@@ -167,7 +167,7 @@ pub(super) fn run_all() {
 /// barrier cannot be mistaken for the single-hart pre-ready observation.
 #[cfg(target_arch = "riscv64")]
 pub(super) fn run_governed_success_after_secondaries() {
-    if !crate::task::smp::is_rt_hart_online() {
+    if !crate::sched::smp::is_rt_hart_online() {
         skip_smp_success();
         log::info!("ATOMIC_PUBLICATION_AP-13: SKIP (hart 1 not online; SMP probe not required)");
         return;
@@ -193,7 +193,7 @@ pub(super) fn finish_governed_success_case(tid: usize) {
                 passed,
                 "atomic-publication pre-ready success contract failed"
             );
-            crate::task::hart_local::ready::remove_from_all(tid);
+            crate::sched::hart_local::ready::remove_from_all(tid);
             if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
                 scheduler.exit_task(tid, 0);
             }

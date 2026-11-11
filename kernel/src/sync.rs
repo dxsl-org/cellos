@@ -52,7 +52,7 @@ impl<T> Spinlock<T> {
                 ),
                 not(all(test, not(target_os = "none")))
             ))]
-            crate::task::smp::answer_tlb_flush_in_spin(crate::task::hart_local::current_hart_id());
+            crate::sched::smp::answer_tlb_flush_in_spin(crate::sched::hart_local::current_hart_id());
             if self
                 .lock
                 .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)

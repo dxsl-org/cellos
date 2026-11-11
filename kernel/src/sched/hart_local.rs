@@ -15,14 +15,14 @@
 //! `MPIDR_EL1` affinity, mapped to a CPU index by `smp::CPU_MPIDRS` (the
 //! firmware tree's `/cpus` order; `Aff0` alone repeats across clusters) and
 //! from there to a logical hart through
-//! [`smp::CPU_TOPOLOGY`](crate::task::smp::CPU_TOPOLOGY),
+//! [`smp::CPU_TOPOLOGY`](crate::sched::smp::CPU_TOPOLOGY),
 //! published before a secondary is started. A hart therefore only ever reads a
 //! mapping that already exists, and an unpublished CPU resolves to slot 0 — the
 //! same answer as "before `install()`" on RISC-V.
 
 pub mod ready;
 
-use crate::task::smp::MAX_HARTS;
+use crate::sched::smp::MAX_HARTS;
 use alloc::collections::{BTreeMap, VecDeque};
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
@@ -31,7 +31,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use portable_atomic::AtomicU64;
 
 #[cfg(target_arch = "aarch64")]
-use crate::task::smp::{CPU_MPIDRS, CPU_TOPOLOGY};
+use crate::sched::smp::{CPU_MPIDRS, CPU_TOPOLOGY};
 
 /// The CPU index this hart is running on: its `MPIDR_EL1` affinity looked up
 /// in [`CPU_MPIDRS`]. `None` for a core the firmware tree does not describe.
@@ -457,7 +457,7 @@ pub struct TrapProvenUserFault(());
 
 impl TrapProvenUserFault {
     #[inline(always)]
-    pub(super) const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self(())
     }
 }
@@ -520,7 +520,7 @@ impl DeferredFault {
     /// Cell accounting attribution or a kernel panic from entering the
     /// scheduler retirement path.
     #[inline(always)]
-    pub(super) fn from_user_trap(
+    pub(crate) fn from_user_trap(
         _provenance: TrapProvenUserFault,
         tid: usize,
         cell_id: usize,

@@ -96,7 +96,7 @@ fn fail(frame: usize, reason: &str) {
 
 /// Called by hart 0 after RFENCE-gated secondary startup.
 pub fn run_primary() {
-    if !crate::task::smp::is_rt_hart_online() {
+    if !crate::sched::smp::is_rt_hart_online() {
         log::warn!("[selftest] TLB-SHOOTDOWN: RUNTIME-GATED (hart 1 offline)");
         return;
     }
@@ -197,7 +197,7 @@ pub fn run_primary() {
 
 /// Called by the RV64 secondary before it enters its scheduler loop.
 pub fn run_secondary(hart_id: usize) {
-    if hart_id != crate::task::smp::HART_RT || !wait_for(POSITIVE_ARMED) {
+    if hart_id != crate::sched::smp::HART_RT || !wait_for(POSITIVE_ARMED) {
         return;
     }
     // SAFETY: hart 0 mapped TEST_VA writable before publishing POSITIVE_ARMED.
@@ -226,7 +226,7 @@ pub fn run_secondary(hart_id: usize) {
 
 /// Consume only the expected probe store fault and resume after its `sd` instruction.
 pub fn handle_store_fault(frame: &mut ViTrapFrame) -> bool {
-    if crate::task::hart_local::current_hart_id() != crate::task::smp::HART_RT
+    if crate::sched::hart_local::current_hart_id() != crate::sched::smp::HART_RT
         || frame.stval != TEST_VA
         || !EXPECT_STORE_FAULT.swap(false, Ordering::AcqRel)
     {

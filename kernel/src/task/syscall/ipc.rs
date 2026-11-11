@@ -113,7 +113,7 @@ pub(super) fn take_queued_death(
 }
 
 pub(super) fn sender_cell_context_in_sched(
-    sched: &crate::task::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     sender_tid: usize,
 ) -> (u64, u64) {
     crate::task::sender_context(sched, sender_tid)

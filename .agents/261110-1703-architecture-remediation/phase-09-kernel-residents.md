@@ -124,3 +124,8 @@ Phases 10 and 14 both build on the new layout.
   - Both tests only pin dispatcher source text (`// 417: …` arm markers and `contains` checks). Under the test policy, such tests are deleted, not re-pinned. They are deleted together with their `Cargo.toml` and `lanes.toml` entries.
 - **Pre-existing failure (not mine).** `tests/rust-std-promotion` fails 2/33: frozen `.agents/260821-…` artifact digests no longer match the live sources. The same 2 tests fail on `8a005f998`.
 - **Surprise.** `docs/code-metrics.generated.md` had gone stale over the earlier Phase 09 commits; it is regenerated here. Every later commit now runs `generate-code-metrics.py --check`.
+- **Hoist 2/4 (`sched/`).** Moved out of `task/` into `crate::sched`: `scheduler`, `smp` (and `smp/`), `hart_local` (and `hart_local/`), `quiesce`, `cpu_accounting`, `domain_switch` and `domain_switch_tests`.
+  - Two `pub(super)` items of `task` are used from `sched` and became `pub(crate)`: `Task::owner_death_matches_receive_mask` and `completion_wait::irq_wake_due`.
+  - **Path-only re-pin.** The law-1 guard `check-multi-source-wait-law1-digests.sh` pins the scheduler's sweep call as source text. Its path moved from `super::completion_wait::irq_wake_due` to `crate::task::completion_wait::irq_wake_due`, with the same function and arguments. `K_SCHED` follows the file. This is not an ABI delta (S4b approval: "Law 1: no delta").
+  - The `cellos_g1_cpu` + `cellos_p01_trace` build was checked locally using a dummy 96-byte manifest.
+  - `qemu-tier3-ssh-guest-x86.sh` (manual) keeps its already-stale sha pins.

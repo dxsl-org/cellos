@@ -390,7 +390,7 @@ pub(crate) fn enable_for_boot() -> bool {
     // would be a claim about a mechanism this boot does not have — the same
     // refusal, for the same reason, as the EL2 branch above.
     #[cfg(target_arch = "x86_64")]
-    if crate::hal::domain::kernel_cr3() == 0 || !crate::task::smp::x86_substrate_qualified() {
+    if crate::hal::domain::kernel_cr3() == 0 || !crate::sched::smp::x86_substrate_qualified() {
         return false;
     }
     POLICY

@@ -4,7 +4,7 @@
 //! published in `user_copy_guard_resume_pc`.
 
 use super::range::CopyError;
-use crate::task::hart_local;
+use crate::sched::hart_local;
 use core::sync::atomic::Ordering;
 
 /// Run one byte-copy chunk inside the per-hart recoverable fault window.

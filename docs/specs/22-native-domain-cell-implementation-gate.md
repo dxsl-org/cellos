@@ -373,7 +373,7 @@ requires a separate release decision.
 | Current evidence | Consequence for Tier 2 |
 |---|---|
 | `kernel/src/memory/paging.rs:38`, `:430-440`, `:604-617` | CPU mapping and activation are global-root operations today; domain-aware ownership is new work. |
-| `kernel/src/task/scheduler.rs:683-692` and `kernel/src/task/tcb.rs:141-149` | Scheduler/TCB carry task register context, not an address-space identity. |
+| `kernel/src/sched/scheduler.rs:683-692` and `kernel/src/task/tcb.rs:141-149` | Scheduler/TCB carry task register context, not an address-space identity. |
 | `kernel/src/loader.rs:115-153` and `kernel/src/loader/mem_spawn_gate.rs:30-64` | Governed native loader and syscall spawn paths share signature/manifest admission; no tier-to-root selection exists. Trusted bootstrap init directly calls `task::spawn_from_mem` at `kernel/src/main.rs:877` and is an explicit exception that a Tier-2 implementation must audit rather than silently inherit. |
 | `kernel/src/task/syscall.rs:612-632`, `:2175-2185`; `hal/arch/riscv/src/rv64/trap.rs:124-151` | Current user-buffer validation is not a domain-aware recoverable copy boundary, and kernel-mode faults panic; Tier 2 must replace raw ABI-pointer access with the §2.4 contract. |
 | `kernel/src/task/syscall.rs:98-165`, `:4232-4294`, `:4361-4386` | Grants are global SAS identity mappings with ownership bookkeeping, not receiver-domain PTE mappings or synchronous revoke. |

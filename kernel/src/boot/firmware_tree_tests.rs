@@ -13,7 +13,7 @@
 //!   replaced by `FDT_NOP`.
 
 use super::{fdt_nops, firmware_cpus};
-use crate::task::smp::mpidr::MpidrTable;
+use crate::sched::smp::mpidr::MpidrTable;
 
 const T8103: &[u8] = include_bytes!("../../../tests/fixtures/dtb/t8103-j274.dtb");
 const T8103_M1N1: &[u8] = include_bytes!("../../../tests/fixtures/dtb/t8103-j274-m1n1.dtb");

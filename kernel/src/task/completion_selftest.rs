@@ -72,7 +72,7 @@ pub(super) fn remove(tid: usize) {
             }
         }
     }
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
 }
 
 pub(super) fn queue(tid: usize) -> Option<Arc<CompletionQueue>> {
@@ -371,11 +371,11 @@ fn deferred_wake_reaches_scheduler() -> bool {
                 return fail("an empty queue refused a reservation");
             }
         };
-        let before = super::hart_local::ready::total_ready_count();
+        let before = crate::sched::hart_local::ready::total_ready_count();
         if !q.complete(slot, 1) {
             ok = fail("completing a freshly reserved slot was refused");
         }
-        if super::hart_local::ready::total_ready_count() != before {
+        if crate::sched::hart_local::ready::total_ready_count() != before {
             ok = fail("the append woke the waiter inline instead of deferring it");
         }
         if !completion::wakes_pending() {
@@ -384,7 +384,7 @@ fn deferred_wake_reaches_scheduler() -> bool {
 
         completion::deliver_pending_wakes(sched);
 
-        if super::hart_local::ready::total_ready_count() != before + 1 {
+        if crate::sched::hart_local::ready::total_ready_count() != before + 1 {
             ok = fail("the deferred wake did not reach the scheduler");
         }
         if sched.tasks.get(&TID_A).map(|t| &t.state) != Some(&TaskState::Ready) {
@@ -395,7 +395,7 @@ fn deferred_wake_reaches_scheduler() -> bool {
         }
         sched.tasks.remove(&TID_A);
     }
-    super::hart_local::ready::remove_from_all(TID_A);
+    crate::sched::hart_local::ready::remove_from_all(TID_A);
     let _ = q.clear_waiter(TID_A);
     ok
 }

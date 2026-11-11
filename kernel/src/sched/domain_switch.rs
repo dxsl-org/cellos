@@ -1,12 +1,10 @@
 //! Scheduler-owned root transition plan. Compiled for every architecture that
 //! can carry a private root; the tuple encoding is arch-specific and lives in
 //! [`root_tuple`].
-use super::{
-    hart_local,
-    tcb::{Task, TaskAddressSpace},
-};
 use crate::hal::arch::Context;
 use crate::memory::address_space::AddressSpace;
+use crate::sched::hart_local;
+use crate::task::tcb::{Task, TaskAddressSpace};
 use alloc::sync::Arc;
 
 #[derive(Clone)]
@@ -145,7 +143,7 @@ impl SwitchPlan {
                 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
                 log::info!(
                     "S22-RV64-SWITCH: PASS harts={}",
-                    super::smp::online_hart_count()
+                    crate::sched::smp::online_hart_count()
                 );
                 root
             }

@@ -67,7 +67,7 @@ struct DeferredRelease {
     /// earlier "does any hart owe any invalidation" test stayed true for as long
     /// as unrelated teardowns kept asking, and delayed every confirmation behind
     /// them.
-    epochs: [usize; crate::task::smp::MAX_HARTS],
+    epochs: [usize; crate::sched::smp::MAX_HARTS],
     /// Why the frames were retained. Kept verbatim so the quarantine it may end
     /// in names the same cause the release path would have.
     reason: &'static str,
@@ -294,19 +294,19 @@ fn tag_epochs_confirmed(entry: &DeferredRelease) -> bool {
     if crate::memory::tlb_shootdown::test_tag_ack_withheld() {
         return false;
     }
-    (0..crate::task::smp::MAX_HARTS)
-        .all(|hart| crate::task::smp::tlb_flush_completed(hart, entry.epochs[hart]))
+    (0..crate::sched::smp::MAX_HARTS)
+        .all(|hart| crate::sched::smp::tlb_flush_completed(hart, entry.epochs[hart]))
 }
 
 /// Record requests while holding the queue lock, without waiting for replies.
 /// Remote service is lock-free. Keeping publication atomic with the retained
 /// frames prevents a reaper from observing a vacuous zero-epoch entry or freeing
 /// a concurrently merged batch against an older acknowledgement.
-fn issue_tag_epochs() -> [usize; crate::task::smp::MAX_HARTS] {
-    let me = crate::task::hart_local::current_hart_id();
-    let mut requested = [0usize; crate::task::smp::MAX_HARTS];
-    for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
-        requested[hart] = crate::task::smp::request_tlb_flush(hart);
+fn issue_tag_epochs() -> [usize; crate::sched::smp::MAX_HARTS] {
+    let me = crate::sched::hart_local::current_hart_id();
+    let mut requested = [0usize; crate::sched::smp::MAX_HARTS];
+    for hart in crate::sched::smp::online_harts().filter(|hart| *hart != me) {
+        requested[hart] = crate::sched::smp::request_tlb_flush(hart);
     }
     requested
 }

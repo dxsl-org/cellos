@@ -96,11 +96,11 @@ pub(crate) fn checkpoint(case: &'static str) -> Result<(), ViError> {
 pub(crate) fn observe_schedule_attempt() {
     #[cfg(target_arch = "riscv64")]
     if AP13_BARRIER.load(Ordering::Acquire) == 1
-        && crate::task::hart_local::current_hart_id() == crate::task::smp::HART_RT
+        && crate::sched::hart_local::current_hart_id() == crate::sched::smp::HART_RT
     {
         let tid = AP13_TARGET_TID.load(Ordering::Acquire);
         let excluded = tid != usize::MAX
-            && crate::task::hart_local::HART_LOCALS.iter().all(|hart| {
+            && crate::sched::hart_local::HART_LOCALS.iter().all(|hart| {
                 hart.current_task_id.load(Ordering::Acquire) != tid
                     && hart
                         .ready
@@ -137,13 +137,13 @@ pub(crate) fn release_competing_hart() {
 /// caller must not report it as a failure.
 #[cfg(target_arch = "riscv64")]
 fn competing_hart_schedule_attempt(tid: usize) -> Option<bool> {
-    if !crate::task::smp::is_rt_hart_online() {
+    if !crate::sched::smp::is_rt_hart_online() {
         return None;
     }
     AP13_TARGET_TID.store(tid, Ordering::Release);
     AP13_REMOTE_ACK.store(0, Ordering::Release);
     AP13_BARRIER.store(1, Ordering::Release);
-    let target = crate::task::smp::logical_sbi_target(crate::task::smp::HART_RT);
+    let target = crate::sched::smp::logical_sbi_target(crate::sched::smp::HART_RT);
     let Some((mask, base)) = target else {
         disarm_competing_hart();
         return None;
@@ -174,7 +174,7 @@ fn competing_hart_schedule_attempt(_tid: usize) -> Option<bool> {
     None
 }
 
-pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: usize) {
+pub(crate) fn observe_complete(sched: &crate::sched::scheduler::Scheduler, tid: usize) {
     let Some(task) = sched.tasks.get(&tid) else {
         return;
     };

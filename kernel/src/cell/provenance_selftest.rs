@@ -106,7 +106,7 @@ pub fn run_primary() {
     }
 
     if report(0, probe()) {
-        if crate::task::smp::is_rt_hart_online() {
+        if crate::sched::smp::is_rt_hart_online() {
             PHASE.store(ARMED, Ordering::Release);
             let deadline = crate::task::system_ticks() + 500;
             loop {
@@ -129,7 +129,7 @@ pub fn run_primary() {
 }
 
 pub fn run_secondary(hart_id: usize) {
-    if hart_id != crate::task::smp::HART_RT {
+    if hart_id != crate::sched::smp::HART_RT {
         return;
     }
     let deadline = crate::task::system_ticks() + 500;

@@ -10,7 +10,8 @@ use super::{
     grant_table_lock, handle_syscall, map_syscall, reg_grant_table_lock, PageGrant, RegGrant,
     Syscall,
 };
-use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
+use crate::sched::scheduler::Scheduler;
+use crate::task::{tcb::Task, SCHEDULER};
 use alloc::collections::BTreeMap;
 use api::syscall::ViSyscall;
 use types::{CellId, GrantPerm};

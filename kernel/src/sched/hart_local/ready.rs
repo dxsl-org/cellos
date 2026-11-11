@@ -213,8 +213,8 @@ fn drop_unused_bucket(ready: &mut BTreeMap<u8, VecDeque<usize>>, hart: usize, pr
 /// Hart selected for a newly runnable task of `priority` (RealTime goes to the
 /// dedicated hart when online, otherwise the calling hart).
 pub(crate) fn destination_hart(priority: u8) -> usize {
-    if priority >= RT_PRIO && crate::task::smp::is_rt_hart_online() {
-        crate::task::smp::HART_RT
+    if priority >= RT_PRIO && crate::sched::smp::is_rt_hart_online() {
+        crate::sched::smp::HART_RT
     } else {
         super::current_hart_id()
     }
@@ -734,7 +734,7 @@ pub fn steal_from_busiest(thief: usize) {
 /// taking its locks.
 fn steal_candidate(hart: usize) -> bool {
     hart < 2
-        || crate::task::smp::HART_ONLINE
+        || crate::sched::smp::HART_ONLINE
             .get(hart)
             .is_some_and(|online| online.load(PromiseOrdering::Acquire))
 }
@@ -906,7 +906,7 @@ pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
         return false;
     }
     // Real buckets: the production steal runs while the selection is vacated.
-    if super::super::smp::is_rt_hart_online() || total_ready_count() != 0 {
+    if crate::sched::smp::is_rt_hart_online() || total_ready_count() != 0 {
         return true;
     }
     let hart = super::current_hart_id();

@@ -69,7 +69,7 @@
 //!   from the frame allocator by [`reserve_scratch_region_at_boot`] and a build
 //!   without one refuses with [`SnapshotError::NoReservedScratch`];
 //! - every online hart is parked at an acknowledged safe point
-//!   ([`crate::task::quiesce`]) — a no-op on a single-hart system, and on RV64 a
+//!   ([`crate::sched::quiesce`]) — a no-op on a single-hart system, and on RV64 a
 //!   real request answered by each hart's trap path;
 //! - the device has a trusted monotonic epoch source and the image can be
 //!   authenticated ([`SnapshotDevice::current_epoch`], [`SNAPSHOT_TRUST_KEY`]).
@@ -230,7 +230,7 @@
 //! The format, the state machine and the corruption matrix are exercised with
 //! an in-memory fake sector device (volatile write-back cache + fault
 //! injection) and a sparse frame map.  The quiescence preflight is exercised
-//! with the fake hart set in `task::quiesce` (a clock that advances one tick per
+//! with the fake hart set in `crate::sched::quiesce` (a clock that advances one tick per
 //! poll, programmed acknowledgements, logged requests).  The frozen window, the
 //! staging check and the freshness matrix are exercised through
 //! [`capture_frozen_with_allocated`] (an explicit allocated set and image span,
@@ -245,8 +245,8 @@
 
 use crate::dev::block;
 use crate::memory::frame::{phys_to_virt, FrameAllocator, FRAME_ALLOCATOR};
+use crate::sched::quiesce;
 use crate::sync::Spinlock;
-use crate::task::quiesce;
 use alloc::vec::Vec;
 use core::fmt;
 use core::mem::MaybeUninit;
@@ -3443,7 +3443,7 @@ mod fake {
 mod tests {
     use super::fake::{FakeDisk, FakeRam, Fault};
     use super::*;
-    use crate::task::quiesce;
+    use crate::sched::quiesce;
 
     /// 64 frames of RAM at the RV64 RAM base.
     const BASE: u64 = 0x8020_0000;

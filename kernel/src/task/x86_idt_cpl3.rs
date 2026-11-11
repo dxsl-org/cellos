@@ -44,7 +44,7 @@ pub(super) fn run() -> ! {
 
     let mut guard = super::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
-    if !scheduler.tasks.is_empty() || super::hart_local::ready::total_ready_count() != 0 {
+    if !scheduler.tasks.is_empty() || crate::sched::hart_local::ready::total_ready_count() != 0 {
         fail();
     }
     let b_tid = scheduler
@@ -78,7 +78,7 @@ pub(super) fn run() -> ! {
     drop(guard);
 
     crate::hal::idt::arm_cpl3_probe(code, b_return_offset);
-    super::smp::x86_idt_fixture_uniprocessor_ready();
+    crate::sched::smp::x86_idt_fixture_uniprocessor_ready();
     super::yield_cpu();
     fail()
 }

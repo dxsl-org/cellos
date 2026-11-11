@@ -108,7 +108,7 @@ impl TaskLaunchState {
 }
 
 fn authority_is_current(
-    sched: &super::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     authority: &CallerLaunchAuthority,
 ) -> bool {
     sched.tasks.get(&authority.tid).is_some_and(|task| {
@@ -173,7 +173,7 @@ pub fn publish_prepared(
     }
     crate::loader::atomic_checkpoint("AP-07")?;
     crate::loader::atomic_checkpoint("AP-08")?;
-    let _kernel_alloc = super::scheduler::KernelAllocationContext::enter();
+    let _kernel_alloc = crate::sched::scheduler::KernelAllocationContext::enter();
 
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
     // InheritedDirHandles is bounded inline state, not an independently
@@ -251,7 +251,8 @@ pub fn publish_prepared(
             {
                 return Err(ViError::PermissionDenied);
             }
-            super::cpu_accounting::bind(sched, owner).map_err(|_| ViError::PermissionDenied)?;
+            crate::sched::cpu_accounting::bind(sched, owner)
+                .map_err(|_| ViError::PermissionDenied)?;
         }
     }
 
@@ -502,7 +503,7 @@ pub(crate) struct SessionPublication {
     quota: crate::memory::cell_quota::QuotaReservation,
     authority: crate::cell::cspace::AuthorityReservation,
     measurement: crate::measurement_log::PublicationReservation,
-    ready: super::hart_local::ready::PublicationReservation,
+    ready: crate::sched::hart_local::ready::PublicationReservation,
     claim: PublicationClaim,
     /// ADR-0019 lease of a domain child, rechecked in `current()` under the same
     /// SCHEDULER section as `publish`; `None` for an ordinary child.
@@ -515,7 +516,7 @@ impl SessionPublication {
     /// Every fallible allocation, quota, owner-slot, log and ready-queue claim
     /// happens here; `publish` allocates nothing and cannot fail.
     pub(crate) fn reserve(
-        sched: &mut super::scheduler::Scheduler,
+        sched: &mut crate::sched::scheduler::Scheduler,
         prepared: super::PreparedElfTask,
         state: TaskLaunchState,
         route: crate::loader::launch_profile::LaunchRoute,
@@ -548,7 +549,7 @@ impl SessionPublication {
         }
         // Heap bookkeeping for the unpublished task is kernel memory, exactly as
         // in `publish_prepared`; per-principal accounting is the explicit claim.
-        let _kernel_alloc = super::scheduler::KernelAllocationContext::enter();
+        let _kernel_alloc = crate::sched::scheduler::KernelAllocationContext::enter();
         let tid = sched.next_task_id;
         let next = tid.checked_add(1).ok_or(ViError::OutOfMemory)?;
         let quota = crate::memory::cell_quota::QuotaReservation::reserve_next(state.quota_limit)?;
@@ -586,13 +587,14 @@ impl SessionPublication {
         let claim = PublicationClaim::charge(
             creator,
             crate::measurement_log::PublicationReservation::ENTRY_BYTES + path_len,
-            super::hart_local::ready::PublicationReservation::SLOT_BYTES,
+            crate::sched::hart_local::ready::PublicationReservation::SLOT_BYTES,
         )?;
         let measurement = crate::measurement_log::PublicationReservation::reserve((
             creator as u64,
             creator_generation,
         ))?;
-        let ready = super::hart_local::ready::PublicationReservation::reserve(state.priority)?;
+        let ready =
+            crate::sched::hart_local::ready::PublicationReservation::reserve(state.priority)?;
         sched.reserve_session_owner(owner)?;
         sched.next_task_id = next;
         Ok(Self {
@@ -617,7 +619,7 @@ impl SessionPublication {
             grant_live,
         )
     }
-    pub(crate) fn current(&self, sched: &super::scheduler::Scheduler) -> bool {
+    pub(crate) fn current(&self, sched: &crate::sched::scheduler::Scheduler) -> bool {
         if !sched.session_owner_reserved(self.owner)
             || self
                 .state
@@ -653,7 +655,7 @@ impl SessionPublication {
     /// Final publication. Called with every owner check already passed, under
     /// SCHEDULER, and performs no allocation: capacity for the task row, CSpace
     /// row, log entry and ready entry was promised in `reserve`.
-    pub(crate) fn publish(mut self, sched: &mut super::scheduler::Scheduler) {
+    pub(crate) fn publish(mut self, sched: &mut crate::sched::scheduler::Scheduler) {
         let tid = self.owner.root_tid as usize;
         if self.domain_lease.is_some() {
             log_domain_admitted(&self.task.name);

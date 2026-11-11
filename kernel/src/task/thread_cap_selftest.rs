@@ -110,7 +110,7 @@ pub(crate) fn remove(tid: usize) {
             }
         }
     }
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
 }
 
 /// Returns true iff both fixes behave as specified. Logs a decisive serial line.
@@ -529,7 +529,7 @@ pub fn self_test() -> bool {
         .apply_to(&mut parent);
         insert(parent);
 
-        let filler: alloc::vec::Vec<usize> = (0..super::scheduler::MAX_THREADS_PER_CELL - 1)
+        let filler: alloc::vec::Vec<usize> = (0..crate::sched::scheduler::MAX_THREADS_PER_CELL - 1)
             .map(|i| DOS_FILLER_BASE + i)
             .collect();
         for &tid in &filler {

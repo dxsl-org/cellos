@@ -128,16 +128,16 @@ pub(crate) fn run_primary() {
                 // made by other tasks while the remote ack is outstanding.
                 let before = space.frames.lock().len();
                 let tag = space.asid();
-                let remote_acks_before: Vec<(usize, usize)> = crate::task::smp::online_harts()
-                    .filter(|hart| *hart != crate::task::hart_local::current_hart_id())
-                    .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
+                let remote_acks_before: Vec<(usize, usize)> = crate::sched::smp::online_harts()
+                    .filter(|hart| *hart != crate::sched::hart_local::current_hart_id())
+                    .map(|hart| (hart, crate::sched::smp::tlb_flush_complete_epoch(hart)))
                     .collect();
                 crate::memory::tlb_shootdown::begin_test_flush_observation();
                 let unmapped = space.unmap_private_page(PRIVATE_PAGE).is_ok();
                 let tagged = crate::memory::tlb_shootdown::test_tag_flush_observed(tag);
                 crate::memory::tlb_shootdown::finish_test_flush_observation();
                 let remote_acked = remote_acks_before.iter().all(|(hart, before)| {
-                    crate::task::smp::tlb_flush_complete_epoch(*hart) > *before
+                    crate::sched::smp::tlb_flush_complete_epoch(*hart) > *before
                 });
                 let released = space.frames.lock().len() < before;
                 let not_quarantined = quarantined_frame_count() == 0;
@@ -150,8 +150,8 @@ pub(crate) fn run_primary() {
     if unmap_order {
         // Remote acknowledgement evidence, same shape as the lease fixture: on a
         // two-hart run the release above waited for the other hart's own flush.
-        let me = crate::task::hart_local::current_hart_id();
-        let remotes: alloc::vec::Vec<usize> = crate::task::smp::online_harts()
+        let me = crate::sched::hart_local::current_hart_id();
+        let remotes: alloc::vec::Vec<usize> = crate::sched::smp::online_harts()
             .filter(|hart| *hart != me)
             .collect();
         log::info!(
@@ -253,10 +253,10 @@ pub(crate) fn run_primary() {
     // invalidation, so the recycle below is also the witness that the wait
     // completed: if an ack never arrived the slot is retained (fail closed) and
     // the released value does not come back.
-    let me = crate::task::hart_local::current_hart_id();
-    let remote_acks_before: alloc::vec::Vec<(usize, usize)> = crate::task::smp::online_harts()
+    let me = crate::sched::hart_local::current_hart_id();
+    let remote_acks_before: alloc::vec::Vec<(usize, usize)> = crate::sched::smp::online_harts()
         .filter(|hart| *hart != me)
-        .map(|hart| (hart, crate::task::smp::tlb_flush_complete_epoch(hart)))
+        .map(|hart| (hart, crate::sched::smp::tlb_flush_complete_epoch(hart)))
         .collect();
 
     let released = live.pop();
@@ -264,7 +264,7 @@ pub(crate) fn run_primary() {
     drop(released);
     let remote_ack_advanced = remote_acks_before
         .iter()
-        .all(|(hart, before)| crate::task::smp::tlb_flush_complete_epoch(*hart) > *before);
+        .all(|(hart, before)| crate::sched::smp::tlb_flush_complete_epoch(*hart) > *before);
     let recycled = AsidLease::acquire(2).is_some_and(|again| {
         Some(again.value) == released_value && live_tag_owner(again.value) == Some(2)
     });
@@ -283,7 +283,7 @@ pub(crate) fn run_primary() {
         log::info!(
             "[asid] lease release confirmed: remote_acks={} harts={}",
             remote_acks_before.len(),
-            crate::task::smp::online_hart_count()
+            crate::sched::smp::online_hart_count()
         );
         log::info!("S22-RV64-ASID-LEASE: PASS");
     } else {

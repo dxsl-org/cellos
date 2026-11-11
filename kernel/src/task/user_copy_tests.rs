@@ -9,16 +9,13 @@
 //!   recovery (single-hart capable)
 //! - `S22-RV64-COPY-RACE: PASS harts=2` — revoke-blocks-on-reader drain proof
 
-use super::{
-    smp,
-    user_copy::{
-        copy_to_user_scatter, stage_domain_for_test, CopyError, CopyView, UserReadSlice,
-        UserWriteSlice,
-    },
+use super::user_copy::{
+    copy_to_user_scatter, stage_domain_for_test, CopyError, CopyView, UserReadSlice, UserWriteSlice,
 };
 use crate::memory::address_space::{AddressSpace, AddressSpaceBuilder, MappingKind};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::{Flags, PAGE_SIZE};
+use crate::sched::smp;
 use alloc::{sync::Arc, vec, vec::Vec};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use types::{CellId, ViError};
@@ -529,7 +526,7 @@ fn run_race_fixture() -> bool {
             log::error!("S22-RV64-COPY-RACE: FAIL setup spawn");
             return false;
         };
-        super::hart_local::ready::remove_from_all(worker_tid);
+        crate::sched::hart_local::ready::remove_from_all(worker_tid);
         let priority = {
             let Some(worker) = scheduler.tasks.get_mut(&worker_tid) else {
                 log::error!("S22-RV64-COPY-RACE: FAIL setup worker-lost");
@@ -538,11 +535,12 @@ fn run_race_fixture() -> bool {
             worker.context.ra = race_revoker_entry as *const () as usize;
             worker.priority
         };
-        if !super::hart_local::ready::reserve_test_dispatch_on_hart(smp::HART_RT, worker_tid) {
+        if !crate::sched::hart_local::ready::reserve_test_dispatch_on_hart(smp::HART_RT, worker_tid)
+        {
             log::error!("S22-RV64-COPY-RACE: FAIL setup dispatch-pin");
             return false;
         }
-        super::hart_local::ready::push_on_hart(smp::HART_RT, worker_tid, priority);
+        crate::sched::hart_local::ready::push_on_hart(smp::HART_RT, worker_tid, priority);
         worker_tid
     };
     RACE_WORKER_TID.store(spawn_result, Ordering::Release);
@@ -578,7 +576,7 @@ fn run_race_fixture() -> bool {
     // included, and this boot-hart wait does not take the IPI that would
     // answer it (observed: "hart 0 silent through the 2000000 tick probe").
     // Answer here, exactly as the trap path would.
-    let me = super::hart_local::current_hart_id();
+    let me = crate::sched::hart_local::current_hart_id();
     let mut drained = false;
     for _ in 0..400_000_000usize {
         if RACE_DONE.load(Ordering::Acquire) == 1 {
@@ -592,8 +590,8 @@ fn run_race_fixture() -> bool {
     // lock, so let the revoker fully retire and hart 1 finish emitting its
     // last switch-boundary line BEFORE this hart logs any COPY-RACE marker.
     for _ in 0..400_000_000usize {
-        if super::hart_local::ready::current_task_id_for(smp::HART_RT) == 0
-            && !super::hart_local::ready::any_hart_running(spawn_result)
+        if crate::sched::hart_local::ready::current_task_id_for(smp::HART_RT) == 0
+            && !crate::sched::hart_local::ready::any_hart_running(spawn_result)
         {
             break;
         }
@@ -654,12 +652,12 @@ pub(crate) fn run_primary() {
     if copy_ok {
         log::info!(
             "S22-RV64-COPY: PASS harts={}",
-            super::smp::online_hart_count()
+            crate::sched::smp::online_hart_count()
         );
     } else {
         log::error!(
             "S22-RV64-COPY: FAIL harts={}",
-            super::smp::online_hart_count()
+            crate::sched::smp::online_hart_count()
         );
     }
     let race_ok = run_race_fixture();

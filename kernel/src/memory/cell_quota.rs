@@ -197,8 +197,8 @@ pub fn register(cell_id: CellId, limit: usize) {
     // Pin to kernel context (0) so the BTreeMap::insert's node allocation does
     // not re-enter `charge` (which locks QUOTA_LIMITS) while we hold that lock.
     // Deadlock contract: see module doc.
-    let prev_cell = crate::task::hart_local::current_cell_id();
-    crate::task::hart_local::set_current_cell_id(0);
+    let prev_cell = crate::sched::hart_local::current_cell_id();
+    crate::sched::hart_local::set_current_cell_id(0);
     {
         let mut limits = QUOTA_LIMITS.lock();
         #[cfg(cellos_p01_trace)]
@@ -208,7 +208,7 @@ pub fn register(cell_id: CellId, limit: usize) {
         );
         limits.insert(id, limit);
     }
-    crate::task::hart_local::set_current_cell_id(prev_cell);
+    crate::sched::hart_local::set_current_cell_id(prev_cell);
 }
 
 /// Deregister a Cell on exit.

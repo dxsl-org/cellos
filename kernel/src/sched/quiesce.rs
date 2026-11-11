@@ -432,8 +432,8 @@ fn request_park(hart: usize) -> usize {
         // A hart cannot interrupt itself, and the protocol never makes the
         // requester a target. Sending to a self-mapped id would be harmless but
         // pointless; skip it rather than depend on the SBI call tolerating it.
-        if hart != crate::task::hart_local::current_hart_id() {
-            if let Some((mask, base)) = crate::task::smp::logical_sbi_target(hart) {
+        if hart != crate::sched::hart_local::current_hart_id() {
+            if let Some((mask, base)) = crate::sched::smp::logical_sbi_target(hart) {
                 let _ = hal::common::sbi::sbi_send_ipi(mask, base);
             }
         }
@@ -603,7 +603,7 @@ pub struct KernelHarts;
 
 impl QuiesceHarts for KernelHarts {
     fn requester(&self) -> usize {
-        crate::task::hart_local::current_hart_id()
+        crate::sched::hart_local::current_hart_id()
     }
 
     fn online_harts(&self, out: &mut HartSet) -> Result<(), QuiesceError> {
@@ -677,7 +677,7 @@ const BOOT_HART: usize = 0;
 /// recorded even if its own publication is not yet visible.
 fn online_hart_ids(requester: usize, out: &mut HartSet) -> Result<(), QuiesceError> {
     out.insert(requester)?;
-    for hart in crate::task::smp::online_harts() {
+    for hart in crate::sched::smp::online_harts() {
         out.insert(hart)?;
     }
     Ok(())
@@ -845,10 +845,10 @@ pub mod lane {
     /// witness itself did not hold. The caller only has to keep that marker
     /// visible; the lane decides on the markers, not on this value.
     pub fn run_primary() -> bool {
-        if crate::task::hart_local::current_hart_id() != BOOT_HART {
+        if crate::sched::hart_local::current_hart_id() != BOOT_HART {
             return true;
         }
-        let target = match crate::task::smp::online_harts().find(|hart| *hart != BOOT_HART) {
+        let target = match crate::sched::smp::online_harts().find(|hart| *hart != BOOT_HART) {
             Some(hart) => hart,
             None => {
                 // One hart: no target, no request, no wait — the protocol's no-op
@@ -1446,7 +1446,7 @@ mod tests {
         // requester is named explicitly here. The boot hart reaches the set only
         // through its boot-time `HART_ONLINE` publication — the same path every
         // remote shootdown uses — so a capture requested from hart 1 freezes it.
-        crate::task::smp::publish_boot_hart_online();
+        crate::sched::smp::publish_boot_hart_online();
         let mut set = HartSet::new();
         online_hart_ids(1, &mut set).expect("ids are bounded");
         let ids: Vec<usize> = set.iter().collect();

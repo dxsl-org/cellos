@@ -4,8 +4,9 @@ use super::{
     supports_typed_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
     SyscallError,
 };
+use crate::sched::scheduler::Scheduler;
 use crate::task::cap::CapSet;
-use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
+use crate::task::{tcb::Task, SCHEDULER};
 use api::syscall::ViSyscall;
 use types::CellId;
 
@@ -1917,7 +1918,7 @@ fn services_outside_owner_watch_table() -> alloc::vec::Vec<u16> {
         s::OCEL_JS,
     ]
     .into_iter()
-    .filter(|id| !crate::task::scheduler::OWNER_WATCH_SERVICES.contains(id))
+    .filter(|id| !crate::sched::scheduler::OWNER_WATCH_SERVICES.contains(id))
     .collect()
 }
 
@@ -2104,7 +2105,7 @@ fn assert_owner_watch_grant_for(service: u16) {
 #[test]
 fn owner_watch_grant_matrix() {
     use api::syscall::service::{COMPOSITOR, NET};
-    for &service in &crate::task::scheduler::OWNER_WATCH_SERVICES {
+    for &service in &crate::sched::scheduler::OWNER_WATCH_SERVICES {
         assert_owner_watch_grant_for(service);
     }
 
@@ -2214,7 +2215,7 @@ fn owner_watch_grant_matrix() {
 #[test]
 fn owner_watch_services_are_an_explicit_table() {
     assert_eq!(
-        crate::task::scheduler::OWNER_WATCH_SERVICES,
+        crate::sched::scheduler::OWNER_WATCH_SERVICES,
         [
             api::syscall::service::NET,
             api::syscall::service::COMPOSITOR,

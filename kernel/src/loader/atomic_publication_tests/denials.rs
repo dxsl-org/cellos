@@ -236,9 +236,9 @@ fn measurement_reservation_contract() -> bool {
 /// growth and stealing, commits without growing the queue, and leaves no queue
 /// key behind when dropped.
 fn ready_reservation_contract() -> bool {
-    use crate::task::hart_local::{ready, HART_LOCALS};
+    use crate::sched::hart_local::{ready, HART_LOCALS};
     const BASE: usize = 91_000;
-    if crate::task::smp::is_rt_hart_online() || ready::total_ready_count() != 0 {
+    if crate::sched::smp::is_rt_hart_online() || ready::total_ready_count() != 0 {
         return true;
     }
     let normal = api::TaskPriority::Normal as u8;
@@ -251,7 +251,7 @@ fn ready_reservation_contract() -> bool {
         return false;
     };
     let (hart, priority) = reservation.destination();
-    if hart >= crate::task::smp::MAX_HARTS {
+    if hart >= crate::sched::smp::MAX_HARTS {
         return false;
     }
     let covers = |promises: usize| {
@@ -825,7 +825,7 @@ fn session_frontend_receipt_contract() -> bool {
     ok
 }
 
-type Sched = crate::task::scheduler::Scheduler;
+type Sched = crate::sched::scheduler::Scheduler;
 
 /// Run `probe` inside one SCHEDULER hold: no maintenance pass on another hart
 /// can interleave with the staged records and the production transitions.
@@ -976,7 +976,7 @@ fn measurement_creator_share_contract() -> bool {
 /// A selection vacated from the ready queue and rolled back returns to its
 /// exact FIFO position even when entries ahead of it were stolen meanwhile.
 fn ready_rollback_fifo_contract() -> bool {
-    crate::task::hart_local::ready::test_rollback_keeps_fifo_position(91_500)
+    crate::sched::hart_local::ready::test_rollback_keeps_fifo_position(91_500)
 }
 
 /// Cancellation is a flat worklist over operations indexed by id: a deep

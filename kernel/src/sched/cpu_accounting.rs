@@ -1,7 +1,8 @@
 //! Intel development-only charged-occupancy integrator. Lock order is
 //! SCHEDULER -> ACCOUNTING; no allocator, console or context switch under ACCOUNTING.
-use super::{scheduler::Scheduler, tcb::Task};
+use crate::sched::scheduler::Scheduler;
 use crate::sync::Spinlock;
+use crate::task::tcb::Task;
 use api::cell_owner::CellOwner;
 
 const N: usize = 64;
@@ -16,7 +17,7 @@ const RETIRING: u64 = 3;
 const SEALED: u64 = 4;
 const RETIRED: u64 = 5;
 const _: [(); N] = [(); crate::memory::cell_quota::MAX_CELLS];
-const _: [(); M] = [(); super::smp::MAX_HARTS];
+const _: [(); M] = [(); crate::sched::smp::MAX_HARTS];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u64)]
@@ -682,13 +683,13 @@ impl Accounting {
         }
         let clock = crate::hal::hpet::checked_sample().map_err(|_| Error::ClockUnavailable)?;
         let now = narrow(clock.raw_counter as u128 * clock.period_fs as u128 / 1_000_000)?;
-        let m = super::smp::online_hart_count();
+        let m = crate::sched::smp::online_hart_count();
         if m == 0 || m > M || boot_session == 0 {
             return Err(Error::BadConfig);
         }
         for hart in 0..m {
-            if super::hart_local::ready::selected_task_id_for(hart) != 0
-                || super::hart_local::ready::outgoing_context_save_task_id_for(hart) != 0
+            if crate::sched::hart_local::ready::selected_task_id_for(hart) != 0
+                || crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart) != 0
             {
                 return Err(Error::Busy);
             }
@@ -713,7 +714,7 @@ impl Accounting {
         };
         for hart in 0..m {
             self.harts[hart].active_tid =
-                super::hart_local::ready::executing_task_id_for(hart) as u64;
+                crate::sched::hart_local::ready::executing_task_id_for(hart) as u64;
             self.harts[hart].last_service_ns = now;
         }
         self.emit(
@@ -778,7 +779,7 @@ fn mutate<T>(_: &Scheduler, f: impl FnOnce(&mut Accounting) -> Result<T>) -> Res
     drop(a);
     for hart in 0..M {
         if preempt & (1 << hart) != 0 {
-            super::smp::request_preemption(hart);
+            crate::sched::smp::request_preemption(hart);
         }
     }
     result
@@ -878,7 +879,7 @@ pub(crate) fn period_wait_target(s: &Scheduler) -> Result<Option<usize>> {
         }
         if !matches!(
             task.state,
-            super::tcb::TaskState::Recv {
+            crate::task::tcb::TaskState::Recv {
                 mask: 0,
                 deadline: None,
                 buf_len: 2,
@@ -912,7 +913,7 @@ pub(crate) fn join_wait_target(s: &Scheduler) -> Result<Option<usize>> {
         let Some(parent) = s.tasks.get(&root) else {
             return Ok(None);
         };
-        let super::tcb::TaskState::Waiting { target } = parent.state else {
+        let crate::task::tcb::TaskState::Waiting { target } = parent.state else {
             return Ok(None);
         };
         let Some(worker) = s.tasks.get(&target) else {
@@ -925,7 +926,7 @@ pub(crate) fn join_wait_target(s: &Scheduler) -> Result<Option<usize>> {
             || !worker.waiters.contains(&root)
             || !matches!(
                 worker.state,
-                super::tcb::TaskState::Recv {
+                crate::task::tcb::TaskState::Recv {
                     mask: 0,
                     deadline: None,
                     buf_len: 2,
@@ -971,7 +972,7 @@ pub(crate) fn start_wait_targets(s: &Scheduler) -> Result<([Option<usize>; M], u
             }
             if !matches!(
                 worker.state,
-                super::tcb::TaskState::Recv {
+                crate::task::tcb::TaskState::Recv {
                     mask: 0,
                     deadline: None,
                     buf_len: 3,
@@ -1078,7 +1079,7 @@ pub(crate) fn stage(s: &Scheduler, hart: usize, incoming: Option<&Task>) -> Resu
         let tuple = a.tuple(incoming)?;
         let h = *a.harts.get(hart).ok_or(Error::BadConfig)?;
         if h.pending_serial != 0
-            || h.active_tid != super::hart_local::ready::executing_task_id_for(hart) as u64
+            || h.active_tid != crate::sched::hart_local::ready::executing_task_id_for(hart) as u64
         {
             return Err(Error::SwitchMismatch);
         }
@@ -1218,7 +1219,7 @@ pub(crate) unsafe fn abort_staged_switch(s: &Scheduler, hart: usize, serial: u64
         let h = *a.harts.get(hart).ok_or(Error::BadConfig)?;
         if serial == 0
             || h.pending_serial != serial
-            || super::hart_local::ready::executing_task_id_for(hart) as u64 != h.active_tid
+            || crate::sched::hart_local::ready::executing_task_id_for(hart) as u64 != h.active_tid
         {
             return Err(Error::SwitchMismatch);
         }
@@ -1377,7 +1378,7 @@ fn line<const W: usize>(tag: &str, index: usize, words: [u64; W]) {
 /// cutoff exports; copying individual frozen rows never holds locks while logging.
 pub(crate) fn safe_point() {
     let header = {
-        let scheduler = super::SCHEDULER.lock();
+        let scheduler = crate::task::SCHEDULER.lock();
         let Some(s) = scheduler.as_ref() else { return };
         let mut a = ACCOUNTING.lock();
         if a.header.state != 1
@@ -1419,14 +1420,14 @@ pub(crate) fn safe_point() {
     );
     for i in 0..M {
         let row = {
-            let _s = super::SCHEDULER.lock();
+            let _s = crate::task::SCHEDULER.lock();
             ACCOUNTING.lock().harts[i]
         };
         line("G1-HART", i, row.words());
     }
     for i in 0..N {
         let (group, retired) = {
-            let _s = super::SCHEDULER.lock();
+            let _s = crate::task::SCHEDULER.lock();
             let a = ACCOUNTING.lock();
             (a.groups[i], a.retired[i])
         };
@@ -1439,7 +1440,7 @@ pub(crate) fn safe_point() {
     }
     for i in 0..header.event_count as usize {
         let row = {
-            let _s = super::SCHEDULER.lock();
+            let _s = crate::task::SCHEDULER.lock();
             ACCOUNTING.lock().events[i]
         };
         line("G1-EVENT", i, row.words());
@@ -1448,14 +1449,14 @@ pub(crate) fn safe_point() {
         Ok(c) => c,
         Err(_) => {
             {
-                let _s = super::SCHEDULER.lock();
+                let _s = crate::task::SCHEDULER.lock();
                 ACCOUNTING.lock().seal(Error::ClockUnavailable);
             }
             fatal(Error::ClockUnavailable)
         }
     };
     let final_identity = {
-        let _s = super::SCHEDULER.lock();
+        let _s = crate::task::SCHEDULER.lock();
         let mut a = ACCOUNTING.lock();
         let result = a.check_clock_identity(&c).and_then(|_| {
             if c.raw_counter < a.header.last_raw_counter {
@@ -1479,7 +1480,7 @@ pub(crate) fn safe_point() {
         c.configuration
     );
     let retired = {
-        let _s = super::SCHEDULER.lock();
+        let _s = crate::task::SCHEDULER.lock();
         ACCOUNTING.lock().retired_count
     };
     log::warn!(

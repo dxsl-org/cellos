@@ -240,7 +240,7 @@ fn row(
     put16(
         &mut b,
         12,
-        crate::task::hart_local::current_hart_id() as u16,
+        crate::sched::hart_local::current_hart_id() as u16,
     );
     if let Some(o) = owner {
         flags |= 3;

@@ -61,7 +61,7 @@ impl ReplacementReservation {
     }
 
     /// Check the binding while the caller holds `SCHEDULER`.
-    pub(crate) fn can_bind(&self, sched: &crate::task::scheduler::Scheduler) -> bool {
+    pub(crate) fn can_bind(&self, sched: &crate::sched::scheduler::Scheduler) -> bool {
         let source_matches = sched.tasks.get(&self.source_tid).is_some_and(|task| {
             task.cell_generation == self.source_generation
                 && matches!(task.state, crate::task::tcb::TaskState::Frozen { swap_id } if swap_id == self.swap_id)
@@ -270,7 +270,7 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
             freeze_nonce,
         },
     );
-    crate::task::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
     Ok(())
 }
 
@@ -461,7 +461,7 @@ pub(crate) fn commit_hotswap_barrier(
 }
 
 fn message_is_async(
-    sched: &crate::task::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     source_tid: usize,
     index: usize,
 ) -> bool {
@@ -473,7 +473,7 @@ fn message_is_async(
 }
 
 fn rollback_mailbox_appends(
-    sched: &mut crate::task::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     target_tid: usize,
     target_start: usize,
 ) {

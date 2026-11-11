@@ -2,7 +2,7 @@
 //! sender's **actual target hart**, and the request must be decided from that
 //! hart's running priority.
 //!
-//! The observable is the preemption decision (`task::smp::preempt_pends_for`), not
+//! The observable is the preemption decision (`crate::sched::smp::preempt_pends_for`), not
 //! the interrupt: the fixture holds `SCHEDULER` for its whole body, so the target
 //! hart cannot dispatch the synthetic sender before the fixture removes it, and the
 //! property is asserted exactly rather than timed.
@@ -16,9 +16,9 @@
 //!      current-hart predicate treated as "no preemption needed".
 
 use super::ipc_wire::IpcWireHeader;
-use super::smp::{is_rt_hart_online, HART_RT};
 use super::tcb::{Task, TaskState};
 use super::{wake_sender_token, SCHEDULER};
+use crate::sched::smp::{is_rt_hart_online, HART_RT};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use api::TaskPriority;
@@ -55,11 +55,11 @@ fn header(delivery_id: u64) -> IpcWireHeader {
 
 pub(crate) fn self_test() -> bool {
     let rt_online = is_rt_hart_online();
-    let waking_hart = super::hart_local::current_hart_id();
+    let waking_hart = crate::sched::hart_local::current_hart_id();
     let target_hart = if rt_online { HART_RT } else { waking_hart };
     let cross_hart = target_hart != waking_hart;
-    let target_was = super::hart_local::ready::current_task_id_for(target_hart);
-    let waking_was = super::hart_local::ready::current_task_id_for(waking_hart);
+    let target_was = crate::sched::hart_local::ready::current_task_id_for(target_hart);
+    let waking_was = crate::sched::hart_local::ready::current_task_id_for(waking_hart);
 
     let mut guard = SCHEDULER.lock();
     let Some(sched) = guard.as_mut() else {
@@ -90,24 +90,24 @@ pub(crate) fn self_test() -> bool {
             delivery_id: DELIVERY_ID,
         };
     }
-    super::hart_local::ready::set_current_task_id(target_hart, TARGET_OCCUPANT_TID);
+    crate::sched::hart_local::ready::set_current_task_id(target_hart, TARGET_OCCUPANT_TID);
     // The waking hart only needs its own occupant when it is a *different* hart: on a
     // single-hart boot the target hart *is* the waking hart, and it must run the
     // Normal occupant for an RT wake to be worth an interrupt.
     if cross_hart {
-        super::hart_local::ready::set_current_task_id(waking_hart, WAKING_OCCUPANT_TID);
+        crate::sched::hart_local::ready::set_current_task_id(waking_hart, WAKING_OCCUPANT_TID);
     }
 
     // 1. Consuming the exact message.
-    super::smp::reset_preempt_pends();
+    crate::sched::smp::reset_preempt_pends();
     wake_sender_token(sched, SENDER_TID, RECEIVER_TID, header(DELIVERY_ID));
     let woke = sched
         .tasks
         .get(&SENDER_TID)
         .is_some_and(|task| matches!(task.state, TaskState::Ready));
     let queued_on_target =
-        super::hart_local::ready::test_ready_contains_on_hart(target_hart, SENDER_TID);
-    let pended = super::smp::preempt_pends_for(target_hart) == 1;
+        crate::sched::hart_local::ready::test_ready_contains_on_hart(target_hart, SENDER_TID);
+    let pended = crate::sched::smp::preempt_pends_for(target_hart) == 1;
 
     // 2. A stale delivery token must neither wake the sender nor pend anything.
     if let Some(sender) = sched.tasks.get_mut(&SENDER_TID) {
@@ -116,24 +116,24 @@ pub(crate) fn self_test() -> bool {
             delivery_id: DELIVERY_ID,
         };
     }
-    super::hart_local::ready::remove_from_all(SENDER_TID);
-    super::smp::reset_preempt_pends();
+    crate::sched::hart_local::ready::remove_from_all(SENDER_TID);
+    crate::sched::smp::reset_preempt_pends();
     wake_sender_token(sched, SENDER_TID, RECEIVER_TID, header(DELIVERY_ID + 1));
     let stale_quiet = matches!(
         sched.tasks.get(&SENDER_TID).map(|task| &task.state),
         Some(TaskState::Sending { .. })
-    ) && super::smp::preempt_pends_for(target_hart) == 0;
+    ) && crate::sched::smp::preempt_pends_for(target_hart) == 0;
 
     // 3. The decision follows the target hart's running priority.
-    super::smp::reset_preempt_pends();
+    crate::sched::smp::reset_preempt_pends();
     sched.pend_preempt_if_needed(TaskPriority::RealTime as u8);
-    let target_hart_decides = !cross_hart || super::smp::preempt_pends_for(target_hart) == 1;
-    let waking_hart_quiet = !cross_hart || super::smp::preempt_pends_for(waking_hart) == 0;
+    let target_hart_decides = !cross_hart || crate::sched::smp::preempt_pends_for(target_hart) == 1;
+    let waking_hart_quiet = !cross_hart || crate::sched::smp::preempt_pends_for(waking_hart) == 0;
 
     // Teardown happens before `SCHEDULER` is released, so the target hart can never
     // observe the synthetic sender in its queue.
     for tid in [SENDER_TID, TARGET_OCCUPANT_TID, WAKING_OCCUPANT_TID] {
-        super::hart_local::ready::remove_from_all(tid);
+        crate::sched::hart_local::ready::remove_from_all(tid);
     }
     for tid in [
         SENDER_TID,
@@ -143,9 +143,9 @@ pub(crate) fn self_test() -> bool {
     ] {
         sched.tasks.remove(&tid);
     }
-    super::hart_local::ready::set_current_task_id(target_hart, target_was);
-    super::hart_local::ready::set_current_task_id(waking_hart, waking_was);
-    super::smp::reset_preempt_pends();
+    crate::sched::hart_local::ready::set_current_task_id(target_hart, target_was);
+    crate::sched::hart_local::ready::set_current_task_id(waking_hart, waking_was);
+    crate::sched::smp::reset_preempt_pends();
 
     let ok = woke
         && queued_on_target

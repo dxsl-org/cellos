@@ -8,8 +8,8 @@
 use super::{
     child_context,
     pipe::{self, PipeEnd, PipeHandle},
-    scheduler::{KernelAllocationContext, Scheduler},
 };
+use crate::sched::scheduler::{KernelAllocationContext, Scheduler};
 use alloc::vec::Vec;
 use api::cell_session::{
     ChildRefV1 as Child, ObjectRefV1 as Ref, PrincipalV1 as Principal, Reader, RequestHeaderV1,

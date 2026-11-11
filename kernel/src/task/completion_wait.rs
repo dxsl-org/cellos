@@ -142,7 +142,7 @@ fn irq_lines_ready(task: &Task) -> IrqLineSet {
 /// Whether the scheduler sweep must ready a task parked in `WaitCompletion`
 /// with `source`: the mask names `IRQ` and a snapshot line is pending. A
 /// pending line outside the snapshot never wakes it.
-pub(super) fn irq_wake_due(task: &Task, source: u32) -> bool {
+pub(crate) fn irq_wake_due(task: &Task, source: u32) -> bool {
     source & api::completion::source::IRQ != 0 && !irq_lines_ready(task).is_empty()
 }
 
@@ -780,7 +780,7 @@ mod tests {
     //! global reservation and level flag (serialized by `TEST_STATE_LOCK`).
 
     use super::*;
-    use crate::task::scheduler::Scheduler;
+    use crate::sched::scheduler::Scheduler;
     use alloc::boxed::Box;
     use alloc::sync::Arc;
     use types::CellId;

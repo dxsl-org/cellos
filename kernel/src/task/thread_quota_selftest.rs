@@ -74,7 +74,7 @@ fn remove(tid: usize) {
             }
         }
     }
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
 }
 
 /// Drop every reapable zombie OUTSIDE the scheduler lock, which is what actually

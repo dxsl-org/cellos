@@ -198,7 +198,7 @@ pub(super) fn remove_owner_death(task: &mut crate::task::Task, token: u64) {
 /// Every task of `tid`'s Cell incarnation (root and threads), in a fixed
 /// buffer: no allocation, bounded by the per-Cell thread cap.
 pub(super) fn incarnation_members(
-    sched: &crate::task::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     tid: usize,
 ) -> incarnation_tids::Tids {
     let mut out = incarnation_tids::Tids::default();
@@ -337,7 +337,7 @@ pub(super) fn commit_cap_revoke(
 ///   authority from a running VFS/net service mid-flight corrupts driver state;
 ///   the supervisor freeze/replace flow is the supported path.
 pub(super) fn cap_revoke_gate(
-    sched: &mut crate::task::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     caller_id: usize,
     target_tid: usize,
     cap_mask: u32,

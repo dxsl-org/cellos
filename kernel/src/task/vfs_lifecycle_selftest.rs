@@ -49,7 +49,7 @@ fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         sched.tasks.remove(&tid);
     }
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
 }
 
 fn set_recv_waiting(tid: usize, mask: usize) {

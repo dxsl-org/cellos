@@ -534,7 +534,7 @@ mod serial_port {
     )
 ))]
 fn sas_record_end(
-    sched: &super::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
     registered_grants: Option<&BTreeMap<usize, RegGrant>>,
     caller_id: usize,
@@ -612,7 +612,7 @@ fn sas_record_end(
     )
 ))]
 fn sas_caller_owned_span(
-    sched: &super::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
     registered_grants: Option<&BTreeMap<usize, RegGrant>>,
     caller_id: usize,
@@ -988,7 +988,7 @@ include!(concat!(env!("OUT_DIR"), "/syscall_opcodes.rs"));
 
 mod incarnation_tids {
     /// Root plus the per-Cell thread cap.
-    const CAP: usize = super::super::scheduler::MAX_THREADS_PER_CELL + 1;
+    const CAP: usize = crate::sched::scheduler::MAX_THREADS_PER_CELL + 1;
 
     pub(super) struct Tids {
         ids: [usize; CAP],
@@ -2065,8 +2065,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     // (ViCell cells are poll-based — try_recv/yield every loop iteration), so
     // reset its CPU-monopoly counter.
     {
-        let hart_id = super::hart_local::current_hart_id();
-        let cid = super::hart_local::ready::current_task_id_for(hart_id);
+        let hart_id = crate::sched::hart_local::current_hart_id();
+        let cid = crate::sched::hart_local::ready::current_task_id_for(hart_id);
         if cid > 0 {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&cid) {
@@ -2141,8 +2141,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
     // Watchdog: syscall proves the cell is making forward progress.
     {
-        let hart_id = super::hart_local::current_hart_id();
-        let cid = super::hart_local::ready::current_task_id_for(hart_id);
+        let hart_id = crate::sched::hart_local::current_hart_id();
+        let cid = crate::sched::hart_local::ready::current_task_id_for(hart_id);
         if cid > 0 {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&cid) {

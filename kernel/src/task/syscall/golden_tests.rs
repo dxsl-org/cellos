@@ -13,8 +13,9 @@
 //! Run without feature flags that add opcodes (`bench-counters`).
 
 use super::{check_allowlist, map_syscall, supports_typed_oom, syscall_to_vi, SyscallError};
+use crate::sched::scheduler::Scheduler;
 use crate::task::cap::CapSet;
-use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
+use crate::task::{tcb::Task, SCHEDULER};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

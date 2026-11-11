@@ -1,11 +1,9 @@
 //! Native-domain scheduler fixtures, shared by every architecture that can carry
 //! a private root. They deliberately construct no user mapping.
-use super::{
-    domain_switch::{root_tuple, SwitchPlan},
-    hart_local,
-    tcb::{Task, TaskAddressSpace},
-};
 use crate::memory::address_space::AddressSpaceBuilder;
+use crate::sched::domain_switch::{root_tuple, SwitchPlan};
+use crate::sched::hart_local;
+use crate::task::tcb::{Task, TaskAddressSpace};
 use alloc::vec::Vec;
 use types::CellId;
 
@@ -31,7 +29,7 @@ const ARCH_TAG: &str = "X86";
 /// x86 and RV64 consult actual online publication, never configured SMP size.
 #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 fn observed_harts() -> usize {
-    super::smp::online_hart_count()
+    crate::sched::smp::online_hart_count()
 }
 #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
 fn observed_harts() -> usize {
@@ -409,8 +407,8 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
 pub(crate) fn observe_incoming_live_root() {
     use core::sync::atomic::{AtomicBool, Ordering};
 
-    static REPORTED: [AtomicBool; super::smp::MAX_HARTS] =
-        [const { AtomicBool::new(false) }; super::smp::MAX_HARTS];
+    static REPORTED: [AtomicBool; crate::sched::smp::MAX_HARTS] =
+        [const { AtomicBool::new(false) }; crate::sched::smp::MAX_HARTS];
 
     let (id, generation) = hart_local::current_domain();
     if id == 0 {
@@ -616,7 +614,7 @@ pub(crate) fn run_pinned_retire_regression() -> bool {
 /// secondaries, so only there can a selection cross a hart).
 #[cfg_attr(not(target_arch = "riscv64"), allow(dead_code))]
 pub(crate) fn resumed_worker_domain_matches(worker_tid: usize) -> bool {
-    let scheduler = super::SCHEDULER.lock();
+    let scheduler = crate::task::SCHEDULER.lock();
     let Some(task) = scheduler
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&worker_tid))

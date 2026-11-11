@@ -209,8 +209,8 @@ pub fn riscv_plic_init_data() -> Option<(usize, [u32; RISCV_PLIC_IRQ_CAPACITY], 
 
 #[cfg(target_arch = "riscv64")]
 pub fn riscv_plic_context_for_current_hart() -> Option<usize> {
-    let logical_hart = crate::task::hart_local::current_hart_id();
-    let physical_hart = crate::task::smp::logical_to_physical(logical_hart)?;
+    let logical_hart = crate::sched::hart_local::current_hart_id();
+    let physical_hart = crate::sched::smp::logical_to_physical(logical_hart)?;
     crate::board::selected_riscv64_soc().plic_context_for_physical_hart(physical_hart)
 }
 

@@ -30,9 +30,9 @@ use api::telemetry::{
 use core::sync::atomic::{AtomicU64, Ordering};
 use types::{CellId, ViError};
 
-use super::hart_local::ready as rl;
-use super::scheduler::Scheduler;
-use super::smp::MAX_HARTS;
+use crate::sched::hart_local::ready as rl;
+use crate::sched::scheduler::Scheduler;
+use crate::sched::smp::MAX_HARTS;
 
 /// Monotonic nanoseconds on the same clock `GetTime(0)` exposes to cells.
 pub(crate) fn monotonic_ns() -> Option<u64> {
@@ -424,7 +424,7 @@ pub(crate) fn capture(
         sample_id,
         capture_start_ns: clock.unwrap_or(0),
         capture_end_ns: 0,
-        online_cpus: count(super::smp::online_hart_count()),
+        online_cpus: count(crate::sched::smp::online_hart_count()),
         scope: SCOPE_SYSTEM,
         total_cells: count(total_cells),
         total_tasks: count(total_tasks),

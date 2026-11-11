@@ -192,7 +192,7 @@ impl Subject {
 
     /// The subject for `tid` read under a scheduler the caller already holds;
     /// a missing task keeps its tid with a zero incarnation.
-    pub fn of(sched: &crate::task::scheduler::Scheduler, tid: usize) -> Subject {
+    pub fn of(sched: &crate::sched::scheduler::Scheduler, tid: usize) -> Subject {
         sched.tasks.get(&tid).map_or(
             Subject {
                 tid: tid as u64,

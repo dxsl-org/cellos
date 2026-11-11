@@ -104,7 +104,7 @@ pub(super) fn cleanup_task(tid: usize, cell: u64) {
     // A wake in `ipc_send` may have queued this synthetic endpoint on a hart's
     // run queue. Removing it from `tasks` alone leaves that entry behind, and the
     // scheduler would dispatch a task record that no longer exists.
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             let owner =

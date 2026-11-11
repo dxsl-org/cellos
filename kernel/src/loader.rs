@@ -134,12 +134,12 @@ pub(crate) fn atomic_checkpoint(_case: &'static str) -> ViResult<()> {
 }
 
 #[cfg(feature = "test-hooks")]
-pub(crate) fn observe_pre_ready(sched: &crate::task::scheduler::Scheduler, tid: usize) {
+pub(crate) fn observe_pre_ready(sched: &crate::sched::scheduler::Scheduler, tid: usize) {
     atomic_publication_tests::observe_complete(sched, tid);
 }
 
 #[cfg(not(feature = "test-hooks"))]
-pub(crate) fn observe_pre_ready(_sched: &crate::task::scheduler::Scheduler, _tid: usize) {}
+pub(crate) fn observe_pre_ready(_sched: &crate::sched::scheduler::Scheduler, _tid: usize) {}
 
 /// Linker trait (reserved for future dynamic-linking support).
 #[allow(dead_code)] // reason: trait body used by future Cell hot-swap (Phase 20)

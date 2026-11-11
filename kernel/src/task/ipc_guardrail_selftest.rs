@@ -81,7 +81,7 @@ fn dead_peer_unblocks_sender() -> bool {
                     && sender.reply_value == Some(usize::MAX)
                     && sender.trap_frame.regs[10] == usize::MAX as _
             });
-            let requeued = super::hart_local::HART_LOCALS.iter().any(|local| {
+            let requeued = crate::sched::hart_local::HART_LOCALS.iter().any(|local| {
                 local
                     .ready
                     .lock()
@@ -100,7 +100,7 @@ fn dead_peer_unblocks_sender() -> bool {
     };
 
     drop(reaped);
-    super::hart_local::ready::remove_from_all(SENDER);
+    crate::sched::hart_local::ready::remove_from_all(SENDER);
     insert(RECEIVER, TEST_CELL + 2);
     let payload = [0u8; 1];
     let followup = super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, 1) == Ok(1)

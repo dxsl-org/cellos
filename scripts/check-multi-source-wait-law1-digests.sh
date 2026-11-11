@@ -37,7 +37,7 @@ OSTD_LIB="libs/ostd/src/lib.rs"
 K_WAIT="kernel/src/task/completion_wait.rs"
 K_ASYNC="kernel/src/task/async_ipc.rs"
 K_TASK="kernel/src/task.rs"
-K_SCHED="kernel/src/task/scheduler.rs"
+K_SCHED="kernel/src/sched/scheduler.rs"
 # The dispatcher and its helpers live in kernel/src/task/syscall/ (split in
 # architecture remediation Phase 08); the items are checked across the module.
 K_SYSCALL="$(mktemp)"
@@ -166,7 +166,7 @@ require_in "$K_SYSCALL" "let mask = u32::try_from(a0).unwrap_or(u32::MAX);" \
 require_in "$K_MSI" "irq_wait::hint_msi_wake();" "the MSI handler raises the wake hint"
 require_in "$K_SCHED" "| crate::dev::irq_wait::take_wake_hint();" \
     "the hart-0 pass swaps the MSI wake hint every time"
-require_in "$K_SCHED" "if super::completion_wait::irq_wake_due(task, *source) =>" \
+require_in "$K_SCHED" "if crate::task::completion_wait::irq_wake_due(task, *source) =>" \
     "the sweep wakes an IRQ wait on a pending snapshot line"
 forbid_in "$K_WAIT" "PROTO_IPC" "no kernel-private prototype bit remains"
 require_in "$K_ASYNC" "source & api::completion::source::IPC != 0" \

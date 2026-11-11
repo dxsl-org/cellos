@@ -33,25 +33,6 @@ pub(crate) mod domain_grant;
 ))]
 #[path = "task/domain-grant-gate.rs"]
 pub(crate) mod domain_grant_gate;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
-pub(crate) mod domain_switch;
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
-pub(crate) mod domain_switch_tests;
 mod elf_prepare;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod fstat_selftest;
@@ -68,7 +49,6 @@ pub(crate) mod futex;
 pub(crate) mod grant_gate_selftest;
 #[cfg(not(cellos_posture = "release"))]
 pub mod grant_reclaim_selftest;
-pub mod hart_local;
 pub mod manifest_v2_selftest;
 /// Selective MMIO revocation for runtime revocation (`.agents/260712-1901` P03).
 #[cfg(feature = "test-hooks")]
@@ -79,8 +59,6 @@ pub mod net_rx_selftest;
 pub mod p_trust_selftest;
 /// Kernel-owned pipes — one-way byte streams between tasks (ADR-0018 §2.1).
 pub(crate) mod pipe;
-/// All-hart quiescence for the snapshot capture preflight (phase 07 step 3).
-pub mod quiesce;
 /// Phase-06 witness: an RT sender woken by a consume preempts its target hart.
 #[cfg(all(
     feature = "native-domains",
@@ -89,7 +67,6 @@ pub mod quiesce;
 ))]
 #[cfg(not(cellos_posture = "release"))]
 pub(crate) mod rt_wake_selftest;
-pub mod smp;
 pub mod syscall;
 #[cfg(feature = "test-hooks")]
 pub mod task_id_selftest;
@@ -127,8 +104,6 @@ pub mod cap_file_selftest;
 mod cell_image;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod context_handoff_selftest;
-#[cfg(cellos_g1_cpu)]
-pub(crate) mod cpu_accounting;
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 #[path = "task/getrandom-sas-tests.rs"]
 pub(crate) mod getrandom_sas_tests;
@@ -144,7 +119,6 @@ pub mod path_selftest;
 pub mod pending_mailbox;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod retirement_selftest;
-pub mod scheduler;
 pub mod stack;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod stack_overflow_probe;
@@ -171,12 +145,12 @@ pub mod user_out;
 pub mod vfs_lifecycle_selftest;
 pub mod waker;
 
+use crate::sched::scheduler::Scheduler;
 use crate::sync::Spinlock;
 use alloc::{collections::VecDeque, string::String};
 #[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicU8, Ordering};
 use log::info;
-use scheduler::Scheduler;
 /// Conservative fallback for every unmeasured or risk-sensitive task path.
 /// Measured Phase 07 paths use the post-reactor table below; unknown paths keep
 /// this historical 256 KiB allocation.
@@ -459,9 +433,9 @@ fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) 
 /// the raw switch has saved this stack.
 #[inline(always)]
 fn arm_ipc_block_handoff(caller_id: usize) {
-    let hart = hart_local::current_hart_id();
-    if hart_local::ready::current_task_id_for(hart) == caller_id {
-        hart_local::ready::begin_outgoing_context_save(hart, caller_id);
+    let hart = crate::sched::hart_local::current_hart_id();
+    if crate::sched::hart_local::ready::current_task_id_for(hart) == caller_id {
+        crate::sched::hart_local::ready::begin_outgoing_context_save(hart, caller_id);
     }
 }
 
@@ -514,7 +488,7 @@ const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
 pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTrapFrame) -> bool {
     #[cfg(feature = "native-domains")]
     {
-        let hart = unsafe { hart_local::current_hart() };
+        let hart = unsafe { crate::sched::hart_local::current_hart() };
         if hart
             .user_copy_guard_active
             .load(core::sync::atomic::Ordering::Acquire)
@@ -606,7 +580,7 @@ static STACK_BASELINE_EMITTED: AtomicU8 = AtomicU8::new(0);
 // misroute the incoming-context retirement completion to hart 0, and corrupt
 // the remote hart's local scheduler state.
 #[cfg(target_arch = "riscv64")]
-static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; crate::sched::smp::MAX_HARTS] =
     [crate::hal::arch::Context {
         ra: 0,
         sp: 0,
@@ -627,7 +601,7 @@ static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
         gp: 0,
         tp: 0,
         sscratch: 0,
-    }; smp::MAX_HARTS];
+    }; crate::sched::smp::MAX_HARTS];
 /// The context a hart that has never run a task saves itself into.
 ///
 /// One slot per hart, like RV64's `BOOT_CONTEXTS`: a *shared* slot means the
@@ -657,8 +631,8 @@ const IDLE_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
 };
 
 #[cfg(target_arch = "aarch64")]
-static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
-    [IDLE_CONTEXT; smp::MAX_HARTS];
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; crate::sched::smp::MAX_HARTS] =
+    [IDLE_CONTEXT; crate::sched::smp::MAX_HARTS];
 #[cfg(target_arch = "riscv32")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     ra: 0,
@@ -682,7 +656,7 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     sscratch: 0,
 };
 #[cfg(target_arch = "x86_64")]
-static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; crate::sched::smp::MAX_HARTS] =
     [crate::hal::arch::Context {
         r15: 0,
         r14: 0,
@@ -695,7 +669,7 @@ static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
         kernel_trap_sp: 0,
         user_cr3: 0,
         fp_control: hal::context::FpuControl::new(),
-    }; smp::MAX_HARTS];
+    }; crate::sched::smp::MAX_HARTS];
 #[cfg(target_arch = "arm")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     r4: 0,
@@ -854,10 +828,10 @@ pub(crate) fn maybe_emit_exit_stack_baseline(
 pub fn init() {
     // Install hart-local state for hart 0 BEFORE the scheduler or timer start,
     // so current_cell_id() works correctly once interrupts are enabled.
-    hart_local::install(0);
+    crate::sched::hart_local::install(0);
     // Hart 0 is online from here on, on every architecture, so every later
     // remote shootdown or flush-epoch set names it.
-    smp::publish_boot_hart_online();
+    crate::sched::smp::publish_boot_hart_online();
 
     info!("Process: Initializing Scheduler...");
     let mut sched_guard = SCHEDULER.lock();
@@ -993,10 +967,10 @@ pub extern "Rust" fn vi_terminate_on_fault_aarch64(
 #[cfg(target_arch = "aarch64")]
 const _: crate::hal::TerminateOnFaultAarch64 = vi_terminate_on_fault_aarch64;
 
-/// Exposes `scheduler::current_cell_id` to the HAL trap handler.
+/// Exposes `crate::sched::scheduler::current_cell_id` to the HAL trap handler.
 #[no_mangle]
 pub extern "Rust" fn vi_current_cell_id() -> usize {
-    scheduler::current_cell_id()
+    crate::sched::scheduler::current_cell_id()
 }
 
 #[cfg(any(
@@ -1031,17 +1005,20 @@ const _: crate::hal::CurrentCellId = vi_current_cell_id;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "Rust" fn vi_ipi_service() {
-    let hart = hart_local::current_hart_id();
+    let hart = crate::sched::hart_local::current_hart_id();
     #[cfg(target_arch = "aarch64")]
-    smp::note_ipi_taken(hart);
-    smp::service_tlb_flush(hart);
+    crate::sched::smp::note_ipi_taken(hart);
+    crate::sched::smp::service_tlb_flush(hart);
     #[cfg(feature = "native-domains")]
-    if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0 {
-        smp::complete_retirement_switch(hart);
+    if crate::sched::smp::retirement_switch_pending(hart)
+        && crate::sched::hart_local::ready::current_task_id_for(hart) == 0
+    {
+        crate::sched::smp::complete_retirement_switch(hart);
     }
     #[cfg(target_arch = "x86_64")]
-    if smp::x86_scheduler_ready()
-        && (smp::take_preemption(hart) || smp::retirement_switch_pending(hart))
+    if crate::sched::smp::x86_scheduler_ready()
+        && (crate::sched::smp::take_preemption(hart)
+            || crate::sched::smp::retirement_switch_pending(hart))
     {
         yield_cpu();
     }
@@ -1068,8 +1045,8 @@ pub extern "Rust" fn vi_timer_tick() {
         target_arch = "x86_64"
     ))]
     {
-        let hart = hart_local::current_hart_id();
-        smp::service_tlb_flush(hart);
+        let hart = crate::sched::hart_local::current_hart_id();
+        crate::sched::smp::service_tlb_flush(hart);
 
         // Same observation point, same reason, for the capture preflight's park
         // request: a hart can only stop where it is already taking the trap that
@@ -1077,9 +1054,9 @@ pub extern "Rust" fn vi_timer_tick() {
         // invalidation's deadline is never extended by a park, and before `tick()`,
         // the console poll and `yield_cpu()` so the hart is parked holding no lock
         // and with no scheduler state half-changed — see
-        // `quiesce::park_here_if_requested` for the full safe-point argument.
+        // `crate::sched::quiesce::park_here_if_requested` for the full safe-point argument.
         #[cfg(target_arch = "riscv64")]
-        quiesce::park_here_if_requested(hart);
+        crate::sched::quiesce::park_here_if_requested(hart);
 
         // A retirement asks this hart to prove that the context it was executing
         // has been re-entered through a switch boundary. A hart that is running
@@ -1095,9 +1072,10 @@ pub extern "Rust" fn vi_timer_tick() {
         // generation's CellId blocked every later cell (the grant pair's owner
         // could not even `GrantFree`, and the receiver's revoked mapping never
         // faulted).
-        if smp::retirement_switch_pending(hart) && hart_local::ready::current_task_id_for(hart) == 0
+        if crate::sched::smp::retirement_switch_pending(hart)
+            && crate::sched::hart_local::ready::current_task_id_for(hart) == 0
         {
-            smp::complete_retirement_switch(hart);
+            crate::sched::smp::complete_retirement_switch(hart);
         }
     }
 
@@ -1116,12 +1094,12 @@ pub extern "Rust" fn vi_timer_tick() {
             target_arch = "x86_64"
         )
     ))]
-    if hart_local::current_hart_id() == 0 {
+    if crate::sched::hart_local::current_hart_id() == 0 {
         crate::memory::deferred_release::reap_deferred_releases();
     }
 
     #[cfg(target_arch = "x86_64")]
-    if hart_local::current_hart_id() == 0 {
+    if crate::sched::hart_local::current_hart_id() == 0 {
         tick();
     }
     #[cfg(not(target_arch = "x86_64"))]
@@ -1146,7 +1124,7 @@ pub extern "Rust" fn vi_timer_tick() {
     // is currently blocked in sys_read(0).  VirtIO events were already drained
     // above, so the VirtIO section of poll() is a no-op here.
     #[cfg(target_arch = "x86_64")]
-    if hart_local::current_hart_id() == 0 {
+    if crate::sched::hart_local::current_hart_id() == 0 {
         crate::dev::console_drv::CONSOLE.lock().poll();
         // ACPI power button: same hart, same no-lock point as the byte relay.
         crate::acpi::sci::relay_pending();
@@ -1161,7 +1139,7 @@ pub extern "Rust" fn vi_timer_tick() {
     //   (b) yield_cpu() releases SCHEDULER lock before calling Context::switch
     //   (c) trap.S restores the correct ViTrapFrame from the new task's stack
     #[cfg(target_arch = "x86_64")]
-    if !smp::x86_scheduler_ready() {
+    if !crate::sched::smp::x86_scheduler_ready() {
         return;
     }
     yield_cpu();
@@ -1172,20 +1150,20 @@ pub extern "Rust" fn vi_timer_tick() {
 /// the interrupted retiring task can still execute its outgoing kernel path.
 #[no_mangle]
 pub extern "C" fn vi_context_switch_complete() {
-    let hart = hart_local::current_hart_id();
+    let hart = crate::sched::hart_local::current_hart_id();
     // A zero selected TID with an outgoing-save guard denotes task→boot,
     // rather than an unpinned task switch. Keep the terminal task's identity
     // published until this incoming boot context proves the old Context was
     // saved; otherwise a stale user trap could be dispatched as caller 0.
-    let pinned = hart_local::ready::selected_task_id_for(hart);
-    let switched_to_boot =
-        pinned == 0 && hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
+    let pinned = crate::sched::hart_local::ready::selected_task_id_for(hart);
+    let switched_to_boot = pinned == 0
+        && crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
     // Every hook-backed raw switch (RV64 `__switch`, x86_64 `switch_with_root`,
     // AArch64 `__switch_el1`/`__switch_el2`) reaches this callback only after
     // it saved every callee-save register and system register of the outgoing
     // Context. Release the ready-queue steal guard before publishing the
     // incoming ownership.
-    hart_local::ready::complete_outgoing_context_save(hart);
+    crate::sched::hart_local::ready::complete_outgoing_context_save(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_outgoing_save_completion(hart);
     let selected = if pinned != 0 {
@@ -1193,20 +1171,22 @@ pub extern "C" fn vi_context_switch_complete() {
     } else if switched_to_boot {
         0
     } else {
-        hart_local::ready::current_task_id_for(hart)
+        crate::sched::hart_local::ready::current_task_id_for(hart)
     };
     #[cfg(cellos_g1_cpu)]
     {
         let scheduler = SCHEDULER.lock();
-        let sched = scheduler
-            .as_ref()
-            .unwrap_or_else(|| cpu_accounting::fatal(cpu_accounting::Error::Busy));
-        cpu_accounting::require(cpu_accounting::complete(sched, hart, selected));
+        let sched = scheduler.as_ref().unwrap_or_else(|| {
+            crate::sched::cpu_accounting::fatal(crate::sched::cpu_accounting::Error::Busy)
+        });
+        crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::complete(
+            sched, hart, selected,
+        ));
     }
-    hart_local::ready::complete_selected_switch(hart, selected);
+    crate::sched::hart_local::ready::complete_selected_switch(hart, selected);
     if switched_to_boot {
-        hart_local::ready::set_current_task_id(hart, 0);
-        hart_local::set_current_cell_context(0, 0);
+        crate::sched::hart_local::ready::set_current_task_id(hart, 0);
+        crate::sched::hart_local::set_current_cell_context(0, 0);
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         retirement_selftest::observe_heartbeat_boot_completion(hart);
     }
@@ -1219,15 +1199,15 @@ pub extern "C" fn vi_context_switch_complete() {
         )
     ))]
     {
-        let safe_root = hart_local::take_safe_root_pending();
+        let safe_root = crate::sched::hart_local::take_safe_root_pending();
         if switched_to_boot || safe_root {
-            hart_local::acknowledge_safe_root();
+            crate::sched::hart_local::acknowledge_safe_root();
         }
         // Safe-root completion owns outgoing attribution release: clear this
         // hart's execution pin on whatever root the completed switch left.
         // Unconditional take — a direct private→private switch leaves no
         // safe-root pending yet still owes the displaced root a release.
-        if let Some(space) = hart_local::take_staged_execution_release() {
+        if let Some(space) = crate::sched::hart_local::take_staged_execution_release() {
             let _ = space.set_current_hart(hart, false);
         }
         user_copy::clear_guard_for_context_switch();
@@ -1242,8 +1222,8 @@ pub extern "C" fn vi_context_switch_complete() {
         any(target_arch = "aarch64", target_arch = "x86_64")
     ))]
     {
-        domain_switch_tests::observe_incoming_live_root();
-        domain_switch_tests::observe_domain_teardown(hart);
+        crate::sched::domain_switch_tests::observe_incoming_live_root();
+        crate::sched::domain_switch_tests::observe_domain_teardown(hart);
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_origin_ownership_release(hart);
@@ -1253,15 +1233,15 @@ pub extern "C" fn vi_context_switch_complete() {
         "[selftest] SMP-RETIREMENT: stage=rv64-switch-boundary hart={} selected={} executing={}",
         hart,
         selected,
-        hart_local::ready::executing_task_id_for(hart),
+        crate::sched::hart_local::ready::executing_task_id_for(hart),
     );
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::hold_before_switch_completion(hart);
     #[cfg(not(target_arch = "x86_64"))]
-    smp::complete_retirement_switch(hart);
+    crate::sched::smp::complete_retirement_switch(hart);
     #[cfg(target_arch = "x86_64")]
-    smp::complete_captured_retirement_boundary(hart);
+    crate::sched::smp::complete_captured_retirement_boundary(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_switch_completion(hart);
 }
@@ -1298,17 +1278,17 @@ const _: crate::hal::TimerTick = vi_timer_tick;
 /// held by another hart protects live mutable state; clearing it from this hart
 /// would allow concurrent access through the other hart's still-live guard.
 pub fn terminate_current_cell_on_fault(
-    provenance: hart_local::TrapProvenUserFault,
+    provenance: crate::sched::hart_local::TrapProvenUserFault,
     cause: usize,
     pc: usize,
     fault_addr: usize,
 ) {
-    let hart = hart_local::current_hart_id();
-    let fault = hart_local::DeferredFault::from_user_trap(
+    let hart = crate::sched::hart_local::current_hart_id();
+    let fault = crate::sched::hart_local::DeferredFault::from_user_trap(
         provenance,
-        hart_local::ready::current_task_id_for(hart),
-        hart_local::current_cell_id(),
-        hart_local::current_cell_generation(),
+        crate::sched::hart_local::ready::current_task_id_for(hart),
+        crate::sched::hart_local::current_cell_id(),
+        crate::sched::hart_local::current_cell_generation(),
         cause,
         pc,
         fault_addr,
@@ -1317,8 +1297,8 @@ pub fn terminate_current_cell_on_fault(
     // This fixed record is the only fault-path publication before the allocator
     // is uncharged from the victim.  Do not move logging, task lookup, or
     // scheduler collection work above this attribution handoff.
-    hart_local::defer_fault(fault);
-    hart_local::set_current_cell_id(0);
+    crate::sched::hart_local::defer_fault(fault);
+    crate::sched::hart_local::set_current_cell_id(0);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_fault_deferred_record_commit(fault);
@@ -1340,7 +1320,7 @@ pub(crate) fn terminate_current_cell_on_user_trap_fault(
     fault_addr: usize,
 ) {
     terminate_current_cell_on_fault(
-        hart_local::TrapProvenUserFault::new(),
+        crate::sched::hart_local::TrapProvenUserFault::new(),
         cause,
         pc,
         fault_addr,
@@ -1375,7 +1355,8 @@ unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 fn note_task_dispatch(hart_id: usize) {
     use core::sync::atomic::{AtomicU8, Ordering};
-    static REPORTED: [AtomicU8; smp::MAX_HARTS] = [const { AtomicU8::new(0) }; smp::MAX_HARTS];
+    static REPORTED: [AtomicU8; crate::sched::smp::MAX_HARTS] =
+        [const { AtomicU8::new(0) }; crate::sched::smp::MAX_HARTS];
     if let Some(slot) = REPORTED.get(hart_id) {
         if slot.swap(1, Ordering::AcqRel) == 0 {
             log::info!("[sched] hart {} dispatched a task", hart_id);
@@ -1386,7 +1367,7 @@ fn note_task_dispatch(hart_id: usize) {
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
     #[cfg(target_arch = "x86_64")]
-    if !smp::x86_scheduler_ready() {
+    if !crate::sched::smp::x86_scheduler_ready() {
         return;
     }
     // RV64 cooperative yields can enter with SIE set (not only from trap
@@ -1410,14 +1391,14 @@ pub fn yield_cpu() {
         flags
     };
     #[cfg(target_arch = "x86_64")]
-    smp::capture_retirement_boundary(hart_local::current_hart_id());
+    crate::sched::smp::capture_retirement_boundary(crate::sched::hart_local::current_hart_id());
     #[cfg(cellos_g1_cpu)]
     {
         let scheduler = SCHEDULER.lock();
         if let Some(sched) = scheduler.as_ref() {
-            cpu_accounting::require(cpu_accounting::service(
+            crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::service(
                 sched,
-                hart_local::current_hart_id(),
+                crate::sched::hart_local::current_hart_id(),
             ));
         }
     }
@@ -1433,8 +1414,8 @@ pub fn yield_cpu() {
     // is already kernel-owned. This is deliberately before zombie reaping and
     // task selection so every terminal path participates in the same quiescence
     // lifecycle.
-    let deferred_retired = match hart_local::take_deferred_retirement() {
-        Some(hart_local::DeferredRetirement::Fault(fault)) => {
+    let deferred_retired = match crate::sched::hart_local::take_deferred_retirement() {
+        Some(crate::sched::hart_local::DeferredRetirement::Fault(fault)) => {
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
             retirement_selftest::observe_fault_scheduler_funnel_attempt(fault.tid);
             let mut guard = SCHEDULER.lock();
@@ -1444,7 +1425,7 @@ pub fn yield_cpu() {
             scheduler.retire_deferred_fault(fault);
             Some(fault.tid)
         }
-        Some(hart_local::DeferredRetirement::Exit(exit)) => {
+        Some(crate::sched::hart_local::DeferredRetirement::Exit(exit)) => {
             let mut guard = SCHEDULER.lock();
             let scheduler = guard
                 .as_mut()
@@ -1677,7 +1658,7 @@ pub fn yield_cpu() {
     #[cfg(cellos_p01_trace)]
     crate::p01_measurement::safe_point();
     #[cfg(cellos_g1_cpu)]
-    cpu_accounting::safe_point();
+    crate::sched::cpu_accounting::safe_point();
 
     // AArch64 reaches this point from the boot idle loop with IRQs unmasked,
     // and the SCHEDULER guard restores that state when it drops. Mask from
@@ -1689,7 +1670,7 @@ pub fn yield_cpu() {
     // it resumes, at the end of `yield_cpu`.
     #[cfg(target_arch = "aarch64")]
     let outgoing_daif = crate::hal::arch::save_and_disable_interrupts();
-    let hart_id = hart_local::current_hart_id();
+    let hart_id = crate::sched::hart_local::current_hart_id();
     #[cfg(all(
         feature = "native-domains",
         any(
@@ -1744,7 +1725,7 @@ pub fn yield_cpu() {
         // Selection is normally published only with a concrete switch tuple.
         // Clear defensively on the no-switch/abort path so a stale pin cannot
         // retain a retired Context indefinitely.
-        hart_local::ready::abort_selected_switch(hart_id);
+        crate::sched::hart_local::ready::abort_selected_switch(hart_id);
     }
     #[cfg(target_arch = "riscv64")]
     if switch_info.is_none() {
@@ -2105,7 +2086,7 @@ pub fn spawn(
 }
 
 /// Register a task around a stack pair the caller already owns. See
-/// [`scheduler::Scheduler::spawn_with_stacks`] for why the caller allocates.
+/// [`crate::sched::scheduler::Scheduler::spawn_with_stacks`] for why the caller allocates.
 pub fn spawn_with_stacks(
     name: &str,
     cell_id: CellId,
@@ -2184,11 +2165,11 @@ pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
 }
 
 pub fn current_task_id() -> usize {
-    hart_local::ready::current_task_id_for(hart_local::current_hart_id())
+    crate::sched::hart_local::ready::current_task_id_for(crate::sched::hart_local::current_hart_id())
 }
 
 pub fn has_ready_tasks() -> bool {
-    hart_local::ready::total_ready_count() > 0
+    crate::sched::hart_local::ready::total_ready_count() > 0
 }
 
 fn append_path_components(output: &mut String, path: &str) {
@@ -3329,7 +3310,10 @@ pub fn scheduler_stats() -> (usize, usize) {
     } else {
         0
     };
-    (task_count, hart_local::ready::total_ready_count())
+    (
+        task_count,
+        crate::sched::hart_local::ready::total_ready_count(),
+    )
 }
 
 /// 8 KB circular ring buffer for `ReadLog = 237` syscall.

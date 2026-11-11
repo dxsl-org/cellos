@@ -46,15 +46,15 @@ impl IpcWireMessage {
         if payload.len() > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         let result = (|| {
             let mut vec = Vec::new();
             vec.try_reserve_exact(payload.len()).map_err(|_| ())?;
             vec.extend_from_slice(payload);
             Ok(vec.into_boxed_slice())
         })();
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
 
         result.map(|payload| Self { header, payload })
     }
@@ -71,15 +71,15 @@ impl IpcWireMessage {
         if len > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         let allocated = (|| {
             let mut vec = Vec::new();
             vec.try_reserve_exact(len).map_err(|_| ())?;
             vec.resize(len, 0);
             Ok(vec.into_boxed_slice())
         })();
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
         let mut message = Self {
             header,
             payload: allocated?,
@@ -153,15 +153,15 @@ impl IpcWireMessage {
     /// Fallibly duplicate this message. Unlike `Clone`, allocation failure is
     /// reported instead of aborting the kernel via the non-returning OOM path.
     pub fn try_clone(&self) -> Result<Self, ()> {
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         let result = (|| {
             let mut vec = Vec::new();
             vec.try_reserve_exact(self.payload.len()).map_err(|_| ())?;
             vec.extend_from_slice(&self.payload);
             Ok(vec.into_boxed_slice())
         })();
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
         result.map(|payload| Self {
             header: self.header,
             payload,
@@ -171,10 +171,10 @@ impl IpcWireMessage {
 
 impl Drop for IpcWireMessage {
     fn drop(&mut self) {
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         let owned = core::mem::take(&mut self.payload);
         drop(owned);
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }

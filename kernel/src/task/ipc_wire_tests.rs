@@ -38,9 +38,9 @@ fn wire_message_bounds() {
 // ---- OSD-3: a blocking send never targets a tombstone ---------------------
 
 mod tombstone_target {
-    use super::super::scheduler::Scheduler;
     use super::super::tcb::{Task, TaskState};
     use super::super::{ipc_send_kernel, ipc_target_is_tombstone, IpcSendError, SCHEDULER};
+    use crate::sched::scheduler::Scheduler;
     use crate::sync::SpinlockGuard;
     use types::CellId;
 

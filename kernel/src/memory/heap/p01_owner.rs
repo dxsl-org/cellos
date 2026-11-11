@@ -13,7 +13,7 @@ pub(crate) const CAPACITY: usize = 1024;
 const ATTEMPTS: usize = 10;
 // Selected scope: at most eight child attempts plus two driver route attempts.
 // Bindings are historical and never recycled merely because an attempt closes.
-const HARTS: usize = crate::task::smp::MAX_HARTS;
+const HARTS: usize = crate::sched::smp::MAX_HARTS;
 const BOOKKEEPING: u64 = u64::MAX;
 static CONTEXT: [AtomicU64; HARTS] = [const { AtomicU64::new(0) }; HARTS];
 
@@ -231,7 +231,7 @@ fn fault(ledger: &mut Ledger, bits: u64) {
                 Phase::Armed => 1,
                 Phase::Frozen => 2,
             },
-            crate::task::hart_local::current_hart_id() as u64,
+            crate::sched::hart_local::current_hart_id() as u64,
         ]);
     }
     ledger.invalid = true;
@@ -406,13 +406,13 @@ pub(crate) fn copy_first_fault() -> Option<[u64; 6]> {
 
 pub(crate) fn current_attempt() -> Option<u64> {
     let id = CONTEXT
-        .get(crate::task::hart_local::current_hart_id())?
+        .get(crate::sched::hart_local::current_hart_id())?
         .load(Ordering::Acquire);
     (id != 0 && id != BOOKKEEPING).then_some(id)
 }
 fn current_origin() -> Origin {
     if CONTEXT
-        .get(crate::task::hart_local::current_hart_id())
+        .get(crate::sched::hart_local::current_hart_id())
         .is_some_and(|context| context.load(Ordering::Acquire) == BOOKKEEPING)
     {
         return Origin::KernelBookkeeping;
@@ -420,8 +420,8 @@ fn current_origin() -> Origin {
     if let Some(id) = current_attempt() {
         return Origin::Preparation(id);
     }
-    let cell = crate::task::hart_local::current_cell_id() as u64;
-    let generation = crate::task::hart_local::current_cell_generation();
+    let cell = crate::sched::hart_local::current_cell_id() as u64;
+    let generation = crate::sched::hart_local::current_cell_generation();
     if cell == 0 {
         Origin::KernelBookkeeping
     } else {
@@ -437,7 +437,7 @@ pub(crate) struct Scope {
     _not_send: PhantomData<*mut ()>,
 }
 pub(crate) fn scope(attempt: Option<Attempt>) -> Scope {
-    let hart = crate::task::hart_local::current_hart_id();
+    let hart = crate::sched::hart_local::current_hart_id();
     let mut scope = Scope {
         hart,
         id: 0,
@@ -495,7 +495,7 @@ impl Drop for Scope {
         if !mutable(ledger) {
             return;
         }
-        if crate::task::hart_local::current_hart_id() != self.hart {
+        if crate::sched::hart_local::current_hart_id() != self.hart {
             fault(ledger, trace::IDENTITY);
             return;
         }
@@ -524,7 +524,7 @@ pub(crate) struct Bookkeeping {
 /// Suspend child-attempt attribution around the actual scheduler/container
 /// publication bookkeeping. No runtime accounting identity is changed.
 pub(crate) fn bookkeeping() -> Bookkeeping {
-    let hart = crate::task::hart_local::current_hart_id();
+    let hart = crate::sched::hart_local::current_hart_id();
     let mut guard = Bookkeeping {
         hart,
         id: 0,
@@ -559,7 +559,7 @@ impl Drop for Bookkeeping {
         if !mutable(ledger) {
             return;
         }
-        if crate::task::hart_local::current_hart_id() != self.hart
+        if crate::sched::hart_local::current_hart_id() != self.hart
             || CONTEXT[self.hart]
                 .compare_exchange(BOOKKEEPING, self.id, Ordering::AcqRel, Ordering::Acquire)
                 .is_err()
@@ -735,7 +735,7 @@ pub(crate) fn creation_fallback(kind: u64) -> Creation {
     creation_inner(None, kind, true)
 }
 fn creation_inner(owner: Option<Owner>, kind: u64, fallback: bool) -> Creation {
-    let hart = crate::task::hart_local::current_hart_id();
+    let hart = crate::sched::hart_local::current_hart_id();
     let mut guard = Creation {
         hart,
         previous: Semantic::EMPTY,
@@ -776,7 +776,7 @@ impl Drop for Creation {
         if !mutable(ledger) {
             return;
         }
-        if crate::task::hart_local::current_hart_id() != self.hart {
+        if crate::sched::hart_local::current_hart_id() != self.hart {
             fault(ledger, trace::IDENTITY);
             return;
         }
@@ -959,7 +959,7 @@ pub(super) unsafe fn allocated(
     let provenance = provenance.unwrap_or_else(|| {
         let semantic = ledger
             .contexts
-            .get(crate::task::hart_local::current_hart_id())
+            .get(crate::sched::hart_local::current_hart_id())
             .copied()
             .unwrap_or(Semantic::EMPTY);
         let adopted = semantic

@@ -44,7 +44,7 @@ pub(crate) fn set_base(task: &mut Task, base: usize) {
 /// value in the task trap frame instead.
 pub(crate) fn install_published_base() {
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-    write_user_thread_pointer(super::hart_local::current_tls_base());
+    write_user_thread_pointer(crate::sched::hart_local::current_tls_base());
 }
 
 /// Reinstall a switched-back task's base after its raw context switch returns.

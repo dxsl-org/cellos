@@ -116,15 +116,15 @@ struct PipeAllocationContext {
 
 impl PipeAllocationContext {
     fn enter() -> Self {
-        let previous_cell = crate::task::hart_local::current_cell_id();
-        crate::task::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         Self { previous_cell }
     }
 }
 
 impl Drop for PipeAllocationContext {
     fn drop(&mut self) {
-        crate::task::hart_local::set_current_cell_id(self.previous_cell);
+        crate::sched::hart_local::set_current_cell_id(self.previous_cell);
     }
 }
 
@@ -435,7 +435,7 @@ pub(crate) fn on_deadline(handle: PipeHandle, tid: usize, end: PipeEnd) {
 
 /// Session transport uses this same bounded ring owner, but never installs a
 /// legacy PipeHandle in any task's legacy table. All calls hold SCHEDULER.
-fn session_wake(sched: &mut super::scheduler::Scheduler, tid: usize) {
+fn session_wake(sched: &mut crate::sched::scheduler::Scheduler, tid: usize) {
     if let Some(task) = sched.tasks.get_mut(&tid) {
         if matches!(
             task.state,
@@ -447,7 +447,7 @@ fn session_wake(sched: &mut super::scheduler::Scheduler, tid: usize) {
     }
 }
 pub(crate) fn session_read(
-    sched: &mut super::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     handle: PipeHandle,
     dst: &mut [u8],
 ) -> Option<ReadOutcome> {
@@ -466,7 +466,7 @@ pub(crate) fn session_read(
     }
 }
 pub(crate) fn session_write(
-    sched: &mut super::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     handle: PipeHandle,
     src: &[u8],
 ) -> Option<WriteOutcome> {
@@ -491,7 +491,10 @@ pub(crate) fn session_counts(handle: PipeHandle) -> Option<(usize, usize)> {
         .map(|p| (p.readers, p.writers))
 }
 /// Discard buffered bytes and wake writers blocked on a now-empty ring.
-pub(crate) fn session_flush(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) -> bool {
+pub(crate) fn session_flush(
+    sched: &mut crate::sched::scheduler::Scheduler,
+    handle: PipeHandle,
+) -> bool {
     let mut pipes = PIPES.lock();
     let Some(pipe) = pipes.get_mut(&handle.pipe) else {
         return false;
@@ -506,7 +509,7 @@ pub(crate) fn session_flush(sched: &mut super::scheduler::Scheduler, handle: Pip
 /// Wake every task parked on this ring so it rechecks its typed endpoint state
 /// (closed, revoked or cancelled). A revoked holder is not necessarily the last
 /// end, so end-count transitions alone cannot cover it.
-pub(crate) fn session_wake_all(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) {
+pub(crate) fn session_wake_all(sched: &mut crate::sched::scheduler::Scheduler, handle: PipeHandle) {
     let mut pipes = PIPES.lock();
     let Some(pipe) = pipes.get_mut(&handle.pipe) else {
         return;
@@ -527,7 +530,10 @@ pub(crate) fn disown_cell(cell: usize) {
         }
     }
 }
-pub(crate) fn session_close(sched: &mut super::scheduler::Scheduler, handle: PipeHandle) -> bool {
+pub(crate) fn session_close(
+    sched: &mut crate::sched::scheduler::Scheduler,
+    handle: PipeHandle,
+) -> bool {
     let mut pipes = PIPES.lock();
     let Some(pipe) = pipes.get_mut(&handle.pipe) else {
         return false;

@@ -220,7 +220,7 @@ pub(crate) fn capture(sample: usize, metrics: &[crate::p01_resources::Metric; 16
         crate::p01_measurement::invalidate(crate::p01_measurement::PROTOCOL);
         return;
     }
-    let online = crate::task::smp::online_hart_count() as u64;
+    let online = crate::sched::smp::online_hart_count() as u64;
     let lifetimes = LIFETIMES.lock();
     snapshot.source = [
         2,
@@ -248,7 +248,7 @@ pub(crate) fn capture(sample: usize, metrics: &[crate::p01_resources::Metric; 16
     drop(lifetimes);
     snapshot.source[6] = count as u64;
     #[cfg(target_arch = "x86_64")]
-    let ready = crate::task::smp::x86_scheduler_ready();
+    let ready = crate::sched::smp::x86_scheduler_ready();
     #[cfg(not(target_arch = "x86_64"))]
     let ready = false;
     if online != 1 || !ready {

@@ -168,7 +168,7 @@ impl QuotaAlloc {
         layout: Layout,
         #[cfg(cellos_p01_trace)] origin: Option<p01_owner::Provenance>,
     ) -> *mut u8 {
-        let cell = crate::task::scheduler::current_cell_id();
+        let cell = crate::sched::scheduler::current_cell_id();
         let Some(owner) = crate::memory::cell_quota::charge_owner(cell, layout.size()) else {
             // Cell quota exceeded — return null, no panic.
             NULL_FROM_QUOTA.fetch_add(1, Ordering::Relaxed);
@@ -481,7 +481,7 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
 mod tests {
     use super::*;
     use crate::memory::cell_quota::{self, MAX_CELLS};
-    use crate::task::hart_local::{current_cell_id, set_current_cell_id};
+    use crate::sched::hart_local::{current_cell_id, set_current_cell_id};
     use types::CellId;
 
     const OWNER: usize = MAX_CELLS - 1;

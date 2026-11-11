@@ -26,9 +26,9 @@
 
 pub(crate) use super::domain_grant_gate::DomainGrantState;
 use super::domain_grant_gate::GrantLifecycle;
-use super::domain_switch::DomainRef;
 use crate::memory::address_space::{AddressSpace, AddressSpaceError};
 use crate::memory::paging::{Flags, PAGE_SIZE};
+use crate::sched::domain_switch::DomainRef;
 use crate::sync::Spinlock;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};

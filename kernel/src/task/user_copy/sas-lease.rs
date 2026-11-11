@@ -30,7 +30,7 @@
 use super::guard::commit_guarded;
 use super::range::{CopyError, Direction};
 use super::sv39_probe::{current_satp_root, sas_span_live, sv39_leaf};
-use crate::task::smp::MAX_HARTS;
+use crate::sched::smp::MAX_HARTS;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
 /// One window sequence per hart: odd while that hart is inside a Sas commit.
@@ -111,7 +111,7 @@ fn leased_body(
     len: usize,
 ) -> Result<(), CopyError> {
     let window = SAS_WINDOWS
-        .open(crate::task::hart_local::current_hart_id())
+        .open(crate::sched::hart_local::current_hart_id())
         .ok_or(CopyError::InvalidAddress)?;
     let root_pa = current_satp_root().ok_or(CopyError::InvalidAddress)?;
     sas_span_live(user_ptr, len, direction, |page| {

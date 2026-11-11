@@ -4,10 +4,10 @@
 use super::{
     copy_glue::TaskCopyView,
     ipc_wire,
-    scheduler::Scheduler,
     tcb::{Task, TaskState},
     SCHEDULER,
 };
+use crate::sched::scheduler::Scheduler;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -138,10 +138,10 @@ impl Operations {
             return Err(Failure::Busy);
         }
         if self.0.len() == self.0.capacity() {
-            let previous = super::hart_local::current_cell_id();
-            super::hart_local::set_current_cell_id(0);
+            let previous = crate::sched::hart_local::current_cell_id();
+            crate::sched::hart_local::set_current_cell_id(0);
             let reserved = self.0.try_reserve(1);
-            super::hart_local::set_current_cell_id(previous);
+            crate::sched::hart_local::set_current_cell_id(previous);
             reserved.map_err(|_| Failure::Busy)?;
         }
         self.0.push(op);
@@ -259,10 +259,10 @@ pub(crate) fn restore_notification(task: &mut Task, token: usize) -> bool {
 impl Drop for Operations {
     fn drop(&mut self) {
         let rows = core::mem::take(&mut self.0);
-        let previous = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         drop(rows);
-        super::hart_local::set_current_cell_id(previous);
+        crate::sched::hart_local::set_current_cell_id(previous);
     }
 }
 
@@ -1238,7 +1238,7 @@ mod tests {
         assert_eq!(sched.tasks[&PROVIDER].pending_msgs.len(), 3);
         expire(&mut sched, 10);
         assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
@@ -1621,7 +1621,7 @@ mod tests {
             TaskState::Recv { mask: PROVIDER, .. }
         ));
         assert!(sched.tasks[&WORKER].async_operations.has_terminal());
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
     }
 
     #[test]
@@ -2469,7 +2469,7 @@ mod tests {
         // Caller must be transitioned to Ready and pushed to the ready queue.
         assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
         assert!(sched.tasks[&OWNER].async_operations.has_terminal());
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
 
         // 3. Race 3: Remote peer-death vs parked caller race
         // Caller is parked in WaitIpc when Provider crashes on another hart.
@@ -2489,7 +2489,7 @@ mod tests {
                 ..
             }
         ));
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
 
         // 4. Race 4: Remote deadline expiration vs reply race
         // Case A: Reply wins lock first, deadline cannot overwrite it.
@@ -2934,7 +2934,7 @@ mod tests {
             ready(&sched),
             "the IPC source wakes the parked waiter in the same hold"
         );
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
         assert_eq!(select(&mut sched, IPC, false, false).unwrap().result, 53);
 
         // R3 peer death against a parked waiter.
@@ -2942,7 +2942,7 @@ mod tests {
         park(&mut sched, IPC);
         peer_died(&mut sched, PROVIDER, 1_003, 7);
         assert!(ready(&sched));
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
         assert_eq!(select(&mut sched, IPC, false, false).unwrap().result, 54);
         assert_eq!(kind(&sched, 54), Some(api::syscall::ipc_status::PEER_GONE));
 
@@ -3022,7 +3022,7 @@ mod tests {
             super::super::wake_after_ipc_publish(sched.tasks.get_mut(&OWNER).unwrap(), false);
         assert!(cause == super::super::IpcWakeCause::None);
         assert_eq!(notify(&mut sched), Some(61));
-        super::super::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
     }
 
     #[test]

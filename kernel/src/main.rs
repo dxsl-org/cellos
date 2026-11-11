@@ -79,6 +79,7 @@ pub mod policy; // Signed operator policy (P5b) — headless consent
 #[cfg(test)]
 mod posture;
 pub mod resource_registry;
+pub mod sched; // Scheduler, SMP bring-up, hart-local state, quiescence
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod smbios; // Bounded SMBIOS type 1 reader (x86 boot identity)
@@ -169,7 +170,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
-    task::smp::set_boot_physical_hart(hartid);
+    crate::sched::smp::set_boot_physical_hart(hartid);
     #[cfg(not(target_arch = "riscv64"))]
     let _hartid = hartid;
     let dtb = boot::effective_dtb(dtb);
@@ -736,7 +737,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         //     that can exercise it (the x86 hypervisor smoke lane).
         let _under_hypervisor = cpu_features::hypervisor_present();
         // Root operation is per-CPU: the same helper runs on each AP before it
-        // goes online (task::smp::x86_secondary_main).
+        // goes online (crate::sched::smp::x86_secondary_main).
         if cpu_features::x86_virt_kind() == Some(cpu_features::X86Virt::Vmx) {
             // VMXON faults (#GP) rather than reporting failure when a
             // precondition is unmet; logged first, a fault stays attributable.
@@ -1027,7 +1028,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::init();
     log_info("Scheduler initialized");
     #[cfg(feature = "test-hooks")]
-    if task::scheduler::death_subscription_quota_self_test() {
+    if crate::sched::scheduler::death_subscription_quota_self_test() {
         log_info("death-subscriber quota self-test PASS");
     } else {
         log_info("death-subscriber quota self-test FAIL");
@@ -1040,7 +1041,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "getrandom-sas-test"
     ))]
     {
-        task::smp::start_secondaries();
+        crate::sched::smp::start_secondaries();
         // Erase the diverging return type so the generic boot path remains
         // typechecked without a feature-specific unreachable-code warning.
         let exit = |success| -> () { crate::qemu_exit(success) };
@@ -1170,12 +1171,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         target_arch = "aarch64",
         target_arch = "x86_64"
     ))]
-    task::smp::start_secondaries();
+    crate::sched::smp::start_secondaries();
     // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
     // SGI delivery path is exercised here: a hart that is online but deaf to the
     // kernel's cross-hart IPI would otherwise look perfectly healthy.
     #[cfg(all(target_arch = "aarch64", not(cellos_posture = "release")))]
-    task::smp::run_ipi_selftest();
+    crate::sched::smp::run_ipi_selftest();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();
@@ -1363,7 +1364,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "native-domains",
         feature = "test-hooks"
     ))]
-    if !task::domain_switch_tests::run_primary() {
+    if !crate::sched::domain_switch_tests::run_primary() {
         log::error!("native-domain SAS scheduler fixture failed");
     }
     #[cfg(all(
@@ -1381,7 +1382,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     ))]
     {
         task::user_copy_tests::run_primary();
-        task::ipc_wire_selftest::run_primary(task::smp::online_hart_count());
+        task::ipc_wire_selftest::run_primary(crate::sched::smp::online_hart_count());
         crate::loader::domain_admission::run_selftest();
         task::futex::run_selftest();
         task::domain_grant::run_selftest();
@@ -1427,7 +1428,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // second hart (the park is a bounded stop, not a background stall) and before
     // init exists, so it has the machine to itself.
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if !task::quiesce::lane::run_primary() {
+    if !crate::sched::quiesce::lane::run_primary() {
         // The fixture's own marker is the verdict: either `S22-RV64-PARK: FAIL`
         // (a step of the witness did not hold) or `S22-RV64-PARK: UNAVAILABLE`
         // (the readiness gate found the second hart not taking traps before any

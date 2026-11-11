@@ -11,7 +11,7 @@ use api::cell_image::CellImage;
 use api::cell_owner::CellOwnerRequest;
 use types::CellId;
 
-impl super::scheduler::Scheduler {
+impl crate::sched::scheduler::Scheduler {
     /// Image identity of the live `(cell_id, generation)`. `None` when that
     /// generation is not live (stale, retired, never existed) or its root was
     /// not admitted through a measured image.
@@ -43,7 +43,7 @@ impl super::scheduler::Scheduler {
 /// install, and gets `None` (refused) — the rule the kernel's own 502 gate uses.
 /// VFS keeps the unfiltered record (`/srv/sshd` is not a `/bin` install).
 pub(super) fn resolve_for_caller(
-    sched: &super::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     caller_id: usize,
     request: CellOwnerRequest,
     is_vfs_cell: impl Fn(usize) -> bool,
@@ -66,7 +66,7 @@ pub(super) fn resolve_for_caller(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task::scheduler::Scheduler;
+    use crate::sched::scheduler::Scheduler;
     use crate::task::Task;
     use alloc::boxed::Box;
     use api::cell_image::{ImageIdentity, ANCHOR_RELEASE};

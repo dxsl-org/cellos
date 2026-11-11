@@ -110,7 +110,7 @@ pub fn observe_cell_id_release(owner: api::cell_owner::CellOwner) {
 /// The root's clean `Exit` reaches this hook only after publishing its scalar
 /// record and changing allocation attribution to kernel Cell 0. The root's
 /// quota was deliberately saturated immediately before the syscall.
-pub fn observe_exit_deferred_record_commit(exit: super::hart_local::DeferredExit) {
+pub fn observe_exit_deferred_record_commit(exit: crate::sched::hart_local::DeferredExit) {
     if exit.tid != RETIRING_ROOT_TID.load(Ordering::Acquire)
         || exit.cell_id != CELL_RAW as usize
         || exit.code != ROOT_EXIT_CODE
@@ -118,9 +118,9 @@ pub fn observe_exit_deferred_record_commit(exit: super::hart_local::DeferredExit
         return;
     }
 
-    let kernel_attribution = super::hart_local::current_cell_id() == 0;
+    let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge(super::hart_local::current_cell_id(), 1);
+        crate::memory::cell_quota::charge(crate::sched::hart_local::current_cell_id(), 1);
     if allocator_accepts {
         crate::memory::cell_quota::refund(0, 1);
     }
@@ -147,10 +147,10 @@ pub fn observe_heartbeat_terminal_current() {
         return;
     }
 
-    let hart = super::hart_local::current_hart_id();
-    let current_tid = super::hart_local::ready::current_task_id_for(hart);
-    let current_cell = super::hart_local::current_cell_id();
-    let no_successor = super::hart_local::ready::total_ready_count() == 0;
+    let hart = crate::sched::hart_local::current_hart_id();
+    let current_tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+    let current_cell = crate::sched::hart_local::current_cell_id();
+    let no_successor = crate::sched::hart_local::ready::total_ready_count() == 0;
     let direct_denied = matches!(
         handle_syscall(
             tid,
@@ -200,9 +200,9 @@ pub fn observe_heartbeat_boot_completion(hart: usize) {
         return;
     }
 
-    let current_tid = super::hart_local::ready::current_task_id_for(hart);
-    let executing_tid = super::hart_local::ready::executing_task_id_for(hart);
-    let current_cell = super::hart_local::current_cell_id();
+    let current_tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+    let executing_tid = crate::sched::hart_local::ready::executing_task_id_for(hart);
+    let current_cell = crate::sched::hart_local::current_cell_id();
     if current_tid == 0 && executing_tid == 0 && current_cell == 0 {
         HEARTBEAT_BOOT_COMPLETED.store(true, Ordering::Release);
         log::info!(
@@ -227,12 +227,12 @@ fn wait_for(expected: u8) {
 /// Record the worker's real synthetic trap trigger before it enters the
 /// architecture-visible fault entry point.
 pub fn observe_direct_fault_trigger() {
-    let hart = super::hart_local::current_hart_id();
-    let tid = super::hart_local::ready::current_task_id_for(hart);
-    if hart == super::smp::HART_RT
+    let hart = crate::sched::hart_local::current_hart_id();
+    let tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+    if hart == crate::sched::smp::HART_RT
         && tid != 0
         && tid == FAULT_WORKER_TID.load(Ordering::Acquire)
-        && super::hart_local::current_cell_id() == CELL_RAW as usize
+        && crate::sched::hart_local::current_cell_id() == CELL_RAW as usize
     {
         FAULT_DIRECT_TRIGGERED.store(true, Ordering::Release);
         log::info!(
@@ -246,9 +246,9 @@ pub fn observe_direct_fault_trigger() {
 /// handler. This only publishes state; the record is committed below after
 /// allocation attribution has become kernel-owned.
 pub fn observe_fault_task_entry() {
-    let hart = super::hart_local::current_hart_id();
-    let tid = super::hart_local::ready::current_task_id_for(hart);
-    if hart == super::smp::HART_RT
+    let hart = crate::sched::hart_local::current_hart_id();
+    let tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+    if hart == crate::sched::smp::HART_RT
         && tid != 0
         && tid == FAULT_WORKER_TID.load(Ordering::Acquire)
         && FAULT_DIRECT_TRIGGERED.load(Ordering::Acquire)
@@ -262,12 +262,12 @@ pub fn observe_fault_task_entry() {
 }
 /// Mark the real fixed-record publication after `defer_fault` has released its
 /// pending flag and the faulting Cell is no longer charged for this path.
-pub fn observe_fault_deferred_record_commit(fault: super::hart_local::DeferredFault) {
+pub fn observe_fault_deferred_record_commit(fault: crate::sched::hart_local::DeferredFault) {
     if fault.tid != 0
         && fault.tid == FAULT_WORKER_TID.load(Ordering::Acquire)
         && fault.cell_id == CELL_RAW as usize
         && FAULT_TASK_ENTRY.load(Ordering::Acquire)
-        && super::hart_local::current_cell_id() == 0
+        && crate::sched::hart_local::current_cell_id() == 0
     {
         FAULT_DEFERRED_COMMITTED.store(true, Ordering::Release);
         log::info!(
@@ -326,13 +326,15 @@ pub fn observe_fault_scheduler_retirement(tid: usize) {
 /// deferred-retirement attempt contend with a real remote owner, rather than
 /// merely observing a guard that happened to be held before the handoff.
 pub fn observe_fault_kernel_attribution(victim_cell: usize) {
-    let tid = super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
+    let tid = crate::sched::hart_local::ready::current_task_id_for(
+        crate::sched::hart_local::current_hart_id(),
+    );
     if victim_cell != CELL_RAW as usize || tid != FAULT_WORKER_TID.load(Ordering::Acquire) {
         return;
     }
-    let kernel_attribution = super::hart_local::current_cell_id() == 0;
+    let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge(super::hart_local::current_cell_id(), 1);
+        crate::memory::cell_quota::charge(crate::sched::hart_local::current_cell_id(), 1);
     if allocator_accepts {
         crate::memory::cell_quota::refund(0, 1);
     }
@@ -376,7 +378,7 @@ pub fn hold_after_fault_scheduler_retirement(tid: usize) {
 /// root and run reaping while the incoming worker Context is ownership-pinned
 /// only by `selected_task_id`.
 pub fn hold_after_selection_before_switch(hart: usize) {
-    if hart != super::smp::HART_RT {
+    if hart != crate::sched::smp::HART_RT {
         return;
     }
     if PHASE
@@ -432,7 +434,7 @@ pub fn hold_after_selection_before_switch(hart: usize) {
 /// the complete incoming context restores its original SIE state. Any entry
 /// while the selection hold is active proves the old nested-scheduling window.
 pub fn observe_forced_ssip_trap() {
-    if super::hart_local::current_hart_id() != super::smp::HART_RT {
+    if crate::sched::hart_local::current_hart_id() != crate::sched::smp::HART_RT {
         return;
     }
 
@@ -463,7 +465,7 @@ pub fn observe_forced_ssip_trap() {
 /// Called from the incoming side of RV64 `Context::switch`, after the new stack
 /// is active but before `complete_retirement_switch` publishes its epoch.
 pub fn hold_before_switch_completion(hart: usize) {
-    if hart != super::smp::HART_RT {
+    if hart != crate::sched::smp::HART_RT {
         return;
     }
     if PHASE
@@ -484,7 +486,7 @@ pub fn hold_before_switch_completion(hart: usize) {
 
 /// Record that the held incoming context has now published the completion epoch.
 pub fn observe_switch_completion(hart: usize) {
-    if hart == super::smp::HART_RT && PHASE.load(Ordering::Acquire) == ALLOW_COMPLETION {
+    if hart == crate::sched::smp::HART_RT && PHASE.load(Ordering::Acquire) == ALLOW_COMPLETION {
         // `complete_retirement_switch` has already made the raw-switch epoch
         // visible. Publish the selftest observation only after that boundary.
         log::info!("[selftest] SMP-RETIREMENT: stage=completion-epoch-published");
@@ -497,10 +499,10 @@ pub fn observe_switch_completion(hart: usize) {
 /// stale task `tp` can run the callback against hart 0 and leave hart 1's
 /// selected pin set forever, which blocks the retirement IPI completion.
 fn verify_remote_execution_publication(worker_tid: usize) -> bool {
-    let hart = super::smp::HART_RT;
-    let selected = super::hart_local::ready::selected_task_id_for(hart);
-    let executing = super::hart_local::ready::executing_task_id_for(hart);
-    let outgoing = super::hart_local::ready::outgoing_context_save_task_id_for(hart);
+    let hart = crate::sched::smp::HART_RT;
+    let selected = crate::sched::hart_local::ready::selected_task_id_for(hart);
+    let executing = crate::sched::hart_local::ready::executing_task_id_for(hart);
+    let outgoing = crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart);
     if selected == 0 && executing == worker_tid && outgoing == 0 {
         log::info!(
             "[selftest] SMP-RETIREMENT: stage=worker-execution-published hart={} selected=0 executing={} outgoing-save=0",
@@ -575,7 +577,8 @@ extern "C" fn remote_worker_entry() -> ! {
     // worker may enter the recoverable scheduler funnel. The funnel must wait
     // for that real guard rather than clearing the lock from hart 1.
     log::info!("[selftest] SMP-RETIREMENT: stage=worker-context-entered");
-    let worker_tid = super::hart_local::ready::current_task_id_for(super::smp::HART_RT);
+    let worker_tid =
+        crate::sched::hart_local::ready::current_task_id_for(crate::sched::smp::HART_RT);
     let root_tid = RETIRING_ROOT_TID.load(Ordering::Acquire);
     if retiring_syscalls_denied(root_tid) && remote_dispatch_denies_retiring_syscalls() {
         RETIRING_SYSCALLS_DENIED.store(true, Ordering::Release);
@@ -707,7 +710,7 @@ fn run_heartbeat_terminal_identity_regression() {
 
 /// Run after hart 1 is online and before workload cells spawn.
 pub fn run_primary() {
-    if !super::smp::is_rt_hart_online() {
+    if !crate::sched::smp::is_rt_hart_online() {
         log::warn!("[selftest] SMP-RETIREMENT: RUNTIME-GATED (hart 1 offline)");
         return;
     }
@@ -755,7 +758,7 @@ pub fn run_primary() {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root stack allocation");
             return;
         };
-        super::hart_local::ready::remove_from_all(root_tid);
+        crate::sched::hart_local::ready::remove_from_all(root_tid);
         let Some(root) = scheduler.tasks.get_mut(&root_tid) else {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root task disappeared");
             return;
@@ -813,7 +816,7 @@ pub fn run_primary() {
 
     // The RT worker is queued on hart 1. Wake it immediately rather than rely
     // on a timer tick so the test observes an actual remote Context::switch.
-    match super::smp::logical_sbi_target(super::smp::HART_RT) {
+    match crate::sched::smp::logical_sbi_target(crate::sched::smp::HART_RT) {
         Some((mask, base)) if hal::common::sbi::sbi_send_ipi(mask, base).is_ok() => {
             log::info!("[selftest] SMP-RETIREMENT: stage=worker-dispatch-ipi");
         }
@@ -831,7 +834,7 @@ pub fn run_primary() {
     // then exercise the public clean Exit path from H0. Its only
     // victim-attributed work is the fixed scalar record; `yield_cpu` consumes
     // it after attribution becomes kernel-owned.
-    super::hart_local::set_current_cell_context(CELL_RAW as usize, owner.generation);
+    crate::sched::hart_local::set_current_cell_context(CELL_RAW as usize, owner.generation);
     let quota_charged = crate::memory::cell_quota::charge(
         CELL_RAW as usize,
         crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
@@ -839,7 +842,7 @@ pub fn run_primary() {
     let mut allocation_probe = alloc::vec::Vec::<u8>::new();
     let allocation_rejected = allocation_probe.try_reserve_exact(1).is_err();
     if !(quota_charged && allocation_rejected) {
-        super::hart_local::set_current_cell_id(0);
+        crate::sched::hart_local::set_current_cell_id(0);
         log::error!(
             "[selftest] SMP-ROOT-EXIT-QUOTA: FAIL — could not deterministically saturate root quota"
         );
@@ -858,7 +861,7 @@ pub fn run_primary() {
         ),
         Ok(0)
     ) {
-        super::hart_local::set_current_cell_id(0);
+        crate::sched::hart_local::set_current_cell_id(0);
         log::error!("[selftest] SMP-ROOT-EXIT-QUOTA: FAIL — clean root Exit rejected");
         return;
     }
@@ -1072,11 +1075,11 @@ pub fn run_primary() {
         return;
     }
 
-    let rt = super::smp::HART_RT;
-    let idle_current = super::hart_local::ready::current_task_id_for(rt);
-    let idle_executing = super::hart_local::ready::executing_task_id_for(rt);
-    let idle_selected = super::hart_local::ready::selected_task_id_for(rt);
-    let idle_cell = super::hart_local::HART_LOCALS[rt]
+    let rt = crate::sched::smp::HART_RT;
+    let idle_current = crate::sched::hart_local::ready::current_task_id_for(rt);
+    let idle_executing = crate::sched::hart_local::ready::executing_task_id_for(rt);
+    let idle_selected = crate::sched::hart_local::ready::selected_task_id_for(rt);
+    let idle_cell = crate::sched::hart_local::HART_LOCALS[rt]
         .current_cell_id
         .load(Ordering::Acquire);
     if idle_current != 0 || idle_executing != 0 || idle_selected != 0 || idle_cell != 0 {

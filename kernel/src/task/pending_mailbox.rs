@@ -30,15 +30,15 @@ impl PendingMsgData {
             });
         }
 
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(allocation_cell);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(allocation_cell);
         let result = (|| {
             let mut bytes = Vec::new();
             bytes.try_reserve_exact(data.len()).map_err(|_| ())?;
             bytes.extend_from_slice(data);
             Ok(bytes)
         })();
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
 
         result.map(|bytes| Self::Heap {
             bytes,
@@ -90,10 +90,10 @@ impl Drop for PendingMsgData {
         };
 
         let owned = core::mem::take(bytes);
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(*allocation_cell);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(*allocation_cell);
         drop(owned);
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }
 
@@ -227,10 +227,10 @@ impl PendingMailbox {
     /// Push without charging mailbox-container growth to an arbitrary cell.
     pub fn try_push(&mut self, message: PendingMsg) -> Result<(), ()> {
         if self.messages.len() == self.messages.capacity() {
-            let previous_cell = super::hart_local::current_cell_id();
-            super::hart_local::set_current_cell_id(0);
+            let previous_cell = crate::sched::hart_local::current_cell_id();
+            crate::sched::hart_local::set_current_cell_id(0);
             let result = self.messages.try_reserve(1).map_err(|_| ());
-            super::hart_local::set_current_cell_id(previous_cell);
+            crate::sched::hart_local::set_current_cell_id(previous_cell);
             result?;
         }
         self.messages.push(message);
@@ -241,9 +241,9 @@ impl PendingMailbox {
 impl Drop for PendingMailbox {
     fn drop(&mut self) {
         let messages = core::mem::take(&mut self.messages);
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         drop(messages);
-        super::hart_local::set_current_cell_id(previous_cell);
+        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }

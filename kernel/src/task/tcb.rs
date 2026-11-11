@@ -888,7 +888,7 @@ impl Task {
     /// predicate succeeds; neither is a sender match and therefore neither can
     /// authorize a masked backend receive.
     #[inline]
-    pub(super) const fn owner_death_matches_receive_mask(mask: usize) -> bool {
+    pub(crate) const fn owner_death_matches_receive_mask(mask: usize) -> bool {
         mask == 0
     }
 

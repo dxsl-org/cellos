@@ -875,7 +875,7 @@ pub(super) fn end_grant_leases_at_send(caller_id: usize, syscall: &Syscall) {
 /// Release the exact VFS lease whose owner death cleared the holder's caller
 /// context. This runs outside SCHEDULER after grant reaping has quarantined any
 /// owner-dead frames.
-pub(crate) fn release_vfs_context_lease(release: crate::task::scheduler::VfsLeaseRelease) {
+pub(crate) fn release_vfs_context_lease(release: crate::sched::scheduler::VfsLeaseRelease) {
     for range in crate::memory::pin::release_vfs_lease(
         release.holder_tid,
         release.grant_owner,

@@ -209,7 +209,9 @@ fn verify_completion_wait_wake(expected: &[u8], ready_before: usize, sender_bloc
             sender.state == TaskState::Ready
         }
     });
-    receiver_ok && sender_ok && super::hart_local::ready::total_ready_count() == ready_before + 1
+    receiver_ok
+        && sender_ok
+        && crate::sched::hart_local::ready::total_ready_count() == ready_before + 1
 }
 
 /// The state publication is the handoff boundary: a producer arriving before
@@ -220,7 +222,7 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
     let mut ok = true;
 
     prepare_completion_wait_receiver();
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     if super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len()) != Ok(1)
         || !verify_completion_wait_wake(payload, ready_before, true)
     {
@@ -229,7 +231,7 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
     reset();
 
     prepare_completion_wait_receiver();
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     if super::ipc_post_nonblock(SENDER, RECEIVER, payload).is_err()
         || !verify_completion_wait_wake(payload, ready_before, false)
     {
@@ -238,7 +240,7 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
     reset();
 
     prepare_completion_wait_receiver();
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
     crate::dev::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
     let sent =
@@ -250,7 +252,7 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
     reset();
 
     prepare_completion_wait_receiver();
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
     crate::dev::driver_cell::INPUT_CELL_TID.store(0, Ordering::Release);
     let rejected =
@@ -271,7 +273,10 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
                 ) && task.pending_msgs.is_empty()
             })
     };
-    if !rejected || !unchanged || super::hart_local::ready::total_ready_count() != ready_before {
+    if !rejected
+        || !unchanged
+        || crate::sched::hart_local::ready::total_ready_count() != ready_before
+    {
         ok = fail("untrusted ipc_try_send broadened completion-wait admission");
     }
     reset();
@@ -280,10 +285,11 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
 
 fn ready_receiver_is_not_enqueued_twice() -> bool {
     prepare_completion_wait_receiver();
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let first = super::ipc_post_nonblock(SENDER, RECEIVER, b"first");
     let second = super::ipc_post_nonblock(SENDER, RECEIVER, b"second");
-    let unchanged_ready_depth = super::hart_local::ready::total_ready_count() == ready_before + 1;
+    let unchanged_ready_depth =
+        crate::sched::hart_local::ready::total_ready_count() == ready_before + 1;
     let messages_preserved = {
         let guard = super::SCHEDULER.lock();
         guard
@@ -305,7 +311,7 @@ fn ready_receiver_is_not_enqueued_twice() -> bool {
 fn timer_completion_wait_remains_deadline_only() -> bool {
     insert(SENDER, TEST_CELL);
     insert(RECEIVER, TEST_CELL + 1);
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let queued_before_park = super::ipc_post_nonblock(SENDER, RECEIVER, b"before-timer-park");
     let decision = {
         let mut guard = super::SCHEDULER.lock();
@@ -342,7 +348,7 @@ fn timer_completion_wait_remains_deadline_only() -> bool {
                 )
             })
     };
-    let ready_unchanged = super::hart_local::ready::total_ready_count() == ready_before;
+    let ready_unchanged = crate::sched::hart_local::ready::total_ready_count() == ready_before;
     reset();
     queued_before_park.is_ok()
         && decision == Some(super::completion_wait::CompletionParkDecision::Parked)
@@ -386,7 +392,7 @@ fn completion_wait_mailbox_is_unchanged(depth: usize, ready_before: usize) -> bo
         .tasks
         .get(&SENDER)
         .is_some_and(|task| task.state == TaskState::Ready)
-        && super::hart_local::ready::total_ready_count() == ready_before
+        && crate::sched::hart_local::ready::total_ready_count() == ready_before
 }
 
 fn full_completion_wait_mailbox_never_wakes() -> bool {
@@ -397,7 +403,7 @@ fn full_completion_wait_mailbox_never_wakes() -> bool {
         reset();
         return fail("could not fill Send completion-wait mailbox");
     }
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let refused = super::ipc_send(SENDER, RECEIVER, payload.as_ptr() as usize, payload.len())
         == Err(super::IpcSendError::Backpressure);
     if !refused || !completion_wait_mailbox_is_unchanged(HOTSWAP_MSG_QUEUE_DEPTH, ready_before) {
@@ -409,7 +415,7 @@ fn full_completion_wait_mailbox_never_wakes() -> bool {
         reset();
         return fail("could not fill post completion-wait mailbox");
     }
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let refused = super::ipc_post_nonblock(SENDER, RECEIVER, payload).is_err();
     if !refused || !completion_wait_mailbox_is_unchanged(HOTSWAP_MSG_QUEUE_DEPTH, ready_before) {
         ok = fail("full mailbox post mutated or woke completion waiter");
@@ -420,7 +426,7 @@ fn full_completion_wait_mailbox_never_wakes() -> bool {
         reset();
         return fail("could not fill TrySend completion-wait mailbox");
     }
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let saved_input = crate::dev::driver_cell::INPUT_CELL_TID.load(Ordering::Acquire);
     crate::dev::driver_cell::INPUT_CELL_TID.store(SENDER, Ordering::Release);
     let refused =
@@ -435,10 +441,10 @@ fn full_completion_wait_mailbox_never_wakes() -> bool {
 #[cfg(target_arch = "riscv64")]
 fn completion_wait_publication_arms_existing_handoff() -> bool {
     insert(RECEIVER, TEST_CELL + 1);
-    let hart = super::hart_local::current_hart_id();
-    let saved_current = super::hart_local::ready::current_task_id_for(hart);
-    let saved_outgoing = super::hart_local::ready::outgoing_context_save_task_id_for(hart);
-    super::hart_local::ready::set_current_task_id(hart, RECEIVER);
+    let hart = crate::sched::hart_local::current_hart_id();
+    let saved_current = crate::sched::hart_local::ready::current_task_id_for(hart);
+    let saved_outgoing = crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart);
+    crate::sched::hart_local::ready::set_current_task_id(hart, RECEIVER);
     let decision = {
         let mut guard = super::SCHEDULER.lock();
         guard
@@ -453,9 +459,10 @@ fn completion_wait_publication_arms_existing_handoff() -> bool {
                 )
             })
     };
-    let armed = super::hart_local::ready::outgoing_context_save_task_id_for(hart) == RECEIVER;
-    super::hart_local::ready::set_current_task_id(hart, saved_current);
-    super::hart_local::ready::begin_outgoing_context_save(hart, saved_outgoing);
+    let armed =
+        crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart) == RECEIVER;
+    crate::sched::hart_local::ready::set_current_task_id(hart, saved_current);
+    crate::sched::hart_local::ready::begin_outgoing_context_save(hart, saved_outgoing);
     reset();
     decision == Some(super::completion_wait::CompletionParkDecision::Parked) && armed
         || fail("completion-wait publication did not arm the existing SMP handoff")
@@ -492,7 +499,7 @@ fn ipc_before_park_returns_raw_zero() -> bool {
     };
     super::waker::arm_net_rx(completions.clone(), slot);
 
-    let ready_before = super::hart_local::ready::total_ready_count();
+    let ready_before = crate::sched::hart_local::ready::total_ready_count();
     let posted = super::ipc_post_nonblock(SENDER, RECEIVER, b"pre-park");
     let decision = {
         let mut guard = super::SCHEDULER.lock();
@@ -537,7 +544,7 @@ fn ipc_before_park_returns_raw_zero() -> bool {
         && completions.reserved() == 0
         && completions.drainable() == 0
         && !super::completion::wakes_pending()
-        && super::hart_local::ready::total_ready_count() == ready_before
+        && crate::sched::hart_local::ready::total_ready_count() == ready_before
         && task_ok;
     reset();
     ok || fail("IPC-before-park did not abort NET_RX wait cleanly with raw zero")

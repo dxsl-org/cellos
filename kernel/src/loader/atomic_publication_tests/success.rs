@@ -179,8 +179,8 @@ pub(super) fn finish_trusted_success(tid: usize) -> bool {
 /// Regression for the recursive quota-lock path: arm while allocator
 /// attribution names a Cell and confirm that arming returns synchronously.
 pub(super) fn trusted_arming_completes_from_cell_context() -> bool {
-    let previous_cell_id = crate::task::hart_local::current_cell_id();
-    crate::task::hart_local::set_current_cell_id(1);
+    let previous_cell_id = crate::sched::hart_local::current_cell_id();
+    crate::sched::hart_local::set_current_cell_id(1);
 
     arm_trusted_success();
 
@@ -188,6 +188,6 @@ pub(super) fn trusted_arming_completes_from_cell_context() -> bool {
     TRUSTED_PENDING.lock().take();
     TRUSTED_ARMED.store(false, Ordering::Release);
     disarm_observations(&["AP-15"]);
-    crate::task::hart_local::set_current_cell_id(previous_cell_id);
+    crate::sched::hart_local::set_current_cell_id(previous_cell_id);
     armed
 }

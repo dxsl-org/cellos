@@ -1715,7 +1715,7 @@ const _: crate::hal::HandlePageFault = vi_handle_page_fault;
 /// switches to another task.
 #[cfg(target_arch = "x86_64")]
 fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
-    let cell_id = crate::task::hart_local::current_cell_id();
+    let cell_id = crate::sched::hart_local::current_cell_id();
     if cell_id == 0 {
         panic!(
             "[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {} and no cell owns the fault",

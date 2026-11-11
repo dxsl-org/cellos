@@ -440,7 +440,7 @@ pub fn fallback_dtb_ram_range() -> (usize, usize) {
 /// run real firmware trees (`tests/fixtures/dtb/`) through the same parser.
 #[cfg(any(target_arch = "aarch64", test))]
 pub mod firmware_cpus {
-    use crate::task::smp::mpidr;
+    use crate::sched::smp::mpidr;
 
     /// One `/cpus/cpu@…` node, in tree order.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -531,7 +531,7 @@ pub mod firmware_smp {
         CPUS.store(firmware_cpus::cpus(tree).count(), Ordering::Relaxed);
 
         let ids = firmware_cpus::cpus(tree).map(|cpu| cpu.affinity);
-        if let Err(error) = crate::task::smp::CPU_MPIDRS.describe(ids) {
+        if let Err(error) = crate::sched::smp::CPU_MPIDRS.describe(ids) {
             log::warn!(
                 "[boot] /cpus affinities unusable ({:?}) — CPU index = MPIDR Aff0",
                 error

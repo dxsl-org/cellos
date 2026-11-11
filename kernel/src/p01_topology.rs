@@ -309,14 +309,14 @@ pub(crate) fn capture(sample: usize) -> [crate::p01_resources::Metric; 16] {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        let online = crate::task::smp::online_hart_count();
+        let online = crate::sched::smp::online_hart_count();
         snapshot.begin(
             sample,
             metrics[1].epoch_before,
             metrics[1].value,
             online as u64,
         );
-        if online != 1 || !crate::task::smp::x86_scheduler_ready() {
+        if online != 1 || !crate::sched::smp::x86_scheduler_ready() {
             snapshot.refuse(UNSUPPORTED);
             return metrics;
         }

@@ -1,4 +1,5 @@
-use super::super::{hart_local, smp, stack::Stack, syscall, SCHEDULER};
+use super::super::{stack::Stack, syscall, SCHEDULER};
+use crate::sched::{hart_local, smp};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use types::CellId;

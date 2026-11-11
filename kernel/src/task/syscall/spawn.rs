@@ -291,7 +291,7 @@ pub(super) fn governed_replacement_request(
 /// The launch identity of `caller_id` (see [`caller_launch_state`]) read under
 /// a scheduler the caller already holds. `None` when the task is gone.
 pub(in crate::task) fn launch_identity_in(
-    sched: &crate::task::scheduler::Scheduler,
+    sched: &crate::sched::scheduler::Scheduler,
     caller_id: usize,
 ) -> Option<String> {
     let init_tid = TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire);
@@ -394,7 +394,7 @@ pub(in crate::task) fn session_launch_request(
 /// Bind the dispatch boundary while the receive snapshot owns the scheduler
 /// lock, before an independent caller can cancel and remove the queued record.
 pub(super) fn snapshot_resume_dispatched(
-    sched: &mut crate::task::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     caller_id: usize,
     mask: usize,
 ) -> Result<ResumeSnapshot, ()> {
@@ -542,14 +542,14 @@ pub(super) fn exit(caller_id: usize, code: usize) -> SyscallResult {
     // `Scheduler::exit_task` while the exiting Cell is still charged.
     // A root exit can retire every member and grow scheduler vectors;
     // the fixed record is therefore the entire victim-attributed path.
-    let exit = crate::task::hart_local::DeferredExit {
+    let exit = crate::sched::hart_local::DeferredExit {
         tid: caller_id,
-        cell_id: crate::task::hart_local::current_cell_id(),
-        generation: crate::task::hart_local::current_cell_generation(),
+        cell_id: crate::sched::hart_local::current_cell_id(),
+        generation: crate::sched::hart_local::current_cell_generation(),
         code,
     };
-    crate::task::hart_local::defer_exit(exit);
-    crate::task::hart_local::set_current_cell_id(0);
+    crate::sched::hart_local::defer_exit(exit);
+    crate::sched::hart_local::set_current_cell_id(0);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::task::retirement_selftest::observe_exit_deferred_record_commit(exit);
@@ -651,11 +651,11 @@ pub(super) fn notify_on_exit(caller_id: usize, watched: usize) -> SyscallResult 
             .get(&watched)
             .is_some_and(|task| !matches!(task.state, TaskState::Retiring | TaskState::Terminated))
         {
-            crate::task::scheduler::subscribe_death(watched, caller_id);
+            crate::sched::scheduler::subscribe_death(watched, caller_id);
         } else {
             // Task already dead — queue synthetic death so watcher never stalls.
             if let Some(wt) = sched.tasks.get_mut(&caller_id) {
-                crate::task::scheduler::queue_pending_death(wt, watched, 0);
+                crate::sched::scheduler::queue_pending_death(wt, watched, 0);
             }
         }
     }
@@ -938,7 +938,7 @@ pub(super) fn spawn_pinned(
                     let (quota_nulls, heap_nulls) = crate::memory::heap::oom_sources();
                     let (used, free) = crate::memory::heap::usage();
                     let charged = crate::memory::cell_quota::in_use(types::CellId(
-                        crate::task::scheduler::current_cell_id() as u64,
+                        crate::sched::scheduler::current_cell_id() as u64,
                     ));
                     log::warn!(
                         "[loader] spawn OOM: op=SpawnPinned caller={} path={} heap_used={} heap_free={} caller_charged={} task_size={} null_from_quota={} null_from_heap={}",

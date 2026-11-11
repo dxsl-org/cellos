@@ -42,7 +42,7 @@ const HANDOFF_KERNEL_STACK_PAGES: usize = 8;
 /// Keep the post-init cross-hart fixture independent from production stack
 /// sizing; it executes only kernel handoff and scheduler-exit paths.
 fn spawn_handoff_task(
-    scheduler: &mut super::scheduler::Scheduler,
+    scheduler: &mut crate::sched::scheduler::Scheduler,
     name: &str,
     cell_id: CellId,
 ) -> Result<usize, types::ViError> {
@@ -59,7 +59,7 @@ fn spawn_handoff_task(
 /// Called from the incoming Context after its assembly prologue has saved the
 /// outgoing hart's Context and cleared the handoff guard.
 pub fn observe_outgoing_save_completion(hart: usize) {
-    if hart == super::smp::HART_RT
+    if hart == crate::sched::smp::HART_RT
         && PHASE
             .compare_exchange(
                 ALLOW_ORIGIN_SWITCH,
@@ -81,7 +81,7 @@ pub fn observe_outgoing_save_completion(hart: usize) {
 /// only after this point: the earlier save hook proves stack safety but can
 /// still race the outgoing hart's executing-identity publication.
 pub fn observe_origin_ownership_release(hart: usize) {
-    if hart == super::smp::HART_RT
+    if hart == crate::sched::smp::HART_RT
         && PHASE
             .compare_exchange(
                 OUTGOING_SAVE_COMPLETE,
@@ -94,10 +94,10 @@ pub fn observe_origin_ownership_release(hart: usize) {
         log::info!(
             "[selftest] SMP-CONTEXT-HANDOFF: stage=origin-ownership-released hart={} current={} selected={} executing={} outgoing-save={}",
             hart,
-            super::hart_local::ready::current_task_id_for(hart),
-            super::hart_local::ready::selected_task_id_for(hart),
-            super::hart_local::ready::executing_task_id_for(hart),
-            super::hart_local::ready::outgoing_context_save_task_id_for(hart),
+            crate::sched::hart_local::ready::current_task_id_for(hart),
+            crate::sched::hart_local::ready::selected_task_id_for(hart),
+            crate::sched::hart_local::ready::executing_task_id_for(hart),
+            crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart),
         );
     }
 }
@@ -108,27 +108,27 @@ fn report_post_origin_completion(worker_tid: usize) {
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&worker_tid))
         .map(|worker| worker.state);
-    let hart = super::smp::HART_RT;
+    let hart = crate::sched::smp::HART_RT;
     log::info!(
         "[selftest] SMP-CONTEXT-HANDOFF: stage=h0-post-origin-completion worker={} state={:?} h0-queued={} h0-reservation={} h1-reservation={} h1-current={} h1-selected={} h1-executing={} h1-outgoing-save={}",
         worker_tid,
         worker_state,
-        super::hart_local::ready::test_ready_contains_on_hart(0, worker_tid),
-        super::hart_local::ready::test_dispatch_reservation_task_id_for(0),
-        super::hart_local::ready::test_dispatch_reservation_task_id_for(hart),
-        super::hart_local::ready::current_task_id_for(hart),
-        super::hart_local::ready::selected_task_id_for(hart),
-        super::hart_local::ready::executing_task_id_for(hart),
-        super::hart_local::ready::outgoing_context_save_task_id_for(hart),
+        crate::sched::hart_local::ready::test_ready_contains_on_hart(0, worker_tid),
+        crate::sched::hart_local::ready::test_dispatch_reservation_task_id_for(0),
+        crate::sched::hart_local::ready::test_dispatch_reservation_task_id_for(hart),
+        crate::sched::hart_local::ready::current_task_id_for(hart),
+        crate::sched::hart_local::ready::selected_task_id_for(hart),
+        crate::sched::hart_local::ready::executing_task_id_for(hart),
+        crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart),
     );
 }
 
 extern "C" fn blocked_worker_entry() -> ! {
     let worker_tid = WORKER_TID.load(Ordering::Acquire);
     let root_tid = ROOT_TID.load(Ordering::Acquire);
-    let origin = super::hart_local::current_hart_id();
+    let origin = crate::sched::hart_local::current_hart_id();
     WORKER_ORIGIN.store(origin, Ordering::Release);
-    if origin != super::smp::HART_RT {
+    if origin != crate::sched::smp::HART_RT {
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-00 early-h0-steal origin={} worker={}",
             origin,
@@ -140,7 +140,7 @@ extern "C" fn blocked_worker_entry() -> ! {
     }
 
     if super::ipc_send(worker_tid, root_tid, CTX_USER_PAGE, 1) != Ok(1)
-        || super::hart_local::ready::outgoing_context_save_task_id_for(origin) != worker_tid
+        || crate::sched::hart_local::ready::outgoing_context_save_task_id_for(origin) != worker_tid
     {
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-00 block-handoff origin={} worker={}",
@@ -167,7 +167,7 @@ extern "C" fn blocked_worker_entry() -> ! {
     // must be saved before the hart-0 queue entry becomes selectable.
     super::yield_cpu();
 
-    let resumed_hart = super::hart_local::current_hart_id();
+    let resumed_hart = crate::sched::hart_local::current_hart_id();
     if resumed_hart != 0 {
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-03 migrated-to-wrong-hart expected=0 actual={}",
@@ -177,7 +177,7 @@ extern "C" fn blocked_worker_entry() -> ! {
             core::hint::spin_loop();
         }
     }
-    if super::hart_local::ready::test_dispatch_reservation_task_id_for(0) != 0 {
+    if crate::sched::hart_local::ready::test_dispatch_reservation_task_id_for(0) != 0 {
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-03 migration-pin-retained worker={}",
             worker_tid
@@ -187,7 +187,7 @@ extern "C" fn blocked_worker_entry() -> ! {
         }
     }
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
-    if !super::domain_switch_tests::resumed_worker_domain_matches(worker_tid) {
+    if !crate::sched::domain_switch_tests::resumed_worker_domain_matches(worker_tid) {
         log::error!(
             "[selftest] S22-RV64-MIGRATION: FAIL marker=DOMAIN-TUPLE worker={}",
             worker_tid
@@ -209,7 +209,7 @@ extern "C" fn blocked_worker_entry() -> ! {
 
 /// Run after hart 1 is online and before workload cells spawn.
 pub fn run_primary() {
-    if !super::smp::is_rt_hart_online() {
+    if !crate::sched::smp::is_rt_hart_online() {
         log::warn!("[selftest] SMP-CONTEXT-HANDOFF: RUNTIME-GATED (hart 1 offline)");
         return;
     }
@@ -250,8 +250,8 @@ pub fn run_primary() {
             );
             return;
         };
-        super::hart_local::ready::remove_from_all(root_tid);
-        super::hart_local::ready::remove_from_all(worker_tid);
+        crate::sched::hart_local::ready::remove_from_all(root_tid);
+        crate::sched::hart_local::ready::remove_from_all(worker_tid);
         let Some(root) = scheduler.tasks.get_mut(&root_tid) else {
             log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP root-lost");
             return;
@@ -300,25 +300,32 @@ pub fn run_primary() {
             }
         }
         worker.context.ra = blocked_worker_entry as *const () as usize;
-        super::hart_local::ready::push_on_hart(0, worker_tid, worker.priority);
-        super::hart_local::ready::remove_from_all(worker_tid);
-        if !super::hart_local::ready::reserve_test_dispatch_on_hart(super::smp::HART_RT, worker_tid)
-        {
+        crate::sched::hart_local::ready::push_on_hart(0, worker_tid, worker.priority);
+        crate::sched::hart_local::ready::remove_from_all(worker_tid);
+        if !crate::sched::hart_local::ready::reserve_test_dispatch_on_hart(
+            crate::sched::smp::HART_RT,
+            worker_tid,
+        ) {
             log::error!(
                 "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-pin"
             );
             return;
         }
-        super::hart_local::ready::push_on_hart(super::smp::HART_RT, worker_tid, worker.priority);
+        crate::sched::hart_local::ready::push_on_hart(
+            crate::sched::smp::HART_RT,
+            worker_tid,
+            worker.priority,
+        );
         (root_tid, worker_tid)
     };
 
     ROOT_TID.store(root_tid, Ordering::Release);
     WORKER_TID.store(worker_tid, Ordering::Release);
     PHASE.store(WAITING_FOR_BLOCK, Ordering::Release);
-    let Some((mask, base)) = super::smp::logical_sbi_target(super::smp::HART_RT) else {
-        let _ = super::hart_local::ready::release_test_dispatch_on_hart(
-            super::smp::HART_RT,
+    let Some((mask, base)) = crate::sched::smp::logical_sbi_target(crate::sched::smp::HART_RT)
+    else {
+        let _ = crate::sched::hart_local::ready::release_test_dispatch_on_hart(
+            crate::sched::smp::HART_RT,
             worker_tid,
         );
         log::error!(
@@ -327,8 +334,8 @@ pub fn run_primary() {
         return;
     };
     if hal::common::sbi::sbi_send_ipi(mask, base).is_err() {
-        let _ = super::hart_local::ready::release_test_dispatch_on_hart(
-            super::smp::HART_RT,
+        let _ = crate::sched::hart_local::ready::release_test_dispatch_on_hart(
+            crate::sched::smp::HART_RT,
             worker_tid,
         );
         log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-ipi");
@@ -336,7 +343,7 @@ pub fn run_primary() {
     }
 
     wait_for(BLOCKED_BEFORE_YIELD);
-    if WORKER_ORIGIN.load(Ordering::Acquire) != super::smp::HART_RT {
+    if WORKER_ORIGIN.load(Ordering::Acquire) != crate::sched::smp::HART_RT {
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-00 early-h0-steal-observed origin={}",
             WORKER_ORIGIN.load(Ordering::Acquire)
@@ -352,7 +359,7 @@ pub fn run_primary() {
     // test-only reservation, hart 1 can steal the already-queued wake after
     // its Context save completes but before hart 0 performs its second yield.
     // Local selection on hart 0 remains unmodified.
-    if !super::hart_local::ready::reserve_test_dispatch_on_hart(0, worker_tid) {
+    if !crate::sched::hart_local::ready::reserve_test_dispatch_on_hart(0, worker_tid) {
         log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 migration-pin");
         return;
     }
@@ -361,10 +368,11 @@ pub fn run_primary() {
     // still owns the worker's live stack. No eligible work exists, so this
     // returns without a raw switch and leaves the queue entry intact.
     super::yield_cpu();
-    if super::hart_local::ready::outgoing_context_save_task_id_for(super::smp::HART_RT)
-        != worker_tid
+    if crate::sched::hart_local::ready::outgoing_context_save_task_id_for(
+        crate::sched::smp::HART_RT,
+    ) != worker_tid
     {
-        let _ = super::hart_local::ready::release_test_dispatch_on_hart(0, worker_tid);
+        let _ = crate::sched::hart_local::ready::release_test_dispatch_on_hart(0, worker_tid);
         log::error!(
             "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 selection-ran-before-save"
         );

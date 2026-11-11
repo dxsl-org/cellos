@@ -99,7 +99,7 @@ pub(super) fn snapshot() -> StateSnapshot {
             sched.publication_snapshot_counters(),
         )
     };
-    let current = crate::task::hart_local::HART_LOCALS
+    let current = crate::sched::hart_local::HART_LOCALS
         .iter()
         .map(|hart| {
             (
@@ -109,7 +109,7 @@ pub(super) fn snapshot() -> StateSnapshot {
             )
         })
         .collect();
-    let ready = crate::task::hart_local::HART_LOCALS
+    let ready = crate::sched::hart_local::HART_LOCALS
         .iter()
         .map(|hart| hart.ready.lock().clone())
         .collect();

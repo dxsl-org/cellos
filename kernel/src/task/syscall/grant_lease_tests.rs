@@ -12,7 +12,8 @@ use super::{
     release_vfs_holder_leases, PageGrant, RegGrant, Syscall, SyscallError,
 };
 use crate::memory::pin;
-use crate::task::{scheduler::Scheduler, tcb::Task, SCHEDULER};
+use crate::sched::scheduler::Scheduler;
+use crate::task::{tcb::Task, SCHEDULER};
 use alloc::collections::BTreeMap;
 use api::syscall::{grant_slice::LEASE, ViSyscall};
 use types::{CellId, GrantPerm};

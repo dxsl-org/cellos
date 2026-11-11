@@ -70,7 +70,7 @@ fn remove(tid: usize) {
             }
         }
     }
-    super::hart_local::ready::remove_from_all(tid);
+    crate::sched::hart_local::ready::remove_from_all(tid);
 }
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 fn reap() {

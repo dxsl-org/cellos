@@ -1,4 +1,4 @@
-use super::tcb::{FileHandle, SyscallFuture, Task, TaskState};
+use crate::task::tcb::{FileHandle, SyscallFuture, Task, TaskState};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
@@ -26,7 +26,7 @@ pub const MAX_THREADS_PER_CELL: usize = 32;
 /// Delegates to `hart_local` which reads the per-hart `current_cell_id` field
 /// via the `tp` CSR — O(1), no lock.  Safe to call from the allocator hot path.
 pub fn current_cell_id() -> usize {
-    super::hart_local::current_cell_id()
+    crate::sched::hart_local::current_cell_id()
 }
 
 // Dummy Waker
@@ -53,11 +53,11 @@ static DUMMY_VTABLE: RawWakerVTable =
 /// callback; other targets retain pre-switch publication.
 #[inline(always)]
 fn prepare_task_to_boot_switch(hart_id: usize) {
-    use super::hart_local::ready as rl;
+    use crate::sched::hart_local::ready as rl;
 
     if rl::CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH {
         rl::set_current_task_id(hart_id, 0);
-        super::hart_local::set_current_cell_context(0, 0);
+        crate::sched::hart_local::set_current_cell_context(0, 0);
     }
 }
 
@@ -104,15 +104,15 @@ pub(crate) struct KernelAllocationContext {
 
 impl KernelAllocationContext {
     pub(crate) fn enter() -> Self {
-        let previous_cell = super::hart_local::current_cell_id();
-        super::hart_local::set_current_cell_id(0);
+        let previous_cell = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
         Self { previous_cell }
     }
 }
 
 impl Drop for KernelAllocationContext {
     fn drop(&mut self) {
-        super::hart_local::set_current_cell_id(self.previous_cell);
+        crate::sched::hart_local::set_current_cell_id(self.previous_cell);
     }
 }
 
@@ -261,7 +261,7 @@ pub(crate) struct RootRetirement {
     pub zombies: Vec<Task>,
     /// Waiters are retained locally until this generation's tasks have dropped.
     pub waiter_wakes: Vec<(usize, usize)>,
-    requested_switch_completion: [usize; super::smp::MAX_HARTS],
+    requested_switch_completion: [usize; crate::sched::smp::MAX_HARTS],
     /// Bit `h`: retirement requested a remote switch completion on hart `h`.
     pub remote_hart_mask: u64,
 }
@@ -406,13 +406,13 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     const WATCHED: usize = usize::MAX - 64;
     const WATCHER: usize = usize::MAX - 1;
 
-    let original = super::hart_local::current_cell_id();
+    let original = crate::sched::hart_local::current_cell_id();
     cell_quota::register(CellId(OWNER_CELL as u64), usize::MAX);
     cell_quota::register(CellId(EXIT_CELL as u64), usize::MAX);
     let owner_before = cell_quota::in_use(CellId(OWNER_CELL as u64));
     let exit_before = cell_quota::in_use(CellId(EXIT_CELL as u64));
 
-    super::hart_local::set_current_cell_id(OWNER_CELL);
+    crate::sched::hart_local::set_current_cell_id(OWNER_CELL);
     for offset in 0..32 {
         for _ in 0..8 {
             subscribe_death(WATCHED + offset, WATCHER);
@@ -427,7 +427,7 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     };
     let owner_after_subscribe = cell_quota::in_use(CellId(OWNER_CELL as u64));
 
-    super::hart_local::set_current_cell_id(EXIT_CELL);
+    crate::sched::hart_local::set_current_cell_id(EXIT_CELL);
     for offset in 0..16 {
         drain_death_subscribers(WATCHED + offset, |_| {});
     }
@@ -436,7 +436,7 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     let owner_after_remove = cell_quota::in_use(CellId(OWNER_CELL as u64));
     let exit_after = cell_quota::in_use(CellId(EXIT_CELL as u64));
 
-    super::hart_local::set_current_cell_id(original);
+    crate::sched::hart_local::set_current_cell_id(original);
     cell_quota::deregister(CellId(OWNER_CELL as u64));
     cell_quota::deregister(CellId(EXIT_CELL as u64));
     let ok = subscriptions_bounded
@@ -475,7 +475,7 @@ pub struct Scheduler {
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
     pub next_task_id: usize,
-    pub(crate) cell_session: super::cell_session::State,
+    pub(crate) cell_session: crate::task::cell_session::State,
     /// Task IDs whose grant pages must be reaped outside the SCHEDULER lock.
     ///
     /// Watchdog kill paths push here instead of calling reap_grants_for_task directly,
@@ -485,26 +485,26 @@ pub struct Scheduler {
     /// Task IDs whose task-local resources must be reaped outside SCHEDULER.
     /// Root-member IDs remain in `pending_root_retirements` until every hart
     /// has completed a switch away from the retiring generation.
-    pub(super) pending_grant_reap: Vec<usize>,
+    pub(crate) pending_grant_reap: Vec<usize>,
     /// Root retirements awaiting completed context switches before CellId-wide
     /// resource release and owner-slot reuse.
     pending_root_retirements: Vec<RootRetirement>,
     /// Dead VFS holder IDs. Every lease held by a dead task releases only
     /// after its saved context is no longer executing on any hart.
-    pub(super) pending_vfs_holder_release: Vec<usize>,
+    pub(crate) pending_vfs_holder_release: Vec<usize>,
     /// Exact VFS request contexts released at a public boundary. These records
     /// retain holder, owner, and generation, unlike the holder-death queue.
     pending_vfs_context_release: Vec<VfsLeaseRelease>,
     /// TIMER reservations owned by dead tasks, released outside SCHEDULER.
     pending_completion_release: Vec<(
         usize,
-        alloc::sync::Arc<super::completion::CompletionQueue>,
-        super::completion::SlotId,
+        alloc::sync::Arc<crate::task::completion::CompletionQueue>,
+        crate::task::completion::SlotId,
     )>,
     pub last_global_sweep_tick: usize,
     /// S6-1 exact on-CPU accounting: per-hart pass stamps and the per-Cell
     /// incarnation CPU of members that already left the task table.
-    pub(crate) cpu_telemetry: super::telemetry::CpuLedger,
+    pub(crate) cpu_telemetry: crate::task::telemetry::CpuLedger,
 }
 
 impl Default for Scheduler {
@@ -517,17 +517,17 @@ impl Scheduler {
     /// Rights of the Cell incarnation `tid` belongs to: its root's record
     /// (`Task::rights`). `EMPTY` when the task or its root is gone, so a gate
     /// fails closed while an incarnation retires.
-    pub(crate) fn cell_rights(&self, tid: usize) -> super::cap::CapSet {
+    pub(crate) fn cell_rights(&self, tid: usize) -> crate::task::cap::CapSet {
         let Some(task) = self.tasks.get(&tid) else {
-            return super::cap::CapSet::EMPTY;
+            return crate::task::cap::CapSet::EMPTY;
         };
         let Some(root) = self.tasks.get(&task.root_tid) else {
-            return super::cap::CapSet::EMPTY;
+            return crate::task::cap::CapSet::EMPTY;
         };
         // A `root_tid` that does not name this task's own incarnation fails
         // closed rather than lending another Cell's rights.
         if (root.cell_id, root.cell_generation) != (task.cell_id, task.cell_generation) {
-            return super::cap::CapSet::EMPTY;
+            return crate::task::cap::CapSet::EMPTY;
         }
         root.rights.without_revoke_mask(root.revoke_pending)
     }
@@ -547,14 +547,14 @@ impl Scheduler {
             cell_owner_watches: BTreeMap::new(),
             next_cell_owner_watch: 1,
             next_task_id: 1,
-            cell_session: super::cell_session::State::new(),
+            cell_session: crate::task::cell_session::State::new(),
             pending_grant_reap: Vec::new(),
             pending_root_retirements: Vec::new(),
             pending_vfs_holder_release: Vec::new(),
             pending_vfs_context_release: Vec::new(),
             pending_completion_release: Vec::new(),
             last_global_sweep_tick: 0,
-            cpu_telemetry: super::telemetry::CpuLedger::new(),
+            cpu_telemetry: crate::task::telemetry::CpuLedger::new(),
         }
     }
     /// Occupy an absent in-range owner slot. Absence is the Empty state, so a
@@ -665,7 +665,9 @@ impl Scheduler {
 
     fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
         #[cfg(cellos_g1_cpu)]
-        super::cpu_accounting::require(super::cpu_accounting::begin_retirement(self, owner));
+        crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::begin_retirement(
+            self, owner,
+        ));
         if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
             *slot = CellOwnerSlot::Retiring(owner);
         }
@@ -682,7 +684,9 @@ impl Scheduler {
             return false;
         }
         #[cfg(cellos_g1_cpu)]
-        if !super::cpu_accounting::require(super::cpu_accounting::finish_retirement(self, owner)) {
+        if !crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::finish_retirement(
+            self, owner,
+        )) {
             return false;
         }
         if !matches!(self.cell_owners.get(&owner.cell_id),
@@ -692,7 +696,7 @@ impl Scheduler {
         }
         self.cell_owners.remove(&owner.cell_id);
         crate::cell::cspace::retire_cell_authority(CellId(owner.cell_id), owner.generation);
-        super::cell_session::retired(self, owner);
+        crate::task::cell_session::retired(self, owner);
         true
     }
 
@@ -722,7 +726,7 @@ impl Scheduler {
     /// charged too, and its Cell incarnation retains the interval with it.
     pub(crate) fn charge_cpu(&mut self, hart_id: usize, now: Option<u64>) {
         let delta = self.cpu_telemetry.pass(hart_id, now);
-        let tid = super::hart_local::ready::current_task_id_for(hart_id);
+        let tid = crate::sched::hart_local::ready::current_task_id_for(hart_id);
         if delta == 0 || tid == 0 {
             return;
         }
@@ -844,13 +848,13 @@ impl Scheduler {
         // RT tasks target the dedicated RT hart when it is online; fall back to
         // the current hart on single-hart systems (e.g. QEMU without -smp 2).
         let target_hart = if priority >= api::TaskPriority::RealTime as u8
-            && crate::task::smp::is_rt_hart_online()
+            && crate::sched::smp::is_rt_hart_online()
         {
-            crate::task::smp::HART_RT
+            crate::sched::smp::HART_RT
         } else {
-            super::hart_local::current_hart_id()
+            crate::sched::hart_local::current_hart_id()
         };
-        super::hart_local::ready::push_on_hart(target_hart, id, priority);
+        crate::sched::hart_local::ready::push_on_hart(target_hart, id, priority);
         priority
     }
 
@@ -871,7 +875,7 @@ impl Scheduler {
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     pub fn pend_preempt_if_needed(&self, new_priority: u8) {
         // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
-        let target_hart = super::hart_local::ready::destination_hart(new_priority);
+        let target_hart = crate::sched::hart_local::ready::destination_hart(new_priority);
         self.pend_preempt_on_hart(target_hart, new_priority);
     }
 
@@ -881,8 +885,8 @@ impl Scheduler {
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     pub fn pend_preempt_on_hart(&self, target_hart: usize, new_priority: u8) {
         #[cfg(target_arch = "riscv64")]
-        let hart_id = super::hart_local::current_hart_id();
-        let target_tid = super::hart_local::ready::current_task_id_for(target_hart);
+        let hart_id = crate::sched::hart_local::current_hart_id();
+        let target_tid = crate::sched::hart_local::ready::current_task_id_for(target_hart);
         let target_priority = if target_tid > 0 {
             self.tasks.get(&target_tid).map(|t| t.priority).unwrap_or(0)
         } else {
@@ -892,9 +896,9 @@ impl Scheduler {
             return;
         }
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-        crate::task::smp::note_preempt_pend(target_hart);
+        crate::sched::smp::note_preempt_pend(target_hart);
         #[cfg(target_arch = "x86_64")]
-        crate::task::smp::request_preemption(target_hart);
+        crate::sched::smp::request_preemption(target_hart);
         #[cfg(target_arch = "riscv64")]
         if target_hart == hart_id {
             // SAFETY: csrsi on sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
@@ -902,7 +906,7 @@ impl Scheduler {
             unsafe { core::arch::asm!("csrsi sip, 0x2") };
         } else {
             // Cross-hart IPI: SSIP fires on the target hart's next interrupt check.
-            if let Some((mask, base)) = crate::task::smp::logical_sbi_target(target_hart) {
+            if let Some((mask, base)) = crate::sched::smp::logical_sbi_target(target_hart) {
                 let _ = hal::common::sbi::sbi_send_ipi(mask, base);
             }
         }
@@ -1148,7 +1152,8 @@ impl Scheduler {
             })
             .ok_or(ViError::PermissionDenied)?;
         #[cfg(cellos_g1_cpu)]
-        super::cpu_accounting::inherit(self, owner).map_err(|_| ViError::PermissionDenied)?;
+        crate::sched::cpu_accounting::inherit(self, owner)
+            .map_err(|_| ViError::PermissionDenied)?;
         let live = self
             .tasks
             .values()
@@ -1233,7 +1238,7 @@ impl Scheduler {
                 target_arch = "x86_64"
             )
         ))]
-        if let super::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
+        if let crate::task::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
             if let Err(error) = space.map_existing_task_stacks(&kstack, &ustack) {
                 log::warn!(
                     "[sched] cell {:?} cannot map thread stacks into its domain: {:?}",
@@ -1297,7 +1302,10 @@ impl Scheduler {
                 target_arch = "x86_64"
             )
         ))]
-        if matches!(task.address_space, super::tcb::TaskAddressSpace::Domain(_)) {
+        if matches!(
+            task.address_space,
+            crate::task::tcb::TaskAddressSpace::Domain(_)
+        ) {
             task.has_dynamic_stack_mapping = true;
         }
 
@@ -1328,8 +1336,8 @@ impl Scheduler {
 
             task.kernel_stack = Some(kstack);
             task.user_stack = Some(ustack);
-            super::prime_user_mode_entry(&mut task, entry, arg);
-            super::tls::inherit_from(&mut task, parent_tls);
+            crate::task::prime_user_mode_entry(&mut task, entry, arg);
+            crate::task::tls::inherit_from(&mut task, parent_tls);
 
             info!(
                 "Thread '{}' (ID {}): KStack 0x{:X}-0x{:X}, UStackTop 0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
@@ -1367,7 +1375,7 @@ impl Scheduler {
     /// matching zombie is an idempotent terminal handoff: a selected Context
     /// may fault after its root already moved the exact generation out of
     /// `tasks`, but a mismatched generation remains a fatal integrity error.
-    pub fn retire_deferred_fault(&mut self, fault: super::hart_local::DeferredFault) {
+    pub fn retire_deferred_fault(&mut self, fault: crate::sched::hart_local::DeferredFault) {
         assert!(
             fault.is_trap_proven_user_fault(),
             "[fault] deferred handoff lacks trap-proven U-mode origin"
@@ -1440,7 +1448,7 @@ impl Scheduler {
     /// allocation attribution.  The scheduler owns root classification, so a
     /// worker remains task-local while a root enters the established quiescent
     /// generation-retirement funnel.
-    pub fn retire_deferred_exit(&mut self, exit: super::hart_local::DeferredExit) {
+    pub fn retire_deferred_exit(&mut self, exit: crate::sched::hart_local::DeferredExit) {
         let matches_exit = self.tasks.get(&exit.tid).is_some_and(|task| {
             task.cell_id.0 as usize == exit.cell_id && task.cell_generation == exit.generation
         });
@@ -1516,7 +1524,7 @@ impl Scheduler {
                 owner.root_tid,
             );
         }
-        super::cell_session::retiring(self, owner, exit_reason);
+        crate::task::cell_session::retiring(self, owner, exit_reason);
         let live_members: Vec<usize> = self
             .tasks
             .iter()
@@ -1555,7 +1563,7 @@ impl Scheduler {
                 member_tids: members,
                 zombies: Vec::new(),
                 waiter_wakes: Vec::new(),
-                requested_switch_completion: [0; super::smp::MAX_HARTS],
+                requested_switch_completion: [0; crate::sched::smp::MAX_HARTS],
                 remote_hart_mask: 0,
             });
         }
@@ -1604,18 +1612,18 @@ impl Scheduler {
         }
         // A dying waiter must not leave a queue entry behind: a later wake on the
         // same key would otherwise spend a wake slot on a task that no longer waits.
-        super::futex::on_task_leaves_wait(tid);
+        crate::task::futex::on_task_leaves_wait(tid);
         // A dying owner must cancel or indeterminate its queued/dispatched operations.
-        super::async_ipc::on_owner_exits(self, tid);
+        crate::task::async_ipc::on_owner_exits(self, tid);
         // A dying pipe owner must not leave an endpoint behind either: closing its
         // ends is what turns a faulted writer into an EOF for its readers.
-        let owned: alloc::vec::Vec<super::pipe::PipeHandle> = self
+        let owned: alloc::vec::Vec<crate::task::pipe::PipeHandle> = self
             .tasks
             .get(&tid)
             .map(|task| task.pipe_handles.iter().copied().collect())
             .unwrap_or_default();
         if !owned.is_empty() {
-            super::pipe::on_task_leaves(tid, &owned);
+            crate::task::pipe::on_task_leaves(tid, &owned);
             if let Some(task) = self.tasks.get_mut(&tid) {
                 task.pipe_handles.clear();
             }
@@ -1763,7 +1771,7 @@ impl Scheduler {
         crate::dev::driver_cell::deregister_all_for(tid);
 
         // Remove from every hart's ready queue if present.
-        super::hart_local::ready::remove_from_all(tid);
+        crate::sched::hart_local::ready::remove_from_all(tid);
 
         // Keep raw one-way Send's existing sender wake semantics. Bounded RPC
         // waiters are completed separately below, without broad masked-Recv
@@ -1816,8 +1824,8 @@ impl Scheduler {
         for id in to_wake {
             self.push_ready(id);
         }
-        super::async_ipc::owner_died(self, tid, dead_caller.0, dead_caller.1);
-        super::async_ipc::peer_died(self, tid, dead_caller.0, dead_caller.1);
+        crate::task::async_ipc::owner_died(self, tid, dead_caller.0, dead_caller.1);
+        crate::task::async_ipc::peer_died(self, tid, dead_caller.0, dead_caller.1);
 
         // Deliver NotifyOnExit death notifications. The subscriber map, its
         // nested vectors, and pending-death storage are scheduler-owned. Their
@@ -1953,7 +1961,9 @@ impl Scheduler {
                 .pending_root_retirements
                 .iter()
                 .any(|retirement| retirement.member_tids.contains(&z.id));
-            if super::hart_local::ready::any_hart_running(z.id) || retained_by_root_retirement {
+            if crate::sched::hart_local::ready::any_hart_running(z.id)
+                || retained_by_root_retirement
+            {
                 keep.push(z);
             } else {
                 let waiter_wakes = Self::take_waiters_after_quiescence(&mut z);
@@ -1968,7 +1978,7 @@ impl Scheduler {
     }
 
     /// Detach a quiescent task's waiters for publication after resource teardown.
-    fn take_waiters_after_quiescence(task: &mut super::tcb::Task) -> Vec<(usize, usize)> {
+    fn take_waiters_after_quiescence(task: &mut crate::task::tcb::Task) -> Vec<(usize, usize)> {
         let exit_reason = task.exit_code.unwrap_or(0);
         core::mem::take(&mut task.waiters)
             .into_iter()
@@ -2001,8 +2011,8 @@ impl Scheduler {
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
         let mut reap = Vec::new();
         self.pending_grant_reap.retain(|tid| {
-            if super::hart_local::ready::any_hart_running(*tid)
-                || super::syscall::dma_publication_in_flight(*tid)
+            if crate::sched::hart_local::ready::any_hart_running(*tid)
+                || crate::task::syscall::dma_publication_in_flight(*tid)
             {
                 true
             } else {
@@ -2018,23 +2028,24 @@ impl Scheduler {
     /// context switch. The owner slot remains `Retiring` while this returns
     /// nothing, so neither quota nor CellId reuse can race a selected Context.
     pub(crate) fn take_quiescent_root_retirements(&mut self) -> Vec<RootRetirement> {
-        let current_hart = super::hart_local::current_hart_id();
+        let current_hart = crate::sched::hart_local::current_hart_id();
         let mut ready = Vec::new();
         let mut pending = Vec::new();
         for mut retirement in core::mem::take(&mut self.pending_root_retirements) {
             let mut members_live = false;
             #[cfg(cellos_g1_cpu)]
-            if !super::cpu_accounting::quiescent(self, retirement.owner) {
+            if !crate::sched::cpu_accounting::quiescent(self, retirement.owner) {
                 members_live = true;
             }
-            for hart in 0..super::smp::MAX_HARTS {
+            for hart in 0..crate::sched::smp::MAX_HARTS {
                 // Read selection before execution. Switch completion publishes
                 // executing (Release) before clearing selection (Release), so
                 // these Acquire loads cannot observe a false quiescent gap.
-                let selected = super::hart_local::ready::selected_task_id_for(hart);
-                let current = super::hart_local::ready::current_task_id_for(hart);
-                let executing = super::hart_local::ready::executing_task_id_for(hart);
-                let outgoing = super::hart_local::ready::outgoing_context_save_task_id_for(hart);
+                let selected = crate::sched::hart_local::ready::selected_task_id_for(hart);
+                let current = crate::sched::hart_local::ready::current_task_id_for(hart);
+                let executing = crate::sched::hart_local::ready::executing_task_id_for(hart);
+                let outgoing =
+                    crate::sched::hart_local::ready::outgoing_context_save_task_id_for(hart);
                 if retirement.member_tids.contains(&selected)
                     || retirement.member_tids.contains(&current)
                     || retirement.member_tids.contains(&executing)
@@ -2043,7 +2054,7 @@ impl Scheduler {
                     members_live = true;
                     if hart != current_hart
                         && (retirement.requested_switch_completion[hart] == 0
-                            || super::smp::retirement_switch_completed(
+                            || crate::sched::smp::retirement_switch_completed(
                                 hart,
                                 retirement.requested_switch_completion[hart],
                             ))
@@ -2052,7 +2063,7 @@ impl Scheduler {
                         // proves a switch *into* (or back to) that member. Arm a
                         // fresh epoch so release waits for its eventual switch-away.
                         retirement.requested_switch_completion[hart] =
-                            super::smp::request_retirement_switch(hart);
+                            crate::sched::smp::request_retirement_switch(hart);
                         retirement.remote_hart_mask |= 1u64.checked_shl(hart as u32).unwrap_or(0);
                     }
                 }
@@ -2061,11 +2072,11 @@ impl Scheduler {
                 .requested_switch_completion
                 .iter()
                 .enumerate()
-                .all(|(hart, &epoch)| super::smp::retirement_switch_completed(hart, epoch));
+                .all(|(hart, &epoch)| crate::sched::smp::retirement_switch_completed(hart, epoch));
             let dma_publication_in_flight = retirement
                 .member_tids
                 .iter()
-                .any(|tid| super::syscall::dma_publication_in_flight(*tid));
+                .any(|tid| crate::task::syscall::dma_publication_in_flight(*tid));
             if !members_live && completed && !dma_publication_in_flight {
                 // Retiring members remain in `tasks` until this exact
                 // quiescence boundary so a stale remote Context is visibly
@@ -2113,7 +2124,7 @@ impl Scheduler {
     pub fn take_pending_vfs_holder_release(&mut self) -> Vec<usize> {
         let mut release = Vec::new();
         self.pending_vfs_holder_release.retain(|tid| {
-            if super::hart_local::ready::any_hart_running(*tid) {
+            if crate::sched::hart_local::ready::any_hart_running(*tid) {
                 true
             } else {
                 release.push(*tid);
@@ -2128,8 +2139,8 @@ impl Scheduler {
         &mut self,
     ) -> Vec<(
         usize,
-        alloc::sync::Arc<super::completion::CompletionQueue>,
-        super::completion::SlotId,
+        alloc::sync::Arc<crate::task::completion::CompletionQueue>,
+        crate::task::completion::SlotId,
     )> {
         core::mem::take(&mut self.pending_completion_release)
     }
@@ -2152,17 +2163,19 @@ impl Scheduler {
         *const crate::hal::arch::Context,
     )> {
         let result = self.pick_next_unaccounted(hart_id);
-        let tid = super::hart_local::ready::current_task_id_for(hart_id);
+        let tid = crate::sched::hart_local::ready::current_task_id_for(hart_id);
         let task = self
             .tasks
             .get(&tid)
             .or_else(|| self.zombies.iter().find(|t| t.id == tid).map(|t| &**t));
         match result {
             Some((_, incoming)) if incoming.is_null() => {
-                super::cpu_accounting::require(super::cpu_accounting::stage(self, hart_id, None));
+                crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::stage(
+                    self, hart_id, None,
+                ));
             }
             Some(_) => {} // Incoming accounting tuple was staged before publication.
-            None => super::cpu_accounting::require(super::cpu_accounting::no_switch(
+            None => crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::no_switch(
                 self, hart_id, task,
             )),
         }
@@ -2190,7 +2203,7 @@ impl Scheduler {
         let now = crate::task::system_ticks();
         // S6-1 K1: charge before any selection or watchdog decision, so every
         // pass — timer or voluntary — closes the outgoing interval exactly once.
-        self.charge_cpu(hart_id, super::telemetry::monotonic_ns());
+        self.charge_cpu(hart_id, crate::task::telemetry::monotonic_ns());
         // Global sweep (timer wakes, heartbeat, async-poll, watchdog) runs on hart 0 only
         // to prevent double-wake races on multihart setups.
         if hart_id != 0 {
@@ -2198,19 +2211,23 @@ impl Scheduler {
         }
         #[cfg(cellos_g1_cpu)]
         {
-            let join =
-                super::cpu_accounting::require(super::cpu_accounting::join_wait_target(self));
-            let period =
-                super::cpu_accounting::require(super::cpu_accounting::period_wait_target(self));
-            let (start, harts) =
-                super::cpu_accounting::require(super::cpu_accounting::start_wait_targets(self));
+            let join = crate::sched::cpu_accounting::require(
+                crate::sched::cpu_accounting::join_wait_target(self),
+            );
+            let period = crate::sched::cpu_accounting::require(
+                crate::sched::cpu_accounting::period_wait_target(self),
+            );
+            let (start, harts) = crate::sched::cpu_accounting::require(
+                crate::sched::cpu_accounting::start_wait_targets(self),
+            );
             for tid in start.into_iter().flatten() {
                 let task = self.tasks.get_mut(&tid).expect("locked G1 start target");
-                let data = super::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
-                    .expect("three-byte inline G1 compute barrier");
+                let data =
+                    crate::task::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
+                        .expect("three-byte inline G1 compute barrier");
                 if task
                     .pending_msgs
-                    .try_push(super::tcb::PendingMsg {
+                    .try_push(crate::task::tcb::PendingMsg {
                         sender_tid: 0,
                         data,
                         wire: None,
@@ -2218,7 +2235,9 @@ impl Scheduler {
                     })
                     .is_err()
                 {
-                    super::cpu_accounting::fatal(super::cpu_accounting::Error::WitnessFull);
+                    crate::sched::cpu_accounting::fatal(
+                        crate::sched::cpu_accounting::Error::WitnessFull,
+                    );
                 }
                 task.state = TaskState::Ready;
                 self.push_ready(tid);
@@ -2228,11 +2247,11 @@ impl Scheduler {
                 // Existing inline mailbox after ACCOUNTING unlock: either the
                 // root has installed a real Wait, or checked HPET reached16P.
                 let task = self.tasks.get_mut(&tid).expect("locked G1 wait target");
-                let data = super::pending_mailbox::PendingMsgData::try_copy(&token, 0)
+                let data = crate::task::pending_mailbox::PendingMsgData::try_copy(&token, 0)
                     .expect("two-byte inline G1 notification");
                 if task
                     .pending_msgs
-                    .try_push(super::tcb::PendingMsg {
+                    .try_push(crate::task::tcb::PendingMsg {
                         sender_tid: 0,
                         data,
                         wire: None,
@@ -2240,7 +2259,9 @@ impl Scheduler {
                     })
                     .is_err()
                 {
-                    super::cpu_accounting::fatal(super::cpu_accounting::Error::WitnessFull);
+                    crate::sched::cpu_accounting::fatal(
+                        crate::sched::cpu_accounting::Error::WitnessFull,
+                    );
                 }
                 task.state = TaskState::Ready;
                 self.push_ready(tid);
@@ -2258,8 +2279,8 @@ impl Scheduler {
                 self.last_global_sweep_tick = now;
             }
 
-            super::async_ipc::expire(self, now as u64);
-            super::cell_session::sweep(self);
+            crate::task::async_ipc::expire(self, now as u64);
+            crate::task::cell_session::sweep(self);
             // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
             //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
             //    RecvTimeout's a peer that never replies would block forever — the
@@ -2287,14 +2308,22 @@ impl Scheduler {
                     TaskState::PipeRead { handle, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        super::pipe::on_deadline(*handle, *id, super::pipe::PipeEnd::Read);
+                        crate::task::pipe::on_deadline(
+                            *handle,
+                            *id,
+                            crate::task::pipe::PipeEnd::Read,
+                        );
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
                     }
                     TaskState::PipeWrite { handle, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        super::pipe::on_deadline(*handle, *id, super::pipe::PipeEnd::Write);
+                        crate::task::pipe::on_deadline(
+                            *handle,
+                            *id,
+                            crate::task::pipe::PipeEnd::Write,
+                        );
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
                     }
@@ -2309,11 +2338,11 @@ impl Scheduler {
                     TaskState::FutexWait { key, deadline }
                         if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
                     {
-                        super::futex::on_deadline(task, *id, *key);
+                        crate::task::futex::on_deadline(task, *id, *key);
                         should_wake = true;
                     }
                     TaskState::WaitEvent { mask, deadline } => {
-                        let fired = super::waker::consume_pending(*mask);
+                        let fired = crate::task::waker::consume_pending(*mask);
                         if fired != 0 {
                             // Return fired mask as the syscall result.
                             task.trap_frame.regs[10] = fired as _;
@@ -2334,7 +2363,7 @@ impl Scheduler {
                     // snapshot readies it; the waiter takes the line itself,
                     // under the allocation lock, after it runs again.
                     TaskState::WaitCompletion { source, .. }
-                        if super::completion_wait::irq_wake_due(task, *source) =>
+                        if crate::task::completion_wait::irq_wake_due(task, *source) =>
                     {
                         should_wake = true;
                     }
@@ -2538,12 +2567,12 @@ impl Scheduler {
     pub(crate) fn pick_next_domain(
         &mut self,
         hart_id: usize,
-    ) -> Option<super::domain_switch::SwitchPlan> {
+    ) -> Option<crate::sched::domain_switch::SwitchPlan> {
         let (outgoing, incoming) = self.pick_next(hart_id)?;
         let incoming_task = (!incoming.is_null())
-            .then(|| super::hart_local::ready::current_task_id_for(hart_id))
+            .then(|| crate::sched::hart_local::ready::current_task_id_for(hart_id))
             .and_then(|id| self.tasks.get(&id));
-        super::domain_switch::SwitchPlan::new(outgoing, incoming, incoming_task)
+        crate::sched::domain_switch::SwitchPlan::new(outgoing, incoming, incoming_task)
     }
 
     /// Per-hart task selection: watchdog on current task, then pop from local queue
@@ -2557,7 +2586,7 @@ impl Scheduler {
         *mut crate::hal::arch::Context,
         *const crate::hal::arch::Context,
     )> {
-        use super::hart_local::ready as rl;
+        use crate::sched::hart_local::ready as rl;
 
         // 3. Decide if the current task yields, and run the CPU-monopoly watchdog.
         let current_id_raw = rl::current_task_id_for(hart_id);
@@ -2638,8 +2667,9 @@ impl Scheduler {
             // refreshes eligibility, so it cannot hide a lower eligible head.
             // The fixed Cell slot bound also bounds selection retries.
             for _ in 0..crate::memory::cell_quota::MAX_CELLS {
-                let eligibility =
-                    super::cpu_accounting::require(super::cpu_accounting::eligibility(self));
+                let eligibility = crate::sched::cpu_accounting::require(
+                    crate::sched::cpu_accounting::eligibility(self),
+                );
                 let eligible = |id| {
                     self.tasks
                         .get(&id)
@@ -2654,7 +2684,7 @@ impl Scheduler {
                 let Some(id) = candidate else { break };
                 let task = self.tasks.get(&id);
                 if Some(id) == current_id
-                    || super::cpu_accounting::require(super::cpu_accounting::stage(
+                    || crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::stage(
                         self, hart_id, task,
                     ))
                 {
@@ -2692,8 +2722,8 @@ impl Scheduler {
             #[cfg(cellos_g1_cpu)]
             if Some(*id) != current_id {
                 // No raw switch or scheduler identity publication occurred.
-                super::cpu_accounting::require(unsafe {
-                    super::cpu_accounting::abort_pending_before_raw(self, hart_id)
+                crate::sched::cpu_accounting::require(unsafe {
+                    crate::sched::cpu_accounting::abort_pending_before_raw(self, hart_id)
                 });
             }
             if let Some(task) = self.tasks.get_mut(id) {
@@ -2704,7 +2734,7 @@ impl Scheduler {
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
             log::info!(
                 "S22-RV64-DYING-NONSCHEDULABLE: PASS harts={}",
-                super::smp::online_hart_count()
+                crate::sched::smp::online_hart_count()
             );
             false
         });
@@ -2727,7 +2757,7 @@ impl Scheduler {
         if let Some(nid) = next_id {
             if let Some(next_task) = self.tasks.get_mut(&nid) {
                 next_task.state = TaskState::Running;
-                super::hart_local::set_current_cell_context(
+                crate::sched::hart_local::set_current_cell_context(
                     next_task.cell_id.0 as usize,
                     next_task.cell_generation,
                 );
@@ -2738,7 +2768,7 @@ impl Scheduler {
                 // incoming-side completion callback.
                 #[cfg(target_arch = "riscv64")]
                 {
-                    next_task.context.tp = super::hart_local::HART_LOCAL_TP_ADDRS[hart_id]
+                    next_task.context.tp = crate::sched::hart_local::HART_LOCAL_TP_ADDRS[hart_id]
                         .load(core::sync::atomic::Ordering::Acquire);
                 }
 
@@ -2752,7 +2782,7 @@ impl Scheduler {
                 // Publish the incoming task's user thread pointer for the resume
                 // path (`task::tls::apply_on_resume`). Same lock-held window as
                 // the other incoming-task state above.
-                super::hart_local::set_current_tls_base(next_task.tls_base);
+                crate::sched::hart_local::set_current_tls_base(next_task.tls_base);
             }
 
             // A controlled test reservation protects only the queued interval:
@@ -2850,15 +2880,16 @@ impl Scheduler {
                 }
             } else {
                 rl::set_current_task_id(hart_id, 0);
-                super::hart_local::set_current_cell_context(0, 0);
+                crate::sched::hart_local::set_current_cell_context(0, 0);
             }
         }
         None
     }
 
     pub fn current_task_mut(&mut self) -> Option<&mut Task> {
-        let tid =
-            super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
+        let tid = crate::sched::hart_local::ready::current_task_id_for(
+            crate::sched::hart_local::current_hart_id(),
+        );
         if tid > 0 {
             self.tasks.get_mut(&tid).map(|b| &mut **b)
         } else {
@@ -2867,8 +2898,9 @@ impl Scheduler {
     }
 
     pub fn current_task_ref(&self) -> Option<&Task> {
-        let tid =
-            super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
+        let tid = crate::sched::hart_local::ready::current_task_id_for(
+            crate::sched::hart_local::current_hart_id(),
+        );
         if tid > 0 {
             self.tasks.get(&tid)
         } else {
@@ -2877,7 +2909,7 @@ impl Scheduler {
     }
 
     pub fn has_ready_tasks(&self) -> bool {
-        super::hart_local::ready::total_ready_count() > 0
+        crate::sched::hart_local::ready::total_ready_count() > 0
     }
 }
 
@@ -2890,12 +2922,12 @@ mod retirement_tests {
         let _guard = crate::TEST_STATE_LOCK.lock();
         const TID: usize = 60_004;
         const CELL_RAW: u64 = 61;
-        let hart = super::super::hart_local::current_hart_id();
-        let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
-        let old_cell = super::super::hart_local::current_cell_id();
-        let old_generation = super::super::hart_local::current_cell_generation();
-        let old_executing = super::super::hart_local::ready::executing_task_id_for(hart);
-        let old_selected = super::super::hart_local::ready::selected_task_id_for(hart);
+        let hart = crate::sched::hart_local::current_hart_id();
+        let old_tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+        let old_cell = crate::sched::hart_local::current_cell_id();
+        let old_generation = crate::sched::hart_local::current_cell_generation();
+        let old_executing = crate::sched::hart_local::ready::executing_task_id_for(hart);
+        let old_selected = crate::sched::hart_local::ready::selected_task_id_for(hart);
         let mut scheduler = Scheduler::new();
         let mut blocked = Box::new(Task::new(
             TID,
@@ -2906,44 +2938,44 @@ mod retirement_tests {
         blocked.state = TaskState::Waiting { target: 0 };
         scheduler.tasks.insert(TID, blocked);
 
-        super::super::hart_local::ready::set_current_task_id(hart, TID);
-        super::super::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
+        crate::sched::hart_local::ready::set_current_task_id(hart, TID);
+        crate::sched::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
         let (_, boot) = scheduler
             .pick_next_local(hart, 0)
             .expect("blocked task must switch to boot");
         assert!(boot.is_null());
-        if super::super::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+        if crate::sched::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
             assert_eq!(
-                super::super::hart_local::ready::current_task_id_for(hart),
+                crate::sched::hart_local::ready::current_task_id_for(hart),
                 TID
             );
-            assert!(super::super::hart_local::ready::owned_by_another_hart(
+            assert!(crate::sched::hart_local::ready::owned_by_another_hart(
                 1 - hart,
                 TID
             ));
             crate::task::vi_context_switch_complete();
         }
         assert_eq!(
-            super::super::hart_local::ready::current_task_id_for(hart),
+            crate::sched::hart_local::ready::current_task_id_for(hart),
             0,
             "completed task→boot must release the blocked task identity"
         );
-        assert_eq!(super::super::hart_local::current_cell_id(), 0);
+        assert_eq!(crate::sched::hart_local::current_cell_id(), 0);
 
         scheduler.tasks.get_mut(&TID).expect("blocked task").state = TaskState::Ready;
-        super::super::hart_local::ready::push_on_hart(hart, TID, api::TaskPriority::Normal as u8);
+        crate::sched::hart_local::ready::push_on_hart(hart, TID, api::TaskPriority::Normal as u8);
         let (curr, next) = scheduler
             .pick_next_local(hart, 0)
             .expect("woken task must be selectable from boot");
         assert!(curr.is_null());
         assert!(!next.is_null());
 
-        super::super::hart_local::ready::remove_from_all(TID);
-        super::super::hart_local::ready::set_current_task_id(hart, old_tid);
-        super::super::hart_local::ready::set_executing_task_id(hart, old_executing);
-        super::super::hart_local::ready::set_selected_task_id(hart, old_selected);
-        super::super::hart_local::ready::complete_outgoing_context_save(hart);
-        super::super::hart_local::set_current_cell_context(old_cell, old_generation);
+        crate::sched::hart_local::ready::remove_from_all(TID);
+        crate::sched::hart_local::ready::set_current_task_id(hart, old_tid);
+        crate::sched::hart_local::ready::set_executing_task_id(hart, old_executing);
+        crate::sched::hart_local::ready::set_selected_task_id(hart, old_selected);
+        crate::sched::hart_local::ready::complete_outgoing_context_save(hart);
+        crate::sched::hart_local::set_current_cell_context(old_cell, old_generation);
     }
 
     #[cfg(not(target_arch = "riscv64"))]
@@ -2953,12 +2985,12 @@ mod retirement_tests {
         const FAULTED_TID: usize = 60_005;
         const SUCCESSOR_TID: usize = 60_006;
         const CELL_RAW: u64 = 60;
-        let hart = super::super::hart_local::current_hart_id();
-        let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
-        let old_cell = super::super::hart_local::current_cell_id();
-        let old_generation = super::super::hart_local::current_cell_generation();
-        let old_executing = super::super::hart_local::ready::executing_task_id_for(hart);
-        let old_selected = super::super::hart_local::ready::selected_task_id_for(hart);
+        let hart = crate::sched::hart_local::current_hart_id();
+        let old_tid = crate::sched::hart_local::ready::current_task_id_for(hart);
+        let old_cell = crate::sched::hart_local::current_cell_id();
+        let old_generation = crate::sched::hart_local::current_cell_generation();
+        let old_executing = crate::sched::hart_local::ready::executing_task_id_for(hart);
+        let old_selected = crate::sched::hart_local::ready::selected_task_id_for(hart);
         let mut scheduler = Scheduler::new();
         let mut faulted = Box::new(Task::new(
             FAULTED_TID,
@@ -2978,31 +3010,31 @@ mod retirement_tests {
             )),
         );
 
-        super::super::hart_local::ready::set_current_task_id(hart, FAULTED_TID);
-        super::super::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
+        crate::sched::hart_local::ready::set_current_task_id(hart, FAULTED_TID);
+        crate::sched::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
         let (_, boot) = scheduler
             .pick_next_local(hart, 0)
             .expect("faulted task must switch to boot");
         assert!(boot.is_null());
-        if super::super::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+        if crate::sched::hart_local::ready::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
             assert_eq!(
-                super::super::hart_local::ready::current_task_id_for(hart),
+                crate::sched::hart_local::ready::current_task_id_for(hart),
                 FAULTED_TID
             );
-            assert!(super::super::hart_local::ready::owned_by_another_hart(
+            assert!(crate::sched::hart_local::ready::owned_by_another_hart(
                 1 - hart,
                 FAULTED_TID
             ));
             crate::task::vi_context_switch_complete();
         }
         assert_eq!(
-            super::super::hart_local::ready::current_task_id_for(hart),
+            crate::sched::hart_local::ready::current_task_id_for(hart),
             0,
             "completed task→boot must release the faulted task identity"
         );
-        assert_eq!(super::super::hart_local::current_cell_id(), 0);
+        assert_eq!(crate::sched::hart_local::current_cell_id(), 0);
 
-        super::super::hart_local::ready::push_on_hart(
+        crate::sched::hart_local::ready::push_on_hart(
             hart,
             SUCCESSOR_TID,
             api::TaskPriority::Normal as u8,
@@ -3013,12 +3045,12 @@ mod retirement_tests {
         assert!(curr.is_null());
         assert!(!next.is_null());
 
-        super::super::hart_local::ready::remove_from_all(SUCCESSOR_TID);
-        super::super::hart_local::ready::set_current_task_id(hart, old_tid);
-        super::super::hart_local::ready::set_executing_task_id(hart, old_executing);
-        super::super::hart_local::ready::set_selected_task_id(hart, old_selected);
-        super::super::hart_local::ready::complete_outgoing_context_save(hart);
-        super::super::hart_local::set_current_cell_context(old_cell, old_generation);
+        crate::sched::hart_local::ready::remove_from_all(SUCCESSOR_TID);
+        crate::sched::hart_local::ready::set_current_task_id(hart, old_tid);
+        crate::sched::hart_local::ready::set_executing_task_id(hart, old_executing);
+        crate::sched::hart_local::ready::set_selected_task_id(hart, old_selected);
+        crate::sched::hart_local::ready::complete_outgoing_context_save(hart);
+        crate::sched::hart_local::set_current_cell_context(old_cell, old_generation);
     }
 
     #[test]
@@ -3029,10 +3061,10 @@ mod retirement_tests {
         const CELL_RAW: u64 = 63;
         const GENERATION: u64 = 7;
         let remote_hart =
-            if super::super::hart_local::current_hart_id() == super::super::smp::HART_RT {
+            if crate::sched::hart_local::current_hart_id() == crate::sched::smp::HART_RT {
                 0
             } else {
-                super::super::smp::HART_RT
+                crate::sched::smp::HART_RT
             };
 
         let owner = api::cell_owner::CellOwner::new(CELL_RAW, GENERATION, ROOT_TID as u64);
@@ -3064,19 +3096,19 @@ mod retirement_tests {
             member_tids: members,
             zombies: Vec::new(),
             waiter_wakes: Vec::new(),
-            requested_switch_completion: [0; super::super::smp::MAX_HARTS],
+            requested_switch_completion: [0; crate::sched::smp::MAX_HARTS],
             remote_hart_mask: 0,
         });
 
-        let old_current = super::super::hart_local::ready::current_task_id_for(remote_hart);
-        let old_selected = super::super::hart_local::ready::selected_task_id_for(remote_hart);
-        let old_executing = super::super::hart_local::ready::executing_task_id_for(remote_hart);
+        let old_current = crate::sched::hart_local::ready::current_task_id_for(remote_hart);
+        let old_selected = crate::sched::hart_local::ready::selected_task_id_for(remote_hart);
+        let old_executing = crate::sched::hart_local::ready::executing_task_id_for(remote_hart);
 
         // Deterministically model root exit after the worker Context pointer was
         // selected but before the incoming switch published it as executing.
-        super::super::hart_local::ready::set_current_task_id(remote_hart, WORKER_TID);
-        super::super::hart_local::ready::set_executing_task_id(remote_hart, 0);
-        super::super::hart_local::ready::set_selected_task_id(remote_hart, WORKER_TID);
+        crate::sched::hart_local::ready::set_current_task_id(remote_hart, WORKER_TID);
+        crate::sched::hart_local::ready::set_executing_task_id(remote_hart, 0);
+        crate::sched::hart_local::ready::set_selected_task_id(remote_hart, WORKER_TID);
 
         assert!(scheduler.take_reapable_zombies().is_empty());
         assert!(scheduler.take_quiescent_root_retirements().is_empty());
@@ -3084,25 +3116,25 @@ mod retirement_tests {
 
         // Incoming-side completion transfers the ownership pin without a gap:
         // executing is published before selection is cleared.
-        super::super::hart_local::ready::complete_selected_switch(remote_hart, WORKER_TID);
+        crate::sched::hart_local::ready::complete_selected_switch(remote_hart, WORKER_TID);
         assert_eq!(
-            super::super::hart_local::ready::selected_task_id_for(remote_hart),
+            crate::sched::hart_local::ready::selected_task_id_for(remote_hart),
             0
         );
         assert_eq!(
-            super::super::hart_local::ready::executing_task_id_for(remote_hart),
+            crate::sched::hart_local::ready::executing_task_id_for(remote_hart),
             WORKER_TID
         );
         assert!(scheduler.take_quiescent_root_retirements().is_empty());
 
-        super::super::hart_local::ready::set_current_task_id(remote_hart, 0);
-        super::super::hart_local::ready::set_executing_task_id(remote_hart, 0);
-        super::super::smp::complete_retirement_switch(remote_hart);
+        crate::sched::hart_local::ready::set_current_task_id(remote_hart, 0);
+        crate::sched::hart_local::ready::set_executing_task_id(remote_hart, 0);
+        crate::sched::smp::complete_retirement_switch(remote_hart);
         // Model the ordinary zombie sweep happening between remote completion
         // and the root-retirement sweep. The generation-owned zombie must stay
         // retained until it moves with the quiescent retirement.
         assert!(scheduler.take_reapable_zombies().is_empty());
-        let publication = super::super::syscall::test_reserve_dma_publication(WORKER_TID)
+        let publication = crate::task::syscall::test_reserve_dma_publication(WORKER_TID)
             .expect("reserve DMA publication marker");
         assert!(scheduler.take_quiescent_root_retirements().is_empty());
         assert!(!scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
@@ -3125,9 +3157,9 @@ mod retirement_tests {
         scheduler.finish_root_retirement(owner);
         assert!(scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
 
-        super::super::hart_local::ready::set_current_task_id(remote_hart, old_current);
-        super::super::hart_local::ready::set_executing_task_id(remote_hart, old_executing);
-        super::super::hart_local::ready::set_selected_task_id(remote_hart, old_selected);
+        crate::sched::hart_local::ready::set_current_task_id(remote_hart, old_current);
+        crate::sched::hart_local::ready::set_executing_task_id(remote_hart, old_executing);
+        crate::sched::hart_local::ready::set_selected_task_id(remote_hart, old_selected);
     }
     #[test]
     fn worker_resource_reap_waits_for_dma_publication() {
@@ -3135,7 +3167,7 @@ mod retirement_tests {
         const WORKER_TID: usize = 60_007;
         let mut scheduler = Scheduler::new();
         scheduler.pending_grant_reap.push(WORKER_TID);
-        let publication = super::super::syscall::test_reserve_dma_publication(WORKER_TID)
+        let publication = crate::task::syscall::test_reserve_dma_publication(WORKER_TID)
             .expect("reserve worker DMA publication marker");
 
         assert!(scheduler.take_pending_grant_reap().is_empty());
@@ -3163,7 +3195,7 @@ mod retirement_tests {
         scheduler.zombies.push(zombie);
 
         scheduler.retire_deferred_fault(
-            super::super::hart_local::DeferredFault::test_trap_proven_user(
+            crate::sched::hart_local::DeferredFault::test_trap_proven_user(
                 TID,
                 CELL_RAW as usize,
                 GENERATION,

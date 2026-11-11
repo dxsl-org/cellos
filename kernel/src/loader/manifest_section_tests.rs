@@ -162,7 +162,7 @@ fn scheduler_snapshot() -> SchedulerSnapshot {
             .collect(),
         next_task_id: scheduler.next_task_id,
         last_global_sweep_tick: scheduler.last_global_sweep_tick,
-        harts: crate::task::hart_local::HART_LOCALS
+        harts: crate::sched::hart_local::HART_LOCALS
             .iter()
             .map(|hart| HartSchedulerSnapshot {
                 hart_id: hart.hart_id.load(Ordering::Acquire),

@@ -44,7 +44,7 @@ pub fn clear_staged(tid: usize) {
 ///
 /// Call while holding the scheduler lock immediately before atomic publication.
 pub(crate) fn take_for_launch(
-    sched: &mut super::scheduler::Scheduler,
+    sched: &mut crate::sched::scheduler::Scheduler,
     spawner: usize,
 ) -> InheritedDirHandles {
     if spawner == 0 {

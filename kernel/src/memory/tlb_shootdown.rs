@@ -116,7 +116,7 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
             if test_tag_ack_withheld() {
                 Err(FlushAckError::Timeout {
-                    hart: crate::task::hart_local::current_hart_id(),
+                    hart: crate::sched::hart_local::current_hart_id(),
                     epoch: 0,
                 })
             } else {
@@ -178,7 +178,7 @@ pub fn tag_invalidation_outstanding() -> Option<usize> {
     // one-hart boot, where nothing remote can be outstanding.
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     if test_tag_ack_withheld() {
-        return Some(crate::task::hart_local::current_hart_id());
+        return Some(crate::sched::hart_local::current_hart_id());
     }
     remote_tag_flushes_outstanding()
 }
@@ -240,8 +240,8 @@ fn local_tag_flush(asid: usize) {
     target_arch = "x86_64"
 ))]
 fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
-    use crate::task::smp;
-    let me = crate::task::hart_local::current_hart_id();
+    use crate::sched::smp;
+    let me = crate::sched::hart_local::current_hart_id();
     let requested = smp::request_tlb_flush_set(smp::online_harts().filter(|hart| *hart != me));
     let deadline = counter_now() + ticks;
     while let Some((hart, epoch)) = smp::tlb_flush_set_outstanding(&requested) {
@@ -271,7 +271,7 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
         // CPU it acknowledges for. Masking only narrows the interrupt window,
         // it never widens it.
         let flags = hal::arch::save_and_disable_interrupts();
-        smp::answer_tlb_flush_in_spin(crate::task::hart_local::current_hart_id());
+        smp::answer_tlb_flush_in_spin(crate::sched::hart_local::current_hart_id());
         // SAFETY: restores exactly the interrupt state saved above.
         unsafe { hal::arch::restore_sstatus(flags) };
     }
@@ -320,9 +320,9 @@ fn counter_now() -> u64 {
     target_arch = "x86_64"
 ))]
 fn issue_remote_tag_flushes() {
-    let me = crate::task::hart_local::current_hart_id();
-    for hart in crate::task::smp::online_harts().filter(|hart| *hart != me) {
-        let _ = crate::task::smp::request_tlb_flush(hart);
+    let me = crate::sched::hart_local::current_hart_id();
+    for hart in crate::sched::smp::online_harts().filter(|hart| *hart != me) {
+        let _ = crate::sched::smp::request_tlb_flush(hart);
     }
 }
 
@@ -341,10 +341,10 @@ fn issue_remote_tag_flushes() {}
     target_arch = "x86_64"
 ))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
-    let me = crate::task::hart_local::current_hart_id();
-    crate::task::smp::online_harts()
+    let me = crate::sched::hart_local::current_hart_id();
+    crate::sched::smp::online_harts()
         .filter(|hart| *hart != me)
-        .find(|hart| crate::task::smp::tlb_flush_pending(*hart))
+        .find(|hart| crate::sched::smp::tlb_flush_pending(*hart))
 }
 
 #[cfg(not(any(
@@ -428,7 +428,7 @@ pub fn flush_range(start: VAddr, size: usize) {
         for page in (start..end).step_by(PAGE_SIZE) {
             hal::paging::flush_tlb_page(page);
         }
-        let Some((remote_mask, remote_base)) = crate::task::smp::remote_online_sbi_target() else {
+        let Some((remote_mask, remote_base)) = crate::sched::smp::remote_online_sbi_target() else {
             return;
         };
         #[cfg(feature = "test-hooks")]

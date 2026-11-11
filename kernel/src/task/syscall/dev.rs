@@ -479,7 +479,7 @@ pub(super) fn query_machine_facts(
 
 /// Handler for `Syscall::GetCpuCount` (extracted from the dispatcher).
 pub(super) fn get_cpu_count() -> SyscallResult {
-    Ok(crate::task::smp::online_hart_count())
+    Ok(crate::sched::smp::online_hart_count())
 }
 
 /// Handler for `Syscall::GpuFlush` (extracted from the dispatcher).

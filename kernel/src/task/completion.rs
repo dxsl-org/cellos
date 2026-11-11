@@ -29,8 +29,8 @@
 //! call that takes `SCHEDULER`, `FRAME_ALLOCATOR` or `KERNEL_ROOT`, and none of
 //! those is held when it is taken.
 
-use super::scheduler::Scheduler;
 use super::tcb::TaskState;
+use crate::sched::scheduler::Scheduler;
 use crate::sync::Spinlock;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -464,10 +464,10 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
                 None,
                 crate::memory::heap::p01_owner::COMPLETION_SHARED,
             );
-            let previous = super::hart_local::current_cell_id();
-            super::hart_local::set_current_cell_id(0);
+            let previous = crate::sched::hart_local::current_cell_id();
+            crate::sched::hart_local::set_current_cell_id(0);
             let created = CompletionQueue::new(cell).map(Arc::new);
-            super::hart_local::set_current_cell_id(previous);
+            crate::sched::hart_local::set_current_cell_id(previous);
             created?
         }
     };

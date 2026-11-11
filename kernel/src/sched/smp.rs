@@ -95,7 +95,7 @@ fn send_ipi(hart_id: usize) {
         if !<hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::HAS_IPI {
             return;
         }
-        if hart_id >= MAX_HARTS || hart_id == crate::task::hart_local::current_hart_id() {
+        if hart_id >= MAX_HARTS || hart_id == crate::sched::hart_local::current_hart_id() {
             return;
         }
         #[cfg(target_arch = "riscv64")]
@@ -105,7 +105,7 @@ fn send_ipi(hart_id: usize) {
         // AArch64: the board's interrupt controller raises the IPI (a GIC SGI),
         // addressed by CPU index or by affinity, whichever it uses.
         #[cfg(target_arch = "aarch64")]
-        if let Some(cpu) = crate::task::hart_local::physical_cpu_for(hart_id) {
+        if let Some(cpu) = crate::sched::hart_local::physical_cpu_for(hart_id) {
             if let Some(mpidr) = CPU_MPIDRS.mpidr(cpu) {
                 <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::send_ipi(
                     cpu as u32, mpidr,
@@ -454,7 +454,7 @@ pub fn logical_sbi_target(logical_hart: usize) -> Option<(usize, usize)> {
 #[cfg(target_arch = "riscv64")]
 pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
     const _: () = assert!(MAX_HARTS == 2);
-    let current = crate::task::hart_local::current_hart_id();
+    let current = crate::sched::hart_local::current_hart_id();
     let remote = if current == 0 { HART_RT } else { 0 };
     let online = HART_ONLINE[remote].load(Ordering::Acquire);
     online.then(|| logical_sbi_target(remote)).flatten()
@@ -686,7 +686,7 @@ fn start_psci_secondaries() {
     // Logical hart N runs CPU index N (the N-th `/cpus` node), so the boot core
     // has to *be* CPU 0 for the mapping to hold; anything else is reported
     // rather than half-applied.
-    let boot_cpu = crate::task::hart_local::physical_cpu_index();
+    let boot_cpu = crate::sched::hart_local::physical_cpu_index();
     if boot_cpu != Some(0) {
         log::warn!(
             "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
@@ -748,7 +748,7 @@ fn start_psci_secondaries() {
             break;
         };
         // The core is still off: this mapping has to exist before it reads it.
-        if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
+        if !crate::sched::hart_local::publish_physical_cpu(hart_id, hart_id) {
             log::warn!(
                 "[smp] hart {} conflicts with the published topology — not started",
                 hart_id
@@ -863,7 +863,7 @@ fn start_spin_table_secondaries() {
     }
     // Release addresses are indexed by `/cpus` node order, with the boot core
     // as node 0, exactly as the logical hart equals the CPU index.
-    let boot_cpu = crate::task::hart_local::physical_cpu_index();
+    let boot_cpu = crate::sched::hart_local::physical_cpu_index();
     if boot_cpu != Some(0) {
         log::warn!(
             "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
@@ -896,7 +896,7 @@ fn start_spin_table_secondaries() {
             }
         };
 
-        if !crate::task::hart_local::publish_physical_cpu(hart_id, hart_id) {
+        if !crate::sched::hart_local::publish_physical_cpu(hart_id, hart_id) {
             log::warn!("[smp] hart {hart_id} conflicts with the published topology — not started");
             continue;
         }
@@ -1480,7 +1480,7 @@ extern "C" fn x86_secondary_main(logical: usize, lapic_id: usize, kernel_cr3: us
     if !unsafe { hal::x86_64::init_secondary_cpu(logical, lapic_id as u32, kernel_cr3) } {
         panic!("[x86-smp] active AP feature/isolation initialization failed");
     }
-    crate::task::hart_local::install(logical);
+    crate::sched::hart_local::install(logical);
     // HypervisorCap is system-wide once the BSP latched root operation, so this
     // CPU must enter the same root operation (own HSAVE/VMXON frame) before it
     // may go online. A refused AP parks with IF clear and is never published.
@@ -1706,7 +1706,7 @@ core::arch::global_asm!(
 
 #[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
 extern "C" fn x86_handoff_fixture_incoming() -> ! {
-    use crate::task::hart_local::ready;
+    use crate::sched::hart_local::ready;
     assert_eq!(ready::selected_task_id_for(0), 0);
     assert_eq!(ready::executing_task_id_for(0), 90_002);
     assert_eq!(ready::outgoing_context_save_task_id_for(0), 0);
@@ -1735,7 +1735,7 @@ extern "C" fn x86_handoff_fixture_incoming() -> ! {
 /// retirement requested after selection. Synthetic TIDs never enter SCHEDULER.
 #[cfg(all(target_arch = "x86_64", feature = "test-hooks"))]
 fn x86_handoff_fixture() {
-    use crate::task::hart_local::ready;
+    use crate::sched::hart_local::ready;
     let stack = crate::task::stack::Stack::new_kernel(2).expect("handoff fixture stack");
     let flags = hal::arch::save_and_disable_interrupts();
     assert_eq!(ready::total_ready_count(), 0);
@@ -1788,7 +1788,7 @@ fn x86_handoff_fixture() {
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
 pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
-    crate::task::hart_local::install(hart_id);
+    crate::sched::hart_local::install(hart_id);
     hal::aarch64::init_secondary_hart();
     {
         use hal::Arch;
@@ -1850,7 +1850,7 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
     // `hal::ARCH.init()` sets stvec + enables SSIE.
     #[cfg(target_arch = "riscv64")]
     {
-        crate::task::hart_local::install(hart_id);
+        crate::sched::hart_local::install(hart_id);
         use hal::Arch;
         hal::ARCH.init();
         // ARCH.init installs the bootstrap-safe default vector. Restore this

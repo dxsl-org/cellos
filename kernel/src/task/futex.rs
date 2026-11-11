@@ -53,7 +53,7 @@ pub struct FutexKey {
 
 /// Key for a word in the calling task's address space.
 pub(crate) fn key_for(addr: VAddr) -> FutexKey {
-    let (space, generation) = super::hart_local::current_domain();
+    let (space, generation) = crate::sched::hart_local::current_domain();
     FutexKey {
         space,
         generation,

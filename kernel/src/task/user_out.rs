@@ -57,8 +57,9 @@ pub(super) fn write_resolved_optional_usize(slot: Option<*mut usize>, value: usi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sched::scheduler::Scheduler;
     use crate::sync::SpinlockGuard;
-    use crate::task::{scheduler::Scheduler, tcb::Task};
+    use crate::task::tcb::Task;
     use alloc::boxed::Box;
     use alloc::vec::Vec;
     use types::CellId;
