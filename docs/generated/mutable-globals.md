@@ -33,11 +33,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 - Only primitives, `&str`, and shared references, slices, arrays and tuples of those, plus `fn` pointers, are exempt as syntactically immutable. No type name is trusted to imply or exclude interior mutability.
 - Declarations of crates not linked into this profile are inventoried below but not required to be classified; their platforms are not qualified by this report.
 
-Source files outside the module tree:
-
-- `kernel/src/intrinsics.rs`: Not compiled: no `mod intrinsics` or `include!` anywhere; the mem* symbols come from compiler_builtins.
-- `kernel/src/prelude.rs`: Not compiled: no `mod prelude` or `include!` anywhere.
-
 ## Declarations needing review
 
 | key | file | kind | mutation | lifetime | contexts | owner | seal | retirement | status |

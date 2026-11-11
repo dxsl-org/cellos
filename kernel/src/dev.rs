@@ -41,11 +41,10 @@ pub mod iommu_riscv; // RISC-V IOMMU — 3-level DDT + Sv39 first-stage
 mod iommu_riscv_cmd;
 #[cfg(target_arch = "x86_64")]
 pub mod iommu_x86; // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
-pub mod nic;
 pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
 #[cfg(target_arch = "x86_64")]
 pub mod pcie_msi; // PCIe function record (434) and MSI/MSI-X allocation (435)
-pub mod virtio_rng; // NIC selector (VirtIO; PCIe NICs are Driver Cells)
+pub mod virtio_rng; // Kernel entropy source (x86 RDSEED/RDRAND)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.
 pub mod irq_wait; // IRQ wait/pending tables for Driver Cell sys_wait_irq

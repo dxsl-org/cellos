@@ -136,14 +136,8 @@ manifest = "hal/soc/bcm27xx/Cargo.toml"
 active = false
 
 # Source files under a crate's src/ that no `mod`/`#[path]` reaches. They are
-# not compiled, so they cannot hold a linked declaration.
-[[unreached]]
-path = "kernel/src/intrinsics.rs"
-reason = "Not compiled: no `mod intrinsics` or `include!` anywhere; the mem* symbols come from compiler_builtins."
-
-[[unreached]]
-path = "kernel/src/prelude.rs"
-reason = "Not compiled: no `mod prelude` or `include!` anywhere."
+# not compiled, so they cannot hold a linked declaration. (None today: the two
+# dead kernel files were deleted in architecture remediation Phase 09.)
 
 # ---- slice A ----
 [[global]]

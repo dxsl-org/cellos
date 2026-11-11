@@ -4,11 +4,6 @@
 //! slot-skip strategy exists (probing claimed block/net slots hangs on RISC-V).
 //! Those targets return zero bytes unless the isolated RV64 output-copy fixture
 //! explicitly enables its deterministic test source.
-pub fn init_driver() {
-    #[cfg(target_arch = "x86_64")]
-    let _ = x86_rng::features();
-}
-
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 static TEST_ENTROPY_ENABLED: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);

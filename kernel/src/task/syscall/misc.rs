@@ -571,9 +571,10 @@ pub(super) fn net_tx(caller_id: usize, frame_ptr: usize, frame_len: usize) -> Sy
         crate::audit::AuditEvent::NetTx,
         &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
     );
-    let frame = read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
-    let ok = crate::dev::nic::send_frame(&frame);
-    Ok(if ok { 1 } else { 0 })
+    // No kernel-resident NIC exists; frames go through the NIC Driver Cell.
+    // The frame is still read so a bad user range is refused as before.
+    read_user_slice(caller_id, frame_ptr, frame_len, MAX_USER_BUF)?;
+    Ok(0)
 }
 
 /// Handler for `Syscall::NetRx` (extracted from the dispatcher).
@@ -582,13 +583,6 @@ pub(super) fn net_rx(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Syscal
         return Err(SyscallError::PermissionDenied);
     }
     validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-    let mut kbuf = alloc::vec::Vec::new();
-    kbuf.try_reserve_exact(buf_len)
-        .map_err(|_| SyscallError::OutOfMemory)?;
-    kbuf.resize(buf_len, 0);
-    let n = crate::dev::nic::recv_frame(&mut kbuf);
-    if n > 0 {
-        write_user_slice(caller_id, buf_ptr, &kbuf[..n], MAX_USER_BUF)?;
-    }
-    Ok(n)
+    // No kernel-resident NIC exists; frames come from the NIC Driver Cell.
+    Ok(0)
 }

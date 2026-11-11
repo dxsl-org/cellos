@@ -135,3 +135,9 @@ Phases 10 and 14 both build on the new layout.
 - **Hoist 4/4 (`fsapi`).** The BootFS file-descriptor/cwd layer moved out of `task.rs` (path resolution, `file_*` handlers; about 325 lines) into `kernel/src/fsapi.rs`, which is one file, so no `fsapi/` directory was created. Callers use `crate::fsapi::file_*`.
   - `resolve_path` became `pub(crate)` because the path selftest calls it. `dir_inherit` stays in `task`: it is spawn-time handle transport, not file API.
   - The task directory hoist is complete: `dev/`, `sched/`, `ipc/` and `fsapi`.
+- **Selftest follow-up.** `task::ipc_test` and `memory::tests` are uncalled test harnesses that were compiled into every kernel. They are now gated off release like the boot fixtures. Found while classifying residents.
+- **Stubs (step 7).** Deleted:
+  - `dev/nic.rs`. Its two always-fail functions are inlined into `NetTx`/`NetRx`. Results are unchanged: `NetTx` still reads, and so validates, the frame and returns 0. `NetRx` still validates the buffer and returns 0, but no longer allocates a buffer it never filled, so an out-of-memory error can no longer occur there.
+  - The uncalled `virtio_rng::init_driver` no-op. The module's misleading "NIC selector" comment is corrected.
+  - The unused `async-trait` dependency, with its `Cargo.lock` entry.
+  - The never-compiled `intrinsics.rs` and `prelude.rs`, together with their `[[unreached]]` acknowledgements in the inventory.
