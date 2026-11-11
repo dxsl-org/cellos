@@ -49,19 +49,19 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 | Plan | Frontmatter status | Linked from |
 |---|---|---|
-| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:272` |
-| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:505` |
+| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:274` |
+| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:507` |
 | `.agents/261011-1200-cell-contract-authority/plan.md` | `in-progress` | `.agents/plan-portfolio.md:19`, `.agents/plan-portfolio.md:29`, `README.md:76`, `README.md:100`, `docs/README.md:13` |
 | `.agents/261019-1310-unified-desktop/plan.md` | `completed` | `.agents/plan-portfolio.md:98` |
-| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:256` |
+| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:258` |
 | `.agents/261020-1750-cellbox-cli/plan.md` | `closed-at-stated-ceilings-with-deferred-items` | `.agents/plan-portfolio.md:110`, `.agents/plan-portfolio.md:112`, `.agents/plan-portfolio.md:129`, `docs/README.md:21` |
 | `.agents/261030-1945-ginux-lessons-hardening/plan.md` | `closed` | `.agents/plan-portfolio.md:150` |
-| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:178` |
-| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:177` |
-| `.agents/261103-2218-x86-platform-breadth/plan.md` | `pending` | `.agents/plan-portfolio.md:189` |
-| `.agents/261104-0711-apple-silicon-group/plan.md` | `pending` | `.agents/plan-portfolio.md:218` |
-| `.agents/261104-0801-x86-igpu-compute/plan.md` | `pending` | `.agents/plan-portfolio.md:203` |
-| `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:212` |
+| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:180` |
+| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:179` |
+| `.agents/261103-2218-x86-platform-breadth/plan.md` | `pending` | `.agents/plan-portfolio.md:191` |
+| `.agents/261104-0711-apple-silicon-group/plan.md` | `pending` | `.agents/plan-portfolio.md:220` |
+| `.agents/261104-0801-x86-igpu-compute/plan.md` | `pending` | `.agents/plan-portfolio.md:205` |
+| `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:214` |
 | `.agents/261110-1703-architecture-remediation/plan.md` | `in-progress` | `.agents/plan-portfolio.md:166` |
 
 ## Open findings
