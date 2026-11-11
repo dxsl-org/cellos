@@ -269,7 +269,7 @@
 
 # ---- sched ----
 "kernel/src/sched.rs" = { category = "A", owner = "sched" }
-"kernel/src/sched/cpu_accounting.rs" = { category = "A", owner = "sched" }
+"kernel/src/sched/cpu_accounting.rs" = { category = "test", owner = "sched" }
 "kernel/src/sched/domain_switch.rs" = { category = "A", owner = "sched" }
 "kernel/src/sched/domain_switch_tests.rs" = { category = "test", owner = "sched" }
 "kernel/src/sched/hart_local.rs" = { category = "A", owner = "sched" }

@@ -485,13 +485,13 @@ pub struct Scheduler {
     /// Task IDs whose task-local resources must be reaped outside SCHEDULER.
     /// Root-member IDs remain in `pending_root_retirements` until every hart
     /// has completed a switch away from the retiring generation.
-    pub(crate) pending_grant_reap: Vec<usize>,
+    pub(in crate::sched) pending_grant_reap: Vec<usize>,
     /// Root retirements awaiting completed context switches before CellId-wide
     /// resource release and owner-slot reuse.
     pending_root_retirements: Vec<RootRetirement>,
     /// Dead VFS holder IDs. Every lease held by a dead task releases only
     /// after its saved context is no longer executing on any hart.
-    pub(crate) pending_vfs_holder_release: Vec<usize>,
+    pub(in crate::sched) pending_vfs_holder_release: Vec<usize>,
     /// Exact VFS request contexts released at a public boundary. These records
     /// retain holder, owner, and generation, unlike the holder-death queue.
     pending_vfs_context_release: Vec<VfsLeaseRelease>,

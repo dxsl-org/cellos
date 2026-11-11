@@ -22,6 +22,7 @@ INLINE_MOD = re.compile(r"^\s*(pub(\([^)]*\))?\s+)?mod\s+\w+\s*\{")
 class LexerState:
     block_depth: int = 0
     raw_hashes: int | None = None
+    braces: int = 0  # `{` minus `}` outside comments, strings and char literals
 
 
 def line_has_code(line: str, state: LexerState) -> bool:
@@ -74,10 +75,30 @@ def line_has_code(line: str, state: LexerState) -> bool:
             index = skip_quoted_string(line, index + 1)
             continue
 
+        if line[index] == "'":
+            end = char_literal_end(line, index)
+            has_code = True
+            index = end if end is not None else index + 1
+            continue
+
+        if line[index] == "{":
+            state.braces += 1
+        elif line[index] == "}":
+            state.braces -= 1
         has_code = True
         index += 1
 
     return has_code
+
+
+def char_literal_end(line: str, index: int) -> int | None:
+    """End of a char literal starting at `index`, or None for a lifetime."""
+    if line.startswith("\\", index + 1):
+        end = line.find("'", index + 3)
+        return end + 1 if end >= 0 else None
+    if index + 2 < len(line) and line[index + 2] == "'":
+        return index + 3
+    return None
 
 
 def raw_string_hashes(line: str, index: int) -> tuple[int, int] | None:
@@ -137,6 +158,7 @@ def count_nloc(paths: list[Path]) -> int:
         skip_depth = None  # brace depth that ends the skipped module
         depth = 0
         for line in path.read_text(encoding="utf-8").splitlines():
+            before = state.braces
             code = line_has_code(line, state)
             if skip_depth is None:
                 if CFG_TEST.match(line) or (held and line.lstrip().startswith("#[")):
@@ -147,7 +169,7 @@ def count_nloc(paths: list[Path]) -> int:
                 else:
                     total += held + int(code)
                     held = 0
-            depth += line.count("{") - line.count("}")
+            depth += state.braces - before
             if skip_depth is not None and depth <= skip_depth:
                 skip_depth = None
         total += held

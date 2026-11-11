@@ -27,7 +27,7 @@ fn main() {
     // are refused rather than silently ignored.
     for retired in ["CELLOS_P01_TRACE", "CELLOS_G1_CPU"] {
         println!("cargo:rerun-if-env-changed={retired}");
-        if matches!(std::env::var(retired).as_deref(), Ok(value) if value != "0") {
+        if std::env::var_os(retired).is_some_and(|value| value != "0") {
             panic!("{retired} is retired: build with the p01-trace / g1-cpu-accounting features");
         }
     }

@@ -6,12 +6,12 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 432 |
+| Sections scanned | 433 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 292 |
+| Ratified/Accepted sections | 293 |
 | …of those, anchored | 18 |
 | Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 274 |
+| Coverage gaps (ratified, unanchored) | 275 |
 | Status-prose hits | 80 |
 | Plans linked from status docs | 14 |
 | Structural errors (plan frontmatter, doc links) | 0 |
@@ -212,26 +212,27 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/14-viui.md:89` — 6. Non-goals
 - `docs/specs/14-viui.md:100` — 7. Verification gates
 - `docs/specs/14-viui.md:110` — See also
-- `docs/specs/15-kernel-boundary.md:15` — 1. Theoretical Basis
-- `docs/specs/15-kernel-boundary.md:17` — 1.1 Liedtke's Minimality Principle (1995)
-- `docs/specs/15-kernel-boundary.md:36` — 1.2 What LBI Can and Cannot Eliminate
-- `docs/specs/15-kernel-boundary.md:63` — 1.3 The Confused Deputy Problem
-- `docs/specs/15-kernel-boundary.md:78` — 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
-- `docs/specs/15-kernel-boundary.md:127` — 2. Kernel Whitelist — What BELONGS in the Kernel
-- `docs/specs/15-kernel-boundary.md:129` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
-- `docs/specs/15-kernel-boundary.md:141` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
-- `docs/specs/15-kernel-boundary.md:153` — Category C: Bootstrap Chicken-and-Egg
-- `docs/specs/15-kernel-boundary.md:178` — Category D: Hardware Exclusivity Arbiter
-- `docs/specs/15-kernel-boundary.md:192` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
-- `docs/specs/15-kernel-boundary.md:197` — 3.1 Device Drivers (all of them)
-- `docs/specs/15-kernel-boundary.md:241` — 3.2 Orchestration Policy
-- `docs/specs/15-kernel-boundary.md:261` — 3.3 Platform Enumeration
-- `docs/specs/15-kernel-boundary.md:269` — 3.4 Scheduling Policy
-- `docs/specs/15-kernel-boundary.md:280` — 3.5 Test/Debug Code
-- `docs/specs/15-kernel-boundary.md:288` — 4. The Boundary Decision Test (quick reference)
-- `docs/specs/15-kernel-boundary.md:312` — 5. Kernel Size Budget
-- `docs/specs/15-kernel-boundary.md:326` — 6. Comparison Table — Where Cellos Fits
-- `docs/specs/15-kernel-boundary.md:345` — 7. References
+- `docs/specs/15-kernel-boundary.md:23` — 1. Theoretical Basis
+- `docs/specs/15-kernel-boundary.md:25` — 1.1 Liedtke's Minimality Principle (1995)
+- `docs/specs/15-kernel-boundary.md:44` — 1.2 What LBI Can and Cannot Eliminate
+- `docs/specs/15-kernel-boundary.md:71` — 1.3 The Confused Deputy Problem
+- `docs/specs/15-kernel-boundary.md:86` — 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
+- `docs/specs/15-kernel-boundary.md:135` — 2. Kernel Whitelist — What BELONGS in the Kernel
+- `docs/specs/15-kernel-boundary.md:137` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
+- `docs/specs/15-kernel-boundary.md:151` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
+- `docs/specs/15-kernel-boundary.md:163` — Category C: Bootstrap Chicken-and-Egg
+- `docs/specs/15-kernel-boundary.md:188` — Category D: Hardware Exclusivity Arbiter
+- `docs/specs/15-kernel-boundary.md:200` — 2.5 Resident manifest
+- `docs/specs/15-kernel-boundary.md:212` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
+- `docs/specs/15-kernel-boundary.md:217` — 3.1 Device Drivers (all of them)
+- `docs/specs/15-kernel-boundary.md:267` — 3.2 Orchestration Policy
+- `docs/specs/15-kernel-boundary.md:287` — 3.3 Platform Enumeration
+- `docs/specs/15-kernel-boundary.md:295` — 3.4 Scheduling Policy
+- `docs/specs/15-kernel-boundary.md:306` — 3.5 Test/Debug Code
+- `docs/specs/15-kernel-boundary.md:320` — 4. The Boundary Decision Test (quick reference)
+- `docs/specs/15-kernel-boundary.md:344` — 5. Kernel Size Budget
+- `docs/specs/15-kernel-boundary.md:358` — 6. Comparison Table — Where Cellos Fits
+- `docs/specs/15-kernel-boundary.md:377` — 7. References
 - `docs/specs/16-rustc-tcb.md:12` — 1. What "TCB" Means for Cellos
 - `docs/specs/16-rustc-tcb.md:36` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
 - `docs/specs/16-rustc-tcb.md:38` — 2.1 `#![forbid(unsafe_code)]` enforcement

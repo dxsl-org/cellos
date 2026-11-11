@@ -298,7 +298,7 @@ review = "kernel/src/boot/limine.rs:get_kernel_address; kernel/src/boot.rs:119"
 key = "kernel::boot::limine::MP_REQUEST @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "static-mut"
-owner = "Limine bootloader writes `response`; kernel::boot::limine::get_mp_response reads it from task::smp::start_secondaries on the BSP"
+owner = "Limine bootloader writes `response`; kernel::boot::limine::get_mp_response reads it from sched::smp::start_secondaries on the BSP"
 contexts = ["boot"]
 seal = "`response` written by Limine before _start; no kernel store exists"
 retirement = "never: .requests is RW for the whole run; response memory is bootloader-reclaimable and never admitted to the frame allocator"
@@ -1355,7 +1355,7 @@ review = "kernel/src/task/telemetry.rs:provider_epoch; kernel/src/task/syscall/m
 key = "kernel::sched::scheduler::DUMMY_VTABLE"
 lifetime = "global"
 mutation = "immutable"
-owner = "kernel::task::scheduler dummy_waker used when polling a task's pending future"
+owner = "kernel::sched::scheduler dummy_waker used when polling a task's pending future"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "const-initialized; never written"
 retirement = "never: lives for the whole run"
@@ -1366,7 +1366,7 @@ review = "kernel/src/sched/scheduler.rs:dummy_raw_waker; kernel/src/sched/schedu
 key = "kernel::sched::scheduler::DEATH_SUBSCRIBERS"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::scheduler NotifyOnExit map watched_tid -> watchers; subscribe_death (syscall) and drain_death_subscribers (exit_task)"
+owner = "kernel::sched::scheduler NotifyOnExit map watched_tid -> watchers; subscribe_death (syscall) and drain_death_subscribers (exit_task)"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "entries drained one-shot when the watched task exits; a dead watcher is purged from every list in drain_death_subscribers"
@@ -1465,7 +1465,7 @@ review = "kernel/src/task/syscall/mod.rs:8948"
 key = "kernel::sched::smp::HART_ONLINE"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp bring-up: each CPU publishes its own slot (BSP slot 0 in start_secondaries, x86 AP slot 1..online in x86_secondary_main, one AP at a time); read by online_harts/online_hart_count/is_rt_hart_online and the steal victim scan"
+owner = "kernel::sched::smp bring-up: each CPU publishes its own slot (BSP slot 0 in start_secondaries, x86 AP slot 1..online in x86_secondary_main, one AP at a time); read by online_harts/online_hart_count/is_rt_hart_online and the steal victim scan"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "each slot set true once during boot/AP bring-up; never cleared"
 retirement = "never: no CPU offline path"
@@ -1487,7 +1487,7 @@ review = "kernel/src/sched/smp/topology.rs:publish; kernel/src/sched/smp/topolog
 key = "kernel::sched::smp::TLB_FLUSH_REQUEST"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp TLB shootdown mailbox: any requester bumps slot N (request_tlb_flush); CPU N reads it in service_tlb_flush"
+owner = "kernel::sched::smp TLB shootdown mailbox: any requester bumps slot N (request_tlb_flush); CPU N reads it in service_tlb_flush"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: monotone epoch"
@@ -1498,7 +1498,7 @@ review = "kernel/src/sched/smp.rs:request_tlb_flush; kernel/src/sched/smp.rs:ser
 key = "kernel::sched::smp::TLB_FLUSH_COMPLETE"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp: only CPU N writes slot N (service_tlb_flush); requesters poll tlb_flush_completed/tlb_flush_pending"
+owner = "kernel::sched::smp: only CPU N writes slot N (service_tlb_flush); requesters poll tlb_flush_completed/tlb_flush_pending"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: monotone epoch"
@@ -1509,7 +1509,7 @@ review = "kernel/src/sched/smp.rs:service_tlb_flush; kernel/src/sched/smp.rs:tlb
 key = "kernel::sched::smp::RETIRE_SWITCH_REQUEST"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp retirement switch proof: Scheduler retirement (request_retirement_switch) bumps slot N; CPU N reads it in capture_retirement_boundary / complete_retirement_switch"
+owner = "kernel::sched::smp retirement switch proof: Scheduler retirement (request_retirement_switch) bumps slot N; CPU N reads it in capture_retirement_boundary / complete_retirement_switch"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: monotone epoch"
@@ -1520,7 +1520,7 @@ review = "kernel/src/sched/smp.rs:request_retirement_switch; kernel/src/sched/sm
 key = "kernel::sched::smp::RETIRE_SWITCH_COMPLETE"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp: CPU N publishes slot N (complete_retirement_switch in timer/IPI ISR when idle; complete_captured_retirement_boundary in vi_context_switch_complete); Scheduler retirement reads it"
+owner = "kernel::sched::smp: CPU N publishes slot N (complete_retirement_switch in timer/IPI ISR when idle; complete_captured_retirement_boundary in vi_context_switch_complete); Scheduler retirement reads it"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: monotone epoch"
@@ -1531,7 +1531,7 @@ review = "kernel/src/sched/smp.rs:complete_retirement_switch; kernel/src/sched/s
 key = "kernel::sched::smp::RETIRE_SWITCH_INFLIGHT @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp (x86_64): CPU N captures the request epoch before selection and consumes it on the incoming side of its switch"
+owner = "kernel::sched::smp (x86_64): CPU N captures the request epoch before selection and consumes it on the incoming side of its switch"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "swapped to 0 at each completed switch"
@@ -1542,7 +1542,7 @@ review = "kernel/src/sched/smp.rs:capture_retirement_boundary; kernel/src/sched/
 key = "kernel::sched::smp::X86_READY @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "kernel::task::smp x86 AP handshake step 1: each AP stores its own logical id after its reciprocal TLB-flush proof; the BSP waits in x86_start_ap for its current AP's id"
+owner = "kernel::sched::smp x86 AP handshake step 1: each AP stores its own logical id after its reciprocal TLB-flush proof; the BSP waits in x86_start_ap for its current AP's id"
 contexts = ["boot", "ap"]
 seal = "written once per AP during bring-up (logical ids 1..online, increasing); never written after X86_BOOT_COMPLETE"
 retirement = "never: lives for the whole run (inert after bring-up)"
@@ -1553,7 +1553,7 @@ review = "kernel/src/sched/smp.rs:x86_secondary_main; kernel/src/sched/smp.rs:st
 key = "kernel::sched::smp::X86_QUALIFIED @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "kernel::task::smp x86 handshake step 2: BSP stores the logical id of each AP that answered its IPI flush; that AP waits for a value >= its id; x86_substrate_qualified reads it (non-zero) for domain admission"
+owner = "kernel::sched::smp x86 handshake step 2: BSP stores the logical id of each AP that answered its IPI flush; that AP waits for a value >= its id; x86_substrate_qualified reads it (non-zero) for domain admission"
 contexts = ["boot", "ap", "normal"]
 seal = "written once per AP by the BSP in x86_start_ap, increasing; never written after X86_BOOT_COMPLETE"
 retirement = "never: lives for the whole run"
@@ -1564,7 +1564,7 @@ review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86
 key = "kernel::sched::smp::X86_BOOT_COMPLETE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "kernel::task::smp: BSP sets it at the end of start_secondaries (or the IDT fixture); gates x86_scheduler_ready for yield_cpu, vi_timer_tick and vi_ipi_service"
+owner = "kernel::sched::smp: BSP sets it at the end of start_secondaries (or the IDT fixture); gates x86_scheduler_ready for yield_cpu, vi_timer_tick and vi_ipi_service"
 contexts = ["boot", "ap", "normal", "irq", "exception"]
 seal = "set true once by the BSP at the end of start_secondaries; never cleared"
 retirement = "never: lives for the whole run"
@@ -1575,7 +1575,7 @@ review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86
 key = "kernel::sched::smp::X86_PREEMPT @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::smp x86 preemption mailbox: Scheduler::pend_preempt_if_needed and cpu_accounting set slot N; CPU N consumes it in vi_ipi_service"
+owner = "kernel::sched::smp x86 preemption mailbox: Scheduler::pend_preempt_if_needed and cpu_accounting set slot N; CPU N consumes it in vi_ipi_service"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: lives for the whole run"
@@ -1597,7 +1597,7 @@ review = "kernel/src/sched/smp.rs:x86_start_ap; kernel/src/sched/smp.rs:X86Secon
 key = "kernel::sched::smp::global_asm!#1 @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "none"
-owner = "kernel::task::smp x86 AP entry trampoline vi_x86_secondary_entry"
+owner = "kernel::sched::smp x86 AP entry trampoline vi_x86_secondary_entry"
 contexts = ["ap"]
 seal = "no storage: code only"
 retirement = "never: code lives for the whole run"
@@ -1608,7 +1608,7 @@ review = "kernel/src/sched/smp.rs:vi_x86_secondary_entry; kernel/src/sched/smp.r
 key = "kernel::sched::quiesce::PARK_REQUEST"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::quiesce park protocol: requester bumps PARK_REQUEST[N] (request_park via KernelHarts); target reads it in park_here_if_requested (RV64 trap path only)"
+owner = "kernel::sched::quiesce park protocol: requester bumps PARK_REQUEST[N] (request_park via KernelHarts); target reads it in park_here_if_requested (RV64 trap path only)"
 contexts = ["normal"]
 seal = "never written on x86_64: QuiesceState::request returns Unsupported (park_hook_available is false off RV64) or has no targets before calling request_park"
 retirement = "never: monotone epochs (on x86_64 never advanced)"
@@ -1619,7 +1619,7 @@ review = "kernel/src/sched/quiesce.rs:request_park; kernel/src/sched/quiesce.rs:
 key = "kernel::sched::quiesce::PARK_ACK"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::quiesce: target hart publishes PARK_ACK[N] in park_here_if_requested; requester reads via park_acknowledged"
+owner = "kernel::sched::quiesce: target hart publishes PARK_ACK[N] in park_here_if_requested; requester reads via park_acknowledged"
 contexts = ["normal"]
 seal = "never written on x86_64: the only writer park_here_if_requested is called from cfg(target_arch = \"riscv64\") code"
 retirement = "never: monotone epochs (on x86_64 never advanced)"
@@ -1630,7 +1630,7 @@ review = "kernel/src/sched/quiesce.rs:park_here_if_requested; kernel/src/sched/q
 key = "kernel::sched::quiesce::PARK_RELEASE"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::quiesce: requester raises PARK_RELEASE[N] (release_park via Guard::release); parked target polls it"
+owner = "kernel::sched::quiesce: requester raises PARK_RELEASE[N] (release_park via Guard::release); parked target polls it"
 contexts = ["normal"]
 seal = "never written on x86_64: Guard::release only releases harts in a requested set that is always empty off RV64"
 retirement = "never: monotone epochs (on x86_64 never advanced)"
@@ -1641,29 +1641,29 @@ review = "kernel/src/sched/quiesce.rs:release_park; kernel/src/sched/quiesce.rs:
 key = "kernel::sched::quiesce::KERNEL_STATE"
 lifetime = "global"
 mutation = "atomic"
-owner = "kernel::task::quiesce single-flight snapshot capture state (QuiesceState.in_flight); used by snapshot::serialize_snapshot"
+owner = "kernel::sched::quiesce single-flight snapshot capture state (QuiesceState.in_flight); used by snapshot::serialize_snapshot"
 contexts = ["normal"]
 seal = "none: toggled per capture attempt"
 retirement = "in_flight cleared by Guard::release (on drop or on refusal)"
 rationale = "compare_exchange(AcqRel) admits one capture at a time and Release store clears it. Only caller is serialize_snapshot from the snapshot syscall (and only with feature snapshot-qualified, else GateClosed first); no timer-IRQ or AP access."
-review = "kernel/src/sched/quiesce.rs:QuiesceState::acquire; kernel/src/snapshot.rs:serialize_snapshot; kernel/src/task/syscall/mod.rs:8204"
+review = "kernel/src/sched/quiesce.rs:QuiesceState::acquire; kernel/src/snapshot_engine.rs:serialize_snapshot; kernel/src/task/syscall/mod.rs:8204"
 
 [[global]]
 key = "kernel::sched::quiesce::KERNEL_HARTS"
 lifetime = "global"
 mutation = "immutable"
-owner = "kernel::task::quiesce KernelHarts: zero-sized QuiesceHarts implementation passed to KERNEL_STATE.acquire"
+owner = "kernel::sched::quiesce KernelHarts: zero-sized QuiesceHarts implementation passed to KERNEL_STATE.acquire"
 contexts = ["normal"]
 seal = "zero-sized unit struct; nothing to initialize or write"
 retirement = "never: lives for the whole run"
 rationale = "KernelHarts has no fields, so the static has no mutable storage; its methods operate on PARK_* and smp::HART_ONLINE. Referenced only by serialize_snapshot from the snapshot syscall; no timer-IRQ or AP access."
-review = "kernel/src/sched/quiesce.rs:693; kernel/src/snapshot.rs:serialize_snapshot"
+review = "kernel/src/sched/quiesce.rs:693; kernel/src/snapshot_engine.rs:serialize_snapshot"
 
 [[global]]
 key = "kernel::ipc::pipe::PIPES"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::pipe kernel pipe objects; created by cell_session, read/written by syscalls, closed on task exit and deadline sweep"
+owner = "kernel::ipc::pipe kernel pipe objects; created by cell_session, read/written by syscalls, closed on task exit and deadline sweep"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "pipe removed and its ring freed (release_pipe) when the last end closes; pipe::on_task_leaves and disown_cell run from exit_task/cell retirement"
@@ -1685,7 +1685,7 @@ review = "kernel/src/ipc/pipe.rs:next_pipe_id; kernel/src/ipc/cell_session.rs:22
 key = "kernel::sched::hart_local::HART_LOCALS"
 lifetime = "per-cpu"
 mutation = "atomic"
-owner = "kernel::task::hart_local: slot N owned by CPU N (current task/cell/domain ids, deferred-retirement record, user-copy guard, TLS base, HartOwnedSlot pins); ready Spinlock shared with stealing/remote-push CPUs"
+owner = "kernel::sched::hart_local: slot N owned by CPU N (current task/cell/domain ids, deferred-retirement record, user-copy guard, TLS base, HartOwnedSlot pins); ready Spinlock shared with stealing/remote-push CPUs"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "hart_id/kernel_gp/kernel_tp_for_cells written once by install() (BSP in task::init, AP in x86_secondary_main); other fields mutated for the whole run"
 retirement = "never: lives for the whole run"
@@ -1718,7 +1718,7 @@ review = "kernel/src/sched/hart_local/ready.rs:claims; kernel/src/sched/hart_loc
 key = "kernel::ipc::futex::WAITERS"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::futex waiter queues keyed by FutexKey; wait/wake syscalls, deadline sweep and task-exit cleanup"
+owner = "kernel::ipc::futex waiter queues keyed by FutexKey; wait/wake syscalls, deadline sweep and task-exit cleanup"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "a waiter is removed on wake, timeout (on_deadline) or exit (on_task_leaves_wait); empty keys are deleted"
@@ -2037,7 +2037,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_text_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2048,7 +2048,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_readonly_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2059,7 +2059,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_readonly_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2070,7 +2070,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_writable_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2081,7 +2081,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::__domain_writable_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2092,7 +2092,7 @@ contexts = ["boot"]
 seal = "fixed at link time by kernel/linker-x86-64.ld"
 retirement = "never: link-time constant"
 rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after APs start); the byte is never read or written, so no runtime mutation exists. snapshot::kernel_image also names some of these but is cfg(any(target_arch = \"riscv64\", target_arch = \"aarch64\"))."
-review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot.rs:kernel_image"
+review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
 key = "kernel::memory::deferred_release::DEFERRED @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
@@ -2430,7 +2430,7 @@ debt = "Blocked, deliberately deferred: enforcing the owner admission gate needs
 key = "kernel::sched::smp::X86_AP_ROOT_REFUSED @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
-owner = "task::smp: an AP stores its own logical id in x86_secondary_main instead of X86_READY when enter_x86_root_on_current_cpu fails; x86_start_ap on the BSP compares it with the id it released"
+owner = "sched::smp: an AP stores its own logical id in x86_secondary_main instead of X86_READY when enter_x86_root_on_current_cpu fails; x86_start_ap on the BSP compares it with the id it released"
 contexts = ["boot", "ap"]
 seal = "written at most once (by the first refusing AP) during start_secondaries, before X86_BOOT_COMPLETE; bring-up stops at that AP"
 retirement = "never: lives for the whole run; the refusing AP stays parked"
