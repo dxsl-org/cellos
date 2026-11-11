@@ -286,7 +286,7 @@ fn cell_colors(cell: &TerminalCell, colors: TermColors) -> (Color, Color) {
     }
 }
 
-/// The Terminal window (first open and the re-create after a close inside a live Cell).
+/// The Terminal window. Closing it ends the shell and the Cell.
 fn open_window(comp_tid: usize, width: u32, height: u32) -> ViSurface {
     let surf = ViSurface::create(comp_tid, width, height, PixelFormat::Bgra8888)
         .expect("create terminal surface");
@@ -369,43 +369,7 @@ fn cell_main() {
 
         if let Some(serial) = close_serial {
             let _ = surf.respond_close(serial, true);
-            if !app.session.running() {
-                ostd::io::println("[terminal] Window closed without a shell; exiting.");
-                break;
-            }
-            // Window close inside this live Cell: release the frontend (the shell keeps a
-            // Detached session), destroy the window, then re-create it at once and resume
-            // the same shell on a fresh frontend. The re-open is automatic: a user-facing
-            // re-open of a running Terminal (desktop single-instance) does not exist.
-            let released = app.session.detach();
-            surf.destroy();
-            match released {
-                Ok(()) => {
-                    ostd::io::println("[terminal] window closed; frontend released, shell detached")
-                }
-                Err(status) => ostd::io::println(&alloc::format!(
-                    "[terminal] window closed; frontend release failed: {:?}",
-                    status
-                )),
-            }
-            surf = open_window(comp_tid, win_w, win_h);
-            while !ostd::input::request_focus() {
-                sys_yield();
-            }
-            app.width = surf.width();
-            app.height = surf.height();
-            let (cols, rows) = grid_dims(app.width, app.height, app.cell_w, app.cell_h);
-            match app.session.reattach(cols, rows) {
-                Ok(()) => ostd::io::println(
-                    "[terminal] window re-created; frontend re-attached to the same shell",
-                ),
-                Err(status) => ostd::io::println(&alloc::format!(
-                    "[terminal] window re-created; re-attach failed: {:?}",
-                    status
-                )),
-            }
-            need_render = true;
-            busy = true;
+            break;
         }
 
         if app.session.pump() {
@@ -414,7 +378,6 @@ fn cell_main() {
         }
 
         if app.session.should_close {
-            ostd::io::println("[terminal] Exiting terminal application.");
             break;
         }
 
@@ -435,7 +398,11 @@ fn cell_main() {
         }
     }
 
+    // Window first, then the shell, then the log line: the console repaint for the log
+    // must not race the window's teardown repaint.
+    surf.destroy();
     app.session.shutdown();
+    ostd::io::println("[terminal] Window closed; shell ended; exiting.");
 }
 
 #[cfg(test)]

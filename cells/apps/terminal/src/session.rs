@@ -8,8 +8,7 @@
 //! normalized events through the frontend attachment, and everything on screen is what
 //! the shell relayed (its own output and its children's) to this Cell's output rings.
 //!
-//! Window close inside the live Cell releases the frontend (the shell keeps a Detached
-//! session); [`TerminalSession::reattach`] resumes the same shell on a new frontend.
+//! Closing the window ends the Cell; [`TerminalSession::shutdown`] cancels the shell.
 
 extern crate alloc;
 use alloc::format;
@@ -94,32 +93,6 @@ impl TerminalSession {
             },
             Err(status) => self.fail("cannot open terminal frontend", status),
         }
-    }
-
-    /// True while a shell runs behind this frontend (attached or not yet).
-    pub fn running(&self) -> bool {
-        self.state == RunState::Running && self.host.is_some()
-    }
-
-    /// The window is closing inside this live Cell: release the frontend. The shell keeps
-    /// its session (Detached) and its output rings stay drained into the grid.
-    pub fn detach(&mut self) -> Result<(), Status> {
-        let host = self.host.as_mut().ok_or(Status::NotFound)?;
-        if host.state() != FrontendState::Attached {
-            host.poll_frontend()?;
-        }
-        host.release()
-    }
-
-    /// A new window of `cols`×`rows` for this Cell: resume the same shell on a fresh
-    /// frontend. The shell redraws its prompt line; the grid keeps the transcript.
-    pub fn reattach(&mut self, cols: usize, rows: usize) -> Result<(), Status> {
-        if (cols, rows) != (self.grid.cols, self.grid.rows) && self.grid.resize(cols, rows).is_err()
-        {
-            return Err(Status::Malformed);
-        }
-        let host = self.host.as_mut().ok_or(Status::NotFound)?;
-        host.reattach(rows as u16, cols as u16)
     }
 
     /// Handle one compositor key event; returns whether the grid changed.
@@ -414,16 +387,6 @@ mod tests {
         session.resize(100, 30);
         assert_eq!((session.grid.cols, session.grid.rows), (100, 30));
         session.resize(100, 30);
-        assert_eq!(session.state, RunState::Idle);
-    }
-
-    #[test]
-    fn window_close_without_a_shell_has_nothing_to_release_or_resume() {
-        let mut session = TerminalSession::new(80, 24);
-        assert!(!session.running());
-        assert_eq!(session.detach(), Err(Status::NotFound));
-        assert_eq!(session.reattach(80, 24), Err(Status::NotFound));
-        // A refused re-attach never fabricates a running shell.
         assert_eq!(session.state, RunState::Idle);
     }
 

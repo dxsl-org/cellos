@@ -765,8 +765,8 @@ class Proof:
         # ---- S5-2: cellos-vt1 screen (alternate screen, colours, addressing, erase) ------
         self.vt(model, state)
 
-        # ---- S5-3 option C: window close -> release -> automatic re-create -> re-attach ----
-        self.s53c_reattach(command, model, state)
+        # S5-2 leaves a cleared screen; one line of output lets S5-4's `clear` controls see a change.
+        command("S54-pre-echo", "echo s54-pre", [["s54-pre"]])
 
         # ---- S5-4: hostile output ---------------------------------------------------------------
         self.hostile(model, state)
@@ -837,88 +837,23 @@ class Proof:
         dbad, _ = self.diff(w, bad, c[1] - 2, c[1], c)
         self.chk("GUI-4-control-status-0-differs", dbad >= MIN_NEGATIVE_DIFF, f"{dbad} differing pixels")
 
-        # ---- window close control (informational) ------------------------------------------
-        try:
-            self.type_text("exit")
-            self.tap("ret")
-
-            time.sleep(8)
-            self.tap("esc")
-            gone, _ = self.wait_for(lambda i: self.locate(i) is None, "window gone after exit + Esc", 120)
-            self.shot("window-closed", gone)
-            self.chk("window-close-control", True, "no Terminal-coloured window rectangle remains", info=True)
-        except StepFailed as e:
-            self.chk("window-close-control", False, str(e), info=True)
-
-    # ---- S5-3 option C: same shell across a window close inside the live Terminal Cell -----
-    def s53c_reattach(self, command, model, state):
-        """phase-05-s3c-frontend-annex.md §7, decision A. The Terminal's close control inside
-        the live Terminal Cell releases its frontend (the shell keeps a Detached session and
-        logs that it observed Lost(4)); the Terminal then re-creates its window AT ONCE by
-        itself and re-attaches the same shell with its holder-bound resume capability. This
-        proves close -> ReleaseFrontend -> Detached -> ReattachFrontend in the same Cell with
-        an automatic window re-create; a user-facing re-open of a running Terminal (desktop
-        single-instance / taskbar) is NOT delivered and not claimed."""
-        command("S53C-cd", "cd /tmp", [[]])
-        command("S53C-pwd-before-close", "pwd", [["/tmp"]])
+        # ---- window menu Close ends the Terminal while its shell still runs --------------------
         org = self.org
-        # Close through the window menu: tab = content - (1, 28); the app icon box (20x20,
-        # window_decoration::menu_button_rect) at tab + (4, 3) opens the menu 4px below it;
-        # Close is the third item after a 9px separator: menu + (4, 4 + 2*28 + 9), 28 tall.
-        # The Terminal is on top.
+        # tab = content - (1, 28); the app icon box (20x20, window_decoration::menu_button_rect)
+        # at tab + (4, 3) opens the menu 4px below it; Close is the third item after a 9px
+        # separator: menu + (4, 4 + 2*28 + 9), 28 tall. The Terminal is on top.
         icon_x, icon_y = org[0] - 1 + 4, org[1] - 28 + 3
         self.click_px(icon_x + 10, icon_y + 10)
-        menu_y = icon_y + 20 + 4
-        self.click_px(icon_x + 4 + 40, menu_y + 4 + 2 * 28 + 9 + 14)
+        self.click_px(icon_x + 4 + 40, icon_y + 20 + 4 + 4 + 2 * 28 + 9 + 14)
         self.park()
-        for needle, what in (
-            ("[terminal] window closed; frontend released, shell detached", "frontend released on window close"),
-            ("[terminal] window re-created; frontend re-attached to the same shell", "window re-created and frontend re-attached"),
-            ("shell: frontend detached; session waits", "shell observed Lost(4) and waits"),
-            ("shell: frontend re-attached; redraw", "shell observed the re-attach"),
-        ):
-            try:
-                self.wait_serial(needle, 120, what)
-                self.chk("S53C-serial:" + what.replace(" ", "-"), True)
-            except StepFailed as e:
-                self.chk("S53C-serial:" + what.replace(" ", "-"), False, str(e))
-                raise
-        text = self.serial.text()
-        order = [text.find(n) for n in ("[terminal] window closed;", "shell: frontend detached;",
-                                        "shell: frontend re-attached;")]
-        self.chk("S53C-release-before-reattach", -1 not in order and order[0] < order[2] and order[1] < order[2], order)
-        # The re-created window shows the same transcript; the shell redrew its prompt line.
-        reopened = self.expect_screen(model, "re-created window shows the same transcript and prompt", 180)
-        self.shot("s53c-reopened", reopened)
-        self.chk("S53C-reopened-screen-exact", True, "diff=0")
-        altered = model[:-2] + [model[-2][:-1] + ("x" if model[-2][-1] != "x" else "y"), model[-1]]
-        _, win = self.window(reopened)
-        dalt, _ = self.diff(win, self.pad(altered), 0, ROWS - 1, self.mcursor(model))
-        self.chk("S53C-control-one-char-change-differs", dalt >= MIN_NEGATIVE_DIFF, f"{dalt} differing pixels")
-        self.chk("S53C-window-same-origin", self.locate(reopened) == org, self.locate(reopened))
-        # Keyboard to the re-created window, as a user would do.
-        self.click_px(org[0] + 360, org[1] + 300)
-        self.park()
-        time.sleep(2)
-        state["img"] = reopened
-        # Same shell: cwd and history survive; nothing restarted (no new banner).
-        command("S53C-pwd-after-reattach", "pwd", [["/tmp"]])
-        before = state["img"]
-        self.tap("up")
-        recalled = model[:-1] + [model[-1] + "pwd"]
-        img = self.expect_screen(recalled, "history Up recalls the last line after re-attach", 120)
-        self.shot("s53c-history-recalled", img)
-        self.chk("S53C-history-recalled-exact", True, "diff=0")
-        self.tap("ret")
-        final = recalled + ["/tmp", PROMPT]
-        img = self.expect_screen(final, "recalled line runs in the same cwd", 120)
-        self.shot("s53c-history-rerun", img)
-        self.chk("S53C-history-rerun-exact", True, "diff=0")
-        dprev = self.match_full(before, self.pad(final), self.mcursor(final))
-        self.chk("S53C-control-before-frame-differs", dprev is not None and (dprev["diff"] is None or dprev["diff"] >= MIN_NEGATIVE_DIFF), dprev)
-        model[:] = final
-        state["img"] = img
-        self.chk("S53C-no-second-banner", self.serial.text().count("[terminal] Terminal surface ready. Entering event loop.") == 1)
+        try:
+            self.wait_serial("[terminal] Window closed; shell ended; exiting.", 120, "Terminal exits on Close")
+            gone, _ = self.wait_for(lambda i: self.locate(i) is None, "window gone after menu Close", 120)
+            self.shot("window-closed", gone)
+            self.chk("window-close-exits", True, "no Terminal-coloured window rectangle remains")
+        except StepFailed as e:
+            self.chk("window-close-exits", False, str(e))
+            raise
 
     # ---- S5-2: cellos-vt1 styled screens ----------------------------------------------------
     @staticmethod
@@ -1509,10 +1444,6 @@ class Proof:
         for name, needle in payloads.items():
             self.chk("no-command-uart:" + name, needle.encode() not in raw, "payload appeared on the physical UART")
         self.chk("uart-terminal-ready-once", log.count("[terminal] Terminal surface ready. Entering event loop.") == 1)
-        # S5-3 option C: exactly one window close/re-create, one shell re-attach notice.
-        self.chk("uart-s53c-one-release", log.count("[terminal] window closed; frontend released, shell detached") == 1)
-        self.chk("uart-s53c-one-reattach", log.count("[terminal] window re-created; frontend re-attached to the same shell") == 1)
-        self.chk("uart-s53c-shell-reattach-once", log.count("shell: frontend re-attached; redraw") == 1)
         self.chk("uart-files-ready-once", log.count("[files] Files surface ready. Entering event loop.") == 1)
         self.chk("no-spotlight-power-claim", "Authorized system" not in log, "a fake power action reported success")
         self.chk("no-key-material-in-log", seed not in log)
