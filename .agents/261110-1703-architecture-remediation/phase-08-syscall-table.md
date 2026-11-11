@@ -76,7 +76,7 @@ Raw opcodes outside the enum (3/100/110/111/255/500–504) become table rows fla
 
 - [x] CP1 approved
 - [x] Golden dump
-- [ ] Generated `api` side
+- [x] Generated `api` side
 - [ ] Generated kernel side, single gate
 - [ ] File split
 - [ ] Generated headers
@@ -106,3 +106,8 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
 
 - **Step 2 (golden dump):** `kernel/src/task/syscall/golden_tests.rs` (host, `syscall_golden`) writes `libs/api/abi/syscalls.golden.json`. It has 148 rows: 141 api opcodes plus the raw aliases 100/110/111/500–503. Each row records the api decode and bit, the kernel decode, the variant→`ViSyscall` map, the result encoder (6 typed-OOM syscalls), and the bits that actually gate the opcode at `check_allowlist`, found by probing all 64 bits against a task holding every right.
 - **Finding from the dump:** for every api opcode, the effective raw-id gate bit equals `allowlist_bit`. `syscall_to_vi` (the variant-side map) returns `None` for 27 syscalls, among them `Call`, `Exit`, `Yield`, `CapRevoke`, `RegisterService`, `CellSessionV1`, `ResolveCellImage` and the 244–248 owner calls. The variant-path allowlist check therefore never covers them, which is the split-gate gap H-5 names. In-kernel `handle_syscall` callers pass only through that variant path.
+- **Step 3 (api generation):** `libs/api/abi/syscalls.toml` has 142 rows (141 opcodes plus the `Unknown` sentinel). A throwaway script extracted them from the hand-written enum and kept every rustdoc, section header, section comment, trailing remark and allowlist-arm comment (43 `bit_note`s). `libs/api/build.rs` parses the subset of TOML the table uses with no new dependency, then generates `ViSyscall`, `allowlist_bit` and `From<usize>` into `OUT_DIR`. `syscall.rs` `include!`s the result and drops from 1 820 to 456 lines; `HOTSWAP_STATE_TRANSFER_BIT` is gone, its value 32 now sits in the rows.
+  - **Surprise:** `libs/api/build.rs` already existed and only emitted the `rerun-if-changed` lines for `src/c/printf.{c,h}`. Those lines are kept.
+  - The golden test passes unchanged against the generated code.
+- **Digest re-pin (CP1 §3.3):** `check-lookupservicebound` and `check-multi-source-wait` matched literal enum, decode and arm text. They now check the table row (`require_row name number bit`), which generates all three. `check-ai` needs no change. Negative control: editing `LookupServiceBound`'s bit to 38 fails both the digest script and `syscall_golden`.
+- **CP1 prototype obligation:** with `libs/api/build.rs` in place, the RV64 ramdisk cells, the AArch64 disk cells and the x86 headless image all build. The CellOS std sysroot builds for 3 targets, and `std-smoke` boots to PASS on riscv64, aarch64 and x86_64. The build.rs route stays and no fallback was needed.

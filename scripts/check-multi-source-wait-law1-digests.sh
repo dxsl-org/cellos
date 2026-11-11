@@ -42,6 +42,27 @@ K_SYSCALL="kernel/src/task/syscall.rs"
 K_MSI="kernel/src/task/drivers/pcie_msi.rs"
 
 failures=0
+# require_row <name> <number> <bit|none> <item description>
+# The syscall surface lives in `libs/api/abi/syscalls.toml` (architecture
+# remediation Phase 08, Law-1 CP1): `libs/api/build.rs` generates the enum
+# variant, its `From<usize>` decode arm and its `allowlist_bit` arm from one row,
+# so the row is the frozen item (re-pinned from the generated text 2026-11-11).
+TABLE="libs/api/abi/syscalls.toml"
+require_row() {
+    local name="$1" number="$2" bit="$3" item="$4"
+    if ! python3 - "$TABLE" "$name" "$number" "$bit" <<'PY'
+import sys, tomllib
+table, name, number, bit = sys.argv[1:]
+rows = [r for r in tomllib.load(open(table, "rb"))["syscall"] if r["name"] == name]
+ok = len(rows) == 1 and rows[0]["number"] == int(number) and (
+    ("bit" not in rows[0]) if bit == "none" else rows[0].get("bit") == int(bit))
+sys.exit(0 if ok else 1)
+PY
+    then
+        echo "FAIL: $item — $TABLE has no single row name=$name number=$number bit=$bit" >&2
+        failures=$((failures + 1))
+    fi
+}
 
 # require_in <file> <literal> <item description>
 require_in() {
@@ -106,9 +127,7 @@ require_in "$COMPLETION" "fn irq_record_carries_the_line_and_refuses_a_mixed_sou
     "IRQ record byte test present"
 
 # ── libs/api: opcode, allowlist and the exported allowlist symbol ─────────────
-require_in "$SYSCALL" "WaitCompletion = 242," "opcode 242 kept"
-require_in "$SYSCALL" "242 => ViSyscall::WaitCompletion," "242 decodes to the variant"
-require_in "$SYSCALL" "Self::WaitCompletion => Some(42)," "allowlist bit 42 kept (shared)"
+require_row WaitCompletion 242 42 "opcode 242 kept, decodes to the variant, allowlist bit 42 kept (shared)"
 require_in "$SYSCALL" '#[export_name = "__vicell_syscall_allowlist"]' \
     "declare_syscalls! exports the allowlist symbol"
 require_count "$OSTD_RUNTIME" '#[export_name = "__vicell_syscall_allowlist"]' 4 \
