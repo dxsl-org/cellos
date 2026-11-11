@@ -96,6 +96,13 @@ impl<F: FileSystem> FilesApp<F> {
         app
     }
 
+    /// The window now has this size; everything is laid out from it at the
+    /// next render and click.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+    }
+
     pub(crate) fn read_listing(&mut self, path: &str) -> FsResult<Vec<FileItem>> {
         let mut entries = self.fs.list_dir(path)?;
         // Folders first; the VFS order is kept within each group.

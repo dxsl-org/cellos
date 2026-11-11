@@ -40,6 +40,7 @@ use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
+use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
@@ -609,6 +610,20 @@ impl OcelViewer {
         if self.search_open {
             self.perform_search();
         }
+    }
+
+    /// The window now has this size: lay the shown document out again at
+    /// the new width (keeping its relative scroll position) and repaint.
+    /// Other tabs lay out again when shown.
+    fn resize(&mut self, width: u32, height: u32) {
+        if (width, height) == (self.width, self.height) {
+            return;
+        }
+        self.width = width;
+        self.height = height;
+        self.hibernate_inactive_tabs();
+        let zoom = self.current_tab().doc.zoom_percent();
+        self.set_zoom(zoom);
     }
 
     fn hibernate_inactive_tabs(&mut self) {
@@ -2567,8 +2582,25 @@ fn cell_main() {
     let mut theme_serial = viui::theme::system_serial();
     viewer.render();
     ostd::io::println("[ocel] Window initialized and painted.");
+    // Resizes, minimize and the window's close button, as for every ViUI window.
+    let mut window = WindowLifecycle::new(ClosePolicy::Accept);
 
     loop {
+        let mut resized = None;
+        let mut restored = false;
+        window.poll(&mut viewer.surface, |event| match event {
+            WindowEvent::Resized { width, height } => resized = Some((width, height)),
+            WindowEvent::Restored => restored = true,
+            WindowEvent::Minimized | WindowEvent::CloseRequested { .. } | WindowEvent::Closed => {}
+        });
+        if window.is_closed() {
+            viewer.should_exit = true;
+        }
+        if let Some((width, height)) = resized {
+            viewer.resize(width, height);
+        } else if restored {
+            viewer.render();
+        }
         for event in ostd::input::poll_events(16) {
             match event {
                 InputEvent::Key(ke) => {

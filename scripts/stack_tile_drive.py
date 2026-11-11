@@ -184,13 +184,14 @@ class Drive:
         self.chk("stack-dissolved", s.at(700, 80) not in (ACTIVE_TAB, STACKED_TAB), s.at(700, 80))
 
         # ---- Win+drag Terminal beside Files: it tiles flush ----------------------
-        # Terminal content now 540,400 (visible frame from 539,372); Files' visible
-        # frame ends at 941. Drop Terminal's frame at 945,72: it snaps to 941.
-        q.drag((600, 386), (600 + 406, 386 - 300), hold="meta_l")
+        # Stacking gave Files the Terminal's 720x480, so Files' visible frame
+        # (content 140,100) ends at 861. Terminal content is now 540,400
+        # (visible frame from 539,372). Drop it at 865,72: it snaps to 861.
+        q.drag((600, 386), (600 + 326, 386 - 300), hold="meta_l")
         s = self.settled("tiled")
-        # Terminal's tab outline in column 941, its fill from 942: flush with Files.
-        self.chk("tiled-flush", s.at(941, 86) not in (ACTIVE_TAB, INACTIVE_TAB) and s.at(943, 86) == ACTIVE_TAB,
-                 f"{s.at(941, 86)} {s.at(943, 86)}")
+        # Terminal's tab outline in column 861, its fill from 862: flush with Files.
+        self.chk("tiled-flush", s.at(861, 86) not in (ACTIVE_TAB, INACTIVE_TAB) and s.at(863, 86) == ACTIVE_TAB,
+                 f"{s.at(861, 86)} {s.at(863, 86)}")
         # Plain drag of Files' tab moves the group: Terminal's tab follows 50px down.
         q.drag((300, 86), (300, 136))
         s = self.settled("group-moved")

@@ -23,6 +23,7 @@ use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_exit, sys_get_resolution, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
+use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
 use viui::canvas::Color;
 use viui::theme;
 
@@ -705,8 +706,22 @@ fn cell_main() {
     app.render(&mut surf, &mut fonts);
     let mut cursor_x = 0i32;
     let mut cursor_y = 0i32;
+    // Resizes, minimize and the window's close button, as for every ViUI
+    // window; closing the window ends the guest session below.
+    let mut window = WindowLifecycle::new(ClosePolicy::Accept);
+    let mut resized = false;
 
     loop {
+        window.poll(&mut surf, |event| match event {
+            WindowEvent::Resized { width, height } => {
+                app.width = width;
+                app.height = height;
+                resized = true;
+            }
+            WindowEvent::Restored => resized = true,
+            WindowEvent::Closed => app.should_close = true,
+            WindowEvent::Minimized | WindowEvent::CloseRequested { .. } => {}
+        });
         if app.should_close {
             ostd::io::println("[chrome] User requested window close. Terminating guest container.");
             if app.vmm_active && app.hv_tid != 0 {
@@ -715,7 +730,7 @@ fn cell_main() {
             }
             break;
         }
-        let mut need_render = false;
+        let mut need_render = core::mem::take(&mut resized);
         for ev in ostd::input::poll_events(16) {
             match ev {
                 InputEvent::MouseMove { x, y, dx, dy } => {

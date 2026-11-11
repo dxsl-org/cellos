@@ -38,6 +38,7 @@ use ostd::syscall::{
     sys_get_resolution, sys_spawn_from_path, sys_spawn_from_path_raw, sys_yield, SyscallResult,
 };
 use ostd::typography::TextFonts;
+use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 api::declare_syscalls![
     Log,
@@ -125,9 +126,25 @@ fn cell_main() {
     ostd::io::println("[files] Files surface ready. Entering event loop.");
     let mut cursor_x = 0i32;
     let mut cursor_y = 0i32;
+    // Resizes, minimize and the window's close button, answered like every
+    // other ViUI window: closing Files simply closes it.
+    let mut window = WindowLifecycle::new(ClosePolicy::Accept);
 
     loop {
         let mut need_render = false;
+        window.poll(&mut surf, |event| match event {
+            WindowEvent::Resized { width, height } => {
+                app.resize(width, height);
+                need_render = true;
+            }
+            WindowEvent::Restored => need_render = true,
+            WindowEvent::Minimized | WindowEvent::CloseRequested { .. } | WindowEvent::Closed => {}
+        });
+        if window.is_closed() {
+            drop(surf);
+            ostd::io::println("[files] Window closed; exiting.");
+            return;
+        }
 
         for ev in ostd::input::poll_events(16) {
             match ev {
@@ -267,7 +284,7 @@ fn cell_main() {
             painted_serial = serial;
             need_render = true;
         }
-        if need_render {
+        if need_render && !window.is_minimized() {
             if app.current_path != title_path {
                 title_path = app.current_path.clone();
                 let _ = surf.set_title(&format!("Files — {}", title_path));

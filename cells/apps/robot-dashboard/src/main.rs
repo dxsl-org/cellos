@@ -51,14 +51,13 @@ use api::display::PixelFormat;
 
 use viui::{
     animation::AnimatedSignal,
-    app_runner::ViApp,
+    managed_surface::{ClosePolicy, ManagedSurfaceApp, ManagedTick},
     event::Event,
     node::ViNode,
     node_widgets::{
         button::Button, column::Column, flex_box::FlexBox, label::Label, list_view::ListView,
         progress_bar::ProgressBar, slider::Slider,
     },
-    renderer::FramebufferRenderer,
     signal::{Signal, SubscriptionHandle},
 };
 
@@ -98,7 +97,6 @@ fn cell_main() {
     if surf.set_icon(LineIcon::Dashboard).is_err() {
         ostd::io::println("[robot-dashboard] set_icon failed; Cell Tab keeps the generic icon");
     }
-    let renderer = FramebufferRenderer::new(surf);
 
     // Register this cell to receive keyboard and mouse events.
     // Retry until the input service grants focus — it may not be registered yet
@@ -196,11 +194,13 @@ fn cell_main() {
         running_start,
     );
 
-    // ── Assemble ViApp ────────────────────────────────────────────────────────
-    let mut app = ViApp::new(Box::new(root), Box::new(renderer));
-    app.add_animation(Box::new(battery_anim));
-    app.add_animation(Box::new(cpu_anim));
-    app.add_animation(Box::new(motor_anim));
+    // ── Assemble the managed ViApp ────────────────────────────────────────────
+    // It follows the window's size, minimize and close like every ViUI window.
+    let mut app = ManagedSurfaceApp::new(Box::new(root), surf);
+    app.set_close_policy(ClosePolicy::Accept);
+    app.app_mut().add_animation(Box::new(battery_anim));
+    app.app_mut().add_animation(Box::new(cpu_anim));
+    app.app_mut().add_animation(Box::new(motor_anim));
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     let mut sim = SimState::new();
@@ -273,8 +273,13 @@ fn cell_main() {
         if now.wrapping_sub(last_frame) >= FRAME_INTERVAL {
             let dt_ms = (now.wrapping_sub(last_frame) / MTIME_TICKS_PER_MS) as u32;
             last_frame = now;
-            app.tick_with_dt(&pending_events, dt_ms);
+            let tick = app.tick_with_dt(&pending_events, dt_ms);
             pending_events.clear();
+            if tick == ManagedTick::Closed {
+                ostd::io::println("[robot-dashboard] window closed; exiting");
+                app.shutdown();
+                ostd::syscall::sys_exit(0);
+            }
         }
 
         // Yield to avoid busy-spinning the CPU.
