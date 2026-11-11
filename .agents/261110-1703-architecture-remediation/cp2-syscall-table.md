@@ -61,3 +61,7 @@
 ## 5. Question to the owner
 
 Confirm CP2 (Law-1 confirmation 2) for the `libs/api` source-form change and `result_sentinel` as implemented in §1.
+
+## 6. Owner decision
+
+2026-11-11: **CP2 confirmed** (Law-1 confirmation 2).

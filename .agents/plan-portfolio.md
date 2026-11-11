@@ -165,7 +165,7 @@ Scope supports Intel Cellos operations only. No IDE/build environment, general L
 
 **Recorded 2026-11-10.** [Plan](261110-1703-architecture-remediation/plan.md) closes the 2 Critical / 14 High / 22 Medium / 8 Low findings of the [architecture review](reports/architecture-review-261110.md) as measured-defect work serving Intel C2C (ADR-0022). Owner [approval](261110-1703-architecture-remediation/admission-approval.md): all slices S0–S8 in order, decisions D1–D4 at their defaults. Only S0 (Phase 01, docs + workspace members + status guard) is effective; S1–S8 each need their own handoff and, for `libs/api`/`libs/types` changes, Law-1 CP1/CP2. Single-WIP rule applies; this plan never takes files from an active Intel slice.
 
-**Progress 2026-11-11.** S0 closed; S1 open only for the post-CI untrack and the signing-blocked release item; S2 (Phases 04–06, authority) closed with commits `b78d47f31`, `d14b69266`, `7dc57d730`, `f3cd96072` (441 CP2 confirmed). S3 (Phase 07, incarnation authority) closed 2026-11-11 with commits `d54abcc22`, `246acddad`, `13a5208c0`, `3f6c5bdd2`. Next: S4 (Phase 08) handoff request + Law-1 CP1.
+**Progress 2026-11-11.** S0 closed; S1 open only for the post-CI untrack and the signing-blocked release item; S2 (Phases 04–06, authority) closed with commits `b78d47f31`, `d14b69266`, `7dc57d730`, `f3cd96072` (441 CP2 confirmed). S3 (Phase 07, incarnation authority) closed 2026-11-11 with commits `d54abcc22`, `246acddad`, `13a5208c0`, `3f6c5bdd2`. S4 Phase 08 (syscall table, single gate, move-only split) closed 2026-11-11, Law-1 CP2 confirmed. Next: Phase 09 request (dispatcher match extraction, kernel residents).
 
 ## Registered — platform image families (ADR-0029), not yet admitted
 

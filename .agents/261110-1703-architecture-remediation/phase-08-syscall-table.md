@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Generated syscall table and split dispatcher"
-status: in-progress
+status: complete
 priority: P1
 effort: "8–12d"
 dependencies: [7]
@@ -80,14 +80,16 @@ Raw opcodes outside the enum (3/100/110/111/255/500–504) become table rows fla
 - [x] Generated kernel side, single gate
 - [x] File split (move-only; arm extraction moved to Phase 09 by owner decision)
 - [x] Generated headers
-- [ ] CP2 approved
+- [x] CP2 approved
 
 ## Success Criteria
 
-- [ ] Host test: generated numbers, bits and encoders equal the golden dump for all rows.
-- [ ] A syscall denied by the allowlist is denied identically from user entry and from each in-kernel caller path (unit test per caller class).
-- [ ] CI header diff fails when a number is edited by hand (negative control).
-- [ ] Kernel builds for x86_64/riscv64/aarch64; kernel host tests pass; one boot lane per arch.
+Evidence: [cp2-syscall-table.md](cp2-syscall-table.md) (CP2 confirmed 2026-11-11).
+
+- [x] Host test: generated numbers, bits and encoders equal the golden dump for all rows.
+- [x] A syscall denied by the allowlist is denied identically from user entry and from each in-kernel caller path (unit test per caller class).
+- [x] CI header diff fails when a number is edited by hand (negative control).
+- [x] Kernel builds for x86_64/riscv64/aarch64; kernel host tests pass; one boot lane per arch.
 
 ## Risk Assessment
 
