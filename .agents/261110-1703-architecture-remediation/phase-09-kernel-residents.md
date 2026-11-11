@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Kernel residents, selftests and module layout"
-status: pending
+status: in-progress
 priority: P2
 effort: "7–10d"
 dependencies: [8]
@@ -96,4 +96,12 @@ Phases 10 and 14 both build on the new layout.
 
 ## Deviation Log
 
-None.
+- **Scope (owner 2026-11-11):** the dispatcher-match extraction moved here from Phase 08. It runs first, ahead of the plan's step 1. Spec 15 admits pipes, futex and sessions as kernel residents.
+- **Step 5 first (dispatcher extraction):** commits `b7441d8d2` (vm), `986f5e09e` (misc, grant, authority) and `1e0d135ab` (fs, dev, spawn, ipc).
+  - **Mechanics.** A throwaway extractor turned each of the 153 arms into `pub(super) fn <variant>(caller_id?, fields…, #[cfg(cellos_p01_trace)] trace?) -> SyscallResult`, typed from the `Syscall` enum. The body is copied verbatim, with `super::` re-anchored. The arm now calls the function.
+  - **Why the transform is sound.** The match is the tail expression of `handle_syscall_inner`, so a `return` in a body returns the same value from the new function. The argv-cleanup guard still drops after the match.
+  - **Deviation:** the plan called for one commit per domain. That held for vm only; the others landed in two commits, because the batch loop did not stop between domains.
+  - **Hand edits on top of the transform:**
+    - two non-x86 and non-display branches add `caller_id` to their unused-argument tuple, since the parameter is now the handler's own;
+    - four handlers that collided with existing helpers are renamed (`*_syscall`, and `yield_now` for `Yield`).
+  - **Result.** `mod.rs` goes from 6 635 to 2 207 lines. Host tests 615 pass, including `syscall_golden` and the gate-equivalence test. Clippy is clean on 3 arches, and `test-hooks`, `bench-counters` and `getrandom-sas-test` check.
