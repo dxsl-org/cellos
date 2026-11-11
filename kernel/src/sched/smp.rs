@@ -1014,7 +1014,7 @@ fn write_release_word(release_addr: usize, entry: u64) -> bool {
 /// wrong affinity (another cluster, Aff0 ≥ 16) fails only for the cores it
 /// names. Bounded and non-fatal: a failed probe is reported, it does not stop
 /// the boot.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(cellos_posture = "release")))]
 pub fn run_ipi_selftest() {
     let mut probed = 0;
     for remote in online_harts().filter(|hart| *hart != 0) {

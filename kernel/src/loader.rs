@@ -22,6 +22,7 @@ pub(crate) mod domain_admission;
 pub mod early;
 pub mod elf;
 pub(crate) mod elf_section;
+#[cfg(not(cellos_posture = "release"))]
 pub mod elf_tests;
 /// Forward-edge CFI opt-in (BTI / CET-IBT) from the image's GNU property note.
 pub(crate) mod gnu_property;
@@ -30,6 +31,7 @@ mod governed_spawn;
 mod image_name_section;
 pub mod launch_profile;
 mod manifest_section;
+#[cfg(not(cellos_posture = "release"))]
 mod manifest_section_tests;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;

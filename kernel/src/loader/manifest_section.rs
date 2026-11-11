@@ -15,6 +15,8 @@ pub(super) enum ManifestSection {
     Absent,
     Valid {
         manifest: CellManifest,
+        // Read only by the boot fixtures, which a release kernel does not carry.
+        #[cfg_attr(cellos_posture = "release", allow(dead_code))]
         version: ManifestVersion,
     },
     Malformed,

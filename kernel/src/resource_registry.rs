@@ -296,7 +296,7 @@ pub(crate) fn test_register_region(tid: usize, base: usize, len: usize, class: M
 #[cfg(not(cellos_posture = "release"))]
 /// The per-arch static allowlist, for callers that must reason about which
 /// windows this board can grant at all (the boot self-tests, which have to stay
-/// board-agnostic, and `request_mmio`'s class derivation below).
+/// board-agnostic).
 pub(crate) fn allowed_windows() -> &'static [(usize, usize, u8)] {
     ALLOWED
 }
@@ -593,8 +593,9 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
 // Boot-time allowlist self-test (runs on every boot, QEMU-visible)
 // ---------------------------------------------------------------------------
 
-/// Power-on self-test of the MMIO allowlist. The boot chain calls it on every
-/// target; tables with nothing pinned pass trivially.
+/// Boot self-test of the MMIO allowlist. The boot chain calls it on every
+/// non-release target; tables with nothing pinned pass trivially.
+#[cfg(not(cellos_posture = "release"))]
 pub fn self_test() -> bool {
     #[cfg(target_arch = "aarch64")]
     match <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SOC {

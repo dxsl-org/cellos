@@ -46,6 +46,7 @@ pub mod fstat_selftest;
 pub(crate) mod grant_gate_selftest;
 #[cfg(not(cellos_posture = "release"))]
 pub mod grant_reclaim_selftest;
+#[cfg(not(cellos_posture = "release"))]
 pub mod manifest_v2_selftest;
 /// Selective MMIO revocation for runtime revocation (`.agents/260712-1901` P03).
 #[cfg(feature = "test-hooks")]
