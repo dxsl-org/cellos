@@ -27,45 +27,63 @@ mod ipc;
 #[allow(unused_imports)]
 pub(crate) use ipc::*;
 #[allow(unused_imports)]
+pub(in crate::task) use ipc::*;
+#[allow(unused_imports)]
 use ipc::*;
 mod grant;
 #[allow(unused_imports)]
 pub(crate) use grant::*;
+#[allow(unused_imports)]
+pub(in crate::task) use grant::*;
 #[allow(unused_imports)]
 use grant::*;
 mod spawn;
 #[allow(unused_imports)]
 pub(crate) use spawn::*;
 #[allow(unused_imports)]
+pub(in crate::task) use spawn::*;
+#[allow(unused_imports)]
 use spawn::*;
 mod fs;
 #[allow(unused_imports)]
 pub(crate) use fs::*;
+#[allow(unused_imports)]
+pub(in crate::task) use fs::*;
 #[allow(unused_imports)]
 use fs::*;
 mod dev;
 #[allow(unused_imports)]
 pub(crate) use dev::*;
 #[allow(unused_imports)]
+pub(in crate::task) use dev::*;
+#[allow(unused_imports)]
 use dev::*;
 mod vm;
 #[allow(unused_imports)]
 pub(crate) use vm::*;
+#[allow(unused_imports)]
+pub(in crate::task) use vm::*;
 #[allow(unused_imports)]
 use vm::*;
 mod authority;
 #[allow(unused_imports)]
 pub(crate) use authority::*;
 #[allow(unused_imports)]
+pub(in crate::task) use authority::*;
+#[allow(unused_imports)]
 use authority::*;
 mod decode;
 #[allow(unused_imports)]
 pub(crate) use decode::*;
 #[allow(unused_imports)]
+pub(in crate::task) use decode::*;
+#[allow(unused_imports)]
 use decode::*;
 mod misc;
 #[allow(unused_imports)]
 pub(crate) use misc::*;
+#[allow(unused_imports)]
+pub(in crate::task) use misc::*;
 #[allow(unused_imports)]
 use misc::*;
 
@@ -1042,18 +1060,13 @@ impl Drop for PendingRevoke {
 ///
 /// `caller_id` is the ID of the task the call is made as.
 pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
-    if let Err(error) = check_allowlist(opcode_of(&syscall), caller_id) {
-        // A live caller refused by its allowlist is audited, as the variant
-        // gate this replaces did; a missing task is refused silently.
+    if let Err(detail) = admission(opcode_of(&syscall), caller_id) {
+        // A live caller's refusal is audited with its real cause, as the
+        // variant gate this replaces did; a missing task is refused silently.
         if syscall_allowlist_for(caller_id).is_some() {
-            audit_syscall_denied(
-                caller_id,
-                syscall_to_vi(&syscall)
-                    .and_then(api::syscall::ViSyscall::allowlist_bit)
-                    .map_or(u32::MAX, u32::from),
-            );
+            audit_syscall_denied(caller_id, detail);
         }
-        return Err(error);
+        return Err(SyscallError::PermissionDenied);
     }
     dispatch_admitted(caller_id, syscall)
 }
@@ -1061,7 +1074,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 /// Dispatch a syscall the kernel itself issues on a Cell's behalf (for example
 /// the GPU scanout path allocating a Grant for the GPU Cell). Kernel origin is
 /// trusted: the Cell's allowlist is not consulted. Never reachable from a trap.
-pub(crate) fn handle_syscall_kernel_origin(caller_id: usize, syscall: Syscall) -> SyscallResult {
+pub(in crate::task) fn handle_syscall_kernel_origin(
+    caller_id: usize,
+    syscall: Syscall,
+) -> SyscallResult {
     dispatch_admitted(caller_id, syscall)
 }
 
@@ -6373,12 +6389,24 @@ pub(crate) fn dispatch_raw_for_test(
 /// the matching right (`observe_right_held`).
 /// The SCHEDULER lock is acquired and released here — callers must NOT hold it.
 fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallError> {
+    admission(syscall_id, caller_id).map_err(|_| SyscallError::PermissionDenied)
+}
+
+/// Audit detail of an admission refusal: the allowlist bit that was missing, or
+/// [`DENIED_RIGHT`] `|` the opcode's bit when the bit was present but the edge
+/// withholds its observation right, or `u32::MAX` for an unknown opcode or a
+/// caller that is not live.
+const DENIED_RIGHT: u32 = 0x100;
+
+/// The admission rules behind [`check_allowlist`]; `Err` carries the audit
+/// detail of the refusal.
+fn admission(syscall_id: usize, caller_id: usize) -> Result<(), u32> {
     let sc = ViSyscall::from(syscall_id);
     // `bench-counters` raw 504 borrows MemInfo's gate exactly: allowlist bit 56
     // and the `observe_memory` right. Without the feature 504 stays unknown.
     #[cfg(feature = "bench-counters")]
-    let gate_sc = if syscall_id == crate::bench_counters::OPCODE {
-        ViSyscall::MemInfo
+    let gate_sc = if syscall_id == RAW_GATE_AS.0 {
+        RAW_GATE_AS.1
     } else {
         sc
     };
@@ -6404,7 +6432,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             syscall_id,
             caller_id
         );
-        return Err(SyscallError::PermissionDenied);
+        return Err(u32::MAX);
     };
 
     // Deny truly-unknown opcodes that land in the legacy inner-match fallback —
@@ -6426,7 +6454,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             caller_id,
             allowlist
         );
-        return Err(SyscallError::PermissionDenied);
+        return Err(u32::MAX);
     }
     if let Some(b) = bit {
         if allowlist & (1u64 << b) == 0 {
@@ -6437,7 +6465,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
                 caller_id,
                 allowlist
             );
-            return Err(SyscallError::PermissionDenied);
+            return Err(u32::from(b));
         }
     }
     if let Some(b) = raw_bit {
@@ -6448,7 +6476,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
                 caller_id,
                 b
             );
-            return Err(SyscallError::PermissionDenied);
+            return Err(u32::from(b));
         }
     }
     if !observe_right_held(gate_sc, caller_id) {
@@ -6457,7 +6485,7 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
             sc,
             caller_id
         );
-        return Err(SyscallError::PermissionDenied);
+        return Err(DENIED_RIGHT | gate_sc.allowlist_bit().map_or(0xFF, u32::from));
     }
     Ok(())
 }

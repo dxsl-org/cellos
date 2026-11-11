@@ -127,6 +127,14 @@ jobs:
       - name: Check generated syscall headers
         run: python3 scripts/gen-syscall-headers.py --check
 
+      # Law-1 frozen syscall items now live in the syscall table
+      # (libs/api/abi/syscalls.toml) and the split syscall module; these assert
+      # the confirmed records on every push, next to the generated-header diff.
+      - name: Assert frozen LookupServiceBound and WaitCompletion items
+        run: |
+          bash scripts/check-lookupservicebound-law1-digests.sh
+          bash scripts/check-multi-source-wait-law1-digests.sh
+
       # The tracked lockfiles must already describe the dependency graph, so no
       # job below can silently re-resolve and build a different graph.
       - name: Check lockfiles are current

@@ -376,7 +376,7 @@ pub(super) fn write_getrandom_output(
 /// Receive-side staging copy of a queued payload: inline up to
 /// [`MSG_PAYLOAD_INLINE`] bytes, so small receives never touch the heap.
 #[derive(Clone, Debug)]
-pub(crate) enum MsgPayload {
+pub(in crate::task) enum MsgPayload {
     Inline {
         len: u8,
         bytes: [u8; MSG_PAYLOAD_INLINE],
@@ -389,7 +389,7 @@ pub(super) const MSG_PAYLOAD_INLINE: usize = 32;
 
 /// Commit the exact event that was peeked by `snapshot_resume`.
 /// Must be called under the scheduler lock with the same `task`.
-pub(crate) fn commit_resume(task: &mut crate::task::Task, snap: &ResumeSnapshot) {
+pub(in crate::task) fn commit_resume(task: &mut crate::task::Task, snap: &ResumeSnapshot) {
     match snap {
         ResumeSnapshot::Death {
             sender_tid,
@@ -444,7 +444,7 @@ pub(crate) fn commit_resume(task: &mut crate::task::Task, snap: &ResumeSnapshot)
 /// event and immediately inspect it. Production paths use `snapshot_resume` +
 /// `commit_resume` instead. Do not add new callers.
 #[allow(dead_code)]
-pub(crate) enum ResumeDelivery {
+pub(in crate::task) enum ResumeDelivery {
     Death { sender_tid: usize, reason: usize },
     Message(crate::task::tcb::PendingMsg),
     Wake,
@@ -452,7 +452,10 @@ pub(crate) enum ResumeDelivery {
 
 /// Consume the next matching delivery event and return it. Selftest-only;
 /// production callers use `snapshot_resume` + `commit_resume`.
-pub(crate) fn take_resume_delivery(task: &mut crate::task::Task, mask: usize) -> ResumeDelivery {
+pub(in crate::task) fn take_resume_delivery(
+    task: &mut crate::task::Task,
+    mask: usize,
+) -> ResumeDelivery {
     // Snapshot without allocation — Death and Wake carry no payload.
     // For Message we need to remove the record, so we take it directly.
     if crate::task::Task::owner_death_matches_receive_mask(mask) {
@@ -480,7 +483,7 @@ pub(crate) fn take_resume_delivery(task: &mut crate::task::Task, mask: usize) ->
     ResumeDelivery::Wake
 }
 
-pub(crate) fn encode_task_state(state: &TaskState) -> u32 {
+pub(in crate::task) fn encode_task_state(state: &TaskState) -> u32 {
     match state {
         TaskState::Ready => 0,
         TaskState::Running => 1,

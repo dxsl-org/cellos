@@ -121,7 +121,7 @@ pub(super) fn caller_launch_state(caller_id: usize) -> Option<(String, bool, boo
 /// Non-owning peek at the next delivery event. Payload bytes are copied into
 /// kernel memory; the original record is NOT removed. Call `commit_resume`
 /// after a successful copy-out to remove exactly the same event.
-pub(crate) enum ResumeSnapshot {
+pub(in crate::task) enum ResumeSnapshot {
     /// A peer died or an exit reason was synthesised. `is_owner_death` flags
     /// which record to commit: owner-deaths queue vs. `pending_exit_reason`.
     Death {
@@ -145,7 +145,10 @@ pub(crate) enum ResumeSnapshot {
 
 /// Peek at the next delivery event matching `mask` without removing anything.
 /// Returns `Err(())` on allocation failure (OOM staging payload bytes).
-pub(crate) fn snapshot_resume(task: &crate::task::Task, mask: usize) -> Result<ResumeSnapshot, ()> {
+pub(in crate::task) fn snapshot_resume(
+    task: &crate::task::Task,
+    mask: usize,
+) -> Result<ResumeSnapshot, ()> {
     // Owner-death events take priority (same order as take_resume_delivery).
     if crate::task::Task::owner_death_matches_receive_mask(mask) {
         if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
@@ -287,7 +290,7 @@ pub(super) fn governed_replacement_request(
 
 /// The launch identity of `caller_id` (see [`caller_launch_state`]) read under
 /// a scheduler the caller already holds. `None` when the task is gone.
-pub(crate) fn launch_identity_in(
+pub(in crate::task) fn launch_identity_in(
     sched: &crate::task::scheduler::Scheduler,
     caller_id: usize,
 ) -> Option<String> {
@@ -344,7 +347,7 @@ pub(super) fn authorize_launch_edge(
     Ok(profile)
 }
 
-pub(crate) fn session_launch_request(
+pub(in crate::task) fn session_launch_request(
     caller: usize,
     path: &str,
     route: crate::loader::launch_profile::LaunchRoute,

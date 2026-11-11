@@ -169,3 +169,91 @@ fn in_kernel_gate_matches_the_trap_gate() {
         "only the raw ServiceLookup alias may differ"
     );
 }
+
+/// The five kernel variants with no opcode (`[[internal]]` rows) map to
+/// `usize::MAX`, which the gate refuses under any explicit allowlist and admits
+/// only under permit-all — never through a trap, which cannot decode them.
+#[test]
+fn internal_variants_have_no_opcode_and_need_permit_all() {
+    use super::Syscall;
+    let internal = [
+        Syscall::Lend {
+            target: 0,
+            ptr: 0,
+            len: 0,
+            flags: 0,
+        },
+        Syscall::BorrowRead {
+            lease_id: 0,
+            offset: 0,
+            ptr: 0,
+            len: 0,
+        },
+        Syscall::BorrowWrite {
+            lease_id: 0,
+            offset: 0,
+            ptr: 0,
+            len: 0,
+        },
+        Syscall::Grant {
+            target: 0,
+            ptr: 0,
+            len: 0,
+            flags: 0,
+        },
+        Syscall::Map { grant_id: 0 },
+    ];
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    let mut task = alloc::boxed::Box::new(Task::new(TID, CellId(7), "internal", Vec::new()));
+    CapSet::ALL.apply_to(&mut task);
+    scheduler.tasks.insert(TID, task);
+    *SCHEDULER.lock() = Some(scheduler);
+    for call in &internal {
+        assert_eq!(super::opcode_of(call), usize::MAX, "{call:?}");
+        assert_eq!(super::syscall_to_vi(call), None, "{call:?}");
+        set_allowlist(!0u64 >> 1); // every real bit, but not permit-all
+        assert_eq!(
+            check_allowlist(super::opcode_of(call), TID),
+            Err(SyscallError::PermissionDenied)
+        );
+        set_allowlist(u64::MAX);
+        assert_eq!(check_allowlist(super::opcode_of(call), TID), Ok(()));
+    }
+    *SCHEDULER.lock() = saved;
+}
+
+/// Kernel-origin calls (the GPU scanout path) skip the Cell's allowlist by
+/// design; the gate `handle_syscall` applies refuses the same call.
+#[test]
+fn kernel_origin_skips_the_allowlist_and_handle_syscall_does_not() {
+    use super::Syscall;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    let mut task = alloc::boxed::Box::new(Task::new(TID, CellId(7), "driver", Vec::new()));
+    CapSet {
+        pcie_driver: true,
+        ..CapSet::EMPTY
+    }
+    .apply_to(&mut task);
+    task.syscall_allowlist = 0; // declares nothing, in particular not bit 40
+    scheduler.tasks.insert(TID, task);
+    *SCHEDULER.lock() = Some(scheduler);
+    // Malformed reserved words: a dispatched call answers InvalidInput on a host.
+    let probe = || Syscall::ProbeVirtioMmio {
+        base: 0x1000_1000,
+        reserved: (0, 1, 0),
+    };
+    // `handle_syscall` gates on this check (its audit record needs a kernel).
+    assert_eq!(
+        check_allowlist(super::opcode_of(&probe()), TID),
+        Err(SyscallError::PermissionDenied)
+    );
+    assert_eq!(
+        super::handle_syscall_kernel_origin(TID, probe()),
+        Err(SyscallError::InvalidInput)
+    );
+    *SCHEDULER.lock() = saved;
+}

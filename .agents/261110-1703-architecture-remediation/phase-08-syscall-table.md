@@ -140,3 +140,12 @@ Phase 09 reorganises the rest of the kernel tree on the same move-only disciplin
   - **Size.** `mod.rs` is now 6 635 lines, 5 212 of them the dispatcher match; that match is Phase 09's job.
   - **Tooling.** The digest scripts now check across `syscall/*.rs`. `mutable-globals` needed a new `include!` row, which had been missing since step 4, and its paths updated. The `qemu-phase03-pipeline-test.sh` source path is updated.
   - **Not done.** The pinned sha of `kernel/src/task/syscall.rs` in the manual lane `qemu-tier3-ssh-guest-x86.sh` was already stale from Phases 06–07 and is left alone. The `cellos_p01_trace` build could not be checked locally: it needs the P01 embed manifest.
+- **Independent review** (haily-reviewer, read-only, PASS_WITH_RISK). All 7 Low findings are addressed:
+  1. `handle_syscall_kernel_origin` is now `pub(in crate::task)` and pinned by the test `kernel_origin_skips_the_allowlist_and_handle_syscall_does_not`. The bypass stays by design; `virtio-gpu` declares no allowlist.
+  2. Refusals are audited with their real cause: a new `admission()` returns the bit, `0x100 | bit` for a missing observation right, or `u32::MAX`. The `SyscallDenied` docs are updated.
+  3. The 504 gate is generated from `gate_as` (`RAW_GATE_AS`).
+  4. The parser rejects a bit of 64 or more, duplicate keys, duplicate numbers or names, raw ids that collide with api numbers, double-claimed kernel variants, and a dangling `gate_as`. Negative controls: bit 64 fails the build, and raw id 2 fails it.
+  5. The 15 formerly task-visible items are `pub(in crate::task)`, with an extra glob re-export at that visibility.
+  6. New tests: `internal_variants_have_no_opcode_and_need_permit_all`, plus the kernel-origin test above.
+  7. Both re-pinned digest scripts now run in CI next to the header diff.
+- **Host-test surprise:** a live caller's in-kernel denial writes an audit record, and the audit path masks interrupts, which faults on a host. The kernel-origin test therefore asserts the gate through `check_allowlist`.

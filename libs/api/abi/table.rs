@@ -42,6 +42,7 @@ type Table = (Vec<TableRow>, Vec<TableRaw>, Vec<String>);
 
 fn parse_table(text: &str) -> Table {
     let mut entries: Vec<TableEntry> = Vec::new();
+    let mut keys_in_row: Vec<String> = Vec::new();
     let mut lines = text.lines().enumerate();
     while let Some((n, line)) = lines.next() {
         let line = line.trim_end();
@@ -51,14 +52,17 @@ fn parse_table(text: &str) -> Table {
         match line {
             "[[syscall]]" => {
                 entries.push(TableEntry::Syscall(TableRow::default()));
+                keys_in_row.clear();
                 continue;
             }
             "[[raw]]" => {
                 entries.push(TableEntry::Raw(TableRaw::default()));
+                keys_in_row.clear();
                 continue;
             }
             "[[internal]]" => {
                 entries.push(TableEntry::Internal(String::new()));
+                keys_in_row.clear();
                 continue;
             }
             _ => {}
@@ -66,6 +70,12 @@ fn parse_table(text: &str) -> Table {
         let (key, value) = line
             .split_once(" = ")
             .unwrap_or_else(|| panic!("syscalls.toml:{}: expected `key = value`", n + 1));
+        assert!(
+            !keys_in_row.iter().any(|k| k == key),
+            "syscalls.toml:{}: duplicate key `{key}` in one row",
+            n + 1
+        );
+        keys_in_row.push(key.to_string());
         let text_value = if value == "'''" {
             let mut body = Vec::new();
             loop {
@@ -89,7 +99,7 @@ fn parse_table(text: &str) -> Table {
             TableEntry::Syscall(row) => match key {
                 "name" => row.name = string(),
                 "number" => row.number = Some(value.parse().expect("number")),
-                "bit" => row.bit = Some(value.parse().expect("bit")),
+                "bit" => row.bit = Some(parse_bit(value, n)),
                 "kernel" => row.kernel = Some(string()),
                 "result" => {
                     assert_eq!(value, "\"typed_oom\"", "syscalls.toml:{}: result", n + 1);
@@ -103,7 +113,7 @@ fn parse_table(text: &str) -> Table {
             TableEntry::Raw(raw) => match key {
                 "id" => raw.id = Some(value.parse().expect("id")),
                 "kernel" => raw.kernel = string(),
-                "bit" => raw.bit = Some(value.parse().expect("bit")),
+                "bit" => raw.bit = Some(parse_bit(value, n)),
                 "feature" => raw.feature = Some(string()),
                 "gate_as" => raw.gate_as = Some(string()),
                 "comment" => {}
@@ -125,5 +135,54 @@ fn parse_table(text: &str) -> Table {
             TableEntry::Internal(kernel) => internal.push(kernel),
         }
     }
+    validate_table(&rows, &raws, &internal);
     (rows, raws, internal)
+}
+
+/// An allowlist bit indexes a `u64` mask.
+fn parse_bit(value: &str, n: usize) -> u8 {
+    let bit: u8 = value.parse().expect("bit");
+    assert!(bit < 64, "syscalls.toml:{}: allowlist bit {bit} is not below 64", n + 1);
+    bit
+}
+
+/// Cross-row invariants the generators rely on: unique numbers and names, raw
+/// ids disjoint from api numbers, and each kernel variant claimed by one row.
+fn validate_table(rows: &[TableRow], raws: &[TableRaw], internal: &[String]) {
+    let mut numbers = std::collections::BTreeSet::new();
+    let mut names = std::collections::BTreeSet::new();
+    let mut kernel = std::collections::BTreeMap::new();
+    for row in rows {
+        let number = row.number.unwrap_or_else(|| panic!("{}: no number", row.name));
+        assert!(numbers.insert(number), "syscalls.toml: duplicate number {number}");
+        assert!(names.insert(row.name.clone()), "syscalls.toml: duplicate name {}", row.name);
+        if row.name != "Unknown" {
+            let variant = row.kernel.clone().unwrap_or_else(|| row.name.clone());
+            assert!(
+                kernel.insert(variant.clone(), number).is_none(),
+                "syscalls.toml: kernel variant {variant} claimed by two api rows"
+            );
+        }
+    }
+    for raw in raws {
+        let id = raw.id.unwrap_or_else(|| panic!("raw {}: no id", raw.kernel));
+        assert!(!numbers.contains(&id), "syscalls.toml: raw id {id} is also an api number");
+        assert!(numbers.insert(id), "syscalls.toml: duplicate raw id {id}");
+        // A raw alias may share a variant with an api row (100 and `Call`), never
+        // with another raw row.
+        assert!(
+            raws.iter().filter(|r| r.kernel == raw.kernel).count() == 1,
+            "syscalls.toml: kernel variant {} claimed by two raw rows",
+            raw.kernel
+        );
+        if let Some(gate_as) = &raw.gate_as {
+            assert!(names.contains(gate_as), "syscalls.toml: raw {id} gate_as {gate_as} is no row");
+        }
+    }
+    for variant in internal {
+        assert!(
+            !kernel.contains_key(variant) && raws.iter().all(|r| &r.kernel != variant),
+            "syscalls.toml: internal variant {variant} also has an opcode"
+        );
+    }
 }

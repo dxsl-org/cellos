@@ -920,7 +920,7 @@ pub(super) struct SessionOutputPin {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct VfsGrantContext {
+pub(in crate::task) struct VfsGrantContext {
     pub(super) grant_owner: usize,
     pub(super) grant_owner_cell_id: u64,
     pub(super) grant_owner_cell_generation: u64,
@@ -928,13 +928,13 @@ pub(crate) struct VfsGrantContext {
     pub(super) pending_revoke: bool,
 }
 
-pub(crate) enum VfsGrantLookup {
+pub(in crate::task) enum VfsGrantLookup {
     NotVfs,
     MissingContext,
     Active(VfsGrantContext),
 }
 
-pub(crate) fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
+pub(in crate::task) fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
     let sched_guard = crate::task::SCHEDULER.lock();
     let Some(task) = sched_guard
         .as_ref()
@@ -1426,7 +1426,7 @@ pub(super) fn free_released_grant_lease_frames(
 /// (`SpawnFromElf` and session route 2). Admission must never read the grant
 /// itself: the caller's other threads and grant peers can rewrite it between
 /// signature verification and segment load.
-pub(crate) fn snapshot_grant_elf(
+pub(in crate::task) fn snapshot_grant_elf(
     caller: usize,
     grant_id: usize,
     len: usize,
@@ -1506,7 +1506,7 @@ pub(super) fn install_vfs_lease_if_context_live(
 }
 
 #[cfg(feature = "test-hooks")]
-pub(crate) fn test_install_vfs_lease_if_context_live(
+pub(in crate::task) fn test_install_vfs_lease_if_context_live(
     caller_id: usize,
     context: VfsGrantContext,
     base: usize,

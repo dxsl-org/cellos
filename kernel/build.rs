@@ -506,7 +506,22 @@ fn emit_syscall_opcodes() {
             .map_or(String::from("None"), |b| format!("Some({b})"));
         writeln!(out, "    ({}, {bit}),", raw.id.expect("id")).unwrap();
     }
-    out.push_str("];\n");
+    out.push_str("];\n\n");
+    for raw in raws.iter().filter(|r| r.gate_as.is_some()) {
+        let feature = raw
+            .feature
+            .as_deref()
+            .expect("a gate_as row is feature-gated");
+        writeln!(
+            out,
+            "/// Raw opcode {id} is admitted exactly as `{g}` (bit and rights).\n\
+             #[cfg(feature = \"{feature}\")]\n\
+             pub(super) const RAW_GATE_AS: (usize, api::syscall::ViSyscall) =\n    ({id}, api::syscall::ViSyscall::{g});",
+            id = raw.id.expect("id"),
+            g = raw.gate_as.as_ref().expect("gate_as"),
+        )
+        .unwrap();
+    }
     let path = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("syscall_opcodes.rs");
     fs::write(path, out).expect("write syscall_opcodes.rs");
 }

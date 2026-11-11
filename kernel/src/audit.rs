@@ -67,8 +67,10 @@ pub enum AuditEvent {
     /// (deadlock / stuck loop) the CPU watchdog cannot detect. The kernel terminates it
     /// for supervised restart. Payload: `encode_u32x2(cell_id, tid)`.
     CellHung = 13,
-    /// A syscall was refused on an authority check: the allowlist bit (`d0` =
-    /// allowlist bit) or pipe-endpoint ownership (`d0` = raw handle).
+    /// A syscall was refused on an authority check. `d0`: the missing
+    /// allowlist bit; `0x100 | bit` when the bit was present but the edge
+    /// withholds its observation right; `u32::MAX` for an unknown opcode; or the
+    /// raw handle for a pipe-ownership refusal.
     /// Payload: [`encode_subject`] with the caller as subject, `d1` = 0.
     SyscallDenied = 14,
     /// A cell's ELF image was measured at spawn (integrity measurement, IMA-style).

@@ -69,7 +69,11 @@ pub(super) fn check_block_access(caller_id: usize, sector: u64, count: u64) -> b
 /// supplied by user code will fault on access — but the fault is far more
 /// graceful when we reject obvious garbage up front.
 #[inline]
-pub(crate) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<(), SyscallError> {
+pub(in crate::task) fn validate_user_buf(
+    ptr: usize,
+    len: usize,
+    max: usize,
+) -> Result<(), SyscallError> {
     if ptr == 0 {
         return Err(SyscallError::InvalidInput);
     }
