@@ -485,6 +485,8 @@ pub struct Scheduler {
     /// Task IDs whose task-local resources must be reaped outside SCHEDULER.
     /// Root-member IDs remain in `pending_root_retirements` until every hart
     /// has completed a switch away from the retiring generation.
+    /// Async operation token → owner / retired receiver (Phase 10).
+    pub(crate) async_index: crate::task::async_ipc::AsyncIndex,
     pub(in crate::sched) pending_grant_reap: Vec<usize>,
     /// Root retirements awaiting completed context switches before CellId-wide
     /// resource release and owner-slot reuse.
@@ -548,6 +550,7 @@ impl Scheduler {
             next_cell_owner_watch: 1,
             next_task_id: 1,
             cell_session: crate::ipc::cell_session::State::new(),
+            async_index: crate::task::async_ipc::AsyncIndex::new(),
             pending_grant_reap: Vec::new(),
             pending_root_retirements: Vec::new(),
             pending_vfs_holder_release: Vec::new(),
@@ -1746,6 +1749,7 @@ impl Scheduler {
         // after the remote switch-completion proof.
         if !retiring_member {
             if let Some(task) = self.tasks.remove(&tid) {
+                crate::task::async_ipc::forget_task(self, &task);
                 #[cfg(feature = "p01-trace")]
                 let _semantic = crate::memory::heap::p01_owner::creation(
                     None,
@@ -2086,6 +2090,7 @@ impl Scheduler {
                 let mut retirement_zombies = Vec::new();
                 for member_tid in &retirement.member_tids {
                     if let Some(mut task) = self.tasks.remove(member_tid) {
+                        crate::task::async_ipc::forget_task(self, &task);
                         self.cpu_telemetry.retain_exited(
                             task.cell_id.0,
                             task.cell_generation,

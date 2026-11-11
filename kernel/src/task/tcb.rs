@@ -858,29 +858,37 @@ impl Task {
         sender_cell_id: u64,
         sender_generation: u64,
     ) {
-        self.set_received_request_context(sender_tid, sender_cell_id, sender_generation, 0);
+        // Token 0: any holder row left for this task is stale and is ignored.
+        let _ = self.set_received_request_context(sender_tid, sender_cell_id, sender_generation, 0);
     }
 
     /// Commit caller identity and bounded-operation token together. Preserving
     /// VFS's outer grant authority must also preserve its operation token, even
     /// when a nested dependency reply happens to have the same sender TID.
+    ///
+    /// Returns the token now held as `current_async_op` (0: none) when the
+    /// context changed, for the caller to record with
+    /// [`AsyncIndex::note_holder`](crate::task::async_ipc::AsyncIndex::note_holder);
+    /// `None` when VFS keeps its outer context.
+    #[must_use = "record the new holder in the scheduler's async index"]
     pub fn set_received_request_context(
         &mut self,
         sender_tid: usize,
         sender_cell_id: u64,
         sender_generation: u64,
         token: usize,
-    ) {
+    ) -> Option<usize> {
         // VFS may perform nested IPC while serving a request. Its outer caller
         // remains the authority for grants and owner-death watches until VFS
         // sends that caller's response; a storage reply must not replace it.
         if crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize)
             && self.caller.current.is_some()
         {
-            return;
+            return None;
         }
         self.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
         self.current_async_op = token;
+        Some(token)
     }
 
     /// Drop VFS's public request context and return the exact lease identity

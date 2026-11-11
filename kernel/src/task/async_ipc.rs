@@ -270,6 +270,132 @@ fn live(task: &Task) -> bool {
     !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
 }
 
+/// Owner of every live operation token, and every task whose request context
+/// was set to a token (architecture remediation Phase 10).
+///
+/// These two tables answer what the reply path used to find by scanning every
+/// task. Owned by the [`Scheduler`] and only touched under `SCHEDULER`. A task
+/// holds at most one token at a time, so `holders` keeps at most one row per
+/// task; a row whose task has since moved on is stale and is checked against
+/// `current_async_op` before use. Capacity for both is reserved when an
+/// operation is accepted, so delivery and removal do not allocate.
+pub struct AsyncIndex {
+    /// `(token, owner tid)`, sorted by token.
+    owners: Vec<(usize, usize)>,
+    /// `(token, tid)`: the last token delivered as `tid`'s request context.
+    holders: Vec<(usize, usize)>,
+}
+
+impl AsyncIndex {
+    pub const fn new() -> Self {
+        Self {
+            owners: Vec::new(),
+            holders: Vec::new(),
+        }
+    }
+
+    /// Reserve room for one more operation, charged to the kernel like the
+    /// operation record itself.
+    fn reserve(&mut self) -> Result<(), Failure> {
+        let previous = crate::sched::hart_local::current_cell_id();
+        crate::sched::hart_local::set_current_cell_id(0);
+        let reserved = self
+            .owners
+            .try_reserve(1)
+            .and_then(|()| self.holders.try_reserve(self.owners.len() + 1));
+        crate::sched::hart_local::set_current_cell_id(previous);
+        reserved.map_err(|_| Failure::Busy)
+    }
+
+    fn insert(&mut self, token: usize, owner: usize) {
+        let at = self.owners.partition_point(|&(t, _)| t < token);
+        self.owners.insert(at, (token, owner));
+    }
+
+    fn owner(&self, token: usize) -> Option<usize> {
+        let at = self.owners.binary_search_by_key(&token, |&(t, _)| t).ok()?;
+        Some(self.owners[at].1)
+    }
+
+    fn remove(&mut self, token: usize) {
+        if let Ok(at) = self.owners.binary_search_by_key(&token, |&(t, _)| t) {
+            self.owners.remove(at);
+        }
+    }
+
+    /// Record that `tid`'s request context now names `token` (0: none).
+    pub(crate) fn note_holder(&mut self, tid: usize, token: usize) {
+        if let Some(at) = self.holders.iter().position(|&(_, t)| t == tid) {
+            self.holders.swap_remove(at);
+        }
+        if token != 0 {
+            self.holders.push((token, tid));
+        }
+    }
+}
+
+impl Default for AsyncIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Accept `op` into its owner's list and the index; fails without side
+/// effect when either is full.
+fn push_operation(sched: &mut Scheduler, owner: usize, op: Operation) -> Result<(), Failure> {
+    sched.async_index.reserve()?;
+    let token = op.id;
+    sched
+        .tasks
+        .get_mut(&owner)
+        .ok_or(Failure::Invalid)?
+        .async_operations
+        .push(op)?;
+    sched.async_index.insert(token, owner);
+    Ok(())
+}
+
+/// Remove `token` from `owner`'s list and the owner index.
+fn remove_operation(sched: &mut Scheduler, owner: usize, token: usize) -> Option<Operation> {
+    let op = sched
+        .tasks
+        .get_mut(&owner)?
+        .async_operations
+        .remove(token)?;
+    sched.async_index.remove(token);
+    Some(op)
+}
+
+/// Index upkeep when `task` leaves the task table: its operations die with it,
+/// and it no longer holds a request context.
+pub(crate) fn forget_task(sched: &mut Scheduler, task: &Task) {
+    for op in &task.async_operations.0 {
+        sched.async_index.remove(op.id);
+    }
+    sched.async_index.note_holder(task.id, 0);
+}
+
+/// The live owner of `token`, from the index. Test kernels cross-check it
+/// against the scan it replaced.
+fn owner_of(sched: &Scheduler, token: usize) -> Option<usize> {
+    let owner = sched.async_index.owner(token).filter(|owner| {
+        sched
+            .tasks
+            .get(owner)
+            .is_some_and(|task| task.async_operations.find(token).is_some())
+    });
+    #[cfg(any(feature = "test-hooks", test))]
+    assert_eq!(
+        owner,
+        sched
+            .tasks
+            .iter()
+            .find_map(|(&id, task)| task.async_operations.find(token).map(|_| id)),
+        "async owner index disagrees with the task scan for token {token}"
+    );
+    owner
+}
+
 /// Make the owner runnable after one of its operations turned terminal: an
 /// `IpcWait` park, or a completion wait whose mask names the IPC source.
 fn wake(sched: &mut Scheduler, owner: usize) {
@@ -396,12 +522,10 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         Some(heap_owner),
         crate::memory::heap::p01_owner::OPERATIONS,
     );
-    let pushed = sched
-        .tasks
-        .get_mut(&owner)
-        .ok_or(Failure::Invalid)?
-        .async_operations
-        .push(Operation {
+    let pushed = push_operation(
+        sched,
+        owner,
+        Operation {
             id: token,
             owner_cell: binding.0,
             owner_generation: binding.1,
@@ -416,7 +540,8 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
             reply,
             #[cfg(feature = "p01-trace")]
             _p01_obligation: p01_obligation,
-        });
+        },
+    );
     #[cfg(feature = "p01-trace")]
     drop(_operations);
     #[cfg(feature = "p01-trace")]
@@ -431,12 +556,7 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
     let recv_eligible =
         matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == owner);
     if super::queue_wire_msg(target, wire, super::tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err() {
-        sched
-            .tasks
-            .get_mut(&owner)
-            .unwrap()
-            .async_operations
-            .remove(token);
+        remove_operation(sched, owner, token);
         return Err(Failure::Busy);
     }
     let wake_cause = super::wake_after_ipc_publish(target, recv_eligible);
@@ -615,10 +735,7 @@ fn reply_in_sched(
     if token == 0 {
         return Err(Failure::Invalid);
     }
-    let owner = sched
-        .tasks
-        .iter()
-        .find_map(|(&id, task)| task.async_operations.find(token).map(|_| id));
+    let owner = owner_of(sched, token);
     let result = owner
         .ok_or(Failure::Invalid)
         .and_then(|owner| terminal(sched, owner, token, peer, false, ptr, len));
@@ -631,12 +748,38 @@ fn reply_in_sched(
         .filter(|task| live(task))
         .map(|task| (task.cell_id, task.cell_generation))
     {
-        for task in sched.tasks.values_mut() {
-            if (task.cell_id, task.cell_generation) == binding
-                && task.current_async_op == token
-                && !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-            {
-                task.clear_current_caller_context();
+        #[cfg(any(feature = "test-hooks", test))]
+        for (&id, task) in sched.tasks.iter() {
+            assert!(
+                task.current_async_op != token || sched.async_index.holders.contains(&(token, id)),
+                "task {id} holds async token {token} unrecorded by the index"
+            );
+        }
+        // Visit the recorded holders of `token`; drop rows that are cleared
+        // here or no longer hold it, keep the rest for a later reply.
+        let holders = &mut sched.async_index.holders;
+        let mut at = 0;
+        while at < holders.len() {
+            let (held, tid) = holders[at];
+            if held != token {
+                at += 1;
+                continue;
+            }
+            let keep = match sched.tasks.get_mut(&tid) {
+                Some(task) if task.current_async_op == token => {
+                    let clear = (task.cell_id, task.cell_generation) == binding
+                        && !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize);
+                    if clear {
+                        task.clear_current_caller_context();
+                    }
+                    !clear
+                }
+                _ => false,
+            };
+            if keep {
+                at += 1;
+            } else {
+                holders.swap_remove(at);
             }
         }
     }
@@ -711,12 +854,16 @@ pub fn take(
         .ok_or(Failure::Invalid)?;
     let caller_cell = (caller.cell_id.0, caller.cell_generation);
 
-    let (owner_tid, op_ref) = sched
-        .tasks
-        .iter()
-        .filter(|(_, t)| (t.cell_id.0, t.cell_generation) == caller_cell)
-        .find_map(|(&id, t)| t.async_operations.find(token).map(|op| (id, op)))
+    let owner_tid = owner_of(sched, token)
+        .filter(|owner| {
+            let task = &sched.tasks[owner];
+            (task.cell_id.0, task.cell_generation) == caller_cell
+        })
         .ok_or(Failure::Invalid)?;
+    let op_ref = sched.tasks[&owner_tid]
+        .async_operations
+        .find(token)
+        .unwrap();
     if !op_ref.can_consume(caller) {
         return Err(Failure::Invalid);
     }
@@ -744,12 +891,7 @@ pub fn take(
     status[8..12].copy_from_slice(&(data.len() as u32).to_le_bytes());
     view.write_bytes(status_ptr, &status)
         .map_err(|_| Failure::Invalid)?;
-    sched
-        .tasks
-        .get_mut(&owner_tid)
-        .unwrap()
-        .async_operations
-        .remove(token);
+    remove_operation(sched, owner_tid, token);
     Ok(true)
 }
 
@@ -774,12 +916,19 @@ pub fn transfer_consumption(
         return Err(Failure::Invalid);
     }
     let caller_cell = (caller.cell_id.0, caller.cell_generation);
+    let owner = owner_of(sched, token)
+        .filter(|owner| {
+            let task = &sched.tasks[owner];
+            (task.cell_id.0, task.cell_generation) == caller_cell
+        })
+        .ok_or(Failure::Invalid)?;
     let op = sched
         .tasks
-        .values_mut()
-        .filter(|t| (t.cell_id.0, t.cell_generation) == caller_cell)
-        .find_map(|t| t.async_operations.find_mut(token))
-        .ok_or(Failure::Invalid)?;
+        .get_mut(&owner)
+        .unwrap()
+        .async_operations
+        .find_mut(token)
+        .unwrap();
     if op.consumer_tid != caller_tid && op.owner_tid != caller_tid {
         return Err(Failure::Invalid);
     }
@@ -1025,10 +1174,12 @@ pub(super) fn selftest_accept_dispatched(
         &[],
     )
     .ok()?;
-    let task = sched.tasks.get_mut(&owner)?;
+    let task = sched.tasks.get(&owner)?;
     let (owner_cell, owner_generation) = (task.cell_id.0, task.cell_generation);
-    task.async_operations
-        .push(Operation {
+    push_operation(
+        sched,
+        owner,
+        Operation {
             id: token,
             owner_cell,
             owner_generation,
@@ -1043,8 +1194,9 @@ pub(super) fn selftest_accept_dispatched(
             reply,
             #[cfg(feature = "p01-trace")]
             _p01_obligation: ObservedOperation(None),
-        })
-        .ok()?;
+        },
+    )
+    .ok()?;
     Some(token)
 }
 #[cfg(test)]
@@ -1373,23 +1525,20 @@ mod tests {
 
     fn add_operation(sched: &mut Scheduler, owner: usize, peer: usize, id: usize, phase: Phase) {
         let op = operation(sched, owner, peer, id, phase);
-        sched
-            .tasks
-            .get_mut(&owner)
-            .unwrap()
-            .async_operations
-            .push(op)
-            .unwrap();
+        push_operation(sched, owner, op).unwrap();
     }
 
     fn serve(sched: &mut Scheduler, peer: usize, owner: usize, token: usize) {
         let task = sched.tasks.get(&owner).unwrap();
         let (cell, generation) = (task.cell_id.0, task.cell_generation);
-        sched
+        let held = sched
             .tasks
             .get_mut(&peer)
             .unwrap()
             .set_received_request_context(owner, cell, generation, token);
+        if let Some(token) = held {
+            sched.async_index.note_holder(peer, token);
+        }
     }
 
     #[test]
@@ -1960,8 +2109,7 @@ mod tests {
             let mut op = operation(&sched, OWNER, PROVIDER, id, Phase::Dispatched);
             op.reply = full_reply();
             op.deadline = if id % 4 == 2 { 0 } else { 10 };
-            let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
-            assert_eq!(ops.push(op), Ok(()));
+            assert_eq!(push_operation(&mut sched, OWNER, op), Ok(()));
         }
         assert_eq!(charged(&sched), MAX_OPERATIONS);
 

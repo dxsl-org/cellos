@@ -2479,12 +2479,15 @@ pub fn ipc_recv(
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_request_context(
+        let held = receiver_task.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
             header.async_op,
         );
+        if let Some(token) = held {
+            sched.async_index.note_holder(caller_id, token);
+        }
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
@@ -2524,7 +2527,7 @@ pub fn ipc_recv_kernel(
         return Ok(None);
     };
 
-    let (sender_id, header, len) = {
+    let (sender_id, header, len, held) = {
         let receiver = sched.tasks.get_mut(&caller_id).ok_or(())?;
         let record = receiver.pending_msgs.as_slice().get(index).ok_or(())?;
         let wire = record.wire.as_ref().ok_or(())?;
@@ -2536,14 +2539,17 @@ pub fn ipc_recv_kernel(
         let sender_id = record.sender_tid;
         let header = wire.header;
         receiver.pending_msgs.remove(index);
-        receiver.set_received_request_context(
+        let held = receiver.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
             header.async_op,
         );
-        (sender_id, header, len)
+        (sender_id, header, len, held)
     };
+    if let Some(token) = held {
+        sched.async_index.note_holder(caller_id, token);
+    }
     async_ipc::dispatch(sched, caller_id, header);
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(Some((sender_id, len)))
@@ -2608,12 +2614,15 @@ pub fn ipc_try_recv(
         if let Some(index) = pos {
             receiver_task.pending_msgs.remove(index);
         }
-        receiver_task.set_received_request_context(
+        let held = receiver_task.set_received_request_context(
             sender_id,
             header.sender_cell_id,
             header.sender_generation,
             header.async_op,
         );
+        if let Some(token) = held {
+            sched.async_index.note_holder(caller_id, token);
+        }
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)

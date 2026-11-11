@@ -71,9 +71,9 @@ Turn lock order from comments into a checked property, and remove the O(tasks) w
 ## Todo List
 
 - [x] Rank graph, no cycles
-- [ ] Rank assert on, violations fixed
+- [x] Rank assert on, violations fixed (none found: the order was learned from the lanes)
 - [x] Spin hook injected
-- [ ] Token index
+- [x] Token index
 - [ ] Deadline heap
 - [ ] RT set / affinity
 
@@ -132,3 +132,13 @@ Phase 11 collapses the IPC mechanisms on top of the indexed operation path.
     - `qemu-native-domain-test --harts 2`: RV64 "kernel stack overflow: trap entry could not save a frame" after `S22-RV64-SWITCH: PASS`.
     - `qemu-aarch64-test-hooks`: `S22-AARCH64-DOMAIN-LIVE: FAIL asid=0`.
   - All three are manual-tier, except `vfs-quota`, which is `pr`.
+- **Step 4: token index.** `Scheduler::async_index` (`task::async_ipc::AsyncIndex`) has two tables:
+  - `owners`: `(token, owner)` pairs sorted by token. Rows are added by `push_operation` (submit and the self-test seam), removed by `remove_operation` (take and submit rollback), and pruned by `forget_task` at both task-table removals.
+  - `holders`: the task whose request context last received a token, at most one row per task.
+  - **Design decision:** a token can be held by more than its operation's `peer_tid`, for example a worker in the host model or a hot-swap replacement that dequeues the wire. Every holder is recorded instead.
+    - `Task::set_received_request_context` now returns the token it set (`#[must_use]`).
+    - All 9 delivery sites record the holder: 3 in `task.rs`, 6 in `syscall/ipc.rs`.
+  - `reply_in_sched`, `take` and `transfer_consumption` use the index, so the reply path has no task scan.
+  - Capacity for both tables is reserved at submit (`Busy` on OOM, like the operation record), so delivery and removal do not allocate.
+  - **Agreement asserts:** test kernels and host tests compare the index with the old scan, for owners and for holders of the replied token. They stay for one release cycle, then go.
+  - Lanes pass with the asserts on: x86 domain 1/2/4 CPU, x86 boot, RV64 and AArch64 boots, `pcie-bar-window`, and lifecycle 3/3 on two reruns (the first run hit the known `multi_source_wait` timeout).

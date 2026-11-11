@@ -431,6 +431,7 @@ pub(super) fn recv(
                         };
                         // Copy succeeded: commit the exact record.
                         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+                            let mut held = None;
                             if let Some(task) = sched.tasks.get_mut(&caller_id) {
                                 commit_resume(task, &snap);
                                 if let ResumeSnapshot::Message {
@@ -441,13 +442,18 @@ pub(super) fn recv(
                                     ..
                                 } = &snap
                                 {
-                                    task.set_received_request_context(
+                                    if let Some(token) = task.set_received_request_context(
                                         *sender_tid,
                                         *sender_cell_id,
                                         *sender_generation,
                                         wire_header.map_or(0, |header| header.async_op),
-                                    );
+                                    ) {
+                                        held = Some(token);
+                                    }
                                 }
+                            }
+                            if let Some(token) = held {
+                                sched.async_index.note_holder(caller_id, token);
                             }
                             if let ResumeSnapshot::Message {
                                 sender_tid,
@@ -482,18 +488,24 @@ pub(super) fn recv(
         crate::bench_counters::ipc_bytes(copy_len);
     }
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        let mut held = None;
         if let Some(t) = sched.tasks.get_mut(&caller_id) {
             let _ = t.pending_msgs.remove_delivered(
                 pos,
                 sender_tid,
                 wire_header.map(|header| header.delivery_id),
             );
-            t.set_received_request_context(
+            if let Some(token) = t.set_received_request_context(
                 sender_tid,
                 sender_cell_id,
                 sender_generation,
                 wire_header.map_or(0, |header| header.async_op),
-            );
+            ) {
+                held = Some(token);
+            }
+        }
+        if let Some(token) = held {
+            sched.async_index.note_holder(caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -642,6 +654,7 @@ pub(super) fn recv_scatter(
     #[cfg(feature = "bench-counters")]
     crate::bench_counters::ipc_bytes(copy_total);
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        let mut held = None;
         if let Some(t) = sched.tasks.get_mut(&caller_id) {
             let _ = t.pending_msgs.remove_delivered(
                 pos,
@@ -652,13 +665,18 @@ pub(super) fn recv_scatter(
                 // Commit caller context together with removal so a
                 // reply after scatter carries the delivered sender's
                 // identity and request generation.
-                t.set_received_request_context(
+                if let Some(token) = t.set_received_request_context(
                     sender_tid,
                     header.sender_cell_id,
                     header.sender_generation,
                     header.async_op,
-                );
+                ) {
+                    held = Some(token);
+                }
             }
+        }
+        if let Some(token) = held {
+            sched.async_index.note_holder(caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -797,6 +815,7 @@ pub(super) fn recv_timeout(
                             ResumeSnapshot::Wake { sender_tid } => *sender_tid,
                         };
                         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+                            let mut held = None;
                             if let Some(task) = sched.tasks.get_mut(&caller_id) {
                                 commit_resume(task, &snap);
                                 if let ResumeSnapshot::Message {
@@ -807,13 +826,18 @@ pub(super) fn recv_timeout(
                                     ..
                                 } = &snap
                                 {
-                                    task.set_received_request_context(
+                                    if let Some(token) = task.set_received_request_context(
                                         *sender_tid,
                                         *sender_cell_id,
                                         *sender_generation,
                                         wire_header.map_or(0, |header| header.async_op),
-                                    );
+                                    ) {
+                                        held = Some(token);
+                                    }
                                 }
+                            }
+                            if let Some(token) = held {
+                                sched.async_index.note_holder(caller_id, token);
                             }
                             if let ResumeSnapshot::Message {
                                 sender_tid,
@@ -844,18 +868,24 @@ pub(super) fn recv_timeout(
         crate::bench_counters::ipc_bytes(copy_len);
     }
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        let mut held = None;
         if let Some(t) = sched.tasks.get_mut(&caller_id) {
             let _ = t.pending_msgs.remove_delivered(
                 pos,
                 sender_tid,
                 wire_header.map(|header| header.delivery_id),
             );
-            t.set_received_request_context(
+            if let Some(token) = t.set_received_request_context(
                 sender_tid,
                 sender_cell_id,
                 sender_generation,
                 wire_header.map_or(0, |header| header.async_op),
-            );
+            ) {
+                held = Some(token);
+            }
+        }
+        if let Some(token) = held {
+            sched.async_index.note_holder(caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -979,16 +1009,22 @@ pub(super) fn try_recv(
             write_caller_identity(caller_id, buf_ptr, buf_len, sender_tid);
         }
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+            let mut held = None;
             if let Some(t) = sched.tasks.get_mut(&caller_id) {
                 let _ = t
                     .pending_msgs
                     .remove_delivered(pos, sender_tid, delivery_id);
-                t.set_received_request_context(
+                if let Some(token) = t.set_received_request_context(
                     sender_tid,
                     sender_cell_id,
                     sender_generation,
                     wire_header.map_or(0, |header| header.async_op),
-                );
+                ) {
+                    held = Some(token);
+                }
+            }
+            if let Some(token) = held {
+                sched.async_index.note_holder(caller_id, token);
             }
             if let Some(header) = wire_header {
                 crate::task::wake_sender_token(sched, sender_tid, caller_id, header);

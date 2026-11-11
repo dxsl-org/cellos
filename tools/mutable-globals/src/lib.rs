@@ -722,7 +722,7 @@ fn lock_ranks(root: &Path, d: &Discovery, problems: &mut Vec<String>) -> Option<
         let users: Vec<String> = locks
             .iter()
             .filter(|x| x.rank.as_deref() == Some(name.as_str()))
-            .map(|x| format!("`{}` ({}:{}{})", x.key, x.file, x.line, if x.active == Tri::False { ", cfg inactive here" } else { "" }))
+            .map(|x| format!("`{}` ({}{})", x.key, x.file, if x.active == Tri::False { ", cfg inactive here" } else { "" }))
             .collect();
         let _ = writeln!(o, "| {} | `{}` | {} |", i + 1, name, cell(&users.join("; ")));
     }
