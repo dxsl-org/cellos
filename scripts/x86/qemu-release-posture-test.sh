@@ -36,10 +36,18 @@ CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS="-C code-model=kernel -C no-redzone=y
     -Z build-std=core,alloc --no-default-features --features release-posture
 
 # Boot fixtures never ship (Spec 15 §3.5, architecture remediation Phase 09):
-# a release kernel carries no `*selftest*` / `*self_test*` symbol.
-if nm -C "$WORK/kernel/x86_64-unknown-none/release/cellos-kernel" | grep -qiE 'selftest|self_test'; then
+# a release kernel carries no `*selftest*` / `*self_test*` symbol. The crypto
+# power-on known-answer tests (ed25519, signed policy, cell signing) are kept on
+# purpose and excluded by name. The symbol list is captured first: `grep -q`
+# under `pipefail` would SIGPIPE `nm` and turn a match into a pass.
+release_kernel="$WORK/kernel/x86_64-unknown-none/release/cellos-kernel"
+nm "$release_kernel" >/dev/null # a missing or unreadable kernel fails here, not below
+fixtures=$(nm -C "$release_kernel" \
+    | grep -iE 'selftest|self_test' \
+    | grep -vE 'cellos_kernel::(ed25519|policy|signing)::self_test' || true)
+if [ -n "$fixtures" ]; then
     echo "FAIL: release-posture kernel contains self-test code:" >&2
-    nm -C "$WORK/kernel/x86_64-unknown-none/release/cellos-kernel" | grep -iE 'selftest|self_test' | head -5 >&2
+    printf '%s\n' "$fixtures" | head -5 >&2
     exit 1
 fi
 echo "  ok: no self-test symbol in the release kernel"

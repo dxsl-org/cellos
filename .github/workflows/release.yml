@@ -65,6 +65,18 @@ jobs:
           -Z build-std=core,alloc
           --no-default-features
           --features release-posture
+      # Boot fixtures never ship (Spec 15 §3.5): no self-test symbol may remain
+      # beyond the crypto power-on known-answer tests.
+      - name: Check the release kernel carries no self-test code
+        run: |
+          kernel=target/riscv64gc-unknown-none-elf/release/cellos-kernel
+          nm "$kernel" >/dev/null
+          fixtures=$(nm -C "$kernel" | grep -iE 'selftest|self_test' \
+            | grep -vE 'cellos_kernel::(ed25519|policy|signing)::self_test' || true)
+          if [ -n "$fixtures" ]; then
+            echo "release kernel contains self-test code:"; printf '%s\n' "$fixtures" | head -5
+            exit 1
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cellos-kernel-riscv64
