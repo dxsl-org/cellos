@@ -446,7 +446,7 @@ pub(super) fn pipe_share(caller_id: usize, handle: usize, target_tid: usize) -> 
 /// Handler for `Syscall::Open` (extracted from the dispatcher).
 pub(super) fn open(caller_id: usize, path_ptr: usize, path_len: usize) -> SyscallResult {
     let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
-    if let Ok(fd) = crate::task::file_open(caller_id, &path) {
+    if let Ok(fd) = crate::fsapi::file_open(caller_id, &path) {
         return Ok(fd);
     }
     Err(SyscallError::FileNotFound)
@@ -459,7 +459,7 @@ pub(super) fn read(caller_id: usize, fd: usize, buf_ptr: usize, buf_len: usize) 
     kbuf.try_reserve_exact(buf_len)
         .map_err(|_| SyscallError::OutOfMemory)?;
     kbuf.resize(buf_len, 0);
-    let read_bytes = crate::task::file_read(fd, &mut kbuf);
+    let read_bytes = crate::fsapi::file_read(fd, &mut kbuf);
     // A committed child's endpoint failure is explicit, never a short count.
     if read_bytes == usize::MAX {
         return Err(SyscallError::PermissionDenied);
@@ -472,7 +472,7 @@ pub(super) fn read(caller_id: usize, fd: usize, buf_ptr: usize, buf_len: usize) 
 
 /// Handler for `Syscall::Close` (extracted from the dispatcher).
 pub(super) fn close(fd: usize) -> SyscallResult {
-    crate::task::file_close(fd);
+    crate::fsapi::file_close(fd);
     Ok(0)
 }
 
@@ -488,7 +488,8 @@ pub(super) fn read_dir(
     kbuf.try_reserve_exact(buf_len)
         .map_err(|_| SyscallError::OutOfMemory)?;
     kbuf.resize(buf_len, 0);
-    let read_bytes = crate::task::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
+    let read_bytes =
+        crate::fsapi::file_readdir(fd, &mut kbuf).map_err(|_| SyscallError::Unknown)?;
     if read_bytes > 0 {
         write_user_slice(caller_id, buf_ptr, &kbuf[..read_bytes], MAX_USER_BUF)?;
     }
@@ -504,7 +505,7 @@ pub(super) fn fstat(caller_id: usize, fd: usize, out_ptr: usize, out_len: usize)
     validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
     preflight_user_output(caller_id, out_ptr, len)?;
 
-    let metadata = crate::task::file_fstat(caller_id, fd).map_err(|_| SyscallError::Unknown)?;
+    let metadata = crate::fsapi::file_fstat(caller_id, fd).map_err(|_| SyscallError::Unknown)?;
     let bytes = unsafe {
         core::slice::from_raw_parts(
             &metadata as *const api::syscall::ViFstatV1 as *const u8,
@@ -561,7 +562,7 @@ pub(super) fn rename(
 /// Handler for `Syscall::ChDir` (extracted from the dispatcher).
 pub(super) fn ch_dir(caller_id: usize, path_ptr: usize, path_len: usize) -> SyscallResult {
     let path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
-    if crate::task::file_chdir(caller_id, &path).is_ok() {
+    if crate::fsapi::file_chdir(caller_id, &path).is_ok() {
         return Ok(0);
     }
     Err(SyscallError::FileNotFound)
@@ -574,7 +575,7 @@ pub(super) fn get_cwd(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sysca
     kbuf.try_reserve_exact(buf_len)
         .map_err(|_| SyscallError::OutOfMemory)?;
     kbuf.resize(buf_len, 0);
-    if let Ok(len) = crate::task::file_getcwd(caller_id, &mut kbuf) {
+    if let Ok(len) = crate::fsapi::file_getcwd(caller_id, &mut kbuf) {
         write_user_slice(caller_id, buf_ptr, &kbuf[..len], MAX_USER_BUF)?;
         return Ok(len);
     }
@@ -584,7 +585,7 @@ pub(super) fn get_cwd(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sysca
 /// Handler for `Syscall::Write` (extracted from the dispatcher).
 pub(super) fn write(caller_id: usize, fd: usize, buf_ptr: usize, buf_len: usize) -> SyscallResult {
     let bytes = read_user_slice(caller_id, buf_ptr, buf_len, MAX_USER_BUF)?;
-    let written = crate::task::file_write(fd, &bytes);
+    let written = crate::fsapi::file_write(fd, &bytes);
     if written == usize::MAX {
         return Err(SyscallError::PermissionDenied);
     }
@@ -900,7 +901,7 @@ pub(super) fn create(caller_id: usize, path_ptr: usize, path_len: usize) -> Sysc
 
 /// Handler for `Syscall::Seek` (extracted from the dispatcher).
 pub(super) fn seek(fd: usize, offset: isize, whence: usize) -> SyscallResult {
-    crate::task::file_seek(fd, offset, whence).map_err(|_| SyscallError::Unknown)
+    crate::fsapi::file_seek(fd, offset, whence).map_err(|_| SyscallError::Unknown)
 }
 
 /// Handler for `Syscall::FileOp` (extracted from the dispatcher).
@@ -908,7 +909,7 @@ pub(super) fn file_op(caller_id: usize, op: usize, arg1: usize, arg2: usize) -> 
     match op {
         0 => {
             let path = read_user_string(caller_id, arg1, arg2, MAX_LOG_MSG)?;
-            crate::task::file_remove(caller_id, &path).map_err(|_| SyscallError::PermissionDenied)
+            crate::fsapi::file_remove(caller_id, &path).map_err(|_| SyscallError::PermissionDenied)
         }
         1 => {
             // Rename - Stub

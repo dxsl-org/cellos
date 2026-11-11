@@ -805,7 +805,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "none: init() programs the controller on the BSP (main.rs x86_64 block) before start_secondaries; decode/event state is mutated on every poll for the whole run"
 retirement = "never: lives for the whole run; not tied to any cell (input-cell death only switches console_drv to the ASCII fallback path)"
 rationale = "Spinlock::lock masks interrupts on the local CPU, so the hart-0 timer ISR (vi_timer_tick -> CONSOLE.lock().poll()) cannot self-deadlock against a file_read(fd 0) holder; every runtime accessor runs nested inside console_drv::CONSOLE (order CONSOLE -> ps2 STATE), and port I/O under the lock is bounded (POLL_LIMIT, 64 events per tick). No NMI/exception path touches it."
-review = "kernel/src/dev/ps2_keyboard.rs:init; kernel/src/dev/ps2_keyboard.rs:poll_event; kernel/src/dev/ps2_keyboard.rs:poll; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
+review = "kernel/src/dev/ps2_keyboard.rs:init; kernel/src/dev/ps2_keyboard.rs:poll_event; kernel/src/dev/ps2_keyboard.rs:poll; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/fsapi.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
 key = "kernel::dev::irq_wait::IRQ_WAITERS"
@@ -1134,7 +1134,7 @@ contexts = ["normal", "irq"]
 seal = "none: polled and drained for the whole run (console_drv::init is not called on x86_64; the const initializer is the initial state)"
 retirement = "never: lives for the whole run"
 rationale = "IRQ-masking spinlock taken from the timer ISR and from syscalls; under it poll drains uart::RX_BUFFER, PS/2 and posts IPC (takes SCHEDULER), giving order CONSOLE -> PENDING_* / RX_BUFFER / ps2 STATE -> SCHEDULER, with no reverse path found. Buffer growth is capped at MAX_BUFFERED, so the ISR path allocates at most up to 4096 bytes."
-review = "kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:file_read; kernel/src/dev/uart.rs:getchar"
+review = "kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/fsapi.rs:file_read; kernel/src/dev/uart.rs:getchar"
 
 [[global]]
 key = "kernel::dev::block::MMC_ZST"
@@ -2318,7 +2318,7 @@ contexts = ["boot", "normal"]
 seal = "Option<Box<dyn ViFileSystem>> installed once by fs::init (main.rs:911); filesystem operations through the lock continue for the whole run"
 retirement = "never: lives for the whole run; per-cell open files are separate ViFile objects"
 rationale = "Only boot code and syscall handlers touch it; the Spinlock serialises the trait object and is held across open/lookup only, not across file reads."
-review = "kernel/src/fs.rs:init; kernel/src/fs.rs:read_file_from_vifs1; kernel/src/task/syscall/mod.rs:6757; kernel/src/task.rs:file_open"
+review = "kernel/src/fs.rs:init; kernel/src/fs.rs:read_file_from_vifs1; kernel/src/task/syscall/mod.rs:6757; kernel/src/fsapi.rs:file_open"
 
 [[global]]
 key = "kernel::cell::state_stash::STASH"

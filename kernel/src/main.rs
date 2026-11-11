@@ -55,6 +55,7 @@ pub mod dev; // Kernel-resident device mechanisms (IRQ, IOMMU, MSI, early consol
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
+pub mod fsapi; // Per-task file descriptors and cwd over BootFS (Spec 15 exception)
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod ipc; // Kernel IPC objects: wire copy, mailboxes, pipes, futex, sessions
 pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)

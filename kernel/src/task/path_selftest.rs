@@ -31,11 +31,15 @@ fn test_normalization(ok: &mut bool) {
     for (cwd, input, expected) in cases {
         check(
             ok,
-            matches!(super::resolve_path(cwd, input), Ok(path) if path == expected),
+            matches!(crate::fsapi::resolve_path(cwd, input), Ok(path) if path == expected),
             input,
         );
     }
-    check(ok, super::resolve_path("/", "").is_err(), "empty path");
+    check(
+        ok,
+        crate::fsapi::resolve_path("/", "").is_err(),
+        "empty path",
+    );
 }
 
 fn test_fat_stat(ok: &mut bool) {
@@ -103,21 +107,21 @@ fn cwd_is(tid: usize, expected: &str) -> bool {
 fn test_task_paths(ok: &mut bool) {
     check(
         ok,
-        super::file_chdir(TASK_A, "/BIN//./").is_ok(),
+        crate::fsapi::file_chdir(TASK_A, "/BIN//./").is_ok(),
         "chdir directory",
     );
     check(ok, cwd_is(TASK_A, TEST_DIR), "caller cwd committed");
     check(ok, cwd_is(TASK_B, "/"), "second task cwd isolated");
 
-    let file_failed = super::file_chdir(TASK_A, "INIT").is_err();
-    let miss_failed = super::file_chdir(TASK_A, "MISSING.BIN").is_err();
+    let file_failed = crate::fsapi::file_chdir(TASK_A, "INIT").is_err();
+    let miss_failed = crate::fsapi::file_chdir(TASK_A, "MISSING.BIN").is_err();
     check(
         ok,
         file_failed && miss_failed && cwd_is(TASK_A, TEST_DIR),
         "failed chdir immutable",
     );
 
-    let opened = super::file_open(TASK_A, "./INIT");
+    let opened = crate::fsapi::file_open(TASK_A, "./INIT");
     let open_isolated = opened.is_ok()
         && super::SCHEDULER.lock().as_ref().is_some_and(|scheduler| {
             let fd = opened.unwrap_or(usize::MAX);
@@ -133,12 +137,12 @@ fn test_task_paths(ok: &mut bool) {
     check(ok, open_isolated, "open caller isolation");
 
     let mut exact = [SENTINEL; 4];
-    let exact_ok = super::file_getcwd(TASK_A, &mut exact) == Ok(TEST_DIR.len())
+    let exact_ok = crate::fsapi::file_getcwd(TASK_A, &mut exact) == Ok(TEST_DIR.len())
         && exact.as_slice() == TEST_DIR.as_bytes();
     check(ok, exact_ok, "getcwd exact buffer");
 
     let mut oversized = [SENTINEL; 16];
-    let oversize_ok = super::file_getcwd(TASK_A, &mut oversized) == Ok(TEST_DIR.len())
+    let oversize_ok = crate::fsapi::file_getcwd(TASK_A, &mut oversized) == Ok(TEST_DIR.len())
         && &oversized[..TEST_DIR.len()] == TEST_DIR.as_bytes()
         && oversized[TEST_DIR.len()..]
             .iter()
@@ -146,17 +150,17 @@ fn test_task_paths(ok: &mut bool) {
     check(ok, oversize_ok, "getcwd oversized sentinel");
 
     let mut undersized = [SENTINEL; 3];
-    let undersize_ok = super::file_getcwd(TASK_A, &mut undersized).is_err()
+    let undersize_ok = crate::fsapi::file_getcwd(TASK_A, &mut undersized).is_err()
         && undersized.iter().all(|byte| *byte == SENTINEL);
     check(ok, undersize_ok, "getcwd undersized immutable");
 
     let mut root = [SENTINEL; 4];
-    let root_ok = super::file_getcwd(TASK_B, &mut root) == Ok(1)
+    let root_ok = crate::fsapi::file_getcwd(TASK_B, &mut root) == Ok(1)
         && root[0] == b'/'
         && root[1..].iter().all(|byte| *byte == SENTINEL);
     check(ok, root_ok, "second task getcwd isolation");
 
-    let remove_denied = super::file_remove(TASK_A, "./INIT").is_err();
+    let remove_denied = crate::fsapi::file_remove(TASK_A, "./INIT").is_err();
     let file_preserved = crate::fs::VIFS1
         .lock()
         .as_ref()

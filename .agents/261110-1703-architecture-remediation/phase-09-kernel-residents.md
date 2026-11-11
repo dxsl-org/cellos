@@ -70,7 +70,7 @@ Make the kernel tree say what it is: test code out of production boots, an inert
 - [x] Selftests gated
 - [x] Snapshot gated
 - [ ] Resident manifest + guard + Spec 15 amendment
-- [ ] Directory hoist
+- [x] Directory hoist
 - [ ] Raw cfgs → features
 - [ ] Metric corrected
 
@@ -132,3 +132,6 @@ Phases 10 and 14 both build on the new layout.
 - **Hoist 3/4 (`ipc/`).** Moved into `crate::ipc`: `ipc_wire` (and its tests), `pending_mailbox`, `pipe`, `futex` and `cell_session`. `ipc.rs` keeps `task`'s `clippy::result_unit_err` allowance.
   - **Deviation:** `async_ipc` stays in `task`. Moving it would have meant widening 15 private `task` items to `pub(crate)`: the wait-state publication, source selection, block handoff and wake helpers. It is the task-blocking glue, not an IPC object.
   - Widened to `pub(crate)` because the moved modules use them: `syscall::{session_launch_request, snapshot_grant_elf}` and `task::ipc_target_is_tombstone`.
+- **Hoist 4/4 (`fsapi`).** The BootFS file-descriptor/cwd layer moved out of `task.rs` (path resolution, `file_*` handlers; about 325 lines) into `kernel/src/fsapi.rs`, which is one file, so no `fsapi/` directory was created. Callers use `crate::fsapi::file_*`.
+  - `resolve_path` became `pub(crate)` because the path selftest calls it. `dir_inherit` stays in `task`: it is spawn-time handle transport, not file API.
+  - The task directory hoist is complete: `dev/`, `sched/`, `ipc/` and `fsapi`.

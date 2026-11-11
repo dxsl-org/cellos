@@ -14,7 +14,7 @@ pub(super) fn test_stdio(ok: &mut bool) {
         check(
             ok,
             matches!(
-                super::super::file_fstat(TASK_A, fd),
+                crate::fsapi::file_fstat(TASK_A, fd),
                 Ok(metadata)
                     if metadata.kind == VI_FSTAT_KIND_CHARACTER
                         && metadata.access == access
@@ -26,8 +26,8 @@ pub(super) fn test_stdio(ok: &mut bool) {
     }
     check(
         ok,
-        super::super::file_fstat(TASK_A, usize::MAX).is_err()
-            && super::super::file_fstat(TASK_A, 89).is_err(),
+        crate::fsapi::file_fstat(TASK_A, usize::MAX).is_err()
+            && crate::fsapi::file_fstat(TASK_A, 89).is_err(),
         "negative and nonexistent descriptors",
     );
 }
@@ -38,8 +38,8 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         .as_ref()
         .and_then(|fs| fs.stat(TEST_FILE).ok())
         .map(|stat| stat.size);
-    let file_fd = super::super::file_open(TASK_A, TEST_FILE).ok();
-    let dir_fd = super::super::file_open(TASK_A, TEST_DIR).ok();
+    let file_fd = crate::fsapi::file_open(TASK_A, TEST_FILE).ok();
+    let dir_fd = crate::fsapi::file_open(TASK_A, TEST_DIR).ok();
     let (Some(expected_size), Some(file_fd), Some(dir_fd)) = (expected_size, file_fd, dir_fd)
     else {
         check(ok, false, "VIFS fixtures open");
@@ -58,7 +58,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         });
     check(ok, positioned, "file cursor positioned");
 
-    let file_metadata = super::super::file_fstat(TASK_A, file_fd);
+    let file_metadata = crate::fsapi::file_fstat(TASK_A, file_fd);
     check(
         ok,
         matches!(
@@ -98,7 +98,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
     check(
         ok,
         matches!(
-            super::super::file_fstat(TASK_A, dir_fd),
+            crate::fsapi::file_fstat(TASK_A, dir_fd),
             Ok(metadata)
                 if metadata.kind == VI_FSTAT_KIND_DIRECTORY
                     && metadata.access == VI_FSTAT_ACCESS_READ
@@ -121,7 +121,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
     check(ok, directory_cursor_preserved, "directory cursor preserved");
     check(
         ok,
-        super::super::file_fstat(TASK_B, file_fd).is_err(),
+        crate::fsapi::file_fstat(TASK_B, file_fd).is_err(),
         "caller descriptor isolation",
     );
 
