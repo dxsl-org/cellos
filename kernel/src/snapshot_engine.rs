@@ -58,9 +58,10 @@
 //!
 //! # Qualification
 //!
-//! `QUALIFICATION_ENABLED` (feature `snapshot-qualified`) gates the shipping
-//! path: capture and restore stay refused until an actual save → reset →
-//! restore → resume has been proven on a block-capable board.  The capture
+//! This engine is compiled only with feature `snapshot-qualified` (and for host
+//! tests); every other kernel links `snapshot_disabled.rs`, where capture is
+//! refused and restore never runs, until an actual save → reset → restore →
+//! resume has been proven on a block-capable board.  The capture
 //! preflight refuses **without any block I/O** unless
 //!
 //! - the boot reserved a scratch workspace the capture can stage in, and that
@@ -324,9 +325,9 @@ pub const RUN_FLAG_IMAGE: u32 = 0b1;
 /// scratch region outside the captured runs (so the staging check refuses the
 /// shipping capture), a real device has no modelled monotonic epoch source, and
 /// closure completeness is not proven. Until then every shipping image keeps the
-/// path disabled: a capture cannot touch the snapshot region and a restore
-/// cannot mutate RAM. `snapshot-qualified` is the single build gate phase 07
-/// turns on for that verified profile.
+/// path disabled: this engine is not compiled into them at all (they link
+/// `snapshot_disabled.rs`). `snapshot-qualified` is the single build gate
+/// phase 07 turns on for that verified profile.
 pub const QUALIFICATION_ENABLED: bool = cfg!(feature = "snapshot-qualified");
 
 /// Git SHA short hash baked in at compile time.  Snapshot is invalid if this
@@ -347,8 +348,6 @@ fn kernel_hash() -> u64 {
 /// be replayed (capture).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SnapshotError {
-    /// `snapshot-qualified` is off — the phase-01 gate.
-    GateClosed,
     /// Not every online hart could be parked at an acknowledged safe point, so
     /// the memory image cannot be frozen. Nothing was written.
     HartsNotQuiesced,
@@ -417,7 +416,6 @@ impl SnapshotError {
     /// Stable short description for logs.
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::GateClosed => "capture unqualified (phase-01 gate: feature `snapshot-qualified`)",
             Self::HartsNotQuiesced => "online harts are not parked at an acknowledged safe point",
             Self::NoReservedScratch => "no reserved capture storage outside the captured runs",
             Self::ScratchOverlapsRun => "capture scratch intersects a planned run",
@@ -1377,12 +1375,10 @@ fn region_intersects_image(region: ScratchRegion, image: ImageRegion) -> bool {
 /// the frame allocator exists and before any capture can run, so a capture never
 /// has to take its own workspace with a live machine.  Never panics and never
 /// degrades: a failure logs and leaves no region, and every capture then refuses
-/// with [`SnapshotError::NoReservedScratch`].  A no-op unless the build is
-/// `snapshot-qualified`, so no shipping image pays for a workspace it cannot use.
+/// with [`SnapshotError::NoReservedScratch`].  Compiled only for
+/// `snapshot-qualified` builds (and host tests), so no shipping image pays for a
+/// workspace it cannot use.
 pub fn reserve_scratch_region_at_boot() {
-    if !QUALIFICATION_ENABLED {
-        return;
-    }
     if scratch_region().is_some() {
         return;
     }
@@ -2240,7 +2236,7 @@ impl FrameMemory for KernelMemory {
         Ok(())
     }
     fn write_frame(&self, pa: u64, src: &[u8; FRAME_SIZE]) -> Result<(), SnapshotError> {
-        // SAFETY: as above; restore is gated on `QUALIFICATION_ENABLED`.
+        // SAFETY: as above; restore is compiled only for `snapshot-qualified`.
         unsafe {
             core::ptr::copy_nonoverlapping(src.as_ptr(), pa as *mut u8, FRAME_SIZE);
         }
@@ -2738,9 +2734,6 @@ fn plan_runs(
 /// ([`FrozenScratch`]), and the capture refuses unless its own scratch spans are
 /// declared outside the planned runs ([`CaptureScratch`]).
 pub fn serialize_snapshot() -> Result<u32, SnapshotError> {
-    if !QUALIFICATION_ENABLED {
-        return Err(SnapshotError::GateClosed);
-    }
     // The workspace the capture stages its own stack and buffers in, reserved at
     // boot from the frame allocator.  A boot that never reserved one (or whose
     // reservation failed) refuses rather than guessing a region.
@@ -2929,13 +2922,6 @@ fn capture_frozen_with_allocated(
 /// and BEFORE `EarlyLoader::probe()` or `task::init()` (cells are about to be
 /// replaced by the restored task set).
 pub fn try_restore() -> bool {
-    if !QUALIFICATION_ENABLED {
-        // Cold boot only. An image that predates this gate would still replay a
-        // header it finds here, so clear one if present — one header sector,
-        // before any other snapshot I/O, never a payload write.
-        invalidate_stale_snapshot_header();
-        return false;
-    }
     let live = match live_layout() {
         Some(layout) => layout,
         None => {
@@ -3027,29 +3013,6 @@ fn halt_mixed_ram(reason: &'static str) -> ! {
 pub fn invalidate_snapshot() {
     invalidate_on(&KERNEL_DEVICE);
     log::info!("[snapshot] snapshot invalidated");
-}
-
-/// Clear a snapshot header written by an image that predates the qualification
-/// gate, so that image cannot replay it after a downgrade.
-///
-/// Reads the header sector first and writes only when it carries the snapshot
-/// magic, so a cold boot on a board without a snapshot region performs no stray
-/// write. Failures are non-fatal: the gate already refuses every read and write
-/// of the region on this image.
-fn invalidate_stale_snapshot_header() {
-    let mut sector = [0u8; HEADER_BYTES];
-    if block::read_sector(SNAPSHOT_BASE_LBA, &mut sector).is_err() {
-        return;
-    }
-    let magic = u32::from_le_bytes([sector[0], sector[1], sector[2], sector[3]]);
-    if magic != SNAPSHOT_MAGIC {
-        return;
-    }
-    invalidate_snapshot();
-    log::warn!(
-        "[snapshot] stale header invalidated: capture/restore disabled by the phase-01 \
-         qualification gate (feature `snapshot-qualified`)"
-    );
 }
 
 // ── Header validation (pure, no I/O) ─────────────────────────────────────────
@@ -4897,15 +4860,6 @@ mod tests {
             "header must survive a sector round trip"
         );
         assert_eq!(&bytes[0..4], b"VICU");
-    }
-
-    #[cfg(not(feature = "snapshot-qualified"))]
-    #[test]
-    fn snapshot_qualification_gate_stays_closed_without_the_feature() {
-        assert!(!QUALIFICATION_ENABLED);
-        assert_eq!(serialize_snapshot(), Err(SnapshotError::GateClosed));
-        // Restore must refuse: the on-disk image is never even considered.
-        assert!(!try_restore());
     }
 
     #[cfg(feature = "snapshot-qualified")]

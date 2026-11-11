@@ -85,10 +85,12 @@ pub mod sched; // Scheduler, SMP bring-up, hart-local state, quiescence
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod smbios; // Bounded SMBIOS type 1 reader (x86 boot identity)
-                // The snapshot engine is compiled only for the qualified profile (and the host
-                // tests); every other kernel gets the gate-closed API (Phase 09). Callers use
-                // `crate::snapshot::*` either way.
-#[cfg(not(any(feature = "snapshot-qualified", test)))]
+
+// The snapshot engine is compiled only for the qualified profile (and the host
+// tests); every other kernel gets the gate-closed API (Phase 09). Callers use
+// `crate::snapshot::*` either way.
+#[cfg(any(not(feature = "snapshot-qualified"), test))]
+#[cfg_attr(test, allow(dead_code))] // host tests reach it only through its own tests
 mod snapshot_disabled;
 #[cfg(any(feature = "snapshot-qualified", test))]
 pub mod snapshot_engine;

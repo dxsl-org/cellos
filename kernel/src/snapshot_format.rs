@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! On-disk identity of a snapshot header, shared by the snapshot engine
-//! (`snapshot.rs`, compiled only with `snapshot-qualified`) and the
+//! (`snapshot_engine.rs`, compiled only with `snapshot-qualified`) and the
 //! always-present cold-boot guard (`snapshot_disabled.rs`), so both recognise
 //! the same header.
 
