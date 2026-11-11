@@ -30,10 +30,10 @@ pub enum Orientation {
 pub struct ProgressBar {
     /// Value signal in `[0.0, 1.0]`.
     pub value: Signal<f32>,
-    /// Track (background) color.
-    pub track_color: Color,
-    /// Fill (foreground) color.
-    pub fill_color: Color,
+    /// Track (background) color; `None` uses the theme's `slider_track`.
+    pub track_color: Option<Color>,
+    /// Fill (foreground) color; `None` uses the theme's `progress_fill`.
+    pub fill_color: Option<Color>,
     /// Bar orientation.
     pub orientation: Orientation,
     /// Show a percentage label on top of the bar.
@@ -46,8 +46,8 @@ impl ProgressBar {
     pub fn new(value: Signal<f32>) -> Self {
         Self {
             value,
-            track_color: Color::rgb(40, 40, 60),
-            fill_color: Color::rgb(60, 160, 60),
+            track_color: None,
+            fill_color: None,
             orientation: Orientation::Horizontal,
             show_label: false,
             bounds: Rect::ZERO,
@@ -57,13 +57,13 @@ impl ProgressBar {
 
     /// Set the fill color.
     pub fn color(mut self, fill: Color) -> Self {
-        self.fill_color = fill;
+        self.fill_color = Some(fill);
         self
     }
 
     /// Set the track (background) color.
     pub fn track(mut self, track: Color) -> Self {
-        self.track_color = track;
+        self.track_color = Some(track);
         self
     }
 
@@ -108,11 +108,10 @@ impl ViNode for ProgressBar {
         let v = self.value.get().clamp(0.0, 1.0);
         let b = self.bounds;
 
-        // Track — use theme token, fall back to stored color if explicitly set
-        cx.canvas.fill_rect(b, cx.theme.slider_track());
+        let track = self.track_color.unwrap_or_else(|| cx.theme.slider_track());
+        cx.canvas.fill_rect(b, track);
 
-        // Fill — use theme token for the progress region
-        let fill_color = cx.theme.progress_fill();
+        let fill_color = self.fill_color.unwrap_or_else(|| cx.theme.progress_fill());
         let fill = match self.orientation {
             Orientation::Horizontal => Rect {
                 x: b.x,
@@ -140,7 +139,8 @@ impl ViNode for ProgressBar {
             let label = format_pct(pct);
             let lx = b.x + b.w * 0.5 - cx.measure(&label) * 0.5;
             let ly = b.y + b.h * 0.5 - cx.line_height() * 0.5;
-            cx.draw_text(Point::new(lx.max(b.x), ly.max(b.y)), &label, Color::WHITE);
+            let color = cx.theme.text_primary();
+            cx.draw_text(Point::new(lx.max(b.x), ly.max(b.y)), &label, color);
         }
     }
 
@@ -173,4 +173,32 @@ fn format_pct(pct: u32) -> alloc::string::String {
         s.push('%');
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProgressBar;
+
+    use crate::canvas::Color;
+    use crate::node_widgets::style::test_support::{fills, paint_node, text_color};
+    use crate::signal::Signal;
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn track_fill_and_label_use_theme_tokens_unless_overridden() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut bar = ProgressBar::new(Signal::new(0.5)).with_label();
+            let buf = paint_node(&mut bar, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.slider_track());
+            assert_eq!(painted[1].1, theme.progress_fill());
+            assert_eq!(text_color(&buf, "50%"), Some(theme.text_primary()));
+
+            let (fill, track) = (Color::rgb(0, 200, 0), Color::rgb(9, 9, 9));
+            let mut bar = ProgressBar::new(Signal::new(0.5)).color(fill).track(track);
+            let painted = fills(&paint_node(&mut bar, theme));
+            assert_eq!(painted[0].1, track);
+            assert_eq!(painted[1].1, fill);
+        }
+    }
 }

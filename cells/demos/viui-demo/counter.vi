@@ -6,7 +6,8 @@ component Counter {
         padding: 16px;
         spacing: 8px;
 
-        Text { text: "Count: \{count}"; color: #ffffff; }
+        // No colour: the label draws in the session theme's text colour.
+        Text { text: "Count: \{count}"; }
         Button {
             text: "Increment";
             clicked => { count += 1; }

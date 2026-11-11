@@ -15,10 +15,12 @@
 //! # }
 //! ```
 
+pub mod appearance;
 mod dispatcher;
 mod events;
 mod ipc;
 mod lifecycle;
+pub mod linear;
 mod routing;
 mod surface;
 

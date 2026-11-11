@@ -3,14 +3,12 @@
 use alloc::{string::String, vec::Vec};
 use core::cell::{Cell, RefCell};
 
-use crate::canvas::Color;
 use crate::event::{Event, EventCx, EventStatus, KeyCode, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Length, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget, WidgetId};
+use ostd::display::linear::CONTROL_RADIUS;
 
 const PAD: f32 = 4.0;
-
-const CURSOR_CLR: Color = Color::WHITE;
 
 pub struct TextEdit {
     pub id: WidgetId,
@@ -107,22 +105,19 @@ impl ViWidget for TextEdit {
         } else {
             cx.theme.input_bg()
         };
-        cx.canvas.fill_rect(bounds, bg);
+        cx.canvas.fill_round_rect(bounds, CONTROL_RADIUS, bg);
 
         let border = if self.focused {
             cx.theme.input_focused_border()
         } else {
             cx.theme.border()
         };
-        cx.canvas.draw_line(
-            Point::new(bounds.x, bounds.y + bounds.h - 1.0),
-            Point::new(bounds.x + bounds.w, bounds.y + bounds.h - 1.0),
-            border,
-        );
+        cx.canvas.stroke_round_rect(bounds, CONTROL_RADIUS, border);
 
         let text_pos = Point::new(bounds.x + PAD, bounds.y + PAD);
         cx.canvas.clip_push(bounds);
-        cx.draw_text(text_pos, &self.text, cx.theme.text_primary(), 0.0);
+        let text_color = cx.theme.text_primary();
+        cx.draw_text(text_pos, &self.text, text_color, 0.0);
 
         // Cursor
         if self.focused {
@@ -130,7 +125,7 @@ impl ViWidget for TextEdit {
             let cy0 = bounds.y + PAD;
             let cy1 = bounds.y + PAD + cx.font.line_height();
             cx.canvas
-                .draw_line(Point::new(cx_x, cy0), Point::new(cx_x, cy1), CURSOR_CLR);
+                .draw_line(Point::new(cx_x, cy0), Point::new(cx_x, cy1), text_color);
         }
         cx.canvas.clip_pop();
     }
@@ -253,5 +248,25 @@ mod tests {
         edit.event(&mut cx, &Event::Char('x'));
         assert_eq!(edit.text, "Wxiii");
         assert_eq!(layout.bounds.h, font.line_height() + PAD * 2.0);
+    }
+
+    #[test]
+    fn focused_field_text_and_cursor_use_theme_tokens() {
+        use crate::node_widgets::style::test_support::{fills, lines, record, strokes, text_color};
+        use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut edit = TextEdit::new(WidgetId::ROOT).with_text("cellos");
+            edit.focused = true;
+            let mut font = FontContext::default();
+            edit.layout(Constraints::root(Size::new(200.0, 80.0)), &mut font);
+            let buf =
+                record(|canvas| edit.paint(&mut PaintCx::with_theme(canvas, theme, &mut font)));
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.input_focused_bg());
+            assert_eq!(strokes(&buf), [theme.input_focused_border()]);
+            assert_eq!(text_color(&buf, "cellos"), Some(theme.text_primary()));
+            assert_eq!(lines(&buf), [theme.text_primary()]);
+        }
     }
 }

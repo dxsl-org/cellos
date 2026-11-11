@@ -16,10 +16,17 @@ use crate::layout::{Constraints, Point, Rect, Size};
 use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
 use crate::signal::SubscriptionHandle;
+use crate::theme::ViTheme;
+use ostd::display::linear::PANEL_RADIUS;
+
+/// Severity stripe: a small pill inset from the left edge, clear of the
+/// panel's rounded corners.
+const STRIPE_W: f32 = 3.0;
+const STRIPE_INSET: f32 = 4.0;
 
 // ─── ToastKind ───────────────────────────────────────────────────────────────
 
-/// Semantic category of a toast — controls background colour.
+/// Semantic category of a toast — controls the severity stripe colour.
 #[derive(Clone)]
 pub enum ToastKind {
     Info,
@@ -72,12 +79,13 @@ impl Toast {
         }
     }
 
-    fn bg_color(&self) -> Color {
+    /// Severity stripe colour from the theme's status tokens.
+    fn severity_color(&self, theme: &dyn ViTheme) -> Color {
         match self.kind {
-            ToastKind::Info => Color::rgb(40, 80, 160),
-            ToastKind::Success => Color::rgb(30, 120, 60),
-            ToastKind::Warning => Color::rgb(160, 120, 20),
-            ToastKind::Error => Color::rgb(160, 40, 40),
+            ToastKind::Info => theme.badge_attention(),
+            ToastKind::Success => theme.badge_success(),
+            ToastKind::Warning => theme.badge_dirty(),
+            ToastKind::Error => theme.badge_error(),
         }
     }
 }
@@ -103,9 +111,24 @@ impl ViNode for Toast {
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
-        cx.canvas.fill_rect(b, self.bg_color());
+        let theme = cx.theme;
+        cx.canvas.fill_round_rect(b, PANEL_RADIUS, theme.surface());
+        let corner = PANEL_RADIUS as f32;
+        let stripe = Rect {
+            x: b.x + STRIPE_INSET,
+            y: b.y + corner,
+            w: STRIPE_W,
+            h: (b.h - corner * 2.0).max(0.0),
+        };
+        cx.canvas
+            .fill_round_rect(stripe, STRIPE_W as u32 / 2, self.severity_color(theme));
+        cx.canvas.stroke_round_rect(b, PANEL_RADIUS, theme.border());
         let text_y = b.y + (b.h - cx.line_height()) * 0.5;
-        cx.draw_text(Point::new(b.x + 12.0, text_y), &self.message, Color::WHITE);
+        cx.draw_text(
+            Point::new(b.x + 12.0, text_y),
+            &self.message,
+            theme.text_primary(),
+        );
     }
 
     /// Toasts are non-interactive — never consume events.
@@ -118,5 +141,37 @@ impl ViNode for Toast {
         _region: DirtyRegion,
     ) -> alloc::vec::Vec<SubscriptionHandle> {
         alloc::vec::Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Toast, ToastConfig, ToastKind};
+
+    use crate::node_widgets::style::test_support::{fills, paint_node, strokes, text_color};
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn panel_text_and_severity_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            for (kind, severity) in [
+                (ToastKind::Info, theme.badge_attention()),
+                (ToastKind::Success, theme.badge_success()),
+                (ToastKind::Warning, theme.badge_dirty()),
+                (ToastKind::Error, theme.badge_error()),
+            ] {
+                let mut toast = Toast::new(&ToastConfig {
+                    message: "Saved".into(),
+                    kind,
+                    duration_ms: 0,
+                });
+                let buf = paint_node(&mut toast, theme);
+                let painted = fills(&buf);
+                assert_eq!(painted[0].1, theme.surface());
+                assert_eq!(painted[1].1, severity);
+                assert_eq!(strokes(&buf), [theme.border()]);
+                assert_eq!(text_color(&buf, "Saved"), Some(theme.text_primary()));
+            }
+        }
     }
 }

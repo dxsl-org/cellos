@@ -7,8 +7,11 @@
 //!
 //! # Clip behaviour
 //! `fill_rect` and `clip_push/pop` are handled here; the clipped rect is
-//! stored in the command. `draw_image` records the original dest and delegates
-//! clipping to the executor (avoids src-offset arithmetic in the recorder).
+//! stored in the command. Rounded rects are culled against the clip but
+//! recorded unclipped (clipping would move their corners); playback clips
+//! them through the replayed clip stack. `draw_image` records the original
+//! dest and delegates clipping to the executor (avoids src-offset arithmetic
+//! in the recorder).
 
 use crate::canvas::{Color, TextStyle, ViCanvas};
 use crate::gpu_cmd::{GpuCmd, GpuCommandBuffer};
@@ -89,6 +92,26 @@ impl<'buf> ViCanvas for GpuCanvas<'buf> {
         if let Some(clipped) = rect.intersect(&clip) {
             self.buf.push(GpuCmd::FillRect {
                 rect: clipped,
+                color,
+            });
+        }
+    }
+
+    fn fill_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        if rect.intersect(&self.active_clip()).is_some() {
+            self.buf.push(GpuCmd::FillRoundRect {
+                rect,
+                radius,
+                color,
+            });
+        }
+    }
+
+    fn stroke_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        if rect.intersect(&self.active_clip()).is_some() {
+            self.buf.push(GpuCmd::StrokeRoundRect {
+                rect,
+                radius,
                 color,
             });
         }

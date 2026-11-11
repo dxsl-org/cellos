@@ -2,15 +2,14 @@
 
 use alloc::string::String;
 
-use crate::canvas::Color;
 use crate::event::{Event, EventCx, EventStatus, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget, WidgetId};
 use crate::widgets::label::Label;
+use ostd::display::linear::CONTROL_RADIUS;
 
 const BOX_SIZE: f32 = 14.0;
 const GAP: f32 = 6.0;
-const CHECK: Color = Color::WHITE;
 
 pub struct Checkbox {
     pub id: WidgetId,
@@ -62,44 +61,25 @@ impl ViWidget for Checkbox {
         let bg = if self.hovered {
             cx.theme.button_hovered()
         } else {
-            cx.theme.surface()
+            cx.theme.input_bg()
         };
-        cx.canvas.fill_rect(box_rect, bg);
-
-        let border = cx.theme.border();
-        for (a, b) in [
-            (
-                Point::new(orig.x, orig.y),
-                Point::new(orig.x + BOX_SIZE, orig.y),
-            ),
-            (
-                Point::new(orig.x + BOX_SIZE, orig.y),
-                Point::new(orig.x + BOX_SIZE, orig.y + BOX_SIZE),
-            ),
-            (
-                Point::new(orig.x + BOX_SIZE, orig.y + BOX_SIZE),
-                Point::new(orig.x, orig.y + BOX_SIZE),
-            ),
-            (
-                Point::new(orig.x, orig.y + BOX_SIZE),
-                Point::new(orig.x, orig.y),
-            ),
-        ] {
-            cx.canvas.draw_line(a, b, border);
-        }
+        cx.canvas.fill_round_rect(box_rect, CONTROL_RADIUS, bg);
+        cx.canvas
+            .stroke_round_rect(box_rect, CONTROL_RADIUS, cx.theme.border());
 
         if self.checked {
             // Checkmark: two diagonal lines forming a tick
+            let check = cx.theme.check_color();
             let m = 3.0; // margin
             cx.canvas.draw_line(
                 Point::new(orig.x + m, orig.y + BOX_SIZE / 2.0),
                 Point::new(orig.x + BOX_SIZE / 2.0 - 1.0, orig.y + BOX_SIZE - m),
-                CHECK,
+                check,
             );
             cx.canvas.draw_line(
                 Point::new(orig.x + BOX_SIZE / 2.0 - 1.0, orig.y + BOX_SIZE - m),
                 Point::new(orig.x + BOX_SIZE - m, orig.y + m),
-                CHECK,
+                check,
             );
         }
 
@@ -134,6 +114,32 @@ impl ViWidget for Checkbox {
                 }
             }
             _ => EventStatus::Ignored,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Checkbox;
+
+    use crate::font_context::FontContext;
+    use crate::layout::{Constraints, Size};
+    use crate::node_widgets::style::test_support::{fills, lines, record, strokes, text_color};
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+    use crate::widget::{PaintCx, ViWidget, WidgetId};
+
+    #[test]
+    fn box_check_and_label_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let cb = Checkbox::new(WidgetId(1), true, "Sync");
+            let mut font = FontContext::default();
+            cb.layout(Constraints::root(Size::new(200.0, 40.0)), &mut font);
+            let buf = record(|canvas| cb.paint(&mut PaintCx::with_theme(canvas, theme, &mut font)));
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.input_bg());
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(lines(&buf), [theme.check_color(); 2]);
+            assert_eq!(text_color(&buf, "Sync"), Some(theme.text_primary()));
         }
     }
 }

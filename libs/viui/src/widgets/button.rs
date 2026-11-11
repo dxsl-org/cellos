@@ -6,6 +6,7 @@ use crate::event::{Event, EventCx, EventStatus, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Padding, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget, WidgetId};
 use crate::widgets::label::Label;
+use ostd::display::linear::CONTROL_RADIUS;
 
 pub struct Button {
     pub id: WidgetId,
@@ -73,18 +74,9 @@ impl ViWidget for Button {
         } else {
             cx.theme.button_normal()
         };
-        cx.canvas.fill_rect(bounds, bg);
-
-        let border = cx.theme.border();
-        let b = bounds;
-        for (a, bb) in [
-            (Point::new(b.x, b.y), Point::new(b.x + b.w, b.y)),
-            (Point::new(b.x + b.w, b.y), Point::new(b.x + b.w, b.y + b.h)),
-            (Point::new(b.x + b.w, b.y + b.h), Point::new(b.x, b.y + b.h)),
-            (Point::new(b.x, b.y + b.h), Point::new(b.x, b.y)),
-        ] {
-            cx.canvas.draw_line(a, bb, border);
-        }
+        cx.canvas.fill_round_rect(bounds, CONTROL_RADIUS, bg);
+        cx.canvas
+            .stroke_round_rect(bounds, CONTROL_RADIUS, cx.theme.border());
 
         let text_pos = Point::new(
             bounds.x + (bounds.w - ts.w) * 0.5,

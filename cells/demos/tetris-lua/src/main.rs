@@ -24,7 +24,7 @@ use api::input::{InputEvent, KeyState, KeySym};
 #[cfg(not(lua_c_unavailable))]
 use core::ffi::{c_char, c_int};
 #[cfg(not(lua_c_unavailable))]
-use ostd::display::{wait_for_compositor, ViSurface};
+use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 #[cfg(not(lua_c_unavailable))]
 use ostd::font::FONT8X8;
 #[cfg(not(lua_c_unavailable))]
@@ -271,6 +271,11 @@ extern "C" fn main() -> usize {
     unsafe {
         match ViSurface::create(comp, SURF_W, SURF_H, PixelFormat::Bgra8888) {
             Ok(s) => {
+                if s.set_icon(LineIcon::Blocks).is_err() {
+                    ostd::io::println(
+                        "[tetris-lua] set_icon failed; Cell Tab keeps the generic icon",
+                    );
+                }
                 s.raise();
                 SURFACE = Some(s);
             }

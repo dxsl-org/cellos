@@ -7,10 +7,12 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::draw::{self, theme, Color};
+use crate::draw::code_ink::CodePalette;
+use crate::draw::{self, code_ink, ink, Color, CONTROL_RADIUS, PANEL_RADIUS};
 use crate::parser::web::{paint_lines, paint_lines_themed, wrap_runs, TextLine, TextRun};
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
+use viui::theme::{SystemPalette, ViTheme};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StyledSpan {
@@ -18,6 +20,8 @@ pub struct StyledSpan {
     pub bold: bool,
     pub italic: bool,
     pub code: bool,
+    /// Monospace face only (reader mono): no code backdrop or syntax colour.
+    pub mono: bool,
     pub link: Option<String>,
     pub color: Option<Color>,
 }
@@ -29,6 +33,7 @@ impl StyledSpan {
             bold: false,
             italic: false,
             code: false,
+            mono: false,
             link: None,
             color: None,
         }
@@ -40,13 +45,14 @@ impl StyledSpan {
             bold: false,
             italic: false,
             code: true,
+            mono: false,
             link: None,
-            color: Some(theme::ACCENT_CYAN),
+            color: Some(code_ink::INLINE),
         }
     }
 
     pub fn face(&self) -> FontFace {
-        if self.code {
+        if self.code || self.mono {
             if self.bold {
                 FontFace::MonoBold
             } else {
@@ -146,13 +152,22 @@ pub struct FormInputLayout {
     pub checked: bool,
     pub is_focused: bool,
 }
+/// Decoration a native layout box paints behind or beside its lines.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoxFrame {
+    /// Code block panel on the fixed syntax surface.
+    Code,
+    /// Accent-filled button.
+    Button,
+    /// Accent rule along a quotation's left edge.
+    Quote,
+}
 #[derive(Clone, Debug)]
 pub struct LayoutBox {
     pub y_offset: i32,
     pub height: i32,
     pub lines: Vec<TextLine>,
-    pub bg_color: Option<Color>,
-    pub border_color: Option<Color>,
+    pub frame: Option<BoxFrame>,
     pub is_rule: bool,
     pub left_margin: i32,
     pub image: Option<(u32, u32, Rc<Vec<u8>>)>,
@@ -169,8 +184,7 @@ impl LayoutBox {
             y_offset: y,
             height: 0,
             lines: Vec::new(),
-            bg_color: None,
-            border_color: None,
+            frame: None,
             is_rule: false,
             left_margin: 0,
             image: None,
@@ -183,6 +197,20 @@ impl LayoutBox {
         }
     }
 }
+
+/// Find-in-page wash: the theme's amber, translucent so the match stays legible.
+fn search_highlight(theme: &dyn ViTheme, active: bool) -> Color {
+    theme
+        .badge_dirty()
+        .with_alpha(if active { 160 } else { 70 })
+}
+
+/// Backdrop behind an inline run: only real code sits on the code surface;
+/// reader mono changes the face alone.
+fn code_backdrop(run: &TextRun, code: &CodePalette) -> Option<Color> {
+    run.span.code.then_some(code.surface)
+}
+
 pub struct Document {
     pub nodes: Vec<DocNode>,
     pub layout_boxes: Vec<LayoutBox>,
@@ -551,7 +579,7 @@ impl Document {
                     let mut span = StyledSpan::plain(text);
                     span.bold = true;
                     if *level == 1 {
-                        span.color = Some(theme::ACCENT_BLUE);
+                        span.color = Some(ink::ACCENT);
                     }
                     b.lines = lines_for(fonts, &[span], px, width, false);
                     gap = 8;
@@ -570,7 +598,7 @@ impl Document {
                             .iter()
                             .map(|s| {
                                 let mut m = s.clone();
-                                m.code = true;
+                                m.mono = true;
                                 m
                             })
                             .collect::<Vec<_>>();
@@ -596,8 +624,7 @@ impl Document {
                             true,
                         ));
                     }
-                    b.bg_color = Some(theme::BG_INPUT);
-                    b.border_color = Some(theme::BORDER);
+                    b.frame = Some(BoxFrame::Code);
                     b.left_margin = 8;
                     gap = 8;
                 }
@@ -613,7 +640,6 @@ impl Document {
                         format!("{} ", bullet)
                     })];
                     list[0].bold = true;
-                    list[0].color = Some(theme::ACCENT_CYAN);
                     let effective_spans;
                     let li_spans: &[StyledSpan] = if self.bionic_reading && self.is_reader_mode() {
                         effective_spans = apply_bionic_reading(spans);
@@ -627,7 +653,7 @@ impl Document {
                             .iter()
                             .map(|s| {
                                 let mut m = s.clone();
-                                m.code = true;
+                                m.mono = true;
                                 m
                             })
                             .collect::<Vec<_>>();
@@ -646,11 +672,11 @@ impl Document {
                 }
                 DocNode::Blockquote { lines } => {
                     b.left_margin = 16;
-                    b.border_color = Some(theme::ACCENT_BLUE);
+                    b.frame = Some(BoxFrame::Quote);
                     for text in lines {
                         let mut span = StyledSpan::plain(text);
                         span.italic = true;
-                        span.color = Some(theme::TEXT_MUTED);
+                        span.color = Some(ink::MUTED);
                         b.lines.extend(lines_for(
                             fonts,
                             &[span],
@@ -757,11 +783,6 @@ impl Document {
                         for (i, &w) in widths.iter().enumerate() {
                             let mut span = StyledSpan::plain(row.get(i).map_or("", String::as_str));
                             span.bold = header;
-                            span.color = Some(if header {
-                                theme::ACCENT_CYAN
-                            } else {
-                                theme::TEXT_PRIMARY
-                            });
                             let lines = lines_for(
                                 fonts,
                                 &[span],
@@ -798,8 +819,7 @@ impl Document {
                         .max()
                         .unwrap_or(16);
                     b.left_margin = 8;
-                    b.bg_color = Some(theme::ACCENT_BLUE);
-                    b.border_color = Some(theme::BORDER);
+                    b.frame = Some(BoxFrame::Button);
                     b.node_id = *node_id;
                     gap = 8;
                 }
@@ -852,10 +872,12 @@ impl Document {
         self.refresh_highlights();
     }
 
-    // reason: viewport rendering takes surface, rect, scroll, and theme as plain values at each
+    /// Paint the visible slice of the document. Native layouts paint with the
+    /// document `palette`; web layouts keep their own canvas and author colours.
+    // reason: viewport rendering takes surface, rect, scroll, and palette as plain values at each
     // call site; bundling them would only churn the drawing callers.
     #[allow(clippy::too_many_arguments)]
-    pub fn render_viewport_themed(
+    pub fn render_viewport(
         &self,
         fonts: &mut TextFonts,
         surf: &mut ViSurface,
@@ -864,14 +886,15 @@ impl Document {
         view_w: u32,
         view_h: u32,
         scroll_y: i32,
-        theme_mode: Option<crate::draw::ReaderThemeMode>,
+        palette: SystemPalette,
     ) {
         if let Some(web) = &self.web_layout {
             web.render(fonts, surf, (view_x, view_y, view_w, view_h), scroll_y);
             return;
         }
-        let text_color = theme_mode.map_or(theme::TEXT_PRIMARY, |m| m.text_color());
-        let border_color = theme_mode.map_or(theme::BORDER, |m| m.muted_color());
+        let theme = palette.theme();
+        let code = CodePalette::for_palette(palette);
+        let text_color = theme.reader_text();
         let clip = (
             view_x,
             view_y,
@@ -884,19 +907,39 @@ impl Document {
                 continue;
             }
             let text_x = view_x + 16 + b.left_margin;
-            if let Some(bg) = b.bg_color {
-                let w = if b.node_id.is_some() {
-                    b.table_width
-                } else {
-                    view_w.saturating_sub(b.left_margin as u32 + 20)
-                };
-                draw::clipped_rect(surf, text_x - 8, y, w, b.height as u32, bg, clip);
-                if let Some(border) = b.border_color {
-                    draw::clipped_rect(surf, text_x - 8, y, w, 1, border, clip);
-                    draw::clipped_rect(surf, text_x - 8, y + b.height - 1, w, 1, border, clip);
+            match b.frame {
+                Some(frame @ (BoxFrame::Code | BoxFrame::Button)) => {
+                    let w = if b.node_id.is_some() {
+                        b.table_width
+                    } else {
+                        view_w.saturating_sub(b.left_margin as u32 + 20)
+                    };
+                    let (radius, fill) = if frame == BoxFrame::Code {
+                        (PANEL_RADIUS, code.surface)
+                    } else {
+                        (CONTROL_RADIUS, theme.accent())
+                    };
+                    draw::clipped_round_rect(
+                        surf,
+                        (text_x - 8, y, w, b.height as u32),
+                        radius,
+                        Some(fill),
+                        Some(theme.border()),
+                        clip,
+                    );
                 }
-            } else if let Some(border) = b.border_color {
-                draw::clipped_rect(surf, text_x - 8, y, 2, b.height as u32, border, clip);
+                Some(BoxFrame::Quote) => {
+                    draw::clipped_rect(
+                        surf,
+                        text_x - 8,
+                        y,
+                        1,
+                        b.height as u32,
+                        theme.accent(),
+                        clip,
+                    );
+                }
+                None => {}
             }
             if b.is_rule {
                 draw::clipped_rect(
@@ -905,7 +948,7 @@ impl Document {
                     y + 4,
                     view_w.saturating_sub(30),
                     1,
-                    border_color,
+                    theme.divider(),
                     clip,
                 );
                 continue;
@@ -928,19 +971,21 @@ impl Document {
                 let inp_x = text_x;
                 let inp_y = y + 2;
                 if input.input_type == "checkbox" {
-                    draw::clipped_rect(surf, inp_x, inp_y, 18, 18, theme::BG_INPUT, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y, 18, 1, theme::BORDER, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y + 17, 18, 1, theme::BORDER, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y, 1, 18, theme::BORDER, clip);
-                    draw::clipped_rect(surf, inp_x + 17, inp_y, 1, 18, theme::BORDER, clip);
+                    draw::clipped_round_rect(
+                        surf,
+                        (inp_x, inp_y, 18, 18),
+                        CONTROL_RADIUS,
+                        Some(theme.input_bg()),
+                        Some(theme.border()),
+                        clip,
+                    );
                     if input.checked {
-                        draw::clipped_rect(
+                        draw::clipped_round_rect(
                             surf,
-                            inp_x + 3,
-                            inp_y + 3,
-                            12,
-                            12,
-                            theme::ACCENT_CYAN,
+                            (inp_x + 3, inp_y + 3, 12, 12),
+                            CONTROL_RADIUS / 2,
+                            Some(theme.check_color()),
+                            None,
                             clip,
                         );
                     }
@@ -950,13 +995,12 @@ impl Document {
                     } else {
                         input.value.as_str()
                     };
-                    draw::clipped_rect(
+                    draw::clipped_round_rect(
                         surf,
-                        inp_x,
-                        inp_y,
-                        b.table_width,
-                        28,
-                        theme::ACCENT_BLUE,
+                        (inp_x, inp_y, b.table_width, 28),
+                        CONTROL_RADIUS,
+                        Some(theme.accent()),
+                        None,
                         clip,
                     );
                     let mut span = StyledSpan::plain(label);
@@ -968,27 +1012,22 @@ impl Document {
                         &line,
                         (inp_x + 8) as f32,
                         (inp_y + 5) as f32,
-                        Color::rgb(17, 17, 27),
+                        Color::WHITE,
                         clip,
                     );
                 } else {
                     let inp_w = b.table_width.max(120);
-                    let border_col = if input.is_focused {
-                        theme::ACCENT_CYAN
+                    let (fill, border) = if input.is_focused {
+                        (theme.input_focused_bg(), theme.input_focused_border())
                     } else {
-                        theme::BORDER
+                        (theme.input_bg(), theme.border())
                     };
-                    draw::clipped_rect(surf, inp_x, inp_y, inp_w, 28, theme::BG_INPUT, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y, inp_w, 1, border_col, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y + 27, inp_w, 1, border_col, clip);
-                    draw::clipped_rect(surf, inp_x, inp_y, 1, 28, border_col, clip);
-                    draw::clipped_rect(
+                    draw::clipped_round_rect(
                         surf,
-                        inp_x + inp_w as i32 - 1,
-                        inp_y,
-                        1,
-                        28,
-                        border_col,
+                        (inp_x, inp_y, inp_w, 28),
+                        CONTROL_RADIUS,
+                        Some(fill),
+                        Some(border),
                         clip,
                     );
                     let display_text = if !input.value.is_empty() {
@@ -997,9 +1036,9 @@ impl Document {
                         &input.placeholder
                     };
                     let col = if !input.value.is_empty() {
-                        theme::TEXT_PRIMARY
+                        theme.text_primary()
                     } else {
-                        theme::TEXT_MUTED
+                        theme.text_secondary()
                     };
                     let span = StyledSpan::plain(display_text);
                     let line = lines_for(
@@ -1025,19 +1064,16 @@ impl Document {
                 let x = view_x + b.left_margin;
                 for row in rows {
                     let ry = y + row.y_rel;
-                    let header_bg = match theme_mode {
-                        Some(mode) => {
-                            let pal = mode.resolved_palette(crate::draw::active_system_palette());
-                            match pal {
-                                viui::theme::SystemPalette::Dark => Color::rgb(38, 38, 52),
-                                viui::theme::SystemPalette::Paper => Color::rgb(232, 228, 218),
-                                viui::theme::SystemPalette::Light => Color::rgb(235, 237, 242),
-                            }
-                        }
-                        None => theme::BG_INPUT,
-                    };
                     if row.is_header {
-                        draw::clipped_rect(surf, x, ry, b.table_width, row.height, header_bg, clip);
+                        draw::clipped_rect(
+                            surf,
+                            x,
+                            ry,
+                            b.table_width,
+                            row.height,
+                            theme.button_normal(),
+                            clip,
+                        );
                     }
                     for &(offset, height, active) in &b.search_highlights {
                         if offset >= row.y_rel && offset < row.y_rel + row.height as i32 {
@@ -1047,11 +1083,7 @@ impl Document {
                                 y + offset,
                                 b.table_width,
                                 height,
-                                if active {
-                                    Color::rgb(245, 158, 11)
-                                } else {
-                                    Color::rgb(100, 90, 30)
-                                },
+                                search_highlight(theme, active),
                                 clip,
                             );
                         }
@@ -1062,7 +1094,7 @@ impl Document {
                         ry + row.height as i32 - 1,
                         b.table_width,
                         1,
-                        theme::BORDER,
+                        theme.border(),
                         clip,
                     );
                     for cell in &row.cells {
@@ -1072,7 +1104,7 @@ impl Document {
                             ry,
                             1,
                             row.height,
-                            theme::BORDER,
+                            theme.border(),
                             clip,
                         );
                         let cell_clip = (
@@ -1089,24 +1121,24 @@ impl Document {
                             (ry + 6) as f32,
                             text_color,
                             cell_clip,
-                            theme_mode,
+                            Some(palette),
                         );
                     }
                 }
                 continue;
             }
-            if b.bg_color.is_none() {
+            if !matches!(b.frame, Some(BoxFrame::Code | BoxFrame::Button)) {
                 let mut line_y = y + 4;
                 for line in &b.lines {
                     for run in &line.runs {
-                        if run.span.code {
+                        if let Some(backdrop) = code_backdrop(run, code) {
                             draw::clipped_rect(
                                 surf,
                                 text_x + run.x as i32 - 2,
                                 line_y,
                                 crate::parser::web::ceil_pixel(run.width) + 4,
                                 line.height,
-                                theme::BG_INPUT,
+                                backdrop,
                                 clip,
                             );
                         }
@@ -1127,23 +1159,24 @@ impl Document {
                     y + offset,
                     width,
                     height,
-                    if active {
-                        Color::rgb(245, 158, 11)
-                    } else {
-                        Color::rgb(100, 90, 30)
-                    },
+                    search_highlight(theme, active),
                     clip,
                 );
             }
+            let base_color = if b.frame == Some(BoxFrame::Button) {
+                Color::WHITE
+            } else {
+                text_color
+            };
             paint_lines_themed(
                 fonts,
                 surf,
                 &b.lines,
                 text_x as f32,
                 (y + 4) as f32,
-                text_color,
+                base_color,
                 clip,
-                theme_mode,
+                Some(palette),
             );
         }
     }
@@ -2247,5 +2280,43 @@ impl Document {
             return Err(String::from("Layout exceeds resident memory budget"));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod reader_mono_tests {
+    use super::*;
+    use crate::draw::ReaderThemeMode;
+    use crate::parser::web::run_color;
+
+    #[test]
+    fn mono_light_reader_paragraph_paints_reader_text_without_code_backdrop() {
+        let paragraph = DocNode::Paragraph {
+            spans: alloc::vec![StyledSpan::plain("Plain prose set in mono.")],
+        };
+        let mut doc = Document::new();
+        doc.nodes = alloc::vec![paragraph.clone()];
+        doc.reader_nodes = Some(alloc::vec![paragraph]);
+        doc.reader_mono = true;
+        doc.compute_layout(&mut TextFonts::new(), 800);
+
+        // Light reader mode under a Dark session: the reader palette wins.
+        let palette = ReaderThemeMode::Light.resolved_palette(SystemPalette::Dark);
+        let theme = palette.theme();
+        let runs: Vec<&TextRun> = doc
+            .layout_boxes
+            .iter()
+            .flat_map(|b| &b.lines)
+            .flat_map(|line| &line.runs)
+            .collect();
+        assert!(!runs.is_empty());
+        for run in runs {
+            assert_eq!(run.face(), FontFace::MonoRegular);
+            assert_eq!(code_backdrop(run, CodePalette::for_palette(palette)), None);
+            assert_eq!(
+                run_color(run, theme.reader_text(), Some(palette)),
+                SystemPalette::Light.theme().reader_text()
+            );
+        }
     }
 }

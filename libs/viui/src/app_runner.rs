@@ -47,7 +47,7 @@ use crate::overlay::{new_action_queue, OverlayAction, OverlayActionQueue, Overla
 use crate::render_ctx::RenderCtx;
 use crate::renderer::ViRenderer;
 use crate::signal::SubscriptionHandle;
-use crate::theme::{DarkTheme, ViTheme};
+use crate::theme::ViTheme;
 
 // ─── Focus state ─────────────────────────────────────────────────────────────
 
@@ -169,8 +169,11 @@ pub struct ViApp {
     dirty_region: DirtyRegion,
     dirty_handles: Vec<SubscriptionHandle>,
     layout_dirty: bool,
-    /// Active design-token set. Widgets read colors/spacing from `cx.theme`.
-    theme: Box<dyn ViTheme>,
+    /// App-chosen design tokens; `None` follows the system theme.
+    /// Widgets read colors/spacing from `cx.theme`.
+    theme: Option<Box<dyn ViTheme>>,
+    /// System theme serial seen at the last layout; a change repaints.
+    theme_serial: u32,
     /// Software key-repeat state. See `KeyRepeatState` for rationale.
     key_repeat: KeyRepeatState,
     /// Tab-order focus state. Rebuilt after every layout pass.
@@ -203,7 +206,8 @@ impl ViApp {
             dirty_region,
             dirty_handles: Vec::new(),
             layout_dirty: true,
-            theme: Box::new(DarkTheme),
+            theme: None,
+            theme_serial: crate::theme::system_serial(),
             key_repeat: KeyRepeatState::new(),
             focus: FocusState::new(),
             mouse_pos: crate::layout::Point::new(0.0, 0.0),
@@ -273,9 +277,17 @@ impl ViApp {
         self
     }
 
-    /// Switch the active theme. The next frame will render with the new tokens.
+    /// Draw with `theme` instead of the system theme. The next frame will
+    /// render with the new tokens.
     pub fn set_theme<T: ViTheme + 'static>(&mut self, theme: T) {
-        self.theme = Box::new(theme);
+        self.theme = Some(Box::new(theme));
+        self.layout_dirty = true;
+    }
+
+    /// Return to the system theme (the default).
+    pub fn follow_system_theme(&mut self) {
+        self.theme = None;
+        self.layout_dirty = true;
     }
 
     /// Register an animation that is advanced every `tick_with_dt()` call.
@@ -299,6 +311,14 @@ impl ViApp {
     /// `dt_ms`: milliseconds elapsed since the last call. Pass `0` to skip
     /// animation advancement (useful for initial render or event-only ticks).
     pub fn tick_with_dt(&mut self, events: &[Event], dt_ms: u32) -> bool {
+        // ── Follow the system palette ─────────────────────────────────────────
+        let serial = crate::theme::system_serial();
+        if serial != self.theme_serial {
+            self.theme_serial = serial;
+            if self.theme.is_none() {
+                self.layout_dirty = true;
+            }
+        }
         // ── Advance animations ────────────────────────────────────────────────
         // Animations update Signal<f32> values which trigger dirty-region marks
         // via their subscriptions — no explicit dirty flag needed here.
@@ -573,7 +593,10 @@ impl ViApp {
         // toast_entries are all disjoint struct fields.
         let renderer = &mut self.renderer;
         let font_ctx = &mut self.font_ctx;
-        let theme = &*self.theme;
+        let theme: &dyn ViTheme = match &self.theme {
+            Some(theme) => &**theme,
+            None => crate::theme::system(),
+        };
         let root = &self.root;
         let overlays = &self.overlays;
         let toast_entries = &self.toast_entries;

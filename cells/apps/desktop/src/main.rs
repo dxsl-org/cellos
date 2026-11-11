@@ -7,6 +7,8 @@
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
 
+extern crate alloc;
+
 mod apps;
 mod draw;
 mod spotlight;
@@ -20,6 +22,7 @@ use ostd::syscall::{
     SyscallResult,
 };
 use ostd::typography::TextFonts;
+use viui::theme::{ThemePreferenceState, ViTheme};
 
 use crate::apps::AppRegistry;
 use crate::spotlight::{SpotlightAction, SpotlightState};
@@ -75,6 +78,11 @@ fn cell_main() {
     let tb_y = screen_h as i32 - tb_h as i32;
     tb_surf.move_to(0, tb_y);
 
+    // The desktop owns the system appearance; the compositor paints its chrome to match.
+    let mut theme_pref = ThemePreferenceState::default();
+    let mut theme = theme_pref.create_theme();
+    announce_appearance(&tb_surf, theme_pref);
+
     // 4. Create Spotlight Search Surface (Centered)
     let sp_w = spotlight::SPOTLIGHT_WIDTH;
     let sp_h = spotlight::SPOTLIGHT_HEIGHT;
@@ -97,7 +105,7 @@ fn cell_main() {
 
     // 7. Initial Paint
     tb_state.update_daemons();
-    taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state);
+    taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state, &*theme);
 
     let mut last_tick = sys_get_time();
     let mut cursor_x = 0i32;
@@ -176,9 +184,7 @@ fn cell_main() {
                                     need_tb_render = true;
                                 }
                                 SpotlightAction::CycleTheme => {
-                                    ostd::io::println(
-                                        "[desktop] Spotlight: Theme cycle triggered.",
-                                    );
+                                    theme = cycle_theme(&tb_surf, &mut theme_pref);
                                     need_tb_render = true;
                                     need_sp_render = true;
                                 }
@@ -293,7 +299,7 @@ fn cell_main() {
                                 need_tb_render = true;
                             }
                             SpotlightAction::CycleTheme => {
-                                ostd::io::println("[desktop] Spotlight: Theme cycle triggered.");
+                                theme = cycle_theme(&tb_surf, &mut theme_pref);
                                 need_tb_render = true;
                                 need_sp_render = true;
                             }
@@ -322,13 +328,52 @@ fn cell_main() {
 
         // Re-paint damaged components
         if need_tb_render {
-            taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state);
+            taskbar::render(&mut tb_surf, &mut fonts, &registry, &tb_state, &*theme);
         }
         if need_sp_render && sp_state.is_open {
-            spotlight::render(&mut sp_surf, &mut fonts, &registry, &sp_state);
+            spotlight::render(
+                &mut sp_surf,
+                &mut fonts,
+                &registry,
+                &sp_state,
+                &*theme,
+                theme_pref.palette,
+            );
         }
 
         sys_yield();
+    }
+}
+
+/// Advance the system palette (Light -> Dark -> Paper -> Light) under a strictly greater
+/// revision. Returns whether the preference changed.
+fn advance_theme(pref: &mut ThemePreferenceState) -> bool {
+    pref.apply_update(pref.palette.next(), pref.revision.saturating_add(1))
+}
+
+/// Spotlight's Appearance action: advance the palette, tell the compositor and hand back the
+/// theme the desktop paints with from now on.
+fn cycle_theme(
+    tb_surf: &ViSurface,
+    pref: &mut ThemePreferenceState,
+) -> alloc::boxed::Box<dyn ViTheme> {
+    if advance_theme(pref) {
+        ostd::io::print("[desktop] Appearance: ");
+        ostd::io::println(pref.palette.name());
+        announce_appearance(tb_surf, *pref);
+    } else {
+        ostd::io::println("[desktop] Appearance: revision exhausted, palette unchanged");
+    }
+    pref.create_theme()
+}
+
+/// Tell the compositor which palette the desktop's chrome uses (honoured for Panel surfaces).
+fn announce_appearance(tb_surf: &ViSurface, pref: ThemePreferenceState) {
+    if tb_surf
+        .set_appearance(pref.palette.appearance(), pref.revision)
+        .is_err()
+    {
+        ostd::io::println("[desktop] set_appearance failed; compositor chrome keeps its palette");
     }
 }
 
@@ -361,10 +406,18 @@ fn launch_intent(intent: &api::services::mime::LaunchIntent) {
     report_spawn(spawned);
 }
 
+/// Launch a `/bin` app. The kernel's path route comes first: only it gives the
+/// child a measured launch identity, without which the child's own reviewed
+/// launch edges (Terminal -> `/bin/cellbox`) are refused. The VFS route stays
+/// as the fallback for cells the kernel path route cannot resolve.
 fn launch_application(path: &str) {
     ostd::io::print("[desktop] Launching application: ");
     ostd::io::println(path);
-    report_spawn(sys_spawn_from_path(path));
+    let mut spawned = sys_spawn_from_path_raw(path);
+    if matches!(spawned, SyscallResult::Err(_)) {
+        spawned = sys_spawn_from_path(path);
+    }
+    report_spawn(spawned);
 }
 
 fn report_spawn(spawned: SyscallResult) {
@@ -394,5 +447,39 @@ fn report_spawn(spawned: SyscallResult) {
         SyscallResult::Err(_) => {
             ostd::io::println("[desktop] ERROR: Application spawn rejected by kernel.");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use viui::theme::SystemPalette;
+
+    #[test]
+    fn theme_cycle_advances_palette_under_strictly_growing_revision() {
+        let mut pref = ThemePreferenceState::default();
+        let mut seen = alloc::vec::Vec::new();
+        for _ in 0..3 {
+            let before = pref.revision;
+            assert!(advance_theme(&mut pref));
+            assert!(pref.revision > before);
+            seen.push(pref.palette);
+        }
+        assert_eq!(
+            seen,
+            [
+                SystemPalette::Dark,
+                SystemPalette::Paper,
+                SystemPalette::Light
+            ]
+        );
+
+        // A preference at the last revision cannot advance: the compositor would refuse it.
+        let mut last = ThemePreferenceState::new(SystemPalette::Dark, u32::MAX);
+        assert!(!advance_theme(&mut last));
+        assert_eq!(
+            last,
+            ThemePreferenceState::new(SystemPalette::Dark, u32::MAX)
+        );
     }
 }

@@ -22,7 +22,6 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::cell::Cell;
 
-use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::{Event, MouseButton};
 use crate::layout::{Constraints, Point, Rect, Size};
@@ -30,6 +29,10 @@ use crate::node::ViNode;
 use crate::overlay::{OverlayAction, OverlayActionQueue, OverlayEntry};
 use crate::render_ctx::RenderCtx;
 use crate::signal::{Signal, SubscriptionHandle};
+use ostd::display::linear::{CONTROL_RADIUS, PANEL_RADIUS};
+
+/// Inset of popup row highlights from the panel edge.
+const ROW_INSET: f32 = 2.0;
 
 // ─── DropDown ────────────────────────────────────────────────────────────────
 
@@ -107,24 +110,22 @@ impl ViNode for DropDown {
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
+        let theme = cx.theme;
         let bg = if self.hovered {
-            Color::rgb(55, 60, 80)
+            theme.button_hovered()
         } else {
-            Color::rgb(40, 44, 60)
+            theme.button_normal()
         };
-        cx.canvas.fill_rect(b, bg);
-        cx.canvas.draw_rect_border(b, Color::rgb(80, 85, 110), 1.0);
+        cx.canvas.fill_round_rect(b, CONTROL_RADIUS, bg);
+        cx.canvas
+            .stroke_round_rect(b, CONTROL_RADIUS, theme.border());
 
         let text = self.selected.get();
         let y = b.y + (b.h - cx.line_height()) * 0.5;
-        cx.draw_text(Point::new(b.x + 8.0, y), &text, Color::WHITE);
+        cx.draw_text(Point::new(b.x + 8.0, y), &text, theme.text_primary());
 
         // Down-arrow indicator (right-aligned).
-        cx.draw_text(
-            Point::new(b.x + b.w - 18.0, y),
-            "v",
-            Color::rgb(150, 150, 180),
-        );
+        cx.draw_text(Point::new(b.x + b.w - 18.0, y), "v", theme.text_secondary());
     }
 
     fn event(&mut self, event: &Event) -> bool {
@@ -222,33 +223,35 @@ impl ViNode for DropDownPopup {
         let b = self.bounds.get();
         let item_h = self.item_height;
         let current = self.selected.get();
+        let theme = cx.theme;
 
-        cx.canvas.fill_rect(b, Color::rgb(35, 38, 52));
-        cx.canvas.draw_rect_border(b, Color::rgb(70, 72, 100), 1.0);
+        cx.canvas.fill_round_rect(b, PANEL_RADIUS, theme.surface());
 
         for (i, item) in self.items.iter().enumerate() {
             let iy = b.y + i as f32 * item_h;
-            let is_selected = item.as_str() == current.as_str();
-            let is_hovered = self.hovered == Some(i);
-            let bg = if is_hovered {
-                Color::rgb(80, 120, 220)
-            } else if is_selected {
-                Color::rgb(60, 100, 180)
-            } else {
-                Color::rgb(35, 38, 52)
+            // Highlights sit 2 px inside the panel so they clear its rounded corners.
+            let row = Rect {
+                x: b.x + ROW_INSET,
+                y: iy + ROW_INSET,
+                w: b.w - ROW_INSET * 2.0,
+                h: item_h - ROW_INSET * 2.0,
             };
-            cx.canvas.fill_rect(
-                Rect {
-                    x: b.x,
-                    y: iy,
-                    w: b.w,
-                    h: item_h,
-                },
-                bg,
-            );
+            let fg = if self.hovered == Some(i) {
+                cx.canvas
+                    .fill_round_rect(row, CONTROL_RADIUS, theme.button_hovered());
+                theme.text_primary()
+            } else if item.as_str() == current.as_str() {
+                cx.canvas
+                    .fill_round_rect(row, CONTROL_RADIUS, theme.list_selected_bg());
+                theme.list_selected_fg()
+            } else {
+                theme.text_primary()
+            };
             let text_y = iy + (item_h - cx.line_height()) * 0.5;
-            cx.draw_text(Point::new(b.x + 8.0, text_y), item, Color::WHITE);
+            cx.draw_text(Point::new(b.x + 8.0, text_y), item, fg);
         }
+
+        cx.canvas.stroke_round_rect(b, PANEL_RADIUS, theme.border());
     }
 
     fn event(&mut self, event: &Event) -> bool {
@@ -293,5 +296,63 @@ impl ViNode for DropDownPopup {
 
     fn collect_dirty_handles(&mut self, _region: DirtyRegion) -> Vec<SubscriptionHandle> {
         Vec::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::{DropDown, DropDownPopup};
+    use alloc::string::String;
+
+    use crate::event::Event;
+    use crate::layout::{Point, Rect};
+    use crate::node::ViNode;
+    use crate::node_widgets::style::test_support::{fills, paint_node, strokes, text_color};
+    use crate::overlay::new_action_queue;
+    use crate::signal::Signal;
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    fn items() -> alloc::vec::Vec<String> {
+        alloc::vec!["One".into(), "Two".into(), "Three".into()]
+    }
+
+    #[test]
+    fn trigger_uses_theme_button_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut dd = DropDown::new(Signal::new("Two".into()), items(), new_action_queue());
+            let buf = paint_node(&mut dd, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.button_normal());
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(text_color(&buf, "Two"), Some(theme.text_primary()));
+            assert_eq!(text_color(&buf, "v"), Some(theme.text_secondary()));
+        }
+    }
+
+    #[test]
+    fn popup_highlights_selection_and_hover_with_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut popup = DropDownPopup::new(
+                items(),
+                Signal::new("Two".into()),
+                Rect::new(0.0, 0.0, 120.0, 36.0),
+                new_action_queue(),
+            );
+            let buf = paint_node(&mut popup, theme);
+            let colors: alloc::vec::Vec<_> = fills(&buf).iter().map(|&(_, c)| c).collect();
+            assert_eq!(colors, [theme.surface(), theme.list_selected_bg()]);
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(text_color(&buf, "Two"), Some(theme.list_selected_fg()));
+            assert_eq!(text_color(&buf, "One"), Some(theme.text_primary()));
+
+            let row0 = popup.bounds.get();
+            popup.event(&Event::MouseMove {
+                pos: Point::new(row0.x + 4.0, row0.y + 4.0),
+            });
+            let buf = paint_node(&mut popup, theme);
+            assert_eq!(fills(&buf)[1].1, theme.button_hovered());
+        }
     }
 }

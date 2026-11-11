@@ -7,7 +7,7 @@ use crate::canvas::ViCanvas;
 use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, LayoutView, Point, Rect, Size};
 use crate::state_store::{FocusManager, WidgetStateStore};
-use crate::theme::{ViTheme, DARK_THEME};
+use crate::theme::ViTheme;
 
 // ─── WidgetId ────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ impl<'a> PaintCx<'a> {
         Self {
             canvas,
             origin: Point::ZERO,
-            theme: &DARK_THEME,
+            theme: crate::theme::system(),
             font,
         }
     }

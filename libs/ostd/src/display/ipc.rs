@@ -22,17 +22,20 @@ pub(super) fn create_surface(comp_tid: usize, w: u32, h: u32, role: SurfaceRole)
     req[9] = role as u8;
     sys_send(comp_tid, &req);
 
-    let mut resp = [0u8; 8];
-    match sys_recv(comp_tid, &mut resp) {
-        SyscallResult::Ok(sender) if sender == comp_tid => {
-            let cap = u32::from_le_bytes([resp[0], resp[1], resp[2], resp[3]]);
-            if cap == 0 {
-                Err(ViError::IO)
-            } else {
-                Ok(cap)
+    loop {
+        let mut resp = [0u8; 72];
+        match sys_recv(comp_tid, &mut resp) {
+            SyscallResult::Ok(sender) if sender == comp_tid => {
+                // A palette broadcast can precede the reply; its nonzero
+                // generation tells it from `cap:u32` + four zero bytes.
+                if super::appearance::note_frame(&resp) {
+                    continue;
+                }
+                let cap = u32::from_le_bytes([resp[0], resp[1], resp[2], resp[3]]);
+                return if cap == 0 { Err(ViError::IO) } else { Ok(cap) };
             }
+            _ => return Err(ViError::IO),
         }
-        _ => Err(ViError::IO),
     }
 }
 
@@ -53,7 +56,8 @@ pub(super) fn receive_status(comp_tid: usize, expected_status: u8) -> ViResult<(
                 api::input::INPUT_EVENT_OPCODE
                 | compositor_events::WINDOW_CONFIGURE
                 | compositor_events::WINDOW_CLOSE_REQUEST
-                | compositor_events::WINDOW_STATE_CHANGED => route_compositor_frame(&frame),
+                | compositor_events::WINDOW_STATE_CHANGED
+                | compositor_events::APPEARANCE_CHANGED => route_compositor_frame(&frame),
                 status if status == expected_status => return Ok(()),
                 _ => return Err(ViError::IO),
             },
@@ -120,7 +124,8 @@ pub(super) fn stage_grant(
                 api::input::INPUT_EVENT_OPCODE
                 | compositor_events::WINDOW_CONFIGURE
                 | compositor_events::WINDOW_CLOSE_REQUEST
-                | compositor_events::WINDOW_STATE_CHANGED => route_compositor_frame(&frame),
+                | compositor_events::WINDOW_STATE_CHANGED
+                | compositor_events::APPEARANCE_CHANGED => route_compositor_frame(&frame),
                 0x01 => return AttachGrantResult::Attached,
                 0x00 => return AttachGrantResult::Rejected,
                 _ => return AttachGrantResult::AmbiguousFailure,

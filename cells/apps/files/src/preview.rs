@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 use viui::canvas::Color;
+use viui::theme::ViTheme;
 
 use crate::draw::{draw_label, fill_rect, stroke_rect};
 use crate::fs::FsResult;
@@ -160,6 +161,7 @@ pub fn handle_click(state: &mut QuickLookState, x: i32, y: i32, win_w: u32, win_
 pub fn render(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
+    theme: &dyn ViTheme,
     state: &QuickLookState,
     win_w: u32,
     win_h: u32,
@@ -169,23 +171,23 @@ pub fn render(
     }
     let (ql_x, ql_y, ql_w, ql_h) = hud_rect(win_w, win_h);
 
-    // Dim background overlay
-    fill_rect(surf, 0, 0, win_w, win_h, Color::rgb(0, 0, 0).with_alpha(80));
+    // Dim scrim over the window: black at low alpha darkens every palette alike.
+    fill_rect(surf, 0, 0, win_w, win_h, Color::BLACK.with_alpha(80));
 
     // Modal background & border
-    fill_rect(surf, ql_x, ql_y, ql_w, ql_h, Color::rgb(255, 255, 255));
-    stroke_rect(surf, ql_x, ql_y, ql_w, ql_h, Color::rgb(35, 90, 215));
+    fill_rect(surf, ql_x, ql_y, ql_w, ql_h, theme.surface());
+    stroke_rect(surf, ql_x, ql_y, ql_w, ql_h, theme.accent());
 
     // Header bar (36 DIP)
     let header_h = 36;
-    fill_rect(surf, ql_x, ql_y, ql_w, header_h, Color::rgb(240, 242, 248));
+    fill_rect(surf, ql_x, ql_y, ql_w, header_h, theme.bg());
     fill_rect(
         surf,
         ql_x,
         ql_y + header_h as i32 - 1,
         ql_w,
         1,
-        Color::rgb(215, 218, 224),
+        theme.border(),
     );
 
     let title_text = format!("{}  ·  {}", state.file_name, state.kind.name());
@@ -199,7 +201,7 @@ pub fn render(
         &title_text,
         FontFace::UiSemibold,
         14.0,
-        Color::rgb(20, 20, 28),
+        theme.text_primary(),
     );
 
     let body_x = ql_x + 20;
@@ -221,15 +223,15 @@ pub fn render(
             line,
             face,
             size,
-            Color::rgb(40, 45, 55),
+            theme.text_primary(),
         );
         line_y += 24;
     }
 
     // Footer with dismissal instructions
     let footer_y = ql_y + ql_h as i32 - 28;
-    fill_rect(surf, ql_x, footer_y, ql_w, 28, Color::rgb(245, 245, 248));
-    fill_rect(surf, ql_x, footer_y, ql_w, 1, Color::rgb(215, 218, 224));
+    fill_rect(surf, ql_x, footer_y, ql_w, 28, theme.bg());
+    fill_rect(surf, ql_x, footer_y, ql_w, 1, theme.border());
     let footer_text = if let Some(app) = state.default_app {
         if state.mime.is_executable() {
             format!("Enter: Run in {}    Space/Esc: Dismiss", app)
@@ -255,7 +257,7 @@ pub fn render(
         &footer_text,
         FontFace::UiRegular,
         12.0,
-        Color::rgb(100, 105, 120),
+        theme.text_secondary(),
     );
 }
 

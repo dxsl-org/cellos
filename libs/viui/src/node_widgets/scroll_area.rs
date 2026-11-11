@@ -20,7 +20,6 @@ extern crate alloc;
 use alloc::{boxed::Box, vec::Vec};
 use core::cell::Cell;
 
-use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::Event;
 use crate::layout::{Constraints, Point, Rect, Size};
@@ -31,6 +30,9 @@ use crate::signal::SubscriptionHandle;
 const SCROLL_SPEED: f32 = 30.0;
 const SCROLLBAR_W: f32 = 6.0;
 const THUMB_MIN_H: f32 = 24.0;
+/// Thumb opacity over the track: `text_secondary` at ~55% reads clearly on
+/// both light and dark surfaces without competing with content.
+const THUMB_ALPHA: u8 = 140;
 
 pub struct ScrollArea {
     child: Box<dyn ViNode>,
@@ -115,7 +117,7 @@ impl ViNode for ScrollArea {
                 w: SCROLLBAR_W,
                 h: b.h,
             };
-            cx.canvas.fill_rect(track, Color::rgb(25, 25, 38));
+            cx.canvas.fill_rect(track, cx.theme.surface());
 
             let max_scroll = (content_h - b.h).max(1.0);
             let thumb_ratio = b.h / content_h;
@@ -127,7 +129,8 @@ impl ViNode for ScrollArea {
                 w: SCROLLBAR_W - 2.0,
                 h: thumb_h,
             };
-            cx.canvas.fill_rect(thumb, Color::rgb(80, 80, 110));
+            let thumb_color = cx.theme.text_secondary().with_alpha(THUMB_ALPHA);
+            cx.canvas.fill_rect(thumb, thumb_color);
         }
     }
 
@@ -148,5 +151,33 @@ impl ViNode for ScrollArea {
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         self.child.collect_dirty_handles(region)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::{ScrollArea, THUMB_ALPHA};
+    use alloc::boxed::Box;
+
+    use crate::node_widgets::space::Space;
+    use crate::node_widgets::style::test_support::{fills, paint_node};
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn scrollbar_track_and_thumb_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut area = ScrollArea::new(Box::new(Space::new(100.0, 2000.0)));
+            let painted = fills(&paint_node(&mut area, theme));
+            let colors: alloc::vec::Vec<_> = painted.iter().map(|&(_, c)| c).collect();
+            assert_eq!(
+                colors,
+                [
+                    theme.surface(),
+                    theme.text_secondary().with_alpha(THUMB_ALPHA)
+                ]
+            );
+        }
     }
 }

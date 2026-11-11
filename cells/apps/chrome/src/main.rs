@@ -24,6 +24,7 @@ use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_exit, sys_get_resolution, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
 use viui::canvas::Color;
+use viui::theme;
 
 api::declare_manifest!(block_io = true, network = true, spawn = true);
 api::declare_syscalls![
@@ -314,26 +315,28 @@ impl ChromeApp {
         false
     }
 
+    /// Draw the launcher chrome (tabs, toolbar, status bar) in the session palette; the
+    /// content viewport between them is the guest's area and keeps its own colours.
     pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
+        let theme = theme::system();
         let sw = self.width;
         let sh = self.height;
         let surf_w = surf.width();
         let surf_h = surf.height();
         let stride = surf.stride();
 
-        // 1. Fill entire window background with dark base
-        fill_rect(surf, 0, 0, sw, sh, Color::rgb(24, 26, 32));
+        // 1. Window background, which the tab strip shows between tabs
+        fill_rect(surf, 0, 0, sw, sh, theme.bg());
 
         // 2. Tab Bar (height: 32)
-        fill_rect(surf, 0, 0, sw, 32, Color::rgb(18, 20, 25));
         let mut cur_x = 8;
         for (idx, tab) in self.tabs.iter().enumerate() {
             let tab_w = 140;
             let is_active = idx == self.active_tab;
-            let tab_bg = if is_active {
-                Color::rgb(35, 38, 48)
+            let (tab_bg, tab_fg) = if is_active {
+                (theme.tab_active_bg(), theme.tab_active_fg())
             } else {
-                Color::rgb(24, 26, 34)
+                (theme.tab_inactive_bg(), theme.tab_inactive_fg())
             };
             fill_rect(surf, cur_x, 4, tab_w, 28, tab_bg);
 
@@ -353,7 +356,7 @@ impl ChromeApp {
                     FontFace::UiRegular
                 },
                 12.0,
-                [230, 230, 240, 255],
+                bgra(tab_fg),
                 clip,
             );
 
@@ -369,7 +372,7 @@ impl ChromeApp {
                 "x",
                 FontFace::UiRegular,
                 11.0,
-                [160, 160, 180, 255],
+                bgra(theme.text_secondary()),
                 (close_x, 4, close_x + 16, 32),
             );
 
@@ -377,7 +380,7 @@ impl ChromeApp {
         }
 
         // '+' Add Tab button
-        fill_rect(surf, cur_x, 6, 24, 22, Color::rgb(30, 33, 42));
+        fill_rect(surf, cur_x, 6, 24, 22, theme.button_normal());
         fonts.draw_text(
             surf.pixels_mut(),
             surf_w,
@@ -388,12 +391,13 @@ impl ChromeApp {
             "+",
             FontFace::UiSemibold,
             13.0,
-            [200, 200, 220, 255],
+            bgra(theme.text_primary()),
             (cur_x, 4, cur_x + 24, 32),
         );
 
-        // 3. Navigation Toolbar (y: 32..72, height: 40)
-        fill_rect(surf, 0, 32, sw, 40, Color::rgb(32, 35, 45));
+        // 3. Navigation Toolbar (y: 32..72, height: 40), 1px divider along its bottom edge
+        fill_rect(surf, 0, 32, sw, 40, theme.surface());
+        fill_rect(surf, 0, 71, sw, 1, theme.divider());
         // Back / Forward / Reload buttons
         draw_button(
             surf,
@@ -403,8 +407,8 @@ impl ChromeApp {
             28,
             28,
             "<",
-            Color::rgb(42, 46, 58),
-            [220, 220, 230, 255],
+            theme.button_normal(),
+            bgra(theme.text_primary()),
         );
         draw_button(
             surf,
@@ -414,8 +418,8 @@ impl ChromeApp {
             28,
             28,
             ">",
-            Color::rgb(42, 46, 58),
-            [220, 220, 230, 255],
+            theme.button_normal(),
+            bgra(theme.text_primary()),
         );
         draw_button(
             surf,
@@ -425,19 +429,20 @@ impl ChromeApp {
             28,
             28,
             "R",
-            Color::rgb(42, 46, 58),
-            [220, 220, 230, 255],
+            theme.button_normal(),
+            bgra(theme.text_primary()),
         );
 
-        // Address Bar
+        // Address Bar: input field with a 1px outline (accent while focused)
         let addr_w = sw.saturating_sub(180);
-        let addr_bg = if self.is_url_focused {
-            Color::rgb(20, 22, 30)
+        let (addr_bg, addr_border) = if self.is_url_focused {
+            (theme.input_focused_bg(), theme.input_focused_border())
         } else {
-            Color::rgb(26, 29, 38)
+            (theme.input_bg(), theme.border())
         };
         fill_rect(surf, 110, 38, addr_w, 28, addr_bg);
-        // Security Lock / Protocol badge
+        viui::surface::stroke_rect(surf, 110, 38, addr_w, 28, addr_border);
+        // Security Lock / Protocol badge (a fixed status colour, the same in every palette)
         fonts.draw_text(
             surf.pixels_mut(),
             surf_w,
@@ -467,7 +472,7 @@ impl ChromeApp {
             &display_url,
             FontFace::UiRegular,
             12.0,
-            [240, 242, 250, 255],
+            bgra(theme.text_primary()),
             (168, 38, (110 + addr_w) as i32, 66),
         );
 
@@ -481,11 +486,12 @@ impl ChromeApp {
             44,
             28,
             "Go",
-            Color::rgb(70, 130, 245),
-            [255, 255, 255, 255],
+            theme.accent(),
+            bgra(Color::WHITE),
         );
 
-        // 4. Viewport (y: 72..sh-24): Guest Web Content Surface
+        // 4. Viewport (y: 72..sh-24): the guest's web content area. It stands in for the
+        // guest's own pixels, so it keeps its own (page) colours whatever the palette.
         let view_h = sh.saturating_sub(96);
         fill_rect(surf, 0, 72, sw, view_h, Color::rgb(250, 252, 255));
 
@@ -530,9 +536,10 @@ impl ChromeApp {
             );
         }
 
-        // 5. Bottom Status Bar (height: 24)
+        // 5. Bottom Status Bar (height: 24), 1px divider along its top edge
         let status_y = (sh.saturating_sub(24)) as i32;
-        fill_rect(surf, 0, status_y, sw, 24, Color::rgb(18, 20, 26));
+        fill_rect(surf, 0, status_y, sw, 24, theme.surface());
+        fill_rect(surf, 0, status_y, sw, 1, theme.divider());
         fonts.draw_text(
             surf.pixels_mut(),
             surf_w,
@@ -543,11 +550,16 @@ impl ChromeApp {
             &self.guest_status,
             FontFace::UiRegular,
             11.0,
-            [130, 135, 150, 255],
+            bgra(theme.text_secondary()),
             (0, status_y, sw as i32, sh as i32),
         );
         surf.damage_all();
     }
+}
+
+/// A colour as the BGRA bytes `TextFonts::draw_text` takes.
+fn bgra(color: Color) -> [u8; 4] {
+    [color.b(), color.g(), color.r(), color.a()]
 }
 
 fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, col: Color) {
@@ -639,6 +651,12 @@ fn cell_main() {
         }
     };
     let _ = surf.set_title("Chrome (Tier 3 Linux Guest)");
+    if surf
+        .set_icon(ostd::display::linear::icons::LineIcon::Globe)
+        .is_err()
+    {
+        ostd::io::println("[chrome] set_icon failed; Cell Tab keeps the generic icon");
+    }
     let win_x = (screen_w.saturating_sub(win_w) / 2) as i32;
     let win_y = (screen_h.saturating_sub(win_h) / 2) as i32;
     surf.move_to(win_x, win_y);
@@ -682,6 +700,8 @@ fn cell_main() {
         sys_yield();
     }
 
+    // Palette generation the last frame was painted with; a change repaints everything.
+    let mut painted_serial = theme::system_serial();
     app.render(&mut surf, &mut fonts);
     let mut cursor_x = 0i32;
     let mut cursor_y = 0i32;
@@ -761,6 +781,11 @@ fn cell_main() {
             }
         }
 
+        let serial = theme::system_serial();
+        if serial != painted_serial {
+            painted_serial = serial;
+            need_render = true;
+        }
         if need_render {
             app.render(&mut surf, &mut fonts);
         }

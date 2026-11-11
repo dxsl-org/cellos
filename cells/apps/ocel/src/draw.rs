@@ -1,38 +1,126 @@
 // SPDX-License-Identifier: MIT
 //! Drawing primitives for Ocel Document Viewer.
 
+use ostd::display::linear::{Canvas, Radii, RoundRect};
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
+use viui::theme::SystemPalette;
 
 pub use viui::canvas::Color;
 pub use viui::surface::components::*;
-pub use viui::surface::{fill_rect, stroke_rect};
+pub use viui::surface::{
+    draw_icon_centered, fill_rect, fill_round_rect, stroke_round_rect, LineIcon, CONTROL_RADIUS,
+    PANEL_RADIUS,
+};
 
-pub mod theme {
+/// Semantic text roles the document parsers stamp on spans. The values are
+/// tags, not paint: [`ink::resolve`] maps them to the painting theme, so a
+/// parsed document re-tints whenever the reader or system palette changes.
+pub mod ink {
     use super::Color;
+    use viui::theme::ViTheme;
 
-    pub const BG_DARK: Color = Color::rgb(30, 30, 46); // Mocha Base
-    pub const BG_TOOLBAR: Color = Color::rgb(24, 24, 37); // Mantle
-    pub const BG_INPUT: Color = Color::rgb(49, 50, 68); // Surface0
-    pub const TEXT_PRIMARY: Color = Color::rgb(205, 214, 244);
-    pub const TEXT_MUTED: Color = Color::rgb(166, 173, 200);
-    pub const ACCENT_BLUE: Color = Color::rgb(137, 180, 250);
-    pub const ACCENT_CYAN: Color = Color::rgb(148, 226, 213);
-    pub const BORDER: Color = Color::rgb(69, 71, 90);
+    /// Secondary text: captions, metadata, image placeholders, quotes.
+    pub const MUTED: Color = Color::rgb(166, 173, 200);
+    /// Emphasised text: top-level headings, prices, pagination and menu links.
+    pub const ACCENT: Color = Color::rgb(137, 180, 250);
+
+    /// Colour that paints a span tagged `c` under `theme`; other colours pass through.
+    pub fn resolve(theme: &dyn ViTheme, c: Color) -> Color {
+        if c == ACCENT {
+            theme.accent()
+        } else if c == MUTED {
+            theme.reader_subtext()
+        } else {
+            c
+        }
+    }
 }
 
-use core::sync::atomic::{AtomicU8, Ordering};
+/// Syntax-highlighting roles and the per-palette colours that paint them.
+/// Code spans carry the role tags below (the Dark palette's values);
+/// [`CodePalette::resolve`] maps them onto the document palette at paint
+/// time, so open code re-tints whenever the reader or system palette changes.
+pub mod code_ink {
+    use super::{Color, SystemPalette};
 
-static ACTIVE_SYSTEM_PALETTE: AtomicU8 = AtomicU8::new(viui::theme::SystemPalette::Light as u8);
+    /// Code surface and token colours for one document palette. Every token
+    /// keeps at least 4.5:1 contrast against `surface`.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct CodePalette {
+        pub surface: Color,
+        pub plain: Color,
+        pub comment: Color,
+        pub keyword: Color,
+        pub string: Color,
+        pub number: Color,
+        /// Inline code and code blocks without a known language.
+        pub inline: Color,
+    }
 
-#[cfg(test)]
-pub fn set_active_system_palette(palette: viui::theme::SystemPalette) {
-    ACTIVE_SYSTEM_PALETTE.store(palette as u8, Ordering::Relaxed);
+    pub const DARK: CodePalette = CodePalette {
+        surface: Color::rgb(49, 50, 68),
+        plain: Color::rgb(205, 214, 244),
+        comment: Color::rgb(166, 173, 200),
+        keyword: Color::rgb(137, 180, 250),
+        string: Color::rgb(166, 227, 161),
+        number: Color::rgb(250, 179, 135),
+        inline: Color::rgb(148, 226, 213),
+    };
+
+    pub const LIGHT: CodePalette = CodePalette {
+        surface: Color::rgb(238, 240, 244),
+        plain: Color::rgb(36, 41, 47),
+        comment: Color::rgb(87, 96, 106),
+        keyword: Color::rgb(111, 66, 193),
+        string: Color::rgb(17, 99, 41),
+        number: Color::rgb(5, 80, 174),
+        inline: Color::rgb(149, 56, 0),
+    };
+
+    pub const PAPER: CodePalette = CodePalette {
+        surface: Color::rgb(233, 229, 218),
+        plain: Color::rgb(43, 43, 42),
+        comment: Color::rgb(95, 90, 80),
+        keyword: Color::rgb(140, 60, 30),
+        string: Color::rgb(61, 95, 30),
+        number: Color::rgb(30, 80, 130),
+        inline: Color::rgb(122, 74, 18),
+    };
+
+    pub const PLAIN: Color = DARK.plain;
+    pub const COMMENT: Color = DARK.comment;
+    pub const KEYWORD: Color = DARK.keyword;
+    pub const STRING: Color = DARK.string;
+    pub const NUMBER: Color = DARK.number;
+    /// Inline code and code blocks without a known language.
+    pub const INLINE: Color = DARK.inline;
+
+    impl CodePalette {
+        /// Code palette painted under the document palette `palette`.
+        pub const fn for_palette(palette: SystemPalette) -> &'static Self {
+            match palette {
+                SystemPalette::Light => &LIGHT,
+                SystemPalette::Dark => &DARK,
+                SystemPalette::Paper => &PAPER,
+            }
+        }
+
+        /// Colour that paints a code span tagged `c`; other colours pass through.
+        pub fn resolve(&self, c: Color) -> Color {
+            match c {
+                PLAIN => self.plain,
+                COMMENT => self.comment,
+                KEYWORD => self.keyword,
+                STRING => self.string,
+                NUMBER => self.number,
+                INLINE => self.inline,
+                other => other,
+            }
+        }
+    }
 }
 
-pub fn active_system_palette() -> viui::theme::SystemPalette {
-    viui::theme::SystemPalette::from_u8(ACTIVE_SYSTEM_PALETTE.load(Ordering::Relaxed))
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ReaderThemeMode {
     #[default]
@@ -52,69 +140,14 @@ impl ReaderThemeMode {
         }
     }
 
-    /// Resolve effective palette, mapping FollowSystem to the active system palette.
-    pub fn resolved_palette(
-        self,
-        system: viui::theme::SystemPalette,
-    ) -> viui::theme::SystemPalette {
+    /// Effective palette, with FollowSystem mapped to `system`.
+    pub fn resolved_palette(self, system: SystemPalette) -> SystemPalette {
         match self {
             Self::FollowSystem => system,
-            Self::Light => viui::theme::SystemPalette::Light,
-            Self::Dark => viui::theme::SystemPalette::Dark,
-            Self::Paper => viui::theme::SystemPalette::Paper,
+            Self::Light => SystemPalette::Light,
+            Self::Dark => SystemPalette::Dark,
+            Self::Paper => SystemPalette::Paper,
         }
-    }
-
-    /// Obtain the shared ViTheme reference for the resolved palette.
-    pub fn resolved_theme(
-        self,
-        system: viui::theme::SystemPalette,
-    ) -> &'static dyn viui::theme::ViTheme {
-        match self.resolved_palette(system) {
-            viui::theme::SystemPalette::Light => &viui::theme::LIGHT_THEME,
-            viui::theme::SystemPalette::Dark => &viui::theme::DARK_THEME,
-            viui::theme::SystemPalette::Paper => &viui::theme::PAPER_THEME,
-        }
-    }
-
-    pub fn bg_color(self) -> Color {
-        self.resolved_bg(active_system_palette())
-    }
-
-    pub fn resolved_bg(self, system: viui::theme::SystemPalette) -> Color {
-        self.resolved_theme(system).reader_bg()
-    }
-
-    pub fn text_color(self) -> Color {
-        self.resolved_text(active_system_palette())
-    }
-
-    pub fn resolved_text(self, system: viui::theme::SystemPalette) -> Color {
-        self.resolved_theme(system).reader_text()
-    }
-
-    pub fn muted_color(self) -> Color {
-        self.resolved_muted(active_system_palette())
-    }
-
-    pub fn resolved_muted(self, system: viui::theme::SystemPalette) -> Color {
-        self.resolved_theme(system).reader_subtext()
-    }
-
-    pub fn accent_color(self) -> Color {
-        self.resolved_accent(active_system_palette())
-    }
-
-    pub fn resolved_accent(self, system: viui::theme::SystemPalette) -> Color {
-        self.resolved_theme(system).accent()
-    }
-
-    pub fn link_color(self) -> Color {
-        self.resolved_link(active_system_palette())
-    }
-
-    pub fn resolved_link(self, system: viui::theme::SystemPalette) -> Color {
-        self.resolved_theme(system).reader_link()
     }
 
     pub const fn name(self) -> &'static str {
@@ -125,71 +158,35 @@ impl ReaderThemeMode {
             Self::Paper => "Paper",
         }
     }
+}
 
-    /// Remap legacy dark-theme span colors to the corresponding semantic color of this reader mode.
-    pub fn remap_span_color(self, c: Color) -> Color {
-        if c == theme::ACCENT_BLUE {
-            self.accent_color()
-        } else if c == theme::ACCENT_CYAN {
-            self.text_color()
-        } else if c == theme::TEXT_MUTED {
-            self.muted_color()
-        } else if c == theme::TEXT_PRIMARY {
-            self.text_color()
-        } else {
-            c
-        }
+/// Rounded box clipped to the caller's viewport: `fill`, then a 1px `stroke`
+/// covering the same outline.
+pub fn clipped_round_rect(
+    surf: &mut ViSurface,
+    (x, y, w, h): (i32, i32, u32, u32),
+    radius: u32,
+    fill: Option<Color>,
+    stroke: Option<Color>,
+    clip: (i32, i32, i32, i32),
+) {
+    if clip.2 <= clip.0 || clip.3 <= clip.1 {
+        return;
     }
-}
-
-pub fn draw_book_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
-    // Left page outline
-    fill_rect(surf, cx - 7, cy - 5, 6, 1, color);
-    fill_rect(surf, cx - 7, cy + 5, 6, 1, color);
-    fill_rect(surf, cx - 7, cy - 5, 1, 11, color);
-    fill_rect(surf, cx - 1, cy - 5, 1, 11, color);
-    // Left page lines
-    fill_rect(surf, cx - 5, cy - 2, 3, 1, color);
-    fill_rect(surf, cx - 5, cy + 1, 3, 1, color);
-
-    // Right page outline
-    fill_rect(surf, cx + 1, cy - 5, 6, 1, color);
-    fill_rect(surf, cx + 1, cy + 5, 6, 1, color);
-    fill_rect(surf, cx + 1, cy - 5, 1, 11, color);
-    fill_rect(surf, cx + 7, cy - 5, 1, 11, color);
-    // Right page lines
-    fill_rect(surf, cx + 3, cy - 2, 3, 1, color);
-    fill_rect(surf, cx + 3, cy + 1, 3, 1, color);
-
-    // Center spine
-    fill_rect(surf, cx, cy - 5, 1, 12, color);
-}
-
-pub fn draw_globe_icon(surf: &mut ViSurface, cx: i32, cy: i32, color: Color) {
-    // Outer circle
-    fill_rect(surf, cx - 3, cy - 6, 7, 1, color);
-    fill_rect(surf, cx - 3, cy + 6, 7, 1, color);
-    fill_rect(surf, cx - 6, cy - 3, 1, 7, color);
-    fill_rect(surf, cx + 6, cy - 3, 1, 7, color);
-    // Corner pixels
-    fill_rect(surf, cx - 5, cy - 5, 2, 1, color);
-    fill_rect(surf, cx + 4, cy - 5, 2, 1, color);
-    fill_rect(surf, cx - 5, cy + 5, 2, 1, color);
-    fill_rect(surf, cx + 4, cy + 5, 2, 1, color);
-    fill_rect(surf, cx - 5, cy - 4, 1, 2, color);
-    fill_rect(surf, cx + 5, cy - 4, 1, 2, color);
-    fill_rect(surf, cx - 5, cy + 3, 1, 2, color);
-    fill_rect(surf, cx + 5, cy + 3, 1, 2, color);
-
-    // Equator line
-    fill_rect(surf, cx - 5, cy, 11, 1, color);
-
-    // Prime meridian vertical line
-    fill_rect(surf, cx, cy - 5, 1, 11, color);
-
-    // Meridian inner curves
-    fill_rect(surf, cx - 3, cy - 4, 1, 9, color);
-    fill_rect(surf, cx + 3, cy - 4, 1, 9, color);
+    let (width, height, stride) = (surf.width(), surf.height(), surf.stride());
+    let mut canvas = Canvas::new(surf.pixels_mut(), width, height, stride).clip_to(
+        clip.0,
+        clip.1,
+        (clip.2 - clip.0) as u32,
+        (clip.3 - clip.1) as u32,
+    );
+    let shape = RoundRect::new(x, y, w, h, Radii::all(radius));
+    if let Some(color) = fill {
+        canvas.fill_round(&shape, color.as_bgra_bytes());
+    }
+    if let Some(color) = stroke {
+        canvas.stroke_round(&shape, color.as_bgra_bytes());
+    }
 }
 
 /// Paint measured, grayscale-antialiased text within a caller's viewport.
@@ -301,6 +298,55 @@ pub fn draw_image_clipped(
                     dst_pixels[dst_offset + 2] = ((sr * sa + dr * inv) / 255) as u8;
                     dst_pixels[dst_offset + 3] = 255;
                 }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use super::code_ink::{CodePalette, DARK, LIGHT, PAPER};
+    use super::Color;
+
+    /// WCAG 2.1 relative luminance of an sRGB colour.
+    fn luminance(c: Color) -> f64 {
+        let channel = |v: u8| {
+            let s = f64::from(v) / 255.0;
+            if s <= 0.04045 {
+                s / 12.92
+            } else {
+                ((s + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+    }
+
+    /// WCAG 2.1 contrast ratio between two colours.
+    fn contrast(a: Color, b: Color) -> f64 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
+    #[test]
+    fn every_code_token_keeps_wcag_aa_contrast_on_its_surface() {
+        let palettes: [(&str, CodePalette); 3] =
+            [("Dark", DARK), ("Light", LIGHT), ("Paper", PAPER)];
+        for (name, p) in palettes {
+            for (role, ink) in [
+                ("plain", p.plain),
+                ("comment", p.comment),
+                ("keyword", p.keyword),
+                ("string", p.string),
+                ("number", p.number),
+                ("inline", p.inline),
+            ] {
+                let ratio = contrast(ink, p.surface);
+                assert!(
+                    ratio >= 4.5,
+                    "{name} {role} contrast {ratio:.2}:1 is below 4.5:1"
+                );
             }
         }
     }

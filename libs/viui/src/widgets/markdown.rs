@@ -6,11 +6,11 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use crate::canvas::Color;
 use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget};
 use crate::widgets::rich_text::{LaidOutWord, RichTextView, TextSpan};
+use ostd::display::linear::PANEL_RADIUS;
 
 /// Abstract parsed Markdown block node.
 #[derive(Clone, Debug, PartialEq)]
@@ -37,13 +37,13 @@ pub enum MarkdownBlock {
     Rule,
 }
 
+/// Laid-out block geometry; colours resolve from the theme at paint time.
 #[derive(Clone, Debug)]
 pub(crate) enum LaidOutItem {
     Heading {
         rect: Rect,
         text: String,
         size_px: f32,
-        color: Color,
     },
     ParagraphWords(Vec<LaidOutWord>),
     CodeBlock {
@@ -56,7 +56,6 @@ pub(crate) enum LaidOutItem {
     ListItem {
         bullet_pos: Point,
         bullet: char,
-        bullet_color: Color,
         words: Vec<LaidOutWord>,
     },
     Blockquote {
@@ -66,7 +65,6 @@ pub(crate) enum LaidOutItem {
     Rule {
         p1: Point,
         p2: Point,
-        color: Color,
     },
 }
 
@@ -320,7 +318,6 @@ impl ViWidget for MarkdownView {
         let mut cur_y = 0.0f32;
         let mut max_w = 0.0f32;
         let line_spacing = 4.0;
-        let default_text_color = Color::WHITE;
 
         for block in &self.blocks {
             match block {
@@ -346,7 +343,6 @@ impl ViWidget for MarkdownView {
                         rect,
                         text: text.clone(),
                         size_px: h_size,
-                        color: Color::WHITE,
                     });
 
                     cur_y += line_h + 4.0;
@@ -362,7 +358,6 @@ impl ViWidget for MarkdownView {
                         origin,
                         constraints.max.w,
                         line_spacing,
-                        default_text_color,
                         font,
                         &mut words,
                     );
@@ -429,7 +424,6 @@ impl ViWidget for MarkdownView {
                         item_origin,
                         constraints.max.w - indent_px,
                         line_spacing,
-                        default_text_color,
                         font,
                         &mut words,
                     );
@@ -437,7 +431,6 @@ impl ViWidget for MarkdownView {
                     laid_out.push(LaidOutItem::ListItem {
                         bullet_pos,
                         bullet: *bullet,
-                        bullet_color: Color::CYAN,
                         words,
                     });
 
@@ -458,7 +451,6 @@ impl ViWidget for MarkdownView {
                         quote_origin,
                         constraints.max.w - indent_px,
                         line_spacing,
-                        Color::bgra(210, 210, 210, 255), // Muted text for quote
                         font,
                         &mut words,
                     );
@@ -481,11 +473,7 @@ impl ViWidget for MarkdownView {
                     let p1 = Point::new(constraints.origin.x, line_y);
                     let p2 = Point::new(constraints.origin.x + constraints.max.w, line_y);
 
-                    laid_out.push(LaidOutItem::Rule {
-                        p1,
-                        p2,
-                        color: Color::DARK_GRAY,
-                    });
+                    laid_out.push(LaidOutItem::Rule { p1, p2 });
 
                     cur_y += 12.0;
                 }
@@ -504,6 +492,7 @@ impl ViWidget for MarkdownView {
     }
 
     fn paint(&self, cx: &mut PaintCx) {
+        let theme = cx.theme;
         let items = self.layout_cache.borrow();
         for item in items.iter() {
             match item {
@@ -511,13 +500,12 @@ impl ViWidget for MarkdownView {
                     rect,
                     text,
                     size_px,
-                    color,
                 } => {
                     let screen_pos = rect.origin().offset(cx.origin.x, cx.origin.y);
-                    cx.draw_text(screen_pos, text, *color, *size_px);
+                    cx.draw_text(screen_pos, text, theme.text_primary(), *size_px);
                 }
                 LaidOutItem::ParagraphWords(words) => {
-                    Self::paint_words(words, cx);
+                    RichTextView::paint_words(words, theme.text_primary(), cx);
                 }
                 LaidOutItem::CodeBlock {
                     rect,
@@ -526,52 +514,36 @@ impl ViWidget for MarkdownView {
                     ..
                 } => {
                     let screen_rect = cx.screen_rect(*rect);
-                    // Dark code container background
-                    let bg_color = Color::bgra(24, 20, 16, 255);
-                    let border_color = Color::bgra(60, 50, 40, 255);
-                    cx.canvas.fill_rect(screen_rect, bg_color);
-
-                    // Border outline
-                    let r = screen_rect;
-                    cx.canvas.draw_line(
-                        Point::new(r.x, r.y),
-                        Point::new(r.x + r.w, r.y),
-                        border_color,
-                    );
-                    cx.canvas.draw_line(
-                        Point::new(r.x, r.y + r.h),
-                        Point::new(r.x + r.w, r.y + r.h),
-                        border_color,
-                    );
-
-                    // Draw each code line
-                    let code_text_color = Color::bgra(180, 230, 240, 255); // Monospace cyan/white
+                    cx.canvas
+                        .fill_round_rect(screen_rect, PANEL_RADIUS, theme.surface());
+                    cx.canvas
+                        .stroke_round_rect(screen_rect, PANEL_RADIUS, theme.border());
                     for (pos, line_str) in lines {
                         let screen_pos = pos.offset(cx.origin.x, cx.origin.y);
-                        cx.draw_text(screen_pos, line_str, code_text_color, *font_size);
+                        cx.draw_text(screen_pos, line_str, theme.text_primary(), *font_size);
                     }
                 }
                 LaidOutItem::ListItem {
                     bullet_pos,
                     bullet,
-                    bullet_color,
                     words,
                 } => {
                     let screen_bullet_pos = bullet_pos.offset(cx.origin.x, cx.origin.y);
                     let mut b_str = String::new();
                     b_str.push(*bullet);
-                    cx.draw_text(screen_bullet_pos, &b_str, *bullet_color, cx.font.size_px);
-                    Self::paint_words(words, cx);
+                    let size = cx.font.size_px;
+                    cx.draw_text(screen_bullet_pos, &b_str, theme.text_secondary(), size);
+                    RichTextView::paint_words(words, theme.text_primary(), cx);
                 }
                 LaidOutItem::Blockquote { bar_rect, words } => {
                     let screen_bar = cx.screen_rect(*bar_rect);
-                    cx.canvas.fill_rect(screen_bar, cx.theme.accent());
-                    Self::paint_words(words, cx);
+                    cx.canvas.fill_rect(screen_bar, theme.accent());
+                    RichTextView::paint_words(words, theme.text_secondary(), cx);
                 }
-                LaidOutItem::Rule { p1, p2, color } => {
+                LaidOutItem::Rule { p1, p2 } => {
                     let sp1 = p1.offset(cx.origin.x, cx.origin.y);
                     let sp2 = p2.offset(cx.origin.x, cx.origin.y);
-                    cx.canvas.draw_line(sp1, sp2, *color);
+                    cx.canvas.draw_line(sp1, sp2, theme.divider());
                 }
             }
         }
@@ -579,35 +551,6 @@ impl ViWidget for MarkdownView {
 
     fn event(&mut self, _cx: &mut EventCx, _e: &Event) -> EventStatus {
         EventStatus::Ignored
-    }
-}
-
-impl MarkdownView {
-    fn paint_words(words: &[LaidOutWord], cx: &mut PaintCx) {
-        for word in words {
-            let screen_rect = cx.screen_rect(word.rect);
-
-            if let Some(bg) = word.bg_color {
-                let pad = 2.0;
-                let badge_rect = Rect::new(
-                    screen_rect.x - pad,
-                    screen_rect.y,
-                    screen_rect.w + pad * 2.0,
-                    screen_rect.h,
-                );
-                cx.canvas.fill_rect(badge_rect, bg);
-            }
-
-            let pos = screen_rect.origin();
-            cx.draw_text(pos, &word.text, word.color, word.size_px);
-
-            if word.is_link {
-                let underline_y = screen_rect.y + screen_rect.h - 1.0;
-                let p1 = Point::new(screen_rect.x, underline_y);
-                let p2 = Point::new(screen_rect.x + screen_rect.w, underline_y);
-                cx.canvas.draw_line(p1, p2, word.color);
-            }
-        }
     }
 }
 
@@ -662,5 +605,34 @@ mod tests {
         assert!(node.bounds.w > 0.0);
         assert!(node.bounds.h > 50.0);
         assert!(!view.layout_cache.borrow().is_empty());
+    }
+
+    #[test]
+    fn blocks_resolve_colours_from_the_theme() {
+        use crate::node_widgets::style::test_support::{fills, lines, record, strokes, text_color};
+        use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+        use crate::widget::PaintCx;
+
+        let md = "# Title\n\nBody\n\n```\nlet x\n```\n\n- Item\n\n> Quote\n\n---";
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let view = MarkdownView::new(md);
+            let mut font = FontContext::default();
+            view.layout(
+                Constraints::new(Point::ZERO, Size::new(400.0, 1000.0)),
+                &mut font,
+            );
+            let buf =
+                record(|canvas| view.paint(&mut PaintCx::with_theme(canvas, theme, &mut font)));
+            for text in ["Title", "Body", "let x", "Item"] {
+                assert_eq!(text_color(&buf, text), Some(theme.text_primary()), "{text}");
+            }
+            assert_eq!(text_color(&buf, "*"), Some(theme.text_secondary()));
+            assert_eq!(text_color(&buf, "Quote"), Some(theme.text_secondary()));
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.surface());
+            assert_eq!(painted[1].1, theme.accent());
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(lines(&buf), [theme.divider()]);
+        }
     }
 }

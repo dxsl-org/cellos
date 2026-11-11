@@ -434,7 +434,6 @@ pub fn scrollable<Msg: 'static>(id: WidgetId, content: Element<Msg>) -> Element<
 /// the Elm event loop: recv input → dispatch → update(msg) → view() → repaint.
 pub fn run_app<App: ViApp>(mut app: App) -> ! {
     use crate::canvas::{FramebufferCanvas, ViCanvas};
-    use crate::theme::DARK_THEME;
     use crate::widget::PaintCx;
     use crate::window::{decode_input_event, translate_input, WindowChrome};
     use api::display::PixelFormat;
@@ -475,23 +474,31 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
         let sw = surf.width();
         let sh = surf.height();
         let pixels = surf.pixels_mut();
+        let theme = crate::theme::system();
         let mut canvas = FramebufferCanvas::new(pixels, stride, sw, sh);
         canvas.fill_rect(
             crate::layout::Rect::new(0.0, 0.0, sw as f32, sh as f32),
-            crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255),
+            theme.bg().with_alpha(255),
         );
-        chrome.paint(&mut canvas, font);
-        let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME, font);
+        chrome.paint(&mut canvas, font, theme);
+        let mut cx = PaintCx::with_theme(&mut canvas, theme, font);
         cx.origin = crate::layout::Point::new(0.0, chrome_h as f32);
         root.paint(&mut cx);
         surf.damage_all();
     };
     paint(&mut surf, &root, &chrome, &mut font_ctx);
+    let mut theme_serial = crate::theme::system_serial();
 
     loop {
         let mut buf = [0u8; 64];
         if let SyscallResult::Ok(_) = sys_recv(0, &mut buf) {
-            if let Some(raw_ev) = decode_input_event(&buf) {
+            if ostd::display::appearance::note_frame(&buf) {
+                let serial = crate::theme::system_serial();
+                if serial != theme_serial {
+                    theme_serial = serial;
+                    paint(&mut surf, &root, &chrome, &mut font_ctx);
+                }
+            } else if let Some(raw_ev) = decode_input_event(&buf) {
                 if let InputEvent::MouseMove { x, y, .. } = raw_ev {
                     mouse_pos = crate::layout::Point::new(x as f32, y as f32);
                 }

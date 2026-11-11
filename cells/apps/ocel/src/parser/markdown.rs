@@ -104,7 +104,7 @@ pub fn parse_markdown_with_base(input: &str, base_url: Option<&str>) -> Vec<DocN
                             "[🖼 {}]",
                             if alt.is_empty() { "Image" } else { alt }
                         ));
-                        span.color = Some(crate::draw::theme::TEXT_MUTED);
+                        span.color = Some(crate::draw::ink::MUTED);
                         nodes.push(DocNode::Paragraph {
                             spans: alloc::vec![span],
                         });
@@ -247,7 +247,7 @@ pub fn parse_inlines(text: &str) -> Vec<StyledSpan> {
                     }
                     let mut span = StyledSpan::plain(&after[..close]);
                     span.link = Some(String::from(&after[close + 2..close + 2 + end]));
-                    span.color = Some(crate::draw::theme::ACCENT_BLUE);
+                    span.color = Some(crate::draw::ink::ACCENT);
                     spans.push(span);
                     rest = &after[close + 3 + end..];
                     continue;

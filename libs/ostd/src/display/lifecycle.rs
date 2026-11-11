@@ -1,6 +1,8 @@
 //! Managed-surface lifecycle requests, Grant replacement, and cleanup.
 
-use api::display::{compositor_ops, SetTitle, SurfaceStateRequest, WindowConfigure};
+use api::display::{
+    compositor_ops, AppearancePalette, SetAppearance, SetIcon, SetTitle, SurfaceStateRequest, WindowConfigure,
+};
 use types::{ViError, ViResult};
 
 use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice, sys_send};
@@ -17,6 +19,26 @@ impl ViSurface {
     pub fn set_title(&self, title: &str) -> ViResult<()> {
         let request = SetTitle::new(self.cap, title).map_err(|_| ViError::InvalidInput)?;
         let frame = request.encode().map_err(|_| ViError::InvalidInput)?;
+        ipc::send_lifecycle_request(self.comp_tid, &frame)
+    }
+
+    /// Ask the compositor to draw its chrome (Cell Tabs, frames, panel
+    /// shadows) in `palette`. Honoured only for a Panel surface, i.e. from the
+    /// system shell; `revision` must grow across calls from one shell.
+    ///
+    /// # Errors
+    /// Returns `IO` when the request cannot be sent.
+    pub fn set_appearance(&self, palette: AppearancePalette, revision: u32) -> ViResult<()> {
+        let frame = SetAppearance::new(self.cap, palette, revision).encode();
+        ipc::send_lifecycle_request(self.comp_tid, &frame)
+    }
+
+    /// Show `icon` on this surface's Cell Tab.
+    ///
+    /// # Errors
+    /// Returns `IO` when the request cannot be sent.
+    pub fn set_icon(&self, icon: crate::display::linear::icons::LineIcon) -> ViResult<()> {
+        let frame = SetIcon { icon: icon as u8, cap: self.cap }.encode();
         ipc::send_lifecycle_request(self.comp_tid, &frame)
     }
 

@@ -5,13 +5,13 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::cell::Cell;
 
-use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::{Event, KeyCode};
 use crate::layout::{Constraints, Point, Rect, Size};
 use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
 use crate::signal::{Signal, SubscriptionHandle};
+use ostd::display::linear::CONTROL_RADIUS;
 
 const PADDING: f32 = 4.0;
 
@@ -120,32 +120,14 @@ impl ViNode for TextEdit {
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds_cache.get();
 
-        // Background — slightly brighter when focused
-        let bg = if self.focused.get() {
-            Color::rgb(20, 20, 50)
+        let focused = self.focused.get();
+        let (bg, border) = if focused {
+            (cx.theme.input_focused_bg(), cx.theme.input_focused_border())
         } else {
-            Color::rgb(25, 25, 38)
+            (cx.theme.input_bg(), cx.theme.border())
         };
-        cx.canvas.fill_rect(b, bg);
-
-        // Border — accent color when focused
-        let border = if self.focused.get() {
-            Color::rgb(80, 120, 220)
-        } else {
-            Color::rgb(70, 70, 95)
-        };
-        let x0 = b.x;
-        let y0 = b.y;
-        let x1 = b.x + b.w;
-        let y1 = b.y + b.h;
-        cx.canvas
-            .draw_line(Point::new(x0, y0), Point::new(x1, y0), border); // top
-        cx.canvas
-            .draw_line(Point::new(x1, y0), Point::new(x1, y1), border); // right
-        cx.canvas
-            .draw_line(Point::new(x1, y1), Point::new(x0, y1), border); // bottom
-        cx.canvas
-            .draw_line(Point::new(x0, y1), Point::new(x0, y0), border); // left
+        cx.canvas.fill_round_rect(b, CONTROL_RADIUS, bg);
+        cx.canvas.stroke_round_rect(b, CONTROL_RADIUS, border);
 
         let ty = b.y + (b.h - cx.line_height()) * 0.5;
 
@@ -162,19 +144,13 @@ impl ViNode for TextEdit {
             // Show placeholder
             let ph = self.placeholder.get();
             if !ph.is_empty() {
-                cx.draw_text(
-                    Point::new(b.x + PADDING, ty.max(b.y)),
-                    &ph,
-                    Color::rgb(100, 100, 130),
-                );
+                let color = cx.theme.text_secondary();
+                cx.draw_text(Point::new(b.x + PADDING, ty.max(b.y)), &ph, color);
             }
         } else {
             // Draw the text content
-            cx.draw_text(
-                Point::new(b.x + PADDING, ty.max(b.y)),
-                &text,
-                Color::rgb(220, 220, 230),
-            );
+            let color = cx.theme.text_primary();
+            cx.draw_text(Point::new(b.x + PADDING, ty.max(b.y)), &text, color);
 
             // Draw cursor bar while focused
             if self.focused.get() {
@@ -183,7 +159,7 @@ impl ViNode for TextEdit {
                 cx.canvas.draw_line(
                     Point::new(cursor_x, b.y + 3.0),
                     Point::new(cursor_x, b.y + b.h - 3.0),
-                    Color::WHITE,
+                    color,
                 );
             }
         }
@@ -313,6 +289,29 @@ impl ViNode for TextEdit {
 mod tests {
     use super::*;
     use crate::font_context::FontContext;
+    use crate::node_widgets::style::test_support::{fills, lines, paint_node, strokes, text_color};
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn field_text_placeholder_and_focus_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut edit = TextEdit::new(Signal::new(String::new())).placeholder_str("Search");
+            let buf = paint_node(&mut edit, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.input_bg());
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(text_color(&buf, "Search"), Some(theme.text_secondary()));
+
+            let mut edit = TextEdit::new(Signal::new(String::from("cellos")));
+            edit.event(&Event::Focus);
+            let buf = paint_node(&mut edit, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.input_focused_bg());
+            assert_eq!(strokes(&buf), [theme.input_focused_border()]);
+            assert_eq!(text_color(&buf, "cellos"), Some(theme.text_primary()));
+            assert_eq!(lines(&buf), [theme.text_primary()]);
+        }
+    }
 
     #[test]
     fn clicking_proportional_text_places_cursor_at_measured_boundary() {

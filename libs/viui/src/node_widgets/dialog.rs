@@ -15,14 +15,15 @@ extern crate alloc;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::cell::Cell;
 
-use crate::canvas::Color;
 use crate::dirty::DirtyRegion;
 use crate::event::{Event, MouseButton};
 use crate::layout::{Constraints, Point, Rect, Size};
 use crate::node::ViNode;
+use crate::node_widgets::style::{self, HOVER_TINT, PRESSED_TINT};
 use crate::overlay::{OverlayAction, OverlayActionQueue};
 use crate::render_ctx::RenderCtx;
 use crate::signal::SubscriptionHandle;
+use ostd::display::linear::{CONTROL_RADIUS, PANEL_RADIUS};
 
 // ─── DialogButton ────────────────────────────────────────────────────────────
 
@@ -166,50 +167,54 @@ impl ViNode for Dialog {
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
+        let theme = cx.theme;
 
-        // Card background.
-        cx.canvas.fill_rect(b, Color::rgb(30, 32, 44));
-        // Subtle border.
-        cx.canvas.draw_rect_border(b, Color::rgb(70, 72, 100), 1.0);
+        // Card panel with a 1 px outline.
+        cx.canvas.fill_round_rect(b, PANEL_RADIUS, theme.surface());
+        cx.canvas.stroke_round_rect(b, PANEL_RADIUS, theme.border());
 
-        // Title text.
         cx.draw_text(
             Point::new(b.x + 16.0, b.y + 16.0),
             &self.title,
-            Color::WHITE,
+            theme.text_primary(),
         );
-        // Message text — slightly dimmed.
         cx.draw_text(
             Point::new(b.x + 16.0, b.y + 48.0),
             &self.message,
-            Color::rgb(180, 180, 200),
+            theme.text_secondary(),
         );
 
-        // Buttons.
         for btn in &self.buttons {
             let bb = btn.bounds.get();
-            let bg = if btn.is_primary {
-                if btn.pressed {
-                    Color::rgb(60, 100, 200)
+            let (bg, fg) = if btn.is_primary {
+                let accent = theme.accent();
+                let bg = if btn.pressed {
+                    style::tint(theme, accent, PRESSED_TINT)
                 } else if btn.hovered {
-                    Color::rgb(100, 140, 240)
+                    style::tint(theme, accent, HOVER_TINT)
                 } else {
-                    Color::rgb(80, 120, 220)
-                }
+                    accent
+                };
+                (bg, style::text_on(theme, accent))
             } else {
-                if btn.pressed {
-                    Color::rgb(50, 52, 70)
+                let bg = if btn.pressed {
+                    theme.button_pressed()
                 } else if btn.hovered {
-                    Color::rgb(70, 72, 90)
+                    theme.button_hovered()
                 } else {
-                    Color::rgb(55, 57, 75)
-                }
+                    theme.button_normal()
+                };
+                (bg, theme.text_primary())
             };
-            cx.canvas.fill_rect(bb, bg);
+            cx.canvas.fill_round_rect(bb, CONTROL_RADIUS, bg);
+            if !btn.is_primary {
+                cx.canvas
+                    .stroke_round_rect(bb, CONTROL_RADIUS, theme.border());
+            }
 
             let text_x = bb.x + (bb.w - cx.measure(&btn.label)) / 2.0;
             let text_y = bb.y + (bb.h - cx.line_height()) / 2.0;
-            cx.draw_text(Point::new(text_x, text_y), &btn.label, Color::WHITE);
+            cx.draw_text(Point::new(text_x, text_y), &btn.label, fg);
         }
     }
 
@@ -267,5 +272,50 @@ impl ViNode for Dialog {
 
     fn is_focusable(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Dialog;
+
+    use crate::event::Event;
+    use crate::node::ViNode;
+    use crate::node_widgets::style::test_support::{fills, paint_node, strokes, text_color};
+    use crate::node_widgets::style::{text_on, tint, HOVER_TINT};
+    use crate::overlay::new_action_queue;
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn card_text_and_buttons_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut dialog =
+                Dialog::confirm("Delete?", "Gone for good", new_action_queue(), || {}, || {});
+            let buf = paint_node(&mut dialog, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0], (dialog.bounds(), theme.surface()));
+            assert_eq!(painted[1].1, theme.button_normal());
+            assert_eq!(painted[2].1, theme.accent());
+            assert_eq!(painted.len(), 3);
+            // Card outline, then the secondary button's outline.
+            assert_eq!(strokes(&buf), [theme.border(); 2]);
+            assert_eq!(text_color(&buf, "Delete?"), Some(theme.text_primary()));
+            assert_eq!(
+                text_color(&buf, "Gone for good"),
+                Some(theme.text_secondary())
+            );
+            assert_eq!(text_color(&buf, "Cancel"), Some(theme.text_primary()));
+            assert_eq!(
+                text_color(&buf, "Confirm"),
+                Some(text_on(theme, theme.accent()))
+            );
+
+            let confirm = dialog.buttons[1].bounds.get();
+            dialog.event(&Event::MouseMove {
+                pos: crate::layout::Point::new(confirm.x + 1.0, confirm.y + 1.0),
+            });
+            let painted = fills(&paint_node(&mut dialog, theme));
+            assert_eq!(painted[2].1, tint(theme, theme.accent(), HOVER_TINT));
+        }
     }
 }

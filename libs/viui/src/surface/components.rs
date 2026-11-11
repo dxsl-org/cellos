@@ -7,7 +7,10 @@ extern crate alloc;
 use alloc::string::String;
 
 use crate::canvas::Color;
-use crate::surface::{draw_label, draw_label_aligned, fill_rect, stroke_rect, LABEL_TEXT_INSET};
+use crate::surface::{
+    draw_icon_centered, draw_label, draw_label_aligned, fill_rect, fill_round_rect, stroke_rect,
+    stroke_round_rect, LineIcon, CONTROL_RADIUS, PANEL_RADIUS,
+};
 use crate::theme::ViTheme;
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
@@ -26,7 +29,7 @@ impl Toolbar {
         theme: &dyn ViTheme,
         width: u32,
         height: u32,
-        icon: &str,
+        icon: Option<LineIcon>,
         title: &str,
     ) {
         // Toolbar background
@@ -35,23 +38,17 @@ impl Toolbar {
         fill_rect(surf, 0, height as i32 - 1, width, 1, theme.border());
 
         // App Icon
-        if !icon.is_empty() {
-            draw_label(
+        if let Some(icon) = icon {
+            draw_icon_centered(
                 surf,
-                fonts,
-                12,
-                (height as i32 - 24) / 2,
-                32,
-                24,
                 icon,
-                FontFace::UiSemibold,
-                16.0,
+                (12, (height as i32 - 24) / 2, 32, 24),
                 theme.accent(),
             );
         }
 
         // Title / Breadcrumb
-        let text_x = if icon.is_empty() { 16 } else { 48 };
+        let text_x = if icon.is_none() { 16 } else { 48 };
         let text_w = width.saturating_sub(text_x as u32 + 200);
         draw_label(
             surf,
@@ -144,43 +141,10 @@ impl SegmentedControl {
 
 // ─── Icon columns ────────────────────────────────────────────────────────────
 
-/// Horizontal geometry of an icon column followed by a name column, measured
-/// from the component's left edge.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct IconColumns {
-    /// Width of the icon label rect.
-    icon_w: u32,
-    /// Left edge of the name label rect.
-    name_x: u32,
-}
-
-/// Narrowest icon rect; also keeps the name column where it has always been
-/// for icons at most one glyph wide.
-const MIN_ICON_W: u32 = 24;
-/// Space between the icon rect and the name rect.
+/// Width of the box a 16px line icon is centred in, left of a name column.
+const ICON_BOX_W: u32 = 24;
+/// Space between the icon box and the name rect.
 const ICON_COLUMN_GAP: u32 = 4;
-
-/// Size an icon column at `icon_x` to the widest of `icons`, measured in the
-/// face and size they are drawn in, so labels such as `[D]` are never clipped
-/// by the column rect.
-fn icon_columns<'a>(
-    fonts: &mut TextFonts,
-    icons: impl Iterator<Item = &'a str>,
-    face: FontFace,
-    px: f32,
-    icon_x: u32,
-) -> IconColumns {
-    let widest = icons
-        .map(|icon| fonts.measure(face, icon, px))
-        .fold(0.0f32, f32::max);
-    // `as` truncates; the extra pixel covers the fractional advance and the
-    // anti-aliased edge of the last glyph.
-    let icon_w = (LABEL_TEXT_INSET + widest as u32 + 1).max(MIN_ICON_W);
-    IconColumns {
-        icon_w,
-        name_x: icon_x + icon_w + ICON_COLUMN_GAP,
-    }
-}
 
 // ─── 3. PlacesSidebar Component ──────────────────────────────────────────────
 
@@ -188,7 +152,7 @@ fn icon_columns<'a>(
 pub struct PlacesItemDef {
     pub name: String,
     pub path: String,
-    pub icon: String,
+    pub icon: LineIcon,
 }
 
 pub struct PlacesSidebar;
@@ -196,24 +160,12 @@ pub struct PlacesSidebar;
 impl PlacesSidebar {
     pub const DEFAULT_WIDTH: u32 = 160;
     pub const ROW_HEIGHT: u32 = 28;
-    /// Left edge of the icon label rect.
+    /// Left edge of the icon box.
     const ICON_X: u32 = 14;
-    const ICON_FACE: FontFace = FontFace::UiSemibold;
-    const ICON_PX: f32 = 13.0;
+    /// Left edge of the name label rect.
+    const NAME_X: u32 = Self::ICON_X + ICON_BOX_W + ICON_COLUMN_GAP;
     /// Room kept right of the name column (pill inset plus padding).
     const NAME_RIGHT_PAD: u32 = 12;
-
-    /// Columns sized to the widest icon of every place, so the name column
-    /// does not shift as the list is clipped by the sidebar height.
-    fn columns(fonts: &mut TextFonts, items: &[PlacesItemDef]) -> IconColumns {
-        icon_columns(
-            fonts,
-            items.iter().map(|item| item.icon.as_str()),
-            Self::ICON_FACE,
-            Self::ICON_PX,
-            Self::ICON_X,
-        )
-    }
 
     /// Render a standard navigation sidebar (Places / Bookmarks).
     // reason: public render primitive called from app crates; its parameter list is its API.
@@ -249,8 +201,7 @@ impl PlacesSidebar {
             theme.text_secondary(),
         );
 
-        let columns = Self::columns(fonts, items);
-        let name_w = width.saturating_sub(columns.name_x + Self::NAME_RIGHT_PAD);
+        let name_w = width.saturating_sub(Self::NAME_X + Self::NAME_RIGHT_PAD);
         let row_start_y = y + 32;
         for (i, item) in items.iter().enumerate() {
             let row_y = row_start_y + i as i32 * Self::ROW_HEIGHT as i32;
@@ -262,17 +213,16 @@ impl PlacesSidebar {
                 active_path == item.path || (item.path == "/" && active_path.is_empty());
 
             if is_active {
-                // Highlight pill background
-                fill_rect(
+                // Highlight pill; it and the accent icon mark the active place.
+                fill_round_rect(
                     surf,
                     x + 6,
                     row_y,
                     width.saturating_sub(12),
                     Self::ROW_HEIGHT,
+                    CONTROL_RADIUS,
                     theme.list_selected_bg(),
                 );
-                // Active accent indicator (3px on left)
-                fill_rect(surf, x + 6, row_y, 3, Self::ROW_HEIGHT, theme.accent());
             }
 
             // Icon
@@ -281,16 +231,10 @@ impl PlacesSidebar {
             } else {
                 theme.text_secondary()
             };
-            draw_label(
+            draw_icon_centered(
                 surf,
-                fonts,
-                x + Self::ICON_X as i32,
-                row_y + 4,
-                columns.icon_w,
-                20,
-                &item.icon,
-                Self::ICON_FACE,
-                Self::ICON_PX,
+                item.icon,
+                (x + Self::ICON_X as i32, row_y + 4, ICON_BOX_W, 20),
                 icon_col,
             );
 
@@ -303,7 +247,7 @@ impl PlacesSidebar {
             draw_label(
                 surf,
                 fonts,
-                x + columns.name_x as i32,
+                x + Self::NAME_X as i32,
                 row_y + 4,
                 name_w,
                 20,
@@ -344,7 +288,7 @@ impl PlacesSidebar {
 
 #[derive(Clone, Debug)]
 pub struct ListViewItemDef {
-    pub icon: String,
+    pub icon: LineIcon,
     pub name: String,
     pub size_str: String,
     pub kind_str: String,
@@ -356,23 +300,12 @@ pub struct ListView;
 impl ListView {
     pub const HEADER_HEIGHT: u32 = 28;
     pub const ROW_HEIGHT: u32 = 32;
-    /// Left edge of the icon label rect.
+    /// Left edge of the icon box.
     const ICON_X: u32 = 8;
-    const ICON_FACE: FontFace = FontFace::UiSemibold;
-    const ICON_PX: f32 = 14.0;
+    /// Left edge of the name label rect.
+    const NAME_X: u32 = Self::ICON_X + ICON_BOX_W + ICON_COLUMN_GAP;
     /// Room reserved right of the name column for the Size and Kind columns.
     const TRAILING_COLUMNS_W: u32 = 184;
-
-    /// Columns sized to the widest icon among `items`.
-    fn columns(fonts: &mut TextFonts, items: &[ListViewItemDef]) -> IconColumns {
-        icon_columns(
-            fonts,
-            items.iter().map(|item| item.icon.as_str()),
-            Self::ICON_FACE,
-            Self::ICON_PX,
-            Self::ICON_X,
-        )
-    }
 
     /// Render a multi-column data list with header and selectable rows.
     // reason: public render primitive called from app crates; its parameter list is its API.
@@ -405,10 +338,8 @@ impl ListView {
         let rows_start_y = y + Self::HEADER_HEIGHT as i32;
         let max_visible = (height.saturating_sub(Self::HEADER_HEIGHT) / Self::ROW_HEIGHT) as usize;
         let visible = &items[..items.len().min(max_visible)];
-        // Measured over the drawn rows only: those are the icons that must fit.
-        let columns = Self::columns(fonts, visible);
-        let name_x = x + columns.name_x as i32;
-        let col_name_w = width.saturating_sub(columns.name_x + Self::TRAILING_COLUMNS_W);
+        let name_x = x + Self::NAME_X as i32;
+        let col_name_w = width.saturating_sub(Self::NAME_X + Self::TRAILING_COLUMNS_W);
         draw_label(
             surf,
             fonts,
@@ -459,7 +390,8 @@ impl ListView {
                     Self::ROW_HEIGHT,
                     theme.list_selected_bg(),
                 );
-                fill_rect(surf, x, row_y, 3, Self::ROW_HEIGHT, theme.accent());
+                // 1px accent indicator on the row's left edge.
+                fill_rect(surf, x, row_y, 1, Self::ROW_HEIGHT, theme.accent());
             }
 
             // Icon
@@ -468,16 +400,10 @@ impl ListView {
             } else {
                 theme.text_primary()
             };
-            draw_label(
+            draw_icon_centered(
                 surf,
-                fonts,
-                x + Self::ICON_X as i32,
-                row_y + 6,
-                columns.icon_w,
-                20,
-                &item.icon,
-                Self::ICON_FACE,
-                Self::ICON_PX,
+                item.icon,
+                (x + Self::ICON_X as i32, row_y + 6, ICON_BOX_W, 20),
                 icon_col,
             );
 
@@ -565,7 +491,7 @@ impl ListView {
 
 #[derive(Clone, Debug)]
 pub struct GridItemDef {
-    pub icon: String,
+    pub icon: LineIcon,
     pub name: String,
     pub is_dir: bool,
 }
@@ -611,55 +537,61 @@ impl GridView {
             let is_selected = selected_idx == Some(i);
 
             if is_selected {
-                fill_rect(
+                fill_round_rect(
                     surf,
                     cx,
                     cy,
                     Self::CARD_W,
                     Self::CARD_H,
+                    PANEL_RADIUS,
                     theme.list_selected_bg(),
                 );
-                stroke_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.accent());
+                stroke_round_rect(
+                    surf,
+                    cx,
+                    cy,
+                    Self::CARD_W,
+                    Self::CARD_H,
+                    PANEL_RADIUS,
+                    theme.accent(),
+                );
             } else {
-                fill_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.surface());
-                stroke_rect(surf, cx, cy, Self::CARD_W, Self::CARD_H, theme.border());
+                fill_round_rect(
+                    surf,
+                    cx,
+                    cy,
+                    Self::CARD_W,
+                    Self::CARD_H,
+                    PANEL_RADIUS,
+                    theme.surface(),
+                );
+                stroke_round_rect(
+                    surf,
+                    cx,
+                    cy,
+                    Self::CARD_W,
+                    Self::CARD_H,
+                    PANEL_RADIUS,
+                    theme.border(),
+                );
             }
 
             // Inner icon box
-            let icon_box_y = cy + 8;
-            let icon_box_h = 44;
+            let icon_box = (cx + 12, cy + 8, Self::CARD_W - 24, 44);
             let icon_box_bg = if is_selected {
                 theme.list_selected_bg()
             } else {
                 theme.bg()
             };
-            fill_rect(
-                surf,
-                cx + 12,
-                icon_box_y,
-                Self::CARD_W - 24,
-                icon_box_h,
-                icon_box_bg,
-            );
+            let (bx, by, bw, bh) = icon_box;
+            fill_round_rect(surf, bx, by, bw, bh, CONTROL_RADIUS, icon_box_bg);
 
             let icon_fg = if item.is_dir {
                 theme.accent()
             } else {
                 theme.text_primary()
             };
-            draw_label_aligned(
-                surf,
-                fonts,
-                cx + 12,
-                icon_box_y,
-                Self::CARD_W - 24,
-                icon_box_h,
-                &item.icon,
-                FontFace::UiSemibold,
-                18.0,
-                icon_fg,
-                true,
-            );
+            draw_icon_centered(surf, item.icon, icon_box, icon_fg);
 
             // Name label
             let label_y = cy + 56;
@@ -940,97 +872,5 @@ impl NavigationButtons {
                 fg,
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn item(icon: &str) -> ListViewItemDef {
-        ListViewItemDef {
-            icon: String::from(icon),
-            name: String::from("name"),
-            size_str: String::new(),
-            kind_str: String::new(),
-            is_dir: false,
-        }
-    }
-
-    fn place(icon: &str) -> PlacesItemDef {
-        PlacesItemDef {
-            name: String::from("name"),
-            path: String::from("/"),
-            icon: String::from(icon),
-        }
-    }
-
-    /// Every icon's glyphs, which start `LABEL_TEXT_INSET` into the clip rect,
-    /// end inside it, and the name column starts after the icon rect.
-    fn assert_icons_fit(
-        fonts: &mut TextFonts,
-        columns: IconColumns,
-        icons: &[&str],
-        face: FontFace,
-        px: f32,
-        icon_x: u32,
-    ) {
-        for icon in icons {
-            let text_w = fonts.measure(face, icon, px);
-            assert!(
-                LABEL_TEXT_INSET as f32 + text_w <= columns.icon_w as f32,
-                "{icon}: {text_w}px clipped by a {}px column",
-                columns.icon_w
-            );
-        }
-        // The old fixed 24px rect clipped these labels; that is the regression.
-        assert!(columns.icon_w > MIN_ICON_W);
-        assert_eq!(columns.name_x, icon_x + columns.icon_w + ICON_COLUMN_GAP);
-    }
-
-    #[test]
-    fn bracketed_list_icons_fit_their_column() {
-        let mut fonts = TextFonts::new();
-        let icons = ["[D]", "[X]", "[F]"];
-        let items = icons.map(item);
-        let columns = ListView::columns(&mut fonts, &items);
-        assert_icons_fit(
-            &mut fonts,
-            columns,
-            &icons,
-            ListView::ICON_FACE,
-            ListView::ICON_PX,
-            ListView::ICON_X,
-        );
-    }
-
-    #[test]
-    fn bracketed_place_icons_fit_their_column() {
-        let mut fonts = TextFonts::new();
-        // The Files sidebar's places (cells/apps/files/src/model.rs).
-        let icons = ["(/)", "[A]", "[*]", "[S]", "[=]", "[T]"];
-        let items = icons.map(place);
-        let columns = PlacesSidebar::columns(&mut fonts, &items);
-        assert_icons_fit(
-            &mut fonts,
-            columns,
-            &icons,
-            PlacesSidebar::ICON_FACE,
-            PlacesSidebar::ICON_PX,
-            PlacesSidebar::ICON_X,
-        );
-    }
-
-    #[test]
-    fn single_glyph_icons_keep_the_original_layout() {
-        let mut fonts = TextFonts::new();
-        let columns = ListView::columns(&mut fonts, &[item("*")]);
-        assert_eq!(columns.icon_w, MIN_ICON_W);
-        assert_eq!(columns.name_x, 36);
-        // An empty list measures nothing and falls back to the same layout.
-        assert_eq!(ListView::columns(&mut fonts, &[]), columns);
-        let sidebar = PlacesSidebar::columns(&mut fonts, &[place("*")]);
-        assert_eq!(sidebar.icon_w, MIN_ICON_W);
-        assert_eq!(sidebar.name_x, 42);
     }
 }

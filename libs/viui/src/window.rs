@@ -15,10 +15,10 @@ use ostd::syscall::sys_recv;
 
 use api::display::PixelFormat;
 
-use crate::canvas::{Color, FramebufferCanvas, ViCanvas};
+use crate::canvas::{FramebufferCanvas, ViCanvas};
 use crate::event::{Event, KeyCode, Modifiers, MouseButton};
 use crate::layout::{Point, Rect};
-use crate::theme::DARK_THEME;
+use crate::theme::ViTheme;
 use crate::widget::{PaintCx, ViWidget, WidgetTree};
 
 // ─── Chrome geometry constants ───────────────────────────────────────────────
@@ -27,12 +27,8 @@ const TITLEBAR_H: f32 = 28.0;
 const BTN_SIZE: f32 = 16.0;
 const BTN_HIT_SIZE: f32 = 20.0;
 const BTN_MARGIN: f32 = 6.0;
-const CHROME_BG: Color = Color::rgb(35, 35, 50);
-const CHROME_BTN_CLOSE: Color = Color::rgb(200, 60, 60);
-const CHROME_BTN_MIN: Color = Color::rgb(200, 160, 40);
-const CHROME_BTN_MAX: Color = Color::rgb(60, 160, 80);
-const CHROME_BORDER: Color = Color::rgb(60, 60, 90);
-const TITLE_CLR: Color = Color::WHITE;
+/// Side of the 1px control glyphs; odd so the close diagonals cross on one pixel.
+const GLYPH: i32 = 9;
 
 // ─── WindowEvent ─────────────────────────────────────────────────────────────
 
@@ -98,32 +94,45 @@ impl WindowChrome {
         Rect::new(x, (TITLEBAR_H - BTN_SIZE) / 2.0, BTN_SIZE, BTN_SIZE)
     }
 
-    /// Paint the titlebar onto `canvas` (writes from y=0).
-    pub fn paint(&self, canvas: &mut dyn ViCanvas, font: &mut crate::font_context::FontContext) {
+    /// Paint the titlebar onto `canvas` (writes from y=0) in CellOS Linear
+    /// style: theme tab colours, a 1px separator and 1px control glyphs.
+    pub fn paint(
+        &self,
+        canvas: &mut dyn ViCanvas,
+        font: &mut crate::font_context::FontContext,
+        theme: &dyn ViTheme,
+    ) {
         let w = canvas.width();
-        let bg = Rect::new(0.0, 0.0, w as f32, TITLEBAR_H);
-        canvas.fill_rect(bg, CHROME_BG);
-
-        // Bottom border
+        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, TITLEBAR_H), theme.tab_active_bg());
         canvas.draw_line(
             Point::new(0.0, TITLEBAR_H - 1.0),
-            Point::new(w as f32, TITLEBAR_H - 1.0),
-            CHROME_BORDER,
+            Point::new(w as f32 - 1.0, TITLEBAR_H - 1.0),
+            theme.tab_border(),
         );
-
-        // Title text (left-padded)
         canvas.draw_text_scaled(
             Point::new(8.0, (TITLEBAR_H - font.line_height()) * 0.5),
             &self.title,
             font.size_px,
-            TITLE_CLR,
+            theme.tab_active_fg(),
             &mut font.atlas,
         );
 
-        // Buttons: close, max, min (right-aligned)
-        canvas.fill_rect(self.close_btn_icon_rect(w), CHROME_BTN_CLOSE);
-        canvas.fill_rect(self.max_btn_rect(w), CHROME_BTN_MAX);
-        canvas.fill_rect(self.min_btn_rect(w), CHROME_BTN_MIN);
+        let ink = theme.text_secondary();
+        let line = |canvas: &mut dyn ViCanvas, x0: i32, y0: i32, x1: i32, y1: i32| {
+            let point = |x: i32, y: i32| Point::new(x as f32, y as f32);
+            canvas.draw_line(point(x0, y0), point(x1, y1), ink);
+        };
+        let last = GLYPH - 1;
+        let (x, y) = glyph_origin(self.close_btn_rect(w));
+        line(canvas, x, y, x + last, y + last);
+        line(canvas, x + last, y, x, y + last);
+        let (x, y) = glyph_origin(self.max_btn_rect(w));
+        line(canvas, x, y, x + last, y);
+        line(canvas, x + last, y, x + last, y + last);
+        line(canvas, x + last, y + last, x, y + last);
+        line(canvas, x, y + last, x, y);
+        let (x, y) = glyph_origin(self.min_btn_rect(w));
+        line(canvas, x, y + GLYPH / 2, x + last, y + GLYPH / 2);
     }
 
     /// Process a pointer event at `surface-local` pos. Returns a WindowEvent if chrome handled it.
@@ -165,6 +174,12 @@ impl WindowChrome {
             _ => None,
         }
     }
+}
+
+/// Top-left of a [`GLYPH`]-sized glyph centred on whole pixels in `hit`.
+fn glyph_origin(hit: Rect) -> (i32, i32) {
+    let inset = |extent: f32| ((extent as i32 - GLYPH) / 2).max(0);
+    (hit.x as i32 + inset(hit.w), hit.y as i32 + inset(hit.h))
 }
 
 // ─── Input translation ───────────────────────────────────────────────────────
@@ -359,17 +374,15 @@ impl ManagedWindow {
         let h = self.surf.height();
         let stride = self.surf.stride() as u32;
         let pixels = self.surf.pixels_mut();
+        let theme = crate::theme::system();
         let mut canvas = FramebufferCanvas::new(pixels, stride, w, h);
-        canvas.fill_rect(
-            Rect::new(0.0, 0.0, w as f32, h as f32),
-            crate::theme::ViTheme::bg(&DARK_THEME).with_alpha(255),
-        );
+        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, h as f32), theme.bg().with_alpha(255));
 
         // Chrome occupies top TITLEBAR_H rows; content paints below
-        self.chrome.paint(&mut canvas, &mut self.font);
+        self.chrome.paint(&mut canvas, &mut self.font, theme);
 
         let content_origin = Point::new(0.0, TITLEBAR_H);
-        let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME, &mut self.font);
+        let mut cx = PaintCx::with_theme(&mut canvas, theme, &mut self.font);
         cx.origin = content_origin;
         self.tree.paint(&mut cx);
 
@@ -384,6 +397,8 @@ pub struct WindowManager {
     focused: usize,
     comp_tid: usize,
     mouse_pos: Point,
+    /// System theme serial seen at the last repaint.
+    theme_serial: u32,
 }
 
 impl WindowManager {
@@ -394,6 +409,7 @@ impl WindowManager {
             focused: 0,
             comp_tid: wait_for_compositor(),
             mouse_pos: Point::ZERO,
+            theme_serial: crate::theme::system_serial(),
         }
     }
 
@@ -446,7 +462,15 @@ impl WindowManager {
         loop {
             let mut buf = [0u8; 64];
             if let ostd::syscall::SyscallResult::Ok(_) = sys_recv(0, &mut buf) {
-                if let Some(raw_ev) = decode_input_event(&buf) {
+                if ostd::display::appearance::note_frame(&buf) {
+                    let serial = crate::theme::system_serial();
+                    if serial != self.theme_serial {
+                        self.theme_serial = serial;
+                        for window in &mut self.windows {
+                            window.repaint();
+                        }
+                    }
+                } else if let Some(raw_ev) = decode_input_event(&buf) {
                     // Track mouse position
                     if let InputEvent::MouseMove { x, y, .. } = raw_ev {
                         self.mouse_pos = Point::new(x as f32, y as f32);

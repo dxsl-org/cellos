@@ -15,7 +15,7 @@ mod game;
 use api::declare_manifest;
 use api::display::PixelFormat;
 use api::input::{InputEvent, KeyState, KeySym};
-use ostd::display::{wait_for_compositor, ViSurface};
+use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
@@ -41,6 +41,9 @@ fn cell_main() {
             sys_exit(1);
         }
     };
+    if surf.set_icon(LineIcon::Blocks).is_err() {
+        ostd::io::println("[tetris] set_icon failed; Cell Tab keeps the generic icon");
+    }
     surf.raise();
 
     while !request_focus() {

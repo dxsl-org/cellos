@@ -363,7 +363,7 @@ pub fn extract_article_cached(
             let meta_text = meta_parts.join(" • ");
             let mut span = StyledSpan::plain(&meta_text);
             span.italic = true;
-            span.color = Some(crate::draw::theme::TEXT_MUTED);
+            span.color = Some(crate::draw::ink::MUTED);
             nodes.push(DocNode::Paragraph {
                 spans: alloc::vec![span],
             });
@@ -400,7 +400,6 @@ pub fn extract_article_cached(
             let mut span = StyledSpan::plain("📖 Đọc tiếp trang tiếp theo →");
             span.link = Some(next_url);
             span.bold = true;
-            span.color = Some(crate::draw::theme::ACCENT_CYAN);
             nodes.push(DocNode::ListItem {
                 bullet: '▸',
                 indent: 0,
@@ -412,7 +411,6 @@ pub fn extract_article_cached(
                 let mut span = StyledSpan::plain(&link_title);
                 span.link = Some(link_url);
                 span.bold = true;
-                span.color = Some(crate::draw::theme::ACCENT_CYAN);
                 nodes.push(DocNode::ListItem {
                     bullet: '•',
                     indent: 0,
@@ -447,7 +445,6 @@ pub fn extract_article_cached(
                 let mut span = StyledSpan::plain(&card.title);
                 span.link = Some(card.url.clone());
                 span.bold = true;
-                span.color = Some(crate::draw::theme::ACCENT_CYAN);
                 nodes.push(DocNode::ListItem {
                     bullet: '•',
                     indent: 0,
@@ -456,7 +453,7 @@ pub fn extract_article_cached(
                 if let Some(price) = card.price {
                     let mut price_span = StyledSpan::plain(&format!("  💰 {}", price));
                     price_span.bold = true;
-                    price_span.color = Some(crate::draw::Color::rgb(166, 227, 161));
+                    price_span.color = Some(crate::draw::ink::ACCENT);
                     nodes.push(DocNode::Paragraph {
                         spans: alloc::vec![price_span],
                     });
@@ -471,7 +468,7 @@ pub fn extract_article_cached(
                 if let Some(meta) = card.meta {
                     let mut meta_span = StyledSpan::plain(&format!("  {}", meta));
                     meta_span.italic = true;
-                    meta_span.color = Some(crate::draw::theme::TEXT_MUTED);
+                    meta_span.color = Some(crate::draw::ink::MUTED);
                     nodes.push(DocNode::Paragraph {
                         spans: alloc::vec![meta_span],
                     });
@@ -483,7 +480,6 @@ pub fn extract_article_cached(
                 let mut span = StyledSpan::plain(&link_title);
                 span.link = Some(link_url);
                 span.bold = true;
-                span.color = Some(crate::draw::theme::ACCENT_CYAN);
                 nodes.push(DocNode::ListItem {
                     bullet: '•',
                     indent: 0,
@@ -504,7 +500,7 @@ pub fn extract_article_cached(
                 let mut span = StyledSpan::plain(&format!("[ {} ]", pg_text));
                 span.link = Some(pg_url);
                 span.bold = true;
-                span.color = Some(crate::draw::theme::ACCENT_BLUE);
+                span.color = Some(crate::draw::ink::ACCENT);
                 spans.push(span);
             }
             nodes.push(DocNode::Paragraph { spans });
@@ -520,7 +516,7 @@ pub fn extract_article_cached(
             let mut span = StyledSpan::plain(&link_title);
             span.link = Some(link_url);
             span.bold = true;
-            span.color = Some(crate::draw::theme::ACCENT_BLUE);
+            span.color = Some(crate::draw::ink::ACCENT);
             nodes.push(DocNode::ListItem {
                 bullet: '▸',
                 indent: 0,
@@ -1869,7 +1865,7 @@ fn render_clean_subtree(
                                 cur=child.next_sibling;continue;
                             }
                             let mut span = StyledSpan::plain(&format!("[🖼 {}]", alt));
-                            span.color = Some(crate::draw::theme::TEXT_MUTED);
+                            span.color = Some(crate::draw::ink::MUTED);
                             out.push(DocNode::Paragraph {
                                 spans: alloc::vec![span],
                             });
@@ -1882,7 +1878,7 @@ fn render_clean_subtree(
                             if !text.is_empty() {
                                 let mut span = StyledSpan::plain(&text);
                                 span.italic = true;
-                                span.color = Some(crate::draw::theme::TEXT_MUTED);
+                                span.color = Some(crate::draw::ink::MUTED);
                                 out.push(DocNode::Paragraph {
                                     spans: alloc::vec![span],
                                 });
@@ -2029,9 +2025,9 @@ fn collect_article_spans(
                 }
                 NodeData::Text(text) if !text.is_empty() => {
                     let color = if link.is_some() {
-                        Some(crate::draw::theme::ACCENT_CYAN)
+                        Some(crate::draw::ink::ACCENT)
                     } else if code {
-                        Some(crate::draw::theme::ACCENT_BLUE)
+                        Some(crate::draw::code_ink::INLINE)
                     } else {
                         None
                     };
@@ -2040,6 +2036,7 @@ fn collect_article_spans(
                         bold,
                         italic,
                         code,
+                        mono: false,
                         link: link.clone(),
                         color,
                     });

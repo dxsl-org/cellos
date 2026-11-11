@@ -82,6 +82,16 @@ fn execute_commands(
         }
         match cmd {
             GpuCmd::FillRect { rect, color } => canvas.fill_rect(*rect, *color),
+            GpuCmd::FillRoundRect {
+                rect,
+                radius,
+                color,
+            } => canvas.fill_round_rect(*rect, *radius, *color),
+            GpuCmd::StrokeRoundRect {
+                rect,
+                radius,
+                color,
+            } => canvas.stroke_round_rect(*rect, *radius, *color),
             GpuCmd::DrawLine { a, b, color } => canvas.draw_line(*a, *b, *color),
             GpuCmd::DrawText {
                 pos,
@@ -158,5 +168,40 @@ mod tests {
                 assert_eq!(recorded, direct, "recorded playback differs at {px}px");
             }
         }
+    }
+
+    #[test]
+    fn recorded_round_rects_replay_pixel_identical_to_direct_drawing() {
+        use ostd::display::linear::PANEL_RADIUS;
+
+        let (w, h) = (48u32, 32u32);
+        let rect = Rect::new(4.0, 3.0, 36.0, 24.0);
+        // Clip cuts through the bottom-right corner: recorded geometry must
+        // stay unclipped so the visible arc is unchanged.
+        let clip = Rect::new(0.0, 0.0, 30.0, 20.0);
+        let (fill, ink) = (Color::rgb(30, 60, 90), Color::rgb(200, 100, 50));
+        let draw = |canvas: &mut dyn ViCanvas| {
+            canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, h as f32), Color::WHITE);
+            canvas.fill_round_rect(rect, PANEL_RADIUS, fill);
+            canvas.stroke_round_rect(rect, PANEL_RADIUS, ink);
+            canvas.clip_push(clip);
+            canvas.fill_round_rect(rect, PANEL_RADIUS, ink);
+            canvas.stroke_round_rect(rect, PANEL_RADIUS, fill);
+            canvas.clip_pop();
+        };
+
+        let mut commands = GpuCommandBuffer::new();
+        draw(&mut GpuCanvas::new(&mut commands, w, h));
+        let mut recorded = alloc::vec![0; (w * h * 4) as usize];
+        let mut direct = recorded.clone();
+        let mut font = crate::font_context::FontContext::default();
+        execute_commands(
+            &mut FramebufferCanvas::new(&mut recorded, w * 4, w, h),
+            &mut font,
+            &commands,
+            None,
+        );
+        draw(&mut FramebufferCanvas::new(&mut direct, w * 4, w, h));
+        assert_eq!(recorded, direct);
     }
 }

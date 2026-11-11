@@ -29,8 +29,8 @@ mod trace;
 
 use doc::{DocNode, Document};
 use draw::{
-    fill_rect, stroke_rect, theme, AddressBar, Color, NavigationButtons, ProgressIndicator,
-    ScrollBar, StatusBar,
+    draw_icon_centered, fill_rect, fill_round_rect, stroke_round_rect, AddressBar, Color, LineIcon,
+    NavigationButtons, ProgressIndicator, ScrollBar, StatusBar, CONTROL_RADIUS, PANEL_RADIUS,
 };
 use loader::{load_document, DocumentLoadJob, LoadedDocument};
 use parser::DocFormat;
@@ -444,6 +444,9 @@ impl OcelViewer {
     fn new(comp_tid: usize, width: u32, height: u32, initial_url: &str) -> Option<Self> {
         let surface = ViSurface::create(comp_tid, width, height, PixelFormat::Bgra8888).ok()?;
         let _ = surface.set_title("Ocel Document Viewer");
+        if surface.set_icon(LineIcon::Document).is_err() {
+            ostd::io::println("[ocel] set_icon failed; Cell Tab keeps the generic icon");
+        }
 
         let mut js_runtime = js::Tier2JsBridge::new();
         let mut fonts = TextFonts::new();
@@ -1199,20 +1202,22 @@ impl OcelViewer {
 
         let active_scroll = self.tabs[self.active_tab].scroll_y;
         let max_s = self.max_scroll();
-        let sys_theme = self
-            .reader_theme
-            .resolved_theme(draw::active_system_palette());
+        let system = viui::theme::system_palette();
+        let chrome = system.theme();
+        let is_reader = self.tabs[self.active_tab].doc.is_reader_mode();
+        // The reader surface takes the reader palette; every other native
+        // document follows the session palette like the chrome around it.
+        let content_palette = if is_reader {
+            self.reader_theme.resolved_palette(system)
+        } else {
+            system
+        };
+        let content = content_palette.theme();
         let script_status = self.script_status();
         if document_dirty {
             self.tabs[self.active_tab].browser.layout_dirty = true;
-            let is_reader = self.tabs[self.active_tab].doc.is_reader_mode();
-            let bg_color = if is_reader {
-                self.reader_theme.bg_color()
-            } else {
-                theme::BG_DARK
-            };
-            fill_rect(&mut self.surface, 0, view_y, w, view_h, bg_color);
-            self.tabs[self.active_tab].doc.render_viewport_themed(
+            fill_rect(&mut self.surface, 0, view_y, w, view_h, content.reader_bg());
+            self.tabs[self.active_tab].doc.render_viewport(
                 &mut self.fonts,
                 &mut self.surface,
                 0,
@@ -1220,22 +1225,18 @@ impl OcelViewer {
                 w.saturating_sub(16),
                 view_h,
                 active_scroll,
-                if is_reader {
-                    Some(self.reader_theme)
-                } else {
-                    None
-                },
+                content_palette,
             );
-            // Reading Progress Indicator (2px thin bar at top of viewport)
+            // Reading progress: a 1px rule along the top of the viewport.
             if is_reader && max_s > 0 {
                 let progress_ratio = (active_scroll as f32 / max_s as f32).clamp(0.0, 1.0);
                 ProgressIndicator::render(
                     &mut self.surface,
-                    sys_theme,
+                    content,
                     0,
                     view_y,
                     w,
-                    2,
+                    1,
                     progress_ratio,
                 );
             }
@@ -1245,7 +1246,7 @@ impl OcelViewer {
                 let doc_h = self.current_tab().doc.total_height;
                 ScrollBar::render(
                     &mut self.surface,
-                    sys_theme,
+                    content,
                     sb_x,
                     view_y,
                     12,
@@ -1263,26 +1264,17 @@ impl OcelViewer {
         let regular = FontFace::UiRegular;
         let semibold = FontFace::UiSemibold;
         if navigation_dirty {
-            fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, sys_theme.surface());
-            fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, sys_theme.border());
+            fill_rect(surf, 0, 0, w, TOOLBAR_HEIGHT, chrome.surface());
+            fill_rect(surf, 0, TOOLBAR_HEIGHT as i32 - 1, w, 1, chrome.border());
             let tab = &self.tabs[self.active_tab];
             let can_back = tab.history_idx > 0;
             let can_fwd = tab.history_idx + 1 < tab.history.len();
-            NavigationButtons::render(surf, fonts, sys_theme, 10, 8, can_back, can_fwd);
+            NavigationButtons::render(surf, fonts, chrome, 10, 8, can_back, can_fwd);
             let addr_x = 76;
             let addr_w = w.saturating_sub(176);
-            AddressBar::render(
-                surf,
-                fonts,
-                sys_theme,
-                addr_x,
-                8,
-                addr_w,
-                28,
-                &self.url_input,
-            );
+            AddressBar::render(surf, fonts, chrome, addr_x, 8, addr_w, 28, &self.url_input);
             let btn_x = addr_x + addr_w as i32 + 8;
-            fill_rect(surf, btn_x, 8, 38, 28, sys_theme.accent());
+            fill_round_rect(surf, btn_x, 8, 38, 28, CONTROL_RADIUS, chrome.accent());
             ui_text(
                 fonts,
                 surf,
@@ -1296,44 +1288,70 @@ impl OcelViewer {
             let reader_x = btn_x + 44;
             let reader = tab.doc.is_reader_mode() || tab.doc.web_layout.is_none();
             let btn_w = 32u32;
-            if reader {
-                fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.accent());
-                draw::draw_book_icon(surf, reader_x + 16, 22, Color::WHITE);
+            let (icon, ink) = if reader {
+                fill_round_rect(
+                    surf,
+                    reader_x,
+                    8,
+                    btn_w,
+                    28,
+                    CONTROL_RADIUS,
+                    chrome.accent(),
+                );
+                (LineIcon::Document, Color::WHITE)
             } else {
-                fill_rect(surf, reader_x, 8, btn_w, 28, sys_theme.input_bg());
-                stroke_rect(surf, reader_x, 8, btn_w, 28, sys_theme.border());
-                draw::draw_globe_icon(surf, reader_x + 16, 22, sys_theme.accent());
-            }
+                fill_round_rect(
+                    surf,
+                    reader_x,
+                    8,
+                    btn_w,
+                    28,
+                    CONTROL_RADIUS,
+                    chrome.input_bg(),
+                );
+                stroke_round_rect(
+                    surf,
+                    reader_x,
+                    8,
+                    btn_w,
+                    28,
+                    CONTROL_RADIUS,
+                    chrome.border(),
+                );
+                (LineIcon::Globe, chrome.accent())
+            };
+            draw_icon_centered(surf, icon, (reader_x, 8, btn_w, 28), ink);
 
             // reason: TABBAR_HEIGHT is a layout config const that is 0 while tabs are
             // compositor-native; the in-app tab bar stays available for nonzero values.
             #[allow(clippy::absurd_extreme_comparisons)]
             if TABBAR_HEIGHT > 0 {
                 let tabbar_y = TOOLBAR_HEIGHT as i32;
-                fill_rect(surf, 0, tabbar_y, w, TABBAR_HEIGHT, theme::BG_TOOLBAR);
+                fill_rect(surf, 0, tabbar_y, w, TABBAR_HEIGHT, chrome.surface());
                 fill_rect(
                     surf,
                     0,
                     tabbar_y + TABBAR_HEIGHT as i32 - 1,
                     w,
                     1,
-                    theme::BORDER,
+                    chrome.tab_border(),
                 );
                 let num_tabs = self.tabs.len() as u32;
                 let tab_w = 140u32.min(w.saturating_sub(60) / num_tabs.max(1));
                 for (i, tab) in self.tabs.iter().enumerate() {
                     let x = 10 + i as i32 * tab_w as i32;
                     let active = i == self.active_tab;
-                    fill_rect(
+                    fill_round_rect(
                         surf,
                         x,
                         tabbar_y + 2,
                         tab_w.saturating_sub(2),
                         TABBAR_HEIGHT - 2,
+                        CONTROL_RADIUS,
                         if active {
-                            theme::BG_DARK
+                            chrome.tab_active_bg()
                         } else {
-                            theme::BG_INPUT
+                            chrome.tab_inactive_bg()
                         },
                     );
                     if active {
@@ -1342,8 +1360,8 @@ impl OcelViewer {
                             x,
                             tabbar_y,
                             tab_w.saturating_sub(2),
-                            2,
-                            theme::ACCENT_CYAN,
+                            1,
+                            chrome.accent(),
                         );
                     }
                     ui_text(
@@ -1357,9 +1375,9 @@ impl OcelViewer {
                         ),
                         &tab.title,
                         if active {
-                            theme::TEXT_PRIMARY
+                            chrome.tab_active_fg()
                         } else {
-                            theme::TEXT_MUTED
+                            chrome.tab_inactive_fg()
                         },
                         regular,
                         14.0,
@@ -1371,7 +1389,7 @@ impl OcelViewer {
                             surf,
                             (x + tab_w as i32 - 20, tabbar_y + 2, 18, TABBAR_HEIGHT - 4),
                             "×",
-                            theme::TEXT_MUTED,
+                            chrome.tab_inactive_fg(),
                             regular,
                             14.0,
                             true,
@@ -1380,13 +1398,21 @@ impl OcelViewer {
                 }
                 let plus_x = 10 + num_tabs as i32 * tab_w as i32 + 6;
                 if plus_x + 22 < w as i32 {
-                    fill_rect(surf, plus_x, tabbar_y + 3, 22, 22, theme::BG_INPUT);
+                    fill_round_rect(
+                        surf,
+                        plus_x,
+                        tabbar_y + 3,
+                        22,
+                        22,
+                        CONTROL_RADIUS,
+                        chrome.button_normal(),
+                    );
                     ui_text(
                         fonts,
                         surf,
                         (plus_x, tabbar_y + 3, 22, 22),
                         "+",
-                        theme::ACCENT_BLUE,
+                        chrome.accent(),
                         regular,
                         16.0,
                         true,
@@ -1399,8 +1425,24 @@ impl OcelViewer {
             let sb_w = 320u32.min(w.saturating_sub(30));
             let sb_x = w.saturating_sub(sb_w + 30) as i32;
             let sb_y = (TOOLBAR_HEIGHT + TABBAR_HEIGHT + 8) as i32;
-            fill_rect(surf, sb_x, sb_y, sb_w, 34, theme::BG_INPUT);
-            stroke_rect(surf, sb_x, sb_y, sb_w, 34, theme::ACCENT_BLUE);
+            fill_round_rect(
+                surf,
+                sb_x,
+                sb_y,
+                sb_w,
+                34,
+                PANEL_RADIUS,
+                chrome.spotlight_bg(),
+            );
+            stroke_round_rect(
+                surf,
+                sb_x,
+                sb_y,
+                sb_w,
+                34,
+                PANEL_RADIUS,
+                chrome.spotlight_border(),
+            );
             let count = if self.search_matches.is_empty() {
                 String::from("0/0")
             } else {
@@ -1413,7 +1455,7 @@ impl OcelViewer {
                 surf,
                 (sb_x + 8, sb_y, label_w, 34),
                 "Find:",
-                theme::TEXT_MUTED,
+                chrome.text_secondary(),
                 semibold,
                 14.0,
                 false,
@@ -1428,7 +1470,7 @@ impl OcelViewer {
                     34,
                 ),
                 &self.search_query,
-                theme::TEXT_PRIMARY,
+                chrome.text_primary(),
                 regular,
                 14.0,
                 false,
@@ -1443,7 +1485,7 @@ impl OcelViewer {
                     34,
                 ),
                 &count,
-                theme::TEXT_MUTED,
+                chrome.text_secondary(),
                 regular,
                 14.0,
                 true,
@@ -1454,14 +1496,30 @@ impl OcelViewer {
             let panel_x = 8;
             let panel_y = view_y + 8;
             let panel_h = view_h.saturating_sub(16);
-            fill_rect(surf, panel_x, panel_y, panel_w, panel_h, theme::BG_INPUT);
-            stroke_rect(surf, panel_x, panel_y, panel_w, panel_h, theme::ACCENT_BLUE);
+            fill_round_rect(
+                surf,
+                panel_x,
+                panel_y,
+                panel_w,
+                panel_h,
+                PANEL_RADIUS,
+                chrome.spotlight_bg(),
+            );
+            stroke_round_rect(
+                surf,
+                panel_x,
+                panel_y,
+                panel_w,
+                panel_h,
+                PANEL_RADIUS,
+                chrome.spotlight_border(),
+            );
             ui_text(
                 fonts,
                 surf,
                 (panel_x + 10, panel_y + 2, panel_w.saturating_sub(20), 30),
                 "Contents · Esc closes",
-                theme::ACCENT_CYAN,
+                chrome.accent(),
                 semibold,
                 15.0,
                 false,
@@ -1485,7 +1543,7 @@ impl OcelViewer {
                         26,
                     ),
                     &entry.title,
-                    theme::TEXT_PRIMARY,
+                    chrome.text_primary(),
                     regular,
                     14.0,
                     false,
@@ -1507,7 +1565,7 @@ impl OcelViewer {
         StatusBar::render_split(
             &mut self.surface,
             fonts,
-            sys_theme,
+            chrome,
             status_y,
             w,
             STATUS_HEIGHT,
@@ -1538,7 +1596,10 @@ impl OcelViewer {
             });
         }
         if let Some((iw, ih, pixels)) = &self.zoomed_image {
-            fill_rect(&mut self.surface, 0, 0, w, h, Color::rgba(0, 0, 0, 220));
+            // The lightbox is a dark scrim in every palette so the image reads
+            // against it, hence the fixed Dark palette.
+            let lightbox = viui::theme::SystemPalette::Dark.theme();
+            fill_rect(&mut self.surface, 0, 0, w, h, lightbox.bg().with_alpha(220));
             let max_w = w.saturating_sub(64).max(64);
             let max_h = h.saturating_sub(80).max(64);
             let scale_w = max_w as f32 / (*iw).max(1) as f32;
@@ -1564,7 +1625,7 @@ impl OcelViewer {
                 &mut self.surface,
                 (0, 16, w, 24),
                 "Image Zoom · Click or Escape to close",
-                Color::rgb(240, 240, 240),
+                lightbox.text_primary(),
                 FontFace::UiSemibold,
                 15.0,
                 true,
@@ -2503,6 +2564,7 @@ fn cell_main() {
         sys_yield();
     }
 
+    let mut theme_serial = viui::theme::system_serial();
     viewer.render();
     ostd::io::println("[ocel] Window initialized and painted.");
 
@@ -2557,6 +2619,13 @@ fn cell_main() {
         loader::poll_cleanup();
         viewer.poll_loading();
         viewer.poll_browser();
+        // ostd records palette announcements while polling; repaint everything
+        // once the session palette moved since the last full paint.
+        let serial = viui::theme::system_serial();
+        if serial != theme_serial {
+            theme_serial = serial;
+            viewer.render();
+        }
 
         sys_yield();
     }
@@ -2585,51 +2654,71 @@ mod main_ux_tests {
         assert_eq!(ReaderThemeMode::Dark.name(), "Dark");
         assert_eq!(ReaderThemeMode::Paper.name(), "Paper");
 
-        // Verify FollowSystem resolves to the current active SystemPalette
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Light),
-            ReaderThemeMode::Light.resolved_bg(SystemPalette::Light)
-        );
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Dark),
-            ReaderThemeMode::Dark.resolved_bg(SystemPalette::Dark)
-        );
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.resolved_bg(SystemPalette::Paper),
-            ReaderThemeMode::Paper.resolved_bg(SystemPalette::Paper)
-        );
+        // FollowSystem tracks the palette it is given; explicit modes ignore it.
+        for system in [
+            SystemPalette::Light,
+            SystemPalette::Dark,
+            SystemPalette::Paper,
+        ] {
+            assert_eq!(
+                ReaderThemeMode::FollowSystem.resolved_palette(system),
+                system
+            );
+            assert_eq!(
+                ReaderThemeMode::Light.resolved_palette(system),
+                SystemPalette::Light
+            );
+            assert_eq!(
+                ReaderThemeMode::Dark.resolved_palette(system),
+                SystemPalette::Dark
+            );
+            assert_eq!(
+                ReaderThemeMode::Paper.resolved_palette(system),
+                SystemPalette::Paper
+            );
+        }
 
-        // Verify dynamic zero-argument bg_color() follows active system palette
-        draw::set_active_system_palette(SystemPalette::Dark);
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.bg_color(),
-            ReaderThemeMode::Dark.bg_color()
-        );
+        let bg = |mode: ReaderThemeMode| {
+            mode.resolved_palette(SystemPalette::Light)
+                .theme()
+                .reader_bg()
+        };
+        assert_ne!(bg(ReaderThemeMode::Light), bg(ReaderThemeMode::Dark));
+        assert_ne!(bg(ReaderThemeMode::Dark), bg(ReaderThemeMode::Paper));
+        assert_ne!(bg(ReaderThemeMode::Paper), bg(ReaderThemeMode::Light));
+    }
 
-        draw::set_active_system_palette(SystemPalette::Paper);
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.bg_color(),
-            ReaderThemeMode::Paper.bg_color()
-        );
+    #[test]
+    fn span_role_tags_resolve_against_the_painting_theme() {
+        use draw::code_ink::{self, CodePalette};
+        use draw::ink;
+        use viui::theme::SystemPalette;
 
-        draw::set_active_system_palette(SystemPalette::Light);
-        assert_eq!(
-            ReaderThemeMode::FollowSystem.bg_color(),
-            ReaderThemeMode::Light.bg_color()
-        );
+        for system in [
+            SystemPalette::Light,
+            SystemPalette::Dark,
+            SystemPalette::Paper,
+        ] {
+            let theme = system.theme();
+            assert_eq!(ink::resolve(theme, ink::ACCENT), theme.accent());
+            assert_eq!(ink::resolve(theme, ink::MUTED), theme.reader_subtext());
+            assert_eq!(ink::resolve(theme, code_ink::STRING), code_ink::STRING);
 
-        assert_ne!(
-            ReaderThemeMode::Light.bg_color(),
-            ReaderThemeMode::Dark.bg_color()
+            // Code roles resolve against the code palette of the same document
+            // palette, even where a tag shares its value with an `ink` role.
+            let code = CodePalette::for_palette(system);
+            assert_eq!(code.resolve(code_ink::PLAIN), code.plain);
+            assert_eq!(code.resolve(code_ink::COMMENT), code.comment);
+            assert_eq!(code.resolve(code_ink::KEYWORD), code.keyword);
+            assert_eq!(code.resolve(code_ink::STRING), code.string);
+            assert_eq!(code.resolve(code_ink::NUMBER), code.number);
+            assert_eq!(code.resolve(code_ink::INLINE), code.inline);
+        }
+        assert_eq!(
+            CodePalette::for_palette(SystemPalette::Light).resolve(code_ink::KEYWORD),
+            code_ink::LIGHT.keyword
         );
-        assert_ne!(
-            ReaderThemeMode::Dark.bg_color(),
-            ReaderThemeMode::Paper.bg_color()
-        );
-        assert_ne!(
-            ReaderThemeMode::Paper.bg_color(),
-            ReaderThemeMode::Light.bg_color()
-        );
+        assert_ne!(code_ink::LIGHT.keyword, code_ink::KEYWORD);
     }
 
     #[test]

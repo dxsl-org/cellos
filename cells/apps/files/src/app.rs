@@ -319,11 +319,16 @@ impl<F: FileSystem> FilesApp<F> {
             return;
         }
         let _ = self.fs.mkdir(TRASH_DIR);
+        // No Trash (e.g. `/data` not mounted): say so and name the permanent path
+        // instead of reporting a bare VFS error for the item.
         let trash_existing = match self.names_in(TRASH_DIR) {
             Ok(names) => names,
             Err(e) => {
-                self.status_message =
-                    format!("Cannot move {} to Trash: {}", item.name, e.describe());
+                self.status_message = format!(
+                    "Trash unavailable ({}): {} kept; Shift+Delete deletes permanently",
+                    e.describe(),
+                    item.name
+                );
                 return;
             }
         };
@@ -701,6 +706,18 @@ mod tests {
         assert_eq!(intent.action, api::services::mime::FileAction::Open);
         assert_eq!(intent.app_id, "terminal");
     }
+    #[test]
+    fn delete_without_a_trash_volume_keeps_the_file_and_names_shift_delete() {
+        // c5_tree has /tmp but no /data, like an image without a data disk.
+        let mut app = app_at(c5_tree(), "/tmp/c5dir");
+        app.selected_index = 1;
+        app.trash_selected();
+        assert!(app.fs.stat("/tmp/c5dir/a.txt").is_ok());
+        assert!(!app.can_undo_trash());
+        assert!(app.status_message.starts_with("Trash unavailable"), "{}", app.status_message);
+        assert!(app.status_message.contains("Shift+Delete"));
+    }
+
     #[test]
     fn trash_and_undo_restores_file() {
         let fs = FakeFs::new()

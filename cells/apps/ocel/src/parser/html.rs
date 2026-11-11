@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use dom_arena::{DocumentArena, NodeData, NodeId};
 
 use crate::doc::{DocNode, StyledSpan};
-use crate::draw::theme;
+use crate::draw::{code_ink, ink};
 
 pub enum ScriptSource {
     Inline(NodeId),
@@ -493,7 +493,7 @@ fn render_children(
                             }
                             if !loaded {
                                 let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", alt));
-                                span.color = Some(theme::TEXT_MUTED);
+                                span.color = Some(ink::MUTED);
                                 out.push(DocNode::Paragraph {
                                     spans: alloc::vec![span],
                                 });
@@ -611,7 +611,7 @@ fn collect_inline_spans(
                             .map(|(_, v)| v.as_str())
                             .unwrap_or("Image");
                         let mut span = StyledSpan::plain(&alloc::format!("[🖼 {}]", alt));
-                        span.color = Some(theme::TEXT_MUTED);
+                        span.color = Some(ink::MUTED);
                         out.push(span);
                         cur = arena.get(child_id).and_then(|n| n.next_sibling);
                         continue;
@@ -619,9 +619,9 @@ fn collect_inline_spans(
                 }
                 NodeData::Text(text) if !text.is_empty() => {
                     let color = if link.is_some() {
-                        Some(theme::ACCENT_BLUE)
+                        Some(ink::ACCENT)
                     } else if code {
-                        Some(theme::ACCENT_CYAN)
+                        Some(code_ink::INLINE)
                     } else {
                         None
                     };
@@ -631,6 +631,7 @@ fn collect_inline_spans(
                         bold,
                         italic,
                         code,
+                        mono: false,
                         link: link.clone(),
                         color,
                     });

@@ -3,11 +3,11 @@
 
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
-use viui::canvas::Color;
+use viui::theme::ViTheme;
 
-use crate::draw::{draw_label, fill_rect};
+use crate::draw::{draw_icon_centered, draw_label, fill_rect, fill_round_rect, PANEL_RADIUS};
 use crate::model::FileItem;
-use crate::views::{ContentRect, ViewPalette};
+use crate::views::ContentRect;
 
 pub const COLUMN_W: u32 = 180;
 pub const ROW_H: u32 = 28;
@@ -18,7 +18,7 @@ pub fn render(
     items: &[FileItem],
     selected_idx: usize,
     rect: ContentRect,
-    palette: ViewPalette,
+    theme: &dyn ViTheme,
 ) {
     let ContentRect {
         x: content_x,
@@ -26,12 +26,11 @@ pub fn render(
         w: content_w,
         h: content_h,
     } = rect;
-    let ViewPalette {
-        bg: theme_bg,
-        fg: theme_fg,
-        accent: theme_accent,
-        border: theme_border,
-    } = palette;
+    let theme_bg = theme.bg();
+    let theme_fg = theme.text_primary();
+    let theme_secondary = theme.text_secondary();
+    let theme_accent = theme.accent();
+    let theme_border = theme.border();
     fill_rect(surf, content_x, content_y, content_w, content_h, theme_bg);
 
     // Column 0: File/Folder listing
@@ -60,20 +59,15 @@ pub fn render(
                 ROW_H,
                 theme_accent.with_alpha(50),
             );
-            fill_rect(surf, col0_x, row_y, 3, ROW_H, theme_accent);
+            // 1px accent indicator on the row's left edge.
+            fill_rect(surf, col0_x, row_y, 1, ROW_H, theme_accent);
         }
 
         // Icon
-        draw_label(
+        draw_icon_centered(
             surf,
-            fonts,
-            col0_x + 8,
-            row_y + 4,
-            20,
-            20,
             item.icon,
-            FontFace::UiSemibold,
-            13.0,
+            (col0_x + 8, row_y + 4, 20, 20),
             if item.is_dir { theme_accent } else { theme_fg },
         );
 
@@ -103,7 +97,7 @@ pub fn render(
                 ">",
                 FontFace::UiRegular,
                 12.0,
-                Color::rgb(140, 145, 160),
+                theme_secondary,
             );
         }
     }
@@ -115,18 +109,20 @@ pub fn render(
         let pad_x = col1_x + 16;
         let mut text_y = content_y + 20;
 
-        // Large icon box
-        fill_rect(surf, pad_x, text_y, 64, 64, Color::rgb(240, 242, 248));
-        draw_label(
+        // Large icon tile, the 16px line icon centred in it
+        fill_round_rect(
             surf,
-            fonts,
-            pad_x + 16,
-            text_y + 18,
-            32,
-            28,
+            pad_x,
+            text_y,
+            64,
+            64,
+            PANEL_RADIUS,
+            theme.button_normal(),
+        );
+        draw_icon_centered(
+            surf,
             selected_item.icon,
-            FontFace::UiSemibold,
-            24.0,
+            (pad_x, text_y, 64, 64),
             if selected_item.is_dir {
                 theme_accent
             } else {
@@ -164,7 +160,7 @@ pub fn render(
             &alloc::format!("Kind: {}", kind_info),
             FontFace::UiRegular,
             13.0,
-            Color::rgb(120, 125, 140),
+            theme_secondary,
         );
 
         text_y += 24;
@@ -179,7 +175,7 @@ pub fn render(
             &alloc::format!("Size: {}", size_info),
             FontFace::UiRegular,
             13.0,
-            Color::rgb(120, 125, 140),
+            theme_secondary,
         );
 
         text_y += 24;
@@ -193,7 +189,7 @@ pub fn render(
             &alloc::format!("Location: {}", selected_item.path),
             FontFace::UiRegular,
             13.0,
-            Color::rgb(120, 125, 140),
+            theme_secondary,
         );
 
         text_y += 36;

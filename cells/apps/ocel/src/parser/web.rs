@@ -13,6 +13,7 @@ use taffy::tree::{
     Cache, Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer, LayoutInput,
     LayoutOutput, LayoutPartialTree, RoundTree, RunMode, TraversePartialTree, TraverseTree,
 };
+use viui::theme::{SystemPalette, ViTheme};
 
 #[derive(Clone, Debug)]
 pub struct TextRun {
@@ -648,6 +649,7 @@ impl<'a> Builder<'a> {
                                 bold: run.span.bold,
                                 italic: run.span.italic,
                                 code: run.span.code,
+                                mono: run.span.mono,
                                 link: run.span.link.clone(),
                                 color: run.span.color,
                             };
@@ -679,6 +681,7 @@ impl<'a> Builder<'a> {
                         bold: run.span.bold,
                         italic: run.span.italic,
                         code: run.span.code,
+                        mono: run.span.mono,
                         link: run.span.link.clone(),
                         color: run.span.color,
                     };
@@ -1094,6 +1097,7 @@ fn same_run(a: &TextRun, b: &TextRun) -> bool {
         && a.span.bold == b.span.bold
         && a.span.italic == b.span.italic
         && a.span.code == b.span.code
+        && a.span.mono == b.span.mono
         && a.span.color == b.span.color
         && a.span.link == b.span.link
         && a.visible == b.visible
@@ -1130,6 +1134,7 @@ fn push_char(fonts: &mut TextFonts, line: &mut TextLine, source: &TextRun, c: ch
         span.bold = source.span.bold;
         span.italic = source.span.italic;
         span.code = source.span.code;
+        span.mono = source.span.mono;
         span.link = source.span.link.clone();
         span.color = source.span.color;
         span.text.push(c);
@@ -1387,8 +1392,22 @@ fn measure(
     }
 }
 
+/// Colour `run` paints with: under a document palette, links, role tags and
+/// code roles resolve against it; untinted runs take `base`.
+pub fn run_color(run: &TextRun, base: Color, palette: Option<SystemPalette>) -> Color {
+    match (run.span.color, palette) {
+        (_, Some(palette)) if run.span.link.is_some() => palette.theme().reader_link(),
+        (Some(c), Some(palette)) if run.span.code => {
+            crate::draw::code_ink::CodePalette::for_palette(palette).resolve(c)
+        }
+        (Some(c), Some(palette)) => crate::draw::ink::resolve(palette.theme(), c),
+        (Some(c), None) => c,
+        (None, _) => base,
+    }
+}
+
 // reason: low-level text painter shared by document and web rendering call sites; bundling
-// position, color, clip, and theme would only churn callers.
+// position, color, clip, and palette would only churn callers.
 #[allow(clippy::too_many_arguments)]
 pub fn paint_lines_themed(
     fonts: &mut TextFonts,
@@ -1398,7 +1417,7 @@ pub fn paint_lines_themed(
     y: f32,
     color: Color,
     clip: (i32, i32, i32, i32),
-    theme_mode: Option<crate::draw::ReaderThemeMode>,
+    palette: Option<SystemPalette>,
 ) {
     let mut top = y;
     for line in lines {
@@ -1407,13 +1426,7 @@ pub fn paint_lines_themed(
                 continue;
             }
             let run_top = top + line.baseline - fonts.ascender(run.face(), run.px);
-            let effective_color = match (run.span.color, theme_mode) {
-                (_, Some(mode)) if run.span.link.is_some() => mode.link_color(),
-                (Some(c), Some(_)) if run.span.code => c,
-                (Some(c), Some(mode)) => mode.remap_span_color(c),
-                (Some(c), None) => c,
-                (None, _) => color,
-            };
+            let effective_color = run_color(run, color, palette);
             crate::draw::text(
                 fonts,
                 surf,
@@ -1923,20 +1936,15 @@ impl WebLayout {
                 continue;
             }
             if let Some(input) = &b.input_data {
+                // Controls sit on the web canvas, so they take the light UA
+                // defaults like the canvas itself, not the viewer palette.
+                let ua = &viui::theme::LIGHT_THEME;
                 let color = if input.is_focused {
-                    crate::draw::theme::ACCENT_CYAN
+                    ua.input_focused_border()
                 } else {
                     b.border_color
                 };
-                rect(
-                    surf,
-                    x,
-                    y,
-                    b.width,
-                    b.height,
-                    crate::draw::theme::BG_INPUT,
-                    clip,
-                );
+                rect(surf, x, y, b.width, b.height, ua.input_bg(), clip);
                 rect(surf, x, y, b.width, 1, color, clip);
                 rect(surf, x, y, 1, b.height, color, clip);
                 rect(
@@ -1965,7 +1973,7 @@ impl WebLayout {
                             y + 4,
                             b.width.saturating_sub(8),
                             b.height.saturating_sub(8),
-                            crate::draw::theme::ACCENT_CYAN,
+                            ua.check_color(),
                             clip,
                         );
                     }
@@ -2009,7 +2017,7 @@ impl WebLayout {
                                 "•",
                                 FontFace::UiRegular,
                                 b.control_px,
-                                crate::draw::theme::TEXT_PRIMARY,
+                                ua.text_primary(),
                                 text_clip,
                             );
                         }
@@ -2022,7 +2030,7 @@ impl WebLayout {
                             text,
                             FontFace::UiRegular,
                             b.control_px,
-                            crate::draw::theme::TEXT_PRIMARY,
+                            ua.text_primary(),
                             text_clip,
                         );
                     }

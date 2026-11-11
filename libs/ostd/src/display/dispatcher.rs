@@ -167,6 +167,9 @@ pub(crate) fn route_compositor_frame(frame: &[u8]) {
                 dispatcher.insert(SurfaceEvent::StateChanged(event));
             }
         }
+        compositor_events::APPEARANCE_CHANGED => {
+            super::appearance::note_frame(frame);
+        }
         _ => {}
     }
 }

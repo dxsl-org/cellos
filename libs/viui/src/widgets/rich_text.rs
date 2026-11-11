@@ -12,6 +12,10 @@ use crate::layout::{Constraints, LayoutNode, Point, Rect, Size};
 use crate::widget::{PaintCx, ViWidget};
 
 /// An individual formatted span of text within a rich text view.
+///
+/// `None` colours resolve against the active theme at paint time: text uses
+/// the view's default (theme `text_primary`), links `reader_link`, and code
+/// spans get a `button_normal` chip.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSpan {
     pub text: String,
@@ -51,29 +55,15 @@ impl TextSpan {
     }
 
     pub fn code(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            color: Some(Color::CYAN),
-            bg_color: Some(Color::bgra(45, 38, 30, 255)), // Subtle dark highlight
-            bold: false,
-            italic: false,
-            code: true,
-            size_px: None,
-            link: None,
-        }
+        let mut s = Self::plain(text);
+        s.code = true;
+        s
     }
 
     pub fn link(text: impl Into<String>, url: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            color: Some(Color::bgra(240, 160, 60, 255)), // Vibrant accent link blue
-            bg_color: None,
-            bold: false,
-            italic: false,
-            code: false,
-            size_px: None,
-            link: Some(url.into()),
-        }
+        let mut s = Self::plain(text);
+        s.link = Some(url.into());
+        s
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
@@ -96,10 +86,11 @@ impl TextSpan {
 pub(crate) struct LaidOutWord {
     pub rect: Rect,
     pub text: String,
-    pub color: Color,
+    /// Explicit span colour; `None` resolves from the theme at paint time.
+    pub color: Option<Color>,
     pub bg_color: Option<Color>,
     pub size_px: f32,
-    pub _is_code: bool,
+    pub is_code: bool,
     pub is_link: bool,
 }
 
@@ -107,6 +98,7 @@ pub(crate) struct LaidOutWord {
 pub struct RichTextView {
     pub spans: Vec<TextSpan>,
     pub line_spacing: f32,
+    /// Colour for spans without their own; `None` uses the theme's `text_primary`.
     pub default_color: Option<Color>,
     bounds: core::cell::Cell<Rect>,
     layout_cache: RefCell<Vec<LaidOutWord>>,
@@ -147,7 +139,6 @@ impl RichTextView {
         origin: Point,
         max_w: f32,
         line_spacing: f32,
-        default_color: Color,
         font: &mut crate::font_context::FontContext,
         out_words: &mut Vec<LaidOutWord>,
     ) -> Size {
@@ -166,7 +157,6 @@ impl RichTextView {
                 cur_row_h = line_h;
             }
 
-            let text_color = span.color.unwrap_or(default_color);
             let is_link = span.link.is_some();
 
             // Handle newline or split words
@@ -203,10 +193,10 @@ impl RichTextView {
                     out_words.push(LaidOutWord {
                         rect: word_rect,
                         text: word.to_string(),
-                        color: text_color,
+                        color: span.color,
                         bg_color: span.bg_color,
                         size_px,
-                        _is_code: span.code,
+                        is_code: span.code,
                         is_link,
                     });
 
@@ -229,6 +219,42 @@ impl RichTextView {
             h: total_h,
         }
     }
+
+    /// Paint laid-out words; `fallback` colours spans without their own.
+    pub(crate) fn paint_words(words: &[LaidOutWord], fallback: Color, cx: &mut PaintCx) {
+        for word in words {
+            let screen_rect = cx.screen_rect(word.rect);
+            let color = word.color.unwrap_or(if word.is_link {
+                cx.theme.reader_link()
+            } else {
+                fallback
+            });
+
+            // Background chip (explicit, or the themed inline-code chip)
+            let bg = word
+                .bg_color
+                .or_else(|| word.is_code.then(|| cx.theme.button_normal()));
+            if let Some(bg) = bg {
+                let pad = 2.0;
+                let badge_rect = Rect::new(
+                    screen_rect.x - pad,
+                    screen_rect.y,
+                    screen_rect.w + pad * 2.0,
+                    screen_rect.h,
+                );
+                cx.canvas.fill_rect(badge_rect, bg);
+            }
+
+            cx.draw_text(screen_rect.origin(), &word.text, color, word.size_px);
+
+            if word.is_link {
+                let underline_y = screen_rect.y + screen_rect.h - 1.0;
+                let p1 = Point::new(screen_rect.x, underline_y);
+                let p2 = Point::new(screen_rect.x + screen_rect.w, underline_y);
+                cx.canvas.draw_line(p1, p2, color);
+            }
+        }
+    }
 }
 
 impl ViWidget for RichTextView {
@@ -238,13 +264,11 @@ impl ViWidget for RichTextView {
         font: &mut crate::font_context::FontContext,
     ) -> LayoutNode {
         let mut words = self.layout_cache.borrow_mut();
-        let fallback_color = self.default_color.unwrap_or(Color::WHITE);
         let desired = Self::layout_spans_into(
             &self.spans,
             constraints.origin,
             constraints.max.w,
             self.line_spacing,
-            fallback_color,
             font,
             &mut words,
         );
@@ -257,33 +281,10 @@ impl ViWidget for RichTextView {
 
     fn paint(&self, cx: &mut PaintCx) {
         let words = self.layout_cache.borrow();
-        for word in words.iter() {
-            let screen_rect = cx.screen_rect(word.rect);
-
-            // Draw background badge (e.g. for inline code)
-            if let Some(bg) = word.bg_color {
-                let pad = 2.0;
-                let badge_rect = Rect::new(
-                    screen_rect.x - pad,
-                    screen_rect.y,
-                    screen_rect.w + pad * 2.0,
-                    screen_rect.h,
-                );
-                cx.canvas.fill_rect(badge_rect, bg);
-            }
-
-            // Draw text
-            let pos = screen_rect.origin();
-            cx.draw_text(pos, &word.text, word.color, word.size_px);
-
-            // Draw link underline
-            if word.is_link {
-                let underline_y = screen_rect.y + screen_rect.h - 1.0;
-                let p1 = Point::new(screen_rect.x, underline_y);
-                let p2 = Point::new(screen_rect.x + screen_rect.w, underline_y);
-                cx.canvas.draw_line(p1, p2, word.color);
-            }
-        }
+        let fallback = self
+            .default_color
+            .unwrap_or_else(|| cx.theme.text_primary());
+        Self::paint_words(&words, fallback, cx);
     }
 
     fn event(&mut self, _cx: &mut EventCx, _e: &Event) -> EventStatus {
@@ -308,10 +309,47 @@ mod tests {
 
         let s3 = TextSpan::code("cargo check");
         assert!(s3.code);
-        assert_eq!(s3.color, Some(Color::CYAN));
+        assert_eq!(s3.color, None);
 
         let s4 = TextSpan::link("CellOS", "https://cellos.org");
         assert_eq!(s4.link.as_deref(), Some("https://cellos.org"));
+    }
+
+    #[test]
+    fn unstyled_spans_resolve_colours_from_the_theme() {
+        use crate::node_widgets::style::test_support::{fills, lines, record, text_color};
+        use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let view = RichTextView::new(alloc::vec![
+                TextSpan::plain("plain "),
+                TextSpan::code("code "),
+                TextSpan::link("link", "https://cellos.org"),
+            ]);
+            let mut font = FontContext::default();
+            view.layout(
+                Constraints::new(Point::ZERO, Size::new(400.0, 100.0)),
+                &mut font,
+            );
+            let buf =
+                record(|canvas| view.paint(&mut PaintCx::with_theme(canvas, theme, &mut font)));
+            assert_eq!(text_color(&buf, "plain"), Some(theme.text_primary()));
+            assert_eq!(text_color(&buf, "code"), Some(theme.text_primary()));
+            assert_eq!(fills(&buf)[0].1, theme.button_normal());
+            assert_eq!(text_color(&buf, "link"), Some(theme.reader_link()));
+            assert_eq!(lines(&buf), [theme.reader_link()]);
+
+            let red = Color::rgb(200, 0, 0);
+            let view =
+                RichTextView::new(alloc::vec![TextSpan::plain("plain")]).with_default_color(red);
+            view.layout(
+                Constraints::new(Point::ZERO, Size::new(400.0, 100.0)),
+                &mut font,
+            );
+            let buf =
+                record(|canvas| view.paint(&mut PaintCx::with_theme(canvas, theme, &mut font)));
+            assert_eq!(text_color(&buf, "plain"), Some(red));
+        }
     }
 
     #[test]

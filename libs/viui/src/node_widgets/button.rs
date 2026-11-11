@@ -4,11 +4,11 @@
 extern crate alloc;
 use alloc::{boxed::Box, string::String};
 
-use crate::canvas::Color;
 use crate::event::{Event, MouseButton};
 use crate::layout::{Constraints, Point, Rect, Size};
 use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
+use ostd::display::linear::CONTROL_RADIUS;
 
 const PAD: f32 = 6.0;
 
@@ -57,28 +57,21 @@ impl ViNode for Button {
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let bg = if self.pressed {
-            Color::rgb(80, 80, 160)
+            cx.theme.button_pressed()
         } else if self.hovered {
-            Color::rgb(70, 70, 130)
+            cx.theme.button_hovered()
         } else {
-            Color::rgb(50, 50, 100)
+            cx.theme.button_normal()
         };
-        cx.canvas.fill_rect(self.bounds, bg);
-
         let b = self.bounds;
-        let border = Color::rgb(120, 120, 200);
-        for (a, bb) in [
-            (Point::new(b.x, b.y), Point::new(b.x + b.w, b.y)),
-            (Point::new(b.x + b.w, b.y), Point::new(b.x + b.w, b.y + b.h)),
-            (Point::new(b.x + b.w, b.y + b.h), Point::new(b.x, b.y + b.h)),
-            (Point::new(b.x, b.y + b.h), Point::new(b.x, b.y)),
-        ] {
-            cx.canvas.draw_line(a, bb, border);
-        }
+        cx.canvas.fill_round_rect(b, CONTROL_RADIUS, bg);
+        cx.canvas
+            .stroke_round_rect(b, CONTROL_RADIUS, cx.theme.border());
 
         let x = b.x + (b.w - cx.measure(&self.label)) * 0.5;
         let y = b.y + (b.h - cx.line_height()) * 0.5;
-        cx.draw_text(Point::new(x, y), &self.label, Color::WHITE);
+        let text = cx.theme.text_primary();
+        cx.draw_text(Point::new(x, y), &self.label, text);
     }
 
     fn is_focusable(&self) -> bool {
@@ -147,6 +140,27 @@ mod tests {
     use crate::event::{Event, MouseButton};
     use crate::layout::{Constraints, Point, Size};
     use crate::node::ViNode;
+    use crate::node_widgets::style::test_support::{fills, paint_node, strokes, text_color};
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn paints_with_theme_button_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut button = Button::new("Apply", || {});
+            let buf = paint_node(&mut button, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted, [(button.bounds(), theme.button_normal())]);
+            assert_eq!(strokes(&buf), [theme.border()]);
+            assert_eq!(text_color(&buf, "Apply"), Some(theme.text_primary()));
+
+            button.event(&Event::MousePress {
+                pos: Point::new(1.0, 1.0),
+                button: MouseButton::Left,
+            });
+            let buf = paint_node(&mut button, theme);
+            assert_eq!(fills(&buf)[0].1, theme.button_pressed());
+        }
+    }
 
     #[test]
     fn callback_requires_a_completed_left_click_inside_bounds() {

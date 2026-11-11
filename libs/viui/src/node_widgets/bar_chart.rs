@@ -22,7 +22,8 @@ use crate::signal::{Signal, SubscriptionHandle};
 pub struct BarChart {
     data: Signal<Vec<f32>>,
     labels: Vec<String>,
-    bar_color: Color,
+    /// Bar fill; `None` uses the theme's `accent`.
+    bar_color: Option<Color>,
     y_max: Option<f32>,
     show_values: bool,
     bounds: Rect,
@@ -34,7 +35,7 @@ impl BarChart {
         Self {
             data,
             labels: Vec::new(),
-            bar_color: Color::rgb(80, 120, 220),
+            bar_color: None,
             y_max: None,
             show_values: true,
             bounds: Rect::ZERO,
@@ -48,7 +49,7 @@ impl BarChart {
     }
 
     pub fn color(mut self, color: Color) -> Self {
-        self.bar_color = color;
+        self.bar_color = Some(color);
         self
     }
 
@@ -87,7 +88,10 @@ impl ViNode for BarChart {
             .y_max
             .unwrap_or_else(|| data.iter().cloned().fold(f32::MIN, f32::max).max(0.001));
 
-        cx.canvas.fill_rect(b, Color::rgb(14, 16, 24));
+        cx.canvas.fill_rect(b, cx.theme.surface());
+        let bar_color = self.bar_color.unwrap_or_else(|| cx.theme.accent());
+        let label_color = cx.theme.text_secondary();
+        let value_color = cx.theme.text_primary();
 
         let n = data.len();
         let gap = 4.0f32;
@@ -105,23 +109,19 @@ impl ViNode for BarChart {
                     w: bar_w,
                     h: bar_h,
                 },
-                self.bar_color,
+                bar_color,
             );
 
             if let Some(label) = self.labels.get(i) {
                 let x = bx + (bar_w - cx.measure(label)) * 0.5;
-                cx.draw_text(
-                    Point::new(x, b.y + b.h - mb + 4.0),
-                    label,
-                    Color::rgb(120, 130, 150),
-                );
+                cx.draw_text(Point::new(x, b.y + b.h - mb + 4.0), label, label_color);
             }
 
             if self.show_values && bar_h > cx.line_height() {
                 let label = format_f32_short(v);
                 let x = bx + (bar_w - cx.measure(&label)) * 0.5;
                 let y = by - cx.line_height();
-                cx.draw_text(Point::new(x, y), &label, Color::WHITE);
+                cx.draw_text(Point::new(x, y), &label, value_color);
             }
         }
     }
@@ -145,4 +145,34 @@ impl ViNode for BarChart {
 fn format_f32_short(v: f32) -> String {
     let scaled = (v * 10.0) as i32;
     alloc::format!("{}.{}", scaled / 10, (scaled % 10).abs())
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::BarChart;
+
+    use crate::canvas::Color;
+    use crate::node_widgets::style::test_support::{fills, paint_node, text_color};
+    use crate::signal::Signal;
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn plot_bars_and_labels_use_theme_tokens_unless_overridden() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let mut chart =
+                BarChart::new(Signal::new(alloc::vec![4.0, 8.0])).labels(alloc::vec!["A", "B"]);
+            let buf = paint_node(&mut chart, theme);
+            let painted = fills(&buf);
+            assert_eq!(painted[0].1, theme.surface());
+            assert!(painted[1..].iter().all(|&(_, c)| c == theme.accent()));
+            assert_eq!(text_color(&buf, "A"), Some(theme.text_secondary()));
+            assert_eq!(text_color(&buf, "8.0"), Some(theme.text_primary()));
+
+            let green = Color::rgb(0, 160, 0);
+            let mut chart = BarChart::new(Signal::new(alloc::vec![1.0])).color(green);
+            assert_eq!(fills(&paint_node(&mut chart, theme))[1].1, green);
+        }
+    }
 }

@@ -19,12 +19,14 @@ mod session;
 mod sink;
 
 use api::display::PixelFormat;
+use ostd::display::linear::icons::LineIcon;
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
 use ostd::input::{InputEvent, KeyState, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_set_timer, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
 use viui::canvas::Color;
 use viui::surface::fill_rect;
+use viui::theme::{self, ViTheme};
 
 use crate::grid::{Color as GridColor, TerminalCell, Width};
 use crate::session::{TerminalSession, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
@@ -84,19 +86,20 @@ impl TerminalApp {
     }
 
     pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
+        let colors = TermColors::of(theme::system());
         let sw = self.width;
         let sh = self.height;
         let surf_w = surf.width();
         let surf_h = surf.height();
         let stride = surf.stride();
         let grid = &self.session.grid;
-        fill_rect(surf, 0, 0, sw, sh, DEFAULT_BG);
+        fill_rect(surf, 0, 0, sw, sh, colors.bg);
 
         // Pass 1: cell backgrounds that differ from the window background. All fills come
         // before any glyph so a glyph's 2 px clip overhang is never painted over.
         for (col_x, row_y, cell, span) in self.visible_cells() {
-            let (_, bg) = cell_colors(cell);
-            if bg != DEFAULT_BG {
+            let (_, bg) = cell_colors(cell, colors);
+            if bg != colors.bg {
                 fill_rect(
                     surf,
                     col_x as i32,
@@ -120,7 +123,7 @@ impl TerminalApp {
                     .mark
                     .map_or(0, |mark| mark.encode_utf8(&mut buf[len..]).len());
             let text = core::str::from_utf8(&buf[..len]).unwrap_or("\u{fffd}");
-            let (fg, _) = cell_colors(cell);
+            let (fg, _) = cell_colors(cell, colors);
             let face = if cell.pen.bold {
                 FontFace::MonoBold
             } else {
@@ -158,7 +161,7 @@ impl TerminalApp {
                     cur_y as i32 + 2,
                     self.cell_w as u32,
                     (self.cell_h - 4.0) as u32,
-                    Color::rgb(0, 200, 255).with_alpha(160),
+                    colors.cursor,
                 );
             }
         }
@@ -191,9 +194,28 @@ impl TerminalApp {
     }
 }
 
-/// Default text and window colours.
-const DEFAULT_FG: Color = Color::rgb(220, 225, 235);
-const DEFAULT_BG: Color = Color::rgb(18, 20, 26);
+/// Default text, window background and cursor colours, taken from the session palette so
+/// the Terminal matches the desktop; explicit ANSI/indexed/RGB colours keep their values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TermColors {
+    fg: Color,
+    bg: Color,
+    /// Translucent block over the cursor cell, so the glyph under it stays visible.
+    cursor: Color,
+}
+
+impl TermColors {
+    const CURSOR_ALPHA: u8 = 160;
+
+    fn of(theme: &dyn ViTheme) -> Self {
+        Self {
+            fg: theme.text_primary(),
+            bg: theme.bg(),
+            cursor: theme.accent().with_alpha(Self::CURSOR_ALPHA),
+        }
+    }
+}
+
 const PAD_X: f32 = 8.0;
 const PAD_Y: f32 = 6.0;
 const FONT_PX: f32 = 14.0;
@@ -254,9 +276,9 @@ fn resolve(color: GridColor, default: Color) -> Color {
 }
 
 /// Foreground and background pixels of a cell; inverse swaps the resolved pair.
-fn cell_colors(cell: &TerminalCell) -> (Color, Color) {
-    let fg = resolve(cell.pen.fg, DEFAULT_FG);
-    let bg = resolve(cell.pen.bg, DEFAULT_BG);
+fn cell_colors(cell: &TerminalCell, colors: TermColors) -> (Color, Color) {
+    let fg = resolve(cell.pen.fg, colors.fg);
+    let bg = resolve(cell.pen.bg, colors.bg);
     if cell.pen.inverse {
         (bg, fg)
     } else {
@@ -269,6 +291,9 @@ fn open_window(comp_tid: usize, width: u32, height: u32) -> ViSurface {
     let surf = ViSurface::create(comp_tid, width, height, PixelFormat::Bgra8888)
         .expect("create terminal surface");
     let _ = surf.set_title("Terminal — CellOS Shell");
+    if surf.set_icon(LineIcon::Terminal).is_err() {
+        ostd::io::println("[terminal] set_icon failed; Cell Tab keeps the generic icon");
+    }
     surf.move_to(140, 100);
     surf
 }
@@ -300,6 +325,8 @@ fn cell_main() {
 
     // The shell's own prompt and output are the first thing on screen.
     app.session.start();
+    // Palette generation the last frame was painted with; a change repaints everything.
+    let mut painted_serial = theme::system_serial();
     app.render(&mut surf, &mut fonts);
     ostd::io::println("[terminal] Terminal surface ready. Entering event loop.");
 
@@ -391,6 +418,11 @@ fn cell_main() {
             break;
         }
 
+        let serial = theme::system_serial();
+        if serial != painted_serial {
+            painted_serial = serial;
+            need_render = true;
+        }
         if need_render {
             app.render(&mut surf, &mut fonts);
         }
@@ -498,43 +530,75 @@ mod tests {
     }
 
     #[test]
-    fn colours_resolve_to_the_documented_palette_and_inverse_swaps_them() {
-        assert_eq!(resolve(GridColor::Default, DEFAULT_FG), DEFAULT_FG);
+    fn colours_resolve_to_the_documented_palette() {
+        let default = Color::rgb(9, 9, 9);
+        assert_eq!(resolve(GridColor::Default, default), default);
         assert_eq!(
-            resolve(GridColor::Indexed(1), DEFAULT_FG),
+            resolve(GridColor::Indexed(1), default),
             Color::rgb(205, 49, 49)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(15), DEFAULT_FG),
+            resolve(GridColor::Indexed(15), default),
             Color::rgb(255, 255, 255)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(16), DEFAULT_FG),
+            resolve(GridColor::Indexed(16), default),
             Color::rgb(0, 0, 0)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(196), DEFAULT_FG),
+            resolve(GridColor::Indexed(196), default),
             Color::rgb(255, 0, 0)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(231), DEFAULT_FG),
+            resolve(GridColor::Indexed(231), default),
             Color::rgb(255, 255, 255)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(232), DEFAULT_FG),
+            resolve(GridColor::Indexed(232), default),
             Color::rgb(8, 8, 8)
         );
         assert_eq!(
-            resolve(GridColor::Indexed(255), DEFAULT_FG),
+            resolve(GridColor::Indexed(255), default),
             Color::rgb(238, 238, 238)
         );
         assert_eq!(
-            resolve(GridColor::Rgb(1, 2, 3), DEFAULT_FG),
+            resolve(GridColor::Rgb(1, 2, 3), default),
             Color::rgb(1, 2, 3)
         );
-        let mut cell = TerminalCell::BLANK;
-        cell.pen.inverse = true;
-        assert_eq!(cell_colors(&cell), (DEFAULT_BG, DEFAULT_FG));
+    }
+
+    #[test]
+    fn default_colours_follow_the_theme_and_explicit_colours_do_not() {
+        let light = TermColors::of(&viui::theme::LightTheme);
+        assert_eq!(light.fg, Color::rgb(20, 20, 28));
+        assert_eq!(light.bg, Color::rgb(245, 245, 248));
+        assert_eq!(light.cursor, Color::rgb(35, 90, 215).with_alpha(160));
+        let dark = TermColors::of(&viui::theme::DarkTheme);
+        assert_ne!(light, dark);
+
+        for colors in [light, dark] {
+            // Default cell: theme text on theme background; inverse swaps them, so an
+            // inverse default cell paints a text-coloured block on a light theme too.
+            let mut cell = TerminalCell::BLANK;
+            assert_eq!(cell_colors(&cell, colors), (colors.fg, colors.bg));
+            cell.pen.inverse = true;
+            assert_eq!(cell_colors(&cell, colors), (colors.bg, colors.fg));
+            assert_ne!(cell_colors(&cell, colors).1, colors.bg);
+
+            // Explicit colours keep their values whatever the theme.
+            cell.pen.inverse = false;
+            cell.pen.fg = GridColor::Indexed(1);
+            cell.pen.bg = GridColor::Rgb(1, 2, 3);
+            assert_eq!(
+                cell_colors(&cell, colors),
+                (Color::rgb(205, 49, 49), Color::rgb(1, 2, 3))
+            );
+            cell.pen.inverse = true;
+            assert_eq!(
+                cell_colors(&cell, colors),
+                (Color::rgb(1, 2, 3), Color::rgb(205, 49, 49))
+            );
+        }
     }
 
     #[test]

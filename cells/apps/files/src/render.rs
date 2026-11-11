@@ -15,7 +15,8 @@ use viui::surface::components::{
     GridItemDef, GridView, ListView, ListViewItemDef, PlacesItemDef, PlacesSidebar,
     SegmentedControl, StatusBar, Toolbar,
 };
-use viui::theme::{ViTheme, LIGHT_THEME};
+use viui::surface::LineIcon;
+use viui::theme::{self, ViTheme};
 
 use crate::app::FilesApp;
 use crate::draw::{draw_label, fill_rect, stroke_rect};
@@ -31,10 +32,18 @@ impl<F: FileSystem> FilesApp<F> {
     pub fn render(&self, surf: &mut ViSurface, fonts: &mut TextFonts) {
         let sw = self.width;
         let sh = self.height;
-        let theme = &LIGHT_THEME;
+        let theme = theme::system();
 
         let path_title = format!("Files: {}", self.current_path);
-        Toolbar::render(surf, fonts, theme, sw, TOOLBAR_HEIGHT, "[F]", &path_title);
+        Toolbar::render(
+            surf,
+            fonts,
+            theme,
+            sw,
+            TOOLBAR_HEIGHT,
+            Some(LineIcon::Folder),
+            &path_title,
+        );
         let mode_idx = match self.view_mode {
             ViewMode::List => 0,
             ViewMode::Grid => 1,
@@ -43,6 +52,7 @@ impl<F: FileSystem> FilesApp<F> {
         segments(
             surf,
             fonts,
+            theme,
             layout::view_switch(sw),
             &layout::VIEW_MODE_LABELS,
             mode_idx,
@@ -52,6 +62,7 @@ impl<F: FileSystem> FilesApp<F> {
         segments(
             surf,
             fonts,
+            theme,
             layout::split_button(sw),
             &[layout::SPLIT_LABEL],
             split_idx,
@@ -64,7 +75,7 @@ impl<F: FileSystem> FilesApp<F> {
             .map(|p| PlacesItemDef {
                 name: String::from(p.name),
                 path: String::from(p.path),
-                icon: String::from(p.icon),
+                icon: p.icon,
             })
             .collect();
         PlacesSidebar::render(
@@ -83,7 +94,7 @@ impl<F: FileSystem> FilesApp<F> {
         let (left, right) = self.pane_views();
         match (right, layout::pane_frames(sw, sh, right.is_some())) {
             (Some(right), (left_frame, Some(right_frame))) => {
-                render_pane(surf, fonts, self.view_mode, &left, left_frame);
+                render_pane(surf, fonts, theme, self.view_mode, &left, left_frame);
                 let divider_x = left_frame.x + left_frame.w as i32;
                 let divider_w = (right_frame.x - divider_x) as u32;
                 fill_rect(
@@ -94,11 +105,12 @@ impl<F: FileSystem> FilesApp<F> {
                     content.h,
                     theme.border(),
                 );
-                render_pane(surf, fonts, self.view_mode, &right, right_frame);
+                render_pane(surf, fonts, theme, self.view_mode, &right, right_frame);
             }
             _ => render_listing(
                 surf,
                 fonts,
+                theme,
                 self.view_mode,
                 left.items,
                 left.selected_index,
@@ -116,7 +128,7 @@ impl<F: FileSystem> FilesApp<F> {
             STATUS_HEIGHT,
             &self.status_message,
         );
-        preview::render(surf, fonts, &self.quick_look, sw, sh);
+        preview::render(surf, fonts, theme, &self.quick_look, sw, sh);
         surf.damage_all();
     }
 }
@@ -124,20 +136,13 @@ impl<F: FileSystem> FilesApp<F> {
 fn segments(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
+    theme: &dyn ViTheme,
     at: Segments,
     labels: &[&str],
     selected: usize,
 ) {
     SegmentedControl::render(
-        surf,
-        fonts,
-        &LIGHT_THEME,
-        at.x,
-        at.y,
-        at.item_w,
-        at.h,
-        labels,
-        selected,
+        surf, fonts, theme, at.x, at.y, at.item_w, at.h, labels, selected,
     );
 }
 
@@ -146,11 +151,11 @@ fn segments(
 fn render_pane(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
+    theme: &dyn ViTheme,
     mode: ViewMode,
     pane: &PaneView<'_>,
     frame: ContentRect,
 ) {
-    let theme = &LIGHT_THEME;
     let (header_bg, header_fg) = if pane.focused {
         (theme.accent(), Color::WHITE)
     } else {
@@ -177,7 +182,15 @@ fn render_pane(
         header_fg,
     );
     let listing = layout::listing_rect(frame, true);
-    render_listing(surf, fonts, mode, pane.items, pane.selected_index, listing);
+    render_listing(
+        surf,
+        fonts,
+        theme,
+        mode,
+        pane.items,
+        pane.selected_index,
+        listing,
+    );
     if pane.focused {
         stroke_rect(surf, frame.x, frame.y, frame.w, frame.h, theme.accent());
     }
@@ -187,18 +200,18 @@ fn render_pane(
 fn render_listing(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
+    theme: &dyn ViTheme,
     mode: ViewMode,
     items: &[FileItem],
     selected: usize,
     rect: ContentRect,
 ) {
-    let theme = &LIGHT_THEME;
     match mode {
         ViewMode::List => {
             let defs: Vec<ListViewItemDef> = items
                 .iter()
                 .map(|item| ListViewItemDef {
-                    icon: String::from(item.icon),
+                    icon: item.icon,
                     name: item.name.clone(),
                     size_str: item.formatted_size(),
                     kind_str: String::from(if item.is_dir { "Folder" } else { "File" }),
@@ -221,7 +234,7 @@ fn render_listing(
             let defs: Vec<GridItemDef> = items
                 .iter()
                 .map(|item| GridItemDef {
-                    icon: String::from(item.icon),
+                    icon: item.icon,
                     name: item.name.clone(),
                     is_dir: item.is_dir,
                 })
@@ -238,18 +251,6 @@ fn render_listing(
                 Some(selected),
             );
         }
-        ViewMode::Columns => views::columns::render(
-            surf,
-            fonts,
-            items,
-            selected,
-            rect,
-            views::ViewPalette {
-                bg: theme.bg(),
-                fg: theme.text_primary(),
-                accent: theme.accent(),
-                border: theme.border(),
-            },
-        ),
+        ViewMode::Columns => views::columns::render(surf, fonts, items, selected, rect, theme),
     }
 }

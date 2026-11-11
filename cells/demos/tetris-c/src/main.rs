@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use api::declare_manifest;
 use api::display::PixelFormat;
 use api::input::{InputEvent, KeyState, KeySym};
-use ostd::display::{wait_for_compositor, ViSurface};
+use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::font::FONT8X8;
 use ostd::input::{poll_events, request_focus};
 use ostd::io::println;
@@ -81,6 +81,9 @@ pub extern "C" fn main() {
     unsafe {
         match ViSurface::create(comp_tid, SURF_W, SURF_H, PixelFormat::Bgra8888) {
             Ok(surf) => {
+                if surf.set_icon(LineIcon::Blocks).is_err() {
+                    println("[tetris-c] set_icon failed; Cell Tab keeps the generic icon");
+                }
                 surf.raise();
                 SURFACE = Some(surf);
             }

@@ -4,12 +4,14 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
+use crate::draw::LineIcon;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct AppInfo {
     pub id: &'static str,
     pub name: &'static str,
     pub path: &'static str,
-    pub icon: &'static str,
+    pub icon: LineIcon,
     pub description: &'static str,
     pub is_pinned: bool,
 }
@@ -19,7 +21,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "terminal",
         name: "Terminal",
         path: "/bin/terminal",
-        icon: ">_",
+        icon: LineIcon::Terminal,
         description: "Native GUI Terminal",
         is_pinned: true,
     },
@@ -27,7 +29,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "ocel",
         name: "Ocel Viewer",
         path: "/bin/ocel",
-        icon: "(O)",
+        icon: LineIcon::Document,
         description: "Document & Web Viewer",
         is_pinned: true,
     },
@@ -35,7 +37,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "files",
         name: "Files",
         path: "/bin/files",
-        icon: "[F]",
+        icon: LineIcon::Folder,
         description: "File Manager & VFS",
         is_pinned: true,
     },
@@ -43,7 +45,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "chrome",
         name: "Chrome (Tier 3)",
         path: "/bin/chrome",
-        icon: "[C]",
+        icon: LineIcon::Globe,
         description: "Web Browser (Tier 3 Linux Guest)",
         is_pinned: true,
     },
@@ -51,7 +53,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "dashboard",
         name: "Robot Dash",
         path: "/bin/robot-dashboard",
-        icon: "[#]",
+        icon: LineIcon::Dashboard,
         description: "Telemetry & Controls",
         is_pinned: true,
     },
@@ -59,7 +61,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "counter",
         name: "ViUI Counter",
         path: "/bin/viui-demo",
-        icon: "+1",
+        icon: LineIcon::Counter,
         description: "Reactive UI Demo",
         is_pinned: true,
     },
@@ -67,7 +69,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "tetris",
         name: "Tetris",
         path: "/bin/tetris",
-        icon: "[T]",
+        icon: LineIcon::Blocks,
         description: "Block Stacking Game",
         is_pinned: true,
     },
@@ -75,7 +77,7 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
         id: "sensors",
         name: "Sensors",
         path: "/bin/sensor-demo",
-        icon: "(s)",
+        icon: LineIcon::Pulse,
         description: "Hardware Peripheral Prober",
         is_pinned: false,
     },

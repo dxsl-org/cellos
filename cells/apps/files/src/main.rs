@@ -31,6 +31,7 @@ use crate::app::{FilesApp, PromptKind};
 use crate::fs::FileSystem;
 use crate::model::ViewMode;
 use api::display::PixelFormat;
+use ostd::display::linear::icons::LineIcon;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{
@@ -109,12 +110,17 @@ fn cell_main() {
     let mut app = FilesApp::new(fs::Vfs::new(), "/data", win_w, win_h);
     let mut title_path = app.current_path.clone();
     let _ = surf.set_title(&format!("Files — {}", title_path));
+    if surf.set_icon(LineIcon::Folder).is_err() {
+        ostd::io::println("[files] set_icon failed; Cell Tab keeps the generic icon");
+    }
     let mut fonts = TextFonts::new();
 
     while !ostd::input::request_focus() {
         sys_yield();
     }
 
+    // Palette generation the last frame was painted with; a change repaints everything.
+    let mut painted_serial = viui::theme::system_serial();
     app.render(&mut surf, &mut fonts);
     ostd::io::println("[files] Files surface ready. Entering event loop.");
     let mut cursor_x = 0i32;
@@ -256,6 +262,11 @@ fn cell_main() {
             dispatch_launch_intent(&intent);
         }
 
+        let serial = viui::theme::system_serial();
+        if serial != painted_serial {
+            painted_serial = serial;
+            need_render = true;
+        }
         if need_render {
             if app.current_path != title_path {
                 title_path = app.current_path.clone();

@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use api::declare_manifest;
 use api::display::PixelFormat;
 use api::input::{InputEvent, KeyState, KeySym};
-use ostd::display::{wait_for_compositor, ViSurface};
+use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
@@ -166,6 +166,9 @@ pub unsafe extern "C" fn DG_Init() {
     let comp_tid = wait_for_compositor();
     match ViSurface::create(comp_tid, SCREEN_W, SCREEN_H, PixelFormat::Bgra8888) {
         Ok(surf) => {
+            if surf.set_icon(LineIcon::Blocks).is_err() {
+                ostd::io::println("DOOM: set_icon failed; Cell Tab keeps the generic icon");
+            }
             surf.raise(); // own the top of the z-order
             SURFACE = Some(surf);
         }

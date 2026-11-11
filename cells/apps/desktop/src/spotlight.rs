@@ -9,7 +9,11 @@ use ostd::input::KeySym;
 use ostd::typography::{FontFace, TextFonts};
 
 use crate::apps::AppRegistry;
-use crate::draw::{draw_button, draw_label, draw_text, fill_rect, stroke_rect, theme, Color};
+use crate::draw::{
+    draw_button, draw_icon_centered, draw_label, draw_text, fill_rect, fill_round_rect,
+    stroke_round_rect, Color, LineIcon, ViTheme, CONTROL_RADIUS, PANEL_RADIUS,
+};
+use viui::theme::SystemPalette;
 
 pub const SPOTLIGHT_WIDTH: u32 = 480;
 pub const SPOTLIGHT_HEIGHT: u32 = 320;
@@ -100,38 +104,44 @@ pub fn render(
     fonts: &mut TextFonts,
     registry: &AppRegistry,
     state: &SpotlightState,
+    theme: &dyn ViTheme,
+    palette: SystemPalette,
 ) {
     let sw = surf.width();
     let sh = surf.height();
-    fill_rect(surf, 0, 0, sw, sh, theme::MODAL_BG);
-    stroke_rect(surf, 0, 0, sw, sh, theme::MODAL_BORDER);
+    // Floating panel: the compositor clips these corners to PANEL_RADIUS, so the 1px outline
+    // follows the same curve.
+    fill_round_rect(surf, 0, 0, sw, sh, PANEL_RADIUS, theme.spotlight_bg());
+    stroke_round_rect(surf, 0, 0, sw, sh, PANEL_RADIUS, theme.border());
 
-    // Search input bar
+    // Search input bar (always the focused control while Spotlight is open)
     let input_x = 14;
     let input_y = 10;
     let input_w = sw.saturating_sub(28);
     let input_h = 38;
-    fill_rect(
+    fill_round_rect(
         surf,
         input_x,
         input_y,
         input_w,
         input_h,
-        Color::rgb(32, 35, 45),
+        CONTROL_RADIUS,
+        theme.input_bg(),
     );
-    stroke_rect(surf, input_x, input_y, input_w, input_h, theme::ACCENT_BLUE);
-    draw_label(
+    stroke_round_rect(
         surf,
-        fonts,
-        input_x + 8,
+        input_x,
         input_y,
-        22,
+        input_w,
         input_h,
-        "?",
-        FontFace::UiSemibold,
-        16.0,
-        theme::ACCENT_CYAN,
-        true,
+        CONTROL_RADIUS,
+        theme.input_focused_border(),
+    );
+    draw_icon_centered(
+        surf,
+        LineIcon::Search,
+        (input_x + 8, input_y, 22, input_h),
+        theme.accent(),
     );
     let query_x = input_x + 36;
     let query_w = input_w.saturating_sub(48);
@@ -152,7 +162,7 @@ pub fn render(
             },
             FontFace::UiRegular,
             14.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             false,
         );
     } else {
@@ -173,7 +183,7 @@ pub fn render(
             &state.query,
             FontFace::UiRegular,
             16.0,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
             clip,
         );
         let caret_x = query_x + (query_width.min(visible_width) + 0.5) as i32;
@@ -183,7 +193,7 @@ pub fn render(
             input_y + 8,
             1,
             input_h - 16,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
         );
     }
 
@@ -195,9 +205,9 @@ pub fn render(
             || (i == 1 && state.section == SpotlightSection::ActiveCells)
             || (i == 2 && state.section == SpotlightSection::System);
         let tab_col = if is_active {
-            theme::ACCENT_CYAN
+            theme.accent()
         } else {
-            theme::TEXT_MUTED
+            theme.text_secondary()
         };
         draw_label(
             surf,
@@ -220,38 +230,31 @@ pub fn render(
             fill_rect(
                 surf,
                 tx + 8,
-                TABS_Y + TABS_HEIGHT as i32 - 2,
+                TABS_Y + TABS_HEIGHT as i32 - 1,
                 tab_w - 16,
-                2,
-                theme::ACCENT_BLUE,
+                1,
+                theme.accent(),
             );
         }
     }
-    fill_rect(
-        surf,
-        0,
-        TABS_Y + TABS_HEIGHT as i32,
-        sw,
-        1,
-        theme::MODAL_BORDER,
-    );
+    fill_rect(surf, 0, TABS_Y + TABS_HEIGHT as i32, sw, 1, theme.border());
 
     // Section Content
     match state.section {
         SpotlightSection::Cells => {
-            render_applications(surf, fonts, registry, state, sw);
+            render_applications(surf, fonts, registry, state, theme, sw);
         }
         SpotlightSection::ActiveCells => {
-            render_running_tasks(surf, fonts, state, sw);
+            render_running_tasks(surf, fonts, state, theme, sw);
         }
         SpotlightSection::System => {
-            render_system(surf, fonts, state, sw);
+            render_system(surf, fonts, state, theme, palette, sw);
         }
     }
 
     // Footer
     let footer_y = sh as i32 - 28;
-    fill_rect(surf, 0, footer_y, sw, 1, theme::MODAL_BORDER);
+    fill_rect(surf, 0, footer_y, sw, 1, theme.border());
     draw_label(
         surf,
         fonts,
@@ -262,10 +265,39 @@ pub fn render(
         "Tab Switch Section    Esc Close    Enter Select Cell",
         FontFace::UiRegular,
         13.0,
-        theme::TEXT_MUTED,
+        theme.text_secondary(),
         false,
     );
     surf.damage_all();
+}
+
+/// Result row: rounded fill with a 1px rounded outline, accent when selected.
+fn paint_row(
+    surf: &mut ViSurface,
+    theme: &dyn ViTheme,
+    row_y: i32,
+    row_w: u32,
+    bg: Color,
+    selected: bool,
+) {
+    let border = if selected {
+        theme.accent()
+    } else {
+        theme.border()
+    };
+    fill_round_rect(surf, 14, row_y, row_w, ROW_HEIGHT, CONTROL_RADIUS, bg);
+    stroke_round_rect(surf, 14, row_y, row_w, ROW_HEIGHT, CONTROL_RADIUS, border);
+}
+
+/// Row fill: pressed when selected, hovered under the pointer, normal otherwise.
+fn row_bg(theme: &dyn ViTheme, selected: bool, hover: bool) -> Color {
+    if selected {
+        theme.button_pressed()
+    } else if hover {
+        theme.button_hovered()
+    } else {
+        theme.button_normal()
+    }
 }
 
 fn render_applications(
@@ -273,6 +305,7 @@ fn render_applications(
     fonts: &mut TextFonts,
     registry: &AppRegistry,
     state: &SpotlightState,
+    theme: &dyn ViTheme,
     sw: u32,
 ) {
     if state.query.starts_with('/') {
@@ -282,21 +315,13 @@ fn render_applications(
             .unwrap_or(intent.app_id);
         let row_y = LIST_START_Y;
         let row_w = sw.saturating_sub(28);
-        fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, theme::BTN_ACTIVE);
-        fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
+        paint_row(surf, theme, row_y, row_w, row_bg(theme, true, false), true);
 
-        draw_label(
+        draw_icon_centered(
             surf,
-            fonts,
-            24,
-            row_y,
-            34,
-            ROW_HEIGHT,
-            intent.mime.icon_tag(),
-            FontFace::UiRegular,
-            14.0,
-            theme::ACCENT_CYAN,
-            true,
+            LineIcon::for_mime(intent.mime),
+            (24, row_y, 34, ROW_HEIGHT),
+            theme.accent(),
         );
 
         let text_x = 70;
@@ -317,7 +342,7 @@ fn render_applications(
             &title,
             FontFace::UiSemibold,
             15.0,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
             false,
         );
         draw_label(
@@ -330,7 +355,7 @@ fn render_applications(
             &desc,
             FontFace::UiRegular,
             13.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             false,
         );
 
@@ -342,9 +367,9 @@ fn render_applications(
             ACTION_WIDTH,
             ACTION_HEIGHT,
             intent.action.as_str(),
-            theme::BTN_NORMAL,
-            theme::BTN_HOVER,
-            theme::TEXT_PRIMARY,
+            theme.button_normal(),
+            theme.border(),
+            theme.text_primary(),
         );
         return;
     }
@@ -360,7 +385,7 @@ fn render_applications(
             "No matching cells found",
             FontFace::UiRegular,
             15.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             true,
         );
         return;
@@ -374,43 +399,15 @@ fn render_applications(
         let row_w = sw.saturating_sub(28);
         let is_selected = i == state.selected_index;
         let is_hover = is_inside(state.mouse_x, state.mouse_y, 14, row_y, row_w, ROW_HEIGHT);
-        let row_bg = if is_selected {
-            theme::BTN_ACTIVE
-        } else if is_hover {
-            theme::BTN_HOVER
-        } else {
-            theme::BTN_NORMAL
-        };
-
-        fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, row_bg);
-        if is_selected {
-            fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
-        }
-        stroke_rect(
+        paint_row(
             surf,
-            14,
+            theme,
             row_y,
             row_w,
-            ROW_HEIGHT,
-            if is_selected {
-                theme::ACCENT_BLUE
-            } else {
-                theme::TASKBAR_BORDER
-            },
+            row_bg(theme, is_selected, is_hover),
+            is_selected,
         );
-        draw_label(
-            surf,
-            fonts,
-            24,
-            row_y,
-            34,
-            ROW_HEIGHT,
-            app.icon,
-            FontFace::UiRegular,
-            14.0,
-            theme::ACCENT_CYAN,
-            true,
-        );
+        draw_icon_centered(surf, app.icon, (24, row_y, 34, ROW_HEIGHT), theme.accent());
 
         let text_x = 70;
         let text_w = (pin_x(sw) - 10 - text_x).max(0) as u32;
@@ -425,7 +422,7 @@ fn render_applications(
             app.name,
             FontFace::UiSemibold,
             15.0,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
             false,
         );
         draw_label(
@@ -438,7 +435,7 @@ fn render_applications(
             app.description,
             FontFace::UiRegular,
             13.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             false,
         );
 
@@ -451,9 +448,9 @@ fn render_applications(
             ACTION_WIDTH,
             ACTION_HEIGHT,
             pin_text,
-            theme::BTN_NORMAL,
-            theme::BTN_HOVER,
-            theme::TEXT_PRIMARY,
+            theme.button_normal(),
+            theme.border(),
+            theme.text_primary(),
         );
         draw_button(
             surf,
@@ -463,9 +460,9 @@ fn render_applications(
             ACTION_WIDTH,
             ACTION_HEIGHT,
             "Open",
-            theme::BTN_NORMAL,
-            theme::BTN_HOVER,
-            theme::TEXT_PRIMARY,
+            theme.button_normal(),
+            theme.border(),
+            theme.text_primary(),
         );
     }
 }
@@ -474,12 +471,25 @@ fn render_running_tasks(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
     state: &SpotlightState,
+    theme: &dyn ViTheme,
     sw: u32,
 ) {
-    let tasks: &[(&str, &str, &str)] = &[
-        ("(O)", "Ocel Document Viewer", "Active Session (Frame 1)"),
-        (">_", "Interactive Terminal", "Active Session (Frame 2)"),
-        ("[]", "Desktop Shell", "Background Workspace"),
+    let tasks: &[(LineIcon, &str, &str)] = &[
+        (
+            LineIcon::Document,
+            "Ocel Document Viewer",
+            "Active Session (Frame 1)",
+        ),
+        (
+            LineIcon::Terminal,
+            "Interactive Terminal",
+            "Active Session (Frame 2)",
+        ),
+        (
+            LineIcon::Application,
+            "Desktop Shell",
+            "Background Workspace",
+        ),
     ];
 
     let name_height = (fonts.line_height(FontFace::UiSemibold, 15.0) + 1.0) as u32;
@@ -490,43 +500,15 @@ fn render_running_tasks(
         let row_w = sw.saturating_sub(28);
         let is_selected = i == state.selected_index;
         let is_hover = is_inside(state.mouse_x, state.mouse_y, 14, row_y, row_w, ROW_HEIGHT);
-        let row_bg = if is_selected {
-            theme::BTN_ACTIVE
-        } else if is_hover {
-            theme::BTN_HOVER
-        } else {
-            theme::BTN_NORMAL
-        };
-
-        fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, row_bg);
-        if is_selected {
-            fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
-        }
-        stroke_rect(
+        paint_row(
             surf,
-            14,
+            theme,
             row_y,
             row_w,
-            ROW_HEIGHT,
-            if is_selected {
-                theme::ACCENT_BLUE
-            } else {
-                theme::TASKBAR_BORDER
-            },
+            row_bg(theme, is_selected, is_hover),
+            is_selected,
         );
-        draw_label(
-            surf,
-            fonts,
-            24,
-            row_y,
-            34,
-            ROW_HEIGHT,
-            icon,
-            FontFace::UiRegular,
-            14.0,
-            theme::ACCENT_CYAN,
-            true,
-        );
+        draw_icon_centered(surf, icon, (24, row_y, 34, ROW_HEIGHT), theme.accent());
 
         let text_x = 70;
         let text_w = (run_x(sw) - 10 - text_x).max(0) as u32;
@@ -541,7 +523,7 @@ fn render_running_tasks(
             name,
             FontFace::UiSemibold,
             15.0,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
             false,
         );
         draw_label(
@@ -554,7 +536,7 @@ fn render_running_tasks(
             status,
             FontFace::UiRegular,
             13.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             false,
         );
 
@@ -566,19 +548,19 @@ fn render_running_tasks(
             ACTION_WIDTH,
             ACTION_HEIGHT,
             "Switch",
-            theme::BTN_NORMAL,
-            theme::BTN_HOVER,
-            theme::TEXT_PRIMARY,
+            theme.button_normal(),
+            theme.border(),
+            theme.text_primary(),
         );
     }
 }
 
 /// System section rows: (icon, name, description, button). Power off and reboot are not
 /// offered: no platform provider exists for either, so a button could only pretend.
-const SYSTEM_ACTIONS: &[(&str, &str, &str, &str)] = &[(
-    "[T]",
+const SYSTEM_ACTIONS: &[(LineIcon, &str, &str, &str)] = &[(
+    LineIcon::Appearance,
     "Appearance Theme",
-    "Cycle Light / Dark / Paper",
+    "cycle Light / Dark / Paper",
     "Cycle",
 )];
 
@@ -589,7 +571,24 @@ fn system_action(index: usize) -> SpotlightAction {
     }
 }
 
-fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightState, sw: u32) {
+/// The System row description; the theme row leads with the palette in use.
+fn system_description(index: usize, desc: &str, palette: SystemPalette) -> String {
+    match system_action(index) {
+        SpotlightAction::CycleTheme => {
+            alloc::format!("Current: {} \u{2014} {}", palette.name(), desc)
+        }
+        _ => String::from(desc),
+    }
+}
+
+fn render_system(
+    surf: &mut ViSurface,
+    fonts: &mut TextFonts,
+    state: &SpotlightState,
+    theme: &dyn ViTheme,
+    palette: SystemPalette,
+    sw: u32,
+) {
     let name_height = (fonts.line_height(FontFace::UiSemibold, 15.0) + 1.0) as u32;
     let desc_height = (fonts.line_height(FontFace::UiRegular, 13.0) + 1.0) as u32;
 
@@ -598,43 +597,16 @@ fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightS
         let row_w = sw.saturating_sub(28);
         let is_selected = i == state.selected_index;
         let is_hover = is_inside(state.mouse_x, state.mouse_y, 14, row_y, row_w, ROW_HEIGHT);
-        let row_bg = if is_selected {
-            theme::BTN_ACTIVE
-        } else if is_hover {
-            theme::BTN_HOVER
-        } else {
-            theme::BTN_NORMAL
-        };
-
-        fill_rect(surf, 14, row_y, row_w, ROW_HEIGHT, row_bg);
-        if is_selected {
-            fill_rect(surf, 14, row_y, 4, ROW_HEIGHT, theme::ACCENT_CYAN);
-        }
-        stroke_rect(
+        paint_row(
             surf,
-            14,
+            theme,
             row_y,
             row_w,
-            ROW_HEIGHT,
-            if is_selected {
-                theme::ACCENT_BLUE
-            } else {
-                theme::TASKBAR_BORDER
-            },
+            row_bg(theme, is_selected, is_hover),
+            is_selected,
         );
-        draw_label(
-            surf,
-            fonts,
-            24,
-            row_y,
-            34,
-            ROW_HEIGHT,
-            icon,
-            FontFace::UiRegular,
-            14.0,
-            theme::ACCENT_CYAN,
-            true,
-        );
+        draw_icon_centered(surf, icon, (24, row_y, 34, ROW_HEIGHT), theme.accent());
+        let desc = system_description(i, desc, palette);
 
         let text_x = 70;
         let text_w = (run_x(sw) - 10 - text_x).max(0) as u32;
@@ -649,7 +621,7 @@ fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightS
             name,
             FontFace::UiSemibold,
             15.0,
-            theme::TEXT_PRIMARY,
+            theme.text_primary(),
             false,
         );
         draw_label(
@@ -659,10 +631,10 @@ fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightS
             text_y + name_height as i32 + 4,
             text_w,
             desc_height,
-            desc,
+            &desc,
             FontFace::UiRegular,
             13.0,
-            theme::TEXT_MUTED,
+            theme.text_secondary(),
             false,
         );
 
@@ -674,9 +646,9 @@ fn render_system(surf: &mut ViSurface, fonts: &mut TextFonts, state: &SpotlightS
             ACTION_WIDTH,
             ACTION_HEIGHT,
             btn_text,
-            theme::BTN_NORMAL,
-            theme::BTN_HOVER,
-            theme::TEXT_PRIMARY,
+            theme.button_normal(),
+            theme.border(),
+            theme.text_primary(),
         );
     }
 }

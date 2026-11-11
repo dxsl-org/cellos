@@ -4,6 +4,7 @@
 //! This matches BGRA8888 little-endian framebuffer byte order (B at lowest address).
 
 use crate::layout::{Point, Rect};
+use ostd::display::linear::{self, Radii, RoundRect};
 
 // ─── Color ───────────────────────────────────────────────────────────────────
 
@@ -215,6 +216,23 @@ pub trait ViCanvas {
             color,
         );
     }
+
+    /// Fill `rect` with every corner rounded by `radius` px.
+    ///
+    /// The default draws square corners; rasterizing backends override it.
+    fn fill_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        let _ = radius;
+        self.fill_rect(rect, color);
+    }
+
+    /// 1px outline covering exactly the boundary pixels of
+    /// [`Self::fill_round_rect`] for the same `rect` and `radius`.
+    ///
+    /// The default draws square corners; rasterizing backends override it.
+    fn stroke_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        let _ = radius;
+        self.draw_rect_border(rect, color, 1.0);
+    }
 }
 
 // ─── FramebufferCanvas ───────────────────────────────────────────────────────
@@ -295,6 +313,32 @@ impl<'fb> FramebufferCanvas<'fb> {
         let out = Color::blend_over(color, dst);
         // u32 store: LLVM emits single STR on aligned targets
         self.pixels[off..off + 4].copy_from_slice(&out.0.to_le_bytes());
+    }
+
+    /// `linear::Canvas` over this framebuffer, clipped to the active clip.
+    fn linear(&mut self) -> linear::Canvas<'_> {
+        let (x0, y0, x1, y1) = self.clip_stack_i[self.clip_depth];
+        linear::Canvas::new(self.pixels, self.width, self.height, self.stride as usize).clip_to(
+            x0,
+            y0,
+            (x1 - x0).max(0) as u32,
+            (y1 - y0).max(0) as u32,
+        )
+    }
+
+    /// Snap `rect` to whole pixels the way `fill_rect` does.
+    fn round_shape(rect: Rect, radius: u32) -> Option<RoundRect> {
+        let (x0, y0) = (rect.x as i32, rect.y as i32);
+        let (x1, y1) = ((rect.x + rect.w) as i32, (rect.y + rect.h) as i32);
+        (x1 > x0 && y1 > y0).then(|| {
+            RoundRect::new(
+                x0,
+                y0,
+                (x1 - x0) as u32,
+                (y1 - y0) as u32,
+                Radii::all(radius),
+            )
+        })
     }
 }
 
@@ -577,5 +621,75 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
     }
     fn height(&self) -> u32 {
         self.height
+    }
+
+    fn fill_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        if let Some(shape) = Self::round_shape(rect, radius) {
+            self.linear().fill_round(&shape, color.0.to_le_bytes());
+        }
+    }
+
+    fn stroke_round_rect(&mut self, rect: Rect, radius: u32, color: Color) {
+        if let Some(shape) = Self::round_shape(rect, radius) {
+            self.linear().stroke_round(&shape, color.0.to_le_bytes());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::{Color, FramebufferCanvas, ViCanvas};
+    use crate::layout::Rect;
+    use ostd::display::linear::{Radii, RoundRect, PANEL_RADIUS};
+
+    const W: u32 = 32;
+    const H: u32 = 24;
+    const BG: Color = Color::rgb(1, 2, 3);
+
+    fn pixel(pixels: &[u8], x: u32, y: u32) -> Color {
+        let off = ((y * W + x) * 4) as usize;
+        Color(u32::from_le_bytes([
+            pixels[off],
+            pixels[off + 1],
+            pixels[off + 2],
+            pixels[off + 3],
+        ]))
+    }
+
+    fn canvas_with(draw: impl FnOnce(&mut FramebufferCanvas<'_>)) -> alloc::vec::Vec<u8> {
+        let mut pixels = alloc::vec![0u8; (W * H * 4) as usize];
+        let mut canvas = FramebufferCanvas::new(&mut pixels, W * 4, W, H);
+        canvas.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), BG);
+        draw(&mut canvas);
+        pixels
+    }
+
+    #[test]
+    fn rounded_fill_skips_corners_and_stroke_matches_linear_outline() {
+        let ink = Color::rgb(200, 100, 50);
+        let (x, y, w, h) = (4u32, 3u32, 20u32, 14u32);
+        let rect = Rect::new(x as f32, y as f32, w as f32, h as f32);
+
+        let filled = canvas_with(|c| c.fill_round_rect(rect, PANEL_RADIUS, ink));
+        assert_eq!(pixel(&filled, x, y), BG);
+        assert_eq!(pixel(&filled, x + w - 1, y + h - 1), BG);
+        assert_eq!(pixel(&filled, x + w / 2, y), ink);
+        assert_eq!(pixel(&filled, x + w / 2, y + h / 2), ink);
+
+        let stroked = canvas_with(|c| c.stroke_round_rect(rect, PANEL_RADIUS, ink));
+        let shape = RoundRect::new(x as i32, y as i32, w, h, Radii::all(PANEL_RADIUS));
+        for py in 0..H {
+            for px in 0..W {
+                let on_outline = py >= y && py < y + h && px >= x && {
+                    let ((l0, l1), (r0, r1)) = shape.outline(py - y);
+                    let col = px - x;
+                    (l0..l1).contains(&col) || (r0..r1).contains(&col)
+                };
+                let expected = if on_outline { ink } else { BG };
+                assert_eq!(pixel(&stroked, px, py), expected, "({px}, {py})");
+            }
+        }
     }
 }

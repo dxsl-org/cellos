@@ -63,7 +63,7 @@ use viui::{
 };
 
 use ostd::{
-    display::{wait_for_compositor, ViSurface},
+    display::{linear::icons::LineIcon, wait_for_compositor, ViSurface},
     syscall::{sys_get_time, sys_heartbeat, sys_yield},
     MTIME_TICKS_PER_MS,
 };
@@ -95,6 +95,9 @@ fn cell_main() {
             ostd::syscall::sys_exit(1);
         }
     };
+    if surf.set_icon(LineIcon::Dashboard).is_err() {
+        ostd::io::println("[robot-dashboard] set_icon failed; Cell Tab keeps the generic icon");
+    }
     let renderer = FramebufferRenderer::new(surf);
 
     // Register this cell to receive keyboard and mouse events.

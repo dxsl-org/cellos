@@ -245,6 +245,14 @@ impl AttachGrant {
     }
 }
 
+mod appearance;
+mod icon;
+pub use icon::{SetIcon, SET_ICON_WIRE_SIZE};
+pub use appearance::{
+    AppearanceChanged, AppearancePalette, SetAppearance, APPEARANCE_CHANGED_WIRE_SIZE,
+    SET_APPEARANCE_WIRE_SIZE,
+};
+
 // ─── Window lifecycle IPC messages ───────────────────────────────────────────
 
 /// Maximum number of UTF-8 bytes in a window title.
@@ -1207,6 +1215,16 @@ pub mod compositor_ops {
     /// Payload: [`DetachReplacedGrant`] (16 bytes).
     pub const DETACH_REPLACED_GRANT: u8 = 0x11;
 
+    /// Set the palette of compositor-drawn chrome; shell (Panel owner) only.
+    ///
+    /// Payload: [`SetAppearance`] (12 bytes). No reply.
+    pub const SET_APPEARANCE: u8 = 0x12;
+
+    /// Set the Cell Tab icon of an owner surface.
+    ///
+    /// Payload: [`SetIcon`] (8 bytes). No reply.
+    pub const SET_ICON: u8 = 0x13;
+
     /// Query screen dimensions.
     /// Payload: empty  Reply: `[w: u32, h: u32]`
     pub const GET_SCREEN_SIZE: u8 = 0x10;
@@ -1255,6 +1273,8 @@ pub mod compositor_events {
     pub const WINDOW_CLOSE_REQUEST: u8 = 0xA1;
     /// A state transition encoded as [`WindowStateChanged`] (12 bytes).
     pub const WINDOW_STATE_CHANGED: u8 = 0xA2;
+    /// The system palette, encoded as [`AppearanceChanged`] (8 bytes).
+    pub const APPEARANCE_CHANGED: u8 = 0xA3;
 }
 
 // ─── Misc constants ───────────────────────────────────────────────────────────

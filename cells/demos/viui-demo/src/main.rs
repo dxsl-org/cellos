@@ -8,7 +8,7 @@ extern crate ostd;
 use alloc::boxed::Box;
 use api::display::PixelFormat;
 use ostd::{
-    display::{wait_for_compositor, ViSurface},
+    display::{linear::icons::LineIcon, wait_for_compositor, ViSurface},
     syscall::sys_exit,
     task::yield_now,
 };
@@ -60,6 +60,9 @@ fn cell_main() {
     if surface.set_title("ViUI Counter").is_err() {
         ostd::io::println("[viui-demo] ERROR: could not set surface title");
         sys_exit(1);
+    }
+    if surface.set_icon(LineIcon::Counter).is_err() {
+        ostd::io::println("[viui-demo] set_icon failed; Cell Tab keeps the generic icon");
     }
     surface.move_to(SURFACE_X, SURFACE_Y);
 

@@ -18,7 +18,8 @@ use crate::signal::{Signal, SubscriptionHandle};
 /// One data series: reactive data, draw color, and display label.
 pub struct Series {
     pub data: Signal<Vec<f32>>,
-    pub color: Color,
+    /// Line colour; `None` uses the theme's `accent`.
+    pub color: Option<Color>,
     pub label: String,
 }
 
@@ -26,7 +27,16 @@ impl Series {
     pub fn new(data: Signal<Vec<f32>>, color: Color, label: impl Into<String>) -> Self {
         Self {
             data,
-            color,
+            color: Some(color),
+            label: label.into(),
+        }
+    }
+
+    /// Series drawn in the active theme's `accent` colour.
+    pub fn themed(data: Signal<Vec<f32>>, label: impl Into<String>) -> Self {
+        Self {
+            data,
+            color: None,
             label: label.into(),
         }
     }
@@ -121,7 +131,7 @@ impl ViNode for LineChart {
             h: (b.h - mt - mb).max(1.0),
         };
 
-        cx.canvas.fill_rect(b, Color::rgb(14, 16, 24));
+        cx.canvas.fill_rect(b, cx.theme.surface());
 
         // Compute Y range across all series
         let (mut data_min, mut data_max) = (f32::MAX, f32::MIN);
@@ -146,7 +156,8 @@ impl ViNode for LineChart {
 
         // 5 horizontal grid lines
         if self.grid_lines {
-            let grid_color = Color::rgb(40, 44, 60);
+            let grid_color = cx.theme.divider();
+            let label_color = cx.theme.text_secondary();
             for i in 0..=4 {
                 let t = i as f32 / 4.0;
                 let gy = plot.y + plot.h * (1.0 - t);
@@ -159,12 +170,12 @@ impl ViNode for LineChart {
                 let label = format_f32_label(val);
                 let x = plot.x - cx.measure(&label) - 4.0;
                 let y = gy - cx.line_height() * 0.5;
-                cx.draw_text(Point::new(x, y), &label, Color::rgb(120, 130, 150));
+                cx.draw_text(Point::new(x, y), &label, label_color);
             }
         }
 
         // Axis lines
-        let axis_color = Color::rgb(60, 65, 85);
+        let axis_color = cx.theme.border();
         cx.canvas.draw_line(
             Point::new(plot.x, plot.y),
             Point::new(plot.x, plot.y + plot.h),
@@ -178,6 +189,7 @@ impl ViNode for LineChart {
 
         // Plot each series as a polyline
         let plot_w_px = plot.w as usize;
+        let accent = cx.theme.accent();
         for s in &self.series {
             let data = s.data.get();
             if data.is_empty() {
@@ -190,8 +202,11 @@ impl ViNode for LineChart {
                 let x1 = plot.x + i as f32 / (n - 1) as f32 * plot.w;
                 let y0 = plot.y + plot.h * (1.0 - (pts[i - 1] - y_lo) / y_range);
                 let y1 = plot.y + plot.h * (1.0 - (pts[i] - y_lo) / y_range);
-                cx.canvas
-                    .draw_line(Point::new(x0, y0), Point::new(x1, y1), s.color);
+                cx.canvas.draw_line(
+                    Point::new(x0, y0),
+                    Point::new(x1, y1),
+                    s.color.unwrap_or(accent),
+                );
             }
         }
     }
@@ -223,5 +238,35 @@ fn format_f32_label(v: f32) -> String {
     } else {
         let scaled = (v * 10.0) as i32;
         alloc::format!("{}.{}", scaled / 10, (scaled % 10).abs())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate alloc;
+
+    use super::{LineChart, Series};
+
+    use crate::canvas::Color;
+    use crate::node_widgets::style::test_support::{fills, lines, paint_node, text_color};
+    use crate::signal::Signal;
+    use crate::theme::{ViTheme, DARK_THEME, LIGHT_THEME};
+
+    #[test]
+    fn plot_grid_axis_and_series_use_theme_tokens() {
+        for theme in [&LIGHT_THEME as &dyn ViTheme, &DARK_THEME] {
+            let red = Color::rgb(220, 0, 0);
+            let mut chart = LineChart::new(alloc::vec![
+                Series::themed(Signal::new(alloc::vec![0.0, 1.0]), "a"),
+                Series::new(Signal::new(alloc::vec![1.0, 0.0]), red, "b"),
+            ]);
+            let buf = paint_node(&mut chart, theme);
+            assert_eq!(fills(&buf)[0].1, theme.surface());
+            assert_eq!(text_color(&buf, "1.0"), Some(theme.text_secondary()));
+            let l = lines(&buf);
+            assert_eq!(l[..5], [theme.divider(); 5]);
+            assert_eq!(l[5..7], [theme.border(); 2]);
+            assert_eq!(l[7..], [theme.accent(), red]);
+        }
     }
 }

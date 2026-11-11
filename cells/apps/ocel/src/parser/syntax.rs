@@ -4,7 +4,7 @@
 
 extern crate alloc;
 use crate::doc::StyledSpan;
-use crate::draw::{theme, Color};
+use crate::draw::{code_ink, Color};
 use alloc::vec::Vec;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,15 +95,15 @@ impl Highlighter {
                     } else {
                         State::BlockComment(depth)
                     };
-                    color = theme::TEXT_MUTED;
+                    color = code_ink::COMMENT;
                 }
                 State::String { quote, triple } => {
                     i = consume_string(text, i, quote, triple, &mut self.state);
-                    color = Color::rgb(166, 227, 161);
+                    color = code_ink::STRING;
                 }
                 State::RawString(hashes) => {
                     i = consume_raw(text, i, hashes, &mut self.state);
-                    color = Color::rgb(166, 227, 161);
+                    color = code_ink::STRING;
                 }
                 State::Normal => {
                     if matches!(language, Language::Rust | Language::C | Language::Json)
@@ -111,25 +111,25 @@ impl Highlighter {
                         || language == Language::Toml && bytes[i] == b'#'
                     {
                         i = bytes.len();
-                        color = theme::TEXT_MUTED;
+                        color = code_ink::COMMENT;
                     } else if matches!(language, Language::Rust | Language::C | Language::Json)
                         && bytes[i..].starts_with(b"/*")
                     {
                         self.state = State::BlockComment(1);
                         i += 2;
-                        color = theme::TEXT_MUTED;
+                        color = code_ink::COMMENT;
                     } else if language == Language::Xml && bytes[i..].starts_with(b"<!--") {
                         if let Some(end) = text[i..].find("-->") {
                             i += end + 3;
                         } else {
                             i = bytes.len();
                         }
-                        color = theme::TEXT_MUTED;
+                        color = code_ink::COMMENT;
                     } else if language == Language::Xml
                         && (bytes[i] == b'<' || bytes[i] == b'>' || bytes[i] == b'/')
                     {
                         i += 1;
-                        color = theme::ACCENT_BLUE;
+                        color = code_ink::KEYWORD;
                     } else if let Some((prefix, hashes)) = (language == Language::Rust)
                         .then(|| raw_open(&bytes[i..]))
                         .flatten()
@@ -137,7 +137,7 @@ impl Highlighter {
                         i += prefix;
                         self.state = State::RawString(hashes);
                         i = consume_raw(text, i, hashes, &mut self.state);
-                        color = Color::rgb(166, 227, 161);
+                        color = code_ink::STRING;
                     } else if bytes[i] == b'"' || language == Language::Toml && bytes[i] == b'\'' {
                         let quote = bytes[i];
                         let triple =
@@ -145,14 +145,14 @@ impl Highlighter {
                         i += if triple { 3 } else { 1 };
                         self.state = State::String { quote, triple };
                         i = consume_string(text, i, quote, triple, &mut self.state);
-                        color = Color::rgb(166, 227, 161);
+                        color = code_ink::STRING;
                     } else if let Some(end) = (bytes[i] == b'\''
                         && matches!(language, Language::Rust | Language::C))
                     .then(|| char_literal_end(text, i))
                     .flatten()
                     {
                         i = end;
-                        color = Color::rgb(166, 227, 161);
+                        color = code_ink::STRING;
                     } else if bytes[i].is_ascii_digit() {
                         i += 1;
                         while i < bytes.len()
@@ -163,20 +163,20 @@ impl Highlighter {
                         {
                             i += 1;
                         }
-                        color = Color::rgb(250, 179, 135);
+                        color = code_ink::NUMBER;
                     } else if identifier_start(text, i) {
                         i += char_len(text, i);
                         while i < bytes.len() && identifier_continue(text, i) {
                             i += char_len(text, i);
                         }
                         color = if keyword(language, &text[start..i]) {
-                            theme::ACCENT_BLUE
+                            code_ink::KEYWORD
                         } else {
-                            theme::TEXT_PRIMARY
+                            code_ink::PLAIN
                         };
                     } else {
                         i += char_len(text, i);
-                        color = theme::TEXT_PRIMARY;
+                        color = code_ink::PLAIN;
                     }
                 }
             }

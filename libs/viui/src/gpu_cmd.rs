@@ -20,6 +20,21 @@ pub enum GpuCmd {
         rect: Rect,
         color: Color,
     },
+    /// Fill `rect` with every corner rounded by `radius` px. `rect` is kept
+    /// unclipped so the corners stay in place; playback clips via the
+    /// replayed clip stack.
+    FillRoundRect {
+        rect: Rect,
+        radius: u32,
+        color: Color,
+    },
+    /// 1px outline of [`GpuCmd::FillRoundRect`] with the same geometry;
+    /// `rect` is unclipped, like the fill.
+    StrokeRoundRect {
+        rect: Rect,
+        radius: u32,
+        color: Color,
+    },
     /// Draw a line from `a` to `b` (Bresenham, handled by executor).
     DrawLine {
         a: Point,
@@ -63,7 +78,9 @@ impl GpuCmd {
     /// that see `None` must always execute the command.
     pub fn bounding_rect(&self) -> Option<Rect> {
         match self {
-            GpuCmd::FillRect { rect, .. } => Some(*rect),
+            GpuCmd::FillRect { rect, .. }
+            | GpuCmd::FillRoundRect { rect, .. }
+            | GpuCmd::StrokeRoundRect { rect, .. } => Some(*rect),
             GpuCmd::DrawLine { a, b, .. } => {
                 let x = a.x.min(b.x);
                 let y = a.y.min(b.y);

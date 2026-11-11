@@ -4,6 +4,9 @@
 
 use crate::canvas::Color;
 
+mod system;
+pub use system::{serial as system_serial, system, system_palette};
+
 // ─── ViTheme trait ───────────────────────────────────────────────────────────
 
 pub trait ViTheme: 'static {
@@ -158,6 +161,11 @@ pub trait ViTheme: 'static {
     /// Error badge or refusal highlight color.
     fn badge_error(&self) -> Color {
         Color::rgb(220, 38, 38)
+    }
+
+    /// Success/completed status color.
+    fn badge_success(&self) -> Color {
+        Color::rgb(22, 128, 61)
     }
 
     // ─── Reader tokens (Ocel / Document viewers) ─────────────────────────────
@@ -634,6 +642,24 @@ impl SystemPalette {
         self as u8
     }
 
+    /// The compositor chrome palette for this system palette.
+    pub const fn appearance(self) -> api::display::AppearancePalette {
+        match self {
+            Self::Light => api::display::AppearancePalette::Light,
+            Self::Dark => api::display::AppearancePalette::Dark,
+            Self::Paper => api::display::AppearancePalette::Paper,
+        }
+    }
+
+    /// The next palette in the Light -> Dark -> Paper cycle.
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Light => Self::Dark,
+            Self::Dark => Self::Paper,
+            Self::Paper => Self::Light,
+        }
+    }
+
     pub const fn name(self) -> &'static str {
         match self {
             Self::Light => "Light",
@@ -796,6 +822,13 @@ mod tests {
             assert!(
                 taskbar_contrast >= 4.5,
                 "{name} theme taskbar contrast {taskbar_contrast:.2} < 4.5"
+            );
+
+            // Success status colour on Surface (non-text UI element, >= 3:1)
+            let success_contrast = contrast_ratio(theme.badge_success(), theme.surface());
+            assert!(
+                success_contrast >= 3.0,
+                "{name} theme badge_success on surface contrast {success_contrast:.2} < 3.0"
             );
         }
     }

@@ -3,7 +3,6 @@
 //! translates bounded Gemtext into native nodes.
 extern crate alloc;
 use crate::doc::{DocNode, StyledSpan};
-use crate::draw::theme;
 use alloc::{format, string::String, vec::Vec};
 
 /// Parse Gemtext (text/gemini) into native CellOS DocNodes.
@@ -79,7 +78,6 @@ pub fn parse_gemtext(input: &str, base_url: &str) -> Vec<DocNode> {
                 };
                 let mut span = StyledSpan::plain(&format!("🚀 {}", display_label));
                 span.link = Some(target_url);
-                span.color = Some(theme::ACCENT_CYAN);
                 span.bold = true;
                 nodes.push(DocNode::Paragraph {
                     spans: alloc::vec![span],

@@ -78,7 +78,7 @@ pub fn parse_feed_to_nodes(content: &str, base_url: Option<&str>) -> Vec<DocNode
         if !desc.is_empty() {
             let mut span = StyledSpan::plain(&desc);
             span.italic = true;
-            span.color = Some(crate::draw::theme::TEXT_MUTED);
+            span.color = Some(crate::draw::ink::MUTED);
             nodes.push(DocNode::Paragraph {
                 spans: alloc::vec![span],
             });
@@ -92,7 +92,6 @@ pub fn parse_feed_to_nodes(content: &str, base_url: Option<&str>) -> Vec<DocNode
         let mut title_span = StyledSpan::plain(&item.title);
         title_span.link = Some(item.link);
         title_span.bold = true;
-        title_span.color = Some(crate::draw::theme::ACCENT_CYAN);
         nodes.push(DocNode::ListItem {
             bullet: '•',
             indent: 0,
@@ -102,15 +101,14 @@ pub fn parse_feed_to_nodes(content: &str, base_url: Option<&str>) -> Vec<DocNode
         if let Some(date) = item.date {
             let mut date_span = StyledSpan::plain(&format!("  📅 {}", date));
             date_span.italic = true;
-            date_span.color = Some(crate::draw::theme::TEXT_MUTED);
+            date_span.color = Some(crate::draw::ink::MUTED);
             nodes.push(DocNode::Paragraph {
                 spans: alloc::vec![date_span],
             });
         }
 
         if let Some(summary) = item.summary {
-            let mut sum_span = StyledSpan::plain(&format!("  {}", summary));
-            sum_span.color = Some(crate::draw::theme::TEXT_PRIMARY);
+            let sum_span = StyledSpan::plain(&format!("  {}", summary));
             nodes.push(DocNode::Paragraph {
                 spans: alloc::vec![sum_span],
             });

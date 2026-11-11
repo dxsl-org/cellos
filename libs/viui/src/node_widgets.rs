@@ -22,6 +22,7 @@ pub mod row;
 pub mod scroll_area;
 pub mod slider;
 pub mod space;
+pub(crate) mod style;
 pub mod text_edit;
 pub mod toast;
 pub mod touch_area;

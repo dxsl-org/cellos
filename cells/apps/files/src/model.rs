@@ -5,6 +5,8 @@ extern crate alloc;
 use alloc::format;
 use alloc::string::String;
 
+use viui::surface::LineIcon;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewMode {
     #[default]
@@ -31,7 +33,7 @@ pub struct FileItem {
     pub mime: api::services::mime::MimeType,
     /// `Stat` size; `None` for folders and when the VFS refused the `Stat`.
     pub size: Option<u64>,
-    pub icon: &'static str,
+    pub icon: LineIcon,
 }
 
 impl FileItem {
@@ -48,7 +50,7 @@ impl FileItem {
         } else {
             api::services::mime::MimeType::from_path(&path)
         };
-        let icon = mime.icon_tag();
+        let icon = LineIcon::for_mime(mime);
 
         Self {
             name,
@@ -82,7 +84,7 @@ pub struct TrashRecord {
 pub struct PlacesItem {
     pub name: &'static str,
     pub path: &'static str,
-    pub icon: &'static str,
+    pub icon: LineIcon,
     pub is_pinned: bool,
 }
 
@@ -90,37 +92,37 @@ pub const DEFAULT_PLACES: &[PlacesItem] = &[
     PlacesItem {
         name: "Root",
         path: "/",
-        icon: "(/)",
+        icon: LineIcon::Folder,
         is_pinned: false,
     },
     PlacesItem {
         name: "Applications",
         path: "/bin",
-        icon: "[A]",
+        icon: LineIcon::Application,
         is_pinned: false,
     },
     PlacesItem {
         name: "Data",
         path: "/data",
-        icon: "[*]",
+        icon: LineIcon::Document,
         is_pinned: true,
     },
     PlacesItem {
         name: "Storage",
         path: "/mnt",
-        icon: "[S]",
+        icon: LineIcon::Blocks,
         is_pinned: true,
     },
     PlacesItem {
         name: "Services",
         path: "/srv",
-        icon: "[=]",
+        icon: LineIcon::Dashboard,
         is_pinned: false,
     },
     PlacesItem {
         name: "Trash",
         path: "/data/.trash",
-        icon: "[T]",
+        icon: LineIcon::Folder,
         is_pinned: true,
     },
 ];
@@ -181,15 +183,15 @@ mod tests {
     #[test]
     fn test_file_item_icons_and_sizes() {
         let dir = FileItem::new("docs", "/docs", true, None);
-        assert_eq!(dir.icon, "[D]");
+        assert_eq!(dir.icon, LineIcon::Folder);
         assert_eq!(dir.formatted_size(), "--");
 
         let doc = FileItem::new("readme.md", "/readme.md", false, Some(2048));
-        assert_eq!(doc.icon, "[M]");
+        assert_eq!(doc.icon, LineIcon::Document);
         assert_eq!(doc.formatted_size(), "2 KB");
 
         let pdf = FileItem::new("manual.pdf", "/manual.pdf", false, Some(5 * 1024 * 1024));
-        assert_eq!(pdf.icon, "[P]");
+        assert_eq!(pdf.icon, LineIcon::Document);
         assert_eq!(pdf.formatted_size(), "5 MB");
 
         let refused = FileItem::new("secret", "/secret", false, None);

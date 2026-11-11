@@ -3,69 +3,66 @@
 
 use crate::canvas::Color;
 use crate::theme::ViTheme;
+use ostd::display::linear::{Bgra, Canvas, Radii, RoundRect};
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 pub mod components;
+pub mod icons;
 pub use components::*;
+pub use icons::{draw_icon, draw_icon_centered, paint_icon, LineIcon, ICON_SIZE};
+
+pub use ostd::display::linear::{CONTROL_RADIUS, PANEL_RADIUS};
+
+pub(crate) fn bgra(color: Color) -> Bgra {
+    [color.b(), color.g(), color.r(), color.a()]
+}
+
+pub(crate) fn linear_canvas(surf: &mut ViSurface) -> Canvas<'_> {
+    let (width, height, stride) = (surf.width(), surf.height(), surf.stride());
+    Canvas::new(surf.pixels_mut(), width, height, stride)
+}
 
 /// Fill a rectangle directly on a ViSurface buffer using its native stride and bounds.
 pub fn fill_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
-    let sw = surf.width() as i32;
-    let sh = surf.height() as i32;
-    let stride = surf.stride();
-    let pixels = surf.pixels_mut();
-
-    let x0 = x.clamp(0, sw);
-    let y0 = y.clamp(0, sh);
-    let x1 = x.saturating_add(w as i32).clamp(0, sw);
-    let y1 = y.saturating_add(h as i32).clamp(0, sh);
-
-    if x0 >= x1 || y0 >= y1 {
-        return;
-    }
-    let sa = color.a() as u32;
-    if sa == 0 {
-        return;
-    }
-    if sa == 255 {
-        let bgra = [color.b(), color.g(), color.r(), 255];
-        for cy in y0..y1 {
-            let row_start = (cy as usize * stride) + (x0 as usize * 4);
-            for cx in 0..(x1 - x0) as usize {
-                let offset = row_start + (cx * 4);
-                if offset + 4 <= pixels.len() {
-                    pixels[offset..offset + 4].copy_from_slice(&bgra);
-                }
-            }
-        }
-        return;
-    }
-
-    let inv = 255 - sa;
-    let (sb, sg, sr) = (color.b() as u32, color.g() as u32, color.r() as u32);
-    for cy in y0..y1 {
-        let row_start = (cy as usize * stride) + (x0 as usize * 4);
-        for cx in 0..(x1 - x0) as usize {
-            let offset = row_start + (cx * 4);
-            if offset + 4 <= pixels.len() {
-                let db = pixels[offset] as u32;
-                let dg = pixels[offset + 1] as u32;
-                let dr = pixels[offset + 2] as u32;
-                pixels[offset] = ((sb * sa + db * inv + 127) / 255) as u8;
-                pixels[offset + 1] = ((sg * sa + dg * inv + 127) / 255) as u8;
-                pixels[offset + 2] = ((sr * sa + dr * inv + 127) / 255) as u8;
-                pixels[offset + 3] = 255;
-            }
-        }
-    }
+    linear_canvas(surf).fill_rect(x, y, w, h, bgra(color));
 }
 
 /// Draw a 1-pixel rectangle outline on a ViSurface.
 pub fn stroke_rect(surf: &mut ViSurface, x: i32, y: i32, w: u32, h: u32, color: Color) {
-    fill_rect(surf, x, y, w, 1, color);
-    fill_rect(surf, x, y + h as i32 - 1, w, 1, color);
-    fill_rect(surf, x, y, 1, h, color);
-    fill_rect(surf, x + w as i32 - 1, y, 1, h, color);
+    linear_canvas(surf).stroke_rect(x, y, w, h, bgra(color));
+}
+
+/// Fill a rectangle with rounded corners of `radius` pixels.
+///
+/// Corner pixels outside the curve are left untouched, so whatever was painted
+/// beneath shows through without reading it back.
+// reason: public drawing primitive mirroring fill_rect plus the radius.
+#[allow(clippy::too_many_arguments)]
+pub fn fill_round_rect(
+    surf: &mut ViSurface,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    radius: u32,
+    color: Color,
+) {
+    linear_canvas(surf).fill_round(&RoundRect::new(x, y, w, h, Radii::all(radius)), bgra(color));
+}
+
+/// Draw the 1-pixel outline of [`fill_round_rect`] with the same geometry.
+// reason: public drawing primitive mirroring stroke_rect plus the radius.
+#[allow(clippy::too_many_arguments)]
+pub fn stroke_round_rect(
+    surf: &mut ViSurface,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    radius: u32,
+    color: Color,
+) {
+    linear_canvas(surf).stroke_round(&RoundRect::new(x, y, w, h, Radii::all(radius)), bgra(color));
 }
 
 /// Horizontal inset, in pixels, between a left-aligned label's rect and its
@@ -166,7 +163,7 @@ pub fn draw_label_aligned(
     );
 }
 
-/// Draw standard toolkit button with background, border, and centered label.
+/// Draw standard toolkit button: rounded fill, 1px rounded border, centered label.
 // reason: public drawing primitive used across app crates; its parameter list is its API.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_button(
@@ -181,8 +178,8 @@ pub fn draw_button(
     border: Color,
     fg: Color,
 ) {
-    fill_rect(surf, x, y, w, h, bg);
-    stroke_rect(surf, x, y, w, h, border);
+    fill_round_rect(surf, x, y, w, h, CONTROL_RADIUS, bg);
+    stroke_round_rect(surf, x, y, w, h, CONTROL_RADIUS, border);
     draw_label_aligned(
         surf,
         fonts,
@@ -212,7 +209,7 @@ pub fn draw_badge(
     bg: Color,
     fg: Color,
 ) {
-    fill_rect(surf, x, y, w, h, bg);
+    fill_round_rect(surf, x, y, w, h, CONTROL_RADIUS, bg);
     draw_label_aligned(
         surf,
         fonts,
@@ -239,8 +236,8 @@ pub fn draw_themed_panel(
     w: u32,
     h: u32,
 ) {
-    fill_rect(surf, x, y, w, h, theme.surface());
-    stroke_rect(surf, x, y, w, h, theme.border());
+    fill_round_rect(surf, x, y, w, h, PANEL_RADIUS, theme.surface());
+    stroke_round_rect(surf, x, y, w, h, PANEL_RADIUS, theme.border());
 }
 
 /// Draw a themed button using theme tokens (Normal / Hovered / Primary).

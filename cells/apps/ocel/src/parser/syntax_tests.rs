@@ -22,25 +22,25 @@ fn rust_nested_comments_survive_line_boundaries_and_resume_code() {
     let first = "let x = 1; /* outer /* nested";
     let spans = h.line(first);
     preserved(&spans, first);
-    assert_eq!(colour_at(&spans, 0), theme::ACCENT_BLUE);
+    assert_eq!(colour_at(&spans, 0), code_ink::KEYWORD);
     assert_eq!(
         colour_at(&spans, first.find("outer").unwrap()),
-        theme::TEXT_MUTED
+        code_ink::COMMENT
     );
     let second = "*/ still outer */ fn next() {} // tail";
     let spans = h.line(second);
     preserved(&spans, second);
     assert_eq!(
         colour_at(&spans, second.find("still").unwrap()),
-        theme::TEXT_MUTED
+        code_ink::COMMENT
     );
     assert_eq!(
         colour_at(&spans, second.find("fn").unwrap()),
-        theme::ACCENT_BLUE
+        code_ink::KEYWORD
     );
     assert_eq!(
         colour_at(&spans, second.find("tail").unwrap()),
-        theme::TEXT_MUTED
+        code_ink::COMMENT
     );
 }
 
@@ -52,15 +52,15 @@ fn raw_string_requires_matching_hashes_and_does_not_parse_comments() {
     preserved(&spans, first);
     assert_eq!(
         colour_at(&spans, first.find("fn").unwrap()),
-        Color::rgb(166, 227, 161)
+        code_ink::STRING
     );
     let second = "/* text */\"##; let n = 42;";
     let spans = h.line(second);
     preserved(&spans, second);
-    assert_eq!(colour_at(&spans, 0), Color::rgb(166, 227, 161));
+    assert_eq!(colour_at(&spans, 0), code_ink::STRING);
     assert_eq!(
         colour_at(&spans, second.find("let").unwrap()),
-        theme::ACCENT_BLUE
+        code_ink::KEYWORD
     );
 }
 
@@ -69,13 +69,10 @@ fn lifetimes_unicode_and_escaped_characters_preserve_text() {
     let text = "fn f<'a>(c: &'a str) { let café = '\\n'; let λ = 'é'; }";
     let spans = Highlighter::new("rust").line(text);
     preserved(&spans, text);
-    assert_eq!(
-        colour_at(&spans, text.find("'a").unwrap()),
-        theme::TEXT_PRIMARY
-    );
+    assert_eq!(colour_at(&spans, text.find("'a").unwrap()), code_ink::PLAIN);
     assert_eq!(
         colour_at(&spans, text.find("'é'").unwrap()),
-        Color::rgb(166, 227, 161)
+        code_ink::STRING
     );
     for text in ["'", "'\\", "'é", "let 字 = 1;"] {
         preserved(&Highlighter::new("rust").line(text), text);
@@ -90,11 +87,11 @@ fn strings_take_precedence_over_comment_delimiters() {
         preserved(&spans, text);
         assert_eq!(
             colour_at(&spans, text.find("//").unwrap()),
-            Color::rgb(166, 227, 161)
+            code_ink::STRING
         );
         assert_eq!(
             colour_at(&spans, text.find("true").unwrap()),
-            theme::ACCENT_BLUE
+            code_ink::KEYWORD
         );
     }
 }
@@ -107,10 +104,10 @@ fn toml_multiline_literal_string_and_comment_have_separate_scopes() {
     let second = "still literal''' # comment";
     let spans = h.line(second);
     preserved(&spans, second);
-    assert_eq!(colour_at(&spans, 0), Color::rgb(166, 227, 161));
+    assert_eq!(colour_at(&spans, 0), code_ink::STRING);
     assert_eq!(
         colour_at(&spans, second.find("#").unwrap()),
-        theme::TEXT_MUTED
+        code_ink::COMMENT
     );
 }
 
@@ -121,7 +118,7 @@ fn unknown_languages_and_unlabelled_blocks_are_not_guessed() {
         let spans = Highlighter::new(language).line(text);
         preserved(&spans, text);
         assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].color, Some(theme::ACCENT_CYAN));
+        assert_eq!(spans[0].color, Some(code_ink::INLINE));
     }
 }
 

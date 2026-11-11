@@ -7,7 +7,10 @@ use ostd::syscall::{sys_get_time, sys_lookup_service};
 use ostd::typography::{FontFace, TextFonts};
 
 use crate::apps::AppRegistry;
-use crate::draw::{draw_button, draw_label, fill_rect, stroke_rect, theme};
+use crate::draw::{
+    draw_button, draw_icon_centered, draw_label, fill_rect, fill_round_rect, stroke_round_rect,
+    ViTheme, CONTROL_RADIUS,
+};
 
 pub const TASKBAR_HEIGHT: u32 = 36;
 pub const MAX_VISIBLE_APPS: usize = 4;
@@ -124,19 +127,21 @@ pub fn render(
     fonts: &mut TextFonts,
     registry: &AppRegistry,
     state: &TaskbarState,
+    theme: &dyn ViTheme,
 ) {
     let sw = surf.width();
     let sh = surf.height();
     let pinned = registry.pinned_apps();
     let layout = Layout::new(sw, pinned.len(), state.page_offset);
 
-    fill_rect(surf, 0, 0, sw, sh, theme::TASKBAR_BG);
-    fill_rect(surf, 0, 0, sw, 1, theme::TASKBAR_BORDER);
+    // Docked along the screen's bottom edge: a full rect, square corners.
+    fill_rect(surf, 0, 0, sw, sh, theme.taskbar_bg());
+    fill_rect(surf, 0, 0, sw, 1, theme.taskbar_border());
 
     let cellos_bg = if is_inside(state.mouse_x, state.mouse_y, 8, BUTTON_Y, 84, BUTTON_HEIGHT) {
-        theme::BTN_HOVER
+        theme.button_hovered()
     } else {
-        theme::BTN_NORMAL
+        theme.button_normal()
     };
     draw_button(
         surf,
@@ -147,13 +152,13 @@ pub fn render(
         BUTTON_HEIGHT,
         "CellOS",
         cellos_bg,
-        theme::TASKBAR_BORDER,
-        theme::ACCENT_CYAN,
+        theme.taskbar_border(),
+        theme.accent(),
     );
-    fill_rect(surf, 98, 10, 1, 28, theme::TASKBAR_BORDER);
+    fill_rect(surf, 98, 10, 1, 28, theme.taskbar_border());
 
     if layout.paged && layout.start > 0 {
-        render_page_button(surf, fonts, state, APPS_X, "<");
+        render_page_button(surf, fonts, state, theme, APPS_X, "<");
     }
     let mut cursor_x = layout.apps_x();
     for app in &pinned[layout.start..layout.end] {
@@ -165,31 +170,33 @@ pub fn render(
             APP_WIDTH,
             BUTTON_HEIGHT,
         ) {
-            theme::BTN_HOVER
+            theme.button_hovered()
         } else {
-            theme::BTN_NORMAL
+            theme.button_normal()
         };
-        fill_rect(surf, cursor_x, BUTTON_Y, APP_WIDTH, BUTTON_HEIGHT, bg);
-        stroke_rect(
+        fill_round_rect(
             surf,
             cursor_x,
             BUTTON_Y,
             APP_WIDTH,
             BUTTON_HEIGHT,
-            theme::TASKBAR_BORDER,
+            CONTROL_RADIUS,
+            bg,
         );
-        draw_label(
+        stroke_round_rect(
             surf,
-            fonts,
-            cursor_x + 6,
+            cursor_x,
             BUTTON_Y,
-            28,
+            APP_WIDTH,
             BUTTON_HEIGHT,
+            CONTROL_RADIUS,
+            theme.taskbar_border(),
+        );
+        draw_icon_centered(
+            surf,
             app.icon,
-            FontFace::UiRegular,
-            14.0,
-            theme::ACCENT_CYAN,
-            true,
+            (cursor_x + 6, BUTTON_Y, 28, BUTTON_HEIGHT),
+            theme.accent(),
         );
         draw_label(
             surf,
@@ -201,18 +208,18 @@ pub fn render(
             app.name,
             FontFace::UiRegular,
             14.0,
-            theme::TEXT_PRIMARY,
+            theme.taskbar_fg(),
             false,
         );
         cursor_x += APP_STEP;
     }
     if layout.capacity > 0 && layout.paged && layout.end < pinned.len() {
-        render_page_button(surf, fonts, state, layout.next_x(), ">");
+        render_page_button(surf, fonts, state, theme, layout.next_x(), ">");
     }
     if layout.paged {
         let x = layout.more_x();
         let bg = if state.sub_taskbar_open {
-            theme::BTN_ACTIVE
+            theme.button_pressed()
         } else if is_inside(
             state.mouse_x,
             state.mouse_y,
@@ -221,9 +228,9 @@ pub fn render(
             MORE_WIDTH,
             BUTTON_HEIGHT,
         ) {
-            theme::BTN_HOVER
+            theme.button_hovered()
         } else {
-            theme::BTN_NORMAL
+            theme.button_normal()
         };
         draw_button(
             surf,
@@ -234,23 +241,25 @@ pub fn render(
             BUTTON_HEIGHT,
             "More",
             bg,
-            theme::TASKBAR_BORDER,
-            theme::ACCENT_CYAN,
+            theme.taskbar_border(),
+            theme.accent(),
         );
     }
 
     let mut right_x = layout.tray_x;
-    fill_rect(surf, right_x - 6, 10, 1, 28, theme::TASKBAR_BORDER);
+    fill_rect(surf, right_x - 6, 10, 1, 28, theme.taskbar_border());
     if sw >= 600 {
-        for (label, online, online_color) in [
-            ("NET", state.net_online, theme::ACCENT_GREEN),
-            ("VFS", state.vfs_online, theme::ACCENT_GREEN),
-            ("AI", state.ai_online, theme::ACCENT_CYAN),
+        // No status-green token: online is the accent, offline the secondary text. The label
+        // names the service either way, so colour is never the only cue.
+        for (label, online) in [
+            ("NET", state.net_online),
+            ("VFS", state.vfs_online),
+            ("AI", state.ai_online),
         ] {
             let color = if online {
-                online_color
+                theme.accent()
             } else {
-                theme::TEXT_MUTED
+                theme.text_secondary()
             };
             draw_label(
                 surf,
@@ -279,7 +288,7 @@ pub fn render(
         clock,
         FontFace::UiSemibold,
         14.0,
-        theme::TEXT_PRIMARY,
+        theme.taskbar_fg(),
         true,
     );
     surf.damage_all();
@@ -289,6 +298,7 @@ fn render_page_button(
     surf: &mut ViSurface,
     fonts: &mut TextFonts,
     state: &TaskbarState,
+    theme: &dyn ViTheme,
     x: i32,
     text: &str,
 ) {
@@ -300,9 +310,9 @@ fn render_page_button(
         PAGE_WIDTH,
         BUTTON_HEIGHT,
     ) {
-        theme::BTN_HOVER
+        theme.button_hovered()
     } else {
-        theme::BTN_NORMAL
+        theme.button_normal()
     };
     draw_button(
         surf,
@@ -313,8 +323,8 @@ fn render_page_button(
         BUTTON_HEIGHT,
         text,
         bg,
-        theme::TASKBAR_BORDER,
-        theme::TEXT_PRIMARY,
+        theme.taskbar_border(),
+        theme.taskbar_fg(),
     );
 }
 
