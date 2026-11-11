@@ -62,7 +62,7 @@ class QualifiedRoute:
 # assembler, is a reviewed source change of this table.
 X86_CANONICAL_ROOT = "kernel/src/embedded-x86_64"
 X86_CANDIDATE_RECIPE = "scripts/assemble-x86-image.py"
-X86_CANDIDATE_RECIPE_SHA256 = "941d508d68dc90525974581e385acf2ad3d6679ca6761ced39fbb81ee3e0aa09"
+X86_CANDIDATE_RECIPE_SHA256 = "bb8d3343bc6c17d595711822a1f1d4f90af323ab7f44f7c1606aab1c4110c26f"
 _X86_HEADLESS_SIGNED = frozenset({
     "cellbox", "service-vfs", "service-config", "service-input", "service-net", "platform",
     "driver-nvme", "driver-e1000", "driver-igb", "driver-e1000e", "driver-ahci", "driver-xhci",
@@ -72,6 +72,7 @@ _X86_HEADLESS_SIGNED = frozenset({
 })
 _X86_DESKTOP_SIGNED = _X86_HEADLESS_SIGNED | frozenset({
     "service-compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel",
+    "hypervisor",
 })
 QUALIFIED_ROUTES = {
     "x86-candidate-headless": QualifiedRoute(

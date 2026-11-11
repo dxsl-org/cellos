@@ -32,18 +32,31 @@ fn deliver_uart(vm_id: usize, vcpu_id: usize, uart: &Uart16550, pic: &Pic8259) -
     }
 }
 
+/// ISA line shared by virtio-gpu and virtio-input (Linux's virtio-mmio IRQs are
+/// `IRQF_SHARED`). The emulated PIC has no slave, so the free master lines are
+/// 3 and 7, and 7 is the 8259 spurious line.
+pub const DISPLAY_IRQ: u8 = 3;
+
 fn deliver_virtio(
     vm_id: usize,
     vcpu_id: usize,
     block: &VirtioMmio,
     net: &VirtioMmio,
+    display: [&VirtioMmio; 2],
     pic: &Pic8259,
 ) -> bool {
     let vector = block
         .interrupt_pending()
         .then(|| pic.irq(5))
         .flatten()
-        .or_else(|| net.interrupt_pending().then(|| pic.irq(6)).flatten());
+        .or_else(|| net.interrupt_pending().then(|| pic.irq(6)).flatten())
+        .or_else(|| {
+            display
+                .iter()
+                .any(|device| device.interrupt_pending())
+                .then(|| pic.irq(DISPLAY_IRQ))
+                .flatten()
+        });
     if let Some(vector) = vector {
         vmm::inject_irq(vm_id, vcpu_id, u32::from(vector));
         true
@@ -73,6 +86,7 @@ pub fn service_idle(
     net_device: &mut NetDev,
     block_mmio: &VirtioMmio,
     net_mmio: &mut VirtioMmio,
+    display_mmio: [&VirtioMmio; 2],
     prefer_pit: &mut bool,
 ) {
     drain_host_input(uart);
@@ -95,7 +109,7 @@ pub fn service_idle(
         *prefer_pit = false;
         return;
     }
-    if deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, pic) {
+    if deliver_virtio(vm_id, vcpu_id, block_mmio, net_mmio, display_mmio, pic) {
         *prefer_pit = true;
         return;
     }

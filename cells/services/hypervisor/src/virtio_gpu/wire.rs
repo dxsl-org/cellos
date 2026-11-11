@@ -25,7 +25,12 @@ pub const CTRL_HDR_LEN: usize = 24;
 const RECT_LEN: usize = 16;
 const DISPLAY_ONE_LEN: usize = 24;
 const MAX_SCANOUTS: usize = 16;
-const MAX_ATTACH_ENTRIES: usize = 128;
+/// Backing pages one resource may list: a 3840x2160 BGRA scanout in 4 KiB pages
+/// (8100). Linux backs a dumb buffer with shmem pages, mostly not contiguous,
+/// so a 1280x800 framebuffer alone needs ~1000 entries.
+pub const MAX_ATTACH_ENTRIES: usize = 8192;
+/// Longest ATTACH_BACKING request: header, resource id + count, the entries.
+pub const MAX_ATTACH_REQUEST_LEN: usize = CTRL_HDR_LEN + 8 + MAX_ATTACH_ENTRIES * 16;
 pub const DISPLAY_INFO_LEN: usize = CTRL_HDR_LEN + DISPLAY_ONE_LEN * MAX_SCANOUTS;
 #[derive(Clone, Copy)]
 pub struct CtrlHeader {

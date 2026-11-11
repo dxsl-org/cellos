@@ -10,7 +10,7 @@ mod render;
 
 const BYTES_PER_PIXEL: usize = 4;
 const MAX_RESOURCES: usize = 64;
-const MAX_BACKING_ENTRIES: usize = 128;
+use super::wire::MAX_ATTACH_ENTRIES as MAX_BACKING_ENTRIES;
 const SCANOUT_ID: u32 = 0;
 
 pub enum ResourceError {

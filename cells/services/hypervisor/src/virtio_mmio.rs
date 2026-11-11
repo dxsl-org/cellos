@@ -98,6 +98,10 @@ impl VirtioMmio {
             0x038 if q < MAX_QUEUES => self.queues[q].num as u64,
             0x044 if q < MAX_QUEUES && self.queues[q].ready => 1,
             0x060 => self.intr_status as u64,
+            // SHMLenLow/High: all-ones means "no such shared memory region".
+            // Answering 0 made Linux's virtio-gpu reserve a zero-length host
+            // region at address 0 and fail its probe with -EBUSY.
+            0x0b0 | 0x0b4 => 0xFFFF_FFFF,
             0x070 => self.status as u64,
             // Config space is addressed in **bytes**: the guest reads a `u8` field,
             // or the 6-byte virtio-net MAC (which `memcpy_fromio` copies one byte

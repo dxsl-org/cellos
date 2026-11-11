@@ -83,6 +83,8 @@ class Cell:
     binary: str
     paths: tuple[str, ...]
     signed: bool = True
+    # Cargo features of `package` itself, built into this profile's binary.
+    features: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,11 @@ class Profile:
     def packages(self) -> list[str]:
         """Cargo `-p` list in manifest order, each package once."""
         return list(dict.fromkeys(cell.package for cell in self.cells))
+
+    def package_features(self) -> list[str]:
+        """`package/feature` list for the cells' own features, in manifest order."""
+        return list(dict.fromkeys(f"{cell.package}/{feature}"
+                                  for cell in self.cells for feature in cell.features))
 
     def image_paths(self) -> set[str]:
         """Every image path the profile packages, without the generated config."""
@@ -146,6 +153,9 @@ DESKTOP_CELLS = HEADLESS_CELLS + (
     Cell("terminal", "terminal", ("/bin/terminal",)),
     Cell("app-chrome", "chrome", ("/bin/chrome",)),
     Cell("ocel", "ocel", ("/bin/ocel",)),
+    # Tier 3 guest host for Chrome (ADR-0017 §5d); spawned on demand, not autostarted.
+    # No guest disk yet: the guest runs from its initramfs.
+    Cell("service-hypervisor", "hypervisor", ("/bin/hypervisor",), features=("volatile-disk",)),
 )
 
 PROFILES = {
@@ -423,8 +433,10 @@ class Assembler:
     def build(self, marker: Path) -> None:
         marker.write_bytes(b"")
         started = self.placed_ns(marker)
+        features = self.profile.package_features()
         cells = self.cargo_build([arg for package in self.profile.packages()
-                                  for arg in ("-p", package)])
+                                  for arg in ("-p", package)]
+                                 + (["--features", ",".join(features)] if features else []))
         init = self.cargo_build(["-p", INIT_PACKAGE, "--features",
                                  ",".join(self.profile.init_features)])
         reported = cells | init
@@ -512,7 +524,8 @@ class Assembler:
             expected[path] = (config_dir / Path(path).name).read_bytes()
         check_image(files, expected, self.profile, self.blocked)
 
-        packages = {path: {"package": cell.package, "binary": cell.binary, "signed": cell.signed}
+        packages = {path: {"package": cell.package, "binary": cell.binary, "signed": cell.signed,
+                           **({"features": list(cell.features)} if cell.features else {})}
                     for cell in self.profile.cells for path in cell.paths}
         manifest = {
             "schema": "cellos-x86-image-manifest/1",

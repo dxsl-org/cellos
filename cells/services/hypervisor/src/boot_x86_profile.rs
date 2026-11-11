@@ -13,12 +13,13 @@ pub const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
 pub const VMLINUX_PATH: &str = "/vmlinux";
 pub const INITRD_PATH: &str = "/initrd.gz";
 
+// Slots 3 (virtio-gpu) and 4 (virtio-input) share ISA IRQ 3 (`x86_irq_dispatch::DISPLAY_IRQ`).
 #[cfg(not(feature = "ubuntu-wide-guest"))]
-const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 -- -i";
+const CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/sh panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3 -- -i";
 #[cfg(not(feature = "ubuntu-wide-guest"))]
-const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
+const E2E_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off rdinit=/bin/virtio-e2e-init panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3";
 #[cfg(feature = "ubuntu-wide-guest")]
-const UBUNTU_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off root=/dev/vda rw rootfstype=ext4 rootwait init=/sbin/init systemd.unit=multi-user.target net.ifnames=0 panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6";
+const UBUNTU_CMDLINE: &str = "earlycon=uart8250,io,0x3f8,115200 console=ttyS0 nox2apic pci=off lpj=4000000 nohz=off highres=off root=/dev/vda rw rootfstype=ext4 rootwait init=/sbin/init systemd.unit=multi-user.target net.ifnames=0 panic=1 virtio_mmio.device=512@0xd0000000:5 virtio_mmio.device=512@0xd0000200:6 virtio_mmio.device=512@0xd0000600:3 virtio_mmio.device=512@0xd0000800:3";
 
 #[cfg(feature = "ubuntu-wide-guest")]
 pub fn guest_cmdline() -> &'static str {

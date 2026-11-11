@@ -96,6 +96,8 @@ pub fn read(ipa: u64, size: u8, dev: &MmioDevices<'_>) -> Option<u32> {
     let aligned = match size {
         4 => offset,
         1 if offset >= 0x100 => offset & !3,
+        // Device config words (`readw`) stay inside one 32-bit config word.
+        2 if offset >= 0x100 && offset & 1 == 0 => offset & !3,
         _ => {
             println(&alloc::format!(
                 "[hv-x86] unsupported MMIO read gpa=0x{:x} size={}",
@@ -132,9 +134,10 @@ pub fn read(ipa: u64, size: u8, dev: &MmioDevices<'_>) -> Option<u32> {
         }
         _ => 0,
     };
-    Some(if size == 1 {
-        (raw >> ((offset - aligned) * 8)) & 0xff
-    } else {
-        raw
+    let shift = (offset - aligned) * 8;
+    Some(match size {
+        1 => (raw >> shift) & 0xff,
+        2 => (raw >> shift) & 0xffff,
+        _ => raw,
     })
 }

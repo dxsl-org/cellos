@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 pub use super::wire::*;
 
-const MAX_REQUEST_LEN: usize = 64 * 1024;
+const MAX_REQUEST_LEN: usize = super::wire::MAX_ATTACH_REQUEST_LEN;
 
 pub fn read_header(bufs: &[DescBuf], vm_id: usize) -> Option<CtrlHeader> {
     parse_header(&read_request_bytes(bufs, vm_id)?)

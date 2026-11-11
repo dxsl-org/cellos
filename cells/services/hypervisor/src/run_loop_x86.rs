@@ -27,7 +27,7 @@ use crate::{
     uart_16550::Uart16550,
     virtio_blk::BlkDisk,
     virtio_gpu::GpuDev,
-    virtio_input::{InputDev, INPUT_SPI},
+    virtio_input::InputDev,
     virtio_mmio::VirtioMmio,
     virtio_net::NetDev,
     vmm,
@@ -66,7 +66,8 @@ pub fn run(
     );
     let mut gpu_vmio = VirtioMmio::default();
     gpu.bring_up();
-    let mut input = InputDev::new(Some(INPUT_SPI));
+    // x86: completions raise ISR status only; `x86_irq_dispatch` delivers them on DISPLAY_IRQ.
+    let mut input = InputDev::new(None);
     let mut input_vmio = VirtioMmio::default();
     let mut uart = Uart16550::new();
     let mut pic = Pic8259::new();
@@ -115,6 +116,7 @@ pub fn run(
                     &mut net,
                     &blk_vmio,
                     &mut net_vmio,
+                    [&gpu_vmio, &input_vmio],
                     &mut net_poll_turn,
                 );
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);
@@ -151,6 +153,7 @@ pub fn run(
                     &mut net,
                     &blk_vmio,
                     &mut net_vmio,
+                    [&gpu_vmio, &input_vmio],
                     &mut net_poll_turn,
                 );
                 forward_input_events(&mut input, &mut input_vmio, vm_id, vcpu_id);

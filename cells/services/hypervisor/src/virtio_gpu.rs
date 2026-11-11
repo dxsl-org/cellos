@@ -13,6 +13,7 @@ use crate::virtqueue::process_notify;
 use resource::ResourceTable;
 use scanout::ScanoutBridge;
 
+#[cfg(target_arch = "aarch64")]
 const GPU_SPI: u32 = 19;
 
 pub struct GpuDev {
@@ -116,6 +117,9 @@ impl VirtioDevice for GpuDev {
                 });
             }
         }
+        // aarch64 raises the SPI here; x86 delivers the ISR status that
+        // `notify`'s `true` sets through the emulated PIC (x86_irq_dispatch).
+        #[cfg(target_arch = "aarch64")]
         crate::vmm::inject_irq(vm_id, vcpu_id, crate::vmm::device_irq(GPU_SPI));
         true
     }
