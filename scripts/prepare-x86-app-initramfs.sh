@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Repack the cached Alpine initramfs with a Tier 3 in-guest application fixture.
-# Set the guest clock in the fixture: this emulated guest has no useful RTC,
-# and TLS certificates cannot be verified until its clock is initialized.
+# Set the guest clock in the fixture: TLS certificates cannot be verified until it
+# is initialized, and the guest RTC reads zero on a host without a wall clock.
 # Prune unused modules to leave memory for apk and the application in the
 # bounded Alpine guest RAM profiles.
 #
@@ -54,7 +54,8 @@ mkdir -p "$(dirname "$OUTPUT")"
         kernel/drivers/block/virtio_blk.ko \
         kernel/drivers/net/virtio_net.ko \
         kernel/drivers/net/net_failover.ko \
-        kernel/net/core/failover.ko
+        kernel/net/core/failover.ko \
+        kernel/net/packet/af_packet.ko
 
 [[ "$(sha256sum "$SOURCE" | cut -d ' ' -f 1)" == "$source_sha" ]] \
     || { echo "FAIL: cached Alpine initramfs changed during repack" >&2; exit 1; }

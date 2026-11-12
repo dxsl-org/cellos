@@ -8,11 +8,16 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_ADDR_IN_USE};
 use ostd::syscall::sys_lookup_service;
 
-use crate::virtio_net::GUEST_MAC;
 const BACKEND_TIMEOUT_TICKS: u64 = 200;
+/// First guest address (locally administered). Session `n` of those running at
+/// once gets `n` added to the last byte, so a guest reuses the address (and the
+/// upstream DHCP lease) of a session that has ended.
+const GUEST_MAC_BASE: [u8; 6] = [0x52, 0x54, 0x00, 0xAA, 0xBB, 0xCC];
+/// Addresses tried before giving up; above the net service's port count.
+const GUEST_MAC_CANDIDATES: u8 = 16;
 
 /// Supervised Net Cell connection state retained by one virtual device.
 pub struct Connection {
@@ -20,6 +25,8 @@ pub struct Connection {
     poisoned_tid: usize,
     recovery_pending: bool,
     force_unavailable_once: bool,
+    /// The guest's address: this session's bridge port in the net service.
+    guest_mac: [u8; 6],
 }
 
 impl Connection {
@@ -30,7 +37,57 @@ impl Connection {
             poisoned_tid: 0,
             recovery_pending: false,
             force_unavailable_once: false,
+            guest_mac: GUEST_MAC_BASE,
         }
+    }
+
+    /// The address the guest's virtio-net device presents.
+    pub fn guest_mac(&self) -> [u8; 6] {
+        self.guest_mac
+    }
+
+    /// Open this session's bridge port at the first address no other session or
+    /// the host stack uses. Must run before the guest reads its device config.
+    /// Without a net service the base address stays and later polls open it.
+    pub fn claim_guest_mac(&mut self) {
+        for n in 0..GUEST_MAC_CANDIDATES {
+            let mut mac = GUEST_MAC_BASE;
+            mac[5] = mac[5].wrapping_add(n);
+            self.guest_mac = mac;
+            let Some(active_tid) = self.active_tid() else {
+                return;
+            };
+            let mut response_buffer = [0u8; IPC_BUF_SIZE];
+            // A frame already queued for the new port predates the guest; drop it.
+            match poll(active_tid, mac, &mut response_buffer) {
+                Ok(NetResponse::Ok | NetResponse::Data(_)) => {
+                    ostd::io::println(&alloc::format!(
+                        "[hv-net] guest port open mac={:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                        mac[0],
+                        mac[1],
+                        mac[2],
+                        mac[3],
+                        mac[4],
+                        mac[5]
+                    ));
+                    return;
+                }
+                Ok(NetResponse::Err(NET_ERR_ADDR_IN_USE)) => {}
+                other => {
+                    ostd::io::println(&alloc::format!(
+                        "[hv-net] guest port not opened: {}",
+                        l2_status(&other)
+                    ));
+                    if let Err(error) = other {
+                        self.mark_unavailable(active_tid, poisons(&error));
+                    }
+                    self.guest_mac = GUEST_MAC_BASE;
+                    return;
+                }
+            }
+        }
+        ostd::io::println("[hv-net] guest port not opened: every address in use");
+        self.guest_mac = GUEST_MAC_BASE;
     }
 
     #[cfg(feature = "hostile-backend-recovery")]
@@ -260,18 +317,8 @@ pub fn try_receive(connection: &mut Connection) -> Option<Box<[u8]>> {
             return None;
         }
     };
-    let request = NetRequest::L2Recv {
-        guest_mac: GUEST_MAC,
-    };
-    let mut send_buffer = [0u8; IPC_BUF_SIZE];
     let mut response_buffer = [0u8; IPC_BUF_SIZE];
-    let result = ostd::ipc::service_call_typed_bounded(
-        active_tid,
-        &request,
-        &mut send_buffer,
-        &mut response_buffer,
-        BACKEND_TIMEOUT_TICKS,
-    );
+    let result = poll(active_tid, connection.guest_mac, &mut response_buffer);
     #[cfg(feature = "l2-trace")]
     trace_l2_outcome("L2Recv", active_tid, &result);
     #[cfg(not(feature = "l2-trace"))]
@@ -304,16 +351,36 @@ pub fn try_receive(connection: &mut Connection) -> Option<Box<[u8]>> {
         }
         Ok(NetResponse::Data(_)) | Ok(NetResponse::Ok) => None,
         error => {
-            connection.mark_unavailable(
-                active_tid,
-                matches!(
-                    error,
-                    Err(ostd::ipc::IpcError::Recv
-                        | ostd::ipc::IpcError::PeerGone
-                        | ostd::ipc::IpcError::Indeterminate)
-                ),
-            );
+            let poison = matches!(&error, Err(error) if poisons(error));
+            connection.mark_unavailable(active_tid, poison);
             None
         }
     }
+}
+
+/// One `L2Recv` for this session's port at `mac`.
+fn poll<'r>(
+    active_tid: usize,
+    mac: [u8; 6],
+    response_buffer: &'r mut [u8],
+) -> Result<NetResponse<'r>, ostd::ipc::IpcError> {
+    let request = NetRequest::L2Recv { guest_mac: mac };
+    let mut send_buffer = [0u8; IPC_BUF_SIZE];
+    ostd::ipc::service_call_typed_bounded(
+        active_tid,
+        &request,
+        &mut send_buffer,
+        response_buffer,
+        BACKEND_TIMEOUT_TICKS,
+    )
+}
+
+/// Whether a failed call may still be answered late, so the next reply from
+/// that tid could be this call's (see [`Connection::active_tid`]).
+fn poisons(error: &ostd::ipc::IpcError) -> bool {
+    use ostd::ipc::IpcError;
+    matches!(
+        error,
+        IpcError::Recv | IpcError::PeerGone | IpcError::Indeterminate
+    )
 }

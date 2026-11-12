@@ -19,14 +19,25 @@ mount -t tmpfs -o mode=1777 tmpfs /dev/shm
 chmod 0700 "$XDG_RUNTIME_DIR"
 hostname cellos-chrome
 
-for module in virtio_gpu virtio_input evdev; do
+for module in virtio_gpu virtio_input evdev virtio_net af_packet; do
     modprobe "$module" 2>/dev/null
 done
 udevd --daemon
 udevadm trigger --action=add
 udevadm settle --timeout=10
 [ -e /dev/dri/card0 ] || { log "CHROME_GUEST_FAIL:no-drm"; poweroff -f; }
-log "CHROME_GUEST_DEVICES $(free -m | awk '/^Mem:/ { print "mem_total_mib=" $2 }')"
+log "CHROME_GUEST_DEVICES $(free -m | awk '/^Mem:/ { print "mem_total_mib=" $2 }') utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# The lease comes from the upstream network (the CellOS net service bridges this
+# guest's MAC beside its own stack). udhcpc stays running to renew it; without a
+# lease Chromium still starts and shows its own network error.
+ip link set lo up
+if ip link set eth0 up 2>/dev/null && udhcpc -i eth0 -t 10 -T 3 -b -p /run/udhcpc.pid >/dev/null 2>&1 \
+    && ip -4 addr show eth0 | grep -q 'inet '; then
+    log "CHROME_GUEST_NET lease=$(ip -4 addr show eth0 | awk '/inet / { print $2; exit }') dns=$(awk '/^nameserver/ { print $2; exit }' /etc/resolv.conf)"
+else
+    log "CHROME_GUEST_NET_FAIL:no-lease"
+fi
 
 dbus-uuidgen --ensure
 mkdir -p /run/dbus

@@ -65,9 +65,10 @@ done
 echo "guest net iface: $net_if"
 ip link set "$net_if" up || die net-link-up
 ip link set lo up || true
-ip addr add 10.0.2.15/24 dev "$net_if" || die net-address
-ip route add default via 10.0.2.2 dev "$net_if" || die net-route
-echo 'nameserver 10.0.2.3' > /etc/resolv.conf
+# The net service's host stack holds a lease of its own (10.0.2.15 under QEMU
+# user networking); the guest takes its own from DHCP, which also names the resolver.
+modprobe af_packet || die modprobe-af-packet
+udhcpc -i "$net_if" -n -q -t 10 -T 3 >/dev/null 2>&1 || die net-dhcp
 if ping -c 1 -W 5 10.0.2.2 >/dev/null 2>&1; then
     say "GATEWAY_PING_PASS"
 else

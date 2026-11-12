@@ -3,11 +3,10 @@ use api::ipc::{self, NetRequest, NetResponse};
 use api::syscall::events::NET_RX;
 use core::sync::atomic::Ordering;
 use ostd::syscall::sys_try_recv_attested;
-#[cfg(any(not(feature = "ipc-wake-oracle"), feature = "hypervisor-bridge"))]
+#[cfg(not(feature = "ipc-wake-oracle"))]
 use ostd::syscall::sys_wait_completion;
-#[cfg(not(feature = "hypervisor-bridge"))]
 use ostd::syscall::sys_yield;
-#[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+#[cfg(feature = "ipc-wake-oracle")]
 use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
 use ostd::{io::println, syscall::SyscallResult};
 use smoltcp::{
@@ -16,7 +15,6 @@ use smoltcp::{
     wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
 };
 
-#[cfg(not(feature = "hypervisor-bridge"))]
 use crate::dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use crate::{
     dns::Resolver,
@@ -61,14 +59,14 @@ const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
 // therefore has to be the preceding 9 periods, not the 100 ms maintenance budget.
 #[cfg(any(
     test,
-    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+    feature = "ipc-wake-oracle"
 ))]
 const IDLE_IPC_WAKE_PROOF_CEILING_TICKS: u64 =
     (NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS - 1) * SCHEDULER_TICK_MS * MTIME_TICKS_PER_MS;
 
 #[cfg(any(
     test,
-    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+    feature = "ipc-wake-oracle"
 ))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum IdleIpcWakeClassification {
@@ -84,7 +82,7 @@ pub(crate) enum IdleIpcWakeClassification {
 /// waiter's path back to `TryRecv` afterwards is not part of the wake.
 #[cfg(any(
     test,
-    all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge"))
+    feature = "ipc-wake-oracle"
 ))]
 pub(crate) const fn classify_idle_ipc_wake(wait_return_ticks: u64) -> IdleIpcWakeClassification {
     if wait_return_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS {
@@ -588,6 +586,7 @@ fn owner_death_line(owner: SocketOwner, aborted: usize, released: usize) -> Opti
 #[allow(clippy::too_many_arguments)]
 fn release_owner(
     owner: SocketOwner,
+    device: &mut VirtioNetDevice,
     sockets: &mut SocketSet<'_>,
     table: &mut SocketTable,
     tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
@@ -597,6 +596,9 @@ fn release_owner(
     resolver: &Resolver,
     watched: &mut BTreeMap<SocketOwner, (usize, u64)>,
 ) {
+    if device.release_port(owner) {
+        println("[net-bridge] guest port released");
+    }
     let (aborted, released) = reclaim_owner_state(
         owner,
         sockets,
@@ -618,7 +620,7 @@ fn release_owner(
 }
 
 /// Replace the interface's IPv4 address (DHCP and link-local share one slot).
-#[cfg(all(target_os = "none", not(feature = "hypervisor-bridge")))]
+#[cfg(target_os = "none")]
 fn set_ipv4(iface: &mut Interface, cidr: IpCidr) {
     iface.update_ip_addrs(|addrs| {
         if let Some(slot) = addrs.iter_mut().find(|a| matches!(a, IpCidr::Ipv4(_))) {
@@ -632,7 +634,7 @@ fn set_ipv4(iface: &mut Interface, cidr: IpCidr) {
 /// Apply one RFC 3927 engine step. The address is configured at the claim so
 /// smoltcp answers ARP for it while the announcements go out; `local_ip` (what
 /// `ifconfig` reports) follows at the bind.
-#[cfg(all(target_os = "none", not(feature = "hypervisor-bridge")))]
+#[cfg(target_os = "none")]
 fn apply_link_local(
     event: crate::link_local::Event,
     iface: &mut Interface,
@@ -733,6 +735,7 @@ pub(crate) fn run() {
         }
     };
 
+    device.set_host_mac(initial_mac.0);
     let config = crate::stack_entropy::seeded_config(HardwareAddress::Ethernet(initial_mac));
     let mut iface = Interface::new(config, &mut device, now_instant());
     iface.update_ip_addrs(|addresses| {
@@ -758,31 +761,22 @@ pub(crate) fn run() {
     #[allow(unused_mut)]
     let mut resolver = Resolver::install(&mut sockets);
 
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_handle = add_dhcp_socket(&mut sockets);
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut dhcp_state = DhcpState::Pending;
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let dhcp_start_ticks = sys_get_time();
     // RFC 3927 claim, started once DHCP has had its head start; dropped when a
     // lease arrives, because a lease outranks a link-local address.
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut link_local: Option<crate::link_local::LinkLocal> = None;
     let mut buffer = [0u8; IPC_BUF_SIZE];
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut last_poll_ticks = sys_get_time();
     #[allow(unused_mut)]
     let mut local_ip = [0u8; 4];
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut net_rx_producer_proved = false;
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut pending_net_rx_proof = false;
-    #[cfg(not(feature = "hypervisor-bridge"))]
     let mut ipc_burst_grace = 0;
-    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+    #[cfg(feature = "ipc-wake-oracle")]
     let mut idle_ipc_wake_oracle = crate::idle_ipc_wake_oracle::IdleIpcWakeOracle::new();
 
-    #[cfg(not(feature = "hypervisor-bridge"))]
     println("[net] Starting DHCP...");
 
     #[cfg(feature = "loop-trace")]
@@ -802,8 +796,8 @@ pub(crate) fn run() {
                     mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
                 ));
                 iface.set_hardware_addr(HardwareAddress::Ethernet(EthernetAddress(mac)));
+                device.set_host_mac(mac);
                 mac_synchronized = true;
-                #[cfg(not(feature = "hypervisor-bridge"))]
                 if dhcp_state == DhcpState::Pending {
                     sockets
                         .get_mut::<smoltcp::socket::dhcpv4::Socket>(dhcp_handle)
@@ -829,11 +823,10 @@ pub(crate) fn run() {
                     crate::interface::DRV_COMMANDS.load(Ordering::Relaxed),
                     crate::interface::DRV_TIMEOUTS.load(Ordering::Relaxed),
                     device.rx_queue_len(),
-                    device.guest_rx_queue_len(),
+                    device.bridge_queued(),
                 ));
             }
         }
-        #[cfg(not(feature = "hypervisor-bridge"))]
         {
             let drained = device.pump_rx_split();
             if pending_net_rx_proof {
@@ -943,6 +936,7 @@ pub(crate) fn run() {
                     if let Some(owner) = owner_for_root(&watched, sender) {
                         release_owner(
                             owner,
+                            &mut device,
                             &mut sockets,
                             &mut table,
                             &mut tls_table,
@@ -953,21 +947,20 @@ pub(crate) fn run() {
                             &mut watched,
                         );
                     }
-                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    #[cfg(feature = "ipc-wake-oracle")]
                     idle_ipc_wake_oracle.record_ipc_miss();
                     continue;
                 };
                 if identity.cell_id == 0 || identity.generation == 0 {
-                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    #[cfg(feature = "ipc-wake-oracle")]
                     idle_ipc_wake_oracle.record_ipc_miss();
                     continue;
                 }
                 // Admission precedes every effect of the request, the owner
                 // watch included: a denied caller leaves no state behind.
                 if !admit_request(&buffer, sender, identity.flags) {
-                    #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                    #[cfg(feature = "ipc-wake-oracle")]
                     idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
-                    #[cfg(not(feature = "hypervisor-bridge"))]
                     {
                         ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
                     }
@@ -987,6 +980,7 @@ pub(crate) fn run() {
                         while let Some(stale) = stale_generation_of(&watched, owner) {
                             release_owner(
                                 stale,
+                                &mut device,
                                 &mut sockets,
                                 &mut table,
                                 &mut tls_table,
@@ -1002,7 +996,7 @@ pub(crate) fn run() {
                         println("[net] owner death watch unavailable; socket reclaim deferred");
                     }
                 }
-                #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                #[cfg(feature = "ipc-wake-oracle")]
                 idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
                 dispatch_admitted(
                     &buffer,
@@ -1020,19 +1014,13 @@ pub(crate) fn run() {
                     &local_ip,
                 );
                 drain_ready_waits(&mut pending_ready, &mut sockets, &table);
-                #[cfg(not(feature = "hypervisor-bridge"))]
                 {
                     ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
                 }
             }
             _ => {
-                #[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+                #[cfg(feature = "ipc-wake-oracle")]
                 idle_ipc_wake_oracle.record_ipc_miss();
-                #[cfg(feature = "hypervisor-bridge")]
-                {
-                    let _ = sys_wait_completion(NET_RX, 1);
-                }
-                #[cfg(not(feature = "hypervisor-bridge"))]
                 if consume_ipc_burst_grace(&mut ipc_burst_grace) {
                     // Let the caller run after a reply before parking on NET_RX;
                     // sequential IPC bursts then avoid one timer quantum per call.

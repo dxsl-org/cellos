@@ -46,12 +46,9 @@ if [[ "$GUEST_PROFILE" == "alpine-wide" ]]; then
     INIT_FEATURES+=",service-hypervisor/alpine-wide-guest"
 fi
 if [[ "$HV_HOSTILE_BACKEND_RECOVERY_VALUE" == "1" ]]; then
-    INIT_FEATURES+=",app-init/hostile-backend-recovery"
-    INIT_FEATURES+=",service-net/hypervisor-bridge,supervisor/hostile-backend-recovery"
+    INIT_FEATURES+=",app-init/hostile-backend-recovery,supervisor/hostile-backend-recovery"
     INIT_FEATURES+=",service-hypervisor/hostile-backend-recovery"
     HOSTILE_PACKAGE_ARGS=(-p supervisor)
-elif [[ "$GUEST_PROFILE" == "ubuntu" || "$HV_INIT_MIN_VALUE" == "1" ]]; then
-    INIT_FEATURES+=",service-net/hypervisor-bridge"
 fi
 INIT_FEATURE_ARGS=(--features "$INIT_FEATURES")
 

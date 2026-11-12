@@ -65,7 +65,7 @@ if [[ ! -f "$ISO" || "$BUILD_HOSTILE_ISO" == 1 ]]; then
         bash scripts/prepare-x86-virtio-e2e-initramfs.sh
     rm -rf "$EVIDENCE_FS"
     mkdir -p "$EVIDENCE_FS"
-    HV_INIT_MIN=1 HV_HOSTILE_BACKEND_RECOVERY=1 INITRD_OVERRIDE="$INITRAMFS" \
+    HV_HOSTILE_BACKEND_RECOVERY=1 INITRD_OVERRIDE="$INITRAMFS" \
         HV_EMBEDDED_DIR="$EVIDENCE_FS" \
         bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     printf 'rdinit=/bin/virtio-e2e-init\n' > "$WORK_DIR/selector"

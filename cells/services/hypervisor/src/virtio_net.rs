@@ -9,9 +9,6 @@ extern crate alloc;
 use crate::virtio_mmio::{QueueCfg, VirtioDevice, VirtioMmio};
 use crate::virtqueue::{process_notify, read_descriptor_chain, DescBuf};
 
-/// MAC address presented to the guest virtio-net device.
-pub const GUEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0xAA, 0xBB, 0xCC];
-
 /// virtio-net feature bit: device provides a MAC address in config space.
 const VIRTIO_NET_F_MAC: u32 = 1 << 5;
 const VIRTIO_NET_HDR_V1_LEN: usize = 12;
@@ -27,9 +24,13 @@ pub struct NetDev {
 }
 
 impl NetDev {
+    /// Opens this session's bridge port (`Connection::claim_guest_mac`), so the
+    /// address the guest reads from config space is already routed to it.
     pub fn new(net_tid: usize, irq: Option<u32>) -> Self {
+        let mut backend = crate::net_backend::Connection::new(net_tid);
+        backend.claim_guest_mac();
         Self {
-            backend: crate::net_backend::Connection::new(net_tid),
+            backend,
             rx_last_avail: 0,
             rx_used_idx: 0,
             tx_last_avail: 0,
@@ -202,9 +203,10 @@ impl VirtioDevice for NetDev {
 
     /// Config space: MAC[0..5] at bytes 0-5, status at bytes 6-7.
     fn config_read(&self, offset: usize) -> u32 {
+        let mac = self.backend.guest_mac();
         match offset {
-            0 => u32::from_le_bytes([GUEST_MAC[0], GUEST_MAC[1], GUEST_MAC[2], GUEST_MAC[3]]),
-            4 => u32::from_le_bytes([GUEST_MAC[4], GUEST_MAC[5], 0, 0]),
+            0 => u32::from_le_bytes([mac[0], mac[1], mac[2], mac[3]]),
+            4 => u32::from_le_bytes([mac[4], mac[5], 0, 0]),
             _ => 0,
         }
     }

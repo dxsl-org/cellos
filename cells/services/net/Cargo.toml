@@ -18,7 +18,6 @@ license.workspace = true
 [features]
 default = ["tls-roots-embedded", "tls-ca-private"]
 
-hypervisor-bridge = []
 ipc-wake-oracle = []
 # Diagnostic image: one rate-limited `[net-loop]` line per ~2 s with turns,
 # messages received, L2 request counts and driver commands/deadlines. Shows

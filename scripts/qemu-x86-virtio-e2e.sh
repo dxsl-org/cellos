@@ -137,8 +137,9 @@ run_outer() {
         tail -n 200 "$log" >&2
         exit 1
     fi
-    grep -qF '[hv-x86] guest rdinit: /bin/virtio-e2e-init' "$log" \
-        || { echo "FAIL: evidence rdinit was not selected in run $run" >&2; exit 1; }
+    # The Fixture profile is the one the /virtio-e2e selector picks (rdinit=/bin/virtio-e2e-init).
+    grep -qF '[hv-x86] guest profile: Fixture' "$log" \
+        || { echo "FAIL: evidence fixture profile was not selected in run $run" >&2; exit 1; }
     grep -qF '[hv-x86] persistent disk: /mnt/sd/guest_disk.img' "$log" \
         || { echo "FAIL: persistent backend absent in run $run" >&2; exit 1; }
     grep -qF '[vtd] Intel VT-d: DMA isolation ACTIVE' "$log" \

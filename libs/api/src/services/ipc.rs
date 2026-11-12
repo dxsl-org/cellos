@@ -852,14 +852,21 @@ pub enum NetRequest<'a> {
         cap_id: u32,
         group: [u8; 4],
     },
-    /// Forward a raw L2 Ethernet frame to the NIC TX.
-    /// `data` is the raw frame bytes (up to 1514 B, no virtio_net_hdr prefix).
-    /// The Net Cell calls `sys_net_tx(data)` directly — smoltcp is bypassed.
+    /// Forward a raw L2 Ethernet frame from the caller's bridge port to the NIC TX
+    /// (smoltcp is bypassed). `data` is the raw frame bytes (14..=1514 B, no
+    /// virtio_net_hdr prefix). Its source MAC becomes the port's address; a source
+    /// that is the host stack's or another port's is refused with
+    /// [`NET_ERR_ADDR_IN_USE`] and nothing is sent.
     L2Send {
         data: &'a [u8],
     },
-    /// Poll for one inbound L2 frame from the NIC addressed to `guest_mac`.
-    /// The Net Cell splits RX frames by dst MAC; returns `Data(frame)` or `Ok` (empty).
+    /// Poll for one inbound L2 frame for the caller's bridge port, opening the
+    /// port at `guest_mac` on the first call (one port per caller Cell
+    /// generation, released when it exits). The port receives unicast frames for
+    /// its address plus broadcast/multicast; the host stack keeps its own
+    /// traffic. Returns `Data(frame)` or `Ok` (nothing queued);
+    /// [`NET_ERR_ADDR_IN_USE`] when `guest_mac` belongs to the host stack or
+    /// another port, `0xFD` when every port is taken.
     L2Recv {
         guest_mac: [u8; 6],
     },
@@ -895,7 +902,8 @@ pub enum NetRequest<'a> {
 ///
 /// `Err(code)` codes: `0xFF` generic failure, `0xFE` accept not ready, `0xFD`
 /// busy/capacity, [`NET_ERR_DENIED`] (`0xFC`) the caller's Cell lacks the
-/// network right the request needs. A deferred `L2Send` reply may forward the
+/// network right the request needs, [`NET_ERR_ADDR_IN_USE`] (`0xFB`) an L2
+/// address the caller may not use. A deferred `L2Send` reply may forward the
 /// NIC driver's own status byte.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetResponse<'a> {
@@ -918,6 +926,14 @@ pub enum NetResponse<'a> {
 /// needs (`CALLER_FLAG_NET_*` in `abi::caller_identity`). Clients report it as
 /// "permission denied", never as a network failure.
 pub const NET_ERR_DENIED: u8 = 0xFC;
+
+/// `NetResponse::Err` code: the L2 address is the host stack's or another
+/// bridge port's.
+///
+/// `L2Recv` answers it for a `guest_mac` it cannot open a port at (the caller
+/// may retry with another address); `L2Send` answers it for a frame whose
+/// source address is not the caller's to use, and that frame is not sent.
+pub const NET_ERR_ADDR_IN_USE: u8 = 0xFB;
 
 // ── Input service ─────────────────────────────────────────────────────────────
 

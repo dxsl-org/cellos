@@ -47,12 +47,13 @@ struct Snapshot {
     pending_dns: usize,
     pending_ready: usize,
     tx_frames: usize,
-    guest_mac: Option<[u8; 6]>,
+    guest_port_mac: Option<[u8; 6]>,
 }
 
 impl Net {
     fn new() -> Self {
         let mut device = VirtioNetDevice::new();
+        device.set_host_mac(MAC.0);
         let config = Config::new(HardwareAddress::Ethernet(MAC));
         let mut iface = Interface::new(config, &mut device, Instant::from_micros(0));
         iface.update_ip_addrs(|addresses| {
@@ -109,7 +110,7 @@ impl Net {
             pending_dns: self.pending_dns.len(),
             pending_ready: self.pending_ready.len(),
             tx_frames: self.device.tx_queue_len(),
-            guest_mac: self.device.guest_mac(),
+            guest_port_mac: self.device.port_mac(OWNER),
         }
     }
 
@@ -309,7 +310,7 @@ fn raw_l2_is_denied_before_any_frame_or_guest_registration() {
         sends + 1
     );
     assert_eq!(
-        net.device.guest_mac(),
+        net.device.port_mac(OWNER),
         Some([0x52, 0x54, 0x00, 0x00, 0x00, 0x07])
     );
 }

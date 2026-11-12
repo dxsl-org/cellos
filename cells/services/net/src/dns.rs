@@ -90,7 +90,6 @@ impl Resolver {
     }
 
     /// Adopt the DNS server handed out by DHCP.
-    #[cfg_attr(feature = "hypervisor-bridge", allow(dead_code))]
     pub fn set_server(&mut self, sockets: &mut SocketSet<'_>, server: [u8; 4]) {
         if server == self.server {
             return;

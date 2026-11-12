@@ -107,8 +107,10 @@ echo VIRTIO_E2E_NET_DISCOVERY_PASS
 irq6_before=$(irq_count 6)
 [ "$irq6_before" -ge 0 ] || fail irq6-not-registered
 ip link set "$net_if" up || fail net-link-up
-ip addr add 10.0.2.15/24 dev "$net_if" || fail net-address
-ip route add default via 10.0.2.2 dev "$net_if" || fail net-route
+# The net service's host stack holds a lease of its own (10.0.2.15 under QEMU
+# user networking); a fixed address here would collide with it.
+modprobe af_packet || fail modprobe-af-packet
+udhcpc -i "$net_if" -n -q -t 10 -T 3 >/dev/null 2>&1 || fail net-dhcp
 ping -c 1 -W 10 10.0.2.2 >/dev/null 2>&1 || fail net-round-trip
 echo VIRTIO_E2E_NET_TX_RX_PASS
 

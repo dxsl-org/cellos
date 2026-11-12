@@ -59,17 +59,16 @@ api::declare_syscalls![
     CancelCellOwnerWatch,
 ];
 
-#[cfg(not(feature = "hypervisor-bridge"))]
 mod arp;
-#[cfg(not(feature = "hypervisor-bridge"))]
+#[path = "bridge-ports.rs"]
+mod bridge_ports;
 mod dhcp;
 mod dns;
 mod handlers;
-#[cfg(all(feature = "ipc-wake-oracle", not(feature = "hypervisor-bridge")))]
+#[cfg(feature = "ipc-wake-oracle")]
 #[path = "idle-ipc-wake-oracle.rs"]
 mod idle_ipc_wake_oracle;
 mod interface;
-#[cfg(not(feature = "hypervisor-bridge"))]
 mod link_local;
 mod rights;
 #[path = "service-runtime.rs"]

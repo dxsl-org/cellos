@@ -18,6 +18,9 @@ use smoltcp::{
     time::Instant,
 };
 
+use crate::bridge_ports::{Bridge, PortError};
+use crate::socket_table::SocketOwner;
+
 /// Driver replies are untagged, so only one command may be in flight. A lost
 /// reply must not block TCP dispatch; the finite deadline retires that driver
 /// TID before any further commands are admitted.
@@ -34,7 +37,6 @@ const RX_QUEUE_LIMIT: usize = 32;
 /// ARP packets held for the link-local engine between loop turns. Probing
 /// traffic is a handful of frames; a flood past this bound is dropped from the
 /// tap only, never from smoltcp's own RX path.
-#[cfg(not(feature = "hypervisor-bridge"))]
 const ARP_TAP_LIMIT: usize = 16;
 
 /// Attempts a frame gets after the driver refuses it (`status != 0`).
@@ -111,19 +113,6 @@ fn invalidate_nic_driver(tid: usize) {
     invalidate_cached_nic_driver(&NIC_DRIVER_TID, tid);
 }
 
-/// `aa:bb:cc:dd:ee:ff` for a console line (a frame's first six bytes).
-fn mac_hex(frame: &[u8]) -> alloc::string::String {
-    use core::fmt::Write;
-    let mut out = alloc::string::String::new();
-    for (i, byte) in frame.iter().take(6).enumerate() {
-        if i > 0 {
-            out.push(':');
-        }
-        let _ = write!(out, "{byte:02x}");
-    }
-    out
-}
-
 #[cfg(test)]
 mod nic_driver_cache_tests {
     use super::*;
@@ -159,82 +148,6 @@ mod driver_mac_tests {
         let mut dev = VirtioNetDevice::new();
         assert_eq!(dev.driver_mac(), None);
         assert_eq!(dev.query_driver_mac(), None);
-    }
-}
-
-#[cfg(test)]
-mod guest_mac_routing_tests {
-    use super::*;
-
-    /// Ethernet frame of `len` bytes (≥ 14) sent from `src` to `dst`.
-    fn frame(dst: [u8; 6], src: [u8; 6], len: usize) -> alloc::vec::Vec<u8> {
-        let mut f = alloc::vec![0u8; len.max(14)];
-        f[..6].copy_from_slice(&dst);
-        f[6..12].copy_from_slice(&src);
-        f[12..14].copy_from_slice(&[0x08, 0x00]); // EtherType IPv4
-        f
-    }
-
-    const HYPERVISOR_BELIEF: [u8; 6] = [0x52, 0x54, 0x00, 0xAA, 0xBB, 0xCC];
-    const GUEST_ACTUAL: [u8; 6] = [0x52, 0x00, 0x00, 0x00, 0xBB, 0x00];
-
-    /// The board's guest came up with its own address (`52:00:00:00:BB:00`) while
-    /// the `L2Recv` poll registered the hypervisor's `GUEST_MAC`, so a reply
-    /// addressed to the guest was routed to smoltcp and the guest kept reporting
-    /// `RX packets:0`. What the guest sends *from* is authoritative for its
-    /// replies, and a later poll re-registering the hypervisor's belief must not
-    /// undo that.
-    #[test]
-    fn replies_follow_the_mac_the_guest_sent_from() {
-        let mut dev = VirtioNetDevice::new();
-        // Host tests: keep the once-only `first e1000 RX` witness out of the way.
-        FIRST_BRIDGE_RX.store(true, Ordering::Relaxed);
-        dev.set_guest_mac(HYPERVISOR_BELIEF);
-
-        // Before the guest has spoken, routing follows the registered belief: a
-        // reply for the guest's real address is not routed to it.
-        dev.route_rx(&frame(GUEST_ACTUAL, HYPERVISOR_BELIEF, 64));
-        assert!(dev.pop_guest_rx().is_none());
-
-        // The guest speaks (an ARP request), naming its address.
-        dev.learn_guest_mac_from(&frame([0xff; 6], GUEST_ACTUAL, 42));
-        // The poll re-registers the hypervisor's belief; learning wins.
-        dev.set_guest_mac(HYPERVISOR_BELIEF);
-
-        dev.route_rx(&frame(GUEST_ACTUAL, HYPERVISOR_BELIEF, 64));
-        let routed = dev
-            .pop_guest_rx()
-            .expect("a reply for the address the guest sends from must reach it");
-        assert_eq!(&routed[..6], &GUEST_ACTUAL);
-    }
-
-    /// A source that cannot belong to a sender is not learned — it would route
-    /// every reply nowhere.
-    #[test]
-    fn an_impossible_source_address_is_not_learned() {
-        let mut dev = VirtioNetDevice::new();
-        dev.set_guest_mac(HYPERVISOR_BELIEF);
-
-        dev.learn_guest_mac_from(&frame([0xff; 6], [0x00; 6], 64)); // all zero
-        dev.learn_guest_mac_from(&frame([0xff; 6], [0x01, 0, 0, 0, 0, 0x01], 64)); // multicast
-        dev.learn_guest_mac_from(&[0u8; 11]); // too short to carry a source address
-
-        assert_eq!(dev.guest_mac, Some(HYPERVISOR_BELIEF));
-    }
-
-    /// A broadcast still reaches the guest before anything has been learned, so a
-    /// guest that has not spoken yet can still be discovered by the LAN.
-    #[test]
-    fn broadcast_reaches_the_guest_before_it_has_spoken() {
-        let mut dev = VirtioNetDevice::new();
-        FIRST_BRIDGE_RX.store(true, Ordering::Relaxed);
-        dev.set_guest_mac(HYPERVISOR_BELIEF);
-
-        dev.route_rx(&frame([0xff; 6], [0x00, 0x11, 0x22, 0x33, 0x44, 0x55], 64));
-        assert!(
-            dev.pop_guest_rx().is_some(),
-            "broadcast must be offered to the guest"
-        );
     }
 }
 
@@ -298,15 +211,16 @@ const FRAME_POOL_CAPACITY: usize = 32;
 /// A smoltcp transmit token commits to local queue admission, not peer receipt.
 pub struct VirtioNetDevice {
     rx_queue: VecDeque<Box<[u8]>>,
-    guest_rx_queue: VecDeque<Box<[u8]>>,
     tx_queue: VecDeque<OutboundFrame>,
-    guest_mac: Option<[u8; 6]>,
+    /// Guest L2 ports beside the host stack.
+    bridge: Bridge,
+    /// The host stack's own address; no bridge port may use it.
+    host_mac: [u8; 6],
     driver_mac: Option<([u8; 6], usize)>,
     l2_replies: VecDeque<(ReplyTo, u8, u64)>,
     tx_burst: u8,
     frame_pool: alloc::vec::Vec<Box<[u8]>>,
     /// ARP seen on RX, for the RFC 3927 link-local engine.
-    #[cfg(not(feature = "hypervisor-bridge"))]
     arp_rx: VecDeque<crate::arp::ArpPacket>,
 }
 
@@ -328,14 +242,13 @@ impl VirtioNetDevice {
     pub fn new() -> Self {
         Self {
             rx_queue: VecDeque::new(),
-            guest_rx_queue: VecDeque::new(),
             tx_queue: VecDeque::new(),
-            guest_mac: None,
+            bridge: Bridge::default(),
+            host_mac: [0; 6],
             driver_mac: None,
             l2_replies: VecDeque::new(),
             tx_burst: 0,
             frame_pool: alloc::vec::Vec::new(),
-            #[cfg(not(feature = "hypervisor-bridge"))]
             arp_rx: VecDeque::new(),
         }
     }
@@ -393,14 +306,12 @@ impl VirtioNetDevice {
     /// Next ARP packet tapped off the RX path. smoltcp still receives the
     /// frame; the tap exists because it neither exposes ARP nor accepts the
     /// sender-IP-0 probes RFC 3927 conflict detection depends on.
-    #[cfg(not(feature = "hypervisor-bridge"))]
     pub(crate) fn take_arp(&mut self) -> Option<crate::arp::ArpPacket> {
         self.arp_rx.pop_front()
     }
 
     /// Queue a frame built outside smoltcp on the same TX path smoltcp uses.
     /// `false` when the queue is full; the caller's protocol retries.
-    #[cfg(not(feature = "hypervisor-bridge"))]
     pub(crate) fn send_frame(&mut self, frame: &[u8]) -> bool {
         if self.tx_queue.len() >= TX_QUEUE_LIMIT {
             return false;
@@ -437,57 +348,46 @@ impl VirtioNetDevice {
         Some(reply)
     }
 
-    /// Register the guest MAC address the *hypervisor* believes the guest has
-    /// (`L2Recv` names it on every poll).
-    ///
-    /// That belief is not authoritative: on the board the guest came up with a
-    /// driver-chosen address (`52:00:00:00:BB:00`) while the poll registered
-    /// `GUEST_MAC` (`52:54:00:AA:BB:CC`), so replies addressed to the guest were
-    /// routed to smoltcp and the guest kept showing `RX packets:0`. This value is
-    /// therefore only used until the guest's own traffic teaches us better; it
-    /// still routes broadcasts to the guest before the guest has sent anything.
-    pub fn set_guest_mac(&mut self, mac: [u8; 6]) {
-        if self.guest_mac.is_none() {
-            self.guest_mac = Some(mac);
-        }
+    /// Record the host stack's address (the interface's hardware address).
+    pub fn set_host_mac(&mut self, mac: [u8; 6]) {
+        self.host_mac = mac;
     }
 
-    /// Learn the guest's address from a frame the guest sent (its Ethernet
-    /// source address).
-    ///
-    /// `L2Send` carries frames that came out of the guest's TX queue, and an
-    /// address a peer sends *from* is the address its replies must be sent *to* —
-    /// the same rule a learning bridge uses. It outranks the registered belief and
-    /// self-heals when the guest changes its address. A source that cannot belong
-    /// to a sender (all-zero, or multicast) is not learned: it would route every
-    /// reply nowhere.
-    pub fn learn_guest_mac_from(&mut self, frame: &[u8]) {
-        if frame.len() < 12 {
-            return;
-        }
-        let mut mac = [0u8; 6];
-        mac.copy_from_slice(&frame[6..12]);
-        if mac == [0u8; 6] || mac[0] & 0x01 != 0 {
-            return;
-        }
-        self.guest_mac = Some(mac);
+    /// Open `owner`'s bridge port at `mac` (`L2Recv` names it on every poll;
+    /// an open port keeps the address its guest sends from).
+    pub(crate) fn open_port(&mut self, owner: SocketOwner, mac: [u8; 6]) -> Result<(), PortError> {
+        self.bridge.open(owner, mac, self.host_mac)
     }
 
-    /// Pop one frame from the guest RX queue.
-    pub fn pop_guest_rx(&mut self) -> Option<Box<[u8]>> {
-        self.guest_rx_queue.pop_front()
+    /// Check a frame `owner`'s guest wants sent; see [`Bridge::admit_tx`].
+    pub(crate) fn admit_port_tx(
+        &mut self,
+        owner: SocketOwner,
+        frame: &[u8],
+    ) -> Result<(), PortError> {
+        self.bridge.admit_tx(owner, frame, self.host_mac)
     }
 
-    /// Frames waiting for smoltcp / for the guest (`loop-trace` images).
+    /// Close the port of an owner that exited.
+    pub(crate) fn release_port(&mut self, owner: SocketOwner) -> bool {
+        self.bridge.release(owner)
+    }
+
+    /// Next frame for `owner`'s bridge port.
+    pub(crate) fn pop_port_rx(&mut self, owner: SocketOwner) -> Option<Box<[u8]>> {
+        self.bridge.pop(owner)
+    }
+
+    /// Frames waiting for smoltcp (`loop-trace` images).
     #[cfg(feature = "loop-trace")]
     pub fn rx_queue_len(&self) -> usize {
         self.rx_queue.len()
     }
 
-    /// Frames the L2 bridge has routed to the guest and nobody has collected.
+    /// Frames the bridge has routed to guests and nobody has collected.
     #[cfg(feature = "loop-trace")]
-    pub fn guest_rx_queue_len(&self) -> usize {
-        self.guest_rx_queue.len()
+    pub fn bridge_queued(&self) -> usize {
+        self.bridge.queued()
     }
 
     /// Frames waiting for the NIC driver (host tests).
@@ -496,10 +396,10 @@ impl VirtioNetDevice {
         self.tx_queue.len()
     }
 
-    /// The guest MAC the L2 bridge routes to (host tests).
+    /// The address `owner`'s bridge port answers to (host tests).
     #[cfg(test)]
-    pub(crate) fn guest_mac(&self) -> Option<[u8; 6]> {
-        self.guest_mac
+    pub(crate) fn port_mac(&self, owner: SocketOwner) -> Option<[u8; 6]> {
+        self.bridge.mac(owner)
     }
 
     /// L2Send returns success only after the NIC driver ACKs. A None result
@@ -692,10 +592,9 @@ impl VirtioNetDevice {
         // the virtqueue's available buffers run out under a burst and the
         // device then drops every later packet.
         let mut received = 0usize;
-        while received < RX_QUEUE_LIMIT
-            && self.rx_queue.len() < RX_QUEUE_LIMIT
-            && self.guest_rx_queue.len() < RX_QUEUE_LIMIT
-        {
+        // A full guest port drops its own frames (`Bridge::route`), so only the
+        // host stack's queue bounds the drain.
+        while received < RX_QUEUE_LIMIT && self.rx_queue.len() < RX_QUEUE_LIMIT {
             self.tx_burst = 0;
             reply.fill(0);
             if Self::command(tid, &[OP_RX], &mut reply).is_none() {
@@ -724,49 +623,17 @@ impl VirtioNetDevice {
                 frame.len()
             ));
         }
-        #[cfg(not(feature = "hypervisor-bridge"))]
         if self.arp_rx.len() < ARP_TAP_LIMIT {
             if let Some(packet) = crate::arp::ArpPacket::parse_frame(frame) {
                 self.arp_rx.push_back(packet);
             }
         }
-        match self.guest_mac {
-            Some(mac) if frame.len() >= 6 && frame[..6] == mac => {
-                let b = self.clone_into_pooled_frame(frame);
-                self.guest_rx_queue.push_back(b);
-            }
-            Some(_) if frame.len() >= 6 && frame[..6] == [0xff; 6] => {
-                let b1 = self.clone_into_pooled_frame(frame);
-                let b2 = self.clone_into_pooled_frame(frame);
-                self.guest_rx_queue.push_back(b1);
-                self.rx_queue.push_back(b2);
-            }
-            Some(guest_mac) => {
-                // A frame that arrived while the guest is registered but is not
-                // addressed to it. One line, with both addresses, because this is
-                // what separates "the chip delivered nothing at all" (nothing
-                // prints) from "the LAN is talking, just not to the guest" — and
-                // that fork decides whether the next step is the chip's receive
-                // path or the far end of the cable.
-                static FIRST_FOREIGN: core::sync::atomic::AtomicBool =
-                    core::sync::atomic::AtomicBool::new(false);
-                if !FIRST_FOREIGN.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                    println(&alloc::format!(
-                        "[net-bridge] first frame while guest registered: dst={} guest={} len={}",
-                        mac_hex(frame),
-                        mac_hex(&guest_mac),
-                        frame.len()
-                    ));
-                }
-                let b = self.clone_into_pooled_frame(frame);
-                self.rx_queue.push_back(b);
-            }
-            None => {
-                let b = self.clone_into_pooled_frame(frame);
-                self.rx_queue.push_back(b);
-            }
+        if self.bridge.route(frame) {
+            let b = self.clone_into_pooled_frame(frame);
+            self.rx_queue.push_back(b);
         }
     }
+
     fn queue_tx(&mut self, frame: Box<[u8]>) {
         debug_assert!(self.tx_queue.len() < TX_QUEUE_LIMIT);
         self.tx_queue.push_back(OutboundFrame {

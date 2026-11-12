@@ -24,7 +24,9 @@ class Vm:
             f"socket,id=s0,path={self._sock('serial')},server=on,wait=off,"
             f"logfile={self.serial_log}",
             "-serial", "chardev:s0", "-qmp", f"unix:{self._sock('qmp')},server=on,wait=off",
-            "-monitor", "none", "-cdrom", str(iso), "-boot", "d", "-no-reboot", "-nic", "none",
+            "-monitor", "none", "-cdrom", str(iso), "-boot", "d", "-no-reboot",
+            # User-mode network: the host stack and every guest each get a lease.
+            "-nic", "user,model=e1000,mac=52:54:00:12:34:56",
             "-device", "virtio-keyboard-pci", "-device", "virtio-tablet-pci", *extra],
             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
@@ -79,6 +81,27 @@ class Vm:
         for down in (True, False):
             self.qmp(event("btn", {"down": down, "button": "left"}))
             time.sleep(0.1)
+
+    def press(self, *qcodes: str) -> None:
+        """Press a key chord (QEMU qcodes, modifiers first) through the virtio keyboard."""
+        def key(code, down):
+            return {"execute": "input-send-event", "arguments": {"events": [
+                {"type": "key", "data": {"down": down, "key": {"type": "qcode", "data": code}}}]}}
+        self.qmp(*(key(code, True) for code in qcodes))
+        time.sleep(0.05)
+        self.qmp(*(key(code, False) for code in reversed(qcodes)))
+        time.sleep(0.1)
+
+    def type_text(self, text: str) -> None:
+        """Type URL-like text (letters, digits, `.:/-_?=`) key by key."""
+        named = {".": ("dot",), "/": ("slash",), ":": ("shift", "semicolon"),
+                 "-": ("minus",), "_": ("shift", "minus"), "?": ("shift", "slash"),
+                 "=": ("equal",)}
+        for char in text:
+            if char.isascii() and (char.isdigit() or char.islower()):
+                self.press(char)
+            else:
+                self.press(*named[char])
 
     def stop(self) -> None:
         self.process.kill()

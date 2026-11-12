@@ -12,7 +12,6 @@ Environment:
   HV_GUEST_PROFILE       alpine (default), alpine-wide (256 MiB), or ubuntu
   UBUNTU_ARTIFACT_DIR    Ubuntu profile artifacts (default build/ubuntu-wide-guest-x86)
   HV_VOLATILE_DISK       0 (default) or 1; Ubuntu requires 0
-  HV_INIT_MIN            0 (default) or 1
   HV_HOSTILE_BACKEND_RECOVERY  0 (default) or 1
   HV_EMBEDDED_DIR        staging dir for kernel_fs.img/init
                          (default kernel/src/embedded-hv-x86 — tracked). Evidence
@@ -44,7 +43,6 @@ parse_and_validate_args() {
     INITRD_SOURCE="${INITRD_OVERRIDE:-$ALPINE_CACHE/initramfs-virt}"
     EMBEDDED_HV="${HV_EMBEDDED_DIR:-kernel/src/embedded-hv-x86}"
 
-    HV_INIT_MIN_VALUE="${HV_INIT_MIN:-0}"
     HV_HOSTILE_BACKEND_RECOVERY_VALUE="${HV_HOSTILE_BACKEND_RECOVERY:-0}"
     HV_VOLATILE_DISK_VALUE="${HV_VOLATILE_DISK:-0}"
 
@@ -72,8 +70,7 @@ parse_and_validate_args() {
             ;;
     esac
 
-    for val_spec in "HV_INIT_MIN:$HV_INIT_MIN_VALUE" \
-                     "HV_HOSTILE_BACKEND_RECOVERY:$HV_HOSTILE_BACKEND_RECOVERY_VALUE" \
+    for val_spec in "HV_HOSTILE_BACKEND_RECOVERY:$HV_HOSTILE_BACKEND_RECOVERY_VALUE" \
                      "HV_VOLATILE_DISK:$HV_VOLATILE_DISK_VALUE"; do
         var="${val_spec%%:*}"
         val="${val_spec#*:}"

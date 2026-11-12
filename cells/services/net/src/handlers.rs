@@ -18,6 +18,7 @@ use smoltcp::{
 };
 
 use crate::{
+    bridge_ports::PortError,
     dns::Resolver,
     interface::VirtioNetDevice,
     service_runtime::now_instant,
@@ -243,26 +244,32 @@ pub(crate) fn handle_typed(
                 send_typed(sender, R::Err(0xFF));
                 return;
             }
-            device.learn_guest_mac_from(data);
+            if let Err(error) = device.admit_port_tx(owner, data) {
+                report_port_refusal("L2Send source", error);
+                send_typed(sender, R::Err(port_error_code(error)));
+                return;
+            }
             if let Some(accepted) = device.send_l2(data, sender) {
                 send_typed(sender, if accepted { R::Ok } else { R::Err(0xFF) });
             }
         }
         NetRequest::L2Recv { guest_mac } => {
             L2_RECV_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            if guest_mac == [0; 6] || guest_mac == [0xFF; 6] || (guest_mac[0] & 1 != 0) {
-                send_typed(sender, R::Err(0xFF));
+            if let Err(error) = device.open_port(owner, guest_mac) {
+                report_port_refusal("L2Recv port", error);
+                send_typed(sender, R::Err(port_error_code(error)));
                 return;
             }
+            // Captured before the driver commands below, which are IPC of their own.
             let operation = ostd::ipc::current();
             static FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
                 core::sync::atomic::AtomicBool::new(false);
             if !FIRST_GUEST_POLL.swap(true, core::sync::atomic::Ordering::Relaxed) {
-                ostd::io::println("[net-bridge] first guest L2Recv — guest MAC registered");
+                ostd::io::println("[net-bridge] first guest L2Recv — guest port open");
             }
-            device.set_guest_mac(guest_mac);
             let _ = device.pump_rx_split();
-            if let Some(frame) = device.pop_guest_rx() {
+            let frame = device.pop_port_rx(owner);
+            if let Some(frame) = &frame {
                 static FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
                     core::sync::atomic::AtomicBool::new(false);
                 if !FIRST_GUEST_RX.swap(true, core::sync::atomic::Ordering::Relaxed) {
@@ -271,25 +278,37 @@ pub(crate) fn handle_typed(
                         frame.len()
                     ));
                 }
-                let mut rb = [0u8; IPC_BUF_SIZE];
-                if let Ok(s) = ipc::encode(&R::Data(&frame), &mut rb) {
-                    if let Some(operation) = operation {
-                        let _ = ostd::ipc::reply(operation, s);
-                    } else {
-                        let _ = post(sender, s);
-                    }
-                }
-            } else {
+            }
+            let response = match &frame {
+                Some(frame) => R::Data(frame),
+                None => R::Ok,
+            };
+            let mut rb = [0u8; IPC_BUF_SIZE];
+            if let Ok(s) = ipc::encode(&response, &mut rb) {
                 if let Some(operation) = operation {
-                    let mut rb = [0u8; IPC_BUF_SIZE];
-                    if let Ok(s) = ipc::encode(&R::Err(0), &mut rb) {
-                        let _ = ostd::ipc::reply(operation, s);
-                    }
+                    let _ = ostd::ipc::reply(operation, s);
                 } else {
-                    send_typed(sender, R::Err(0));
+                    let _ = post(sender, s);
                 }
             }
         }
         _ => {}
+    }
+}
+
+fn port_error_code(error: PortError) -> u8 {
+    match error {
+        PortError::NotStation => 0xFF,
+        PortError::AddressInUse => ipc::NET_ERR_ADDR_IN_USE,
+        PortError::Full => 0xFD,
+    }
+}
+
+/// Once per service lifetime: a refused port or frame is an operator question
+/// ("why has this guest no network?") whose answer must not need a trace image.
+fn report_port_refusal(what: &str, error: PortError) {
+    static REPORTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+    if !REPORTED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+        ostd::io::println(&alloc::format!("[net-bridge] {what} refused: {error:?}"));
     }
 }

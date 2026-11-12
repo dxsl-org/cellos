@@ -74,7 +74,7 @@ if [[ "$BUILD_EVIDENCE_IMAGE" == 1 ]]; then
         bash scripts/prepare-x86-app-initramfs.sh
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
-    HV_VOLATILE_DISK=1 HV_INIT_MIN=1 INITRD_OVERRIDE="$INITRAMFS" \
+    HV_VOLATILE_DISK=1 INITRD_OVERRIDE="$INITRAMFS" \
         HV_EMBEDDED_DIR="$STAGE" \
         bash scripts/make-hypervisor-fs-x86.sh --skip-fetch
     # The build wrote kernel_fs.img/init straight into $STAGE (HV_EMBEDDED_DIR),

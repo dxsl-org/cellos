@@ -2,7 +2,9 @@
 # Tier 3 x86 display fixture: bind virtio-gpu and virtio-input, then fill the
 # guest framebuffer with a two-band test pattern the lane checks on screen:
 # top half bytes 0x40, bottom half bytes 0xC0 (BGRA grey 64 / grey 192).
-# Then /bin/fpu-check (fpu-check.S) proves guest XMM state survives VM exits.
+# Then /bin/fpu-check (fpu-check.S) proves guest XMM state survives VM exits,
+# and the guest takes its own DHCP lease, resolves a name and fetches a page
+# over the bridge the net service runs beside its host stack.
 
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 /bin/busybox --install -s /bin
@@ -51,5 +53,16 @@ echo "X86_INPUT_BOUND"
 echo "X86_DISPLAY_IRQ:$(awk '$1 == "3:" { print $2 }' /proc/interrupts)"
 # XMM registers must survive the VM exits taken while it spins.
 /bin/fpu-check
+
+modprobe af_packet || fail modprobe-af-packet
+modprobe virtio_net || fail modprobe-virtio-net
+mdev -s
+ip link set eth0 up || fail net-link-up
+udhcpc -i eth0 -n -q -t 10 -T 3 >/dev/null 2>&1 || fail net-no-lease
+echo "X86_NET_LEASE:$(ip -4 addr show eth0 | awk '/inet / { print $2; exit }')"
+echo "X86_NET_DNS:$(nslookup -type=a example.com 2>/dev/null | awk '/^Address/ { a = $NF } END { print a }')"
+wget -q -O /tmp/page http://example.com/ || fail net-http
+grep -q 'Example Domain' /tmp/page || fail net-http-content
+echo "X86_NET_HTTP_OK"
 
 while :; do sleep 3600; done

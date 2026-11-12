@@ -216,7 +216,6 @@ case "$BUILDER" in
         ;;
     make-hypervisor-fs-x86.sh)
         export HV_VOLATILE_DISK="$VOLATILE"
-        export HV_INIT_MIN=1
         [[ -n "$GUEST" ]] && export HV_GUEST_PROFILE="$GUEST"
         bash "scripts/$BUILDER" "${BUILDER_ARGS[@]}"
         RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \

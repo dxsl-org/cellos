@@ -12,8 +12,10 @@
 > **Chrome guest:** the taskbar's Chrome runs Chromium under cage in an Alpine guest
 > whose read-only root is `/mnt/sd/chrome-guest.sqfs` (`scripts/build-chrome-guest-image.sh`).
 > Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the guest holds
-> no credentials (user data lives in tmpfs and is gone at exit). Startup currently takes
-> ~18 minutes because guest disk reads run at ~2 MB/s (one 512-byte sector per block IPC).
+> no credentials (user data lives in tmpfs and is gone at exit). The guest takes its own
+> DHCP lease and loads real HTTPS pages (guest clock from the host RTC). Chromium's UI
+> appears ~130 s after the taskbar click under nested KVM (`scripts/qemu-tier3-chrome-x86.sh`);
+> guest disk reads still move one 512-byte sector per block IPC.
 
 ---
 
@@ -212,20 +214,24 @@ SD-backed path there; physical-board durability is not yet established.
 
 ## Guest Network Access
 
-The hypervisor exposes a VirtIO net device. Guest sees a standard Linux NIC:
+The hypervisor exposes a VirtIO net device; the guest sees a standard Linux NIC and
+takes its own DHCP lease from the upstream network:
 
 ```bash
 # Inside guest
-ip addr show
-eth0: inet 10.0.2.15
-
-# Connect to host services (Cellos net cell runs at 10.0.2.2)
-curl -v http://10.0.2.2:8080/
-
-# Or use sockets normally
+udhcpc -i eth0          # e.g. 10.0.2.16 under QEMU user networking
+wget -O- http://example.com/
 ```
 
-Network traffic is routed through Cellos's kernel; no direct hardware access.
+The CellOS net service bridges the guest beside its own stack on the same NIC. Each
+hypervisor opens one bridge port (`NetRequest::L2Recv`, `L2` right, hypervisor only)
+at the guest's MAC, `52:54:00:AA:BB:CC` plus the session index (the first free one,
+so a new session reuses an ended session's address and lease). Frames for that MAC
+go to that guest only, broadcast and multicast to the host stack and every guest,
+everything else to the host stack. A guest cannot use the host's or another guest's
+MAC (`NET_ERR_ADDR_IN_USE`, frame not sent), and its port closes when its
+hypervisor exits. The guest is a peer on the LAN, not behind NAT: it has no access
+to the host stack's sockets.
 
 > **Boot-time caveat (measured):** the guest kernel seeds its CRNG only after boot and `/dev/random`
 > blocks until it does. A TLS client started immediately after the network comes up can sit inside its
@@ -430,7 +436,10 @@ mounted — the `x86 VirtIO e2e + persistence` lane above is the worked example 
 boot, read back on the second).
 
 **Network unreachable?**
-→ Cellos net cell may not be running. Check `net-tools` in `/bin/`. Guest IP should be 10.0.2.15, Cellos host at 10.0.2.2.
+→ The serial log names each step once: `[hv-net] guest port open mac=…` (or `guest port not opened: …`),
+`[net-bridge] first guest TX/RX …`, `[net-bridge] L2Send source refused: …` for a frame sent from an address
+the guest may not use. Under QEMU user networking the host stack leases 10.0.2.15 and guests 10.0.2.16 and up;
+10.0.2.2 is QEMU's gateway, not CellOS. A guest with a static 10.0.2.15 collides with the host stack.
 
 **Slow network?**
 → VirtIO performance is ~90% native on QEMU. Real hardware faster. No tuning levers exposed yet.
