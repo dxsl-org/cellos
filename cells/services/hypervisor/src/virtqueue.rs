@@ -21,7 +21,8 @@ pub struct DescBuf {
 
 const FLAGS_NEXT: u16 = 1;
 const FLAGS_WRITE: u16 = 2;
-const MAX_CHAIN: usize = 64; // guard against infinite chains
+/// Longest descriptor chain accepted; guards against infinite chains.
+pub(crate) const MAX_CHAIN: usize = 64;
 
 /// Read and fully validate one descriptor chain before exposing it to a backend.
 pub(crate) fn read_descriptor_chain(

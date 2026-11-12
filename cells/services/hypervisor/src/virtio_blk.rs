@@ -60,6 +60,15 @@ pub struct BlkDisk {
     irq: Option<u32>,
 }
 
+/// Data descriptors a guest may put in one request. With two, Linux split its
+/// reads into ~8 KiB requests, one VMM exit each. Segments are not limited in
+/// size (no `VIRTIO_BLK_F_SIZE_MAX`), so a request can now reach the guest's
+/// `max_sectors_kb`; the persistent backend moves it in `VFS_GRANT_CHUNK`
+/// pieces. A chain is the segments plus the header and status descriptors,
+/// inside `virtqueue::MAX_CHAIN`.
+const SEG_MAX: u32 = 16;
+const _: () = assert!(SEG_MAX as usize + 2 <= crate::virtqueue::MAX_CHAIN);
+
 impl BlkDisk {
     /// `file` is an opened persistent disk and the spec it was opened with;
     /// `None` selects the 4 MiB volatile disk.
@@ -107,7 +116,7 @@ impl VirtioDevice for BlkDisk {
         match offset {
             0 => (self.num_sectors & 0xFFFF_FFFF) as u32,
             4 => (self.num_sectors >> 32) as u32,
-            12 => 2,
+            12 => SEG_MAX,
             _ => 0,
         }
     }
@@ -390,7 +399,6 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                 // guest does not care whether a request arrived as one
                 // descriptor or sixty-four.
                 let mut done = 0usize;
-                let mut chunks = 0usize;
                 while done < total_len as usize {
                     let want = total_len as usize - done;
                     let Some((mut grant, chunk)) = alloc_chunk_grant(want) else {
@@ -472,14 +480,6 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         return 1;
                     }
                     done += chunk;
-                    chunks += 1;
-                }
-                if total_len >= 65536 {
-                    println(&alloc::format!(
-                        "[hv-blk] read bytes={} chunks={}",
-                        total_len,
-                        chunks
-                    ));
                 }
                 // The whole descriptor chain was scattered in the loop above.
                 // Only the volatile backend processes one buffer at a time.
@@ -537,7 +537,6 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                 // Gather the request's guest buffers into one grant per chunk,
                 // then hand the VFS that chunk in a single round trip.
                 let mut done = 0usize;
-                let mut chunks = 0usize;
                 while done < total_len as usize {
                     let want = total_len as usize - done;
                     let Some((mut grant, chunk)) = alloc_chunk_grant(want) else {
@@ -604,14 +603,6 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         return 1;
                     }
                     done += chunk;
-                    chunks += 1;
-                }
-                if total_len >= 65536 {
-                    println(&alloc::format!(
-                        "[hv-blk] write bytes={} chunks={}",
-                        total_len,
-                        chunks
-                    ));
                 }
                 // The whole descriptor chain was gathered in the loop above.
                 break;
