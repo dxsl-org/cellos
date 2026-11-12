@@ -21,6 +21,7 @@
 //! state. The scheduler is left exactly as it was found.
 
 use super::completion::{self, CompletionQueue, QUEUE_CAPACITY};
+use super::tcb::{Delivery, WaitKind};
 use super::tcb::{Task, TaskState};
 use alloc::sync::Arc;
 use types::CellId;
@@ -209,8 +210,11 @@ fn task_exit_defers_timer_release() -> bool {
                 slot,
                 irq_lines: crate::dev::irq_wait::IrqLineSet::EMPTY,
             });
-            task.state = TaskState::WaitCompletion {
-                source: api::completion::source::TIMER,
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    source: api::completion::source::TIMER,
+                    delivery: Delivery::Queue,
+                },
                 deadline: Some(u64::MAX),
             };
         }
@@ -354,7 +358,10 @@ fn deferred_wake_reaches_scheduler() -> bool {
             }
         };
         if let Some(task) = sched.tasks.get_mut(&TID_A) {
-            task.state = TaskState::Sleeping { until: usize::MAX };
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Sleep,
+                deadline: Some(usize::MAX as u64),
+            };
         }
         // Start from a cleared flag, so the one observed after the append below
         // is provably this append's and not a leftover from an earlier row.
@@ -474,11 +481,17 @@ fn self_drain_cancels_stale_wake() -> bool {
         let mut guard = super::SCHEDULER.lock();
         if let Some(sched) = guard.as_mut() {
             if let Some(task) = sched.tasks.get_mut(&TID_A) {
-                task.state = TaskState::Sleeping { until: usize::MAX };
+                task.state = TaskState::Blocked {
+                    wait: WaitKind::Sleep,
+                    deadline: Some(usize::MAX as u64),
+                };
             }
             completion::deliver_pending_wakes(sched);
             if sched.tasks.get(&TID_A).map(|task| &task.state)
-                != Some(&TaskState::Sleeping { until: usize::MAX })
+                != Some(&TaskState::Blocked {
+                    wait: WaitKind::Sleep,
+                    deadline: Some(usize::MAX as u64),
+                })
             {
                 ok = fail("a self-drained completion woke the task's next park");
             }

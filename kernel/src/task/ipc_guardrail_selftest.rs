@@ -1,12 +1,13 @@
 //! Boot-time guards for IPC behaviors that generic reactor work must preserve.
 //!
-//! `RecvScatter` currently parks through the ordinary `TaskState::Recv` shape,
+//! `RecvScatter` currently parks through the ordinary `WaitKind::Recv` shape,
 //! even though its temporary receive buffer cannot outlive the syscall frame.
 //! These tests freeze the safe boundary: producers leave owned mailbox bytes,
 //! do not write the stale pointer, and do not silently route this path to the CQ.
 
 use super::completion_selftest::{insert, remove};
 use super::tcb::TaskState;
+use super::tcb::WaitKind;
 
 const SENDER: usize = 9341;
 const RECEIVER: usize = 9342;
@@ -24,10 +25,12 @@ fn recv_scatter_stays_mailbox_isolated() -> bool {
     insert(RECEIVER, TEST_CELL + 1);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
-            receiver.state = TaskState::Recv {
-                mask: SENDER,
-                buf_ptr: INVALID_RECV_PTR,
-                buf_len: 16,
+            receiver.state = TaskState::Blocked {
+                wait: WaitKind::Recv {
+                    mask: SENDER,
+                    buf_ptr: INVALID_RECV_PTR,
+                    buf_len: 16,
+                },
                 deadline: None,
             };
         }
@@ -65,9 +68,12 @@ fn dead_peer_unblocks_sender() -> bool {
         let mut guard = super::SCHEDULER.lock();
         if let Some(sched) = guard.as_mut() {
             let setup = if let Some(sender) = sched.tasks.get_mut(&SENDER) {
-                sender.state = TaskState::Sending {
-                    target: DEAD_PEER,
-                    delivery_id: super::next_delivery_id(),
+                sender.state = TaskState::Blocked {
+                    wait: WaitKind::Send {
+                        target: DEAD_PEER,
+                        delivery_id: super::next_delivery_id(),
+                    },
+                    deadline: None,
                 };
                 true
             } else {
@@ -110,7 +116,7 @@ fn dead_peer_unblocks_sender() -> bool {
             .and_then(|sched| sched.tasks.get(&SENDER))
             .is_some_and(|sender| {
                 sender.reply_value.is_none()
-                    && matches!(sender.state, TaskState::Sending { target, .. } if target == RECEIVER)
+                    && matches!(sender.state, TaskState::Blocked { wait: WaitKind::Send { target, .. }, .. } if target == RECEIVER)
             });
     remove(SENDER);
     remove(RECEIVER);

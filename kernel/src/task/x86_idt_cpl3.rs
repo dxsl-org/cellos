@@ -1,5 +1,6 @@
 use super::stack::Stack;
 use super::tcb::TaskState;
+use super::tcb::WaitKind;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use types::CellId;
 
@@ -90,7 +91,10 @@ fn park_current(expected: usize) {
     let mut guard = super::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
     let task = scheduler.tasks.get_mut(&expected).unwrap_or_else(|| fail());
-    task.state = TaskState::Waiting { target: 0 };
+    task.state = TaskState::Blocked {
+        wait: WaitKind::Join { target: 0 },
+        deadline: None,
+    };
 }
 
 #[no_mangle]
@@ -108,7 +112,13 @@ pub extern "Rust" fn vi_x86_idt_cpl3_wake_b() {
     let mut guard = super::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
     let task = scheduler.tasks.get_mut(&b_tid).unwrap_or_else(|| fail());
-    if !matches!(task.state, TaskState::Waiting { .. }) {
+    if !matches!(
+        task.state,
+        TaskState::Blocked {
+            wait: WaitKind::Join { .. },
+            ..
+        }
+    ) {
         fail();
     }
     task.state = TaskState::Ready;

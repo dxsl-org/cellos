@@ -3269,13 +3269,13 @@ fn stream_io(
         }
         let task = sched.tasks.get_mut(&caller).ok_or(Status::Revoked)?;
         task.state = if selector == 5 {
-            crate::task::tcb::TaskState::PipeRead {
-                handle: e.handle,
+            crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::PipeRead { handle: e.handle },
                 deadline: wait,
             }
         } else {
-            crate::task::tcb::TaskState::PipeWrite {
-                handle: e.handle,
+            crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::PipeWrite { handle: e.handle },
                 deadline: wait,
             }
         };

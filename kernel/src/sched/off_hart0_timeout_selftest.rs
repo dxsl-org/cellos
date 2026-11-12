@@ -21,7 +21,7 @@ use crate::hal::Arch;
 #[cfg(not(target_arch = "x86_64"))]
 use crate::sched::hart_local::ready;
 #[cfg(not(target_arch = "x86_64"))]
-use crate::task::{system_ticks, tcb::Task, tcb::TaskState, SCHEDULER};
+use crate::task::{system_ticks, tcb::Task, tcb::TaskState, tcb::WaitKind, SCHEDULER};
 
 /// Ticks from parking to the deadline.
 #[cfg(not(target_arch = "x86_64"))]
@@ -65,15 +65,22 @@ fn run() {
             alloc::vec::Vec::new(),
         ));
         task.root_tid = FIXTURE_TID;
-        task.state = TaskState::Sleeping { until };
+        task.state = TaskState::Blocked {
+            wait: WaitKind::Sleep,
+            deadline: Some(until as u64),
+        };
         // Park it the way a sleeping task leaves the CPU: in the table, off
         // every ready queue, noted by the switch-out bookkeeping, and owned
         // by hart 0 so no other hart can dispatch it once it is readied.
         ready::set_selected_task_id(0, FIXTURE_TID);
         sched.tasks.insert(FIXTURE_TID, task);
-        sched
-            .tasks
-            .note_parked(FIXTURE_TID, &TaskState::Sleeping { until });
+        sched.tasks.note_parked(
+            FIXTURE_TID,
+            &TaskState::Blocked {
+                wait: WaitKind::Sleep,
+                deadline: Some(until as u64),
+            },
+        );
     }
 
     // Hold hart 0: no interrupt, so no tick handler and no sweep here. Taking
@@ -86,7 +93,15 @@ fn run() {
             .lock()
             .as_ref()
             .and_then(|sched| sched.tasks.get(&FIXTURE_TID))
-            .is_some_and(|task| matches!(task.state, TaskState::Sleeping { .. }));
+            .is_some_and(|task| {
+                matches!(
+                    task.state,
+                    TaskState::Blocked {
+                        wait: WaitKind::Sleep,
+                        ..
+                    }
+                )
+            });
         if !sleeping {
             break Some(now);
         }

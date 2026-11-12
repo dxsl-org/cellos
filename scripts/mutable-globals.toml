@@ -1407,17 +1407,6 @@ rationale = "Lazy once-init via Acquire load + AcqRel CAS; a racing loser adopts
 review = "kernel/src/task/telemetry.rs:provider_epoch; kernel/src/task/syscall/mod.rs:7226"
 
 [[global]]
-key = "kernel::sched::scheduler::DUMMY_VTABLE"
-lifetime = "global"
-mutation = "immutable"
-owner = "kernel::sched::scheduler dummy_waker used when polling a task's pending future"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "const-initialized; never written"
-retirement = "never: lives for the whole run"
-rationale = "RawWakerVTable holds only no-op fn pointers and has no interior mutability, so concurrent reads are safe. It is read from Scheduler::pick_next_unaccounted, which yield_cpu reaches from the timer/IPI ISR, user-fault path and AP idle loop."
-review = "kernel/src/sched/scheduler.rs:dummy_raw_waker; kernel/src/sched/scheduler.rs:2273"
-
-[[global]]
 key = "kernel::sched::scheduler::DEATH_SUBSCRIBERS"
 lifetime = "global"
 mutation = "spinlock"

@@ -91,10 +91,12 @@ fn remove(tid: usize) {
 fn set_recv_waiting(tid: usize, mask: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.state = super::tcb::TaskState::Recv {
-                mask,
-                buf_ptr: 0,
-                buf_len: 0,
+            task.state = super::tcb::TaskState::Blocked {
+                wait: super::tcb::WaitKind::Recv {
+                    mask,
+                    buf_ptr: 0,
+                    buf_len: 0,
+                },
                 deadline: None,
             };
         }

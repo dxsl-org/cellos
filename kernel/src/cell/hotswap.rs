@@ -301,6 +301,7 @@ pub(crate) fn commit_hotswap_barrier(
     service_id: u16,
 ) -> ViResult<()> {
     use crate::ipc::pending_mailbox::{PendingMsg, PendingMsgData};
+    use crate::task::tcb::WaitKind;
     use crate::task::tcb::{TaskState, HOTSWAP_MSG_QUEUE_DEPTH};
 
     let mut scheduler = crate::task::SCHEDULER.lock();
@@ -328,7 +329,10 @@ pub(crate) fn commit_hotswap_barrier(
             return Err(ViError::WouldBlock);
         }
         let wake_sender = match target.state {
-            TaskState::Recv { mask, .. } => source
+            TaskState::Blocked {
+                wait: WaitKind::Recv { mask, .. },
+                ..
+            } => source
                 .pending_msgs
                 .iter()
                 .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != 0))

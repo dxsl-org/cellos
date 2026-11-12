@@ -774,7 +774,13 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
     // Park the task — scheduler sweep will wake it when IRQ_PENDING[irq] is set.
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&caller_id) {
-            task.state = crate::task::tcb::TaskState::WaitIrq { irq };
+            task.state = crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::Completion {
+                    source: api::completion::source::IRQ,
+                    delivery: crate::task::tcb::Delivery::IrqLine(irq),
+                },
+                deadline: None,
+            };
         }
     }
     crate::task::yield_cpu();

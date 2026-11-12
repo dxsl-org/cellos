@@ -171,7 +171,10 @@ pub(crate) fn wait(
     match sched.tasks.get_mut(&caller_id) {
         Some(task) => {
             enqueue(key, caller_id);
-            task.state = crate::task::tcb::TaskState::FutexWait { key, deadline };
+            task.state = crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::Futex { key },
+                deadline,
+            };
             // A waker writes the outcome into this slot before pushing the task to
             // a run queue; the handler reads it back after the park.
             task.trap_frame.regs[10] = OUTCOME_WOKEN as _;
@@ -217,7 +220,7 @@ pub(crate) fn wake(
         if let Some(task) = sched.tasks.get_mut(&tid) {
             // Only a task still parked on this key may be woken: a timeout or an
             // exit that raced this wake already removed it from the wait state.
-            if matches!(task.state, crate::task::tcb::TaskState::FutexWait { key: k, .. } if k == key)
+            if matches!(task.state, crate::task::tcb::TaskState::Blocked { wait: crate::task::tcb::WaitKind::Futex { key: k, .. }, .. } if k == key)
             {
                 task.state = crate::task::tcb::TaskState::Ready;
                 task.trap_frame.regs[10] = OUTCOME_WOKEN as _;

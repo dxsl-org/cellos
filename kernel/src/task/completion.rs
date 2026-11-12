@@ -359,7 +359,7 @@ impl CompletionQueue {
     /// Name `tid` as the task to make runnable when a completion arrives.
     ///
     /// # Contract
-    /// The registrant must publish `TaskState::WaitCompletion` before yielding.
+    /// The registrant must publish its `WaitKind::Completion` park before yielding.
     /// A NET_RX waiter is also intentionally interruptible by queued IPC; that
     /// path readies the task but leaves this queue's reservation and any
     /// concurrent completion under the waiter's normal cleanup protocol.

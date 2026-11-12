@@ -16,8 +16,6 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use types::*;
 
-use api::fs::{BoxFuture, FileResult};
-
 /// Maximum number of IPC messages buffered for a Frozen cell during hot-swap.
 ///
 /// When a cell is mid-swap (state `Frozen`), incoming `sys_send` calls enqueue
@@ -40,26 +38,11 @@ pub const INPUT_EVENT_QUEUE_DEPTH: usize = 512;
 pub enum TaskState {
     Ready,
     Running,
-    /// Sleeping until a specific monotonic time (ticks/ms)
-    Sleeping {
-        until: usize,
-    },
-    /// Blocked waiting for the receiver to consume the message published
-    /// under `delivery_id`. The payload lives in the receiver's kernel-owned
-    /// mailbox; this variant holds only the delivery token.
-    Sending {
-        target: usize,
-        delivery_id: u64,
-    },
-    /// Blocked waiting to receive a message.
-    ///
-    /// `mask`: sender filter (0 = any sender).
-    /// `deadline`: optional monotonic tick count after which the kernel wakes
-    ///   this task with `ViError::Timeout`.  `None` = wait indefinitely.
-    Recv {
-        mask: usize,
-        buf_ptr: VAddr,
-        buf_len: usize,
+    /// Parked until `wait` is satisfied or, when set, `deadline` (absolute
+    /// `system_ticks`) passes. Every parked shape is one of these: the timer
+    /// sweep keys on `deadline` and the event sweep on [`WaitKind::Completion`].
+    Blocked {
+        wait: WaitKind,
         deadline: Option<u64>,
     },
     /// This task has finished running.
@@ -69,51 +52,6 @@ pub enum TaskState {
     /// stale remote Context is denied rather than treated as an early-boot
     /// kernel caller.
     Retiring,
-    /// Blocked in a pipe read (ring empty, a writer end still open).
-    PipeRead {
-        handle: crate::ipc::pipe::PipeHandle,
-        deadline: Option<u64>,
-    },
-    /// Blocked in a pipe write (ring full).
-    PipeWrite {
-        handle: crate::ipc::pipe::PipeHandle,
-        deadline: Option<u64>,
-    },
-    /// Blocked on a futex wait.
-    /// `key`: `(address-space identity, generation, word address)` — see
-    ///        [`crate::ipc::futex`] for why the identity is part of the key.
-    /// `deadline`: absolute `system_ticks`; `None` blocks indefinitely.
-    FutexWait {
-        key: crate::ipc::futex::FutexKey,
-        deadline: Option<u64>,
-    },
-    /// Waiting for another task to exit (Join).
-    Waiting {
-        target: usize,
-    },
-    /// Polling an async future (e.g. syscall)
-    Polling,
-    /// Blocked in `WaitForEvent(mask, timeout)`.  Woken by `waker::signal_net_rx()`
-    /// (or equivalent) when any bit in `mask` fires, or when `deadline` ticks pass.
-    /// `deadline = None` means block indefinitely.
-    WaitEvent {
-        mask: u32,
-        deadline: Option<u64>,
-    },
-    /// Blocked in `WaitCompletion`. `source` is the wait's source mask (any
-    /// non-empty subset of `NET_RX | TIMER | IPC | IRQ`). NET_RX completions
-    /// wake through the queue, IPC terminals through `async_ipc::wake`, IRQ
-    /// lines of the task's `CompletionWait::irq_lines` through the scheduler
-    /// sweep, a queued raw message only when the mask names NET_RX, and a
-    /// finite deadline through the timer sweep.
-    WaitCompletion {
-        source: u32,
-        deadline: Option<u64>,
-    },
-    /// Parked only when there is no retained terminal async RPC result.
-    WaitIpc {
-        deadline: Option<u64>,
-    },
     /// Cell is suspended during a hot-swap sequence identified by `swap_id`.
     ///
     /// Invariants while Frozen:
@@ -126,14 +64,61 @@ pub enum TaskState {
     Frozen {
         swap_id: u64,
     },
-    /// Blocked in `sys_wait_irq(irq, mmio_base)` until hardware IRQ `irq` fires.
-    ///
-    /// Woken by the scheduler sweep (NOT from ISR — ISR only sets `IRQ_PENDING[irq]`).
-    /// No deadline: IRQ-only wake; Driver Cells must implement their own poll-fallback
-    /// if the device can hang without raising an IRQ.
-    WaitIrq {
-        irq: u8,
+}
+
+/// What a [`TaskState::Blocked`] task waits for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaitKind {
+    /// Only the deadline (`Sleep`).
+    Sleep,
+    /// The receiver to consume the message published under `delivery_id`. The
+    /// payload lives in the receiver's kernel-owned mailbox; this holds only
+    /// the delivery token.
+    Send { target: usize, delivery_id: u64 },
+    /// A message. `mask`: sender filter (0 = any sender). On the deadline the
+    /// kernel wakes the task with a 0 sender.
+    Recv {
+        mask: usize,
+        buf_ptr: VAddr,
+        buf_len: usize,
     },
+    /// A pipe read (ring empty, a writer end still open).
+    PipeRead {
+        handle: crate::ipc::pipe::PipeHandle,
+    },
+    /// A pipe write (ring full).
+    PipeWrite {
+        handle: crate::ipc::pipe::PipeHandle,
+    },
+    /// A futex wake. `key`: `(address-space identity, generation, word
+    /// address)` — see [`crate::ipc::futex`] for why the identity is part of it.
+    Futex { key: crate::ipc::futex::FutexKey },
+    /// Another task's exit (Join).
+    Join { target: usize },
+    /// A completion source: `source` is a non-empty subset of
+    /// `NET_RX | TIMER | IPC | IRQ`. IPC terminals wake it through
+    /// `async_ipc::wake`, a pending IRQ line through the event sweep, and the
+    /// deadline through the timer sweep. `delivery` says how the wait reports
+    /// what woke it; the legacy `WaitForEvent`, `IpcWait` and `WaitIrq` calls
+    /// are this wait with their own delivery (CP1 D2/D3).
+    Completion { source: u32, delivery: Delivery },
+}
+
+/// How a [`WaitKind::Completion`] wait reports its result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Delivery {
+    /// `WaitCompletion`: a record in the reserved slot of the cell's queue.
+    /// NET_RX completes that reservation; IRQ lines come from
+    /// [`CompletionWait::irq_lines`].
+    Queue,
+    /// `WaitForEvent(mask)`: the event sweep consumes the fired `mask` bits of
+    /// the NET_RX level flag into the return register (no reservation).
+    EventMask(u32),
+    /// `IpcWait`: the caller checks for a terminal operation after the wake.
+    IpcTerminal,
+    /// `WaitIrq(line)`: the event sweep consumes `line` once it is pending,
+    /// clears its waiter slot and readies the task. No deadline.
+    IrqLine(u8),
 }
 
 impl TaskState {
@@ -141,26 +126,22 @@ impl TaskState {
     /// parked in this state, if it has a deadline.
     pub(crate) fn wake_deadline(&self) -> Option<u64> {
         match self {
-            TaskState::Sleeping { until } => Some(*until as u64),
-            TaskState::Recv { deadline, .. }
-            | TaskState::PipeRead { deadline, .. }
-            | TaskState::PipeWrite { deadline, .. }
-            | TaskState::FutexWait { deadline, .. }
-            | TaskState::WaitEvent { deadline, .. }
-            | TaskState::WaitCompletion { deadline, .. }
-            | TaskState::WaitIpc { deadline } => *deadline,
+            TaskState::Blocked { deadline, .. } => *deadline,
             _ => None,
         }
     }
 
     /// Whether the sweep must poll a task parked in this state for an event
     /// (an IRQ, NET_RX, or a completion source) on every pass.
+    ///
+    /// `IpcWait` is woken by the IPC terminal itself and needs no polling.
     pub(crate) fn waits_for_events(&self) -> bool {
         matches!(
             self,
-            TaskState::WaitEvent { .. }
-                | TaskState::WaitCompletion { .. }
-                | TaskState::WaitIrq { .. }
+            TaskState::Blocked {
+                wait: WaitKind::Completion { delivery, .. },
+                ..
+            } if *delivery != Delivery::IpcTerminal
         )
     }
 }
@@ -174,21 +155,24 @@ pub fn task_state_name(state: &TaskState) -> &'static str {
     match state {
         TaskState::Ready => "ready",
         TaskState::Running => "running",
-        TaskState::Sleeping { .. } => "sleeping",
-        TaskState::Sending { .. } => "sending",
-        TaskState::Recv { .. } => "recv",
+        TaskState::Blocked { wait, .. } => match wait {
+            WaitKind::Sleep => "sleeping",
+            WaitKind::Send { .. } => "sending",
+            WaitKind::Recv { .. } => "recv",
+            WaitKind::PipeRead { .. } => "pipe-read",
+            WaitKind::PipeWrite { .. } => "pipe-write",
+            WaitKind::Futex { .. } => "futex-wait",
+            WaitKind::Join { .. } => "waiting",
+            WaitKind::Completion { delivery, .. } => match delivery {
+                Delivery::Queue => "wait-completion",
+                Delivery::EventMask(_) => "wait-event",
+                Delivery::IpcTerminal => "wait-ipc",
+                Delivery::IrqLine(_) => "wait-irq",
+            },
+        },
         TaskState::Terminated => "terminated",
         TaskState::Retiring => "retiring",
-        TaskState::PipeRead { .. } => "pipe-read",
-        TaskState::PipeWrite { .. } => "pipe-write",
-        TaskState::FutexWait { .. } => "futex-wait",
-        TaskState::Waiting { .. } => "waiting",
-        TaskState::Polling => "polling",
-        TaskState::WaitEvent { .. } => "wait-event",
-        TaskState::WaitCompletion { .. } => "wait-completion",
-        TaskState::WaitIpc { .. } => "wait-ipc",
         TaskState::Frozen { .. } => "frozen",
-        TaskState::WaitIrq { .. } => "wait-irq",
     }
 }
 
@@ -241,12 +225,6 @@ pub struct GrantEntry {
 
 // File Handle for Stateful IO
 pub use api::fs::FileHandle;
-
-/// Enum to hold the different types of futures a task might be waiting on.
-pub enum SyscallFuture {
-    FileRead(usize, BoxFuture<'static, FileResult<usize>>), // fd, future
-                                                            // Add other syscall futures here (FileWrite, Connect, etc.)
-}
 
 /// The request a service task is currently serving (Task field group).
 pub struct CallerSlot {
@@ -444,9 +422,6 @@ pub struct Task {
     /// Exit reason for a generic `NotifyOnExit` wake delivered while this task
     /// was parked in `Recv`. Owner-watch wakes use `pending_owner_deaths` instead.
     pub pending_exit_reason: Option<usize>,
-
-    // Async Kernel Support
-    pub pending_future: Option<SyscallFuture>,
 
     /// Test-hooks-only, exact-path authority to self-register `service::SILO`.
     /// A launch-route token on the root task, not a Cell right (not in `CapSet`).
@@ -706,7 +681,6 @@ impl Task {
             pending_deaths: Vec::new(),
             pending_owner_deaths: Vec::new(),
             pending_exit_reason: None,
-            pending_future: None,
             #[cfg(feature = "test-hooks")]
             development_silo_registration_cap: None,
             rights: super::cap::CapSet::EMPTY,

@@ -12,7 +12,7 @@ impl AsyncStdin {
     ///
     /// Sources in priority order:
     ///   1. VirtIO keyboard + UART via input service (EV_ASCII relay), received
-    ///      via `sys_recv_timeout` (1-tick block) so shell enters `TaskState::Recv`
+    ///      via `sys_recv_timeout` (1-tick block) so shell parks in a kernel receive
     ///      and input service's `sys_try_send` can deliver events.
     ///   2. UART/serial via sys_read(fd=0) — fallback when input service absent
     ///      or when the 1-tick IPC window times out with no event.
@@ -34,7 +34,7 @@ impl AsyncStdin {
             }
 
             // ── Input service path ──────────────────────────────────────────
-            // sys_recv_timeout puts shell into TaskState::Recv for 1 tick
+            // sys_recv_timeout parks the shell in a kernel receive for 1 tick
             // (~10ms), allowing input service's sys_try_send to deliver events.
             // poll_events (sys_try_recv) never places shell in Recv — input
             // service's sys_try_send always drops when shell is not in Recv

@@ -763,10 +763,12 @@ pub fn run_primary() {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root task disappeared");
             return;
         };
-        root.state = super::tcb::TaskState::Recv {
-            mask: 0,
-            buf_ptr: 0,
-            buf_len: 0,
+        root.state = super::tcb::TaskState::Blocked {
+            wait: super::tcb::WaitKind::Recv {
+                mask: 0,
+                buf_ptr: 0,
+                buf_len: 0,
+            },
             deadline: None,
         };
         let owner =

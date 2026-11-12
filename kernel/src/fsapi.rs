@@ -136,12 +136,9 @@ pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
         return 0;
     }
 
-    // File Read — synchronous. The VIFS1 ramdisk is synchronous, and the async
-    // path (read_async → pending_future + state=Polling) called straight back into
-    // this same sync `read()` anyway. But it returned a dummy 0 to the caller while
-    // the future was never driven to completion, so a blocking reader (e.g. DOOM's
-    // WAD load) received 0 bytes and an uninitialized buffer ("doesn't have IWAD").
-    // Read directly under the SCHEDULER lock and return the real byte count.
+    // File Read — synchronous, under the SCHEDULER lock: the VIFS1 ramdisk is
+    // synchronous, and a blocking reader (e.g. DOOM's WAD load) needs the real
+    // byte count, never a placeholder 0.
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.current_task_mut() {
             if let Some(handle) = task.open_files.get_mut(&fd) {

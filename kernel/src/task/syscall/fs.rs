@@ -294,7 +294,10 @@ pub(super) fn pipe_read(
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
                             crate::ipc::pipe::park_reader(handle, caller_id);
-                            task.state = crate::task::tcb::TaskState::PipeRead { handle, deadline };
+                            task.state = crate::task::tcb::TaskState::Blocked {
+                                wait: crate::task::tcb::WaitKind::PipeRead { handle },
+                                deadline,
+                            };
                         }
                         None => return Err(SyscallError::PermissionDenied),
                     }
@@ -360,8 +363,10 @@ pub(super) fn pipe_write(
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
                             crate::ipc::pipe::park_writer(handle, caller_id);
-                            task.state =
-                                crate::task::tcb::TaskState::PipeWrite { handle, deadline };
+                            task.state = crate::task::tcb::TaskState::Blocked {
+                                wait: crate::task::tcb::WaitKind::PipeWrite { handle },
+                                deadline,
+                            };
                         }
                         None => return Err(SyscallError::PermissionDenied),
                     }

@@ -15,6 +15,7 @@
 //!      is deliberately busy with an equal-priority task, which the old
 //!      current-hart predicate treated as "no preemption needed".
 
+use super::tcb::WaitKind;
 use super::tcb::{Task, TaskState};
 use super::{wake_sender_token, SCHEDULER};
 use crate::ipc::ipc_wire::IpcWireHeader;
@@ -85,9 +86,12 @@ pub(crate) fn self_test() -> bool {
         sched.tasks.insert(tid, task);
     }
     if let Some(sender) = sched.tasks.get_mut(&SENDER_TID) {
-        sender.state = TaskState::Sending {
-            target: RECEIVER_TID,
-            delivery_id: DELIVERY_ID,
+        sender.state = TaskState::Blocked {
+            wait: WaitKind::Send {
+                target: RECEIVER_TID,
+                delivery_id: DELIVERY_ID,
+            },
+            deadline: None,
         };
     }
     crate::sched::hart_local::ready::set_current_task_id(target_hart, TARGET_OCCUPANT_TID);
@@ -111,9 +115,12 @@ pub(crate) fn self_test() -> bool {
 
     // 2. A stale delivery token must neither wake the sender nor pend anything.
     if let Some(sender) = sched.tasks.get_mut(&SENDER_TID) {
-        sender.state = TaskState::Sending {
-            target: RECEIVER_TID,
-            delivery_id: DELIVERY_ID,
+        sender.state = TaskState::Blocked {
+            wait: WaitKind::Send {
+                target: RECEIVER_TID,
+                delivery_id: DELIVERY_ID,
+            },
+            deadline: None,
         };
     }
     crate::sched::hart_local::ready::remove_from_all(SENDER_TID);
@@ -121,7 +128,10 @@ pub(crate) fn self_test() -> bool {
     wake_sender_token(sched, SENDER_TID, RECEIVER_TID, header(DELIVERY_ID + 1));
     let stale_quiet = matches!(
         sched.tasks.get(&SENDER_TID).map(|task| &task.state),
-        Some(TaskState::Sending { .. })
+        Some(TaskState::Blocked {
+            wait: WaitKind::Send { .. },
+            ..
+        })
     ) && crate::sched::smp::preempt_pends_for(target_hart) == 0;
 
     // 3. The decision follows the target hart's running priority.

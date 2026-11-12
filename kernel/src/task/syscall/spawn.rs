@@ -447,10 +447,12 @@ pub(in crate::task) fn resume_or_repark(
         return Ok(Some(snap));
     };
     crate::task::arm_ipc_block_handoff(caller_id);
-    task.state = crate::task::tcb::TaskState::Recv {
-        mask,
-        buf_ptr,
-        buf_len,
+    task.state = crate::task::tcb::TaskState::Blocked {
+        wait: crate::task::tcb::WaitKind::Recv {
+            mask,
+            buf_ptr,
+            buf_len,
+        },
         deadline,
     };
     Ok(None)

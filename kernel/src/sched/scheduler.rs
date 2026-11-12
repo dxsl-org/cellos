@@ -1,8 +1,7 @@
-use crate::task::tcb::{FileHandle, SyscallFuture, Task, TaskState};
+use crate::task::tcb::{Task, TaskState, WaitKind};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
-use core::task::{Context, Poll};
 use log::info;
 use types::*;
 
@@ -28,23 +27,6 @@ pub const MAX_THREADS_PER_CELL: usize = 32;
 pub fn current_cell_id() -> usize {
     crate::sched::hart_local::current_cell_id()
 }
-
-// Dummy Waker
-// In a real executor, we'd have a way to wake specific tasks.
-// Here we just poll in the loop.
-// We need a dummy waker to pass to poll.
-use core::task::{RawWaker, RawWakerVTable, Waker};
-
-fn dummy_waker() -> Waker {
-    unsafe { Waker::from_raw(dummy_raw_waker()) }
-}
-
-fn dummy_raw_waker() -> RawWaker {
-    RawWaker::new(core::ptr::null(), &DUMMY_VTABLE)
-}
-
-static DUMMY_VTABLE: RawWakerVTable =
-    RawWakerVTable::new(|_| dummy_raw_waker(), |_| {}, |_| {}, |_| {});
 
 /// Publish boot ownership at the task→boot boundary on targets without an
 /// incoming-side completion hook (single-hart RISC-V32 only).
@@ -1870,7 +1852,11 @@ impl Scheduler {
         // wakes or an implication that dispatched work had no side effects.
         let mut to_wake = Vec::new();
         for (id, task) in self.tasks.iter_mut() {
-            if let TaskState::Sending { target, .. } = task.state {
+            if let TaskState::Blocked {
+                wait: WaitKind::Send { target, .. },
+                ..
+            } = task.state
+            {
                 if target == tid {
                     task.state = TaskState::Ready;
                     // The Send handler resumes inside the kernel and reads
@@ -1929,7 +1915,13 @@ impl Scheduler {
                 if matches!(wt.state, TaskState::Retiring | TaskState::Terminated) {
                     return;
                 }
-                if matches!(wt.state, TaskState::Recv { .. }) {
+                if matches!(
+                    wt.state,
+                    TaskState::Blocked {
+                        wait: WaitKind::Recv { .. },
+                        ..
+                    }
+                ) {
                     // The actual userspace write occurs when Recv resumes.
                     wt.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
                     wt.pending_exit_reason = Some(exit_reason);
@@ -1952,7 +1944,7 @@ impl Scheduler {
             .tasks
             .iter()
             .filter_map(|(&id, task)| {
-                matches!(task.state, TaskState::Recv { mask, .. } if mask == tid).then_some(id)
+                matches!(task.state, TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. } if mask == tid).then_some(id)
             })
             .collect();
         for receiver in masked_receivers {
@@ -2000,7 +1992,7 @@ impl Scheduler {
                 );
                 if matches!(
                     task.state,
-                    TaskState::Recv { mask, .. }
+                    TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. }
                         if Task::owner_death_matches_receive_mask(mask)
                 ) {
                     task.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
@@ -2082,11 +2074,15 @@ impl Scheduler {
         waiter_wakes: Vec<(usize, usize)>,
     ) {
         for (waiter_id, exit_reason) in waiter_wakes {
-            if self
-                .tasks
-                .get(&waiter_id)
-                .is_some_and(|waiter| matches!(waiter.state, TaskState::Waiting { .. }))
-            {
+            if self.tasks.get(&waiter_id).is_some_and(|waiter| {
+                matches!(
+                    waiter.state,
+                    TaskState::Blocked {
+                        wait: WaitKind::Join { .. },
+                        ..
+                    }
+                )
+            }) {
                 if let Some(waiter) = self.tasks.get_mut(&waiter_id) {
                     waiter.state = TaskState::Ready;
                     waiter.reply_value = Some(exit_reason);
@@ -2436,22 +2432,27 @@ impl Scheduler {
                 let mut should_wake = false;
                 let mut timed_out = false;
                 match &task.state {
-                    TaskState::Sleeping { until } if now >= *until => {
+                    TaskState::Blocked {
+                        wait: WaitKind::Sleep,
+                        deadline: Some(d),
+                    } if now as u64 >= *d => {
                         should_wake = true;
                     }
                     // `deadline` is u64 (mtime-domain field); `now` is usize system
                     // ticks. On rv64 usize == u64, so the cast is lossless.
-                    TaskState::Recv {
-                        deadline: Some(d), ..
+                    TaskState::Blocked {
+                        wait: WaitKind::Recv { .. },
+                        deadline: Some(d),
                     } if now as u64 >= *d => {
                         should_wake = true;
                         timed_out = true;
                     }
                     // Pipe reader/writer whose deadline elapsed: drop the queue entry
                     // and hand the task a 0-byte result so it re-checks.
-                    TaskState::PipeRead { handle, deadline }
-                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
-                    {
+                    TaskState::Blocked {
+                        wait: WaitKind::PipeRead { handle },
+                        deadline,
+                    } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
                         crate::ipc::pipe::on_deadline(
                             *handle,
                             *id,
@@ -2460,9 +2461,10 @@ impl Scheduler {
                         task.trap_frame.regs[10] = 0;
                         should_wake = true;
                     }
-                    TaskState::PipeWrite { handle, deadline }
-                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
-                    {
+                    TaskState::Blocked {
+                        wait: WaitKind::PipeWrite { handle },
+                        deadline,
+                    } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
                         crate::ipc::pipe::on_deadline(
                             *handle,
                             *id,
@@ -2479,51 +2481,35 @@ impl Scheduler {
                     // (Ok(0) on timeout) and would clobber the futex outcome. This
                     // arm publishes its own result in `on_deadline`, so it only has
                     // to request the wake.
-                    TaskState::FutexWait { key, deadline }
-                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
-                    {
+                    TaskState::Blocked {
+                        wait: WaitKind::Futex { key },
+                        deadline,
+                    } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
                         crate::ipc::futex::on_deadline(task, *id, *key);
                         should_wake = true;
                     }
-                    TaskState::WaitEvent { mask, deadline } => {
-                        let fired = crate::task::waker::consume_pending(*mask);
-                        if fired != 0 {
-                            // Return fired mask as the syscall result.
-                            task.trap_frame.regs[10] = fired as _;
-                            should_wake = true;
-                        } else if deadline.map(|d| now as u64 >= d).unwrap_or(false) {
-                            task.trap_frame.regs[10] = 0; // timeout — return 0
-                            should_wake = true;
-                            timed_out = true;
+                    // Every completion-source wait (WaitCompletion and the legacy
+                    // WaitForEvent / IpcWait / WaitIrq): one rule set, keyed on
+                    // how the wait reports its result.
+                    TaskState::Blocked {
+                        wait: WaitKind::Completion { source, delivery },
+                        deadline,
+                    } => {
+                        use crate::task::completion_wait::{sweep_wake, SweepWake};
+                        match sweep_wake(task, *source, *delivery, *deadline, now as u64) {
+                            SweepWake::Stay => {}
+                            SweepWake::Ready => should_wake = true,
+                            SweepWake::Fired(mask) => {
+                                // WaitForEvent returns the fired mask.
+                                task.trap_frame.regs[10] = mask as _;
+                                should_wake = true;
+                            }
+                            SweepWake::Deadline { timed_out: late } => {
+                                task.trap_frame.regs[10] = 0;
+                                should_wake = true;
+                                timed_out = late;
+                            }
                         }
-                    }
-                    TaskState::WaitIpc { deadline }
-                        if deadline.map(|d| now as u64 >= d).unwrap_or(false) =>
-                    {
-                        task.trap_frame.regs[10] = 0;
-                        should_wake = true;
-                    }
-                    // WaitCompletion(IRQ): a pending line of the wait's own
-                    // snapshot readies it; the waiter takes the line itself,
-                    // under the allocation lock, after it runs again.
-                    TaskState::WaitCompletion { source, .. }
-                        if crate::task::completion_wait::irq_wake_due(task, *source) =>
-                    {
-                        should_wake = true;
-                    }
-                    TaskState::WaitCompletion {
-                        source, deadline, ..
-                    } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
-                        task.trap_frame.regs[10] = 0;
-                        should_wake = true;
-                        timed_out = *source & api::completion::source::TIMER == 0;
-                    }
-                    // WaitIrq: IRQ-only wake — no deadline, no timeout.
-                    // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).
-                    // This sweep is the only place that transitions WaitIrq → Ready.
-                    TaskState::WaitIrq { irq } if crate::dev::irq_wait::take_pending(*irq) => {
-                        crate::dev::irq_wait::clear_waiter(*irq);
-                        should_wake = true;
                     }
                     _ => {}
                 }
@@ -2609,7 +2595,11 @@ impl Scheduler {
                 // is the single most useful forensic fact for IPC hangs.
                 if let Some(t) = self.tasks.get(&tid) {
                     log::error!("[heartbeat] task {} state at kill: {:?}", tid, t.state);
-                    if let TaskState::Sending { target, .. } = t.state {
+                    if let TaskState::Blocked {
+                        wait: WaitKind::Send { target, .. },
+                        ..
+                    } = t.state
+                    {
                         if let Some(tt) = self.tasks.get(&target) {
                             log::error!(
                                 "[heartbeat] send target {} state: {:?} pending_msgs={}",
@@ -2633,68 +2623,6 @@ impl Scheduler {
                 // The terminal task remains this hart's identity until the raw
                 // task→boot switch has saved its Context. `vi_context_switch_complete`
                 // clears the task and Cell tuple from the incoming boot stack.
-            }
-        }
-
-        // 2. Poll Async Tasks: filter directly for active polling tasks. Hart 0
-        // only, every pass, as before the sweep moved to any hart.
-        let polling_ids: Vec<usize> = if hart_id == 0 {
-            self.tasks
-                .iter()
-                .filter_map(|(&id, t)| (t.state == TaskState::Polling).then_some(id))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        if !polling_ids.is_empty() {
-            let mut polled_tasks = Vec::new();
-            let waker = dummy_waker();
-            let mut cx = Context::from_waker(&waker);
-
-            for id in polling_ids {
-                if let Some(task) = self.tasks.get_mut(&id) {
-                    if task.state == TaskState::Polling {
-                        #[cfg(feature = "p01-trace")]
-                        let heap_owner = crate::p01_resources::owner(task);
-                        if let Some(ref mut future_enum) = task.pending_future {
-                            match future_enum {
-                                SyscallFuture::FileRead(fd, future) => {
-                                    // Poll the future
-                                    match future.as_mut().poll(&mut cx) {
-                                        Poll::Ready((file, res)) => {
-                                            // Restore file handle
-                                            // file is Box<dyn ViFile>
-                                            #[cfg(feature = "p01-trace")]
-                                            let _semantic =
-                                                crate::memory::heap::p01_owner::creation(
-                                                    Some(heap_owner),
-                                                    crate::memory::heap::p01_owner::TASK_FIELDS,
-                                                );
-                                            task.open_files.insert(*fd, FileHandle::new(file));
-
-                                            // Set return value (a0 / regs[10]); errors use the
-                                            // syscall ABI sentinel usize::MAX (same encoding as
-                                            // ViCell_syscall_dispatch), not a fake 0-byte success.
-                                            task.trap_frame.regs[10] =
-                                                res.unwrap_or(usize::MAX) as _;
-
-                                            // Wake task
-                                            task.state = TaskState::Ready;
-                                            task.pending_future = None;
-                                            polled_tasks.push(id);
-                                        }
-                                        Poll::Pending => {
-                                            // Still waiting
-                                        } //
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            for id in polled_tasks {
-                self.push_ready(id);
             }
         }
 
@@ -3094,7 +3022,10 @@ mod retirement_tests {
             "blocked-boot",
             alloc::vec![],
         ));
-        blocked.state = TaskState::Waiting { target: 0 };
+        blocked.state = TaskState::Blocked {
+            wait: WaitKind::Join { target: 0 },
+            deadline: None,
+        };
         scheduler.tasks.insert(TID, blocked);
 
         crate::sched::hart_local::ready::set_current_task_id(hart, TID);

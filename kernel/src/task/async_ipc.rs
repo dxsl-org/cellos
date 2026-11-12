@@ -8,6 +8,7 @@ use super::{
 };
 use crate::ipc::ipc_wire;
 use crate::sched::scheduler::Scheduler;
+use crate::task::tcb::{Delivery, WaitKind};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -407,15 +408,17 @@ fn owner_of(sched: &Scheduler, token: usize) -> Option<usize> {
     owner
 }
 
-/// Make the owner runnable after one of its operations turned terminal: an
-/// `IpcWait` park, or a completion wait whose mask names the IPC source.
+/// Make the owner runnable after one of its operations turned terminal: any
+/// completion-source wait that names IPC (`WaitCompletion(IPC)` or `IpcWait`).
 fn wake(sched: &mut Scheduler, owner: usize) {
     if let Some(task) = sched.tasks.get_mut(&owner) {
-        let waiting = match task.state {
-            TaskState::WaitIpc { .. } => true,
-            TaskState::WaitCompletion { source, .. } => source & api::completion::source::IPC != 0,
-            _ => false,
-        };
+        let waiting = matches!(
+            task.state,
+            TaskState::Blocked {
+                wait: WaitKind::Completion { source, .. },
+                ..
+            } if source & api::completion::source::IPC != 0
+        );
         if waiting {
             task.state = TaskState::Ready;
             let priority = sched.push_ready(owner);
@@ -599,8 +602,7 @@ pub fn submit_request(owner: usize, peer: usize, request: Request<'_>) -> Result
         .observe_owner(heap_owner);
     pushed?;
     let target = sched.tasks.get_mut(&peer).ok_or(Failure::PeerGone)?;
-    let recv_eligible =
-        matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == owner);
+    let recv_eligible = matches!(target.state, TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. } if mask == 0 || mask == owner);
     if super::queue_wire_msg(target, wire, super::tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err() {
         remove_operation(sched, owner, token);
         return Err(Failure::Busy);
@@ -967,7 +969,13 @@ pub fn take_or_park_kernel(
     let op = task.async_operations.find(token).ok_or(Failure::Invalid)?;
     let Phase::Terminal { kind, len } = op.phase else {
         super::arm_ipc_block_handoff(owner);
-        task.state = TaskState::WaitIpc { deadline: None };
+        task.state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
         return Ok(None);
     };
     out[..len].copy_from_slice(&op.reply.as_slice()[..len]);
@@ -1083,7 +1091,13 @@ pub fn wait(owner: usize, ticks: u64) -> Result<bool, Failure> {
             return Ok(true);
         }
         super::arm_ipc_block_handoff(owner);
-        task.state = TaskState::WaitIpc { deadline };
+        task.state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline,
+        };
     }
     super::yield_cpu();
     let guard = SCHEDULER.lock();
@@ -1449,11 +1463,23 @@ mod tests {
             },
         );
         serve(&mut sched, PROVIDER, OWNER, 12);
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
         expire(&mut sched, 9);
         assert!(matches!(
             sched.tasks[&OWNER].state,
-            TaskState::WaitIpc { .. }
+            TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    delivery: Delivery::IpcTerminal,
+                    ..
+                },
+                ..
+            }
         ));
         assert!(!sched.tasks[&OWNER].async_operations.has_terminal());
         assert!(matches!(
@@ -1832,11 +1858,19 @@ mod tests {
         let mut sched = fixture();
         add_operation(&mut sched, OWNER, PROVIDER, 11, Phase::Dispatched);
         add_operation(&mut sched, WORKER, PROVIDER, 12, Phase::Queued);
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
-        sched.tasks.get_mut(&WORKER).unwrap().state = TaskState::Recv {
-            mask: PROVIDER,
-            buf_ptr: 0,
-            buf_len: 0,
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
+        sched.tasks.get_mut(&WORKER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Recv {
+                mask: PROVIDER,
+                buf_ptr: 0,
+                buf_len: 0,
+            },
             deadline: None,
         };
         peer_died(&mut sched, PROVIDER, 1_003, 7);
@@ -1844,7 +1878,10 @@ mod tests {
         assert!(sched.tasks[&OWNER].async_operations.has_terminal());
         assert!(matches!(
             sched.tasks[&WORKER].state,
-            TaskState::Recv { mask: PROVIDER, .. }
+            TaskState::Blocked {
+                wait: WaitKind::Recv { mask: PROVIDER, .. },
+                ..
+            }
         ));
         assert!(sched.tasks[&WORKER].async_operations.has_terminal());
         crate::sched::hart_local::ready::remove_from_all(OWNER);
@@ -2013,10 +2050,12 @@ mod tests {
         use super::super::syscall::resume_or_repark;
         let mut sched = fixture();
         serve(&mut sched, PROVIDER, OWNER, 10);
-        sched.tasks.get_mut(&PROVIDER).unwrap().state = TaskState::Recv {
-            mask: OWNER,
-            buf_ptr: 0,
-            buf_len: 0,
+        sched.tasks.get_mut(&PROVIDER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Recv {
+                mask: OWNER,
+                buf_ptr: 0,
+                buf_len: 0,
+            },
             deadline: None,
         };
         add_operation(&mut sched, OWNER, PROVIDER, 11, Phase::Queued);
@@ -2033,10 +2072,9 @@ mod tests {
         );
         assert!(matches!(
             sched.tasks[&PROVIDER].state,
-            TaskState::Recv {
-                mask: OWNER,
-                deadline: None,
-                ..
+            TaskState::Blocked {
+                wait: WaitKind::Recv { mask: OWNER, .. },
+                deadline: None
             }
         ));
     }
@@ -2054,9 +2092,9 @@ mod tests {
         assert!(early.is_none());
         assert!(matches!(
             sched.tasks[&PROVIDER].state,
-            TaskState::Recv {
-                deadline: Some(u64::MAX),
-                ..
+            TaskState::Blocked {
+                wait: WaitKind::Recv { .. },
+                deadline: Some(u64::MAX)
             }
         ));
 
@@ -2200,7 +2238,13 @@ mod tests {
         add_operation(&mut sched, OWNER, PROVIDER, 61, Phase::Queued);
         queue_op_wire(&mut sched, OWNER, PROVIDER, 61);
         add_operation(&mut sched, OWNER, PROVIDER, 62, Phase::Dispatched);
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
         cutover_peer(&mut sched, PROVIDER, 1_003, 7);
         assert_eq!(terminal_kind(&sched, OWNER, 61), Some(PEER_GONE));
         assert_eq!(terminal_kind(&sched, OWNER, 62), None);
@@ -2750,7 +2794,13 @@ mod tests {
         // Caller is parked in WaitIpc when Provider settles the call.
         add_operation(&mut sched, OWNER, PROVIDER, 102, Phase::Dispatched);
         serve(&mut sched, PROVIDER, OWNER, 102);
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
         assert_eq!(
             reply_current_in_sched(&mut sched, PROVIDER, OWNER, 0, 0),
             Some(Ok(()))
@@ -2763,7 +2813,13 @@ mod tests {
         // 3. Race 3: Remote peer-death vs parked caller race
         // Caller is parked in WaitIpc when Provider crashes on another hart.
         add_operation(&mut sched, OWNER, PROVIDER, 103, Phase::Dispatched);
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitIpc { deadline: None };
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::IPC,
+                delivery: Delivery::IpcTerminal,
+            },
+            deadline: None,
+        };
         peer_died(&mut sched, PROVIDER, 1_003, 7);
         // Caller must be transitioned to Ready with PeerGone terminal.
         assert!(matches!(sched.tasks[&OWNER].state, TaskState::Ready));
@@ -2907,8 +2963,11 @@ mod tests {
     }
 
     fn park(sched: &mut Scheduler, mask: u32) {
-        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::WaitCompletion {
-            source: mask,
+        sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: mask,
+                delivery: Delivery::Queue,
+            },
             deadline: None,
         };
     }
@@ -3468,13 +3527,25 @@ mod tests {
         assert_eq!(take_or_park_kernel(OWNER, token, &mut out), Ok(None));
         assert!(matches!(
             SCHEDULER.lock().as_ref().unwrap().tasks[&OWNER].state,
-            TaskState::WaitIpc { deadline: None }
+            TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    delivery: Delivery::IpcTerminal,
+                    ..
+                },
+                deadline: None
+            }
         ));
         peer_died(SCHEDULER.lock().as_mut().unwrap(), PROVIDER, 1_003, 7);
         assert!(
             !matches!(
                 SCHEDULER.lock().as_ref().unwrap().tasks[&OWNER].state,
-                TaskState::WaitIpc { .. }
+                TaskState::Blocked {
+                    wait: WaitKind::Completion {
+                        delivery: Delivery::IpcTerminal,
+                        ..
+                    },
+                    ..
+                }
             ),
             "the provider's death must wake the parked caller"
         );

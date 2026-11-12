@@ -40,6 +40,7 @@ fn wire_message_bounds() {
 mod tombstone_target {
     use crate::sched::scheduler::Scheduler;
     use crate::sync::SpinlockGuard;
+    use crate::task::tcb::WaitKind;
     use crate::task::tcb::{Task, TaskState};
     use crate::task::{ipc_send_kernel, ipc_target_is_tombstone, IpcSendError, SCHEDULER};
     use types::CellId;
@@ -87,10 +88,12 @@ mod tombstone_target {
     }
 
     fn recv() -> TaskState {
-        TaskState::Recv {
-            mask: 0,
-            buf_ptr: 0x0200_0000,
-            buf_len: 64,
+        TaskState::Blocked {
+            wait: WaitKind::Recv {
+                mask: 0,
+                buf_ptr: 0x0200_0000,
+                buf_len: 64,
+            },
             deadline: None,
         }
     }
@@ -104,9 +107,12 @@ mod tombstone_target {
             TaskState::Ready,
             TaskState::Running,
             recv(),
-            TaskState::Sending {
-                target: CALLER,
-                delivery_id: 1,
+            TaskState::Blocked {
+                wait: WaitKind::Send {
+                    target: CALLER,
+                    delivery_id: 1,
+                },
+                deadline: None,
             },
             TaskState::Frozen { swap_id: 1 },
         ] {

@@ -243,6 +243,7 @@ pub(crate) fn prime_user_mode_entry_at(task: &mut Task, entry: usize, arg: usize
 
 // use alloc::vec::Vec;
 use tcb::TaskState;
+use tcb::{Delivery, WaitKind};
 use types::*;
 
 #[cfg(not(cellos_posture = "release"))]
@@ -355,7 +356,7 @@ fn wake_after_ipc_publish(target: &mut Task, recv_eligible: bool) -> IpcWakeCaus
         IpcWakeCause::Recv
     } else if matches!(
         target.state,
-        TaskState::WaitCompletion { source, .. }
+        TaskState::Blocked { wait: WaitKind::Completion { source, delivery: Delivery::Queue, .. }, .. }
             if source & api::completion::source::NET_RX != 0
     ) {
         IpcWakeCause::NetRxCompletionWait
@@ -448,7 +449,7 @@ pub fn inbound_ipc_drained(target_id: usize) -> bool {
             .is_some_and(|target| target.pending_msgs.is_empty());
         mailbox_empty
             && !sched.tasks.values().any(
-                |task| matches!(task.state, TaskState::Sending { target, .. } if target == target_id),
+                |task| matches!(task.state, TaskState::Blocked { wait: WaitKind::Send { target, .. }, .. } if target == target_id),
             )
     })
 }
@@ -2318,8 +2319,7 @@ pub fn ipc_send_kernel(
         .tasks
         .get(&target_id)
         .ok_or(IpcSendError::TargetGone)?;
-    let recv_eligible =
-        matches!(target.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id);
+    let recv_eligible = matches!(target.state, TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. } if mask == 0 || mask == caller_id);
     let target_frozen = matches!(target.state, TaskState::Frozen { .. });
     // A target already blocked sending *to this caller* is the other half of a
     // send cycle: it cannot consume this message until its own send completes,
@@ -2329,8 +2329,7 @@ pub fn ipc_send_kernel(
     // Cell every ~1 s). Queueing is safe instead: the message is owned by the
     // receiver's mailbox, so the target consumes it as soon as its own send
     // lands, and the caller is free to receive the message that unblocks it.
-    let target_sending_to_caller =
-        matches!(target.state, TaskState::Sending { target: peer, .. } if peer == caller_id);
+    let target_sending_to_caller = matches!(target.state, TaskState::Blocked { wait: WaitKind::Send { target: peer, .. }, .. } if peer == caller_id);
     let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
         queue_wire_msg(target, wire_msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
             .map_err(|_| IpcSendError::Backpressure)?;
@@ -2351,9 +2350,12 @@ pub fn ipc_send_kernel(
     arm_ipc_block_handoff(caller_id);
     if let Some(caller) = sched.tasks.get_mut(&caller_id) {
         caller.reply_value = None;
-        caller.state = TaskState::Sending {
-            target: target_id,
-            delivery_id: header.delivery_id,
+        caller.state = TaskState::Blocked {
+            wait: WaitKind::Send {
+                target: target_id,
+                delivery_id: header.delivery_id,
+            },
+            deadline: None,
         };
     }
     Ok(1)
@@ -2392,10 +2394,15 @@ pub fn ipc_post_nonblock(
         // Known pre-existing contract gap (2026-07-31 Recv buffer-pinning audit):
         // unlike ipc_send/ipc_try_send, this path intentionally preserves its
         // current behavior of matching any Recv without consulting the mask.
-        let recv_eligible = sched
-            .tasks
-            .get(&target_id)
-            .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
+        let recv_eligible = sched.tasks.get(&target_id).is_some_and(|t| {
+            matches!(
+                t.state,
+                TaskState::Blocked {
+                    wait: WaitKind::Recv { .. },
+                    ..
+                }
+            )
+        });
 
         let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
         let header = crate::ipc::ipc_wire::IpcWireHeader {
@@ -2461,10 +2468,12 @@ pub fn ipc_recv(
         let Some(index) = slot else {
             arm_ipc_block_handoff(caller_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.state = TaskState::Recv {
-                    mask,
-                    buf_ptr,
-                    buf_len,
+                caller.state = TaskState::Blocked {
+                    wait: WaitKind::Recv {
+                        mask,
+                        buf_ptr,
+                        buf_len,
+                    },
                     deadline: None,
                 };
             }
@@ -2612,7 +2621,7 @@ pub(crate) fn wake_sender_token(
         && sender_task.cell_generation == header.sender_generation;
     let token_matches = matches!(
         sender_task.state,
-        TaskState::Sending { target, delivery_id }
+        TaskState::Blocked { wait: WaitKind::Send { target, delivery_id }, .. }
             if target == target_id && delivery_id == header.delivery_id
     );
     if identity_matches && token_matches {
@@ -2727,7 +2736,7 @@ pub fn ipc_try_send(
             let target_ready = sched
                 .tasks
                 .get(&target_id)
-                .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
+                .map(|t| matches!(t.state, TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. } if mask == 0 || mask == caller_id))
                 .unwrap_or(false);
             let is_same_cell_wake_candidate = sched
                 .tasks
@@ -2781,7 +2790,7 @@ pub fn ipc_try_send(
     let recv_eligible = sched
         .tasks
         .get(&target_id)
-        .map(|t| matches!(t.state, TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id))
+        .map(|t| matches!(t.state, TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. } if mask == 0 || mask == caller_id))
         .unwrap_or(false);
     let is_reactor_wake = match (sched.tasks.get(&caller_id), sched.tasks.get(&target_id)) {
         (Some(c), Some(t)) => {

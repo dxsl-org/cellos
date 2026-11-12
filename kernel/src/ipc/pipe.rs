@@ -440,8 +440,13 @@ fn session_wake(sched: &mut crate::sched::scheduler::Scheduler, tid: usize) {
     if let Some(task) = sched.tasks.get_mut(&tid) {
         if matches!(
             task.state,
-            crate::task::tcb::TaskState::PipeRead { .. }
-                | crate::task::tcb::TaskState::PipeWrite { .. }
+            crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::PipeRead { .. },
+                ..
+            } | crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::PipeWrite { .. },
+                ..
+            }
         ) {
             task.state = crate::task::tcb::TaskState::Ready;
             sched.push_ready(tid);

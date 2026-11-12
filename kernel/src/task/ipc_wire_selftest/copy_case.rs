@@ -6,6 +6,7 @@ use super::{
 };
 use crate::memory::address_space::AddressSpace;
 use crate::task::tcb::TaskState;
+use crate::task::tcb::WaitKind;
 
 pub(super) fn run_copy_case(
     harts: usize,
@@ -22,10 +23,12 @@ pub(super) fn run_copy_case(
     // Receiver parked in Recv so ipc_send takes the wake path.
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER_TID) {
-            receiver.state = TaskState::Recv {
-                mask: 0,
-                buf_ptr: RECEIVER_VA,
-                buf_len: COPY_LEN,
+            receiver.state = TaskState::Blocked {
+                wait: WaitKind::Recv {
+                    mask: 0,
+                    buf_ptr: RECEIVER_VA,
+                    buf_len: COPY_LEN,
+                },
                 deadline: None,
             };
         }

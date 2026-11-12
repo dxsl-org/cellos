@@ -5,6 +5,7 @@
 use super::*;
 #[allow(unused_imports)]
 use super::{authority::*, decode::*, dev::*, fs::*, grant::*, misc::*, spawn::*, vm::*};
+use crate::task::tcb::WaitKind;
 
 pub(super) fn ipc_error(error: crate::task::async_ipc::Failure) -> SyscallError {
     match error {
@@ -764,9 +765,9 @@ pub(super) fn recv_timeout(
                         // Blocked with deadline:None — install the absolute deadline.
                         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                             if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                                if let crate::task::tcb::TaskState::Recv {
+                                if let crate::task::tcb::TaskState::Blocked {
+                                    wait: crate::task::tcb::WaitKind::Recv { .. },
                                     deadline: ref mut d,
-                                    ..
                                 } = task.state
                                 {
                                     *d = Some(deadline);
@@ -1097,7 +1098,10 @@ pub(super) fn wait(caller_id: usize, pid: usize) -> SyscallResult {
         }
 
         if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-            caller.state = TaskState::Waiting { target: pid };
+            caller.state = TaskState::Blocked {
+                wait: WaitKind::Join { target: pid },
+                deadline: None,
+            };
         }
     }
     crate::task::yield_cpu();
@@ -1200,7 +1204,10 @@ pub(super) fn set_timer(deadline: usize) -> SyscallResult {
     // Sleep!
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.current_task_mut() {
-            task.state = TaskState::Sleeping { until: wake_at };
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Sleep,
+                deadline: Some(wake_at as u64),
+            };
         }
     }
     // Yield CPU safely
@@ -1423,7 +1430,13 @@ pub(super) fn wait_for_event(caller_id: usize, mask: u32, deadline: Option<u64>)
     // Park: set WaitEvent state so the timer sweep can wake this task.
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&caller_id) {
-            task.state = crate::task::tcb::TaskState::WaitEvent { mask, deadline };
+            task.state = crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::Completion {
+                    source: api::completion::source::NET_RX,
+                    delivery: crate::task::tcb::Delivery::EventMask(mask),
+                },
+                deadline,
+            };
         }
     }
     // Yield; wake happens in pick_next's global sweep (on any hart).

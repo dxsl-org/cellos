@@ -7,6 +7,7 @@ use super::{
 use crate::ipc::ipc_wire::MAX_IPC_WIRE_PAYLOAD;
 use crate::memory::address_space::AddressSpace;
 use crate::task::tcb::TaskState;
+use crate::task::tcb::WaitKind;
 
 pub(super) fn run_race_case(sender_space: &AddressSpace, receiver_space: &AddressSpace) -> bool {
     const RACE_LEN: usize = 128;
@@ -41,7 +42,10 @@ pub(super) fn run_race_case(sender_space: &AddressSpace, receiver_space: &Addres
     let death = crate::task::SCHEDULER.lock().as_mut().is_some_and(|sched| {
         let sender_blocked = matches!(
             sched.tasks.get(&SENDER_TID).map(|t| &t.state),
-            Some(TaskState::Sending { .. })
+            Some(TaskState::Blocked {
+                wait: WaitKind::Send { .. },
+                ..
+            })
         );
         if sender_blocked {
             sched.exit_task(SENDER_TID, 0);

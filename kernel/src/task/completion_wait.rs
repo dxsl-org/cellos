@@ -19,7 +19,7 @@
 
 use super::completion::{self, Completion, CompletionQueue};
 use super::syscall::{validate_user_buf, SyscallError};
-use super::tcb::{CompletionWait, Task, TaskState};
+use super::tcb::{CompletionWait, Delivery, Task, TaskState, WaitKind};
 use super::waker;
 use crate::dev::irq_wait::{self, IrqLineSet};
 use api::completion::{ViCompletion, COMPLETION_LEN};
@@ -146,6 +146,62 @@ pub(crate) fn irq_wake_due(task: &Task, source: u32) -> bool {
     source & api::completion::source::IRQ != 0 && !irq_lines_ready(task).is_empty()
 }
 
+/// What the event sweep does with a task parked in a completion-source wait.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SweepWake {
+    Stay,
+    /// Ready it; the waiter computes its own result when it runs.
+    Ready,
+    /// Ready it with these fired `WaitForEvent` bits as the syscall result.
+    Fired(u32),
+    /// Its deadline passed: ready it with result 0. `timed_out` asks the sweep
+    /// for the receive-timeout treatment (caller context dropped, deadline miss
+    /// counted).
+    Deadline {
+        timed_out: bool,
+    },
+}
+
+/// The sweep's rule for every completion-source wait (CP1 D2/D3): a source
+/// event first, then the deadline. Atomics only on the event side, so it is
+/// safe under `SCHEDULER`.
+///
+/// - `Queue` (`WaitCompletion`): a pending line of the wait's IRQ snapshot
+///   readies it (NET_RX and IPC complete through their own paths); on the
+///   deadline it is a receive-style timeout unless the mask names `TIMER`.
+/// - `EventMask` (`WaitForEvent`): fired NET_RX level bits are consumed here
+///   and returned; the deadline is a receive-style timeout.
+/// - `IpcTerminal` (`IpcWait`): terminals wake it through `async_ipc::wake`;
+///   the deadline returns 0 without the timeout treatment.
+/// - `IrqLine` (`WaitIrq`): the pending line is consumed and its waiter slot
+///   cleared here, exactly once; it has no deadline.
+pub(crate) fn sweep_wake(
+    task: &Task,
+    source: u32,
+    delivery: Delivery,
+    deadline: Option<u64>,
+    now: u64,
+) -> SweepWake {
+    let expired = deadline.is_some_and(|d| now >= d);
+    match delivery {
+        Delivery::Queue if irq_wake_due(task, source) => SweepWake::Ready,
+        Delivery::Queue if expired => SweepWake::Deadline {
+            timed_out: source & api::completion::source::TIMER == 0,
+        },
+        Delivery::EventMask(mask) => match waker::consume_pending(mask) {
+            0 if expired => SweepWake::Deadline { timed_out: true },
+            0 => SweepWake::Stay,
+            fired => SweepWake::Fired(fired),
+        },
+        Delivery::IpcTerminal if expired => SweepWake::Deadline { timed_out: false },
+        Delivery::IrqLine(line) if irq_wait::take_pending(line) => {
+            irq_wait::clear_waiter(line);
+            SweepWake::Ready
+        }
+        _ => SweepWake::Stay,
+    }
+}
+
 /// One record chosen for a multi-source completion wait.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) struct Selection {
@@ -260,7 +316,13 @@ pub(super) fn publish_wait_state_locked(
         return CompletionParkDecision::IrqPending;
     }
     super::arm_ipc_block_handoff(tid);
-    task.state = TaskState::WaitCompletion { source, deadline };
+    task.state = TaskState::Blocked {
+        wait: WaitKind::Completion {
+            source,
+            delivery: Delivery::Queue,
+        },
+        deadline,
+    };
     CompletionParkDecision::Parked
 }
 
@@ -1120,6 +1182,64 @@ mod tests {
         assert!(settled(&queue));
         assert!(take_owned_line(OWNER, line), "the line is pending again");
         assert_eq!(pcie_msi::release_for(OWNER), 1);
+    }
+
+    /// D2/D3: the legacy waits share the completion sweep but keep their own
+    /// results. WaitForEvent returns the fired bits or times out like a
+    /// receive; IpcWait's deadline is silent; WaitIrq takes its line and frees
+    /// its waiter slot exactly once; WaitCompletion is a receive-style timeout
+    /// only when its mask does not name TIMER.
+    #[test]
+    fn the_sweep_keeps_each_completion_delivery_result() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let task = Task::new(TID + 2, CellId(72), "sweep", alloc::vec::Vec::new());
+        let _ = waker::consume_pending(NET_RX);
+
+        let event = Delivery::EventMask(NET_RX);
+        assert_eq!(
+            sweep_wake(&task, NET_RX, event, Some(10), 9),
+            SweepWake::Stay
+        );
+        waker::relevel_net_rx();
+        assert_eq!(
+            sweep_wake(&task, NET_RX, event, Some(10), 9),
+            SweepWake::Fired(NET_RX)
+        );
+        assert_eq!(
+            sweep_wake(&task, NET_RX, event, Some(10), 10),
+            SweepWake::Deadline { timed_out: true }
+        );
+
+        let ipc = Delivery::IpcTerminal;
+        assert_eq!(sweep_wake(&task, IPC, ipc, None, u64::MAX), SweepWake::Stay);
+        assert_eq!(
+            sweep_wake(&task, IPC, ipc, Some(3), 3),
+            SweepWake::Deadline { timed_out: false }
+        );
+
+        let line = 0xC7;
+        let owner = TID + 2;
+        assert!(irq_wait::register_waiter(line, owner, 0));
+        let irq = Delivery::IrqLine(line);
+        assert_eq!(sweep_wake(&task, IRQ, irq, None, 1), SweepWake::Stay);
+        irq_wait::restore_pending(line);
+        assert_eq!(sweep_wake(&task, IRQ, irq, None, 1), SweepWake::Ready);
+        assert!(!irq_wait::has_waiter(line), "the waiter slot is freed");
+        assert_eq!(
+            sweep_wake(&task, IRQ, irq, None, 1),
+            SweepWake::Stay,
+            "the line was consumed"
+        );
+
+        let queue = Delivery::Queue;
+        assert_eq!(
+            sweep_wake(&task, IPC, queue, Some(4), 4),
+            SweepWake::Deadline { timed_out: true }
+        );
+        assert_eq!(
+            sweep_wake(&task, IPC | TIMER, queue, Some(4), 4),
+            SweepWake::Deadline { timed_out: false }
+        );
     }
 }
 

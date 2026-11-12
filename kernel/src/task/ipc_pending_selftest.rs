@@ -6,6 +6,7 @@
 //! foreign buffer. Teardown removes every synthetic task and ready-queue entry.
 
 use super::completion_selftest::{insert, queue, remove};
+use super::tcb::{Delivery, WaitKind};
 use super::tcb::{Task, TaskState, HOTSWAP_MSG_QUEUE_DEPTH, INPUT_EVENT_QUEUE_DEPTH};
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
@@ -27,10 +28,12 @@ fn prepare_receiver(mask: usize) {
     insert(RECEIVER, TEST_CELL + 1);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
-            task.state = TaskState::Recv {
-                mask,
-                buf_ptr: INVALID_RECV_PTR,
-                buf_len: 16,
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Recv {
+                    mask,
+                    buf_ptr: INVALID_RECV_PTR,
+                    buf_len: 16,
+                },
                 deadline: None,
             };
         }
@@ -45,8 +48,11 @@ fn prepare_completion_wait_receiver() {
         .as_mut()
         .and_then(|sched| sched.tasks.get_mut(&RECEIVER))
     {
-        task.state = TaskState::WaitCompletion {
-            source: api::completion::source::NET_RX,
+        task.state = TaskState::Blocked {
+            wait: WaitKind::Completion {
+                source: api::completion::source::NET_RX,
+                delivery: Delivery::Queue,
+            },
             deadline: None,
         };
     }
@@ -72,7 +78,7 @@ fn reset() {
 }
 
 fn all_producers_defer_foreign_writes() -> bool {
-    // RecvScatter leaves the same TaskState::Recv shape behind, but its temporary
+    // RecvScatter leaves the same WaitKind::Recv shape behind, but its temporary
     // buffer is already gone. INVALID_RECV_PTR models that stale pointer: exercising
     // every producer here proves none of them dereferences either Recv variant's
     // retained destination outside the receiver's own syscall context.
@@ -117,9 +123,12 @@ fn send_to_a_target_blocked_sending_to_us_queues() -> bool {
     insert(RECEIVER, TEST_CELL + 1);
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
-            task.state = TaskState::Sending {
-                target: SENDER,
-                delivery_id: 1,
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Send {
+                    target: SENDER,
+                    delivery_id: 1,
+                },
+                deadline: None,
             };
         }
     }
@@ -130,7 +139,7 @@ fn send_to_a_target_blocked_sending_to_us_queues() -> bool {
         let guard = super::SCHEDULER.lock();
         match guard.as_ref().and_then(|sched| sched.tasks.get(&RECEIVER)) {
             Some(task)
-                if matches!(task.state, TaskState::Sending { target, .. } if target == SENDER)
+                if matches!(task.state, TaskState::Blocked { wait: WaitKind::Send { target, .. }, .. } if target == SENDER)
                     && matches!(
                         task.pending_msgs.as_slice(),
                         [msg] if msg.sender_tid == SENDER && msg.payload() == payload
@@ -161,12 +170,12 @@ fn kernel_send_respects_receiver_mask() -> bool {
         let sender = sched.tasks.get(&SENDER);
         matches!(
             receiver.map(|task| &task.state),
-            Some(TaskState::Recv { mask, .. }) if *mask == usize::MAX
+            Some(TaskState::Blocked { wait: WaitKind::Recv { mask, .. }, .. }) if *mask == usize::MAX
         ) && receiver.is_some_and(|task| {
             matches!(task.pending_msgs.as_slice(), [msg] if msg.sender_tid == SENDER && msg.payload() == payload)
         }) && matches!(
             sender.map(|task| &task.state),
-            Some(TaskState::Sending { target, .. }) if *target == RECEIVER
+            Some(TaskState::Blocked { wait: WaitKind::Send { target, .. }, .. }) if *target == RECEIVER
         )
     };
     reset();
@@ -203,7 +212,7 @@ fn verify_completion_wait_wake(expected: &[u8], ready_before: usize, sender_bloc
         if sender_blocks {
             matches!(
                 sender.state,
-                TaskState::Sending { target, .. } if target == RECEIVER
+                TaskState::Blocked { wait: WaitKind::Send { target, .. }, .. } if target == RECEIVER
             )
         } else {
             sender.state == TaskState::Ready
@@ -266,8 +275,12 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
             .is_some_and(|task| {
                 matches!(
                     task.state,
-                    TaskState::WaitCompletion {
-                        source: api::completion::source::NET_RX,
+                    TaskState::Blocked {
+                        wait: WaitKind::Completion {
+                            source: api::completion::source::NET_RX,
+                            delivery: Delivery::Queue,
+                            ..
+                        },
                         ..
                     }
                 ) && task.pending_msgs.is_empty()
@@ -336,8 +349,12 @@ fn timer_completion_wait_remains_deadline_only() -> bool {
             .is_some_and(|task| {
                 matches!(
                     task.state,
-                    TaskState::WaitCompletion {
-                        source: api::completion::source::TIMER,
+                    TaskState::Blocked {
+                        wait: WaitKind::Completion {
+                            source: api::completion::source::TIMER,
+                            delivery: Delivery::Queue,
+                            ..
+                        },
                         ..
                     }
                 ) && matches!(
@@ -383,8 +400,12 @@ fn completion_wait_mailbox_is_unchanged(depth: usize, ready_before: usize) -> bo
     sched.tasks.get(&RECEIVER).is_some_and(|task| {
         matches!(
             task.state,
-            TaskState::WaitCompletion {
-                source: api::completion::source::NET_RX,
+            TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    source: api::completion::source::NET_RX,
+                    delivery: Delivery::Queue,
+                    ..
+                },
                 ..
             }
         ) && task.pending_msgs.len() == depth
@@ -579,8 +600,13 @@ fn full_mailbox_refuses_without_wake() -> bool {
             .as_ref()
             .and_then(|sched| sched.tasks.get(&RECEIVER))
             .is_some_and(|task| {
-                matches!(task.state, TaskState::Recv { .. })
-                    && task.caller.current.is_none()
+                matches!(
+                    task.state,
+                    TaskState::Blocked {
+                        wait: WaitKind::Recv { .. },
+                        ..
+                    }
+                ) && task.caller.current.is_none()
                     && task.pending_msgs.len() == HOTSWAP_MSG_QUEUE_DEPTH
             })
     };
@@ -936,8 +962,11 @@ fn multi_source_wait_reports_each_source_once() -> bool {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         token = super::async_ipc::selftest_accept_dispatched(sched, RECEIVER, SENDER);
         if let Some(task) = sched.tasks.get_mut(&RECEIVER) {
-            task.state = TaskState::WaitCompletion {
-                source: mask,
+            task.state = TaskState::Blocked {
+                wait: WaitKind::Completion {
+                    source: mask,
+                    delivery: Delivery::Queue,
+                },
                 deadline: None,
             };
         }

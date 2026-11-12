@@ -882,11 +882,13 @@ pub(crate) fn period_wait_target(s: &Scheduler) -> Result<Option<usize>> {
         }
         if !matches!(
             task.state,
-            crate::task::tcb::TaskState::Recv {
-                mask: 0,
-                deadline: None,
-                buf_len: 2,
-                ..
+            crate::task::tcb::TaskState::Blocked {
+                wait: crate::task::tcb::WaitKind::Recv {
+                    mask: 0,
+                    buf_len: 2,
+                    ..
+                },
+                deadline: None
             }
         ) || !task.pending_msgs.is_empty()
         {
@@ -916,7 +918,11 @@ pub(crate) fn join_wait_target(s: &Scheduler) -> Result<Option<usize>> {
         let Some(parent) = s.tasks.get(&root) else {
             return Ok(None);
         };
-        let crate::task::tcb::TaskState::Waiting { target } = parent.state else {
+        let crate::task::tcb::TaskState::Blocked {
+            wait: crate::task::tcb::WaitKind::Join { target },
+            ..
+        } = parent.state
+        else {
             return Ok(None);
         };
         let Some(worker) = s.tasks.get(&target) else {
@@ -929,11 +935,13 @@ pub(crate) fn join_wait_target(s: &Scheduler) -> Result<Option<usize>> {
             || !worker.waiters.contains(&root)
             || !matches!(
                 worker.state,
-                crate::task::tcb::TaskState::Recv {
-                    mask: 0,
-                    deadline: None,
-                    buf_len: 2,
-                    ..
+                crate::task::tcb::TaskState::Blocked {
+                    wait: crate::task::tcb::WaitKind::Recv {
+                        mask: 0,
+                        buf_len: 2,
+                        ..
+                    },
+                    deadline: None
                 }
             )
             || !worker.pending_msgs.is_empty()
@@ -975,11 +983,13 @@ pub(crate) fn start_wait_targets(s: &Scheduler) -> Result<([Option<usize>; M], u
             }
             if !matches!(
                 worker.state,
-                crate::task::tcb::TaskState::Recv {
-                    mask: 0,
-                    deadline: None,
-                    buf_len: 3,
-                    ..
+                crate::task::tcb::TaskState::Blocked {
+                    wait: crate::task::tcb::WaitKind::Recv {
+                        mask: 0,
+                        buf_len: 3,
+                        ..
+                    },
+                    deadline: None
                 }
             ) || !worker.pending_msgs.is_empty()
             {
