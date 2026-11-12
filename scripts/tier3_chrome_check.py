@@ -18,8 +18,12 @@ from PIL import Image
 from tier3_display_check import CHROME_H, CHROME_TASKBAR, CHROME_W, CHROME_X, CHROME_Y, ipv4
 from tier3_vm import SCREEN_H, SCREEN_W, Vm
 
-# Chromium's default light theme (sampled from phase 04's evidence).
-TAB_STRIP, OMNIBOX = (211, 227, 253), (237, 242, 250)
+# Chromium's default light theme (sampled from phase 04's evidence). The omnibox
+# is white while it holds keyboard focus, which it does when Chromium is up
+# before the window loses focus.
+TAB_STRIP = (211, 227, 253)
+OMNIBOX, OMNIBOX_FOCUSED = (237, 242, 250), (255, 255, 255)
+SETTLE_BEFORE_TYPING = 15  # seconds
 # https://example.com/ paints its page background #eee in light mode.
 EXAMPLE_BACKGROUND = (238, 238, 238)
 PAGE_WINDOW = 300
@@ -65,7 +69,8 @@ def chromium_ui(image: Image.Image, x0: int = CHROME_X, y0: int = CHROME_Y,
     """Chromium's tab strip and omnibox, sampled near the content's right edge."""
     x = x0 + width - 330
     return (near(image.getpixel((x, y0 + 15)), TAB_STRIP)
-            and near(image.getpixel((x, y0 + 62)), OMNIBOX))
+            and any(near(image.getpixel((x, y0 + 62)), colour)
+                    for colour in (OMNIBOX, OMNIBOX_FOCUSED)))
 
 
 def page_share(image: Image.Image, colour) -> float:
@@ -122,6 +127,10 @@ def run(args) -> list:
             return checks
         checks.append(("control-not-example-before", page_share(image, EXAMPLE_BACKGROUND) < 0.5))
 
+        # Chromium keeps loading for a while after its UI first paints; a key
+        # typed then can see its release late and auto-repeat
+        # ("httppppps://..."), so let the guest settle before typing.
+        time.sleep(SETTLE_BEFORE_TYPING)
         vm.click(CHROME_X + 400, CHROME_Y + 62)
         vm.press("ctrl", "a")
         vm.type_text(args.url)

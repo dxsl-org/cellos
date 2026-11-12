@@ -9,7 +9,8 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export HOME=/root XDG_RUNTIME_DIR=/run/user/0
 export WLR_RENDERER=pixman WLR_NO_HARDWARE_CURSORS=1 LIBSEAT_BACKEND=seatd
 
-log() { echo "$1" > /dev/ttyS0; }
+# Every marker carries the guest uptime, so a slow start can be placed.
+log() { echo "$1 up=$(cut -d' ' -f1 /proc/uptime)" > /dev/ttyS0; }
 
 mount -t tmpfs -o mode=0755 tmpfs /run
 mount -t tmpfs -o mode=1777 tmpfs /tmp

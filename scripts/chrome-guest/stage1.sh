@@ -35,6 +35,6 @@ mount -t overlay overlay -o lowerdir=/lower,upperdir=/rw/upper,workdir=/rw/work 
 for fs in proc sys dev; do
     mount --move "/$fs" "/newroot/$fs" || fail "move-$fs"
 done
-echo "CHROME_GUEST_ROOT_MOUNTED" > /newroot/dev/ttyS0
+echo "CHROME_GUEST_ROOT_MOUNTED up=$(cut -d" " -f1 /newroot/proc/uptime)" > /newroot/dev/ttyS0
 exec switch_root /newroot /sbin/chrome-guest-init
 fail switch-root
