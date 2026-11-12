@@ -1,6 +1,6 @@
 # CP2 — one IPC operation model (Phase 11)
 
-**Date:** 2026-11-12 · **CP1:** [cp1-ipc-model.md](cp1-ipc-model.md) (owner confirmation 1, 2026-11-11) · **Law 1:** confirmation 2 requested · **Branch:** `p11-step7` (steps 3–7 in seven commits on `53b0d3200`)
+**Date:** 2026-11-12 · **CP1:** [cp1-ipc-model.md](cp1-ipc-model.md) (owner confirmation 1, 2026-11-11) · **Law 1:** confirmation 2 given 2026-11-12 · **Branch:** `p11-step7` (steps 3–7 in seven commits on `53b0d3200`)
 
 ## 1. Delta as implemented
 
@@ -69,3 +69,7 @@ The two-node nightly lane was run through the x86-c2c two-node TCG gate; no phys
 - CP1 §4.3 bridge ordering has no UI-lane witness; CP1 §4.2 `Rename` kill is a host test (QEMU kill cannot be timed).
 - Pre-existing, not touched: CI's x86-c2c image step refuses its in-repo `--out-dir`; the shell-test lane's `SFN SHELL` check; images without an input service cannot start a serial shell (`vfs-quota`, broker oracle); promotion-validator digest pins; `native-workload` and `actor-supervisor` (step 3 log).
 - `allowed_drivers` and `pku_key` stay (copied to threads), as CP1 said.
+
+## 7. Owner decision
+
+2026-11-12: **CP2 confirmed** (Law-1 confirmation 2) for D1–D7 as implemented in §1, with their deviations. Not part of this confirmation: removing `libs/api/src/abi/fast_ipc.rs` (§2 item 2) stays a proposal for a later slice, and the raw fixed-result opcodes (§2 item 3) stay listed for a later CP.
