@@ -13,10 +13,11 @@ extern crate alloc;
 
 use crate::error::HotswapError;
 use crate::transfer::{send_restore_event, send_snapshot_event};
+use ostd::service::namespace_flags;
 use ostd::syscall::{
-    sys_commit_hotswap, sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_pause_service,
-    sys_query_hotswap_ready, sys_register_service, sys_resume_cell, sys_spawn_replacement,
-    sys_get_scheduler_ticks, sys_state_restore, sys_state_stash_clear, sys_yield,
+    sys_commit_hotswap, sys_freeze_cell, sys_get_scheduler_ticks, sys_kill_cell,
+    sys_lookup_service, sys_pause_service, sys_query_hotswap_ready, sys_register_service,
+    sys_resume_cell, sys_spawn_replacement, sys_state_restore, sys_state_stash_clear, sys_yield,
 };
 
 /// Budget for the stash and for readiness, in 10 ms scheduler ticks (5 s). The
@@ -124,7 +125,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
 
     // ── Step 2: SERIALIZE ─────────────────────────────────────────────────────
     if let Err(e) = send_snapshot_event(old_tid, swap_id) {
-        let _ = sys_register_service(service_id, old_tid);
+        let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
         return Err(e);
     }
 
@@ -133,7 +134,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     match wait_for_stash_key(stash_key) {
         Ok(()) | Err(HotswapError::SnapshotTimeout) => {}
         Err(e) => {
-            let _ = sys_register_service(service_id, old_tid);
+            let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
             return Err(e);
         }
     }
@@ -141,7 +142,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     // ── Step 3: SPAWN ─────────────────────────────────────────────────────────
     // Snapshot is complete; now stop the old task and publish its cap ceiling.
     if sys_freeze_cell(old_tid).is_err() {
-        let _ = sys_register_service(service_id, old_tid);
+        let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
         sys_state_stash_clear(stash_key);
         return Err(HotswapError::FreezeFailed);
     }
@@ -152,7 +153,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
             ostd::syscall::SyscallResult::Ok(tid) => tid,
             ostd::syscall::SyscallResult::Err(_) => {
                 sys_resume_cell(old_tid).ok();
-                let _ = sys_register_service(service_id, old_tid);
+                let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
                 sys_state_stash_clear(stash_key);
                 return Err(HotswapError::SpawnFailed);
             }
@@ -190,7 +191,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
 fn rollback_spawned(service_id: u16, old_tid: usize, new_tid: usize, stash_key: u64) {
     let _ = sys_kill_cell(new_tid, 0xAAAA_AAAB_u32);
     sys_resume_cell(old_tid).ok();
-    let _ = sys_register_service(service_id, old_tid);
+    let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
     sys_state_stash_clear(stash_key);
 }
 
@@ -201,7 +202,7 @@ fn wait_for_service_pause(service_id: u16, old_tid: usize) -> Result<(), Hotswap
             return Ok(());
         }
         if expired(start) {
-            let _ = sys_register_service(service_id, old_tid);
+            let _ = sys_register_service(service_id, old_tid, namespace_flags(service_id));
             return Err(HotswapError::PauseFailed);
         }
         sys_yield();

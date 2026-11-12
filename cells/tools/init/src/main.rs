@@ -147,7 +147,7 @@ fn start_services() {
     }
 
     if !matches!(
-        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid),
+        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid, 0),
         ostd::syscall::SyscallResult::Ok(0)
     ) {
         println("Init: Ocel activator registration failed — autoload blocked.");

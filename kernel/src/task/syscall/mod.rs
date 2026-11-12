@@ -1319,9 +1319,11 @@ fn handle_syscall_inner(
             a3,
         } => dev::query_machine_facts(caller_id, out_ptr, out_len, a2, a3),
 
-        Syscall::RegisterService { service_id, tid } => {
-            authority::register_service(caller_id, service_id, tid)
-        }
+        Syscall::RegisterService {
+            service_id,
+            tid,
+            flags,
+        } => authority::register_service(caller_id, service_id, tid, flags),
         Syscall::LookupService { service_id } => authority::lookup_service(service_id),
         Syscall::LookupServiceBound {
             service_id,

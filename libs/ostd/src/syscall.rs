@@ -956,11 +956,19 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
 /// publish only a private id (`>= 0x100`) that no other live registrar owns. A
 /// kernel-defined narrow capability may instead authorize one fixed service ID
 /// with `tid=0` self-registration.
+/// `flags` ([`api::syscall::service_flags`]) are the namespace owner's: any other
+/// caller passes 0. [`crate::service::namespace_flags`] is init's policy for them.
 /// Returns `Ok(0)` on success and `Err` when authority is absent, the target is
 /// invalid, or the registry is full.
-pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
+pub fn sys_register_service(service_id: u16, tid: usize, flags: usize) -> SyscallResult {
     unsafe {
-        let ret = syscall(ViSyscall::RegisterService, service_id as usize, tid, 0, 0);
+        let ret = syscall(
+            ViSyscall::RegisterService,
+            service_id as usize,
+            tid,
+            flags,
+            0,
+        );
         if ret == 0 {
             SyscallResult::Ok(0)
         } else {

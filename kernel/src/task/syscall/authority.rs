@@ -534,7 +534,25 @@ pub(super) fn cap_revoke(caller_id: usize, target_tid: usize, cap_mask: u32) -> 
 }
 
 /// Handler for `Syscall::RegisterService` (extracted from the dispatcher).
-pub(super) fn register_service(caller_id: usize, service_id: u16, tid: usize) -> SyscallResult {
+pub(super) fn register_service(
+    caller_id: usize,
+    service_id: u16,
+    tid: usize,
+    flags: usize,
+) -> SyscallResult {
+    if flags & !api::syscall::service_flags::ALL != 0 {
+        return Err(SyscallError::InvalidInput);
+    }
+    // Flags are the namespace owner's decision for a named provider; the narrow
+    // `tid=0` self-registration paths below publish rows without them.
+    if flags != 0 {
+        if tid == 0 {
+            return Err(SyscallError::InvalidInput);
+        }
+        if !(caller_is_trusted_init(caller_id) || caller_has_supervisor(caller_id)) {
+            return Err(SyscallError::PermissionDenied);
+        }
+    }
     // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
     // so no caller may publish the singleton service.
     if service_id == api::syscall::service::BLOCK_DRIVER {
@@ -628,7 +646,7 @@ pub(super) fn register_service(caller_id: usize, service_id: u16, tid: usize) ->
         return Err(SyscallError::InvalidInput);
     };
     match crate::cell::service_registry::register_as(
-        registrar, service_id, tid, cell_id, generation,
+        registrar, service_id, tid, cell_id, generation, flags,
     ) {
         Ok(()) => Ok(0),
         Err(crate::cell::service_registry::Refusal::NotOwner) => {
@@ -708,8 +726,10 @@ pub(super) fn resolve_cell_owner(
             .resolve_live_cell_owner(types::CellId(cell_id), generation)
             .ok_or(SyscallError::PermissionDenied)?;
         let vfs_principal = sched.tasks.get(&caller_id).is_some_and(|task| {
-            crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                && task.caller.cell_id == cell_id
+            crate::cell::service_registry::retains_outer_caller(
+                task.cell_id.0,
+                task.cell_generation,
+            ) && task.caller.cell_id == cell_id
                 && task.caller.cell_generation == generation
         });
         let registered_service =
@@ -765,8 +785,10 @@ pub(super) fn resolve_cell_owner_record(
         let guard = crate::task::SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
         let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
-            crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                && task.caller.cell_id == request.cell_id
+            crate::cell::service_registry::retains_outer_caller(
+                task.cell_id.0,
+                task.cell_generation,
+            ) && task.caller.cell_id == request.cell_id
                 && task.caller.cell_generation == request.generation
         });
         if !allowed {
@@ -801,7 +823,7 @@ pub(super) fn resolve_cell_image(
             sched,
             caller_id,
             request,
-            crate::fast_ipc::is_registered_vfs_cell,
+            crate::cell::service_registry::retains_outer_caller,
         )
         .ok_or(SyscallError::PermissionDenied)?
     };

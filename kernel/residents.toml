@@ -137,9 +137,6 @@
 # ---- ed25519 ----
 "kernel/src/ed25519.rs" = { category = "B", owner = "ed25519" }
 
-# ---- fast_ipc ----
-"kernel/src/fast_ipc.rs" = { category = "A", owner = "fast_ipc" }
-
 # ---- fs ----
 "kernel/src/fs.rs" = { category = "C", owner = "fs" }
 "kernel/src/fs/fat.rs" = { category = "C", owner = "fs" }

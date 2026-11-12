@@ -431,8 +431,8 @@ pub struct Task {
     /// while this watcher was NOT parked in Recv. Drained by the next `Recv`
     /// regardless of mask, preserving the public NotifyOnExit contract.
     pub pending_deaths: Vec<(usize, usize)>,
-    /// Root-owner death events of registered watchers (the VFS cell and the
-    /// live `OWNER_WATCH_SERVICES` providers), kept separate from generic task watches.
+    /// Root-owner death events of registered watchers (Active providers of
+    /// `OWNER_WATCH` registry rows), kept separate from generic task watches.
     ///
     /// The opaque watch token never crosses the syscall ABI: it binds this queued
     /// event to the exact subscription so a stale cancellation cannot affect a
@@ -911,11 +911,15 @@ impl Task {
         sender_generation: u64,
         token: usize,
     ) -> Option<usize> {
-        // VFS may perform nested IPC while serving a request. Its outer caller
-        // remains the authority for grants and owner-death watches until VFS
-        // sends that caller's response; a storage reply must not replace it.
-        if crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize)
-            && self.caller.current.is_some()
+        // A RETAINS_OUTER_CALLER provider (VFS) may perform nested IPC while
+        // serving a request. Its outer caller remains the authority for grants
+        // and owner-death watches until it sends that caller's response; a
+        // storage reply must not replace it.
+        if self.caller.current.is_some()
+            && crate::cell::service_registry::retains_outer_caller(
+                self.cell_id.0,
+                self.cell_generation,
+            )
         {
             return None;
         }
@@ -927,9 +931,15 @@ impl Task {
     /// Drop VFS's public request context and return the exact lease identity
     /// that must be released after the scheduler lock is dropped.
     pub fn begin_receive_context(&mut self, mask: usize) -> Option<(usize, u64)> {
-        // VFS uses a wildcard receive only at its public request loop. Masked
-        // receives are nested dependency replies and keep the outer authority.
-        if mask == 0 && crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize) {
+        // A RETAINS_OUTER_CALLER provider uses a wildcard receive only at its
+        // public request loop. Masked receives are nested dependency replies
+        // and keep the outer authority.
+        if mask == 0
+            && crate::cell::service_registry::retains_outer_caller(
+                self.cell_id.0,
+                self.cell_generation,
+            )
+        {
             let dropped = self
                 .caller
                 .current
@@ -942,8 +952,8 @@ impl Task {
 
     /// Whether a receive mask may dequeue a tokenized owner-death event.
     ///
-    /// Owner death is routed on a registered watcher's public plane only (VFS,
-    /// the `OWNER_WATCH_SERVICES` providers). Its root TID and subscription token identify the event after this
+    /// Owner death is routed on a registered watcher's public plane only (the
+    /// `OWNER_WATCH` providers). Its root TID and subscription token identify the event after this
     /// predicate succeeds; neither is a sender match and therefore neither can
     /// authorize a masked backend receive.
     #[inline]

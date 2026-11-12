@@ -411,6 +411,24 @@ pub mod service {
     pub const XE_GPU: u16 = 21;
 }
 
+/// `RegisterService` flags (`a2`): kernel rights a registry row grants the Cell
+/// incarnation it names. Only the namespace owner (trusted init or a
+/// `SupervisorCap` holder) may set them; a set bit outside [`ALL`](service_flags::ALL)
+/// is refused. A hot-swap commit carries the row's flags to the replacement.
+pub mod service_flags {
+    /// The provider keeps its outer caller (grant leases, owner resolution,
+    /// owner-death watches) across the nested IPC it makes while serving; only
+    /// its next wildcard receive or its reply ends that context. Holds while the
+    /// row is Active or Paused, so requests already in flight finish.
+    pub const RETAINS_OUTER_CALLER: usize = 1 << 0;
+    /// The provider may watch the root death of the principal it is serving
+    /// (`WatchCellOwner`/`WatchCellOwnerRecord`). Only while the row is Active:
+    /// a hot-swap quiesce grants no new watch.
+    pub const OWNER_WATCH: usize = 1 << 1;
+    /// Every defined flag.
+    pub const ALL: usize = RETAINS_OUTER_CALLER | OWNER_WATCH;
+}
+
 /// Arguments for `SpawnFromMem`.
 ///
 /// Using `repr(C)` for ABI stability. The caller supplies raw ELF bytes plus a

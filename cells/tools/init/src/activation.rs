@@ -311,7 +311,7 @@ impl Activator {
             && readiness(provider)
             && task_alive(tid) == Some(true)
             && matches!(
-                syscall::sys_register_service(service_id(engine), tid),
+                syscall::sys_register_service(service_id(engine), tid, 0),
                 SyscallResult::Ok(0)
             )
             && syscall::sys_lookup_service(service_id(engine)) == Some(tid)

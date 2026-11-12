@@ -103,7 +103,7 @@ fn dispatch(provider: &mut Provider, from: Sender, msg: Msg) {
         },
         Msg::Restored { epoch, revision } if provider.auth.is_writer(epoch, from) => {
             let published = matches!(
-                ostd::syscall::sys_register_service(WORKER_SERVICE, from.tid),
+                ostd::syscall::sys_register_service(WORKER_SERVICE, from.tid, 0),
                 ostd::syscall::SyscallResult::Ok(_)
             );
             provider.state = if published {

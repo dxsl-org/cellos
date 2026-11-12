@@ -1109,6 +1109,7 @@ fn register_service_refuses_the_retired_block_driver_id() {
             Syscall::RegisterService {
                 service_id: api::syscall::service::BLOCK_DRIVER,
                 tid,
+                flags: 0,
             },
         );
         assert_eq!(refused, Err(SyscallError::PermissionDenied));
@@ -1407,6 +1408,7 @@ fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
                 Syscall::RegisterService {
                     service_id: MACHINE_PIN,
                     tid: target,
+                    flags: 0,
                 },
             )
         };
@@ -1481,9 +1483,17 @@ fn register_service_refuses_well_known_hijack_by_a_spawn_only_cell() {
                 .tasks
                 .insert(tid, task);
         }
-        let register = |caller, service_id, tid| {
-            super::handle_syscall(caller, Syscall::RegisterService { service_id, tid })
+        let register_flagged = |caller, service_id, tid, flags| {
+            super::handle_syscall(
+                caller,
+                Syscall::RegisterService {
+                    service_id,
+                    tid,
+                    flags,
+                },
+            )
         };
+        let register = |caller, service_id, tid| register_flagged(caller, service_id, tid, 0);
         assert_eq!(
             register(HIJACKER, VFS, HIJACKER),
             Err(SyscallError::PermissionDenied)
@@ -1491,6 +1501,27 @@ fn register_service_refuses_well_known_hijack_by_a_spawn_only_cell() {
         assert_ne!(crate::cell::service_registry::lookup(VFS), Some(HIJACKER));
         assert_eq!(register(SUPERVISOR, VFS, SUPERVISOR), Ok(0));
         assert_eq!(crate::cell::service_registry::lookup(VFS), Some(SUPERVISOR));
+        // D1: flags are the namespace owner's, and undefined bits are refused.
+        let flags = api::syscall::service_flags::ALL;
+        assert_eq!(
+            register_flagged(HIJACKER, PRIVATE_ID, HIJACKER, flags),
+            Err(SyscallError::PermissionDenied)
+        );
+        assert_eq!(
+            register_flagged(SUPERVISOR, VFS, SUPERVISOR, flags + 1),
+            Err(SyscallError::InvalidInput)
+        );
+        assert_eq!(register_flagged(SUPERVISOR, VFS, SUPERVISOR, flags), Ok(0));
+        let generation = SCHEDULER
+            .lock()
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&SUPERVISOR))
+            .map(|task| task.cell_generation)
+            .expect("supervisor task");
+        assert!(crate::cell::service_registry::retains_outer_caller(
+            SUPERVISOR as u64,
+            generation
+        ));
         assert_eq!(register(HIJACKER, PRIVATE_ID, HIJACKER), Ok(0));
         crate::cell::service_registry::clear_tid(HIJACKER);
         crate::cell::service_registry::clear_tid(SUPERVISOR);
@@ -1858,6 +1889,14 @@ fn owner_watch_scheduler() -> Scheduler {
 /// `registry` published (and `pause` applied) for the duration of the call
 /// only: the global registry is shared with tests that do not take
 /// `TEST_STATE_LOCK`.
+/// The services these cases register with `OWNER_WATCH` (init's policy for
+/// them; which services init flags is pinned in `ostd::service`).
+const OWNER_WATCH_ROWS: [u16; 3] = [
+    api::syscall::service::NET,
+    api::syscall::service::COMPOSITOR,
+    api::syscall::service::XE_GPU,
+];
+
 fn owner_watch(
     sched: &mut Scheduler,
     registry: &[(u16, usize, u64, u64)],
@@ -1866,9 +1905,22 @@ fn owner_watch(
     generation: u64,
 ) -> Option<(api::cell_owner::CellOwner, u64)> {
     for &(service, tid, cell_id, gen) in registry {
-        assert!(crate::cell::service_registry::register(
-            service, tid, cell_id, gen
-        ));
+        let flags = if OWNER_WATCH_ROWS.contains(&service) {
+            api::syscall::service_flags::OWNER_WATCH
+        } else {
+            0
+        };
+        assert_eq!(
+            crate::cell::service_registry::register_as(
+                crate::cell::service_registry::Registrar::Namespace,
+                service,
+                tid,
+                cell_id,
+                gen,
+                flags,
+            ),
+            Ok(())
+        );
     }
     if let Some((service, tid)) = pause {
         assert!(crate::cell::service_registry::pause(service, tid));
@@ -1897,7 +1949,7 @@ fn assert_owner_watch(
     assert_eq!(sched.cell_owner_watch_count(), usize::from(want), "{label}");
 }
 
-/// Every service id the registry can bind that is not in the owner-watch table.
+/// Every service id the registry can bind that these cases register unflagged.
 fn services_outside_owner_watch_table() -> alloc::vec::Vec<u16> {
     use api::syscall::service as s;
     [
@@ -1918,7 +1970,7 @@ fn services_outside_owner_watch_table() -> alloc::vec::Vec<u16> {
         s::OCEL_JS,
     ]
     .into_iter()
-    .filter(|id| !crate::sched::scheduler::OWNER_WATCH_SERVICES.contains(id))
+    .filter(|id| !OWNER_WATCH_ROWS.contains(id))
     .collect()
 }
 
@@ -2107,7 +2159,7 @@ fn assert_owner_watch_grant_for(service: u16) {
 #[test]
 fn owner_watch_grant_matrix() {
     use api::syscall::service::{COMPOSITOR, NET};
-    for &service in &crate::sched::scheduler::OWNER_WATCH_SERVICES {
+    for &service in &OWNER_WATCH_ROWS {
         assert_owner_watch_grant_for(service);
     }
 
@@ -2178,11 +2230,22 @@ fn owner_watch_grant_matrix() {
         CLIENT_GEN,
     );
 
-    // Regression: the registered VFS cell is granted exactly as before, with
-    // no service registration, and is held to the same serving-context proof.
-    crate::fast_ipc::set_vfs_handler_cell(NET_CELL as usize);
+    // The grant follows the row's flag, not the service id: a VFS row its
+    // registrar flagged grants exactly like the rows above, and is held to the
+    // same serving-context proof.
+    assert_eq!(
+        crate::cell::service_registry::register_as(
+            crate::cell::service_registry::Registrar::Namespace,
+            api::syscall::service::VFS,
+            NET_TID,
+            NET_CELL,
+            NET_GEN,
+            api::syscall::service_flags::ALL,
+        ),
+        Ok(())
+    );
     assert_owner_watch(
-        "vfs cell",
+        "flagged vfs row",
         true,
         &[],
         None,
@@ -2191,7 +2254,7 @@ fn owner_watch_grant_matrix() {
         CLIENT_GEN,
     );
     assert_owner_watch(
-        "vfs cell, other principal",
+        "flagged vfs row, other principal",
         false,
         &[],
         None,
@@ -2199,30 +2262,15 @@ fn owner_watch_grant_matrix() {
         OTHER_CELL,
         OTHER_GEN,
     );
-    crate::fast_ipc::clear_vfs_if_cell(NET_CELL as usize);
+    crate::cell::service_registry::clear_tid(NET_TID);
     assert_owner_watch(
-        "vfs cleared",
+        "vfs row cleared",
         false,
         &[],
         None,
         nothing,
         CLIENT_CELL,
         CLIENT_GEN,
-    );
-}
-
-/// Tripwire: who may hold an owner watch is an explicit owner decision.
-/// Adding a service here is a reviewed change with its own consumer and
-/// grant-matrix coverage, never a silent widening.
-#[test]
-fn owner_watch_services_are_an_explicit_table() {
-    assert_eq!(
-        crate::sched::scheduler::OWNER_WATCH_SERVICES,
-        [
-            api::syscall::service::NET,
-            api::syscall::service::COMPOSITOR,
-            api::syscall::service::XE_GPU
-        ]
     );
 }
 

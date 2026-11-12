@@ -148,15 +148,6 @@ mod tests {
     }
 
     #[test]
-    fn fast_path_never_serves_the_namespace() {
-        let table = live_table();
-        for path in INSIDE {
-            assert!(!table.can_read_fast(PROVIDER, path), "{path}: fast read");
-            assert!(!table.can_read_fast(OTHER, path), "{path}: fast read");
-        }
-    }
-
-    #[test]
     fn namespace_and_ancestors_cannot_be_removed() {
         let table = live_table();
         for path in [
@@ -188,7 +179,6 @@ mod tests {
             for caller in [PROVIDER, OTHER] {
                 assert!(!table.can_read(caller, path), "{path}: read");
                 assert!(!table.can_write(caller, path), "{path}: write");
-                assert!(!table.can_read_fast(caller, path), "{path}: fast read");
                 assert!(!table.can_remove_tree(caller, path), "{path}: remove tree");
                 assert!(!table.can_remove_dir(caller, path), "{path}: rmdir");
             }

@@ -35,6 +35,22 @@ pub fn lookup(service_id: u16) -> Option<usize> {
     syscall::sys_lookup_service(service_id)
 }
 
+/// The [`api::syscall::service_flags`] the namespace owner (init, and the
+/// supervisor when it rolls a hot swap back) registers `service_id` with.
+///
+/// VFS keeps its outer caller across nested IPC and watches the owners it
+/// serves; NET, the compositor and the Intel GPU driver watch the owners whose
+/// resources they reclaim. Each entry is an owner decision with its own reclaim
+/// consumer.
+pub const fn namespace_flags(service_id: u16) -> usize {
+    use api::syscall::service_flags::{ALL, OWNER_WATCH};
+    match service_id {
+        service::VFS => ALL,
+        service::NET | service::COMPOSITOR | service::XE_GPU => OWNER_WATCH,
+        _ => 0,
+    }
+}
+
 /// Register the calling cell as the live provider of `service_id`.
 ///
 /// Well-known ids require trusted init or `SupervisorCap`; a `SpawnCap`-only cell may
@@ -46,7 +62,7 @@ pub fn lookup(service_id: u16) -> Option<usize> {
 /// Returns `ViError::PermissionDenied` when the caller lacks matching authority, or
 /// `ViError::Unknown` if the registry is full.
 pub fn register(service_id: u16, tid: usize) -> ViResult<()> {
-    match syscall::sys_register_service(service_id, tid) {
+    match syscall::sys_register_service(service_id, tid, 0) {
         syscall::SyscallResult::Ok(_) => Ok(()),
         syscall::SyscallResult::Err(_) => Err(ViError::PermissionDenied),
     }
@@ -263,3 +279,29 @@ pub type InputRef = ServiceRef<{ service::INPUT }>;
 pub type ConfigRef = ServiceRef<{ service::CONFIG }>;
 /// Convenience type alias — compositor service handle.
 pub type CompositorRef = ServiceRef<{ service::COMPOSITOR }>;
+
+#[cfg(test)]
+mod tests {
+    use super::{namespace_flags, service};
+    use api::syscall::service_flags::{ALL, OWNER_WATCH};
+
+    /// Tripwire: which services the namespace owner flags is an owner decision.
+    /// Adding one is a reviewed change with its own reclaim consumer and kernel
+    /// grant coverage, never a silent widening.
+    #[test]
+    fn namespace_flags_are_an_explicit_table() {
+        let flagged: alloc::vec::Vec<(u16, usize)> = (0..=u16::MAX)
+            .map(|id| (id, namespace_flags(id)))
+            .filter(|&(_, flags)| flags != 0)
+            .collect();
+        assert_eq!(
+            flagged,
+            [
+                (service::VFS, ALL),
+                (service::NET, OWNER_WATCH),
+                (service::COMPOSITOR, OWNER_WATCH),
+                (service::XE_GPU, OWNER_WATCH),
+            ]
+        );
+    }
+}

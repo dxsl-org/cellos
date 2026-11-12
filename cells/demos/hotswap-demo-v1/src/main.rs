@@ -74,7 +74,7 @@ static STATE: Mutex<DemoState> = Mutex::new(DemoState::new());
 fn main_handler(ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            match ostd::syscall::sys_register_service(api::syscall::service::HOTSWAP_DEMO, 0) {
+            match ostd::syscall::sys_register_service(api::syscall::service::HOTSWAP_DEMO, 0, 0) {
                 ostd::syscall::SyscallResult::Ok(_) => {
                     println("[hotswap-demo-v1] service registered")
                 }

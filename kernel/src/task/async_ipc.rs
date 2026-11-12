@@ -814,7 +814,10 @@ fn reply_in_sched(
             let keep = match sched.tasks.get_mut(&tid) {
                 Some(task) if task.current_async_op == token => {
                     let clear = (task.cell_id, task.cell_generation) == binding
-                        && !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize);
+                        && !crate::cell::service_registry::retains_outer_caller(
+                            task.cell_id.0,
+                            task.cell_generation,
+                        );
                     if clear {
                         task.clear_current_caller_context();
                     }

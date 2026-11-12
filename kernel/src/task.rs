@@ -1573,7 +1573,6 @@ pub fn yield_cpu() {
             if let Some(sched) = SCHEDULER.lock().as_mut() {
                 sched.release_waiters_after_resource_drop(waiter_wakes);
             }
-            crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
             tally.shm_frames_released = crate::task::syscall::release_shm_for(
                 retirement.owner.cell_id,
                 retirement.owner.generation,

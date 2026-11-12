@@ -38,43 +38,28 @@ pub const MAX_SERVICES: usize = 32;
 /// `service_id` → current provider. `0` is never stored as a tid (it is the ABI
 /// "no provider" sentinel returned by `lookup`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ServiceEntry {
-    Active {
-        tid: usize,
-        cell_id: u64,
-        generation: u64,
-    },
-    Paused {
-        tid: usize,
-        cell_id: u64,
-        generation: u64,
-    },
+struct ServiceEntry {
+    tid: usize,
+    cell_id: u64,
+    generation: u64,
+    /// [`api::syscall::service_flags`] granted to this incarnation.
+    flags: usize,
+    /// Hidden from lookups by a hot-swap quiesce; the provider still runs.
+    paused: bool,
 }
 
 impl ServiceEntry {
-    fn tid(self) -> usize {
-        match self {
-            ServiceEntry::Active { tid, .. } | ServiceEntry::Paused { tid, .. } => tid,
-        }
-    }
-
     /// The provider's Cell identity, or `None` when it names no live Cell.
     ///
     /// `cell_id == 0` is the kernel's own allocation rather than any Cell, and a
     /// zero generation is not an epoch. Either one means the entry cannot support
     /// a binding, so `LookupServiceBound` treats it exactly like an absent provider.
     fn identity(self) -> Option<(u64, u64)> {
-        let (ServiceEntry::Active {
-            cell_id,
-            generation,
-            ..
-        }
-        | ServiceEntry::Paused {
-            cell_id,
-            generation,
-            ..
-        }) = self;
-        (cell_id != 0 && generation != 0).then_some((cell_id, generation))
+        (self.cell_id != 0 && self.generation != 0).then_some((self.cell_id, self.generation))
+    }
+
+    fn names(self, cell_id: u64, generation: u64) -> bool {
+        self.identity() == Some((cell_id, generation))
     }
 }
 
@@ -104,30 +89,36 @@ pub enum Registrar {
 /// Why [`register_as`] refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// The id is well-known or owned by another live registrar.
+    /// The id is well-known or owned by another live registrar, or flags were
+    /// asked by a registrar that is not the namespace owner.
     NotOwner,
-    /// Zero tid, or the registry/owner table is full.
+    /// Zero tid, an undefined flag bit, or the registry/owner table is full.
     Rejected,
 }
 
 /// Publish `tid` as the provider of `service_id` on behalf of `registrar`.
 ///
-/// A [`Registrar::Spawner`] may publish only a private id, and only one that no
-/// other live spawner owns; its first successful publish makes it the owner
-/// until it exits ([`clear_tid`]), so it can rebind its own restarted child.
+/// A [`Registrar::Spawner`] may publish only a private id, without flags, and
+/// only one that no other live spawner owns; its first successful publish makes
+/// it the owner until it exits ([`clear_tid`]), so it can rebind its own
+/// restarted child.
 pub fn register_as(
     registrar: Registrar,
     service_id: u16,
     tid: usize,
     cell_id: u64,
     generation: u64,
+    flags: usize,
 ) -> Result<(), Refusal> {
+    if flags & !api::syscall::service_flags::ALL != 0 {
+        return Err(Refusal::Rejected);
+    }
     let Registrar::Spawner(spawner) = registrar else {
-        return register(service_id, tid, cell_id, generation)
+        return insert(service_id, tid, cell_id, generation, flags)
             .then_some(())
             .ok_or(Refusal::Rejected);
     };
-    if service_id < PRIVATE_ID_BASE {
+    if service_id < PRIVATE_ID_BASE || flags != 0 {
         return Err(Refusal::NotOwner);
     }
     let mut owners = OWNERS.lock();
@@ -148,15 +139,20 @@ pub fn register_as(
     Ok(())
 }
 
-/// Register `tid` as the current provider of `service_id`, replacing any prior
-/// entry. Returns `false` (rejected) if the registry is full and `service_id` is
-/// new, or if `tid` is 0 (the reserved "none" sentinel). No authority check: the
-/// generic `RegisterService` path uses [`register_as`]; the kernel-defined
-/// self-registration paths (GPU driver, Silo, demo) check their own authority.
+/// Register `tid` as the current provider of `service_id`, without flags,
+/// replacing any prior entry. Returns `false` (rejected) if the registry is
+/// full and `service_id` is new, or if `tid` is 0 (the reserved "none"
+/// sentinel). No authority check: the generic `RegisterService` path uses
+/// [`register_as`]; the kernel-defined self-registration paths (GPU driver,
+/// Silo, demo) check their own authority.
 ///
 /// `cell_id`/`generation` are the provider's live identity, read from the
 /// scheduler by the caller. They are recorded, never invented here.
 pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> bool {
+    insert(service_id, tid, cell_id, generation, 0)
+}
+
+fn insert(service_id: u16, tid: usize, cell_id: u64, generation: u64, flags: usize) -> bool {
     if tid == 0 {
         return false;
     }
@@ -176,20 +172,23 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
     );
     map.insert(
         service_id,
-        ServiceEntry::Active {
+        ServiceEntry {
             tid,
             cell_id,
             generation,
+            flags,
+            paused: false,
         },
     );
     #[cfg(feature = "p01-trace")]
     drop(_semantic);
     log::info!(
-        "[service-registry] {} -> tid {} (cell {} gen {})",
+        "[service-registry] {} -> tid {} (cell {} gen {} flags {:#x})",
         service_id,
         tid,
         cell_id,
-        generation
+        generation,
+        flags
     );
     true
 }
@@ -197,10 +196,11 @@ pub fn register(service_id: u16, tid: usize, cell_id: u64, generation: u64) -> b
 /// Resolve `service_id` to its current provider tid, or `None` if no live
 /// provider is registered. The syscall layer maps `None` to the ABI value 0.
 pub fn lookup(service_id: u16) -> Option<usize> {
-    match REGISTRY.lock().get(&service_id).copied() {
-        Some(ServiceEntry::Active { tid, .. }) => Some(tid),
-        Some(ServiceEntry::Paused { .. }) | None => None,
-    }
+    REGISTRY
+        .lock()
+        .get(&service_id)
+        .filter(|entry| !entry.paused)
+        .map(|entry| entry.tid)
 }
 
 /// Resolve `service_id` to its current provider's full binding
@@ -212,39 +212,47 @@ pub fn lookup(service_id: u16) -> Option<usize> {
 /// the ABI value 0 exactly like [`lookup`].
 pub fn lookup_bound(service_id: u16) -> Option<(usize, u64, u64)> {
     let entry = REGISTRY.lock().get(&service_id).copied()?;
-    if !matches!(entry, ServiceEntry::Active { .. }) {
+    if entry.paused {
         return None;
     }
     let (cell_id, generation) = entry.identity()?;
-    Some((entry.tid(), cell_id, generation))
+    Some((entry.tid, cell_id, generation))
+}
+
+/// Whether the Cell incarnation `(cell_id, generation)` provides a service
+/// whose row carries `RETAINS_OUTER_CALLER`, Active or Paused.
+///
+/// Lock order SCHEDULER -> REGISTRY: callers hold the scheduler lock.
+pub fn retains_outer_caller(cell_id: u64, generation: u64) -> bool {
+    REGISTRY.lock().values().any(|entry| {
+        entry.flags & api::syscall::service_flags::RETAINS_OUTER_CALLER != 0
+            && entry.names(cell_id, generation)
+    })
+}
+
+/// Whether the Cell incarnation `(cell_id, generation)` is the Active provider
+/// of a service whose row carries `OWNER_WATCH`. A Paused row grants nothing,
+/// and a provider bound to one row has no right through another's binding.
+pub fn grants_owner_watch(cell_id: u64, generation: u64) -> bool {
+    REGISTRY.lock().values().any(|entry| {
+        entry.flags & api::syscall::service_flags::OWNER_WATCH != 0
+            && !entry.paused
+            && entry.names(cell_id, generation)
+    })
 }
 
 /// Hide a service from new lookups while its current provider remains runnable.
 ///
 /// The compare-and-pause contract prevents a stale supervisor request from
 /// pausing a replacement that another recovery path already registered.
+/// Pausing preserves the recorded identity and flags verbatim: it is a
+/// visibility change, not a re-registration.
 pub fn pause(service_id: u16, expected_tid: usize) -> bool {
-    let mut map = REGISTRY.lock();
-    match map.get(&service_id).copied() {
-        // Pausing preserves the recorded identity verbatim: the pause is a
-        // visibility change, not a re-registration, and a provider's identity does
-        // not change while it is being quiesced.
-        Some(ServiceEntry::Active {
-            tid,
-            cell_id,
-            generation,
-        }) if tid == expected_tid => {
-            map.insert(
-                service_id,
-                ServiceEntry::Paused {
-                    tid: expected_tid,
-                    cell_id,
-                    generation,
-                },
-            );
+    match REGISTRY.lock().get_mut(&service_id) {
+        Some(entry) if entry.tid == expected_tid => {
+            entry.paused = true;
             true
         }
-        Some(ServiceEntry::Paused { tid, .. }) if tid == expected_tid => true,
         _ => false,
     }
 }
@@ -253,7 +261,8 @@ pub fn pause(service_id: u16, expected_tid: usize) -> bool {
 ///
 /// The hot-swap barrier calls this while holding `SCHEDULER`, preserving the
 /// global `SCHEDULER -> service registry` lock order. `cell_id`/`generation` are
-/// the replacement's live identity, read from the scheduler by that caller.
+/// the replacement's live identity, read from the scheduler by that caller. The
+/// replacement inherits the row's flags.
 pub(crate) fn commit_paused(
     service_id: u16,
     old_tid: usize,
@@ -264,17 +273,15 @@ pub(crate) fn commit_paused(
     if new_tid == 0 {
         return false;
     }
-    let mut map = REGISTRY.lock();
-    match map.get(&service_id).copied() {
-        Some(ServiceEntry::Paused { tid, .. }) if tid == old_tid => {
-            map.insert(
-                service_id,
-                ServiceEntry::Active {
-                    tid: new_tid,
-                    cell_id,
-                    generation,
-                },
-            );
+    match REGISTRY.lock().get_mut(&service_id) {
+        Some(entry) if entry.paused && entry.tid == old_tid => {
+            *entry = ServiceEntry {
+                tid: new_tid,
+                cell_id,
+                generation,
+                flags: entry.flags,
+                paused: false,
+            };
             true
         }
         _ => false,
@@ -283,10 +290,10 @@ pub(crate) fn commit_paused(
 
 /// Check the exact paused provider without exposing registry representation.
 pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
-    matches!(
-        REGISTRY.lock().get(&service_id).copied(),
-        Some(ServiceEntry::Paused { tid, .. }) if tid == expected_tid
-    )
+    REGISTRY
+        .lock()
+        .get(&service_id)
+        .is_some_and(|entry| entry.paused && entry.tid == expected_tid)
 }
 
 /// Return whether `tid` is hidden behind any paused service mapping.
@@ -294,18 +301,16 @@ pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
 /// IPC admission uses this as the quiesce barrier for callers that cached the
 /// provider tid before the mapping was paused.
 pub fn is_paused_tid(tid: usize) -> bool {
-    REGISTRY.lock().values().any(
-        |entry| matches!(entry, ServiceEntry::Paused { tid: provider, .. } if *provider == tid),
-    )
+    REGISTRY
+        .lock()
+        .values()
+        .any(|entry| entry.paused && entry.tid == tid)
 }
 
 /// Return whether `tid` is the active or paused provider of any trusted
 /// supervisor-owned service registration.
 pub fn is_registered_tid(tid: usize) -> bool {
-    REGISTRY
-        .lock()
-        .values()
-        .any(|entry| matches!(entry, ServiceEntry::Active { .. } | ServiceEntry::Paused { .. } if entry.tid() == tid))
+    REGISTRY.lock().values().any(|entry| entry.tid == tid)
 }
 
 /// Remove every registration that points at `tid`. Called from `exit_task` when a
@@ -316,7 +321,7 @@ pub fn clear_tid(tid: usize) {
     {
         let mut map = REGISTRY.lock();
         let before = map.len();
-        map.retain(|_, entry| entry.tid() != tid);
+        map.retain(|_, entry| entry.tid != tid);
         if map.len() != before {
             log::info!(
                 "[service-registry] cleared stale entries for dead tid {}",
@@ -327,15 +332,13 @@ pub fn clear_tid(tid: usize) {
     OWNERS.lock().retain(|_, owner| *owner != tid);
 }
 
+/// `(service_id, tid, paused, flags)` for every row.
 #[cfg(feature = "test-hooks")]
-pub(crate) fn snapshot() -> alloc::vec::Vec<(u16, usize, bool)> {
+pub(crate) fn snapshot() -> alloc::vec::Vec<(u16, usize, bool, usize)> {
     REGISTRY
         .lock()
         .iter()
-        .map(|(service_id, entry)| match entry {
-            ServiceEntry::Active { tid, .. } => (*service_id, *tid, false),
-            ServiceEntry::Paused { tid, .. } => (*service_id, *tid, true),
-        })
+        .map(|(service_id, entry)| (*service_id, entry.tid, entry.paused, entry.flags))
         .collect()
 }
 
@@ -465,13 +468,13 @@ mod tests {
         const HIJACKER: usize = 0x5_11A0;
         for id in [SUPERVISOR, KMS] {
             assert_eq!(
-                register_as(Registrar::Spawner(HIJACKER), id, HIJACKER, CELL, GEN),
+                register_as(Registrar::Spawner(HIJACKER), id, HIJACKER, CELL, GEN, 0),
                 Err(Refusal::NotOwner)
             );
             assert_ne!(lookup(id), Some(HIJACKER));
         }
         assert_eq!(
-            register_as(Registrar::Namespace, KMS, 0x5_11A1, CELL, GEN),
+            register_as(Registrar::Namespace, KMS, 0x5_11A1, CELL, GEN, 0),
             Ok(())
         );
         assert_eq!(lookup(KMS), Some(0x5_11A1));
@@ -489,32 +492,89 @@ mod tests {
         const SUCCESSOR: usize = 0x5_11B2;
         let spawner = Registrar::Spawner;
 
-        assert_eq!(register_as(spawner(OWNER), ID, 0x5_11C0, CELL, GEN), Ok(()));
         assert_eq!(
-            register_as(spawner(OWNER), ID, 0x5_11C1, CELL, GEN + 1),
+            register_as(spawner(OWNER), ID, 0x5_11C0, CELL, GEN, 0),
+            Ok(())
+        );
+        assert_eq!(
+            register_as(spawner(OWNER), ID, 0x5_11C1, CELL, GEN + 1, 0),
             Ok(())
         );
         assert_eq!(lookup(ID), Some(0x5_11C1));
         assert_eq!(
-            register_as(spawner(OTHER), ID, OTHER, CELL, GEN),
+            register_as(spawner(OTHER), ID, OTHER, CELL, GEN, 0),
             Err(Refusal::NotOwner)
         );
         assert_eq!(lookup(ID), Some(0x5_11C1));
         assert_eq!(
-            register_as(spawner(OWNER), ID, 0, CELL, GEN),
+            register_as(spawner(OWNER), ID, 0, CELL, GEN, 0),
             Err(Refusal::Rejected)
         );
 
         clear_tid(OWNER);
         assert_eq!(
-            register_as(spawner(SUCCESSOR), ID, 0x5_11C2, CELL, GEN),
+            register_as(spawner(SUCCESSOR), ID, 0x5_11C2, CELL, GEN, 0),
             Ok(())
         );
         assert_eq!(
-            register_as(spawner(OWNER), ID, 0x5_11C3, CELL, GEN),
+            register_as(spawner(OWNER), ID, 0x5_11C3, CELL, GEN, 0),
             Err(Refusal::NotOwner)
         );
         clear_tid(SUCCESSOR);
         clear_tid(0x5_11C2);
+    }
+
+    /// D1: flags come only from the namespace owner, an undefined bit is refused,
+    /// RETAINS_OUTER_CALLER holds through a quiesce while OWNER_WATCH does not,
+    /// and a hot-swap commit hands both to the replacement.
+    #[test]
+    fn registration_flags_follow_the_row() {
+        use api::syscall::service_flags::{ALL, OWNER_WATCH, RETAINS_OUTER_CALLER};
+        const ID: u16 = 0x7A0C;
+        const OLD: usize = 0x5_11D0;
+        const NEW: usize = 0x5_11D1;
+        const NEW_CELL: u64 = CELL + 1;
+
+        assert_eq!(
+            register_as(Registrar::Namespace, ID, OLD, CELL, GEN, ALL + 1),
+            Err(Refusal::Rejected)
+        );
+        assert_eq!(
+            register_as(Registrar::Spawner(OLD), ID, OLD, CELL, GEN, OWNER_WATCH),
+            Err(Refusal::NotOwner)
+        );
+        assert_eq!(lookup(ID), None);
+
+        assert_eq!(
+            register_as(Registrar::Namespace, ID, OLD, CELL, GEN, ALL),
+            Ok(())
+        );
+        assert!(retains_outer_caller(CELL, GEN) && grants_owner_watch(CELL, GEN));
+        assert!(!retains_outer_caller(CELL, GEN + 1) && !grants_owner_watch(CELL, GEN + 1));
+
+        assert!(pause(ID, OLD));
+        assert!(retains_outer_caller(CELL, GEN));
+        assert!(!grants_owner_watch(CELL, GEN));
+
+        assert!(commit_paused(ID, OLD, NEW, NEW_CELL, GEN));
+        assert!(!retains_outer_caller(CELL, GEN));
+        assert!(retains_outer_caller(NEW_CELL, GEN) && grants_owner_watch(NEW_CELL, GEN));
+
+        // A plain re-registration states its own flags.
+        assert!(register(ID, NEW, NEW_CELL, GEN));
+        assert!(!retains_outer_caller(NEW_CELL, GEN) && !grants_owner_watch(NEW_CELL, GEN));
+        assert_eq!(
+            register_as(
+                Registrar::Namespace,
+                ID,
+                NEW,
+                NEW_CELL,
+                GEN,
+                RETAINS_OUTER_CALLER
+            ),
+            Ok(())
+        );
+        clear_tid(NEW);
+        assert!(!retains_outer_caller(NEW_CELL, GEN));
     }
 }

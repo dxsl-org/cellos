@@ -35,7 +35,6 @@ mod dispatch_dirs;
 mod dispatch_file_handles;
 mod dispatch_grants;
 mod dispatch_paths;
-mod fast_handler;
 mod fat_extent_map;
 mod file_handles;
 mod grant_read;
@@ -52,9 +51,11 @@ mod save;
 mod subtree;
 mod trust;
 
-use fast_handler::{vfs_fast_handler, GLOBAL_VFS};
 use manager::VfsManager;
 use ostd::io::println;
+
+#[cfg(target_os = "none")]
+static GLOBAL_VFS: ostd::prelude::Mutex<Option<VfsManager>> = ostd::prelude::Mutex::new(None);
 
 // Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 // part_data/part_lfs scope the raw block syscalls to P1 (FAT32) + P4
@@ -153,11 +154,6 @@ fn vfs_main() {
         save::selftest::run();
     }
     *GLOBAL_VFS.lock() = Some(vfs);
-
-    // Register the fast-IPC handler so trusted Cells can bypass ecall for VFS reads.
-    // The kernel records the VFS cell's ID at spawn time so it can clear this
-    // pointer if VFS crashes — see loader.rs fast_ipc::set_vfs_handler_cell call.
-    ostd::fast_ipc::register_vfs(vfs_fast_handler);
     let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
     // Full reconciliation runs once per this many idle turns. VFS holds no SetTimer
     // authority (deliberately withheld, see the allowlist; GetTime is only the trust-call
@@ -175,7 +171,7 @@ fn vfs_main() {
         // only while `prepared_cwd::idle_work` says one is unsettled. Otherwise every
         // change arrives as a request or an owner-death notification, and the loop
         // parks in the blocking receive instead of yield-spinning. `idle_work` is
-        // recomputed wherever the loop changes VFS state; the fast-IPC handler only reads.
+        // recomputed wherever the loop changes VFS state.
         let received = if idle_work {
             ostd::syscall::sys_try_recv_attested(0, &mut buf)
         } else {

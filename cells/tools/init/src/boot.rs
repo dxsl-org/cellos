@@ -700,7 +700,7 @@ pub(crate) fn spawn_test_fixtures() {
         match sys_spawn_from_path("/bin/tier2-rpc-provider") {
             SyscallResult::Ok(provider) => {
                 ostd::io::println("Init: tier2-rpc-provider admitted.");
-                match ostd::syscall::sys_register_service(TIER2_RPC_FIXTURE_SERVICE, provider) {
+                match ostd::syscall::sys_register_service(TIER2_RPC_FIXTURE_SERVICE, provider, 0) {
                     SyscallResult::Ok(_) => {
                         ostd::io::println("Init: tier2-rpc-provider registered.")
                     }
@@ -725,7 +725,7 @@ pub(crate) fn spawn_test_fixtures() {
     {
         match sys_spawn_from_path("/bin/edu-holder") {
             SyscallResult::Ok(holder) => {
-                match ostd::syscall::sys_register_service(EDU_EXPORT_HOLDER_SERVICE, holder) {
+                match ostd::syscall::sys_register_service(EDU_EXPORT_HOLDER_SERVICE, holder, 0) {
                     SyscallResult::Ok(_) => ostd::io::println("Init: edu-holder registered."),
                     SyscallResult::Err(_) => {
                         ostd::io::println("Init: edu-holder registration failed.")

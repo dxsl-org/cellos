@@ -125,8 +125,10 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
             wait_for_block_route(tid, service.spec.ready_timeout_ticks)
         }
         (Readiness::Spec, Registration::Init, Some(id)) => {
-            matches!(syscall::sys_register_service(id, tid), SyscallResult::Ok(0))
-                && syscall::sys_lookup_service(id) == Some(tid)
+            matches!(
+                syscall::sys_register_service(id, tid, ostd::service::namespace_flags(id)),
+                SyscallResult::Ok(0)
+            ) && syscall::sys_lookup_service(id) == Some(tid)
         }
         (Readiness::Spec, Registration::SelfReady, Some(id)) => {
             wait_for_exact_registration(id, tid, service.spec.ready_timeout_ticks)

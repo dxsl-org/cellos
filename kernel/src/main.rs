@@ -53,7 +53,6 @@ mod catalog_export;
 pub mod cell;
 pub mod dev; // Kernel-resident device mechanisms (IRQ, IOMMU, MSI, early console)
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
-pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
 pub mod fsapi; // Per-task file descriptors and cwd over BootFS (Spec 15 exception)
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)

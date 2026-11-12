@@ -40,10 +40,8 @@ pub(super) struct StateSnapshot {
     va: (usize, alloc::vec::Vec<u64>),
     replacement: alloc::vec::Vec<crate::cell::hotswap::CeilingSnapshotEntry>,
     block_io_registered: bool,
-    vfs_tid: usize,
-    vfs_handler: usize,
     input_tid: usize,
-    service_routes: alloc::vec::Vec<(u16, usize, bool)>,
+    service_routes: alloc::vec::Vec<(u16, usize, bool, usize)>,
     argv_and_stash: alloc::vec::Vec<(u64, alloc::vec::Vec<u8>)>,
     pub(super) measurements: (usize, [u8; 32]),
     pub(super) audit: (usize, usize, usize),
@@ -130,8 +128,6 @@ pub(super) fn snapshot() -> StateSnapshot {
         va: super::super::va_alloc::snapshot(),
         replacement: crate::cell::hotswap::replacement_ceiling_snapshot(),
         block_io_registered: crate::loader::block_io_registered_snapshot(),
-        vfs_tid: crate::fast_ipc::vfs_handler_cell_snapshot(),
-        vfs_handler: crate::fast_ipc::vfs_handler_pointer_snapshot(),
         input_tid: crate::dev::driver_cell::input_cell_snapshot(),
         service_routes: crate::cell::service_registry::snapshot(),
         argv_and_stash: crate::cell::state_stash::snapshot(),
@@ -215,13 +211,6 @@ pub(super) fn snapshot_matches(
         stage,
         "block-io-route",
         before.block_io_registered != after.block_io_registered,
-    );
-    report_mismatch(case, stage, "vfs-route", before.vfs_tid != after.vfs_tid);
-    report_mismatch(
-        case,
-        stage,
-        "vfs-handler",
-        before.vfs_handler != after.vfs_handler,
     );
     report_mismatch(
         case,

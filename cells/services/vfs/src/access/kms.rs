@@ -116,10 +116,6 @@ mod tests {
                 "{path} should deny stale write"
             );
             assert!(
-                !stale.can_read_fast(CELL, path),
-                "{path} should deny fast path"
-            );
-            assert!(
                 !stale.can_remove_tree(CELL, path),
                 "{path} should deny remove"
             );
@@ -141,10 +137,6 @@ mod tests {
         ] {
             assert!(!table.can_read(CELL, path), "{path} should not read");
             assert!(!table.can_write(CELL, path), "{path} should not write");
-            assert!(
-                !table.can_read_fast(CELL, path),
-                "{path} should not fast-read"
-            );
             assert!(
                 !table.can_remove_tree(CELL, path),
                 "{path} should not remove"

@@ -1813,39 +1813,6 @@ retirement = "never: the latch is not cleared when the Platform cell retires, by
 rationale = "SeqCst compare_exchange gives a single winner across CPUs and the rollback CAS only succeeds for the uncommitted reservation owner. Only the spawn path (and a test-hooks fixture) touches it; no timer-IRQ or AP access."
 review = "kernel/src/task/cap.rs:reserve_platform; kernel/src/task/cap.rs:PlatformCapReservation; kernel/src/loader/governed_spawn.rs:178"
 
-[[global]]
-key = "kernel::fast_ipc::VFS_HANDLER_PTR"
-lifetime = "global"
-mutation = "atomic"
-owner = "kernel::fast_ipc VFS fast-path handler pointer: register_vfs (no production caller) stores, clear_vfs_if_cell nulls on VFS retirement, call_vfs loads"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "none: only test-hooks fixtures and register_vfs (unresolved #[no_mangle]) store it; retirement nulls it"
-retirement = "nulled by clear_vfs_if_cell from yield_cpu's root-retirement funnel when the registered VFS cell retires"
-rationale = "Release store / Acquire load publishes the fn pointer; call_vfs takes no lock. Every writer (register_vfs, set_vfs_handler_cell, clear_vfs_if_cell, the test-hooks restore) holds VFS_HANDLER_WRITE, and clear_vfs_if_cell compares the owner and clears owner and pointer under it, so a retiring VFS cell cannot null a newer registration."
-review = "kernel/src/fast_ipc.rs:register_vfs; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:call_vfs; test stale_owner_clear_preserves_newer_registration"
-
-[[global]]
-key = "kernel::fast_ipc::VFS_HANDLER_CELL"
-lifetime = "global"
-mutation = "atomic"
-owner = "kernel::fast_ipc registered VFS CellId: set by loader::commit_launch_routes for the block_io route, cleared by clear_vfs_if_cell, read by is_registered_vfs_cell for authorization"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "none: set at each block_io launch, cleared at that cell's retirement"
-retirement = "cleared by clear_vfs_if_cell(cell_id) in yield_cpu's root-retirement funnel"
-rationale = "Owner publication and clear are Release, the authorization read is_registered_vfs_cell is Acquire. set_vfs_handler_cell and clear_vfs_if_cell serialise on VFS_HANDLER_WRITE, so the retirement funnel (which calls the clear after dropping SCHEDULER) can no longer erase an owner set by a concurrent launch on another hart. Readers stay lock-free and may transiently see the old or new owner during a transition, as before."
-review = "kernel/src/fast_ipc.rs:set_vfs_handler_cell; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/fast_ipc.rs:is_registered_vfs_cell; kernel/src/loader.rs:commit_launch_routes; test stale_owner_clear_preserves_newer_registration"
-
-[[global]]
-key = "kernel::fast_ipc::VFS_HANDLER_WRITE"
-lifetime = "global"
-mutation = "spinlock"
-owner = "kernel::fast_ipc writer lock for the VFS_HANDLER_PTR / VFS_HANDLER_CELL pair; taken by register_vfs, set_vfs_handler_cell, clear_vfs_if_cell and the test-hooks restore"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "none: taken for the whole run"
-retirement = "never: lives for the whole run (guards no data)"
-rationale = "IRQ-masking Spinlock held only for a few atomic loads/stores, never across the handler call; the clear runs from the retirement funnel (timer ISR, user faults, AP idle) and the setter from launch publication under SCHEDULER, so it nests inside SCHEDULER and nothing is taken under it."
-review = "kernel/src/fast_ipc.rs:VFS_HANDLER_WRITE; kernel/src/fast_ipc.rs:clear_vfs_if_cell; kernel/src/loader.rs:commit_launch_routes"
-
 # ---- slice D ----
 # kernel::snapshot_engine (SNAPSHOT_SCRATCH, the x86 stack-switch global_asm!,
 # KERNEL_DEVICE, KERNEL_MEMORY) is compiled only with `snapshot-qualified`
@@ -2322,7 +2289,7 @@ owner = "loader: commit_launch_routes swaps it when a block-I/O route is publish
 contexts = ["boot", "normal"]
 seal = "one-way false -> true on the first block_io route (production never resets it)"
 retirement = "never: not cleared when the block driver cell retires, so a respawn logs a 'route replaced' warning"
-rationale = "SeqCst swap only drives a warning log; the real route lives in fast_ipc. Production builds have no reader, so the ordering choice carries no data."
+rationale = "SeqCst swap only drives a warning log; no authority reads it (VFS rights come from its registry flags). Production builds have no reader, so the ordering choice carries no data."
 review = "kernel/src/loader.rs:commit_launch_routes; kernel/src/loader.rs:block_io_registered_snapshot"
 
 [[global]]

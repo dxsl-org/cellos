@@ -102,13 +102,12 @@ pub(crate) fn spawn_bootstrap_init(elf: &[u8]) -> ViResult<usize> {
     governed_spawn::spawn_bootstrap_init(elf)
 }
 
-pub(crate) fn commit_launch_routes(tid: usize, cell_id: CellId, routes: crate::task::LaunchRoutes) {
+pub(crate) fn commit_launch_routes(tid: usize, routes: crate::task::LaunchRoutes) {
     if routes.block_io {
         let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
         if already {
             log::warn!("[loader] block_io route replaced by task {}", tid);
         }
-        crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
     }
     if routes.input {
         crate::dev::driver_cell::set_input_cell(tid);

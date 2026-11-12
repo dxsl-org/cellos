@@ -158,9 +158,11 @@ pub enum Syscall {
     },
     /// 205: RegisterService — register `tid` as the current provider of `service_id`.
     /// SpawnCap owns the namespace; fixed-ID self-registration uses narrower caps.
+    /// `flags` are `api::syscall::service_flags`, namespace owner only.
     RegisterService {
         service_id: u16,
         tid: usize,
+        flags: usize,
     },
     /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
     LookupService {
@@ -1100,6 +1102,7 @@ pub(super) fn map_syscall(
         ViSyscall::RegisterService => Syscall::RegisterService {
             service_id: a0 as u16,
             tid: a1,
+            flags: a2,
         },
         ViSyscall::LookupService => Syscall::LookupService {
             service_id: a0 as u16,

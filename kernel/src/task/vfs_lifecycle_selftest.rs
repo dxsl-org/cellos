@@ -28,6 +28,42 @@ fn fail(step: &str, detail: &str) -> bool {
     false
 }
 
+/// Service id of each fixture VFS task's registry row.
+const fn vfs_role_id(tid: usize) -> u16 {
+    if tid == VFS_OWNER_TID {
+        0x7E21
+    } else {
+        0x7E22
+    }
+}
+
+/// What init's VFS registration grants, for the fixture VFS tasks present:
+/// a row with `RETAINS_OUTER_CALLER | OWNER_WATCH` naming each one.
+fn grant_vfs_role() {
+    for tid in [VFS_OWNER_TID, VFS_WORKER_TID] {
+        let identity = super::SCHEDULER
+            .lock()
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&tid))
+            .map(|task| (task.cell_id.0, task.cell_generation));
+        if let Some((cell_id, generation)) = identity {
+            let _ = crate::cell::service_registry::register_as(
+                crate::cell::service_registry::Registrar::Namespace,
+                vfs_role_id(tid),
+                tid,
+                cell_id,
+                generation,
+                api::syscall::service_flags::ALL,
+            );
+        }
+    }
+}
+
+fn revoke_vfs_role() {
+    crate::cell::service_registry::clear_tid(VFS_OWNER_TID);
+    crate::cell::service_registry::clear_tid(VFS_WORKER_TID);
+}
+
 fn mk_task(tid: usize, cell: u64, name: &str) -> Box<Task> {
     Box::new(Task::new(tid, CellId(cell), name, vec![]))
 }
@@ -82,7 +118,7 @@ fn vfs_send_release_is_exact() -> bool {
         "client-worker-send-selftest",
     ));
     insert(mk_task(OTHER_TID, OTHER_TID as u64, "other-send-selftest"));
-    crate::fast_ipc::set_vfs_handler_cell(VFS_OWNER_TID);
+    grant_vfs_role();
 
     let owner_generation = super::SCHEDULER
         .lock()
@@ -106,7 +142,7 @@ fn vfs_send_release_is_exact() -> bool {
     ) {
         Ok(id) if id != 0 => id,
         _ => {
-            crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+            revoke_vfs_role();
             remove(VFS_WORKER_TID);
             remove(CLIENT_OWNER_TID);
             remove(CLIENT_WORKER_TID);
@@ -123,7 +159,7 @@ fn vfs_send_release_is_exact() -> bool {
         },
     ) != Ok(0)
     {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_OWNER_TID);
         remove(CLIENT_WORKER_TID);
@@ -143,7 +179,7 @@ fn vfs_send_release_is_exact() -> bool {
         log::error!(
             "[selftest] VFS-LIFETIME/send-release: GrantSlice result={slice_result:?}, grant_id={grant_id:#x}"
         );
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_OWNER_TID);
         remove(CLIENT_WORKER_TID);
@@ -161,7 +197,7 @@ fn vfs_send_release_is_exact() -> bool {
         },
     ) != Ok(0)
     {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_OWNER_TID);
         remove(CLIENT_WORKER_TID);
@@ -175,7 +211,7 @@ fn vfs_send_release_is_exact() -> bool {
         })
     });
     if !wrong_target_preserved || crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_none() {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_OWNER_TID);
         remove(CLIENT_WORKER_TID);
@@ -196,7 +232,7 @@ fn vfs_send_release_is_exact() -> bool {
         },
     ) != Ok(0)
     {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_OWNER_TID);
         remove(CLIENT_WORKER_TID);
@@ -212,7 +248,7 @@ fn vfs_send_release_is_exact() -> bool {
         })
     });
 
-    crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+    revoke_vfs_role();
     remove(VFS_WORKER_TID);
     remove(CLIENT_OWNER_TID);
     remove(CLIENT_WORKER_TID);
@@ -241,7 +277,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         CLIENT_OWNER_TID as u64,
         "client-worker-reg-selftest",
     ));
-    crate::fast_ipc::set_vfs_handler_cell(VFS_OWNER_TID);
+    grant_vfs_role();
 
     let owner_generation = super::SCHEDULER
         .lock()
@@ -255,7 +291,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
     ) {
         Ok(id) if id != 0 => id,
         _ => {
-            crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+            revoke_vfs_role();
             remove(VFS_WORKER_TID);
             remove(CLIENT_WORKER_TID);
             return fail("reg-reap", "GrantRegister setup failed");
@@ -270,7 +306,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         },
     ) != Ok(0)
     {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_WORKER_TID);
         return fail("reg-reap", "GrantShare setup failed");
@@ -303,7 +339,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         log::error!(
             "[selftest] VFS-LIFETIME/reg-reap: GrantSlice result={slice_result:?}, grant_id={grant_id:#x}"
         );
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_WORKER_TID);
         return fail(
@@ -341,7 +377,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         crate::memory::pin::find_vfs_lease(VFS_WORKER_TID, CLIENT_WORKER_TID, request_generation)
             .is_none();
 
-    crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+    revoke_vfs_role();
     remove(VFS_WORKER_TID);
     remove(CLIENT_WORKER_TID);
 
@@ -511,7 +547,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
         CLIENT_CELL_ID,
         "client-worker-grant-race-selftest",
     ));
-    crate::fast_ipc::set_vfs_handler_cell(VFS_OWNER_TID);
+    grant_vfs_role();
 
     let lease_generation = renew_vfs_grant_context();
     let leased = allocate_race_grant(kind);
@@ -623,7 +659,7 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
     let invalid_slice_leak_free =
         invalid_slice.is_some_and(|result| result.is_err()) && invalid_lease_absent;
 
-    crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+    revoke_vfs_role();
     remove(VFS_WORKER_TID);
     remove(CLIENT_WORKER_TID);
 
@@ -663,7 +699,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
         CLIENT_CELL_ID,
         "client-worker-stale-install-selftest",
     ));
-    crate::fast_ipc::set_vfs_handler_cell(VFS_OWNER_TID);
+    grant_vfs_role();
 
     let request_generation = super::SCHEDULER.lock().as_mut().and_then(|sched| {
         let owner_generation = sched
@@ -675,7 +711,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
         Some(holder.caller.request_generation)
     });
     let Some(request_generation) = request_generation else {
-        crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+        revoke_vfs_role();
         remove(VFS_WORKER_TID);
         remove(CLIENT_WORKER_TID);
         return fail(
@@ -686,7 +722,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
     let snapshot = match super::syscall::current_vfs_grant_lookup(VFS_WORKER_TID) {
         super::syscall::VfsGrantLookup::Active(context) => context,
         _ => {
-            crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+            revoke_vfs_role();
             remove(VFS_WORKER_TID);
             remove(CLIENT_WORKER_TID);
             return fail("stale-install", "could not snapshot the live VFS context");
@@ -737,7 +773,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
         );
     }
 
-    crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
+    revoke_vfs_role();
     remove(VFS_WORKER_TID);
     remove(CLIENT_WORKER_TID);
 
@@ -898,7 +934,7 @@ fn vfs_owner_watch() -> bool {
         "client-worker-selftest",
     ));
     insert(mk_task(OTHER_TID, 43, "other-selftest"));
-    crate::fast_ipc::set_vfs_handler_cell(VFS_CELL_ID as usize);
+    grant_vfs_role();
 
     let owner_generation = {
         let guard = super::SCHEDULER.lock();
@@ -1027,7 +1063,7 @@ fn vfs_owner_watch() -> bool {
             .is_none()
     });
 
-    crate::fast_ipc::clear_vfs_if_cell(VFS_CELL_ID as usize);
+    revoke_vfs_role();
     remove(VFS_OWNER_TID);
     remove(VFS_WORKER_TID);
     remove(CLIENT_OWNER_TID);

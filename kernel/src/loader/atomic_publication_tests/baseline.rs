@@ -15,23 +15,9 @@ const REPLACEMENT_CELL: CellId = CellId(24);
 const QUOTA_CELL: CellId = CellId(25);
 const ROUTE_CELL: CellId = CellId(26);
 const SERVICE_ID: u16 = 0x7f01;
-const PREEXISTING_VFS_CELL: CellId = CellId(27);
-
-unsafe fn fixture_vfs_handler(
-    _caller: Option<api::caller_identity::CallerIdentity>,
-    _request: &api::ipc::VfsRequest<'_>,
-    _out: &mut [u8; api::ipc::IPC_BUF_SIZE],
-) -> usize {
-    0
-}
-
-unsafe fn preexisting_vfs_handler(
-    _caller: Option<api::caller_identity::CallerIdentity>,
-    _request: &api::ipc::VfsRequest<'_>,
-    _out: &mut [u8; api::ipc::IPC_BUF_SIZE],
-) -> usize {
-    1
-}
+/// A flagged row standing in for VFS, so the corpus also proves registration
+/// flags are neither changed by a denial nor left behind by teardown.
+const VFS_SERVICE_ID: u16 = 0x7f02;
 
 /// Run a denial against the same populated owners that production admission
 /// observes. `audit_bytes` is the documented request evidence the denial
@@ -67,36 +53,19 @@ pub(super) fn with_populated_baseline(
 }
 
 /// Exercise fixture ownership without a denial, so a teardown regression cannot
-/// be hidden by a case-specific audit allowance. The setup gives the fixture a
-/// distinct, non-null preexisting VFS handler to prove it restores the handler
-/// it replaced, not merely a null default.
+/// be hidden by a case-specific audit allowance.
 pub(super) fn populated_baseline_teardown_restores_state() -> bool {
     let original = snapshot();
-    let original_handler = crate::fast_ipc::vfs_handler_pointer_snapshot();
-    let original_owner = crate::fast_ipc::vfs_handler_cell_snapshot();
-    crate::fast_ipc::register_vfs(preexisting_vfs_handler);
-    crate::fast_ipc::set_vfs_handler_cell(PREEXISTING_VFS_CELL.0 as usize);
-    let pre_fixture = snapshot();
     let baseline = SharedStateBaseline::install();
     let populated = baseline.owners_are_populated();
-    let handlers_distinct = !core::ptr::eq(
-        (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const (),
-        (preexisting_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const (),
-    );
     drop(baseline);
-    let restored = snapshot_matches("FIXTURE", "fixture-roundtrip", &pre_fixture, &snapshot());
-    crate::fast_ipc::restore_vfs_handler_pointer_for_test(original_handler);
-    crate::fast_ipc::set_vfs_handler_cell(original_owner);
-    let setup_restored =
-        snapshot_matches("FIXTURE", "fixture-setup-teardown", &original, &snapshot());
-    populated && handlers_distinct && restored && setup_restored
+    let restored = snapshot_matches("FIXTURE", "fixture-roundtrip", &original, &snapshot());
+    populated && restored
 }
 
 struct SharedStateBaseline {
     next_generation: u64,
     block_io_registered: bool,
-    vfs_tid: usize,
-    vfs_handler: usize,
     input_tid: usize,
 }
 
@@ -104,10 +73,8 @@ impl SharedStateBaseline {
     fn install() -> Self {
         let next_generation = crate::task::tcb::cell_generation_snapshot();
         let block_io_registered = crate::loader::block_io_registered_snapshot();
-        let vfs_tid = crate::fast_ipc::vfs_handler_cell_snapshot();
-        let vfs_handler = crate::fast_ipc::vfs_handler_pointer_snapshot();
         let input_tid = crate::dev::driver_cell::input_cell_snapshot();
-        let (service_cell, service_generation) = {
+        let [(vfs_cell, vfs_generation), (service_cell, service_generation)] = {
             let mut scheduler = crate::task::SCHEDULER.lock();
             let sched = scheduler.as_mut().expect("atomic corpus needs scheduler");
             for (tid, cell, name) in [
@@ -135,24 +102,34 @@ impl SharedStateBaseline {
                 );
                 assert!(sched.tasks.insert(tid, task).is_none());
             }
-            sched
-                .tasks
-                .get(&SERVICE_TID)
-                .map(|task| (task.cell_id.0, task.cell_generation))
-                .expect("service owner installed")
+            [VFS_TID, SERVICE_TID].map(|tid| {
+                sched
+                    .tasks
+                    .get(&tid)
+                    .map(|task| (task.cell_id.0, task.cell_generation))
+                    .expect("service owner installed")
+            })
         };
         crate::memory::cell_quota::register(QUOTA_CELL, 0x2345_0000);
         crate::loader::commit_launch_routes(
             ROUTE_TID,
-            ROUTE_CELL,
             crate::task::LaunchRoutes {
                 block_io: true,
                 input: false,
                 development_silo: false,
             },
         );
-        crate::fast_ipc::register_vfs(fixture_vfs_handler);
-        crate::fast_ipc::set_vfs_handler_cell(VFS_CELL.0 as usize);
+        assert_eq!(
+            crate::cell::service_registry::register_as(
+                crate::cell::service_registry::Registrar::Namespace,
+                VFS_SERVICE_ID,
+                VFS_TID,
+                vfs_cell,
+                vfs_generation,
+                api::syscall::service_flags::ALL,
+            ),
+            Ok(())
+        );
         crate::dev::driver_cell::set_input_cell(INPUT_TID);
         assert!(crate::cell::service_registry::register(
             SERVICE_ID,
@@ -164,8 +141,6 @@ impl SharedStateBaseline {
         Self {
             next_generation,
             block_io_registered,
-            vfs_tid,
-            vfs_handler,
             input_tid,
         }
     }
@@ -197,13 +172,17 @@ impl SharedStateBaseline {
             && replacement_present
             && crate::memory::cell_quota::registered_limit_for_test(QUOTA_CELL) == Some(0x2345_0000)
             && crate::loader::block_io_registered_snapshot()
-            && crate::fast_ipc::vfs_handler_cell_snapshot() == VFS_CELL.0 as usize
-            && crate::fast_ipc::vfs_handler_pointer_snapshot()
-                == (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize
             && crate::dev::driver_cell::input_cell_snapshot() == INPUT_TID
             && crate::cell::service_registry::snapshot()
                 .iter()
-                .any(|&(service, tid, _)| service == SERVICE_ID && tid == SERVICE_TID)
+                .any(|&(service, tid, _, flags)| {
+                    service == VFS_SERVICE_ID
+                        && tid == VFS_TID
+                        && flags == api::syscall::service_flags::ALL
+                })
+            && crate::cell::service_registry::snapshot()
+                .iter()
+                .any(|&(service, tid, _, _)| service == SERVICE_ID && tid == SERVICE_TID)
     }
 }
 
@@ -211,12 +190,7 @@ impl Drop for SharedStateBaseline {
     fn drop(&mut self) {
         crate::cell::hotswap::clear_swap_ceiling(REPLACEMENT_TID);
         crate::cell::service_registry::clear_tid(SERVICE_TID);
-        // The fixture owns both the handler and its Cell routing tag. Clear only
-        // that owned route before restoring the captured, potentially unrelated
-        // handler and owner state.
-        crate::fast_ipc::clear_vfs_if_cell(VFS_CELL.0 as usize);
-        crate::fast_ipc::restore_vfs_handler_pointer_for_test(self.vfs_handler);
-        crate::fast_ipc::set_vfs_handler_cell(self.vfs_tid);
+        crate::cell::service_registry::clear_tid(VFS_TID);
         crate::dev::driver_cell::clear_input_cell_if(INPUT_TID);
         if self.input_tid != 0 {
             crate::dev::driver_cell::set_input_cell(self.input_tid);

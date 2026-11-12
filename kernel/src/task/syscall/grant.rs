@@ -942,7 +942,7 @@ pub(in crate::task) fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLoo
     else {
         return VfsGrantLookup::NotVfs;
     };
-    if !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize) {
+    if !crate::cell::service_registry::retains_outer_caller(task.cell_id.0, task.cell_generation) {
         return VfsGrantLookup::NotVfs;
     }
     match task.caller.current {
@@ -1478,8 +1478,10 @@ pub(super) fn install_vfs_lease_if_context_live(
     let Some(holder) = sched.tasks.get(&caller_id) else {
         return false;
     };
-    if !crate::fast_ipc::is_registered_vfs_cell(holder.cell_id.0 as usize)
-        || holder.caller.current != Some(context.grant_owner)
+    if !crate::cell::service_registry::retains_outer_caller(
+        holder.cell_id.0,
+        holder.cell_generation,
+    ) || holder.caller.current != Some(context.grant_owner)
         || holder.caller.cell_id != context.grant_owner_cell_id
         || holder.caller.cell_generation != context.grant_owner_cell_generation
         || holder.caller.request_generation != context.request_generation

@@ -274,7 +274,7 @@ pub fn publish_prepared(
     );
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
-    crate::loader::commit_launch_routes(tid, cell_id, state.routes);
+    crate::loader::commit_launch_routes(tid, state.routes);
     #[cfg(feature = "p01-trace")]
     {
         let task = sched.tasks.get_mut(&tid).expect("committed publication");
@@ -669,7 +669,7 @@ impl SessionPublication {
         sched.tasks.publish_reserved(tid, self.task);
         sched.publish_session_owner(self.owner);
         self.quota.commit();
-        crate::loader::commit_launch_routes(tid, CellId(self.owner.cell_id), self.state.routes);
+        crate::loader::commit_launch_routes(tid, self.state.routes);
         #[cfg(feature = "p01-trace")]
         {
             let task = sched.tasks.get_mut(&tid).expect("committed publication");

@@ -46,10 +46,10 @@ pub(super) fn resolve_for_caller(
     sched: &crate::sched::scheduler::Scheduler,
     caller_id: usize,
     request: CellOwnerRequest,
-    is_vfs_cell: impl Fn(usize) -> bool,
+    retains_outer_caller: impl Fn(u64, u64) -> bool,
 ) -> Option<CellImage> {
     let caller = sched.tasks.get(&caller_id)?;
-    if is_vfs_cell(caller.cell_id.0 as usize) {
+    if retains_outer_caller(caller.cell_id.0, caller.cell_generation) {
         return sched.resolve_cell_image(CellId(request.cell_id), request.generation);
     }
     if !sched.cell_rights(caller_id).supervisor {
@@ -141,7 +141,7 @@ mod tests {
         let mut sched = Scheduler::new();
         let generation = fixture(&mut sched, Some(sshd()));
         let request = CellOwnerRequest::new(CELL, generation);
-        let is_vfs = |cell: usize| cell == VFS_CELL as usize;
+        let is_vfs = |cell: u64, _generation: u64| cell == VFS_CELL;
         assert!(resolve_for_caller(&sched, VFS_TID, request, is_vfs).is_some());
         // The subject itself, an unknown task, and VFS asking about a stale
         // generation all get nothing.
@@ -172,7 +172,7 @@ mod tests {
         .apply_to(&mut supervisor);
         sched.tasks.insert(SUPERVISOR_TID, supervisor);
         let request = CellOwnerRequest::new(CELL, generation);
-        let no_vfs = |_: usize| false;
+        let no_vfs = |_: u64, _: u64| false;
 
         // Same bytes, but not a reviewed install (sandbox copy, caller ELF).
         assert!(resolve_for_caller(&sched, SUPERVISOR_TID, request, no_vfs).is_none());

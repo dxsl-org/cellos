@@ -138,13 +138,6 @@ fn sshd_still_needs_vfs_mutate_to_write() {
 }
 
 #[test]
-fn fast_path_refuses_even_sshd() {
-    for path in INSIDE {
-        assert!(!table().can_read_fast(SSHD, path), "{path}");
-    }
-}
-
-#[test]
 fn nobody_removes_the_namespace_or_an_ancestor() {
     let table = table();
     for path in ["/srv", "/srv/", "/srv/sshd", "/srv/sshd/", "/srv/sshd/keys"] {

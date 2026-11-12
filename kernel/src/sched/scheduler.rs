@@ -383,37 +383,17 @@ pub(crate) struct VfsLeaseRelease {
 
 const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 
-/// Registry-bound services whose live provider cell may subscribe to the root
-/// death of the principal it is serving (in addition to the registered VFS
-/// cell). Explicit on purpose: being a registered service is not the right, and
-/// each entry is an owner decision with its own reclaim consumer.
-pub(crate) const OWNER_WATCH_SERVICES: [u16; 3] = [
-    api::syscall::service::NET,
-    api::syscall::service::COMPOSITOR,
-    // CP1 D-G7: the GPU driver tears down a dead client's contexts and VMs.
-    api::syscall::service::XE_GPU,
-];
-
 /// Who may subscribe to the root death of the principal it is serving: the
-/// registered VFS cell, or the live registry-bound provider of a service in
-/// [`OWNER_WATCH_SERVICES`] (matched by Cell identity and generation, never by
-/// name, so a stale cell that reuses the CellId cannot hold the grant; a Paused
-/// or unregistered provider is refused, and a provider bound to one listed
-/// service has no right through another's binding). The caller still has to
-/// prove it is serving the principal.
+/// Active provider of a registry row carrying `OWNER_WATCH`, matched by Cell
+/// identity and generation (never by name), so a stale cell that reuses the
+/// CellId cannot hold the grant. A Paused or unregistered provider is refused,
+/// and a provider bound to one row has no right through another's binding. The
+/// caller still has to prove it is serving the principal.
 ///
 /// Lock order SCHEDULER -> REGISTRY, as everywhere else the registry is read
 /// under the scheduler lock.
 fn may_watch_owner_deaths(watcher: &Task) -> bool {
-    crate::fast_ipc::is_registered_vfs_cell(watcher.cell_id.0 as usize)
-        || OWNER_WATCH_SERVICES.iter().any(|&service| {
-            crate::cell::service_registry::lookup_bound(service).is_some_and(
-                |(_, cell_id, generation)| {
-                    // `lookup_bound` never yields cell 0 or generation 0.
-                    cell_id == watcher.cell_id.0 && generation == watcher.cell_generation
-                },
-            )
-        })
+    crate::cell::service_registry::grants_owner_watch(watcher.cell_id.0, watcher.cell_generation)
 }
 
 /// Register `watcher` to be notified when `watched` exits or faults.
@@ -568,8 +548,8 @@ pub struct Scheduler {
     /// Sparse map of CellId -> occupied slot, bounded by `MAX_CELLS`; a slot
     /// that returns to Empty is removed, so only occupied CellIds hold nodes.
     cell_owners: BTreeMap<u64, CellOwnerSlot>,
-    /// Token-indexed root-death subscriptions (registered VFS cell, live
-    /// providers of the [`OWNER_WATCH_SERVICES`] serving that principal).
+    /// Token-indexed root-death subscriptions (Active providers of
+    /// `OWNER_WATCH` registry rows serving that principal).
     cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
     next_cell_owner_watch: u64,
     pub next_task_id: usize,

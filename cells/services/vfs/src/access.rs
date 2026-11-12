@@ -31,18 +31,14 @@ mod tests;
 use crate::caller::Caller;
 use guest_disk::live_hypervisor_matches;
 pub(crate) use guest_disk::{contains_guest_disk, is_guest_disk_path, GUEST_DISK_PATH};
-use kms::{
-    contains_kms_namespace, is_canonical_policy_path, is_kms_namespace_path, is_kms_store_rule,
-    live_kms_matches,
-};
+use kms::{contains_kms_namespace, is_canonical_policy_path, is_kms_store_rule, live_kms_matches};
 use machine_pin::{
     contains_machine_pin_namespace, is_machine_pin_namespace_path, is_machine_pin_store_rule,
     live_machine_pin_matches,
 };
 pub use rules::PathRule;
 use srv_owner::{
-    contains_srv_owner_namespace, is_srv_owner_namespace_path, is_srv_owner_store_rule,
-    srv_owner_matches, ImageLookup,
+    contains_srv_owner_namespace, is_srv_owner_store_rule, srv_owner_matches, ImageLookup,
 };
 
 /// Path rules, evaluated whole-path first and by prefix second.
@@ -124,18 +120,6 @@ impl AccessTable {
         self.decide(caller, path, AccessKind::Read)
     }
 
-    /// Interrupt-disabled fast path: never performs service lookup.
-    ///
-    /// The provider-held namespaces are denied here so the ecall path remains
-    /// the only place that can prove "live service::KMS" or "live
-    /// service::MACHINE_PIN" with a normal lookup.
-    pub fn can_read_fast(&self, caller: Caller, path: &str) -> bool {
-        if !is_canonical_policy_path(path) || is_provider_namespace_path(path) {
-            return false;
-        }
-        self.decide(caller, path, AccessKind::Read)
-    }
-
     /// Whether `caller` may recursively remove `path` and its descendants.
     pub fn can_remove_tree(&self, caller: Caller, path: &str) -> bool {
         caller.may_mutate()
@@ -204,14 +188,6 @@ impl Default for AccessTable {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Namespaces admitted only to one live service provider or one measured
-/// program, which the fast path cannot prove and so must refuse outright.
-fn is_provider_namespace_path(path: &str) -> bool {
-    is_kms_namespace_path(path)
-        || is_machine_pin_namespace_path(path)
-        || is_srv_owner_namespace_path(path)
 }
 
 /// Whether removing `path` would remove a provider-held namespace: `path` is
