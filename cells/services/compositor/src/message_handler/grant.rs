@@ -1,5 +1,6 @@
 use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
-use ostd::syscall::{sys_grant_slice_with_len_owned_by, sys_send};
+use ostd::ipc::reply_to;
+use ostd::syscall::sys_grant_slice_with_len_owned_by;
 
 use crate::appearance::Appearance;
 use crate::framebuffer;
@@ -58,7 +59,7 @@ fn attach_grant(
     };
     let grant = AttachGrant::decode(frame);
     let attached = admit_grant(&grant, sender, table, sys_grant_slice_with_len_owned_by);
-    sys_send(sender, if attached { b"\x01" } else { b"\x00" });
+    let _ = reply_to(sender, if attached { b"\x01" } else { b"\x00" });
     if attached {
         appearance.announce_to(sender);
     }
@@ -98,18 +99,18 @@ fn admit_grant(
 /// Returns whether the sender's own surface released its retired Grant.
 fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) -> bool {
     let Ok(frame) = DetachReplacedGrant::decode(&buf[..16]) else {
-        sys_send(sender, b"\x00");
+        let _ = reply_to(sender, b"\x00");
         return false;
     };
     let Ok(reg_id) = usize::try_from(frame.reg_id) else {
-        sys_send(sender, b"\x00");
+        let _ = reply_to(sender, b"\x00");
         return false;
     };
     let acknowledged = table
         .get_mut(frame.cap as u64)
         .filter(|surface| surface.owner == sender)
         .is_some_and(|surface| surface.detach_replaced_grant(reg_id));
-    sys_send(sender, if acknowledged { b"\x01" } else { b"\x00" });
+    let _ = reply_to(sender, if acknowledged { b"\x01" } else { b"\x00" });
     acknowledged
 }
 
@@ -138,7 +139,7 @@ fn detach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     }
     let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap());
     if let Some(surface) = table.get_mut(cap).filter(|surface| surface.owner == sender) {
-        sys_send(
+        let _ = reply_to(
             sender,
             if surface.detach_grant() {
                 b"\x01"
@@ -147,7 +148,7 @@ fn detach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
             },
         );
     } else {
-        sys_send(sender, b"\x00");
+        let _ = reply_to(sender, b"\x00");
     }
 }
 
@@ -156,7 +157,7 @@ fn screen_size(sender: usize) {
     let mut reply = [0u8; 8];
     reply[0..4].copy_from_slice(&width.to_le_bytes());
     reply[4..8].copy_from_slice(&height.to_le_bytes());
-    sys_send(sender, &reply);
+    let _ = reply_to(sender, &reply);
 }
 
 #[cfg(test)]

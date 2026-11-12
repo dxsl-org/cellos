@@ -14,7 +14,7 @@ use crate::{
 use alloc::collections::BTreeMap;
 use alloc::string::ToString;
 use ostd::io::println;
-use ostd::syscall::sys_send;
+use ostd::ipc::{post, reply_to};
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::tcp,
@@ -41,7 +41,7 @@ fn send_connect_reply(sender: usize, cap: u64) {
     let reply = cap.to_le_bytes();
     #[cfg(test)]
     crate::tls::authenticated_time_precheck_tests::record_connect_reply(&reply);
-    sys_send(sender, &reply);
+    let _ = reply_to(sender, &reply);
 }
 fn make_tcp(
     sockets: &mut SocketSet<'_>,
@@ -80,7 +80,7 @@ pub fn handle_tls_raw(
     let req = match parse_raw_tls_request(buf) {
         Ok(r) => r,
         Err(_) => {
-            sys_send(sender, &[]);
+            let _ = reply_to(sender, &[]);
             return;
         }
     };
@@ -101,7 +101,7 @@ pub fn handle_tls_raw(
                     let _ = ostd::ipc::reply(token, &code);
                 }
                 ReplyTo::Legacy(sender) => {
-                    sys_send(sender, &code);
+                    let _ = post(sender, &code);
                 }
             }
         }
@@ -152,7 +152,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Send { cap, data } => {
             if !table.is_owner(cap, owner) {
-                sys_send(sender, &u32::MAX.to_le_bytes());
+                let _ = reply_to(sender, &u32::MAX.to_le_bytes());
                 return;
             }
             pending.enqueue(
@@ -166,7 +166,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Recv { cap, buf_len } => {
             if !table.is_owner(cap, owner) {
-                sys_send(sender, &u16::MAX.to_le_bytes());
+                let _ = reply_to(sender, &u16::MAX.to_le_bytes());
                 return;
             }
             pending.enqueue(

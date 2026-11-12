@@ -24,6 +24,7 @@ extern crate ostd;
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     IpcSubmit,

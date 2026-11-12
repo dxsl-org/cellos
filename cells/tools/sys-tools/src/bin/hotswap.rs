@@ -222,6 +222,8 @@ fn decimal(mut value: u8, buffer: &mut [u8; 3]) -> &[u8] {
     &buffer[cursor..]
 }
 
+/// Write `parts` as one record when they fit in a line buffer, so a kernel log
+/// line cannot land inside the message and split it on the console.
 fn emit(stream: &ostd::io::OutputStream, parts: &[&[u8]]) {
     let deadline = match ostd::session::monotonic_ns()
         .ok()
@@ -230,9 +232,28 @@ fn emit(stream: &ostd::io::OutputStream, parts: &[&[u8]]) {
         Some(deadline) if deadline != u64::MAX => deadline,
         _ => syscall::sys_exit(1),
     };
+    let mut line = [0u8; 512];
+    let mut len = 0;
     for bytes in parts {
-        if stream.write_all(bytes, deadline).is_err() {
-            syscall::sys_exit(1);
+        match line.get_mut(len..len + bytes.len()) {
+            Some(slot) => {
+                slot.copy_from_slice(bytes);
+                len += bytes.len();
+            }
+            None => {
+                len = usize::MAX;
+                break;
+            }
         }
+    }
+    let written = if len == usize::MAX {
+        parts
+            .iter()
+            .try_for_each(|bytes| stream.write_all(bytes, deadline))
+    } else {
+        stream.write_all(&line[..len], deadline)
+    };
+    if written.is_err() {
+        syscall::sys_exit(1);
     }
 }

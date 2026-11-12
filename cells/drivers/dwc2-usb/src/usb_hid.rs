@@ -38,7 +38,6 @@ use crate::usb_desc::{
     self, EndpointDesc, InterfaceDesc, RT_CLASS_INTERFACE_OUT, RT_DEV_TO_HOST_STANDARD,
 };
 use ostd::io::{print, println};
-use ostd::syscall::SyscallResult;
 
 /// First host channel reserved for HID. Channels 0-2 are control and the
 /// Ethernet bulk pair, so HID devices take 3..=6 (four concurrently attached).
@@ -952,7 +951,7 @@ pub fn forward_device_event(tid: usize, device: HidDeviceId, ev: &EvdevEvent) ->
     }
     let mut buf = [0u8; DEVICE_EVENT_LEN];
     ev.encode_device(device, &mut buf);
-    matches!(ostd::syscall::sys_send(tid, &buf), SyscallResult::Ok(_))
+    ostd::ipc::post_blocking(tid, &buf).is_ok()
 }
 
 /// Register this cell as a raw event producer with the input service.
@@ -972,7 +971,7 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
         // nonblocking receive and never parks in Recv, and the kernel delivers a
         // TrySend only to a target parked in Recv, so a TrySend registration is
         // refused every time. Send queues it and returns once the service took it.
-        Ok(encoded) => matches!(ostd::syscall::sys_send(tid, encoded), SyscallResult::Ok(_)),
+        Ok(encoded) => ostd::ipc::post_blocking(tid, encoded).is_ok(),
         Err(_) => false,
     }
 }

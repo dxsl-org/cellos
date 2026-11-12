@@ -1,6 +1,6 @@
 mod enroll;
 
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
 use types::kms::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayP256StatusPayload,
     RelayProviderAssessment,
@@ -116,9 +116,9 @@ impl DevelopmentSiloProvider {
     ) -> Result<DevelopmentSiloResponse, RelaySignError> {
         let silo_tid =
             sys_lookup_service(api::syscall::service::SILO).ok_or(RelaySignError::Unavailable)?;
-        match sys_send(silo_tid, &request.encode()) {
-            SyscallResult::Ok(_) => {}
-            _ => return self.fail(RelaySignError::Unavailable),
+        // Queued, never parked: the receive below bounds the whole exchange.
+        if ostd::ipc::post(silo_tid, &request.encode()).is_err() {
+            return self.fail(RelaySignError::Unavailable);
         }
         let mut bytes = [0u8; DEVELOPMENT_SILO_FRAME_LEN];
         match sys_recv_timeout(silo_tid, &mut bytes, 8) {

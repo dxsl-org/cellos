@@ -30,7 +30,15 @@ api::declare_manifest!(block_io = false, network = false, spawn = true);
 // GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
 // one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
 // StateRestore: reads the spawn argv that names the owning core.
-api::declare_syscalls![Send, Recv, Log, SpawnFromPath, GrantAlloc, StateRestore];
+api::declare_syscalls![
+    Send,
+    SendGather,
+    Recv,
+    Log,
+    SpawnFromPath,
+    GrantAlloc,
+    StateRestore
+];
 
 ostd::cell_main!(cell_main);
 
@@ -63,7 +71,7 @@ fn handle(ctx: &AppContext, spawned: &mut SpawnedCells, sender: usize, data: &[u
     };
     let mut buf = [0u8; 4096];
     if let Ok(bytes) = postcard::to_slice(&reply, &mut buf) {
-        let _ = ctx.send(sender, bytes);
+        let _ = ctx.reply(sender, bytes);
     }
 }
 

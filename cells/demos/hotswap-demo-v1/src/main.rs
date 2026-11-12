@@ -130,7 +130,7 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                 let mut state = STATE.lock();
                 state.counter = state.counter.saturating_add(1);
                 // Reply with raw "ok" bytes so tests can assert on a simple string.
-                ctx.send(sender_tid, b"ok").ok();
+                ctx.reply(sender_tid, b"ok").ok();
             } else if message_eq(data, b"get") {
                 // Reply with "v1:" + 4 LE bytes of counter so the test can assert
                 // the version prefix AND the counter value in one message.
@@ -140,9 +140,9 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                 resp[1] = b'1';
                 resp[2] = b':';
                 resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
-                ctx.send(sender_tid, &resp).ok();
+                ctx.reply(sender_tid, &resp).ok();
             } else {
-                ctx.send(sender_tid, b"unknown").ok();
+                ctx.reply(sender_tid, b"unknown").ok();
             }
         }
 

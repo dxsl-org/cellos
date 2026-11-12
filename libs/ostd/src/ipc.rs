@@ -283,6 +283,9 @@ pub fn reply(op: IpcOpId, bytes: &[u8]) -> Result<(), IpcError> {
     }
 }
 
+mod post;
+pub use post::{post, post_blocking, reply_to, Incoming, PostError};
+
 // ─── Nonblocking operation handles ───────────────────────────────────────────
 
 /// One submitted bounded call: the kernel owns the request bytes and the reply slot,

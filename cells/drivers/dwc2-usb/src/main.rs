@@ -19,8 +19,8 @@ use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
 use ostd::syscall::{
     sys_force_exit, sys_lookup_service, sys_notify_on_exit, sys_recv_timeout,
-    sys_register_nic_driver, sys_register_usb_hid_producer, sys_send, sys_spawn_from_path,
-    sys_try_send, sys_yield, SyscallResult,
+    sys_register_nic_driver, sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send,
+    sys_yield, SyscallResult,
 };
 
 declare_manifest!(
@@ -36,6 +36,7 @@ declare_manifest!(
 
 declare_syscalls![
     Send,
+    SendGather,
     TrySend,
     Recv,
     RecvTimeout,
@@ -609,7 +610,7 @@ fn cell_main() {
                     // attempt, hundreds of them, while the Net Cell waited seconds per
                     // frame). Saying "not ready" costs one byte and keeps the frame.
                     if nic_request_len(&in_buf).is_some() {
-                        let _ = sys_send(sender_tid, &[STATUS_NOT_READY]);
+                        let _ = ostd::ipc::reply_to(sender_tid, &[STATUS_NOT_READY]);
                     }
                 } else {
                     if let Some(request_len) = nic_request_len(&in_buf) {
@@ -822,7 +823,7 @@ fn reply_nic(client: usize, operation: Option<usize>, bytes: &[u8]) {
     if let Some(operation) = operation {
         let _ = ostd::ipc::reply(operation, bytes);
     } else {
-        let _ = sys_send(client, bytes);
+        let _ = ostd::ipc::post(client, bytes);
     }
 }
 

@@ -38,8 +38,7 @@ use ostd::app::{AppContext, AppEvent};
 use ostd::io::print_fmt;
 use ostd::sync::Mutex;
 use ostd::syscall::{
-    sys_exit, sys_lookup_service, sys_query_pcie_function, sys_register_block_device, sys_send,
-    BlockDevice,
+    sys_exit, sys_lookup_service, sys_query_pcie_function, sys_register_block_device, BlockDevice,
 };
 use scan::Disk;
 use types::block_wire::{BlockOutcome, SECTOR_SIZE};
@@ -173,9 +172,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 reply[0] = BlockOutcome::NotIssued.to_byte(); // not initialised
                 1
             };
-            // Blocking send: the VFS client issues sys_send + a blocking
-            // sys_recv(tid), so it is waiting for this reply.
-            let _ = sys_send(sender_tid, &reply[..len]);
+            let _ = ostd::ipc::reply_to(sender_tid, &reply[..len]);
         }
 
         AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => sys_exit(0),

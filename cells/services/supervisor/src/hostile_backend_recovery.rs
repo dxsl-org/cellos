@@ -6,7 +6,8 @@ use api::hostile_backend_recovery::{
 };
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_kill_cell, sys_lookup_service, sys_send};
+use ostd::ipc::Incoming;
+use ostd::syscall::{sys_kill_cell, sys_lookup_service};
 
 const HYPERVISOR_TASK_NAME: &str = "hypervisor";
 const BENCH_TASK_NAME: &str = "bench";
@@ -59,6 +60,7 @@ fn allowed_service_name(service_id: u16) -> Option<&'static str> {
     }
 }
 
+/// Nothing in `handle` receives, so the latest request is still this one.
 fn reply(sender_tid: usize, status: u8) {
-    let _ = sys_send(sender_tid, &encode_kill_response(status));
+    let _ = Incoming::current(sender_tid).reply(&encode_kill_response(status));
 }

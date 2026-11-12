@@ -30,7 +30,8 @@ mod transfer;
 use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
-use ostd::syscall::{sys_lookup_service, sys_resolve_cell_image, sys_send};
+use ostd::ipc::Incoming;
+use ostd::syscall::{sys_lookup_service, sys_resolve_cell_image};
 use protocol::{
     encode_status, parse_power_request, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_POWER,
     OP_SNAPSHOT, POWER_STATUS_PHASE, STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER,
@@ -65,30 +66,33 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
             if data.is_empty() {
                 return;
             }
+            // Captured before the swap flow receives anything else; replies never
+            // park on a requester that does not receive them.
+            let request = Incoming::current(sender_tid);
 
             if data[0] == OP_HOTSWAP {
                 if !sender_is_program(ctx, sender_tid, HOTSWAP_PROGRAM) {
-                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
+                    let _ = request.reply(&encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }
                 let Some(req) = HotswapRequest::parse(data) else {
-                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_INVALID_REQUEST));
+                    let _ = request.reply(&encode_status(0, STATUS_INVALID_REQUEST));
                     return;
                 };
 
                 let service_id = service_id_for_name(req.service_name());
                 if service_id == 0 {
-                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_SERVICE_NOT_FOUND));
+                    let _ = request.reply(&encode_status(0, STATUS_SERVICE_NOT_FOUND));
                     return;
                 }
 
                 match hotswap::hotswap(service_id, req.elf_path()) {
                     Ok(new_tid) => {
-                        let _ = sys_send(sender_tid, &encode_status(6, 0x00));
+                        let _ = request.reply(&encode_status(6, 0x00));
                         let _ = new_tid;
                     }
                     Err(e) => {
-                        let _ = sys_send(sender_tid, &encode_status(0xFF, e.as_code()));
+                        let _ = request.reply(&encode_status(0xFF, e.as_code()));
                     }
                 }
                 return;
@@ -99,19 +103,19 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
                     .iter()
                     .any(|program| sender_is_program(ctx, sender_tid, program))
                 {
-                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
+                    let _ = request.reply(&encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }
                 if SnapshotRequest::parse(data).is_none() {
-                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_INVALID_REQUEST));
+                    let _ = request.reply(&encode_status(0, STATUS_INVALID_REQUEST));
                     return;
                 }
-                let _ = sys_send(sender_tid, &snapshot::run());
+                let _ = request.reply(&snapshot::run());
                 return;
             }
 
             if data[0] == OP_POWER {
-                handle_power(ctx, sender_tid, data);
+                handle_power(ctx, request, data);
             }
         }
 
@@ -129,7 +133,7 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
                 let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
                 relay[0] = 0xE2;
                 relay[1..].copy_from_slice(&data[1..]);
-                let _ = sys_send(compositor, &relay);
+                let _ = ostd::ipc::post(compositor, &relay);
             }
         }
 
@@ -143,14 +147,15 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
 /// `OP_POWER` from the `/bin/shutdown` worker (reboot or poweroff) or from the
 /// kernel's power-button relay (poweroff only). Only a refused operator
 /// request gets a reply; success resets or powers off the machine.
-fn handle_power(ctx: &AppContext, sender_tid: usize, data: &[u8]) {
+fn handle_power(ctx: &AppContext, request: Incoming, data: &[u8]) {
     use ostd::syscall::SystemPowerAction;
+    let sender_tid = request.sender();
     let origin = if sender_tid == KERNEL_SENDER {
         power::Origin::PowerButton
     } else if sender_is_program(ctx, sender_tid, SHUTDOWN_PROGRAM) {
         power::Origin::Operator
     } else {
-        reply_power(sender_tid, STATUS_REJECTED_CALLER);
+        reply_power(request, STATUS_REJECTED_CALLER);
         return;
     };
     let operator = origin == power::Origin::Operator;
@@ -158,18 +163,18 @@ fn handle_power(ctx: &AppContext, sender_tid: usize, data: &[u8]) {
         .filter(|&action| operator || action == SystemPowerAction::PowerOff)
     else {
         if operator {
-            reply_power(sender_tid, STATUS_INVALID_REQUEST);
+            reply_power(request, STATUS_INVALID_REQUEST);
         }
         return;
     };
     let _ = power::shut_down(action, origin);
     if operator {
-        reply_power(sender_tid, STATUS_UNAVAILABLE);
+        reply_power(request, STATUS_UNAVAILABLE);
     }
 }
 
-fn reply_power(sender_tid: usize, status: u8) {
-    let _ = sys_send(sender_tid, &encode_status(POWER_STATUS_PHASE, status));
+fn reply_power(request: Incoming, status: u8) {
+    let _ = request.reply(&encode_status(POWER_STATUS_PHASE, status));
 }
 
 /// Map a well-known ASCII service name to its numeric `service::*` constant.

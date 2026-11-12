@@ -13,7 +13,6 @@
 
 use api::ipc::{self, input_source, InputRequest};
 use driver_hid::{EvdevEvent, HidDeviceId, DEVICE_EVENT_LEN};
-use ostd::syscall::{sys_send, SyscallResult};
 
 /// Register this cell as a raw event producer with the input service.
 ///
@@ -35,7 +34,7 @@ pub fn register_as_source(tid: usize) -> bool {
         },
         &mut buf,
     ) {
-        Ok(encoded) => matches!(sys_send(tid, encoded), SyscallResult::Ok(_)),
+        Ok(encoded) => ostd::ipc::post_blocking(tid, encoded).is_ok(),
         Err(_) => false,
     }
 }
@@ -47,5 +46,5 @@ pub fn forward_device_event(tid: usize, device: HidDeviceId, ev: &EvdevEvent) ->
     }
     let mut buf = [0u8; DEVICE_EVENT_LEN];
     ev.encode_device(device, &mut buf);
-    matches!(sys_send(tid, &buf), SyscallResult::Ok(_))
+    ostd::ipc::post_blocking(tid, &buf).is_ok()
 }

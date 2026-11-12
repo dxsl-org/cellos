@@ -9,7 +9,7 @@ use crate::error::PvscsiError;
 use crate::scan::Disk;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_lookup_service, sys_send};
+use ostd::syscall::sys_lookup_service;
 use scsi_block::ScsiError;
 use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
 
@@ -47,7 +47,7 @@ pub fn serve(state: &Mutex<Option<Disk>>, sender_tid: usize, data: &[u8]) {
     } else {
         status(&mut reply, BlockOutcome::NotIssued)
     };
-    let _ = sys_send(sender_tid, &reply[..len]);
+    let _ = ostd::ipc::reply_to(sender_tid, &reply[..len]);
 }
 
 #[derive(Debug, PartialEq, Eq)]

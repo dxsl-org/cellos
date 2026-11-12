@@ -6,10 +6,18 @@ use api::syscall::service;
 use driver_dwc2_usb::lan_ipc;
 use ostd::io::println;
 use ostd::service::sender_is_live_provider;
-use ostd::syscall::{sys_heartbeat, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::syscall::{sys_heartbeat, sys_recv_timeout, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, TrySend, RecvTimeout, Heartbeat, Log, LookupService];
+api::declare_syscalls![
+    Send,
+    SendGather,
+    TrySend,
+    RecvTimeout,
+    Heartbeat,
+    Log,
+    LookupService
+];
 
 const POLL_TICKS: u64 = 1;
 const HEARTBEAT_TICKS: u64 = 5_000;
@@ -52,7 +60,7 @@ fn cell_main() {
                 // host's tid never receives it.
                 && lan_ipc::decode_request(&buf).is_some() =>
             {
-                let _ = sys_send(host_tid, &buf);
+                let _ = ostd::ipc::post(host_tid, &buf);
             }
             _ => {}
         }

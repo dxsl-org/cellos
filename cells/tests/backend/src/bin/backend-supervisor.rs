@@ -20,6 +20,7 @@ api::declare_syscalls![
     Log,
     Exit,
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     GetTime,

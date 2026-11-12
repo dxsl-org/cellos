@@ -6,8 +6,8 @@
 //!   exit_task_internal(..) → sys_kill_cell(tid, 0xAAAA_AAAA)
 //!
 //! Polling replaced by yield-and-retry loops using sys_yield() + sys_state_restore()
-//! and sys_query_hotswap_ready().  The timeouts are calibrated to scheduler tick rate
-//! (one tick ≈ 10 ms) — HOTSWAP_MAX_ITERS×YIELD_COST_TICKS ≈ 5 seconds.
+//! and sys_query_hotswap_ready(), each bounded by `WAIT_TICKS` scheduler ticks
+//! (one tick ≈ 10 ms, so 5 seconds).
 
 extern crate alloc;
 
@@ -16,11 +16,23 @@ use crate::transfer::{send_restore_event, send_snapshot_event};
 use ostd::syscall::{
     sys_commit_hotswap, sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_pause_service,
     sys_query_hotswap_ready, sys_register_service, sys_resume_cell, sys_spawn_replacement,
-    sys_state_restore, sys_state_stash_clear, sys_yield,
+    sys_get_scheduler_ticks, sys_state_restore, sys_state_stash_clear, sys_yield,
 };
 
-/// Maximum poll iterations while waiting for stash/ready (≈ 5 s at 10 ms/tick).
-const MAX_ITERS: u32 = 500;
+/// Budget for the stash and for readiness, in 10 ms scheduler ticks (5 s). The
+/// snapshot and restore events are queued, not handed over, so the budget is
+/// time, not polls: it covers the target waking and, for restore, the new cell's
+/// whole startup.
+const WAIT_TICKS: u64 = 500;
+
+/// Whether `WAIT_TICKS` have passed since `start`; an unreadable clock counts
+/// as expired so a wait can never become unbounded.
+fn expired(start: Option<u64>) -> bool {
+    match (start, sys_get_scheduler_ticks()) {
+        (Some(start), Some(now)) => now.saturating_sub(start) >= WAIT_TICKS,
+        _ => true,
+    }
+}
 
 // ── IPC envelope byte constants (must match kernel hotswap.rs) ───────────────
 
@@ -38,18 +50,21 @@ fn stash_key_for(swap_id: u64) -> u64 {
 ///
 /// Uses the empty-buffer status probe (`sys_state_restore(key, &mut [])` returns the
 /// stored length): the supervisor may see that state exists, never its bytes.
-/// Returns `Err(SnapshotTimeout)` after `MAX_ITERS` yields without success.
+/// Returns `Err(SnapshotTimeout)` after `WAIT_TICKS` without success.
 ///
 /// A stash miss is tolerated (cell that doesn't implement ViStateTransfer never
 /// stashes anything); the hotswap continues with an empty stash.
 fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
-    for _ in 0..MAX_ITERS {
+    let start = sys_get_scheduler_ticks();
+    loop {
         if sys_state_restore(key, &mut []) > 0 {
             return Ok(());
         }
+        if expired(start) {
+            return Err(HotswapError::SnapshotTimeout);
+        }
         sys_yield();
     }
-    Err(HotswapError::SnapshotTimeout)
 }
 
 /// Poll until the new cell has called `sys_hotswap_ready()`, yielding between
@@ -57,15 +72,18 @@ fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
 ///
 /// Returns `Ok(())` when the flag is set, `Err(ReadyTimeout)` on timeout.
 fn wait_for_hotswap_ready(new_tid: usize) -> Result<(), HotswapError> {
-    for _ in 0..MAX_ITERS {
+    let start = sys_get_scheduler_ticks();
+    loop {
         match sys_query_hotswap_ready(new_tid) {
             Ok(true) => return Ok(()),
             Ok(false) => {}
-            Err(_) => break, // tid vanished — treat as timeout
+            Err(_) => return Err(HotswapError::ReadyTimeout), // tid vanished
+        }
+        if expired(start) {
+            return Err(HotswapError::ReadyTimeout);
         }
         sys_yield();
     }
-    Err(HotswapError::ReadyTimeout)
 }
 
 // ── IPC senders ───────────────────────────────────────────────────────────────
@@ -177,12 +195,15 @@ fn rollback_spawned(service_id: u16, old_tid: usize, new_tid: usize, stash_key: 
 }
 
 fn wait_for_service_pause(service_id: u16, old_tid: usize) -> Result<(), HotswapError> {
-    for _ in 0..MAX_ITERS {
+    let start = sys_get_scheduler_ticks();
+    loop {
         if sys_pause_service(service_id, old_tid).is_ok() {
             return Ok(());
         }
+        if expired(start) {
+            let _ = sys_register_service(service_id, old_tid);
+            return Err(HotswapError::PauseFailed);
+        }
         sys_yield();
     }
-    let _ = sys_register_service(service_id, old_tid);
-    Err(HotswapError::PauseFailed)
 }

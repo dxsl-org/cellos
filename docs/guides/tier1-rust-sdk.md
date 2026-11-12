@@ -35,7 +35,7 @@ ostd::app_entry!(handler = app_main);
 fn app_main(ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            // ctx.vfs(), ctx.net(), ctx.send() all available here
+            // ctx.vfs(), ctx.net(), ctx.reply() all available here
             match ctx.vfs().stat("/") {
                 Ok((size, is_dir)) => {
                     println(&alloc::format!("Root: size={} is_dir={}", size, is_dir));
@@ -117,13 +117,13 @@ The `TcpStream` is dropped automatically (socket close on Drop).
 Send App SDK–wrapped messages:
 
 ```rust
-// Send typed message to another Cell (by TID)
+// Queue an envelope message for another Cell (by TID); never parks
 let remote_tid = 5usize;
 ctx.send_msg(remote_tid, b"hello")?;
     // Wraps [0xAC, 0x00, b"hello"] for AppContext on the other end
 
-// Send raw bytes (legacy)
-ctx.send(remote_tid, &my_bytes)?;
+// Answer the request `sender_tid` sent; never parks on a client that is not receiving
+ctx.reply(sender_tid, &my_bytes)?;
 
 // Receive (handled by app_entry! loop — you get AppEvent::Message)
 ```

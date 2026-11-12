@@ -74,6 +74,7 @@ api::declare_manifest!(
 // cannot do (see backend_bootfs.rs::read_to_vec).
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     Reply,
@@ -213,7 +214,7 @@ fn vfs_main() {
                     if let Some(operation) = operation {
                         let _ = ostd::ipc::reply(operation, &encoded[..len]);
                     } else {
-                        ostd::syscall::sys_send(sender, &encoded[..len]);
+                        let _ = ostd::ipc::post(sender, &encoded[..len]);
                     }
                     buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     continue;
@@ -240,7 +241,7 @@ fn vfs_main() {
                 if let Some(operation) = operation {
                     let _ = ostd::ipc::reply(operation, &encoded[..encoded_len]);
                 } else {
-                    ostd::syscall::sys_send(sender, &encoded[..encoded_len]);
+                    let _ = ostd::ipc::post(sender, &encoded[..encoded_len]);
                 }
                 buf = [0u8; api::ipc::IPC_BUF_SIZE];
             }

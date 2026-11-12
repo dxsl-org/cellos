@@ -41,10 +41,19 @@ case "$WORKLOAD" in
         # bench-peer-t2 is the Tier-2 (private-root domain) echo peer of
         # `bench`'s ipc_send_recv_domain scenario.
         WORKLOAD_CELLS=(bench bench-probe bench-peer-t2)
+        # `bench nonreceiving-client` needs the supervisor, config and
+        # compositor running. The boot config launches them for the
+        # `supervisor`, `ai` (config; /bin/ai is not packaged) and `ui` features.
+        SERVICE_PACKAGES=(supervisor service-compositor)
+        SERVICE_CELLS=(supervisor:/bin/supervisor service-compositor:/bin/compositor)
+        CONFIG_FEATURES="input,supervisor,ai,ui"
         ;;
     render)
         WORKLOAD_PACKAGE="app-c2c-render"
         WORKLOAD_CELLS=(c2c-render c2c-render-worker c2c-render-domain-worker)
+        SERVICE_PACKAGES=()
+        SERVICE_CELLS=()
+        CONFIG_FEATURES="input"
         ;;
     *)
         echo "FAIL: unknown C2C_WORKLOAD=$WORKLOAD (expected lifecycle or render)" >&2
@@ -86,6 +95,9 @@ cargo build --release --target "$TARGET" -Z build-std=core,alloc \
 
 echo "==> Building the $WORKLOAD workload cells..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p "$WORKLOAD_PACKAGE"
+for package in "${SERVICE_PACKAGES[@]}"; do
+    cargo build --release --target "$TARGET" -Z build-std=core,alloc -p "$package"
+done
 
 CELL_BINARIES=(
     "$REL/cellbox"
@@ -116,6 +128,10 @@ CELL_IMAGE_PATHS=(
 for cell in "${WORKLOAD_CELLS[@]}"; do
     CELL_BINARIES+=("$REL/$cell")
     CELL_IMAGE_PATHS+=("/bin/$cell")
+done
+for entry in "${SERVICE_CELLS[@]}"; do
+    CELL_BINARIES+=("$REL/${entry%%:*}")
+    CELL_IMAGE_PATHS+=("${entry#*:}")
 done
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."
@@ -156,7 +172,7 @@ fi
 echo "==> Assembling kernel_fs.img (VIFS1 ramdisk)..."
 # `cellbox sh` opens an authenticated serial session owned by the input
 # service; without it the shell exits (NotFound) and no prompt appears.
-"$PYTHON_BIN" tools/mkfat32.py --config-features input "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
+"$PYTHON_BIN" tools/mkfat32.py --config-features "$CONFIG_FEATURES" "$TH_DIR/kernel_fs.img" "${FAT_CELL_ARGS[@]}"
 if [[ ! -s "$TH_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce a nonempty kernel_fs.img" >&2
     exit 1

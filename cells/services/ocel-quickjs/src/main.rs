@@ -25,7 +25,7 @@ extern crate std;
 #[cfg(not(qjs_c_unavailable))]
 use dom_arena::{ipc::JsServiceSession, JsContext, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
 #[cfg(not(qjs_c_unavailable))]
-use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
 api::declare_manifest!(
     block_io = false,
@@ -33,7 +33,7 @@ api::declare_manifest!(
     spawn = false,
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
+api::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
 
 // Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
 // snapshot source and allocator overhead; the engine's own ceiling stays lower.
@@ -144,7 +144,7 @@ fn cell_main() {
                             }
                         }
                     } else if operation.is_none() {
-                        let _ = sys_send(caller_tid, encoded);
+                        let _ = ostd::ipc::post(caller_tid, encoded);
                     } else if let Some(context) = context {
                         session.abandon(caller_tid, context, &mut ctx);
                     }

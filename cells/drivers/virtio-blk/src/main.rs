@@ -47,7 +47,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use device::BlkDevice;
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_lookup_service, sys_register_block_device, sys_send, BlockDevice};
+use ostd::syscall::{sys_lookup_service, sys_register_block_device, BlockDevice};
 
 static STATE: Mutex<Option<BlkDevice>> = Mutex::new(None);
 
@@ -118,9 +118,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte(); // not initialised
                 1
             };
-            // Blocking send: the VFS client issues sys_send + a blocking sys_recv(tid),
-            // so it is guaranteed to be waiting (matches the NVMe cell reply path).
-            let _ = sys_send(sender_tid, &reply[..len]);
+            let _ = ostd::ipc::reply_to(sender_tid, &reply[..len]);
         }
 
         AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {

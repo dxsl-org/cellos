@@ -56,10 +56,7 @@ pub(crate) fn handle_tcp_request(
                     if let Some(token) = ostd::ipc::current() {
                         ostd::ipc::reply(token, bytes).is_ok()
                     } else {
-                        matches!(
-                            ostd::syscall::sys_send(sender, bytes),
-                            ostd::syscall::SyscallResult::Ok(_)
-                        )
+                        ostd::ipc::post(sender, bytes).is_ok()
                     }
                 });
             if !delivered {

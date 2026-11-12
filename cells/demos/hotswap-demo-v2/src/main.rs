@@ -108,7 +108,7 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
             if message_eq(data, b"inc") {
                 let mut state = STATE.lock();
                 state.counter = state.counter.saturating_add(1);
-                ctx.send(sender_tid, b"ok").ok();
+                ctx.reply(sender_tid, b"ok").ok();
             } else if message_eq(data, b"get") {
                 // v2 prefix distinguishes this version from v1 in tests.
                 let state = STATE.lock();
@@ -117,9 +117,9 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                 resp[1] = b'2';
                 resp[2] = b':';
                 resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
-                ctx.send(sender_tid, &resp).ok();
+                ctx.reply(sender_tid, &resp).ok();
             } else {
-                ctx.send(sender_tid, b"unknown").ok();
+                ctx.reply(sender_tid, b"unknown").ok();
             }
         }
 

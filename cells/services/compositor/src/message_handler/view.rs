@@ -4,7 +4,7 @@ use api::display::{
     compositor_ops, CreateViewRequest, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
     CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
 };
-use ostd::syscall::sys_send;
+use ostd::ipc::reply_to;
 
 use super::{view_frame, MessageContext};
 use crate::stacking;
@@ -229,12 +229,12 @@ pub(super) fn send_response(recipient: usize, resp: &ViewOpResponse) {
     reply[8..12].copy_from_slice(&resp.frame_generation.to_le_bytes());
     reply[12..16].copy_from_slice(&resp.view_id.to_le_bytes());
     reply[16..20].copy_from_slice(&resp.view_incarnation.to_le_bytes());
-    sys_send(recipient, &reply);
+    let _ = reply_to(recipient, &reply);
 }
 
 pub(super) fn send_error(recipient: usize, opcode: u8, err: ViewOpResult) {
     let mut reply = [0u8; VIEW_OP_RESPONSE_WIRE_SIZE];
     reply[0] = opcode;
     reply[1] = err as u8;
-    sys_send(recipient, &reply);
+    let _ = reply_to(recipient, &reply);
 }

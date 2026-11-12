@@ -8,7 +8,7 @@ extern crate ostd;
 
 use alloc::{string::String, vec::Vec};
 use ocel_pdf_proto::{DocumentOwner, Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES};
-use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
 mod engine;
 
@@ -22,6 +22,7 @@ api::declare_syscalls![
     Log,
     Recv,
     Send,
+    SendGather,
     Yield,
     Exit,
     LookupService,
@@ -209,7 +210,7 @@ fn cell_main() {
                             active = None;
                         }
                     } else {
-                        let _ = sys_send(owner, encoded);
+                        let _ = ostd::ipc::post(owner, encoded);
                     }
                 }
             }

@@ -251,7 +251,7 @@ struct PendingReady {
 fn send_ready(sender: usize, response: NetResponse<'_>) {
     let mut buf = [0u8; IPC_BUF_SIZE];
     if let Ok(bytes) = ipc::encode(&response, &mut buf) {
-        let _ = ostd::syscall::sys_send(sender, bytes);
+        let _ = ostd::ipc::reply_to(sender, bytes);
     }
 }
 
@@ -466,7 +466,7 @@ fn admit_request(buffer: &[u8], sender: usize, flags: u32) -> bool {
         return true;
     };
     let mut reply = [0u8; crate::rights::DENIAL_REPLY_LEN];
-    let _ = ostd::syscall::sys_send(sender, denial.reply(&mut reply));
+    let _ = ostd::ipc::reply_to(sender, denial.reply(&mut reply));
     false
 }
 

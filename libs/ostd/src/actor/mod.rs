@@ -16,9 +16,9 @@
 //!   is claimed (§3).
 //! - Requests and replies are **postcard**-encoded (§4) and sized to leave the
 //!   2-byte envelope headroom (§5).
-//! - A reply is a **blocking** send, so the caller must wait for it. Pairs
-//!   inside one actor use [`ActorCtx::call`], which recvs **masked to the peer
-//!   tid** (§2) — never a wildcard that could swallow a keystroke or a child's
+//! - Sends and replies never park: they queue in the peer's mailbox, and the
+//!   caller takes the reply later. Pairs inside one actor use
+//!   [`ActorCtx::call`], which recvs **masked to the peer tid** (§2) — never a wildcard that could swallow a keystroke or a child's
 //!   exit notification.
 //! - Nothing is dropped silently (§7): an undecodable message is logged with its
 //!   sender and length.
@@ -115,15 +115,14 @@ impl<'a> ActorCtx<'a> {
         syscall::sys_get_scheduler_ticks().unwrap_or(0)
     }
 
-    /// Send a typed message in the App SDK envelope.
+    /// Encode `msg` in the App SDK envelope into `frame`; returns its length.
     ///
     /// The payload must fit the frame *after* the 2-byte envelope (Spec 17 §5).
-    pub fn send_msg<T: Serialize>(&mut self, to: usize, msg: &T) -> ViResult<()> {
+    fn frame<T: Serialize>(msg: &T, frame: &mut [u8; api::ipc::IPC_BUF_SIZE]) -> ViResult<usize> {
         let mut scratch = [0u8; api::ipc::IPC_BUF_SIZE];
         let payload_len = api::ipc::encode(msg, &mut scratch)
             .map_err(|_| ViError::InvalidArgument)?
             .len();
-        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
         let total = payload_len + 2;
         if total > frame.len() {
             return Err(ViError::InvalidArgument);
@@ -131,13 +130,29 @@ impl<'a> ActorCtx<'a> {
         frame[0] = APP_MSG_MAGIC;
         frame[1] = 0x00;
         frame[2..total].copy_from_slice(&scratch[..payload_len]);
-        self.app.send(to, &frame[..total])
+        Ok(total)
     }
 
-    /// Answer the sender of a request. A reply is a blocking send, so the caller
-    /// must be waiting for it (see [`ActorCtx::call`]).
+    /// Queue a typed message in the App SDK envelope for `to`, without parking.
+    ///
+    /// # Errors
+    /// `InvalidArgument` when the message does not fit, `IO` when `to` is gone
+    /// or its mailbox is full.
+    pub fn send_msg<T: Serialize>(&mut self, to: usize, msg: &T) -> ViResult<()> {
+        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+        let len = Self::frame(msg, &mut frame)?;
+        crate::ipc::post(to, &frame[..len]).map_err(|_| ViError::IO)
+    }
+
+    /// Answer the request `to` sent, without parking (see
+    /// [`crate::ipc::reply_to`]); the caller need not be receiving yet.
+    ///
+    /// # Errors
+    /// As [`ActorCtx::send_msg`].
     pub fn reply<T: Serialize>(&mut self, to: usize, msg: &T) -> ViResult<()> {
-        self.send_msg(to, msg)
+        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+        let len = Self::frame(msg, &mut frame)?;
+        self.app.reply(to, &frame[..len])
     }
 
     /// Typed request/reply exchange with `to`.

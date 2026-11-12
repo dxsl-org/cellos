@@ -37,7 +37,8 @@ use api::syscall::{SyscallSet, ViSyscall};
 /// the compiler evaluates it at build time.
 ///
 /// # Base set (all cells)
-/// `Send, Recv, TryRecv, Reply, Log, Heartbeat, LookupService, GetTime, RecvTimeout`
+/// `Send, SendGather, Recv, TryRecv, Reply, Log, Heartbeat, LookupService, GetTime,
+/// RecvTimeout` (`SendGather` backs the non-parking `post` and replies)
 ///
 /// # Capability extras
 /// - `block_io=true` → `GrantAlloc/Share/Slice/Free/Register/Unregister`
@@ -47,6 +48,7 @@ use api::syscall::{SyscallSet, ViSyscall};
 pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {
     let base = SyscallSet::EMPTY
         .with(ViSyscall::Send)
+        .with(ViSyscall::SendGather)
         .with(ViSyscall::Recv)
         .with(ViSyscall::TryRecv)
         .with(ViSyscall::Reply)

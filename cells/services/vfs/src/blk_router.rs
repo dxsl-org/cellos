@@ -73,7 +73,7 @@ impl BlockSys for Syscalls {
         }
     }
     fn send(&mut self, tid: usize, msg: &[u8]) -> bool {
-        !matches!(sys::sys_send(tid, msg), SyscallResult::Err(_))
+        ostd::ipc::post(tid, msg).is_ok()
     }
     fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool {
         // Masked to `tid`, so no other cell's message is taken for the reply.

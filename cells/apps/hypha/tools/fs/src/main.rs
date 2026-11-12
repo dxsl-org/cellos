@@ -31,7 +31,15 @@ use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 // StateRestore: reads the spawn argv that names the owning core.
-api::declare_syscalls![Send, Recv, Log, LookupService, VfsMutate, StateRestore];
+api::declare_syscalls![
+    Send,
+    SendGather,
+    Recv,
+    Log,
+    LookupService,
+    VfsMutate,
+    StateRestore
+];
 
 ostd::cell_main!(cell_main);
 
@@ -69,7 +77,7 @@ fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
     };
     let mut buf = [0u8; 4096];
     if let Ok(bytes) = postcard::to_slice(&reply, &mut buf) {
-        let _ = ctx.send(sender, bytes);
+        let _ = ctx.reply(sender, bytes);
     }
 }
 

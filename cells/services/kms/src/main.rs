@@ -10,7 +10,15 @@ use service_kms::{boot_probe_store, KmsService, ServiceRegistrySnapshot};
 use types::kms::KMS_MESSAGE_LEN;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupService, VfsMutate];
+api::declare_syscalls![
+    Send,
+    SendGather,
+    Recv,
+    RecvTimeout,
+    Log,
+    LookupService,
+    VfsMutate
+];
 
 ostd::cell_main!(cell_main);
 
@@ -47,7 +55,7 @@ fn cell_main() {
                     if let Some(operation) = operation {
                         let _ = ostd::ipc::reply(operation, &response.to_bytes());
                     } else {
-                        let _ = ostd::syscall::sys_send(sender, &response.to_bytes());
+                        let _ = ostd::ipc::post(sender, &response.to_bytes());
                     }
                 }
             }

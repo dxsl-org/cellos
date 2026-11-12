@@ -1,7 +1,7 @@
 //! Snapshot and restore IPC envelopes shared by the supervisor swap flow.
 
 use crate::error::HotswapError;
-use ostd::syscall::{sys_send, SyscallResult};
+use ostd::ipc::post;
 
 const APP_MSG_MAGIC: u8 = 0xAC;
 const DISC_SNAPSHOT: u8 = 0xF0;
@@ -12,10 +12,7 @@ pub fn send_snapshot_event(tid: usize, swap_id: u64) -> Result<(), HotswapError>
     buf[0] = APP_MSG_MAGIC;
     buf[1] = DISC_SNAPSHOT;
     buf[2..10].copy_from_slice(&swap_id.to_le_bytes());
-    match sys_send(tid, &buf) {
-        SyscallResult::Ok(_) => Ok(()),
-        SyscallResult::Err(_) => Err(HotswapError::SnapshotIpcFailed),
-    }
+    post(tid, &buf).map_err(|_| HotswapError::SnapshotIpcFailed)
 }
 
 pub fn send_restore_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
@@ -25,10 +22,7 @@ pub fn send_restore_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> 
     let mut tmp = [0u8; 20];
     let len = fmt_u64_decimal(swap_id, &mut tmp).min(63);
     buf[2..2 + len].copy_from_slice(&tmp[..len]);
-    match sys_send(tid, &buf) {
-        SyscallResult::Ok(_) => Ok(()),
-        SyscallResult::Err(_) => Err(HotswapError::RestoreIpcFailed),
-    }
+    post(tid, &buf).map_err(|_| HotswapError::RestoreIpcFailed)
 }
 
 fn fmt_u64_decimal(mut value: u64, buf: &mut [u8; 20]) -> usize {

@@ -45,7 +45,7 @@ use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{
-    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, sys_send, BlockDevice,
+    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, BlockDevice,
     PcieDeviceInfo,
 };
 use types::ViError;
@@ -234,7 +234,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 reply[0] = types::block_wire::BlockOutcome::NotIssued.to_byte();
                 1 // not initialised
             };
-            let _ = sys_send(sender_tid, &reply[..len]);
+            let _ = ostd::ipc::reply_to(sender_tid, &reply[..len]);
         }
 
         AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {
@@ -291,6 +291,7 @@ macro_rules! ahci_syscalls {
         api::declare_syscalls![
             // AppContext event-loop base set.
             Send,
+            SendGather,
             Recv,
             TryRecv,
             Reply,

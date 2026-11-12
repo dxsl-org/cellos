@@ -429,3 +429,42 @@ fn assert_async_lifecycle(mut qemu: QemuRunner, topology: &str) {
         }
     }
 }
+
+/// Phase 11 (CP1 §4.1): a client that sends to the supervisor, config or
+/// compositor by raw `Send` and never receives must not park the service; each
+/// one then answers a second client's bounded call.
+#[test]
+fn x86_services_do_not_park_on_a_client_that_never_receives() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&lifecycle_iso_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "x86_64 shell prompt not reached: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("bench nonreceiving-client");
+    qemu.wait_for("[nonreceiving] PASS", SCENARIO_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "non-receiving client witness did not complete: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+    let output = qemu.dump();
+    assert!(
+        !output.contains("[nonreceiving] FAIL"),
+        "witness reported a failure\n--- output ---\n{output}"
+    );
+    for service in ["config", "supervisor", "compositor"] {
+        let served =
+            format!("[nonreceiving] {service} SERVED second=Reply first_client_receiving=false");
+        assert!(
+            output.contains(&served),
+            "{service} was not witnessed serving a second client\n--- output ---\n{output}"
+        );
+    }
+}

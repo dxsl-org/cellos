@@ -37,7 +37,7 @@ use ostd::io::{print, print_usize, println};
 use ostd::runtime::CellRuntime;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+api::declare_syscalls![Send, SendGather, Recv, Log, LookupService];
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // 10.0.2.2 = QEMU user-net gateway = the host (pin the IP — os-gap G3).
@@ -79,7 +79,7 @@ fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
     };
     let mut buf = [0u8; 4096];
     if let Ok(bytes) = postcard::to_slice(&reply, &mut buf) {
-        let _ = ctx.send(sender, bytes);
+        let _ = ctx.reply(sender, bytes);
     }
 }
 

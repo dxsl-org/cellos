@@ -181,6 +181,7 @@ api::declare_manifest!(
 // interrupt (435 at start, `WaitCompletion(IRQ)` parks).
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     Reply,

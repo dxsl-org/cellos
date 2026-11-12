@@ -13,7 +13,7 @@ extern crate ostd;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
-api::declare_syscalls![Log, Exit, Send, Recv, RecvTimeout];
+api::declare_syscalls![Log, Exit, Send, SendGather, Recv, RecvTimeout];
 
 ostd::cell_main!(cell_main);
 

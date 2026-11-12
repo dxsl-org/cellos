@@ -15,7 +15,7 @@ mod engine;
 
 use dom_arena::{ipc::JsServiceSession, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
 use engine::OcelJsServiceEngine;
-use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
 // Untrusted-protection-class manifest: the kernel classifies this cell as a
 // domain cell and admits it to Tier 2 (private page tables), containing any
@@ -29,7 +29,7 @@ api::declare_manifest!(
     spawn = false,
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, Send, TryRecv, GetTime];
+api::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
 
 ostd::cell_main!(cell_main);
 
@@ -55,7 +55,7 @@ fn cell_main() {
                 };
 
                 if let Ok(encoded) = postcard::to_slice(&response, &mut send_buf) {
-                    let _ = sys_send(caller_tid, encoded);
+                    let _ = ostd::ipc::reply_to(caller_tid, encoded);
                 }
             }
             _ => {

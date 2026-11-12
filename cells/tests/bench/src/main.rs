@@ -17,6 +17,7 @@ mod cpu_accounting;
 #[cfg(not(feature = "g1-cpu-workload"))]
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     TryRecv,
@@ -47,6 +48,7 @@ api::declare_syscalls![
     Spawn,
     Wait,
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     Log,
@@ -461,6 +463,7 @@ fn cell_main() {
     match role {
         "c2c-broker-oracle" => scenarios::c2c_broker_oracle::run(),
         "local-service-lifecycle" => scenarios::local_service_lifecycle::run(),
+        "nonreceiving-client" => scenarios::nonreceiving_client::run(),
         "async-lifecycle" => scenarios::async_lifecycle::run(),
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),

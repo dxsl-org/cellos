@@ -1,5 +1,5 @@
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
-use ostd::syscall::sys_send;
+use ostd::ipc::reply_to;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::{udp, Socket},
@@ -153,7 +153,7 @@ pub(crate) fn handle_udp_request(
                 Some(reply) => {
                     let mut rb = [0u8; IPC_BUF_SIZE];
                     if let Ok(s) = ipc::encode(&R::Data(&reply), &mut rb) {
-                        sys_send(sender, s);
+                        let _ = reply_to(sender, s);
                     }
                 }
                 None => send_typed(sender, R::Data(&[])),

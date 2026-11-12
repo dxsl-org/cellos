@@ -10,7 +10,7 @@ ostd::cell_main!(cell_main);
 
 /// kill <tid> — send cooperative shutdown signal or force-exit a task.
 ///
-/// Cooperative (state=Waiting): sends 0xFF via sys_send; the task's recv loop
+/// Cooperative (state=Waiting): queues 0xFF in its mailbox; the task's recv loop
 /// checks for this sentinel and exits cleanly.
 /// Force (state=Ready/Running): calls sys_force_exit; the kernel terminates the
 /// task immediately.  System Cells with SpawnCap may reject force-exit.
@@ -46,7 +46,7 @@ fn cell_main() {
     match state {
         Some(2) => {
             // Task is blocked in a recv call — send cooperative shutdown sentinel.
-            let _ = syscall::sys_send(tid, &[0xFF_u8]);
+            let _ = ostd::ipc::post(tid, &[0xFF_u8]);
             emit(
                 output.stdout(),
                 &[b"kill: sent shutdown signal to ", tid_bytes, b"\n"],

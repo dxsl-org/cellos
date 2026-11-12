@@ -9,8 +9,8 @@ mod udp;
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use ostd::ipc::{post, reply_to};
 use ostd::sync::Mutex;
-use ostd::syscall::sys_send;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::tcp as smoltcp_tcp,
@@ -57,7 +57,7 @@ pub(crate) fn tcp_state_byte(s: smoltcp_tcp::State) -> u8 {
 pub(crate) fn send_typed(sender: usize, resp: NetResponse<'_>) {
     let mut r = [0u8; IPC_BUF_SIZE];
     if let Ok(s) = ipc::encode(&resp, &mut r) {
-        sys_send(sender, s);
+        let _ = reply_to(sender, s);
     }
 }
 
@@ -276,7 +276,7 @@ pub(crate) fn handle_typed(
                     if let Some(operation) = operation {
                         let _ = ostd::ipc::reply(operation, s);
                     } else {
-                        sys_send(sender, s);
+                        let _ = post(sender, s);
                     }
                 }
             } else {

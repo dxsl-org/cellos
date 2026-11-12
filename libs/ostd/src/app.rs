@@ -23,7 +23,7 @@
 //!
 //! fn handler(ctx: &mut AppContext, ev: AppEvent) {
 //!     if let AppEvent::Message { sender_tid, .. } = ev {
-//!         ctx.send(sender_tid, b"\xAC\x00pong").ok();
+//!         ctx.reply(sender_tid, b"\xAC\x00pong").ok();
 //!     }
 //! }
 //!
@@ -247,7 +247,7 @@ impl AppContext {
     /// Run the IPC event loop, calling `handler` for every incoming event.
     ///
     /// Blocks until events arrive. The handler receives `&mut AppContext` so it can
-    /// call [`send`][AppContext::send], [`lookup_service`][AppContext::lookup_service],
+    /// call [`reply`][AppContext::reply], [`lookup_service`][AppContext::lookup_service],
     /// etc. An armed heartbeat is kept alive while idle (see [`Self::arm_heartbeat`]).
     pub fn run(&mut self, mut handler: impl FnMut(&mut AppContext, AppEvent)) -> ! {
         loop {
@@ -300,18 +300,22 @@ impl AppContext {
         }
     }
 
-    /// Send raw bytes `data` to another cell by TID.
-    pub fn send(&self, tid: usize, data: &[u8]) -> ViResult<()> {
-        match syscall::sys_send(tid, data) {
-            syscall::SyscallResult::Ok(_) => Ok(()),
-            syscall::SyscallResult::Err(_) => Err(ViError::IO),
-        }
+    /// Answer the request `tid` sent, without parking: see [`crate::ipc::reply_to`].
+    ///
+    /// # Errors
+    /// `IO` when the reply could not be delivered.
+    pub fn reply(&self, tid: usize, data: &[u8]) -> ViResult<()> {
+        crate::ipc::reply_to(tid, data).map_err(|_| ViError::IO)
     }
 
-    /// Send an App SDK envelope message to `tid`.
+    /// Queue an App SDK envelope message for `tid`, without parking.
     ///
     /// Prepends `[APP_MSG_MAGIC, 0x00]` so the receiver's `AppContext` decodes it
     /// as [`AppEvent::Message`].
+    ///
+    /// # Errors
+    /// `InvalidArgument` when the payload does not fit, `IO` when `tid` is gone
+    /// or its mailbox is full.
     pub fn send_msg(&self, tid: usize, payload: &[u8]) -> ViResult<()> {
         let mut buf = [0u8; RECV_BUF_SIZE];
         if payload.len() + 2 > RECV_BUF_SIZE {
@@ -320,7 +324,7 @@ impl AppContext {
         buf[0] = APP_MSG_MAGIC;
         buf[1] = 0x00;
         buf[2..2 + payload.len()].copy_from_slice(payload);
-        self.send(tid, &buf[..2 + payload.len()])
+        crate::ipc::post(tid, &buf[..2 + payload.len()]).map_err(|_| ViError::IO)
     }
 
     /// Resolve the live provider tid of a well-known service.

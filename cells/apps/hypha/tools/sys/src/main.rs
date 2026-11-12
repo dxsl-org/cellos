@@ -26,7 +26,7 @@ use ostd::runtime::CellRuntime;
 use ostd::syscall::{sys_exit, sys_get_procs, sys_lookup_service};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, GetProcs, LookupService];
+api::declare_syscalls![Send, SendGather, Recv, Log, GetProcs, LookupService];
 
 ostd::cell_main!(cell_main);
 
@@ -57,7 +57,7 @@ fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
     };
     let mut buf = [0u8; 4096];
     if let Ok(bytes) = postcard::to_slice(&reply, &mut buf) {
-        let _ = ctx.send(sender, bytes);
+        let _ = ctx.reply(sender, bytes);
     }
 }
 

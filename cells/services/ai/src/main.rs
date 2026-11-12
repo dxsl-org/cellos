@@ -38,6 +38,7 @@ use ostd::syscall::SyscallResult;
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     Log,
@@ -124,7 +125,7 @@ fn cell_main() {
             SyscallResult::Ok(sender) if sender > 0 => {
                 service.reap_idle_sessions();
                 if let Some(encoded) = service.handle(sender, &buf, &mut reply) {
-                    let _ = ostd::syscall::sys_send(sender, encoded);
+                    let _ = ostd::ipc::reply_to(sender, encoded);
                 }
             }
             _ => ostd::task::yield_now(),

@@ -12,6 +12,7 @@ mod scenarios;
 // Probe/load roles do not spawn further children.
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     TryRecv,
@@ -67,6 +68,9 @@ fn cell_main() {
     }
     if role.starts_with("c2c-sync-expiry-caller:") {
         scenarios::local_service_lifecycle::run_sync_expiry_caller(role);
+    }
+    if role.starts_with("nr-client:") {
+        scenarios::nonreceiving_client::run_client(role);
     }
     if role.starts_with("c2c-echo-reverse:") {
         scenarios::async_lifecycle::run_echo_reverse(role);

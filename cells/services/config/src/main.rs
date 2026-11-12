@@ -17,6 +17,7 @@ mod rights;
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     Log,
@@ -121,7 +122,8 @@ fn cell_main() {
                 let caller = CallerIdentity::from_recv_buf(&buf);
                 let request = api::ipc::decode::<ConfigRequest>(&buf).ok();
                 if let Some(reply) = handle(&mut store, request, caller.as_ref(), &mut resp_buf) {
-                    ostd::syscall::sys_send(sender, reply);
+                    // Never park on a client that does not receive its reply.
+                    let _ = ostd::ipc::Incoming::current(sender).reply(reply);
                 }
             }
             _ => {

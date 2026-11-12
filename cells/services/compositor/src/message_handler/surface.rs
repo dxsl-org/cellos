@@ -1,5 +1,5 @@
 use api::display::{compositor_ops, Rect, SurfaceRole};
-use ostd::syscall::sys_send;
+use ostd::ipc::reply_to;
 
 use crate::input_handler::InputState;
 use crate::stacking;
@@ -36,10 +36,10 @@ pub(super) fn handle(
                         frames.adopt(cap, sender);
                         input.focus_new_window(sender, cap);
                     }
-                    sys_send(sender, &cap.to_le_bytes());
+                    let _ = reply_to(sender, &cap.to_le_bytes());
                 }
                 Err(_) => {
-                    sys_send(sender, &0u64.to_le_bytes());
+                    let _ = reply_to(sender, &0u64.to_le_bytes());
                 }
             }
         }
@@ -191,7 +191,7 @@ fn destroy_surface(
         .get(cap)
         .is_some_and(|surface| surface.owner == sender)
     {
-        sys_send(sender, b"\x01");
+        let _ = reply_to(sender, b"\x01");
         return;
     }
     let freed_rect = table
@@ -203,7 +203,7 @@ fn destroy_surface(
     input.remove_surface(cap);
     z_order.remove(cap);
     let _ = table.remove(cap);
-    sys_send(sender, b"\x00");
+    let _ = reply_to(sender, b"\x00");
     if let Some(rect) = freed_rect {
         *dirty = Some(match dirty.take() {
             Some(acc) => acc.union(&rect),
