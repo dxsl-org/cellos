@@ -88,8 +88,14 @@ pub fn service_idle(
     net_mmio: &mut VirtioMmio,
     display_mmio: [&VirtioMmio; 2],
     prefer_pit: &mut bool,
+    host_console: bool,
 ) {
-    drain_host_input(uart);
+    // The host serial input is one system-wide queue. Only the console guest
+    // (`hv`) is the operator's terminal; a launcher's guest (Chrome) has no
+    // interactive console and must not receive what is typed at CellOS.
+    if host_console {
+        drain_host_input(uart);
+    }
     if deliver_uart(vm_id, vcpu_id, uart, pic) {
         return;
     }

@@ -133,6 +133,7 @@ pub fn run(
                     &mut net_vmio,
                     [&gpu_vmio, &input_vmio],
                     &mut net_poll_turn,
+                    session.is_none(),
                 );
                 if serve_host(
                     &mut gpu,
@@ -169,6 +170,7 @@ pub fn run(
                     &mut net_vmio,
                     [&gpu_vmio, &input_vmio],
                     &mut net_poll_turn,
+                    session.is_none(),
                 );
                 if serve_host(
                     &mut gpu,

@@ -118,9 +118,9 @@ def chrome(args) -> list:
             outside = window.getpixel((CHROME_X - 40, CHROME_Y + 200))
             checks.append(("chrome:control-pattern-only-inside-window",
                            outside not in (TOP, BOTTOM)))
-            # The host stack serves Ocel while the guest's port is open. The serial
-            # shell cannot start it here: the Chrome guest's hypervisor reads the
-            # serial input. Ocel's window opens over Chrome's at the same place,
+            # The host stack serves Ocel while the guest's port is open. Ocel is
+            # opened from the taskbar: with a window focused the serial shell does
+            # not get the serial input. Ocel's window opens over Chrome's at the same place,
             # so the first window menu Close below closes Ocel and the second
             # closes Chrome.
             vm.click(*OCEL_TASKBAR)
