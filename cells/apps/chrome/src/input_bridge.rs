@@ -60,12 +60,15 @@ impl InputBridge {
                     return out;
                 }
                 self.sync_modifiers(key.modifiers, &mut out);
-                let value = match key.state {
-                    KeyState::Released => 0,
-                    KeyState::Pressed => 1,
-                    KeyState::Repeated => 2,
-                };
-                out.push((EV_KEY, key.scancode as u16, value));
+                let code = key.scancode as u16;
+                match key.state {
+                    KeyState::Released => out.push((EV_KEY, code, 0)),
+                    KeyState::Pressed => out.push((EV_KEY, code, 1)),
+                    // The host input service owns repeat and the guest's is off
+                    // (scripts/chrome-guest/no-key-repeat.c). libinput drops
+                    // evdev value 2, so a repeat is a fresh press.
+                    KeyState::Repeated => out.extend([(EV_KEY, code, 0), (EV_KEY, code, 1)]),
+                }
             }
         }
         out
@@ -116,7 +119,7 @@ mod tests {
         let shifted = bridge.translate(&key(30, Modifiers::SHIFT, KeyState::Pressed), 800, 600);
         assert_eq!(shifted, [(EV_KEY, 42, 1), (EV_KEY, 30, 1)]);
         let repeat = bridge.translate(&key(30, Modifiers::SHIFT, KeyState::Repeated), 800, 600);
-        assert_eq!(repeat, [(EV_KEY, 30, 2)]);
+        assert_eq!(repeat, [(EV_KEY, 30, 0), (EV_KEY, 30, 1)]);
         let plain = bridge.translate(&key(48, Modifiers(0), KeyState::Pressed), 800, 600);
         assert_eq!(plain, [(EV_KEY, 42, 0), (EV_KEY, 48, 1)]);
     }

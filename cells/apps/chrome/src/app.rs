@@ -8,7 +8,7 @@ use viui::theme;
 use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
 
 use crate::frame::GuestFrame;
-use crate::guest::Guest;
+use crate::guest::{Guest, InputOutbox};
 use crate::input_bridge::InputBridge;
 
 const DEFAULT_WIDTH: u32 = 1024;
@@ -79,6 +79,7 @@ pub fn cell_main() {
     let mut window = WindowLifecycle::new(ClosePolicy::Accept);
     let mut frame: Option<GuestFrame> = None;
     let mut bridge = InputBridge::new();
+    let mut outbox = InputOutbox::new();
     loop {
         let mut closed = false;
         let mut resized = false;
@@ -113,12 +114,11 @@ pub fn cell_main() {
             if let ostd::input::InputEvent::MouseButton { .. } = event {
                 let _ = ostd::input::request_focus();
             }
-            for (event_type, code, value) in
-                bridge.translate(&event, surface.width(), surface.height())
-            {
-                guest.forward(event_type, code, value);
+            for guest_event in bridge.translate(&event, surface.width(), surface.height()) {
+                outbox.push(guest_event);
             }
         }
+        busy |= outbox.flush(guest);
 
         while let Some(event) = guest.next_event() {
             busy = true;

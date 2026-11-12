@@ -1,6 +1,7 @@
 //! The Linux guest behind the window: this launcher's own hypervisor Cell and
 //! the `vmm_session` protocol to it.
 
+use alloc::collections::VecDeque;
 use alloc::string::ToString;
 
 use api::services::vmm_session::{
@@ -9,8 +10,12 @@ use api::services::vmm_session::{
 };
 use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
 
+use crate::input_bridge::GuestEvent;
+
 /// How long the hypervisor may take to answer LAUNCH (10 ms ticks).
 const LAUNCH_REPLY_TICKS: u64 = 500;
+/// Forwarded input events held while the hypervisor's mailbox is full.
+const OUTBOX_CAPACITY: usize = 512;
 
 pub struct Guest {
     hypervisor_tid: usize,
@@ -60,13 +65,14 @@ impl Guest {
         self.hypervisor_tid
     }
 
-    /// Forward one evdev event; dropped if the hypervisor's queue is full.
-    pub fn forward(&self, event_type: u16, code: u16, value: i32) {
+    /// Post one evdev event; `false` when the hypervisor's mailbox is full.
+    fn forward(&self, (event_type, code, value): GuestEvent) -> bool {
         let request = VmmInputForwardRequest::new(self.session_id, event_type, code, value);
         let mut buf = [0u8; VmmInputForwardRequest::LEN];
-        if request.encode(&mut buf).is_ok() {
-            let _ = sys_post(self.hypervisor_tid, &buf);
+        if request.encode(&mut buf).is_err() {
+            return true;
         }
+        matches!(sys_post(self.hypervisor_tid, &buf), SyscallResult::Ok(0))
     }
 
     /// Ask the guest to use a new display size (the window was resized).
@@ -91,5 +97,38 @@ impl Guest {
             SyscallResult::Ok(sender) if sender == self.hypervisor_tid => VmmEvent::decode(&buf),
             _ => None,
         }
+    }
+}
+
+/// Input on its way to the guest, in order. The hypervisor drains its mailbox
+/// only between guest exits, so a burst (this window catching up after a
+/// stall) can fill it; a dropped key release would leave the key held in the
+/// guest, so events wait here instead.
+pub struct InputOutbox(VecDeque<GuestEvent>);
+
+impl InputOutbox {
+    pub const fn new() -> Self {
+        Self(VecDeque::new())
+    }
+
+    /// Queue `event`; past capacity (the hypervisor stopped draining) the
+    /// oldest event is dropped.
+    pub fn push(&mut self, event: GuestEvent) {
+        if self.0.len() == OUTBOX_CAPACITY {
+            self.0.pop_front();
+        }
+        self.0.push_back(event);
+    }
+
+    /// Post queued events in order until the mailbox is full. Returns `true`
+    /// while events remain.
+    pub fn flush(&mut self, guest: &Guest) -> bool {
+        while let Some(&event) = self.0.front() {
+            if !guest.forward(event) {
+                return true;
+            }
+            self.0.pop_front();
+        }
+        false
     }
 }

@@ -11,8 +11,9 @@
 #   chrome-guest.sqfs   the guest root
 #   packages.txt        installed package set (name-version), sorted
 #   SHA256SUMS          checksums of both
-#   INPUTS.sha256       digest of this builder and the guest init, so a consumer
-#                       (scripts/make-chrome-guest-disk.sh) can tell a stale image
+#   INPUTS.sha256       digest of this builder, the guest init and the cage key-repeat
+#                       shim, so a consumer (scripts/make-chrome-guest-disk.sh) can tell
+#                       a stale image
 #
 # Usage: bash scripts/build-chrome-guest-image.sh [OUT_DIR]
 set -euo pipefail
@@ -51,13 +52,16 @@ docker run --rm -i \
     -v "$REPO_ROOT/scripts/chrome-guest:/in:ro" -v "$OUT_DIR:/out" -v "$MODLOOP:/modloop:ro" \
     -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)" \
     "$BUILDER" sh -eu -s -- "${PACKAGES[@]}" <<'EOF'
-apk add -q --no-cache squashfs-tools
+apk add -q --no-cache squashfs-tools gcc musl-dev
 mkdir -p /rootfs/etc/apk
 cp -a /etc/apk/keys /rootfs/etc/apk/
 cp /etc/apk/repositories /rootfs/etc/apk/
 apk add -q --root /rootfs --initdb --no-cache "$@"
 apk info -q --root /rootfs -v | sort > /out/packages.txt
 install -m 0755 /in/init.sh /rootfs/sbin/chrome-guest-init
+mkdir -p /rootfs/usr/lib/chrome-guest
+gcc -O2 -shared -fPIC -Wall -Werror -o /rootfs/usr/lib/chrome-guest/no-key-repeat.so \
+    /in/no-key-repeat.c
 unsquashfs -q -n -d /modloop-root /modloop
 mkdir -p /rootfs/lib/modules
 cp -a /modloop-root/modules/. /rootfs/lib/modules/

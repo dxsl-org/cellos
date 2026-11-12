@@ -23,7 +23,6 @@ from tier3_vm import SCREEN_H, SCREEN_W, Vm
 # before the window loses focus.
 TAB_STRIP = (211, 227, 253)
 OMNIBOX, OMNIBOX_FOCUSED = (237, 242, 250), (255, 255, 255)
-SETTLE_BEFORE_TYPING = 15  # seconds
 # https://example.com/ paints its page background #eee in light mode.
 EXAMPLE_BACKGROUND = (238, 238, 238)
 PAGE_WINDOW = 300
@@ -127,10 +126,6 @@ def run(args) -> list:
             return checks
         checks.append(("control-not-example-before", page_share(image, EXAMPLE_BACKGROUND) < 0.5))
 
-        # Chromium keeps loading for a while after its UI first paints; a key
-        # typed then can see its release late and auto-repeat
-        # ("httppppps://..."), so let the guest settle before typing.
-        time.sleep(SETTLE_BEFORE_TYPING)
         vm.click(CHROME_X + 400, CHROME_Y + 62)
         vm.press("ctrl", "a")
         vm.type_text(args.url)

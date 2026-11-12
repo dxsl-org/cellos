@@ -70,7 +70,9 @@ follow_display() {
 (export WAYLAND_DISPLAY=wayland-0; follow_display) &
 
 log "CHROME_GUEST_STARTING_CAGE"
-cage -s -- chromium --ozone-platform=wayland --disable-gpu --no-sandbox \
+# Key repeat comes from the host (see no-key-repeat.c); only cage loads the shim.
+LD_PRELOAD=/usr/lib/chrome-guest/no-key-repeat.so \
+    cage -s -- env -u LD_PRELOAD chromium --ozone-platform=wayland --disable-gpu --no-sandbox \
     --no-first-run --no-default-browser-check --user-data-dir=/tmp/chrome \
     --disable-dev-shm-usage ${CHROME_URL:-about:blank} > /tmp/cage.log 2>&1
 status=$?
