@@ -378,7 +378,7 @@ hypervisor cell. Passing is emulator evidence — it does not qualify physical h
 | x86 VirtIO e2e + persistence | `bash scripts/qemu-x86-virtio-e2e.sh` | block/network discovery, IRQ5/IRQ6 completion, and a two-boot persistent marker read back on the host | `qemu-x86-tier3-virtio-e2e` |
 | x86 hostile corpus | `BUILD_HOSTILE_ISO=1 bash scripts/qemu-tier3-hostile-runner-x86.sh` | 27 bounded malformed-input scenarios plus a host-read post-reset recovery write | `qemu-x86-tier3-hostile` |
 | x86 display + network (Intel VMX) | `bash scripts/qemu-tier3-display-x86.sh` | guest pattern on screen and in the Chrome window, virtio-input bound, guest DHCP lease beside the host stack, DNS, HTTP, Ocel fetch while the guest runs, Close ends the guest | none (local KVM only) |
-| x86 Chrome (Intel VMX) | `bash scripts/qemu-tier3-chrome-x86.sh` | taskbar Chrome → guest lease → Chromium UI (prints `Chromium UI after N s`; 60–78 s on 2026-11-12, was ~132 s) → a URL typed into Chromium renders https://example.com/ → Maximize resizes Chromium → Close ends launcher and hypervisor | none (local KVM only) |
+| x86 Chrome (Intel VMX) | `bash scripts/qemu-tier3-chrome-x86.sh` | taskbar Chrome → guest lease → Chromium UI (prints `Chromium UI after N s`; 29–32 s on a quiet host on 2026-11-12, was ~132 s) → a URL typed into Chromium renders https://example.com/ → Maximize resizes Chromium → Close ends launcher and hypervisor | none (local KVM only) |
 
 CPython is the first useful application gate because its batch-processing result
 can be checked without a display bridge. A browser is a separate, later gate:
@@ -406,12 +406,14 @@ trip each. The two-boot lane passed once with it, run unpinned on QEMU 11.1.3
 (TCG; the lane's 10.2.0 pin was patched out in a throwaway copy).
 
 Where the Chrome guest's start goes (guest uptime markers `up=` in the serial
-log, KVM on a WSL2 host): cage starts 5–12 s after the guest boots, then
+log, KVM on a WSL2 host): cage starts 5–9 s after the guest boots, then
 Chromium reads ~130 MiB of its squashfs root. With multi-sector block reads
 (`OP_READ_RUN`, ABI record §20) and per-file FAT extent maps, those reads keep
-the vCPU busy for ~15 s in total; the rest of the 60–78 s is the guest's own
-CPU work (xz decompression and Chromium start-up on one vCPU). The squashfs
-stays xz: the 254 MB root already fills the 256 MiB `/mnt/sd` partition.
+the vCPU busy for ~12–15 s in total. On a quiet host the lane reports the UI
+after 29–32 s (three runs; it polls every 10 s). The same build took 60–94 s
+while the host was busy (parallel builds, or load on the Windows side), so
+compare startup times only between runs made back to back. The squashfs stays
+xz: the 254 MB root already fills the 256 MiB `/mnt/sd` partition.
 
 The Python lane still depends on live HTTPS. One run with a shortened
 `BOOT_WINDOW=1000` passed DNS but did not reach `PYTHON_IN_VM_APK_PASS` before
