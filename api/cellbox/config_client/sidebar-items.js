@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["encode_set","export_outcome","set_reply"],"struct":["ConfigClient"]};
+window.SIDEBAR_ITEMS = {"constant":["CONFIG_CALL_TICKS"],"fn":["encode_set","export_outcome","set_reply"],"struct":["ConfigClient"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PORTS","PORT_RX_LIMIT"],"enum":["PortError"],"fn":["is_station","source_mac"],"struct":["Bridge","Port"]};

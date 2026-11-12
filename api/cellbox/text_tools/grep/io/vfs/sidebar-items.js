@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["join_path","list_dir","request_vfs","stat_path"],"struct":["DirEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["VFS_CALL_TICKS"],"fn":["join_path","list_dir","request_vfs","stat_path"],"struct":["DirEntry"]};

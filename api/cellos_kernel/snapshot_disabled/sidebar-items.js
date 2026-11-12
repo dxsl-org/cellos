@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SnapshotError"],"fn":["clear_stale_header","reserve_scratch_region_at_boot","serialize_snapshot","try_restore"],"struct":["KernelBlock"],"trait":["Sectors"]};

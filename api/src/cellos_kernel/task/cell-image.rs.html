@@ -1,0 +1,189 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/task/cell-image.rs`."><title>cell-image.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cellos_kernel/task/</div>cell-image.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Kernel side of `ResolveCellImage` (syscall 441, `api::cell_image`).
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! The identity lives on the Cell's root task (`Task::bind_image`), bound from
+<a href=#4 id=4 data-nosnippet>4</a>//! the admission measurement before the task is published and never rewritten.
+<a href=#5 id=5 data-nosnippet>5</a>//! It is reached only through the live owner slot, so the answer is always for
+<a href=#6 id=6 data-nosnippet>6</a>//! the exact `(cell_id, generation)` asked about: a respawn under the same
+<a href=#7 id=7 data-nosnippet>7</a>//! `CellId` is a different generation with its own root and its own image, and
+<a href=#8 id=8 data-nosnippet>8</a>//! a dead or stale generation has no answer at all.
+<a href=#9 id=9 data-nosnippet>9</a>
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>api::cell_image::CellImage;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::cell_owner::CellOwnerRequest;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>types::CellId;
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">impl </span><span class="kw">crate</span>::sched::scheduler::Scheduler {
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="doccomment">/// Image identity of the live `(cell_id, generation)`. `None` when that
+<a href=#16 id=16 data-nosnippet>16</a>    /// generation is not live (stale, retired, never existed) or its root was
+<a href=#17 id=17 data-nosnippet>17</a>    /// not admitted through a measured image.
+<a href=#18 id=18 data-nosnippet>18</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>resolve_cell_image(<span class="kw-2">&amp;</span><span class="self">self</span>, cell_id: CellId, generation: u64) -&gt; <span class="prelude-ty">Option</span>&lt;CellImage&gt; {
+<a href=#19 id=19 data-nosnippet>19</a>        <span class="kw">let </span>owner = <span class="self">self</span>.resolve_live_cell_owner(cell_id, generation)<span class="question-mark">?</span>;
+<a href=#20 id=20 data-nosnippet>20</a>        <span class="kw">let </span>root = <span class="self">self</span>.tasks.get(<span class="kw-2">&amp;</span>(owner.root_tid <span class="kw">as </span>usize))<span class="question-mark">?</span>;
+<a href=#21 id=21 data-nosnippet>21</a>        <span class="prelude-val">Some</span>(CellImage {
+<a href=#22 id=22 data-nosnippet>22</a>            cell_id: owner.cell_id,
+<a href=#23 id=23 data-nosnippet>23</a>            generation: owner.generation,
+<a href=#24 id=24 data-nosnippet>24</a>            identity: root.image()<span class="question-mark">?</span>,
+<a href=#25 id=25 data-nosnippet>25</a>        })
+<a href=#26 id=26 data-nosnippet>26</a>    }
+<a href=#27 id=27 data-nosnippet>27</a>}
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Dispatch rule for 441: answered for a task of the registered VFS Cell, or
+<a href=#30 id=30 data-nosnippet>30</a>/// for a `SupervisorCap` holder (architecture remediation Phase 06, CP1 option
+<a href=#31 id=31 data-nosnippet>31</a>/// A: `/bin/supervisor` authorises `OP_POWER`/`OP_HOTSWAP` by the sender's signed
+<a href=#32 id=32 data-nosnippet>32</a>/// program).
+<a href=#33 id=33 data-nosnippet>33</a>///
+<a href=#34 id=34 data-nosnippet>34</a>/// Not tied to the principal VFS is currently receiving from (unlike 247):
+<a href=#35 id=35 data-nosnippet>35</a>/// VFS re-authorizes deferred work (handle reads, prepared directories) after
+<a href=#36 id=36 data-nosnippet>36</a>/// its receive context has moved on, and an image identity grants nothing by
+<a href=#37 id=37 data-nosnippet>37</a>/// itself. Every other Cell is refused, so it cannot learn which program
+<a href=#38 id=38 data-nosnippet>38</a>/// another Cell runs.
+<a href=#39 id=39 data-nosnippet>39</a>///
+<a href=#40 id=40 data-nosnippet>40</a>/// The supervisor gets an answer only for a Cell whose name is its launch
+<a href=#41 id=41 data-nosnippet>41</a>/// identity (`Task::launch_named`): a signed `shutdown` copied under `/home`, or
+<a href=#42 id=42 data-nosnippet>42</a>/// bytes another caller supplied, is the same program but not the reviewed
+<a href=#43 id=43 data-nosnippet>43</a>/// install, and gets `None` (refused) — the rule the kernel's own 502 gate uses.
+<a href=#44 id=44 data-nosnippet>44</a>/// VFS keeps the unfiltered record (`/srv/sshd` is not a `/bin` install).
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>resolve_for_caller(
+<a href=#46 id=46 data-nosnippet>46</a>    sched: <span class="kw-2">&amp;</span><span class="kw">crate</span>::sched::scheduler::Scheduler,
+<a href=#47 id=47 data-nosnippet>47</a>    caller_id: usize,
+<a href=#48 id=48 data-nosnippet>48</a>    request: CellOwnerRequest,
+<a href=#49 id=49 data-nosnippet>49</a>    retains_outer_caller: <span class="kw">impl </span>Fn(u64, u64) -&gt; bool,
+<a href=#50 id=50 data-nosnippet>50</a>) -&gt; <span class="prelude-ty">Option</span>&lt;CellImage&gt; {
+<a href=#51 id=51 data-nosnippet>51</a>    <span class="kw">let </span>caller = sched.tasks.get(<span class="kw-2">&amp;</span>caller_id)<span class="question-mark">?</span>;
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">if </span>retains_outer_caller(caller.cell_id.<span class="number">0</span>, caller.cell_generation) {
+<a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">return </span>sched.resolve_cell_image(CellId(request.cell_id), request.generation);
+<a href=#54 id=54 data-nosnippet>54</a>    }
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">if </span>!sched.cell_rights(caller_id).supervisor {
+<a href=#56 id=56 data-nosnippet>56</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#57 id=57 data-nosnippet>57</a>    }
+<a href=#58 id=58 data-nosnippet>58</a>    <span class="kw">let </span>owner = sched.resolve_live_cell_owner(CellId(request.cell_id), request.generation)<span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>root = sched.tasks.get(<span class="kw-2">&amp;</span>(owner.root_tid <span class="kw">as </span>usize))<span class="question-mark">?</span>;
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">if </span>!root.launch_named {
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#62 id=62 data-nosnippet>62</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>    sched.resolve_cell_image(CellId(request.cell_id), request.generation)
+<a href=#64 id=64 data-nosnippet>64</a>}
+<a href=#65 id=65 data-nosnippet>65</a>
+<a href=#66 id=66 data-nosnippet>66</a><span class="attr">#[cfg(test)]
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">mod </span>tests {
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">use </span><span class="kw">crate</span>::sched::scheduler::Scheduler;
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">use </span><span class="kw">crate</span>::task::Task;
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">use </span>alloc::boxed::Box;
+<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">use </span>api::cell_image::{ImageIdentity, ANCHOR_RELEASE};
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">use </span>api::cell_owner::CellOwner;
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">const </span>ROOT: usize = <span class="number">60_441</span>;
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">const </span>CELL: u64 = <span class="number">62</span>;
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">const </span>VFS_TID: usize = <span class="number">60_442</span>;
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">const </span>VFS_CELL: u64 = <span class="number">63</span>;
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>sshd() -&gt; ImageIdentity {
+<a href=#81 id=81 data-nosnippet>81</a>        ImageIdentity::signed([<span class="number">7</span>; <span class="number">32</span>], ANCHOR_RELEASE, <span class="string">b"sshd"</span>).expect(<span class="string">"valid identity"</span>)
+<a href=#82 id=82 data-nosnippet>82</a>    }
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// One published root with `image` bound, plus a VFS task. Returns the
+<a href=#85 id=85 data-nosnippet>85</a>    /// root's generation.
+<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="kw">fn </span>fixture(sched: <span class="kw-2">&amp;mut </span>Scheduler, image: <span class="prelude-ty">Option</span>&lt;ImageIdentity&gt;) -&gt; u64 {
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span><span class="kw-2">mut </span>root = Box::new(Task::new(ROOT, CellId(CELL), <span class="string">"sshd"</span>, <span class="macro">alloc::vec!</span>[]));
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(image) = image {
+<a href=#89 id=89 data-nosnippet>89</a>            <span class="macro">assert!</span>(root.bind_image(image));
+<a href=#90 id=90 data-nosnippet>90</a>        }
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>generation = root.cell_generation;
+<a href=#92 id=92 data-nosnippet>92</a>        sched.tasks.insert(ROOT, root);
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="macro">assert!</span>(sched.publish_live_cell_owner(CellOwner::new(CELL, generation, ROOT <span class="kw">as </span>u64)));
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>vfs = Box::new(Task::new(VFS_TID, CellId(VFS_CELL), <span class="string">"vfs"</span>, <span class="macro">alloc::vec!</span>[]));
+<a href=#95 id=95 data-nosnippet>95</a>        sched.tasks.insert(VFS_TID, vfs);
+<a href=#96 id=96 data-nosnippet>96</a>        generation
+<a href=#97 id=97 data-nosnippet>97</a>    }
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="attr">#[test]
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">fn </span>bound_identity_is_immutable() {
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(ROOT, CellId(CELL), <span class="string">"sshd"</span>, <span class="macro">alloc::vec!</span>[]);
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="macro">assert_eq!</span>(task.image(), <span class="prelude-val">None</span>);
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="macro">assert!</span>(task.bind_image(sshd()));
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="macro">assert!</span>(!task.bind_image(ImageIdentity::unsigned([<span class="number">9</span>; <span class="number">32</span>])));
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="macro">assert_eq!</span>(task.image(), <span class="prelude-val">Some</span>(sshd()));
+<a href=#107 id=107 data-nosnippet>107</a>    }
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a>    <span class="attr">#[test]
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="kw">fn </span>exact_live_generation_resolves_and_stale_ones_fail() {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">let </span>generation = fixture(<span class="kw-2">&amp;mut </span>sched, <span class="prelude-val">Some</span>(sshd()));
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>image = sched
+<a href=#115 id=115 data-nosnippet>115</a>            .resolve_cell_image(CellId(CELL), generation)
+<a href=#116 id=116 data-nosnippet>116</a>            .expect(<span class="string">"live generation resolves"</span>);
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="macro">assert_eq!</span>((image.cell_id, image.generation), (CELL, generation));
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="macro">assert_eq!</span>(image.identity, sshd());
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">for </span>stale <span class="kw">in </span>[<span class="number">0</span>, generation - <span class="number">1</span>, generation + <span class="number">1</span>] {
+<a href=#120 id=120 data-nosnippet>120</a>            <span class="macro">assert!</span>(sched.resolve_cell_image(CellId(CELL), stale).is_none());
+<a href=#121 id=121 data-nosnippet>121</a>        }
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">assert!</span>(sched
+<a href=#123 id=123 data-nosnippet>123</a>            .resolve_cell_image(CellId(CELL + <span class="number">1</span>), generation)
+<a href=#124 id=124 data-nosnippet>124</a>            .is_none());
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="comment">// Once the root is gone the incarnation is over: no answer survives it.
+<a href=#126 id=126 data-nosnippet>126</a>        </span>sched.tasks.remove(<span class="kw-2">&amp;</span>ROOT);
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="macro">assert!</span>(sched.resolve_cell_image(CellId(CELL), generation).is_none());
+<a href=#128 id=128 data-nosnippet>128</a>    }
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="attr">#[test]
+<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">fn </span>unmeasured_root_has_no_identity() {
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>generation = fixture(<span class="kw-2">&amp;mut </span>sched, <span class="prelude-val">None</span>);
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="macro">assert!</span>(sched.resolve_cell_image(CellId(CELL), generation).is_none());
+<a href=#136 id=136 data-nosnippet>136</a>    }
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="attr">#[test]
+<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">fn </span>only_the_registered_vfs_cell_is_answered() {
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>generation = fixture(<span class="kw-2">&amp;mut </span>sched, <span class="prelude-val">Some</span>(sshd()));
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">let </span>request = CellOwnerRequest::new(CELL, generation);
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>is_vfs = |cell: u64, _generation: u64| cell == VFS_CELL;
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, VFS_TID, request, is_vfs).is_some());
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="comment">// The subject itself, an unknown task, and VFS asking about a stale
+<a href=#147 id=147 data-nosnippet>147</a>        // generation all get nothing.
+<a href=#148 id=148 data-nosnippet>148</a>        </span><span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, ROOT, request, is_vfs).is_none());
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, <span class="number">1</span>, request, is_vfs).is_none());
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">let </span>stale = CellOwnerRequest::new(CELL, generation + <span class="number">1</span>);
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, VFS_TID, stale, is_vfs).is_none());
+<a href=#152 id=152 data-nosnippet>152</a>    }
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="doccomment">/// CP1 option A: a `SupervisorCap` holder is answered too, but only for a
+<a href=#155 id=155 data-nosnippet>155</a>    /// Cell whose signed name is its launch identity (`Task::launch_named`).
+<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="attr">#[test]
+<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">fn </span>supervisor_is_answered_only_for_named_launches() {
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">const </span>SUPERVISOR_TID: usize = <span class="number">60_443</span>;
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">let </span>_guard = <span class="kw">crate</span>::TEST_STATE_LOCK.lock();
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span><span class="kw-2">mut </span>sched = Scheduler::new();
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>generation = fixture(<span class="kw-2">&amp;mut </span>sched, <span class="prelude-val">Some</span>(sshd()));
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">let </span><span class="kw-2">mut </span>supervisor = Box::new(Task::new(
+<a href=#163 id=163 data-nosnippet>163</a>            SUPERVISOR_TID,
+<a href=#164 id=164 data-nosnippet>164</a>            CellId(<span class="number">64</span>),
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="string">"supervisor"</span>,
+<a href=#166 id=166 data-nosnippet>166</a>            <span class="macro">alloc::vec!</span>[],
+<a href=#167 id=167 data-nosnippet>167</a>        ));
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">crate</span>::task::cap::CapSet {
+<a href=#169 id=169 data-nosnippet>169</a>            supervisor: <span class="bool-val">true</span>,
+<a href=#170 id=170 data-nosnippet>170</a>            ..<span class="kw">crate</span>::task::cap::CapSet::EMPTY
+<a href=#171 id=171 data-nosnippet>171</a>        }
+<a href=#172 id=172 data-nosnippet>172</a>        .apply_to(<span class="kw-2">&amp;mut </span>supervisor);
+<a href=#173 id=173 data-nosnippet>173</a>        sched.tasks.insert(SUPERVISOR_TID, supervisor);
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="kw">let </span>request = CellOwnerRequest::new(CELL, generation);
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span>no_vfs = |<span class="kw">_</span>: u64, <span class="kw">_</span>: u64| <span class="bool-val">false</span>;
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="comment">// Same bytes, but not a reviewed install (sandbox copy, caller ELF).
+<a href=#178 id=178 data-nosnippet>178</a>        </span><span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, SUPERVISOR_TID, request, no_vfs).is_none());
+<a href=#179 id=179 data-nosnippet>179</a>        sched.tasks.get_mut(<span class="kw-2">&amp;</span>ROOT).expect(<span class="string">"root"</span>).launch_named = <span class="bool-val">true</span>;
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">let </span>image = resolve_for_caller(<span class="kw-2">&amp;</span>sched, SUPERVISOR_TID, request, no_vfs)
+<a href=#181 id=181 data-nosnippet>181</a>            .expect(<span class="string">"supervisor answered for a named launch"</span>);
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="macro">assert_eq!</span>(image.identity, sshd());
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="comment">// A task without SupervisorCap still learns nothing.
+<a href=#184 id=184 data-nosnippet>184</a>        </span><span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, VFS_TID, request, no_vfs).is_none());
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">let </span>stale = CellOwnerRequest::new(CELL, generation + <span class="number">1</span>);
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="macro">assert!</span>(resolve_for_caller(<span class="kw-2">&amp;</span>sched, SUPERVISOR_TID, stale, no_vfs).is_none());
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>}
+</code></pre></div></section></main></body></html>

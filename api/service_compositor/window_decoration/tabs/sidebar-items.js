@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["icon_box","max_tab_offset","menu_button_rect","slot_at","snapped_offset","tab_rect","tab_slot","tab_width"],"struct":["Tabs"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PHYSICAL_ID_LIMIT","UNMAPPED"],"fn":["boot_swapped_physical"],"static":["CPU_TOPOLOGY"],"struct":["CpuTopology"]};

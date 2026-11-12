@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PAYLOAD_BYTES","STALE_POLLS"],"fn":["cell_main","fail","live_binding","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["PAYLOAD_BYTES","STALE_DEADLINE_MS"],"fn":["cell_main","fail","live_binding","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACES"],"mod":["configure","frame","lifecycle","pixels","state","storage"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACES","MAX_SURFACE_DIM"],"mod":["configure","frame","lifecycle","pixels","state","storage"]};

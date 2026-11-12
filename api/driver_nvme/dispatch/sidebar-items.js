@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["REPLY_SIZE"],"enum":["DrvOp"],"fn":["encode_read","encode_write","handle","parse_op"]};
+window.SIDEBAR_ITEMS = {"constant":["REPLY_SIZE"],"enum":["DrvOp"],"fn":["failed","handle","parse_op","read_run","status"]};

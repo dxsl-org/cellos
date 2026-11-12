@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["stage2_regs"],"static":["ARCH"],"struct":["AArch64Arch","AArch64Hypervisor"],"type":["PlatformArch"]};
+window.SIDEBAR_ITEMS = {"mod":["gicv3_layout","stage2_regs","translation_config","vgic"],"static":["ARCH"],"struct":["AArch64Arch","AArch64Hypervisor"],"type":["PlatformArch"]};

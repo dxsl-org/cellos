@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ActivePane"],"struct":["PaneState","PaneView"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["NET_DENIED"],"fn":["cell_main","close_socket","decode_remaining_len","do_publish","do_subscribe","encode_remaining_len","main","mqtt_handshake","parse_u16","resolve_host","tcp_send"],"static":["VICELL_SYSCALLS"],"struct":["MqttConn"]};
+window.SIDEBAR_ITEMS = {"constant":["NET_CALL_TICKS","NET_DENIED"],"fn":["cell_main","close_socket","decode_remaining_len","do_publish","do_subscribe","encode_remaining_len","main","mqtt_handshake","net_call","parse_u16","resolve_host","tcp_send"],"static":["VICELL_SYSCALLS"],"struct":["MqttConn"]};

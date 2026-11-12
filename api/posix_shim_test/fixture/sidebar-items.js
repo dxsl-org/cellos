@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create","install_working_dir"]};

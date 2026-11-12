@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IDENTITIES","QUERY_DEVICE_IDS","VENDOR_INTEL"],"enum":["Admission","I40eModel"],"fn":["classify","id","lookup"],"struct":["Identity"]};

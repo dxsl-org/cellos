@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PROBE_TARGET","MIN_CDB","SECTOR"],"enum":["ConfigError"],"fn":["limits","read"],"struct":["Limits","RawConfig"],"type":["ConfigWords"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"static":["NEXT_CONTEXT"],"struct":["Tier2JsBridge"]};
+window.SIDEBAR_ITEMS = {"static":["NEXT_CONTEXT"],"struct":["Tier2JsBridge"],"type":["LayoutHost"]};

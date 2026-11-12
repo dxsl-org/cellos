@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["read_file_grant","read_grant"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_GRANT_READ"],"fn":["read_file_grant","read_grant"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SERVER_VERSION","SERVER_VERSION_RAW"],"struct":["KexState"]};
+window.SIDEBAR_ITEMS = {"constant":["SERVER_VERSION","SERVER_VERSION_RAW"],"enum":["KexError"],"fn":["host_key_blob","kernel_entropy"],"struct":["KexState"],"type":["Entropy"]};

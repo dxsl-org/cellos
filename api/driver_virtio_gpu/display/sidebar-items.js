@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MMIO_SLOT_SIZE","VIRTIO_DEV_GPU","VIRTIO_MAGIC"],"fn":["find_and_init_gpu","virtio_slot_iter"],"struct":["CellHal","GpuDevice"],"type":["GpuDev"]};
+window.SIDEBAR_ITEMS = {"constant":["MMIO_SLOT_SIZE","VIRTIO_DEV_GPU"],"fn":["find_and_init_gpu","virtio_slot_iter"],"struct":["CellHal","GpuDevice","StagedSource"],"type":["GpuDev"]};

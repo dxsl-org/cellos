@@ -11,9 +11,9 @@
 <a href=#11 id=11 data-nosnippet>11</a>//! # SMP limitation
 <a href=#12 id=12 data-nosnippet>12</a>//!
 <a href=#13 id=13 data-nosnippet>13</a>//! This impl masks interrupts on the **local hart only**. ViCell supports SMP
-<a href=#14 id=14 data-nosnippet>14</a>//! (MAX_HARTS=2, hart 1 = RT scheduler). Code protected by
-<a href=#15 id=15 data-nosnippet>15</a>//! `critical_section::with` is therefore NOT mutually exclusive against
-<a href=#16 id=16 data-nosnippet>16</a>//! concurrent execution on hart 1.
+<a href=#14 id=14 data-nosnippet>14</a>//! (RISC-V `task::smp::MAX_HARTS` = 2, hart 1 = RT scheduler; the bound is per
+<a href=#15 id=15 data-nosnippet>15</a>//! architecture). Code protected by `critical_section::with` is therefore NOT
+<a href=#16 id=16 data-nosnippet>16</a>//! mutually exclusive against concurrent execution on another hart.
 <a href=#17 id=17 data-nosnippet>17</a>//!
 <a href=#18 id=18 data-nosnippet>18</a>//! **Safe to use:** `heapless::spsc::Queue` (single-producer, single-consumer),
 <a href=#19 id=19 data-nosnippet>19</a>//! any data only ever accessed from one hart, and interrupt-handler ↔ task

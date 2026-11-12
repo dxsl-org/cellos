@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STATUS_HEIGHT","TOOLBAR_HEIGHT"],"fn":["cell_main","init_custom_heap","main","prompt_key"],"mod":["app","draw","fs","model","preview","views"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","dispatch_launch_intent","init_custom_heap","main","prompt_key"],"mod":["app","draw","fs","layout","model","preview","render","split","views"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

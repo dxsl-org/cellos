@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["WAIT_TICKS"],"fn":["fail","run"]};
+window.SIDEBAR_ITEMS = {"fn":["fail","prime","verify"]};

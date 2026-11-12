@@ -153,19 +153,19 @@
 <a href=#153 id=153 data-nosnippet>153</a>        tasks: scheduler
 <a href=#154 id=154 data-nosnippet>154</a>            .tasks
 <a href=#155 id=155 data-nosnippet>155</a>            .iter()
-<a href=#156 id=156 data-nosnippet>156</a>            .map(|(key, task)| (<span class="kw-2">*</span>key, task.id, task.cell_id, task.state.clone()))
+<a href=#156 id=156 data-nosnippet>156</a>            .map(|(key, task)| (<span class="kw-2">*</span>key, task.id, task.cell_id, task.state))
 <a href=#157 id=157 data-nosnippet>157</a>            .collect(),
 <a href=#158 id=158 data-nosnippet>158</a>        zombies: scheduler
 <a href=#159 id=159 data-nosnippet>159</a>            .zombies
 <a href=#160 id=160 data-nosnippet>160</a>            .iter()
-<a href=#161 id=161 data-nosnippet>161</a>            .map(|task| (task.id, task.cell_id, task.state.clone()))
+<a href=#161 id=161 data-nosnippet>161</a>            .map(|task| (task.id, task.cell_id, task.state))
 <a href=#162 id=162 data-nosnippet>162</a>            .collect(),
 <a href=#163 id=163 data-nosnippet>163</a>        next_task_id: scheduler.next_task_id,
 <a href=#164 id=164 data-nosnippet>164</a>        last_global_sweep_tick: scheduler.last_global_sweep_tick,
-<a href=#165 id=165 data-nosnippet>165</a>        harts: <span class="kw">crate</span>::task::hart_local::HART_LOCALS
+<a href=#165 id=165 data-nosnippet>165</a>        harts: <span class="kw">crate</span>::sched::hart_local::HART_LOCALS
 <a href=#166 id=166 data-nosnippet>166</a>            .iter()
 <a href=#167 id=167 data-nosnippet>167</a>            .map(|hart| HartSchedulerSnapshot {
-<a href=#168 id=168 data-nosnippet>168</a>                hart_id: hart.hart_id,
+<a href=#168 id=168 data-nosnippet>168</a>                hart_id: hart.hart_id.load(Ordering::Acquire),
 <a href=#169 id=169 data-nosnippet>169</a>                current_cell_id: hart.current_cell_id.load(Ordering::Acquire),
 <a href=#170 id=170 data-nosnippet>170</a>                current_task_id: hart.current_task_id.load(Ordering::Acquire),
 <a href=#171 id=171 data-nosnippet>171</a>                ready: hart.ready.lock().clone(),

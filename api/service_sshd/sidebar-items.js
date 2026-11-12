@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SSH_PORT"],"fn":["cell_main","init_custom_heap","main"],"mod":["cipher","kex","session","ssh_packet"],"static":["VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"constant":["LOGIN_GRACE_MS"],"fn":["cell_main","init_custom_heap","log","log2","main"],"mod":["auth","authorized_keys","base64","cipher","connection","handshake","host_key","kex","reactor","session","shell","ssh_packet"],"static":["VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

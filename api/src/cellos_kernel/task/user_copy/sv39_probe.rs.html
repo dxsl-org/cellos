@@ -206,56 +206,70 @@
 <a href=#206 id=206 data-nosnippet>206</a><span class="doccomment">/// Probe `[ptr, ptr+len)` against the currently resident root.
 <a href=#207 id=207 data-nosnippet>207</a>///
 <a href=#208 id=208 data-nosnippet>208</a>/// Sas RETAINS today's shared-address-space semantics: cells and the kernel
-<a href=#209 id=209 data-nosnippet>209</a>/// share one map and the kernel dereferences through SUM=1, so any live
-<a href=#210 id=210 data-nosnippet>210</a>/// mapping with the required R/W right qualifies — the U bit is deliberately
-<a href=#211 id=211 data-nosnippet>211</a>/// NOT required here. Kernel-image rejection for Sas therefore reduces to the
-<a href=#212 id=212 data-nosnippet>212</a>/// canonical bound plus whatever the walk refuses; private-root views enforce
-<a href=#213 id=213 data-nosnippet>213</a>/// the strict U + R/W ledger contract above.
-<a href=#214 id=214 data-nosnippet>214</a>///
-<a href=#215 id=215 data-nosnippet>215</a>/// Documented retained legacy exposure: Sas identity-maps RAM, so a wild
-<a href=#216 id=216 data-nosnippet>216</a>/// pointer inside the identity-mapped RAM range passes this probe by design —
-<a href=#217 id=217 data-nosnippet>217</a>/// only VAs with no live Sv39 leaf (true holes between mapped regions) are
-<a href=#218 id=218 data-nosnippet>218</a>/// rejected before any byte moves. Concurrent-unmap residual is legacy Sas
-<a href=#219 id=219 data-nosnippet>219</a>/// semantics, converted to a recoverable error by the guard.
+<a href=#209 id=209 data-nosnippet>209</a>/// share one map, so any live USER mapping with the required R/W right
+<a href=#210 id=210 data-nosnippet>210</a>/// qualifies — ownership is not checked. Private-root views enforce the strict
+<a href=#211 id=211 data-nosnippet>211</a>/// ledger contract above.
+<a href=#212 id=212 data-nosnippet>212</a>///
+<a href=#213 id=213 data-nosnippet>213</a>/// Documented retained legacy exposure: Sas identity-maps RAM, so a wild
+<a href=#214 id=214 data-nosnippet>214</a>/// pointer at another cell's USER page passes this probe by design. This probe
+<a href=#215 id=215 data-nosnippet>215</a>/// is NOT the authority for the commit: a page may be retired between probe
+<a href=#216 id=216 data-nosnippet>216</a>/// and commit, and a retired page is re-mapped kernel-RWX — writable by the
+<a href=#217 id=217 data-nosnippet>217</a>/// kernel without any fault — before its frame is reused. The commit therefore
+<a href=#218 id=218 data-nosnippet>218</a>/// re-validates every page inside its leased window (`sas_lease`), which is
+<a href=#219 id=219 data-nosnippet>219</a>/// what keeps a racing release from receiving bytes after the frame is freed.
 <a href=#220 id=220 data-nosnippet>220</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>probe_sas(ptr: usize, len: usize, direction: Direction) -&gt; <span class="prelude-ty">Result</span>&lt;(), CopyError&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span>end = ptr.checked_add(len).ok_or(CopyError::InvalidAddress)<span class="question-mark">?</span>;
-<a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(root_pa) = current_satp_root() <span class="kw">else </span>{
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CopyError::InvalidAddress);
-<a href=#224 id=224 data-nosnippet>224</a>    };
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">let </span>need = <span class="kw">if </span>direction == Direction::ToUser {
-<a href=#226 id=226 data-nosnippet>226</a>        SV39_WRITE | SV39_USER
-<a href=#227 id=227 data-nosnippet>227</a>    } <span class="kw">else </span>{
-<a href=#228 id=228 data-nosnippet>228</a>        SV39_READ | SV39_USER
-<a href=#229 id=229 data-nosnippet>229</a>    };
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let </span><span class="kw-2">mut </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="kw">while </span>page &lt; end {
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>(bits, <span class="kw">_</span>) = sv39_leaf(root_pa, page).ok_or(CopyError::InvalidAddress)<span class="question-mark">?</span>;
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">if </span>bits &amp; (SV39_VALID | need) != SV39_VALID | need {
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CopyError::InvalidAddress);
-<a href=#235 id=235 data-nosnippet>235</a>        }
-<a href=#236 id=236 data-nosnippet>236</a>        page += PAGE_SIZE;
-<a href=#237 id=237 data-nosnippet>237</a>    }
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="prelude-val">Ok</span>(())
-<a href=#239 id=239 data-nosnippet>239</a>}
-<a href=#240 id=240 data-nosnippet>240</a>
-<a href=#241 id=241 data-nosnippet>241</a><span class="doccomment">/// TEST HOOK: stage (probe + pin) a domain copy without committing it, so a
-<a href=#242 id=242 data-nosnippet>242</a>/// fixture can inject a protocol violation between the two passes.
-<a href=#243 id=243 data-nosnippet>243</a></span><span class="attr">#[cfg(all(
-<a href=#244 id=244 data-nosnippet>244</a>    feature = <span class="string">"native-domains"</span>,
-<a href=#245 id=245 data-nosnippet>245</a>    feature = <span class="string">"test-hooks"</span>,
-<a href=#246 id=246 data-nosnippet>246</a>    target_arch = <span class="string">"riscv64"
-<a href=#247 id=247 data-nosnippet>247</a></span>))]
-<a href=#248 id=248 data-nosnippet>248</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stage_domain_for_test&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#249 id=249 data-nosnippet>249</a>    arc: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>AddressSpace,
-<a href=#250 id=250 data-nosnippet>250</a>    ptr: usize,
-<a href=#251 id=251 data-nosnippet>251</a>    len: usize,
-<a href=#252 id=252 data-nosnippet>252</a>    write: bool,
-<a href=#253 id=253 data-nosnippet>253</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PinnedCopy&lt;<span class="lifetime">'a</span>&gt;, CopyError&gt; {
-<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">let </span>direction = <span class="kw">if </span>write {
-<a href=#255 id=255 data-nosnippet>255</a>        Direction::ToUser
-<a href=#256 id=256 data-nosnippet>256</a>    } <span class="kw">else </span>{
-<a href=#257 id=257 data-nosnippet>257</a>        Direction::FromUser
-<a href=#258 id=258 data-nosnippet>258</a>    };
-<a href=#259 id=259 data-nosnippet>259</a>    stage_domain(arc, direction, ptr, len)
-<a href=#260 id=260 data-nosnippet>260</a>}
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(root_pa) = current_satp_root() <span class="kw">else </span>{
+<a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(CopyError::InvalidAddress);
+<a href=#223 id=223 data-nosnippet>223</a>    };
+<a href=#224 id=224 data-nosnippet>224</a>    sas_span_live(ptr, len, direction, |page| {
+<a href=#225 id=225 data-nosnippet>225</a>        sv39_leaf(root_pa, page).map(|(bits, <span class="kw">_</span>)| bits)
+<a href=#226 id=226 data-nosnippet>226</a>    })
+<a href=#227 id=227 data-nosnippet>227</a>}
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a><span class="doccomment">/// Require every page of `[ptr, ptr+len)` to resolve VALID | USER plus the
+<a href=#230 id=230 data-nosnippet>230</a>/// direction's R/W right. `leaf` returns the PTE bits for one page VA. A
+<a href=#231 id=231 data-nosnippet>231</a>/// retired page (unmapped, or re-mapped kernel-only) fails here.
+<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>sas_span_live(
+<a href=#233 id=233 data-nosnippet>233</a>    ptr: usize,
+<a href=#234 id=234 data-nosnippet>234</a>    len: usize,
+<a href=#235 id=235 data-nosnippet>235</a>    direction: Direction,
+<a href=#236 id=236 data-nosnippet>236</a>    leaf: <span class="kw">impl </span>Fn(usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#237 id=237 data-nosnippet>237</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), CopyError&gt; {
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span>end = ptr.checked_add(len).ok_or(CopyError::InvalidAddress)<span class="question-mark">?</span>;
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">let </span>need = <span class="kw">if </span>direction == Direction::ToUser {
+<a href=#240 id=240 data-nosnippet>240</a>        SV39_VALID | SV39_WRITE | SV39_USER
+<a href=#241 id=241 data-nosnippet>241</a>    } <span class="kw">else </span>{
+<a href=#242 id=242 data-nosnippet>242</a>        SV39_VALID | SV39_READ | SV39_USER
+<a href=#243 id=243 data-nosnippet>243</a>    };
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">let </span><span class="kw-2">mut </span>page = ptr &amp; !(PAGE_SIZE - <span class="number">1</span>);
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">while </span>page &lt; end {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>bits = leaf(page).ok_or(CopyError::InvalidAddress)<span class="question-mark">?</span>;
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">if </span>bits &amp; need != need {
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(CopyError::InvalidAddress);
+<a href=#249 id=249 data-nosnippet>249</a>        }
+<a href=#250 id=250 data-nosnippet>250</a>        page += PAGE_SIZE;
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="prelude-val">Ok</span>(())
+<a href=#253 id=253 data-nosnippet>253</a>}
+<a href=#254 id=254 data-nosnippet>254</a>
+<a href=#255 id=255 data-nosnippet>255</a><span class="doccomment">/// TEST HOOK: stage (probe + pin) a domain copy without committing it, so a
+<a href=#256 id=256 data-nosnippet>256</a>/// fixture can inject a protocol violation between the two passes.
+<a href=#257 id=257 data-nosnippet>257</a></span><span class="attr">#[cfg(all(
+<a href=#258 id=258 data-nosnippet>258</a>    feature = <span class="string">"native-domains"</span>,
+<a href=#259 id=259 data-nosnippet>259</a>    feature = <span class="string">"test-hooks"</span>,
+<a href=#260 id=260 data-nosnippet>260</a>    target_arch = <span class="string">"riscv64"
+<a href=#261 id=261 data-nosnippet>261</a></span>))]
+<a href=#262 id=262 data-nosnippet>262</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stage_domain_for_test&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#263 id=263 data-nosnippet>263</a>    arc: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>AddressSpace,
+<a href=#264 id=264 data-nosnippet>264</a>    ptr: usize,
+<a href=#265 id=265 data-nosnippet>265</a>    len: usize,
+<a href=#266 id=266 data-nosnippet>266</a>    write: bool,
+<a href=#267 id=267 data-nosnippet>267</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PinnedCopy&lt;<span class="lifetime">'a</span>&gt;, CopyError&gt; {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>direction = <span class="kw">if </span>write {
+<a href=#269 id=269 data-nosnippet>269</a>        Direction::ToUser
+<a href=#270 id=270 data-nosnippet>270</a>    } <span class="kw">else </span>{
+<a href=#271 id=271 data-nosnippet>271</a>        Direction::FromUser
+<a href=#272 id=272 data-nosnippet>272</a>    };
+<a href=#273 id=273 data-nosnippet>273</a>    stage_domain(arc, direction, ptr, len)
+<a href=#274 id=274 data-nosnippet>274</a>}
 </code></pre></div></section></main></body></html>

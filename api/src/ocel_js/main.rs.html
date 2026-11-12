@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>dom_arena::{ipc::JsServiceSession, JsEngine, OcelJsRequest, OCEL_JS_IPC_BUF_SIZE};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>engine::OcelJsServiceEngine;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="comment">// Untrusted-protection-class manifest: the kernel classifies this cell as a
 <a href=#21 id=21 data-nosnippet>21</a>// domain cell and admits it to Tier 2 (private page tables), containing any
@@ -29,7 +29,7 @@
 <a href=#29 id=29 data-nosnippet>29</a>    spawn = <span class="bool-val">false</span>,
 <a href=#30 id=30 data-nosnippet>30</a>    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 <a href=#31 id=31 data-nosnippet>31</a>);
-<a href=#32 id=32 data-nosnippet>32</a><span class="macro">api::declare_syscalls!</span>[Log, Recv, Send, TryRecv, GetTime];
+<a href=#32 id=32 data-nosnippet>32</a><span class="macro">api::declare_syscalls!</span>[Log, Recv, Send, SendGather, TryRecv, GetTime];
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#35 id=35 data-nosnippet>35</a>
@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>                };
 <a href=#56 id=56 data-nosnippet>56</a>
 <a href=#57 id=57 data-nosnippet>57</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = postcard::to_slice(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>send_buf) {
-<a href=#58 id=58 data-nosnippet>58</a>                    <span class="kw">let _ </span>= sys_send(caller_tid, encoded);
+<a href=#58 id=58 data-nosnippet>58</a>                    <span class="kw">let _ </span>= ostd::ipc::reply_to(caller_tid, encoded);
 <a href=#59 id=59 data-nosnippet>59</a>                }
 <a href=#60 id=60 data-nosnippet>60</a>            }
 <a href=#61 id=61 data-nosnippet>61</a>            <span class="kw">_ </span>=&gt; {

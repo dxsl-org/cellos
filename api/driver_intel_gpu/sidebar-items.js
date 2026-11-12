@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["bring_up","cell","clock","controller","devmem","forcewake","ggtt","gpu","guc","guc_ct","identity","owner_watch","ppgtt_store","regs","service"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

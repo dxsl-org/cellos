@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CMD_IRQ","CMD_RUN","CMD_TO_RAM","EDU_DEV_BUF","EDU_DMA_CMD","EDU_DMA_CNT","EDU_DMA_DST","EDU_DMA_SRC","EDU_IDENT","EDU_INTR_ACK","EDU_INTR_STATUS","PAGE"],"fn":["answer","cell_main","main","run_l3","status"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["Edu"]};

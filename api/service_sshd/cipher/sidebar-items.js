@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CipherMode"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_PACKET_LENGTH","MAX_PLAINTEXT_PACKET_LENGTH"],"enum":["CipherMode"]};

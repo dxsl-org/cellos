@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["current_translation_config","set_translation_config"],"struct":["TranslationConfig"]};

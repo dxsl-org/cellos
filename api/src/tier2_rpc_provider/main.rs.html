@@ -45,9 +45,9 @@
 <a href=#45 id=45 data-nosnippet>45</a>    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 <a href=#46 id=46 data-nosnippet>46</a>);
 <a href=#47 id=47 data-nosnippet>47</a>
-<a href=#48 id=48 data-nosnippet>48</a><span class="comment">// No capability bit is declared: `LookupService` also authorizes
-<a href=#49 id=49 data-nosnippet>49</a>// `LookupServiceBound` (allowlist bit 37), and `Send`/`Recv` are ordinary IPC.
-<a href=#50 id=50 data-nosnippet>50</a></span><span class="macro">api::declare_syscalls!</span>[Log, Exit, Send, Recv, LookupService];
+<a href=#48 id=48 data-nosnippet>48</a><span class="comment">// No capability bit is declared: `LookupServiceBound` (allowlist bit 37) is open,
+<a href=#49 id=49 data-nosnippet>49</a>// and `Send`/`Recv` are ordinary IPC.
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="macro">api::declare_syscalls!</span>[Log, Exit, Send, Recv, LookupServiceBound];
 <a href=#51 id=51 data-nosnippet>51</a>
 <a href=#52 id=52 data-nosnippet>52</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#53 id=53 data-nosnippet>53</a>
@@ -145,21 +145,24 @@
 <a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">fn </span>stat_root_through_sdk() -&gt; (bool, bool) {
 <a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span><span class="kw-2">mut </span>vfs: ServiceRef&lt;{ service::VFS }&gt; = ServiceRef::new();
 <a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">let </span><span class="kw-2">mut </span>response_buffer = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">match </span>vfs.call::&lt;VfsRequest, VfsResponse&gt;(<span class="kw-2">&amp;</span>VfsRequest::Stat(<span class="string">"/"</span>), <span class="kw-2">&amp;mut </span>response_buffer) {
-<a href=#149 id=149 data-nosnippet>149</a>        <span class="prelude-val">Ok</span>(VfsResponse::Stat { is_dir, .. }) =&gt; {
-<a href=#150 id=150 data-nosnippet>150</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[tier2-rpc] provider-vfs-stat ok is_dir={is_dir}"</span>));
-<a href=#151 id=151 data-nosnippet>151</a>            (<span class="bool-val">true</span>, is_dir)
-<a href=#152 id=152 data-nosnippet>152</a>        }
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="prelude-val">Ok</span>(other) =&gt; {
-<a href=#154 id=154 data-nosnippet>154</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-<a href=#155 id=155 data-nosnippet>155</a>                <span class="string">"[tier2-rpc] provider-vfs-stat unexpected {other:?}"
-<a href=#156 id=156 data-nosnippet>156</a>            </span>));
-<a href=#157 id=157 data-nosnippet>157</a>            (<span class="bool-val">true</span>, <span class="bool-val">false</span>)
-<a href=#158 id=158 data-nosnippet>158</a>        }
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="prelude-val">Err</span>(error) =&gt; {
-<a href=#160 id=160 data-nosnippet>160</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[tier2-rpc] provider-vfs-stat failed {error:?}"</span>));
-<a href=#161 id=161 data-nosnippet>161</a>            (<span class="bool-val">false</span>, <span class="bool-val">false</span>)
-<a href=#162 id=162 data-nosnippet>162</a>        }
-<a href=#163 id=163 data-nosnippet>163</a>    }
-<a href=#164 id=164 data-nosnippet>164</a>}
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">match </span>vfs
+<a href=#149 id=149 data-nosnippet>149</a>        .call::&lt;VfsRequest, VfsResponse&gt;(<span class="kw-2">&amp;</span>VfsRequest::Stat(<span class="string">"/"</span>), <span class="kw-2">&amp;mut </span>response_buffer)
+<a href=#150 id=150 data-nosnippet>150</a>        .into_result()
+<a href=#151 id=151 data-nosnippet>151</a>    {
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="prelude-val">Ok</span>(VfsResponse::Stat { is_dir, .. }) =&gt; {
+<a href=#153 id=153 data-nosnippet>153</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[tier2-rpc] provider-vfs-stat ok is_dir={is_dir}"</span>));
+<a href=#154 id=154 data-nosnippet>154</a>            (<span class="bool-val">true</span>, is_dir)
+<a href=#155 id=155 data-nosnippet>155</a>        }
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="prelude-val">Ok</span>(other) =&gt; {
+<a href=#157 id=157 data-nosnippet>157</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+<a href=#158 id=158 data-nosnippet>158</a>                <span class="string">"[tier2-rpc] provider-vfs-stat unexpected {other:?}"
+<a href=#159 id=159 data-nosnippet>159</a>            </span>));
+<a href=#160 id=160 data-nosnippet>160</a>            (<span class="bool-val">true</span>, <span class="bool-val">false</span>)
+<a href=#161 id=161 data-nosnippet>161</a>        }
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"[tier2-rpc] provider-vfs-stat failed {error:?}"</span>));
+<a href=#164 id=164 data-nosnippet>164</a>            (<span class="bool-val">false</span>, <span class="bool-val">false</span>)
+<a href=#165 id=165 data-nosnippet>165</a>        }
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>}
 </code></pre></div></section></main></body></html>

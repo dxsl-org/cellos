@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["backend","ct","guc_abi","guc_ads","guc_fw","guc_init","hw","lrc","ppgtt","pte","server","syncobj","uapi","wire"]};

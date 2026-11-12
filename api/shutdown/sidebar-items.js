@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","main"]};
+window.SIDEBAR_ITEMS = {"constant":["RELAY_WINDOW_NS"],"fn":["cell_main","main"]};

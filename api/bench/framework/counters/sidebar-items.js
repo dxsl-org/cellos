@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FIELDS","LABELS","RECORD_VERSION"],"fn":["emit","read"],"type":["Snapshot"]};

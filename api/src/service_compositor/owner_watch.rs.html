@@ -582,7 +582,7 @@
 <a href=#582 id=582 data-nosnippet>582</a>        </span><span class="kw">let </span>(a_root, a_root_view) = world.window(<span class="number">1000</span>, <span class="number">0</span>);
 <a href=#583 id=583 data-nosnippet>583</a>        <span class="kw">let </span>(a_worker, a_worker_view) = world.window(<span class="number">1001</span>, <span class="number">200</span>);
 <a href=#584 id=584 data-nosnippet>584</a>        <span class="kw">let </span>(b_cap, b_view) = world.window(<span class="number">2000</span>, <span class="number">400</span>);
-<a href=#585 id=585 data-nosnippet>585</a>        world.input.set_focus(<span class="number">1000</span>, <span class="prelude-val">Some</span>(a_root));
+<a href=#585 id=585 data-nosnippet>585</a>        <span class="macro">assert!</span>(world.input.request_focus(<span class="number">1000</span>, a_root));
 <a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert_eq!</span>(world.input.selected_cap(), <span class="prelude-val">Some</span>(a_root));
 <a href=#587 id=587 data-nosnippet>587</a>        <span class="kw">let </span>a_bounds: Vec&lt;Rect&gt; = [a_root, a_worker]
 <a href=#588 id=588 data-nosnippet>588</a>            .iter()
@@ -642,7 +642,7 @@
 <a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span><span class="kw-2">mut </span>world = World::new();
 <a href=#643 id=643 data-nosnippet>643</a>        <span class="kw">let </span>(_a, <span class="kw">_</span>) = world.window(<span class="number">1000</span>, <span class="number">0</span>);
 <a href=#644 id=644 data-nosnippet>644</a>        <span class="kw">let </span>(b_cap, <span class="kw">_</span>) = world.window(<span class="number">2000</span>, <span class="number">400</span>);
-<a href=#645 id=645 data-nosnippet>645</a>        world.input.set_focus(<span class="number">2000</span>, <span class="prelude-val">Some</span>(b_cap));
+<a href=#645 id=645 data-nosnippet>645</a>        <span class="macro">assert!</span>(world.input.request_focus(<span class="number">2000</span>, b_cap));
 <a href=#646 id=646 data-nosnippet>646</a>        <span class="kw">let </span>dead = Released {
 <a href=#647 id=647 data-nosnippet>647</a>            cell_id: <span class="number">1</span>,
 <a href=#648 id=648 data-nosnippet>648</a>            generation: <span class="number">1</span>,

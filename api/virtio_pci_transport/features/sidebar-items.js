@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ACCESS_PLATFORM","VERSION_1"],"enum":["AccessPlatform"],"fn":["driver_features"]};

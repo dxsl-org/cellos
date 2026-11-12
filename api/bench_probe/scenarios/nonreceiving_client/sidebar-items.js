@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLIENT_HOLD_TICKS","CLIENT_PREFIX","CONTROL","HANDSHAKE_TICKS","PROBE_PATH","SECOND_CALL_TICKS","SUPERVISOR_ENVELOPE","SUPERVISOR_REFUSAL","SUPERVISOR_SNAPSHOT"],"fn":["fail","leg","name","notify","reply_matches","request","run","run_client","spawn_client","ticks"]};

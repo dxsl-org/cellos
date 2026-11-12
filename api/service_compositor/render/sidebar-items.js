@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["render_frame"]};
+window.SIDEBAR_ITEMS = {"fn":["label","paint_chrome","paint_menu","render_frame"],"struct":["ChromeState"]};

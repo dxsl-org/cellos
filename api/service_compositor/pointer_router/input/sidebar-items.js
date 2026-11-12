@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["move_pointer","release_button","route","route_button"]};
+window.SIDEBAR_ITEMS = {"fn":["contains","is_double_click","move_pointer","press","route","route_button"]};

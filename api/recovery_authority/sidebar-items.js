@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cell_main","dispatch","main"],"mod":["common","lifecycle"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

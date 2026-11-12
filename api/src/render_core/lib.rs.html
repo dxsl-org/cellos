@@ -68,11 +68,11 @@
 <a href=#68 id=68 data-nosnippet>68</a>            </span>|| <span class="self">self
 <a href=#69 id=69 data-nosnippet>69</a>                </span>.x
 <a href=#70 id=70 data-nosnippet>70</a>                .checked_add(<span class="self">self</span>.width)
-<a href=#71 id=71 data-nosnippet>71</a>                .map_or(<span class="bool-val">true</span>, |end| end &gt; config.width)
+<a href=#71 id=71 data-nosnippet>71</a>                .is_none_or(|end| end &gt; config.width)
 <a href=#72 id=72 data-nosnippet>72</a>            || <span class="self">self
 <a href=#73 id=73 data-nosnippet>73</a>                </span>.y
 <a href=#74 id=74 data-nosnippet>74</a>                .checked_add(<span class="self">self</span>.height)
-<a href=#75 id=75 data-nosnippet>75</a>                .map_or(<span class="bool-val">true</span>, |end| end &gt; config.height)
+<a href=#75 id=75 data-nosnippet>75</a>                .is_none_or(|end| end &gt; config.height)
 <a href=#76 id=76 data-nosnippet>76</a>        {
 <a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(RenderError::InvalidTile);
 <a href=#78 id=78 data-nosnippet>78</a>        }

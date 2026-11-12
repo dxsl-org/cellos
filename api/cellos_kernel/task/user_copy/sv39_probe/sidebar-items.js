@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SV39_READ","SV39_USER","SV39_VALID","SV39_WRITE"],"fn":["current_satp_root","probe_sas","stage_domain","sv39_leaf"]};
+window.SIDEBAR_ITEMS = {"constant":["SV39_READ","SV39_USER","SV39_VALID","SV39_WRITE"],"fn":["current_satp_root","probe_sas","sas_span_live","stage_domain","sv39_leaf"]};

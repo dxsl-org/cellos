@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BCMD_FLAGS_END","BCMD_FLAGS_PACKET_END","BUF_SIZE"],"fn":["clear","write_rx_desc","write_tx_desc"],"struct":["BcmRxDesc","BcmTxDesc"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ToolRouter"]};
+window.SIDEBAR_ITEMS = {"constant":["TOOL_CALL_TICKS"],"struct":["ToolRouter"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CREATE_SIGNALED","QUERY_LAST_SUBMITTED","WAIT_ALL","WAIT_AVAILABLE","WAIT_DEADLINE","WAIT_FOR_SUBMIT"],"enum":["SyncError","WaitState"],"struct":["FenceId","Syncobjs"]};

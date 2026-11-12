@@ -56,16 +56,16 @@
 <a href=#56 id=56 data-nosnippet>56</a>        }
 <a href=#57 id=57 data-nosnippet>57</a>        NetRequest::TcpListen { .. }
 <a href=#58 id=58 data-nosnippet>58</a>        | NetRequest::UdpBind { .. }
-<a href=#59 id=59 data-nosnippet>59</a>        | NetRequest::MulticastJoin { .. } =&gt; <span class="prelude-val">Some</span>(Right::Listen),
-<a href=#60 id=60 data-nosnippet>60</a>        NetRequest::L2Send { .. } | NetRequest::L2Recv { .. } =&gt; <span class="prelude-val">Some</span>(Right::L2),
-<a href=#61 id=61 data-nosnippet>61</a>        NetRequest::TcpSend { .. }
-<a href=#62 id=62 data-nosnippet>62</a>        | NetRequest::TcpRecv { .. }
-<a href=#63 id=63 data-nosnippet>63</a>        | NetRequest::TcpClose { .. }
-<a href=#64 id=64 data-nosnippet>64</a>        | NetRequest::TcpAccept { .. }
-<a href=#65 id=65 data-nosnippet>65</a>        | NetRequest::UdpRecv { .. }
-<a href=#66 id=66 data-nosnippet>66</a>        | NetRequest::SocketState { .. }
-<a href=#67 id=67 data-nosnippet>67</a>        | NetRequest::GetLocalIp
-<a href=#68 id=68 data-nosnippet>68</a>        | NetRequest::MulticastLeave { .. }
+<a href=#59 id=59 data-nosnippet>59</a>        | NetRequest::MulticastJoin { .. }
+<a href=#60 id=60 data-nosnippet>60</a>        | NetRequest::MulticastLeave { .. } =&gt; <span class="prelude-val">Some</span>(Right::Listen),
+<a href=#61 id=61 data-nosnippet>61</a>        NetRequest::L2Send { .. } | NetRequest::L2Recv { .. } =&gt; <span class="prelude-val">Some</span>(Right::L2),
+<a href=#62 id=62 data-nosnippet>62</a>        NetRequest::TcpSend { .. }
+<a href=#63 id=63 data-nosnippet>63</a>        | NetRequest::TcpRecv { .. }
+<a href=#64 id=64 data-nosnippet>64</a>        | NetRequest::TcpClose { .. }
+<a href=#65 id=65 data-nosnippet>65</a>        | NetRequest::TcpAccept { .. }
+<a href=#66 id=66 data-nosnippet>66</a>        | NetRequest::UdpRecv { .. }
+<a href=#67 id=67 data-nosnippet>67</a>        | NetRequest::SocketState { .. }
+<a href=#68 id=68 data-nosnippet>68</a>        | NetRequest::GetLocalIp
 <a href=#69 id=69 data-nosnippet>69</a>        | NetRequest::TcpReady { .. }
 <a href=#70 id=70 data-nosnippet>70</a>        | NetRequest::TcpRecvReady { .. }
 <a href=#71 id=71 data-nosnippet>71</a>        | NetRequest::TcpSendReady { .. }

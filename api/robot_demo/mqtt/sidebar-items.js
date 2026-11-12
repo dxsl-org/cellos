@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MQTT_ADDR","MQTT_PORT","RECV_TIMEOUT_SOFT_TICKS"],"enum":["PublishPacketError"],"fn":["close_cap","encode_publish_packet","encode_remaining_len","mqtt_handshake","mqtt_publish","publish_telemetry","tcp_recv_once","tcp_send_raw","tcp_try_send"]};
+window.SIDEBAR_ITEMS = {"constant":["MQTT_ADDR","MQTT_PORT","NET_CALL_TICKS"],"enum":["PublishPacketError"],"fn":["close_cap","encode_publish_packet","encode_remaining_len","mqtt_handshake","mqtt_publish","net_call","publish_telemetry","tcp_recv_once","tcp_send_raw","tcp_try_send"]};

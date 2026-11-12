@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["RecoveryStatus"],"fn":["recover_ledger"]};

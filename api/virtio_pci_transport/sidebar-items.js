@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COMMON_CFG_LEN","NO_VECTOR","RESET_SPIN_BUDGET"],"enum":["InitFailure","TransportError"],"mod":["caps","features","identity"],"struct":["VirtioPciTransport"],"trait":["BarMapper"]};

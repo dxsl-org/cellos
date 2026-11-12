@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DESC_DWORDS","DESC_HEAD","DESC_STATUS","DESC_TAIL","G2H_DWORDS","H2G_DWORDS","MAX_MSG_DWORDS","STATUS_DISABLED","STATUS_MISMATCH","STATUS_OVERFLOW","STATUS_UNDERFLOW"],"enum":["CtError","HxgType"],"fn":["ct_header","decode_hxg","g2h_read","h2g_write","hxg_header","space"],"struct":["Hxg"]};

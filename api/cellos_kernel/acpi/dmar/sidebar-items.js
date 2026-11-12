@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DRHD_SCOPES_MAX","RMRR_SCOPES_MAX","SCOPE_PATH_MAX"],"fn":["parse_dmar","read_scopes"],"struct":["DeviceScope","DrhdEntry","RmrrEntry"]};

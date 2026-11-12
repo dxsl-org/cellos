@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["ack_if_input","force_unlock_locks","init_driver"],"static":["INPUT_IRQ","KEYBOARD_ACK"],"struct":["InputAckDriver"]};

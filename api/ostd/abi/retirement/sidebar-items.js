@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RETIREMENT_RECORD_LEN","RETIREMENT_RECORD_VERSION"],"enum":["RecordError","RetirementState"],"mod":["reason"],"struct":["ViRetirementV1"]};

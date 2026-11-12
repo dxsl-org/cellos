@@ -2,7 +2,7 @@
 <details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 14 variants</span></summary>    Empty,
     Simple(<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>),
     Pipeline(Vec&lt;<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>&gt;),
-    BackgroundPipeline(Vec&lt;<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>&gt;),
+    BackgroundPipeline,
     Background(<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>),
     Invalid(&amp;'static str),
     Sequence(Vec&lt;<a class="enum" href="enum.Ast.html" title="enum cellbox::parser::Ast">Ast</a>&gt;),
@@ -34,7 +34,7 @@
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Empty" class="variant"><a href="#variant.Empty" class="anchor">§</a><h3 class="code-header">Empty</h3></section><div class="docblock"><p>Empty input.</p>
 </div><section id="variant.Simple" class="variant"><a href="#variant.Simple" class="anchor">§</a><h3 class="code-header">Simple(<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>)</h3></section><div class="docblock"><p>A single simple command.</p>
 </div><section id="variant.Pipeline" class="variant"><a href="#variant.Pipeline" class="anchor">§</a><h3 class="code-header">Pipeline(Vec&lt;<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>&gt;)</h3></section><div class="docblock"><p><code>cmd1 | cmd2 | …</code> — pipeline of commands.</p>
-</div><section id="variant.BackgroundPipeline" class="variant"><a href="#variant.BackgroundPipeline" class="anchor">§</a><h3 class="code-header">BackgroundPipeline(Vec&lt;<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>&gt;)</h3></section><div class="docblock"><p><code>cmd1 | cmd2 &amp;</code> — a background marker on a multi-stage pipeline. The
+</div><section id="variant.BackgroundPipeline" class="variant"><a href="#variant.BackgroundPipeline" class="anchor">§</a><h3 class="code-header">BackgroundPipeline</h3></section><div class="docblock"><p><code>cmd1 | cmd2 &amp;</code> — a background marker on a multi-stage pipeline. The
 executor refuses it before any effect; it is never run in the foreground.</p>
 </div><section id="variant.Background" class="variant"><a href="#variant.Background" class="anchor">§</a><h3 class="code-header">Background(<a class="struct" href="struct.Cmd.html" title="struct cellbox::parser::Cmd">Cmd</a>)</h3></section><div class="docblock"><p><code>cmd &amp;</code> — run in background.</p>
 </div><section id="variant.Invalid" class="variant"><a href="#variant.Invalid" class="anchor">§</a><h3 class="code-header">Invalid(&amp;'static str)</h3></section><div class="docblock"><p>Syntax the grammar rejects (misplaced <code>&amp;</code>, empty pipeline stage, redirect

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EXIT_LEN","PAYLOAD","REGS_LEN"],"fn":["encode_exit","regs_from_bytes","regs_to_bytes"],"struct":["Image"]};

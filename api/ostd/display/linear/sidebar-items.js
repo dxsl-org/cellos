@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_RADIUS","PANEL_RADIUS"],"fn":["corner_inset"],"mod":["icons"],"struct":["Canvas","Radii","RoundRect","Shadow"],"type":["Bgra"]};

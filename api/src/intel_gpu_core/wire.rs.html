@@ -1,0 +1,108 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/intel-gpu-core/src/wire.rs`."><title>wire.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="intel_gpu_core" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">intel_gpu_core/</div>wire.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! `XE_GPU` IPC transport (service id 21, CP1 D-G8): one DRM file operation per request,
+<a href=#2 id=2 data-nosnippet>2</a>//! the `xe` ioctl carried unchanged.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! The transport adds no GPU semantics (ADR-0033 G1, "no new GPU API"): the request code
+<a href=#5 id=5 data-nosnippet>5</a>//! and the struct bytes are Linux's. The one thing IPC cannot do in place is touch the
+<a href=#6 id=6 data-nosnippet>6</a>//! client's memory through the user pointers inside a struct, so the client declares the
+<a href=#7 id=7 data-nosnippet>7</a>//! user ranges a request may touch:
+<a href=#8 id=8 data-nosnippet>8</a>//! - an `IN` segment carries its bytes to the driver, which may read only inside it;
+<a href=#9 id=9 data-nosnippet>9</a>//! - an `OUT` segment is a range the driver may write; the reply returns every write and the
+<a href=#10 id=10 data-nosnippet>10</a>//!   client applies it only inside a range it declared.
+<a href=#11 id=11 data-nosnippet>11</a>//! - an `EXPORT` segment is not memory at all: it attaches one client-memory export lease
+<a href=#12 id=12 data-nosnippet>12</a>//!   (`ExportDmaRange`, syscall 437) to the request, the way an fd rides beside an ioctl.
+<a href=#13 id=13 data-nosnippet>13</a>//!   Its descriptor is `{addr = export id, len = 0, flags = SEG_EXPORT}` and nothing else;
+<a href=#14 id=14 data-nosnippet>14</a>//!   the driver maps it with `MapDmaExport` (438) and checks that the lease's owner is the
+<a href=#15 id=15 data-nosnippet>15</a>//!   request's attested sender. `GEM_CREATE` carries exactly one (CP1 D-G1 option B); every
+<a href=#16 id=16 data-nosnippet>16</a>//!   other request carries none.
+<a href=#17 id=17 data-nosnippet>17</a>//!
+<a href=#18 id=18 data-nosnippet>18</a>//! Anything outside the declared segments fails with `EFAULT`, as a bad user pointer does.
+<a href=#19 id=19 data-nosnippet>19</a>//!
+<a href=#20 id=20 data-nosnippet>20</a>//! Request (little-endian): `op u8, segment_count u8, arg_len u16, file u32, request u32,
+<a href=#21 id=21 data-nosnippet>21</a>//! reserved u32 (0)`, then `segment_count` × `{addr u64, len u32, flags u32}`, the `arg`
+<a href=#22 id=22 data-nosnippet>22</a>//! bytes, and the bytes of each `IN` segment in order; the counts give the frame length.
+<a href=#23 id=23 data-nosnippet>23</a>//! Reply: `errno u32 (0 = success), value u32, arg_len u16, write_count u8, reserved u8 (0),
+<a href=#24 id=24 data-nosnippet>24</a>//! reserved u32 (0)`, then `write_count` × `{addr u64, len u32, reserved u32 (0)}`, the `arg`
+<a href=#25 id=25 data-nosnippet>25</a>//! bytes and the bytes of each write in order. The layout is recorded in
+<a href=#26 id=26 data-nosnippet>26</a>//! `docs/abi-boundary-records.md`.
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">mod </span>reply;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">mod </span>request;
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">pub use </span>reply::{decode_reply, encode_reply, Reply};
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">pub use </span>request::{decode_request, encode_request, Request, SegmentMemory};
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// Fixed header of a request and of a reply.
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub const </span>HEADER_LEN: usize = <span class="number">16</span>;
+<a href=#36 id=36 data-nosnippet>36</a><span class="doccomment">/// One segment (request) or write (reply) descriptor.
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub const </span>DESCRIPTOR_LEN: usize = <span class="number">16</span>;
+<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Segments one request may declare. `VERSION` needs three (`VM_BIND` and `EXEC` two at
+<a href=#39 id=39 data-nosnippet>39</a>/// most, `GEM_CREATE` one attachment); no served ioctl needs more.
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub const </span>MAX_SEGMENTS: usize = <span class="number">4</span>;
+<a href=#41 id=41 data-nosnippet>41</a><span class="doccomment">/// Writes one reply may carry.
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">pub const </span>MAX_WRITES: usize = <span class="number">8</span>;
+<a href=#43 id=43 data-nosnippet>43</a><span class="doccomment">/// Largest request: an `IPC_BUF_SIZE` (4096) receive buffer minus the 32-byte
+<a href=#44 id=44 data-nosnippet>44</a>/// caller-identity trailer the kernel writes at its end.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub const </span>MAX_REQUEST_LEN: usize = <span class="number">4096 </span>- <span class="number">32</span>;
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Largest reply: one `IPC_BUF_SIZE` IPC payload.
+<a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub const </span>MAX_REPLY_LEN: usize = <span class="number">4096</span>;
+<a href=#48 id=48 data-nosnippet>48</a>
+<a href=#49 id=49 data-nosnippet>49</a><span class="doccomment">/// Open a DRM file; the reply `value` is its file id.
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">pub const </span>OP_OPEN: u8 = <span class="number">1</span>;
+<a href=#51 id=51 data-nosnippet>51</a><span class="doccomment">/// Close the DRM file named by `file` (`postclose`).
+<a href=#52 id=52 data-nosnippet>52</a></span><span class="kw">pub const </span>OP_CLOSE: u8 = <span class="number">2</span>;
+<a href=#53 id=53 data-nosnippet>53</a><span class="doccomment">/// Run `request` on the DRM file named by `file`.
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">pub const </span>OP_IOCTL: u8 = <span class="number">3</span>;
+<a href=#55 id=55 data-nosnippet>55</a>
+<a href=#56 id=56 data-nosnippet>56</a><span class="doccomment">/// The driver may read the segment; its bytes follow the `arg`.
+<a href=#57 id=57 data-nosnippet>57</a></span><span class="kw">pub const </span>SEG_IN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>;
+<a href=#58 id=58 data-nosnippet>58</a><span class="doccomment">/// The driver may write the segment.
+<a href=#59 id=59 data-nosnippet>59</a></span><span class="kw">pub const </span>SEG_OUT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
+<a href=#60 id=60 data-nosnippet>60</a><span class="doccomment">/// The descriptor attaches export lease `addr`; `len` is 0 and no other flag is set.
+<a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub const </span>SEG_EXPORT: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>;
+<a href=#62 id=62 data-nosnippet>62</a><span class="doccomment">/// Largest export id the kernel hands out (`1..=isize::MAX`, CP1 §5.1).
+<a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub const </span>MAX_EXPORT_ID: u64 = i64::MAX <span class="kw">as </span>u64;
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a><span class="doccomment">/// A user range a request may touch.
+<a href=#66 id=66 data-nosnippet>66</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub struct </span>Segment {
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">pub </span>addr: u64,
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">pub </span>len: u32,
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">pub </span>flags: u32,
+<a href=#71 id=71 data-nosnippet>71</a>}
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">impl </span>Segment {
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="doccomment">/// An attachment of export lease `export_id`.
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub const fn </span>export(export_id: u64) -&gt; <span class="self">Self </span>{
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="self">Self </span>{
+<a href=#77 id=77 data-nosnippet>77</a>            addr: export_id,
+<a href=#78 id=78 data-nosnippet>78</a>            len: <span class="number">0</span>,
+<a href=#79 id=79 data-nosnippet>79</a>            flags: SEG_EXPORT,
+<a href=#80 id=80 data-nosnippet>80</a>        }
+<a href=#81 id=81 data-nosnippet>81</a>    }
+<a href=#82 id=82 data-nosnippet>82</a>
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Whether this descriptor is well formed: a non-empty mix of `IN`/`OUT`, or an export
+<a href=#84 id=84 data-nosnippet>84</a>    /// attachment with a valid id, zero length and no other flag.
+<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="kw">fn </span>is_valid(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">if </span><span class="self">self</span>.flags &amp; SEG_EXPORT != <span class="number">0 </span>{
+<a href=#87 id=87 data-nosnippet>87</a>            <span class="kw">return </span><span class="self">self</span>.flags == SEG_EXPORT
+<a href=#88 id=88 data-nosnippet>88</a>                &amp;&amp; <span class="self">self</span>.len == <span class="number">0
+<a href=#89 id=89 data-nosnippet>89</a>                </span>&amp;&amp; (<span class="number">1</span>..=MAX_EXPORT_ID).contains(<span class="kw-2">&amp;</span><span class="self">self</span>.addr);
+<a href=#90 id=90 data-nosnippet>90</a>        }
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="self">self</span>.flags != <span class="number">0 </span>&amp;&amp; <span class="self">self</span>.flags &amp; !(SEG_IN | SEG_OUT) == <span class="number">0
+<a href=#92 id=92 data-nosnippet>92</a>    </span>}
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">fn </span>covers(<span class="kw-2">&amp;</span><span class="self">self</span>, addr: u64, len: usize, flag: u32) -&gt; bool {
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(offset) = addr.checked_sub(<span class="self">self</span>.addr) <span class="kw">else </span>{
+<a href=#96 id=96 data-nosnippet>96</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#97 id=97 data-nosnippet>97</a>        };
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="self">self</span>.flags &amp; flag != <span class="number">0
+<a href=#99 id=99 data-nosnippet>99</a>            </span>&amp;&amp; offset
+<a href=#100 id=100 data-nosnippet>100</a>                .checked_add(len <span class="kw">as </span>u64)
+<a href=#101 id=101 data-nosnippet>101</a>                .is_some_and(|end| end &lt;= u64::from(<span class="self">self</span>.len))
+<a href=#102 id=102 data-nosnippet>102</a>    }
+<a href=#103 id=103 data-nosnippet>103</a>}
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a><span class="attr">#[cfg(test)]
+<a href=#106 id=106 data-nosnippet>106</a>#[path = <span class="string">"wire/tests.rs"</span>]
+<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">mod </span>tests;
+</code></pre></div></section></main></body></html>

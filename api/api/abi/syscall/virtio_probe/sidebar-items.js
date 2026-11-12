@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEVICE_ID_OFFSET","ERR_INVALID_INPUT","ERR_NOT_FOUND","MAGIC","MAGIC_OFFSET","STATUS_DRIVER_OK","STATUS_OFFSET"],"fn":["decode","encode"],"struct":["SlotIdentity"]};

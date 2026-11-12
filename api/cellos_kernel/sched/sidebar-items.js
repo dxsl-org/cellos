@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["domain_switch","hart_local","quiesce","scheduler","smp"]};

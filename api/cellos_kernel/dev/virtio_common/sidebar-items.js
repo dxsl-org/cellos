@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE","SLOT_REGS_LEN"],"enum":["SlotProbe"],"fn":["ack_unclaimed","ack_virtio_interrupt_status","is_slot_base","probe_slot","slot_window","vi_handle_virtio_irq","virtio_slots","with_riscv_sum_for_virtio_ack"],"struct":["VirtioSlot"]};

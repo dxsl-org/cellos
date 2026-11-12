@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VENDOR_INTEL"],"enum":["GfxArch"],"fn":["parse_gmd_id","probe_gt","read_mask","read_ref_clock","read_topology"],"struct":["GtIdentity","Topology"]};

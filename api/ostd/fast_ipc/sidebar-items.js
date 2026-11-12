@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["call_vfs","clear_vfs_if_cell","register_vfs","set_vfs_handler_cell","vi_clear_fast_ipc_vfs_cell","vi_set_fast_ipc_vfs_cell"],"type":["VfsFastHandler"]};

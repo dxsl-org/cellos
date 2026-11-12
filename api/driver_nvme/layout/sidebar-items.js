@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ID_NS_FLBAS","ID_NS_LBAF0","ID_NS_NLBAF","MAX_QID","PAGE_SIZE","REG_DB_BASE"],"enum":["LbaFormatError"],"fn":["blocks_in_one_prp","lba_format_index","lba_format_offset","validate_lba_format"],"struct":["Doorbells"]};

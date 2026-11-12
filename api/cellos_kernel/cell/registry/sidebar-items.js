@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CellState"],"static":["CELL_REGISTRY"],"struct":["CellNode","CellRegistry"]};

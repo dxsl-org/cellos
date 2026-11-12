@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {};
+window.SIDEBAR_ITEMS = {"constant":["MAX_OWNED_PIXEL_BYTES"]};

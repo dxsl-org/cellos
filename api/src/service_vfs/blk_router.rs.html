@@ -1,191 +1,201 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/vfs/src/blk_router.rs`."><title>blk_router.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_vfs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_vfs/</div>blk_router.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Shared absolute-LBA block router for all disk-backed VFS backends.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/vfs/src/blk_router.rs`."><title>blk_router.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_vfs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_vfs/</div>blk_router.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Absolute-LBA block router for all disk-backed VFS backends, per device.
 <a href=#2 id=2 data-nosnippet>2</a>//!
-<a href=#3 id=3 data-nosnippet>3</a>//! Since the G2 loader redesign the kernel drives no block hardware on QEMU:
-<a href=#4 id=4 data-nosnippet>4</a>//! `sys_blk_read`/`sys_blk_write` reach only the kernel's null device. Sector
-<a href=#5 id=5 data-nosnippet>5</a>//! I/O must go to the registered block Driver Cell (`service::BLOCK_DRIVER`,
-<a href=#6 id=6 data-nosnippet>6</a>//! the virtio-blk / NVMe cell) via the DrvRequest IPC protocol. This module is
-<a href=#7 id=7 data-nosnippet>7</a>//! the single place that speaks that protocol so every backend (FAT via
-<a href=#8 id=8 data-nosnippet>8</a>//! `block_stream`, littlefs via `lfs_disk`) routes identically — before this was
-<a href=#9 id=9 data-nosnippet>9</a>//! extracted, littlefs still called the raw syscalls and silently hit the dead
-<a href=#10 id=10 data-nosnippet>10</a>//! null device, so every `/data` write failed.
-<a href=#11 id=11 data-nosnippet>11</a>//!
-<a href=#12 id=12 data-nosnippet>12</a>//! The kernel path remains the fallback for real boards where an MMC/SDHCI
-<a href=#13 id=13 data-nosnippet>13</a>//! block device is kernel-resident and no Driver Cell registers.
-<a href=#14 id=14 data-nosnippet>14</a>
-<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span>core::sync::atomic::{AtomicUsize, Ordering};
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>ostd::syscall::{
-<a href=#17 id=17 data-nosnippet>17</a>    sys_blk_read, sys_blk_write, sys_lookup_service, sys_recv, sys_send, SyscallResult,
-<a href=#18 id=18 data-nosnippet>18</a>};
-<a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">const </span>SECTOR_SIZE: usize = <span class="number">512</span>;
-<a href=#21 id=21 data-nosnippet>21</a>
-<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Sentinel: block Driver Cell not yet probed.
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">const </span>NOT_PROBED: usize = <span class="number">0</span>;
-<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// Sentinel: probed and absent (no Driver Cell registered — use the kernel path).
-<a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">const </span>ABSENT: usize = usize::MAX;
-<a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="doccomment">/// Cached block Driver Cell TID. `NOT_PROBED` (0) until the first lookup.
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">static </span>DRIVER_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
+<a href=#3 id=3 data-nosnippet>3</a>//! Every storage device a block Driver Cell registered (syscall 416) has a
+<a href=#4 id=4 data-nosnippet>4</a>//! kernel route slot; the VFS reads the slots once at start (syscall 432) into
+<a href=#5 id=5 data-nosnippet>5</a>//! its device table, and each backend addresses its device by [`DeviceRef`].
+<a href=#6 id=6 data-nosnippet>6</a>//! Requests go to the device's provider over the DrvRequest IPC wire. This is
+<a href=#7 id=7 data-nosnippet>7</a>//! the single place that speaks that wire, so FAT (`block_stream`) and CellosFS
+<a href=#8 id=8 data-nosnippet>8</a>//! (`disk_cellosfs`) route identically.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! The kernel block path (`sys_blk_*`) serves only [`DeviceRef::Kernel`], the
+<a href=#11 id=11 data-nosnippet>11</a>//! disk of boards where no Driver Cell registers a route (kernel-resident MMC).
+<a href=#12 id=12 data-nosnippet>12</a>
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">mod </span>discovery;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">mod </span>requests;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">mod </span>router;
+<a href=#16 id=16 data-nosnippet>16</a><span class="attr">#[cfg(test)]
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">mod </span>read_run_tests;
+<a href=#18 id=18 data-nosnippet>18</a><span class="attr">#[cfg(test)]
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">mod </span>tests;
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub use </span><span class="self">self</span>::discovery::Discovery;
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="self">self</span>::router::Router;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::block_route::ViBlockRouteV1;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::prelude::Mutex;
+<a href=#26 id=26 data-nosnippet>26</a><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>ostd::syscall::{<span class="self">self </span><span class="kw">as </span>sys, SyscallResult};
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>types::block_wire::{BlockOutcome, SECTOR_SIZE};
 <a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Returns the block Driver Cell TID if one has registered, else `None`.
-<a href=#31 id=31 data-nosnippet>31</a>/// Caches a live driver TID across requests, re-checking service discovery
-<a href=#32 id=32 data-nosnippet>32</a>/// when no driver was registered previously.
-<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">fn </span>driver_tid() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">let </span>cached = DRIVER_TID.load(Ordering::Relaxed);
-<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">if </span>cached != NOT_PROBED &amp;&amp; cached != ABSENT {
-<a href=#36 id=36 data-nosnippet>36</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(cached);
-<a href=#37 id=37 data-nosnippet>37</a>    }
+<a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Which block path a request takes.
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+<a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">pub enum </span>DeviceRef {
+<a href=#33 id=33 data-nosnippet>33</a>    <span class="doccomment">/// Entry `n` of the device table built at discovery.
+<a href=#34 id=34 data-nosnippet>34</a>    </span>Device(u8),
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="doccomment">/// The kernel block path; used only when discovery found no routes.
+<a href=#36 id=36 data-nosnippet>36</a>    </span>Kernel,
+<a href=#37 id=37 data-nosnippet>37</a>}
 <a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">match </span>sys_lookup_service(api::syscall::service::BLOCK_DRIVER) {
-<a href=#40 id=40 data-nosnippet>40</a>        <span class="prelude-val">Some</span>(tid) <span class="kw">if </span>tid != <span class="number">0 </span>=&gt; {
-<a href=#41 id=41 data-nosnippet>41</a>            DRIVER_TID.store(tid, Ordering::Relaxed);
-<a href=#42 id=42 data-nosnippet>42</a>            <span class="prelude-val">Some</span>(tid)
-<a href=#43 id=43 data-nosnippet>43</a>        }
-<a href=#44 id=44 data-nosnippet>44</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#45 id=45 data-nosnippet>45</a>    }
-<a href=#46 id=46 data-nosnippet>46</a>}
-<a href=#47 id=47 data-nosnippet>47</a>
-<a href=#48 id=48 data-nosnippet>48</a><span class="doccomment">/// Drop the cached driver TID after a failed exchange so the next request
-<a href=#49 id=49 data-nosnippet>49</a>/// re-probes service discovery.
-<a href=#50 id=50 data-nosnippet>50</a>///
-<a href=#51 id=51 data-nosnippet>51</a>/// A block driver cell that dies and is restarted registers under a new tid;
-<a href=#52 id=52 data-nosnippet>52</a>/// keeping the old one cached means every later request in that boot is sent to
-<a href=#53 id=53 data-nosnippet>53</a>/// a cell that no longer answers. `compare_exchange` leaves a tid cached by
-<a href=#54 id=54 data-nosnippet>54</a>/// another caller alone.
-<a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">fn </span>forget_driver(tid: usize) {
-<a href=#56 id=56 data-nosnippet>56</a>    <span class="kw">let _ </span>= DRIVER_TID.compare_exchange(tid, NOT_PROBED, Ordering::Relaxed, Ordering::Relaxed);
-<a href=#57 id=57 data-nosnippet>57</a>}
-<a href=#58 id=58 data-nosnippet>58</a>
-<a href=#59 id=59 data-nosnippet>59</a><span class="doccomment">/// Read one 512-byte sector at absolute LBA `abs_lba`.
-<a href=#60 id=60 data-nosnippet>60</a>///
-<a href=#61 id=61 data-nosnippet>61</a>/// Routes to the block Driver Cell (DrvRequest IPC) when registered, falling
-<a href=#62 id=62 data-nosnippet>62</a>/// back to the kernel block path (`sys_blk_read`) for MMC-backed real boards.
-<a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub fn </span>blk_read(abs_lba: u64, buf: <span class="kw-2">&amp;mut </span>[u8; SECTOR_SIZE]) -&gt; bool {
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = driver_tid() {
-<a href=#65 id=65 data-nosnippet>65</a>        <span class="comment">// Read request: [op=0 (2B)] [sector (8B)] — 10 bytes.
-<a href=#66 id=66 data-nosnippet>66</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>req = [<span class="number">0u8</span>; <span class="number">10</span>];
-<a href=#67 id=67 data-nosnippet>67</a>        req[<span class="number">0</span>..<span class="number">2</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u16</span>.to_le_bytes());
-<a href=#68 id=68 data-nosnippet>68</a>        req[<span class="number">2</span>..<span class="number">10</span>].copy_from_slice(<span class="kw-2">&amp;</span>abs_lba.to_le_bytes());
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">if let </span>SyscallResult::Err(<span class="kw">_</span>) = sys_send(tid, <span class="kw-2">&amp;</span>req) {
-<a href=#70 id=70 data-nosnippet>70</a>            forget_driver(tid);
-<a href=#71 id=71 data-nosnippet>71</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#72 id=72 data-nosnippet>72</a>        }
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="comment">// Reply: [status (1B)] [data (512B)] = 513 bytes. mask=tid so a message
-<a href=#74 id=74 data-nosnippet>74</a>        // from another cell (while we are blocked here) is never mistaken for it.
-<a href=#75 id=75 data-nosnippet>75</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>reply = [<span class="number">0u8</span>; <span class="number">1 </span>+ SECTOR_SIZE];
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="comment">// This recv result used to be dropped, and dropping it is not harmless:
-<a href=#77 id=77 data-nosnippet>77</a>        // the kernel delivers a driver cell's death as `Ok(dead_tid)` with the
-<a href=#78 id=78 data-nosnippet>78</a>        // reason written into the first 8 bytes of the buffer, so a cell that
-<a href=#79 id=79 data-nosnippet>79</a>        // died while this recv was parked left `reply[0] == 0` plus 512 bytes of
-<a href=#80 id=80 data-nosnippet>80</a>        // zeros - a successful read of data that was never on the device, from
-<a href=#81 id=81 data-nosnippet>81</a>        // which the filesystem then walked a FAT chain of zeros. Only `Ok(tid)`
-<a href=#82 id=82 data-nosnippet>82</a>        // is a reply; anything else is a failure the caller's retry re-probes.
-<a href=#83 id=83 data-nosnippet>83</a>        </span><span class="kw">match </span>sys_recv(tid, <span class="kw-2">&amp;mut </span>reply) {
-<a href=#84 id=84 data-nosnippet>84</a>            SyscallResult::Ok(from) <span class="kw">if </span>from == tid =&gt; {}
-<a href=#85 id=85 data-nosnippet>85</a>            <span class="kw">_ </span>=&gt; {
-<a href=#86 id=86 data-nosnippet>86</a>                forget_driver(tid);
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#88 id=88 data-nosnippet>88</a>            }
-<a href=#89 id=89 data-nosnippet>89</a>        }
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">if </span>reply[<span class="number">0</span>] != <span class="number">0 </span>{
-<a href=#91 id=91 data-nosnippet>91</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#92 id=92 data-nosnippet>92</a>        }
-<a href=#93 id=93 data-nosnippet>93</a>        buf.copy_from_slice(<span class="kw-2">&amp;</span>reply[<span class="number">1</span>..<span class="number">1 </span>+ SECTOR_SIZE]);
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="bool-val">true
-<a href=#95 id=95 data-nosnippet>95</a>    </span>} <span class="kw">else </span>{
-<a href=#96 id=96 data-nosnippet>96</a>        sys_blk_read(abs_lba, buf)
-<a href=#97 id=97 data-nosnippet>97</a>    }
-<a href=#98 id=98 data-nosnippet>98</a>}
-<a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a><span class="doccomment">/// Write one 512-byte sector at absolute LBA `abs_lba`.
-<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub fn </span>blk_write(abs_lba: u64, data: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE]) -&gt; bool {
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = driver_tid() {
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="comment">// Write request: [op=1 (2B)] [sector (8B)] [data (512B)] = 522 bytes.
-<a href=#104 id=104 data-nosnippet>104</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>req = [<span class="number">0u8</span>; <span class="number">10 </span>+ SECTOR_SIZE];
-<a href=#105 id=105 data-nosnippet>105</a>        req[<span class="number">0</span>..<span class="number">2</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u16</span>.to_le_bytes());
-<a href=#106 id=106 data-nosnippet>106</a>        req[<span class="number">2</span>..<span class="number">10</span>].copy_from_slice(<span class="kw-2">&amp;</span>abs_lba.to_le_bytes());
-<a href=#107 id=107 data-nosnippet>107</a>        req[<span class="number">10</span>..<span class="number">10 </span>+ SECTOR_SIZE].copy_from_slice(data);
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">if let </span>SyscallResult::Err(<span class="kw">_</span>) = sys_send(tid, <span class="kw-2">&amp;</span>req) {
-<a href=#109 id=109 data-nosnippet>109</a>            forget_driver(tid);
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#111 id=111 data-nosnippet>111</a>        }
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span><span class="kw-2">mut </span>reply = [<span class="number">0u8</span>; <span class="number">1</span>];
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="comment">// Same as blk_read: only `Ok(tid)` is a reply, and an unanswered write
-<a href=#114 id=114 data-nosnippet>114</a>        // that reads as success is worse than an unanswered read - the page cache
-<a href=#115 id=115 data-nosnippet>115</a>        // is write-through, so the filesystem believes a sector reached the
-<a href=#116 id=116 data-nosnippet>116</a>        // device that never arrived.
-<a href=#117 id=117 data-nosnippet>117</a>        </span><span class="kw">match </span>sys_recv(tid, <span class="kw-2">&amp;mut </span>reply) {
-<a href=#118 id=118 data-nosnippet>118</a>            SyscallResult::Ok(from) <span class="kw">if </span>from == tid =&gt; {}
-<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">_ </span>=&gt; {
-<a href=#120 id=120 data-nosnippet>120</a>                forget_driver(tid);
-<a href=#121 id=121 data-nosnippet>121</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#122 id=122 data-nosnippet>122</a>            }
-<a href=#123 id=123 data-nosnippet>123</a>        }
-<a href=#124 id=124 data-nosnippet>124</a>        reply[<span class="number">0</span>] == <span class="number">0
-<a href=#125 id=125 data-nosnippet>125</a>    </span>} <span class="kw">else </span>{
-<a href=#126 id=126 data-nosnippet>126</a>        sys_blk_write(abs_lba, data)
-<a href=#127 id=127 data-nosnippet>127</a>    }
-<a href=#128 id=128 data-nosnippet>128</a>}
-<a href=#129 id=129 data-nosnippet>129</a>
-<a href=#130 id=130 data-nosnippet>130</a><span class="doccomment">/// Flush all dirty data for the block device.
-<a href=#131 id=131 data-nosnippet>131</a></span><span class="kw">pub fn </span>blk_flush() -&gt; bool {
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = driver_tid() {
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="comment">// Flush request: [op=2 (2B)] = 2 bytes.
-<a href=#134 id=134 data-nosnippet>134</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>req = [<span class="number">0u8</span>; <span class="number">2</span>];
-<a href=#135 id=135 data-nosnippet>135</a>        req[<span class="number">0</span>..<span class="number">2</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">2u16</span>.to_le_bytes());
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">if let </span>ostd::syscall::SyscallResult::Err(<span class="kw">_</span>) = ostd::syscall::sys_send(tid, <span class="kw-2">&amp;</span>req) {
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#138 id=138 data-nosnippet>138</a>        }
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span><span class="kw-2">mut </span>reply = [<span class="number">0u8</span>; <span class="number">1</span>];
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="comment">// `sys_recv` returns Ok(tid) for a reply and Ok(dead_tid) when the driver
-<a href=#141 id=141 data-nosnippet>141</a>        // cell died while this was parked - the Err arm that used to be checked
-<a href=#142 id=142 data-nosnippet>142</a>        // here never fires, so a dead driver read as a rejected flush.
-<a href=#143 id=143 data-nosnippet>143</a>        </span><span class="kw">match </span>ostd::syscall::sys_recv(tid, <span class="kw-2">&amp;mut </span>reply) {
-<a href=#144 id=144 data-nosnippet>144</a>            ostd::syscall::SyscallResult::Ok(from) <span class="kw">if </span>from == tid =&gt; {}
-<a href=#145 id=145 data-nosnippet>145</a>            other =&gt; {
-<a href=#146 id=146 data-nosnippet>146</a>                ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[blk-router] flush recv failed: {:?}"</span>, other));
-<a href=#147 id=147 data-nosnippet>147</a>                forget_driver(tid);
-<a href=#148 id=148 data-nosnippet>148</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#149 id=149 data-nosnippet>149</a>            }
-<a href=#150 id=150 data-nosnippet>150</a>        }
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">if </span>reply[<span class="number">0</span>] != <span class="number">0 </span>{
-<a href=#152 id=152 data-nosnippet>152</a>            ostd::io::println(<span class="string">"[blk-router] flush rejected by block driver"</span>);
-<a href=#153 id=153 data-nosnippet>153</a>        }
-<a href=#154 id=154 data-nosnippet>154</a>        reply[<span class="number">0</span>] == <span class="number">0
-<a href=#155 id=155 data-nosnippet>155</a>    </span>} <span class="kw">else </span>{
-<a href=#156 id=156 data-nosnippet>156</a>        ostd::syscall::sys_blk_flush()
-<a href=#157 id=157 data-nosnippet>157</a>    }
-<a href=#158 id=158 data-nosnippet>158</a>}
-<a href=#159 id=159 data-nosnippet>159</a>
-<a href=#160 id=160 data-nosnippet>160</a><span class="doccomment">/// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` into `buf`.
-<a href=#161 id=161 data-nosnippet>161</a></span><span class="kw">pub fn </span>blk_read_sectors(abs_lba: u64, count: u32, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; bool {
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">if </span>buf.len() &lt; (count <span class="kw">as </span>usize) * SECTOR_SIZE {
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#164 id=164 data-nosnippet>164</a>    }
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..count {
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; SECTOR_SIZE];
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">if </span>!blk_read(abs_lba + i <span class="kw">as </span>u64, <span class="kw-2">&amp;mut </span>tmp) {
-<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#169 id=169 data-nosnippet>169</a>        }
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>off = (i <span class="kw">as </span>usize) * SECTOR_SIZE;
-<a href=#171 id=171 data-nosnippet>171</a>        buf[off..off + SECTOR_SIZE].copy_from_slice(<span class="kw-2">&amp;</span>tmp);
-<a href=#172 id=172 data-nosnippet>172</a>    }
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="bool-val">true
-<a href=#174 id=174 data-nosnippet>174</a></span>}
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` from `data`.
-<a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">pub fn </span>blk_write_sectors(abs_lba: u64, count: u32, data: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">if </span>data.len() &lt; (count <span class="kw">as </span>usize) * SECTOR_SIZE {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..count {
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>off = (i <span class="kw">as </span>usize) * SECTOR_SIZE;
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span><span class="kw-2">mut </span>tmp = [<span class="number">0u8</span>; SECTOR_SIZE];
-<a href=#184 id=184 data-nosnippet>184</a>        tmp.copy_from_slice(<span class="kw-2">&amp;</span>data[off..off + SECTOR_SIZE]);
-<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">if </span>!blk_write(abs_lba + i <span class="kw">as </span>u64, <span class="kw-2">&amp;</span>tmp) {
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#187 id=187 data-nosnippet>187</a>        }
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="bool-val">true
-<a href=#190 id=190 data-nosnippet>190</a></span>}
+<a href=#39 id=39 data-nosnippet>39</a><span class="doccomment">/// Kernel and IPC operations the router needs.
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub trait </span>BlockSys {
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="doccomment">/// Route slot `index` (syscall 432); `None` when there is no route there.
+<a href=#42 id=42 data-nosnippet>42</a>    </span><span class="kw">fn </span>lookup_route(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: u32) -&gt; <span class="prelude-ty">Option</span>&lt;ViBlockRouteV1&gt;;
+<a href=#43 id=43 data-nosnippet>43</a>    <span class="doccomment">/// `true` when the kernel accepted the message for `tid`.
+<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">fn </span>send(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, msg: <span class="kw-2">&amp;</span>[u8]) -&gt; bool;
+<a href=#45 id=45 data-nosnippet>45</a>    <span class="doccomment">/// `true` when a message from `tid` arrived in `buf`.
+<a href=#46 id=46 data-nosnippet>46</a>    </span><span class="kw">fn </span>recv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; bool;
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">fn </span>kernel_read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lba: u64, buf: <span class="kw-2">&amp;mut </span>[u8; SECTOR_SIZE]) -&gt; bool;
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">fn </span>kernel_write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lba: u64, data: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE]) -&gt; bool;
+<a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">fn </span>kernel_flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool;
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, line: <span class="kw-2">&amp;</span>str);
+<a href=#51 id=51 data-nosnippet>51</a>}
+<a href=#52 id=52 data-nosnippet>52</a>
+<a href=#53 id=53 data-nosnippet>53</a><span class="doccomment">/// The VFS block-device table; every block request is serialized through it.
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">static </span>ROUTER: Mutex&lt;Router&gt; = Mutex::new(Router::new());
+<a href=#55 id=55 data-nosnippet>55</a>
+<a href=#56 id=56 data-nosnippet>56</a><span class="doccomment">/// Scheduler ticks the VFS waits for its own `service::VFS` registration, which
+<a href=#57 id=57 data-nosnippet>57</a>/// the drivers require of every block request sender.
+<a href=#58 id=58 data-nosnippet>58</a></span><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
+<a href=#59 id=59 data-nosnippet>59</a></span><span class="kw">const </span>VFS_REGISTRATION_WAIT_TICKS: u64 = <span class="number">500</span>;
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a><span class="doccomment">/// The live kernel behind [`BlockSys`].
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">struct </span>Syscalls;
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">impl </span>BlockSys <span class="kw">for </span>Syscalls {
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">fn </span>lookup_route(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: u32) -&gt; <span class="prelude-ty">Option</span>&lt;ViBlockRouteV1&gt; {
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">match </span>sys::sys_lookup_block_route(index) {
+<a href=#68 id=68 data-nosnippet>68</a>            <span class="prelude-val">Ok</span>(record) =&gt; record,
+<a href=#69 id=69 data-nosnippet>69</a>            <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#70 id=70 data-nosnippet>70</a>                <span class="self">self</span>.log(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#71 id=71 data-nosnippet>71</a>                    <span class="string">"[vfs] block route {index} lookup refused: {error:?}"
+<a href=#72 id=72 data-nosnippet>72</a>                </span>));
+<a href=#73 id=73 data-nosnippet>73</a>                <span class="prelude-val">None
+<a href=#74 id=74 data-nosnippet>74</a>            </span>}
+<a href=#75 id=75 data-nosnippet>75</a>        }
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">fn </span>send(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, msg: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#78 id=78 data-nosnippet>78</a>        ostd::ipc::post(tid, msg).is_ok()
+<a href=#79 id=79 data-nosnippet>79</a>    }
+<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>recv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tid: usize, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; bool {
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="comment">// Masked to `tid`, so no other cell's message is taken for the reply.
+<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="macro">matches!</span>(sys::sys_recv(tid, buf), SyscallResult::Ok(from) <span class="kw">if </span>from == tid)
+<a href=#83 id=83 data-nosnippet>83</a>    }
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>kernel_read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lba: u64, buf: <span class="kw-2">&amp;mut </span>[u8; SECTOR_SIZE]) -&gt; bool {
+<a href=#85 id=85 data-nosnippet>85</a>        sys::sys_blk_read(lba, buf)
+<a href=#86 id=86 data-nosnippet>86</a>    }
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">fn </span>kernel_write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, lba: u64, data: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE]) -&gt; bool {
+<a href=#88 id=88 data-nosnippet>88</a>        sys::sys_blk_write(lba, data)
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">fn </span>kernel_flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#91 id=91 data-nosnippet>91</a>        sys::sys_blk_flush()
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, line: <span class="kw-2">&amp;</span>str) {
+<a href=#94 id=94 data-nosnippet>94</a>        ostd::io::println(line);
+<a href=#95 id=95 data-nosnippet>95</a>    }
+<a href=#96 id=96 data-nosnippet>96</a>}
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a><span class="doccomment">/// Hosted (test) builds have no kernel: no routes, and the kernel disk is absent.
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="attr">#[cfg(not(target_os = <span class="string">"none"</span>))]
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">impl </span>BlockSys <span class="kw">for </span>Syscalls {
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">fn </span>lookup_route(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _index: u32) -&gt; <span class="prelude-ty">Option</span>&lt;ViBlockRouteV1&gt; {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="prelude-val">None
+<a href=#103 id=103 data-nosnippet>103</a>    </span>}
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">fn </span>send(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _tid: usize, _msg: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="bool-val">false
+<a href=#106 id=106 data-nosnippet>106</a>    </span>}
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">fn </span>recv(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _tid: usize, _buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; bool {
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="bool-val">false
+<a href=#109 id=109 data-nosnippet>109</a>    </span>}
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">fn </span>kernel_read(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _lba: u64, _buf: <span class="kw-2">&amp;mut </span>[u8; SECTOR_SIZE]) -&gt; bool {
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="bool-val">false
+<a href=#112 id=112 data-nosnippet>112</a>    </span>}
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">fn </span>kernel_write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _lba: u64, _data: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE]) -&gt; bool {
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="bool-val">false
+<a href=#115 id=115 data-nosnippet>115</a>    </span>}
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">fn </span>kernel_flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="bool-val">false
+<a href=#118 id=118 data-nosnippet>118</a>    </span>}
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _line: <span class="kw-2">&amp;</span>str) {}
+<a href=#120 id=120 data-nosnippet>120</a>}
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a><span class="doccomment">/// Wait (bounded) until this VFS is the registered `service::VFS`, then build
+<a href=#123 id=123 data-nosnippet>123</a>/// the device table from the kernel route slots and choose the primary disk.
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub fn </span>discover() -&gt; Discovery {
+<a href=#125 id=125 data-nosnippet>125</a>    wait_for_vfs_registration();
+<a href=#126 id=126 data-nosnippet>126</a>    discovery::discover(<span class="kw-2">&amp;mut </span>ROUTER.lock(), <span class="kw-2">&amp;mut </span>Syscalls)
+<a href=#127 id=127 data-nosnippet>127</a>}
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a><span class="doccomment">/// Drivers refuse block requests from anyone but the registered VFS, and init
+<a href=#130 id=130 data-nosnippet>130</a>/// registers a freshly spawned VFS only after the spawn returns.
+<a href=#131 id=131 data-nosnippet>131</a></span><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
+<a href=#132 id=132 data-nosnippet>132</a></span><span class="kw">fn </span>wait_for_vfs_registration() {
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">let </span>start = sys::sys_get_scheduler_ticks();
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="kw">while </span>ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">let </span>waited = <span class="kw">match </span>(start, sys::sys_get_scheduler_ticks()) {
+<a href=#136 id=136 data-nosnippet>136</a>            (<span class="prelude-val">Some</span>(start), <span class="prelude-val">Some</span>(now)) =&gt; now.saturating_sub(start),
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">_ </span>=&gt; u64::MAX,
+<a href=#138 id=138 data-nosnippet>138</a>        };
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">if </span>waited &gt;= VFS_REGISTRATION_WAIT_TICKS {
+<a href=#140 id=140 data-nosnippet>140</a>            ostd::io::println(
+<a href=#141 id=141 data-nosnippet>141</a>                <span class="string">"[vfs] not registered as VFS after 500 ticks; block devices will refuse requests"</span>,
+<a href=#142 id=142 data-nosnippet>142</a>            );
+<a href=#143 id=143 data-nosnippet>143</a>            <span class="kw">return</span>;
+<a href=#144 id=144 data-nosnippet>144</a>        }
+<a href=#145 id=145 data-nosnippet>145</a>        ostd::task::yield_now();
+<a href=#146 id=146 data-nosnippet>146</a>    }
+<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a><span class="attr">#[cfg(not(target_os = <span class="string">"none"</span>))]
+<a href=#150 id=150 data-nosnippet>150</a></span><span class="kw">fn </span>wait_for_vfs_registration() {}
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a><span class="doccomment">/// Read one 512-byte sector at absolute LBA `abs_lba` of `dev`.
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">pub fn </span>blk_read(dev: DeviceRef, abs_lba: u64, buf: <span class="kw-2">&amp;mut </span>[u8; SECTOR_SIZE]) -&gt; bool {
+<a href=#154 id=154 data-nosnippet>154</a>    ROUTER.lock().read(<span class="kw-2">&amp;mut </span>Syscalls, dev, abs_lba, buf)
+<a href=#155 id=155 data-nosnippet>155</a>}
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a><span class="doccomment">/// Write one 512-byte sector at absolute LBA `abs_lba` of `dev`.
+<a href=#158 id=158 data-nosnippet>158</a>///
+<a href=#159 id=159 data-nosnippet>159</a>/// `NotIssued`: nothing reached a device (send refused, or no live provider).
+<a href=#160 id=160 data-nosnippet>160</a>/// `Indeterminate`: the write may have been issued; the caller must not replay it.
+<a href=#161 id=161 data-nosnippet>161</a></span><span class="kw">pub fn </span>blk_write(dev: DeviceRef, abs_lba: u64, data: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE]) -&gt; BlockOutcome {
+<a href=#162 id=162 data-nosnippet>162</a>    ROUTER.lock().write(<span class="kw-2">&amp;mut </span>Syscalls, dev, abs_lba, data)
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="doccomment">/// Flush `dev` only. Outcome rules as [`blk_write`].
+<a href=#166 id=166 data-nosnippet>166</a></span><span class="kw">pub fn </span>blk_flush(dev: DeviceRef) -&gt; BlockOutcome {
+<a href=#167 id=167 data-nosnippet>167</a>    ROUTER.lock().flush(<span class="kw-2">&amp;mut </span>Syscalls, dev)
+<a href=#168 id=168 data-nosnippet>168</a>}
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a><span class="doccomment">/// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` into `buf`.
+<a href=#171 id=171 data-nosnippet>171</a>///
+<a href=#172 id=172 data-nosnippet>172</a>/// Up to [`types::block_wire::MAX_RUN_SECTORS`] sectors move per request.
+<a href=#173 id=173 data-nosnippet>173</a></span><span class="kw">pub fn </span>blk_read_sectors(dev: DeviceRef, abs_lba: u64, count: u32, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; bool {
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(buf) = buf.get_mut(..(count <span class="kw">as </span>usize) * SECTOR_SIZE) <span class="kw">else </span>{
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#176 id=176 data-nosnippet>176</a>    };
+<a href=#177 id=177 data-nosnippet>177</a>    ROUTER.lock().read_sectors(<span class="kw-2">&amp;mut </span>Syscalls, dev, abs_lba, buf)
+<a href=#178 id=178 data-nosnippet>178</a>}
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a><span class="doccomment">/// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` from `data`.
+<a href=#181 id=181 data-nosnippet>181</a>///
+<a href=#182 id=182 data-nosnippet>182</a>/// Stops at the first sector that does not complete and returns its outcome;
+<a href=#183 id=183 data-nosnippet>183</a>/// earlier sectors stay written.
+<a href=#184 id=184 data-nosnippet>184</a></span><span class="kw">pub fn </span>blk_write_sectors(dev: DeviceRef, abs_lba: u64, count: u32, data: <span class="kw-2">&amp;</span>[u8]) -&gt; BlockOutcome {
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">if </span>data.len() &lt; (count <span class="kw">as </span>usize) * SECTOR_SIZE {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">return </span>BlockOutcome::NotIssued;
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">for </span>(i, chunk) <span class="kw">in </span>data
+<a href=#189 id=189 data-nosnippet>189</a>        .chunks_exact(SECTOR_SIZE)
+<a href=#190 id=190 data-nosnippet>190</a>        .take(count <span class="kw">as </span>usize)
+<a href=#191 id=191 data-nosnippet>191</a>        .enumerate()
+<a href=#192 id=192 data-nosnippet>192</a>    {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>sector: <span class="kw-2">&amp;</span>[u8; SECTOR_SIZE] = chunk.try_into().expect(<span class="string">"whole sector chunk"</span>);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">let </span>outcome = blk_write(dev, abs_lba + i <span class="kw">as </span>u64, sector);
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">if </span>!outcome.is_completed() {
+<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">return </span>outcome;
+<a href=#197 id=197 data-nosnippet>197</a>        }
+<a href=#198 id=198 data-nosnippet>198</a>    }
+<a href=#199 id=199 data-nosnippet>199</a>    BlockOutcome::Completed
+<a href=#200 id=200 data-nosnippet>200</a>}
 </code></pre></div></section></main></body></html>

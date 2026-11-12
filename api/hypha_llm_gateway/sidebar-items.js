@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["http","local"]};
+window.SIDEBAR_ITEMS = {"mod":["endpoint","http","local"]};

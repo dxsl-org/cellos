@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["report","rt_report","runner","timer"]};
+window.SIDEBAR_ITEMS = {"mod":["counters","report","rt_report","runner","timer"]};

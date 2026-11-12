@@ -5,30 +5,38 @@
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">static </span>ORIGIN_MS: AtomicU64 = AtomicU64::new(<span class="number">0</span>);
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">fn </span>now_ms() -&gt; u64 { ostd::syscall::sys_get_time_ms().unwrap_or(<span class="number">0</span>) }
-<a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// Reset the origin at the start of a navigation.
-<a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">pub fn </span>begin(url: <span class="kw-2">&amp;</span>str) {
-<a href=#12 id=12 data-nosnippet>12</a>    ORIGIN_MS.store(now_ms(), Ordering::Relaxed);
-<a href=#13 id=13 data-nosnippet>13</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[ocel/t] +0ms navigate {}"</span>, url));
-<a href=#14 id=14 data-nosnippet>14</a>}
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="doccomment">/// Milliseconds since `begin`.
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub fn </span>elapsed_ms() -&gt; u64 { now_ms().saturating_sub(ORIGIN_MS.load(Ordering::Relaxed)) }
-<a href=#18 id=18 data-nosnippet>18</a>
-<a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Print one stage stamp.
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">pub fn </span>stamp(stage: <span class="kw-2">&amp;</span>str) {
-<a href=#21 id=21 data-nosnippet>21</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[ocel/t] +{}ms {}"</span>, elapsed_ms(), stage));
-<a href=#22 id=22 data-nosnippet>22</a>}
-<a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// Print a stage stamp with the duration of the stage itself.
-<a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">pub fn </span>stamp_took(stage: <span class="kw-2">&amp;</span>str, started_ms: u64) {
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">let </span>now = now_ms();
-<a href=#27 id=27 data-nosnippet>27</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#28 id=28 data-nosnippet>28</a>        <span class="string">"[ocel/t] +{}ms {} ({}ms)"</span>,
-<a href=#29 id=29 data-nosnippet>29</a>        now.saturating_sub(ORIGIN_MS.load(Ordering::Relaxed)), stage, now.saturating_sub(started_ms)
-<a href=#30 id=30 data-nosnippet>30</a>    ));
-<a href=#31 id=31 data-nosnippet>31</a>}
-<a href=#32 id=32 data-nosnippet>32</a>
-<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub fn </span>now() -&gt; u64 { now_ms() }
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">fn </span>now_ms() -&gt; u64 {
+<a href=#9 id=9 data-nosnippet>9</a>    ostd::syscall::sys_get_time_ms().unwrap_or(<span class="number">0</span>)
+<a href=#10 id=10 data-nosnippet>10</a>}
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Reset the origin at the start of a navigation.
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">pub fn </span>begin(url: <span class="kw-2">&amp;</span>str) {
+<a href=#14 id=14 data-nosnippet>14</a>    ORIGIN_MS.store(now_ms(), Ordering::Relaxed);
+<a href=#15 id=15 data-nosnippet>15</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[ocel/t] +0ms navigate {}"</span>, url));
+<a href=#16 id=16 data-nosnippet>16</a>}
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Milliseconds since `begin`.
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">pub fn </span>elapsed_ms() -&gt; u64 {
+<a href=#20 id=20 data-nosnippet>20</a>    now_ms().saturating_sub(ORIGIN_MS.load(Ordering::Relaxed))
+<a href=#21 id=21 data-nosnippet>21</a>}
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Print one stage stamp.
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub fn </span>stamp(stage: <span class="kw-2">&amp;</span>str) {
+<a href=#25 id=25 data-nosnippet>25</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[ocel/t] +{}ms {}"</span>, elapsed_ms(), stage));
+<a href=#26 id=26 data-nosnippet>26</a>}
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// Print a stage stamp with the duration of the stage itself.
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">pub fn </span>stamp_took(stage: <span class="kw-2">&amp;</span>str, started_ms: u64) {
+<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">let </span>now = now_ms();
+<a href=#31 id=31 data-nosnippet>31</a>    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#32 id=32 data-nosnippet>32</a>        <span class="string">"[ocel/t] +{}ms {} ({}ms)"</span>,
+<a href=#33 id=33 data-nosnippet>33</a>        now.saturating_sub(ORIGIN_MS.load(Ordering::Relaxed)),
+<a href=#34 id=34 data-nosnippet>34</a>        stage,
+<a href=#35 id=35 data-nosnippet>35</a>        now.saturating_sub(started_ms)
+<a href=#36 id=36 data-nosnippet>36</a>    ));
+<a href=#37 id=37 data-nosnippet>37</a>}
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">pub fn </span>now() -&gt; u64 {
+<a href=#40 id=40 data-nosnippet>40</a>    now_ms()
+<a href=#41 id=41 data-nosnippet>41</a>}
 </code></pre></div></section></main></body></html>

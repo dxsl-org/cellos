@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_udp_request"]};
+window.SIDEBAR_ITEMS = {"constant":["EPHEMERAL_PORT_DRAWS"],"fn":["ensure_client_bound","handle_udp_request","unbound_udp_port"]};

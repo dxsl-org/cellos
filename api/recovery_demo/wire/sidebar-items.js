@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FRAME_LEN"],"enum":["Fault","Msg","Refusal"],"struct":["Binding"]};

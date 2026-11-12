@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IDENTITIES","QUERY_DEVICE_IDS","VENDOR_VMWARE"],"enum":["Admission"],"fn":["classify"],"struct":["Identity"]};

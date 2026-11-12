@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SFP_I2C_ADDR","SFP_TYPE_SFP_PLUS"],"fn":["i2c_get_data","i2c_read_byte","i2c_set_clk","i2c_set_data","i2c_start","i2c_stop","i2c_write_byte","identify_sfp","read_sfp_byte"]};

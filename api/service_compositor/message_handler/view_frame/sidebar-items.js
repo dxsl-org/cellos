@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["detach","fullscreen","group","keep_place","snap"]};

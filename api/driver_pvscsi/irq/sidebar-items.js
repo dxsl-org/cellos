@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EXPIRY_LOG_LIMIT","FALLBACK_POLLS","IO_BUDGET_MS","PARK_TICKS","POLL_YIELD_EVERY","SPIN_BEFORE_PARK"],"enum":["Park"],"fn":["evidence","note_expiry","should_log_expiry"],"static":["EXPIRIES","EXPIRY_EMPTY","EXPIRY_READY","WAIT_REFUSED","WAKES"],"struct":["CompletionIrq","Evidence"]};

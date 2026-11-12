@@ -224,96 +224,108 @@
 <a href=#224 id=224 data-nosnippet>224</a><span class="kw">impl </span>Theme {
 <a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// [`Palette::DEFAULT`] with rounded borders.
 <a href=#226 id=226 data-nosnippet>226</a>    </span><span class="kw">pub const fn </span>new(mode: ColorMode) -&gt; <span class="self">Self </span>{
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="self">Self </span>{ palette: Palette::DEFAULT, mode, border: Border::Rounded }
-<a href=#228 id=228 data-nosnippet>228</a>    }
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="doccomment">/// `rgb` in this theme's colour mode.
-<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">pub fn </span>color(<span class="kw-2">&amp;</span><span class="self">self</span>, rgb: Rgb) -&gt; Color {
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">match </span><span class="self">self</span>.mode {
-<a href=#233 id=233 data-nosnippet>233</a>            ColorMode::TrueColor =&gt; Color::Rgb(rgb.<span class="number">0</span>, rgb.<span class="number">1</span>, rgb.<span class="number">2</span>),
-<a href=#234 id=234 data-nosnippet>234</a>            ColorMode::Indexed256 =&gt; Color::Indexed(nearest_256(rgb)),
-<a href=#235 id=235 data-nosnippet>235</a>            ColorMode::Ansi16 =&gt; ANSI16_COLORS[nearest_16(rgb) <span class="kw">as </span>usize],
-<a href=#236 id=236 data-nosnippet>236</a>        }
-<a href=#237 id=237 data-nosnippet>237</a>    }
-<a href=#238 id=238 data-nosnippet>238</a>
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="doccomment">/// Body text on the panel background.
-<a href=#240 id=240 data-nosnippet>240</a>    </span><span class="kw">pub fn </span>base(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#241 id=241 data-nosnippet>241</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.fg)).bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.bg))
-<a href=#242 id=242 data-nosnippet>242</a>    }
-<a href=#243 id=243 data-nosnippet>243</a>
-<a href=#244 id=244 data-nosnippet>244</a>    <span class="kw">pub fn </span>border_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#245 id=245 data-nosnippet>245</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.border))
-<a href=#246 id=246 data-nosnippet>246</a>    }
-<a href=#247 id=247 data-nosnippet>247</a>
-<a href=#248 id=248 data-nosnippet>248</a>    <span class="doccomment">/// Block titles: bold accent.
-<a href=#249 id=249 data-nosnippet>249</a>    </span><span class="kw">pub fn </span>title_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#250 id=250 data-nosnippet>250</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent)).add_modifier(Modifier::BOLD)
-<a href=#251 id=251 data-nosnippet>251</a>    }
-<a href=#252 id=252 data-nosnippet>252</a>
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// A bordered block in this theme's border set, on the panel background, titled `title`.
-<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub fn </span>block&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, title: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Block&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#255 id=255 data-nosnippet>255</a>        Block::bordered()
-<a href=#256 id=256 data-nosnippet>256</a>            .border_set(<span class="self">self</span>.border.set())
-<a href=#257 id=257 data-nosnippet>257</a>            .border_style(<span class="self">self</span>.border_style())
-<a href=#258 id=258 data-nosnippet>258</a>            .title(Line::styled(title, <span class="self">self</span>.title_style()))
-<a href=#259 id=259 data-nosnippet>259</a>            .style(<span class="self">self</span>.base())
-<a href=#260 id=260 data-nosnippet>260</a>    }
-<a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="doccomment">/// The title bar: bold panel-background text on the accent colour.
-<a href=#263 id=263 data-nosnippet>263</a>    </span><span class="kw">pub fn </span>title_bar_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#264 id=264 data-nosnippet>264</a>        Style::new()
-<a href=#265 id=265 data-nosnippet>265</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.bg))
-<a href=#266 id=266 data-nosnippet>266</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
-<a href=#267 id=267 data-nosnippet>267</a>            .add_modifier(Modifier::BOLD)
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="self">Self </span>{
+<a href=#228 id=228 data-nosnippet>228</a>            palette: Palette::DEFAULT,
+<a href=#229 id=229 data-nosnippet>229</a>            mode,
+<a href=#230 id=230 data-nosnippet>230</a>            border: Border::Rounded,
+<a href=#231 id=231 data-nosnippet>231</a>        }
+<a href=#232 id=232 data-nosnippet>232</a>    }
+<a href=#233 id=233 data-nosnippet>233</a>
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="doccomment">/// `rgb` in this theme's colour mode.
+<a href=#235 id=235 data-nosnippet>235</a>    </span><span class="kw">pub fn </span>color(<span class="kw-2">&amp;</span><span class="self">self</span>, rgb: Rgb) -&gt; Color {
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">match </span><span class="self">self</span>.mode {
+<a href=#237 id=237 data-nosnippet>237</a>            ColorMode::TrueColor =&gt; Color::Rgb(rgb.<span class="number">0</span>, rgb.<span class="number">1</span>, rgb.<span class="number">2</span>),
+<a href=#238 id=238 data-nosnippet>238</a>            ColorMode::Indexed256 =&gt; Color::Indexed(nearest_256(rgb)),
+<a href=#239 id=239 data-nosnippet>239</a>            ColorMode::Ansi16 =&gt; ANSI16_COLORS[nearest_16(rgb) <span class="kw">as </span>usize],
+<a href=#240 id=240 data-nosnippet>240</a>        }
+<a href=#241 id=241 data-nosnippet>241</a>    }
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="doccomment">/// Body text on the panel background.
+<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">pub fn </span>base(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#245 id=245 data-nosnippet>245</a>        Style::new()
+<a href=#246 id=246 data-nosnippet>246</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.fg))
+<a href=#247 id=247 data-nosnippet>247</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.bg))
+<a href=#248 id=248 data-nosnippet>248</a>    }
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">pub fn </span>border_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#251 id=251 data-nosnippet>251</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.border))
+<a href=#252 id=252 data-nosnippet>252</a>    }
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="doccomment">/// Block titles: bold accent.
+<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">pub fn </span>title_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#256 id=256 data-nosnippet>256</a>        Style::new()
+<a href=#257 id=257 data-nosnippet>257</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
+<a href=#258 id=258 data-nosnippet>258</a>            .add_modifier(Modifier::BOLD)
+<a href=#259 id=259 data-nosnippet>259</a>    }
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// A bordered block in this theme's border set, on the panel background, titled `title`.
+<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">pub fn </span>block&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, title: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Block&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#263 id=263 data-nosnippet>263</a>        Block::bordered()
+<a href=#264 id=264 data-nosnippet>264</a>            .border_set(<span class="self">self</span>.border.set())
+<a href=#265 id=265 data-nosnippet>265</a>            .border_style(<span class="self">self</span>.border_style())
+<a href=#266 id=266 data-nosnippet>266</a>            .title(Line::styled(title, <span class="self">self</span>.title_style()))
+<a href=#267 id=267 data-nosnippet>267</a>            .style(<span class="self">self</span>.base())
 <a href=#268 id=268 data-nosnippet>268</a>    }
 <a href=#269 id=269 data-nosnippet>269</a>
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="doccomment">/// `text` as a title bar; rendered as a widget it fills its whole row.
-<a href=#271 id=271 data-nosnippet>271</a>    </span><span class="kw">pub fn </span>title_bar&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#272 id=272 data-nosnippet>272</a>        Line::styled(text, <span class="self">self</span>.title_bar_style())
-<a href=#273 id=273 data-nosnippet>273</a>    }
-<a href=#274 id=274 data-nosnippet>274</a>
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="doccomment">/// The status line: body text on the surface colour.
-<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">pub fn </span>status_line_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#277 id=277 data-nosnippet>277</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.fg)).bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.surface))
-<a href=#278 id=278 data-nosnippet>278</a>    }
-<a href=#279 id=279 data-nosnippet>279</a>
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="doccomment">/// `text` as a status line; rendered as a widget it fills its whole row.
-<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="kw">pub fn </span>status_line&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#282 id=282 data-nosnippet>282</a>        Line::styled(text, <span class="self">self</span>.status_line_style())
-<a href=#283 id=283 data-nosnippet>283</a>    }
-<a href=#284 id=284 data-nosnippet>284</a>
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="doccomment">/// The selected row of a list: bold accent on the highlight colour. Use with
-<a href=#286 id=286 data-nosnippet>286</a>    /// [`HIGHLIGHT_SYMBOL`].
-<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">pub fn </span>highlight_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#288 id=288 data-nosnippet>288</a>        Style::new()
-<a href=#289 id=289 data-nosnippet>289</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
-<a href=#290 id=290 data-nosnippet>290</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.highlight))
-<a href=#291 id=291 data-nosnippet>291</a>            .add_modifier(Modifier::BOLD)
-<a href=#292 id=292 data-nosnippet>292</a>    }
-<a href=#293 id=293 data-nosnippet>293</a>
-<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">pub fn </span>key_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#295 id=295 data-nosnippet>295</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent)).add_modifier(Modifier::BOLD)
-<a href=#296 id=296 data-nosnippet>296</a>    }
-<a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">pub fn </span>muted_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
-<a href=#299 id=299 data-nosnippet>299</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.muted))
-<a href=#300 id=300 data-nosnippet>300</a>    }
-<a href=#301 id=301 data-nosnippet>301</a>
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="doccomment">/// A key-hint footer: `key label  key label ...`, keys bold accent, the rest muted.
-<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">pub fn </span>key_hints&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, hints: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)]) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">let </span><span class="kw-2">mut </span>spans = Vec::with_capacity(hints.len() * <span class="number">4</span>);
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">for </span>(i, (key, label)) <span class="kw">in </span>hints.iter().enumerate() {
-<a href=#306 id=306 data-nosnippet>306</a>            <span class="kw">if </span>i &gt; <span class="number">0 </span>{
-<a href=#307 id=307 data-nosnippet>307</a>                spans.push(Span::raw(<span class="string">"  "</span>));
-<a href=#308 id=308 data-nosnippet>308</a>            }
-<a href=#309 id=309 data-nosnippet>309</a>            spans.push(Span::styled(<span class="kw-2">*</span>key, <span class="self">self</span>.key_style()));
-<a href=#310 id=310 data-nosnippet>310</a>            spans.push(Span::raw(<span class="string">" "</span>));
-<a href=#311 id=311 data-nosnippet>311</a>            spans.push(Span::raw(<span class="kw-2">*</span>label));
-<a href=#312 id=312 data-nosnippet>312</a>        }
-<a href=#313 id=313 data-nosnippet>313</a>        Line::from(spans).style(<span class="self">self</span>.muted_style())
-<a href=#314 id=314 data-nosnippet>314</a>    }
-<a href=#315 id=315 data-nosnippet>315</a>}
-<a href=#316 id=316 data-nosnippet>316</a>
-<a href=#317 id=317 data-nosnippet>317</a><span class="attr">#[cfg(test)]
-<a href=#318 id=318 data-nosnippet>318</a></span><span class="kw">mod </span>tests;
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="doccomment">/// The title bar: bold panel-background text on the accent colour.
+<a href=#271 id=271 data-nosnippet>271</a>    </span><span class="kw">pub fn </span>title_bar_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#272 id=272 data-nosnippet>272</a>        Style::new()
+<a href=#273 id=273 data-nosnippet>273</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.bg))
+<a href=#274 id=274 data-nosnippet>274</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
+<a href=#275 id=275 data-nosnippet>275</a>            .add_modifier(Modifier::BOLD)
+<a href=#276 id=276 data-nosnippet>276</a>    }
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a>    <span class="doccomment">/// `text` as a title bar; rendered as a widget it fills its whole row.
+<a href=#279 id=279 data-nosnippet>279</a>    </span><span class="kw">pub fn </span>title_bar&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#280 id=280 data-nosnippet>280</a>        Line::styled(text, <span class="self">self</span>.title_bar_style())
+<a href=#281 id=281 data-nosnippet>281</a>    }
+<a href=#282 id=282 data-nosnippet>282</a>
+<a href=#283 id=283 data-nosnippet>283</a>    <span class="doccomment">/// The status line: body text on the surface colour.
+<a href=#284 id=284 data-nosnippet>284</a>    </span><span class="kw">pub fn </span>status_line_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#285 id=285 data-nosnippet>285</a>        Style::new()
+<a href=#286 id=286 data-nosnippet>286</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.fg))
+<a href=#287 id=287 data-nosnippet>287</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.surface))
+<a href=#288 id=288 data-nosnippet>288</a>    }
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// `text` as a status line; rendered as a widget it fills its whole row.
+<a href=#291 id=291 data-nosnippet>291</a>    </span><span class="kw">pub fn </span>status_line&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, text: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#292 id=292 data-nosnippet>292</a>        Line::styled(text, <span class="self">self</span>.status_line_style())
+<a href=#293 id=293 data-nosnippet>293</a>    }
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="doccomment">/// The selected row of a list: bold accent on the highlight colour. Use with
+<a href=#296 id=296 data-nosnippet>296</a>    /// [`HIGHLIGHT_SYMBOL`].
+<a href=#297 id=297 data-nosnippet>297</a>    </span><span class="kw">pub fn </span>highlight_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#298 id=298 data-nosnippet>298</a>        Style::new()
+<a href=#299 id=299 data-nosnippet>299</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
+<a href=#300 id=300 data-nosnippet>300</a>            .bg(<span class="self">self</span>.color(<span class="self">self</span>.palette.highlight))
+<a href=#301 id=301 data-nosnippet>301</a>            .add_modifier(Modifier::BOLD)
+<a href=#302 id=302 data-nosnippet>302</a>    }
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">pub fn </span>key_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#305 id=305 data-nosnippet>305</a>        Style::new()
+<a href=#306 id=306 data-nosnippet>306</a>            .fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.accent))
+<a href=#307 id=307 data-nosnippet>307</a>            .add_modifier(Modifier::BOLD)
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">pub fn </span>muted_style(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Style {
+<a href=#311 id=311 data-nosnippet>311</a>        Style::new().fg(<span class="self">self</span>.color(<span class="self">self</span>.palette.muted))
+<a href=#312 id=312 data-nosnippet>312</a>    }
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="doccomment">/// A key-hint footer: `key label  key label ...`, keys bold accent, the rest muted.
+<a href=#315 id=315 data-nosnippet>315</a>    </span><span class="kw">pub fn </span>key_hints&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, hints: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)]) -&gt; Line&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span><span class="kw-2">mut </span>spans = Vec::with_capacity(hints.len() * <span class="number">4</span>);
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">for </span>(i, (key, label)) <span class="kw">in </span>hints.iter().enumerate() {
+<a href=#318 id=318 data-nosnippet>318</a>            <span class="kw">if </span>i &gt; <span class="number">0 </span>{
+<a href=#319 id=319 data-nosnippet>319</a>                spans.push(Span::raw(<span class="string">"  "</span>));
+<a href=#320 id=320 data-nosnippet>320</a>            }
+<a href=#321 id=321 data-nosnippet>321</a>            spans.push(Span::styled(<span class="kw-2">*</span>key, <span class="self">self</span>.key_style()));
+<a href=#322 id=322 data-nosnippet>322</a>            spans.push(Span::raw(<span class="string">" "</span>));
+<a href=#323 id=323 data-nosnippet>323</a>            spans.push(Span::raw(<span class="kw-2">*</span>label));
+<a href=#324 id=324 data-nosnippet>324</a>        }
+<a href=#325 id=325 data-nosnippet>325</a>        Line::from(spans).style(<span class="self">self</span>.muted_style())
+<a href=#326 id=326 data-nosnippet>326</a>    }
+<a href=#327 id=327 data-nosnippet>327</a>}
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a><span class="attr">#[cfg(test)]
+<a href=#330 id=330 data-nosnippet>330</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

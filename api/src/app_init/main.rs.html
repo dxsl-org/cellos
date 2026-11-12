@@ -24,19 +24,19 @@
 <a href=#24 id=24 data-nosnippet>24</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
 <a href=#25 id=25 data-nosnippet>25</a><span class="macro">api::declare_syscalls!</span>[
 <a href=#26 id=26 data-nosnippet>26</a>    Send,
-<a href=#27 id=27 data-nosnippet>27</a>    Recv,
-<a href=#28 id=28 data-nosnippet>28</a>    TryRecv,
-<a href=#29 id=29 data-nosnippet>29</a>    IpcSubmit,
-<a href=#30 id=30 data-nosnippet>30</a>    IpcTake,
-<a href=#31 id=31 data-nosnippet>31</a>    IpcWait,
-<a href=#32 id=32 data-nosnippet>32</a>    IpcCancel,
-<a href=#33 id=33 data-nosnippet>33</a>    IpcCurrent,
-<a href=#34 id=34 data-nosnippet>34</a>    IpcReply,
-<a href=#35 id=35 data-nosnippet>35</a>    RecvTimeout,
-<a href=#36 id=36 data-nosnippet>36</a>    Reply,
+<a href=#27 id=27 data-nosnippet>27</a>    SendGather,
+<a href=#28 id=28 data-nosnippet>28</a>    Recv,
+<a href=#29 id=29 data-nosnippet>29</a>    TryRecv,
+<a href=#30 id=30 data-nosnippet>30</a>    IpcSubmit,
+<a href=#31 id=31 data-nosnippet>31</a>    IpcTake,
+<a href=#32 id=32 data-nosnippet>32</a>    IpcWait,
+<a href=#33 id=33 data-nosnippet>33</a>    IpcCancel,
+<a href=#34 id=34 data-nosnippet>34</a>    IpcCurrent,
+<a href=#35 id=35 data-nosnippet>35</a>    IpcReply,
+<a href=#36 id=36 data-nosnippet>36</a>    RecvTimeout,
 <a href=#37 id=37 data-nosnippet>37</a>    Log,
 <a href=#38 id=38 data-nosnippet>38</a>    Heartbeat,
-<a href=#39 id=39 data-nosnippet>39</a>    LookupService,
+<a href=#39 id=39 data-nosnippet>39</a>    LookupServiceBound,
 <a href=#40 id=40 data-nosnippet>40</a>    SpawnFromPath,
 <a href=#41 id=41 data-nosnippet>41</a>    Wait,
 <a href=#42 id=42 data-nosnippet>42</a>    GetTime,
@@ -57,135 +57,180 @@
 <a href=#57 id=57 data-nosnippet>57</a>    GetProcs,
 <a href=#58 id=58 data-nosnippet>58</a>];
 <a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a><span class="kw">mod </span>boot;
-<a href=#61 id=61 data-nosnippet>61</a><span class="kw">mod </span>activation;
-<a href=#62 id=62 data-nosnippet>62</a><span class="kw">mod </span>activation_state;
+<a href=#60 id=60 data-nosnippet>60</a><span class="kw">mod </span>activation;
+<a href=#61 id=61 data-nosnippet>61</a><span class="kw">mod </span>activation_state;
+<a href=#62 id=62 data-nosnippet>62</a><span class="kw">mod </span>boot;
 <a href=#63 id=63 data-nosnippet>63</a><span class="kw">mod </span>configuration;
-<a href=#64 id=64 data-nosnippet>64</a><span class="kw">mod </span>service_table;
-<a href=#65 id=65 data-nosnippet>65</a><span class="kw">mod </span>supervisor;
-<a href=#66 id=66 data-nosnippet>66</a>
-<a href=#67 id=67 data-nosnippet>67</a><span class="kw">use </span>ostd::io::println;
+<a href=#64 id=64 data-nosnippet>64</a><span class="kw">mod </span>machine_pin;
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">mod </span>service_table;
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">mod </span>supervisor;
+<a href=#67 id=67 data-nosnippet>67</a>
 <a href=#68 id=68 data-nosnippet>68</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#69 id=69 data-nosnippet>69</a><span class="kw">use </span>cellos_boot_config::{ordered_indices, CellConfig};
-<a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a><span class="macro">ostd::cell_main!</span>(<span class="kw">extern </span><span class="string">"C" </span>cell_main);
-<a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a><span class="kw">fn </span>cell_main() {
-<a href=#74 id=74 data-nosnippet>74</a>    println(<span class="string">"Init: Starting Cellos Orchestrator..."</span>);
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = boot::start_after_platform(start_services) {
-<a href=#76 id=76 data-nosnippet>76</a>        println(error.diagnostic());
-<a href=#77 id=77 data-nosnippet>77</a>    }
-<a href=#78 id=78 data-nosnippet>78</a>}
-<a href=#79 id=79 data-nosnippet>79</a>
-<a href=#80 id=80 data-nosnippet>80</a><span class="kw">fn </span>start_services() {
-<a href=#81 id=81 data-nosnippet>81</a>    boot::start_block_drivers();
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span><span class="kw-2">mut </span>services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + <span class="number">1</span>);
-<a href=#83 id=83 data-nosnippet>83</a>    services.push(service_table::Service::bootstrap_vfs());
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">match </span>service_table::spawn(<span class="kw-2">&amp;mut </span>services[<span class="number">0</span>]) {
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {}
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#87 id=87 data-nosnippet>87</a>            println(<span class="string">"Init: required VFS bootstrap failed — boot stopped."</span>);
-<a href=#88 id=88 data-nosnippet>88</a>            <span class="kw">return</span>;
-<a href=#89 id=89 data-nosnippet>89</a>        }
-<a href=#90 id=90 data-nosnippet>90</a>    };
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>(service_config, autoload_config) = <span class="kw">match </span>configuration::load() {
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="prelude-val">Ok</span>(config) =&gt; config,
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="prelude-val">Err</span>(error) =&gt; {
-<a href=#94 id=94 data-nosnippet>94</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: configuration failure — {error}"</span>));
-<a href=#95 id=95 data-nosnippet>95</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#96 id=96 data-nosnippet>96</a>        }
-<a href=#97 id=97 data-nosnippet>97</a>    };
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>service_order = <span class="kw">match </span>ordered_indices(<span class="kw-2">&amp;</span>service_config, <span class="kw-2">&amp;</span>CellConfig::default()) {
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="prelude-val">Ok</span>(order) =&gt; order,
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="prelude-val">Err</span>(error) =&gt; {
-<a href=#101 id=101 data-nosnippet>101</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: service ordering failure — {error}"</span>));
-<a href=#102 id=102 data-nosnippet>102</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#103 id=103 data-nosnippet>103</a>        }
-<a href=#104 id=104 data-nosnippet>104</a>    };
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">let </span>autoload_order = <span class="kw">match </span>ordered_indices(<span class="kw-2">&amp;</span>autoload_config, <span class="kw-2">&amp;</span>service_config) {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="prelude-val">Ok</span>(order) =&gt; order,
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="prelude-val">Err</span>(error) =&gt; {
-<a href=#108 id=108 data-nosnippet>108</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: autoload ordering failure — {error}"</span>));
-<a href=#109 id=109 data-nosnippet>109</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#110 id=110 data-nosnippet>110</a>        }
-<a href=#111 id=111 data-nosnippet>111</a>    };
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>autoload_offset = <span class="number">1 </span>+ service_config.cells.len();
-<a href=#113 id=113 data-nosnippet>113</a>    services.extend(service_config.cells.into_iter().map(service_table::Service::new));
-<a href=#114 id=114 data-nosnippet>114</a>    services.extend(autoload_config.cells.into_iter().map(service_table::Service::new));
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">if </span>!launch_order(<span class="kw-2">&amp;mut </span>services, <span class="kw-2">&amp;</span>service_order, <span class="number">1</span>) {
-<a href=#116 id=116 data-nosnippet>116</a>        println(<span class="string">"Init: required service failed — autoload and OS ready blocked."</span>);
-<a href=#117 id=117 data-nosnippet>117</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#118 id=118 data-nosnippet>118</a>    }
-<a href=#119 id=119 data-nosnippet>119</a>
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span>init_tid = {
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw">let </span><span class="kw-2">mut </span>procs = [api::syscall::ProcessInfo::default(); <span class="number">16</span>];
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span><span class="kw-2">mut </span>tid = <span class="number">2</span>;
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(count) = ostd::syscall::sys_get_procs(<span class="kw-2">&amp;mut </span>procs) {
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">for </span>proc <span class="kw">in </span>procs.iter().take(count) {
-<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">if </span><span class="kw-2">&amp;</span>proc.name[..<span class="number">4</span>] == <span class="string">b"init" </span>&amp;&amp; (proc.name[<span class="number">4</span>] == <span class="number">0 </span>|| proc.name[<span class="number">4</span>] == <span class="string">b' '</span>) {
-<a href=#126 id=126 data-nosnippet>126</a>                    tid = proc.id;
-<a href=#127 id=127 data-nosnippet>127</a>                    <span class="kw">break</span>;
-<a href=#128 id=128 data-nosnippet>128</a>                }
-<a href=#129 id=129 data-nosnippet>129</a>            }
-<a href=#130 id=130 data-nosnippet>130</a>        }
-<a href=#131 id=131 data-nosnippet>131</a>        tid
-<a href=#132 id=132 data-nosnippet>132</a>    };
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
-<a href=#134 id=134 data-nosnippet>134</a>        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid),
-<a href=#135 id=135 data-nosnippet>135</a>        ostd::syscall::SyscallResult::Ok(<span class="number">0</span>)
-<a href=#136 id=136 data-nosnippet>136</a>    ) {
-<a href=#137 id=137 data-nosnippet>137</a>        println(<span class="string">"Init: Ocel activator registration failed — autoload blocked."</span>);
-<a href=#138 id=138 data-nosnippet>138</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#139 id=139 data-nosnippet>139</a>    }
-<a href=#140 id=140 data-nosnippet>140</a>
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="comment">// Test fixtures retain their reviewed boot lanes. Production optional cells,
-<a href=#142 id=142 data-nosnippet>142</a>    // including shell and hypervisor autostart, come exclusively from the plan.
-<a href=#143 id=143 data-nosnippet>143</a>    </span>boot::spawn_test_fixtures();
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">if </span>!required_services_available(<span class="kw-2">&amp;</span>services[..autoload_offset]) {
-<a href=#145 id=145 data-nosnippet>145</a>        println(<span class="string">"Init: required service lost before autoload — OS ready blocked."</span>);
-<a href=#146 id=146 data-nosnippet>146</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>    println(<span class="string">"Init: services spawned."</span>);
-<a href=#149 id=149 data-nosnippet>149</a>    println(<span class="string">"Init: service registry verified (init registration is publication, not application readiness)."</span>);
-<a href=#150 id=150 data-nosnippet>150</a>    println(<span class="string">"Init: OS ready."</span>);
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>!launch_order(<span class="kw-2">&amp;mut </span>services, <span class="kw-2">&amp;</span>autoload_order, autoload_offset)
-<a href=#152 id=152 data-nosnippet>152</a>        || !required_services_available(<span class="kw-2">&amp;</span>services)
-<a href=#153 id=153 data-nosnippet>153</a>    {
-<a href=#154 id=154 data-nosnippet>154</a>        println(<span class="string">"Init: required cell unavailable — remaining autoload blocked."</span>);
-<a href=#155 id=155 data-nosnippet>155</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services);
-<a href=#156 id=156 data-nosnippet>156</a>    }
-<a href=#157 id=157 data-nosnippet>157</a>    println(<span class="string">"Init: supervising services (auto-restart on crash)..."</span>);
-<a href=#158 id=158 data-nosnippet>158</a>    supervisor::run(<span class="kw-2">&amp;mut </span>services)
-<a href=#159 id=159 data-nosnippet>159</a>}
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a><span class="kw">fn </span>required_services_available(services: <span class="kw-2">&amp;</span>[service_table::Service]) -&gt; bool {
-<a href=#162 id=162 data-nosnippet>162</a>    services.iter().all(|service| {
-<a href=#163 id=163 data-nosnippet>163</a>        !service.spec.enabled || !service.spec.required || service.available()
-<a href=#164 id=164 data-nosnippet>164</a>    })
-<a href=#165 id=165 data-nosnippet>165</a>}
-<a href=#166 id=166 data-nosnippet>166</a>
-<a href=#167 id=167 data-nosnippet>167</a><span class="kw">fn </span>launch_order(services: <span class="kw-2">&amp;mut </span>[service_table::Service], order: <span class="kw-2">&amp;</span>[usize], offset: usize) -&gt; bool {
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>entry <span class="kw">in </span>order {
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">if </span>services.iter().any(|service| {
-<a href=#170 id=170 data-nosnippet>170</a>            service.spec.enabled &amp;&amp; service.spec.required &amp;&amp; service.tid.is_some() &amp;&amp; !service.available()
-<a href=#171 id=171 data-nosnippet>171</a>        }) {
-<a href=#172 id=172 data-nosnippet>172</a>            println(<span class="string">"Init: required service lost during launch — remaining cells blocked."</span>);
-<a href=#173 id=173 data-nosnippet>173</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#174 id=174 data-nosnippet>174</a>        }
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">let </span>index = offset + entry;
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">if </span>!service_table::dependencies_available(services, index) {
-<a href=#177 id=177 data-nosnippet>177</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: {} blocked — dependency unavailable."</span>, services[index].spec.name));
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">if </span>services[index].spec.required { <span class="kw">return </span><span class="bool-val">false</span>; }
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">continue</span>;
-<a href=#180 id=180 data-nosnippet>180</a>        }
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">if </span>service_table::spawn(<span class="kw-2">&amp;mut </span>services[index]).is_none() {
-<a href=#182 id=182 data-nosnippet>182</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: {} spawn/registration failed."</span>, services[index].spec.name));
-<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">if </span>services[index].spec.required { <span class="kw">return </span><span class="bool-val">false</span>; }
-<a href=#184 id=184 data-nosnippet>184</a>        } <span class="kw">else </span>{
-<a href=#185 id=185 data-nosnippet>185</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: {} launched."</span>, services[index].spec.name));
-<a href=#186 id=186 data-nosnippet>186</a>        }
-<a href=#187 id=187 data-nosnippet>187</a>        ostd::task::yield_now();
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="bool-val">true
-<a href=#190 id=190 data-nosnippet>190</a></span>}
+<a href=#70 id=70 data-nosnippet>70</a><span class="kw">use </span>ostd::io::println;
+<a href=#71 id=71 data-nosnippet>71</a>
+<a href=#72 id=72 data-nosnippet>72</a><span class="macro">ostd::cell_main!</span>(<span class="kw">extern </span><span class="string">"C" </span>cell_main);
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a><span class="kw">fn </span>cell_main() {
+<a href=#75 id=75 data-nosnippet>75</a>    println(<span class="string">"Init: Starting Cellos Orchestrator..."</span>);
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = boot::start_after_platform(start_services) {
+<a href=#77 id=77 data-nosnippet>77</a>        println(error.diagnostic());
+<a href=#78 id=78 data-nosnippet>78</a>    }
+<a href=#79 id=79 data-nosnippet>79</a>}
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">fn </span>start_services() {
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="comment">// Supervised block drivers go after every configured entry: launch and
+<a href=#83 id=83 data-nosnippet>83</a>    // autoload orders index the table from 1. Each early `supervisor::run`
+<a href=#84 id=84 data-nosnippet>84</a>    // below appends them first so a driver death is still watched.
+<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>block_drivers = boot::start_block_drivers();
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">let </span><span class="kw-2">mut </span>services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + <span class="number">1 </span>+ block_drivers.len());
+<a href=#87 id=87 data-nosnippet>87</a>    services.push(service_table::Service::bootstrap_vfs());
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">match </span>service_table::spawn(<span class="kw-2">&amp;mut </span>services[<span class="number">0</span>]) {
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {}
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#91 id=91 data-nosnippet>91</a>            println(<span class="string">"Init: required VFS bootstrap failed — boot stopped."</span>);
+<a href=#92 id=92 data-nosnippet>92</a>            <span class="kw">return</span>;
+<a href=#93 id=93 data-nosnippet>93</a>        }
+<a href=#94 id=94 data-nosnippet>94</a>    };
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let </span>(service_config, autoload_config) = <span class="kw">match </span>configuration::load() {
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="prelude-val">Ok</span>(config) =&gt; config,
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#98 id=98 data-nosnippet>98</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: configuration failure — {error}"</span>));
+<a href=#99 id=99 data-nosnippet>99</a>            services.append(<span class="kw-2">&amp;mut </span>block_drivers);
+<a href=#100 id=100 data-nosnippet>100</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">None</span>);
+<a href=#101 id=101 data-nosnippet>101</a>        }
+<a href=#102 id=102 data-nosnippet>102</a>    };
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>service_order = <span class="kw">match </span>ordered_indices(<span class="kw-2">&amp;</span>service_config, <span class="kw-2">&amp;</span>CellConfig::default()) {
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="prelude-val">Ok</span>(order) =&gt; order,
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: service ordering failure — {error}"</span>));
+<a href=#107 id=107 data-nosnippet>107</a>            services.append(<span class="kw-2">&amp;mut </span>block_drivers);
+<a href=#108 id=108 data-nosnippet>108</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">None</span>);
+<a href=#109 id=109 data-nosnippet>109</a>        }
+<a href=#110 id=110 data-nosnippet>110</a>    };
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>autoload_order = <span class="kw">match </span>ordered_indices(<span class="kw-2">&amp;</span>autoload_config, <span class="kw-2">&amp;</span>service_config) {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="prelude-val">Ok</span>(order) =&gt; order,
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#114 id=114 data-nosnippet>114</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"Init: autoload ordering failure — {error}"</span>));
+<a href=#115 id=115 data-nosnippet>115</a>            services.append(<span class="kw-2">&amp;mut </span>block_drivers);
+<a href=#116 id=116 data-nosnippet>116</a>            supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">None</span>);
+<a href=#117 id=117 data-nosnippet>117</a>        }
+<a href=#118 id=118 data-nosnippet>118</a>    };
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span>autoload_offset = <span class="number">1 </span>+ service_config.cells.len();
+<a href=#120 id=120 data-nosnippet>120</a>    services.extend(
+<a href=#121 id=121 data-nosnippet>121</a>        service_config
+<a href=#122 id=122 data-nosnippet>122</a>            .cells
+<a href=#123 id=123 data-nosnippet>123</a>            .into_iter()
+<a href=#124 id=124 data-nosnippet>124</a>            .map(service_table::Service::new),
+<a href=#125 id=125 data-nosnippet>125</a>    );
+<a href=#126 id=126 data-nosnippet>126</a>    services.extend(
+<a href=#127 id=127 data-nosnippet>127</a>        autoload_config
+<a href=#128 id=128 data-nosnippet>128</a>            .cells
+<a href=#129 id=129 data-nosnippet>129</a>            .into_iter()
+<a href=#130 id=130 data-nosnippet>130</a>            .map(service_table::Service::new),
+<a href=#131 id=131 data-nosnippet>131</a>    );
+<a href=#132 id=132 data-nosnippet>132</a>    services.append(<span class="kw-2">&amp;mut </span>block_drivers);
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a>    <span class="comment">// ADR-0029 §3: the machine pin gates every configured service. The VFS and
+<a href=#135 id=135 data-nosnippet>135</a>    // the boot-critical block drivers above are already running and stay so.
+<a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">let </span>init_tid = own_tid();
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">let </span><span class="kw-2">mut </span>pin = machine_pin::gate(init_tid);
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">if </span>pin.safe_mode() {
+<a href=#139 id=139 data-nosnippet>139</a>        pin.enter_safe_mode(<span class="kw-2">&amp;mut </span>services, autoload_offset);
+<a href=#140 id=140 data-nosnippet>140</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin));
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="kw">if </span>!launch_order(<span class="kw-2">&amp;mut </span>services, <span class="kw-2">&amp;</span>service_order, <span class="number">1</span>) {
+<a href=#144 id=144 data-nosnippet>144</a>        println(<span class="string">"Init: required service failed — autoload and OS ready blocked."</span>);
+<a href=#145 id=145 data-nosnippet>145</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin));
+<a href=#146 id=146 data-nosnippet>146</a>    }
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
+<a href=#149 id=149 data-nosnippet>149</a>        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid, <span class="number">0</span>),
+<a href=#150 id=150 data-nosnippet>150</a>        ostd::syscall::SyscallResult::Ok(<span class="number">0</span>)
+<a href=#151 id=151 data-nosnippet>151</a>    ) {
+<a href=#152 id=152 data-nosnippet>152</a>        println(<span class="string">"Init: Ocel activator registration failed — autoload blocked."</span>);
+<a href=#153 id=153 data-nosnippet>153</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin));
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="comment">// Test fixtures retain their reviewed boot lanes. Production optional cells,
+<a href=#157 id=157 data-nosnippet>157</a>    // including shell and hypervisor autostart, come exclusively from the plan.
+<a href=#158 id=158 data-nosnippet>158</a>    </span>boot::spawn_test_fixtures();
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">if </span>!required_services_available(<span class="kw-2">&amp;</span>services[..autoload_offset]) {
+<a href=#160 id=160 data-nosnippet>160</a>        println(<span class="string">"Init: required service lost before autoload — OS ready blocked."</span>);
+<a href=#161 id=161 data-nosnippet>161</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin));
+<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>    println(<span class="string">"Init: services spawned."</span>);
+<a href=#164 id=164 data-nosnippet>164</a>    println(<span class="string">"Init: service registry verified (init registration is publication, not application readiness)."</span>);
+<a href=#165 id=165 data-nosnippet>165</a>    println(<span class="string">"Init: OS ready."</span>);
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">if </span>!launch_order(<span class="kw-2">&amp;mut </span>services, <span class="kw-2">&amp;</span>autoload_order, autoload_offset)
+<a href=#167 id=167 data-nosnippet>167</a>        || !required_services_available(<span class="kw-2">&amp;</span>services)
+<a href=#168 id=168 data-nosnippet>168</a>    {
+<a href=#169 id=169 data-nosnippet>169</a>        println(<span class="string">"Init: required cell unavailable — remaining autoload blocked."</span>);
+<a href=#170 id=170 data-nosnippet>170</a>        supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin));
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>    println(<span class="string">"Init: supervising services (auto-restart on crash)..."</span>);
+<a href=#173 id=173 data-nosnippet>173</a>    supervisor::run(<span class="kw-2">&amp;mut </span>services, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;mut </span>pin))
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Init's own tid, found by name in the process table; 2 when the table
+<a href=#177 id=177 data-nosnippet>177</a>/// cannot be read (the fallback init has always used here).
+<a href=#178 id=178 data-nosnippet>178</a></span><span class="kw">fn </span>own_tid() -&gt; usize {
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span><span class="kw-2">mut </span>procs = [api::syscall::ProcessInfo::default(); <span class="number">16</span>];
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(count) = ostd::syscall::sys_get_procs(<span class="kw-2">&amp;mut </span>procs) {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">for </span>proc <span class="kw">in </span>procs.iter().take(count) {
+<a href=#182 id=182 data-nosnippet>182</a>            <span class="kw">if </span><span class="kw-2">&amp;</span>proc.name[..<span class="number">4</span>] == <span class="string">b"init" </span>&amp;&amp; (proc.name[<span class="number">4</span>] == <span class="number">0 </span>|| proc.name[<span class="number">4</span>] == <span class="string">b' '</span>) {
+<a href=#183 id=183 data-nosnippet>183</a>                <span class="kw">return </span>proc.id;
+<a href=#184 id=184 data-nosnippet>184</a>            }
+<a href=#185 id=185 data-nosnippet>185</a>        }
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="number">2
+<a href=#188 id=188 data-nosnippet>188</a></span>}
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a><span class="kw">fn </span>required_services_available(services: <span class="kw-2">&amp;</span>[service_table::Service]) -&gt; bool {
+<a href=#191 id=191 data-nosnippet>191</a>    services
+<a href=#192 id=192 data-nosnippet>192</a>        .iter()
+<a href=#193 id=193 data-nosnippet>193</a>        .all(|service| !service.spec.enabled || !service.spec.required || service.available())
+<a href=#194 id=194 data-nosnippet>194</a>}
+<a href=#195 id=195 data-nosnippet>195</a>
+<a href=#196 id=196 data-nosnippet>196</a><span class="kw">fn </span>launch_order(services: <span class="kw-2">&amp;mut </span>[service_table::Service], order: <span class="kw-2">&amp;</span>[usize], offset: usize) -&gt; bool {
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>entry <span class="kw">in </span>order {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">if </span>services.iter().any(|service| {
+<a href=#199 id=199 data-nosnippet>199</a>            service.spec.enabled
+<a href=#200 id=200 data-nosnippet>200</a>                &amp;&amp; service.spec.required
+<a href=#201 id=201 data-nosnippet>201</a>                &amp;&amp; service.tid.is_some()
+<a href=#202 id=202 data-nosnippet>202</a>                &amp;&amp; !service.available()
+<a href=#203 id=203 data-nosnippet>203</a>        }) {
+<a href=#204 id=204 data-nosnippet>204</a>            println(<span class="string">"Init: required service lost during launch — remaining cells blocked."</span>);
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#206 id=206 data-nosnippet>206</a>        }
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">let </span>index = offset + entry;
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">if </span>!service_table::dependencies_available(services, index) {
+<a href=#209 id=209 data-nosnippet>209</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#210 id=210 data-nosnippet>210</a>                <span class="string">"Init: {} blocked — dependency unavailable."</span>,
+<a href=#211 id=211 data-nosnippet>211</a>                services[index].spec.name
+<a href=#212 id=212 data-nosnippet>212</a>            ));
+<a href=#213 id=213 data-nosnippet>213</a>            <span class="kw">if </span>services[index].spec.required {
+<a href=#214 id=214 data-nosnippet>214</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#215 id=215 data-nosnippet>215</a>            }
+<a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">continue</span>;
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">if </span>service_table::spawn(<span class="kw-2">&amp;mut </span>services[index]).is_none() {
+<a href=#219 id=219 data-nosnippet>219</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#220 id=220 data-nosnippet>220</a>                <span class="string">"Init: {} spawn/registration failed."</span>,
+<a href=#221 id=221 data-nosnippet>221</a>                services[index].spec.name
+<a href=#222 id=222 data-nosnippet>222</a>            ));
+<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">if </span>services[index].spec.required {
+<a href=#224 id=224 data-nosnippet>224</a>                <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#225 id=225 data-nosnippet>225</a>            }
+<a href=#226 id=226 data-nosnippet>226</a>        } <span class="kw">else </span>{
+<a href=#227 id=227 data-nosnippet>227</a>            println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#228 id=228 data-nosnippet>228</a>                <span class="string">"Init: {} launched."</span>,
+<a href=#229 id=229 data-nosnippet>229</a>                services[index].spec.name
+<a href=#230 id=230 data-nosnippet>230</a>            ));
+<a href=#231 id=231 data-nosnippet>231</a>        }
+<a href=#232 id=232 data-nosnippet>232</a>        ostd::task::yield_now();
+<a href=#233 id=233 data-nosnippet>233</a>    }
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="bool-val">true
+<a href=#235 id=235 data-nosnippet>235</a></span>}
 </code></pre></div></section></main></body></html>

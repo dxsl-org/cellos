@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BMCR_ANENABLE","BMCR_ANRESTART","BMCR_FULL_DUPLEX","BMCR_SPEED1000","MII_BMCR","PHY_POLLS"],"fn":["phy_read","phy_write","restart_autoneg"]};

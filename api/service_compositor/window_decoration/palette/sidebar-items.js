@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DARK","LIGHT","PAPER"],"fn":["bgra","chrome","shadow"],"struct":["ChromePalette","FocusColors"]};

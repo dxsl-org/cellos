@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BTN_ACTIVE_BG","BTN_BORDER","BTN_INACTIVE_BG","FRAME_COLOR","GLYPH","TAB_ACTIVE","TAB_ACTIVE_HL","TAB_INACTIVE","TAB_INACTIVE_HL"],"fn":["intersect","paint","paint_rect","paint_symbol"]};
+window.SIDEBAR_ITEMS = {"constant":["GLYPH","TITLE_GAP"],"fn":["paint","paint_glyph","slot_shape"],"struct":["Style","TabLabel"]};

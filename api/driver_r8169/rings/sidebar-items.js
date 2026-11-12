@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","DESC_EOP","DESC_FS","DESC_LS","DESC_OWN","DESC_RING_END"],"fn":["clear","read_desc","write_desc"],"struct":["RtlDesc"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BASE"],"fn":["enforce","page_flags","reject_wx_page","reject_wx_segment","run_self_tests"]};
+window.SIDEBAR_ITEMS = {"constant":["BASE"],"fn":["assert_guard_selection","enforce","page_flags","reject_wx_page","reject_wx_segment","run_self_tests"]};

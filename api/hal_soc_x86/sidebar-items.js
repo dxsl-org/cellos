@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GENERIC_X86_PC","QEMU_Q35"],"enum":["Rs485Direction","ValidationError"],"struct":["AddressRange","PortIoDevice","Rs485Port","X86PlatformProfile"]};
+window.SIDEBAR_ITEMS = {"constant":["GENERIC_X86_PC","GENERIC_X86_VM","QEMU_Q35","X86_EARLY_FACTS","X86_PROFILES"],"enum":["Rs485Direction","ValidationError"],"struct":["AddressRange","PortIoDevice","Rs485Port","X86EarlyFacts","X86PlatformProfile"]};

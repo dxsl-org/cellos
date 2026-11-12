@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Capture"],"fn":["capture_cap"],"mod":["control","input","resize","target"],"struct":["PointerRouter","RouteContext"]};
+window.SIDEBAR_ITEMS = {"constant":["DOUBLE_CLICK_MS","DOUBLE_CLICK_SLOP"],"enum":["Capture"],"fn":["capture_cap"],"mod":["actions","control","input","resize","stack_drag","target","window_menu"],"struct":["MenuButtonHover","OpenMenu","PointerRouter","RouteContext"]};

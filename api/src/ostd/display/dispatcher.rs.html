@@ -167,20 +167,23 @@
 <a href=#167 id=167 data-nosnippet>167</a>                dispatcher.insert(SurfaceEvent::StateChanged(event));
 <a href=#168 id=168 data-nosnippet>168</a>            }
 <a href=#169 id=169 data-nosnippet>169</a>        }
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">_ </span>=&gt; {}
-<a href=#171 id=171 data-nosnippet>171</a>    }
-<a href=#172 id=172 data-nosnippet>172</a>}
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>take_forwarded_input_event() -&gt; <span class="prelude-ty">Option</span>&lt;api::input::InputEvent&gt; {
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span><span class="kw-2">mut </span>dispatcher = SURFACE_EVENTS.lock();
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>dispatcher.forwarded_input.is_empty() {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="prelude-val">None
-<a href=#178 id=178 data-nosnippet>178</a>    </span>} <span class="kw">else </span>{
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="prelude-val">Some</span>(dispatcher.forwarded_input.remove(<span class="number">0</span>))
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>}
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>take_surface() -&gt; <span class="prelude-ty">Option</span>&lt;SurfaceEvent&gt; {
-<a href=#184 id=184 data-nosnippet>184</a>    SURFACE_EVENTS.lock().take_surface()
-<a href=#185 id=185 data-nosnippet>185</a>}
+<a href=#170 id=170 data-nosnippet>170</a>        compositor_events::APPEARANCE_CHANGED =&gt; {
+<a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">super</span>::appearance::note_frame(frame);
+<a href=#172 id=172 data-nosnippet>172</a>        }
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">_ </span>=&gt; {}
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>take_forwarded_input_event() -&gt; <span class="prelude-ty">Option</span>&lt;api::input::InputEvent&gt; {
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span><span class="kw-2">mut </span>dispatcher = SURFACE_EVENTS.lock();
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">if </span>dispatcher.forwarded_input.is_empty() {
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="prelude-val">None
+<a href=#181 id=181 data-nosnippet>181</a>    </span>} <span class="kw">else </span>{
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="prelude-val">Some</span>(dispatcher.forwarded_input.remove(<span class="number">0</span>))
+<a href=#183 id=183 data-nosnippet>183</a>    }
+<a href=#184 id=184 data-nosnippet>184</a>}
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>take_surface() -&gt; <span class="prelude-ty">Option</span>&lt;SurfaceEvent&gt; {
+<a href=#187 id=187 data-nosnippet>187</a>    SURFACE_EVENTS.lock().take_surface()
+<a href=#188 id=188 data-nosnippet>188</a>}
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","init_custom_heap","launch_application","main"],"mod":["apps","draw","spotlight","taskbar"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"fn":["advance_theme","announce_appearance","cell_main","cycle_theme","init_custom_heap","launch_application","launch_intent","main","report_spawn"],"mod":["apps","draw","spotlight","taskbar"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["confirmation_prompt","display_escape","is_confirmed","needs_confirmation"]};

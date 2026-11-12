@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RevokeError"],"struct":["ClientBuffer","DmaClientMemory"],"trait":["ClientMemory"]};

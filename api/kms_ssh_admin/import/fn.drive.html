@@ -2,7 +2,7 @@
     kms: &amp;dyn <a class="trait" href="../kms/trait.Kms.html" title="trait kms_ssh_admin::kms::Kms">Kms</a>,
     name: &amp;[u8],
     blob: &amp;[u8],
-) -&gt; Result&lt;<a class="struct" href="struct.Imported.html" title="struct kms_ssh_admin::import::Imported">Imported</a>, <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Drive one import of <code>blob</code> (1..=65,536 bytes) as <code>name</code>. Aborts the pending import
+) -&gt; Result&lt;<a class="struct" href="struct.Imported.html" title="struct kms_ssh_admin::import::Imported">Imported</a>, KmsClientError&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Drive one import of <code>blob</code> (1..=65,536 bytes) as <code>name</code>. Aborts the pending import
 (best effort) on any failure after Begin; a timeout aborts nothing, because the client
 is poisoned and could not send it.</p>
 </div></details></section></div></main></body></html>

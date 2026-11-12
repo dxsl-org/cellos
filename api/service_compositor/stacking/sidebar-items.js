@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DETACH_KEEP","DETACH_OFFSET","MAX_CONTENT"],"fn":["detach","follow","forget","frame_bounds","reselected","select","show","stack","sync","sync_frame_of","tabs_of"],"mod":["closing","reconcile"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CMP_CONS","CMP_ENTRIES","CMP_LEN","CMP_LOG2","CMP_PROD","CMP_RING_OFF","DATA_LEN","DATA_OFF","DMA_PAGES","MAX_RING_PAGES","PAGE","REQ_CONS","REQ_ENTRIES","REQ_LEN","REQ_LOG2","REQ_PROD","REQ_RING_OFF","SENSE_LEN","SENSE_OFF","SETUP_WORDS","STATE_OFF"],"fn":["setup_rings_words"],"struct":["CmpDesc","ReqDesc","RingsState","SetupRings"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LEFT_META","LEFT_SHIFT","RIGHT_META","RIGHT_SHIFT","STRIP_SLACK"],"enum":["DragMode"],"fn":["cancel","drop","grow","is_modifier_key","mode_for","modifiers_after","move_frame","show","slide","strip_of","target_at","track"],"struct":["DragFeedback"]};

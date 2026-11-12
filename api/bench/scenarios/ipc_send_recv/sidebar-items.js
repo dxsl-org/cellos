@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SELF_PATH"],"struct":["IpcSendRecvBench"]};
+window.SIDEBAR_ITEMS = {"constant":["SAS_PEER_PATH"],"struct":["IpcSendRecvBench"]};

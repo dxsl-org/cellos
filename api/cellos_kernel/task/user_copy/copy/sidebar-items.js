@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["commit_sas","copy_from_user","copy_to_user","execute","probe_writable"],"struct":["PinnedCopy"]};
+window.SIDEBAR_ITEMS = {"fn":["copy_from_user","copy_to_user","execute","probe_writable"],"struct":["PinnedCopy"]};

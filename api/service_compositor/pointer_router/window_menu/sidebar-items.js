@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_TARGETS","NEAR"],"fn":["can_stack","covers","gap","items_for","stack_targets","visible"]};

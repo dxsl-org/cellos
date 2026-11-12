@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","main"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["SESSION_SLICE_NS"],"fn":["cell_main","focus_loop","is_pressed_key","main","report_key","session_loop"],"static":["VICELL_MANIFEST"]};

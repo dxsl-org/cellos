@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE_4K"],"struct":["ClientVm","PoolTables"]};

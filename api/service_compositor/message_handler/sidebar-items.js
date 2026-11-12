@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["OWNER_EXITED_OPCODE"],"fn":["cleanup_owner","handle_message"],"mod":["grant","surface","view","window"],"struct":["MessageContext"]};
+window.SIDEBAR_ITEMS = {"constant":["OWNER_EXITED_OPCODE"],"fn":["cleanup_owner","handle_message"],"mod":["grant","surface","view","view_frame","window"],"struct":["MessageContext"]};

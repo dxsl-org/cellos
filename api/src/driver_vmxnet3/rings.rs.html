@@ -1,0 +1,158 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/drivers/vmxnet3/src/rings.rs`."><title>rings.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="driver_vmxnet3" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">driver_vmxnet3/</div>rings.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! DMA layout, generation-bit rings and descriptor encoding (pure; host-tested).
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Every vmxnet3 ring is owned by whichever side's generation bit a slot
+<a href=#4 id=4 data-nosnippet>4</a>//! carries: a producer writes a slot with its current generation and flips the
+<a href=#5 id=5 data-nosnippet>5</a>//! generation each time its index wraps, and a consumer accepts a slot only
+<a href=#6 id=6 data-nosnippet>6</a>//! while the slot's bit equals its own generation. Both sides start at 1, so a
+<a href=#7 id=7 data-nosnippet>7</a>//! zeroed ring is empty for the device's command rings and free for its
+<a href=#8 id=8 data-nosnippet>8</a>//! completion rings. Descriptor bit positions follow FreeBSD's `if_vmxreg.h`
+<a href=#9 id=9 data-nosnippet>9</a>//! (`vmxnet3_txdesc`, `vmxnet3_rxdesc`, `vmxnet3_txcompdesc`,
+<a href=#10 id=10 data-nosnippet>10</a>//! `vmxnet3_rxcompdesc`; ISC, see `NOTICE`).
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span><span class="kw">crate</span>::shared::{Sink, DRIVER_SHARED_LEN, QUEUES_LEN};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>core::sync::atomic::{fence, Ordering};
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>TX_SLOTS: usize = <span class="number">32</span>;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>RX_SLOTS: usize = <span class="number">32</span>;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>RX_COMP_SLOTS: usize = <span class="number">2 </span>* RX_SLOTS;
+<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Command and completion descriptors are 16 bytes; TX data-ring entries 128.
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">const </span>DESC_LEN: usize = <span class="number">16</span>;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">const </span>TX_DATA_DESC_LEN: usize = <span class="number">128</span>;
+<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Frame buffer per slot (one Ethernet frame without FCS fits).
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub const </span>BUF_SIZE: usize = <span class="number">2048</span>;
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a><span class="comment">// ── Layout of the single DMA area ────────────────────────────────────────────
+<a href=#25 id=25 data-nosnippet>25</a>
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>SHARED_OFF: usize = <span class="number">0</span>;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>QUEUES_OFF: usize = <span class="number">1024</span>;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>TX_RING_OFF: usize = <span class="number">4096</span>;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>TX_COMP_OFF: usize = TX_RING_OFF + TX_SLOTS * DESC_LEN;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>RX_RING_OFF: [usize; <span class="number">2</span>] = [TX_COMP_OFF + TX_SLOTS * DESC_LEN, RX_RING_OFF_1];
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">const </span>RX_RING_OFF_1: usize = TX_COMP_OFF + (TX_SLOTS + RX_SLOTS) * DESC_LEN;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>RX_COMP_OFF: usize = RX_RING_OFF_1 + RX_SLOTS * DESC_LEN;
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>TX_DATA_OFF: usize = <span class="number">2 </span>* <span class="number">4096</span>;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>TX_BUF_OFF: usize = TX_DATA_OFF + TX_SLOTS * TX_DATA_DESC_LEN;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>RX_BUF_OFF: usize = TX_BUF_OFF + TX_SLOTS * BUF_SIZE;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>DMA_PAGES: usize = (RX_BUF_OFF + RX_SLOTS * BUF_SIZE) / <span class="number">4096</span>;
+<a href=#37 id=37 data-nosnippet>37</a>
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>(SHARED_OFF + DRIVER_SHARED_LEN &lt;= QUEUES_OFF);
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>(QUEUES_OFF.is_multiple_of(<span class="number">128</span>) &amp;&amp; QUEUES_OFF + QUEUES_LEN &lt;= TX_RING_OFF);
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>(RX_COMP_OFF + RX_COMP_SLOTS * DESC_LEN &lt;= TX_DATA_OFF);
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>(
+<a href=#42 id=42 data-nosnippet>42</a>    TX_COMP_OFF.is_multiple_of(<span class="number">512</span>)
+<a href=#43 id=43 data-nosnippet>43</a>        &amp;&amp; RX_RING_OFF_1.is_multiple_of(<span class="number">512</span>)
+<a href=#44 id=44 data-nosnippet>44</a>        &amp;&amp; RX_COMP_OFF.is_multiple_of(<span class="number">512</span>)
+<a href=#45 id=45 data-nosnippet>45</a>);
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">const _</span>: () = <span class="macro">assert!</span>((RX_BUF_OFF + RX_SLOTS * BUF_SIZE).is_multiple_of(<span class="number">4096</span>));
+<a href=#47 id=47 data-nosnippet>47</a>
+<a href=#48 id=48 data-nosnippet>48</a><span class="comment">// ── Descriptor bits ──────────────────────────────────────────────────────────
+<a href=#49 id=49 data-nosnippet>49</a>
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">const </span>LEN_MASK: u32 = <span class="number">0x3FFF</span>;
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">const </span>TXD_GEN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">14</span>;
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">const </span>TXD_EOP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">12</span>;
+<a href=#53 id=53 data-nosnippet>53</a><span class="kw">const </span>TXD_CQ: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">13</span>;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">const </span>RXD_GEN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">const </span>COMP_GEN: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">31</span>;
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">const </span>RXCD_EOP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">14</span>;
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">const </span>RXCD_SOP: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">15</span>;
+<a href=#58 id=58 data-nosnippet>58</a><span class="kw">const </span>RXCD_ERR: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">14</span>;
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">const </span>IDX_MASK: u32 = <span class="number">0xFFF</span>;
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a><span class="doccomment">/// One side's position in a ring: next slot and current generation.
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="attr">#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+<a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>GenRing {
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">pub </span>next: usize,
+<a href=#65 id=65 data-nosnippet>65</a>    <span class="kw">pub gen</span>: bool,
+<a href=#66 id=66 data-nosnippet>66</a>    size: usize,
+<a href=#67 id=67 data-nosnippet>67</a>}
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="kw">impl </span>GenRing {
+<a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>new(size: usize) -&gt; <span class="self">Self </span>{
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="self">Self </span>{
+<a href=#72 id=72 data-nosnippet>72</a>            next: <span class="number">0</span>,
+<a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">gen</span>: <span class="bool-val">true</span>,
+<a href=#74 id=74 data-nosnippet>74</a>            size,
+<a href=#75 id=75 data-nosnippet>75</a>        }
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Step past the current slot, flipping the generation on wrap.
+<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>advance(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="self">self</span>.next += <span class="number">1</span>;
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="kw">if </span><span class="self">self</span>.next == <span class="self">self</span>.size {
+<a href=#82 id=82 data-nosnippet>82</a>            <span class="self">self</span>.next = <span class="number">0</span>;
+<a href=#83 id=83 data-nosnippet>83</a>            <span class="self">self</span>.<span class="kw">gen </span>= !<span class="self">self</span>.<span class="kw">gen</span>;
+<a href=#84 id=84 data-nosnippet>84</a>        }
+<a href=#85 id=85 data-nosnippet>85</a>    }
+<a href=#86 id=86 data-nosnippet>86</a>}
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="doccomment">/// Write TX descriptor `slot` for one `len`-byte frame at `addr` with
+<a href=#89 id=89 data-nosnippet>89</a>/// generation `gen`; the generation word goes last, after a release fence.
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>post_tx(s: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Sink, slot: usize, addr: u64, len: u16, <span class="kw">gen</span>: bool) {
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>desc = TX_RING_OFF + slot % TX_SLOTS * DESC_LEN;
+<a href=#92 id=92 data-nosnippet>92</a>    s.put64(desc, addr);
+<a href=#93 id=93 data-nosnippet>93</a>    s.put32(desc + <span class="number">12</span>, TXD_EOP | TXD_CQ);
+<a href=#94 id=94 data-nosnippet>94</a>    fence(Ordering::Release);
+<a href=#95 id=95 data-nosnippet>95</a>    s.put32(
+<a href=#96 id=96 data-nosnippet>96</a>        desc + <span class="number">8</span>,
+<a href=#97 id=97 data-nosnippet>97</a>        (u32::from(len) &amp; LEN_MASK) | <span class="kw">if gen </span>{ TXD_GEN } <span class="kw">else </span>{ <span class="number">0 </span>},
+<a href=#98 id=98 data-nosnippet>98</a>    );
+<a href=#99 id=99 data-nosnippet>99</a>}
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a><span class="doccomment">/// Write RX ring-0 descriptor `slot` as a head buffer of [`BUF_SIZE`] bytes.
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>post_rx(s: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Sink, slot: usize, addr: u64, <span class="kw">gen</span>: bool) {
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>desc = RX_RING_OFF[<span class="number">0</span>] + slot % RX_SLOTS * DESC_LEN;
+<a href=#104 id=104 data-nosnippet>104</a>    s.put64(desc, addr);
+<a href=#105 id=105 data-nosnippet>105</a>    s.put32(desc + <span class="number">12</span>, <span class="number">0</span>);
+<a href=#106 id=106 data-nosnippet>106</a>    fence(Ordering::Release);
+<a href=#107 id=107 data-nosnippet>107</a>    s.put32(
+<a href=#108 id=108 data-nosnippet>108</a>        desc + <span class="number">8</span>,
+<a href=#109 id=109 data-nosnippet>109</a>        BUF_SIZE <span class="kw">as </span>u32 &amp; LEN_MASK | <span class="kw">if gen </span>{ RXD_GEN } <span class="kw">else </span>{ <span class="number">0 </span>},
+<a href=#110 id=110 data-nosnippet>110</a>    );
+<a href=#111 id=111 data-nosnippet>111</a>}
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a><span class="doccomment">/// The TX ring index of the completion at `ring.next`, once the device wrote
+<a href=#114 id=114 data-nosnippet>114</a>/// it with the consumer's generation.
+<a href=#115 id=115 data-nosnippet>115</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>tx_completion(read32: <span class="kw">impl </span>Fn(usize) -&gt; u32, ring: <span class="kw-2">&amp;</span>GenRing) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">let </span>desc = TX_COMP_OFF + ring.next * DESC_LEN;
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">if </span>(read32(desc + <span class="number">12</span>) &amp; COMP_GEN != <span class="number">0</span>) != ring.<span class="kw">gen </span>{
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#119 id=119 data-nosnippet>119</a>    }
+<a href=#120 id=120 data-nosnippet>120</a>    fence(Ordering::Acquire);
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="prelude-val">Some</span>((read32(desc) &amp; IDX_MASK) <span class="kw">as </span>usize)
+<a href=#122 id=122 data-nosnippet>122</a>}
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a><span class="doccomment">/// A received-frame completion.
+<a href=#125 id=125 data-nosnippet>125</a></span><span class="attr">#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+<a href=#126 id=126 data-nosnippet>126</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>RxCompletion {
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">pub </span>index: usize,
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// 0 = ring 0 (head buffers), 1 = ring 1 (body buffers).
+<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">pub </span>ring: u32,
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">pub </span>sop: bool,
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">pub </span>eop: bool,
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="kw">pub </span>error: bool,
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="kw">pub </span>len: usize,
+<a href=#134 id=134 data-nosnippet>134</a>}
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// The RX completion at `ring.next`, once written with the consumer's
+<a href=#137 id=137 data-nosnippet>137</a>/// generation.
+<a href=#138 id=138 data-nosnippet>138</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>rx_completion(read32: <span class="kw">impl </span>Fn(usize) -&gt; u32, ring: <span class="kw-2">&amp;</span>GenRing) -&gt; <span class="prelude-ty">Option</span>&lt;RxCompletion&gt; {
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">let </span>desc = RX_COMP_OFF + ring.next * DESC_LEN;
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">if </span>(read32(desc + <span class="number">12</span>) &amp; COMP_GEN != <span class="number">0</span>) != ring.<span class="kw">gen </span>{
+<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#142 id=142 data-nosnippet>142</a>    }
+<a href=#143 id=143 data-nosnippet>143</a>    fence(Ordering::Acquire);
+<a href=#144 id=144 data-nosnippet>144</a>    <span class="kw">let </span>(word0, word2) = (read32(desc), read32(desc + <span class="number">8</span>));
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="prelude-val">Some</span>(RxCompletion {
+<a href=#146 id=146 data-nosnippet>146</a>        index: (word0 &amp; IDX_MASK) <span class="kw">as </span>usize,
+<a href=#147 id=147 data-nosnippet>147</a>        ring: (word0 &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0x3FF</span>,
+<a href=#148 id=148 data-nosnippet>148</a>        sop: word0 &amp; RXCD_SOP != <span class="number">0</span>,
+<a href=#149 id=149 data-nosnippet>149</a>        eop: word0 &amp; RXCD_EOP != <span class="number">0</span>,
+<a href=#150 id=150 data-nosnippet>150</a>        error: word2 &amp; RXCD_ERR != <span class="number">0</span>,
+<a href=#151 id=151 data-nosnippet>151</a>        len: (word2 &amp; LEN_MASK) <span class="kw">as </span>usize,
+<a href=#152 id=152 data-nosnippet>152</a>    })
+<a href=#153 id=153 data-nosnippet>153</a>}
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a><span class="attr">#[cfg(test)]
+<a href=#156 id=156 data-nosnippet>156</a>#[path = <span class="string">"rings_tests.rs"</span>]
+<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">mod </span>tests;
+</code></pre></div></section></main></body></html>

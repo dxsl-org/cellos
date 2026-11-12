@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["draw_label","fill_rect","stroke_rect"]};
+window.SIDEBAR_ITEMS = {"constant":["PANEL_RADIUS"],"fn":["draw_icon_centered","draw_label","fill_rect","fill_round_rect","stroke_rect"]};

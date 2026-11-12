@@ -278,7 +278,7 @@
 <a href=#278 id=278 data-nosnippet>278</a>        ostd::io::println(<span class="string">"[stationary-assembly] START: ASSEMBLY-01 native QEMU witness"</span>);
 <a href=#279 id=279 data-nosnippet>279</a>        ostd::syscall::sys_heartbeat(<span class="number">0</span>);
 <a href=#280 id=280 data-nosnippet>280</a>
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(vfs_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) <span class="kw">else </span>{
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(vfs_tid) = ostd::service::provider_tid(api::syscall::service::VFS) <span class="kw">else </span>{
 <a href=#282 id=282 data-nosnippet>282</a>            fail(<span class="string">"VFS service is not registered"</span>);
 <a href=#283 id=283 data-nosnippet>283</a>        };
 <a href=#284 id=284 data-nosnippet>284</a>        ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(

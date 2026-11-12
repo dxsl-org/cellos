@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["advance_close","ask_to_close","close_all","show_next"]};

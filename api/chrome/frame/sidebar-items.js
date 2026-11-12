@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BYTES_PER_PIXEL"],"fn":["clip"],"struct":["GuestFrame"]};

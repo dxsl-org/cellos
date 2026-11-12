@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["HELLO","NET_DENIED"],"fn":["cell_main","close_socket","main","parse_u16","query_state","resolve_host","serve_connection","server_mode"],"static":["VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["HELLO","NET_CALL_TICKS","NET_DENIED"],"fn":["accept_next","cell_main","close_socket","main","net_call","parse_u16","query_state","resolve_host","serve_connection","server_mode"],"static":["VICELL_SYSCALLS"]};

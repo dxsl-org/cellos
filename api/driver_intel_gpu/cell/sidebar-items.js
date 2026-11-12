@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BAR0_LEN","CLIENT_SYSMEM_BYTES","FIND_ATTEMPTS","FIRMWARE_MAX","QUERY_DEVICE_IDS"],"fn":["cell_main","export_error","fail","find_gpu","log","read_all","serve"],"struct":["CellPlatform","KernelExports","KernelWatch"],"type":["CellGpu"]};

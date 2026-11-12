@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CELLOS_PARTITION_TYPE"],"enum":["PrimaryReason"],"fn":["choose_primary","device_name","discover","has_cellos_partition"],"struct":["Discovery"]};

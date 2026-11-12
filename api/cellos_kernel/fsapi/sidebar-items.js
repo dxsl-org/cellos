@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["append_path_components","file_chdir","file_close","file_fstat","file_getcwd","file_open","file_read","file_readdir","file_remove","file_seek","file_write","resolve_path","resolve_task_path"],"struct":["ResolvedTaskPath"]};

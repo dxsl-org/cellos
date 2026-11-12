@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SPAWNED","SPAWN_ALLOWLIST"],"fn":["spawn_allowed"],"struct":["SpawnedCells"]};

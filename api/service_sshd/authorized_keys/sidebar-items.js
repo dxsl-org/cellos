@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KEY_TYPE","MAX_FILE","PATH"],"fn":["ed25519_from_blob","load","parse","parse_line"]};

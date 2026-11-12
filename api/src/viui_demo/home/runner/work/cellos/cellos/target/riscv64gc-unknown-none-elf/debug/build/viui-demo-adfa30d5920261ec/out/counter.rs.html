@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>
 <a href=#38 id=38 data-nosnippet>38</a>            <span class="kw">let </span>(text_sig_0, _sub_text_0) = count.map(|n| <span class="macro">alloc::format!</span>(<span class="string">"Count: {}"</span>, n)).into_parts();
 <a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a>            <span class="kw">let </span>w_label_0 = Label::new(text_sig_0).with_color(Color::rgb(<span class="number">255</span>, <span class="number">255</span>, <span class="number">255</span>));
+<a href=#40 id=40 data-nosnippet>40</a>            <span class="kw">let </span>w_label_0 = Label::new(text_sig_0);
 <a href=#41 id=41 data-nosnippet>41</a>
 <a href=#42 id=42 data-nosnippet>42</a>            <span class="kw">let </span>_count_c0 = count.clone();
 <a href=#43 id=43 data-nosnippet>43</a>            <span class="kw">let </span>w_button_1 = Button::new(<span class="string">"Increment"</span>, <span class="kw">move </span>|| { _count_c0.update(|n| <span class="kw-2">*</span>n += <span class="number">1</span>); });

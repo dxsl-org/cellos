@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cluster","next_tid_hint","prepare_gated","section_u64","spawn_gated","spawn_init","spawn_trusted_init"]};
+window.SIDEBAR_ITEMS = {"fn":["cluster_mode","next_tid_hint","prepare_gated","section_u64","session_path_valid","spawn_gated","spawn_init","spawn_trusted_init","spawner_subject"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DESCRIPTOR_LEN","HEADER_LEN","MAX_EXPORT_ID","MAX_REPLY_LEN","MAX_REQUEST_LEN","MAX_SEGMENTS","MAX_WRITES","OP_CLOSE","OP_IOCTL","OP_OPEN","SEG_EXPORT","SEG_IN","SEG_OUT"],"fn":["decode_reply","decode_request","encode_reply","encode_request"],"struct":["Reply","Request","Segment","SegmentMemory"]};

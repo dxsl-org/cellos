@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SAFE_SERVICE","SAFE_SHELL","STORE_OPTIONAL_PROFILE"],"fn":["authorize_confirm","evaluate","gate","safe_set","short"],"mod":["diff","store"],"struct":["Endpoint","Gate"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ANNOUNCE_INTERVAL_MS","ANNOUNCE_NUM","ANNOUNCE_WAIT_MS","DEFEND_INTERVAL_MS","MAX_CONFLICTS","PEER_LOG_INTERVAL_MS","PEER_SLOTS","PROBE_MAX_MS","PROBE_MIN_MS","PROBE_NUM","PROBE_WAIT_MS","RATE_LIMIT_INTERVAL_MS"],"enum":["Event","PeerKind","Phase"],"fn":["first_candidate"],"struct":["LinkLocal","Peer"]};

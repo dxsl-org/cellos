@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CONTENT"],"fn":["chrome","content_of","move_line","resize","settle","shares","with_bottom","with_left","with_right","with_top"]};

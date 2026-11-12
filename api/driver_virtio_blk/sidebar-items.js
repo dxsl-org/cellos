@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handler","main"],"mod":["device","dispatch"],"static":["STATE","VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"fn":["handler","main","sender_is_vfs"],"mod":["device","dispatch","mmio"],"static":["STATE","VFS_TID","VICELL_MANIFEST"]};

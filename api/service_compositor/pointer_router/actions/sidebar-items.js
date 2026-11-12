@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply","focus","release_in_menu","settle","show_tab","untile"]};

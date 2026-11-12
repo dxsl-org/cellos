@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ANCHOR_DEV","ANCHOR_PRIVATE","ANCHOR_RELEASE","ANCHOR_UNSIGNED","CELL_IMAGE_LEN","CELL_IMAGE_NAME_MAX","CELL_IMAGE_VERSION","IMAGE_NAME_SECTION"],"fn":["is_valid_image_name"],"struct":["CellImage","ImageIdentity"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COMMENT","DARK","INLINE","KEYWORD","LIGHT","NUMBER","PAPER","PLAIN","STRING"],"struct":["CodePalette"]};

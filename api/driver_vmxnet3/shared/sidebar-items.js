@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DRIVER_SHARED_LEN","EVENT_OFF","GOS_FREEBSD_64","MAX_INTRS","MTU","QUEUES_LEN","REV1_MAGIC","RXMODE","RXQ_UPDATE_RXHEAD_OFF","TXQ_LEN"],"fn":["write_driver_shared","write_queues"],"struct":["ConfDesc","DriverShared","QueueConfig","RxQueueShared","TxQueueShared"]};

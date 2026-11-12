@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["draw_button","draw_label","draw_text","fill_rect","stroke_rect"],"mod":["theme"],"struct":["Color"]};
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_RADIUS","PANEL_RADIUS"],"enum":["LineIcon"],"fn":["draw_button","draw_icon_centered","draw_label","draw_text","fill_rect","fill_round_rect","stroke_round_rect"],"struct":["Color"],"trait":["ViTheme"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AlignedElf"],"fn":["bytes"]};
+window.SIDEBAR_ITEMS = {"enum":["AlignedElf"],"fn":["bytes"],"struct":["ElfSnapshot"]};

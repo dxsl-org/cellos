@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["EPS","JMP_BUF_WORDS","M_E","M_PI"],"fn":["atan2","cos","log","longjmp","main","near","nearf","pow","printf","setjmp","sin","sinf","sqrt","write_bytes"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["JmpBuf"]};
+window.SIDEBAR_ITEMS = {"constant":["EPS","M_E","M_PI"],"fn":["atan2","c_math_smoke_setjmp_probe","cos","log","main","near","nearf","pow","printf","sin","sinf","sqrt","write_bytes"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

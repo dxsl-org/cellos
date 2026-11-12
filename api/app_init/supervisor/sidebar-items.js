@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_RESTARTS_PER_WINDOW","RESTART_WINDOW_TICKS"],"fn":["relay_hypervisor_exit","restart_pending","run"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_RESTARTS_PER_WINDOW","RESTART_WINDOW_TICKS","VERDICT_POLL_LIMIT","VERDICT_WAIT_TICKS"],"enum":["Decision"],"fn":["await_verdict","decision_line","relay_hypervisor_exit","restart_decision","restart_pending","run"]};

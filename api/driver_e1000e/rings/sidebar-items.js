@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","DESC_STATUS_DD","RXD_STAT_EOP","TXD_CMD_EOP","TXD_CMD_FRAME","TXD_CMD_IFCS","TXD_CMD_RS"],"enum":["RxCompletion"],"fn":["clear","copy_in","copy_out","post_rx","post_tx","ring_bytes","rx_completed","rx_written_back","tx_done","tx_has_room","tx_room","tx_slot_reusable","tx_status"],"struct":["RxDesc","TxDesc"]};

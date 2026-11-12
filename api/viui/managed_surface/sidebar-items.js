@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ClosePolicy","ManagedTick"],"struct":["ManagedSurfaceApp"]};
+window.SIDEBAR_ITEMS = {"enum":["ManagedTick"],"struct":["ManagedSurfaceApp"]};

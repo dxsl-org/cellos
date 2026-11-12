@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_H","CONTROL_Y","PANE_DIVIDER","PANE_HEADER_HEIGHT","SPLIT_BUTTON_GAP","SPLIT_BUTTON_W","SPLIT_LABEL","STATUS_HEIGHT","TOOLBAR_HEIGHT","VIEW_MODE_LABELS","VIEW_SEGMENT_W","VIEW_SWITCH_INSET"],"fn":["content_rect","listing_hit","listing_rect","pane_at","pane_frames","split_button","view_switch"],"struct":["Segments"]};

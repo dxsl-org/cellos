@@ -1,0 +1,388 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/drivers/intel-gpu/src/guc.rs`."><title>guc.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="driver_intel_gpu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">driver_intel_gpu/</div>guc.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Intel GuC firmware load: WOPCM partition, reset, parameter block, transfer setup,
+<a href=#2 id=2 data-nosnippet>2</a>//! uCode DMA, boot wait, and the MMIO host-to-GuC channel.
+<a href=#3 id=3 data-nosnippet>3</a>//!
+<a href=#4 id=4 data-nosnippet>4</a>//! Upstream reference (MIT): `drivers/gpu/drm/xe/xe_guc.c` (`xe_guc_reset`,
+<a href=#5 id=5 data-nosnippet>5</a>//! `guc_write_params`, `guc_prepare_xfer`, `guc_xfer_rsa`, `guc_load_done`,
+<a href=#6 id=6 data-nosnippet>6</a>//! `guc_wait_ucode`, `__xe_guc_upload`, `xe_guc_mmio_send_recv`, `xe_guc_notify`),
+<a href=#7 id=7 data-nosnippet>7</a>//! `xe_uc_fw.c` (`uc_fw_xfer`), `xe_wopcm.c` (`xe_wopcm_init`), `xe_uc.c` (order:
+<a href=#8 id=8 data-nosnippet>8</a>//! WOPCM at init, then sanitize/reset, then upload), `regs/xe_guc_regs.h` and
+<a href=#9 id=9 data-nosnippet>9</a>//! `abi/guc_errors_abi.h`.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! Every wait is bounded by time through [`Clock`], with upstream's limits: GDRST 5 ms,
+<a href=#12 id=12 data-nosnippet>12</a>//! uCode DMA 100 ms, GuC boot polled every 10 ms for up to 3 s (`GUC_LOAD_TIMEOUT_SEC` of a
+<a href=#13 id=13 data-nosnippet>13</a>//! non-debug build; a load above 200 ms is reported as slow), MMIO replies 50 ms.
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span><span class="kw">crate</span>::clock::Clock;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::regs::{
+<a href=#17 id=17 data-nosnippet>17</a>    masked_write, wait32, RegisterFile, WaitError, ARAT_EXPIRED_INTRMSK, GDRST, GRDOM_GUC,
+<a href=#18 id=18 data-nosnippet>18</a>    PMINTRMSK,
+<a href=#19 id=19 data-nosnippet>19</a>};
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>intel_gpu_core::guc_abi::{decode_mmio_reply, MmioReply};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>intel_gpu_core::guc_init::{
+<a href=#22 id=22 data-nosnippet>22</a>    check_layout, compute_layout, locked_layout, WopcmError, WopcmLayout, GUC_CTL_MAX_DWORDS,
+<a href=#23 id=23 data-nosnippet>23</a>    GUC_WOPCM_OFFSET_MASK, GUC_WOPCM_OFFSET_VALID, GUC_WOPCM_SIZE_LOCKED, GUC_WOPCM_SIZE_MASK,
+<a href=#24 id=24 data-nosnippet>24</a>    LNL_WOPCM_SIZE, MAX_WOPCM_SIZE,
+<a href=#25 id=25 data-nosnippet>25</a>};
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="comment">// ── Registers (`regs/xe_guc_regs.h`) ─────────────────────────────────────────
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="doccomment">/// `DIST_DBS_POPULATED`: doorbells per SQIDI in bits 23:16 (read for the ADS).
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub const </span>DIST_DBS_POPULATED: usize = <span class="number">0x000D08</span>;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">pub const </span>GUC_STATUS: usize = <span class="number">0x00C000</span>;
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// `GS_MIA_IN_RESET`.
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">pub const </span>GUC_STATUS_MIA_IN_RESET: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>;
+<a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// `GS_BOOTROM_MASK`, bits 7:1.
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub const </span>GUC_STATUS_BOOTROM_MASK: u32 = <span class="number">0x7F </span>&lt;&lt; <span class="number">1</span>;
+<a href=#36 id=36 data-nosnippet>36</a><span class="doccomment">/// `GS_UKERNEL_MASK`, bits 15:8.
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub const </span>GUC_STATUS_UKERNEL_MASK: u32 = <span class="number">0xFF </span>&lt;&lt; <span class="number">8</span>;
+<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// `XE_GUC_LOAD_STATUS_READY` in the microkernel field.
+<a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">pub const </span>GUC_STATUS_UKERNEL_READY: u32 = <span class="number">0xF0 </span>&lt;&lt; <span class="number">8</span>;
+<a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// `GUC_WOPCM_SIZE`: size in bits 31:12, `GUC_WOPCM_SIZE_LOCKED` in bit 0.
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub const </span>GUC_WOPCM_SIZE: usize = <span class="number">0x00C050</span>;
+<a href=#42 id=42 data-nosnippet>42</a><span class="doccomment">/// `GUC_SHIM_CONTROL`, programmed before the uCode DMA.
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="kw">pub const </span>GUC_SHIM_CONTROL: usize = <span class="number">0x00C064</span>;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">pub const </span>GUC_ENABLE_READ_CACHE_LOGIC: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub const </span>GUC_ENABLE_READ_CACHE_FOR_SRAM_DATA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">9</span>;
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub const </span>GUC_ENABLE_READ_CACHE_FOR_WOPCM_DATA: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">10</span>;
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub const </span>GUC_ENABLE_MIA_CLOCK_GATING: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">15</span>;
+<a href=#48 id=48 data-nosnippet>48</a><span class="doccomment">/// `GUC_MOCS_INDEX_MASK` shift (bits 27:24).
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">pub const </span>GUC_MOCS_INDEX_SHIFT: u32 = <span class="number">24</span>;
+<a href=#50 id=50 data-nosnippet>50</a><span class="doccomment">/// `gt-&gt;mocs.uc_index` on Lunar Lake and Panther Lake (`xe2_mocs_table`, `xe_mocs.c`).
+<a href=#51 id=51 data-nosnippet>51</a></span><span class="kw">pub const </span>XE2_MOCS_UC_INDEX: u32 = <span class="number">3</span>;
+<a href=#52 id=52 data-nosnippet>52</a><span class="doccomment">/// `SOFT_SCRATCH(0)`; the parameter block occupies `SOFT_SCRATCH(1..=14)`.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">pub const </span>SOFT_SCRATCH_0: usize = <span class="number">0x00C180</span>;
+<a href=#54 id=54 data-nosnippet>54</a><span class="doccomment">/// `UOS_RSA_SCRATCH(0)`: the first of the registers that take an RSA signature of up to
+<a href=#55 id=55 data-nosnippet>55</a>/// [`UOS_RSA_SCRATCH_COUNT`] dwords, or the GGTT address of a larger one.
+<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub const </span>UOS_RSA_SCRATCH_0: usize = <span class="number">0x00C200</span>;
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">pub const </span>UOS_RSA_SCRATCH_COUNT: usize = <span class="number">64</span>;
+<a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub const </span>GUC_DMA_ADDR_0_LOW: usize = <span class="number">0x00C300</span>;
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub const </span>GUC_DMA_ADDR_0_HIGH: usize = <span class="number">0x00C304</span>;
+<a href=#60 id=60 data-nosnippet>60</a><span class="kw">pub const </span>GUC_DMA_ADDR_1_LOW: usize = <span class="number">0x00C308</span>;
+<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub const </span>GUC_DMA_ADDR_1_HIGH: usize = <span class="number">0x00C30C</span>;
+<a href=#62 id=62 data-nosnippet>62</a><span class="kw">pub const </span>GUC_DMA_COPY_SIZE: usize = <span class="number">0x00C310</span>;
+<a href=#63 id=63 data-nosnippet>63</a><span class="doccomment">/// Masked register: bits 15:0 value, bits 31:16 write enable.
+<a href=#64 id=64 data-nosnippet>64</a></span><span class="kw">pub const </span>GUC_DMA_CTRL: usize = <span class="number">0x00C314</span>;
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">pub const </span>GUC_DMA_CTRL_START: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>;
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">pub const </span>GUC_DMA_CTRL_UOS_MOVE: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">4</span>;
+<a href=#67 id=67 data-nosnippet>67</a><span class="kw">pub const </span>DMA_ADDRESS_SPACE_WOPCM: u32 = <span class="number">7 </span>&lt;&lt; <span class="number">16</span>;
+<a href=#68 id=68 data-nosnippet>68</a><span class="kw">pub const </span>DMA_ADDRESS_SPACE_GGTT: u32 = <span class="number">8 </span>&lt;&lt; <span class="number">16</span>;
+<a href=#69 id=69 data-nosnippet>69</a><span class="doccomment">/// `DMA_GUC_WOPCM_OFFSET`: base in bits 31:14, `GUC_WOPCM_OFFSET_VALID` in bit 0.
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub const </span>DMA_GUC_WOPCM_OFFSET: usize = <span class="number">0x00C340</span>;
+<a href=#71 id=71 data-nosnippet>71</a><span class="doccomment">/// `GT_PM_CONFIG` and `GT_DOORBELL_ENABLE`.
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">pub const </span>GT_PM_CONFIG: usize = <span class="number">0x13816C</span>;
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">pub const </span>GT_DOORBELL_ENABLE: u32 = <span class="number">1 </span>&lt;&lt; <span class="number">0</span>;
+<a href=#74 id=74 data-nosnippet>74</a><span class="doccomment">/// `GUC_HOST_INTERRUPT`: any write notifies the GuC (`xe_guc_notify` writes 0).
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub const </span>GUC_HOST_INTERRUPT: usize = <span class="number">0x1901F0</span>;
+<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// `VF_SW_FLAG(0)`: MMIO request dwords go to `VF_SW_FLAG(0..4)`, the reply comes back
+<a href=#77 id=77 data-nosnippet>77</a>/// in `VF_SW_FLAG(0)`.
+<a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub const </span>VF_SW_FLAG_0: usize = <span class="number">0x190240</span>;
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub const </span>VF_SW_FLAG_COUNT: usize = <span class="number">4</span>;
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a><span class="doccomment">/// WOPCM offset the GuC image is copied to: "current uCode expects the code to be loaded
+<a href=#82 id=82 data-nosnippet>82</a>/// at 8k; locations below this are used for the stack" (`__xe_guc_upload`).
+<a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">pub const </span>GUC_WOPCM_LOAD_OFFSET: u32 = <span class="number">0x2000</span>;
+<a href=#84 id=84 data-nosnippet>84</a>
+<a href=#85 id=85 data-nosnippet>85</a><span class="doccomment">/// `xe_guc_reset`: `GDRST` wait.
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub const </span>GDRST_TIMEOUT_US: u64 = <span class="number">5_000</span>;
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// `uc_fw_xfer`: DMA completion wait.
+<a href=#88 id=88 data-nosnippet>88</a></span><span class="kw">pub const </span>DMA_TIMEOUT_US: u64 = <span class="number">100_000</span>;
+<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// `guc_wait_ucode`: one `GUC_STATUS` read every 10 ms...
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub const </span>LOAD_POLL_US: u64 = <span class="number">10_000</span>;
+<a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// ...for at most `GUC_LOAD_TIMEOUT_SEC` (3 s outside debug builds).
+<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub const </span>LOAD_TIMEOUT_US: u64 = <span class="number">3_000_000</span>;
+<a href=#93 id=93 data-nosnippet>93</a><span class="doccomment">/// `GUC_LOAD_TIME_WARN_MSEC`.
+<a href=#94 id=94 data-nosnippet>94</a></span><span class="kw">pub const </span>LOAD_WARN_US: u64 = <span class="number">200_000</span>;
+<a href=#95 id=95 data-nosnippet>95</a><span class="doccomment">/// `xe_guc_mmio_send_recv`: wait for the GuC's answer...
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">pub const </span>MMIO_REPLY_TIMEOUT_US: u64 = <span class="number">50_000</span>;
+<a href=#97 id=97 data-nosnippet>97</a><span class="doccomment">/// ...and, after a `NO_RESPONSE_BUSY`, for the final one.
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">pub const </span>MMIO_BUSY_TIMEOUT_US: u64 = <span class="number">2_000_000</span>;
+<a href=#99 id=99 data-nosnippet>99</a><span class="doccomment">/// Upstream retries a `NO_RESPONSE_RETRY` answer without limit (backing off to 256 ms);
+<a href=#100 id=100 data-nosnippet>100</a>/// this driver gives up after this long so a wedged GuC cannot stall its only thread.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="kw">pub const </span>MMIO_RETRY_LIMIT_US: u64 = <span class="number">5_000_000</span>;
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a><span class="doccomment">/// Why the GuC did not come up, or the MMIO channel failed.
+<a href=#104 id=104 data-nosnippet>104</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">pub enum </span>GucError {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// An MMIO access failed.
+<a href=#107 id=107 data-nosnippet>107</a>    </span>Mmio,
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// The WOPCM cannot hold the image.
+<a href=#109 id=109 data-nosnippet>109</a>    </span>Wopcm(WopcmError),
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="doccomment">/// The WOPCM registers did not read back locked with the written values
+<a href=#111 id=111 data-nosnippet>111</a>    /// (`xe_mmio_write32_and_verify`); the value read.
+<a href=#112 id=112 data-nosnippet>112</a>    </span>WopcmNotLocked(u32),
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="doccomment">/// `GRDOM_GUC` did not clear within 5 ms; the last `GDRST`.
+<a href=#114 id=114 data-nosnippet>114</a>    </span>ResetTimeout(u32),
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// The reset finished but the MIA core is not held in reset; `GUC_STATUS`.
+<a href=#116 id=116 data-nosnippet>116</a>    </span>NotInReset(u32),
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// An RSA key shorter than the scratch registers (`xe_uc_fw_copy_rsa` short copy).
+<a href=#118 id=118 data-nosnippet>118</a>    </span>RsaTooShort,
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="doccomment">/// The image or its GGTT address does not fit the DMA registers.
+<a href=#120 id=120 data-nosnippet>120</a>    </span>BadImage,
+<a href=#121 id=121 data-nosnippet>121</a>    <span class="doccomment">/// `START_DMA` did not clear within 100 ms; `DMA_CTRL`.
+<a href=#122 id=122 data-nosnippet>122</a>    </span>DmaTimeout(u32),
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// `guc_load_done` saw a terminal failure code; `GUC_STATUS`.
+<a href=#124 id=124 data-nosnippet>124</a>    </span>LoadFailed(u32),
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="doccomment">/// No terminal state within 3 s; the last `GUC_STATUS`.
+<a href=#126 id=126 data-nosnippet>126</a>    </span>LoadTimeout(u32),
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="doccomment">/// No MMIO reply in time; the last `VF_SW_FLAG(0)`.
+<a href=#128 id=128 data-nosnippet>128</a>    </span>MmioTimeout(u32),
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// The GuC answered `RESPONSE_FAILURE`.
+<a href=#130 id=130 data-nosnippet>130</a>    </span>MmioFailure { hint: u32, error: u32 },
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// The GuC answered with something no request expects (`-EPROTO`).
+<a href=#132 id=132 data-nosnippet>132</a>    </span>MmioProtocol(u32),
+<a href=#133 id=133 data-nosnippet>133</a>}
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a><span class="kw">impl </span>From&lt;WaitError&gt; <span class="kw">for </span>GucError {
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">fn </span>from(e: WaitError) -&gt; <span class="self">Self </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">match </span>e {
+<a href=#138 id=138 data-nosnippet>138</a>            WaitError::Mmio =&gt; GucError::Mmio,
+<a href=#139 id=139 data-nosnippet>139</a>            WaitError::TimedOut(v) =&gt; GucError::MmioTimeout(v),
+<a href=#140 id=140 data-nosnippet>140</a>        }
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>}
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a><span class="kw">fn </span>mmio&lt;T&gt;(r: types::ViResult&lt;T&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;T, GucError&gt; {
+<a href=#145 id=145 data-nosnippet>145</a>    r.map_err(|<span class="kw">_</span>| GucError::Mmio)
+<a href=#146 id=146 data-nosnippet>146</a>}
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a><span class="doccomment">/// `xe_wopcm_init` for a platform without HuC firmware: keep a partition firmware already
+<a href=#149 id=149 data-nosnippet>149</a>/// locked if it fits the image, else compute one, write it, and require the hardware to
+<a href=#150 id=150 data-nosnippet>150</a>/// report both registers locked with exactly those values (`__wopcm_init_regs`).
+<a href=#151 id=151 data-nosnippet>151</a></span><span class="kw">pub fn </span>init_wopcm(regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile, guc_fw_size: u32) -&gt; <span class="prelude-ty">Result</span>&lt;WopcmLayout, GucError&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">let </span>reg_offset = mmio(regs.read32(DMA_GUC_WOPCM_OFFSET))<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">let </span>reg_size = mmio(regs.read32(GUC_WOPCM_SIZE))<span class="question-mark">?</span>;
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(layout) = locked_layout(reg_offset, reg_size) {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="comment">// Preprogrammed by BIOS/IFWI: check against the largest WOPCM (`max_wopcm_size`).
+<a href=#156 id=156 data-nosnippet>156</a>        </span>check_layout(MAX_WOPCM_SIZE, layout, guc_fw_size, <span class="number">0</span>).map_err(GucError::Wopcm)<span class="question-mark">?</span>;
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(layout);
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>layout = compute_layout(LNL_WOPCM_SIZE, guc_fw_size, <span class="number">0</span>).map_err(GucError::Wopcm)<span class="question-mark">?</span>;
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    mmio(regs.write32(GUC_WOPCM_SIZE, layout.size))<span class="question-mark">?</span>;
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="kw">let </span>size = mmio(regs.read32(GUC_WOPCM_SIZE))<span class="question-mark">?</span>;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">if </span>size &amp; (GUC_WOPCM_SIZE_MASK | GUC_WOPCM_SIZE_LOCKED) != layout.size | GUC_WOPCM_SIZE_LOCKED {
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::WopcmNotLocked(size));
+<a href=#165 id=165 data-nosnippet>165</a>    }
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="comment">// No HuC image is loaded, so `HUC_LOADING_AGENT_GUC` stays clear.
+<a href=#167 id=167 data-nosnippet>167</a>    </span>mmio(regs.write32(DMA_GUC_WOPCM_OFFSET, layout.base))<span class="question-mark">?</span>;
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">let </span>base = mmio(regs.read32(DMA_GUC_WOPCM_OFFSET))<span class="question-mark">?</span>;
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">if </span>base &amp; (GUC_WOPCM_OFFSET_MASK | GUC_WOPCM_OFFSET_VALID)
+<a href=#170 id=170 data-nosnippet>170</a>        != layout.base | GUC_WOPCM_OFFSET_VALID
+<a href=#171 id=171 data-nosnippet>171</a>    {
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::WopcmNotLocked(base));
+<a href=#173 id=173 data-nosnippet>173</a>    }
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="prelude-val">Ok</span>(layout)
+<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a><span class="doccomment">/// `xe_guc_reset`: reset the GuC domain, wait up to 5 ms for the bit to self-clear, then
+<a href=#178 id=178 data-nosnippet>178</a>/// require the microcontroller held in reset.
+<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub fn </span>reset_guc(regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile, clock: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Clock) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#180 id=180 data-nosnippet>180</a>    mmio(regs.write32(GDRST, GRDOM_GUC))<span class="question-mark">?</span>;
+<a href=#181 id=181 data-nosnippet>181</a>    wait32(regs, clock, GDRST, GRDOM_GUC, <span class="number">0</span>, GDRST_TIMEOUT_US).map_err(|e| <span class="kw">match </span>e {
+<a href=#182 id=182 data-nosnippet>182</a>        WaitError::TimedOut(v) =&gt; GucError::ResetTimeout(v),
+<a href=#183 id=183 data-nosnippet>183</a>        WaitError::Mmio =&gt; GucError::Mmio,
+<a href=#184 id=184 data-nosnippet>184</a>    })<span class="question-mark">?</span>;
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>status = mmio(regs.read32(GUC_STATUS))<span class="question-mark">?</span>;
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">if </span>status &amp; GUC_STATUS_MIA_IN_RESET == <span class="number">0 </span>{
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::NotInReset(status));
+<a href=#188 id=188 data-nosnippet>188</a>    }
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="prelude-val">Ok</span>(())
+<a href=#190 id=190 data-nosnippet>190</a>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="doccomment">/// `guc_write_params`: `SOFT_SCRATCH(0)` cleared, the block in `SOFT_SCRATCH(1..=14)`.
+<a href=#193 id=193 data-nosnippet>193</a></span><span class="kw">pub fn </span>write_params(
+<a href=#194 id=194 data-nosnippet>194</a>    regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile,
+<a href=#195 id=195 data-nosnippet>195</a>    params: <span class="kw-2">&amp;</span>[u32; GUC_CTL_MAX_DWORDS],
+<a href=#196 id=196 data-nosnippet>196</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#197 id=197 data-nosnippet>197</a>    mmio(regs.write32(SOFT_SCRATCH_0, <span class="number">0</span>))<span class="question-mark">?</span>;
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>p) <span class="kw">in </span>params.iter().enumerate() {
+<a href=#199 id=199 data-nosnippet>199</a>        mmio(regs.write32(SOFT_SCRATCH_0 + <span class="number">4 </span>* (<span class="number">1 </span>+ i), p))<span class="question-mark">?</span>;
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="prelude-val">Ok</span>(())
+<a href=#202 id=202 data-nosnippet>202</a>}
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a><span class="doccomment">/// `guc_prepare_xfer` for graphics 20+: shim caching and MOCS index, doorbells on, ARAT
+<a href=#205 id=205 data-nosnippet>205</a>/// interrupts unmasked.
+<a href=#206 id=206 data-nosnippet>206</a></span><span class="kw">pub fn </span>prepare_xfer(regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">let </span>shim = GUC_ENABLE_READ_CACHE_LOGIC
+<a href=#208 id=208 data-nosnippet>208</a>        | GUC_ENABLE_READ_CACHE_FOR_SRAM_DATA
+<a href=#209 id=209 data-nosnippet>209</a>        | GUC_ENABLE_READ_CACHE_FOR_WOPCM_DATA
+<a href=#210 id=210 data-nosnippet>210</a>        | GUC_ENABLE_MIA_CLOCK_GATING
+<a href=#211 id=211 data-nosnippet>211</a>        | XE2_MOCS_UC_INDEX &lt;&lt; GUC_MOCS_INDEX_SHIFT;
+<a href=#212 id=212 data-nosnippet>212</a>    mmio(regs.write32(GUC_SHIM_CONTROL, shim))<span class="question-mark">?</span>;
+<a href=#213 id=213 data-nosnippet>213</a>    mmio(regs.write32(GT_PM_CONFIG, GT_DOORBELL_ENABLE))<span class="question-mark">?</span>;
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">let </span>mask = mmio(regs.read32(PMINTRMSK))<span class="question-mark">?</span>;
+<a href=#215 id=215 data-nosnippet>215</a>    mmio(regs.write32(PMINTRMSK, mask &amp; !ARAT_EXPIRED_INTRMSK))
+<a href=#216 id=216 data-nosnippet>216</a>}
+<a href=#217 id=217 data-nosnippet>217</a>
+<a href=#218 id=218 data-nosnippet>218</a><span class="doccomment">/// `guc_xfer_rsa`: the boot ROM reads a key larger than the scratch registers from GGTT;
+<a href=#219 id=219 data-nosnippet>219</a>/// a smaller one must fill all of them (`xe_uc_fw_copy_rsa` short copy is `-ENOMEM`).
+<a href=#220 id=220 data-nosnippet>220</a></span><span class="kw">pub fn </span>transfer_rsa(
+<a href=#221 id=221 data-nosnippet>221</a>    regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile,
+<a href=#222 id=222 data-nosnippet>222</a>    rsa: <span class="kw-2">&amp;</span>[u8],
+<a href=#223 id=223 data-nosnippet>223</a>    rsa_ggtt: u64,
+<a href=#224 id=224 data-nosnippet>224</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">const </span>SCRATCH_BYTES: usize = UOS_RSA_SCRATCH_COUNT * <span class="number">4</span>;
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="kw">if </span>rsa.len() &gt; SCRATCH_BYTES {
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">let </span>addr = u32::try_from(rsa_ggtt).map_err(|<span class="kw">_</span>| GucError::BadImage)<span class="question-mark">?</span>;
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">return </span>mmio(regs.write32(UOS_RSA_SCRATCH_0, addr));
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">if </span>rsa.len() &lt; SCRATCH_BYTES {
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::RsaTooShort);
+<a href=#232 id=232 data-nosnippet>232</a>    }
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">for </span>(i, word) <span class="kw">in </span>rsa.chunks_exact(<span class="number">4</span>).enumerate() {
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span>word = u32::from_le_bytes([word[<span class="number">0</span>], word[<span class="number">1</span>], word[<span class="number">2</span>], word[<span class="number">3</span>]]);
+<a href=#235 id=235 data-nosnippet>235</a>        mmio(regs.write32(UOS_RSA_SCRATCH_0 + i * <span class="number">4</span>, word))<span class="question-mark">?</span>;
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="prelude-val">Ok</span>(())
+<a href=#238 id=238 data-nosnippet>238</a>}
+<a href=#239 id=239 data-nosnippet>239</a>
+<a href=#240 id=240 data-nosnippet>240</a><span class="doccomment">/// `uc_fw_xfer`: DMA the CSS header plus uCode (`size` bytes at GGTT address `src_ggtt`)
+<a href=#241 id=241 data-nosnippet>241</a>/// into WOPCM at `dst_wopcm`, waiting up to 100 ms for the engine.
+<a href=#242 id=242 data-nosnippet>242</a></span><span class="kw">pub fn </span>upload_guc_firmware(
+<a href=#243 id=243 data-nosnippet>243</a>    regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile,
+<a href=#244 id=244 data-nosnippet>244</a>    clock: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Clock,
+<a href=#245 id=245 data-nosnippet>245</a>    src_ggtt: u64,
+<a href=#246 id=246 data-nosnippet>246</a>    dst_wopcm: u32,
+<a href=#247 id=247 data-nosnippet>247</a>    size: usize,
+<a href=#248 id=248 data-nosnippet>248</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">if </span>size == <span class="number">0 </span>|| !size.is_multiple_of(<span class="number">4</span>) {
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::BadImage);
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">let </span>size = u32::try_from(size).map_err(|<span class="kw">_</span>| GucError::BadImage)<span class="question-mark">?</span>;
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="comment">// The high dword carries the address-space selector in bits 20:16.
+<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">let </span>src_high = u32::try_from(src_ggtt &gt;&gt; <span class="number">32</span>)
+<a href=#255 id=255 data-nosnippet>255</a>        .ok()
+<a href=#256 id=256 data-nosnippet>256</a>        .filter(|high| <span class="kw-2">*</span>high &lt;= <span class="number">0xFFFF</span>)
+<a href=#257 id=257 data-nosnippet>257</a>        .ok_or(GucError::BadImage)<span class="question-mark">?</span>;
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>    mmio(regs.write32(GUC_DMA_ADDR_0_LOW, src_ggtt <span class="kw">as </span>u32))<span class="question-mark">?</span>;
+<a href=#260 id=260 data-nosnippet>260</a>    mmio(regs.write32(GUC_DMA_ADDR_0_HIGH, src_high | DMA_ADDRESS_SPACE_GGTT))<span class="question-mark">?</span>;
+<a href=#261 id=261 data-nosnippet>261</a>    mmio(regs.write32(GUC_DMA_ADDR_1_LOW, dst_wopcm))<span class="question-mark">?</span>;
+<a href=#262 id=262 data-nosnippet>262</a>    mmio(regs.write32(GUC_DMA_ADDR_1_HIGH, DMA_ADDRESS_SPACE_WOPCM))<span class="question-mark">?</span>;
+<a href=#263 id=263 data-nosnippet>263</a>    mmio(regs.write32(GUC_DMA_COPY_SIZE, size))<span class="question-mark">?</span>;
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>flags = GUC_DMA_CTRL_UOS_MOVE | GUC_DMA_CTRL_START;
+<a href=#266 id=266 data-nosnippet>266</a>    mmio(regs.write32(GUC_DMA_CTRL, masked_write(flags, flags)))<span class="question-mark">?</span>;
+<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">let </span>start = u32::from(GUC_DMA_CTRL_START);
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span>done = wait32(regs, clock, GUC_DMA_CTRL, start, <span class="number">0</span>, DMA_TIMEOUT_US);
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="comment">// Upstream clears the move bit whether or not the copy finished.
+<a href=#270 id=270 data-nosnippet>270</a>    </span>mmio(regs.write32(GUC_DMA_CTRL, masked_write(<span class="number">0</span>, GUC_DMA_CTRL_UOS_MOVE)))<span class="question-mark">?</span>;
+<a href=#271 id=271 data-nosnippet>271</a>    done.map(|<span class="kw">_</span>| ()).map_err(|e| <span class="kw">match </span>e {
+<a href=#272 id=272 data-nosnippet>272</a>        WaitError::TimedOut(v) =&gt; GucError::DmaTimeout(v),
+<a href=#273 id=273 data-nosnippet>273</a>        WaitError::Mmio =&gt; GucError::Mmio,
+<a href=#274 id=274 data-nosnippet>274</a>    })
+<a href=#275 id=275 data-nosnippet>275</a>}
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a><span class="doccomment">/// What `guc_load_done` makes of one `GUC_STATUS` value.
+<a href=#278 id=278 data-nosnippet>278</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+<a href=#279 id=279 data-nosnippet>279</a></span><span class="kw">pub enum </span>LoadState {
+<a href=#280 id=280 data-nosnippet>280</a>    Running,
+<a href=#281 id=281 data-nosnippet>281</a>    Failed,
+<a href=#282 id=282 data-nosnippet>282</a>    InProgress,
+<a href=#283 id=283 data-nosnippet>283</a>}
+<a href=#284 id=284 data-nosnippet>284</a>
+<a href=#285 id=285 data-nosnippet>285</a><span class="doccomment">/// `guc_load_done`: terminal microkernel codes (`XE_GUC_LOAD_STATUS_*`), then terminal
+<a href=#286 id=286 data-nosnippet>286</a>/// boot ROM codes (`XE_BOOTROM_STATUS_*`), else still loading.
+<a href=#287 id=287 data-nosnippet>287</a></span><span class="kw">pub fn </span>guc_load_done(status: u32) -&gt; LoadState {
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span>ukernel = (status &amp; GUC_STATUS_UKERNEL_MASK) &gt;&gt; <span class="number">8</span>;
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span>bootrom = (status &amp; GUC_STATUS_BOOTROM_MASK) &gt;&gt; <span class="number">1</span>;
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">if </span>status &amp; GUC_STATUS_UKERNEL_MASK == GUC_STATUS_UKERNEL_READY {
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">return </span>LoadState::Running;
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>ukernel_failed = <span class="macro">matches!</span>(
+<a href=#294 id=294 data-nosnippet>294</a>        ukernel,
+<a href=#295 id=295 data-nosnippet>295</a>        <span class="number">0x02</span>..=<span class="number">0x04 </span>| <span class="number">0x07 </span>| <span class="number">0x08 </span>| <span class="number">0x60 </span>| <span class="number">0x70 </span>| <span class="number">0x71 </span>| <span class="number">0x73</span>..=<span class="number">0x76
+<a href=#296 id=296 data-nosnippet>296</a>    </span>);
+<a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">let </span>bootrom_failed = <span class="macro">matches!</span>(
+<a href=#298 id=298 data-nosnippet>298</a>        bootrom,
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="number">0x13 </span>| <span class="number">0x2B </span>| <span class="number">0x50 </span>| <span class="number">0x73 </span>| <span class="number">0x74 </span>| <span class="number">0x75 </span>| <span class="number">0x77 </span>| <span class="number">0x79 </span>| <span class="number">0x7A </span>| <span class="number">0x7E
+<a href=#300 id=300 data-nosnippet>300</a>    </span>);
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">if </span>ukernel_failed || bootrom_failed {
+<a href=#302 id=302 data-nosnippet>302</a>        LoadState::Failed
+<a href=#303 id=303 data-nosnippet>303</a>    } <span class="kw">else </span>{
+<a href=#304 id=304 data-nosnippet>304</a>        LoadState::InProgress
+<a href=#305 id=305 data-nosnippet>305</a>    }
+<a href=#306 id=306 data-nosnippet>306</a>}
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a><span class="doccomment">/// `guc_wait_ucode`: read `GUC_STATUS` every 10 ms until `guc_load_done` reports a terminal
+<a href=#309 id=309 data-nosnippet>309</a>/// state, for at most 3 s. Returns how long the load took in microseconds.
+<a href=#310 id=310 data-nosnippet>310</a></span><span class="kw">pub fn </span>wait_guc_ukernel_running(
+<a href=#311 id=311 data-nosnippet>311</a>    regs: <span class="kw-2">&amp;</span><span class="kw">impl </span>RegisterFile,
+<a href=#312 id=312 data-nosnippet>312</a>    clock: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Clock,
+<a href=#313 id=313 data-nosnippet>313</a>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, GucError&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">let </span>start = clock.now_us();
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">loop </span>{
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">let </span>status = mmio(regs.read32(GUC_STATUS))<span class="question-mark">?</span>;
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">match </span>guc_load_done(status) {
+<a href=#318 id=318 data-nosnippet>318</a>            LoadState::Running =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(clock.now_us() - start),
+<a href=#319 id=319 data-nosnippet>319</a>            LoadState::Failed =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::LoadFailed(status)),
+<a href=#320 id=320 data-nosnippet>320</a>            LoadState::InProgress =&gt; {}
+<a href=#321 id=321 data-nosnippet>321</a>        }
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span>elapsed = clock.now_us() - start;
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">if </span>elapsed &gt;= LOAD_TIMEOUT_US {
+<a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::LoadTimeout(status));
+<a href=#325 id=325 data-nosnippet>325</a>        }
+<a href=#326 id=326 data-nosnippet>326</a>        clock.relax(LOAD_POLL_US.min(LOAD_TIMEOUT_US - elapsed));
+<a href=#327 id=327 data-nosnippet>327</a>    }
+<a href=#328 id=328 data-nosnippet>328</a>}
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a><span class="doccomment">/// `xe_guc_mmio_send_recv` on the primary GT: request dwords into `VF_SW_FLAG(0..n)`,
+<a href=#331 id=331 data-nosnippet>331</a>/// a posting read of the last flag, notify, then wait for a reply with the GuC origin bit.
+<a href=#332 id=332 data-nosnippet>332</a>/// Returns the reply's `DATA0`.
+<a href=#333 id=333 data-nosnippet>333</a></span><span class="kw">pub fn </span>mmio_send(
+<a href=#334 id=334 data-nosnippet>334</a>    regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile,
+<a href=#335 id=335 data-nosnippet>335</a>    clock: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Clock,
+<a href=#336 id=336 data-nosnippet>336</a>    request: <span class="kw-2">&amp;</span>[u32],
+<a href=#337 id=337 data-nosnippet>337</a>) -&gt; <span class="prelude-ty">Result</span>&lt;u32, GucError&gt; {
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="macro">debug_assert!</span>(!request.is_empty() &amp;&amp; request.len() &lt;= VF_SW_FLAG_COUNT);
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">let </span>started = clock.now_us();
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">let </span><span class="kw-2">mut </span>sleep = <span class="number">1_000u64</span>;
+<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">loop </span>{
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>word) <span class="kw">in </span>request.iter().enumerate() {
+<a href=#343 id=343 data-nosnippet>343</a>            mmio(regs.write32(VF_SW_FLAG_0 + <span class="number">4 </span>* i, word))<span class="question-mark">?</span>;
+<a href=#344 id=344 data-nosnippet>344</a>        }
+<a href=#345 id=345 data-nosnippet>345</a>        mmio(regs.read32(VF_SW_FLAG_0 + <span class="number">4 </span>* (VF_SW_FLAG_COUNT - <span class="number">1</span>)))<span class="question-mark">?</span>;
+<a href=#346 id=346 data-nosnippet>346</a>        notify(regs)<span class="question-mark">?</span>;
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span>origin = intel_gpu_core::guc_abi::HXG_ORIGIN_GUC;
+<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span><span class="kw-2">mut </span>header = wait32(
+<a href=#350 id=350 data-nosnippet>350</a>            regs,
+<a href=#351 id=351 data-nosnippet>351</a>            clock,
+<a href=#352 id=352 data-nosnippet>352</a>            VF_SW_FLAG_0,
+<a href=#353 id=353 data-nosnippet>353</a>            origin,
+<a href=#354 id=354 data-nosnippet>354</a>            origin,
+<a href=#355 id=355 data-nosnippet>355</a>            MMIO_REPLY_TIMEOUT_US,
+<a href=#356 id=356 data-nosnippet>356</a>        )<span class="question-mark">?</span>;
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">if </span>decode_mmio_reply(header) == MmioReply::Busy {
+<a href=#358 id=358 data-nosnippet>358</a>            <span class="comment">// SUCCESS (7) and FAILURE (6) differ in one bit; wait for both upper type bits.
+<a href=#359 id=359 data-nosnippet>359</a>            </span><span class="kw">let </span>final_bits = <span class="number">6 </span>&lt;&lt; <span class="number">28</span>;
+<a href=#360 id=360 data-nosnippet>360</a>            header = wait32(
+<a href=#361 id=361 data-nosnippet>361</a>                regs,
+<a href=#362 id=362 data-nosnippet>362</a>                clock,
+<a href=#363 id=363 data-nosnippet>363</a>                VF_SW_FLAG_0,
+<a href=#364 id=364 data-nosnippet>364</a>                final_bits,
+<a href=#365 id=365 data-nosnippet>365</a>                final_bits,
+<a href=#366 id=366 data-nosnippet>366</a>                MMIO_BUSY_TIMEOUT_US,
+<a href=#367 id=367 data-nosnippet>367</a>            )<span class="question-mark">?</span>;
+<a href=#368 id=368 data-nosnippet>368</a>        }
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">match </span>decode_mmio_reply(header) {
+<a href=#370 id=370 data-nosnippet>370</a>            MmioReply::Success(data0) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(data0),
+<a href=#371 id=371 data-nosnippet>371</a>            MmioReply::Retry <span class="kw">if </span>clock.now_us() - started &lt; MMIO_RETRY_LIMIT_US =&gt; {
+<a href=#372 id=372 data-nosnippet>372</a>                clock.relax(sleep);
+<a href=#373 id=373 data-nosnippet>373</a>                sleep = (sleep * <span class="number">2</span>).min(<span class="number">256_000</span>);
+<a href=#374 id=374 data-nosnippet>374</a>            }
+<a href=#375 id=375 data-nosnippet>375</a>            MmioReply::Retry =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::MmioTimeout(header)),
+<a href=#376 id=376 data-nosnippet>376</a>            MmioReply::Failure { hint, error } =&gt; {
+<a href=#377 id=377 data-nosnippet>377</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::MmioFailure { hint, error })
+<a href=#378 id=378 data-nosnippet>378</a>            }
+<a href=#379 id=379 data-nosnippet>379</a>            <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(GucError::MmioProtocol(header)),
+<a href=#380 id=380 data-nosnippet>380</a>        }
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>}
+<a href=#383 id=383 data-nosnippet>383</a>
+<a href=#384 id=384 data-nosnippet>384</a><span class="doccomment">/// `xe_guc_notify`: the firmware ignores the payload so far, so upstream writes 0.
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="kw">pub fn </span>notify(regs: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>RegisterFile) -&gt; <span class="prelude-ty">Result</span>&lt;(), GucError&gt; {
+<a href=#386 id=386 data-nosnippet>386</a>    mmio(regs.write32(GUC_HOST_INTERRUPT, <span class="number">0</span>))
+<a href=#387 id=387 data-nosnippet>387</a>}
+</code></pre></div></section></main></body></html>

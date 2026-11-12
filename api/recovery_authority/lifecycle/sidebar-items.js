@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RESTARTS","VERDICT_POLLS"],"fn":["log_verdict","wait_verdict"],"struct":["Provider"]};

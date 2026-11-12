@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_DISPLAY_EDGE","MIN_DISPLAY_EDGE","VMM_EVT_DAMAGE","VMM_EVT_EXITED","VMM_EVT_SCANOUT"],"enum":["VmmEvent"],"fn":["display_size_valid"],"struct":["VmmResizeRequest"]};

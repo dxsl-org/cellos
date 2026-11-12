@@ -1,0 +1,125 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/intel-gpu-core/src/uapi/ioctl.rs`."><title>ioctl.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="intel_gpu_core" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">intel_gpu_core/uapi/</div>ioctl.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! DRM and Linux Xe ioctl definitions and request decoding.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Upstream reference: `include/uapi/drm/drm.h`, `include/uapi/drm/xe_drm.h` and
+<a href=#4 id=4 data-nosnippet>4</a>//! `include/uapi/asm-generic/ioctl.h` (MIT / GPL-2.0 WITH Linux-syscall-note).
+<a href=#5 id=5 data-nosnippet>5</a>//! Struct sizes are the LP64 layouts every Cellos target uses.
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">pub const </span>DRM_IOCTL_BASE: u32 = <span class="number">0x64</span>; <span class="comment">// 'd'
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">pub const </span>DRM_COMMAND_BASE: u32 = <span class="number">0x40</span>;
+<a href=#9 id=9 data-nosnippet>9</a>
+<a href=#10 id=10 data-nosnippet>10</a><span class="comment">// ── Linux ioctl encoding: nr 7:0, type 15:8, size 29:16, dir 31:30 ─────────────
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">pub const </span>IOC_WRITE: u32 = <span class="number">1</span>;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub const </span>IOC_READ: u32 = <span class="number">2</span>;
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[inline]
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">pub const fn </span>ioctl_nr(cmd: u32) -&gt; u32 {
+<a href=#17 id=17 data-nosnippet>17</a>    cmd &amp; <span class="number">0xFF
+<a href=#18 id=18 data-nosnippet>18</a></span>}
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a><span class="attr">#[inline]
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub const fn </span>ioctl_type(cmd: u32) -&gt; u32 {
+<a href=#22 id=22 data-nosnippet>22</a>    (cmd &gt;&gt; <span class="number">8</span>) &amp; <span class="number">0xFF
+<a href=#23 id=23 data-nosnippet>23</a></span>}
+<a href=#24 id=24 data-nosnippet>24</a>
+<a href=#25 id=25 data-nosnippet>25</a><span class="attr">#[inline]
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub const fn </span>ioctl_size(cmd: u32) -&gt; usize {
+<a href=#27 id=27 data-nosnippet>27</a>    ((cmd &gt;&gt; <span class="number">16</span>) &amp; <span class="number">0x3FFF</span>) <span class="kw">as </span>usize
+<a href=#28 id=28 data-nosnippet>28</a>}
+<a href=#29 id=29 data-nosnippet>29</a>
+<a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[inline]
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub const fn </span>ioctl_dir(cmd: u32) -&gt; u32 {
+<a href=#32 id=32 data-nosnippet>32</a>    cmd &gt;&gt; <span class="number">30
+<a href=#33 id=33 data-nosnippet>33</a></span>}
+<a href=#34 id=34 data-nosnippet>34</a>
+<a href=#35 id=35 data-nosnippet>35</a><span class="doccomment">/// `DRM_IOWR(nr, struct)` for a struct of `size` bytes.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">pub const fn </span>drm_iowr(nr: u32, size: usize) -&gt; u32 {
+<a href=#37 id=37 data-nosnippet>37</a>    ((IOC_READ | IOC_WRITE) &lt;&lt; <span class="number">30</span>) | ((size <span class="kw">as </span>u32) &lt;&lt; <span class="number">16</span>) | (DRM_IOCTL_BASE &lt;&lt; <span class="number">8</span>) | nr
+<a href=#38 id=38 data-nosnippet>38</a>}
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a><span class="doccomment">/// `DRM_IOW(nr, struct)` for a struct of `size` bytes.
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub const fn </span>drm_iow(nr: u32, size: usize) -&gt; u32 {
+<a href=#42 id=42 data-nosnippet>42</a>    (IOC_WRITE &lt;&lt; <span class="number">30</span>) | ((size <span class="kw">as </span>u32) &lt;&lt; <span class="number">16</span>) | (DRM_IOCTL_BASE &lt;&lt; <span class="number">8</span>) | nr
+<a href=#43 id=43 data-nosnippet>43</a>}
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a><span class="comment">// ── DRM Core ioctl numbers ───────────────────────────────────────────────────
+<a href=#46 id=46 data-nosnippet>46</a>
+<a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub const </span>DRM_IOCTL_NR_VERSION: u32 = <span class="number">0x00</span>;
+<a href=#48 id=48 data-nosnippet>48</a><span class="kw">pub const </span>DRM_IOCTL_NR_GET_CAP: u32 = <span class="number">0x0C</span>;
+<a href=#49 id=49 data-nosnippet>49</a><span class="kw">pub const </span>DRM_IOCTL_NR_GEM_CLOSE: u32 = <span class="number">0x09</span>;
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_CREATE: u32 = <span class="number">0xBF</span>;
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_DESTROY: u32 = <span class="number">0xC0</span>;
+<a href=#53 id=53 data-nosnippet>53</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_WAIT: u32 = <span class="number">0xC3</span>;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_RESET: u32 = <span class="number">0xC4</span>;
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_SIGNAL: u32 = <span class="number">0xC5</span>;
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_TIMELINE_WAIT: u32 = <span class="number">0xCA</span>;
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_QUERY: u32 = <span class="number">0xCB</span>;
+<a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_TRANSFER: u32 = <span class="number">0xCC</span>;
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub const </span>DRM_IOCTL_NR_SYNCOBJ_TIMELINE_SIGNAL: u32 = <span class="number">0xCD</span>;
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a><span class="comment">// ── Xe Driver Specific ioctl numbers ─────────────────────────────────────────
+<a href=#62 id=62 data-nosnippet>62</a>
+<a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub const </span>DRM_XE_DEVICE_QUERY: u32 = DRM_COMMAND_BASE; <span class="comment">// 0x40
+<a href=#64 id=64 data-nosnippet>64</a></span><span class="kw">pub const </span>DRM_XE_GEM_CREATE: u32 = DRM_COMMAND_BASE + <span class="number">0x01</span>; <span class="comment">// 0x41
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub const </span>DRM_XE_GEM_MMAP_OFFSET: u32 = DRM_COMMAND_BASE + <span class="number">0x02</span>; <span class="comment">// 0x42
+<a href=#66 id=66 data-nosnippet>66</a></span><span class="kw">pub const </span>DRM_XE_VM_CREATE: u32 = DRM_COMMAND_BASE + <span class="number">0x03</span>; <span class="comment">// 0x43
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub const </span>DRM_XE_VM_DESTROY: u32 = DRM_COMMAND_BASE + <span class="number">0x04</span>; <span class="comment">// 0x44
+<a href=#68 id=68 data-nosnippet>68</a></span><span class="kw">pub const </span>DRM_XE_VM_BIND: u32 = DRM_COMMAND_BASE + <span class="number">0x05</span>; <span class="comment">// 0x45
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="kw">pub const </span>DRM_XE_EXEC_QUEUE_CREATE: u32 = DRM_COMMAND_BASE + <span class="number">0x06</span>; <span class="comment">// 0x46
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub const </span>DRM_XE_EXEC_QUEUE_DESTROY: u32 = DRM_COMMAND_BASE + <span class="number">0x07</span>; <span class="comment">// 0x47
+<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">pub const </span>DRM_XE_EXEC_QUEUE_GET_PROPERTY: u32 = DRM_COMMAND_BASE + <span class="number">0x08</span>; <span class="comment">// 0x48
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">pub const </span>DRM_XE_EXEC: u32 = DRM_COMMAND_BASE + <span class="number">0x09</span>; <span class="comment">// 0x49
+<a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">pub const </span>DRM_XE_VM_GET_PROPERTY: u32 = DRM_COMMAND_BASE + <span class="number">0x0F</span>; <span class="comment">// 0x4F
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>// ── Full request codes the shim serves (direction and struct size included) ──
+<a href=#76 id=76 data-nosnippet>76</a>
+<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">pub const </span>DRM_IOCTL_VERSION: u32 = drm_iowr(DRM_IOCTL_NR_VERSION, <span class="number">64</span>);
+<a href=#78 id=78 data-nosnippet>78</a><span class="kw">pub const </span>DRM_IOCTL_GET_CAP: u32 = drm_iowr(DRM_IOCTL_NR_GET_CAP, <span class="number">16</span>);
+<a href=#79 id=79 data-nosnippet>79</a><span class="kw">pub const </span>DRM_IOCTL_GEM_CLOSE: u32 = drm_iow(DRM_IOCTL_NR_GEM_CLOSE, <span class="number">8</span>);
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">pub const </span>DRM_IOCTL_SYNCOBJ_CREATE: u32 = drm_iowr(DRM_IOCTL_NR_SYNCOBJ_CREATE, <span class="number">8</span>);
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">pub const </span>DRM_IOCTL_SYNCOBJ_DESTROY: u32 = drm_iowr(DRM_IOCTL_NR_SYNCOBJ_DESTROY, <span class="number">8</span>);
+<a href=#82 id=82 data-nosnippet>82</a><span class="kw">pub const </span>DRM_IOCTL_XE_DEVICE_QUERY: u32 = drm_iowr(DRM_XE_DEVICE_QUERY, <span class="number">40</span>);
+<a href=#83 id=83 data-nosnippet>83</a><span class="kw">pub const </span>DRM_IOCTL_XE_GEM_CREATE: u32 = drm_iowr(DRM_XE_GEM_CREATE, <span class="number">56</span>);
+<a href=#84 id=84 data-nosnippet>84</a><span class="kw">pub const </span>DRM_IOCTL_XE_GEM_MMAP_OFFSET: u32 = drm_iowr(DRM_XE_GEM_MMAP_OFFSET, <span class="number">40</span>);
+<a href=#85 id=85 data-nosnippet>85</a><span class="kw">pub const </span>DRM_IOCTL_XE_VM_CREATE: u32 = drm_iowr(DRM_XE_VM_CREATE, <span class="number">32</span>);
+<a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub const </span>DRM_IOCTL_XE_VM_DESTROY: u32 = drm_iow(DRM_XE_VM_DESTROY, <span class="number">24</span>);
+<a href=#87 id=87 data-nosnippet>87</a><span class="kw">pub const </span>DRM_IOCTL_XE_VM_BIND: u32 = drm_iow(DRM_XE_VM_BIND, VM_BIND_SIZE);
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">pub const </span>DRM_IOCTL_XE_EXEC_QUEUE_CREATE: u32 = drm_iowr(DRM_XE_EXEC_QUEUE_CREATE, <span class="number">48</span>);
+<a href=#89 id=89 data-nosnippet>89</a><span class="kw">pub const </span>DRM_IOCTL_XE_EXEC_QUEUE_DESTROY: u32 = drm_iow(DRM_XE_EXEC_QUEUE_DESTROY, <span class="number">24</span>);
+<a href=#90 id=90 data-nosnippet>90</a><span class="kw">pub const </span>DRM_IOCTL_XE_EXEC_QUEUE_GET_PROPERTY: u32 = drm_iowr(DRM_XE_EXEC_QUEUE_GET_PROPERTY, <span class="number">40</span>);
+<a href=#91 id=91 data-nosnippet>91</a><span class="kw">pub const </span>DRM_IOCTL_XE_EXEC: u32 = drm_iow(DRM_XE_EXEC, <span class="number">56</span>);
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a><span class="doccomment">/// `sizeof(struct drm_xe_engine_class_instance)`, the element `EXEC_QUEUE_CREATE.instances`
+<a href=#94 id=94 data-nosnippet>94</a>/// points at.
+<a href=#95 id=95 data-nosnippet>95</a></span><span class="kw">pub const </span>EXEC_QUEUE_INSTANCE_SIZE: usize = <span class="number">8</span>;
+<a href=#96 id=96 data-nosnippet>96</a><span class="doccomment">/// `sizeof(struct drm_xe_vm_bind)`.
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="kw">pub const </span>VM_BIND_SIZE: usize = <span class="number">136</span>;
+<a href=#98 id=98 data-nosnippet>98</a><span class="doccomment">/// `sizeof(struct drm_xe_vm_bind_op)`, the element `drm_xe_vm_bind.vector_of_binds`
+<a href=#99 id=99 data-nosnippet>99</a>/// points at when `num_binds &gt; 1`.
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">pub const </span>VM_BIND_OP_SIZE: usize = <span class="number">80</span>;
+<a href=#101 id=101 data-nosnippet>101</a><span class="doccomment">/// `sizeof(struct drm_xe_sync)`, the element `syncs` points at in `VM_BIND` and `EXEC`.
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub const </span>XE_SYNC_SIZE: usize = <span class="number">48</span>;
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="comment">// ── DRM Caps ─────────────────────────────────────────────────────────────────
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub const </span>DRM_CAP_SYNCOBJ: u64 = <span class="number">0x13</span>;
+<a href=#107 id=107 data-nosnippet>107</a><span class="kw">pub const </span>DRM_CAP_SYNCOBJ_TIMELINE: u64 = <span class="number">0x14</span>;
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a><span class="comment">// ── Linux standard error numbers returned to Mesa ────────────────────────────
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a></span><span class="kw">pub const </span>EINVAL: i32 = <span class="number">22</span>;
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">pub const </span>ENOENT: i32 = <span class="number">2</span>;
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">pub const </span>ENOMEM: i32 = <span class="number">12</span>;
+<a href=#114 id=114 data-nosnippet>114</a><span class="kw">pub const </span>EPERM: i32 = <span class="number">1</span>;
+<a href=#115 id=115 data-nosnippet>115</a><span class="kw">pub const </span>EOPNOTSUPP: i32 = <span class="number">95</span>;
+<a href=#116 id=116 data-nosnippet>116</a><span class="kw">pub const </span>ECANCELED: i32 = <span class="number">125</span>;
+<a href=#117 id=117 data-nosnippet>117</a><span class="kw">pub const </span>ETIME: i32 = <span class="number">62</span>;
+<a href=#118 id=118 data-nosnippet>118</a><span class="kw">pub const </span>EBADF: i32 = <span class="number">9</span>;
+<a href=#119 id=119 data-nosnippet>119</a><span class="kw">pub const </span>EFAULT: i32 = <span class="number">14</span>;
+<a href=#120 id=120 data-nosnippet>120</a><span class="kw">pub const </span>EIO: i32 = <span class="number">5</span>;
+<a href=#121 id=121 data-nosnippet>121</a><span class="kw">pub const </span>ENODEV: i32 = <span class="number">19</span>;
+<a href=#122 id=122 data-nosnippet>122</a><span class="kw">pub const </span>EMFILE: i32 = <span class="number">24</span>;
+<a href=#123 id=123 data-nosnippet>123</a><span class="kw">pub const </span>ENFILE: i32 = <span class="number">23</span>;
+<a href=#124 id=124 data-nosnippet>124</a><span class="kw">pub const </span>EAGAIN: i32 = <span class="number">11</span>;
+</code></pre></div></section></main></body></html>

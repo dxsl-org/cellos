@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","main"],"mod":["framework","scenarios"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","main"],"mod":["echo","framework","scenarios"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

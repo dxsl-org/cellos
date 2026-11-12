@@ -3,9 +3,9 @@
 <a href=#3 id=3 data-nosnippet>3</a>    CONFIG_BYTES, POSTED_BYTES, READY_BYTES, SUMMARY_BYTES,
 <a href=#4 id=4 data-nosnippet>4</a>};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>api::task::TaskPriority;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>ostd::syscall::{
-<a href=#7 id=7 data-nosnippet>7</a>    sys_force_exit, sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned,
-<a href=#8 id=8 data-nosnippet>8</a>    SyscallResult,
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::syscall::{
+<a href=#8 id=8 data-nosnippet>8</a>    sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
 <a href=#9 id=9 data-nosnippet>9</a>};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::task::yield_now;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>service_net_broker::bench_oracle::{
@@ -56,7 +56,7 @@
 <a href=#56 id=56 data-nosnippet>56</a>}
 <a href=#57 id=57 data-nosnippet>57</a>
 <a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub fn </span>broker_snapshot(sequence: u64) -&gt; <span class="prelude-ty">Option</span>&lt;OracleSnapshot&gt; {
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>broker_tid = sys_lookup_service(api::syscall::service::NET_BROKER)<span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>broker_tid = provider_tid(api::syscall::service::NET_BROKER)<span class="question-mark">?</span>;
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span><span class="kw-2">mut </span>tx = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>len = encode_snapshot_request(sequence, <span class="kw-2">&amp;mut </span>tx).ok()<span class="question-mark">?</span>;

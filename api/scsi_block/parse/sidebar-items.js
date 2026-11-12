@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEVICE_TYPE_DISK","INQUIRY_LEN","QUALIFIER_CONNECTED"],"fn":["inquiry","read_capacity_16","report_luns"],"struct":["Capacity","Inquiry","LunList"]};

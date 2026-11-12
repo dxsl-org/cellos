@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PATH_BYTES","WORKSPACE_ROOT"],"enum":["PathRefusal"],"fn":["confine"]};

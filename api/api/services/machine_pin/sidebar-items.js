@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FRAME_VERSION","REQUEST_BYTES","RESPONSE_BYTES"],"enum":["MachinePinRequest","MachinePinResponse","PinState","Refusal"]};

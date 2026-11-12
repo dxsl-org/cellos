@@ -117,32 +117,50 @@
 <a href=#117 id=117 data-nosnippet>117</a>    <span class="attr">#[test]
 <a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">fn </span>relative_edges_do_not_accumulate_offscreen_debt() {
 <a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new(<span class="number">1920</span>, <span class="number">1080</span>);
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, (-<span class="number">1200i32</span>) <span class="kw">as </span>u32)), (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>));
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, <span class="number">10</span>)), (<span class="number">10</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">0</span>));
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, i32::MAX <span class="kw">as </span>u32)), (<span class="number">1919</span>, <span class="number">0</span>, <span class="number">1909</span>, <span class="number">0</span>));
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, (-<span class="number">1i32</span>) <span class="kw">as </span>u32)), (<span class="number">1918</span>, <span class="number">0</span>, -<span class="number">1</span>, <span class="number">0</span>));
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_Y, <span class="number">2000</span>)), (<span class="number">1918</span>, <span class="number">1079</span>, <span class="number">0</span>, <span class="number">1079</span>));
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_Y, (-<span class="number">1i32</span>) <span class="kw">as </span>u32)), (<span class="number">1918</span>, <span class="number">1078</span>, <span class="number">0</span>, -<span class="number">1</span>));
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="attr">#[test]
-<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">fn </span>absolute_coordinates_are_pixels_not_scaled_again() {
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new(<span class="number">1280</span>, <span class="number">800</span>);
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_X, <span class="number">295</span>)), (<span class="number">295</span>, <span class="number">0</span>, <span class="number">295</span>, <span class="number">0</span>));
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_Y, <span class="number">119</span>)), (<span class="number">295</span>, <span class="number">119</span>, <span class="number">0</span>, <span class="number">119</span>));
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_X, <span class="number">1279</span>)), (<span class="number">1279</span>, <span class="number">119</span>, <span class="number">984</span>, <span class="number">0</span>));
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_Y, <span class="number">799</span>)), (<span class="number">1279</span>, <span class="number">799</span>, <span class="number">0</span>, <span class="number">680</span>));
-<a href=#135 id=135 data-nosnippet>135</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_X, u32::MAX)), (<span class="number">1279</span>, <span class="number">799</span>, <span class="number">0</span>, <span class="number">0</span>));
-<a href=#136 id=136 data-nosnippet>136</a>    }
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="attr">#[test]
-<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">fn </span>wheel_remains_signed_and_zero_extent_is_safe() {
-<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new(<span class="number">0</span>, <span class="number">0</span>);
-<a href=#141 id=141 data-nosnippet>141</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, <span class="number">500</span>)), (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>));
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#143 id=143 data-nosnippet>143</a>            mouse.apply_rel(REL_WHEEL, (-<span class="number">2i32</span>) <span class="kw">as </span>u32),
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="prelude-val">Some</span>(InputEvent::MouseScroll { dx: <span class="number">0</span>, dy: -<span class="number">2 </span>})
-<a href=#145 id=145 data-nosnippet>145</a>        ));
-<a href=#146 id=146 data-nosnippet>146</a>    }
-<a href=#147 id=147 data-nosnippet>147</a>}
+<a href=#120 id=120 data-nosnippet>120</a>        <span class="macro">assert_eq!</span>(
+<a href=#121 id=121 data-nosnippet>121</a>            position(mouse.apply_rel(REL_X, (-<span class="number">1200i32</span>) <span class="kw">as </span>u32)),
+<a href=#122 id=122 data-nosnippet>122</a>            (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>)
+<a href=#123 id=123 data-nosnippet>123</a>        );
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, <span class="number">10</span>)), (<span class="number">10</span>, <span class="number">0</span>, <span class="number">10</span>, <span class="number">0</span>));
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="macro">assert_eq!</span>(
+<a href=#126 id=126 data-nosnippet>126</a>            position(mouse.apply_rel(REL_X, i32::MAX <span class="kw">as </span>u32)),
+<a href=#127 id=127 data-nosnippet>127</a>            (<span class="number">1919</span>, <span class="number">0</span>, <span class="number">1909</span>, <span class="number">0</span>)
+<a href=#128 id=128 data-nosnippet>128</a>        );
+<a href=#129 id=129 data-nosnippet>129</a>        <span class="macro">assert_eq!</span>(
+<a href=#130 id=130 data-nosnippet>130</a>            position(mouse.apply_rel(REL_X, (-<span class="number">1i32</span>) <span class="kw">as </span>u32)),
+<a href=#131 id=131 data-nosnippet>131</a>            (<span class="number">1918</span>, <span class="number">0</span>, -<span class="number">1</span>, <span class="number">0</span>)
+<a href=#132 id=132 data-nosnippet>132</a>        );
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="macro">assert_eq!</span>(
+<a href=#134 id=134 data-nosnippet>134</a>            position(mouse.apply_rel(REL_Y, <span class="number">2000</span>)),
+<a href=#135 id=135 data-nosnippet>135</a>            (<span class="number">1918</span>, <span class="number">1079</span>, <span class="number">0</span>, <span class="number">1079</span>)
+<a href=#136 id=136 data-nosnippet>136</a>        );
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert_eq!</span>(
+<a href=#138 id=138 data-nosnippet>138</a>            position(mouse.apply_rel(REL_Y, (-<span class="number">1i32</span>) <span class="kw">as </span>u32)),
+<a href=#139 id=139 data-nosnippet>139</a>            (<span class="number">1918</span>, <span class="number">1078</span>, <span class="number">0</span>, -<span class="number">1</span>)
+<a href=#140 id=140 data-nosnippet>140</a>        );
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="attr">#[test]
+<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">fn </span>absolute_coordinates_are_pixels_not_scaled_again() {
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new(<span class="number">1280</span>, <span class="number">800</span>);
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_X, <span class="number">295</span>)), (<span class="number">295</span>, <span class="number">0</span>, <span class="number">295</span>, <span class="number">0</span>));
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_Y, <span class="number">119</span>)), (<span class="number">295</span>, <span class="number">119</span>, <span class="number">0</span>, <span class="number">119</span>));
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_X, <span class="number">1279</span>)), (<span class="number">1279</span>, <span class="number">119</span>, <span class="number">984</span>, <span class="number">0</span>));
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_abs(ABS_Y, <span class="number">799</span>)), (<span class="number">1279</span>, <span class="number">799</span>, <span class="number">0</span>, <span class="number">680</span>));
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="macro">assert_eq!</span>(
+<a href=#151 id=151 data-nosnippet>151</a>            position(mouse.apply_abs(ABS_X, u32::MAX)),
+<a href=#152 id=152 data-nosnippet>152</a>            (<span class="number">1279</span>, <span class="number">799</span>, <span class="number">0</span>, <span class="number">0</span>)
+<a href=#153 id=153 data-nosnippet>153</a>        );
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="attr">#[test]
+<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">fn </span>wheel_remains_signed_and_zero_extent_is_safe() {
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span><span class="kw-2">mut </span>mouse = MouseState::new(<span class="number">0</span>, <span class="number">0</span>);
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="macro">assert_eq!</span>(position(mouse.apply_rel(REL_X, <span class="number">500</span>)), (<span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>));
+<a href=#160 id=160 data-nosnippet>160</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#161 id=161 data-nosnippet>161</a>            mouse.apply_rel(REL_WHEEL, (-<span class="number">2i32</span>) <span class="kw">as </span>u32),
+<a href=#162 id=162 data-nosnippet>162</a>            <span class="prelude-val">Some</span>(InputEvent::MouseScroll { dx: <span class="number">0</span>, dy: -<span class="number">2 </span>})
+<a href=#163 id=163 data-nosnippet>163</a>        ));
+<a href=#164 id=164 data-nosnippet>164</a>    }
+<a href=#165 id=165 data-nosnippet>165</a>}
 </code></pre></div></section></main></body></html>

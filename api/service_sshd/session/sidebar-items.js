@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SessionPhase"],"struct":["SshSession"]};
+window.SIDEBAR_ITEMS = {"constant":["DISCONNECT_KEY_EXCHANGE_FAILED","MAX_VERSION_LINE"],"enum":["SessionPhase"],"struct":["SshSession"]};

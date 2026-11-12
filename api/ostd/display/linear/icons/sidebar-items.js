@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ICON_SIZE"],"enum":["LineIcon"],"fn":["paint_icon"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BIOS_OWNED_BIT","CAP_ID_USB_LEGACY","OS_OWNED_BIT"],"fn":["bios_handoff"],"struct":["LegacyHandoffResult"],"trait":["XhciMmio"]};

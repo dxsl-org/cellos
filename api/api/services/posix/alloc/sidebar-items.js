@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["_ZdaPv","_ZdaPvm","_ZdlPv","_ZdlPvm","_Znam","_Znwm","calloc","free","malloc","realloc"]};

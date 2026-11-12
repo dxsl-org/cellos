@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Spinlock","SpinlockGuard"]};
+window.SIDEBAR_ITEMS = {"fn":["install_hart_hooks","installed_hart_id"],"mod":["rank"],"static":["HART_ID_HOOK","SPIN_HOOK"],"struct":["Spinlock","SpinlockGuard"]};

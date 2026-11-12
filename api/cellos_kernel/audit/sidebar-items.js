@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","MASK"],"enum":["AuditEvent"],"fn":["drain","dropped_count","encode_u32x2","log_event"],"static":["RING","WRITE"],"struct":["AuditRing"]};
+window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","DROP_RECORD_LEN","MASK"],"enum":["AuditEvent"],"fn":["consume","copy_whole_records","dropped_count","encode_subject","encode_u32x2","evict_for","log_event","peek","push_record","record_len_at","tail_after_consume","write_record_bytes"],"static":["RING","WRITE"],"struct":["AuditRing","Subject"]};

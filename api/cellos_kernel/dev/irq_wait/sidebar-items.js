@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_IRQ","NO_WAITER","SET_WORDS"],"fn":["clear_waiter","get_mmio_base","has_waiter","hint_msi_wake","pending_in","register_waiter","release_waiters_for","restore_pending","signal_irq","take_pending","take_wake_hint"],"static":["IRQ_MMIO_BASE","IRQ_PENDING","IRQ_WAITERS","MSI_WAKE"],"struct":["IrqLineSet"]};

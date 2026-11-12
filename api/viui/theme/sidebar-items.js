@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SystemPalette"],"fn":["theme_for_palette"],"static":["DARK_THEME","LIGHT_THEME","PAPER_THEME"],"struct":["DarkTheme","KioskTheme","LightTheme","PaperTheme","RobotTheme","ThemePreferenceState"],"trait":["ViTheme"]};
+window.SIDEBAR_ITEMS = {"enum":["SystemPalette"],"fn":["system","system_palette","system_serial","theme_for_palette"],"static":["DARK_THEME","LIGHT_THEME","PAPER_THEME"],"struct":["DarkTheme","KioskTheme","LightTheme","PaperTheme","RobotTheme","ThemePreferenceState"],"trait":["ViTheme"]};

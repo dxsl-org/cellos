@@ -125,7 +125,7 @@
 <a href=#125 id=125 data-nosnippet>125</a>    </span>Pipeline(Vec&lt;Cmd&gt;),
 <a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// `cmd1 | cmd2 &amp;` — a background marker on a multi-stage pipeline. The
 <a href=#127 id=127 data-nosnippet>127</a>    /// executor refuses it before any effect; it is never run in the foreground.
-<a href=#128 id=128 data-nosnippet>128</a>    </span>BackgroundPipeline(Vec&lt;Cmd&gt;),
+<a href=#128 id=128 data-nosnippet>128</a>    </span>BackgroundPipeline,
 <a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// `cmd &amp;` — run in background.
 <a href=#130 id=130 data-nosnippet>130</a>    </span>Background(Cmd),
 <a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// Syntax the grammar rejects (misplaced `&amp;`, empty pipeline stage, redirect
@@ -691,7 +691,7 @@
 <a href=#691 id=691 data-nosnippet>691</a>        <span class="kw">return match </span>cmds.len() {
 <a href=#692 id=692 data-nosnippet>692</a>            <span class="number">0 </span>=&gt; Ast::Empty,
 <a href=#693 id=693 data-nosnippet>693</a>            <span class="number">1 </span>=&gt; Ast::Background(cmds.into_iter().next().unwrap_or_else(Cmd::new)),
-<a href=#694 id=694 data-nosnippet>694</a>            <span class="kw">_ </span>=&gt; Ast::BackgroundPipeline(cmds),
+<a href=#694 id=694 data-nosnippet>694</a>            <span class="kw">_ </span>=&gt; Ast::BackgroundPipeline,
 <a href=#695 id=695 data-nosnippet>695</a>        };
 <a href=#696 id=696 data-nosnippet>696</a>    }
 <a href=#697 id=697 data-nosnippet>697</a>    <span class="kw">match </span>cmds.len() {
@@ -884,54 +884,58 @@
 <a href=#884 id=884 data-nosnippet>884</a>
 <a href=#885 id=885 data-nosnippet>885</a>    <span class="attr">#[test]
 <a href=#886 id=886 data-nosnippet>886</a>    </span><span class="kw">fn </span>background_marker_on_a_pipeline_is_kept_not_ignored() {
-<a href=#887 id=887 data-nosnippet>887</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"ps --records | take 1 &amp;"</span>), Ast::BackgroundPipeline(c) <span class="kw">if </span>c.len() == <span class="number">2</span>));
-<a href=#888 id=888 data-nosnippet>888</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"sleep 1 &amp;"</span>), Ast::Background(<span class="kw">_</span>)));
-<a href=#889 id=889 data-nosnippet>889</a>    }
-<a href=#890 id=890 data-nosnippet>890</a>
-<a href=#891 id=891 data-nosnippet>891</a>    <span class="attr">#[test]
-<a href=#892 id=892 data-nosnippet>892</a>    </span><span class="kw">fn </span>misplaced_background_marker_is_invalid() {
-<a href=#893 id=893 data-nosnippet>893</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"a &amp; b"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#894 id=894 data-nosnippet>894</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"a &amp; | b"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#895 id=895 data-nosnippet>895</a>    }
-<a href=#896 id=896 data-nosnippet>896</a>
-<a href=#897 id=897 data-nosnippet>897</a>    <span class="attr">#[test]
-<a href=#898 id=898 data-nosnippet>898</a>    </span><span class="kw">fn </span>empty_pipeline_stage_is_invalid() {
-<a href=#899 id=899 data-nosnippet>899</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"ps --records |"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#900 id=900 data-nosnippet>900</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"| take 1"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#901 id=901 data-nosnippet>901</a>    }
-<a href=#902 id=902 data-nosnippet>902</a>
-<a href=#903 id=903 data-nosnippet>903</a>    <span class="attr">#[test]
-<a href=#904 id=904 data-nosnippet>904</a>    </span><span class="kw">fn </span>redirect_without_target_is_invalid() {
-<a href=#905 id=905 data-nosnippet>905</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"echo hi &gt;"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#906 id=906 data-nosnippet>906</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"cat &lt; | grep x"</span>), Ast::Invalid(<span class="kw">_</span>)));
-<a href=#907 id=907 data-nosnippet>907</a>    }
-<a href=#908 id=908 data-nosnippet>908</a>
-<a href=#909 id=909 data-nosnippet>909</a>    <span class="attr">#[test]
-<a href=#910 id=910 data-nosnippet>910</a>    </span><span class="kw">fn </span>quoted_comparison_operators_stay_arguments() {
-<a href=#911 id=911 data-nosnippet>911</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where cpu_tenths '&gt;' uint:0 | take 3"</span>) <span class="kw">else </span>{
-<a href=#912 id=912 data-nosnippet>912</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
-<a href=#913 id=913 data-nosnippet>913</a>        };
-<a href=#914 id=914 data-nosnippet>914</a>        <span class="macro">assert_eq!</span>(cmds.len(), <span class="number">3</span>);
-<a href=#915 id=915 data-nosnippet>915</a>        <span class="macro">assert!</span>(cmds[<span class="number">1</span>].redirects.is_empty());
-<a href=#916 id=916 data-nosnippet>916</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">2</span>].text, <span class="string">"&gt;"</span>);
-<a href=#917 id=917 data-nosnippet>917</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">2</span>].quote, QuoteStyle::Single);
-<a href=#918 id=918 data-nosnippet>918</a>    }
-<a href=#919 id=919 data-nosnippet>919</a>
-<a href=#920 id=920 data-nosnippet>920</a>    <span class="attr">#[test]
-<a href=#921 id=921 data-nosnippet>921</a>    </span><span class="kw">fn </span>single_quoted_json_literal_keeps_double_quotes() {
-<a href=#922 id=922 data-nosnippet>922</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where state == '\"running\"'"</span>) <span class="kw">else </span>{
-<a href=#923 id=923 data-nosnippet>923</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
-<a href=#924 id=924 data-nosnippet>924</a>        };
-<a href=#925 id=925 data-nosnippet>925</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">3</span>].text, <span class="string">"\"running\""</span>);
-<a href=#926 id=926 data-nosnippet>926</a>    }
-<a href=#927 id=927 data-nosnippet>927</a>
-<a href=#928 id=928 data-nosnippet>928</a>    <span class="attr">#[test]
-<a href=#929 id=929 data-nosnippet>929</a>    </span><span class="kw">fn </span>unquoted_operator_remains_a_redirect() {
-<a href=#930 id=930 data-nosnippet>930</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where cpu_tenths &gt; 0"</span>) <span class="kw">else </span>{
-<a href=#931 id=931 data-nosnippet>931</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
-<a href=#932 id=932 data-nosnippet>932</a>        };
-<a href=#933 id=933 data-nosnippet>933</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv.len(), <span class="number">2</span>);
-<a href=#934 id=934 data-nosnippet>934</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].redirects.len(), <span class="number">1</span>);
-<a href=#935 id=935 data-nosnippet>935</a>    }
-<a href=#936 id=936 data-nosnippet>936</a>}
+<a href=#887 id=887 data-nosnippet>887</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#888 id=888 data-nosnippet>888</a>            parse(<span class="string">"ps --records | take 1 &amp;"</span>),
+<a href=#889 id=889 data-nosnippet>889</a>            Ast::BackgroundPipeline
+<a href=#890 id=890 data-nosnippet>890</a>        ));
+<a href=#891 id=891 data-nosnippet>891</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"sleep 1 &amp;"</span>), Ast::Background(<span class="kw">_</span>)));
+<a href=#892 id=892 data-nosnippet>892</a>    }
+<a href=#893 id=893 data-nosnippet>893</a>
+<a href=#894 id=894 data-nosnippet>894</a>    <span class="attr">#[test]
+<a href=#895 id=895 data-nosnippet>895</a>    </span><span class="kw">fn </span>misplaced_background_marker_is_invalid() {
+<a href=#896 id=896 data-nosnippet>896</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"a &amp; b"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#897 id=897 data-nosnippet>897</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"a &amp; | b"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#898 id=898 data-nosnippet>898</a>    }
+<a href=#899 id=899 data-nosnippet>899</a>
+<a href=#900 id=900 data-nosnippet>900</a>    <span class="attr">#[test]
+<a href=#901 id=901 data-nosnippet>901</a>    </span><span class="kw">fn </span>empty_pipeline_stage_is_invalid() {
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"ps --records |"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#903 id=903 data-nosnippet>903</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"| take 1"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#904 id=904 data-nosnippet>904</a>    }
+<a href=#905 id=905 data-nosnippet>905</a>
+<a href=#906 id=906 data-nosnippet>906</a>    <span class="attr">#[test]
+<a href=#907 id=907 data-nosnippet>907</a>    </span><span class="kw">fn </span>redirect_without_target_is_invalid() {
+<a href=#908 id=908 data-nosnippet>908</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"echo hi &gt;"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(parse(<span class="string">"cat &lt; | grep x"</span>), Ast::Invalid(<span class="kw">_</span>)));
+<a href=#910 id=910 data-nosnippet>910</a>    }
+<a href=#911 id=911 data-nosnippet>911</a>
+<a href=#912 id=912 data-nosnippet>912</a>    <span class="attr">#[test]
+<a href=#913 id=913 data-nosnippet>913</a>    </span><span class="kw">fn </span>quoted_comparison_operators_stay_arguments() {
+<a href=#914 id=914 data-nosnippet>914</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where cpu_tenths '&gt;' uint:0 | take 3"</span>)
+<a href=#915 id=915 data-nosnippet>915</a>        <span class="kw">else </span>{
+<a href=#916 id=916 data-nosnippet>916</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
+<a href=#917 id=917 data-nosnippet>917</a>        };
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="macro">assert_eq!</span>(cmds.len(), <span class="number">3</span>);
+<a href=#919 id=919 data-nosnippet>919</a>        <span class="macro">assert!</span>(cmds[<span class="number">1</span>].redirects.is_empty());
+<a href=#920 id=920 data-nosnippet>920</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">2</span>].text, <span class="string">"&gt;"</span>);
+<a href=#921 id=921 data-nosnippet>921</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">2</span>].quote, QuoteStyle::Single);
+<a href=#922 id=922 data-nosnippet>922</a>    }
+<a href=#923 id=923 data-nosnippet>923</a>
+<a href=#924 id=924 data-nosnippet>924</a>    <span class="attr">#[test]
+<a href=#925 id=925 data-nosnippet>925</a>    </span><span class="kw">fn </span>single_quoted_json_literal_keeps_double_quotes() {
+<a href=#926 id=926 data-nosnippet>926</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where state == '\"running\"'"</span>) <span class="kw">else </span>{
+<a href=#927 id=927 data-nosnippet>927</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
+<a href=#928 id=928 data-nosnippet>928</a>        };
+<a href=#929 id=929 data-nosnippet>929</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv[<span class="number">3</span>].text, <span class="string">"\"running\""</span>);
+<a href=#930 id=930 data-nosnippet>930</a>    }
+<a href=#931 id=931 data-nosnippet>931</a>
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="attr">#[test]
+<a href=#933 id=933 data-nosnippet>933</a>    </span><span class="kw">fn </span>unquoted_operator_remains_a_redirect() {
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="kw">let </span>Ast::Pipeline(cmds) = parse(<span class="string">"ps --records | where cpu_tenths &gt; 0"</span>) <span class="kw">else </span>{
+<a href=#935 id=935 data-nosnippet>935</a>            <span class="macro">panic!</span>(<span class="string">"expected Pipeline"</span>);
+<a href=#936 id=936 data-nosnippet>936</a>        };
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].argv.len(), <span class="number">2</span>);
+<a href=#938 id=938 data-nosnippet>938</a>        <span class="macro">assert_eq!</span>(cmds[<span class="number">1</span>].redirects.len(), <span class="number">1</span>);
+<a href=#939 id=939 data-nosnippet>939</a>    }
+<a href=#940 id=940 data-nosnippet>940</a>}
 </code></pre></div></section></main></body></html>

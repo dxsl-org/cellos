@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["declared_name","measured_identity"]};

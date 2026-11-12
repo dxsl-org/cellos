@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ABSENT","NOT_PROBED","SECTOR_SIZE"],"fn":["blk_flush","blk_read","blk_read_sectors","blk_write","blk_write_sectors","driver_tid","forget_driver"],"static":["DRIVER_TID"]};
+window.SIDEBAR_ITEMS = {"constant":["VFS_REGISTRATION_WAIT_TICKS"],"enum":["DeviceRef"],"fn":["blk_flush","blk_read","blk_read_sectors","blk_write","blk_write_sectors","discover","wait_for_vfs_registration"],"mod":["discovery","requests","router"],"static":["ROUTER"],"struct":["Syscalls"],"trait":["BlockSys"]};

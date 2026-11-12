@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CELL_SIGNER_PUBKEY","DEV_CELL_SIGNER_PUBKEY"],"fn":["extract_sig","self_test","signature_range","signing_required","verify_cell","verify_cell_with_key"],"static":["PAYLOAD_SCRATCH"]};
+window.SIDEBAR_ITEMS = {"constant":["CELL_SIGNER_PUBKEY","DEV_CELL_SIGNER_PUBKEY"],"fn":["anchor_class","anchor_class_for","extract_sig","self_test","signature_range","signing_required","trust_anchor","unsigned_admitted","verify_cell","verify_cell_with_key"],"static":["PAYLOAD_SCRATCH"]};

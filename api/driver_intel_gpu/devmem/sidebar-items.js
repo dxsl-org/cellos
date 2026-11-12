@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CHUNK_PAGES","PAGE"],"fn":["find_run","read_u32","write_u32s"],"struct":["Chunk","KernelDma","Pool","Region"],"trait":["DmaMemory"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GGTT_PAGE_SIZE","GGTT_PTE_PAT0","GGTT_PTE_PAT1","GSM_LEN","GSM_OFFSET","GUC_TLB_INV_DESC0","GUC_TLB_INV_DESC0_VALID","GUC_TLB_INV_DESC1","GUC_TLB_INV_DESC1_INVALIDATE","WOPCM_SIZE"],"fn":["encode_ggtt_pte","invalidate"],"struct":["Ggtt","GgttAllocator"]};

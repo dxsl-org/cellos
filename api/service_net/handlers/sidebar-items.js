@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_request","handle_typed","make_tcp","send_typed","tcp_state_byte","try_promote"],"mod":["tcp","udp"],"static":["L2_RECV_REQUESTS","L2_SEND_REQUESTS"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_request","handle_typed","make_tcp","port_error_code","report_port_refusal","send_typed","tcp_state_byte","try_promote"],"mod":["tcp","udp"],"static":["L2_RECV_REQUESTS","L2_SEND_REQUESTS","MULTICAST_MEMBERS"]};

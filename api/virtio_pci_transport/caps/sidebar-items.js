@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PCI_CAP_ID_VNDR"],"enum":["CfgType"],"fn":["parse_caps"],"struct":["CapRegion","VirtioCaps"]};

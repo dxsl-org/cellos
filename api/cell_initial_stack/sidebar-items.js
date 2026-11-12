@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AT_BASE","AT_ENTRY","AT_NULL","AT_PAGESZ","AT_PHDR","AT_PHENT","AT_PHNUM","AT_RANDOM","MAX_BYTES","MAX_PHDRS","PAGE_SIZE","PHENT"],"enum":["Error"],"fn":["build"],"struct":["Block","Image"]};

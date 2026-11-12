@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IDENTITIES","QUERY_DEVICE_IDS","VENDOR_INTEL"],"enum":["Admission","IxgbeMac"],"fn":["classify","id","lookup"],"struct":["Identity"]};

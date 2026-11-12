@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["alloc_error_handler","capture_fail_site","fail_site","init_heap","oom_sources","try_box","usage"],"static":["ALLOCATOR","FAIL_SITE","NULL_FROM_HEAP","NULL_FROM_QUOTA"],"struct":["QuotaAlloc"]};
+window.SIDEBAR_ITEMS = {"constant":["OWNER_TAG_BYTES"],"fn":["alloc_error_handler","capture_fail_site","fail_site","init_heap","oom_sources","tagged_layout","try_box","usage"],"static":["ALLOCATOR","FAIL_SITE","NULL_FROM_HEAP","NULL_FROM_QUOTA"],"struct":["HeapIrqMask","QuotaAlloc"]};

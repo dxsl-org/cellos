@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["JMP_BUF_WORDS"],"fn":["longjmp","setjmp"],"struct":["JmpBuf"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_ITERS"],"fn":["hotswap","next_swap_id","rollback_spawned","stash_key_for","wait_for_hotswap_ready","wait_for_service_pause","wait_for_stash_key"],"static":["SWAP_ID_COUNTER"]};
+window.SIDEBAR_ITEMS = {"constant":["WAIT_TICKS"],"fn":["expired","hotswap","next_swap_id","rollback_spawned","stash_key_for","wait_for_hotswap_ready","wait_for_service_pause","wait_for_stash_key"],"static":["SWAP_ID_COUNTER"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CLIENTS","MAX_FILES_PER_CLIENT"],"struct":["Caller","XeServer"]};

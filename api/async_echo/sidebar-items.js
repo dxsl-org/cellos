@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ECHO_PORT","SERVER_TOKEN"],"fn":["cell_main","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};
+window.SIDEBAR_ITEMS = {"constant":["ECHO_PORT","NET_CALL_TICKS","SERVER_TOKEN"],"fn":["cell_main","init_custom_heap","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS","__CUSTOM_HEAP_ARENA"],"struct":["__CustomHeapArena"]};

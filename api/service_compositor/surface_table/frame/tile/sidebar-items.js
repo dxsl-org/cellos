@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_GROUP"],"enum":["Side"],"struct":["Join"]};

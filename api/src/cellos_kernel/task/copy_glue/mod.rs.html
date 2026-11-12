@@ -137,7 +137,7 @@
 <a href=#137 id=137 data-nosnippet>137</a>        guard
 <a href=#138 id=138 data-nosnippet>138</a>            .as_ref()
 <a href=#139 id=139 data-nosnippet>139</a>            .and_then(|s| s.tasks.get(<span class="kw-2">&amp;</span>task_id))
-<a href=#140 id=140 data-nosnippet>140</a>            .map(|t| <span class="self">Self</span>::of(t))
+<a href=#140 id=140 data-nosnippet>140</a>            .map(<span class="self">Self</span>::of)
 <a href=#141 id=141 data-nosnippet>141</a>    }
 <a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// Whether this view uses the shared SAS root rather than a private Domain.
 <a href=#143 id=143 data-nosnippet>143</a>    </span><span class="attr">#[cfg(all(

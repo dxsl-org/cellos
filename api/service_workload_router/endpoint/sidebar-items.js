@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["EndpointKind"],"struct":["EndpointRegistry","ReadyEvidence","WorkloadMember"]};

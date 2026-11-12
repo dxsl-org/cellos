@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Syscall"],"fn":["map_syscall"]};

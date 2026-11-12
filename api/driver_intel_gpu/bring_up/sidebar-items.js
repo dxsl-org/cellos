@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PINNED_GUC"],"enum":["BringUpError"],"fn":["bring_up","guc_firmware_path","load_guc","map_firmware"],"struct":["Loaded","PciIdentity","Ready"],"trait":["Platform"]};

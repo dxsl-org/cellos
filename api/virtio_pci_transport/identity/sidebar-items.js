@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VIRTIO_VENDOR_ID"],"fn":["device_type_for"]};

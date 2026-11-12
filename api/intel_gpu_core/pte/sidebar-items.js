@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ADDR_MASK_4K","PAGE_PRESENT","PAGE_RW","PDE_PS_LEAF","PPGTT_PDE_PDPE_PAT2","PPGTT_PTE_DM","PPGTT_PTE_PAT0","PPGTT_PTE_PAT1","PPGTT_PTE_PAT2","PTE_PS64","XE2_PPGTT_PTE_PAT4","XELPG_PPGTT_PTE_PAT3","XE_PTE_NULL"],"enum":["EncodeError"],"fn":["encode_leaf","encode_null_leaf","encode_table","level_span"],"struct":["PatIndex"]};

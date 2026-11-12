@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DMACR","EEER","EEE_SU","SEM_POLLS","SWFW_EEP_SM","SWFW_PHY0_SM","SWFW_PHY1_SM","SWFW_PHY2_SM","SWFW_PHY3_SM","SWSM","SWSM_SMBI","SW_FW_SYNC"],"fn":["acquire_hw_semaphore","acquire_swfw_sync","eep_mask","init_i350_features","phy_mask_for_port","release_hw_semaphore","release_swfw_sync","with_swfw_sync"]};

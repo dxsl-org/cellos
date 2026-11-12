@@ -1,0 +1,184 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/ostd/src/vmm.rs`."><title>vmm.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="ostd" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">ostd/</div>vmm.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! VMM syscall wrappers (220-227) for cells holding `HypervisorCap`.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! One safe function per kernel VMM call, shared by the silo and hypervisor
+<a href=#4 id=4 data-nosnippet>4</a>//! services and the hypervisor ABI smoke test. Every function returns the raw
+<a href=#5 id=5 data-nosnippet>5</a>//! kernel result register: an id, a byte count or 0 on success, and a value
+<a href=#6 id=6 data-nosnippet>6</a>//! the caller compares against its documented error sentinels (0 and/or
+<a href=#7 id=7 data-nosnippet>7</a>//! `usize::MAX`) on failure. The kernel gates every call on `HypervisorCap`
+<a href=#8 id=8 data-nosnippet>8</a>//! and returns an error to a cell without it.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! Guest-memory invariant behind every call: guest RAM is a run of frames the
+<a href=#11 id=11 data-nosnippet>11</a>//! kernel carves from its own frame allocator at `CreateVm`
+<a href=#12 id=12 data-nosnippet>12</a>//! (`Stage2Table::carve_guest_ram`), and stage 2 maps only that carve. No byte of
+<a href=#13 id=13 data-nosnippet>13</a>//! the calling cell's memory is guest-visible, and the cell never holds a
+<a href=#14 id=14 data-nosnippet>14</a>//! pointer into guest RAM — it moves bytes only through kernel copies that
+<a href=#15 id=15 data-nosnippet>15</a>//! bounds-check the cell side (`validate_user_buf` + the caller copy view) and
+<a href=#16 id=16 data-nosnippet>16</a>//! the guest side (`check_guest_range`). The only cell memory the kernel writes
+<a href=#17 id=17 data-nosnippet>17</a>//! is the out-parameter of the call in progress, which the wrapper borrows
+<a href=#18 id=18 data-nosnippet>18</a>//! exclusively.
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="attr">#![allow(unsafe_code)]
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">use </span>api::hypervisor::ViVmExit;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>api::syscall::ViSyscall;
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::syscall::syscall;
+<a href=#25 id=25 data-nosnippet>25</a>
+<a href=#26 id=26 data-nosnippet>26</a><span class="doccomment">/// Scheduler budget the VMM services pass to each [`run_vcpu`] call (~10 ms).
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub const </span>SCHED_TICK_BUDGET_NS: u64 = <span class="number">10_000_000</span>;
+<a href=#28 id=28 data-nosnippet>28</a>
+<a href=#29 id=29 data-nosnippet>29</a><span class="doccomment">/// Issue VMM syscall `id`, returning the raw result register unchanged.
+<a href=#30 id=30 data-nosnippet>30</a>///
+<a href=#31 id=31 data-nosnippet>31</a>/// # Safety
+<a href=#32 id=32 data-nosnippet>32</a>/// Same contract as [`crate::syscall::syscall`]: every argument `id` reads as a
+<a href=#33 id=33 data-nosnippet>33</a>/// cell address must be valid for the kernel's access over the length that
+<a href=#34 id=34 data-nosnippet>34</a>/// call uses, and only the caller's exclusive borrow may observe bytes the
+<a href=#35 id=35 data-nosnippet>35</a>/// kernel writes.
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="attr">#[inline(always)]
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">unsafe fn </span>vmm_call(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -&gt; usize {
+<a href=#38 id=38 data-nosnippet>38</a>    <span class="comment">// The kernel result register is a machine word; the VMM callers compare
+<a href=#39 id=39 data-nosnippet>39</a>    // its bit pattern against `usize` sentinels, so reinterpret, not convert.
+<a href=#40 id=40 data-nosnippet>40</a>    // SAFETY: forwarded verbatim from this function's `# Safety` contract.
+<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">unsafe </span>{ syscall(id, a0, a1, a2, a3) <span class="kw">as </span>usize }
+<a href=#42 id=42 data-nosnippet>42</a>}
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// Allocate guest RAM + Stage-2 table; returns vm_id, or 0 / `usize::MAX` on error.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="kw">pub fn </span>create_vm(guest_pages: usize) -&gt; usize {
+<a href=#46 id=46 data-nosnippet>46</a>    <span class="comment">// SAFETY: register-only. The kernel carves the guest RAM from its own frame
+<a href=#47 id=47 data-nosnippet>47</a>    // allocator; it reads and writes no memory of this cell.
+<a href=#48 id=48 data-nosnippet>48</a>    </span><span class="kw">unsafe </span>{ vmm_call(ViSyscall::CreateVm, guest_pages, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) }
+<a href=#49 id=49 data-nosnippet>49</a>}
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="doccomment">/// Create a vCPU with initial PC `entry_pc` in `vm_id`; returns vcpu_id, or 0 /
+<a href=#52 id=52 data-nosnippet>52</a>/// `usize::MAX` on error.
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">pub fn </span>create_vcpu(vm_id: usize, entry_pc: u64) -&gt; usize {
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="comment">// SAFETY: register-only. `entry_pc` is a guest IPA, meaningful only through
+<a href=#55 id=55 data-nosnippet>55</a>    // the VM's stage-2 table; no cell memory is accessed.
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">unsafe </span>{ vmm_call(ViSyscall::CreateVcpu, vm_id, entry_pc <span class="kw">as </span>usize, <span class="number">0</span>, <span class="number">0</span>) }
+<a href=#57 id=57 data-nosnippet>57</a>}
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="doccomment">/// Map guest IPA range in `vm_id`; returns 0 on success.
+<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">pub fn </span>map_guest_memory(vm_id: usize, ipa: u64, size: usize, writable: bool) -&gt; usize {
+<a href=#61 id=61 data-nosnippet>61</a>    <span class="comment">// SAFETY: register-only. The kernel rejects `ipa + size` overflow and any
+<a href=#62 id=62 data-nosnippet>62</a>    // `size` larger than the VM's carve, and backs the range with carve frames
+<a href=#63 id=63 data-nosnippet>63</a>    // only, so stage 2 can never expose this cell's memory to the guest.
+<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">unsafe </span>{
+<a href=#65 id=65 data-nosnippet>65</a>        vmm_call(
+<a href=#66 id=66 data-nosnippet>66</a>            ViSyscall::MapGuestMemory,
+<a href=#67 id=67 data-nosnippet>67</a>            vm_id,
+<a href=#68 id=68 data-nosnippet>68</a>            ipa <span class="kw">as </span>usize,
+<a href=#69 id=69 data-nosnippet>69</a>            size,
+<a href=#70 id=70 data-nosnippet>70</a>            writable <span class="kw">as </span>usize,
+<a href=#71 id=71 data-nosnippet>71</a>        )
+<a href=#72 id=72 data-nosnippet>72</a>    }
+<a href=#73 id=73 data-nosnippet>73</a>}
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a><span class="doccomment">/// Copy `src` bytes into guest RAM at `gpa`; returns bytes written or an error.
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub fn </span>write_guest_memory(vm_id: usize, gpa: u64, src: <span class="kw-2">&amp;</span>[u8]) -&gt; usize {
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// SAFETY: `src` is a live shared borrow of exactly `src.len()` bytes for the
+<a href=#78 id=78 data-nosnippet>78</a>    // whole call. The kernel only reads it (through the caller copy view, after
+<a href=#79 id=79 data-nosnippet>79</a>    // `validate_user_buf`) and writes nothing in this cell; the guest side is
+<a href=#80 id=80 data-nosnippet>80</a>    // bounded to the carve by `check_guest_range`.
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">unsafe </span>{
+<a href=#82 id=82 data-nosnippet>82</a>        vmm_call(
+<a href=#83 id=83 data-nosnippet>83</a>            ViSyscall::WriteGuestMemory,
+<a href=#84 id=84 data-nosnippet>84</a>            vm_id,
+<a href=#85 id=85 data-nosnippet>85</a>            gpa <span class="kw">as </span>usize,
+<a href=#86 id=86 data-nosnippet>86</a>            src.as_ptr() <span class="kw">as </span>usize,
+<a href=#87 id=87 data-nosnippet>87</a>            src.len(),
+<a href=#88 id=88 data-nosnippet>88</a>        )
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>}
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a><span class="doccomment">/// Copy `dst.len()` bytes from guest RAM at `gpa` into `dst`; returns bytes read
+<a href=#93 id=93 data-nosnippet>93</a>/// or an error.
+<a href=#94 id=94 data-nosnippet>94</a></span><span class="kw">pub fn </span>read_guest_memory(vm_id: usize, gpa: u64, dst: <span class="kw-2">&amp;mut </span>[u8]) -&gt; usize {
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="comment">// SAFETY: `dst` is exclusively borrowed for the whole call, so no other
+<a href=#96 id=96 data-nosnippet>96</a>    // reference observes the kernel's writes; the kernel writes at most
+<a href=#97 id=97 data-nosnippet>97</a>    // `dst.len()` bytes through the caller copy view after `validate_user_buf`
+<a href=#98 id=98 data-nosnippet>98</a>    // and reads only carve bytes `check_guest_range` admitted. Every byte value
+<a href=#99 id=99 data-nosnippet>99</a>    // is a valid `u8`.
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">unsafe </span>{
+<a href=#101 id=101 data-nosnippet>101</a>        vmm_call(
+<a href=#102 id=102 data-nosnippet>102</a>            ViSyscall::ReadGuestMemory,
+<a href=#103 id=103 data-nosnippet>103</a>            vm_id,
+<a href=#104 id=104 data-nosnippet>104</a>            gpa <span class="kw">as </span>usize,
+<a href=#105 id=105 data-nosnippet>105</a>            dst.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#106 id=106 data-nosnippet>106</a>            dst.len(),
+<a href=#107 id=107 data-nosnippet>107</a>        )
+<a href=#108 id=108 data-nosnippet>108</a>    }
+<a href=#109 id=109 data-nosnippet>109</a>}
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="doccomment">/// World-switch into `vcpu_id` for at most `budget_ns` (0 = no budget); writes
+<a href=#112 id=112 data-nosnippet>112</a>/// the exit reason to `*exit`. Returns 0 or an error.
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub fn </span>run_vcpu(vm_id: usize, vcpu_id: usize, budget_ns: u64, exit: <span class="kw-2">&amp;mut </span>ViVmExit) -&gt; usize {
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="comment">// SAFETY: `exit` is exclusively borrowed for the whole call. The kernel
+<a href=#115 id=115 data-nosnippet>115</a>    // writes exactly `size_of::&lt;ViVmExit&gt;()` bytes (80, pinned by const asserts
+<a href=#116 id=116 data-nosnippet>116</a>    // in `api::hypervisor` and the kernel's `vmm_wire`): first all zeros — tag 0
+<a href=#117 id=117 data-nosnippet>117</a>    // with zero payload, a valid `MmioRead` — then `encode_exit`'s image, whose
+<a href=#118 id=118 data-nosnippet>118</a>    // tag is a declared discriminant, whose `bool`s are 0/1 and whose padding is
+<a href=#119 id=119 data-nosnippet>119</a>    // zero. The guest runs on stage-2 mappings of its carve only, so the world
+<a href=#120 id=120 data-nosnippet>120</a>    // switch cannot reach this cell's memory.
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">unsafe </span>{
+<a href=#122 id=122 data-nosnippet>122</a>        vmm_call(
+<a href=#123 id=123 data-nosnippet>123</a>            ViSyscall::RunVcpu,
+<a href=#124 id=124 data-nosnippet>124</a>            vm_id,
+<a href=#125 id=125 data-nosnippet>125</a>            vcpu_id,
+<a href=#126 id=126 data-nosnippet>126</a>            budget_ns <span class="kw">as </span>usize,
+<a href=#127 id=127 data-nosnippet>127</a>            exit <span class="kw">as </span><span class="kw-2">*mut </span>ViVmExit <span class="kw">as </span>usize,
+<a href=#128 id=128 data-nosnippet>128</a>        )
+<a href=#129 id=129 data-nosnippet>129</a>    }
+<a href=#130 id=130 data-nosnippet>130</a>}
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a><span class="doccomment">/// Read (`write == false`, mode 0) or write (`write == true`, mode 1) the vCPU
+<a href=#133 id=133 data-nosnippet>133</a>/// GP registers: 32 × u64 = x0..x30 plus the guest PC.
+<a href=#134 id=134 data-nosnippet>134</a></span><span class="kw">pub fn </span>vcpu_regs(vm_id: usize, vcpu_id: usize, regs: <span class="kw-2">&amp;mut </span>[u64; <span class="number">32</span>], write: bool) -&gt; usize {
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="comment">// SAFETY: `regs` is exclusively borrowed and is exactly the kernel's
+<a href=#136 id=136 data-nosnippet>136</a>    // `REGS_LEN` (32 × u64 = 256 bytes). Every mode reads that buffer through
+<a href=#137 id=137 data-nosnippet>137</a>    // the caller copy view after `validate_user_buf`; mode 0 also writes it
+<a href=#138 id=138 data-nosnippet>138</a>    // back. Every bit pattern is a valid `u64`.
+<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">unsafe </span>{
+<a href=#140 id=140 data-nosnippet>140</a>        vmm_call(
+<a href=#141 id=141 data-nosnippet>141</a>            ViSyscall::VcpuRegs,
+<a href=#142 id=142 data-nosnippet>142</a>            vm_id,
+<a href=#143 id=143 data-nosnippet>143</a>            vcpu_id,
+<a href=#144 id=144 data-nosnippet>144</a>            regs.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#145 id=145 data-nosnippet>145</a>            write <span class="kw">as </span>usize,
+<a href=#146 id=146 data-nosnippet>146</a>        )
+<a href=#147 id=147 data-nosnippet>147</a>    }
+<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="doccomment">/// VcpuRegs mode 2: read the guest's saved CNTV_CTL/CNTV_CVAL into words 0 and
+<a href=#151 id=151 data-nosnippet>151</a>/// 1, zeroing the remaining words. Only AArch64 kernels built for the Pi
+<a href=#152 id=152 data-nosnippet>152</a>/// monitor accept mode 2; every other kernel rejects it as invalid input.
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
+<a href=#154 id=154 data-nosnippet>154</a></span><span class="kw">pub fn </span>guest_timer_regs(vm_id: usize, vcpu_id: usize, regs: <span class="kw-2">&amp;mut </span>[u64; <span class="number">32</span>]) -&gt; usize {
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="comment">// SAFETY: as `vcpu_regs` mode 0 — the exclusively borrowed 256-byte `regs`
+<a href=#156 id=156 data-nosnippet>156</a>    // is read and then written back whole through the caller copy view.
+<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">unsafe </span>{
+<a href=#158 id=158 data-nosnippet>158</a>        vmm_call(
+<a href=#159 id=159 data-nosnippet>159</a>            ViSyscall::VcpuRegs,
+<a href=#160 id=160 data-nosnippet>160</a>            vm_id,
+<a href=#161 id=161 data-nosnippet>161</a>            vcpu_id,
+<a href=#162 id=162 data-nosnippet>162</a>            regs.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#163 id=163 data-nosnippet>163</a>            <span class="number">2</span>,
+<a href=#164 id=164 data-nosnippet>164</a>        )
+<a href=#165 id=165 data-nosnippet>165</a>    }
+<a href=#166 id=166 data-nosnippet>166</a>}
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a><span class="doccomment">/// Raise interrupt `intid` on `vcpu_id` of `vm_id` through the kernel's
+<a href=#169 id=169 data-nosnippet>169</a>/// virtual interrupt controller; returns 0 or an error.
+<a href=#170 id=170 data-nosnippet>170</a></span><span class="kw">pub fn </span>inject_irq(vm_id: usize, vcpu_id: usize, intid: u32) -&gt; usize {
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="comment">// SAFETY: register-only; the kernel bounds `intid` and touches no cell
+<a href=#172 id=172 data-nosnippet>172</a>    // memory.
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">unsafe </span>{ vmm_call(ViSyscall::InjectIrq, vm_id, vcpu_id, intid <span class="kw">as </span>usize, <span class="number">0</span>) }
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// The host's time-stamp counter, which an x86 guest reads unchanged: guest
+<a href=#177 id=177 data-nosnippet>177</a>/// RDTSC does not exit and both VMM backends run with a TSC offset of 0.
+<a href=#178 id=178 data-nosnippet>178</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub fn </span>read_tsc() -&gt; u64 {
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="comment">// SAFETY: RDTSC reads a counter register only; it touches no memory and
+<a href=#181 id=181 data-nosnippet>181</a>    // the kernel leaves CR4.TSD clear, so it does not fault at CPL 3.
+<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">unsafe </span>{ core::arch::x86_64::_rdtsc() }
+<a href=#183 id=183 data-nosnippet>183</a>}
+</code></pre></div></section></main></body></html>

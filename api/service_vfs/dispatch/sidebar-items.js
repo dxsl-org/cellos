@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handle_request"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_request","machine_pin_write"]};

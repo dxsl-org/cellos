@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["draw_badge","draw_button","draw_label","draw_label_aligned","draw_text","draw_themed_button","draw_themed_panel","fill_rect","stroke_rect"],"mod":["components"]};
+window.SIDEBAR_ITEMS = {"constant":["CONTROL_RADIUS","ICON_SIZE","LABEL_TEXT_INSET","PANEL_RADIUS"],"enum":["LineIcon"],"fn":["draw_badge","draw_button","draw_label","draw_label_aligned","draw_text","draw_themed_button","draw_themed_panel","fill_rect","fill_round_rect","paint_icon","stroke_rect","stroke_round_rect"],"mod":["components","icons"]};

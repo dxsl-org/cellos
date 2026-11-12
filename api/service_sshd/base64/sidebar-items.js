@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALPHABET"],"fn":["decode","encode_unpadded","value"]};

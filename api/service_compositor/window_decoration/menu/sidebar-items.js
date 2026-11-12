@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DROP","GLYPH_CELL","ITEM_H","MAX_MENU_ITEMS","PAD","SEPARATOR_H","WIDTH"],"enum":["MenuAction","MenuGlyph"],"fn":["height","item_rect","item_top","menu_item_at","menu_rect","menu_region","paint_entry_glyph","paint_menu"],"struct":["MenuEntry","MenuItems"]};

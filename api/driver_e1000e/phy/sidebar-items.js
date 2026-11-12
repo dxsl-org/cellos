@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BMCR_ANENABLE","BMCR_ANRESTART","BMCR_FULL_DUPLEX","BMCR_SPEED1000","MDIC_DATA_MASK","MDIC_ERROR","MDIC_OP_READ","MDIC_OP_WRITE","MDIC_PHY_SHIFT","MDIC_POLLS","MDIC_READY","MDIC_REG_SHIFT","MII_BMCR","PHY_ADDR"],"fn":["mdic_access","mdic_command","phy_read","phy_write","restart_autoneg"]};

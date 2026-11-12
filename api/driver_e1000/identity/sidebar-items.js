@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["I82540EM","I82545EM_COPPER","QUERY_DEVICE_IDS","VENDOR_INTEL"],"enum":["E1000Sku"],"fn":["classify","sku_name"]};

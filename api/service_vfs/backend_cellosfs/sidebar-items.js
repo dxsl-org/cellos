@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STAGING_DIR"],"enum":["NativeState","Operation"],"fn":["clear_staging","path_tag"],"struct":["CellosFsBackend","Failure"]};
+window.SIDEBAR_ITEMS = {"constant":["RECURSIVE_MAX_DEPTH","RECURSIVE_MAX_ENTRIES","STAGING_DIR"],"enum":["NativeState","Operation"],"fn":["clear_staging","collect_tree","path_tag"],"struct":["CellosFsBackend","Failure"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AccessKind"],"fn":["default_service_lookup","touches_boot_configuration"],"mod":["guest_disk","kms","rules"],"struct":["AccessTable"]};
+window.SIDEBAR_ITEMS = {"enum":["AccessKind"],"fn":["contains_provider_namespace","default_image_lookup","default_service_lookup","touches_boot_configuration"],"mod":["guest_disk","kms","machine_pin","rules","srv_owner"],"struct":["AccessTable"]};

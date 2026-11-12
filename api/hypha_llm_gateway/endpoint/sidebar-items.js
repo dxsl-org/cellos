@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PLAINTEXT_PORT","QEMU_SLIRP_HOST","TLS_PORT"],"enum":["Transport"],"fn":["select_transport"]};

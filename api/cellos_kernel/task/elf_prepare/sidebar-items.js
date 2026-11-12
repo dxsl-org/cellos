@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["collect_reserved","prepare_elf_task"],"struct":["PreparationMappings","PreparationVa","PreparedElfTask"]};
+window.SIDEBAR_ITEMS = {"fn":["collect_reserved","prepare_elf_task","write_initial_stack"],"struct":["PreparationMappings","PreparationVa","PreparedElfTask"]};

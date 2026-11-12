@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IDENTITIES","QUERY_DEVICE_IDS","VENDOR_REALTEK"],"enum":["Admission","RtlModel","RtlXid"],"fn":["classify","decode_xid","id","lookup"],"struct":["Identity"]};

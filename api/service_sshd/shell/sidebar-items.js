@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BANNER","MAX_LINE","PROMPT"],"fn":["execute","feed"]};

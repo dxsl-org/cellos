@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["AMP","BUF_LEN","FRAMES","RATE"],"fn":["gen_square","main"],"static":["TONE","VICELL_MANIFEST","VICELL_SYSCALLS"]};

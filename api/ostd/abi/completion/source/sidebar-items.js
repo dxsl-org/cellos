@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["NET_RX","TIMER","UNSPECIFIED"],"fn":["is_single_supported"]};
+window.SIDEBAR_ITEMS = {"constant":["IPC","IRQ","NET_RX","TIMER","UNSPECIFIED"],"fn":["is_single_supported","is_wait_mask_supported"]};

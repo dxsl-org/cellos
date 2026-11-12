@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CallOutcome","Failure","Refusal","Uncertainty"],"fn":["classify","needs_binding_check"]};

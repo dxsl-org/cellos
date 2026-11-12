@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MMIO_SLOT_SIZE","VIRTIO_DEV_BLK"],"fn":["find_and_init_blk","virtio_slot_iter"],"struct":["CellHal"],"type":["CellTransport"]};

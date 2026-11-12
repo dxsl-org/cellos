@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AcpiTopology","BoundedVec","CpuEntry","Gas","IoApicEntry","LapicNmi","McfgAlloc"]};

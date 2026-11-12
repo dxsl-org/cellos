@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["METHOD_ADD_TWICE","METHOD_INC","SCHEMA"],"enum":["Writer"],"fn":["apply"],"struct":["Authority","Committed","Sender"]};

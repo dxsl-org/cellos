@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["ack_if_input","init_driver"],"static":["INPUT_IRQ","KEYBOARD_ACK"],"struct":["InputAckDriver"]};

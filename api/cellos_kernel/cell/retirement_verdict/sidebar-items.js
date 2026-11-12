@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RECORDS","MAX_WATCHERS"],"enum":["QueryError"],"fn":["classify","close","open","query"],"static":["TABLE"],"struct":["RetirementTally","Slot","Table"]};

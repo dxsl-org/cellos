@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CURSOR_SPRITE_LEN","OP_CUR_MOVE","OP_CUR_SET","OP_FLUSH","STAGING_CHUNK"],"fn":["copy_into_staged","copy_pinned","cursor","flush","gpu_cell","post_staged","release_staged","require_compositor","stage_for_gpu","unpack","warn_once"]};

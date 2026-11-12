@@ -7,17 +7,29 @@
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">extern crate </span>alloc;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">mod </span>configure;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">mod </span>lifecycle;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">mod </span>pixels;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">mod </span>state;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">mod </span>storage;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">pub mod </span>frame;
-<a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub use </span>configure::StateTransition;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub use </span>frame::FrameRegistry;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub use </span>state::SurfaceState;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub use </span>storage::SurfaceTable;
-<a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Maximum number of simultaneous surfaces.
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub const </span>MAX_SURFACES: usize = <span class="number">32</span>;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">pub mod </span>frame;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">mod </span>lifecycle;
+<a href=#12 id=12 data-nosnippet>12</a><span class="attr">#[cfg(test)]
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">mod </span>lifecycle_tests;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">mod </span>pixels;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">mod </span>state;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">mod </span>storage;
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">pub use </span>configure::StateTransition;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub use </span>frame::{FrameRegistry, Reselected};
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">pub use </span>state::SurfaceState;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub use </span>storage::SurfaceTable;
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// Maximum number of simultaneous surfaces.
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub const </span>MAX_SURFACES: usize = <span class="number">32</span>;
+<a href=#25 id=25 data-nosnippet>25</a>
+<a href=#26 id=26 data-nosnippet>26</a><span class="comment">// Every blit leases its surface's Grant until the next receive, and one render
+<a href=#27 id=27 data-nosnippet>27</a>// pass blits each surface's single active Grant. The kernel refuses a holder's
+<a href=#28 id=28 data-nosnippet>28</a>// 65th distinct lease as an unknown id, which `resolve_pixels` would treat as a
+<a href=#29 id=29 data-nosnippet>29</a>// released buffer and detach, so every surface must fit one holder's table.
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(MAX_SURFACES &lt;= api::syscall::grant_slice::MAX_LEASES_PER_HOLDER);
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Largest width or height a client may request. Keeps `w * h * bpp` and
+<a href=#33 id=33 data-nosnippet>33</a>/// `x + w` arithmetic far from `u32`/`i32` overflow on every target.
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="kw">pub const </span>MAX_SURFACE_DIM: u32 = <span class="number">8192</span>;
 </code></pre></div></section></main></body></html>

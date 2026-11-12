@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["AVAIL_F_NO_INTERRUPT","CHAIN_MAX","DATA_LEN","DATA_OFF","DESC_F_NEXT","DESC_F_WRITE","DESC_LEN","DMA_PAGES","MAX_CDB","MAX_QUEUE_SIZE","MAX_SENSE","REQ_LEN","REQ_OFF","RESP_LEN","RESP_OFF","RING_AREA","USED_ELEM_LEN"],"fn":["completions","queue_size"],"struct":["RingLayout"]};

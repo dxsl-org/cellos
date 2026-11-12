@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["protect_page","protect_range"]};
+window.SIDEBAR_ITEMS = {"fn":["protect_page","protect_pages","protect_range"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["columns","grid","list","places"]};
+window.SIDEBAR_ITEMS = {"mod":["columns","places"],"struct":["ContentRect"]};

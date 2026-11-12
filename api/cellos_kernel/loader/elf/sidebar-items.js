@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["USER_VADDR_MAX"],"struct":["ElfLoader","LoadedPage"]};
+window.SIDEBAR_ITEMS = {"mod":["image_va"],"struct":["ElfLoader","LoadedPage"]};

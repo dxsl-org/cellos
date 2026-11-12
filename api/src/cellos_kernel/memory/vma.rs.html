@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>///
 <a href=#15 id=15 data-nosnippet>15</a>/// Used by the kernel to apply appropriate fault-handling policy (e.g., ElfText
 <a href=#16 id=16 data-nosnippet>16</a>/// regions are read-only/executable; Stack regions can grow down).
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[derive(Debug, Clone, PartialEq)]
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub enum </span>VmaKind {
 <a href=#19 id=19 data-nosnippet>19</a>    <span class="doccomment">/// ELF `.text` / read-only executable segment.
 <a href=#20 id=20 data-nosnippet>20</a>    </span>ElfText,
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>/// `flags` stores raw architecture PTE flags to install on demand-mapping.
 <a href=#38 id=38 data-nosnippet>38</a>/// On x86_64 these are the `PTE_*` constants from `hal::paging`; on RISC-V
 <a href=#39 id=39 data-nosnippet>39</a>/// they are the `PageFlags` bitmask.
-<a href=#40 id=40 data-nosnippet>40</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#40 id=40 data-nosnippet>40</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 <a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub struct </span>VmaRegion {
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// Inclusive start of the virtual range (page-aligned).
 <a href=#43 id=43 data-nosnippet>43</a>    </span><span class="kw">pub </span>va_start: VAddr,

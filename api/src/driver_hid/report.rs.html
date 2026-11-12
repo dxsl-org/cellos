@@ -374,19 +374,17 @@
 <a href=#374 id=374 data-nosnippet>374</a>
 <a href=#375 id=375 data-nosnippet>375</a><span class="doccomment">/// Classify the innermost recognised collection in the open stack.
 <a href=#376 id=376 data-nosnippet>376</a></span><span class="kw">fn </span>classify_collection(open: <span class="kw-2">&amp;</span>[(u32, u32)]) -&gt; HidCollection {
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">use </span><span class="kw">crate</span>::keymap::{
-<a href=#378 id=378 data-nosnippet>378</a>        GD_KEYBOARD, GD_MOUSE, GD_POINTER, PAGE_CONSUMER, PAGE_GENERIC_DESKTOP,
-<a href=#379 id=379 data-nosnippet>379</a>    };
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">for </span>(page, usage) <span class="kw">in </span>open.iter().rev() {
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">match </span>(<span class="kw-2">*</span>page, <span class="kw-2">*</span>usage) {
-<a href=#382 id=382 data-nosnippet>382</a>            (PAGE_GENERIC_DESKTOP, GD_KEYBOARD) =&gt; <span class="kw">return </span>HidCollection::Keyboard,
-<a href=#383 id=383 data-nosnippet>383</a>            (PAGE_GENERIC_DESKTOP, GD_MOUSE) | (PAGE_GENERIC_DESKTOP, GD_POINTER) =&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>                <span class="kw">return </span>HidCollection::Mouse
-<a href=#385 id=385 data-nosnippet>385</a>            }
-<a href=#386 id=386 data-nosnippet>386</a>            (PAGE_CONSUMER, <span class="kw">_</span>) =&gt; <span class="kw">return </span>HidCollection::Consumer,
-<a href=#387 id=387 data-nosnippet>387</a>            <span class="kw">_ </span>=&gt; {}
-<a href=#388 id=388 data-nosnippet>388</a>        }
-<a href=#389 id=389 data-nosnippet>389</a>    }
-<a href=#390 id=390 data-nosnippet>390</a>    HidCollection::Other
-<a href=#391 id=391 data-nosnippet>391</a>}
+<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">use </span><span class="kw">crate</span>::keymap::{GD_KEYBOARD, GD_MOUSE, GD_POINTER, PAGE_CONSUMER, PAGE_GENERIC_DESKTOP};
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">for </span>(page, usage) <span class="kw">in </span>open.iter().rev() {
+<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">match </span>(<span class="kw-2">*</span>page, <span class="kw-2">*</span>usage) {
+<a href=#380 id=380 data-nosnippet>380</a>            (PAGE_GENERIC_DESKTOP, GD_KEYBOARD) =&gt; <span class="kw">return </span>HidCollection::Keyboard,
+<a href=#381 id=381 data-nosnippet>381</a>            (PAGE_GENERIC_DESKTOP, GD_MOUSE) | (PAGE_GENERIC_DESKTOP, GD_POINTER) =&gt; {
+<a href=#382 id=382 data-nosnippet>382</a>                <span class="kw">return </span>HidCollection::Mouse
+<a href=#383 id=383 data-nosnippet>383</a>            }
+<a href=#384 id=384 data-nosnippet>384</a>            (PAGE_CONSUMER, <span class="kw">_</span>) =&gt; <span class="kw">return </span>HidCollection::Consumer,
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="kw">_ </span>=&gt; {}
+<a href=#386 id=386 data-nosnippet>386</a>        }
+<a href=#387 id=387 data-nosnippet>387</a>    }
+<a href=#388 id=388 data-nosnippet>388</a>    HidCollection::Other
+<a href=#389 id=389 data-nosnippet>389</a>}
 </code></pre></div></section></main></body></html>

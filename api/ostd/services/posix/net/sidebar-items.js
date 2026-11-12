@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["_close","close","connect","gethostbyname","recv","send","socket"],"struct":["hostent","sockaddr_in"]};

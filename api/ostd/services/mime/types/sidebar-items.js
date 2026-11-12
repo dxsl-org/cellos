@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FileAction","MimeType"],"struct":["LaunchIntent"]};

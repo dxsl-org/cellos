@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["dependencies_available","now_ticks","spawn","spawn_path","wait_for_exact_registration"],"struct":["Service"]};
+window.SIDEBAR_ITEMS = {"enum":["Readiness"],"fn":["block_routes","dependencies_available","now_ticks","routes_name","spawn","spawn_path","wait_for_block_route","wait_for_exact_registration"],"struct":["Service"]};

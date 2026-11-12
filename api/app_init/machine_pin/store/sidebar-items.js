@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LISTING_COMPLETE_BELOW","PIN_DIR","PIN_PATH","SRV"],"enum":["PinRead"],"fn":["listing_names","read_pin","write_pin"],"struct":["VfsPinStore"],"trait":["PinStore","VfsOps"]};
