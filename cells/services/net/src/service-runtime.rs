@@ -1,5 +1,6 @@
 use alloc::{collections::BTreeMap, string::String};
 use api::ipc::{self, NetRequest, NetResponse};
+use api::services::proto::net::NetError;
 use api::syscall::events::NET_RX;
 use core::sync::atomic::Ordering;
 use ostd::syscall::sys_try_recv_attested;
@@ -57,17 +58,11 @@ const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
 // A 10-tick deadline can fire just after 9 complete tick periods when the
 // submission lands immediately before a scheduler tick. The exclusive ceiling
 // therefore has to be the preceding 9 periods, not the 100 ms maintenance budget.
-#[cfg(any(
-    test,
-    feature = "ipc-wake-oracle"
-))]
+#[cfg(any(test, feature = "ipc-wake-oracle"))]
 const IDLE_IPC_WAKE_PROOF_CEILING_TICKS: u64 =
     (NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS - 1) * SCHEDULER_TICK_MS * MTIME_TICKS_PER_MS;
 
-#[cfg(any(
-    test,
-    feature = "ipc-wake-oracle"
-))]
+#[cfg(any(test, feature = "ipc-wake-oracle"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum IdleIpcWakeClassification {
     Pass,
@@ -80,10 +75,7 @@ pub(crate) enum IdleIpcWakeClassification {
 /// that followed it: only the return can be below the exclusive ceiling (a
 /// deadline return lands at whole tick periods, at or above it), and the
 /// waiter's path back to `TryRecv` afterwards is not part of the wake.
-#[cfg(any(
-    test,
-    feature = "ipc-wake-oracle"
-))]
+#[cfg(any(test, feature = "ipc-wake-oracle"))]
 pub(crate) const fn classify_idle_ipc_wake(wait_return_ticks: u64) -> IdleIpcWakeClassification {
     if wait_return_ticks < IDLE_IPC_WAKE_PROOF_CEILING_TICKS {
         IdleIpcWakeClassification::Pass
@@ -169,11 +161,11 @@ fn handle_resolve(
         return true;
     }
     if pending.is_full() {
-        send_ready(sender, NetResponse::Err(0xFD));
+        send_ready(sender, NetResponse::Err(NetError::Busy as u8));
         return true;
     }
     let Some(query) = resolver.start(hostname, iface, sockets) else {
-        send_ready(sender, NetResponse::Err(0xFF));
+        send_ready(sender, NetResponse::Err(NetError::Failure as u8));
         return true;
     };
     // Legacy callers wait at Recv; async callers use an exact reply token.
@@ -216,7 +208,7 @@ fn poll_resolves(
         let mut out = [0u8; IPC_BUF_SIZE];
         let response = match answer {
             Some(ip) => NetResponse::Addr(ip),
-            None => NetResponse::Err(0xFF),
+            None => NetResponse::Err(NetError::Failure as u8),
         };
         let sent = ipc::encode(&response, &mut out).is_ok_and(|bytes| match state.op_id {
             Some(op_id) => {
@@ -273,7 +265,7 @@ fn handle_ready_wait(
     };
     let result = readiness(interests, cursor, owner, sockets, table);
     match result {
-        Err(()) => send_ready(sender, NetResponse::Err(0xFF)),
+        Err(()) => send_ready(sender, NetResponse::Err(NetError::Failure as u8)),
         Ok((events, next_cursor)) if !events.is_empty() => {
             let mut packed = [0u8; handlers::tcp::READY_PAGE * ipc::NET_READY_RECORD_BYTES];
             send_ready(
@@ -286,23 +278,23 @@ fn handle_ready_wait(
         }
         Ok(_) => {
             let Some(op_id) = ostd::ipc::current() else {
-                send_ready(sender, NetResponse::Err(0xFD));
+                send_ready(sender, NetResponse::Err(NetError::Busy as u8));
                 return true;
             };
             if let Some(previous) = pending.remove(&owner) {
                 let mut out = [0u8; IPC_BUF_SIZE];
-                if let Ok(bytes) = ipc::encode(&NetResponse::Err(0xFD), &mut out) {
+                if let Ok(bytes) = ipc::encode(&NetResponse::Err(NetError::Busy as u8), &mut out) {
                     let _ = ostd::ipc::reply(previous.op_id, bytes);
                 }
             }
             if pending.len() >= WAITSET_LIMIT {
-                send_ready(sender, NetResponse::Err(0xFD));
+                send_ready(sender, NetResponse::Err(NetError::Busy as u8));
                 return true;
             }
             let mut owned = heapless::Vec::new();
             for &byte in interests {
                 if owned.push(byte).is_err() {
-                    send_ready(sender, NetResponse::Err(0xFF));
+                    send_ready(sender, NetResponse::Err(NetError::Failure as u8));
                     return true;
                 }
             }
@@ -424,7 +416,7 @@ fn drain_ready_waits(
     for (&owner, wait) in pending.iter() {
         let result = readiness(&wait.interests, wait.cursor, owner, sockets, table);
         let response = match result {
-            Err(()) => Some(NetResponse::Err(0xFF)),
+            Err(()) => Some(NetResponse::Err(NetError::Failure as u8)),
             Ok((events, next_cursor)) if !events.is_empty() => {
                 let mut packed = [0u8; handlers::tcp::READY_PAGE * ipc::NET_READY_RECORD_BYTES];
                 let mut out = [0u8; IPC_BUF_SIZE];

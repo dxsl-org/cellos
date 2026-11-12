@@ -46,22 +46,22 @@ impl Transport for Fake {
         }
         state.requests.push(bytes.to_vec());
         let (stage, reply) = match bytes.first() {
-            Some(0x30) => {
+            Some(&tls::CONNECT) => {
                 state.cap += 1;
                 (Stage::Connect, (state.cap as u64).to_le_bytes().to_vec())
             }
-            Some(0x31) => {
-                let data = &bytes[11..];
+            Some(&tls::SEND) => {
+                let data = &bytes[tls::SEND_HEADER_LEN..];
                 let count = data.len().min(7);
                 state.accepted.extend_from_slice(&data[..count]);
                 (Stage::Send, (count as u32).to_le_bytes().to_vec())
             }
-            Some(0x32) => (
+            Some(&tls::RECV) => (
                 Stage::Read,
                 state
                     .tls_reads
                     .pop_front()
-                    .unwrap_or_else(|| alloc::vec![0, 0]),
+                    .unwrap_or_else(|| tls::RECV_EOF.to_le_bytes().to_vec()),
             ),
             _ => match api::ipc::decode::<NetRequest>(bytes).unwrap() {
                 NetRequest::Resolve { .. } => {
@@ -281,7 +281,7 @@ fn tls_error_is_not_eof_and_gemini_uses_exact_raw_operations() {
     fake.0
         .borrow_mut()
         .tls_reads
-        .push_back(alloc::vec![255, 255]);
+        .push_back(tls::RECV_ERROR.to_le_bytes().to_vec());
     assert!(finish(&mut job("https://host/", &fake))
         .unwrap_err()
         .contains("TLS read failed"));

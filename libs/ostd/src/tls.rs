@@ -1,7 +1,7 @@
 //! TLS 1.3 client helpers for app cells.
 //!
-//! Wraps the raw TLS IPC opcodes (0x30–0x32) exposed by the net service cell
-//! into ergonomic functions. Each helper is one exact operation bounded by a
+//! Wraps the raw TLS IPC frames ([`api::services::proto::tls`]) exposed by the
+//! net service cell into ergonomic functions. Each helper is one exact operation bounded by a
 //! tick budget just above the net service's own deadline for that request, so
 //! the service's failure answer arrives before the budget ends; a dead or
 //! stalled service yields the helper's failure value.
@@ -24,12 +24,7 @@
 extern crate alloc;
 
 use crate::ipc::call_bytes;
-
-// TLS IPC opcodes (mirrors cells/services/net/src/poll_driver.rs cell_opcodes).
-const TLS_CONNECT: u8 = 0x30;
-const TLS_SEND: u8 = 0x31;
-const TLS_RECV: u8 = 0x32;
-const CLOSE: u8 = 0x15;
+use api::services::proto::tls as wire;
 
 /// Budget of `tls_connect`: 50 s, above the net service's 15 s TCP connect plus
 /// 30 s handshake deadlines.
@@ -40,27 +35,27 @@ const TLS_IO_TICKS: u64 = 3_500;
 
 /// Open a TLS 1.3 connection to `addr:port` with the given SNI `hostname`.
 ///
-/// Sends `TLS_CONNECT` to the net service at `net_tid`.  Blocks until the TCP
+/// Sends [`wire::CONNECT`] to the net service at `net_tid`.  Blocks until the TCP
 /// handshake and TLS handshake complete, or until the net service times out.
 ///
 /// Returns the `cap_id` (non-zero on success, 0 on failure).
 pub fn tls_connect(net_tid: usize, addr: [u8; 4], port: u16, hostname: &str) -> u64 {
-    // Wire format: [0x30][cap:8=0][addr:4][port:2 LE][hn_len:2 LE][hostname bytes]
+    // Wire format: [CONNECT][cap:8=0][addr:4][port:2 LE][hn_len:2 LE][hostname bytes]
     let hn = hostname.as_bytes();
-    let hn_len = hn.len().min(495);
-    let msg_len = 17 + hn_len;
+    let hn_len = hn.len().min(wire::MAX_HOSTNAME);
+    let msg_len = wire::CONNECT_HEADER_LEN + hn_len;
     let mut msg = alloc::vec![0u8; msg_len];
-    msg[0] = TLS_CONNECT;
+    msg[0] = wire::CONNECT;
     // cap placeholder (bytes 1-8): 0
     msg[9..13].copy_from_slice(&addr);
     msg[13..15].copy_from_slice(&port.to_le_bytes());
     msg[15..17].copy_from_slice(&(hn_len as u16).to_le_bytes());
-    msg[17..17 + hn_len].copy_from_slice(&hn[..hn_len]);
+    msg[wire::CONNECT_HEADER_LEN..wire::CONNECT_HEADER_LEN + hn_len].copy_from_slice(&hn[..hn_len]);
 
     let mut reply = [0u8; 8];
     match call_bytes(net_tid, &msg, &mut reply, TLS_CONNECT_TICKS) {
         Ok(&[a, b, c, d, e, f, g, h]) => u64::from_le_bytes([a, b, c, d, e, f, g, h]),
-        _ => 0,
+        _ => wire::CONNECT_FAILED,
     }
 }
 
@@ -69,19 +64,21 @@ pub fn tls_connect(net_tid: usize, addr: [u8; 4], port: u16, hostname: &str) -> 
 /// Returns the number of bytes accepted by the net service (may be less than
 /// `data.len()` if the send buffer is temporarily full — retry on partial write).
 pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
-    // Wire format: [0x31][cap:8 LE][len:2 LE][data:*]
-    let payload_len = data.len().min(501); // 512 - 11 header bytes
-    let msg_len = 11 + payload_len;
+    // Wire format: [SEND][cap:8 LE][len:2 LE][data:*]
+    let payload_len = data.len().min(wire::MAX_SEND);
+    let msg_len = wire::SEND_HEADER_LEN + payload_len;
     let mut msg = alloc::vec![0u8; msg_len];
-    msg[0] = TLS_SEND;
-    msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-    msg[9..11].copy_from_slice(&(payload_len as u16).to_le_bytes());
-    msg[11..11 + payload_len].copy_from_slice(&data[..payload_len]);
+    msg[0] = wire::SEND;
+    msg[1..wire::HEADER_LEN].copy_from_slice(&cap_id.to_le_bytes());
+    msg[wire::HEADER_LEN..wire::SEND_HEADER_LEN]
+        .copy_from_slice(&(payload_len as u16).to_le_bytes());
+    msg[wire::SEND_HEADER_LEN..wire::SEND_HEADER_LEN + payload_len]
+        .copy_from_slice(&data[..payload_len]);
     let mut reply = [0u8; 4];
     match call_bytes(net_tid, &msg, &mut reply, TLS_IO_TICKS) {
         Ok(&[a, b, c, d]) => {
             let count = u32::from_le_bytes([a, b, c, d]) as usize;
-            // The service reserves u32::MAX for errors, never byte progress.
+            // The service reserves `wire::SEND_ERROR` for errors, never byte progress.
             if count <= payload_len {
                 count
             } else {
@@ -101,7 +98,7 @@ pub(crate) fn parse_tls_read_reply(reply: &[u8], buf: &mut [u8]) -> crate::ViRes
         return Err(crate::ViError::IO);
     }
     let declared_len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
-    if declared_len == u16::MAX as usize {
+    if declared_len == wire::RECV_ERROR as usize {
         return Err(crate::ViError::IO);
     }
     let available = reply.len() - 2;
@@ -116,14 +113,14 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> crate::ViResult<
     if buf.is_empty() {
         return Ok(0);
     }
-    // Wire format: [0x32][cap:8 LE][buf_len:4 LE]
-    let mut msg = [0u8; 13];
-    msg[0] = TLS_RECV;
+    // Wire format: [RECV][cap:8 LE][buf_len:4 LE]
+    let mut msg = [0u8; wire::RECV_REQUEST_LEN];
+    msg[0] = wire::RECV;
     let cap_bytes = cap_id.to_le_bytes();
-    msg[1..9].copy_from_slice(&cap_bytes);
-    let want_len = buf.len().min(4094);
+    msg[1..wire::HEADER_LEN].copy_from_slice(&cap_bytes);
+    let want_len = buf.len().min(wire::MAX_RECV_DATA);
     let want = (want_len as u32).to_le_bytes();
-    msg[9..13].copy_from_slice(&want);
+    msg[wire::HEADER_LEN..wire::RECV_REQUEST_LEN].copy_from_slice(&want);
 
     let mut tmp = alloc::vec![0u8; 2 + want_len];
     match call_bytes(net_tid, &msg, &mut tmp, TLS_IO_TICKS) {
@@ -134,9 +131,9 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> crate::ViResult<
 
 /// Close a TLS connection (also removes the underlying TCP socket).
 pub fn tls_close(net_tid: usize, cap_id: u64) {
-    let mut msg = [0u8; 9];
-    msg[0] = CLOSE;
-    msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
+    let mut msg = [0u8; wire::HEADER_LEN];
+    msg[0] = wire::CLOSE;
+    msg[1..wire::HEADER_LEN].copy_from_slice(&cap_id.to_le_bytes());
     let mut r = [0u8; 1];
     let _ = call_bytes(net_tid, &msg, &mut r, TLS_IO_TICKS);
 }
@@ -167,8 +164,11 @@ mod tests {
         assert!(parse_tls_read_reply(&[0x05], &mut out).is_err());
 
         // Empty payload (0 bytes)
-        assert_eq!(parse_tls_read_reply(&[0x00, 0x00], &mut out).unwrap(), 0);
-        assert!(parse_tls_read_reply(&u16::MAX.to_le_bytes(), &mut out).is_err());
+        assert_eq!(
+            parse_tls_read_reply(&wire::RECV_EOF.to_le_bytes(), &mut out).unwrap(),
+            0
+        );
+        assert!(parse_tls_read_reply(&wire::RECV_ERROR.to_le_bytes(), &mut out).is_err());
 
         // A short body is not EOF and must leave the output untouched.
         let mut bad_reply = [0u8; 6];

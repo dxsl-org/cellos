@@ -1,12 +1,12 @@
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::{resolve, MAX_INLINE_PAYLOAD};
 use crate::file_handles::FileHandleError;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
 
 pub fn open_file<'a>(
     vfs: &mut VfsManager,
@@ -15,25 +15,25 @@ pub fn open_file<'a>(
     name: &str,
 ) -> VfsResponse<'a> {
     if !caller.may_own_state() {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let path = match resolve(vfs, caller, dir, name) {
         Ok(path) => path,
         Err(code) => return VfsResponse::Err(code),
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     match vfs.stat(&path) {
         Some((_, false)) => {}
-        Some((_, true)) | None => return VfsResponse::Err(ERR_IO),
+        Some((_, true)) | None => return VfsResponse::Err(VfsError::Io as u8),
     }
     let lease = if path == "/srv" || path.starts_with("/srv/") {
         let Ok(k) = crate::namespace::NamespaceKey::parse(&path) else {
-            return VfsResponse::Err(ERR_DENIED);
+            return VfsResponse::Err(VfsError::Denied as u8);
         };
         let Ok(l) = vfs.ledger.acquire_service_handle(&k) else {
-            return VfsResponse::Err(ERR_DENIED);
+            return VfsResponse::Err(VfsError::Denied as u8);
         };
         Some(l)
     } else {
@@ -58,7 +58,7 @@ pub fn read_file<'a>(
     };
     if !vfs.access.can_read(caller, &path) {
         let _ = vfs.files.finish_sync_read(caller, file);
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     // Read only the requested range. This used to load the whole file into a fresh `Vec` and slice
     // it, once per request: a client reading in 4 KiB chunks paid `file_size` of copying and one
@@ -67,17 +67,17 @@ pub fn read_file<'a>(
     // backend operation the whole time).
     let Some((size, is_dir)) = vfs.stat(&path) else {
         let _ = vfs.files.finish_sync_read(caller, file);
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     if is_dir {
         let _ = vfs.files.finish_sync_read(caller, file);
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let start = match usize::try_from(offset) {
         Ok(start) => start,
         Err(_) => {
             let _ = vfs.files.finish_sync_read(caller, file);
-            return VfsResponse::Err(ERR_IO);
+            return VfsResponse::Err(VfsError::Io as u8);
         }
     };
     let size = match usize::try_from(size) {
@@ -95,7 +95,7 @@ pub fn read_file<'a>(
     let mut read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
     if !vfs.healthy(&path) {
         let _ = vfs.files.finish_sync_read(caller, file);
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if read == 0 && n > 0 {
         // A backend that does not implement ranged reads returns nothing. Falling back to the
@@ -105,7 +105,7 @@ pub fn read_file<'a>(
         let data = vfs.read_to_vec(&path);
         if !vfs.healthy(&path) {
             let _ = vfs.files.finish_sync_read(caller, file);
-            return VfsResponse::Err(ERR_IO);
+            return VfsResponse::Err(VfsError::Io as u8);
         }
         if offset < data.len() as u64 {
             let start = offset as usize;
@@ -120,20 +120,20 @@ pub fn read_file<'a>(
 
 /// `FileHandleState`: re-authorizes the handle's path like a read, then reports
 /// the current size and whether a mutation reached the path since `OpenFileAt`.
-/// A path that is no longer a regular file is `ERR_IO`.
+/// A path that is no longer a regular file is `VfsError::Io`.
 pub fn file_state<'a>(vfs: &VfsManager, caller: Caller, file: ViVfsFileHandle) -> VfsResponse<'a> {
     let Some((path, modified)) = vfs.files.state_of(caller, file) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if !vfs.access.can_read(caller, path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     match vfs.stat(path) {
         Some((size, false)) => VfsResponse::FileState { size, modified },
-        _ => VfsResponse::Err(ERR_IO),
+        _ => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -145,13 +145,13 @@ pub fn close_file<'a>(
     if vfs.files.close(caller, file) {
         VfsResponse::Ok
     } else {
-        VfsResponse::Err(ERR_HANDLE)
+        VfsResponse::Err(VfsError::Handle as u8)
     }
 }
 
 fn file_err(err: FileHandleError) -> u8 {
     match err {
-        FileHandleError::UnknownHandle => ERR_HANDLE,
-        FileHandleError::TooManyHandles | FileHandleError::Exhausted => ERR_QUOTA,
+        FileHandleError::UnknownHandle => VfsError::Handle as u8,
+        FileHandleError::TooManyHandles | FileHandleError::Exhausted => VfsError::Quota as u8,
     }
 }

@@ -1,30 +1,13 @@
 //! IPC request dispatcher for the vmxnet3 NIC Driver Cell — the unchanged NIC
-//! wire `/bin/e1000` and `/bin/igb` serve (`cells/services/net/src/interface.rs`).
-//!
-//! Wire format (little-endian):
-//!   byte 0: op  (0 = Tx, 1 = Rx, 2 = GetMac)
-//!   byte 1+: payload
-//!
-//! Tx request:   [0x00, len_lo, len_hi] ++ frame_bytes (Ethernet frame, no FCS)
-//!   The explicit length is REQUIRED: raw IPC delivery hands the receiver its
-//!   whole 4096-byte recv buffer with no byte count, so the frame boundary
-//!   cannot be inferred from the message itself.
-//! Rx request:   [0x01]
-//! GetMac:       [0x02]
-//!
-//! Reply for Tx:     [0x00] = OK, [0x01] = Error
-//! Reply for Rx:     [len_lo, len_hi] ++ frame_bytes  (len=0 → nothing ready)
-//! Reply for GetMac: 6 MAC bytes
+//! wire `/bin/e1000` and `/bin/igb` serve, defined in
+//! [`api::services::proto::nic`].
 
 use crate::controller::Vmxnet3;
 use crate::rings::BUF_SIZE;
+use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 use ostd::service::{sender_is_live_provider, service};
 use ostd::sync::Mutex;
 use ostd::syscall::sys_try_send;
-
-const OP_TX: u8 = 0;
-const OP_RX: u8 = 1;
-const OP_GETMAC: u8 = 2;
 
 /// Total output buffer size: 2-byte length header + full frame payload.
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;
@@ -48,23 +31,23 @@ pub fn handle<'a>(
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
     if data.is_empty() {
-        return NicReply::Status(1);
+        return NicReply::Status(NicStatus::Failed as u8);
     }
     match data[0] {
         OP_TX => {
             // [op, len_lo, len_hi, frame...] — length header bounds the frame
             // inside the (padded) IPC buffer.
             if data.len() < 3 {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > BUF_SIZE || 3 + len > data.len() {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let frame = &data[3..3 + len];
             match ctrl.send_frame(frame) {
-                Ok(_) => NicReply::Status(0),
-                Err(_) => NicReply::Status(1),
+                Ok(_) => NicReply::Status(NicStatus::Ok as u8),
+                Err(_) => NicReply::Status(NicStatus::Failed as u8),
             }
         }
         OP_RX => {
@@ -78,7 +61,7 @@ pub fn handle<'a>(
             }
         }
         OP_GETMAC => NicReply::Raw(ctrl.mac),
-        _ => NicReply::Status(1),
+        _ => NicReply::Status(NicStatus::Failed as u8),
     }
 }
 
@@ -99,7 +82,7 @@ pub fn serve(state: &Mutex<Option<Vmxnet3>>, sender_tid: usize, data: &[u8]) {
         }
     };
     if !sender_is_live_provider(service::NET, sender_tid) {
-        reply(&[1u8]);
+        reply(&[NicStatus::Failed as u8]);
         return;
     }
     let mut out_buf = [0u8; REPLY_BUF];
@@ -109,7 +92,7 @@ pub fn serve(state: &Mutex<Option<Vmxnet3>>, sender_tid: usize, data: &[u8]) {
             NicReply::Frame { len, buf } => reply(&buf[..2 + len]),
             NicReply::Raw(mac) => reply(&mac),
         },
-        None => reply(&[1u8]),
+        None => reply(&[NicStatus::Failed as u8]),
     }
 }
 

@@ -14,6 +14,11 @@ extern crate alloc;
 
 use alloc::format;
 use api::services::hostile_backend_recovery::{encode_kill_request, KILL_STATUS_OK};
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use api::services::proto::supervisor::{
+    HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_HOTSWAP_DONE, STATUS_OK, STATUS_REPLY_LEN,
+    SVC_NAME_LEN,
+};
 use api::syscall::service;
 use cellos_fs::crc32::crc32c;
 use ostd::io::println;
@@ -27,11 +32,6 @@ const TOTAL_OPS: u32 = 1000;
 const CHECKPOINT_INTERVAL: u32 = 100;
 const WAIT_TICKS: usize = 500;
 const CUTOVER_WINDOW_TICKS: usize = 1_600;
-
-const OP_HOTSWAP: u8 = 0x01;
-const SVC_NAME_LEN: usize = 64;
-const ELF_PATH_LEN: usize = 128;
-const REQUEST_LEN: usize = 1 + SVC_NAME_LEN + ELF_PATH_LEN;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CheckpointRecord {
@@ -264,7 +264,7 @@ pub fn run() {
 
 fn inc_demo(tid: usize) -> bool {
     let mut resp = [0u8; 2];
-    let msg = [0xAC, 0x00, b'i', b'n', b'c'];
+    let msg = [MAGIC, KIND_MESSAGE, b'i', b'n', b'c'];
     if !matches!(sys_send(tid, &msg), SyscallResult::Ok(_)) {
         return false;
     }
@@ -273,7 +273,7 @@ fn inc_demo(tid: usize) -> bool {
 
 fn read_counter(tid: usize, expected_prefix: &[u8; 3]) -> Option<u32> {
     let mut response = [0u8; 7];
-    let msg = [0xAC, 0x00, b'g', b'e', b't'];
+    let msg = [MAGIC, KIND_MESSAGE, b'g', b'e', b't'];
     if !matches!(sys_send(tid, &msg), SyscallResult::Ok(_)) {
         return None;
     }
@@ -345,7 +345,7 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
     };
 
     let mut inc = [0u8; 5];
-    inc[..2].copy_from_slice(&[0xAC, 0x00]);
+    inc[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
     inc[2..].copy_from_slice(b"inc");
 
     let mut sent = false;
@@ -376,10 +376,9 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
 }
 
 fn trigger_hotswap(supervisor_tid: usize, service_name: &str, elf_path: &str) -> bool {
-    const APP_MESSAGE_PREFIX: [u8; 2] = [0xAC, 0x00];
-    let mut req = [0u8; APP_MESSAGE_PREFIX.len() + REQUEST_LEN];
-    req[..APP_MESSAGE_PREFIX.len()].copy_from_slice(&APP_MESSAGE_PREFIX);
-    let off = APP_MESSAGE_PREFIX.len();
+    let mut req = [0u8; HEADER_LEN + HOTSWAP_REQUEST_LEN];
+    req[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
+    let off = HEADER_LEN;
     req[off] = OP_HOTSWAP;
     let s_bytes = service_name.as_bytes();
     req[off + 1..off + 1 + s_bytes.len()].copy_from_slice(s_bytes);
@@ -389,11 +388,11 @@ fn trigger_hotswap(supervisor_tid: usize, service_name: &str, elf_path: &str) ->
     if !matches!(sys_send(supervisor_tid, &req), SyscallResult::Ok(_)) {
         return false;
     }
-    let mut status = [0u8; 3];
+    let mut status = [0u8; STATUS_REPLY_LEN];
     if !recv_from(supervisor_tid, &mut status) {
         return false;
     }
-    status[0] == 3 && status[1] == 6 && status[2] == 0
+    status == [OP_STATUS, PHASE_HOTSWAP_DONE, STATUS_OK]
 }
 
 fn wait_for_replacement_demo(old_tid: usize, max_ticks: usize) -> Option<usize> {

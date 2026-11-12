@@ -8,12 +8,13 @@
 //! system keys (`PATH`, `OS`) are seeded at start and immutable at runtime for
 //! every caller.
 //!
-//! A refusal is `ConfigResponse::Err(CONFIG_ERR_DENIED)`; the runtime answers
+//! A refusal is `ConfigResponse::Err(ConfigError::Denied)`; the runtime answers
 //! it before touching the store. The client never pre-filters: this module is
 //! the only decision point.
 
 use api::caller_identity::{CallerIdentity, CALLER_FLAG_CONFIG_WRITE};
-use api::ipc::{ConfigRequest, CONFIG_ERR_DENIED};
+use api::ipc::ConfigRequest;
+use api::services::proto::config::ConfigError;
 
 /// Keys seeded by the service and never writable at runtime.
 pub(crate) const SYSTEM_KEYS: [&str; 2] = ["PATH", "OS"];
@@ -51,7 +52,7 @@ pub(crate) fn admit(
     if granted && shell_key_admitted(key) {
         Ok(())
     } else {
-        Err(CONFIG_ERR_DENIED)
+        Err(ConfigError::Denied as u8)
     }
 }
 
@@ -118,7 +119,7 @@ mod tests {
             for request in writes("P01Q_OK") {
                 assert_eq!(
                     admit(&request, caller),
-                    Err(CONFIG_ERR_DENIED),
+                    Err(ConfigError::Denied as u8),
                     "{request:?}"
                 );
             }
@@ -145,7 +146,7 @@ mod tests {
             for request in writes(key) {
                 assert_eq!(
                     admit(&request, Some(&SHELL)),
-                    Err(CONFIG_ERR_DENIED),
+                    Err(ConfigError::Denied as u8),
                     "{request:?}"
                 );
             }

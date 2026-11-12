@@ -3,6 +3,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::service::VfsRef;
 use ostd::{ViError, ViResult};
@@ -166,12 +167,12 @@ fn close_dirs(ops: &mut impl VfsReadOps, dirs: &mut Vec<ViDirHandle>) -> ViResul
 }
 
 fn vfs_err_from_code(code: u8) -> ViError {
-    match code {
-        1 => ViError::IO,
-        2 => ViError::OutOfMemory,
-        3 => ViError::PermissionDenied,
-        4 => ViError::NotFound,
-        _ => ViError::Unknown,
+    match VfsError::from_u8(code) {
+        Some(VfsError::Io) => ViError::IO,
+        Some(VfsError::Quota) => ViError::OutOfMemory,
+        Some(VfsError::Denied) => ViError::PermissionDenied,
+        Some(VfsError::Handle) => ViError::NotFound,
+        Some(VfsError::Unsupported | VfsError::Malformed) | None => ViError::Unknown,
     }
 }
 

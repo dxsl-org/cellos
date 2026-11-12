@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use api::c2c::RetryClass;
 use api::ipc::IPC_BUF_SIZE;
 use api::services::ipc::{VfsRequest, VfsResponse};
+use api::services::proto::supervisor::OWNER_EXITED_NOTICE;
 use api::task::TaskPriority;
 use ostd::service::provider_tid;
 use ostd::{
@@ -813,7 +814,7 @@ pub fn run_raw_event_source() -> ! {
     if bytes[..2] != [CONTROL_TAG, 0] {
         fail("raw event source gate");
     }
-    raw_send(caller, &[0xE1, 0xA7]);
+    raw_send(caller, &[OWNER_EXITED_NOTICE, 0xA7]);
     sys_exit(0)
 }
 
@@ -829,7 +830,7 @@ fn event_coexistence_leg() {
     }
     let source = spawn_probe("c2c-raw-event").unwrap_or_else(|_| fail("raw event source spawn"));
     raw_send(source, &[CONTROL_TAG, 0]);
-    if bounded_recv(source, &mut bytes) != source || bytes[..2] != [0xE1, 0xA7] {
+    if bounded_recv(source, &mut bytes) != source || bytes[..2] != [OWNER_EXITED_NOTICE, 0xA7] {
         fail("raw event payload or sender");
     }
     if call.try_take(&mut bytes) != Ok(None) {

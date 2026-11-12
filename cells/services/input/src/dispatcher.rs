@@ -18,6 +18,7 @@
 //! consuming more raw input. No synchronous Send/SetFocus IPC cycle is created.
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
+use api::services::proto::input::INPUT_EVENT_OPCODE;
 use api::syscall::service;
 use ostd::service::provider_tid;
 use ostd::session::{zeroize, Scrub};
@@ -28,9 +29,6 @@ use crate::focus_routes::{FocusRoutes, Requester};
 /// Report every Nth dropped keyboard event, so a stalled consumer is visible
 /// without one log line per keystroke.
 const DROP_REPORT_EVERY: u64 = 64;
-
-/// Opcode prefix byte sent to the focused cell's IPC endpoint.
-pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 
 /// Routes translated events to the currently focused cell.
 /// Pointer-channel events one raw batch can leave undelivered: three mouse
@@ -137,7 +135,7 @@ impl Dispatcher {
     ///
     /// The IPC message format is:
     /// ```text
-    /// byte[0]   = INPUT_EVENT_OPCODE (0x10)
+    /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     fn dispatch_to(&mut self, target: usize, event: &InputEvent) -> bool {
@@ -233,7 +231,7 @@ impl Dispatcher {
     ///
     /// The IPC message format is:
     /// ```text
-    /// byte[0]   = INPUT_EVENT_OPCODE (0x10)
+    /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     fn try_send_event(target: usize, event: &InputEvent) -> Result<(), ()> {

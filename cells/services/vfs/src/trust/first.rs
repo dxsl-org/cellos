@@ -21,6 +21,7 @@ use api::abi::caller_identity::CALLER_FLAG_NET_CONNECT;
 use api::cell_session::trust::{self as tr, TrustChallengeV1, TrustPromptV1};
 use api::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
 use api::ipc::{ssh_trust, Observation, SaveOutcome, VfsResponse};
+use api::services::proto::vfs::VfsError;
 use sha2::{Digest, Sha256};
 
 use super::{
@@ -28,7 +29,6 @@ use super::{
 };
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::ERR_QUOTA;
 
 /// Input-owner seam: production calls service-input; host tests run a fake owner.
 #[cfg(not(test))]
@@ -144,7 +144,7 @@ pub fn challenge(
         || !blob_names(key, algorithm)
         || session.is_zero()
     {
-        return VfsResponse::Err(0xFF);
+        return VfsResponse::Err(VfsError::Malformed as u8);
     }
     let Some((observation, _, code)) = current(vfs, host, port, algorithm, key) else {
         return VfsResponse::Trust(ssh_trust::UNAVAILABLE);
@@ -164,14 +164,14 @@ pub fn challenge(
     if table.records.iter().filter(|r| r.owner == caller).count() >= MAX_PER_CALLER
         || table.records.len() >= MAX_CHALLENGES
     {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
     let challenge = Ref {
         id: table.next,
         generation: 1,
     };
     let Some(next) = table.next.checked_add(1) else {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     };
     let expiry = now.saturating_add(LIFETIME_NS);
     let fingerprint = fingerprint(key);
@@ -188,7 +188,7 @@ pub fn challenge(
     };
     let mut bytes = [0u8; TrustChallengeV1::MAX_LEN];
     let Ok(len) = descriptor.encode(&mut bytes) else {
-        return VfsResponse::Err(0xFF);
+        return VfsResponse::Err(VfsError::Malformed as u8);
     };
     let digest: [u8; 32] = Sha256::digest(&bytes[..len]).into();
     let Ok(confirmation) = owner::register(&descriptor) else {

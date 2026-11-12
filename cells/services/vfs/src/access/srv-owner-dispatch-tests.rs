@@ -9,16 +9,16 @@ use std::sync::{Arc, Mutex as HostMutex};
 
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use cellos_fs::format::BLOCK_SIZE;
 
 use super::tests::{lookup, OTHER_PROGRAM, RESPAWNED, SSHD, UNSIGNED_SSHD};
 use crate::access::AccessTable;
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::ERR_DENIED;
 
 const KEYS: &str = "/srv/sshd/authorized_keys";
-const DENIED: Reply = Reply::Err(ERR_DENIED);
+const DENIED: Reply = Reply::Err(VfsError::Denied as u8);
 
 #[derive(Debug, PartialEq)]
 enum Reply {
@@ -184,6 +184,6 @@ fn every_other_caller_is_refused_every_operation() {
     );
     assert_eq!(
         call(&mut vfs, SSHD, &VfsRequest::Stat("/srv/sshd/planted")),
-        Reply::Err(1)
+        Reply::Err(VfsError::Io as u8)
     );
 }

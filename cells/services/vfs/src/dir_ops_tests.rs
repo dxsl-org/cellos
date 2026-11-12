@@ -8,13 +8,13 @@ use std::sync::{Arc, Mutex as HostMutex};
 use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use cellos_fs::disk::{BlockDevice, FsError};
 use cellos_fs::format::BLOCK_SIZE;
 use types::CellId;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO};
 
 const WRITER: Caller = Caller {
     flags: CALLER_FLAG_VFS_MUTATE,
@@ -103,7 +103,10 @@ fn a_sealed_cell_creates_and_removes_directories_through_its_handle() {
     let srv = sealed_root(&mut vfs, WRITER, "/srv");
     // The path-string forms stay refused; sealing is unchanged.
     let by_path = VfsRequest::Mkdir("/srv/d");
-    assert_eq!(call(&mut vfs, WRITER, &by_path), Reply::Err(ERR_DENIED));
+    assert_eq!(
+        call(&mut vfs, WRITER, &by_path),
+        Reply::Err(VfsError::Denied as u8)
+    );
     let (dir, name) = (srv, "d");
     let mkdir = VfsRequest::MkdirAt { dir, name };
     assert_eq!(call(&mut vfs, WRITER, &mkdir), Reply::Ok);
@@ -120,7 +123,10 @@ fn a_sealed_cell_creates_and_removes_directories_through_its_handle() {
     };
     assert_eq!(call(&mut vfs, WRITER, &child), Reply::Ok);
     let rmdir = VfsRequest::RmdirAt { dir, name: "d" };
-    assert_eq!(call(&mut vfs, WRITER, &rmdir), Reply::Err(ERR_IO));
+    assert_eq!(
+        call(&mut vfs, WRITER, &rmdir),
+        Reply::Err(VfsError::Io as u8)
+    );
     let rmdir_file = VfsRequest::RmdirAt { dir: d, name };
     assert_ne!(call(&mut vfs, WRITER, &rmdir_file), Reply::Ok);
     assert_eq!(stat(&mut vfs, d, "f"), Reply::Stat { is_dir: false });
@@ -128,7 +134,7 @@ fn a_sealed_cell_creates_and_removes_directories_through_its_handle() {
     let unlink = VfsRequest::UnlinkAt { dir: d, name };
     assert_eq!(call(&mut vfs, WRITER, &unlink), Reply::Ok);
     assert_eq!(call(&mut vfs, WRITER, &rmdir), Reply::Ok);
-    assert_eq!(stat(&mut vfs, srv, "d"), Reply::Err(ERR_IO));
+    assert_eq!(stat(&mut vfs, srv, "d"), Reply::Err(VfsError::Io as u8));
     assert_ne!(call(&mut vfs, WRITER, &rmdir), Reply::Ok, "second rmdir");
 }
 
@@ -156,11 +162,11 @@ fn a_sealed_cell_renames_between_handles_and_both_names_are_checked() {
     };
     let mut renamed = |old, new| call(&mut vfs, WRITER, &rename(old, new));
     // A name that is not one component cannot leave the handle on either side.
-    assert_eq!(renamed("a", "../b"), Reply::Err(ERR_DENIED));
-    assert_eq!(renamed("../a", "b"), Reply::Err(ERR_DENIED));
+    assert_eq!(renamed("a", "../b"), Reply::Err(VfsError::Denied as u8));
+    assert_eq!(renamed("../a", "b"), Reply::Err(VfsError::Denied as u8));
     assert_ne!(renamed("missing", "b"), Reply::Ok);
     assert_eq!(renamed("a", "b"), Reply::Ok);
-    assert_eq!(stat(&mut vfs, srv, "a"), Reply::Err(ERR_IO));
+    assert_eq!(stat(&mut vfs, srv, "a"), Reply::Err(VfsError::Io as u8));
     assert_eq!(stat(&mut vfs, to, "b"), Reply::Stat { is_dir: false });
 }
 
@@ -182,11 +188,14 @@ fn handle_addressed_lifecycle_needs_mutation_authority_and_an_owned_handle() {
         },
     ] {
         let refused = call(&mut vfs, READER, &req);
-        assert_eq!(refused, Reply::Err(ERR_DENIED), "{req:?}");
+        assert_eq!(refused, Reply::Err(VfsError::Denied as u8), "{req:?}");
     }
     // A handle the caller does not hold is unknown, not merely forbidden.
     let foreign = VfsRequest::MkdirAt { dir, name };
-    assert_eq!(call(&mut vfs, WRITER, &foreign), Reply::Err(ERR_HANDLE));
+    assert_eq!(
+        call(&mut vfs, WRITER, &foreign),
+        Reply::Err(VfsError::Handle as u8)
+    );
     let old_dir = writer;
     let mixed = VfsRequest::RenameAt {
         old_dir,
@@ -194,5 +203,8 @@ fn handle_addressed_lifecycle_needs_mutation_authority_and_an_owned_handle() {
         new_dir,
         new,
     };
-    assert_eq!(call(&mut vfs, WRITER, &mixed), Reply::Err(ERR_HANDLE));
+    assert_eq!(
+        call(&mut vfs, WRITER, &mixed),
+        Reply::Err(VfsError::Handle as u8)
+    );
 }

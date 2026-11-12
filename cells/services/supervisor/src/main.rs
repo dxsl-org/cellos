@@ -16,7 +16,6 @@
 #![forbid(unsafe_code)]
 extern crate alloc;
 
-mod error;
 #[cfg(feature = "hostile-backend-recovery")]
 mod hostile_backend_recovery;
 mod hotswap;
@@ -28,16 +27,18 @@ mod transfer;
 
 #[cfg(feature = "hostile-backend-recovery")]
 use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
+use api::services::proto::supervisor::{
+    KERNEL_SENDER, OP_HOTSWAP, OP_POWER, OP_SNAPSHOT, OWNER_EXITED_LEN, OWNER_EXITED_NOTICE,
+    OWNER_EXITED_RELAY, PHASE_HOTSWAP_DONE, PHASE_HOTSWAP_ERROR, PHASE_POWER, PHASE_REFUSED,
+    STATUS_INVALID_REQUEST, STATUS_OK, STATUS_REJECTED_CALLER, STATUS_SERVICE_NOT_FOUND,
+    STATUS_UNAVAILABLE,
+};
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::ipc::Incoming;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_resolve_cell_image;
-use protocol::{
-    encode_status, parse_power_request, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_POWER,
-    OP_SNAPSHOT, POWER_STATUS_PHASE, STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER,
-    STATUS_SERVICE_NOT_FOUND, STATUS_UNAVAILABLE,
-};
+use protocol::{encode_status, parse_power_request, HotswapRequest, SnapshotRequest};
 
 /// Signed program names (`__ViCell_image`) of the reviewed requesters. The
 /// kernel attests the sender's Cell; 441 answers with its measured image only
@@ -46,8 +47,6 @@ use protocol::{
 const HOTSWAP_PROGRAM: &str = "hotswap";
 /// The retained power worker, launched only by the shell (`/bin/shutdown`).
 const SHUTDOWN_PROGRAM: &str = "shutdown";
-/// The kernel's sender id; it sends `OP_POWER` only as the ACPI power button.
-const KERNEL_SENDER: usize = 0;
 /// Signed programs reviewed to request a snapshot. Empty: the suite shell (`cellbox`)
 /// no longer qualifies (S2c-min) and no retained snapshot worker exists, so a snapshot
 /// is unavailable until a `SnapshotTarget` owner is added.
@@ -73,27 +72,27 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
 
             if data[0] == OP_HOTSWAP {
                 if !sender_is_program(ctx, sender_tid, HOTSWAP_PROGRAM) {
-                    let _ = request.reply(&encode_status(0, STATUS_REJECTED_CALLER));
+                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
                     return;
                 }
                 let Some(req) = HotswapRequest::parse(data) else {
-                    let _ = request.reply(&encode_status(0, STATUS_INVALID_REQUEST));
+                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
                     return;
                 };
 
                 let service_id = service_id_for_name(req.service_name());
                 if service_id == 0 {
-                    let _ = request.reply(&encode_status(0, STATUS_SERVICE_NOT_FOUND));
+                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_SERVICE_NOT_FOUND));
                     return;
                 }
 
                 match hotswap::hotswap(service_id, req.elf_path()) {
                     Ok(new_tid) => {
-                        let _ = request.reply(&encode_status(6, 0x00));
+                        let _ = request.reply(&encode_status(PHASE_HOTSWAP_DONE, STATUS_OK));
                         let _ = new_tid;
                     }
                     Err(e) => {
-                        let _ = request.reply(&encode_status(0xFF, e.as_code()));
+                        let _ = request.reply(&encode_status(PHASE_HOTSWAP_ERROR, e as u8));
                     }
                 }
                 return;
@@ -104,11 +103,11 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
                     .iter()
                     .any(|program| sender_is_program(ctx, sender_tid, program))
                 {
-                    let _ = request.reply(&encode_status(0, STATUS_REJECTED_CALLER));
+                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
                     return;
                 }
                 if SnapshotRequest::parse(data).is_none() {
-                    let _ = request.reply(&encode_status(0, STATUS_INVALID_REQUEST));
+                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
                     return;
                 }
                 let _ = request.reply(&snapshot::run());
@@ -127,12 +126,12 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
 
         AppEvent::RawMessage { sender_tid, data }
             if sender_tid == 1
-                && data.len() == 1 + core::mem::size_of::<usize>()
-                && data[0] == 0xE1 =>
+                && data.len() == OWNER_EXITED_LEN
+                && data[0] == OWNER_EXITED_NOTICE =>
         {
             if let Some(compositor) = provider_tid(service::COMPOSITOR) {
-                let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
-                relay[0] = 0xE2;
+                let mut relay = [0u8; OWNER_EXITED_LEN];
+                relay[0] = OWNER_EXITED_RELAY;
                 relay[1..].copy_from_slice(&data[1..]);
                 let _ = ostd::ipc::post(compositor, &relay);
             }
@@ -175,7 +174,7 @@ fn handle_power(ctx: &AppContext, request: Incoming, data: &[u8]) {
 }
 
 fn reply_power(request: Incoming, status: u8) {
-    let _ = request.reply(&encode_status(POWER_STATUS_PHASE, status));
+    let _ = request.reply(&encode_status(PHASE_POWER, status));
 }
 
 /// Map a well-known ASCII service name to its numeric `service::*` constant.

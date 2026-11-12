@@ -6,7 +6,8 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::{net::NetError, tls};
 use core::task::Poll;
 use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
 use ostd::service::provider_tid;
@@ -834,27 +835,28 @@ impl<T: Transport> FetchJob<T> {
     ) -> Result<usize, String> {
         let cap = self.cap.unwrap_or(0);
         if self.stage == Stage::Connect && self.url.tls() {
-            buf[0] = 0x30;
+            buf[0] = tls::CONNECT;
             buf[9..13].copy_from_slice(&addr.ok_or("Missing resolved address")?);
             buf[13..15].copy_from_slice(&self.url.port.to_le_bytes());
             buf[15..17].copy_from_slice(&(self.url.host.len() as u16).to_le_bytes());
-            buf[17..17 + self.url.host.len()].copy_from_slice(self.url.host.as_bytes());
-            return Ok(17 + self.url.host.len());
+            buf[tls::CONNECT_HEADER_LEN..tls::CONNECT_HEADER_LEN + self.url.host.len()]
+                .copy_from_slice(self.url.host.as_bytes());
+            return Ok(tls::CONNECT_HEADER_LEN + self.url.host.len());
         }
         if self.url.tls() && self.stage == Stage::Send {
-            self.sent_chunk = (self.request.len() - self.sent).min(501);
-            buf[0] = 0x31;
+            self.sent_chunk = (self.request.len() - self.sent).min(tls::MAX_SEND);
+            buf[0] = tls::SEND;
             buf[1..9].copy_from_slice(&cap.to_le_bytes());
             buf[9..11].copy_from_slice(&(self.sent_chunk as u16).to_le_bytes());
-            buf[11..11 + self.sent_chunk]
+            buf[tls::SEND_HEADER_LEN..tls::SEND_HEADER_LEN + self.sent_chunk]
                 .copy_from_slice(&self.request[self.sent..self.sent + self.sent_chunk]);
-            return Ok(11 + self.sent_chunk);
+            return Ok(tls::SEND_HEADER_LEN + self.sent_chunk);
         }
         if self.url.tls() && self.stage == Stage::Read {
-            buf[0] = 0x32;
+            buf[0] = tls::RECV;
             buf[1..9].copy_from_slice(&cap.to_le_bytes());
-            buf[9..13].copy_from_slice(&4094u32.to_le_bytes());
-            return Ok(13);
+            buf[9..13].copy_from_slice(&(tls::MAX_RECV_DATA as u32).to_le_bytes());
+            return Ok(tls::RECV_REQUEST_LEN);
         }
         let req = match self.stage {
             Stage::Resolve => NetRequest::Resolve {
@@ -1015,7 +1017,9 @@ impl<T: Transport> FetchJob<T> {
                     ));
                     addr
                 }
-                Ok(NetResponse::Err(NET_ERR_DENIED)) => return Err(NET_DENIED_MESSAGE.into()),
+                Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => {
+                    return Err(NET_DENIED_MESSAGE.into())
+                }
                 _ => return Err(format!("DNS resolution failed for {}", self.url.host)),
             };
             cache_dns(self.url.host.clone(), addr, self.io.now());
@@ -1037,7 +1041,9 @@ impl<T: Transport> FetchJob<T> {
             } else {
                 match api::ipc::decode::<NetResponse>(bytes) {
                     Ok(NetResponse::CapId(cap)) => cap as u64,
-                    Ok(NetResponse::Err(NET_ERR_DENIED)) => return Err(NET_DENIED_MESSAGE.into()),
+                    Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => {
+                        return Err(NET_DENIED_MESSAGE.into())
+                    }
                     _ => return Err("TCP connect failed".into()),
                 }
             };
@@ -1046,7 +1052,7 @@ impl<T: Transport> FetchJob<T> {
                 if self.url.tls() { "+tls" } else { "" },
                 cap
             ));
-            if cap == 0 {
+            if cap == tls::CONNECT_FAILED {
                 return Err("TLS connection failed (network/certificate/time policy)".into());
             }
             self.cap = Some(cap);
@@ -1091,7 +1097,7 @@ impl<T: Transport> FetchJob<T> {
                 return Err("Malformed TLS read reply".into());
             }
             let count = u16::from_le_bytes([bytes[0], bytes[1]]) as usize;
-            if count == u16::MAX as usize {
+            if count == tls::RECV_ERROR as usize {
                 return Err("TLS read failed".into());
             }
             if count == u16::MAX as usize - 1 {
@@ -1104,7 +1110,7 @@ impl<T: Transport> FetchJob<T> {
             if self.decoder.status == 0 {
                 self.first_read_ms = self.io.now();
             }
-            if count == 0 {
+            if count == tls::RECV_EOF as usize {
                 self.decoder.eof()
             } else {
                 self.decoder.feed(&bytes[2..])
@@ -1257,9 +1263,9 @@ impl Closing {
         }
         let mut bytes = [0u8; IPC_BUF_SIZE];
         let len = if self.tls {
-            bytes[0] = 0x15;
+            bytes[0] = tls::CLOSE;
             bytes[1..9].copy_from_slice(&self.cap.to_le_bytes());
-            9
+            tls::HEADER_LEN
         } else {
             match api::ipc::encode(
                 &NetRequest::TcpClose {

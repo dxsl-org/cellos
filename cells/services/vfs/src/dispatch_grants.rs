@@ -3,12 +3,12 @@
 use alloc::string::String;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{vfs_dir_page, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::MAX_INLINE_PAYLOAD;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
 
 pub(crate) fn read_handle_grant<'a>(
     vfs: &mut VfsManager,
@@ -20,16 +20,16 @@ pub(crate) fn read_handle_grant<'a>(
 ) -> VfsResponse<'a> {
     let path = match vfs.files.path_of(caller, file) {
         Some(p) => alloc::string::String::from(p),
-        None => return VfsResponse::Err(ERR_HANDLE),
+        None => return VfsResponse::Err(VfsError::Handle as u8),
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if !matches!(vfs.stat(&path), Some((_, false))) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let max_read = size.min(api::ipc::VFS_GRANT_CHUNK);
     match ostd::grant::with_shared_bytes_mut(grant, |buf| {
@@ -52,7 +52,7 @@ pub(crate) fn read_handle_grant<'a>(
             }
             VfsResponse::GrantDone { bytes }
         }
-        _ => VfsResponse::Err(ERR_IO),
+        _ => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -66,27 +66,27 @@ pub(crate) fn write_handle_grant<'a>(
 ) -> VfsResponse<'a> {
     let path = match vfs.files.path_of(caller, file) {
         Some(p) => alloc::string::String::from(p),
-        None => return VfsResponse::Err(ERR_HANDLE),
+        None => return VfsResponse::Err(VfsError::Handle as u8),
     };
     if !vfs.access.can_write(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
     }
     if bytes > api::ipc::VFS_GRANT_CHUNK {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let file_len = match vfs.stat(&path) {
         Some((len, false)) => len,
-        _ => return VfsResponse::Err(ERR_IO),
+        _ => return VfsResponse::Err(VfsError::Io as u8),
     };
     let end = match offset.checked_add(bytes as u64) {
         Some(e) => e,
-        None => return VfsResponse::Err(ERR_IO),
+        None => return VfsResponse::Err(VfsError::Io as u8),
     };
     let is_guest_disk = crate::access::is_guest_disk_path(&path);
     if is_guest_disk && end > file_len {
@@ -98,7 +98,7 @@ pub(crate) fn write_handle_grant<'a>(
             end,
             file_len
         ));
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let new_len = file_len.max(end);
     let refunded = if vfs.quota.writer_of(&path) == Some(caller.cell) {
@@ -112,14 +112,14 @@ pub(crate) fn write_handle_grant<'a>(
         new_len.saturating_sub(refunded)
     };
     if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
 
     let written = ostd::grant::with_shared_bytes(grant, |buf| {
         buf.len() >= bytes && vfs.write_at(&path, offset, &buf[..bytes])
     });
     if written != Some(true) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if !is_guest_disk {
         vfs.quota.release_path(&path, file_len);
@@ -136,25 +136,25 @@ pub(crate) fn sync_handle<'a>(
 ) -> VfsResponse<'a> {
     let path = match vfs.files.path_of(caller, file) {
         Some(p) => alloc::string::String::from(p),
-        None => return VfsResponse::Err(ERR_HANDLE),
+        None => return VfsResponse::Err(VfsError::Handle as u8),
     };
     if !vfs.access.can_write(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if vfs.sync(&path) {
         VfsResponse::Ok
     } else {
-        VfsResponse::Err(ERR_IO)
+        VfsResponse::Err(VfsError::Io as u8)
     }
 }
 
 pub(crate) fn stat_path<'a>(vfs: &VfsManager, caller: Caller, path: &str) -> VfsResponse<'a> {
     if !vfs.access.can_read(caller, path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     match vfs.stat(path) {
         Some((size, is_dir)) => VfsResponse::Stat { size, is_dir },
-        None => VfsResponse::Err(ERR_IO),
+        None => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -165,20 +165,20 @@ pub(crate) fn list_at<'a>(
     resp_buf: &'a mut [u8; IPC_BUF_SIZE],
 ) -> VfsResponse<'a> {
     let Some(path) = vfs.dirs.dir_path(caller, dir).map(String::from) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if !matches!(vfs.stat(&path), Some((_, true))) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let n = vfs.list_dir(&path, &mut resp_buf[..MAX_INLINE_PAYLOAD]);
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     VfsResponse::Data(&resp_buf[..n])
 }
@@ -194,22 +194,22 @@ pub(crate) fn list_at_page<'a>(
     resp_buf: &'a mut [u8; IPC_BUF_SIZE],
 ) -> VfsResponse<'a> {
     let Some(path) = vfs.dirs.dir_path(caller, dir).map(String::from) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if !matches!(vfs.stat(&path), Some((_, true))) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let Some(page) = vfs.list_page(&path, cursor, &mut resp_buf[..MAX_INLINE_PAYLOAD]) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let changed = vfs
         .dirs
@@ -307,16 +307,16 @@ mod health_tests {
         let mut buffer = [0; IPC_BUF_SIZE];
         assert!(matches!(
             crate::dispatch_file_handles::read_file(&mut vfs, caller, file, 0, 8, &mut buffer),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         assert!(poisoned.load(Ordering::SeqCst));
         assert!(matches!(
             write_handle_grant(&mut vfs, caller, file, 0, 0, 0),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         assert!(matches!(
             stat_path(&vfs, caller, "/data/a"),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         assert!(matches!(
             crate::dispatch_file_handles::close_file(&mut vfs, caller, file),
@@ -337,16 +337,16 @@ mod health_tests {
         let mut buffer = [0; IPC_BUF_SIZE];
         assert!(matches!(
             list_at(&vfs, caller, dir, &mut buffer),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         let other = Caller::principal(types::CellId(45), 1);
         assert!(matches!(
             list_at(&vfs, other, dir, &mut buffer),
-            VfsResponse::Err(ERR_HANDLE)
+            VfsResponse::Err(code) if code == VfsError::Handle as u8
         ));
         assert!(matches!(
             stat_path(&vfs, caller, "unmounted"),
-            VfsResponse::Err(ERR_DENIED)
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
         ));
     }
     #[test]
@@ -371,11 +371,11 @@ mod health_tests {
                 },
                 &mut buffer
             ),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         assert!(matches!(
             crate::grant_read::read_file_grant(&vfs, caller, "/data", 0, 0),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         let mut request = [0; IPC_BUF_SIZE];
         api::ipc::encode(
@@ -385,7 +385,7 @@ mod health_tests {
         .unwrap();
         assert!(matches!(
             crate::dispatch::handle_request(&mut vfs, &request, Some(caller), &mut buffer),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
     }
     #[test]
@@ -407,12 +407,12 @@ mod health_tests {
         let other = Caller::principal(types::CellId(45), 1);
         assert!(matches!(
             crate::dispatch::handle_request(&mut vfs, &request, Some(other), &mut buffer),
-            VfsResponse::Err(ERR_HANDLE)
+            VfsResponse::Err(code) if code == VfsError::Handle as u8
         ));
         assert_eq!(vfs.pending.owned_path(caller, handle), Some("/data/a"));
         assert!(matches!(
             crate::dispatch::handle_request(&mut vfs, &request, Some(caller), &mut buffer),
-            VfsResponse::Err(ERR_IO)
+            VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         assert_eq!(vfs.pending.owned_path(caller, handle), None);
     }

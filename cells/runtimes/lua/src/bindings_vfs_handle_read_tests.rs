@@ -66,7 +66,11 @@ fn reads_more_than_512_bytes() {
 
 #[test]
 fn maps_missing_file_to_io() {
-    let mut ops = MockOps::new(vec![TestReply::Dir(1), TestReply::Err(1), TestReply::Ok]);
+    let mut ops = MockOps::new(vec![
+        TestReply::Dir(1),
+        TestReply::Err(VfsError::Io as u8),
+        TestReply::Ok,
+    ]);
     let err = read_file(&mut ops, "/tmp/missing.lua", 64 * 1024).expect_err("missing");
     assert_eq!(err, ViError::IO);
 }

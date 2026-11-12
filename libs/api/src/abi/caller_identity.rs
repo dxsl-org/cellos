@@ -49,7 +49,7 @@ pub const CALLER_FLAG_VFS_MUTATE: u32 = 1 << 0;
 /// The four `CALLER_FLAG_NET_*` bits mirror kernel-only `CapSet` net rights of
 /// the sender's **Cell** (requested by install path, bounded by the reviewed
 /// launch/boot ceiling). service-net answers a request whose right is absent
-/// with `NetResponse::Err(NET_ERR_DENIED)` before any effect.
+/// with `NetResponse::Err(NetError::Denied)` before any effect.
 pub const CALLER_FLAG_NET_RESOLVE: u32 = 1 << 1;
 /// The calling Cell may open egress: `TcpConnect`, `UdpCreate`, `UdpSend`.
 pub const CALLER_FLAG_NET_CONNECT: u32 = 1 << 2;
@@ -70,7 +70,7 @@ pub const CALLER_FLAG_NET_RIGHTS_MASK: u32 =
 /// requested by install path (`/bin/cellbox` only) and bounded by the reviewed
 /// launch/boot ceiling. service-config answers a write without it, or a write
 /// to a key outside the shell namespace, with
-/// `ConfigResponse::Err(CONFIG_ERR_DENIED)` before any mutation.
+/// `ConfigResponse::Err(ConfigError::Denied)` before any mutation.
 pub const CALLER_FLAG_CONFIG_WRITE: u32 = 1 << 5;
 
 /// The calling Cell may ask service-kms to sign an SSH userauth challenge

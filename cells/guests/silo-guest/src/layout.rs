@@ -28,6 +28,17 @@ pub const COMMAND_DESTROY_ENROLLMENT_KEY: u8 = 5;
 /// Phase 3 enrollment extension: atomic promotion to active signer.
 pub const COMMAND_PROMOTE_ENROLLMENT_KEY: u8 = 6;
 
+/// Response status byte at `STATUS_OFFSET`: a P-256 public point follows.
+pub const STATUS_READY: u8 = 1;
+/// A raw 64-byte signature follows.
+pub const STATUS_SIGNATURE: u8 = 2;
+/// The operation completed with no payload.
+pub const STATUS_ACK: u8 = 3;
+/// The addressed enrollment key does not exist.
+pub const STATUS_ABSENT: u8 = 4;
+/// The guest refused or failed; the one-byte mailbox fault code follows.
+pub const STATUS_FAULT: u8 = 0xff;
+
 pub const HVC_SILO_READY: u64 = 0xC600_0080;
 pub const HVC_SILO_DONE: u64 = 0xC600_0081;
 pub const HVC_SILO_FAULT: u64 = 0xC600_0082;
@@ -63,7 +74,7 @@ pub fn decode_fault_response(
     let canonical = request_seq == expected_request_seq
         && response_seq == expected_request_seq
         && page[COMMAND_OFFSET] == expected_command
-        && status == 0xff
+        && status == STATUS_FAULT
         && page[RESERVED_OFFSET..DATA_OFFSET]
             .iter()
             .all(|byte| *byte == 0)
@@ -97,7 +108,7 @@ mod tests {
         page[RESPONSE_SEQ_OFFSET..RESPONSE_SEQ_OFFSET + 8]
             .copy_from_slice(&request_seq.to_le_bytes());
         page[COMMAND_OFFSET] = COMMAND_INITIALIZE;
-        page[STATUS_OFFSET] = 0xff;
+        page[STATUS_OFFSET] = STATUS_FAULT;
         page[DATA_OFFSET] = 0x41;
 
         assert_eq!(
@@ -105,7 +116,7 @@ mod tests {
             FaultResponseMetadata {
                 request_seq,
                 response_seq: request_seq,
-                status: 0xff,
+                status: STATUS_FAULT,
                 mailbox_code: Some(0x41),
             }
         );

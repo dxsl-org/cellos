@@ -16,12 +16,12 @@ use alloc::string::ToString;
 use alloc::vec;
 
 use api::ipc::VfsResponse;
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::syscall::sys_grant_copy_from_slice;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_IO};
 
 /// Largest `ReadGrant` transfer: the one page `ostd::fs` allocates per call.
 const MAX_GRANT_READ: usize = 4096;
@@ -48,13 +48,13 @@ pub(crate) fn read_grant<'a>(
         return VfsResponse::GrantDone { bytes: 0 };
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let Some((file_len, false)) = vfs.stat(&path) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     let file_len = usize::try_from(file_len).unwrap_or(usize::MAX);
     let start = match usize::try_from(offset) {
@@ -77,11 +77,11 @@ pub(crate) fn read_grant<'a>(
         }
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     match sys_grant_copy_from_slice(grant, &buf[..read]) {
         Some(bytes) => VfsResponse::GrantDone { bytes },
-        None => VfsResponse::Err(ERR_IO),
+        None => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -97,19 +97,19 @@ pub(crate) fn read_file_grant<'a>(
         return hold_lease(grant);
     }
     if !vfs.access.can_read(caller, path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let data = vfs.read_to_vec(path);
     if !vfs.healthy(path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     // The adapter also caps the copy at the kernel-registered grant length.
     match sys_grant_copy_from_slice(grant, &data[..data.len().min(max)]) {
         Some(bytes) => VfsResponse::GrantDone { bytes },
-        None => VfsResponse::Err(ERR_IO),
+        None => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -126,7 +126,7 @@ const HOLD_LEASE_MS: u64 = 4_000;
 fn hold_lease<'a>(grant: usize) -> VfsResponse<'a> {
     use ostd::syscall::{sys_get_time_ms, sys_grant_slice_with_len, sys_yield};
     if sys_grant_slice_with_len(grant).is_none() {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     ostd::io::println("[vfs] recovery-fixture: holding grant lease without acknowledgement");
     let start = sys_get_time_ms().unwrap_or(0);
@@ -134,5 +134,5 @@ fn hold_lease<'a>(grant: usize) -> VfsResponse<'a> {
         sys_yield();
     }
     ostd::io::println("[vfs] recovery-fixture: lease released");
-    VfsResponse::Err(ERR_IO)
+    VfsResponse::Err(VfsError::Io as u8)
 }

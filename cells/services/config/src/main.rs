@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use api::caller_identity::CallerIdentity;
 use api::hotswap::ViStateTransfer;
 use api::ipc::{ConfigRequest, ConfigResponse};
+use api::services::proto::config::ConfigError;
 use ostd::prelude::*;
 
 mod rights;
@@ -26,10 +27,6 @@ api::declare_syscalls![
     StateStash,
     StateRestore
 ];
-
-/// `ConfigResponse::Err` code for a malformed request or a reply too large to
-/// encode.
-const ERR_MALFORMED: u8 = 0xFF;
 
 // Singleton storage
 struct ConfigStore {
@@ -58,7 +55,7 @@ fn handle<'o>(
     out: &'o mut [u8],
 ) -> Option<&'o [u8]> {
     let Some(request) = request else {
-        return encode(&ConfigResponse::Err(ERR_MALFORMED), out);
+        return encode(&ConfigResponse::Err(ConfigError::Malformed as u8), out);
     };
     if let Err(code) = rights::admit(&request, caller) {
         return encode(&ConfigResponse::Err(code), out);
@@ -93,7 +90,7 @@ fn handle<'o>(
         .map(|slice| slice.len());
     match encoded {
         Some(len) => Some(&out[..len]),
-        None => encode(&ConfigResponse::Err(ERR_MALFORMED), out),
+        None => encode(&ConfigResponse::Err(ConfigError::Malformed as u8), out),
     }
 }
 
@@ -220,7 +217,7 @@ impl ViStateTransfer for ConfigStore {
 mod tests {
     use super::*;
     use api::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_VFS_MUTATE};
-    use api::ipc::{CONFIG_ERR_DENIED, IPC_BUF_SIZE};
+    use api::ipc::IPC_BUF_SIZE;
 
     const SHELL: CallerIdentity = CallerIdentity {
         flags: CALLER_FLAG_CONFIG_WRITE | CALLER_FLAG_VFS_MUTATE,
@@ -257,7 +254,7 @@ mod tests {
     fn denied_writes_leave_the_store_unchanged() {
         let mut store = ConfigStore::new();
         let before = snapshot(&store);
-        let denied = alloc::format!("{:?}", ConfigResponse::Err(CONFIG_ERR_DENIED));
+        let denied = alloc::format!("{:?}", ConfigResponse::Err(ConfigError::Denied as u8));
         for (request, caller) in [
             (
                 ConfigRequest::Set {
@@ -344,7 +341,7 @@ mod tests {
         let reply = handle(&mut store, None, Some(&SHELL), &mut out).expect("reply encodes");
         assert!(matches!(
             api::ipc::decode::<ConfigResponse>(reply),
-            Ok(ConfigResponse::Err(ERR_MALFORMED))
+            Ok(ConfigResponse::Err(code)) if code == ConfigError::Malformed as u8
         ));
     }
 }

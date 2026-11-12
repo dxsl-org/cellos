@@ -14,11 +14,12 @@ use alloc::vec::Vec;
 use api::ipc::{
     save_refusal, Observation, SaveOutcome, VfsRequest, VfsResponse, VFS_SAVE_CHUNK, VFS_SAVE_MAX,
 };
+use api::services::proto::vfs::VfsError;
 use sha2::{Digest, Sha256};
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{parent_of, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA, ERR_UNSUPPORTED};
+use crate::paths::parent_of;
 
 #[cfg(feature = "test-hooks")]
 pub(crate) mod selftest;
@@ -86,7 +87,7 @@ pub(crate) fn handle(
                 outcome: Some(outcome),
                 ..
             }) => VfsResponse::SaveOutcome(*outcome),
-            _ => VfsResponse::Err(ERR_HANDLE),
+            _ => VfsResponse::Err(VfsError::Handle as u8),
         },
         VfsRequest::SaveAbort { id } => abort(vfs, caller, id),
         _ => return None,
@@ -95,17 +96,17 @@ pub(crate) fn handle(
 
 fn observe(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResponse<'static> {
     if !vfs.access.can_read(caller, path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if vfs.stage_path(path, 0).is_none() {
-        return VfsResponse::Err(ERR_UNSUPPORTED);
+        return VfsResponse::Err(VfsError::Unsupported as u8);
     }
     if !vfs.healthy(path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     match vfs.observe(path) {
         Some(observation) => VfsResponse::Observed(observation),
-        None => VfsResponse::Err(ERR_IO),
+        None => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -114,16 +115,16 @@ fn begin(vfs: &mut VfsManager, caller: Caller, dst: &str) -> VfsResponse<'static
         || !vfs.access.can_write(caller, dst)
         || !caller.may_own_state()
     {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let id = vfs.saves.next;
     let Some(stage) = vfs.stage_path(dst, id) else {
-        return VfsResponse::Err(ERR_UNSUPPORTED);
+        return VfsResponse::Err(VfsError::Unsupported as u8);
     };
     if !vfs.healthy(dst)
         || !parent_of(dst).is_some_and(|parent| matches!(vfs.stat(parent), Some((_, true))))
     {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     // A successor of a dead cell generation inherits none of its transactions.
     let stale: Vec<String> = vfs
@@ -147,13 +148,13 @@ fn begin(vfs: &mut VfsManager, caller: Caller, dst: &str) -> VfsResponse<'static
         .filter(|slot| slot.owner == caller)
         .count();
     if held >= MAX_SAVES_PER_CALLER || vfs.saves.slots.len() >= MAX_SAVES {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
     let Some(next) = id.checked_add(1) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if !vfs.stage_create(&stage) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     vfs.saves.next = next;
     vfs.saves.slots.push(Slot {
@@ -177,28 +178,28 @@ fn chunk(
 ) -> VfsResponse<'static> {
     let staged = vfs.saves.staged_by(caller);
     let Some(slot) = vfs.saves.owned(caller, id) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if slot.sealed.is_some()
         || slot.outcome.is_some()
         || offset != slot.written
         || bytes.len() > VFS_SAVE_CHUNK
     {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     }
     let end = slot.written + bytes.len() as u64;
     if end > VFS_SAVE_MAX {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
     let stage = slot.stage.clone();
     if !vfs
         .quota
         .can_charge(caller.cell, staged + bytes.len() as u64)
     {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
     if !vfs.stage_write(&stage, offset, bytes) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if let Some(slot) = vfs.saves.owned(caller, id) {
         slot.written = end;
@@ -214,14 +215,14 @@ fn seal(
     sha256: &[u8; 32],
 ) -> VfsResponse<'static> {
     let Some(slot) = vfs.saves.owned(caller, id) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if slot.sealed.is_some() || slot.outcome.is_some() || slot.written != len {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     }
     let stage = slot.stage.clone();
     let Some(identity) = sealed_identity(vfs, &stage, len, sha256) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     if let Some(slot) = vfs.saves.owned(caller, id) {
         slot.sealed = Some(identity);
@@ -328,7 +329,7 @@ fn commit(
     expect: api::ipc::SaveExpect,
 ) -> VfsResponse<'static> {
     let Some(slot) = vfs.saves.owned(caller, id) else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     if let Some(outcome) = slot.outcome {
         return VfsResponse::SaveOutcome(outcome);
@@ -345,14 +346,14 @@ fn commit(
         };
         // Policy may have changed since `SaveBegin`; nothing is attempted then.
         if !vfs.access.can_write(caller, &dst) {
-            return VfsResponse::Err(ERR_DENIED);
+            return VfsResponse::Err(VfsError::Denied as u8);
         }
         let _lease = if dst.starts_with("/srv/") {
             let Ok(key) = crate::namespace::NamespaceKey::parse(&dst) else {
-                return VfsResponse::Err(ERR_DENIED);
+                return VfsResponse::Err(VfsError::Denied as u8);
             };
             let Ok(lease) = vfs.ledger.acquire_transient(&key) else {
-                return VfsResponse::Err(ERR_DENIED);
+                return VfsResponse::Err(VfsError::Denied as u8);
             };
             Some(lease)
         } else {
@@ -393,7 +394,7 @@ fn abort(vfs: &mut VfsManager, caller: Caller, id: u32) -> VfsResponse<'static> 
         .iter()
         .position(|slot| slot.id == id && slot.owner == caller)
     else {
-        return VfsResponse::Err(ERR_HANDLE);
+        return VfsResponse::Err(VfsError::Handle as u8);
     };
     let slot = vfs.saves.slots.remove(index);
     // A committed stage is the destination now. After an indeterminate commit

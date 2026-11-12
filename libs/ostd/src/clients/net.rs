@@ -8,7 +8,8 @@ use super::vierr_from_code;
 use crate::service::NetRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED, NET_TCP_INLINE_DATA_MAX};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
+use api::services::proto::net::NetError;
 
 /// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
 /// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
@@ -16,10 +17,10 @@ const WRITE_STALL_BUDGET: u32 = 100_000;
 
 /// Map a `NetResponse::Err` code to a `ViError`.
 ///
-/// [`NET_ERR_DENIED`] means the caller's Cell lacks the network right the
+/// [`NetError::Denied`] means the caller's Cell lacks the network right the
 /// request needs, which is a permission failure, not a network one.
 fn net_error(code: u8) -> ViError {
-    if code == NET_ERR_DENIED {
+    if code == NetError::Denied as u8 {
         ViError::PermissionDenied
     } else {
         vierr_from_code(code)
@@ -283,7 +284,8 @@ impl embedded_io::Read for TcpStream {
                     crate::task::yield_now();
                 }
                 Err(ViError::Unknown) => {
-                    // EOF: net service sent Err(0xFF) signalling FIN/RST.
+                    // EOF: net service sent `Err(TCP_RECV_EOF)` signalling FIN/RST
+                    // (`api::services::proto::net::TCP_RECV_EOF`).
                     return Ok(0);
                 }
                 Err(e) => return Err(crate::io::OstdError(e)),
@@ -330,8 +332,8 @@ mod tests {
 
     #[test]
     fn denied_is_permission_denied_and_other_codes_keep_their_mapping() {
-        assert_eq!(net_error(NET_ERR_DENIED), ViError::PermissionDenied);
-        assert_eq!(net_error(0xFF), ViError::Unknown);
-        assert_eq!(net_error(0xFD), ViError::Unknown);
+        assert_eq!(net_error(NetError::Denied as u8), ViError::PermissionDenied);
+        assert_eq!(net_error(NetError::Failure as u8), ViError::Unknown);
+        assert_eq!(net_error(NetError::Busy as u8), ViError::Unknown);
     }
 }

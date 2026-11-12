@@ -3,6 +3,12 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use api::services::proto::supervisor::{
+    HotswapError, ELF_PATH_LEN, HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_HOTSWAP_DONE,
+    PHASE_HOTSWAP_ERROR, PHASE_REFUSED, STATUS_INVALID_REQUEST, STATUS_OK, STATUS_REJECTED_CALLER,
+    STATUS_REPLY_LEN, STATUS_SERVICE_NOT_FOUND, SVC_NAME_LEN,
+};
 use api::syscall::service;
 use ostd::ipc::IpcError;
 use ostd::service::provider_tid;
@@ -10,15 +16,6 @@ use ostd::syscall;
 
 ostd::cell_main!(cell_main);
 
-const APP_MESSAGE_PREFIX: [u8; 2] = [0xAC, 0x00];
-const OP_HOTSWAP: u8 = 0x01;
-const OP_STATUS: u8 = 0x03;
-const SVC_NAME_LEN: usize = 64;
-const ELF_PATH_LEN: usize = 128;
-const REQUEST_LEN: usize = 1 + SVC_NAME_LEN + ELF_PATH_LEN;
-const STATUS_LEN: usize = 3;
-const SUCCESS_PHASE: u8 = 6;
-const SUCCESS_CODE: u8 = 0;
 const REPLY_TIMEOUT_TICKS: u64 = 1_600;
 const USAGE: &str = "hotswap: usage: hotswap <service-name> <new-elf-path>";
 const EXACT_BIN_TARGET_ERROR: &str = "hotswap: ELF path must be an exact /bin/<name> target";
@@ -86,7 +83,7 @@ fn cell_main() {
 fn encode_hotswap_request(
     service_name: &str,
     new_path: &str,
-) -> Result<[u8; REQUEST_LEN], &'static str> {
+) -> Result<[u8; HOTSWAP_REQUEST_LEN], &'static str> {
     if service_name.is_empty() || new_path.is_empty() {
         return Err(USAGE);
     }
@@ -94,7 +91,7 @@ fn encode_hotswap_request(
     validate_service_name(service_name)?;
     validate_elf_path(new_path)?;
 
-    let mut request = [0u8; REQUEST_LEN];
+    let mut request = [0u8; HOTSWAP_REQUEST_LEN];
     request[0] = OP_HOTSWAP;
     let service_bytes = service_name.as_bytes();
     request[1..1 + service_bytes.len()].copy_from_slice(service_bytes);
@@ -105,13 +102,16 @@ fn encode_hotswap_request(
 
 /// One hotswap exchange: the supervisor answers each request with exactly one
 /// status record.
-fn request_status(supervisor_tid: usize, request: &[u8; REQUEST_LEN]) -> Result<(), StatusError> {
-    let mut envelope = [0u8; APP_MESSAGE_PREFIX.len() + REQUEST_LEN];
-    envelope[..APP_MESSAGE_PREFIX.len()].copy_from_slice(&APP_MESSAGE_PREFIX);
-    envelope[APP_MESSAGE_PREFIX.len()..].copy_from_slice(request);
-    let mut status = [0u8; STATUS_LEN];
+fn request_status(
+    supervisor_tid: usize,
+    request: &[u8; HOTSWAP_REQUEST_LEN],
+) -> Result<(), StatusError> {
+    let mut envelope = [0u8; HEADER_LEN + HOTSWAP_REQUEST_LEN];
+    envelope[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
+    envelope[HEADER_LEN..].copy_from_slice(request);
+    let mut status = [0u8; STATUS_REPLY_LEN];
     match ostd::ipc::call_bytes(supervisor_tid, &envelope, &mut status, REPLY_TIMEOUT_TICKS) {
-        Ok(reply) => match <[u8; STATUS_LEN]>::try_from(reply) {
+        Ok(reply) => match <[u8; STATUS_REPLY_LEN]>::try_from(reply) {
             Ok(status) => parse_status(status),
             Err(_) => Err(StatusError::Message(MALFORMED_REPLY)),
         },
@@ -127,23 +127,25 @@ fn request_status(supervisor_tid: usize, request: &[u8; REQUEST_LEN]) -> Result<
     }
 }
 
-fn parse_status(status: [u8; STATUS_LEN]) -> Result<(), StatusError> {
+fn parse_status(status: [u8; STATUS_REPLY_LEN]) -> Result<(), StatusError> {
     if status[0] != OP_STATUS {
         return Err(StatusError::Message(MALFORMED_REPLY));
     }
 
     match status {
-        [OP_STATUS, SUCCESS_PHASE, SUCCESS_CODE] => Ok(()),
-        [OP_STATUS, 0, 0xFF] => Err(StatusError::Message(
+        [OP_STATUS, PHASE_HOTSWAP_DONE, STATUS_OK] => Ok(()),
+        [OP_STATUS, PHASE_REFUSED, STATUS_INVALID_REQUEST] => Err(StatusError::Message(
             "hotswap: protocol error: supervisor rejected request framing",
         )),
-        [OP_STATUS, 0, 0xFE] => Err(StatusError::Message(
+        [OP_STATUS, PHASE_REFUSED, STATUS_SERVICE_NOT_FOUND] => Err(StatusError::Message(
             "hotswap: target service is not registered with the supervisor",
         )),
-        [OP_STATUS, 0, 0xFD] => Err(StatusError::Message(
+        [OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER] => Err(StatusError::Message(
             "hotswap: supervisor only accepts requests from the shell-launched hotswap CLI",
         )),
-        [OP_STATUS, 0xFF, code] => Err(StatusError::Message(supervisor_error_message(code))),
+        [OP_STATUS, PHASE_HOTSWAP_ERROR, code] => {
+            Err(StatusError::Message(supervisor_error_message(code)))
+        }
         [OP_STATUS, phase, code] => Err(StatusError::UnexpectedStatus { phase, code }),
         _ => Err(StatusError::Message(MALFORMED_REPLY)),
     }
@@ -182,17 +184,27 @@ fn validate_elf_path(path: &str) -> Result<(), &'static str> {
 }
 
 fn supervisor_error_message(code: u8) -> &'static str {
-    match code {
-        0 => "hotswap: supervisor could not find the target service",
-        1 => "hotswap: supervisor could not freeze the target service",
-        2 => "hotswap: supervisor could not deliver the snapshot request",
-        3 => "hotswap: supervisor timed out waiting for the snapshot",
-        4 => "hotswap: supervisor could not spawn the replacement ELF",
-        5 => "hotswap: supervisor could not deliver the restore request",
-        6 => "hotswap: supervisor timed out waiting for the replacement to become ready",
-        7 => "hotswap: supervisor could not pause the service for cutover",
-        8 => "hotswap: supervisor could not publish the replacement service",
-        _ => "hotswap: supervisor returned an unknown error code",
+    let Some(error) = HotswapError::from_u8(code) else {
+        return "hotswap: supervisor returned an unknown error code";
+    };
+    match error {
+        HotswapError::ServiceNotFound => "hotswap: supervisor could not find the target service",
+        HotswapError::FreezeFailed => "hotswap: supervisor could not freeze the target service",
+        HotswapError::SnapshotIpcFailed => {
+            "hotswap: supervisor could not deliver the snapshot request"
+        }
+        HotswapError::SnapshotTimeout => "hotswap: supervisor timed out waiting for the snapshot",
+        HotswapError::SpawnFailed => "hotswap: supervisor could not spawn the replacement ELF",
+        HotswapError::RestoreIpcFailed => {
+            "hotswap: supervisor could not deliver the restore request"
+        }
+        HotswapError::ReadyTimeout => {
+            "hotswap: supervisor timed out waiting for the replacement to become ready"
+        }
+        HotswapError::PauseFailed => "hotswap: supervisor could not pause the service for cutover",
+        HotswapError::RegisterFailed => {
+            "hotswap: supervisor could not publish the replacement service"
+        }
     }
 }
 

@@ -4,6 +4,7 @@ use super::{
 };
 use alloc::{vec, vec::Vec};
 use api::ipc::{NetResponse, VfsResponse};
+use api::services::proto::vfs::VfsError;
 use ostd::ipc::IpcError;
 use ostd::ViError;
 
@@ -48,7 +49,7 @@ fn classify_file_read_maps_missing_to_not_found() {
 #[test]
 fn classify_stat_preflight_maps_err_io_to_not_found() {
     assert!(matches!(
-        classify_stat_preflight(Ok(VfsResponse::Err(1))),
+        classify_stat_preflight(Ok(VfsResponse::Err(VfsError::Io as u8))),
         StatPreflight::NotFound
     ));
 }
@@ -63,7 +64,7 @@ fn classify_stat_preflight_keeps_other_failures_internal() {
         StatPreflight::InternalError
     ));
     assert!(matches!(
-        classify_stat_preflight(Ok(VfsResponse::Err(4))),
+        classify_stat_preflight(Ok(VfsResponse::Err(VfsError::Handle as u8))),
         StatPreflight::InternalError
     ));
     assert!(matches!(

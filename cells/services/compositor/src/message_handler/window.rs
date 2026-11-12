@@ -2,6 +2,7 @@ use api::display::{
     compositor_ops, CloseResponse, ConfigureAck, Rect, SetIcon, SetTitle, SurfaceStateRequest,
     WindowState,
 };
+use api::services::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
 use ostd::ipc::{post, reply_to};
 use ostd::syscall::{sys_try_send, SyscallResult};
 
@@ -127,31 +128,31 @@ fn acknowledge_configure(
     dirty: &mut Option<Rect>,
 ) -> Option<u64> {
     let Some(frame) = buf.get(..12) else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return None;
     };
     let Ok(frame) = ConfigureAck::decode(frame) else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return None;
     };
     let Some(surface) = table.get_mut(frame.cap as u64) else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return None;
     };
     if surface.owner != sender {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return None;
     }
     let Some((old_rect, new_rect, state)) = surface.acknowledge_configure(frame.cap, frame.serial)
     else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return None;
     };
     // The client consumes this asynchronous state while waiting for the reply.
     if let Ok(event) = state.encode() {
         let _ = post(sender, &event);
     }
-    let _ = reply_to(sender, b"\x01");
+    let _ = reply_to(sender, &[REPLY_TRUE]);
     mark_dirty(dirty, old_rect, new_rect);
     Some(frame.cap as u64)
 }

@@ -37,29 +37,19 @@ pub mod report;
 extern crate alloc;
 
 use alloc::vec::Vec;
+use api::services::proto::input::{DEVICE_FRAME_LEN, EV_DEVICE, EV_KEY, EV_REL};
 
 pub use decode::{decode_auto, decode_report, HidValue};
 pub use leds::{LedOutput, MAX_LED_REPORT};
 pub use report::{parse_report_descriptor, HidCollection, HidReportMap};
 
-// ─── Input-service wire opcodes (must match cells/services/input) ─────────────
-/// `EV_KEY` — a key or mouse button changed state.
-pub const EV_KEY: u8 = 0;
-/// `EV_REL` — a relative pointer axis moved.
-pub const EV_REL: u8 = 1;
-/// `EV_ABS` — an absolute pointer position (unused by this driver).
-pub const EV_ABS: u8 = 2;
-/// A HID event with a stable logical-device identity.
-pub const EV_DEVICE: u8 = 0x05;
-
 /// Host-local logical HID interface identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HidDeviceId(pub u32);
 
-/// Length of a device-identified input event.
-///
-/// Layout: `[EV_DEVICE][device:u32][event_type][code:u32][value:i32]`.
-pub const DEVICE_EVENT_LEN: usize = 14;
+/// Length of a device-identified input event: the `EV_DEVICE` frame of
+/// `api::services::proto::input`.
+pub const DEVICE_EVENT_LEN: usize = DEVICE_FRAME_LEN;
 
 /// Serialise an event from one logical HID interface.
 pub fn encode_device_event(

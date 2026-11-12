@@ -2,6 +2,7 @@ use alloc::collections::BTreeMap;
 use api::ipc::{
     net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
 };
+use api::services::proto::net::{NetError, TCP_RECV_EOF};
 use smoltcp::{
     iface::{Interface, SocketSet},
     socket::tcp,
@@ -31,7 +32,7 @@ pub(crate) fn handle_tcp_request(
             let (handle, cap) = match make_tcp(sockets, table, owner) {
                 Ok(t) => t,
                 Err(_) => {
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                     return true;
                 }
             };
@@ -43,7 +44,7 @@ pub(crate) fn handle_tcp_request(
             {
                 table.remove_internal(cap);
                 sockets.remove(handle);
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             table.set_state(cap, SocketState::Connecting);
@@ -102,7 +103,7 @@ pub(crate) fn handle_tcp_request(
                         (n, ())
                     });
                 } else if !s.may_recv() {
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(TCP_RECV_EOF));
                 } else {
                     send_typed(sender, R::Data(&[]));
                 }
@@ -118,7 +119,7 @@ pub(crate) fn handle_tcp_request(
                 tls_table.remove(&cap);
                 send_typed(sender, R::Ok);
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
             true
         }
@@ -126,7 +127,7 @@ pub(crate) fn handle_tcp_request(
             let (handle, cap) = match make_tcp(sockets, table, owner) {
                 Ok(t) => t,
                 Err(_) => {
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                     return true;
                 }
             };
@@ -137,7 +138,7 @@ pub(crate) fn handle_tcp_request(
             {
                 table.remove_internal(cap);
                 sockets.remove(handle);
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             table.set_state(cap, SocketState::Listening);
@@ -150,24 +151,24 @@ pub(crate) fn handle_tcp_request(
             if table.is_udp(cap, owner)
                 || table.get_state(cap, owner) != Some(SocketState::Listening)
             {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             let handle = match table.get(cap, owner) {
                 Some(h) => h,
                 None => {
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                     return true;
                 }
             };
             if sockets.get_mut::<tcp::Socket>(handle).state() != tcp::State::Established {
-                send_typed(sender, R::Err(0xFE));
+                send_typed(sender, R::Err(NetError::NotReady as u8));
                 return true;
             }
             let listen_port = match table.get_listen_port(cap, owner) {
                 Some(p) => p,
                 None => {
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                     return true;
                 }
             };
@@ -175,7 +176,7 @@ pub(crate) fn handle_tcp_request(
             // capacity is exhausted, the established handle stays attached to
             // the old cap and the caller can retry without a leaked stream cap.
             if !table.can_insert(owner) {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             let mut replacement = tcp::Socket::new(
@@ -183,7 +184,7 @@ pub(crate) fn handle_tcp_request(
                 tcp::SocketBuffer::new(alloc::vec![0u8; 4096]),
             );
             if replacement.listen(listen_port).is_err() {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             let nh = sockets.add(replacement);
@@ -194,7 +195,7 @@ pub(crate) fn handle_tcp_request(
                 }
                 Err(_) => {
                     sockets.remove(nh);
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                 }
             }
             true
@@ -202,7 +203,7 @@ pub(crate) fn handle_tcp_request(
         NetRequest::TcpRecvReady { cap_id, buf_len } => {
             let cap = *cap_id as u64;
             if table.is_udp(cap, owner) || *buf_len == 0 {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             } else if let Some(h) = table.get(cap, owner) {
                 let s = sockets.get_mut::<tcp::Socket>(h);
                 if s.can_recv() {
@@ -225,14 +226,14 @@ pub(crate) fn handle_tcp_request(
                     send_typed(sender, R::NotReady);
                 }
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
             true
         }
         NetRequest::TcpSendReady { cap_id, data } => {
             let cap = *cap_id as u64;
             if table.is_udp(cap, owner) || table.is_graceful_closing(cap) {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             } else if let Some(h) = table.get(cap, owner) {
                 let s = sockets.get_mut::<tcp::Socket>(h);
                 if !s.may_send() {
@@ -251,14 +252,14 @@ pub(crate) fn handle_tcp_request(
                     );
                 }
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
             true
         }
         NetRequest::TcpCloseGraceful { cap_id } => {
             let cap = *cap_id as u64;
             if table.is_udp(cap, owner) {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             } else if let Some(h) = table.get(cap, owner) {
                 if !table.is_graceful_closing(cap) {
                     sockets.get_mut::<tcp::Socket>(h).close();
@@ -269,7 +270,7 @@ pub(crate) fn handle_tcp_request(
                 }
                 send_typed(sender, R::Ok);
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
             true
         }
@@ -281,7 +282,7 @@ pub(crate) fn handle_tcp_request(
             if *wait {
                 // The runtime owns deferred waits; a direct dispatch cannot
                 // retain the receive token and must refuse rather than poll.
-                send_typed(sender, R::Err(0xFD));
+                send_typed(sender, R::Err(NetError::Busy as u8));
             } else {
                 match readiness(interests, *cursor, owner, sockets, table) {
                     Ok((events, next_cursor)) => {
@@ -295,7 +296,7 @@ pub(crate) fn handle_tcp_request(
                             },
                         );
                     }
-                    Err(()) => send_typed(sender, R::Err(0xFF)),
+                    Err(()) => send_typed(sender, R::Err(NetError::Failure as u8)),
                 }
             }
             true

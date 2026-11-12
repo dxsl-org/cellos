@@ -17,6 +17,7 @@ extern crate ostd;
 
 use alloc::vec::Vec;
 use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::syscall::service;
 use ostd::clients::VfsClient;
 use ostd::io::{print, println};
@@ -121,7 +122,7 @@ fn classify_stat_preflight(resp: Result<VfsResponse<'_>, IpcError>) -> StatPrefl
     match resp {
         Ok(VfsResponse::Stat { is_dir: true, .. }) => StatPreflight::InternalError,
         Ok(VfsResponse::Stat { is_dir: false, .. }) => StatPreflight::Exists,
-        Ok(VfsResponse::Err(1)) => StatPreflight::NotFound,
+        Ok(VfsResponse::Err(code)) if code == VfsError::Io as u8 => StatPreflight::NotFound,
         Ok(VfsResponse::Err(_)) | Ok(_) | Err(_) => StatPreflight::InternalError,
     }
 }

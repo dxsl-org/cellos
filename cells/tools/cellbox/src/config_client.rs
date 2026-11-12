@@ -2,7 +2,8 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use api::caller_identity::CALLER_IDENTITY_LEN;
 use api::config::ViConfig;
-use api::ipc::{ConfigRequest, ConfigResponse, CONFIG_ERR_DENIED, IPC_BUF_SIZE};
+use api::ipc::{ConfigRequest, ConfigResponse, IPC_BUF_SIZE};
+use api::services::proto::config::ConfigError;
 use ostd::prelude::*;
 use ostd::sync::Mutex;
 
@@ -13,7 +14,7 @@ const CONFIG_CALL_TICKS: u64 = 200;
 ///
 /// Uses typed postcard IPC (`ConfigRequest` / `ConfigResponse`) matching the
 /// config service v0.4 protocol (attested writes: a `Set` outside the caller's
-/// Q right is answered `Err(CONFIG_ERR_DENIED)`).  Resolves the live Config
+/// Q right is answered `Err(ConfigError::Denied)`).  Resolves the live Config
 /// endpoint via the Service Registry on each call, so it transparently
 /// reconnects when the supervisor respawns Config.
 ///
@@ -106,11 +107,13 @@ fn encode_set<'b>(key: &str, value: &str, buf: &'b mut [u8; IPC_BUF_SIZE]) -> Vi
 }
 
 /// Map service-config's reply to a `Set`. Only the service decides admission;
-/// `CONFIG_ERR_DENIED` is a refusal, anything else unexpected is unavailability.
+/// [`ConfigError::Denied`] is a refusal, anything else unexpected is unavailability.
 fn set_reply(raw: &[u8]) -> ViResult<()> {
     match api::ipc::decode::<ConfigResponse>(raw) {
         Ok(ConfigResponse::Ok) => Ok(()),
-        Ok(ConfigResponse::Err(CONFIG_ERR_DENIED)) => Err(ViError::PermissionDenied),
+        Ok(ConfigResponse::Err(code)) if code == ConfigError::Denied as u8 => {
+            Err(ViError::PermissionDenied)
+        }
         _ => Err(ViError::IO),
     }
 }
@@ -142,11 +145,11 @@ mod tests {
     fn set_reply_distinguishes_refusal_from_unavailability() {
         assert_eq!(set_reply(&reply(ConfigResponse::Ok)), Ok(()));
         assert_eq!(
-            set_reply(&reply(ConfigResponse::Err(CONFIG_ERR_DENIED))),
+            set_reply(&reply(ConfigResponse::Err(ConfigError::Denied as u8))),
             Err(ViError::PermissionDenied)
         );
         for other in [
-            ConfigResponse::Err(0xFF),
+            ConfigResponse::Err(ConfigError::Malformed as u8),
             ConfigResponse::NotFound,
             ConfigResponse::Value("x"),
         ] {

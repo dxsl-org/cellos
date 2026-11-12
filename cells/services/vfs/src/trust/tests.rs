@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex as HostMutex};
 
 use api::caller_identity::{CALLER_FLAG_NET_CONNECT, CALLER_FLAG_VFS_MUTATE};
 use api::ipc::{ssh_trust, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use types::CellId;
 
 use super::{lookup, STORE_PATH};
@@ -565,7 +566,7 @@ fn only_the_caller_with_matching_owner_bindings_commits() {
 fn challenges_are_bounded_per_caller_and_in_total() {
     let mut vfs = manager();
     assert!(challenge(&mut vfs, CLIENT, "a", 22, 1).is_ok());
-    let quota = format!("{:?}", VfsResponse::Err(crate::paths::ERR_QUOTA));
+    let quota = format!("{:?}", VfsResponse::Err(VfsError::Quota as u8));
     assert_eq!(challenge(&mut vfs, CLIENT, "b", 22, 1), Err(quota.clone()));
     let more: [Caller; 3] = [94, 95, 96].map(|cell| Caller {
         flags: CALLER_FLAG_NET_CONNECT,

@@ -3,6 +3,8 @@
 //! Physical input stays in Linux evdev form until service-input translates it.
 //! Only the headless console fallback performs ASCII/ANSI translation.
 
+use api::services::proto::input::{EV_ABS, EV_KEY, EV_REL};
+
 use crate::sync::Spinlock;
 
 const DATA_PORT: u16 = 0x60;
@@ -14,7 +16,8 @@ const STATUS_ERROR: u8 = 0xC0;
 const WAIT_LIMIT: usize = 100_000;
 const POLL_LIMIT: usize = 64;
 
-/// Kernel input-service wire fields: EV_KEY=0, EV_REL=1, EV_ABS=2 (guest pixels).
+/// Input-service producer frame fields (`api::services::proto::input`):
+/// `opcode` is EV_KEY, EV_REL or EV_ABS (guest pixels).
 #[derive(Clone, Copy, Debug)]
 pub struct Ps2Event {
     pub opcode: u8,
@@ -296,7 +299,7 @@ impl Ps2State {
             self.caps_lock = !self.caps_lock;
         }
         self.push(Ps2Event {
-            opcode: 0,
+            opcode: EV_KEY,
             code,
             value,
         });
@@ -392,14 +395,14 @@ impl Ps2State {
         // cursor position, not the position preceding the click.
         if dx != 0 {
             self.push(Ps2Event {
-                opcode: 1,
+                opcode: EV_REL,
                 code: 0,
                 value: dx,
             });
         }
         if dy != 0 {
             self.push(Ps2Event {
-                opcode: 1,
+                opcode: EV_REL,
                 code: 1,
                 value: dy,
             });
@@ -413,7 +416,7 @@ impl Ps2State {
             let mask = 1 << bit;
             if changed & mask != 0 {
                 self.push(Ps2Event {
-                    opcode: 0,
+                    opcode: EV_KEY,
                     code: 0x110 + bit,
                     value: i32::from(buttons & mask != 0),
                 });
@@ -451,23 +454,23 @@ impl Ps2State {
         let [flags, x, y, wheel] = vm_command(VM_MOUSE_DATA, 4);
         if flags & 0x10000 != 0 {
             self.push(Ps2Event {
-                opcode: 1,
+                opcode: EV_REL,
                 code: 0,
                 value: x as i32,
             });
             self.push(Ps2Event {
-                opcode: 1,
+                opcode: EV_REL,
                 code: 1,
                 value: y as i32,
             });
         } else {
             self.push(Ps2Event {
-                opcode: 2,
+                opcode: EV_ABS,
                 code: 0,
                 value: absolute_pixel(x, width),
             });
             self.push(Ps2Event {
-                opcode: 2,
+                opcode: EV_ABS,
                 code: 1,
                 value: absolute_pixel(y, height),
             });
@@ -475,7 +478,7 @@ impl Ps2State {
         // VMware Z is positive down; EV_REL/REL_WHEEL is positive up.
         if wheel != 0 {
             self.push(Ps2Event {
-                opcode: 1,
+                opcode: EV_REL,
                 code: 8,
                 value: (wheel as i32).saturating_neg(),
             });
@@ -520,7 +523,7 @@ impl Ps2State {
     }
 
     fn ascii(&mut self, event: Ps2Event) -> Option<u8> {
-        if event.opcode != 0 || event.value == 0 || event.code >= 144 {
+        if event.opcode != EV_KEY || event.value == 0 || event.code >= 144 {
             return None;
         }
         let sequence: &[u8] = match event.code {

@@ -241,6 +241,7 @@ mod tests {
     use super::*;
     use api::display::SurfaceRole;
     use api::display::{CreateViewRequest, ViewOpResult};
+    use api::services::proto::compositor::OWNER_EXITED_RELAY;
 
     /// Scripted kernel: root tid of a cell is `cell * 1000`.
     #[derive(Default)]
@@ -294,7 +295,7 @@ mod tests {
         let others = [
             0u8,
             0x10,
-            0xE2,
+            OWNER_EXITED_RELAY,
             compositor_ops::WRITE_PIXELS,
             compositor_ops::DAMAGE_SURFACE,
             compositor_ops::MOVE_SURFACE,
@@ -652,7 +653,7 @@ mod tests {
         assert_eq!(world.input.selected_cap(), Some(b_cap));
     }
 
-    /// The supervisor `0xE2` relay still reaches the same routine per tid.
+    /// The supervisor `OWNER_EXITED_RELAY` relay still reaches the same routine per tid.
     #[test]
     fn relay_path_cleanup_owner_is_unchanged() {
         let mut world = World::new();

@@ -1,19 +1,16 @@
+use api::services::proto::vfs::VfsError;
+
 use crate::ViError;
 
 pub(in crate::clients::vfs) const MAX_READ_CHUNK: u32 = 4000;
-pub(super) const VFS_ERR_IO: u8 = 1;
-pub(super) const VFS_ERR_QUOTA: u8 = 2;
-pub(super) const VFS_ERR_DENIED: u8 = 3;
-pub(super) const VFS_ERR_HANDLE: u8 = 4;
-pub(super) const VFS_ERR_UNSUPPORTED: u8 = 6;
 
 pub(in crate::clients::vfs) fn vfs_err_from_code(code: u8) -> ViError {
-    match code {
-        VFS_ERR_IO => ViError::IO,
-        VFS_ERR_QUOTA => ViError::OutOfMemory,
-        VFS_ERR_DENIED => ViError::PermissionDenied,
-        VFS_ERR_HANDLE => ViError::NotFound,
-        VFS_ERR_UNSUPPORTED => ViError::NotSupported,
-        _ => ViError::Unknown,
+    match VfsError::from_u8(code) {
+        Some(VfsError::Io) => ViError::IO,
+        Some(VfsError::Quota) => ViError::OutOfMemory,
+        Some(VfsError::Denied) => ViError::PermissionDenied,
+        Some(VfsError::Handle) => ViError::NotFound,
+        Some(VfsError::Unsupported) => ViError::NotSupported,
+        Some(VfsError::Malformed) | None => ViError::Unknown,
     }
 }

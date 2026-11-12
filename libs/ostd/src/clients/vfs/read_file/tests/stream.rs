@@ -8,6 +8,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::ipc::vfs_dir_page::{push_entry, EntryKind, CHANGED, COMPLETE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 
 fn packed(entries: &[(EntryKind, &str)]) -> Vec<u8> {
@@ -82,9 +83,9 @@ fn a_page_that_is_malformed_or_does_not_fit_is_an_error_not_a_short_listing() {
             flags: 0,
             entries: packed(&[(EntryKind::File, "abcdef")]),
         },
-        MockReply::Err(3),
-        MockReply::Err(4),
-        MockReply::Err(1),
+        MockReply::Err(VfsError::Denied as u8),
+        MockReply::Err(VfsError::Handle as u8),
+        MockReply::Err(VfsError::Io as u8),
         MockReply::Ok,
     ]);
     let dir = ViDirHandle(1);
@@ -126,7 +127,7 @@ fn read_chunk_is_bounded_by_the_buffer_and_the_inline_limit() {
         MockReply::Data(b"tail".to_vec()),
         MockReply::Data(Vec::new()),
         MockReply::DataLen(9, b'x'),
-        MockReply::Err(3),
+        MockReply::Err(VfsError::Denied as u8),
         MockReply::Ok,
     ]);
     let file = ViVfsFileHandle(5);
@@ -173,12 +174,12 @@ fn file_state_and_handle_lifecycle_map_replies_and_errors() {
             size: 1,
             modified: true,
         },
-        MockReply::Err(4),
+        MockReply::Err(VfsError::Handle as u8),
         MockReply::Data(Vec::new()),
         MockReply::Ok,
-        MockReply::Err(4),
+        MockReply::Err(VfsError::Handle as u8),
         MockReply::Ok,
-        MockReply::Err(3),
+        MockReply::Err(VfsError::Denied as u8),
     ]);
     let dir = open_root_dir(&mut ops, "/data/rg").expect("dir");
     assert_eq!(dir, ViDirHandle(2));

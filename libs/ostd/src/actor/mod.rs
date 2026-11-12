@@ -10,9 +10,10 @@
 //!
 //! # Wire discipline (Spec 17)
 //!
-//! - Typed actor traffic rides the existing `0xAC` envelope with event byte
-//!   `0x00`, so [`Actor`] implementations keep receiving `Shutdown`,
-//!   `CapRevoked`, and hot-swap events on the same mailbox. No new byte-0 value
+//! - Typed actor traffic rides the existing App SDK envelope
+//!   ([`api::services::proto::app_envelope`]) with kind `KIND_MESSAGE`, so
+//!   [`Actor`] implementations keep receiving `Shutdown`, `CapRevoked`, and
+//!   hot-swap events on the same mailbox. No new byte-0 value
 //!   is claimed (§3).
 //! - Requests and replies are **postcard**-encoded (§4) and sized to leave the
 //!   2-byte envelope headroom (§5).
@@ -34,9 +35,10 @@ pub mod supervisor;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::app::{AppContext, AppEvent, APP_MSG_MAGIC};
+use crate::app::{AppContext, AppEvent};
 use crate::syscall::SyscallResult;
 use crate::{syscall, ViError, ViResult};
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
 
 pub use supervisor::{Backoff, Child, ChildSpec, Decision, Policy, Strategy, Tree};
 
@@ -63,7 +65,7 @@ pub const ACTOR_TICK_TICKS: u64 = 5;
 ///
 /// Implementors are driven by [`run`], which owns the mailbox loop.
 pub trait Actor: Sized {
-    /// Typed application message carried in the `0xAC 0x00` envelope.
+    /// Typed application message carried in the `MAGIC, KIND_MESSAGE` envelope.
     type Msg: Serialize + DeserializeOwned;
 
     /// Runs once before the first receive. Register services, spawn children,
@@ -123,13 +125,13 @@ impl<'a> ActorCtx<'a> {
         let payload_len = api::ipc::encode(msg, &mut scratch)
             .map_err(|_| ViError::InvalidArgument)?
             .len();
-        let total = payload_len + 2;
+        let total = payload_len + HEADER_LEN;
         if total > frame.len() {
             return Err(ViError::InvalidArgument);
         }
-        frame[0] = APP_MSG_MAGIC;
-        frame[1] = 0x00;
-        frame[2..total].copy_from_slice(&scratch[..payload_len]);
+        frame[0] = MAGIC;
+        frame[1] = KIND_MESSAGE;
+        frame[HEADER_LEN..total].copy_from_slice(&scratch[..payload_len]);
         Ok(total)
     }
 
@@ -172,10 +174,10 @@ impl<'a> ActorCtx<'a> {
             SyscallResult::Ok(_) => return Err(ViError::IO),
             SyscallResult::Err(_) => return Err(ViError::IO),
         }
-        if buf[0] != APP_MSG_MAGIC || buf[1] != 0x00 {
+        if buf[0] != MAGIC || buf[1] != KIND_MESSAGE {
             return Err(ViError::IO);
         }
-        api::ipc::decode::<Resp>(&buf[2..]).map_err(|_| ViError::IO)
+        api::ipc::decode::<Resp>(&buf[HEADER_LEN..]).map_err(|_| ViError::IO)
     }
 
     /// Spawn a cell from a path. Returns its tid.

@@ -202,7 +202,10 @@ fn vfs_main() {
                     ostd::syscall::sys_watch_cell_owner(caller.cell.0, caller.generation)
                 else {
                     let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
-                    let len = api::ipc::encode(&api::ipc::VfsResponse::Err(3), &mut encoded)
+                    let denied = api::ipc::VfsResponse::Err(
+                        api::services::proto::vfs::VfsError::Denied as u8,
+                    );
+                    let len = api::ipc::encode(&denied, &mut encoded)
                         .map(|bytes| bytes.len())
                         .unwrap_or(0);
                     if let Some(operation) = operation {

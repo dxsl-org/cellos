@@ -9,6 +9,11 @@
 use alloc::format;
 use api::ipc::IPC_BUF_SIZE;
 use api::services::ipc::ConfigRequest;
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use api::services::proto::supervisor::{
+    OP_SNAPSHOT, OP_STATUS, PHASE_REFUSED, SNAPSHOT_REQUEST_LEN, STATUS_REJECTED_CALLER,
+    STATUS_REPLY_LEN,
+};
 use api::syscall::service;
 use api::task::TaskPriority;
 use ostd::service::provider_tid;
@@ -32,11 +37,9 @@ const HANDSHAKE_TICKS: u64 = 500;
 /// Budget for the second client's answer; 10 ms ticks.
 const SECOND_CALL_TICKS: u64 = 300;
 
-const SUPERVISOR_ENVELOPE: [u8; 2] = [0xAC, 0x00];
-/// `OP_SNAPSHOT`: no caller is reviewed for it, so every caller gets a refusal.
-const SUPERVISOR_SNAPSHOT: u8 = 0x02;
-/// `encode_status(0, STATUS_REJECTED_CALLER)`.
-const SUPERVISOR_REFUSAL: [u8; 3] = [0x03, 0x00, 0xFD];
+/// The refusal every caller gets for `OP_SNAPSHOT`: no caller is reviewed for it.
+const SUPERVISOR_REFUSAL: [u8; STATUS_REPLY_LEN] =
+    [OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER];
 
 fn ticks() -> u64 {
     sys_get_scheduler_ticks().unwrap_or_else(|| fail("scheduler clock unavailable"))
@@ -54,9 +57,9 @@ fn request(service_id: u16, buf: &mut [u8; IPC_BUF_SIZE]) -> usize {
             .map(|bytes| bytes.len())
             .unwrap_or_else(|_| fail("config request encode")),
         service::SUPERVISOR => {
-            buf[..2].copy_from_slice(&SUPERVISOR_ENVELOPE);
-            buf[2] = SUPERVISOR_SNAPSHOT;
-            3
+            buf[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
+            buf[HEADER_LEN] = OP_SNAPSHOT;
+            HEADER_LEN + SNAPSHOT_REQUEST_LEN
         }
         service::COMPOSITOR => {
             buf[0] = api::display::compositor_ops::GET_SCREEN_SIZE;

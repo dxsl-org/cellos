@@ -12,6 +12,7 @@ use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use api::dir_handles::ViDirHandle;
 use api::ipc::vfs_dir_page::{self, entries, EntryKind};
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 use types::CellId;
 
@@ -22,7 +23,6 @@ use crate::dirs::MAX_HANDLES_PER_CELL;
 use crate::dispatch_dirs::MAX_INLINE_PAYLOAD;
 use crate::file_handles::MAX_FILE_HANDLES_PER_CALLER;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
 
 const READER: Caller = Caller::principal(CellId(61), 1);
 const OTHER_READER: Caller = Caller::principal(CellId(63), 1);
@@ -409,7 +409,7 @@ fn child_create_remove_and_mkdir_mark_changed_but_content_and_reads_do_not() {
                 cursor: 0
             }
         ),
-        Reply::Err(ERR_IO)
+        Reply::Err(VfsError::Io as u8)
     );
 }
 
@@ -513,7 +513,10 @@ fn modified_after_every_content_or_binding_mutation_and_not_after_reads() {
     // file recreated with identical bytes (ABA) is still reported modified.
     let file = open_file(&mut vfs, READER, dir, "f");
     ok(&mut vfs, WRITER, &VfsRequest::Unlink("/tmp/m/f"));
-    assert_eq!(state(&mut vfs, READER, file), Reply::Err(ERR_IO));
+    assert_eq!(
+        state(&mut vfs, READER, file),
+        Reply::Err(VfsError::Io as u8)
+    );
     ok(
         &mut vfs,
         WRITER,
@@ -598,9 +601,12 @@ fn permission_is_rechecked_on_every_page_and_state_query() {
             READER,
             &VfsRequest::ListAtPage { dir, cursor: next }
         ),
-        Reply::Err(ERR_DENIED)
+        Reply::Err(VfsError::Denied as u8)
     );
-    assert_eq!(state(&mut vfs, READER, file), Reply::Err(ERR_DENIED));
+    assert_eq!(
+        state(&mut vfs, READER, file),
+        Reply::Err(VfsError::Denied as u8)
+    );
     vfs.access = AccessTable::new();
     assert!(matches!(
         call(
@@ -624,9 +630,12 @@ fn permission_is_rechecked_on_every_page_and_state_query() {
             OTHER_READER,
             &VfsRequest::ListAtPage { dir, cursor: 0 }
         ),
-        Reply::Err(ERR_HANDLE)
+        Reply::Err(VfsError::Handle as u8)
     );
-    assert_eq!(state(&mut vfs, OTHER_READER, file), Reply::Err(ERR_HANDLE));
+    assert_eq!(
+        state(&mut vfs, OTHER_READER, file),
+        Reply::Err(VfsError::Handle as u8)
+    );
     // A denied subtree is refused even through a handle that names it.
     let denied = vfs.dirs.open_root(READER, "/srv/cellos").expect("handle");
     assert_eq!(
@@ -638,7 +647,7 @@ fn permission_is_rechecked_on_every_page_and_state_query() {
                 cursor: 0
             }
         ),
-        Reply::Err(ERR_DENIED)
+        Reply::Err(VfsError::Denied as u8)
     );
     // Both requests are read-only and handle-addressed: a sealed cell without
     // VfsMutate keeps them.
@@ -664,9 +673,12 @@ fn close_dir_revokes_paging_and_derived_file_state() {
     ok(&mut vfs, READER, &VfsRequest::CloseDir { dir });
     assert_eq!(
         call(&mut vfs, READER, &VfsRequest::ListAtPage { dir, cursor: 0 }),
-        Reply::Err(ERR_HANDLE)
+        Reply::Err(VfsError::Handle as u8)
     );
-    assert_eq!(state(&mut vfs, READER, file), Reply::Err(ERR_HANDLE));
+    assert_eq!(
+        state(&mut vfs, READER, file),
+        Reply::Err(VfsError::Handle as u8)
+    );
     let dir = open_root(&mut vfs, READER, "/tmp/big");
     let file = open_file(
         &mut vfs,
@@ -675,7 +687,10 @@ fn close_dir_revokes_paging_and_derived_file_state() {
         "entry-0001-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     );
     ok(&mut vfs, READER, &VfsRequest::CloseFile { file });
-    assert_eq!(state(&mut vfs, READER, file), Reply::Err(ERR_HANDLE));
+    assert_eq!(
+        state(&mut vfs, READER, file),
+        Reply::Err(VfsError::Handle as u8)
+    );
 }
 
 #[test]
@@ -698,7 +713,10 @@ fn paging_holds_no_handles_and_the_handle_caps_still_apply() {
         dir,
         name: &expected[MAX_FILE_HANDLES_PER_CALLER],
     };
-    assert_eq!(call(&mut vfs, READER, &overflow), Reply::Err(ERR_QUOTA));
+    assert_eq!(
+        call(&mut vfs, READER, &overflow),
+        Reply::Err(VfsError::Quota as u8)
+    );
     // At the cap, paging and state queries keep working.
     assert_eq!(names(&walk(&mut vfs, READER, dir)), expected);
     for file in &files {
@@ -722,7 +740,7 @@ fn paging_holds_no_handles_and_the_handle_caps_still_apply() {
             READER,
             &VfsRequest::OpenRootDir { path: "/tmp/big" }
         ),
-        Reply::Err(ERR_QUOTA)
+        Reply::Err(VfsError::Quota as u8)
     );
     assert_eq!(names(&walk(&mut vfs, READER, dir)), expected);
 }
@@ -735,7 +753,7 @@ fn stale_cursors_and_vanished_directories_are_io_errors_not_empty_pages() {
     for cursor in [4, 1 << 29, (1 << 31) | 9] {
         assert_eq!(
             call(&mut vfs, READER, &VfsRequest::ListAtPage { dir, cursor }),
-            Reply::Err(ERR_IO),
+            Reply::Err(VfsError::Io as u8),
             "{cursor}"
         );
     }
@@ -768,7 +786,7 @@ fn stale_cursors_and_vanished_directories_are_io_errors_not_empty_pages() {
                 cursor: 0
             }
         ),
-        Reply::Err(ERR_IO)
+        Reply::Err(VfsError::Io as u8)
     );
 }
 
@@ -822,7 +840,7 @@ fn a_backend_that_cannot_page_answers_io() {
     let dir = open_root(&mut vfs, READER, "/data");
     assert_eq!(
         call(&mut vfs, READER, &VfsRequest::ListAtPage { dir, cursor: 0 }),
-        Reply::Err(ERR_IO)
+        Reply::Err(VfsError::Io as u8)
     );
 }
 
@@ -1108,7 +1126,7 @@ fn rename_marks_both_parents_and_an_open_srv_file_cannot_be_renamed_under_its_re
                 new: "/srv/one/g"
             }
         ),
-        Reply::Err(ERR_DENIED)
+        Reply::Err(VfsError::Denied as u8)
     );
     assert_eq!(
         state(&mut vfs, READER, file),
@@ -1178,7 +1196,7 @@ fn recursive_removal_clears_a_native_data_tree_but_never_srv() {
     // `/srv` keys are removed one at a time under their namespace reservation.
     assert_eq!(
         call(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/srv/t")),
-        Reply::Err(ERR_DENIED)
+        Reply::Err(VfsError::Denied as u8)
     );
     assert_eq!(vfs.stat("/srv/t/sub/f"), Some((1, false)));
 }

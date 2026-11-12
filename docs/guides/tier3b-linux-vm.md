@@ -240,7 +240,7 @@ at the guest's MAC, `52:54:00:AA:BB:CC` plus the session index (the first free o
 so a new session reuses an ended session's address and lease). Frames for that MAC
 go to that guest only, broadcast and multicast to the host stack and every guest,
 everything else to the host stack. A guest cannot use the host's or another guest's
-MAC (`NET_ERR_ADDR_IN_USE`, frame not sent), and its port closes when its
+MAC (`NetError::AddrInUse`, frame not sent), and its port closes when its
 hypervisor exits. The guest is a peer on the LAN, not behind NAT: it has no access
 to the host stack's sockets.
 

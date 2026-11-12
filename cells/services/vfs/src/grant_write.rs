@@ -10,11 +10,11 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use api::ipc::VfsResponse;
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_IO, ERR_QUOTA};
 
 const MAX_GRANT_WRITE: usize = 4096;
 
@@ -34,25 +34,25 @@ pub(crate) fn write<'a>(
         .path_of(caller, ViVfsFileHandle(cap))
         .map(ToString::to_string)
     else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     if crate::access::is_guest_disk_path(&path) || !vfs.access.can_write(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let Some((file_len, false)) = vfs.stat(&path) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     let Ok(file_len) = usize::try_from(file_len) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     let Ok(offset) = usize::try_from(offset) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     if bytes > MAX_GRANT_WRITE || offset > file_len {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let Some(end) = offset.checked_add(bytes) else {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     };
     let new_len = file_len.max(end);
     let refunded_to_caller = if vfs.quota.writer_of(&path) == Some(caller.cell) {
@@ -62,7 +62,7 @@ pub(crate) fn write<'a>(
     };
     let net_charge = (new_len as u64).saturating_sub(refunded_to_caller);
     if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
-        return VfsResponse::Err(ERR_QUOTA);
+        return VfsResponse::Err(VfsError::Quota as u8);
     }
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
@@ -70,10 +70,10 @@ pub(crate) fn write<'a>(
 
     let old = vfs.read_to_vec(&path);
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if old.len() != file_len {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let mut committed = Vec::with_capacity(new_len);
     committed.extend_from_slice(&old);
@@ -82,11 +82,11 @@ pub(crate) fn write<'a>(
     // transaction. Copy into only the requested file range; a missing or short
     // grant is an I/O error and the backend remains untouched.
     if ostd::syscall::sys_grant_copy_to_slice(grant, &mut committed[offset..end]) != Some(bytes) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
 
     if !vfs.write(&path, &committed) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     // Observed native sync is functional completion, not crash-preserving
     // durability. A failed mutation is possibly accepted and closes the instance.

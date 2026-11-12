@@ -1,10 +1,11 @@
 //! Serving path-string addressed operations.
 
 use api::ipc::{VfsRequest, VfsResponse};
+use api::services::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_IO, ERR_QUOTA};
+use crate::paths::{unlink_file, write_file};
 
 pub(crate) fn handle_path_request(
     vfs: &mut VfsManager,
@@ -14,7 +15,7 @@ pub(crate) fn handle_path_request(
     let resp = match *req {
         VfsRequest::GetFile(p) => {
             if !vfs.access.can_read(caller, p) {
-                return Some(VfsResponse::Err(ERR_DENIED));
+                return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             if let Some((ptr, len)) = vfs.get_file_ptr(p) {
                 VfsResponse::DataPtr {
@@ -22,17 +23,17 @@ pub(crate) fn handle_path_request(
                     len: len as u64,
                 }
             } else {
-                VfsResponse::Err(ERR_IO)
+                VfsResponse::Err(VfsError::Io as u8)
             }
         }
 
         VfsRequest::Stat(p) => {
             if !vfs.access.can_read(caller, p) {
-                return Some(VfsResponse::Err(ERR_DENIED));
+                return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             match vfs.stat(p) {
                 Some((size, is_dir)) => VfsResponse::Stat { size, is_dir },
-                None => VfsResponse::Err(ERR_IO),
+                None => VfsResponse::Err(VfsError::Io as u8),
             }
         }
 
@@ -40,14 +41,14 @@ pub(crate) fn handle_path_request(
 
         VfsRequest::Append { path, content } => {
             if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
-                return Some(VfsResponse::Err(ERR_DENIED));
+                return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             let _lease = if path == "/srv" || path.starts_with("/srv/") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
-                    return Some(VfsResponse::Err(ERR_DENIED));
+                    return Some(VfsResponse::Err(VfsError::Denied as u8));
                 };
                 let Ok(l) = vfs.ledger.acquire_transient(&k) else {
-                    return Some(VfsResponse::Err(ERR_DENIED));
+                    return Some(VfsResponse::Err(VfsError::Denied as u8));
                 };
                 Some(l)
             } else {
@@ -55,14 +56,14 @@ pub(crate) fn handle_path_request(
             };
             let append_len = content.len() as u64;
             if !vfs.quota.can_charge(caller.cell, append_len) {
-                return Some(VfsResponse::Err(ERR_QUOTA));
+                return Some(VfsResponse::Err(VfsError::Quota as u8));
             }
             if vfs.append(path, content) {
                 let _ = vfs.quota.charge(caller.cell, append_len);
                 vfs.quota.record_writer(path, caller.cell);
                 VfsResponse::Ok
             } else {
-                VfsResponse::Err(ERR_IO)
+                VfsResponse::Err(VfsError::Io as u8)
             }
         }
 
@@ -83,7 +84,7 @@ pub(crate) fn handle_path_request(
                 || vfs.is_mount_point(p)
                 || vfs.is_mount_ancestor(p)
             {
-                return Some(VfsResponse::Err(ERR_DENIED));
+                return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             let files = crate::subtree::files_under(vfs, p, 32);
             if vfs.rmdir_recursive(p) {
@@ -92,7 +93,7 @@ pub(crate) fn handle_path_request(
                 }
                 VfsResponse::Ok
             } else {
-                VfsResponse::Err(ERR_IO)
+                VfsResponse::Err(VfsError::Io as u8)
             }
         }
 

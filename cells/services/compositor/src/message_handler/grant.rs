@@ -1,4 +1,5 @@
 use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
+use api::services::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
 use ostd::ipc::reply_to;
 use ostd::syscall::sys_grant_slice_with_len_owned_by;
 
@@ -44,7 +45,7 @@ pub(super) fn handle(
 /// (`GrantSlice` with an expected owner, H-27), which answers a Grant
 /// registered by anyone else exactly as an unknown id. A Grant another owner's
 /// surface already presents, stages or is retiring is refused before asking.
-/// Every refusal gets the same `\x00` reply as an id that does not resolve, so
+/// Every refusal gets the same `REPLY_FALSE` reply as an id that does not resolve, so
 /// probing ids reveals nothing. After a successful reply the owner is told the
 /// current palette, so a new window paints in it from its first frame.
 /// Returns whether the Grant was attached (to the sender's own surface).
@@ -59,7 +60,8 @@ fn attach_grant(
     };
     let grant = AttachGrant::decode(frame);
     let attached = admit_grant(&grant, sender, table, sys_grant_slice_with_len_owned_by);
-    let _ = reply_to(sender, if attached { b"\x01" } else { b"\x00" });
+    let reply = if attached { REPLY_TRUE } else { REPLY_FALSE };
+    let _ = reply_to(sender, &[reply]);
     if attached {
         appearance.announce_to(sender);
     }
@@ -99,18 +101,23 @@ fn admit_grant(
 /// Returns whether the sender's own surface released its retired Grant.
 fn detach_replaced_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) -> bool {
     let Ok(frame) = DetachReplacedGrant::decode(&buf[..16]) else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return false;
     };
     let Ok(reg_id) = usize::try_from(frame.reg_id) else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
         return false;
     };
     let acknowledged = table
         .get_mut(frame.cap as u64)
         .filter(|surface| surface.owner == sender)
         .is_some_and(|surface| surface.detach_replaced_grant(reg_id));
-    let _ = reply_to(sender, if acknowledged { b"\x01" } else { b"\x00" });
+    let reply = if acknowledged {
+        REPLY_TRUE
+    } else {
+        REPLY_FALSE
+    };
+    let _ = reply_to(sender, &[reply]);
     acknowledged
 }
 
@@ -139,16 +146,14 @@ fn detach_grant(buf: &[u8; 512], sender: usize, table: &mut SurfaceTable) {
     }
     let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap());
     if let Some(surface) = table.get_mut(cap).filter(|surface| surface.owner == sender) {
-        let _ = reply_to(
-            sender,
-            if surface.detach_grant() {
-                b"\x01"
-            } else {
-                b"\x00"
-            },
-        );
+        let reply = if surface.detach_grant() {
+            REPLY_TRUE
+        } else {
+            REPLY_FALSE
+        };
+        let _ = reply_to(sender, &[reply]);
     } else {
-        let _ = reply_to(sender, b"\x00");
+        let _ = reply_to(sender, &[REPLY_FALSE]);
     }
 }
 

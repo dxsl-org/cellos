@@ -1,5 +1,10 @@
 //! Runtime witness for state-preserving Supervisor Cell replacement.
 
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use api::services::proto::supervisor::{
+    HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER,
+    STATUS_REPLY_LEN, SVC_NAME_LEN,
+};
 use api::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
@@ -7,13 +12,10 @@ use ostd::syscall::{
     sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned, SyscallResult,
 };
 
-const OP_HOTSWAP: u8 = 0x01;
-const OP_STATUS: u8 = 0x03;
-const APP_MESSAGE_PREFIX: [u8; 2] = [0xAC, 0x00];
-const REQUEST_LEN: usize = 1 + 64 + 128;
 const WAIT_TICKS: usize = 500;
 const CUTOVER_WINDOW_TICKS: usize = 1_600;
-const UNAUTHORIZED_DENIED_STATUS: [u8; 3] = [OP_STATUS, 0, 0xFD];
+const UNAUTHORIZED_DENIED_STATUS: [u8; STATUS_REPLY_LEN] =
+    [OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER];
 
 pub fn run_unauthorized_probe() {
     println("[hotswap-unauthorized-runtime] START");
@@ -27,7 +29,7 @@ pub fn run_unauthorized_probe() {
     if !send_app_message(supervisor_tid, &request) {
         unauthorized_fail("cannot send canonical request to supervisor");
     }
-    let mut status = [0u8; 3];
+    let mut status = [0u8; STATUS_REPLY_LEN];
     if !recv_from(supervisor_tid, &mut status) || status != UNAUTHORIZED_DENIED_STATUS {
         unauthorized_fail("supervisor did not reject the direct bench sender");
     }
@@ -46,10 +48,10 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
         probe_fail("invalid cached tid");
     };
     let mut inc = [0u8; 5];
-    inc[..2].copy_from_slice(&[0xAC, 0x00]);
+    inc[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
     inc[2..].copy_from_slice(b"inc");
     let mut get = [0u8; 5];
-    get[..2].copy_from_slice(&[0xAC, 0x00]);
+    get[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
     get[2..].copy_from_slice(b"get");
 
     if !queue_during_cutover(old_tid, &inc, &get, CUTOVER_WINDOW_TICKS) {
@@ -90,25 +92,25 @@ pub(super) fn expect_reply(tid: usize, request: &[u8], expected: &[u8]) -> bool 
 }
 
 pub(super) fn send_app_message(tid: usize, payload: &[u8]) -> bool {
-    let mut envelope = [0u8; REQUEST_LEN + 2];
-    if payload.len() + 2 > envelope.len() {
+    let mut envelope = [0u8; HEADER_LEN + HOTSWAP_REQUEST_LEN];
+    if payload.len() + HEADER_LEN > envelope.len() {
         return false;
     }
-    envelope[..APP_MESSAGE_PREFIX.len()].copy_from_slice(&APP_MESSAGE_PREFIX);
-    envelope[2..2 + payload.len()].copy_from_slice(payload);
+    envelope[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
+    envelope[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
     matches!(
-        sys_send(tid, &envelope[..2 + payload.len()]),
+        sys_send(tid, &envelope[..HEADER_LEN + payload.len()]),
         SyscallResult::Ok(_)
     )
 }
 
-fn hotswap_request() -> [u8; REQUEST_LEN] {
-    let mut request = [0u8; REQUEST_LEN];
+fn hotswap_request() -> [u8; HOTSWAP_REQUEST_LEN] {
+    let mut request = [0u8; HOTSWAP_REQUEST_LEN];
     request[0] = OP_HOTSWAP;
     let service_name = b"hotswap-demo";
     request[1..1 + service_name.len()].copy_from_slice(service_name);
     let path = b"/bin/hotswap-demo-v2";
-    request[65..65 + path.len()].copy_from_slice(path);
+    request[1 + SVC_NAME_LEN..1 + SVC_NAME_LEN + path.len()].copy_from_slice(path);
     request
 }
 

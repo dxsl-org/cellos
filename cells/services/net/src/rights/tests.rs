@@ -2,8 +2,6 @@ use super::*;
 use api::caller_identity::CALLER_FLAG_NET_RIGHTS_MASK;
 use api::ipc::IPC_BUF_SIZE;
 
-use crate::tls_wire::{TLS_CONNECT_OP, TLS_RECV_OP, TLS_SEND_OP};
-
 /// Every `NetRequest` variant with its wire discriminant and required right.
 fn census() -> [(NetRequest<'static>, u8, Option<Right>); 21] {
     [
@@ -177,15 +175,14 @@ fn typed_denial_is_err_denied() {
     let mut out = [0u8; DENIAL_REPLY_LEN];
     let reply = Denial::Typed.reply(&mut out);
     match ipc::decode::<NetResponse<'_>>(reply) {
-        Ok(NetResponse::Err(code)) => assert_eq!(code, NET_ERR_DENIED),
+        Ok(NetResponse::Err(code)) => assert_eq!(code, NetError::Denied as u8),
         other => panic!("denial decoded as {other:?}"),
     }
-    assert_eq!(NET_ERR_DENIED, 0xFC);
 }
 
 fn raw_tls_connect() -> [u8; 21] {
     let mut request = [0u8; 21];
-    request[0] = TLS_CONNECT_OP;
+    request[0] = tls::CONNECT;
     request[9..13].copy_from_slice(&[10, 0, 2, 2]);
     request[13..15].copy_from_slice(&443u16.to_le_bytes());
     request[15..17].copy_from_slice(&4u16.to_le_bytes());
@@ -207,15 +204,18 @@ fn raw_tls_connect_is_egress_and_owned_cap_ops_are_not() {
     assert_eq!(admit(&connect, CALLER_FLAG_NET_CONNECT), Ok(()));
 
     let mut out = [0u8; DENIAL_REPLY_LEN];
-    assert_eq!(Denial::RawTlsConnect.reply(&mut out), &0u64.to_le_bytes());
+    assert_eq!(
+        Denial::RawTlsConnect.reply(&mut out),
+        &tls::CONNECT_FAILED.to_le_bytes()
+    );
 
     let mut close = [0u8; 9];
-    close[0] = TLS_CLOSE_OP;
+    close[0] = tls::CLOSE;
     let mut send = [0u8; 12];
-    send[0] = TLS_SEND_OP;
+    send[0] = tls::SEND;
     send[9..11].copy_from_slice(&1u16.to_le_bytes());
     let mut recv = [0u8; 13];
-    recv[0] = TLS_RECV_OP;
+    recv[0] = tls::RECV;
     for raw in [&close[..], &send[..], &recv[..]] {
         let parsed = parse_raw_tls_request(raw).expect("parse");
         assert_eq!(raw_tls_required_right(&parsed), None);
@@ -226,6 +226,6 @@ fn raw_tls_connect_is_egress_and_owned_cap_ops_are_not() {
 #[test]
 fn bytes_no_handler_accepts_have_nothing_to_gate() {
     // Neither a `NetRequest` nor a parseable raw TLS request: dispatch drops it.
-    assert_eq!(admit(&[TLS_CONNECT_OP], 0), Ok(()));
+    assert_eq!(admit(&[tls::CONNECT], 0), Ok(()));
     assert_eq!(admit(&[], 0), Ok(()));
 }

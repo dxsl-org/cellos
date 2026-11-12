@@ -856,7 +856,8 @@ pub enum NetRequest<'a> {
     /// (smoltcp is bypassed). `data` is the raw frame bytes (14..=1514 B, no
     /// virtio_net_hdr prefix). Its source MAC becomes the port's address; a source
     /// that is the host stack's or another port's is refused with
-    /// [`NET_ERR_ADDR_IN_USE`] and nothing is sent.
+    /// [`NetError::AddrInUse`](crate::services::proto::net::NetError::AddrInUse)
+    /// and nothing is sent.
     L2Send {
         data: &'a [u8],
     },
@@ -865,8 +866,10 @@ pub enum NetRequest<'a> {
     /// generation, released when it exits). The port receives unicast frames for
     /// its address plus broadcast/multicast; the host stack keeps its own
     /// traffic. Returns `Data(frame)` or `Ok` (nothing queued);
-    /// [`NET_ERR_ADDR_IN_USE`] when `guest_mac` belongs to the host stack or
-    /// another port, `0xFD` when every port is taken.
+    /// [`NetError::AddrInUse`](crate::services::proto::net::NetError::AddrInUse)
+    /// when `guest_mac` belongs to the host stack or another port (the caller
+    /// may retry with another address), [`NetError::Busy`](crate::services::proto::net::NetError::Busy)
+    /// when every port is taken.
     L2Recv {
         guest_mac: [u8; 6],
     },
@@ -900,11 +903,12 @@ pub enum NetRequest<'a> {
 
 /// Responses from the network service.
 ///
-/// `Err(code)` codes: `0xFF` generic failure, `0xFE` accept not ready, `0xFD`
-/// busy/capacity, [`NET_ERR_DENIED`] (`0xFC`) the caller's Cell lacks the
-/// network right the request needs, [`NET_ERR_ADDR_IN_USE`] (`0xFB`) an L2
-/// address the caller may not use. A deferred `L2Send` reply may forward the
-/// NIC driver's own status byte.
+/// `Err(code)` codes are [`crate::services::proto::net::NetError`].
+/// `NetError::Denied` is answered before any effect (no socket, DNS query,
+/// owner watch or frame) when the kernel-attested caller flags lack the right
+/// the request needs (`CALLER_FLAG_NET_*` in `abi::caller_identity`); clients
+/// report it as "permission denied", never as a network failure. A deferred
+/// `L2Send` reply may forward the NIC driver's own status byte.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetResponse<'a> {
     CapId(u32),
@@ -918,22 +922,6 @@ pub enum NetResponse<'a> {
     Eof,
     WriteProgress(u32),
 }
-
-/// `NetResponse::Err` code: permission denied.
-///
-/// service-net returns it before any effect (no socket, DNS query, owner watch
-/// or frame) when the kernel-attested caller flags lack the right the request
-/// needs (`CALLER_FLAG_NET_*` in `abi::caller_identity`). Clients report it as
-/// "permission denied", never as a network failure.
-pub const NET_ERR_DENIED: u8 = 0xFC;
-
-/// `NetResponse::Err` code: the L2 address is the host stack's or another
-/// bridge port's.
-///
-/// `L2Recv` answers it for a `guest_mac` it cannot open a port at (the caller
-/// may retry with another address); `L2Send` answers it for a frame whose
-/// source address is not the caller's to use, and that frame is not sent.
-pub const NET_ERR_ADDR_IN_USE: u8 = 0xFB;
 
 // ── Input service ─────────────────────────────────────────────────────────────
 
@@ -1020,16 +1008,16 @@ pub enum InputResponse<'a> {
 /// [`crate::caller_identity::CALLER_FLAG_CONFIG_WRITE`] **and** the key is in
 /// the shell namespace: 1..=64 bytes of `[A-Za-z_][A-Za-z0-9_]*`, excluding the
 /// system keys `PATH` and `OS`. Anything else is answered with
-/// `ConfigResponse::Err(CONFIG_ERR_DENIED)` before any mutation.
+/// `ConfigResponse::Err(ConfigError::Denied)` before any mutation.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ConfigRequest<'a> {
     /// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
     Get(&'a str),
     /// Write `value` for `key` (insert or overwrite).  Returns `Ok`, or
-    /// `Err(CONFIG_ERR_DENIED)` when the write is not admitted.
+    /// `Err(ConfigError::Denied)` when the write is not admitted.
     Set { key: &'a str, value: &'a str },
     /// Remove `key`.  Returns `Ok` even if absent (idempotent), or
-    /// `Err(CONFIG_ERR_DENIED)` when the delete is not admitted.
+    /// `Err(ConfigError::Denied)` when the delete is not admitted.
     Delete(&'a str),
     /// List all registered keys as a newline-separated string.
     List,
@@ -1037,8 +1025,10 @@ pub enum ConfigRequest<'a> {
 
 /// Responses from the config service.
 ///
-/// `Err(code)` codes: `0xFF` malformed request / reply too large,
-/// [`CONFIG_ERR_DENIED`] (`0xFC`) write not admitted.
+/// `Err(code)` codes are [`crate::services::proto::config::ConfigError`]:
+/// `Malformed` for a malformed request or a reply too large, `Denied` for a
+/// write not admitted (clients report it as "permission denied", never as
+/// "config unavailable").
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ConfigResponse<'a> {
     /// Value associated with a key.
@@ -1049,14 +1039,6 @@ pub enum ConfigResponse<'a> {
     NotFound,
     Err(u8),
 }
-
-/// `ConfigResponse::Err` code: permission denied.
-///
-/// service-config returns it for a `Set`/`Delete` whose caller is unattested,
-/// lacks `CALLER_FLAG_CONFIG_WRITE`, or names a key outside the shell
-/// namespace. The store is untouched. Clients report it as "permission denied",
-/// never as "config unavailable". Same value as [`NET_ERR_DENIED`].
-pub const CONFIG_ERR_DENIED: u8 = 0xFC;
 
 // ── Serialization helpers ─────────────────────────────────────────────────────
 

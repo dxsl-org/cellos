@@ -8,13 +8,13 @@
 //!
 //! # Message envelope
 //!
-//! Messages sent through [`AppContext::send_msg`] carry a 2-byte header:
-//! - byte 0: [`APP_MSG_MAGIC`] (0xAC) — namespace guard, prevents raw-protocol collisions
-//! - byte 1: event type discriminant (0x00 = Message, 0xFF = Shutdown,
-//!   0xF0 = Snapshot, 0xF1 = Restore, 0xF2 = CapRevoked)
-//! - bytes 2..: payload (caller-defined)
+//! Messages sent through [`AppContext::send_msg`] carry the envelope header
+//! defined by [`api::services::proto::app_envelope`]: the magic byte (a
+//! namespace guard against raw-protocol collisions), then the event kind
+//! (message, shutdown, snapshot, restore, capability revocation), then the
+//! caller-defined payload.
 //!
-//! Messages that do not start with `APP_MSG_MAGIC` are delivered as raw
+//! Messages that do not start with the magic byte are delivered as raw
 //! [`AppEvent::RawMessage`] so legacy IPC senders remain compatible.
 //!
 //! # Example
@@ -34,11 +34,11 @@ extern crate alloc;
 
 use crate::{syscall, ViError, ViResult};
 use alloc::vec::Vec;
-
-/// Magic byte prefixing every App SDK envelope.
-///
-/// Prevents collisions between typed AppContext messages and raw `sys_send` clients.
-pub const APP_MSG_MAGIC: u8 = 0xAC;
+use api::services::proto::app_envelope::{
+    CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, KIND_MESSAGE, KIND_RESTORE, KIND_SHUTDOWN,
+    KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SHUTDOWN_PARENT_DIED, SHUTDOWN_WATCHDOG,
+    SNAPSHOT_LEN,
+};
 
 const RECV_BUF_SIZE: usize = 4096;
 
@@ -326,7 +326,7 @@ impl AppContext {
 
     /// Queue an App SDK envelope message for `tid`, without parking.
     ///
-    /// Prepends `[APP_MSG_MAGIC, 0x00]` so the receiver's `AppContext` decodes it
+    /// Prepends `[MAGIC, KIND_MESSAGE]` so the receiver's `AppContext` decodes it
     /// as [`AppEvent::Message`].
     ///
     /// # Errors
@@ -334,13 +334,13 @@ impl AppContext {
     /// or its mailbox is full.
     pub fn send_msg(&self, tid: usize, payload: &[u8]) -> ViResult<()> {
         let mut buf = [0u8; RECV_BUF_SIZE];
-        if payload.len() + 2 > RECV_BUF_SIZE {
+        if payload.len() + HEADER_LEN > RECV_BUF_SIZE {
             return Err(ViError::InvalidArgument);
         }
-        buf[0] = APP_MSG_MAGIC;
-        buf[1] = 0x00;
-        buf[2..2 + payload.len()].copy_from_slice(payload);
-        crate::ipc::post(tid, &buf[..2 + payload.len()]).map_err(|_| ViError::IO)
+        buf[0] = MAGIC;
+        buf[1] = KIND_MESSAGE;
+        buf[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
+        crate::ipc::post(tid, &buf[..HEADER_LEN + payload.len()]).map_err(|_| ViError::IO)
     }
 
     /// Resolve the live provider tid of a well-known service.
@@ -409,11 +409,11 @@ impl AppContext {
     /// Owning the data eliminates the lifetime coupling between the event and the
     /// receive buffer, so the caller can pass `&mut self` to the handler freely.
     fn parse_event_owned(sender_tid: usize, buf: &[u8]) -> AppEvent {
-        if buf.len() >= 2 && buf[0] == APP_MSG_MAGIC {
+        if buf.len() >= HEADER_LEN && buf[0] == MAGIC {
             match buf[1] {
-                0xFF => {
+                KIND_SHUTDOWN => {
                     // Structured shutdown: byte 2 carries the reason (if present).
-                    if buf.len() >= 3 {
+                    if buf.len() > HEADER_LEN {
                         let reason = Self::parse_shutdown_reason(buf);
                         AppEvent::ShutdownWith { reason }
                     } else {
@@ -421,32 +421,32 @@ impl AppContext {
                     }
                 }
                 // Hot-swap Step 2: kernel asks this (old) cell to serialize state.
-                // Envelope: [0xAC, 0xF0, swap_id_le8 (8 bytes)]
-                0xF0 if buf.len() >= 10 => {
+                // Envelope: [MAGIC, KIND_SNAPSHOT, swap_id_le8 (8 bytes)]
+                KIND_SNAPSHOT if buf.len() >= SNAPSHOT_LEN => {
                     let mut id_bytes = [0u8; 8];
-                    id_bytes.copy_from_slice(&buf[2..10]);
+                    id_bytes.copy_from_slice(&buf[HEADER_LEN..SNAPSHOT_LEN]);
                     let swap_id = u64::from_le_bytes(id_bytes);
                     AppEvent::Snapshot { swap_id }
                 }
                 // Hot-swap Step 4: kernel asks this (new) cell to restore state.
-                // Envelope: [0xAC, 0xF1, key (64 bytes)]
-                0xF1 if buf.len() >= 66 => {
-                    let mut key = [0u8; 64];
-                    key.copy_from_slice(&buf[2..66]);
+                // Envelope: [MAGIC, KIND_RESTORE, key (64 bytes)]
+                KIND_RESTORE if buf.len() >= RESTORE_LEN => {
+                    let mut key = [0u8; RESTORE_KEY_LEN];
+                    key.copy_from_slice(&buf[HEADER_LEN..RESTORE_LEN]);
                     AppEvent::Restore { key }
                 }
                 // Runtime capability revocation.
-                // Envelope: [0xAC, 0xF2, mask_le4 (4 bytes)]
-                0xF2 if buf.len() >= 6 => {
+                // Envelope: [MAGIC, KIND_CAP_REVOKED, mask_le4 (4 bytes)]
+                KIND_CAP_REVOKED if buf.len() >= CAP_REVOKED_LEN => {
                     let mut mask_bytes = [0u8; 4];
-                    mask_bytes.copy_from_slice(&buf[2..6]);
+                    mask_bytes.copy_from_slice(&buf[HEADER_LEN..CAP_REVOKED_LEN]);
                     AppEvent::CapRevoked {
                         mask: u32::from_le_bytes(mask_bytes),
                     }
                 }
                 _ => AppEvent::Message {
                     sender_tid,
-                    data: buf[2..].to_vec(),
+                    data: buf[HEADER_LEN..].to_vec(),
                 },
             }
         } else if buf.len() >= 2 && buf[0] == api::input::INPUT_EVENT_OPCODE {
@@ -465,13 +465,13 @@ impl AppContext {
         }
     }
 
-    /// Decode shutdown reason byte from a `[0xAC, 0xFF, reason]` envelope.
+    /// Decode shutdown reason byte from a `[MAGIC, KIND_SHUTDOWN, reason]` envelope.
     ///
     /// Missing or unknown reason bytes default to [`ShutdownReason::Requested`].
     pub(crate) fn parse_shutdown_reason(buf: &[u8]) -> ShutdownReason {
-        match buf.get(2) {
-            Some(1) => ShutdownReason::Watchdog,
-            Some(2) => ShutdownReason::ParentDied,
+        match buf.get(HEADER_LEN).copied() {
+            Some(SHUTDOWN_WATCHDOG) => ShutdownReason::Watchdog,
+            Some(SHUTDOWN_PARENT_DIED) => ShutdownReason::ParentDied,
             _ => ShutdownReason::Requested,
         }
     }
@@ -485,13 +485,13 @@ mod tests {
     use super::*;
 
     /// The wire contract the kernel's `send_cap_revoked_event` produces:
-    /// `[0xAC, 0xF2, mask_le4]` (spec/17 §3).
+    /// `[MAGIC, KIND_CAP_REVOKED, mask_le4]` (spec/17 §3).
     #[test]
     fn cap_revoked_envelope_decodes_to_the_revoked_mask() {
-        let mut buf = [0u8; 6];
-        buf[0] = APP_MSG_MAGIC;
-        buf[1] = 0xF2;
-        buf[2..6].copy_from_slice(&0x0000_0504u32.to_le_bytes());
+        let mut buf = [0u8; CAP_REVOKED_LEN];
+        buf[0] = MAGIC;
+        buf[1] = KIND_CAP_REVOKED;
+        buf[HEADER_LEN..].copy_from_slice(&0x0000_0504u32.to_le_bytes());
 
         match AppContext::parse_event_owned(7, &buf) {
             AppEvent::CapRevoked { mask } => assert_eq!(mask, 0x0000_0504),
@@ -499,11 +499,11 @@ mod tests {
         }
     }
 
-    /// A truncated `0xF2` envelope is not an event: it falls through to a
+    /// A truncated `KIND_CAP_REVOKED` envelope is not an event: it falls through to a
     /// Message rather than reporting a mask it never received.
     #[test]
     fn truncated_cap_revoked_envelope_is_not_decoded() {
-        let buf = [APP_MSG_MAGIC, 0xF2, 0x04];
+        let buf = [MAGIC, KIND_CAP_REVOKED, 0x04];
         assert!(matches!(
             AppContext::parse_event_owned(7, &buf),
             AppEvent::Message { .. }

@@ -5,9 +5,10 @@
 //! quota accounting (net-delta on overwrite), async-read pending table, and
 //! zero-copy grant I/O.
 
+use api::services::proto::vfs::VfsError;
+
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_HANDLE, ERR_IO};
 
 /// Handle one decoded request on behalf of a caller the kernel has attested.
 ///
@@ -26,7 +27,7 @@ pub fn handle_request<'a>(
     resp_buf: &'a mut [u8; api::ipc::IPC_BUF_SIZE],
 ) -> api::ipc::VfsResponse<'a> {
     let Some(caller) = caller else {
-        return api::ipc::VfsResponse::Err(ERR_DENIED);
+        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
     };
 
     // Settle what the kernel says this cell inherited before acting on anything
@@ -35,7 +36,7 @@ pub fn handle_request<'a>(
     // answer landed would be one path-string operation ahead of the seal.
     crate::dir_admission::admit(vfs, caller);
     if !crate::prepared_cwd::ready(vfs, caller) {
-        return api::ipc::VfsResponse::Err(ERR_IO);
+        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
 
     // Decode typed request; `take_from_bytes` tolerates trailing bytes in the
@@ -43,7 +44,7 @@ pub fn handle_request<'a>(
     // caller-identity trailer at the very end.
     let req = match api::ipc::decode::<api::ipc::VfsRequest>(buf) {
         Ok(r) => r,
-        Err(_) => return api::ipc::VfsResponse::Err(0xFF), // malformed request
+        Err(_) => return api::ipc::VfsResponse::Err(VfsError::Malformed as u8),
     };
 
     if let api::ipc::VfsRequest::PreparedChildV1(record) = req {
@@ -58,14 +59,14 @@ pub fn handle_request<'a>(
         && !caller.may_mutate()
         && !machine_pin_write(vfs, caller, &req)
     {
-        return api::ipc::VfsResponse::Err(ERR_DENIED);
+        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
     // A cell that has given up path strings is refused here, before the request
     // reaches an arm that could serve it. Refusing at the entry rather than in
     // each arm is what makes the guarantee hold for every path-addressed
     // operation, including any added later.
     if req.is_path_addressed() && vfs.dirs.is_sealed(caller) {
-        return api::ipc::VfsResponse::Err(ERR_DENIED);
+        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
 
     // A source may not disappear between issuer sealing and kernel commit.
@@ -73,7 +74,7 @@ pub fn handle_request<'a>(
     // the existing directory lineage.
     if let api::ipc::VfsRequest::CloseDir { dir } = req {
         if !crate::prepared_cwd::before_revoke(vfs, caller, dir) {
-            return api::ipc::VfsResponse::Err(ERR_IO);
+            return api::ipc::VfsResponse::Err(VfsError::Io as u8);
         }
     }
 
@@ -90,17 +91,17 @@ pub fn handle_request<'a>(
     match req {
         api::ipc::VfsRequest::ListDir(p) => {
             if !vfs.access.can_read(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
+                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs.healthy(p) {
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             if !matches!(vfs.stat(p), Some((_, true))) {
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let n = vfs.list_dir(p, resp_buf);
             if !vfs.healthy(p) {
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
@@ -109,22 +110,22 @@ pub fn handle_request<'a>(
             // still blocking) and `Poll` only hands over what was already read, so
             // this is the only point where the path is known.
             if !vfs.access.can_read(caller, path) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
+                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             // A handle records durable state against the caller, so it needs a
             // caller that cannot be confused with a later one.
             if !caller.may_own_state() {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
+                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let lease = if path.starts_with("/srv") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
-                    return api::ipc::VfsResponse::Err(ERR_DENIED);
+                    return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
                 };
                 let Ok(l) = vfs.ledger.acquire_service_handle(&k) else {
-                    return api::ipc::VfsResponse::Err(ERR_DENIED);
+                    return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
                 };
                 Some(l)
             } else {
@@ -132,7 +133,7 @@ pub fn handle_request<'a>(
             };
             let data = vfs.read_to_vec(path);
             if !vfs.healthy(path) {
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let handle = vfs.pending.insert(caller, path, data, lease);
             api::ipc::VfsResponse::PendingHandle(handle)
@@ -149,10 +150,10 @@ pub fn handle_request<'a>(
             // only what policy said then, and a slot can outlive a rule change.
             let readable = match vfs.pending.owned_path(caller, handle) {
                 Some(path) => vfs.access.can_read(caller, path),
-                None => return api::ipc::VfsResponse::Err(ERR_HANDLE),
+                None => return api::ipc::VfsResponse::Err(VfsError::Handle as u8),
             };
             if !readable {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
+                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs
                 .pending
@@ -160,7 +161,7 @@ pub fn handle_request<'a>(
                 .is_some_and(|path| vfs.healthy(path))
             {
                 let _ = vfs.pending.poll(caller, handle);
-                return api::ipc::VfsResponse::Err(ERR_IO);
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             match vfs.pending.poll(caller, handle) {
                 Some(data) => {
@@ -172,7 +173,7 @@ pub fn handle_request<'a>(
                     resp_buf[..n].copy_from_slice(&data[..n]);
                     api::ipc::VfsResponse::Data(&resp_buf[..n])
                 }
-                None => api::ipc::VfsResponse::Err(ERR_HANDLE),
+                None => api::ipc::VfsResponse::Err(VfsError::Handle as u8),
             }
         }
 
@@ -191,7 +192,7 @@ pub fn handle_request<'a>(
             bytes,
         } => {
             if !caller.may_mutate() {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
+                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             crate::grant_write::write(vfs, caller, cap, offset, grant, bytes)
         }
@@ -214,7 +215,7 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::RenameAt { .. }
             if !caller.may_mutate() =>
         {
-            api::ipc::VfsResponse::Err(ERR_DENIED)
+            api::ipc::VfsResponse::Err(VfsError::Denied as u8)
         }
 
         api::ipc::VfsRequest::OpenRootDir { .. }
@@ -239,7 +240,7 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::RenameAt { .. } => {
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
-        _ => api::ipc::VfsResponse::Err(0xFF),
+        _ => api::ipc::VfsResponse::Err(VfsError::Malformed as u8),
     }
 }
 

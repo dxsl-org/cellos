@@ -20,6 +20,7 @@
 use super::cap::CapSet;
 use super::syscall::{handle_syscall, Syscall, SyscallError};
 use super::tcb::Task;
+use api::services::proto::app_envelope;
 use api::syscall::cap_mask as CM;
 use types::CellId;
 
@@ -282,7 +283,7 @@ pub fn self_test() -> bool {
 
         // (b) MMIO bits → Ok, window released, owned grant reclaimed, the MMIO
         //     field cleared (the hypervisor cap untouched), and the victim
-        //     notified with `[0xAC, 0xF2, mask_le4]`.
+        //     notified with the `KIND_CAP_REVOKED` envelope.
         let r_mmio = handle_syscall(
             PARENT_TID,
             Syscall::CapRevoke {
@@ -300,8 +301,8 @@ pub fn self_test() -> bool {
                     .any(|wire| {
                         let payload = wire.as_slice();
                         payload.len() == 6
-                            && payload[0] == 0xAC
-                            && payload[1] == 0xF2
+                            && payload[0] == app_envelope::MAGIC
+                            && payload[1] == app_envelope::KIND_CAP_REVOKED
                             && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
                                 == CM::MMIO_MASK
                     });
@@ -464,8 +465,8 @@ pub fn self_test() -> bool {
                     .any(|wire| {
                         let payload = wire.as_slice();
                         payload.len() == 6
-                            && payload[0] == 0xAC
-                            && payload[1] == 0xF2
+                            && payload[0] == app_envelope::MAGIC
+                            && payload[1] == app_envelope::KIND_CAP_REVOKED
                             && u32::from_le_bytes([payload[2], payload[3], payload[4], payload[5]])
                                 == CM::PCIE_DRIVER | CM::PLATFORM | CM::SUPERVISOR
                     });

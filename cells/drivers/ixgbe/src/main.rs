@@ -15,6 +15,7 @@ mod rings;
 mod rx_tx;
 mod sfp;
 
+use api::services::proto::nic::NicStatus;
 use controller::IxgbeController;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use identity::{classify, QUERY_DEVICE_IDS, VENDOR_INTEL};
@@ -129,7 +130,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 }
             };
             if !sender_is_live_provider(service::NET, sender_tid) {
-                reply(&[1u8]);
+                reply(&[NicStatus::Failed as u8]);
                 return;
             }
             let mut out_buf = [0u8; REPLY_BUF];
@@ -146,7 +147,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     }
                 }
             } else {
-                reply(&[1u8]);
+                reply(&[NicStatus::Failed as u8]);
             }
         }
         _ => {}

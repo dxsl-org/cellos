@@ -241,17 +241,20 @@ pub(super) fn audit_syscall_denied(caller_id: usize, detail: u32) {
     );
 }
 
-/// Notify `target_tid` that `mask` was revoked: `[0xAC, 0xF2, mask_le4]`, the
-/// byte-1 discriminant `0xF2` reserved in `spec/17` §3.
+/// Notify `target_tid` that `mask` was revoked: `[MAGIC, KIND_CAP_REVOKED,
+/// mask_le4]` ([`api::services::proto::app_envelope`], `spec/17` §3).
 ///
 /// Best-effort by design: the teardown already happened, and a Cell that ignores
 /// the event still lost the hardware. Returns `false` when the target is gone or
 /// its mailbox is full.
 pub(crate) fn send_cap_revoked_event(target_tid: usize, mask: u32) -> bool {
-    let mut msg = [0u8; 6];
-    msg[0] = 0xAC; // App SDK envelope magic
-    msg[1] = 0xF2; // CapRevoked
-    msg[2..6].copy_from_slice(&mask.to_le_bytes());
+    use api::services::proto::app_envelope::{
+        CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, MAGIC,
+    };
+    let mut msg = [0u8; CAP_REVOKED_LEN];
+    msg[0] = MAGIC;
+    msg[1] = KIND_CAP_REVOKED;
+    msg[HEADER_LEN..].copy_from_slice(&mask.to_le_bytes());
     crate::task::ipc_post_nonblock(0, target_tid, &msg).is_ok()
 }
 

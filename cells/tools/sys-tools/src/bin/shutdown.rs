@@ -55,27 +55,23 @@ fn cell_main() {
 /// How long the shutdown message gets to reach the console before power-off.
 const RELAY_WINDOW_NS: u64 = 300_000_000;
 
-/// Supervisor-private `PowerRequest` (`cells/services/supervisor/src/protocol.rs`)
-/// in the App SDK envelope; the action byte is the 436 a0 value.
-#[cfg(target_arch = "x86_64")]
-const APP_MESSAGE_PREFIX: [u8; 2] = [0xAC, 0x00];
-#[cfg(target_arch = "x86_64")]
-const OP_POWER: u8 = 0x04;
-#[cfg(target_arch = "x86_64")]
-const OP_STATUS: u8 = 0x03;
 /// Covers the supervisor's freeze sweep and settle window with a wide margin;
 /// the same budget bounds admission of the request.
 #[cfg(target_arch = "x86_64")]
 const REPLY_TIMEOUT_TICKS: u64 = 3_000;
 
-/// Send the request and wait. A successful request freezes this worker and
-/// resets or powers off the machine, so any return here is a failure.
+/// Send the supervisor-private `PowerRequest`
+/// ([`api::services::proto::supervisor`]) in the App SDK envelope and wait; the
+/// action byte is the 436 a0 value. A successful request freezes this worker
+/// and resets or powers off the machine, so any return here is a failure.
 #[cfg(target_arch = "x86_64")]
 fn request_from_supervisor(
     action: ostd::syscall::SystemPowerAction,
     output: &ostd::io::ProcessOutput,
     deadline: u64,
 ) -> ! {
+    use api::services::proto::app_envelope::{KIND_MESSAGE, MAGIC};
+    use api::services::proto::supervisor::{OP_POWER, OP_STATUS, STATUS_REPLY_LEN};
     use ostd::ipc::IpcError;
     let Some(supervisor) = ostd::service::provider_tid(api::syscall::service::SUPERVISOR) else {
         exit_with(output, b"shutdown: supervisor unavailable\n", deadline);
@@ -84,13 +80,8 @@ fn request_from_supervisor(
         ostd::syscall::SystemPowerAction::Reboot => api::syscall::system_power::ACTION_REBOOT,
         ostd::syscall::SystemPowerAction::PowerOff => api::syscall::system_power::ACTION_POWEROFF,
     };
-    let request = [
-        APP_MESSAGE_PREFIX[0],
-        APP_MESSAGE_PREFIX[1],
-        OP_POWER,
-        action as u8,
-    ];
-    let mut status = [0u8; 3];
+    let request = [MAGIC, KIND_MESSAGE, OP_POWER, action as u8];
+    let mut status = [0u8; STATUS_REPLY_LEN];
     match ostd::ipc::call_bytes(supervisor, &request, &mut status, REPLY_TIMEOUT_TICKS) {
         Ok(reply) if reply.first() == Some(&OP_STATUS) => exit_with(
             output,

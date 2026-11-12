@@ -1,6 +1,7 @@
 use alloc::format;
 use alloc::vec::Vec;
 use api::ipc::{VfsRequest, VfsResponse};
+use api::services::proto::vfs::VfsError;
 use cellos_boot_config::{parse_cells, validate_plan, CellConfig, MAX_CONFIG_BYTES};
 use ostd::clients::VfsClient;
 
@@ -70,7 +71,7 @@ pub(crate) fn load() -> Result<(CellConfig, CellConfig), alloc::string::String> 
             let bytes = read_required(&mut vfs, AUTOLOAD_PATH)?;
             parse_cells(&bytes).map_err(|error| format!("{AUTOLOAD_PATH}: {error}"))?
         }
-        VfsResponse::Err(1) => {
+        VfsResponse::Err(code) if code == VfsError::Io as u8 => {
             ostd::io::println(
                 "Init: autoload.toml absent — optional autoload is explicitly empty.",
             );

@@ -1,4 +1,5 @@
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use types::CellId;
 
 use crate::caller::Caller;
@@ -60,11 +61,11 @@ fn guest_disk_security_boundary_is_fail_closed() {
 
     assert!(matches!(
         crate::paths::write_file(&mut vfs, hv_caller, "/mnt/sd/guest_disk.img", b"payload"),
-        VfsResponse::Err(crate::paths::ERR_DENIED)
+        VfsResponse::Err(code) if code == VfsError::Denied as u8
     ));
     assert!(matches!(
         crate::paths::unlink_file(&mut vfs, hv_caller, "/mnt/sd/guest_disk.img"),
-        VfsResponse::Err(crate::paths::ERR_DENIED)
+        VfsResponse::Err(code) if code == VfsError::Denied as u8
     ));
 
     let req = VfsRequest::Append {
@@ -75,7 +76,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
     api::ipc::encode(&req, &mut req_buf).expect("encode");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
-    assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_DENIED)));
+    assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
 
     let root = vfs.dirs.open_root(hv_caller, "/mnt/sd").expect("root");
     let file = vfs
@@ -84,7 +85,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         .expect("insert file");
     assert!(matches!(
         crate::grant_write::write(&mut vfs, hv_caller, file.0, 0, 1, 512),
-        VfsResponse::Err(crate::paths::ERR_DENIED)
+        VfsResponse::Err(code) if code == VfsError::Denied as u8
     ));
     use super::stub::GuestDiskStub;
     use alloc::boxed::Box;
@@ -102,7 +103,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
     api::ipc::encode(&over_req, &mut req_buf).expect("encode");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
-    assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_DENIED)));
+    assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
 
     let over_boundary_req = VfsRequest::WriteHandleGrant {
         file,
@@ -112,7 +113,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
     };
     api::ipc::encode(&over_boundary_req, &mut req_buf).expect("encode");
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
-    assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_DENIED)));
+    assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
 
     let within_req = VfsRequest::WriteHandleGrant {
         file,
@@ -122,16 +123,16 @@ fn guest_disk_security_boundary_is_fail_closed() {
     };
     api::ipc::encode(&within_req, &mut req_buf).expect("encode");
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
-    assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_IO)));
+    assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Io as u8));
 
     for alias in ["/mnt/sd/GUEST_~1.IMG", "/mnt/sd/GUESTD~1.IMG"] {
         assert!(matches!(
             crate::paths::write_file(&mut vfs, hv_caller, alias, b"payload"),
-            VfsResponse::Err(crate::paths::ERR_DENIED)
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
         ));
         assert!(matches!(
             crate::paths::unlink_file(&mut vfs, hv_caller, alias),
-            VfsResponse::Err(crate::paths::ERR_DENIED)
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
         ));
         let append_alias = VfsRequest::Append {
             path: alias,
@@ -141,7 +142,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         api::ipc::encode(&append_alias, &mut req_b).expect("encode");
         let mut resp_b = [0u8; IPC_BUF_SIZE];
         let resp = crate::dispatch::handle_request(&mut vfs, &req_b, Some(hv_caller), &mut resp_b);
-        assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_DENIED)));
+        assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
     }
 
     let other_caller = Caller {
@@ -166,11 +167,11 @@ fn guest_disk_security_boundary_is_fail_closed() {
         assert!(!vfs.access.can_write(other_caller, alias));
         assert!(matches!(
             crate::paths::write_file(&mut vfs, other_caller, alias, b"payload"),
-            VfsResponse::Err(crate::paths::ERR_DENIED)
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
         ));
         assert!(matches!(
             crate::paths::unlink_file(&mut vfs, other_caller, alias),
-            VfsResponse::Err(crate::paths::ERR_DENIED)
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
         ));
 
         let other_file = vfs
@@ -192,7 +193,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
             Some(other_caller),
             &mut resp_other,
         );
-        assert!(matches!(resp, VfsResponse::Err(crate::paths::ERR_DENIED)));
+        assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
     }
     ostd::io::println("[vfs-guest-disk] fixed-capacity-boundary PASS");
 }

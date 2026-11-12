@@ -31,6 +31,7 @@ mod window_decoration;
 mod z_order;
 
 use api::display::Rect;
+use api::services::proto::input::INPUT_EVENT_OPCODE;
 use framebuffer::ScreenFb;
 use input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
 use ostd::io::println;
@@ -40,10 +41,6 @@ use ostd::syscall::{
 use render::render_frame;
 use surface_table::SurfaceTable;
 use z_order::ZOrder;
-
-/// IPC opcode prefix byte identifying an input event from the input service.
-/// Must match `input_handler::INPUT_EVENT_OPCODE` (0x10).
-const INPUT_EVENT_OPCODE: u8 = 0x10;
 
 /// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.
 ///

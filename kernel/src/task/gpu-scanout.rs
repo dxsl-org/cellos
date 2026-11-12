@@ -13,6 +13,7 @@
 
 use super::copy_glue::TaskCopyView;
 use super::syscall::{handle_syscall_kernel_origin, Syscall, SyscallError};
+use api::services::proto::app_envelope::{KIND_MESSAGE, MAGIC};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// One 64×64 BGRA8888 sprite, the only size `VirtIOGpu::setup_cursor` takes.
@@ -20,7 +21,7 @@ const CURSOR_SPRITE_LEN: usize = 64 * 64 * 4;
 /// Kernel bounce chunk for every copy below (stack, not heap).
 const STAGING_CHUNK: usize = 4096;
 
-/// GPU Driver Cell opcodes after the AppContext `[0xAC, 0x00]` envelope.
+/// GPU Driver Cell opcodes after the App SDK `[MAGIC, KIND_MESSAGE]` envelope.
 const OP_FLUSH: u8 = 0x10;
 const OP_CUR_SET: u8 = 0x11;
 const OP_CUR_MOVE: u8 = 0x12;
@@ -189,7 +190,7 @@ pub(super) fn flush(
     if gpu_cell != 0 {
         let staged = stage_for_gpu(caller_id, gpu_cell, &view, data_ptr, needed)?;
         let mut msg = [0u8; 23];
-        msg[..3].copy_from_slice(&[0xAC, 0x00, OP_FLUSH]);
+        msg[..3].copy_from_slice(&[MAGIC, KIND_MESSAGE, OP_FLUSH]);
         msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
         msg[7..11].copy_from_slice(&(wh as u32).to_le_bytes());
         msg[11..19].copy_from_slice(&(staged as u64).to_le_bytes());
@@ -263,7 +264,7 @@ pub(super) fn cursor(
             let view = super::syscall::caller_copy_view_for(caller_id)?;
             let staged = stage_for_gpu(caller_id, gpu_cell, &view, data_ptr, CURSOR_SPRITE_LEN)?;
             let mut msg = [0u8; 19];
-            msg[..3].copy_from_slice(&[0xAC, 0x00, OP_CUR_SET]);
+            msg[..3].copy_from_slice(&[MAGIC, KIND_MESSAGE, OP_CUR_SET]);
             msg[3..11].copy_from_slice(&(staged as u64).to_le_bytes());
             msg[11..15].copy_from_slice(&(xy as u32).to_le_bytes());
             msg[15..19].copy_from_slice(&(hot as u32).to_le_bytes());
@@ -271,7 +272,7 @@ pub(super) fn cursor(
         }
         1 => {
             let mut msg = [0u8; 7];
-            msg[..3].copy_from_slice(&[0xAC, 0x00, OP_CUR_MOVE]);
+            msg[..3].copy_from_slice(&[MAGIC, KIND_MESSAGE, OP_CUR_MOVE]);
             msg[3..7].copy_from_slice(&(xy as u32).to_le_bytes());
             let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
         }

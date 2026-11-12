@@ -27,6 +27,7 @@ pub mod net;
 #[path = "services/net-reply.rs"]
 pub mod net_reply;
 pub mod posix;
+pub mod proto;
 pub mod ring_channel;
 pub mod serde_helpers;
 pub mod session;

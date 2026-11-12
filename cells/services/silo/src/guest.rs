@@ -8,7 +8,8 @@ use service_silo::{
         decode_fault_response, FaultResponseMetadata, COMMAND_CREATE_ENROLLMENT_KEY,
         COMMAND_DESTROY_ENROLLMENT_KEY, COMMAND_INITIALIZE, COMMAND_OFFSET,
         COMMAND_PROMOTE_ENROLLMENT_KEY, COMMAND_SIGN_ENROLLMENT_CRI, COMMAND_SIGN_TLS, DATA_OFFSET,
-        INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET, STATUS_OFFSET,
+        INPUT_LEN, MAILBOX_IPA, PAGE_LEN, REQUEST_SEQ_OFFSET, STATUS_ABSENT, STATUS_ACK,
+        STATUS_OFFSET, STATUS_READY, STATUS_SIGNATURE,
     },
     mailbox,
     protocol::PurposeGuest,
@@ -72,7 +73,7 @@ impl GuestSession {
         seed.fill(0);
         core::hint::black_box(&seed);
         let response = response?;
-        if response[STATUS_OFFSET] != 1
+        if response[STATUS_OFFSET] != STATUS_READY
             || response[DATA_OFFSET + 65..].iter().any(|byte| *byte != 0)
         {
             return Err(GuestError::MalformedResponse);
@@ -97,7 +98,7 @@ impl GuestSession {
         transcript_hash: [u8; 32],
     ) -> Result<[u8; 64], GuestError> {
         let response = self.exchange(COMMAND_SIGN_TLS, &transcript_hash)?;
-        if response[STATUS_OFFSET] != 2
+        if response[STATUS_OFFSET] != STATUS_SIGNATURE
             || response[DATA_OFFSET + 64..].iter().any(|byte| *byte != 0)
         {
             self.faulted = true;
@@ -124,7 +125,7 @@ impl GuestSession {
         input[8..40].fill(0);
         core::hint::black_box(&input);
         let response = response?;
-        if response[STATUS_OFFSET] != 1
+        if response[STATUS_OFFSET] != STATUS_READY
             || response[DATA_OFFSET + 65..].iter().any(|byte| *byte != 0)
         {
             self.faulted = true;
@@ -149,7 +150,7 @@ impl GuestSession {
         input[8] = hostname.len() as u8;
         input[9..9 + hostname.len()].copy_from_slice(hostname);
         let response = self.exchange(COMMAND_SIGN_ENROLLMENT_CRI, &input)?;
-        if response[STATUS_OFFSET] != 2
+        if response[STATUS_OFFSET] != STATUS_SIGNATURE
             || response[DATA_OFFSET + 64..].iter().any(|byte| *byte != 0)
         {
             self.faulted = true;
@@ -170,7 +171,7 @@ impl GuestSession {
         let mut input = [0u8; INPUT_LEN];
         input[..8].copy_from_slice(&pending_generation.to_le_bytes());
         let response = self.exchange(COMMAND_PROMOTE_ENROLLMENT_KEY, &input)?;
-        if response[STATUS_OFFSET] != 1
+        if response[STATUS_OFFSET] != STATUS_READY
             || response[DATA_OFFSET + 65..].iter().any(|byte| *byte != 0)
         {
             self.faulted = true;
@@ -191,8 +192,8 @@ impl GuestSession {
         input[..8].copy_from_slice(&pending_generation.to_le_bytes());
         let response = self.exchange(COMMAND_DESTROY_ENROLLMENT_KEY, &input)?;
         match response[STATUS_OFFSET] {
-            3 => Ok(()),
-            4 => Err(GuestError::EnrollmentKeyAbsent),
+            STATUS_ACK => Ok(()),
+            STATUS_ABSENT => Err(GuestError::EnrollmentKeyAbsent),
             _ => {
                 self.faulted = true;
                 Err(GuestError::MalformedResponse)

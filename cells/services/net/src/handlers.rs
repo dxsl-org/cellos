@@ -9,6 +9,7 @@ mod udp;
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::{net::NetError, tls};
 use ostd::ipc::{post, reply_to};
 use ostd::sync::Mutex;
 use smoltcp::{
@@ -26,7 +27,6 @@ use crate::{
     socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
     tls_handler::{handle_tls_raw, TlsPending},
-    tls_wire::TLS_CLOSE_OP,
 };
 
 /// L2 bridge requests handled, by direction (`loop-trace` images).
@@ -128,14 +128,14 @@ pub fn handle_request(
         };
         if let Some(cap) = cap {
             if table.is_owner(cap, owner) && tls_pending.contains_cap(cap) {
-                send_typed(sender, NetResponse::Err(0xFF));
+                send_typed(sender, NetResponse::Err(NetError::Failure as u8));
                 return;
             }
             if table.is_owner(cap, owner)
                 && tls_table.contains_key(&cap)
                 && !matches!(req, NetRequest::TcpClose { .. })
             {
-                send_typed(sender, NetResponse::Err(0xFF));
+                send_typed(sender, NetResponse::Err(NetError::Failure as u8));
                 return;
             }
         }
@@ -148,7 +148,7 @@ pub fn handle_request(
             );
             iface.poll(now_instant(), device, sockets);
         }
-        Err(_) if buf.first().copied().unwrap_or(0) >= TLS_CLOSE_OP => {
+        Err(_) if buf.first().copied().unwrap_or(0) >= tls::CLOSE => {
             iface.poll(now_instant(), device, sockets);
             handle_tls_raw(
                 buf,
@@ -208,17 +208,17 @@ pub(crate) fn handle_typed(
                 set.insert(sender);
                 send_typed(sender, R::Ok);
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
         }
         NetRequest::MulticastLeave { cap_id: _, group } => {
             let mut members = MULTICAST_MEMBERS.lock();
             let Some(set) = members.get_mut(&group) else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return;
             };
             if !set.remove(&sender) {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return;
             }
             let is_last = set.is_empty();
@@ -235,13 +235,13 @@ pub(crate) fn handle_typed(
             let answer = crate::dns::static_lookup(hostname, resolver.server());
             match answer {
                 Some(addr) => send_typed(sender, R::Addr(addr)),
-                None => send_typed(sender, R::Err(0xFF)),
+                None => send_typed(sender, R::Err(NetError::Failure as u8)),
             }
         }
         NetRequest::L2Send { data } => {
             L2_SEND_REQUESTS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             if data.len() < 14 || data.len() > 1514 {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return;
             }
             if let Err(error) = device.admit_port_tx(owner, data) {
@@ -250,7 +250,14 @@ pub(crate) fn handle_typed(
                 return;
             }
             if let Some(accepted) = device.send_l2(data, sender) {
-                send_typed(sender, if accepted { R::Ok } else { R::Err(0xFF) });
+                send_typed(
+                    sender,
+                    if accepted {
+                        R::Ok
+                    } else {
+                        R::Err(NetError::Failure as u8)
+                    },
+                );
             }
         }
         NetRequest::L2Recv { guest_mac } => {
@@ -298,9 +305,9 @@ pub(crate) fn handle_typed(
 
 fn port_error_code(error: PortError) -> u8 {
     match error {
-        PortError::NotStation => 0xFF,
-        PortError::AddressInUse => ipc::NET_ERR_ADDR_IN_USE,
-        PortError::Full => 0xFD,
+        PortError::NotStation => NetError::Failure as u8,
+        PortError::AddressInUse => NetError::AddrInUse as u8,
+        PortError::Full => NetError::Busy as u8,
     }
 }
 

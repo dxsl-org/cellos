@@ -1,4 +1,5 @@
 use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::net::NetError;
 use ostd::ipc::reply_to;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
@@ -60,7 +61,7 @@ pub(crate) fn handle_udp_request(
     match req {
         NetRequest::UdpCreate => {
             if !table.can_insert(owner) {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
                 return true;
             }
             let handle = sockets.add(udp::Socket::new(
@@ -80,7 +81,7 @@ pub(crate) fn handle_udp_request(
                 }
                 Err(_) => {
                     sockets.remove(handle);
-                    send_typed(sender, R::Err(0xFF));
+                    send_typed(sender, R::Err(NetError::Failure as u8));
                 }
             }
             true
@@ -100,7 +101,7 @@ pub(crate) fn handle_udp_request(
                 table.set_state(cap, SocketState::Listening);
                 send_typed(sender, R::Ok);
             } else {
-                send_typed(sender, R::Err(0xFF));
+                send_typed(sender, R::Err(NetError::Failure as u8));
             }
             true
         }

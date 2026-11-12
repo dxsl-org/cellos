@@ -16,7 +16,7 @@ use ostd::syscall::{
     sys_system_power, SyscallResult, SystemPowerAction, SystemPowerError,
 };
 
-use crate::protocol::{OP_POWER, POWER_ACTION_POWEROFF};
+use api::services::proto::supervisor::POWER_BUTTON_REQUEST;
 
 /// Who asked: the `/bin/shutdown` worker or the kernel's power-button relay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,8 +31,6 @@ const STATE_TERMINATED: usize = 3;
 const SETTLE_TICKS: u64 = 50;
 const SETTLE_POLL_TICKS: u64 = 5;
 const KEEP_MAX: usize = 2 + api::block_route::MAX_BLOCK_ROUTES;
-/// The kernel relay's bytes: App SDK envelope, `OP_POWER`, poweroff.
-const POWER_BUTTON_MESSAGE: [u8; 4] = [0xAC, 0x00, OP_POWER, POWER_ACTION_POWEROFF];
 
 fn action_name(action: SystemPowerAction) -> &'static str {
     match action {
@@ -138,7 +136,9 @@ fn settle() -> bool {
         waited += SETTLE_POLL_TICKS;
         // The relay's sender id is 0, which a timeout also returns; only the
         // relay writes these bytes into the cleared buffer.
-        if matches!(result, SyscallResult::Ok(0)) && buf[..4] == POWER_BUTTON_MESSAGE {
+        if matches!(result, SyscallResult::Ok(0))
+            && buf[..POWER_BUTTON_REQUEST.len()] == POWER_BUTTON_REQUEST
+        {
             return true;
         }
     }

@@ -34,6 +34,7 @@ mod mmio;
 #[cfg(target_arch = "x86_64")]
 mod pci_x86;
 
+use api::services::proto::nic::NicStatus;
 use device::NetDevice;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
@@ -82,7 +83,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             // init has not registered yet — is followed without a cached tid.
             // The refusal is the ordinary failure byte the net service retries on.
             if !sender_is_live_provider(service::NET, sender_tid) {
-                reply(&[1u8]);
+                reply(&[NicStatus::Failed as u8]);
                 return;
             }
             let mut out_buf = [0u8; REPLY_BUF];
@@ -99,7 +100,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                     }
                 }
             } else {
-                reply(&[1u8]);
+                reply(&[NicStatus::Failed as u8]);
             }
         }
 

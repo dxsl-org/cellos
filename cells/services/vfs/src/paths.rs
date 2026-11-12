@@ -1,23 +1,14 @@
-//! Operations still addressed by an absolute path, and the codes they answer with.
+//! Operations still addressed by an absolute path.
 //!
 //! Write and delete live here rather than in either dispatch module because both
 //! addressing models reach them: a `Write { path }` and a `WriteAt { dir, name }`
 //! that resolved to the same path must charge the same cell the same bytes. Two
 //! copies of a net-delta calculation are two chances to get that wrong.
 
+use api::services::proto::vfs::VfsError;
+
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-
-/// `types::ViError::PermissionDenied` as the wire code.
-pub(crate) const ERR_DENIED: u8 = 3;
-/// The path does not exist, or the backend refused the operation.
-pub(crate) const ERR_IO: u8 = 1;
-/// Quota exceeded.
-pub(crate) const ERR_QUOTA: u8 = 2;
-/// Stale, unknown, or not-this-caller's handle.
-pub(crate) const ERR_HANDLE: u8 = 4;
-/// `types::ViError::NotSupported`: the backend has no such operation.
-pub(crate) const ERR_UNSUPPORTED: u8 = 6;
 
 /// Whether a mutation of `mutated` may have reached the handle path `held`.
 ///
@@ -67,25 +58,25 @@ pub(crate) fn write_file<'a>(
     content: &[u8],
 ) -> api::ipc::VfsResponse<'a> {
     if crate::access::is_guest_disk_path(path) || !vfs.access.can_write(caller, path) {
-        return api::ipc::VfsResponse::Err(ERR_DENIED);
+        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
     let _lease = if path == "/srv" || path.starts_with("/srv/") {
         let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
-            return api::ipc::VfsResponse::Err(ERR_DENIED);
+            return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
         };
         let Ok(l) = vfs.ledger.acquire_transient(&k) else {
-            return api::ipc::VfsResponse::Err(ERR_DENIED);
+            return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
         };
         Some(l)
     } else {
         None
     };
     if !vfs.healthy(path) {
-        return api::ipc::VfsResponse::Err(ERR_IO);
+        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
     let old_size = vfs.file_size(path);
     if !vfs.healthy(path) {
-        return api::ipc::VfsResponse::Err(ERR_IO);
+        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
     let new_size = content.len() as u64;
     let refunded_to_caller = if vfs.quota.writer_of(path) == Some(caller.cell) {
@@ -95,7 +86,7 @@ pub(crate) fn write_file<'a>(
     };
     let net_charge = new_size.saturating_sub(refunded_to_caller);
     if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
-        return api::ipc::VfsResponse::Err(ERR_QUOTA);
+        return api::ipc::VfsResponse::Err(VfsError::Quota as u8);
     }
     if vfs.write(path, content) {
         // Release the old contents to whoever was charged for them, then charge
@@ -105,7 +96,7 @@ pub(crate) fn write_file<'a>(
         vfs.quota.set_writer(path, caller.cell);
         api::ipc::VfsResponse::Ok
     } else {
-        api::ipc::VfsResponse::Err(ERR_IO)
+        api::ipc::VfsResponse::Err(VfsError::Io as u8)
     }
 }
 
@@ -127,30 +118,30 @@ pub(crate) fn unlink_file<'a>(
         || vfs.is_mount_point(path)
         || vfs.is_mount_ancestor(path)
     {
-        return api::ipc::VfsResponse::Err(ERR_DENIED);
+        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
     let _res = if path == "/srv" || path.starts_with("/srv/") {
         let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
-            return api::ipc::VfsResponse::Err(ERR_DENIED);
+            return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
         };
         let Ok(r) = vfs.ledger.reserve_one(&k) else {
-            return api::ipc::VfsResponse::Err(ERR_DENIED);
+            return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
         };
         Some(r)
     } else {
         None
     };
     if !vfs.healthy(path) {
-        return api::ipc::VfsResponse::Err(ERR_IO);
+        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
     let file_size = vfs.file_size(path);
     if !vfs.healthy(path) {
-        return api::ipc::VfsResponse::Err(ERR_IO);
+        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
     if vfs.unlink(path) {
         vfs.quota.release_path(path, file_size);
         api::ipc::VfsResponse::Ok
     } else {
-        api::ipc::VfsResponse::Err(ERR_IO)
+        api::ipc::VfsResponse::Err(VfsError::Io as u8)
     }
 }

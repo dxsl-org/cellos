@@ -12,7 +12,7 @@ use api::caller_identity::{
 use smoltcp::{iface::Config, socket::udp};
 
 use crate::socket_state::SocketState;
-use crate::tls_wire::TLS_CONNECT_OP;
+use api::services::proto::tls;
 
 /// A TID no host file descriptor can match: host replies fail with `EBADF`
 /// instead of touching a real descriptor.
@@ -319,7 +319,7 @@ fn raw_l2_is_denied_before_any_frame_or_guest_registration() {
 fn raw_tls_connect_is_denied_before_allocating_a_socket() {
     let mut net = Net::new();
     let mut buffer = [0u8; IPC_BUF_SIZE];
-    buffer[0] = TLS_CONNECT_OP;
+    buffer[0] = tls::CONNECT;
     buffer[9..13].copy_from_slice(&[10, 0, 2, 2]);
     buffer[13..15].copy_from_slice(&443u16.to_le_bytes());
     buffer[15..17].copy_from_slice(&4u16.to_le_bytes());

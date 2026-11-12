@@ -8,16 +8,17 @@
 //! request, and the socket table rejects a foreign cap with its existing error.
 //! `GetLocalIp` stays ungated (it discloses only the local address).
 //!
-//! A denial is `NetResponse::Err(NET_ERR_DENIED)` and nothing else: the runtime
+//! A denial is `NetResponse::Err(NetError::Denied)` and nothing else: the runtime
 //! answers it before the owner watch, both intercepts and dispatch, so no socket,
 //! DNS query, owner watch or frame exists because of a denied request.
 
 use api::caller_identity::{
     CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN, CALLER_FLAG_NET_RESOLVE,
 };
-use api::ipc::{self, NetRequest, NetResponse, NET_ERR_DENIED};
+use api::ipc::{self, NetRequest, NetResponse};
+use api::services::proto::{net::NetError, tls};
 
-use crate::tls_wire::{parse_raw_tls_request, RawTlsRequest, TLS_CLOSE_OP};
+use crate::tls_wire::{parse_raw_tls_request, RawTlsRequest};
 
 /// One coarse network right.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,10 +90,10 @@ pub(crate) fn raw_tls_required_right(request: &RawTlsRequest<'_>) -> Option<Righ
 /// How a denied request is answered: in the wire format its caller reads.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Denial {
-    /// `NetResponse::Err(NET_ERR_DENIED)`.
+    /// `NetResponse::Err(NetError::Denied)`.
     Typed,
-    /// Raw TLS connect has no error code on its wire: cap `0` is its existing
-    /// "connect failed" reply.
+    /// Raw TLS connect has no error code on its wire: [`tls::CONNECT_FAILED`]
+    /// is its existing "connect failed" reply.
     RawTlsConnect,
 }
 
@@ -103,13 +104,13 @@ impl Denial {
     /// Encode the denial reply into `out`.
     pub(crate) fn reply(self, out: &mut [u8; DENIAL_REPLY_LEN]) -> &[u8] {
         match self {
-            Self::Typed => match ipc::encode(&NetResponse::Err(NET_ERR_DENIED), out) {
+            Self::Typed => match ipc::encode(&NetResponse::Err(NetError::Denied as u8), out) {
                 Ok(bytes) => bytes,
                 // Two postcard bytes always fit; an empty reply is still a refusal.
                 Err(_) => &[],
             },
             Self::RawTlsConnect => {
-                *out = 0u64.to_le_bytes();
+                *out = tls::CONNECT_FAILED.to_le_bytes();
                 &out[..]
             }
         }
@@ -120,12 +121,12 @@ impl Denial {
 ///
 /// Classification mirrors dispatch exactly: a buffer that decodes as a
 /// `NetRequest` is typed (both intercepts and `handle_request` decode it the same
-/// way); otherwise a first byte at or above `TLS_CLOSE_OP` goes to the raw TLS
+/// way); otherwise a first byte at or above [`tls::CLOSE`] goes to the raw TLS
 /// handler. Anything else reaches no handler and has no effect to gate.
 pub(crate) fn admit(buffer: &[u8], flags: u32) -> Result<(), Denial> {
     let (right, denial) = match ipc::decode::<NetRequest<'_>>(buffer) {
         Ok(request) => (required_right(&request), Denial::Typed),
-        Err(_) if buffer.first().copied().unwrap_or(0) >= TLS_CLOSE_OP => {
+        Err(_) if buffer.first().copied().unwrap_or(0) >= tls::CLOSE => {
             match parse_raw_tls_request(buffer) {
                 Ok(request) => (raw_tls_required_right(&request), Denial::RawTlsConnect),
                 Err(_) => (None, Denial::Typed),

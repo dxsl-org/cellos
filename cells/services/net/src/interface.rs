@@ -8,6 +8,7 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, collections::VecDeque};
+use api::services::proto::nic::{NicStatus, MIN_FRAME, OP_GETMAC, OP_RX, OP_TX};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use ostd::service::provider_tid;
 use ostd::{
@@ -51,22 +52,6 @@ const MAX_TX_REFUSALS: u8 = 8;
 
 /// Maximum Ethernet frame size accepted by the Net Cell.
 const MAX_FRAME: usize = 1514;
-/// Shortest frame a NIC driver can hand back: the Ethernet header alone.
-///
-/// A driver that cannot serve a request answers with a one-byte status, so a
-/// shorter length reading is a status, not a frame.
-const MIN_FRAME: usize = 14;
-
-/// NIC Driver Cell IPC op codes shared by VirtIO and e1000 providers.
-const OP_TX: u8 = 0;
-const OP_RX: u8 = 1;
-const OP_GETMAC: u8 = 2;
-/// Status bytes a NIC driver answers a request with (see the drivers' wire
-/// protocol). Only [`STATUS_OK`] means the frame went out; the rest are refusals
-/// this cell retries, and the value is carried to the L2Send caller so its log can
-/// say whether the chip refused or the driver was not ready.
-const STATUS_OK: u8 = 0;
-const STATUS_FAILED: u8 = 1;
 
 /// Zero means no NIC Driver Cell has been discovered yet.
 const NOT_PROBED: usize = 0;
@@ -156,11 +141,6 @@ mod driver_mac_tests {
 mod tx_queue_retry_tests {
     use super::*;
 
-    /// The driver's front-end was not parked: its request never reached the chip.
-    /// The Net Cell treats every non-zero status alike, so only this test needs
-    /// the name.
-    const STATUS_NOT_READY: u8 = 2;
-
     /// A frame the driver refuses keeps its place for the next turn.
     ///
     /// The board lost a guest ARP this way — one refusal (`first guest TX
@@ -174,7 +154,7 @@ mod tx_queue_retry_tests {
 
         for attempt in 1..MAX_TX_REFUSALS {
             assert!(
-                !dev.settle_tx_verdict(STATUS_FAILED),
+                !dev.settle_tx_verdict(NicStatus::Failed as u8),
                 "attempt {attempt} is not a send"
             );
             assert_eq!(
@@ -184,7 +164,7 @@ mod tx_queue_retry_tests {
             );
             assert_eq!(dev.tx_queue.front().expect("queued").refusals, attempt);
         }
-        assert!(!dev.settle_tx_verdict(STATUS_FAILED));
+        assert!(!dev.settle_tx_verdict(NicStatus::Failed as u8));
         assert!(dev.tx_queue.is_empty(), "the bound must release the head");
     }
 
@@ -196,10 +176,10 @@ mod tx_queue_retry_tests {
         dev.queue_tx(Box::from(&[0xAAu8; 64][..]));
         dev.tx_queue.front_mut().expect("queued").reply = Some(ReplyTo::Legacy(9));
 
-        assert!(!dev.settle_tx_verdict(STATUS_NOT_READY));
+        assert!(!dev.settle_tx_verdict(NicStatus::NotReady as u8));
         assert!(dev.tx_queue.front().expect("queued").reply.is_none());
 
-        assert!(dev.settle_tx_verdict(STATUS_OK));
+        assert!(dev.settle_tx_verdict(NicStatus::Ok as u8));
         assert!(dev.tx_queue.is_empty());
     }
 }
@@ -329,7 +309,7 @@ impl VirtioNetDevice {
         self.driver_mac.map(|(mac, _)| mac)
     }
 
-    /// Query the bound NIC driver's hardware MAC via IPC `OP_GETMAC` (2).
+    /// Query the bound NIC driver's hardware MAC via IPC [`OP_GETMAC`].
     ///
     /// Validates that the returned MAC is non-zero, not broadcast, and unicast
     /// (least significant bit of first octet is 0). Caches the result by driver TID.
@@ -521,7 +501,8 @@ impl VirtioNetDevice {
             let now = crate::service_runtime::sys_get_time();
             if let Some(sent) = self.tx_queue.pop_front() {
                 if let Some(target) = sent.reply {
-                    self.l2_replies.push_back((target, STATUS_FAILED, now));
+                    self.l2_replies
+                        .push_back((target, NicStatus::Failed as u8, now));
                 }
                 self.recycle_frame(sent.bytes);
             }
@@ -554,11 +535,12 @@ impl VirtioNetDevice {
                 break;
             };
             self.tx_burst = self.tx_burst.saturating_add(1);
-            // The driver's own verdict byte: 0 accepted, 1 the USB transfer
-            // failed, 2 its front-end was not parked. It is carried through to the
-            // caller instead of being flattened to one "failed" value, because
-            // "the chip refused" and "the driver was busy" need different fixes.
-            let status = reply.first().copied().unwrap_or(STATUS_FAILED);
+            // The driver's own verdict byte ([`NicStatus`]): `Ok` accepted,
+            // `Failed` the USB transfer failed, `NotReady` its front-end was not
+            // parked. It is carried through to the caller instead of being
+            // flattened to one "failed" value, because "the chip refused" and
+            // "the driver was busy" need different fixes.
+            let status = reply.first().copied().unwrap_or(NicStatus::Failed as u8);
             let accepted = self.settle_tx_verdict(status);
             if let Some(target) = target {
                 self.l2_replies.push_back((target, status, now));
@@ -638,7 +620,7 @@ impl VirtioNetDevice {
     /// Apply one driver verdict to the head of the TX queue.
     ///
     /// `true` means the frame went out and has left the queue. A refusal
-    /// (`status != STATUS_OK`) keeps the frame at the head for the next turn,
+    /// (`status != NicStatus::Ok`) keeps the frame at the head for the next turn,
     /// which is the same policy the "driver was busy" case already used: popping
     /// it dropped the guest's ARP on the first USB transfer error — the board
     /// logged `first guest TX accepted=false` and the ping that followed had no
@@ -648,7 +630,7 @@ impl VirtioNetDevice {
     /// its verdict is answered exactly once (a later attempt that succeeds must not
     /// answer the same request twice).
     fn settle_tx_verdict(&mut self, status: u8) -> bool {
-        if status == STATUS_OK {
+        if status == NicStatus::Ok as u8 {
             if let Some(frame) = self.tx_queue.pop_front() {
                 self.recycle_frame(frame.bytes);
             }
@@ -690,7 +672,7 @@ impl VirtioNetDevice {
             // retry that followed went unrecorded. Both halves print once, and the
             // status byte names which refusal it was.
             let status = *status;
-            let accepted = status == 0;
+            let accepted = status == NicStatus::Ok as u8;
             {
                 static FIRST_GUEST_TX_OK: core::sync::atomic::AtomicBool =
                     core::sync::atomic::AtomicBool::new(false);

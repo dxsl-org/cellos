@@ -18,6 +18,7 @@
 use alloc::string::String;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
@@ -26,7 +27,7 @@ use crate::dispatch_grants::{
     list_at, list_at_page, read_handle_grant, stat_path, sync_handle, write_handle_grant,
 };
 use crate::manager::VfsManager;
-use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
+use crate::paths::{unlink_file, write_file};
 
 /// Largest payload an inline reply carries, leaving room for the postcard
 /// envelope inside the IPC frame. A caller that needs more compares against
@@ -110,12 +111,12 @@ pub fn handle<'a>(
             if vfs.dirs.seal(caller) {
                 VfsResponse::Ok
             } else {
-                VfsResponse::Err(ERR_DENIED)
+                VfsResponse::Err(VfsError::Denied as u8)
             }
         }
         // `handle` is only reached from the directory arms of the dispatch
         // match; anything else is a routing mistake, not a caller error.
-        _ => VfsResponse::Err(0xFF),
+        _ => VfsResponse::Err(VfsError::Malformed as u8),
     }
 }
 
@@ -124,10 +125,10 @@ fn dir_err(err: DirError) -> u8 {
     match err {
         // Unknown and not-yours are the same answer, so sweeping handle values
         // reveals nothing about what other cells hold.
-        DirError::UnknownHandle => ERR_HANDLE,
+        DirError::UnknownHandle => VfsError::Handle as u8,
         // The caller tried to express something a handle cannot express.
-        DirError::BadName(_) => ERR_DENIED,
-        DirError::TooManyHandles => ERR_QUOTA,
+        DirError::BadName(_) => VfsError::Denied as u8,
+        DirError::TooManyHandles => VfsError::Quota as u8,
     }
 }
 
@@ -145,16 +146,16 @@ fn open_root<'a>(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsRespons
     // one operation left that takes a path, so it is the one place a traversal
     // could still enter the handle graph.
     let Ok(checked) = api::dir_name::validate_dir_path(path.as_bytes()) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     if !vfs.access.can_read(caller, checked) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     // A handle to something that is not a directory would resolve names against
     // a file, which no backend defines.
     match vfs.stat(checked) {
         Some((_, true)) => {}
-        _ => return VfsResponse::Err(ERR_IO),
+        _ => return VfsResponse::Err(VfsError::Io as u8),
     }
     match vfs.dirs.open_root(caller, checked) {
         Ok(handle) => VfsResponse::DirHandle(handle),
@@ -173,15 +174,15 @@ fn open_dir<'a>(
         Err(code) => return VfsResponse::Err(code),
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     match vfs.stat(&path) {
         Some((_, true)) => {}
         _ if vfs.is_mount_ancestor(&path) => {}
-        _ => return VfsResponse::Err(ERR_IO),
+        _ => return VfsResponse::Err(VfsError::Io as u8),
     }
     match vfs.dirs.insert(caller, path, Some(dir.0)) {
         Ok(handle) => VfsResponse::DirHandle(handle),
@@ -201,16 +202,16 @@ fn read_at<'a>(
         Err(code) => return VfsResponse::Err(code),
     };
     if !vfs.access.can_read(caller, &path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     // Absent and empty must not look alike: an empty reply for a missing file
     // would make a caller act on data that does not exist.
     if !matches!(vfs.stat(&path), Some((_, false))) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let data = vfs.read_to_vec(&path);
     if !vfs.healthy(&path) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     let n = data.len().min(MAX_INLINE_PAYLOAD);
     resp_buf[..n].copy_from_slice(&data[..n]);

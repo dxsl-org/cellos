@@ -4,11 +4,10 @@
 
 extern crate alloc;
 
+use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 use api::syscall::service;
 use api::{declare_manifest, declare_syscalls};
-#[cfg(feature = "loop-trace")]
-use driver_dwc2_usb::dispatch::OP_TX;
-use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF, STATUS_FAILED, STATUS_NOT_READY};
+use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
 use driver_dwc2_usb::lan9514::Lan9514Device;
@@ -528,7 +527,11 @@ fn cell_main() {
                                 // The chip's verdict for a transmitted frame.
                                 #[cfg(feature = "loop-trace")]
                                 if request.first() == Some(&OP_TX) {
-                                    let counter = if code == 0 { &NIC_TX_OK } else { &NIC_TX_FAIL };
+                                    let counter = if code == NicStatus::Ok as u8 {
+                                        &NIC_TX_OK
+                                    } else {
+                                        &NIC_TX_FAIL
+                                    };
                                     counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                                 }
                                 reply_nic(client_tid, operation, &[code]);
@@ -581,10 +584,10 @@ fn cell_main() {
                     if nic_request_len(&in_buf).is_some() {
                         match ostd::ipc::current() {
                             Some(operation) => {
-                                let _ = ostd::ipc::reply(operation, &[STATUS_FAILED]);
+                                let _ = ostd::ipc::reply(operation, &[NicStatus::Failed as u8]);
                             }
                             None => {
-                                let _ = sys_try_send(sender_tid, &[STATUS_FAILED]);
+                                let _ = sys_try_send(sender_tid, &[NicStatus::Failed as u8]);
                             }
                         }
                     }
@@ -599,7 +602,7 @@ fn cell_main() {
                     // ever answered. A status byte says "not ready" instead, and
                     // the client's own retry is what gets served.
                     //
-                    // `STATUS_NOT_READY`, not a bare 1: the Net Cell keeps a refused
+                    // `NicStatus::NotReady`, not a bare 1: the Net Cell keeps a refused
                     // frame and offers it again, and this code is what tells its log
                     // that nothing reached the chip (rather than the chip refusing).
                     //
@@ -609,7 +612,7 @@ fn cell_main() {
                     // attempt, hundreds of them, while the Net Cell waited seconds per
                     // frame). Saying "not ready" costs one byte and keeps the frame.
                     if nic_request_len(&in_buf).is_some() {
-                        let _ = ostd::ipc::reply_to(sender_tid, &[STATUS_NOT_READY]);
+                        let _ = ostd::ipc::reply_to(sender_tid, &[NicStatus::NotReady as u8]);
                     }
                 } else {
                     if let Some(request_len) = nic_request_len(&in_buf) {
@@ -812,7 +815,7 @@ impl DeferredLan {
 
     fn clear(&mut self) {
         if let Some((_, Some(operation), _)) = lan_ipc::decode_request(&self.bytes[..self.len]) {
-            let _ = ostd::ipc::reply(operation, &[STATUS_NOT_READY]);
+            let _ = ostd::ipc::reply(operation, &[NicStatus::NotReady as u8]);
         }
         self.len = 0;
     }
@@ -829,7 +832,7 @@ fn reply_nic(client: usize, operation: Option<usize>, bytes: &[u8]) {
 /// Exact byte length of a raw NIC request inside a padded IPC receive buffer.
 fn nic_request_len(frame: &[u8]) -> Option<usize> {
     match *frame.first()? {
-        0 => {
+        OP_TX => {
             if frame.len() < 3 {
                 return None;
             }
@@ -838,7 +841,7 @@ fn nic_request_len(frame: &[u8]) -> Option<usize> {
             (bytes > 0 && bytes <= driver_dwc2_usb::dispatch::FRAME_BUF && len <= frame.len())
                 .then_some(len)
         }
-        1 | 2 => Some(1),
+        OP_RX | OP_GETMAC => Some(1),
         _ => None,
     }
 }

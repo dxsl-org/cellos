@@ -1,25 +1,10 @@
 //! IPC request dispatcher for the virtio-net Driver Cell.
 //!
-//! Wire format (little-endian) — identical to e1000 so `net` service IPC is shared:
-//!   byte 0: op  (0 = Tx, 1 = Rx, 2 = GetMac)
-//!   byte 1+: payload
-//!
-//! Tx request:   [0x00, len_lo, len_hi] ++ frame_bytes
-//!   The explicit length is REQUIRED: raw IPC delivery hands the receiver its
-//!   whole 4096-byte recv buffer with no byte count, so the frame boundary
-//!   cannot be inferred from the message itself.
-//! Rx request:   [0x01]
-//! GetMac:       [0x02]
-//!
-//! Reply Tx:     [0x00] OK  /  [0x01] Error
-//! Reply Rx:     [len_lo, len_hi] ++ frame_bytes   (len=0 → nothing ready)
-//! Reply GetMac: 6 MAC bytes
+//! Serves the NIC wire in [`api::services::proto::nic`], shared with e1000 so
+//! the `net` service IPC is the same for every NIC.
 
 use crate::device::NetDevice;
-
-const OP_TX: u8 = 0;
-const OP_RX: u8 = 1;
-const OP_GETMAC: u8 = 2;
+use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 /// Max frame size (1514 bytes Ethernet + 2-byte length header).
 pub const FRAME_BUF: usize = 1514;
@@ -44,7 +29,7 @@ pub fn handle<'a>(
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
     if data.is_empty() {
-        return NicReply::Status(1);
+        return NicReply::Status(NicStatus::Failed as u8);
     }
 
     match data[0] {
@@ -52,17 +37,17 @@ pub fn handle<'a>(
             // [op, len_lo, len_hi, frame...] — length header bounds the frame
             // inside the (padded) IPC buffer.
             if data.len() < 3 {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > FRAME_BUF || 3 + len > data.len() {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let frame = &data[3..3 + len];
             if dev.send(frame) {
-                NicReply::Status(0)
+                NicReply::Status(NicStatus::Ok as u8)
             } else {
-                NicReply::Status(1)
+                NicReply::Status(NicStatus::Failed as u8)
             }
         }
 
@@ -82,6 +67,6 @@ pub fn handle<'a>(
 
         OP_GETMAC => NicReply::Mac(dev.mac()),
 
-        _ => NicReply::Status(1),
+        _ => NicReply::Status(NicStatus::Failed as u8),
     }
 }

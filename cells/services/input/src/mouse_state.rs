@@ -1,18 +1,16 @@
 use api::input::{InputEvent, MouseButton};
+use api::services::vmm_session as evdev;
 
-// EV_REL axis codes
-const REL_X: u32 = 0;
-const REL_Y: u32 = 1;
-const REL_WHEEL: u32 = 8;
-
-// EV_ABS axis codes
-const ABS_X: u32 = 0;
-const ABS_Y: u32 = 1;
-
-// Mouse button EV_KEY codes (BTN_*)
-pub const BTN_LEFT: u32 = 0x110;
-pub const BTN_RIGHT: u32 = 0x111;
-pub const BTN_MIDDLE: u32 = 0x112;
+// The Linux evdev codes of `api::services::vmm_session`, widened to the u32
+// code field of the producer frame.
+const REL_X: u32 = evdev::REL_X as u32;
+const REL_Y: u32 = evdev::REL_Y as u32;
+const REL_WHEEL: u32 = evdev::REL_WHEEL as u32;
+const ABS_X: u32 = evdev::ABS_X as u32;
+const ABS_Y: u32 = evdev::ABS_Y as u32;
+pub const BTN_LEFT: u32 = evdev::BTN_LEFT as u32;
+pub const BTN_RIGHT: u32 = evdev::BTN_RIGHT as u32;
+pub const BTN_MIDDLE: u32 = evdev::BTN_MIDDLE as u32;
 
 /// Tracks screen-pixel position. EV_ABS producers must scale device units once,
 /// before forwarding them here; service-input never rescales pixel coordinates.

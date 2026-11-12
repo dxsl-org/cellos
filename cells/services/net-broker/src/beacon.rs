@@ -493,6 +493,7 @@ impl PeerTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use api::services::proto::net::NetError;
 
     #[test]
     fn machine_id_uses_the_specified_sha256_domain_separation() {
@@ -573,7 +574,7 @@ mod tests {
     #[test]
     fn channel_setup_and_send_require_explicit_success_responses() {
         assert!(response_is_ok(NetResponse::Ok));
-        assert!(!response_is_ok(NetResponse::Err(0xff)));
+        assert!(!response_is_ok(NetResponse::Err(NetError::Failure as u8)));
         assert!(!response_is_ok(NetResponse::CapId(1)));
 
         let sent = (WIRE_LEN as u32).to_le_bytes();

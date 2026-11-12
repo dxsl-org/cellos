@@ -16,6 +16,8 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU8, Ordering};
 
+use api::services::proto::supervisor::{KERNEL_SENDER, POWER_BUTTON_REQUEST};
+
 use super::power::{self, inb, inw, io_port, outb, outw};
 use super::AcpiInfo;
 
@@ -34,13 +36,6 @@ const PM1_ALL_FIXED_STATUS: u16 = 0x8731;
 /// Status-port reads while firmware hands over to ACPI mode (≥ ~3 s on
 /// hardware, as ACPI-aware OSes allow).
 const ACPI_ENABLE_POLLS: usize = 3_000_000;
-
-/// Supervisor-private wire (`cells/services/supervisor/src/protocol.rs`):
-/// App SDK envelope, `OP_POWER`, action 2 (poweroff, the 436 a0 value).
-const POWER_BUTTON_REQUEST: [u8; 4] = [0xAC, 0x00, 0x04, 0x02];
-/// The kernel's sender id; the supervisor accepts `OP_POWER` from it only as
-/// the power button.
-const KERNEL_SENDER: usize = 0;
 
 static STATE: AtomicU8 = AtomicU8::new(STATE_OFF);
 static PM1A_STATUS: AtomicU16 = AtomicU16::new(0);

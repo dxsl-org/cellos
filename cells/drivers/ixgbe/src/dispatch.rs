@@ -1,10 +1,9 @@
 //! IPC request dispatcher for the Intel ixgbe NIC Driver Cell.
+//!
+//! Serves the NIC wire defined in [`api::services::proto::nic`].
 
 use crate::controller::{IxgbeController, BUF_SIZE};
-
-const OP_TX: u8 = 0;
-const OP_RX: u8 = 1;
-const OP_GETMAC: u8 = 2;
+use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;
 
@@ -20,21 +19,21 @@ pub fn handle<'a>(
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
     if data.is_empty() {
-        return NicReply::Status(1);
+        return NicReply::Status(NicStatus::Failed as u8);
     }
     match data[0] {
         OP_TX => {
             if data.len() < 3 {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > BUF_SIZE || 3 + len > data.len() {
-                return NicReply::Status(1);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let frame = &data[3..3 + len];
             match ctrl.send_frame(frame) {
-                Ok(_) => NicReply::Status(0),
-                Err(_) => NicReply::Status(1),
+                Ok(_) => NicReply::Status(NicStatus::Ok as u8),
+                Err(_) => NicReply::Status(NicStatus::Failed as u8),
             }
         }
         OP_RX => {
@@ -47,6 +46,6 @@ pub fn handle<'a>(
             }
         }
         OP_GETMAC => NicReply::Raw(ctrl.mac),
-        _ => NicReply::Status(1),
+        _ => NicReply::Status(NicStatus::Failed as u8),
     }
 }

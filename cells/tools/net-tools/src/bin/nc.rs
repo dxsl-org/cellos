@@ -3,7 +3,8 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::net::NetError;
 use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::{service_call_typed_bounded, IpcError};
@@ -108,7 +109,7 @@ fn cell_main() {
         &mut resp_buf,
     ) {
         Ok(NetResponse::CapId(c)) => c,
-        Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+        Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => {
             print("nc: connect: ");
             println(NET_DENIED);
             return;
@@ -181,7 +182,7 @@ fn server_mode(port: u16, net_ep: usize) {
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let listen_cap = match net_call(net_ep, &NetRequest::TcpListen { port }, &mut resp_buf) {
         Ok(NetResponse::CapId(c)) => c,
-        Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+        Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => {
             print("nc: listen: ");
             println(NET_DENIED);
             return;
@@ -302,7 +303,7 @@ fn resolve_host(host: &str, net_ep: usize) -> Result<[u8; 4], &'static str> {
         &mut resp_buf,
     ) {
         Ok(NetResponse::Addr(addr)) => Ok(addr),
-        Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
+        Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => Err(NET_DENIED),
         _ => Err(UNRESOLVED),
     }
 }

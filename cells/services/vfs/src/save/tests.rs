@@ -10,12 +10,12 @@ use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use api::ipc::{
     save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
 };
+use api::services::proto::vfs::VfsError;
 use sha2::{Digest, Sha256};
 use types::CellId;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_HANDLE, ERR_IO, ERR_UNSUPPORTED};
 
 const ALICE: Caller = Caller {
     flags: CALLER_FLAG_VFS_MUTATE,
@@ -336,7 +336,7 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
                 sha256: wrong
             }
         ),
-        Reply::Err(ERR_IO)
+        Reply::Err(VfsError::Io as u8)
     );
     // Out-of-order chunk and another caller's id are refused.
     assert_eq!(
@@ -349,7 +349,7 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
                 bytes: b"x"
             }
         ),
-        Reply::Err(ERR_HANDLE)
+        Reply::Err(VfsError::Handle as u8)
     );
     assert_eq!(
         call(
@@ -361,11 +361,11 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
                 bytes: b"x"
             }
         ),
-        Reply::Err(ERR_HANDLE)
+        Reply::Err(VfsError::Handle as u8)
     );
     assert_eq!(
         call(&mut vfs, BOB, &VfsRequest::SaveAbort { id }),
-        Reply::Err(ERR_HANDLE)
+        Reply::Err(VfsError::Handle as u8)
     );
     // Staged bytes rewritten after sealing.
     let id = staged(&mut vfs, ALICE, "/srv/u", b"sealed");
@@ -393,11 +393,11 @@ fn backends_without_conditional_publication_refuse_before_staging() {
     let (mut vfs, _) = manager();
     assert_eq!(
         call(&mut vfs, ALICE, &VfsRequest::Observe { path: "/tmp/x" }),
-        Reply::Err(ERR_UNSUPPORTED)
+        Reply::Err(VfsError::Unsupported as u8)
     );
     assert_eq!(
         call(&mut vfs, ALICE, &VfsRequest::SaveBegin { dst: "/tmp/x" }),
-        Reply::Err(ERR_UNSUPPORTED)
+        Reply::Err(VfsError::Unsupported as u8)
     );
     assert_eq!(vfs.stat("/tmp/x"), None);
 }
@@ -419,7 +419,7 @@ fn transactions_are_bounded_per_caller_and_a_successor_generation_inherits_none(
     }
     assert_eq!(
         call(&mut vfs, ALICE, &VfsRequest::SaveBegin { dst: "/srv/over" }),
-        Reply::Err(crate::paths::ERR_QUOTA)
+        Reply::Err(VfsError::Quota as u8)
     );
     let successor = Caller {
         generation: 2,

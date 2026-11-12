@@ -13,6 +13,7 @@ use crate::{
 };
 use alloc::collections::BTreeMap;
 use alloc::string::ToString;
+use api::services::proto::tls;
 use ostd::io::println;
 use ostd::ipc::{post, reply_to};
 use smoltcp::{
@@ -26,7 +27,7 @@ fn authenticated_time_available() -> bool {
 
 /// Announce the fail-closed refusal once.
 ///
-/// Without authenticated time every `TLS_CONNECT` is refused before any
+/// Without authenticated time every [`tls::CONNECT`] is refused before any
 /// certificate is seen, so the caller only observes a zero cap ("handshake
 /// failed") and cannot tell a policy refusal from a transport fault. One named
 /// line of evidence removes that ambiguity — and gives the `tls-gate` lane
@@ -95,7 +96,11 @@ pub fn handle_tls_raw(
                 false
             };
             let reply = ReplyTo::capture(sender);
-            let code = if ok { [0x00] } else { [0xFF] };
+            let code = if ok {
+                [tls::CLOSE_OK]
+            } else {
+                [tls::CLOSE_FAILED]
+            };
             match reply {
                 ReplyTo::Async(token) => {
                     let _ = ostd::ipc::reply(token, &code);
@@ -121,7 +126,7 @@ pub fn handle_tls_raw(
             ));
             if !cfg!(feature = "qemu-dev-https") && !authenticated_time_available() {
                 announce_tls_refusal_once();
-                send_connect_reply(sender, 0);
+                send_connect_reply(sender, tls::CONNECT_FAILED);
                 return;
             }
             // Async callers use the exact operation token. Legacy blocking
@@ -131,7 +136,7 @@ pub fn handle_tls_raw(
                 Ok(pair) => pair,
                 Err(_) => {
                     ostd::io::println("[net/tls] make_tcp failed");
-                    send_connect_reply(sender, 0);
+                    send_connect_reply(sender, tls::CONNECT_FAILED);
                     return;
                 }
             };
@@ -144,7 +149,7 @@ pub fn handle_tls_raw(
                 ostd::io::println(&alloc::format!("[net/tls] socket.connect error: {:?}", e));
                 table.remove_internal(cap);
                 sockets.remove(handle);
-                send_connect_reply(sender, 0);
+                send_connect_reply(sender, tls::CONNECT_FAILED);
                 return;
             }
             table.set_state(cap, SocketState::Connecting);
@@ -152,7 +157,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Send { cap, data } => {
             if !table.is_owner(cap, owner) {
-                let _ = reply_to(sender, &u32::MAX.to_le_bytes());
+                let _ = reply_to(sender, &tls::SEND_ERROR.to_le_bytes());
                 return;
             }
             pending.enqueue(
@@ -166,7 +171,7 @@ pub fn handle_tls_raw(
         }
         RawTlsRequest::Recv { cap, buf_len } => {
             if !table.is_owner(cap, owner) {
-                let _ = reply_to(sender, &u16::MAX.to_le_bytes());
+                let _ = reply_to(sender, &tls::RECV_ERROR.to_le_bytes());
                 return;
             }
             pending.enqueue(

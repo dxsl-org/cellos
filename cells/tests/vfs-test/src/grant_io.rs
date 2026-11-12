@@ -1,4 +1,5 @@
 use api::ipc::{VfsRequest, VfsResponse};
+use api::services::proto::vfs::VfsError;
 use ostd::grant::GrantHandle;
 use ostd::syscall::{sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share};
 
@@ -88,7 +89,9 @@ pub fn read_file_into_grant(path: &str) -> Result<(GrantRegion, usize), &'static
     }) {
         VfsResponse::GrantDone { bytes } if bytes > 0 => bytes,
         VfsResponse::GrantDone { .. } => return Err("ReadFileGrant copied zero bytes"),
-        VfsResponse::Err(3) => return Err("ReadFileGrant was denied before sealing"),
+        VfsResponse::Err(code) if code == VfsError::Denied as u8 => {
+            return Err("ReadFileGrant was denied before sealing")
+        }
         VfsResponse::Err(_) => return Err("ReadFileGrant returned an error"),
         _ => return Err("ReadFileGrant returned an unexpected response"),
     };

@@ -1,4 +1,5 @@
 use api::display::{compositor_ops, Rect, SurfaceRole};
+use api::services::proto::compositor::{DESTROY_OK, DESTROY_REFUSED};
 use ostd::ipc::reply_to;
 
 use crate::input_handler::InputState;
@@ -191,7 +192,7 @@ fn destroy_surface(
         .get(cap)
         .is_some_and(|surface| surface.owner == sender)
     {
-        let _ = reply_to(sender, b"\x01");
+        let _ = reply_to(sender, &[DESTROY_REFUSED]);
         return;
     }
     let freed_rect = table
@@ -203,7 +204,7 @@ fn destroy_surface(
     input.remove_surface(cap);
     z_order.remove(cap);
     let _ = table.remove(cap);
-    let _ = reply_to(sender, b"\x00");
+    let _ = reply_to(sender, &[DESTROY_OK]);
     if let Some(rect) = freed_rect {
         *dirty = Some(match dirty.take() {
             Some(acc) => acc.union(&rect),

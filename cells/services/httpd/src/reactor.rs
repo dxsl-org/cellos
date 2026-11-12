@@ -12,6 +12,7 @@ use alloc::{
 };
 use api::dir_handles::ViDirHandle;
 use api::ipc::{net_ready, NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::ipc::{self, IpcSubmitError};
 use ostd::service::provider_tid;
@@ -170,7 +171,7 @@ impl FileSession {
         }
     }
     fn complete(&mut self, result: Option<VfsResponse<'_>>) {
-        let missing = matches!(result, Some(VfsResponse::Err(1)));
+        let missing = matches!(result, Some(VfsResponse::Err(code)) if code == VfsError::Io as u8);
         match self.stage {
             FileStep::Preflight => match result {
                 Some(VfsResponse::Stat { is_dir: false, .. }) => self.stage = FileStep::Root,
@@ -1157,6 +1158,7 @@ mod state_tests {
     use crate::handlers;
     use api::dir_handles::ViDirHandle;
     use api::ipc::VfsResponse;
+    use api::services::proto::vfs::VfsError;
     use api::vfs_file_handles::ViVfsFileHandle;
 
     #[test]
@@ -1196,7 +1198,7 @@ mod state_tests {
     #[test]
     fn missing_and_invalid_file_preflight_do_not_open_a_handle() {
         let mut missing = FileSession::new("/missing").unwrap();
-        missing.complete(Some(VfsResponse::Err(1)));
+        missing.complete(Some(VfsResponse::Err(VfsError::Io as u8)));
         assert!(matches!(missing.stage, FileStep::Done));
         assert_eq!(missing.outcome, 404);
         let mut invalid = FileSession::new("/directory").unwrap();

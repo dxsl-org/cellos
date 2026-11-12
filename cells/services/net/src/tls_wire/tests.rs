@@ -1,9 +1,10 @@
 use super::*;
+use api::services::proto::tls;
 
 #[test]
 fn parse_close_exact() {
     let mut buf = [0u8; 9];
-    buf[0] = TLS_CLOSE_OP;
+    buf[0] = tls::CLOSE;
     buf[1..9].copy_from_slice(&42u64.to_le_bytes());
     assert_eq!(
         parse_raw_tls_request(&buf),
@@ -15,7 +16,7 @@ fn parse_close_exact() {
 fn parse_connect_exact_and_negative() {
     // Valid
     let mut buf = alloc::vec![0u8; 17 + 11];
-    buf[0] = TLS_CONNECT_OP;
+    buf[0] = tls::CONNECT;
     buf[9..13].copy_from_slice(&[10, 0, 2, 2]);
     buf[13..15].copy_from_slice(&443u16.to_le_bytes());
     buf[15..17].copy_from_slice(&11u16.to_le_bytes());
@@ -51,7 +52,7 @@ fn parse_connect_exact_and_negative() {
 fn parse_send_preserves_binary_trailing_zeros() {
     let binary = b"test\x00\x00\x00\x00";
     let mut buf = alloc::vec![0u8; 11 + binary.len()];
-    buf[0] = TLS_SEND_OP;
+    buf[0] = tls::SEND;
     buf[1..9].copy_from_slice(&77u64.to_le_bytes());
     buf[9..11].copy_from_slice(&(binary.len() as u16).to_le_bytes());
     buf[11..].copy_from_slice(binary);
@@ -68,7 +69,7 @@ fn parse_send_preserves_binary_trailing_zeros() {
 #[test]
 fn parse_send_negative_cases() {
     // Buffer < 11
-    let short = [TLS_SEND_OP, 1, 2, 3, 4, 5, 6, 7, 8, 0];
+    let short = [tls::SEND, 1, 2, 3, 4, 5, 6, 7, 8, 0];
     assert_eq!(
         parse_raw_tls_request(&short),
         Err(RawTlsError::BufferTooShort)
@@ -76,7 +77,7 @@ fn parse_send_negative_cases() {
 
     // Declared length > buffer available
     let mut bad_len = [0u8; 15];
-    bad_len[0] = TLS_SEND_OP;
+    bad_len[0] = tls::SEND;
     bad_len[9..11].copy_from_slice(&100u16.to_le_bytes());
     assert_eq!(
         parse_raw_tls_request(&bad_len),
@@ -85,7 +86,7 @@ fn parse_send_negative_cases() {
 
     // Oversize payload (> 501)
     let mut oversize = alloc::vec![0u8; 600];
-    oversize[0] = TLS_SEND_OP;
+    oversize[0] = tls::SEND;
     oversize[9..11].copy_from_slice(&550u16.to_le_bytes());
     assert_eq!(
         parse_raw_tls_request(&oversize),
@@ -96,7 +97,7 @@ fn parse_send_negative_cases() {
 #[test]
 fn parse_recv_exact_and_negative() {
     let mut buf = [0u8; 13];
-    buf[0] = TLS_RECV_OP;
+    buf[0] = tls::RECV;
     buf[1..9].copy_from_slice(&99u64.to_le_bytes());
     buf[9..13].copy_from_slice(&512u32.to_le_bytes());
 
@@ -108,13 +109,13 @@ fn parse_recv_exact_and_negative() {
         })
     );
 
-    // Clamping to MAX_TLS_RECV_DATA (4094)
+    // Clamping to tls::MAX_RECV_DATA (4094)
     buf[9..13].copy_from_slice(&8192u32.to_le_bytes());
     assert_eq!(
         parse_raw_tls_request(&buf),
         Ok(RawTlsRequest::Recv {
             cap: 99,
-            buf_len: MAX_TLS_RECV_DATA,
+            buf_len: tls::MAX_RECV_DATA,
         })
     );
 
@@ -139,8 +140,8 @@ fn recv_reply_encoding_preserves_zeros() {
 fn recv_reply_encoding_clamps_at_max_recv_data() {
     let large_data = alloc::vec![0xAA; 5000];
     let encoded = encode_tls_recv_reply(&large_data);
-    assert_eq!(encoded.len(), 2 + MAX_TLS_RECV_DATA);
+    assert_eq!(encoded.len(), 2 + tls::MAX_RECV_DATA);
     assert!(encoded.len() <= 4096);
     let len = u16::from_le_bytes([encoded[0], encoded[1]]) as usize;
-    assert_eq!(len, MAX_TLS_RECV_DATA);
+    assert_eq!(len, tls::MAX_RECV_DATA);
 }

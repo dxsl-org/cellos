@@ -22,14 +22,14 @@
 //!   UdpCreate, UdpBind, TcpListen, MulticastJoin, L2Send) once to the
 //!   live net service and print one `NETPROBE <op> <result>` line per
 //!   request, then `NETPROBE DONE`; `<result>` is `denied` for
-//!   `Err(NET_ERR_DENIED)` and `other:<detail>` for anything else.
+//!   `Err(NetError::Denied)` and `other:<detail>` for anything else.
 //!   This Cell holds no network right (its launch edge has an empty
 //!   ceiling), so every line is expected to read `denied`.
 //! - `config-probe get KEY` / `config-probe set KEY VALUE` /
 //!   `config-probe delete KEY`
 //!   send one `ConfigRequest` to the live config service and print
 //!   `CFGPROBE <op> <KEY> <result>`; `<result>` is `ok`, `denied`
-//!   (`Err(CONFIG_ERR_DENIED)`), `value:<v>`, `notfound` or
+//!   (`Err(ConfigError::Denied)`), `value:<v>`, `notfound` or
 //!   `other:<detail>`. This Cell holds no Q right (its edge ceiling
 //!   lacks `config_write`), so `set`/`delete` are expected to read
 //!   `denied`; `get` is ungated (Phase 01 CP1).
@@ -56,10 +56,8 @@ extern crate ostd;
 use alloc::format;
 use alloc::string::String;
 use api::cell_session::Status;
-use api::ipc::{
-    ConfigRequest, ConfigResponse, NetRequest, NetResponse, CONFIG_ERR_DENIED, IPC_BUF_SIZE,
-    NET_ERR_DENIED,
-};
+use api::ipc::{ConfigRequest, ConfigResponse, NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::{config::ConfigError, net::NetError};
 use ostd::child_context::{ChildContext, GrantSlot};
 use ostd::service::{ConfigRef, NetRef};
 use ostd::syscall::sys_exit;
@@ -296,7 +294,7 @@ fn probe(net: &mut NetRef, request: &NetRequest) -> String {
         .call::<NetRequest, NetResponse>(request, &mut reply)
         .into_result()
     {
-        Ok(NetResponse::Err(NET_ERR_DENIED)) => String::from("denied"),
+        Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => String::from("denied"),
         Ok(NetResponse::Err(code)) => format!("other:err-0x{code:02x}"),
         Ok(NetResponse::CapId(id)) => format!("other:cap-{id}"),
         Ok(NetResponse::Addr([a, b, c, d])) => format!("other:addr-{a}.{b}.{c}.{d}"),
@@ -371,7 +369,9 @@ fn config_probe(context: &ChildContext) -> i32 {
         .into_result()
     {
         Ok(ConfigResponse::Ok) => String::from("ok"),
-        Ok(ConfigResponse::Err(CONFIG_ERR_DENIED)) => String::from("denied"),
+        Ok(ConfigResponse::Err(code)) if code == ConfigError::Denied as u8 => {
+            String::from("denied")
+        }
         Ok(ConfigResponse::Value(v)) => format!("value:{v}"),
         Ok(ConfigResponse::NotFound) => String::from("notfound"),
         Ok(ConfigResponse::Err(code)) => format!("other:err-0x{code:02x}"),

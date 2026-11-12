@@ -23,6 +23,7 @@ use alloc::vec::Vec;
 
 use api::abi::caller_identity::CALLER_FLAG_NET_CONNECT;
 use api::ipc::{ssh_trust, VfsRequest, VfsResponse};
+use api::services::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -86,7 +87,7 @@ pub fn handle(
         || key.len() > MAX_BLOB
         || port == 0
     {
-        return Some(VfsResponse::Err(0xFF));
+        return Some(VfsResponse::Err(VfsError::Malformed as u8));
     }
     let code = match vfs.stat(STORE_PATH) {
         None => ssh_trust::UNKNOWN,

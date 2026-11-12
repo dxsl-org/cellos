@@ -1,5 +1,6 @@
 use alloc::string::String;
 use api::retirement::{reason, RetirementState, ViRetirementV1};
+use api::services::proto::supervisor::{OWNER_EXITED_LEN, OWNER_EXITED_NOTICE};
 use api::syscall::service;
 use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
@@ -233,8 +234,8 @@ fn restart_pending(services: &mut [Service]) {
 }
 
 fn relay_hypervisor_exit(dead: usize) {
-    let mut message = [0u8; 1 + core::mem::size_of::<usize>()];
-    message[0] = 0xE1;
+    let mut message = [0u8; OWNER_EXITED_LEN];
+    message[0] = OWNER_EXITED_NOTICE;
     message[1..].copy_from_slice(&dead.to_le_bytes());
     if let Some(supervisor) = provider_tid(service::SUPERVISOR) {
         let _ = ostd::ipc::post(supervisor, &message);

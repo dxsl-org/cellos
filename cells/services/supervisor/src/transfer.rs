@@ -1,27 +1,26 @@
 //! Snapshot and restore IPC envelopes shared by the supervisor swap flow.
 
-use crate::error::HotswapError;
+use api::services::proto::app_envelope::{
+    HEADER_LEN, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SNAPSHOT_LEN,
+};
+use api::services::proto::supervisor::HotswapError;
 use ostd::ipc::post;
 
-const APP_MSG_MAGIC: u8 = 0xAC;
-const DISC_SNAPSHOT: u8 = 0xF0;
-const DISC_RESTORE: u8 = 0xF1;
-
 pub fn send_snapshot_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
-    let mut buf = [0u8; 10];
-    buf[0] = APP_MSG_MAGIC;
-    buf[1] = DISC_SNAPSHOT;
-    buf[2..10].copy_from_slice(&swap_id.to_le_bytes());
+    let mut buf = [0u8; SNAPSHOT_LEN];
+    buf[0] = MAGIC;
+    buf[1] = KIND_SNAPSHOT;
+    buf[HEADER_LEN..].copy_from_slice(&swap_id.to_le_bytes());
     post(tid, &buf).map_err(|_| HotswapError::SnapshotIpcFailed)
 }
 
 pub fn send_restore_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
-    let mut buf = [0u8; 66];
-    buf[0] = APP_MSG_MAGIC;
-    buf[1] = DISC_RESTORE;
+    let mut buf = [0u8; RESTORE_LEN];
+    buf[0] = MAGIC;
+    buf[1] = KIND_RESTORE;
     let mut tmp = [0u8; 20];
-    let len = fmt_u64_decimal(swap_id, &mut tmp).min(63);
-    buf[2..2 + len].copy_from_slice(&tmp[..len]);
+    let len = fmt_u64_decimal(swap_id, &mut tmp).min(RESTORE_KEY_LEN - 1);
+    buf[HEADER_LEN..HEADER_LEN + len].copy_from_slice(&tmp[..len]);
     post(tid, &buf).map_err(|_| HotswapError::RestoreIpcFailed)
 }
 

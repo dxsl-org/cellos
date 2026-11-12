@@ -7,6 +7,10 @@
 extern crate alloc;
 use alloc::collections::VecDeque;
 
+use api::services::vmm_session::{
+    BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE, EV_ABS, EV_KEY, EV_REL, REL_WHEEL,
+};
+
 use crate::virtio_mmio::{QueueCfg, VirtioDevice};
 use crate::virtqueue::read_descriptor_chain;
 #[cfg(target_arch = "aarch64")]
@@ -23,19 +27,9 @@ const VIRTIO_INPUT_CFG_PROP_BITS: u8 = 0x10;
 const VIRTIO_INPUT_CFG_EV_BITS: u8 = 0x11;
 const VIRTIO_INPUT_CFG_ABS_INFO: u8 = 0x12;
 
-// Linux Event Types
+// Linux event types and codes beyond those `api::services::vmm_session` owns.
 pub const EV_SYN: u16 = 0x00;
-pub const EV_KEY: u16 = 0x01;
-pub const EV_REL: u16 = 0x02;
-pub const EV_ABS: u16 = 0x03;
-
 pub const SYN_REPORT: u16 = 0;
-pub const REL_WHEEL: u16 = 0x08;
-pub const BTN_LEFT: u16 = 0x110;
-pub const BTN_RIGHT: u16 = 0x111;
-pub const BTN_MIDDLE: u16 = 0x112;
-pub const BTN_SIDE: u16 = 0x113;
-pub const BTN_EXTRA: u16 = 0x114;
 
 /// Queued events cap: a guest that never posts eventq buffers must not grow
 /// host memory without bound.
@@ -374,15 +368,28 @@ mod tests {
     #[test]
     fn pointer_is_absolute_with_the_session_range() {
         let mut dev = InputDev::new(None);
-        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_ABS) << 8));
+        dev.config_write(
+            0,
+            u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_ABS) << 8),
+        );
         assert_eq!(cfg_byte(&dev, 2), 1);
         assert_eq!(cfg_byte(&dev, 8), 0x03);
-        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_REL) << 8));
-        assert_eq!((cfg_byte(&dev, 8), cfg_byte(&dev, 9)), (0, 0x01), "wheel only");
+        dev.config_write(
+            0,
+            u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_REL) << 8),
+        );
+        assert_eq!(
+            (cfg_byte(&dev, 8), cfg_byte(&dev, 9)),
+            (0, 0x01),
+            "wheel only"
+        );
         dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_ABS_INFO) | (1 << 8));
         assert_eq!(cfg_byte(&dev, 2), 20);
         let max: alloc::vec::Vec<u8> = (12..16).map(|i| cfg_byte(&dev, i)).collect();
-        assert_eq!(max, (api::services::vmm_session::ABS_MAX as u32).to_le_bytes());
+        assert_eq!(
+            max,
+            (api::services::vmm_session::ABS_MAX as u32).to_le_bytes()
+        );
     }
 
     #[test]

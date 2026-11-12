@@ -1,5 +1,6 @@
 use crate::sync::Spinlock;
 use alloc::collections::VecDeque;
+use api::services::proto::input::{EV_ASCII, PRODUCER_FRAME_LEN};
 use core::sync::atomic::Ordering;
 
 #[cfg(target_arch = "aarch64")]
@@ -246,28 +247,25 @@ static PENDING_PS2: Spinlock<Option<crate::dev::ps2_keyboard::Ps2Event>> =
 /// drains that entry into its own user buffer, so this interrupt-side path never
 /// enables supervisor access to user pages.
 fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
-    // Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
-    const WIRE_ASCII: u8 = 0x04;
-
     // Use isize::MAX as sender_id — distinguishes kernel UART messages from
     // real timeout (Ok(0)) in the input service. Must be isize::MAX (not
     // usize::MAX) because syscall() returns isize: usize::MAX == -1 as isize
     // which causes sys_recv_timeout to return Err instead of Ok.
     const KERNEL_UART_SENDER: usize = isize::MAX as usize;
-    let mut msg = [0u8; 9];
-    msg[0] = WIRE_ASCII;
+    let mut msg = [0u8; PRODUCER_FRAME_LEN];
+    msg[0] = EV_ASCII;
     msg[1..5].copy_from_slice(&(byte as u32).to_le_bytes());
     msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
-    crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]).is_ok()
+    crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg).is_ok()
 }
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
 fn relay_evdev_to_input(input_tid: usize, opcode: u8, code: u32, value: i32) -> bool {
     const KERNEL_SENDER: usize = isize::MAX as usize;
-    let mut msg = [0u8; 9];
+    let mut msg = [0u8; PRODUCER_FRAME_LEN];
     msg[0] = opcode;
     msg[1..5].copy_from_slice(&code.to_le_bytes());
     msg[5..9].copy_from_slice(&(value as u32).to_le_bytes());
-    crate::task::ipc_post_nonblock(KERNEL_SENDER, input_tid, &msg[..9]).is_ok()
+    crate::task::ipc_post_nonblock(KERNEL_SENDER, input_tid, &msg).is_ok()
 }
 
 pub static CONSOLE: Spinlock<viConsole> = Spinlock::ranked(

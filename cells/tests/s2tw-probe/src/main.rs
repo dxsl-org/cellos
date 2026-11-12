@@ -52,6 +52,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use api::services::proto::vfs::VfsError;
 use api::syscall::{ProcessInfo, ProcessInfoV2};
 use api::telemetry::{header_flags, request, TelemetrySnapshot};
 use ostd::child_context::{ChildContext, GrantSlot};
@@ -97,8 +98,6 @@ const USAGE: i32 = 2;
 const IO: i32 = 3;
 /// No deadline: block until the reader takes the bytes, closes or cancels.
 const FOREVER: u64 = u64::MAX;
-/// The VFS wire code for `PermissionDenied` (`cells/services/vfs/src/paths.rs`).
-const VFS_ERR_DENIED: u8 = 3;
 /// Directory the write targets; the shell's cwd must be it or an ancestor.
 const TARGET_DIR: &str = "/tmp";
 const ROWS: usize = 64;
@@ -258,7 +257,7 @@ fn vfs_write(context: &ChildContext, tag: &str) -> String {
         .call::<VfsRequest, VfsResponse>(&request, &mut reply)
         .into_result()
     {
-        Ok(VfsResponse::Err(VFS_ERR_DENIED)) => String::from("denied"),
+        Ok(VfsResponse::Err(code)) if code == VfsError::Denied as u8 => String::from("denied"),
         Ok(other) => format!("other:{}", vfs_detail(&other)),
         Err(error) => format!("other:ipc-{error:?}"),
     }

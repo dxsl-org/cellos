@@ -13,8 +13,9 @@
 //! dispatches them to the currently focused cell.
 //!
 //! ## IPC protocol (inbound from kernel, sender == 0)
+//! Producer frames, wire in `api::services::proto::input`:
 //! ```text
-//! byte[0]   = event type: 0=EV_KEY, 1=EV_REL, 2=EV_ABS
+//! byte[0]   = event kind: EV_KEY, EV_REL, EV_ABS, EV_ASCII (or an EV_DEVICE frame)
 //! byte[1..5]= code  (u32 LE: scancode, REL_*, ABS_* axis)
 //! byte[5..9]= value (u32 LE: key state, signed rel delta, abs coord)
 //! ```
@@ -41,7 +42,12 @@ mod virtio_device;
 
 use alloc::vec::Vec;
 use api::input::{InputEvent, KeyEvent, KeyState, KeySym};
-use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE, OP_HID_DEVICE_REMOVED};
+use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
+use api::services::proto::input::{
+    DEVICE_FRAME_LEN, EV_ABS, EV_ASCII, EV_DEVICE, EV_KEY, EV_REL, OP_HID_DEVICE_REMOVED,
+    OP_SET_LEDS, PRODUCER_FRAME_LEN,
+};
+use api::services::vmm_session as evdev;
 use api::syscall::service;
 use dispatcher::Dispatcher;
 use focus_routes::Requester;
@@ -76,21 +82,6 @@ api::declare_syscalls![
     SetTimer,
     Yield
 ];
-
-/// Raw event type discriminant for keyboard events (kernel VirtIO push).
-const EV_KEY: u8 = 0;
-/// Raw event type for UART ASCII relay from the kernel console driver.
-/// The code field carries the raw ASCII byte; no scancode translation needed.
-const EV_ASCII: u8 = 0x04;
-/// A per-interface HID worker event carrying a logical-device ID.
-///
-/// Layout: `[EV_DEVICE][device:u32][event_type][code:u32][value:i32]`.
-const EV_DEVICE: u8 = 0x05;
-
-/// Linux evdev event types used by VirtIO input device.
-const EVDEV_KEY: u16 = 1;
-const EVDEV_REL: u16 = 2;
-const EVDEV_ABS: u16 = 3;
 
 /// Watchdog interval: 5000 scheduler ticks × 10ms = 50 seconds.
 /// Must match DISPATCH_HEARTBEAT in dispatcher.rs — they share the same timeline.
@@ -310,7 +301,7 @@ impl EventSources {
 
     /// Tell one producer what the lock LEDs should show.
     fn send_leds(&self, tid: usize, leds: u8) {
-        let frame = [api::ipc::OP_SET_LEDS, leds];
+        let frame = [OP_SET_LEDS, leds];
         if !matches!(sys_try_send(tid, &frame), SyscallResult::Ok(0)) {
             print("[input] WARN: lock LED state not delivered to source tid=");
             print_usize(tid);
@@ -447,10 +438,10 @@ fn drain_virtio(
         // Map Linux evdev event types → the same opcode encoding the kernel uses
         // in dispatch_pending, so handle_kernel_event processes them identically.
         let opcode: u8 = match ev.event_type {
-            EVDEV_KEY => 0, // EV_KEY
-            EVDEV_REL => 1, // EV_REL
-            EVDEV_ABS => 2, // EV_ABS
-            _ => continue,  // unknown type (EV_SYN, EV_MSC, etc.) — drop
+            evdev::EV_KEY => EV_KEY,
+            evdev::EV_REL => EV_REL,
+            evdev::EV_ABS => EV_ABS,
+            _ => continue, // unknown type (EV_SYN, EV_MSC, etc.) — drop
         };
         buf[0] = opcode;
         buf[1..5].copy_from_slice(&(ev.code as u32).to_le_bytes());
@@ -490,10 +481,12 @@ fn handle_message(
 
 /// Handle a raw VirtIO event pushed by the kernel (sender == 0).
 ///
-/// Wire format: `[opcode:1][code:4 LE][value:4 LE]`
-/// opcode 0 = EV_KEY (keyboard key or mouse button via BTN_* scancode ≥ 0x110)
-/// opcode 1 = EV_REL (relative mouse: REL_X/Y/WHEEL)
-/// opcode 2 = EV_ABS (absolute mouse: ABS_X/Y in guest framebuffer pixels)
+/// Wire format (`api::services::proto::input`): `[opcode:1][code:4 LE][value:4 LE]`
+/// EV_KEY = keyboard key or mouse button via BTN_* scancode ≥ 0x110
+/// EV_REL = relative mouse: REL_X/Y/WHEEL
+/// EV_ABS = absolute mouse: ABS_X/Y in guest framebuffer pixels
+/// EV_ASCII = UART byte relayed by the kernel console driver
+/// EV_DEVICE = `[EV_DEVICE][device:u32][kind][code:u32][value:i32]` from a HID worker
 fn handle_kernel_event(
     buf: &[u8; IPC_BUF_SIZE],
     modifiers: &mut ModifierState,
@@ -502,7 +495,7 @@ fn handle_kernel_event(
     hid_devices: &mut HidDeviceStates,
 ) {
     let (device, opcode, code, value) = if buf[0] == EV_DEVICE {
-        if buf.len() < 14 {
+        if buf.len() < DEVICE_FRAME_LEN {
             return;
         }
         (
@@ -512,7 +505,7 @@ fn handle_kernel_event(
             u32::from_le_bytes([buf[10], buf[11], buf[12], buf[13]]),
         )
     } else {
-        if buf.len() < 9 {
+        if buf.len() < PRODUCER_FRAME_LEN {
             return;
         }
         (
@@ -574,12 +567,12 @@ fn handle_kernel_event(
                 println("[input] WARNING: clearing failed keyboard focus");
             }
         }
-        1 => {
+        EV_REL => {
             if let Some(ev) = mouse.apply_rel(code, value) {
                 dispatcher.dispatch_mouse(&ev);
             }
         }
-        2 => {
+        EV_ABS => {
             if let Some(ev) = mouse.apply_abs(code, value) {
                 dispatcher.dispatch_mouse(&ev);
             }

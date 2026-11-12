@@ -33,10 +33,7 @@ extern crate alloc;
 use crate::service;
 use crate::tls::{tls_close, tls_connect, tls_read, tls_write};
 use crate::{ViError, ViResult};
-
-/// Max bytes accepted by a single [`tls_write`] IPC call (mirrors the cap in
-/// `tls.rs`: 512-byte IPC buffer minus the 11-byte `[op][cap][len]` header).
-const MAX_TLS_WRITE: usize = 501;
+use api::services::proto::tls::{CONNECT_FAILED, MAX_SEND};
 
 /// Bound write-side zero-progress retries; receive never retries EOF or errors.
 const WRITE_RETRY_BUDGET: u32 = 100_000;
@@ -60,7 +57,7 @@ impl TlsStream {
     pub fn connect(addr: [u8; 4], port: u16, hostname: &str) -> ViResult<Self> {
         let net_tid = service::provider_tid(service::service::NET).ok_or(ViError::NotFound)?;
         let cap_id = tls_connect(net_tid, addr, port, hostname);
-        if cap_id == 0 {
+        if cap_id == CONNECT_FAILED {
             return Err(ViError::IO);
         }
         Ok(Self { net_tid, cap_id })
@@ -101,7 +98,7 @@ impl embedded_io::Write for TlsStream {
         let mut sent = 0usize;
         let mut stalls: u32 = 0;
         while sent < buf.len() {
-            let chunk_end = (sent + MAX_TLS_WRITE).min(buf.len());
+            let chunk_end = (sent + MAX_SEND).min(buf.len());
             let n = tls_write(self.net_tid, self.cap_id, &buf[sent..chunk_end]);
             if n == 0 {
                 stalls += 1;

@@ -11,8 +11,8 @@
 
 extern crate alloc;
 
-use crate::error::HotswapError;
 use crate::transfer::{send_restore_event, send_snapshot_event};
+use api::services::proto::supervisor::HotswapError;
 use ostd::service::namespace_flags;
 use ostd::service::provider_tid;
 use ostd::syscall::{

@@ -26,7 +26,7 @@ struct Extra<'a> {
 
 impl VfsManager {
     /// One page of directory `path`, starting at `cursor`. `None` for anything
-    /// the wire reports as `ERR_IO`: not a listable directory, a backend
+    /// the wire reports as `VfsError::Io`: not a listable directory, a backend
     /// iteration error, an invalid name, or a stale cursor.
     pub fn list_page(&self, path: &str, cursor: u32, out: &mut [u8]) -> Option<ListPage> {
         let backend = self.mounts.backend(path)?;

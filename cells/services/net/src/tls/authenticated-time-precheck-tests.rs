@@ -13,6 +13,7 @@ pub(crate) fn record_buffer_allocation() {
 }
 
 use alloc::collections::BTreeMap;
+use api::services::proto::tls as proto_tls;
 use embedded_tls::TlsError;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
@@ -25,7 +26,6 @@ use crate::{
     socket_table::{SocketOwner, SocketTable},
     tls::socket::prepare_handshake_buffers,
     tls_handler::{handle_tls_raw, TlsPending},
-    tls_wire::TLS_CONNECT_OP,
 };
 
 fn interface_config() -> Config {
@@ -50,7 +50,7 @@ fn handler_rejects_before_allocating_tcp_capability() {
         generation: 1,
     };
     let mut request = [0u8; 21];
-    request[0] = TLS_CONNECT_OP;
+    request[0] = proto_tls::CONNECT;
     request[15..17].copy_from_slice(&4u16.to_le_bytes());
     request[17..].copy_from_slice(b"mock");
 
@@ -69,7 +69,10 @@ fn handler_rejects_before_allocating_tcp_capability() {
     assert_eq!(table.next_cap_for_test(), 1);
     assert_eq!(sockets.iter().count(), 0);
     assert!(tls_table.is_empty());
-    assert_eq!(LAST_CONNECT_REPLY.load(Ordering::Relaxed), 0);
+    assert_eq!(
+        LAST_CONNECT_REPLY.load(Ordering::Relaxed),
+        proto_tls::CONNECT_FAILED
+    );
 }
 
 #[test]

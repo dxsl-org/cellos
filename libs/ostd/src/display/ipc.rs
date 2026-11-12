@@ -7,6 +7,7 @@
 //! which route every compositor frame.
 
 use api::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
+use api::services::proto::compositor::DESTROY_OK;
 use types::{ViError, ViResult};
 
 use crate::ipc::{call_bytes, post, IpcError};
@@ -145,7 +146,7 @@ pub(super) fn destroy_surface(comp_tid: usize, cap: u32, ticks: u64) -> ViResult
     let mut req = [0u8; 9];
     req[0] = compositor_ops::DESTROY_SURFACE;
     req[1..9].copy_from_slice(&(cap as u64).to_le_bytes());
-    request_status(comp_tid, &req, 0x00, ticks)
+    request_status(comp_tid, &req, DESTROY_OK, ticks)
 }
 
 /// Unregister attempts [`release_grant`] makes before leaving the Grant to

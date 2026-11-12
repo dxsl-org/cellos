@@ -7,10 +7,10 @@
 //! namespace-reservation and quota rules an unsealed one does.
 
 use api::ipc::VfsResponse;
+use api::services::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-use crate::paths::{ERR_DENIED, ERR_IO};
 
 /// `/srv` entries carry an exclusive namespace reservation for the duration of
 /// the mutation; other mounts have no ledger. `Err` means the key could not be
@@ -28,15 +28,15 @@ fn reserve_srv(
 
 pub(crate) fn mkdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResponse<'static> {
     if !vfs.access.can_write(caller, path) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let Ok(_reservation) = reserve_srv(vfs, path) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     if vfs.mkdir(path) {
         VfsResponse::Ok
     } else {
-        VfsResponse::Err(ERR_IO)
+        VfsResponse::Err(VfsError::Io as u8)
     }
 }
 
@@ -46,15 +46,15 @@ pub(crate) fn rmdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
         || vfs.is_mount_point(path)
         || vfs.is_mount_ancestor(path)
     {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let Ok(_reservation) = reserve_srv(vfs, path) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     if vfs.rmdir(path) {
         VfsResponse::Ok
     } else {
-        VfsResponse::Err(ERR_IO)
+        VfsResponse::Err(VfsError::Io as u8)
     }
 }
 
@@ -65,36 +65,36 @@ pub(crate) fn rename(
     new: &str,
 ) -> VfsResponse<'static> {
     if !caller.may_mutate() {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !old.starts_with("/srv/") || !new.starts_with("/srv/") {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     if !vfs.access.can_write(caller, old) || !vfs.access.can_write(caller, new) {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     }
     let Ok(old_key) = crate::namespace::NamespaceKey::parse(old) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     let Ok(new_key) = crate::namespace::NamespaceKey::parse(new) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     if !vfs.healthy(old) || !vfs.healthy(new) {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if old_key == new_key {
         return match vfs.stat(old) {
             Some((_, false)) => VfsResponse::Ok,
-            _ => VfsResponse::Err(ERR_IO),
+            _ => VfsResponse::Err(VfsError::Io as u8),
         };
     }
     let Ok(reservation) = vfs.ledger.reserve_two(&old_key, &new_key) else {
-        return VfsResponse::Err(ERR_DENIED);
+        return VfsResponse::Err(VfsError::Denied as u8);
     };
     let ok = vfs.rename_no_replace(old, new);
     drop(reservation);
     if !ok {
-        return VfsResponse::Err(ERR_IO);
+        return VfsResponse::Err(VfsError::Io as u8);
     }
     if let Some(w) = vfs.quota.writer_of(old) {
         vfs.quota.release_path(old, 0);

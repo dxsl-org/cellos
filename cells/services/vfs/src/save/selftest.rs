@@ -9,6 +9,7 @@ use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use api::ipc::{
     save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
 };
+use api::services::proto::vfs::VfsError;
 use cellos_fs::format::BLOCK_SIZE;
 use sha2::{Digest, Sha256};
 use types::CellId;
@@ -242,7 +243,7 @@ fn checks() -> [bool; 4] {
             &VfsRequest::SaveBegin { dst: "/tmp/s8" },
             &mut [0; IPC_BUF_SIZE]
         ),
-        VfsResponse::Err(crate::paths::ERR_UNSUPPORTED)
+        VfsResponse::Err(code) if code == VfsError::Unsupported as u8
     ) && vfs.stat("/tmp/s8").is_none();
     [replaced, conflict, tampered, refused]
 }

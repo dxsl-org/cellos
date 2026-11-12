@@ -1,11 +1,10 @@
 use super::super::path::FileReadPlan;
 use super::super::session::ReadSession;
-use super::super::wire::{
-    vfs_err_from_code, MAX_READ_CHUNK, VFS_ERR_DENIED, VFS_ERR_HANDLE, VFS_ERR_IO, VFS_ERR_QUOTA,
-};
+use super::super::wire::{vfs_err_from_code, MAX_READ_CHUNK};
 use super::support::{MockOps, MockReply};
 use crate::ViError;
 use alloc::vec;
+use api::services::proto::vfs::VfsError;
 
 /// Every read path stats the file before its first chunk, so each mock sequence
 /// carries the reply for that call. A backend that refuses it is a separate case
@@ -19,10 +18,16 @@ fn stat(size: u64) -> MockReply {
 
 #[test]
 fn wire_error_codes_map_to_typed_errors() {
-    assert_eq!(vfs_err_from_code(VFS_ERR_IO), ViError::IO);
-    assert_eq!(vfs_err_from_code(VFS_ERR_QUOTA), ViError::OutOfMemory);
-    assert_eq!(vfs_err_from_code(VFS_ERR_DENIED), ViError::PermissionDenied);
-    assert_eq!(vfs_err_from_code(VFS_ERR_HANDLE), ViError::NotFound);
+    assert_eq!(vfs_err_from_code(VfsError::Io as u8), ViError::IO);
+    assert_eq!(
+        vfs_err_from_code(VfsError::Quota as u8),
+        ViError::OutOfMemory
+    );
+    assert_eq!(
+        vfs_err_from_code(VfsError::Denied as u8),
+        ViError::PermissionDenied
+    );
+    assert_eq!(vfs_err_from_code(VfsError::Handle as u8), ViError::NotFound);
 }
 
 #[test]
@@ -84,7 +89,7 @@ fn read_falls_back_to_the_requested_bound_without_a_stat() {
     let mut ops = MockOps::new(vec![
         MockReply::Dir(1),
         MockReply::File(9),
-        MockReply::Err(VFS_ERR_IO),
+        MockReply::Err(VfsError::Io as u8),
         MockReply::DataLen(100, b'a'),
         MockReply::Ok,
         MockReply::Ok,
@@ -104,7 +109,7 @@ fn cleanup_closes_file_after_read_error() {
         MockReply::Dir(1),
         MockReply::File(9),
         stat(4),
-        MockReply::Err(2),
+        MockReply::Err(VfsError::Quota as u8),
         MockReply::Ok,
         MockReply::Ok,
     ]);
@@ -124,7 +129,7 @@ fn cleanup_closes_directories_after_close_file_error() {
         MockReply::File(9),
         stat(2),
         MockReply::Data(b"ok".to_vec()),
-        MockReply::Err(VFS_ERR_HANDLE),
+        MockReply::Err(VfsError::Handle as u8),
         MockReply::Ok,
     ]);
     let mut session = ReadSession::new(&mut ops);

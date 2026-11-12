@@ -1,28 +1,12 @@
 //! IPC request dispatcher for the LAN9514 NIC Driver Cell.
 //!
-//! Implements the raw NIC wire protocol (shared with virtio-net and e1000):
-//!   OP_TX (0):   [0x00, len_lo, len_hi] ++ frame_bytes -> [0x00] OK / [0x01] Err
-//!   OP_RX (1):   [0x01] -> [len_lo, len_hi] ++ frame_bytes
-//!   OP_GETMAC (2): [0x02] -> 6 MAC bytes
+//! Serves the NIC wire defined in [`api::services::proto::nic`], shared with
+//! virtio-net and e1000. Only [`NicStatus::Ok`] means the frame went out; every
+//! other status is a refusal the Net Cell retries, and the value names which
+//! kind (the chip refused versus the driver was not ready).
 
 use crate::lan9514::Lan9514Device;
-
-pub const OP_TX: u8 = 0;
-pub const OP_RX: u8 = 1;
-pub const OP_GETMAC: u8 = 2;
-
-/// NIC response status byte: only [`STATUS_OK`] means the frame went out.
-///
-/// Every other value is a refusal the caller may retry, and the value says which
-/// kind — the board's ping drowned in a single `accepted=false` byte whose cause
-/// (the chip refused versus the driver was not ready) had to be guessed from the
-/// surrounding lines. The Net Cell keeps a refused frame and offers it again,
-/// bounded, so naming the refusal is what decides the next fix.
-pub const STATUS_OK: u8 = 0;
-/// The request was malformed, or its USB transfer failed.
-pub const STATUS_FAILED: u8 = 1;
-/// The front-end that decodes requests was not parked: nothing reached the chip.
-pub const STATUS_NOT_READY: u8 = 2;
+use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 pub const FRAME_BUF: usize = 1514;
 pub const REPLY_BUF: usize = 2 + FRAME_BUF;
@@ -39,17 +23,17 @@ pub fn handle<'a>(
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
     if data.is_empty() {
-        return NicReply::Status(STATUS_FAILED);
+        return NicReply::Status(NicStatus::Failed as u8);
     }
 
     match data[0] {
         OP_TX => {
             if data.len() < 3 {
-                return NicReply::Status(STATUS_FAILED);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > FRAME_BUF || (3 + len) > data.len() {
-                return NicReply::Status(STATUS_FAILED);
+                return NicReply::Status(NicStatus::Failed as u8);
             }
             let frame = &data[3..3 + len];
             let ok = dev.send_frame(frame);
@@ -63,9 +47,9 @@ pub fn handle<'a>(
                 if !FIRST_TX_OK.swap(true, core::sync::atomic::Ordering::Relaxed) {
                     ostd::io::println("[dwc2-usb] TX packet transmitted OK");
                 }
-                NicReply::Status(STATUS_OK)
+                NicReply::Status(NicStatus::Ok as u8)
             } else {
-                NicReply::Status(STATUS_FAILED)
+                NicReply::Status(NicStatus::Failed as u8)
             }
         }
 
@@ -81,6 +65,6 @@ pub fn handle<'a>(
 
         OP_GETMAC => NicReply::Mac(dev.mac_address()),
 
-        _ => NicReply::Status(STATUS_FAILED),
+        _ => NicReply::Status(NicStatus::Failed as u8),
     }
 }

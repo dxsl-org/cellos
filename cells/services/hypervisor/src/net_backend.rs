@@ -8,7 +8,8 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_ADDR_IN_USE};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use api::services::proto::net::NetError;
 use ostd::service::provider_tid;
 
 const BACKEND_TIMEOUT_TICKS: u64 = 200;
@@ -72,7 +73,7 @@ impl Connection {
                     ));
                     return;
                 }
-                Ok(NetResponse::Err(NET_ERR_ADDR_IN_USE)) => {}
+                Ok(NetResponse::Err(code)) if code == NetError::AddrInUse as u8 => {}
                 other => {
                     ostd::io::println(&alloc::format!(
                         "[hv-net] guest port not opened: {}",

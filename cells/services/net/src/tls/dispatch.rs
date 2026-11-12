@@ -16,6 +16,7 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::string::String;
 use alloc::vec::Vec;
+use api::services::proto::tls;
 use core::future::Future;
 use core::ops::Bound::{Excluded, Unbounded};
 use core::pin::Pin;
@@ -28,6 +29,9 @@ use smoltcp::{
 
 const TCP_TIMEOUT: u64 = 150_000_000; // 15 seconds (sys_get_time: 10 MHz)
 const TLS_TIMEOUT: u64 = 300_000_000; // 30 seconds for one TLS operation
+const CONNECT_FAILED_REPLY: [u8; 8] = tls::CONNECT_FAILED.to_le_bytes();
+const SEND_ERROR_REPLY: [u8; 4] = tls::SEND_ERROR.to_le_bytes();
+const RECV_ERROR_REPLY: [u8; 2] = tls::RECV_ERROR.to_le_bytes();
 const REPLY_TIMEOUT: u64 = 300_000_000; // legacy receiver may not yet be scheduled
 
 type Handshake = Pin<Box<dyn Future<Output = Result<TlsSocketEntry, embedded_tls::TlsError>>>>;
@@ -105,8 +109,8 @@ pub struct TlsPending {
 
 fn failed(request: &Request) -> &'static [u8] {
     match request {
-        Request::Send(_) => &[0xff; 4],
-        Request::Recv(_) => &[0xff; 2],
+        Request::Send(_) => &SEND_ERROR_REPLY,
+        Request::Recv(_) => &RECV_ERROR_REPLY,
     }
 }
 
@@ -269,9 +273,9 @@ impl TlsPending {
                 ..
             } = op;
             let response: &[u8] = match &state {
-                State::Connecting(..) | State::Handshake(_) => &[0; 8],
-                State::Send(_) => &[0xff; 4],
-                State::Recv(_) => &[0xff; 2],
+                State::Connecting(..) | State::Handshake(_) => &CONNECT_FAILED_REPLY,
+                State::Send(_) => &SEND_ERROR_REPLY,
+                State::Recv(_) => &RECV_ERROR_REPLY,
                 State::Vacant => &[],
             };
             drop(state);
@@ -400,7 +404,7 @@ impl TlsPending {
                 }
                 Step::Sent(entry, result) => {
                     op.state = State::Vacant;
-                    let count = result.map(|n| n as u32).unwrap_or(u32::MAX);
+                    let count = result.map(|n| n as u32).unwrap_or(tls::SEND_ERROR);
                     if self.answer(op.reply, op.owner, Some(cap), &count.to_le_bytes()) {
                         tls_table.insert(cap, entry);
                         self.start_queued(cap, op, tls_table);
@@ -418,7 +422,7 @@ impl TlsPending {
                     op.state = State::Vacant;
                     let response = match result {
                         Ok(len) => encode_tls_recv_reply(&data[..len]),
-                        Err(_) => alloc::vec![0xff; 2],
+                        Err(_) => RECV_ERROR_REPLY.to_vec(),
                     };
                     if self.answer(op.reply, op.owner, Some(cap), &response) {
                         tls_table.insert(cap, entry);
@@ -468,9 +472,9 @@ impl TlsPending {
             ..
         } = op;
         let response: &[u8] = match &state {
-            State::Connecting(..) | State::Handshake(_) => &[0; 8],
-            State::Send(_) => &[0xff; 4],
-            State::Recv(_) => &[0xff; 2],
+            State::Connecting(..) | State::Handshake(_) => &CONNECT_FAILED_REPLY,
+            State::Send(_) => &SEND_ERROR_REPLY,
+            State::Recv(_) => &RECV_ERROR_REPLY,
             State::Vacant => &[],
         };
         // The suspended future owns TLS keys and record buffers: destroy it
