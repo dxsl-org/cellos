@@ -16,8 +16,10 @@
 > partition. Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the
 > guest holds no credentials (user data lives in tmpfs and is gone at exit). The guest
 > takes its own DHCP lease and loads real HTTPS pages (guest clock from the host RTC).
-> Under nested KVM Chromium's UI appears ~130 s after the taskbar click; guest disk reads
-> still move one 512-byte sector per block IPC. The machine needs about 3 GiB.
+> Chromium's UI appears ~30 s after the taskbar click on a quiet host. Key repeat comes
+> from the host input service only: the launcher sends each host repeat as a release and
+> press, and cage runs with `no-key-repeat.c` preloaded, which tells Chromium not to
+> repeat keys itself. The machine needs about 3 GiB.
 >
 > To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`; `run-desktop.sh`
 > then attaches that disk (as the lowest-addressed disk, which VFS mounts as `/mnt/sd`) and gives
