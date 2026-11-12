@@ -56,6 +56,7 @@ pub fn wait_for_launch() -> Option<(AppSession, u32, u32)> {
             continue;
         };
         let accepted = display_size_valid(request.width, request.height);
+        let width = crate::virtio_gpu::guest_display_width(request.width);
         let reply = VmmLaunchReply {
             status: if accepted {
                 vmm_ipc::VMM_STATUS_OK
@@ -64,7 +65,7 @@ pub fn wait_for_launch() -> Option<(AppSession, u32, u32)> {
             },
             session_id: SESSION_ID,
             reserved: 0,
-            scanout_width: request.width,
+            scanout_width: width,
             scanout_height: request.height,
         };
         let mut reply_buf = [0u8; VmmLaunchReply::LEN];
@@ -82,10 +83,10 @@ pub fn wait_for_launch() -> Option<(AppSession, u32, u32)> {
         println(&alloc::format!(
             "[hv-x86] app session bound to tid={} ({}x{})",
             sender,
-            request.width,
+            width,
             request.height
         ));
-        return Some((AppSession { client_tid: sender }, request.width, request.height));
+        return Some((AppSession { client_tid: sender }, width, request.height));
     }
     println("[hv-x86] no launcher LAUNCH arrived; exiting");
     None
@@ -136,7 +137,10 @@ impl AppSession {
                     };
                     if request.session_id == SESSION_ID
                         && display_size_valid(request.width, request.height)
-                        && gpu.resize(request.width, request.height)
+                        && gpu.resize(
+                            crate::virtio_gpu::guest_display_width(request.width),
+                            request.height,
+                        )
                     {
                         gpu_vmio.signal_config_change();
                     }

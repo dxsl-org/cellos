@@ -92,6 +92,8 @@ class Profile:
     name: str
     cells: tuple[Cell, ...]
     init_features: tuple[str, ...]
+    # Unsigned Tier 3 guest boot files (not cells), built by `Assembler.guest_inputs`.
+    guest_files: tuple[str, ...] = ()
 
     def packages(self) -> list[str]:
         """Cargo `-p` list in manifest order, each package once."""
@@ -104,7 +106,8 @@ class Profile:
 
     def image_paths(self) -> set[str]:
         """Every image path the profile packages, without the generated config."""
-        return {path for cell in self.cells for path in cell.paths} | {POLICY_PATH}
+        return ({path for cell in self.cells for path in cell.paths} | {POLICY_PATH}
+                | set(self.guest_files))
 
 
 # D10-6: the retained workers in canonical images. app-sys-tools builds 11 binaries.
@@ -153,15 +156,26 @@ DESKTOP_CELLS = HEADLESS_CELLS + (
     Cell("terminal", "terminal", ("/bin/terminal",)),
     Cell("app-chrome", "chrome", ("/bin/chrome",)),
     Cell("ocel", "ocel", ("/bin/ocel",)),
-    # Tier 3 guest host for Chrome (ADR-0017 §5d); spawned on demand, not autostarted.
-    # No guest disk yet: the guest runs from its initramfs.
+    # Tier 3 guest host for Chrome (ADR-0017 §5d); spawned by /bin/chrome, not
+    # autostarted. Its root disk lives on /mnt/sd; `volatile-disk` only concerns the
+    # console guest.
     Cell("service-hypervisor", "hypervisor", ("/bin/hypervisor",), features=("volatile-disk",)),
 )
+
+# The Chrome guest's kernel and initramfs (`boot_x86_profile.rs`). They cannot live on
+# /mnt/sd beside the guest root: that fixed 256 MiB partition holds the 254 MB root only.
+GUEST_VMLINUX_PATH = "/vmlinux"
+GUEST_CHROME_INITRD_PATH = "/chrome-initrd.gz"
+ALPINE_CACHE = ".alpine-cache-x86"
+# The initramfs modules stage 1 loads (virtio_mmio is built into the kernel).
+CHROME_INITRD_MODULES = ("kernel/drivers/block/virtio_blk.ko", "kernel/fs/squashfs/squashfs.ko",
+                         "kernel/fs/overlayfs/overlay.ko")
 
 PROFILES = {
     # `supervisor` selects the supervisor row of config/services.toml.
     "headless": Profile("headless", HEADLESS_CELLS, ("input", "supervisor")),
-    "desktop": Profile("desktop", DESKTOP_CELLS, ("input", "ui", "supervisor")),
+    "desktop": Profile("desktop", DESKTOP_CELLS, ("input", "ui", "supervisor"),
+                       (GUEST_VMLINUX_PATH, GUEST_CHROME_INITRD_PATH)),
 }
 
 
@@ -355,6 +369,27 @@ class Assembler:
         if code != 0:
             raise AssemblyError("cellos-sign refused or failed; nothing was packaged")
 
+    def guest_inputs(self, work: Path) -> list[tuple[Path, str]]:
+        """The profile's guest boot files: the pinned Alpine kernel
+        (`scripts/fetch-alpine-x86.sh`, fetched when absent) and its initramfs pruned to
+        `CHROME_INITRD_MODULES` plus `scripts/chrome-guest/stage1.sh`."""
+        if not self.profile.guest_files:
+            return []
+        cache = self.repo / ALPINE_CACHE
+        if not ((cache / "vmlinux").is_file() and (cache / "initramfs-virt").is_file()):
+            fetch = ["bash", str(self.repo / "scripts" / "fetch-alpine-x86.sh"), str(cache)]
+            if subprocess.run(fetch, cwd=self.repo).returncode != 0:
+                raise AssemblyError("fetch-alpine-x86.sh failed")
+        initrd = work / "chrome-initrd.gz"
+        command = [sys.executable, str(self.repo / "tools" / "repack-initramfs.py"),
+                   str(cache / "initramfs-virt"), str(initrd),
+                   "--add", "/bin/chrome-guest-stage1",
+                   str(self.repo / "scripts" / "chrome-guest" / "stage1.sh"), "100755",
+                   "--prune-modules-to", *CHROME_INITRD_MODULES]
+        if subprocess.run(command, cwd=self.repo).returncode != 0 or not initrd.is_file():
+            raise AssemblyError("repack-initramfs.py failed for the Chrome initramfs")
+        return [(cache / "vmlinux", GUEST_VMLINUX_PATH), (initrd, GUEST_CHROME_INITRD_PATH)]
+
     def sign_policy(self, out: Path) -> None:
         command = [sys.executable, str(self.repo / "scripts" / "sign-policy.py"), "--out", str(out)]
         if subprocess.run(command, cwd=self.repo).returncode != 0 or not out.is_file():
@@ -509,6 +544,7 @@ class Assembler:
 
         pairs = [(snapshots[cell.binary], path) for cell in self.profile.cells for path in cell.paths]
         pairs.append((policy, POLICY_PATH))
+        pairs.extend(self.guest_inputs(work))
         pairs.extend(self.extra_pairs)
 
         check_inputs(pairs, init, self.profile, self.blocked)

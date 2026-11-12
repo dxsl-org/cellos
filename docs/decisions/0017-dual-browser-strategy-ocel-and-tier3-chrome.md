@@ -1,9 +1,11 @@
 # ADR-0017 — Dual Browser Strategy: Ocel + Tier 3 Chrome
 
-> **Status**: Accepted 2026-09-20 as the retained browser design; implementation
-> expansion is parked by [ADR-0022](0022-intel-x86-64-c2c-only-direction.md)
-> (2026-10-08). Existing code/evidence stays; Intel C2C, not browser completion,
-> owns the current Tier 3 objective.
+> **Status**: Accepted 2026-09-20 as the retained browser design; parked by
+> [ADR-0022](0022-intel-x86-64-c2c-only-direction.md) (2026-10-08) and unparked for
+> the x86 desktop on 2026-11-11 (§5d). Since 2026-11-12 the desktop image ships the
+> §2.2 path: the taskbar's Chrome runs Chromium in an Alpine guest on Intel VT-x
+> (one vCPU, 1536 MiB), loads real HTTPS pages and follows window resizes
+> (`scripts/qemu-tier3-chrome-x86.sh`, nested KVM only).
 > **Supersedes**: None. First browser/viewer decision.
 
 ## 1. Context

@@ -10,12 +10,19 @@
 > (ADR-0017 §5d), other browser/GUI expansion stays parked.
 >
 > **Chrome guest:** the taskbar's Chrome runs Chromium under cage in an Alpine guest
-> whose read-only root is `/mnt/sd/chrome-guest.sqfs` (`scripts/build-chrome-guest-image.sh`).
-> Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the guest holds
-> no credentials (user data lives in tmpfs and is gone at exit). The guest takes its own
-> DHCP lease and loads real HTTPS pages (guest clock from the host RTC). Chromium's UI
-> appears ~130 s after the taskbar click under nested KVM (`scripts/qemu-tier3-chrome-x86.sh`);
-> guest disk reads still move one 512-byte sector per block IPC.
+> (one vCPU, 1536 MiB guest RAM). The desktop image carries the guest kernel (`/vmlinux`)
+> and initramfs (`/chrome-initrd.gz`); the read-only root `chrome-guest.sqfs`
+> (`scripts/build-chrome-guest-image.sh`) lives on `/mnt/sd`, which is a fixed 256 MiB
+> partition. Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the
+> guest holds no credentials (user data lives in tmpfs and is gone at exit). The guest
+> takes its own DHCP lease and loads real HTTPS pages (guest clock from the host RTC).
+> Under nested KVM Chromium's UI appears ~130 s after the taskbar click; guest disk reads
+> still move one 512-byte sector per block IPC. The machine needs about 3 GiB.
+>
+> To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`, then add
+> `-m 3G -drive file=build/chrome-guest-disk.img,if=none,id=sd,format=raw
+> -device nvme,drive=sd,serial=CELLOSSD -nic user,model=e1000` to the desktop's QEMU
+> command. `scripts/qemu-tier3-chrome-x86.sh` is the KVM lane (not in CI: no nested VMX).
 
 ---
 
@@ -368,6 +375,8 @@ hypervisor cell. Passing is emulator evidence — it does not qualify physical h
 | x86 in-guest nginx (secondary regression) | `bash scripts/qemu-x86-nginx-gate.sh` | `apk add nginx`, forked master + worker and in-guest HTTP fetch | `qemu-x86-tier3-python` (second step) |
 | x86 VirtIO e2e + persistence | `bash scripts/qemu-x86-virtio-e2e.sh` | block/network discovery, IRQ5/IRQ6 completion, and a two-boot persistent marker read back on the host | `qemu-x86-tier3-virtio-e2e` |
 | x86 hostile corpus | `BUILD_HOSTILE_ISO=1 bash scripts/qemu-tier3-hostile-runner-x86.sh` | 27 bounded malformed-input scenarios plus a host-read post-reset recovery write | `qemu-x86-tier3-hostile` |
+| x86 display + network (Intel VMX) | `bash scripts/qemu-tier3-display-x86.sh` | guest pattern on screen and in the Chrome window, virtio-input bound, guest DHCP lease beside the host stack, DNS, HTTP, Ocel fetch while the guest runs, Close ends the guest | none (local KVM only) |
+| x86 Chrome (Intel VMX) | `bash scripts/qemu-tier3-chrome-x86.sh` | taskbar Chrome → guest lease → Chromium UI → a URL typed into Chromium renders https://example.com/ → Maximize resizes Chromium → Close ends launcher and hypervisor | none (local KVM only) |
 
 CPython is the first useful application gate because its batch-processing result
 can be checked without a display bridge. A browser is a separate, later gate:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the Tier 3 Chrome guest root: a read-only xz squashfs holding Alpine
-# 3.21 with cage, Chromium, fonts, dbus, eudev and seatd, plus the guest init
+# 3.21 with cage, Chromium, fonts, dbus, eudev, seatd and wlr-randr, plus the guest init
 # (scripts/chrome-guest/init.sh). The hypervisor serves it as its only disk
 # (/dev/vda); stage 1 in the Alpine initramfs mounts it under a tmpfs overlay.
 #
@@ -27,6 +27,7 @@ PACKAGES=(
     alpine-baselayout busybox musl
     chromium=136.0.7103.113-r0
     cage=0.2.0-r0
+    wlr-randr=0.4.1-r0
     seatd=0.9.1-r0
     eudev=3.2.14-r5
     font-dejavu=2.37-r5

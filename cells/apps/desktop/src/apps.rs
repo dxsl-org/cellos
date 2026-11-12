@@ -43,10 +43,10 @@ pub const DEFAULT_CATALOG: &[AppInfo] = &[
     },
     AppInfo {
         id: "chrome",
-        name: "Chrome (Tier 3)",
+        name: "Chrome",
         path: "/bin/chrome",
         icon: LineIcon::Globe,
-        description: "Web Browser (Tier 3 Linux Guest)",
+        description: "Chromium in a Linux guest (Tier 3)",
         is_pinned: true,
     },
     AppInfo {

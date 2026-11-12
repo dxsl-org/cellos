@@ -77,7 +77,9 @@ class ManifestTables(unittest.TestCase):
             "service-compositor", "fb-console", "desktop", "files", "terminal", "app-chrome", "ocel",
             "service-hypervisor"])
         self.assertEqual(DESKTOP.image_paths() - HEADLESS.image_paths(), {"/bin/" + name for name in (
-            "compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel", "hypervisor")})
+            "compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel", "hypervisor")}
+            | {"/vmlinux", "/chrome-initrd.gz"})
+        self.assertEqual(HEADLESS.guest_files, ())
         self.assertEqual(DESKTOP.package_features(), ["service-hypervisor/volatile-disk"])
         self.assertEqual(HEADLESS.package_features(), [])
         self.assertTrue(HEADLESS.image_paths() < DESKTOP.image_paths())
@@ -129,6 +131,10 @@ class ImageFixture:
         policy = inputs / "POLICY.BIN"
         policy.write_bytes(b"signed policy fixture")
         pairs.append((policy, "/POLICY.BIN"))
+        for path in profile.guest_files:
+            guest = inputs / ("guest" + path.replace("/", "_"))
+            guest.write_bytes(b"guest fixture " + path.encode())
+            pairs.append((guest, path))
         for path, data in add:
             extra = inputs / ("extra" + path.replace("/", "_"))
             extra.write_bytes(data)
@@ -309,6 +315,14 @@ class FakeAssembler(asm.Assembler):
 
     def sign_policy(self, out):
         out.write_bytes(b"fake signed policy")
+
+    def guest_inputs(self, work):
+        pairs = []
+        for path in self.profile.guest_files:
+            guest = work / ("guest" + path.replace("/", "_"))
+            guest.write_bytes(b"guest fixture " + path.encode())
+            pairs.append((guest, path))
+        return pairs
 
     def provenance(self):
         return {"git_head": "0" * 40, "dirty_digest_sha256": "0" * 64}

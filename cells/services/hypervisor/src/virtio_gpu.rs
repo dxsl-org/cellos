@@ -47,6 +47,16 @@ pub struct GpuDev {
     used_idx: [u16; 2],
 }
 
+/// Display width offered to a launcher's guest for a window `width` wide.
+///
+/// Linux's virtio-gpu builds its only mode with `drm_cvt_mode`, which rounds the
+/// width down to 8 pixels, and a scanout resource must match the offered size
+/// exactly (`ResourceTable::set_scanout`). A maximized window offered 1278 got a
+/// 1272 resource back, the scanout was refused and the window stayed black.
+pub fn guest_display_width(width: u32) -> u32 {
+    width & !7
+}
+
 impl GpuDev {
     /// A device shown on a full-screen compositor surface.
     pub fn new(compositor_tid: usize, width: u32, height: u32) -> Self {

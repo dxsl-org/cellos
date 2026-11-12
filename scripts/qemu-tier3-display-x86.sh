@@ -42,6 +42,7 @@ ld -static "$W/fpu-check.o" -o "$W/fpu-check"
 python3 tools/repack-initramfs.py .alpine-cache-x86/initramfs-virt "$W/initrd.gz" \
     --add /bin/virtio-e2e-init "$FIXTURE" 100755 --add /bin/fpu-check "$W/fpu-check" 100755
 printf 'rdinit=/bin/virtio-e2e-init\n' > "$W/virtio-e2e"
+# The desktop image already carries /vmlinux (the Chrome guest's kernel).
 tier3_build_iso "$W" tier3-display "$W/initrd.gz" /initrd.gz "$W/virtio-e2e" /virtio-e2e
 
 echo "==> [tier3-display] booting"

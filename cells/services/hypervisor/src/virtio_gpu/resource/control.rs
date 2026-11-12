@@ -113,10 +113,20 @@ impl ResourceTable {
             .get(&cmd.resource_id)
             .ok_or(ResourceError::InvalidResourceId)?;
         let (width, height) = (resource.width, resource.height);
-        if self.scanout_dimensions != Some((width, height)) {
-            return Err(ResourceError::InvalidParameter);
-        }
-        if !rect_covers_resource(cmd.rect, width, height) {
+        if self.scanout_dimensions != Some((width, height))
+            || !rect_covers_resource(cmd.rect, width, height)
+        {
+            // The guest sees only an error code; the host log names the sizes.
+            ostd::io::println(&alloc::format!(
+                "[hv-gpu] set_scanout refused: resource {}x{} rect {}x{}+{}+{} display {:?}",
+                width,
+                height,
+                cmd.rect.width,
+                cmd.rect.height,
+                cmd.rect.x,
+                cmd.rect.y,
+                self.scanout_dimensions
+            ));
             return Err(ResourceError::InvalidParameter);
         }
         self.ensure_scanout(width, height)?;

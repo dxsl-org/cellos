@@ -44,6 +44,30 @@ mkdir -p /run/dbus
 dbus-daemon --system --fork
 
 seatd -g root &
+
+# The launcher's window size reaches the guest as a virtio-gpu display change, a
+# DRM hotplug uevent; the kernel's connector then lists the new size first. Cage
+# keeps both its mode and its stale mode list on hotplug, so set that size as a
+# custom mode; Chromium follows the output size.
+follow_display() {
+    udevadm monitor --udev --subsystem-match=drm | while read -r line; do
+        case "$line" in
+        *change*)
+            output=$(wlr-randr 2>/dev/null | awk 'NR == 1 { print $1 }')
+            size=$(head -n 1 /sys/class/drm/card0-*/modes 2>/dev/null)
+            [ -n "$output" ] && [ -n "$size" ] || continue
+            if wlr-randr --output "$output" --custom-mode "$size" 2>/dev/null; then
+                log "CHROME_GUEST_DISPLAY $size"
+            else
+                log "CHROME_GUEST_DISPLAY_FAIL:$output:$size"
+            fi
+            ;;
+        esac
+    done
+}
+# Not exported globally: cage would take WAYLAND_DISPLAY as a parent compositor.
+(export WAYLAND_DISPLAY=wayland-0; follow_display) &
+
 log "CHROME_GUEST_STARTING_CAGE"
 cage -s -- chromium --ozone-platform=wayland --disable-gpu --no-sandbox \
     --no-first-run --no-default-browser-check --user-data-dir=/tmp/chrome \

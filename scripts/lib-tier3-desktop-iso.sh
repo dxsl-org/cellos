@@ -20,8 +20,8 @@ tier3_preflight() {
 
 # tier3_build_iso WORK LABEL [SOURCE IMAGE_PATH]...
 # Builds the desktop image (assemble-x86-image.py --profile desktop, which packages
-# /bin/hypervisor), adds /vmlinux and every SOURCE at IMAGE_PATH to its FAT image,
-# and writes WORK/cellos.iso.
+# /bin/hypervisor), adds every SOURCE at IMAGE_PATH to its FAT image (none: the
+# image as shipped), and writes WORK/cellos.iso.
 tier3_build_iso() {
     local work="$1" label="$2"
     shift 2
@@ -29,17 +29,18 @@ tier3_build_iso() {
     CARGO_TARGET_DIR="$work/cells-target" python3 scripts/assemble-x86-image.py \
         --profile desktop --out-dir "$work/embedded"
 
-    echo "==> [$label] adding the guest files"
-    # mkfat32 sizes the image to its contents, so the image is rebuilt with the guest
-    # files. The assembler manifest no longer describes the result and is removed.
-    rm -rf "$work/fat" && mkdir -p "$work/fat"
-    mcopy -s -n -i "$work/embedded/kernel_fs.img" ::/ "$work/fat/"
-    local pairs=() file
-    while IFS= read -r file; do pairs+=("$file" "/${file#"$work/fat/"}"); done \
-        < <(find "$work/fat" -type f | sort)
-    pairs+=(.alpine-cache-x86/vmlinux /vmlinux "$@")
-    python3 tools/mkfat32.py "$work/embedded/kernel_fs.img" "${pairs[@]}"
-    rm -f "$work/embedded/manifest.json"
+    if (( $# )); then
+        echo "==> [$label] adding the lane's guest files"
+        # mkfat32 sizes the image to its contents, so the image is rebuilt with the
+        # extra files. The assembler manifest no longer describes the result.
+        rm -rf "$work/fat" && mkdir -p "$work/fat"
+        mcopy -s -n -i "$work/embedded/kernel_fs.img" ::/ "$work/fat/"
+        local pairs=() file
+        while IFS= read -r file; do pairs+=("$file" "/${file#"$work/fat/"}"); done \
+            < <(find "$work/fat" -type f | sort)
+        python3 tools/mkfat32.py "$work/embedded/kernel_fs.img" "${pairs[@]}" "$@"
+        rm -f "$work/embedded/manifest.json"
+    fi
 
     echo "==> [$label] building the kernel and ISO"
     EMBEDDED_OVERRIDE="$work/embedded" CARGO_TARGET_DIR="$work/kernel-target" \

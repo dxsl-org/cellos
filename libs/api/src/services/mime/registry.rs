@@ -34,7 +34,7 @@ pub const APP_FILES: AppCandidate = AppCandidate {
 
 pub const APP_CHROME: AppCandidate = AppCandidate {
     app_id: "chrome",
-    app_name: "Chrome (Tier 3)",
+    app_name: "Chrome",
     app_binary: "/bin/chrome",
 };
 

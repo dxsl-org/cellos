@@ -2,9 +2,10 @@
 
 One boot: the taskbar's Chrome starts its hypervisor and the Chromium guest; the
 guest leases its own address beside the host stack; once Chromium's UI shows in
-the window, the URL is typed into Chromium's omnibox and the page must render.
-Screenshots and the serial log stay in the work directory as evidence.
-Exit 0 PASS, 1 FAIL.
+the window, the URL is typed into Chromium's omnibox and the page must render;
+the window menu's Maximize must bring Chromium's UI to the new width; its Close
+must end the launcher and the hypervisor. Screenshots and the serial log stay in
+the work directory as evidence. Exit 0 PASS, 1 FAIL.
 """
 import argparse
 import re
@@ -15,13 +16,39 @@ from pathlib import Path
 from PIL import Image
 
 from tier3_display_check import CHROME_H, CHROME_TASKBAR, CHROME_W, CHROME_X, CHROME_Y, ipv4
-from tier3_vm import Vm
+from tier3_vm import SCREEN_H, SCREEN_W, Vm
 
 # Chromium's default light theme (sampled from phase 04's evidence).
 TAB_STRIP, OMNIBOX = (211, 227, 253), (237, 242, 250)
 # https://example.com/ paints its page background #eee in light mode.
 EXAMPLE_BACKGROUND = (238, 238, 238)
 PAGE_WINDOW = 300
+# Any of these means the guest will not come up; stop waiting for it.
+GUEST_DOWN = ("CHROME_GUEST_FAIL", "CHROME_GUEST_EXITED", "[chrome] guest not started",
+              "[hv-x86] guest exited")
+
+
+def guest_down(log: str) -> bool:
+    return any(marker in log for marker in GUEST_DOWN)
+RESIZE_WINDOW = 120
+# Compositor geometry (window_decoration.rs): a 28px Cell Tab above the content,
+# 1px border, 36px taskbar; a maximized frame fills the screen above the taskbar.
+MAXIMIZED_X, MAXIMIZED_Y = 1, 28
+MAXIMIZED_W = SCREEN_W - 2
+
+
+def menu_point(content_x: int, content_y: int, item: int):
+    """Window menu: Cell Tab icon at content + (3, -25); items 0, 1, separator, Close."""
+    icon = (content_x + 3 + 10, content_y - 25 + 10)
+    row = content_y - 25 + 20 + 4 + 4 + item * 28 + (9 if item >= 2 else 0) + 14
+    return icon, (content_x + 3 + 44, row)
+
+
+def window_menu(vm: Vm, content_x: int, content_y: int, item: int) -> None:
+    icon, entry = menu_point(content_x, content_y, item)
+    vm.click(*icon)
+    time.sleep(1)
+    vm.click(*entry)
 
 
 def near(pixel, expected, tolerance=6) -> bool:
@@ -33,8 +60,12 @@ def at(image: Image.Image, x: int, y: int):
     return image.getpixel((CHROME_X + x, CHROME_Y + y))
 
 
-def chromium_ui(image: Image.Image) -> bool:
-    return near(at(image, 700, 15), TAB_STRIP) and near(at(image, 700, 62), OMNIBOX)
+def chromium_ui(image: Image.Image, x0: int = CHROME_X, y0: int = CHROME_Y,
+                width: int = CHROME_W) -> bool:
+    """Chromium's tab strip and omnibox, sampled near the content's right edge."""
+    x = x0 + width - 330
+    return (near(image.getpixel((x, y0 + 15)), TAB_STRIP)
+            and near(image.getpixel((x, y0 + 62)), OMNIBOX))
 
 
 def page_share(image: Image.Image, colour) -> float:
@@ -50,7 +81,7 @@ def poll_screen(vm: Vm, name: str, predicate, seconds: float):
         image = vm.screendump(name)
         if predicate(image):
             return True, image
-        if "CHROME_GUEST_FAIL" in vm.log() or "CHROME_GUEST_EXITED" in vm.log():
+        if guest_down(vm.log()):
             break
         time.sleep(10)
     return False, image
@@ -71,7 +102,7 @@ def run(args) -> list:
         vm.click(*CHROME_TASKBAR)
         checks.append(("guest-session-bound",
                        vm.wait_for(lambda t: "[chrome] guest session bound" in t, 60)))
-        net_done = vm.wait_for(lambda t: "CHROME_GUEST_NET" in t or "CHROME_GUEST_FAIL" in t,
+        net_done = vm.wait_for(lambda t: "CHROME_GUEST_NET" in t or guest_down(t),
                                args.chrome_window)
         log = vm.log()
         host = re.search(r"\[net\] IP address: (\S+)", log)
@@ -99,11 +130,34 @@ def run(args) -> list:
                                lambda img: page_share(img, EXAMPLE_BACKGROUND) >= 0.8,
                                PAGE_WINDOW)
         checks.append(("https-page-rendered", shown))
+
+        window_menu(vm, CHROME_X, CHROME_Y, 0)
+        resized_at = time.time()
+        followed, _ = poll_screen(
+            vm, "maximized",
+            lambda img: chromium_ui(img, MAXIMIZED_X, MAXIMIZED_Y, MAXIMIZED_W), RESIZE_WINDOW)
+        checks.append(("maximize-chromium-follows-new-width", followed))
+        print(f"[tier3-chrome] resize followed after {time.time() - resized_at:.0f} s", flush=True)
+        log = vm.log()
+        checks.append(("no-guest-failure", not guest_down(log)))
+        checks.append(("guest-followed-display-change", "CHROME_GUEST_DISPLAY " in log))
+
+        window_menu(vm, MAXIMIZED_X, MAXIMIZED_Y, 2)
+        checks.append(("close-ends-hypervisor", vm.wait_for(
+            lambda t: "app session terminated by its launcher" in t
+            and "[hv-x86] guest exited" in t, 30)))
+        checks.append(("close-releases-guest-port", vm.wait_for(
+            lambda t: "[net-bridge] guest port released" in t, 10)))
+        # The launcher's surface goes with its Cell (compositor owner death); the
+        # hypervisor reports its own end above. Both exits are kernel-logged.
+        after_close = len(log)
+        vm.wait_for(lambda t: t[after_close:].count("Syscall::Exit: task") >= 2, 15)
+        tail = vm.log()[after_close:]
+        checks.append(("close-both-cells-gone",
+                       "[compositor] owner death" in tail
+                       and tail.count("Syscall::Exit: task") >= 2))
     finally:
         vm.stop()
-        log = vm.log()
-        checks.append(("no-guest-failure",
-                       "CHROME_GUEST_FAIL" not in log and "CHROME_GUEST_EXITED" not in log))
     return checks
 
 
