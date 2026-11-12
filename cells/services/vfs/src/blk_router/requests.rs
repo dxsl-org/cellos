@@ -2,10 +2,15 @@
 //! the per-request outcome rules (08A).
 
 use alloc::format;
-use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
+use types::block_wire::{
+    self, BlockOutcome, ReadRunRequest, MAX_REPLY_SIZE, MAX_RUN_SECTORS, SECTOR_SIZE,
+};
 
 use super::router::{Exchange, Router, Target};
 use super::{BlockSys, DeviceRef};
+
+/// Bytes of the largest `OP_READ_RUN`.
+const RUN_BYTES: usize = MAX_RUN_SECTORS as usize * SECTOR_SIZE;
 
 impl Router {
     /// Send a write/flush request and decode its one-byte status reply.
@@ -61,6 +66,60 @@ impl Router {
                 true
             }
         }
+    }
+
+    /// Read `buf.len() / 512` whole sectors starting at `lba`: one
+    /// `OP_READ_RUN` per [`MAX_RUN_SECTORS`] for a routed device.
+    pub fn read_sectors(
+        &mut self,
+        sys: &mut impl BlockSys,
+        dev: DeviceRef,
+        lba: u64,
+        buf: &mut [u8],
+    ) -> bool {
+        if !buf.len().is_multiple_of(SECTOR_SIZE) {
+            return false;
+        }
+        buf.chunks_mut(RUN_BYTES).enumerate().all(|(k, chunk)| {
+            let first = lba + (k * usize::from(MAX_RUN_SECTORS)) as u64;
+            match self.target(sys, dev) {
+                Target::Refused => false,
+                Target::Provider(i, tid) => self.read_run(sys, i, tid, first, chunk),
+                Target::Kernel => chunk.chunks_exact_mut(SECTOR_SIZE).enumerate().all(
+                    |(n, sector)| {
+                        let sector: &mut [u8; SECTOR_SIZE] =
+                            sector.try_into().expect("whole sector");
+                        sys.kernel_read(first + n as u64, sector)
+                    },
+                ),
+            }
+        })
+    }
+
+    /// One `OP_READ_RUN`; the sectors are copied out only when it completed.
+    fn read_run(
+        &mut self,
+        sys: &mut impl BlockSys,
+        i: usize,
+        tid: usize,
+        lba: u64,
+        buf: &mut [u8],
+    ) -> bool {
+        let request = ReadRunRequest {
+            sector: lba,
+            count: (buf.len() / SECTOR_SIZE) as u16,
+        };
+        let mut reply = [0u8; MAX_REPLY_SIZE];
+        let reply = &mut reply[..request.reply_len()];
+        if !matches!(
+            self.exchange(sys, i, tid, &request.encode(), reply),
+            Exchange::Replied
+        ) || !BlockOutcome::from_byte(reply[0]).is_completed()
+        {
+            return false;
+        }
+        buf.copy_from_slice(&reply[1..]);
+        true
     }
 
     /// Write one sector. `Indeterminate` means the write may have been issued

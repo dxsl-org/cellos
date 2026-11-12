@@ -590,9 +590,17 @@ impl NvmeController {
     /// Read one 512-byte block into the page at `iova`. The namespace format is
     /// 512-byte blocks without metadata (`layout::validate_lba_format`) and NLB=0,
     /// so the transfer is 512 bytes and PRP1 alone describes it as long as it does
-    /// not cross a page (`layout::fits_one_prp`, enforced by `BounceBuffer`).
+    /// not cross a page (`layout::blocks_in_one_prp`, enforced by `BounceBuffer`).
     pub fn read_sector(&mut self, sector: u64, iova: u64) -> Result<(), IoFailure> {
         self.submit_io(NVM_OPC_READ, 1, sector, 0, iova)
+    }
+
+    /// Read `count` 512-byte blocks into the page at `iova`. The caller keeps the
+    /// transfer inside that page (`layout::blocks_in_one_prp`), so PRP1 alone
+    /// describes it, as for [`Self::read_sector`].
+    pub fn read_sectors(&mut self, sector: u64, count: u16, iova: u64) -> Result<(), IoFailure> {
+        debug_assert!(count >= 1 && usize::from(count) <= crate::layout::blocks_in_one_prp(iova));
+        self.submit_io(NVM_OPC_READ, 1, sector, count - 1, iova)
     }
 
     /// Write one 512-byte block from the page at `iova`; see [`Self::read_sector`].

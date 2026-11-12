@@ -8,9 +8,9 @@
 use crate::proto::VscsiError;
 use crate::scan::Disk;
 use scsi_block::ScsiError;
-use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
+use types::block_wire::{self, BlockOutcome, ReadRunRequest, SECTOR_SIZE};
 
-pub const REPLY_SIZE: usize = block_wire::REPLY_SIZE;
+pub const REPLY_SIZE: usize = block_wire::MAX_REPLY_SIZE;
 
 #[derive(Debug, PartialEq, Eq)]
 enum DrvOp {
@@ -54,8 +54,15 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
 }
 
 /// Handle one incoming IPC message. Writes the reply into `out` and returns
-/// the number of bytes to send back: 513 for a completed read, else 1.
+/// the number of bytes to send back: the outcome byte plus the sectors of a
+/// completed read, else 1.
 pub fn handle(disk: &mut Disk, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> usize {
+    if let Some(request) = ReadRunRequest::decode(data) {
+        // The device refuses a block past its capacity itself.
+        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, sector| {
+            disk.read(lba, sector).map_err(|error| outcome(&error))
+        });
+    }
     let Some((op, sector)) = parse_op(data) else {
         return status(out, BlockOutcome::NotIssued);
     };
@@ -63,8 +70,8 @@ pub fn handle(disk: &mut Disk, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> usize
         DrvOp::Read => {
             let mut sec = [0u8; SECTOR_SIZE];
             disk.read(sector, &mut sec).map(|()| {
-                out[1..].copy_from_slice(&sec);
-                REPLY_SIZE
+                out[1..block_wire::REPLY_SIZE].copy_from_slice(&sec);
+                block_wire::REPLY_SIZE
             })
         }
         DrvOp::Write => {

@@ -14,6 +14,8 @@ mod discovery;
 mod requests;
 mod router;
 #[cfg(test)]
+mod read_run_tests;
+#[cfg(test)]
 mod tests;
 
 pub use self::discovery::Discovery;
@@ -166,21 +168,13 @@ pub fn blk_flush(dev: DeviceRef) -> BlockOutcome {
 }
 
 /// Read `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` into `buf`.
+///
+/// Up to [`types::block_wire::MAX_RUN_SECTORS`] sectors move per request.
 pub fn blk_read_sectors(dev: DeviceRef, abs_lba: u64, count: u32, buf: &mut [u8]) -> bool {
-    if buf.len() < (count as usize) * SECTOR_SIZE {
+    let Some(buf) = buf.get_mut(..(count as usize) * SECTOR_SIZE) else {
         return false;
-    }
-    for (i, chunk) in buf
-        .chunks_exact_mut(SECTOR_SIZE)
-        .take(count as usize)
-        .enumerate()
-    {
-        let sector: &mut [u8; SECTOR_SIZE] = chunk.try_into().expect("whole sector chunk");
-        if !blk_read(dev, abs_lba + i as u64, sector) {
-            return false;
-        }
-    }
-    true
+    };
+    ROUTER.lock().read_sectors(&mut Syscalls, dev, abs_lba, buf)
 }
 
 /// Write `count` 512-byte sectors starting at absolute LBA `abs_lba` of `dev` from `data`.

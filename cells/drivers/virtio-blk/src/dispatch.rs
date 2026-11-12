@@ -4,9 +4,9 @@
 //! speaks one block protocol.
 
 use crate::device::BlkDevice;
-use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
+use types::block_wire::{self, BlockOutcome, ReadRunRequest, SECTOR_SIZE};
 
-pub const REPLY_SIZE: usize = block_wire::REPLY_SIZE;
+pub const REPLY_SIZE: usize = block_wire::MAX_REPLY_SIZE;
 
 #[derive(PartialEq, Eq)]
 enum DrvOp {
@@ -38,8 +38,15 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
 }
 
 /// Handle one incoming IPC message. Writes the reply into `out` and returns the
-/// number of bytes to send back: 513 for a completed read, else 1.
+/// number of bytes to send back: the outcome byte plus the sectors of a
+/// completed read, else 1.
 pub fn handle(dev: &mut BlkDevice, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> usize {
+    if let Some(request) = ReadRunRequest::decode(data) {
+        // The device refuses a sector past its capacity itself.
+        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, sector| {
+            dev.read_sector(lba, sector)
+        });
+    }
     let Some((op, sector)) = parse_op(data) else {
         return status(out, BlockOutcome::NotIssued);
     };
@@ -50,8 +57,8 @@ pub fn handle(dev: &mut BlkDevice, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> u
             match dev.read_sector(sector, &mut sec) {
                 Ok(()) => {
                     out[0] = BlockOutcome::Completed.to_byte();
-                    out[1..].copy_from_slice(&sec);
-                    REPLY_SIZE
+                    out[1..block_wire::REPLY_SIZE].copy_from_slice(&sec);
+                    block_wire::REPLY_SIZE
                 }
                 Err(outcome) => status(out, outcome),
             }

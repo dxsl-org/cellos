@@ -5,7 +5,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::block_route::{ViBlockRouteV1, FLAG_PROVIDER_LIVE};
-use types::block_wire::{BlockOutcome, OP_READ, OP_WRITE, SECTOR_SIZE};
+use types::block_wire::{BlockOutcome, ReadRunRequest, OP_READ, OP_READ_RUN, OP_WRITE, SECTOR_SIZE};
 
 pub(super) const AHCI: u64 = 0xFA; // 00:1f.2
 pub(super) const NVME: u64 = 0x300; // 03:00.0
@@ -26,15 +26,19 @@ fn route(kind: u16, id: u64, tid: u64, cell: u64) -> ViBlockRouteV1 {
 
 /// Kernel route table plus one medium per provider tid.
 #[derive(Default)]
-struct Fake {
+pub(super) struct Fake {
     routes: Vec<ViBlockRouteV1>,
-    media: BTreeMap<usize, BTreeMap<u64, [u8; SECTOR_SIZE]>>,
+    pub media: BTreeMap<usize, BTreeMap<u64, [u8; SECTOR_SIZE]>>,
     /// Provider that exits right after accepting its next request.
     dies_after_send: Option<usize>,
     pending: Option<(usize, Vec<u8>)>,
     sent: Vec<usize>,
+    /// Opcode of every accepted request, in order.
+    pub ops: Vec<u16>,
     kernel_calls: usize,
     logs: Vec<String>,
+    /// Outcome an `OP_READ_RUN` reports (default `Completed`).
+    pub read_run_outcome: Option<BlockOutcome>,
 }
 
 impl Fake {
@@ -66,6 +70,7 @@ impl BlockSys for Fake {
             return false;
         }
         self.sent.push(tid);
+        self.ops.push(u16::from_le_bytes([msg[0], msg[1]]));
         self.pending = Some((tid, msg.to_vec()));
         if self.dies_after_send == Some(tid) {
             self.kill(tid);
@@ -91,6 +96,21 @@ impl BlockSys for Fake {
                 buf[1..].copy_from_slice(&medium.get(&lba).copied().unwrap_or([0; SECTOR_SIZE]))
             }
             OP_WRITE => drop(medium.insert(lba, req[10..].try_into().unwrap())),
+            OP_READ_RUN => {
+                let request = ReadRunRequest::decode(&req).expect("well-formed request");
+                assert_eq!(buf.len(), request.reply_len(), "reply buffer fits the run");
+                let outcome = self.read_run_outcome.unwrap_or(BlockOutcome::Completed);
+                buf[0] = outcome.to_byte();
+                if outcome.is_completed() {
+                    for (k, out) in buf[1..].chunks_exact_mut(SECTOR_SIZE).enumerate() {
+                        let lba = request.sector + k as u64;
+                        out.copy_from_slice(&medium.get(&lba).copied().unwrap_or([0; SECTOR_SIZE]));
+                    }
+                } else {
+                    // Garbage a careless client might copy out.
+                    buf[1..].fill(0xA5);
+                }
+            }
             _ => {}
         }
         true
@@ -119,7 +139,7 @@ pub(super) fn cellos_mbr() -> [u8; SECTOR_SIZE] {
     mbr
 }
 
-fn two_disks() -> (Fake, Router) {
+pub(super) fn two_disks() -> (Fake, Router) {
     let mut fake = Fake {
         routes: alloc::vec![route(1, AHCI, 7, 70), route(1, NVME, 9, 90)],
         ..Fake::default()

@@ -8,9 +8,9 @@
 use crate::controller::AhciController;
 use crate::dma::AuthorizedDma;
 use ostd::dma::DmaBuf;
-use types::block_wire::{self, BlockOutcome, SECTOR_SIZE};
+use types::block_wire::{self, BlockOutcome, ReadRunRequest, SECTOR_SIZE};
 
-pub const REPLY_SIZE: usize = block_wire::REPLY_SIZE;
+pub const REPLY_SIZE: usize = block_wire::MAX_REPLY_SIZE;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DrvOp {
@@ -42,13 +42,30 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
 }
 
 /// Handle one incoming IPC message. Writes the reply into `out` and returns
-/// the number of bytes to send back: 513 for a completed read, else 1.
+/// the number of bytes to send back: the outcome byte plus the sectors of a
+/// completed read, else 1.
 pub fn handle(
     ctrl: &mut AhciController,
     io_buf: &AuthorizedDma<DmaBuf>,
     data: &[u8],
     out: &mut [u8; REPLY_SIZE],
 ) -> usize {
+    if let Some(request) = ReadRunRequest::decode(data) {
+        let capacity = ctrl.capacity_sectors();
+        return block_wire::serve_read_run(&request, capacity, out, |lba, sector| {
+            ctrl.read_sector(lba, io_buf.iova())?;
+            // SAFETY: read_sector completed; the DMA payload is now stable in
+            // the CPU mapping retained by io_buf, which covers one page.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    io_buf.inner().virt(),
+                    sector.as_mut_ptr(),
+                    SECTOR_SIZE,
+                );
+            }
+            Ok(())
+        });
+    }
     let Some((op, sector)) = parse_op(data) else {
         return status(out, BlockOutcome::NotIssued);
     };
@@ -66,7 +83,7 @@ pub fn handle(
                         SECTOR_SIZE,
                     );
                 }
-                REPLY_SIZE
+                block_wire::REPLY_SIZE
             }
             Err(outcome) => status(out, outcome),
         },

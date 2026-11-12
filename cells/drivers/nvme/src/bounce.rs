@@ -12,6 +12,7 @@ use crate::layout;
 use alloc::vec::Vec;
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
+use types::block_wire::MAX_RUN_SECTORS;
 
 /// Retired pages kept before the driver stops serving I/O. Each holds one page, and
 /// a device that keeps abandoning commands is not one to keep feeding memory.
@@ -42,7 +43,9 @@ impl BounceBuffer {
             Ok(buf) => buf,
             Err(_) => return Err("authorization failed"),
         };
-        if !layout::fits_one_prp(buf.iova()) {
+        // A full `OP_READ_RUN` must fit one PRP1 transfer, or every run would be
+        // refused while single-sector reads still worked.
+        if layout::blocks_in_one_prp(buf.iova()) < usize::from(MAX_RUN_SECTORS) {
             // Dropped without `free` (DmaBuf has no Drop): a page authorized for the
             // device is never handed back to the allocator.
             return Err("iova would need a second PRP");

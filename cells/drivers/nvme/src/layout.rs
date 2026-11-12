@@ -10,8 +10,8 @@ pub(crate) const MAX_QID: usize = 1;
 /// Memory page size programmed in CC.MPS (4 KiB) and the size of the bounce buffer.
 pub(crate) const PAGE_SIZE: usize = 4096;
 
-// Every I/O command carries one 512-byte block (NLB=0) and PRP1 only: the transfer
-// must never cross into a second memory page, which would need PRP2.
+// Every I/O command uses PRP1 only, so its transfer must never cross into a second
+// memory page, which would need PRP2: at most one page of 512-byte blocks.
 const _: () = assert!(SECTOR_SIZE <= PAGE_SIZE);
 
 /// Doorbell offsets for queues `0..=MAX_QID`, proven to lie inside the BAR0 window.
@@ -106,9 +106,10 @@ pub(crate) fn validate_lba_format(flbas: u8, nlbaf: u8, lbaf: u32) -> Result<(),
     Ok(())
 }
 
-/// A one-block transfer starting at `iova` stays inside a single memory page.
-pub(crate) fn fits_one_prp(iova: u64) -> bool {
-    (iova as usize % PAGE_SIZE) + SECTOR_SIZE <= PAGE_SIZE
+/// Whole 512-byte blocks one PRP1-only transfer starting at `iova` can carry
+/// before it would cross into the next memory page.
+pub(crate) fn blocks_in_one_prp(iova: u64) -> usize {
+    (PAGE_SIZE - iova as usize % PAGE_SIZE) / SECTOR_SIZE
 }
 
 #[cfg(test)]
@@ -170,9 +171,10 @@ mod tests {
     }
 
     #[test]
-    fn one_block_transfers_never_cross_a_page() {
-        assert!(fits_one_prp(0x1_0000));
-        assert!(fits_one_prp(0x1_0000 + 3584));
-        assert!(!fits_one_prp(0x1_0000 + 3585));
+    fn multi_block_transfers_stop_at_the_page_end() {
+        assert_eq!(blocks_in_one_prp(0x1_0000), 8);
+        assert_eq!(blocks_in_one_prp(0x1_0000 + 512), 7);
+        assert_eq!(blocks_in_one_prp(0x1_0000 + 3584), 1);
+        assert_eq!(blocks_in_one_prp(0x1_0000 + 3585), 0);
     }
 }
