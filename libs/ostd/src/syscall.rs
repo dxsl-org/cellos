@@ -351,17 +351,6 @@ pub fn sys_force_exit(tid: usize) -> SyscallResult {
     }
 }
 
-pub fn sys_exec(path: &str) -> SyscallResult {
-    unsafe {
-        let ret = syscall(ViSyscall::Exec, path.as_ptr() as usize, path.len(), 0, 0);
-        if ret != -1 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
-    }
-}
-
 /// Outcome of a futex wait.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FutexWaitOutcome {
@@ -1834,23 +1823,6 @@ pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<()
     }
 }
 
-/// Play raw PCM frames on the VirtIO sound output device (blocking).
-///
-/// Frames must be signed 16-bit little-endian, 2 interleaved channels (L, R) at
-/// 44100 Hz — i.e. 4 bytes per frame. Blocks until every frame has been handed to
-/// the device. Returns the number of bytes played (0 when there is no sound
-/// device or the transfer failed). Requires `AudioPlay` in `declare_syscalls!`.
-pub fn sys_audio_play(pcm: &[u8]) -> usize {
-    // SAFETY: pcm is a valid immutable slice; the kernel validates the pointer and
-    // length, and reads exactly `pcm.len()` bytes from it.
-    let ret = unsafe { syscall(ViSyscall::AudioPlay, pcm.as_ptr() as usize, pcm.len(), 0, 0) };
-    if ret > 0 {
-        ret as usize
-    } else {
-        0
-    }
-}
-
 /// Set or move the VirtIO GPU hardware cursor.
 ///
 /// **op = 0 (set sprite):** uploads a 64×64 BGRA8888 sprite and positions the
@@ -1897,36 +1869,6 @@ pub fn sys_get_resolution() -> (u32, u32) {
         (1280, 800)
     } else {
         (w, h)
-    }
-}
-
-/// Transmit one Ethernet frame through the kernel VirtIO NIC.
-///
-/// `frame` must contain a complete Ethernet frame (the kernel prepends the
-/// VirtIO net header internally).
-///
-/// # Returns
-/// `true` if the frame was queued for transmission, `false` if the NIC is not
-/// present or the TX ring is full.
-pub fn sys_net_tx(frame: &[u8]) -> bool {
-    // SAFETY: frame is a valid immutable slice; the kernel reads exactly
-    // frame.len() bytes after validating the buffer.
-    let ret = unsafe { syscall(ViSyscall::NetTx, frame.as_ptr() as usize, frame.len(), 0, 0) };
-    ret == 1
-}
-
-/// Receive one pending Ethernet frame from the kernel VirtIO NIC.
-///
-/// # Returns
-/// The number of bytes written into `buf` (0 if no frame is ready).
-pub fn sys_net_rx(buf: &mut [u8]) -> usize {
-    // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len()
-    // bytes and returns the count.
-    let ret = unsafe { syscall(ViSyscall::NetRx, buf.as_mut_ptr() as usize, buf.len(), 0, 0) };
-    if ret > 0 {
-        ret as usize
-    } else {
-        0
     }
 }
 

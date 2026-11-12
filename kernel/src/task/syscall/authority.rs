@@ -71,10 +71,6 @@ pub(super) fn live_cell_identity(tid: usize) -> Option<(u64, u64)> {
         .map(|t| (t.cell_id.0, t.cell_generation))
 }
 
-pub(super) fn caller_has_network(caller_id: usize) -> bool {
-    caller_has_cap(caller_id, |t| t.network)
-}
-
 #[cfg(feature = "test-hooks")]
 pub(super) fn caller_has_development_silo_registration(caller_id: usize) -> bool {
     // A launch-route token on the root task, not a Cell right (not in CapSet).

@@ -1148,9 +1148,7 @@ fn handle_syscall_inner(
             | Syscall::GrantCacheSyncBegin { .. }
             | Syscall::GrantCacheSyncComplete { .. }
             | Syscall::ShmAlloc { .. }
-            | Syscall::ShmMap { .. }
-            | Syscall::Grant { .. }
-            | Syscall::Map { .. } => Some(3),
+            | Syscall::ShmMap { .. } => Some(3),
             Syscall::GrantDma { .. } => Some(5),
             Syscall::CreateVm { .. }
             | Syscall::CreateVcpu { .. }
@@ -1281,13 +1279,6 @@ fn handle_syscall_inner(
         } => ipc::futex_wait(caller_id, addr, expected, timeout_ticks),
         Syscall::FutexWake { addr, count } => ipc::futex_wake(caller_id, addr, count),
         Syscall::Log { msg_ptr, msg_len } => ipc::log(caller_id, msg_ptr, msg_len),
-        Syscall::Grant {
-            target,
-            ptr,
-            len,
-            flags,
-        } => grant::grant(caller_id, target, ptr, len, flags),
-        Syscall::Map { grant_id } => grant::map(caller_id, grant_id),
         Syscall::Exit { code } => spawn::exit(caller_id, code),
 
         Syscall::ForceExit { tid } => spawn::force_exit(caller_id, tid),
@@ -1332,28 +1323,6 @@ fn handle_syscall_inner(
         } => authority::lookup_service_bound(caller_id, service_id, out_ptr, out_len),
         Syscall::Heartbeat { interval } => ipc::heartbeat(caller_id, interval),
 
-        Syscall::Reply { caller: _, result } => ipc::reply(caller_id, result),
-
-        Syscall::Lend {
-            target,
-            ptr,
-            len,
-            flags,
-        } => grant::lend(caller_id, target, ptr, len, flags),
-
-        Syscall::BorrowRead {
-            lease_id,
-            offset,
-            ptr,
-            len,
-        } => grant::borrow_read(caller_id, lease_id, offset, ptr, len),
-        Syscall::BorrowWrite {
-            lease_id,
-            offset,
-            ptr,
-            len,
-        } => grant::borrow_write(caller_id, lease_id, offset, ptr, len),
-
         // --- Legacy Implementation ---
         Syscall::Yield => spawn::yield_now(),
         Syscall::ServiceLookup { name_ptr, name_len } => {
@@ -1397,7 +1366,6 @@ fn handle_syscall_inner(
             buf_len,
         } => fs::write(caller_id, fd, buf_ptr, buf_len),
         Syscall::MkDir { path_ptr, path_len } => fs::mk_dir(caller_id, path_ptr, path_len),
-        Syscall::Exec { path_ptr, path_len } => spawn::exec(caller_id, path_ptr, path_len),
         Syscall::SpawnFromPath { path_ptr, path_len } => spawn::spawn_from_path(
             caller_id,
             path_ptr,
@@ -1559,7 +1527,6 @@ fn handle_syscall_inner(
 
         Syscall::GetTime { op } => ipc::get_time(op),
         Syscall::GetCpuCount => dev::get_cpu_count(),
-        Syscall::AudioPlay { .. } => misc::audio_play(),
         // Compositor-only; the source is copied through the caller's copy view
         // into a GPU-Cell-owned Grant before the hand-off, so the GPU Cell never
         // reads compositor memory; the framebuffer fallback stages it the same
@@ -1577,11 +1544,6 @@ fn handle_syscall_inner(
             hot,
         } => dev::gpu_cursor(caller_id, op, data_ptr, xy, hot),
         Syscall::GpuGetResolution => dev::gpu_get_resolution(),
-        Syscall::NetTx {
-            frame_ptr,
-            frame_len,
-        } => misc::net_tx(caller_id, frame_ptr, frame_len),
-        Syscall::NetRx { buf_ptr, buf_len } => misc::net_rx(caller_id, buf_ptr, buf_len),
         Syscall::StateStash {
             key,
             buf_ptr,

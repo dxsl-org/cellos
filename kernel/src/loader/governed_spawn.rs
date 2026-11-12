@@ -21,16 +21,12 @@ fn section_u64(elf: &[u8], name: &str) -> u64 {
         .unwrap_or(u64::MAX)
 }
 
-fn cluster(elf: &[u8]) -> (u8, u64) {
+fn cluster_mode(elf: &[u8]) -> u8 {
     super::ElfLoader
         .get_section(elf, "__ViCell_cluster")
         .ok()
         .filter(|bytes| bytes.len() >= 16)
-        .map(|bytes| {
-            let id = u64::from_le_bytes(bytes[8..16].try_into().expect("cluster id"));
-            (bytes[0], id)
-        })
-        .unwrap_or((0, 0))
+        .map_or(0, |bytes| bytes[0])
 }
 
 /// The task that asked for this launch, for audit records; the kernel for boot
@@ -176,7 +172,7 @@ fn prepare_gated(
     }
 
     let allowlist = section_u64(elf, "__ViCell_syscalls");
-    let (cluster_mode, cluster_id) = cluster(elf);
+    let cluster_mode = cluster_mode(elf);
     if request.priority > api::TaskPriority::RealTime as u8
         || (request.priority == api::TaskPriority::RealTime as u8 && cluster_mode != 0)
     {
@@ -221,8 +217,6 @@ fn prepare_gated(
         request.replacement.take(),
         crate::memory::cell_quota::default_quota_bytes(),
         allowlist,
-        cluster_mode,
-        cluster_id,
         request.priority,
         pku_key,
         pku_value,
@@ -321,8 +315,6 @@ fn spawn_init(elf: &[u8], #[cfg(feature = "p01-trace")] bootstrap_init: bool) ->
         None,
         crate::memory::cell_quota::default_quota_bytes(),
         u64::MAX,
-        0,
-        0,
         api::TaskPriority::Normal as u8,
         0,
         0,

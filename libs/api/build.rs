@@ -110,7 +110,7 @@ fn main() {
     println!("cargo:rerun-if-changed={}", table.display());
     println!("cargo:rerun-if-changed=abi/table.rs");
     let text = std::fs::read_to_string(&table).expect("read abi/syscalls.toml");
-    let (rows, _raw, _internal) = parse_table(&text);
+    let (rows, _raw, _reserved) = parse_table(&text);
     assert!(
         rows.iter().any(|r| r.name == "Unknown"),
         "the table must keep the Unknown sentinel row"

@@ -294,7 +294,6 @@ macro_rules! ahci_syscalls {
             SendGather,
             Recv,
             TryRecv,
-            Reply,
             Log,
             Heartbeat,
             LookupService,

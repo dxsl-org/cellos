@@ -37,12 +37,12 @@ use api::syscall::{SyscallSet, ViSyscall};
 /// the compiler evaluates it at build time.
 ///
 /// # Base set (all cells)
-/// `Send, SendGather, Recv, TryRecv, Reply, Log, Heartbeat, LookupService, GetTime,
+/// `Send, SendGather, Recv, TryRecv, Log, Heartbeat, LookupService, GetTime,
 /// RecvTimeout` (`SendGather` backs the non-parking `post` and replies)
 ///
 /// # Capability extras
 /// - `block_io=true` → `GrantAlloc/Share/Slice/Free/Register/Unregister`
-/// - `network=true`  → `NetTx, NetRx, WaitForEvent, GetRandom`
+/// - `network=true`  → `WaitForEvent, GetRandom`
 /// - `spawn=true`    → `SpawnFromPath/Mem/Pinned, Wait, OpenCap, ReadCap, CloseCap,
 ///                      GetProcs, Snapshot, StateStash/Restore`
 pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {
@@ -51,7 +51,6 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
         .with(ViSyscall::SendGather)
         .with(ViSyscall::Recv)
         .with(ViSyscall::TryRecv)
-        .with(ViSyscall::Reply)
         .with(ViSyscall::Log)
         .with(ViSyscall::Heartbeat)
         .with(ViSyscall::LookupService)
@@ -73,8 +72,6 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
 
     let net_extra = if network {
         SyscallSet::EMPTY
-            .with(ViSyscall::NetTx)
-            .with(ViSyscall::NetRx)
             .with(ViSyscall::WaitForEvent)
             .with(ViSyscall::GetRandom)
     } else {

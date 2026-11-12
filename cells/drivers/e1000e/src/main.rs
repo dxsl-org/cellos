@@ -171,7 +171,6 @@ api::declare_syscalls![
     TrySend,
     Recv,
     TryRecv,
-    Reply,
     Log,
     Heartbeat,
     LookupService,

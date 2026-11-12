@@ -52,7 +52,6 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     TrySend,
-    Reply,
     Log,
     Heartbeat,
     LookupService,

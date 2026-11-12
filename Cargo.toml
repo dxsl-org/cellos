@@ -189,7 +189,6 @@ members = [
     "cells/demos/cfi-test",
     "cells/demos/viui-demo",
     "cells/demos/sdk-demo",
-    "cells/demos/audio-demo",
     "cells/demos/hotswap-demo-v1",
     "cells/demos/hotswap-demo-v2",
     "cells/demos/recovery-demo",

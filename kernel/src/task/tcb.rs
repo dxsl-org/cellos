@@ -195,34 +195,6 @@ pub(crate) enum TaskAddressSpace {
     Domain(Arc<crate::memory::address_space::AddressSpace>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LeaseAttributes(pub u32);
-
-impl LeaseAttributes {
-    pub const READ: Self = Self(1 << 0);
-    pub const WRITE: Self = Self(1 << 1);
-
-    pub fn contains(&self, other: Self) -> bool {
-        (self.0 & other.0) == other.0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Lease {
-    pub id: usize,  // Logic Lease ID (Index)
-    pub ptr: VAddr, // Address in Task's space
-    pub len: usize, // Length
-    pub attributes: LeaseAttributes,
-}
-
-#[derive(Debug, Clone)]
-pub struct GrantEntry {
-    pub ptr: VAddr,
-    pub len: usize,
-    pub flags: u32,
-    pub sender_id: usize,
-}
-
 // File Handle for Stateful IO
 pub use api::fs::FileHandle;
 
@@ -359,15 +331,6 @@ pub struct Task {
     pub(crate) child_context: Option<Vec<u8>>,
     pub(crate) child_stdio: [api::cell_session::ObjectRefV1; 4],
     pub allowed_drivers: Vec<usize>,
-    // Maps LeaseID -> Lease
-    pub leases: alloc::collections::BTreeMap<usize, Lease>,
-    // Next available Lease ID
-    pub next_lease_id: usize,
-
-    // Grant Table (Zero-Copy IPC)
-    // Maps GrantID -> GrantEntry
-    pub grant_table: alloc::collections::BTreeMap<usize, GrantEntry>,
-    pub next_grant_id: usize,
 
     // Maps FD -> FileHandle
     pub open_files: alloc::collections::BTreeMap<usize, FileHandle>,
@@ -467,17 +430,6 @@ pub struct Task {
     /// Hart this task last ran on (set at dispatch); RT placement prefers it
     /// (Phase 10 step 7).
     pub last_hart: Option<usize>,
-
-    /// Cluster participation mode parsed from `__ViCell_cluster` ELF section.
-    /// `0` = Isolated (default, no section present).  See `api::cluster::ClusterMode`.
-    ///
-    /// Invariant: a task with `cluster_mode != 0` MUST have `priority != RealTime (2)`.
-    /// The `SpawnPinned` handler enforces this at spawn time.
-    pub cluster_mode: u8,
-
-    /// FNV-1a-64 cluster routing identifier from `__ViCell_cluster`.
-    /// `0` when `cluster_mode == Isolated`.  NOT a credential — routing only.
-    pub cluster_id: u64,
 
     /// Per-Cell syscall allowlist.  Each bit corresponds to a syscall via
     /// `api::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
@@ -662,10 +614,6 @@ impl Task {
             child_context: None,
             child_stdio: [api::cell_session::ObjectRefV1::ZERO; 4],
             allowed_drivers,
-            leases: alloc::collections::BTreeMap::new(),
-            next_lease_id: 1, // Start efficiently
-            grant_table: alloc::collections::BTreeMap::new(),
-            next_grant_id: 1,
             open_files: alloc::collections::BTreeMap::new(),
             caller: CallerSlot::new(),
             current_async_op: 0,
@@ -690,8 +638,6 @@ impl Task {
             user_cet: 0,
             priority: api::TaskPriority::Normal as u8,
             last_hart: None,
-            cluster_mode: 0,
-            cluster_id: 0,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             sched_stats: SchedStats::default(),
             heartbeat_deadline: None,
@@ -786,63 +732,6 @@ impl Task {
             TaskAddressSpace::Sas => Ok(()),
             TaskAddressSpace::Domain(space) => space.begin_execution(hart_id),
         }
-    }
-
-    pub fn add_lease(&mut self, ptr: VAddr, len: usize, attributes: LeaseAttributes) -> usize {
-        let id = self.next_lease_id;
-        self.next_lease_id += 1;
-
-        let lease = Lease {
-            id,
-            ptr,
-            len,
-            attributes,
-        };
-
-        #[cfg(feature = "p01-trace")]
-        let _semantic = crate::memory::heap::p01_owner::creation(
-            Some(crate::p01_resources::owner(self)),
-            crate::memory::heap::p01_owner::TASK_FIELDS,
-        );
-        self.leases.insert(id, lease);
-        id
-    }
-
-    pub fn get_lease(&self, id: usize) -> Option<&Lease> {
-        self.leases.get(&id)
-    }
-
-    pub fn revoke_lease(&mut self, id: usize) {
-        self.leases.remove(&id);
-    }
-
-    // --- Grant Table Methods ---
-    pub fn add_grant(&mut self, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -> usize {
-        let id = self.next_grant_id;
-        self.next_grant_id += 1;
-        #[cfg(feature = "p01-trace")]
-        let _semantic = crate::memory::heap::p01_owner::creation(
-            Some(crate::p01_resources::owner(self)),
-            crate::memory::heap::p01_owner::TASK_FIELDS,
-        );
-        self.grant_table.insert(
-            id,
-            GrantEntry {
-                ptr,
-                len,
-                flags,
-                sender_id,
-            },
-        );
-        id
-    }
-
-    pub fn get_grant(&self, id: usize) -> Option<&GrantEntry> {
-        self.grant_table.get(&id)
-    }
-
-    pub fn remove_grant(&mut self, id: usize) -> Option<GrantEntry> {
-        self.grant_table.remove(&id)
     }
 
     pub fn set_current_caller_context(

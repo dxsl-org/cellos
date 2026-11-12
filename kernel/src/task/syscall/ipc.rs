@@ -1190,11 +1190,6 @@ pub(super) fn heartbeat(caller_id: usize, interval: usize) -> SyscallResult {
     Ok(0)
 }
 
-/// Handler for `Syscall::Reply` (extracted from the dispatcher).
-pub(super) fn reply(caller_id: usize, result: usize) -> SyscallResult {
-    crate::task::ipc_reply(caller_id, result).map_err(|_| SyscallError::InvalidCommand)
-}
-
 /// Handler for `Syscall::SetTimer` (extracted from the dispatcher).
 pub(super) fn set_timer(deadline: usize) -> SyscallResult {
     // Check if deadline passed

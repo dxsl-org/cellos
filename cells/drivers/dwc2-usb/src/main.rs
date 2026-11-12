@@ -40,7 +40,6 @@ declare_syscalls![
     TrySend,
     Recv,
     RecvTimeout,
-    Reply,
     Log,
     RequestMmio,
     WaitIrq,

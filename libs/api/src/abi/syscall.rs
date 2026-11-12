@@ -87,7 +87,7 @@ const _: () = {
 pub mod cap_mask {
     /// Revoke raw block-device access (BlkRead/BlkWrite/BlkFlush).
     pub const BLOCK_IO: u32 = 1 << 0;
-    /// Revoke network transmit/receive (NetTx/NetRx).
+    /// Revoke network authority (`NetworkCap`).
     pub const NETWORK: u32 = 1 << 1;
     /// Revoke lifecycle spawn authority (`ForceExit`, `NotifyOnExit`,
     /// `RegisterService`, snapshot control, and any exact launch
@@ -366,8 +366,8 @@ pub mod service {
     /// NVMe / block device driver cell. Clients (VFS) call `LookupService(BLOCK_DRIVER)`
     /// to find the provider tid and send IPC directly instead of using `BlkReadAsync`.
     pub const BLOCK_DRIVER: u16 = 9;
-    /// NIC driver cell. The net cell resolves this instead of using kernel `NetTx`/`NetRx`
-    /// once a Driver Cell has registered.
+    /// NIC driver cell. The net cell moves every frame through it; with none
+    /// registered, no frame moves.
     pub const NIC_DRIVER: u16 = 10;
     /// Supervisor Cell — hotswap/snapshot orchestration. Trusted by init; holds SupervisorCap.
     /// Send `HotswapRequest` / `SnapshotRequest` IPC to trigger live cell replacement.

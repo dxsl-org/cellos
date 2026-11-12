@@ -74,35 +74,9 @@ pub enum Syscall {
         /// Deadline in kernel monotonic ticks from boot.  0 = non-blocking.
         deadline: u64,
     },
-    /// 2: Reply (Unblocking Reply to Caller)
-    Reply {
-        caller: usize,
-        result: usize,
-    },
     /// 3: SetTimer (Wake up after ticks)
     SetTimer {
         deadline: usize,
-    },
-    /// 4: BorrowRead (Copy from Lease to Caller)
-    BorrowRead {
-        lease_id: usize,
-        offset: usize,
-        ptr: usize,
-        len: usize,
-    },
-    /// 5: BorrowWrite (Copy from Caller to Lease)
-    BorrowWrite {
-        lease_id: usize,
-        offset: usize,
-        ptr: usize,
-        len: usize,
-    },
-    /// 6: Lend (Create a Lease for Target Task)
-    Lend {
-        target: usize,
-        ptr: usize,
-        len: usize,
-        flags: usize,
     },
     /// 7: TryRecv (Non-blocking Receive)
     TryRecv {
@@ -132,17 +106,6 @@ pub enum Syscall {
     Log {
         msg_ptr: usize,
         msg_len: usize,
-    },
-    /// 12: Grant (Zero Copy)
-    Grant {
-        target: usize,
-        ptr: usize,
-        len: usize,
-        flags: usize,
-    },
-    /// 13: Map (Zero Copy)
-    Map {
-        grant_id: usize,
     },
     /// 14: Exit (Terminate Process)
     Exit {
@@ -180,11 +143,6 @@ pub enum Syscall {
     /// `interval` ticks ahead (0 = disable).
     Heartbeat {
         interval: usize,
-    },
-    /// 6: Exec (Spawn from file)
-    Exec {
-        path_ptr: usize,
-        path_len: usize,
     },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
     SpawnFromMem {
@@ -509,11 +467,6 @@ pub enum Syscall {
         xy: usize,
         wh: usize,
     },
-    /// 218: AudioPlay — write raw PCM (S16LE/2ch/44100) to the VirtIO sound output.
-    AudioPlay {
-        buf_ptr: usize,
-        buf_len: usize,
-    },
     /// 219: CapRevoke — strip capabilities from a live cell at runtime.
     CapRevoke {
         target_tid: usize,
@@ -528,16 +481,6 @@ pub enum Syscall {
     },
     /// 302: GpuGetResolution — return current GPU scanout (width, height) packed as (w<<32)|h.
     GpuGetResolution,
-    /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
-    NetTx {
-        frame_ptr: usize,
-        frame_len: usize,
-    },
-    /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
-    NetRx {
-        buf_ptr: usize,
-        buf_len: usize,
-    },
     /// 410: StateStash — save serialized cell state under `key` for hot-swap.
     StateStash {
         key: usize,
@@ -961,19 +904,7 @@ pub(super) fn map_syscall(
             result_capacity: a3,
         },
         ViSyscall::GetCpuCount => Syscall::GetCpuCount,
-        ViSyscall::Reply => Syscall::Reply {
-            caller: a0,
-            result: a1,
-        },
-        ViSyscall::Call => Syscall::ServiceLookup {
-            name_ptr: a0,
-            name_len: a1,
-        },
         ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
-        ViSyscall::Exec => Syscall::Exec {
-            path_ptr: a0,
-            path_len: a1,
-        },
         ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { args_ptr: a0 },
         ViSyscall::SpawnFromPath => Syscall::SpawnFromPath {
             path_ptr: a0,
@@ -1238,10 +1169,6 @@ pub(super) fn map_syscall(
             xy: a2,
             wh: a3,
         },
-        ViSyscall::AudioPlay => Syscall::AudioPlay {
-            buf_ptr: a0,
-            buf_len: a1,
-        },
         ViSyscall::CapRevoke => Syscall::CapRevoke {
             target_tid: a0,
             cap_mask: a1 as u32,
@@ -1253,14 +1180,6 @@ pub(super) fn map_syscall(
             hot: a3,
         },
         ViSyscall::GpuGetResolution => Syscall::GpuGetResolution,
-        ViSyscall::NetTx => Syscall::NetTx {
-            frame_ptr: a0,
-            frame_len: a1,
-        },
-        ViSyscall::NetRx => Syscall::NetRx {
-            buf_ptr: a0,
-            buf_len: a1,
-        },
         ViSyscall::StateStash => Syscall::StateStash {
             key: a0,
             buf_ptr: a1,
@@ -1477,7 +1396,6 @@ pub(super) fn map_syscall(
             flags: a3,
         },
         _ => match syscall_id {
-            3 => Syscall::SetTimer { deadline: a0 },
             100 => Syscall::ServiceLookup {
                 name_ptr: a0,
                 name_len: a1,

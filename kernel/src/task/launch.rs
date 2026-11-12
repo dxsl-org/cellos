@@ -38,8 +38,6 @@ pub struct TaskLaunchState {
     pub(crate) replacement: Option<crate::cell::hotswap::ReplacementReservation>,
     pub(crate) quota_limit: usize,
     pub(crate) syscall_allowlist: u64,
-    pub(crate) cluster_mode: u8,
-    pub(crate) cluster_id: u64,
     pub(crate) priority: u8,
     pub(crate) pku_key: u8,
     pub(crate) pku_value: u32,
@@ -68,8 +66,6 @@ impl TaskLaunchState {
         replacement: Option<crate::cell::hotswap::ReplacementReservation>,
         quota_limit: usize,
         syscall_allowlist: u64,
-        cluster_mode: u8,
-        cluster_id: u64,
         priority: u8,
         pku_key: u8,
         pku_value: u32,
@@ -87,8 +83,6 @@ impl TaskLaunchState {
             replacement,
             quota_limit,
             syscall_allowlist,
-            cluster_mode,
-            cluster_id,
             priority,
             pku_key,
             pku_value,
@@ -187,8 +181,6 @@ pub fn publish_prepared(
     #[cfg(feature = "p01-trace")]
     crate::memory::heap::p01_owner::adopt_task(&task);
     task.syscall_allowlist = state.syscall_allowlist;
-    task.cluster_mode = state.cluster_mode;
-    task.cluster_id = state.cluster_id;
     task.priority = state.priority;
     task.pku_key = state.pku_key;
     task.pku_value = state.pku_value;
@@ -557,8 +549,6 @@ impl SessionPublication {
         let (mut task, _) = prepared.into_task(tid, cell)?;
         task.root_tid = tid;
         task.syscall_allowlist = state.syscall_allowlist;
-        task.cluster_mode = state.cluster_mode;
-        task.cluster_id = state.cluster_id;
         task.priority = state.priority;
         task.pku_key = state.pku_key;
         task.pku_value = state.pku_value;

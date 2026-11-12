@@ -36,7 +36,6 @@ api::declare_syscalls![
     Recv,
     TryRecv,
     RecvTimeout,
-    Reply,
     Log,
     Exit,
     Yield,

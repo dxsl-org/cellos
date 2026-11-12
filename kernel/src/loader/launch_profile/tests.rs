@@ -1106,7 +1106,6 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
     let mut rows: alloc::vec::Vec<(&str, CapSet)> = [
         "/bin/adc-demo",
         "/bin/ai-test",
-        "/bin/audio-demo",
         "/bin/bench-probe",
         "/bin/c2c-render-worker",
         "/bin/c2c-render-domain-worker",

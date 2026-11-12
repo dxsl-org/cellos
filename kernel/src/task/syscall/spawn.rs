@@ -742,12 +742,6 @@ pub(super) fn yield_now() -> SyscallResult {
     Ok(0)
 }
 
-/// Handler for `Syscall::Exec` (extracted from the dispatcher).
-pub(super) fn exec(caller_id: usize, path_ptr: usize, path_len: usize) -> SyscallResult {
-    let _path = read_user_string(caller_id, path_ptr, path_len, MAX_LOG_MSG)?;
-    Err(SyscallError::NotSupported)
-}
-
 /// Handler for `Syscall::SpawnFromPath` (extracted from the dispatcher).
 pub(super) fn spawn_from_path(
     caller_id: usize,

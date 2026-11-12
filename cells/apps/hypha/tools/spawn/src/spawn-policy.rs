@@ -12,8 +12,6 @@
 /// match. Each entry must declare no VFS-mutate, network, device or spawn
 /// authority, and must run without argv (tool-spawn passes none).
 pub const SPAWN_ALLOWLIST: &[&str] = &[
-    // Plays a fixed tone sequence and exits; declares only `Log` + `AudioPlay`.
-    "/bin/audio-demo",
     // Self-contained game; manifest is block_io/network/spawn = false.
     "/bin/tetris",
 ];

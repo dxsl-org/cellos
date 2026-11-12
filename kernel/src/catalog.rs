@@ -469,7 +469,6 @@ pub const CELLS: &[Cell] = &[
     boot_only("/bin/srv-test"),
     target("/bin/adc-demo"),
     target("/bin/ai-test"),
-    target("/bin/audio-demo"),
     target("/bin/bench-probe"),
     target("/bin/c2c-render-worker"),
     target("/bin/c2c-render-domain-worker"),

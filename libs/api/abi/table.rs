@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Parser for `syscalls.toml`, shared by `libs/api/build.rs` and
 // `kernel/build.rs` through `include!` (build scripts cannot depend on each
-// other). It accepts exactly the subset the table uses: `[[syscall]]` and
-// `[[raw]]` rows, `key = integer`, `key = "string"`, `key = '''` multi-line
-// literal strings, and `#` comment lines. Anything else panics the build.
+// other). It accepts exactly the subset the table uses: `[[syscall]]`,
+// `[[raw]]` and `[[reserved]]` rows, `key = integer`, `key = "string"`,
+// `key = '''` multi-line literal strings, and `#` comment lines. Anything else
+// panics the build.
 
 /// One `[[syscall]]` row: a `ViSyscall` variant.
 #[derive(Default)]
@@ -30,15 +31,24 @@ struct TableRaw {
     gate_as: Option<String>,
 }
 
+/// One `[[reserved]]` row: a retired number and allowlist bit, never reused.
+#[derive(Default)]
+#[allow(dead_code)]
+struct TableReserved {
+    number: Option<usize>,
+    bit: Option<u8>,
+    /// The `ViSyscall` name the number had.
+    former: String,
+}
+
 enum TableEntry {
     Syscall(TableRow),
     Raw(TableRaw),
-    /// A kernel `Syscall` variant with no opcode (`[[internal]]`).
-    Internal(String),
+    Reserved(TableReserved),
 }
 
-/// Parsed table: `[[syscall]]` rows, `[[raw]]` rows, `[[internal]]` variants.
-type Table = (Vec<TableRow>, Vec<TableRaw>, Vec<String>);
+/// Parsed table: `[[syscall]]` rows, `[[raw]]` rows, `[[reserved]]` rows.
+type Table = (Vec<TableRow>, Vec<TableRaw>, Vec<TableReserved>);
 
 fn parse_table(text: &str) -> Table {
     let mut entries: Vec<TableEntry> = Vec::new();
@@ -60,8 +70,8 @@ fn parse_table(text: &str) -> Table {
                 keys_in_row.clear();
                 continue;
             }
-            "[[internal]]" => {
-                entries.push(TableEntry::Internal(String::new()));
+            "[[reserved]]" => {
+                entries.push(TableEntry::Reserved(TableReserved::default()));
                 keys_in_row.clear();
                 continue;
             }
@@ -119,24 +129,27 @@ fn parse_table(text: &str) -> Table {
                 "comment" => {}
                 other => panic!("syscalls.toml:{}: unknown raw key `{other}`", n + 1),
             },
-            TableEntry::Internal(kernel) => match key {
-                "kernel" => *kernel = string(),
-                other => panic!("syscalls.toml:{}: unknown internal key `{other}`", n + 1),
+            TableEntry::Reserved(reserved) => match key {
+                "number" => reserved.number = Some(value.parse().expect("number")),
+                "bit" => reserved.bit = Some(parse_bit(value, n)),
+                "former" => reserved.former = string(),
+                "comment" => {}
+                other => panic!("syscalls.toml:{}: unknown reserved key `{other}`", n + 1),
             },
         }
     }
     let mut rows = Vec::new();
     let mut raws = Vec::new();
-    let mut internal = Vec::new();
+    let mut reserved = Vec::new();
     for entry in entries {
         match entry {
             TableEntry::Syscall(row) => rows.push(row),
             TableEntry::Raw(raw) => raws.push(raw),
-            TableEntry::Internal(kernel) => internal.push(kernel),
+            TableEntry::Reserved(row) => reserved.push(row),
         }
     }
-    validate_table(&rows, &raws, &internal);
-    (rows, raws, internal)
+    validate_table(&rows, &raws, &reserved);
+    (rows, raws, reserved)
 }
 
 /// An allowlist bit indexes a `u64` mask.
@@ -147,8 +160,9 @@ fn parse_bit(value: &str, n: usize) -> u8 {
 }
 
 /// Cross-row invariants the generators rely on: unique numbers and names, raw
-/// ids disjoint from api numbers, and each kernel variant claimed by one row.
-fn validate_table(rows: &[TableRow], raws: &[TableRaw], internal: &[String]) {
+/// ids disjoint from api numbers, each kernel variant claimed by one row, and
+/// a reserved number or bit used by no live row.
+fn validate_table(rows: &[TableRow], raws: &[TableRaw], reserved: &[TableReserved]) {
     let mut numbers = std::collections::BTreeSet::new();
     let mut names = std::collections::BTreeSet::new();
     let mut kernel = std::collections::BTreeMap::new();
@@ -179,10 +193,17 @@ fn validate_table(rows: &[TableRow], raws: &[TableRaw], internal: &[String]) {
             assert!(names.contains(gate_as), "syscalls.toml: raw {id} gate_as {gate_as} is no row");
         }
     }
-    for variant in internal {
-        assert!(
-            !kernel.contains_key(variant) && raws.iter().all(|r| &r.kernel != variant),
-            "syscalls.toml: internal variant {variant} also has an opcode"
-        );
+    let live_bits: std::collections::BTreeSet<u8> = rows
+        .iter()
+        .filter_map(|r| r.bit)
+        .chain(raws.iter().filter_map(|r| r.bit))
+        .collect();
+    for row in reserved {
+        let number = row.number.unwrap_or_else(|| panic!("reserved {}: no number", row.former));
+        assert!(numbers.insert(number), "syscalls.toml: reserved number {number} is in use");
+        assert!(!names.contains(&row.former), "syscalls.toml: reserved {} is a live row", row.former);
+        if let Some(bit) = row.bit {
+            assert!(!live_bits.contains(&bit), "syscalls.toml: reserved bit {bit} is in use");
+        }
     }
 }

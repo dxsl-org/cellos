@@ -20,8 +20,6 @@ mod tests {
     const CASES: &[(usize, ViSyscall)] = &[
         (0, ViSyscall::Send),
         (1, ViSyscall::Recv),
-        (2, ViSyscall::Call),
-        (3, ViSyscall::Reply),
         (4, ViSyscall::TrySend),
         (5, ViSyscall::Spawn),
         (7, ViSyscall::TryRecv),
@@ -66,7 +64,6 @@ mod tests {
         (107, ViSyscall::FileOp),
         (109, ViSyscall::Write),
         (120, ViSyscall::GetTime),
-        (218, ViSyscall::AudioPlay),
         (219, ViSyscall::CapRevoke),
         (401, ViSyscall::HotSwapReady),
         (420, ViSyscall::Snapshot),
@@ -90,8 +87,6 @@ mod tests {
         (442, ViSyscall::ProbeVirtioMmio),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
-        (310, ViSyscall::NetTx),
-        (311, ViSyscall::NetRx),
         (252, ViSyscall::Chdir),
         (253, ViSyscall::Getcwd),
         (254, ViSyscall::Fstat),
@@ -116,8 +111,6 @@ mod tests {
         // must never change without a coordinated version bump.
         assert_eq!(ViSyscall::Send as usize, 0);
         assert_eq!(ViSyscall::Recv as usize, 1);
-        assert_eq!(ViSyscall::Call as usize, 2);
-        assert_eq!(ViSyscall::Reply as usize, 3);
         assert_eq!(ViSyscall::Spawn as usize, 5);
         assert_eq!(ViSyscall::SpawnFromPath as usize, 12);
         assert_eq!(ViSyscall::Log as usize, 11);
@@ -566,7 +559,22 @@ mod tests {
 
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
-        let unassigned = [50, 99, 100, 108, 264, 999, usize::MAX];
+        // 2, 3, 6, 218, 310 and 311 are retired (Phase 11 D4): reserved, never reused.
+        let unassigned = [
+            2,
+            3,
+            6,
+            50,
+            99,
+            100,
+            108,
+            218,
+            264,
+            310,
+            311,
+            999,
+            usize::MAX,
+        ];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(

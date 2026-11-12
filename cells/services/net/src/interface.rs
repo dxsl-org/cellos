@@ -11,7 +11,7 @@ use alloc::{boxed::Box, collections::VecDeque};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use ostd::{
     io::println,
-    syscall::{sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_try_send, SyscallResult},
+    syscall::{sys_lookup_service, sys_recv_timeout, sys_try_send, SyscallResult},
 };
 use smoltcp::{
     phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
@@ -76,7 +76,7 @@ static FIRST_BRIDGE_TX: AtomicBool = AtomicBool::new(false);
 static FIRST_BRIDGE_TX_OK: AtomicBool = AtomicBool::new(false);
 static FIRST_REPLY_FAILURE: AtomicBool = AtomicBool::new(false);
 static FIRST_BRIDGE_RX: AtomicBool = AtomicBool::new(false);
-static LEGACY_LOGS: AtomicUsize = AtomicUsize::new(0);
+static NO_DRIVER_LOGS: AtomicUsize = AtomicUsize::new(0);
 /// Driver commands issued, and how many burned their deadline (`loop-trace`).
 ///
 /// The Net Cell shares one loop between its own smoltcp traffic and the L2
@@ -296,7 +296,7 @@ impl VirtioNetDevice {
 
     /// Enqueue an inbound frame received from a NIC provider.
     // reason: pump_rx()/pump_rx_split() currently pull frames themselves via
-    // the Driver Cell or disabled legacy syscalls; push_rx is the counterpart
+    // the Driver Cell; push_rx is the counterpart
     // for a future push-notification delivery path.
     #[allow(dead_code)]
     pub fn push_rx(&mut self, frame: Box<[u8]>) {
@@ -409,7 +409,7 @@ impl VirtioNetDevice {
             return Some(false);
         }
         if nic_driver_tid().is_none() {
-            return Some(sys_net_tx(frame));
+            return Some(false);
         }
         if self.tx_queue.len() >= TX_QUEUE_LIMIT {
             return Some(false);
@@ -512,28 +512,19 @@ impl VirtioNetDevice {
     pub fn pump_rx_split(&mut self) -> usize {
         self.flush_l2_replies(crate::service_runtime::sys_get_time());
         let Some(tid) = nic_driver_tid() else {
-            if LEGACY_LOGS.fetch_add(1, Ordering::Relaxed) < 3 {
-                println("[net] NIC driver unavailable: legacy frame path");
+            // No NIC driver: nothing moves. A frame queued while one was live
+            // is answered as failed rather than left waiting.
+            if NO_DRIVER_LOGS.fetch_add(1, Ordering::Relaxed) < 3 {
+                println("[net] NIC driver unavailable");
             }
             let now = crate::service_runtime::sys_get_time();
             if let Some(sent) = self.tx_queue.pop_front() {
-                let accepted = sys_net_tx(&sent.bytes);
                 if let Some(target) = sent.reply {
-                    // The status byte the driver path would have carried; the
-                    // legacy syscall has no finer verdict than yes/no.
-                    let status = if accepted { STATUS_OK } else { STATUS_FAILED };
-                    self.l2_replies.push_back((target, status, now));
+                    self.l2_replies.push_back((target, STATUS_FAILED, now));
                 }
                 self.recycle_frame(sent.bytes);
             }
-            let mut scratch = [0u8; MAX_FRAME];
-            let n = ostd::syscall::sys_net_rx(&mut scratch);
-            return if n > 0 && n <= MAX_FRAME && self.rx_queue.len() < RX_QUEUE_LIMIT {
-                self.route_rx(&scratch[..n]);
-                1
-            } else {
-                0
-            };
+            return 0;
         };
 
         let mut reply = [0u8; MAX_FRAME + 2];

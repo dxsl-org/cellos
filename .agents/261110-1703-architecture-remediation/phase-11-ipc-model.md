@@ -77,8 +77,8 @@ events (input, IRQ, notifications): bounded post, never a reply channel
 - [x] Typed outcome surface
 - [x] Bounded send, `IpcReply` replies *(the `clippy.toml` rule is deferred to step 7; see Deviation Log)*
 - [x] Registration flags, `fast_ipc` removed
-- [ ] Waits folded, states collapsed
-- [ ] Dead mechanisms removed
+- [x] Waits folded, states collapsed
+- [x] Dead mechanisms removed
 - [ ] Bound lookup only
 - [ ] CP2
 
@@ -173,3 +173,11 @@ Phase 12 builds the shared service loop on this surface.
   - D2/D3: `WaitForEvent`, `IpcWait` and `WaitIrq` park as `WaitKind::Completion` with `Delivery::{EventMask, IpcTerminal, IrqLine}`; `WaitCompletion` uses `Delivery::Queue`. The sweep has one completion arm (`completion_wait::sweep_wake`), the IPC terminal wake is one rule ("any completion wait naming IPC"), and the kernel `Rename` wait parks the same way. Results and timeout conventions are unchanged per delivery and pinned by `the_sweep_keeps_each_completion_delivery_result`.
   - Deleted: `TaskState::Polling`, `SyscallFuture`, `Task::pending_future`, the dummy waker and the hart-0 polling pass (nothing entered `Polling`).
   - `ProcessInfo` encoding unchanged (D6): every `Blocked` is 2.
+- **Step 6, retired opcodes and dead mechanisms** (2026-11-12). D4, with the census corrections the owner confirmed:
+  - Retired as `[[reserved]]` rows (number and allowlist bit never reused; the table parser refuses a reserved number or bit that a live row uses): `Call` 2 (bit 4), `Reply` 3 (bit 3), `Exec` 6 (bit 35), `AudioPlay` 218 (bit 47), `NetTx` 310 (bit 27), `NetRx` 311 (bit 28). `ViSyscall` has no variant for them and the kernel decodes them to nothing (`UnknownSyscall`); negative control `retired_numbers_decode_to_nothing`.
+  - **Deviation from CP1 D4 (census error): `Yield` 104 stays.** It is the only yield (`ostd::sys_yield`, posix); CP1 listed it as a legacy alias.
+  - **Deviation from CP1 §2 D4 ("nothing in `libs/` or `cells/` calls them"):** the net service's "NIC driver unavailable: legacy frame path" called `NetTx`/`NetRx`, and `audio-demo` called `AudioPlay`. Owner decision: retire anyway. With no NIC driver the net service now moves no frame (an `L2Send` is refused; a frame queued while a driver was live is answered as failed), which is what the kernel arms already did (`NetTx` discarded, `NetRx` never returned data). `audio-demo` is deleted with its image, catalog, launch-test, hypha spawn-allowlist and unsafe-allowlist rows. `ostd::sys_exec`, `sys_audio_play`, `sys_net_tx`, `sys_net_rx` are deleted; the base app allowlist drops `Reply`, the network extra drops `NetTx`/`NetRx`, and 27 cell `declare_syscalls!` lists drop the retired names.
+  - **Surprise:** `map_syscall`'s raw fallback mapped 3 to `SetTimer`, unreachable while 3 was `Reply`; it would have revived 3 as `SetTimer` (bit-less, i.e. always permitted). Removed; the negative control covers it.
+  - Dead kernel mechanisms removed: the five `[[internal]]` variants (`Lend`, `BorrowRead`, `BorrowWrite`, `Grant`, `Map`) with their handlers, `task::ipc_{lend,borrow_read,borrow_write,grant,map,reply}`, `Task::{leases, next_lease_id, grant_table, next_grant_id, cluster_mode, cluster_id}` and the `Lease`/`LeaseAttributes`/`GrantEntry` types. `TaskLaunchState` stops carrying the cluster id; spawn still reads the cluster mode for its RealTime refusal. `[[internal]]` support in the table parser is replaced by `[[reserved]]`. `allowed_drivers` and `pku_key` stay (copied to threads), as CP1 said.
+  - With `Call` gone no api row shares `ServiceLookup` with raw 100, so `in_kernel_gate_matches_the_trap_gate` now requires the two gates to agree everywhere.
+  - Golden: `syscalls.golden.json` changes in rows 2, 3, 6, 218, 310, 311 (gone) and 100 (`kernel_vi` no longer `Call`); `catalog.generated.json` loses `/bin/audio-demo`.

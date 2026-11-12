@@ -853,17 +853,6 @@ pub(super) fn end_grant_leases_at_send(caller_id: usize, syscall: &Syscall) {
         // TrySend's target 0 is a self-wake.
         Syscall::TrySend { target: 0, .. } => caller_id,
         Syscall::TrySend { target, .. } => target,
-        Syscall::Reply { .. } => {
-            let current_caller = crate::task::SCHEDULER
-                .lock()
-                .as_ref()
-                .and_then(|sched| sched.tasks.get(&caller_id))
-                .and_then(|task| task.caller.current);
-            let Some(target) = current_caller else {
-                return;
-            };
-            target
-        }
         _ => return,
     };
     free_released_grant_lease_frames(
@@ -1711,59 +1700,6 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
         }
     }
     Err(SyscallError::Unknown)
-}
-
-/// Handler for `Syscall::Grant` (extracted from the dispatcher).
-pub(super) fn grant(
-    caller_id: usize,
-    target: usize,
-    ptr: usize,
-    len: usize,
-    flags: usize,
-) -> SyscallResult {
-    crate::task::ipc_grant(caller_id, target, ptr, len, flags as u32)
-        .map_err(|_| SyscallError::PermissionDenied)
-}
-
-/// Handler for `Syscall::Map` (extracted from the dispatcher).
-pub(super) fn map(caller_id: usize, grant_id: usize) -> SyscallResult {
-    crate::task::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
-}
-
-/// Handler for `Syscall::Lend` (extracted from the dispatcher).
-pub(super) fn lend(
-    caller_id: usize,
-    target: usize,
-    ptr: usize,
-    len: usize,
-    flags: usize,
-) -> SyscallResult {
-    crate::task::ipc_lend(caller_id, target, ptr, len, flags as u32)
-        .map_err(|_| SyscallError::PermissionDenied)
-}
-
-/// Handler for `Syscall::BorrowRead` (extracted from the dispatcher).
-pub(super) fn borrow_read(
-    caller_id: usize,
-    lease_id: usize,
-    offset: usize,
-    ptr: usize,
-    len: usize,
-) -> SyscallResult {
-    crate::task::ipc_borrow_read(caller_id, lease_id, offset, ptr, len)
-        .map_err(|_| SyscallError::PermissionDenied)
-}
-
-/// Handler for `Syscall::BorrowWrite` (extracted from the dispatcher).
-pub(super) fn borrow_write(
-    caller_id: usize,
-    lease_id: usize,
-    offset: usize,
-    ptr: usize,
-    len: usize,
-) -> SyscallResult {
-    crate::task::ipc_borrow_write(caller_id, lease_id, offset, ptr, len)
-        .map_err(|_| SyscallError::PermissionDenied)
 }
 
 /// Handler for `Syscall::AnonMemory` (extracted from the dispatcher).

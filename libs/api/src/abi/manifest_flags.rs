@@ -53,7 +53,7 @@ pub const PROTECTION_CLASS_LEGACY: u8 = TIER_LEGACY;
 
 /// Raw block-device access (BlkRead/BlkWrite/BlkFlush).  Grants `BlockIoCap`.
 pub const MANIFEST_FLAG_BLOCK_IO: u16 = 1 << 0;
-/// Network transmit/receive (NetTx/NetRx).  Grants `NetworkCap`.
+/// Network authority.  Grants `NetworkCap`.
 pub const MANIFEST_FLAG_NETWORK: u16 = 1 << 1;
 /// Cell spawning and lifecycle control entry points (SpawnFromPath/SpawnPinned). Grants `SpawnCap`.
 pub const MANIFEST_FLAG_SPAWN: u16 = 1 << 2;

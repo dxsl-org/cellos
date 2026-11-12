@@ -629,15 +629,6 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 
 
 [[file]]
-path = "cells/demos/audio-demo/src/main.rs"
-class = "legacy-raw-ptr"
-reason = "A `static mut` PCM tone buffer filled and lent to sys_audio_play from the cell's only task. Re-reviewed 2026-11-10 (3 sites, 0 with SAFETY comments): sound only because nothing runs concurrently or re-enters, so no other reference to TONE is live while `&TONE` is passed. Removable: an `alloc::vec![0u8; BUF_LEN]` on the ostd heap needs no unsafe, after which the crate can forbid unsafe and both entries go."
-approver = "cellos-maintainers"
-date = "2026-07-14"
-review_by = "2027-02-08"
-tracking = "unsafe-allowlist re-review 2026-11-10: removable debt — heap-allocate TONE"
-
-[[file]]
 path = "cells/demos/cfi-test/src/main.rs"
 class = "test-violation"
 reason = "Deliberate CFI violation: an inline-asm indirect call (BLR / CALL reg) to cfi_test_unpadded_target, the instruction right after a BTI c / ENDBR64 landing pad in the cell's own executable .text; a control call to the landing pad first proves the page is executable, so a fault can only be BTI/IBT, not NX. Fixed 2026-11-10: the old target was a .rodata byte array (non-executable, misaligned on aarch64), so it proved NX. Since 2026-11-10 the kernel arms BTI (stage-1 GP) / CPL3 IBT (IA32_U_CET) for an image carrying the GNU property opt-in, so an opted-in build faults there; scripts/qemu-cfi-test.sh builds it opted in and asserts the aarch64 EC 0x0D fault (x86: the cell itself FAILs when CPUID reports IBT and the call returns); riscv64 skips (no Zicfilp)."
@@ -1002,15 +993,6 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 review_by = "2027-02-08"
 tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
-
-[[crate]]
-name = "audio-demo"
-class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/demos/audio-demo/ — see the [[file]] entry of class \"legacy-raw-ptr\". Re-reviewed 2026-11-10: the only unsafe is the `static mut` tone buffer, which a heap Vec would remove, letting the root forbid unsafe and both entries go."
-approver = "cellos-maintainers"
-date = "2026-07-14"
-review_by = "2027-02-08"
-tracking = "unsafe-allowlist re-review 2026-11-10: removable debt — heap-allocate TONE"
 
 [[crate]]
 name = "cfi-test"

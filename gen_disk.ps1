@@ -137,7 +137,6 @@ Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core'
 Build-Cargo -What "input-test"     -Packages @('input-test')
 Build-Cargo -What "window-policy-probe" -Packages @('window-policy-probe')
 Build-Cargo -What "viui-demo"     -Packages @('viui-demo')
-Build-Cargo -What "audio-demo"     -Packages @('audio-demo')      # VirtIO sound test tone
 Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS server-auth e2e gate
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
 Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
@@ -299,7 +298,6 @@ Add-CellToSign "$rel_dir/hypha-tool-spawn"
 Add-CellToSign "$rel_dir/input-test"
 Add-CellToSign "$rel_dir/window-policy-probe"
 Add-RequiredCellToSign "$rel_dir/viui-demo" "viui-demo"
-Add-CellToSign "$rel_dir/audio-demo"
 Add-CellToSign "$rel_dir/app-https-demo"
 Add-CellToSign "$rel_dir/http-smoke"
 Add-CellToSign "$rel_dir/cfi-test"
@@ -402,7 +400,6 @@ $input_test_bin      = "$rel_dir/input-test"       # P05 bare-cell input deliver
 $window_policy_probe_bin = "$rel_dir/window-policy-probe" # Compositor raise/focus integration probe
 $viui_demo_bin = "$rel_dir/viui-demo" # Generated ViUI managed-surface runtime oracle
 # Zig cells — paths resolved by build-zig-cells.ps1 into $zig_elfs hashtable
-$audio_bin = "$rel_dir/audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir/app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $http_smoke_bin = "$rel_dir/http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
 $cfi_test_bin   = "$rel_dir/cfi-test"        # Layer-2 CFI violation test (shell: `cfi-test`)
@@ -656,7 +653,6 @@ if (Test-Path $ai_model)    { $table_args += "/bin/ai-model.gguf=$ai_model" }
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 if (Test-Path $window_policy_probe_bin) { $table_args += "/bin/window-policy-probe=$window_policy_probe_bin" }
 $table_args += "/bin/viui-demo=$viui_demo_bin"
-if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
 if (Test-Path $cfi_test_bin)   { $table_args += "/bin/cfi-test=$cfi_test_bin" }

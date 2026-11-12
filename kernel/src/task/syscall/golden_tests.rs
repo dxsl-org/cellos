@@ -128,9 +128,8 @@ fn syscall_golden() {
 
 /// CP1 §3.2: one gate. For every opcode the trap decodes, the in-kernel entry
 /// (`handle_syscall`, gated on `opcode_of` of the decoded variant) admits under
-/// exactly the allowlists the trap admits — except where a raw alias shares a
-/// kernel variant with a gated api row (raw 100 and `Call` both decode to
-/// `ServiceLookup`), where the in-kernel entry may only be stricter.
+/// exactly the allowlists the trap admits. (Raw 100 and `Call` shared
+/// `ServiceLookup` until `Call` was retired in Phase 11; no alias remains.)
 #[test]
 fn in_kernel_gate_matches_the_trap_gate() {
     let _guard = crate::TEST_STATE_LOCK.lock();
@@ -143,7 +142,7 @@ fn in_kernel_gate_matches_the_trap_gate() {
 
     let mut allowlists: Vec<u64> = (0..64).map(|bit| !(1u64 << bit)).collect();
     allowlists.extend([0, u64::MAX]);
-    let mut stricter = Vec::new();
+    let mut differ = Vec::new();
     for id in 0..=OPCODE_SPAN {
         let Some(decoded) = map_syscall(id, 0, 0, 0, 0) else {
             continue;
@@ -154,75 +153,13 @@ fn in_kernel_gate_matches_the_trap_gate() {
             let trap = check_allowlist(id, TID).is_ok();
             let kernel = check_allowlist(opcode, TID).is_ok();
             if trap != kernel {
-                assert!(
-                    trap && !kernel,
-                    "opcode {id}: the in-kernel entry admits what the trap refuses"
-                );
-                stricter.push(id);
+                differ.push(id);
             }
         }
     }
     *SCHEDULER.lock() = saved;
-    stricter.dedup();
-    assert_eq!(
-        stricter,
-        [100],
-        "only the raw ServiceLookup alias may differ"
-    );
-}
-
-/// The five kernel variants with no opcode (`[[internal]]` rows) map to
-/// `usize::MAX`, which the gate refuses under any explicit allowlist and admits
-/// only under permit-all — never through a trap, which cannot decode them.
-#[test]
-fn internal_variants_have_no_opcode_and_need_permit_all() {
-    use super::Syscall;
-    let internal = [
-        Syscall::Lend {
-            target: 0,
-            ptr: 0,
-            len: 0,
-            flags: 0,
-        },
-        Syscall::BorrowRead {
-            lease_id: 0,
-            offset: 0,
-            ptr: 0,
-            len: 0,
-        },
-        Syscall::BorrowWrite {
-            lease_id: 0,
-            offset: 0,
-            ptr: 0,
-            len: 0,
-        },
-        Syscall::Grant {
-            target: 0,
-            ptr: 0,
-            len: 0,
-            flags: 0,
-        },
-        Syscall::Map { grant_id: 0 },
-    ];
-    let _guard = crate::TEST_STATE_LOCK.lock();
-    let saved = SCHEDULER.lock().take();
-    let mut scheduler = Scheduler::new();
-    let mut task = alloc::boxed::Box::new(Task::new(TID, CellId(7), "internal", Vec::new()));
-    CapSet::ALL.apply_to(&mut task);
-    scheduler.tasks.insert(TID, task);
-    *SCHEDULER.lock() = Some(scheduler);
-    for call in &internal {
-        assert_eq!(super::opcode_of(call), usize::MAX, "{call:?}");
-        assert_eq!(super::syscall_to_vi(call), None, "{call:?}");
-        set_allowlist(!0u64 >> 1); // every real bit, but not permit-all
-        assert_eq!(
-            check_allowlist(super::opcode_of(call), TID),
-            Err(SyscallError::PermissionDenied)
-        );
-        set_allowlist(u64::MAX);
-        assert_eq!(check_allowlist(super::opcode_of(call), TID), Ok(()));
-    }
-    *SCHEDULER.lock() = saved;
+    differ.dedup();
+    assert_eq!(differ, [], "the in-kernel gate differs from the trap gate");
 }
 
 /// Kernel-origin calls (the GPU scanout path) skip the Cell's allowlist by
@@ -257,4 +194,14 @@ fn kernel_origin_skips_the_allowlist_and_handle_syscall_does_not() {
         Err(SyscallError::InvalidInput)
     );
     *SCHEDULER.lock() = saved;
+}
+
+/// CP1 D4 negative control: a retired number decodes to nothing, so the trap
+/// answers it as an unknown syscall — including through the raw fallback,
+/// which once mapped 3 to `SetTimer` behind the retired `Reply`.
+#[test]
+fn retired_numbers_decode_to_nothing() {
+    for id in [2, 3, 6, 218, 310, 311] {
+        assert!(map_syscall(id, 0, 0, 0, 0).is_none(), "opcode {id} decodes");
+    }
 }

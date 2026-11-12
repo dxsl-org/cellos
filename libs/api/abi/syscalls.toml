@@ -14,9 +14,9 @@
 # out of the stable ABI): id, kernel variant, gate bit (absent = always
 # permitted), feature (cargo feature that adds the opcode).
 #
-# [[internal]] rows are kernel `Syscall` variants with no opcode at all: no
-# trap decodes them. An in-kernel caller is gated on them as an unknown opcode.
-# Rows keep the historical order.
+# [[reserved]] rows are retired numbers: number, the allowlist bit it held,
+# former (its ViSyscall name). Neither is ever reused; the kernel decodes the
+# number as an unknown syscall. Rows keep the historical order.
 
 [[syscall]]
 name = "Send"
@@ -42,18 +42,25 @@ unforgeable answer to "which cell called me?" available to a service.
 Opting in reserves that tail; see that module for the invariants.
 '''
 
-[[syscall]]
-name = "Call"
+[[reserved]]
 number = 2
-group = "IPC (0-9)"
-kernel = "ServiceLookup"
 bit = 4
+former = "Call"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Legacy alias of the raw name lookup (100); no caller.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
 
-[[syscall]]
-name = "Reply"
+[[reserved]]
 number = 3
-group = "IPC (0-9)"
 bit = 3
+former = "Reply"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Legacy reply: forced the served caller Ready without checking its state; no caller. Replies use IpcReply (257).
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
 
 [[syscall]]
 name = "TrySend"
@@ -103,13 +110,14 @@ number = 5
 group = "Process Management (10-49)"
 bit = 5
 
-[[syscall]]
-name = "Exec"
+[[reserved]]
 number = 6
-group = "Process Management (10-49)"
 bit = 35
+former = "Exec"
 comment = '''
-Deprecated/Legacy
+Retired (architecture remediation Phase 11, CP1 D4): Always answered NotSupported; no caller.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
 '''
 
 [[syscall]]
@@ -751,24 +759,24 @@ ABI: no args → returns (width as u32) << 32 | (height as u32).
 Falls back to (1280, 800) if GPU not yet initialized.
 '''
 
-[[syscall]]
-name = "NetTx"
+[[reserved]]
 number = 310
-group = "Network"
 bit = 27
-doc = '''
-Transmit one Ethernet frame through the kernel VirtIO NIC.
-ABI: a0 = frame_ptr, a1 = frame_len → 1 on success, 0 on failure.
+former = "NetTx"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Discarded the frame and reported failure; the net service's no-driver path is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
 '''
 
-[[syscall]]
-name = "NetRx"
+[[reserved]]
 number = 311
-group = "Network"
 bit = 28
-doc = '''
-Receive one pending Ethernet frame from the kernel VirtIO NIC.
-ABI: a0 = buf_ptr, a1 = buf_len → bytes written (0 if none ready).
+former = "NetRx"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Never returned a frame; the net service's no-driver path is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
 '''
 
 [[syscall]]
@@ -1025,20 +1033,14 @@ bit_note = '''
 WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
 '''
 
-[[syscall]]
-name = "AudioPlay"
+[[reserved]]
 number = 218
-group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
 bit = 47
-doc = '''
-Play raw PCM frames on the VirtIO sound device's output stream (blocking).
-PCM format is fixed: signed 16-bit LE, 2 channels, 44100 Hz (frame = 4 bytes).
-The kernel configures + starts the output stream on first use.
-ABI: a0 = pcm_ptr, a1 = pcm_len (bytes) → frames written (0 on no device/error).
-Allowlist-gated (bit 47). Requires `AudioPlay` in `declare_syscalls!`.
-'''
-bit_note = '''
-AudioPlay: VirtIO sound output (bit 47 — next free after TruncateCap 46).
+former = "AudioPlay"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Always failed (VirtIO sound output was never wired); its only caller, audio-demo, is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
 '''
 
 [[syscall]]
@@ -2137,17 +2139,3 @@ comment = '''
 Benchmark counters; borrows MemInfo's gate exactly (bit 56 and observe_memory).
 '''
 
-[[internal]]
-kernel = "Lend"
-
-[[internal]]
-kernel = "BorrowRead"
-
-[[internal]]
-kernel = "BorrowWrite"
-
-[[internal]]
-kernel = "Grant"
-
-[[internal]]
-kernel = "Map"

@@ -175,7 +175,6 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "input-test" -p input-test
     build_cells "window-policy-probe" -p window-policy-probe
     build_cells "viui-demo" -p viui-demo
-    build_cells "audio-demo" -p audio-demo
     build_cells "app-https-demo" -p app-https-demo
     build_cells "app-http-smoke" -p app-http-smoke
     build_cells "cfi-test" -p cfi-test
@@ -287,7 +286,7 @@ for cell in app-init cellbox platform service-vfs service-config service-net ser
             ai-test service-input bench bench-probe capacity-probe heavy-probe curl wget nc mqtt ping app-sys-tools \
             robot-demo robot-dashboard fb-console desktop ocel hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
-            window-policy-probe viui-demo audio-demo app-https-demo http-smoke cfi-test wx-test \
+            window-policy-probe viui-demo app-https-demo http-smoke cfi-test wx-test \
             vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 \
             recovery-authority recovery-worker recovery-client ls cat \
             echo ps kill shutdown free hotswap posix-shim-test tier2-smoke tier2-exploit tetris \
@@ -464,7 +463,6 @@ add_row "$(pwd)/models/tiny-llama-64.gguf" "/bin/ai-model.gguf"
 add_row "$REL/input-test"             "/bin/input-test"
 add_row "$REL/window-policy-probe"    "/bin/window-policy-probe"
 table_args+=("/bin/viui-demo=$REL/viui-demo")
-add_row "$REL/audio-demo"             "/bin/audio-demo"
 add_row "$REL/app-https-demo"         "/bin/https-demo"
 add_row "$REL/http-smoke"             "/bin/http-smoke"
 add_row "$REL/cfi-test"               "/bin/cfi-test"

@@ -34,7 +34,6 @@ api::declare_syscalls![
     Recv,
     TryRecv,
     RecvTimeout,
-    Reply,
     Log,
     MemInfo,
     Heartbeat,

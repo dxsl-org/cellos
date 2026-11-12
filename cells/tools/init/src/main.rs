@@ -34,7 +34,6 @@ api::declare_syscalls![
     IpcCurrent,
     IpcReply,
     RecvTimeout,
-    Reply,
     Log,
     Heartbeat,
     LookupService,

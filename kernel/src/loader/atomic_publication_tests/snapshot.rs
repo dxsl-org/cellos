@@ -15,7 +15,6 @@ pub(super) struct TaskSnapshot {
     generation: u64,
     state: crate::task::tcb::TaskState,
     priority: u8,
-    cluster: (u8, u64),
     allowlist: u64,
     protection: (u8, u32),
     caps: crate::task::cap::CapSet,
@@ -61,7 +60,6 @@ pub(super) fn snapshot() -> StateSnapshot {
                     generation: task.cell_generation,
                     state: task.state,
                     priority: task.priority,
-                    cluster: (task.cluster_mode, task.cluster_id),
                     allowlist: task.syscall_allowlist,
                     protection: (task.pku_key, task.pku_value),
                     caps: task.rights,
@@ -375,13 +373,6 @@ fn report_task_mismatches(
             expected.id,
             "priority",
             expected.priority != actual.priority,
-        );
-        report_task_field(
-            case,
-            stage,
-            expected.id,
-            "cluster",
-            expected.cluster != actual.cluster,
         );
         report_task_field(
             case,
