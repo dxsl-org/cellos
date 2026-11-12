@@ -107,25 +107,30 @@ fn cell_main() {
 
     ostd::io::println("[config] Config Service v0.4 (typed IPC, attested writes)");
 
-    let mut store = ConfigStore::new();
-    let mut buf = [0u8; IPC_BUF_SIZE];
-    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    let mut service = ConfigService {
+        store: ConfigStore::new(),
+        resp_buf: [0u8; IPC_BUF_SIZE],
+    };
+    ostd::service::serve(ostd::service::ServeConfig::with_heartbeat(), &mut service);
+}
 
-    loop {
-        // Attested receive: the kernel writes the sender's identity into the
-        // last `CALLER_IDENTITY_LEN` bytes of `buf` (Phase 01 CP1, Q right).
-        match ostd::syscall::sys_recv_attested(0, &mut buf) {
-            ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                let caller = CallerIdentity::from_recv_buf(&buf);
-                let request = api::ipc::decode::<ConfigRequest>(&buf).ok();
-                if let Some(reply) = handle(&mut store, request, caller.as_ref(), &mut resp_buf) {
-                    // Never park on a client that does not receive its reply.
-                    let _ = ostd::ipc::Incoming::current(sender).reply(reply);
-                }
-            }
-            _ => {
-                ostd::task::yield_now();
-            }
+#[cfg(target_os = "none")]
+struct ConfigService {
+    store: ConfigStore,
+    resp_buf: [u8; api::ipc::IPC_BUF_SIZE],
+}
+
+#[cfg(target_os = "none")]
+impl ostd::service::Handler for ConfigService {
+    fn on_request(&mut self, request: ostd::service::Request<'_>) {
+        let decoded = api::ipc::decode::<ConfigRequest>(request.payload()).ok();
+        if let Some(reply) = handle(
+            &mut self.store,
+            decoded,
+            Some(request.caller()),
+            &mut self.resp_buf,
+        ) {
+            let _ = request.reply(reply);
         }
     }
 }

@@ -6,6 +6,7 @@
 //! - Free functions [`lookup`] / [`register`] — thin wrappers for one-shot calls.
 //! - [`ServiceRef<const ID>`] — a caching handle with a typed [`ServiceRef::call`] method
 //!   for cells that talk to the same service repeatedly.
+//! - [`serve`] — the server side: the one receive loop every service runs.
 //!
 //! [`ServiceRef`] resolves the provider's **binding** (`{tid, cell_id, generation}`) from
 //! the kernel's registry rather than a bare tid. A call returns a [`CallOutcome`]: a reply,
@@ -21,6 +22,9 @@ use api::ipc::IPC_BUF_SIZE;
 use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 
 pub use api::syscall::service;
+
+pub mod serve;
+pub use serve::{keepalive, serve, Handler, Request, ServeConfig, Wait};
 
 /// Resolve the live provider **binding** of a well-known service
 /// (`LookupServiceBound`): which Cell incarnation serves it, not only where to

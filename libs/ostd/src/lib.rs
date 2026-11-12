@@ -140,7 +140,7 @@ pub mod dma;
 /// Ergonomic service client facades — `VfsClient`, `NetClient`, `InputClient`.
 pub mod clients;
 
-/// Cell runtime — `CellRuntime` builder, `app_entry!` / `service_entry!` macros.
+/// Cell runtime — `CellRuntime` builder and the `app_entry!` macro.
 pub mod runtime;
 
 /// JSON codec (`feature = "json"`) — re-export of `http_core::json`

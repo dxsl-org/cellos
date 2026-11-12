@@ -203,7 +203,7 @@ enum Park {
 /// This Cell's compiled syscall allowlist: the exact value the loader reads
 /// from `__ViCell_syscalls` at spawn, which every thread of the Cell inherits.
 ///
-/// `declare_syscalls!`, `app_entry!` and `service_entry!` export their
+/// `declare_syscalls!` and `app_entry!` export their
 /// allowlist static under this symbol; that strong definition overrides this
 /// weak default. A Cell that declares no allowlist is permit-all, which the
 /// default (`u64::MAX`) mirrors exactly as the loader does.

@@ -6,7 +6,7 @@
 //! optionally registers the cell as a named service before handing off to the
 //! event loop.  It is the recommended way to start a cell.
 //!
-//! [`app_entry!`] and [`service_entry!`] are declarative macros that generate
+//! [`app_entry!`] is a declarative macro that generates
 //! the `declare_manifest!`, `declare_syscalls!`, and `main()` boilerplate
 //! automatically from a capability declaration, so a minimal app is:
 //!
@@ -127,15 +127,6 @@ const _: () = {
         "MemInfo must never be granted implicitly by app_syscall_set"
     );
 };
-
-/// Like [`app_syscall_set`] but includes `WaitForEvent` in the base set for
-/// service cells that wake on kernel events (net RX, etc.).
-pub const fn service_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {
-    let app_bits = app_syscall_set(block_io, network, spawn);
-    // Add WaitForEvent to the base for services
-    let extra = SyscallSet::EMPTY.with(ViSyscall::WaitForEvent);
-    SyscallSet(app_bits | extra.0).bits()
-}
 
 // ── CellRuntime ───────────────────────────────────────────────────────────────
 
@@ -384,74 +375,6 @@ macro_rules! app_entry {
     // No caps
     (handler = $handler:expr $(,)?) => {
         $crate::app_entry!(
-            block_io = false,
-            network = false,
-            spawn = false,
-            handler = $handler
-        );
-    };
-}
-
-/// Ergonomic service cell entry point — like [`app_entry!`] but uses the service
-/// syscall profile (includes `WaitForEvent` in the base set).
-///
-/// # Forms
-///
-/// The macro accepts bare `handler`, a `network` or `block_io` shorthand, or
-/// the full `block_io`/`network`/`spawn` capability form.
-///
-/// # Example
-/// ```no_run
-/// use ostd::app::{AppContext, AppEvent};
-///
-/// fn my_handler(_context: &mut AppContext, _event: AppEvent) {}
-///
-/// ostd::service_entry!(network = true, handler = my_handler);
-/// ```
-#[macro_export]
-macro_rules! service_entry {
-    // Full explicit 3-cap form
-    (
-        block_io = $bio:literal,
-        network  = $net:literal,
-        spawn    = $spawn:literal,
-        handler  = $handler:expr $(,)?
-    ) => {
-        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
-
-        #[used]
-        #[link_section = "__ViCell_syscalls"]
-        #[export_name = "__vicell_syscall_allowlist"]
-        pub static VICELL_SYSCALLS: u64 = $crate::runtime::service_syscall_set($bio, $net, $spawn);
-
-        // The attribute belongs to the bare-metal target only: a hosted test
-        // build must get libtest's entry, not this one (see ostd::cell_main!).
-        #[cfg_attr(not(any(test, unix, windows, target_family = "wasm")), no_mangle)]
-        pub fn main() {
-            $crate::runtime::CellRuntime::new().run($handler);
-        }
-    };
-    // Shorthand — only network (most common for network services)
-    (network = $net:literal, handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(
-            block_io = false,
-            network = $net,
-            spawn = false,
-            handler = $handler
-        );
-    };
-    // Shorthand — only block_io (storage services)
-    (block_io = $bio:literal, handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(
-            block_io = $bio,
-            network = false,
-            spawn = false,
-            handler = $handler
-        );
-    };
-    // No extra caps
-    (handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(
             block_io = false,
             network = false,
             spawn = false,

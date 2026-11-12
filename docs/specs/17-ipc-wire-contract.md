@@ -365,7 +365,7 @@ the reason the value is safe against existing owners.
     mailbox interruption.
   - **Unchanged:** a lone `NET_RX` or `TIMER` wait behaves exactly as before, and
     `IpcSubmit`…`IpcReply`, `IPC_STATUS`, `WaitForEvent` and `events` are unchanged.
-  - **Allowlist symbol:** `declare_syscalls!` (and `ostd::app_entry!`/`service_entry!`) export the
+  - **Allowlist symbol:** `declare_syscalls!` (and `ostd::app_entry!`) export the
     Cell's allowlist static as `__vicell_syscall_allowlist`; the `__ViCell_syscalls` bytes are
     unchanged. The SDK reads it to use `IpcWait` when the Cell lacks bit 42, so it never issues a
     denied syscall.

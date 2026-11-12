@@ -1555,6 +1555,31 @@ pub fn sys_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
     SyscallResult::Ok(ret as usize)
 }
 
+/// [`sys_recv_attested`] that gives up after `timeout_ticks` scheduler ticks.
+///
+/// Expiry is `Err(TryAgain)`, never `Ok(0)`, so a timeout is never mistaken for
+/// a kernel-sent message (sender 0). `timeout_ticks` is clamped to
+/// `RECV_TIMEOUT_MAX_TICKS`; 0 waits without a deadline. The trailer rules of
+/// [`sys_recv_attested`] apply unchanged.
+pub fn sys_recv_attested_timeout(mask: usize, buf: &mut [u8], timeout_ticks: u64) -> SyscallResult {
+    // SAFETY: buf is a valid mutable slice for the whole call; the kernel writes
+    // the payload and then the trailer inside its bounds.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Recv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            api::caller_identity::recv_flags(true, timeout_ticks),
+        )
+    };
+    if ret >= 0 {
+        SyscallResult::Ok(ret as usize)
+    } else {
+        SyscallResult::Err(SyscallError::TryAgain)
+    }
+}
+
 /// Non-blocking receive: returns immediately with `Ok(0)` when no message is
 /// queued, instead of parking the task like [`sys_recv`].
 ///

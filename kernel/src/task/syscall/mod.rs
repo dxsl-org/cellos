@@ -1245,7 +1245,17 @@ fn handle_syscall_inner(
             buf_ptr,
             buf_len,
             deadline,
-        } => ipc::recv_timeout(caller_id, mask, buf_ptr, buf_len, deadline),
+            attest_caller,
+            timeout_is_error,
+        } => ipc::recv_timeout(
+            caller_id,
+            mask,
+            buf_ptr,
+            buf_len,
+            deadline,
+            attest_caller,
+            timeout_is_error,
+        ),
         Syscall::TryRecv {
             mask,
             buf_ptr,

@@ -134,8 +134,10 @@ require_in "$COMPLETION" "fn irq_record_carries_the_line_and_refuses_a_mixed_sou
 require_row WaitCompletion 242 42 "opcode 242 kept, decodes to the variant, allowlist bit 42 kept (shared)"
 require_in "$SYSCALL" '#[export_name = "__vicell_syscall_allowlist"]' \
     "declare_syscalls! exports the allowlist symbol"
-require_count "$OSTD_RUNTIME" '#[export_name = "__vicell_syscall_allowlist"]' 4 \
-    "app_entry!/service_entry! export the allowlist symbol"
+# Re-pinned 2026-11-13 (Phase 12 step 3, CP2): `service_entry!` had no user and
+# was deleted; services run `ostd::service::serve` under `declare_syscalls!`.
+require_count "$OSTD_RUNTIME" '#[export_name = "__vicell_syscall_allowlist"]' 3 \
+    "app_entry! exports the allowlist symbol"
 
 # ── libs/ostd: the SDK path choice (no probing) ───────────────────────────────
 require_in "$OSTD_LIB" "#![feature(linkage)]" "weak linkage enabled for the default"

@@ -41,6 +41,32 @@
 /// way to change any receiver's observable behaviour.
 pub const RECV_ATTEST_CALLER: usize = 1;
 
+/// `ViSyscall::Recv` a3 bits 8–31: a timeout in scheduler ticks (0 = none).
+///
+/// A non-zero timeout turns the receive into a timed one that keeps every other
+/// `Recv` rule, including the [`RECV_ATTEST_CALLER`] trailer. When the timeout
+/// expires the call returns the generic error sentinel, never sender 0, so a
+/// timeout cannot be mistaken for a kernel-sent message. Bits 1–7 are ignored.
+pub const RECV_TIMEOUT_SHIFT: u32 = 8;
+/// Largest timeout `Recv` a3 can carry (24 bits, about 46 hours at 10 ms).
+pub const RECV_TIMEOUT_MAX_TICKS: u32 = 0xFF_FFFF;
+
+/// Encode `Recv` a3: the attest flag plus a timeout clamped to
+/// [`RECV_TIMEOUT_MAX_TICKS`].
+pub const fn recv_flags(attest_caller: bool, timeout_ticks: u64) -> usize {
+    let ticks = if timeout_ticks > RECV_TIMEOUT_MAX_TICKS as u64 {
+        RECV_TIMEOUT_MAX_TICKS as usize
+    } else {
+        timeout_ticks as usize
+    };
+    (ticks << RECV_TIMEOUT_SHIFT) | if attest_caller { RECV_ATTEST_CALLER } else { 0 }
+}
+
+/// Timeout ticks encoded in `Recv` a3 (0 = untimed).
+pub const fn recv_timeout_ticks(flags: usize) -> u64 {
+    ((flags >> RECV_TIMEOUT_SHIFT) & RECV_TIMEOUT_MAX_TICKS as usize) as u64
+}
+
 /// Caller identity flag indicating the calling Cell has declared VfsMutate authority.
 pub const CALLER_FLAG_VFS_MUTATE: u32 = 1 << 0;
 

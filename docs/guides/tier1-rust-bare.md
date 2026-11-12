@@ -165,7 +165,7 @@ five things that make that work — the same recipe applied five times in 2026-0
 
 1. **Gate `no_std` / `no_main` / entry / heap by target.** `#![cfg_attr(target_os = "none", …)]`
    for the first two, and note every `ostd` macro that emits `#[no_mangle]` (`cell_main!`,
-   `run_app!`, `app_entry!`, `service_entry!`) already gates it. Ungated, the C runtime calls
+   `run_app!`, `app_entry!`) already gates it. Ungated, the C runtime calls
    the cell's entry in the test binary and the harness runs your app and hangs before it lists
    a test.
 2. **A `staticlib` dependency needs `std` on the host** — gate its `no_std` by target too.

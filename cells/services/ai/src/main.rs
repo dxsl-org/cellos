@@ -3,7 +3,8 @@
 //! One event loop serves every caller:
 //!
 //! * `Describe` answers from the resident engine.
-//! * `InferSubmit` seats a session in a bounded table (owner = the sender tid that asked for it).
+//! * `InferSubmit` seats a session in a bounded table, owned by the kernel-attested Cell
+//!   incarnation that asked for it; an unattested caller is never served.
 //! * `InferStreamPoll` advances *its own* session by a bounded number of model steps and returns
 //!   the tokens produced since the previous poll, so one request can never monopolise the loop and
 //!   several callers make progress concurrently.
@@ -32,8 +33,8 @@ use ai_proto::{
     MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
 };
 use alloc::vec::Vec;
+use api::caller_identity::CallerIdentity;
 use ostd::io::{print, print_usize, println};
-use ostd::syscall::SyscallResult;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![
@@ -41,6 +42,7 @@ api::declare_syscalls![
     SendGather,
     Recv,
     TryRecv,
+    Heartbeat,
     Log,
     LookupServiceBound,
     GetTime,
@@ -99,8 +101,24 @@ const SESSION_IDLE_TICKS: u64 = 3_000;
 /// One live session and the Cell that owns it.
 struct Session {
     request_id: u32,
-    owner: usize,
+    owner: Owner,
     last_activity: u64,
+}
+
+/// A session's owner: one incarnation of a Cell, as the kernel attests it. Its threads share it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Owner {
+    cell_id: u64,
+    generation: u64,
+}
+
+impl Owner {
+    fn of(caller: &CallerIdentity) -> Self {
+        Self {
+            cell_id: caller.cell_id,
+            generation: caller.generation,
+        }
+    }
 }
 
 /// The service state.
@@ -115,21 +133,36 @@ ostd::cell_main!(cell_main);
 
 fn cell_main() {
     init_custom_heap();
-    let mut service = AiService::load();
+    let service = AiService::load();
 
-    let mut buf = [0u8; ai_proto::AI_IPC_BUF_SIZE];
     let mut reply = [0u8; ai_proto::AI_IPC_BUF_SIZE];
+    ostd::service::serve(
+        ostd::service::ServeConfig::with_heartbeat(),
+        &mut Ai {
+            service,
+            reply: &mut reply,
+        },
+    );
+}
 
-    loop {
-        match ostd::syscall::sys_recv(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender > 0 => {
-                service.reap_idle_sessions();
-                if let Some(encoded) = service.handle(sender, &buf, &mut reply) {
-                    let _ = ostd::ipc::reply_to(sender, encoded);
-                }
-            }
-            _ => ostd::task::yield_now(),
+struct Ai<'r> {
+    service: AiService,
+    reply: &'r mut [u8; ai_proto::AI_IPC_BUF_SIZE],
+}
+
+impl ostd::service::Handler for Ai<'_> {
+    fn on_request(&mut self, request: ostd::service::Request<'_>) {
+        self.service.reap_idle_sessions();
+        let owner = Owner::of(request.caller());
+        if let Some(encoded) = self.service.handle(owner, request.payload(), self.reply) {
+            let _ = request.reply(encoded);
         }
+    }
+
+    /// Abandoned sessions are reaped on a tick too, not only when a request arrives.
+    fn on_idle(&mut self) -> ostd::service::Wait {
+        self.service.reap_idle_sessions();
+        ostd::service::Wait::Ticks(SESSION_IDLE_TICKS)
     }
 }
 
@@ -248,7 +281,7 @@ impl AiService {
     }
 
     /// Answer one request. `None` when the request must be ignored (nothing can be replied to it).
-    fn handle<'r>(&mut self, sender: usize, buf: &[u8], reply: &'r mut [u8]) -> Option<&'r [u8]> {
+    fn handle<'r>(&mut self, owner: Owner, buf: &[u8], reply: &'r mut [u8]) -> Option<&'r [u8]> {
         let request = match ai_proto::decode::<AiRequest<'_>>(buf) {
             Ok(request) => request,
             Err(_) => {
@@ -291,7 +324,7 @@ impl AiService {
                 };
                 match engine.submit(submit.prompt, params) {
                     Ok(request_id) => {
-                        self.seat(sender, request_id);
+                        self.seat(owner, request_id);
                         ai_proto::encode(
                             &AiResponse::Accepted {
                                 request_id,
@@ -311,9 +344,9 @@ impl AiService {
             AiRequest::InferStreamPoll {
                 request_id,
                 max_tokens,
-            } => self.poll(sender, request_id, max_tokens, reply),
+            } => self.poll(owner, request_id, max_tokens, reply),
             AiRequest::InferCancel { request_id } => {
-                if !self.owned_by(sender, request_id) {
+                if !self.owned_by(owner, request_id) {
                     return Some(encode_failure(reply, request_id, AiError::UnknownRequest));
                 }
                 if let Some(engine) = self.engine.as_mut() {
@@ -370,12 +403,12 @@ impl AiService {
     /// Advance a session and report what it produced.
     fn poll<'r>(
         &mut self,
-        sender: usize,
+        owner: Owner,
         request_id: u32,
         max_tokens: u8,
         reply: &'r mut [u8],
     ) -> Option<&'r [u8]> {
-        if !self.owned_by(sender, request_id) {
+        if !self.owned_by(owner, request_id) {
             return Some(encode_failure(reply, request_id, AiError::UnknownRequest));
         }
         let unavailable = self.unavailable;
@@ -426,7 +459,7 @@ impl AiService {
     }
 
     /// Take a session slot for `owner`.
-    fn seat(&mut self, owner: usize, request_id: u32) {
+    fn seat(&mut self, owner: Owner, request_id: u32) {
         let now = ostd::syscall::sys_get_scheduler_ticks().unwrap_or(0);
         if let Some(slot) = self.sessions.iter_mut().find(|slot| slot.is_none()) {
             *slot = Some(Session {
@@ -438,7 +471,7 @@ impl AiService {
     }
 
     /// Whether `request_id` is seated and belongs to `owner`.
-    fn owned_by(&self, owner: usize, request_id: u32) -> bool {
+    fn owned_by(&self, owner: Owner, request_id: u32) -> bool {
         self.sessions
             .iter()
             .flatten()

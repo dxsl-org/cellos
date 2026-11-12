@@ -11,7 +11,7 @@
 > `std` and lets libtest own the entry. An ungated `#[no_mangle] pub fn main`
 > hands the C runtime the cell's own entry instead, so the harness runs the app
 > and hangs before it lists a single test — `ostd`'s entry macros (`cell_main!`,
-> `run_app!`, `app_entry!`, `service_entry!`) already gate their `#[no_mangle]`
+> `run_app!`, `app_entry!`) already gate their `#[no_mangle]`
 > on the target for the same reason. Everything the image needs for the guest is
 > unchanged: a cell's `.text` and `.rodata` are byte-identical under both forms.
 > The rest of the recipe for running a cell's `#[test]`s on the host is in

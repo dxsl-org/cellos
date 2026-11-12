@@ -2447,3 +2447,55 @@ fn a_cell_posts_into_a_bounded_share_of_a_mailbox() {
         assert_eq!(crate::task::ipc_post_nonblock(0, TARGET, b"k"), Ok(()));
     });
 }
+
+#[test]
+fn recv_timeout_bits_select_a_timed_receive_that_keeps_attestation() {
+    use api::caller_identity::{recv_flags, RECV_ATTEST_CALLER};
+    let recv = |a3: usize| map_syscall(ViSyscall::Recv as usize, 7, 0x4000, 4096, a3);
+    // Untimed: the flag word every pre-existing caller passes.
+    assert!(matches!(
+        recv(0),
+        Some(Syscall::Recv {
+            attest_caller: false,
+            ..
+        })
+    ));
+    assert!(matches!(
+        recv(RECV_ATTEST_CALLER),
+        Some(Syscall::Recv {
+            attest_caller: true,
+            ..
+        })
+    ));
+    // Bits 1-7 stay ignored.
+    assert!(matches!(
+        recv(0xFE),
+        Some(Syscall::Recv {
+            attest_caller: false,
+            ..
+        })
+    ));
+    let before = crate::task::system_ticks() as u64;
+    match recv(recv_flags(true, 50)) {
+        Some(Syscall::RecvTimeout {
+            mask: 7,
+            buf_len: 4096,
+            deadline,
+            attest_caller: true,
+            timeout_is_error: true,
+            ..
+        }) => {
+            assert!(deadline >= before + 50 && deadline <= crate::task::system_ticks() as u64 + 50)
+        }
+        other => panic!("timed attested Recv decoded as {other:?}"),
+    }
+    // `RecvTimeout` itself keeps its historical shape: no trailer, Ok(0) on expiry.
+    assert!(matches!(
+        map_syscall(ViSyscall::RecvTimeout as usize, 0, 0x4000, 4096, 50),
+        Some(Syscall::RecvTimeout {
+            attest_caller: false,
+            timeout_is_error: false,
+            ..
+        })
+    ));
+}

@@ -861,7 +861,7 @@ async fn run() {
 ```
 
 **Pattern summary**:
-- Use `app_entry!` or `service_entry!` macros to declare entry point
+- Use `app_entry!` for apps and `ostd::service::serve` for services
 - Access services via typed client facades (`VfsClient`, `NetClient`, `InputClient`)
 - `CellRuntime` handles manifest generation, permission sets, lifecycle
 - Apps declare minimal syscall set; kernel enforces via allowlist

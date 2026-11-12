@@ -701,11 +701,21 @@ pub(super) fn recv_timeout(
     buf_ptr: usize,
     buf_len: usize,
     deadline: u64,
+    attest_caller: bool,
+    timeout_is_error: bool,
 ) -> SyscallResult {
+    // Trailer rules as in `recv`: written after the payload and after the
+    // scheduler lock is dropped, at each delivery point; never on expiry.
+    let attest = |sender_tid: usize| {
+        if attest_caller {
+            write_caller_identity(caller_id, buf_ptr, buf_len, sender_tid);
+        }
+    };
     // Queued death records first, exactly as the plain `Recv` arm delivers
     // them: a supervised loop that polls with a deadline (a supervisor with
     // backoff timers) must still see its children exit.
     if let Some(dead_tid) = take_queued_death(caller_id, mask, buf_ptr, buf_len)? {
+        attest(dead_tid);
         return Ok(dead_tid);
     }
     let mut vfs_context_drop = None;
@@ -834,8 +844,12 @@ pub(super) fn recv_timeout(
                                 }
                                 *sender_tid
                             }
+                            ResumeSnapshot::Wake { sender_tid: 0 } if timeout_is_error => {
+                                return Err(SyscallError::TryAgain);
+                            }
                             ResumeSnapshot::Wake { sender_tid } => *sender_tid,
                         };
+                        let delivered = !matches!(snap, ResumeSnapshot::Wake { .. });
                         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                             let mut held = None;
                             if let Some(task) = sched.tasks.get_mut(&caller_id) {
@@ -872,9 +886,15 @@ pub(super) fn recv_timeout(
                                 );
                             }
                         }
+                        if delivered {
+                            attest(sender);
+                        }
                         return Ok(sender);
                     }
-                    Ok(id) => return Ok(id),
+                    Ok(id) => {
+                        attest(id);
+                        return Ok(id);
+                    }
                     Err(_) => return Err(SyscallError::InvalidCommand),
                 }
             }
@@ -913,6 +933,7 @@ pub(super) fn recv_timeout(
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
         }
     }
+    attest(sender_tid);
     Ok(sender_tid)
 }
 

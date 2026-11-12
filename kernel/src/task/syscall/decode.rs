@@ -73,6 +73,12 @@ pub enum Syscall {
         buf_len: usize,
         /// Deadline in kernel monotonic ticks from boot.  0 = non-blocking.
         deadline: u64,
+        /// Write the caller-identity trailer (a timed `Recv` with
+        /// `RECV_ATTEST_CALLER`); false for `RecvTimeout` itself.
+        attest_caller: bool,
+        /// A timed `Recv` reports expiry as an error; `RecvTimeout` keeps its
+        /// historical `Ok(0)`.
+        timeout_is_error: bool,
     },
     /// 3: SetTimer (Wake up after ticks)
     SetTimer {
@@ -865,11 +871,21 @@ pub(super) fn map_syscall(
             msg_ptr: a1,
             msg_len: a2,
         },
-        ViSyscall::Recv => Syscall::Recv {
-            mask: a0,
-            buf_ptr: a1,
-            buf_len: a2,
-            attest_caller: a3 & api::caller_identity::RECV_ATTEST_CALLER != 0,
+        ViSyscall::Recv => match api::caller_identity::recv_timeout_ticks(a3) {
+            0 => Syscall::Recv {
+                mask: a0,
+                buf_ptr: a1,
+                buf_len: a2,
+                attest_caller: a3 & api::caller_identity::RECV_ATTEST_CALLER != 0,
+            },
+            ticks => Syscall::RecvTimeout {
+                mask: a0,
+                buf_ptr: a1,
+                buf_len: a2,
+                deadline: (crate::task::system_ticks() as u64).wrapping_add(ticks),
+                attest_caller: a3 & api::caller_identity::RECV_ATTEST_CALLER != 0,
+                timeout_is_error: true,
+            },
         },
         ViSyscall::TryRecv => Syscall::TryRecv {
             mask: a0,
@@ -892,6 +908,8 @@ pub(super) fn map_syscall(
             buf_ptr: a1,
             buf_len: a2,
             deadline: (crate::task::system_ticks() as u64).wrapping_add(a3 as u64),
+            attest_caller: false,
+            timeout_is_error: false,
         },
         ViSyscall::CellSessionV1 => Syscall::CellSessionV1 {
             request_ptr: a0,

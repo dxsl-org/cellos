@@ -40,6 +40,11 @@ kernel write a [`crate::caller_identity::CallerIdentity`] into the LAST
 `CALLER_IDENTITY_LEN` bytes of `buf`, after the payload — the only
 unforgeable answer to "which cell called me?" available to a service.
 Opting in reserves that tail; see that module for the invariants.
+
+a3 bits 8–31 ([`crate::caller_identity::RECV_TIMEOUT_SHIFT`]) carry a
+timeout in scheduler ticks; 0 keeps the untimed receive. A timed receive
+keeps the trailer rule and returns the generic error sentinel on expiry,
+never sender 0. Bits 1–7 are ignored. (Phase 12, CP1 W2.)
 '''
 
 [[reserved]]
