@@ -6,10 +6,10 @@
 //!
 //! ## Usage
 //! ```no_run
-//! use ostd::service::{lookup, service};
+//! use ostd::service::{provider_tid, service};
 //! use ostd::tls::{tls_close, tls_connect, tls_read, tls_write};
 //!
-//! let net = lookup(service::NET).expect("net service not ready");
+//! let net = provider_tid(service::NET).expect("net service not ready");
 //! let cap = tls_connect(net, [93, 184, 216, 34], 443, "example.com");
 //! if cap == 0 { /* handle error */ }
 //!

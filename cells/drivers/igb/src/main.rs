@@ -238,7 +238,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     RecvTimeout,
     // PCIe device path: the exact-identity query (shares allowlist bit 50 with

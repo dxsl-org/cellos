@@ -17,9 +17,10 @@ use api::services::hostile_backend_recovery::{encode_kill_request, KILL_STATUS_O
 use api::syscall::service;
 use cellos_fs::crc32::crc32c;
 use ostd::io::println;
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_heartbeat, sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_set_timer,
-    sys_spawn_pinned, sys_yield, SyscallResult,
+    sys_heartbeat, sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned,
+    sys_yield, SyscallResult,
 };
 const CHECKPOINT_PATH: &str = "/srv/checkpoint.log";
 const TOTAL_OPS: u32 = 1000;
@@ -86,13 +87,13 @@ pub fn run() {
     println("[native-stateful] START: 1000-op stateful workload");
     sys_heartbeat(0);
     // 1. Service Discovery
-    let Some(mut demo_tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
+    let Some(mut demo_tid) = provider_tid(service::HOTSWAP_DEMO) else {
         fail("HOTSWAP_DEMO service is not registered");
     };
-    let Some(vfs_tid) = sys_lookup_service(service::VFS) else {
+    let Some(vfs_tid) = provider_tid(service::VFS) else {
         fail("VFS service is not registered");
     };
-    let Some(supervisor_tid) = sys_lookup_service(service::SUPERVISOR) else {
+    let Some(supervisor_tid) = provider_tid(service::SUPERVISOR) else {
         fail("SUPERVISOR service is not registered");
     };
 
@@ -350,7 +351,7 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
     let mut sent = false;
     for _ in 0..CUTOVER_WINDOW_TICKS {
         sys_heartbeat(0);
-        if sys_lookup_service(service::HOTSWAP_DEMO).is_none()
+        if provider_tid(service::HOTSWAP_DEMO).is_none()
             && matches!(sys_send(old_tid, &inc), SyscallResult::Ok(_))
         {
             sent = true;
@@ -362,7 +363,7 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
     if !sent {
         for _ in 0..WAIT_TICKS {
             sys_heartbeat(0);
-            if let Some(new_tid) = sys_lookup_service(service::HOTSWAP_DEMO) {
+            if let Some(new_tid) = provider_tid(service::HOTSWAP_DEMO) {
                 if new_tid != old_tid {
                     let _ = sys_send(new_tid, &inc);
                     break;
@@ -398,7 +399,7 @@ fn trigger_hotswap(supervisor_tid: usize, service_name: &str, elf_path: &str) ->
 fn wait_for_replacement_demo(old_tid: usize, max_ticks: usize) -> Option<usize> {
     for _ in 0..max_ticks {
         sys_heartbeat(0);
-        if let Some(new_tid) = sys_lookup_service(service::HOTSWAP_DEMO) {
+        if let Some(new_tid) = provider_tid(service::HOTSWAP_DEMO) {
             if new_tid != old_tid {
                 return Some(new_tid);
             }
@@ -411,7 +412,7 @@ fn wait_for_replacement_demo(old_tid: usize, max_ticks: usize) -> Option<usize> 
 fn wait_for_service_restart(service_id: u16, old_tid: usize, max_ticks: usize) -> Option<usize> {
     for _ in 0..max_ticks {
         sys_heartbeat(0);
-        if let Some(new_tid) = sys_lookup_service(service_id) {
+        if let Some(new_tid) = provider_tid(service_id) {
             if new_tid != old_tid {
                 return Some(new_tid);
             }

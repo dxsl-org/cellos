@@ -4,7 +4,8 @@
 extern crate ostd;
 
 use api::syscall::service;
-use ostd::syscall::{self, sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{self, sys_recv_timeout, sys_send, SyscallResult};
 
 ostd::cell_main!(cell_main);
 
@@ -43,7 +44,7 @@ fn cell_main() {
         Err(message) => exit_with_message(output.stderr(), message),
     };
 
-    let Some(supervisor_tid) = sys_lookup_service(service::SUPERVISOR) else {
+    let Some(supervisor_tid) = provider_tid(service::SUPERVISOR) else {
         exit_with_message(output.stderr(), "hotswap: supervisor unavailable");
     };
 

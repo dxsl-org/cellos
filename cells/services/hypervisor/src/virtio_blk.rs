@@ -183,7 +183,7 @@ fn ensure_persistent_connected(backend: &mut Backend) -> bool {
     else {
         return true;
     };
-    let Some(current_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) else {
+    let Some(current_tid) = ostd::service::provider_tid(api::syscall::service::VFS) else {
         *vfs_tid = 0;
         return false;
     };

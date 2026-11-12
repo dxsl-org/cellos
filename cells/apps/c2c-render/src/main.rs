@@ -27,7 +27,7 @@ api::declare_syscalls![
     Log,
     Send,
     Recv,
-    LookupService,
+    LookupServiceBound,
     IpcSubmit,
     IpcTake,
     IpcWait,
@@ -934,7 +934,7 @@ fn verify_size(expected: u64, result: Result<VfsResponse<'_>, IpcError>) -> Resu
 /// so `path` must lie at or below the cwd. A Cell launched without that grant
 /// still names the path.
 fn save_ppm(path: &str, config: RenderConfig, pixels: &[u8]) -> Result<(), String> {
-    let tid = ostd::service::lookup(ostd::service::service::VFS)
+    let tid = ostd::service::provider_tid(ostd::service::service::VFS)
         .ok_or_else(|| String::from("VFS service unavailable; image not saved"))?;
     let mut vfs = Vfs {
         tid,

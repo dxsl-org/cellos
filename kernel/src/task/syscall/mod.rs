@@ -1315,7 +1315,6 @@ fn handle_syscall_inner(
             tid,
             flags,
         } => authority::register_service(caller_id, service_id, tid, flags),
-        Syscall::LookupService { service_id } => authority::lookup_service(service_id),
         Syscall::LookupServiceBound {
             service_id,
             out_ptr,

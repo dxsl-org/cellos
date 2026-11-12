@@ -3,7 +3,8 @@
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ed25519_compact::KeyPair;
-use ostd::syscall::{sys_get_time_ms, sys_lookup_service, sys_yield};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_get_time_ms, sys_yield};
 
 use crate::session::{SessionPhase, SshSession};
 use crate::{authorized_keys, kex, log, LOGIN_GRACE_MS};
@@ -51,7 +52,7 @@ struct Client {
 
 pub fn run(host_key: KeyPair) -> ! {
     let tid = loop {
-        if let Some(tid) = sys_lookup_service(service::NET) {
+        if let Some(tid) = provider_tid(service::NET) {
             break tid;
         }
         sys_yield();

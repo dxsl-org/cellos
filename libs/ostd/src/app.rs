@@ -329,7 +329,7 @@ impl AppContext {
 
     /// Resolve the live provider tid of a well-known service.
     pub fn lookup_service(&self, service_id: u16) -> Option<usize> {
-        syscall::sys_lookup_service(service_id)
+        crate::service::provider_tid(service_id)
     }
 
     /// Register this cell as the keyboard/mouse focus recipient.

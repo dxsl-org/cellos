@@ -18,7 +18,7 @@ pub mod fake {
     thread_local! {
         pub static SENT: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
         pub static NOW_MS: Cell<u64> = const { Cell::new(1_000) };
-        /// Live service registry `(service, tid)` seen by `sys_lookup_service`.
+        /// Live service registry `(service, tid)` seen by `provider_tid`.
         pub static SERVICES: RefCell<Vec<(u16, usize)>> = const { RefCell::new(Vec::new()) };
         /// The current delivered-request token (`sys_ipc_current`); nonzero lets a poll defer.
         pub static IPC_TOKEN: Cell<isize> = const { Cell::new(0) };
@@ -42,7 +42,7 @@ pub mod fake {
         SENT.with(|s| s.borrow_mut().push(bytes.to_vec()));
         ostd::syscall::SyscallResult::Ok(0)
     }
-    pub fn sys_lookup_service(service: u16) -> Option<usize> {
+    pub fn provider_tid(service: u16) -> Option<usize> {
         SERVICES.with(|s| s.borrow().iter().find(|e| e.0 == service).map(|e| e.1))
     }
     pub fn sys_lookup_service_bound(_service: u16, _buf: &mut [u8]) -> Option<ServiceBinding> {

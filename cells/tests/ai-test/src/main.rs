@@ -34,7 +34,7 @@ use ostd::io::{print, print_usize, println};
 use ostd::syscall::sys_exit;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, TryRecv, Log, LookupService, GetTime, Yield];
+api::declare_syscalls![Send, Recv, TryRecv, Log, LookupServiceBound, GetTime, Yield];
 
 ostd::declare_custom_heap!(2 * 1024 * 1024);
 

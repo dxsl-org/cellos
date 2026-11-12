@@ -58,7 +58,7 @@ pub fn run(
     )>,
     launcher: Option<(AppSession, u32, u32)>,
 ) -> RunOutcome {
-    let net_tid = ostd::syscall::sys_lookup_service(api::syscall::service::NET).unwrap_or(0);
+    let net_tid = ostd::service::provider_tid(api::syscall::service::NET).unwrap_or(0);
     let mut blk = BlkDisk::new(disk_file, None);
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid, None);
@@ -69,7 +69,7 @@ pub fn run(
             Some(session),
         ),
         None => {
-            let comp_tid = ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
+            let comp_tid = ostd::service::provider_tid(api::syscall::service::COMPOSITOR)
                 .unwrap_or(0);
             let (width, height) = ostd::syscall::sys_get_resolution();
             let gpu = GpuDev::new(
@@ -295,7 +295,7 @@ fn serve_host(
                 push_console_event(input, event);
             }
             gpu.reconnect_compositor(
-                ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR)
+                ostd::service::provider_tid(api::syscall::service::COMPOSITOR)
                     .unwrap_or(0),
             );
             false

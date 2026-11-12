@@ -3,7 +3,8 @@ use api::syscall::service;
 use ostd::executor::yield_now;
 use ostd::input::{InputEvent, KeyState, KeySym};
 use ostd::prelude::*;
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_timeout, SyscallResult};
 
 pub struct AsyncStdin;
 
@@ -39,8 +40,8 @@ impl AsyncStdin {
             // poll_events (sys_try_recv) never places shell in Recv — input
             // service's sys_try_send always drops when shell is not in Recv
             // state (G18 fix side-effect resolved here).
-            let input_tid = sys_lookup_service(service::INPUT);
-            let comp_tid = sys_lookup_service(service::COMPOSITOR);
+            let input_tid = provider_tid(service::INPUT);
+            let comp_tid = provider_tid(service::COMPOSITOR);
             if input_tid.is_some() || comp_tid.is_some() {
                 let mut frame = [0u8; 65];
                 match sys_recv_timeout(0, &mut frame, 2) {

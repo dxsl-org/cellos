@@ -183,8 +183,8 @@ impl Operation {
             Err(Status::NotFound) => {}
             other => return other,
         }
-        let vfs = ostd::syscall::sys_lookup_service(api::syscall::service::VFS)
-            .ok_or(Status::NotFound)?;
+        let vfs =
+            ostd::service::provider_tid(api::syscall::service::VFS).ok_or(Status::NotFound)?;
         let (grant, len) =
             ostd::fs::read_full_via_grant(path, vfs).map_err(|_| Status::NotFound)?;
         let prepared = self.prepare_child_elf(path, grant, len, context_len);

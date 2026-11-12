@@ -3,7 +3,8 @@
 
 use api::syscall::service;
 use ostd::display::ViSurface;
-use ostd::syscall::{sys_get_time, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_get_time;
 use ostd::typography::{FontFace, TextFonts};
 
 use crate::apps::AppRegistry;
@@ -103,9 +104,9 @@ impl TaskbarState {
     }
 
     pub fn update_daemons(&mut self) {
-        self.net_online = sys_lookup_service(service::NET).is_some();
-        self.vfs_online = sys_lookup_service(service::VFS).is_some();
-        self.ai_online = sys_lookup_service(15 /* AI */).is_some();
+        self.net_online = provider_tid(service::NET).is_some();
+        self.vfs_online = provider_tid(service::VFS).is_some();
+        self.ai_online = provider_tid(15 /* AI */).is_some();
 
         // Calculate time from monotonic ticks:
         let ticks = sys_get_time();

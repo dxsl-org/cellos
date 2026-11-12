@@ -25,7 +25,7 @@ api::declare_syscalls![
     SendGather,
     Yield,
     Exit,
-    LookupService,
+    LookupServiceBound,
     OpenCap,
     ReadCap,
     CloseCap,

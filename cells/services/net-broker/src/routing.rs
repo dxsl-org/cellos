@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use api::syscall::service;
+use ostd::service::provider_tid;
 /// RemoteServiceProxy — broker-side routing table + cluster-RPC dispatch.
 ///
 /// ## Protocol (matches libs/ostd/src/cluster.rs byte layout)
@@ -31,7 +32,6 @@ use api::syscall::service;
 ///
 /// P06 ships the data structures and LookupRemote dispatch; P08 wires gossip
 /// announcements into insert_route / remove_routes_for_peer.
-use ostd::syscall::sys_lookup_service;
 
 // ── Opcodes ────────────────────────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ impl RemoteServiceProxy {
     pub fn new() -> Self {
         // Init registers NET_BROKER before the dispatch loop starts; this lookup
         // returns our own TID (the broker is the only provider of this service).
-        let self_tid = sys_lookup_service(service::NET_BROKER).unwrap_or(0);
+        let self_tid = provider_tid(service::NET_BROKER).unwrap_or(0);
         Self {
             table: RoutingTable::new(),
             self_tid,

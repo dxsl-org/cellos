@@ -19,8 +19,9 @@
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
+use ostd::service::provider_tid;
 use ostd::session::{zeroize, Scrub};
-use ostd::syscall::{sys_lookup_service, sys_try_send};
+use ostd::syscall::sys_try_send;
 
 use crate::focus_routes::{FocusRoutes, Requester};
 
@@ -178,7 +179,7 @@ impl Dispatcher {
     /// on every scheduler turn and the outer watchdog heartbeat stays live.
     pub fn dispatch_mouse(&mut self, event: &InputEvent) {
         if self.mouse_len == 0 {
-            self.compositor_tid = match sys_lookup_service(service::COMPOSITOR) {
+            self.compositor_tid = match provider_tid(service::COMPOSITOR) {
                 Some(tid) => tid,
                 None => return, // no graphical consumer yet
             };
@@ -204,7 +205,7 @@ impl Dispatcher {
         if self.mouse_len == 0 {
             return true;
         }
-        self.compositor_tid = match sys_lookup_service(service::COMPOSITOR) {
+        self.compositor_tid = match provider_tid(service::COMPOSITOR) {
             Some(tid) => tid,
             None => {
                 // A dead compositor has no windows to deliver these events to.

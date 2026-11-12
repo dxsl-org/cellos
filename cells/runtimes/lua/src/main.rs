@@ -31,7 +31,7 @@ api::declare_syscalls![
     RecvTimeout,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     StateRestore,
     VfsMutate,

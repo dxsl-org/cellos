@@ -45,7 +45,6 @@
     {"id": 203, "api": "RecvScatter", "api_bit": 31, "kernel": "RecvScatter", "kernel_vi": "RecvScatter", "typed_oom": false, "gate_bits": [31], "empty_allowlist_denies": true},
     {"id": 204, "api": "NotifyOnExit", "api_bit": null, "kernel": "NotifyOnExit", "kernel_vi": "NotifyOnExit", "typed_oom": false, "gate_bits": [], "empty_allowlist_denies": false},
     {"id": 205, "api": "RegisterService", "api_bit": null, "kernel": "RegisterService", "kernel_vi": "RegisterService", "typed_oom": false, "gate_bits": [], "empty_allowlist_denies": false},
-    {"id": 206, "api": "LookupService", "api_bit": 37, "kernel": "LookupService", "kernel_vi": "LookupService", "typed_oom": false, "gate_bits": [37], "empty_allowlist_denies": true},
     {"id": 207, "api": "Heartbeat", "api_bit": 38, "kernel": "Heartbeat", "kernel_vi": "Heartbeat", "typed_oom": false, "gate_bits": [38], "empty_allowlist_denies": true},
     {"id": 208, "api": "GrantAlloc", "api_bit": 39, "kernel": "GrantAlloc", "kernel_vi": "GrantAlloc", "typed_oom": false, "gate_bits": [39], "empty_allowlist_denies": true},
     {"id": 209, "api": "GrantShare", "api_bit": 39, "kernel": "GrantShare", "kernel_vi": "GrantShare", "typed_oom": false, "gate_bits": [39], "empty_allowlist_denies": true},

@@ -2,7 +2,8 @@
 
 use api::caller_identity::CallerIdentity;
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_recv_attested, sys_try_send, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_attested, sys_try_send, SyscallResult};
 use service_silo::protocol::{PeerIdentity, ProtocolState};
 use types::silo::DEVELOPMENT_SILO_FRAME_LEN;
 
@@ -26,7 +27,7 @@ pub fn run(mut guest: GuestSession) -> ! {
         let response = state.process(
             &mut guest,
             sender,
-            sys_lookup_service(service::KMS),
+            provider_tid(service::KMS),
             peer,
             &buffer[..DEVELOPMENT_SILO_FRAME_LEN],
         );

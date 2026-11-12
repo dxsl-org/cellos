@@ -177,7 +177,7 @@ pub(crate) fn gate(init_tid: usize) -> Endpoint {
     let registered = matches!(
         ostd::syscall::sys_register_service(api::syscall::service::MACHINE_PIN, init_tid, 0),
         ostd::syscall::SyscallResult::Ok(0)
-    ) && ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN)
+    ) && ostd::service::provider_tid(api::syscall::service::MACHINE_PIN)
         == Some(init_tid);
     let current = if registered {
         ostd::syscall::sys_query_machine_facts().ok()

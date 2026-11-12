@@ -14,7 +14,8 @@ use api::dir_handles::ViDirHandle;
 use api::ipc::{net_ready, NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::ipc::{self, IpcSubmitError};
-use ostd::syscall::{sys_get_scheduler_ticks, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_get_scheduler_ticks;
 
 const STATIC_FILE_MAX_BYTES: usize = 64 * 1024;
 const MAX_CONNECTIONS: usize = 257; // 256 held clients and one fast probe.
@@ -849,7 +850,7 @@ impl Reactor<'_> {
                 if self.backend_count() >= MAX_BACKENDS {
                     return false;
                 }
-                if let Some(ai) = sys_lookup_service(api::syscall::service::AI) {
+                if let Some(ai) = provider_tid(api::syscall::service::AI) {
                     if infer.peer.is_some_and(|peer| peer != ai) {
                         conn.respond(handlers::infer_failed("ServiceNotFound"), now);
                         return true;

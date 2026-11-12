@@ -30,7 +30,7 @@ api::declare_syscalls![
     RecvTimeout,
     Yield,
     Log,
-    LookupService,
+    LookupServiceBound,
     OpenCap,
     CloseCap,
     GrantAlloc,
@@ -47,7 +47,7 @@ api::declare_syscalls![
 fn vfs_tid() -> usize {
     use api::syscall::service;
     loop {
-        if let Some(tid) = ostd::syscall::sys_lookup_service(service::VFS) {
+        if let Some(tid) = ostd::service::provider_tid(service::VFS) {
             return tid;
         }
         ostd::task::yield_now();

@@ -7,17 +7,18 @@
 //! the deterministic final result without waiting for a restarted shell cell.
 //!
 //! VFS must be up before file-I/O scenarios run.  The harness waits via
-//! `sys_lookup_service(VFS)` (same pattern as vfs-test/srv-test).
+//! `provider_tid(VFS)` (same pattern as vfs-test/srv-test).
 
 use crate::jobs::Jobs;
 use core::sync::atomic::{AtomicU32, Ordering};
+use ostd::service::provider_tid;
 
 const VFS_SVC: u16 = api::syscall::service::VFS;
 
 /// Wait for the VFS service to register (blocks until init has spawned vfs).
 fn wait_for_vfs() {
     loop {
-        if ostd::syscall::sys_lookup_service(VFS_SVC).is_some() {
+        if ostd::service::provider_tid(VFS_SVC).is_some() {
             return;
         }
         ostd::task::yield_now();

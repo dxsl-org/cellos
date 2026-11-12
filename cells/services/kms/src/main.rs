@@ -16,7 +16,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     Log,
-    LookupService,
+    LookupServiceBound,
     VfsMutate
 ];
 
@@ -45,9 +45,9 @@ fn cell_main() {
                 let operation = ostd::ipc::current();
                 let caller = CallerIdentity::from_recv_buf(&buffer);
                 let registry = ServiceRegistrySnapshot {
-                    net_broker_tid: ostd::syscall::sys_lookup_service(service::NET_BROKER),
-                    supervisor_tid: ostd::syscall::sys_lookup_service(service::SUPERVISOR),
-                    net_tid: ostd::syscall::sys_lookup_service(service::NET),
+                    net_broker_tid: ostd::service::provider_tid(service::NET_BROKER),
+                    supervisor_tid: ostd::service::provider_tid(service::SUPERVISOR),
+                    net_tid: ostd::service::provider_tid(service::NET),
                 };
                 if let Some(response) =
                     service_state.handle(&buffer[..KMS_MESSAGE_LEN], sender, caller, registry)

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Kernel-attested local service-provider binding ABI (`LookupServiceBound`).
 //!
-//! `LookupService` answers with a bare TID, and a TID is not a provider identity:
-//! it says where to send, not *which* Cell incarnation is there. This record adds
+//! A bare TID is not a provider identity: it says where to send, not *which*
+//! Cell incarnation is there. This record adds
 //! the identity the TID cannot carry, using the kernel's existing per-Cell epoch
 //! rather than a second token type:
 //!

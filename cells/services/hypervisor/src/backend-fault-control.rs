@@ -13,7 +13,7 @@ pub fn disconnect(service_id: u16) -> bool {
     if !matches!(service_id, service::VFS | service::NET) {
         return false;
     }
-    let Some(supervisor_tid) = ostd::syscall::sys_lookup_service(service::SUPERVISOR) else {
+    let Some(supervisor_tid) = ostd::service::provider_tid(service::SUPERVISOR) else {
         return false;
     };
     let request = encode_kill_request(service_id);

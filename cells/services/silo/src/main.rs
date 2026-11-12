@@ -22,7 +22,7 @@ api::declare_syscalls![
     TrySend,
     Recv,
     Log,
-    LookupService,
+    LookupServiceBound,
     RegisterService,
     GetRandom,
     CreateVm,

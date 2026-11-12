@@ -2,9 +2,9 @@
 
 use api::syscall::service;
 use ostd::io::println;
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned,
-    SyscallResult,
+    sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned, SyscallResult,
 };
 
 const OP_HOTSWAP: u8 = 0x01;
@@ -17,10 +17,10 @@ const UNAUTHORIZED_DENIED_STATUS: [u8; 3] = [OP_STATUS, 0, 0xFD];
 
 pub fn run_unauthorized_probe() {
     println("[hotswap-unauthorized-runtime] START");
-    let Some(old_tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
+    let Some(old_tid) = provider_tid(service::HOTSWAP_DEMO) else {
         unauthorized_fail("demo-v1 is not registered");
     };
-    let Some(supervisor_tid) = sys_lookup_service(service::SUPERVISOR) else {
+    let Some(supervisor_tid) = provider_tid(service::SUPERVISOR) else {
         unauthorized_fail("supervisor is not registered");
     };
     let request = hotswap_request();
@@ -31,7 +31,7 @@ pub fn run_unauthorized_probe() {
     if !recv_from(supervisor_tid, &mut status) || status != UNAUTHORIZED_DENIED_STATUS {
         unauthorized_fail("supervisor did not reject the direct bench sender");
     }
-    if sys_lookup_service(service::HOTSWAP_DEMO) != Some(old_tid) {
+    if provider_tid(service::HOTSWAP_DEMO) != Some(old_tid) {
         unauthorized_fail("unauthorized request changed the target service tid");
     }
     println("[hotswap-unauthorized-runtime] PASS (direct bench sender denied; tid unchanged)");
@@ -117,7 +117,7 @@ pub(super) fn wait_for_hotswap_demo_replacement_ticks(
     max_ticks: usize,
 ) -> Option<usize> {
     for _ in 0..max_ticks {
-        if let Some(tid) = sys_lookup_service(service::HOTSWAP_DEMO) {
+        if let Some(tid) = provider_tid(service::HOTSWAP_DEMO) {
             if tid != old_tid {
                 return Some(tid);
             }
@@ -131,7 +131,7 @@ pub(super) fn wait_for_hotswap_demo_replacement_ticks(
 
 fn queue_during_cutover(old_tid: usize, inc: &[u8; 5], get: &[u8; 5], max_ticks: usize) -> bool {
     for _ in 0..max_ticks {
-        if sys_lookup_service(service::HOTSWAP_DEMO).is_none()
+        if provider_tid(service::HOTSWAP_DEMO).is_none()
             && matches!(sys_send(old_tid, inc), SyscallResult::Ok(_))
         {
             if !matches!(sys_send(old_tid, get), SyscallResult::Ok(_)) {

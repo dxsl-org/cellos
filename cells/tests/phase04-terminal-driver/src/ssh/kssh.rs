@@ -20,7 +20,8 @@
 
 use super::*;
 use ostd::clients::kms::{KmsClient, KmsClientError, KmsErrorCode};
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, sys_try_recv, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_timeout, sys_send, sys_try_recv, SyscallResult};
 
 /// Markers in the order the judge expects them (`k8-contract.md` section 3).
 const T0_MARKERS: [&str; 21] = [
@@ -1217,7 +1218,7 @@ fn describe_raw(r: &Raw, opcode: u8, id: u32) -> String {
 /// flag bit 6 cannot pass admission: the kernel writes the real trailer last.
 fn s06b() -> Res {
     const ID: u32 = 0x0510_6b00;
-    let tid = sys_lookup_service(api::syscall::service::KMS).ok_or("no key service")?;
+    let tid = provider_tid(api::syscall::service::KMS).ok_or("no key service")?;
     let mut sent = None;
     let mut outcome = Raw::SendFailed;
     for len in [api::ipc::IPC_BUF_SIZE, api::ipc::IPC_BUF_SIZE - 32] {
@@ -1260,7 +1261,7 @@ fn s06b() -> Res {
 /// the service still answers the next canonical frame.
 fn s06c() -> Res {
     const CONTROL: u32 = 0x0510_6c03;
-    let tid = sys_lookup_service(api::syscall::service::KMS).ok_or("no key service")?;
+    let tid = provider_tid(api::syscall::service::KMS).ok_or("no key service")?;
     let flags_op25 = kms_raw(tid, &kms_frame(25, 1, 0x0510_6c01), RAW_TICKS);
     let flags_sign = kms_raw(tid, &kms_frame(SIGN_OPCODE, 1, 0x0510_6c02), RAW_TICKS);
     let control = kms_raw(tid, &kms_frame(SIGN_OPCODE, 0, CONTROL), RAW_TICKS);

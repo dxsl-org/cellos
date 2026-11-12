@@ -14,7 +14,8 @@ use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE, N
 use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::recv_from;
-use ostd::syscall::{sys_get_time_ms, sys_lookup_service, sys_send, sys_yield};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_get_time_ms, sys_send, sys_yield};
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -36,7 +37,7 @@ api::declare_syscalls![
     Recv,
     Log,
     StateRestore,
-    LookupService,
+    LookupServiceBound,
     VfsMutate,
     GetTime
 ];
@@ -73,14 +74,14 @@ fn cell_main() {
     };
 
     // ── Resolve service endpoints ─────────────────────────────────────────────
-    let net_ep = match sys_lookup_service(service::NET) {
+    let net_ep = match provider_tid(service::NET) {
         Some(ep) => ep,
         None => {
             println("wget: no net service");
             return;
         }
     };
-    let vfs_ep = match sys_lookup_service(service::VFS) {
+    let vfs_ep = match provider_tid(service::VFS) {
         Some(ep) => ep,
         None => {
             println("wget: no vfs service");

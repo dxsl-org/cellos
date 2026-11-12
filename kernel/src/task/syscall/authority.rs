@@ -652,14 +652,6 @@ pub(super) fn register_service(
     }
 }
 
-/// Handler for `Syscall::LookupService` (extracted from the dispatcher).
-pub(super) fn lookup_service(service_id: u16) -> SyscallResult {
-    // Open to all cells: resolve the live provider tid (0 = none registered),
-    // so a client reconnects transparently after the supervisor respawns a
-    // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
-    Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
-}
-
 /// Handler for `Syscall::LookupServiceBound` (extracted from the dispatcher).
 pub(super) fn lookup_service_bound(
     caller_id: usize,
@@ -667,15 +659,14 @@ pub(super) fn lookup_service_bound(
     out_ptr: usize,
     out_len: usize,
 ) -> SyscallResult {
-    // Open to all cells, same allowlist bit as `LookupService`: this answers
-    // the same question with the provider's identity instead of a bare tid.
+    // Open to all cells (bit 37): where to send, and which provider
+    // incarnation is there.
     //
     // The record is written whole or not at all. A short buffer is refused
     // with the same `BufferTooSmall` error the other fixed-record writers
     // use (`QueryDirHandles`, `ResolveCellOwner`) rather than partially
     // filled; an absent, paused or identity-less provider returns the `0`
-    // absence sentinel `LookupService` uses — never a binding the kernel
-    // cannot stand behind.
+    // absence sentinel — never a binding the kernel cannot stand behind.
     if out_len < api::service_binding::SERVICE_BINDING_LEN {
         return Err(SyscallError::BufferTooSmall);
     }

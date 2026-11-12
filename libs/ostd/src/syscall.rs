@@ -580,7 +580,7 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     // kernel bootstrap reader when VFS is not yet up (early boot), the VFS read fails,
     // or the VFS-loaded ELF is rejected. OOM is returned immediately: retrying the same
     // allocation through bootstrap would add pressure and hide the typed failure.
-    if let Some(vfs_tid) = crate::service::lookup(crate::service::service::VFS) {
+    if let Some(vfs_tid) = crate::service::provider_tid(crate::service::service::VFS) {
         if let Ok((grant_id, len)) = crate::fs::read_full_via_grant(path, vfs_tid) {
             let r = sys_spawn_from_elf(grant_id, len, path);
             sys_grant_free(grant_id);
@@ -1113,26 +1113,10 @@ pub fn sys_resolve_cell_image(cell_id: u64, generation: u64) -> Option<CellImage
     (image.cell_id == cell_id && image.generation == generation).then_some(image)
 }
 
-/// Resolve a well-known `service_id` to its current provider tid.
-///
-/// Returns `Some(tid)` for a live provider, or `None` when nothing is registered
-/// (e.g. during the death→respawn window — the caller should retry). Open to all cells.
-pub fn sys_lookup_service(service_id: u16) -> Option<usize> {
-    unsafe {
-        let ret = syscall(ViSyscall::LookupService, service_id as usize, 0, 0, 0);
-        // ABI: provider tid (> 0), or 0 when no live provider is registered.
-        if ret > 0 {
-            Some(ret as usize)
-        } else {
-            None
-        }
-    }
-}
-
 /// Resolve a well-known `service_id` to its live provider **binding**.
 ///
 /// Returns the provider's `{ tid, cell_id, generation }` — the identity
-/// [`sys_lookup_service`] cannot carry, because a tid says where to send rather
+/// a bare tid cannot carry, because a tid says where to send rather
 /// than which Cell incarnation is there. `generation` is the per-Cell epoch the
 /// kernel mints at cell creation, the same axis `CallerIdentity` and `CellOwner`
 /// already use.
@@ -1144,7 +1128,7 @@ pub fn sys_lookup_service(service_id: u16) -> Option<usize> {
 ///
 /// The binding is **boot-local**: it is not a remote replay epoch, it grants no
 /// authority, and the kernel re-verifies the live binding when the tid is used.
-/// Open to all cells under the same allowlist bit as [`sys_lookup_service`].
+/// Open to all cells (allowlist bit 37).
 pub fn sys_lookup_service_bound(
     service_id: u16,
     buf: &mut [u8],

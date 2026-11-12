@@ -11,12 +11,13 @@ use api::ipc::IPC_BUF_SIZE;
 use api::services::ipc::ConfigRequest;
 use api::syscall::service;
 use api::task::TaskPriority;
+use ostd::service::provider_tid;
 use ostd::{
     io::println,
     ipc::{IpcTerminal, PendingCall},
     syscall::{
-        sys_exit, sys_get_scheduler_ticks, sys_lookup_service, sys_recv_timeout, sys_send,
-        sys_set_spawn_args, sys_spawn_pinned, sys_try_send, SyscallResult,
+        sys_exit, sys_get_scheduler_ticks, sys_recv_timeout, sys_send, sys_set_spawn_args,
+        sys_spawn_pinned, sys_try_send, SyscallResult,
     },
     task::yield_now,
 };
@@ -118,7 +119,7 @@ pub fn run_client(role: &str) -> ! {
         SyscallResult::Ok(sender) if sender != 0 && kickoff[..2] == CONTROL => sender,
         _ => fail("client kickoff"),
     };
-    let target = sys_lookup_service(service_id).unwrap_or_else(|| fail("client lookup"));
+    let target = provider_tid(service_id).unwrap_or_else(|| fail("client lookup"));
     let mut buf = [0u8; IPC_BUF_SIZE];
     let len = request(service_id, &mut buf);
     // Returns once the service has taken the request.
@@ -147,7 +148,7 @@ fn spawn_client(service_id: u16) -> usize {
 
 /// One leg: a parked first client, then a bounded second call.
 fn leg(service_id: u16) {
-    if sys_lookup_service(service_id).is_none() {
+    if provider_tid(service_id).is_none() {
         println(&format!("[nonreceiving] {} ABSENT", name(service_id)));
         return;
     }
@@ -158,7 +159,7 @@ fn leg(service_id: u16) {
         SyscallResult::Ok(sender) if sender == client && notice[..2] == CONTROL => {}
         _ => fail("first client never reached the service"),
     }
-    let target = sys_lookup_service(service_id).unwrap_or_else(|| fail("lookup"));
+    let target = provider_tid(service_id).unwrap_or_else(|| fail("lookup"));
     let mut buf = [0u8; IPC_BUF_SIZE];
     let len = request(service_id, &mut buf);
     let call = PendingCall::submit(target, &buf[..len]).unwrap_or_else(|_| fail("submit"));

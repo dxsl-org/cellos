@@ -199,7 +199,7 @@ impl Activator {
                     self.apply(effects);
                 }
             } else if provider.phase == Phase::Ready
-                && syscall::sys_lookup_service(service_id(engine)) != Some(provider.tid)
+                && ostd::service::provider_tid(service_id(engine)) != Some(provider.tid)
             {
                 let effects = self.state.retire(engine);
                 self.apply(effects);
@@ -251,7 +251,7 @@ impl Activator {
         let provider = self.state.provider(engine).ok_or(Failure::Failed)?;
         if provider.phase != Phase::Ready
             || task_alive(provider.tid) != Some(true)
-            || syscall::sys_lookup_service(service_id(engine)) != Some(provider.tid)
+            || ostd::service::provider_tid(service_id(engine)) != Some(provider.tid)
         {
             let effects = self.state.retire(engine);
             self.apply(effects);
@@ -314,7 +314,7 @@ impl Activator {
                 syscall::sys_register_service(service_id(engine), tid, 0),
                 SyscallResult::Ok(0)
             )
-            && syscall::sys_lookup_service(service_id(engine)) == Some(tid)
+            && ostd::service::provider_tid(service_id(engine)) == Some(tid)
             && task_alive(tid) == Some(true);
         if !ready || !self.state.ready(provider) {
             let effects = self.state.retire(engine);
@@ -344,7 +344,7 @@ impl Activator {
     /// Same Stat -> shared Grant -> ReadFileGrant -> SpawnFromElf route as
     /// ostd::sys_spawn_from_path, with bounded waits and retained init messages.
     fn spawn_via_vfs(&mut self, engine: Engine) -> Result<usize, Failure> {
-        let vfs = syscall::sys_lookup_service(service::VFS).ok_or(Failure::Unavailable)?;
+        let vfs = ostd::service::provider_tid(service::VFS).ok_or(Failure::Unavailable)?;
         if self.poisoned_vfs == Some(vfs) {
             return Err(Failure::Unavailable);
         }

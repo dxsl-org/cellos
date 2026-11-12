@@ -20,12 +20,13 @@
 //! ```
 
 extern crate alloc;
+use crate::service::provider_tid;
 use alloc::vec::Vec;
 
 // Re-export api::input types so consumers can use `ostd::input::KeyState` etc.
 pub use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
 
-use crate::syscall::{sys_lookup_service, sys_send, sys_try_recv, SyscallResult};
+use crate::syscall::{sys_send, sys_try_recv, SyscallResult};
 use api::{
     input::{decode_event, INPUT_EVENT_OPCODE},
     ipc::{InputRequest, IPC_BUF_SIZE},
@@ -51,7 +52,7 @@ use api::{
 /// Returns `true` when focus is sent. Returns `false` when the input service
 /// is not yet registered (boot race) or `sys_send` fails (service dead).
 pub fn request_focus() -> bool {
-    let Some(input_tid) = sys_lookup_service(service::INPUT) else {
+    let Some(input_tid) = provider_tid(service::INPUT) else {
         return false;
     };
 
@@ -74,7 +75,7 @@ pub fn request_focus() -> bool {
 /// ClearFocus is fire-and-forget (same rationale as SetFocus). Call this before
 /// blocking in `sys_wait` for a child cell, then re-request focus afterwards.
 pub fn release_focus() {
-    let Some(input_tid) = sys_lookup_service(service::INPUT) else {
+    let Some(input_tid) = provider_tid(service::INPUT) else {
         return;
     };
     let mut req_buf = [0u8; IPC_BUF_SIZE];
@@ -96,7 +97,7 @@ pub fn release_focus() {
 /// input service so the subsequent `sys_send(input_tid, ClearFocus)` does not
 /// deadlock (both would be in Sending state indefinitely).
 pub fn drain_pending_input_events() {
-    let Some(input_tid) = sys_lookup_service(service::INPUT) else {
+    let Some(input_tid) = provider_tid(service::INPUT) else {
         return;
     };
     let mut buf = [0u8; IPC_BUF_SIZE];
@@ -120,8 +121,8 @@ pub fn drain_pending_input_events() {
 /// [`crate::display::poll_surface_events`] instead of being discarded. Messages
 /// from all other senders remain queued for their owning protocol.
 pub fn poll_events(max: usize) -> Vec<InputEvent> {
-    let input_tid = sys_lookup_service(service::INPUT);
-    let compositor_tid = sys_lookup_service(service::COMPOSITOR);
+    let input_tid = provider_tid(service::INPUT);
+    let compositor_tid = provider_tid(service::COMPOSITOR);
     if input_tid.is_none() && compositor_tid.is_none() {
         return Vec::new();
     }

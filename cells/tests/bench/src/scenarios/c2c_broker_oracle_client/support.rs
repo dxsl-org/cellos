@@ -2,7 +2,8 @@ use super::{
     decode_config, decode_reply_frame, encode_summary, is_drain, is_start, ClientConfig,
     ClientMode, ClientSummary, CONFIG_BYTES, DRAIN_BYTES, ECHO_BODY, START_BYTES, SUMMARY_BYTES,
 };
-use ostd::syscall::{sys_exit, sys_lookup_service, sys_recv, sys_send, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_exit, sys_recv, sys_send, SyscallResult};
 use ostd::task::yield_now;
 use service_net_broker::local_ingress::ReplyStatus;
 
@@ -52,7 +53,7 @@ pub fn wait_config() -> (usize, ClientConfig) {
 
 pub fn wait_broker() -> Option<usize> {
     for _ in 0..200 {
-        if let Some(broker_tid) = sys_lookup_service(api::syscall::service::NET_BROKER) {
+        if let Some(broker_tid) = provider_tid(api::syscall::service::NET_BROKER) {
             return Some(broker_tid);
         }
         yield_now();

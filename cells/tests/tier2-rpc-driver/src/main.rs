@@ -42,7 +42,7 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 
 // `LookupService` also authorizes `LookupServiceBound` (allowlist bit 37), which is the
 // whole resolution path this driver needs.
-api::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupService, GetTime];
+api::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
 

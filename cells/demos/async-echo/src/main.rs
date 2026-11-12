@@ -10,7 +10,7 @@ extern crate alloc;
 
 use core::time::Duration;
 use ostd::io::println;
-use ostd::syscall::sys_lookup_service;
+use ostd::service::provider_tid;
 use vipolling::{Event, Events, Poller};
 
 api::declare_manifest!(
@@ -31,7 +31,7 @@ api::declare_syscalls![
     TryRecv,
     RecvTimeout,
     Log,
-    LookupService,
+    LookupServiceBound,
     StateRestore,
     GetTime
 ];
@@ -75,7 +75,7 @@ fn cell_main() {
     }
 
     // Resolve network service
-    let net_tid = match sys_lookup_service(api::syscall::service::NET) {
+    let net_tid = match provider_tid(api::syscall::service::NET) {
         Some(tid) => {
             println(&alloc::format!(
                 "[async-echo] Network service discovered at tid: {}",

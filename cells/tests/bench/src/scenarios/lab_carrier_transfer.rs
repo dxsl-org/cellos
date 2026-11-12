@@ -15,7 +15,8 @@ use alloc::format;
 use alloc::string::ToString;
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_heartbeat, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_heartbeat;
 
 use super::lab_transfer_contract::{
     Admission, AdmissionObservation, Configuration, JobState, PlacementObservation, Principal,
@@ -46,7 +47,7 @@ pub fn run() {
     sys_heartbeat(0);
 
     // Verify VFS service is available
-    let Some(vfs_tid) = sys_lookup_service(service::VFS) else {
+    let Some(vfs_tid) = provider_tid(service::VFS) else {
         fail("VFS service is not registered");
     };
     println(&format!(

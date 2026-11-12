@@ -81,7 +81,6 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
     GrantAlloc,
     GrantShare,
     GrantSlice,
@@ -102,8 +101,7 @@ api::declare_syscalls![
     CloseCap,
     // First-trust confirmation (S9-4b): VFS calls service-input over the authenticated
     // SessionV1 transport (`ostd::session::register_trust_challenge` /
-    // `collect_trust_decision`): the issuer binding (LookupServiceBound shares
-    // LookupService's bit), the bounded IPC exchange (IpcSubmit/IpcTake/IpcWait/IpcCancel
+    // `collect_trust_decision`): the issuer binding (LookupServiceBound), the bounded IPC exchange (IpcSubmit/IpcTake/IpcWait/IpcCancel
     // share Send/Recv's bits), its scheduler-tick budget and the monotonic challenge
     // deadline (GetTime). CellSessionV1 has no allowlist bit; it is listed for the record.
     LookupServiceBound,

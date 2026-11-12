@@ -14,7 +14,7 @@ pub(crate) fn wait_for_vfs(tid: usize, timeout: u64) -> bool {
     let mut send = [0u8; 512];
     let mut recv = [0u8; 512];
     for _ in 0..10_000 {
-        if ostd::syscall::sys_lookup_service(api::syscall::service::VFS) != Some(tid)
+        if ostd::service::provider_tid(api::syscall::service::VFS) != Some(tid)
             || crate::activation::task_alive(tid) == Some(false)
         {
             return false;
@@ -52,7 +52,7 @@ pub(crate) fn load() -> Result<(CellConfig, CellConfig), alloc::string::String> 
     // failures; it cannot distinguish those two cases at this boundary.
     let mut send = [0u8; 512];
     let mut recv = [0u8; 512];
-    let tid = ostd::syscall::sys_lookup_service(api::syscall::service::VFS)
+    let tid = ostd::service::provider_tid(api::syscall::service::VFS)
         .ok_or_else(|| format!("{AUTOLOAD_PATH}: VFS unavailable"))?;
     let response = ostd::ipc::service_call_typed_bounded::<_, VfsResponse<'_>>(
         tid,

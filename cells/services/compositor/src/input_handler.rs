@@ -12,7 +12,8 @@ use api::display::Rect;
 use api::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use api::ipc::{InputRequest, IPC_BUF_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_try_send};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_try_send;
 
 use crate::cursor_state;
 use crate::pointer_router::{PointerRouter, RouteContext};
@@ -140,7 +141,7 @@ impl InputState {
 /// Look up a service, yielding until it becomes available.
 fn wait_for_service(id: u16) -> usize {
     loop {
-        if let Some(tid) = sys_lookup_service(id) {
+        if let Some(tid) = provider_tid(id) {
             return tid;
         }
         ostd::task::yield_now();

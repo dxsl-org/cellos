@@ -47,10 +47,9 @@ use driver_hid::{decode_boot_report, BootState, EvdevEvent, HidDeviceId, HidKind
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::print_fmt;
 use ostd::mmio;
+use ostd::service::provider_tid;
 use ostd::sync::Mutex;
-use ostd::syscall::{
-    sys_find_pcie_device, sys_lookup_service, sys_register_usb_hid_producer, PcieDeviceInfo,
-};
+use ostd::syscall::{sys_find_pcie_device, sys_register_usb_hid_producer, PcieDeviceInfo};
 use types::ViError;
 
 /// USB controller class triple. xHCI is prog-if 0x30.
@@ -177,7 +176,7 @@ fn init() {
             error
         ));
     }
-    let input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+    let input_tid = provider_tid(service::INPUT).unwrap_or(0);
     let source_registered = input_tid != 0 && input::register_as_source(input_tid);
     *STATE.lock() = Some(XhciState {
         ctrl,
@@ -198,7 +197,7 @@ fn poll() {
     // The input service is supervised and comes back under a new tid after a
     // restart, so re-resolve and re-register whenever the route is missing.
     if state.input_tid == 0 {
-        state.input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+        state.input_tid = provider_tid(service::INPUT).unwrap_or(0);
         state.source_registered = false;
     }
     if state.input_tid != 0 && !state.source_registered {
@@ -276,7 +275,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     RecvTimeout,
     // PCIe device path.

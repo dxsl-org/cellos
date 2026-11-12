@@ -285,17 +285,14 @@ mod tests {
         assert_eq!(ViSyscall::FindPcieDeviceByVendor as usize, 424);
     }
 
-    /// `LookupServiceBound` answers the same question as `LookupService` with the
-    /// provider's identity instead of a bare tid, so it shares that opcode's open
-    /// allowlist bit 37 and consumes no fresh bit — the `u64` allowlist is full
-    /// (bits 0-62 syscalls, 63 the VFS-mutate declaration). An image whose
-    /// `__ViCell_syscalls` section was generated for `LookupService` keeps working.
+    /// `LookupServiceBound` holds the open allowlist bit 37 of the retired
+    /// bare-tid `LookupService` (206, D5), so an image whose `__ViCell_syscalls`
+    /// section was generated for `LookupService` may still resolve bindings, and
+    /// 206 itself decodes to nothing.
     #[test]
-    fn lookup_bound_shares_open_lookup_authority() {
-        assert_eq!(ViSyscall::LookupService.allowlist_bit(), Some(37));
+    fn lookup_bound_keeps_the_retired_lookup_bit() {
         assert_eq!(ViSyscall::LookupServiceBound.allowlist_bit(), Some(37));
-        let legacy = SyscallSet::EMPTY.with(ViSyscall::LookupService);
-        assert!(legacy.permits(ViSyscall::LookupServiceBound));
+        assert_eq!(ViSyscall::from(206), ViSyscall::Unknown);
         assert_eq!(ViSyscall::LookupServiceBound as usize, 429);
         // 429 is the next free opcode after SerialConfigure = 428, and 400 stays
         // unmapped so retired whole-sequence hot-swap callers fail closed.
@@ -559,7 +556,8 @@ mod tests {
 
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
-        // 2, 3, 6, 218, 310 and 311 are retired (Phase 11 D4): reserved, never reused.
+        // 2, 3, 6, 218, 310 and 311 (Phase 11 D4) and 206 (D5) are retired:
+        // reserved, never reused.
         let unassigned = [
             2,
             3,
@@ -568,6 +566,7 @@ mod tests {
             99,
             100,
             108,
+            206,
             218,
             264,
             310,

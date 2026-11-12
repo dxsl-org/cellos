@@ -28,7 +28,7 @@ api::declare_syscalls![
     // The supervisor reaches its capability-free worker through VFS + SpawnFromElf
     // (`ostd::syscall::sys_spawn_from_path` reads the ELF into a grant first), so it
     // needs service lookup, the grant trio, and the shared outward-launch bit.
-    LookupService,
+    LookupServiceBound,
     GrantAlloc,
     GrantShare,
     GrantFree,

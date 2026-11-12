@@ -44,10 +44,7 @@ use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
-use ostd::syscall::{
-    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, BlockDevice,
-    PcieDeviceInfo,
-};
+use ostd::syscall::{sys_find_pcie_device, sys_register_block_device, BlockDevice, PcieDeviceInfo};
 use types::ViError;
 
 /// SATA controller class triple.
@@ -85,7 +82,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }
@@ -277,7 +274,7 @@ api::declare_manifest!(
 // `run_app!` emits a manifest but NOT a `VICELL_SYSCALLS` section (see
 // libs/ostd/src/lib.rs), so without this the kernel leaves the cell at its TCB's
 // `u64::MAX` allowlist (kernel/src/task/syscall.rs). List exactly what the cell
-// calls: the AppContext base set (its `run()` loop uses Recv; `LookupService`
+// calls: the AppContext base set (its `run()` loop uses Recv; `LookupServiceBound`
 // also resolves the VFS sender), the PCIe device path, block-route
 // registration, request replies, the timeout polling in controller.rs
 // (`GetTime`), the exit path, the DMA calls behind `DmaBuf::alloc`/
@@ -296,7 +293,7 @@ macro_rules! ahci_syscalls {
             TryRecv,
             Log,
             Heartbeat,
-            LookupService,
+            LookupServiceBound,
             GetTime,
             RecvTimeout,
             // PCIe device path.

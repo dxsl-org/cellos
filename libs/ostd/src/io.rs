@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::child_context::{ChildContext, GrantSlot};
-use crate::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
+use crate::service::provider_tid;
+use crate::syscall::{sys_recv_timeout, SyscallResult};
 use crate::*;
 use alloc::string::String;
 use api::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
@@ -265,7 +266,7 @@ impl Stdin {
     /// Falls back to the kernel `sys_read(fd=0)` path when the input service is
     /// not yet registered (early boot, or input cell not present).
     pub fn read_line(&self, buf: &mut String) -> ViResult<usize> {
-        if sys_lookup_service(service::INPUT).is_some() {
+        if provider_tid(service::INPUT).is_some() {
             // Input-service path: receive InputEvent frames dispatched to this cell.
             // Uses a per-iteration timeout only to detect input-service restarts —
             // we re-request focus only when the TID changes, NOT on every timeout.
@@ -277,7 +278,7 @@ impl Stdin {
             let mut focused_on_tid: usize = 0; // 0 = no focus yet
                                                // Re-check the input service TID on each iteration — it may have
                                                // restarted. If it disappears entirely, fall through to sys_read.
-            while let Some(input_tid) = sys_lookup_service(service::INPUT) {
+            while let Some(input_tid) = provider_tid(service::INPUT) {
                 // Request focus only on startup or when input service restarted (TID changed).
                 if focused_on_tid != input_tid {
                     if !crate::input::request_focus() {

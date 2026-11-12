@@ -5,7 +5,8 @@ use alloc::format;
 use alloc::string::String;
 use ocel_service_proto::{Engine, Failure, Request, Response, FRAME_BYTES};
 use ostd::ipc::{self, IpcSubmitError, IpcTakeResult, IpcTerminal};
-use ostd::syscall::{sys_get_scheduler_ticks, sys_lookup_service, sys_yield};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_get_scheduler_ticks, sys_yield};
 
 const CALL_TICKS: u64 = 500;
 const RELEASE_TICKS: u64 = 100;
@@ -31,7 +32,7 @@ impl Transport for KernelTransport {
         sys_get_scheduler_ticks()
     }
     fn lookup(&mut self, service: u16) -> Option<usize> {
-        sys_lookup_service(service)
+        provider_tid(service)
     }
     fn call(
         &mut self,

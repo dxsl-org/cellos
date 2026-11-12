@@ -10,9 +10,10 @@
 
 use api::syscall::{service, ProcessInfo};
 use ostd::io::print_fmt;
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_freeze_cell, sys_get_procs, sys_lookup_block_route, sys_lookup_service, sys_recv_timeout,
-    sys_resume_cell, sys_system_power, SyscallResult, SystemPowerAction, SystemPowerError,
+    sys_freeze_cell, sys_get_procs, sys_lookup_block_route, sys_recv_timeout, sys_resume_cell,
+    sys_system_power, SyscallResult, SystemPowerAction, SystemPowerError,
 };
 
 use crate::protocol::{OP_POWER, POWER_ACTION_POWEROFF};
@@ -44,7 +45,7 @@ fn action_name(action: SystemPowerAction) -> &'static str {
 pub fn shut_down(action: SystemPowerAction, origin: Origin) -> SystemPowerError {
     let mut keep = [0usize; KEEP_MAX];
     let kept = storage_stack(&mut keep);
-    let own = sys_lookup_service(service::SUPERVISOR);
+    let own = provider_tid(service::SUPERVISOR);
     let mut rows = [ProcessInfo::default(); PROCESS_TABLE_ROWS];
     let count = sys_get_procs(&mut rows)
         .unwrap_or(0)
@@ -108,7 +109,7 @@ fn storage_stack(keep: &mut [usize; KEEP_MAX]) -> usize {
         }
     };
     for id in [service::VFS, service::BLOCK_DRIVER] {
-        if let Some(tid) = sys_lookup_service(id) {
+        if let Some(tid) = provider_tid(id) {
             add(tid);
         }
     }

@@ -11,6 +11,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::time::Duration;
+use ostd::service::provider_tid;
 use spin::Mutex;
 
 use api::ipc::{
@@ -18,9 +19,7 @@ use api::ipc::{
     NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
 };
 use api::syscall::service;
-use ostd::syscall::{
-    sys_lookup_service, sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult,
-};
+use ostd::syscall::{sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult};
 
 /// An opaque token used to identify an event source.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -266,7 +265,7 @@ impl Selector {
         }
 
         // 3. Resolve Net Service
-        let net_tid = sys_lookup_service(service::NET).ok_or(MioError::NetServiceUnavailable)?;
+        let net_tid = provider_tid(service::NET).ok_or(MioError::NetServiceUnavailable)?;
 
         // 4. Encode interests
         let mut packed = [0u8; 256 * NET_READY_RECORD_BYTES];

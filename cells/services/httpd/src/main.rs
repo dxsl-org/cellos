@@ -11,14 +11,15 @@ extern crate alloc;
 use alloc::string::String;
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_lookup_service, sys_yield};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_yield;
 
 mod handlers;
 mod net_ipc;
 mod reactor;
 mod router;
 
-api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore, GetTime];
+api::declare_syscalls![Send, Recv, Log, LookupServiceBound, StateRestore, GetTime];
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(8 * 1024 * 1024);
@@ -89,7 +90,7 @@ fn cell_main() {
 /// Panics (via unreachable) only if the service is permanently absent at boot.
 fn wait_for_service(id: u16, name: &str) -> usize {
     for _ in 0..100 {
-        if let Some(tid) = sys_lookup_service(id) {
+        if let Some(tid) = provider_tid(id) {
             return tid;
         }
         sys_yield();

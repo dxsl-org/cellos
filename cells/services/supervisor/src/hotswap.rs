@@ -14,10 +14,11 @@ extern crate alloc;
 use crate::error::HotswapError;
 use crate::transfer::{send_restore_event, send_snapshot_event};
 use ostd::service::namespace_flags;
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_commit_hotswap, sys_freeze_cell, sys_get_scheduler_ticks, sys_kill_cell,
-    sys_lookup_service, sys_pause_service, sys_query_hotswap_ready, sys_register_service,
-    sys_resume_cell, sys_spawn_replacement, sys_state_restore, sys_state_stash_clear, sys_yield,
+    sys_commit_hotswap, sys_freeze_cell, sys_get_scheduler_ticks, sys_kill_cell, sys_pause_service,
+    sys_query_hotswap_ready, sys_register_service, sys_resume_cell, sys_spawn_replacement,
+    sys_state_restore, sys_state_stash_clear, sys_yield,
 };
 
 /// Budget for the stash and for readiness, in 10 ms scheduler ticks (5 s). The
@@ -113,7 +114,7 @@ fn next_swap_id() -> u64 {
 /// 6. COMMIT — atomically drain/close old ingress and publish the replacement
 pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapError> {
     // ── Resolve target tid ────────────────────────────────────────────────────
-    let old_tid = sys_lookup_service(service_id).ok_or(HotswapError::ServiceNotFound)?;
+    let old_tid = provider_tid(service_id).ok_or(HotswapError::ServiceNotFound)?;
 
     let swap_id = next_swap_id();
     let stash_key = stash_key_for(swap_id);

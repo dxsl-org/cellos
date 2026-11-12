@@ -11,7 +11,7 @@ use api::cell_session::{
 };
 use api::{caller_identity::CallerIdentity, service_binding::ServiceBinding};
 use sys::{
-    sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service, sys_lookup_service_bound,
+    provider_tid, sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service_bound,
     sys_try_send,
 };
 
@@ -19,10 +19,10 @@ use sys::{
 /// dispatch against an in-process kernel model (`session_tests.rs`).
 #[cfg(not(test))]
 mod sys {
+    pub use ostd::service::provider_tid;
     pub use ostd::session::{kernel_call, kernel_request, monotonic_ns};
     pub use ostd::syscall::{
-        sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service,
-        sys_lookup_service_bound, sys_try_send,
+        sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service_bound, sys_try_send,
     };
 }
 #[cfg(test)]
@@ -58,7 +58,7 @@ fn now() -> u64 {
 /// the designated serial shell from another cell. Images that run untrusted cells without a
 /// compositor therefore must not expose SessionV1 to them.
 fn compositor_registered() -> bool {
-    sys_lookup_service(api::syscall::service::COMPOSITOR).is_some()
+    provider_tid(api::syscall::service::COMPOSITOR).is_some()
 }
 fn principal(c: CallerIdentity) -> Principal {
     Principal {

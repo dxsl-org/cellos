@@ -131,7 +131,7 @@ pub fn discover() -> Discovery {
 #[cfg(target_os = "none")]
 fn wait_for_vfs_registration() {
     let start = sys::sys_get_scheduler_ticks();
-    while sys::sys_lookup_service(api::syscall::service::VFS).is_none() {
+    while ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
         let waited = match (start, sys::sys_get_scheduler_ticks()) {
             (Some(start), Some(now)) => now.saturating_sub(start),
             _ => u64::MAX,

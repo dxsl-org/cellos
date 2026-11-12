@@ -1,6 +1,7 @@
 //! System-information shell built-ins: pwd, uname, date, free, env.
 
 use ostd::prelude::*;
+use ostd::service::provider_tid;
 use ostd::syscall;
 
 pub use crate::cmd_cwd::cmd_pwd;
@@ -212,9 +213,8 @@ mod tests {
 /// `ifconfig` / `ip` — query and print the network interface IP address from service-net.
 pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     use api::ipc::{NetRequest, NetResponse};
-    use ostd::syscall::sys_lookup_service;
 
-    let Some(net_tid) = sys_lookup_service(api::syscall::service::NET) else {
+    let Some(net_tid) = provider_tid(api::syscall::service::NET) else {
         crate::executor::shell_println("ifconfig: network service (/bin/net) is not running");
         return Ok(());
     };

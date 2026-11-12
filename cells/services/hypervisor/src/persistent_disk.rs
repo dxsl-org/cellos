@@ -22,7 +22,7 @@ pub const GUEST_DISK: DiskSpec = DiskSpec {
 const VFS_CALL_TIMEOUT_TICKS: u64 = 1_000;
 
 pub fn open(spec: DiskSpec) -> Result<Option<PersistentDisk>, ()> {
-    let Some(vfs_tid) = ostd::syscall::sys_lookup_service(api::syscall::service::VFS) else {
+    let Some(vfs_tid) = ostd::service::provider_tid(api::syscall::service::VFS) else {
         return Ok(None);
     };
     let mut poisoned = false;

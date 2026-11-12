@@ -43,7 +43,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     Log,
-    LookupService,
+    LookupServiceBound,
     // Kernel filesystem access (read vmlinuz + initrd)
     OpenCap,
     ReadCap,

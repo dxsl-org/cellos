@@ -9,7 +9,8 @@ use alloc::{
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use core::task::Poll;
 use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
-use ostd::syscall::{sys_get_time_ms, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_get_time_ms;
 
 const HEADER_LIMIT: usize = 16 * 1024;
 const URL_LIMIT: usize = 2048;
@@ -547,7 +548,7 @@ impl Transport for KernelTransport {
         if closing_count() >= CLOSE_LIMIT {
             return None;
         }
-        let endpoint = sys_lookup_service(api::syscall::service::NET)?;
+        let endpoint = provider_tid(api::syscall::service::NET)?;
         if ACTIVE_JOBS
             .fetch_update(
                 core::sync::atomic::Ordering::Relaxed,

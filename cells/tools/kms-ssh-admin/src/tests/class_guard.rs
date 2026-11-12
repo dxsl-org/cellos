@@ -91,12 +91,11 @@ fn the_allowlist_is_the_terminal_session_child_set() {
             "Recv",
             "TryRecv",
             "RecvTimeout",
-            "Reply",
             "Log",
             "Exit",
             "Yield",
             "Heartbeat",
-            "LookupService",
+            "LookupServiceBound",
             "GetTime",
             "SetTimer",
             "MemInfo"

@@ -5,7 +5,9 @@ use alloc::format;
 #[cfg(feature = "restart-oracle")]
 use ostd::io::println;
 #[cfg(feature = "restart-oracle")]
-use ostd::syscall::{sys_lookup_service, sys_send, SyscallResult};
+use ostd::service::provider_tid;
+#[cfg(feature = "restart-oracle")]
+use ostd::syscall::{sys_send, SyscallResult};
 #[cfg(feature = "restart-oracle")]
 use ostd::task::yield_now;
 #[cfg(feature = "restart-oracle")]
@@ -32,7 +34,7 @@ pub fn run() -> bool {
 
 #[cfg(feature = "restart-oracle")]
 pub fn run() -> bool {
-    let Some(old_tid) = sys_lookup_service(api::syscall::service::NET_BROKER) else {
+    let Some(old_tid) = provider_tid(api::syscall::service::NET_BROKER) else {
         print_result(0, 0, false, false, false, false, None);
         return false;
     };
@@ -46,7 +48,7 @@ pub fn run() -> bool {
     let stale_len = encode_echo_request(RESTART_SEQUENCE, RESTART_BODY, &mut tx).unwrap_or(0);
     let stale_indeterminate =
         stale_len != 0 && !matches!(sys_send(old_tid, &tx[..stale_len]), SyscallResult::Ok(_));
-    let gap_observed = sys_lookup_service(api::syscall::service::NET_BROKER) != Some(old_tid);
+    let gap_observed = provider_tid(api::syscall::service::NET_BROKER) != Some(old_tid);
     let Some(new_tid) = wait_for_replacement(old_tid) else {
         print_result(
             old_tid,
@@ -78,7 +80,7 @@ pub fn run() -> bool {
 #[cfg(feature = "restart-oracle")]
 fn wait_for_replacement(old_tid: usize) -> Option<usize> {
     for _ in 0..RELOOKUP_TURNS {
-        if let Some(tid) = sys_lookup_service(api::syscall::service::NET_BROKER) {
+        if let Some(tid) = provider_tid(api::syscall::service::NET_BROKER) {
             if tid != old_tid {
                 return Some(tid);
             }

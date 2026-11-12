@@ -45,9 +45,9 @@ api::declare_manifest!(
     tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
-// No capability bit is declared: `LookupService` also authorizes
-// `LookupServiceBound` (allowlist bit 37), and `Send`/`Recv` are ordinary IPC.
-api::declare_syscalls![Log, Exit, Send, Recv, LookupService];
+// No capability bit is declared: `LookupServiceBound` (allowlist bit 37) is open,
+// and `Send`/`Recv` are ordinary IPC.
+api::declare_syscalls![Log, Exit, Send, Recv, LookupServiceBound];
 
 ostd::cell_main!(cell_main);
 

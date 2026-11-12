@@ -8,7 +8,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use ostd::clients::NetClient;
-use ostd::syscall::sys_lookup_service;
+use ostd::service::provider_tid;
 use ostd::tls::{tls_close, tls_connect, tls_read, tls_write};
 use ostd::ViError;
 
@@ -93,7 +93,7 @@ fn plain(ip: [u8; 4], port: u16, request: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 fn tls(host: &str, ip: [u8; 4], port: u16, request: &[u8]) -> Result<Vec<u8>, String> {
-    let net = sys_lookup_service(api::syscall::service::NET)
+    let net = provider_tid(api::syscall::service::NET)
         .ok_or_else(|| String::from("net service not found"))?;
     let cap = tls_connect(net, ip, port, host);
     if cap == 0 {

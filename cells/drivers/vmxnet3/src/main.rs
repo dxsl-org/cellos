@@ -172,7 +172,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     RecvTimeout,
     FindPcieDeviceByVendor,

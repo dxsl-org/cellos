@@ -7,7 +7,8 @@ use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::recv_from;
-use ostd::syscall::{sys_get_time_ms, sys_lookup_service, sys_send, sys_yield};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_get_time_ms, sys_send, sys_yield};
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -25,7 +26,7 @@ const EXCHANGE_BUDGET_MS: u64 = 30_000;
 /// Hard stop when the wall clock is unavailable or never advances.
 const EXCHANGE_POLL_CEILING: usize = 200_000;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService, GetTime];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
 
@@ -48,7 +49,7 @@ fn cell_main() {
     };
 
     // ── Resolve net service endpoint ──────────────────────────────────────────
-    let net_ep = match sys_lookup_service(service::NET) {
+    let net_ep = match provider_tid(service::NET) {
         Some(ep) => ep,
         None => {
             println("curl: no net service");

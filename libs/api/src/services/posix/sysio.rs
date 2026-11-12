@@ -257,21 +257,26 @@ fn vfs_tid() -> usize {
     if cached != 0 {
         return cached;
     }
-    let tid = unsafe {
+    let mut record = [0u8; crate::service_binding::SERVICE_BINDING_LEN];
+    // SAFETY: `record` is a live writable buffer of the length passed; the kernel
+    // writes the whole record or nothing.
+    let written = unsafe {
         raw_syscall(
-            ViSyscall::LookupService,
+            ViSyscall::LookupServiceBound,
             crate::syscall::service::VFS as usize,
-            0,
-            0,
+            record.as_mut_ptr() as usize,
+            record.len(),
             0,
         )
     };
-    if tid > 0 {
-        VFS_TID_CACHE.store(tid as usize, core::sync::atomic::Ordering::Relaxed);
-        tid as usize
-    } else {
-        0
+    let tid = (written as usize == record.len())
+        .then(|| crate::service_binding::ServiceBinding::from_bytes(&record))
+        .flatten()
+        .map_or(0, |binding| binding.tid as usize);
+    if tid != 0 {
+        VFS_TID_CACHE.store(tid, core::sync::atomic::Ordering::Relaxed);
     }
+    tid
 }
 
 /// One typed VFS request/reply. `None` on any transport failure, after which the

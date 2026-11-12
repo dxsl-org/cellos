@@ -22,17 +22,28 @@ use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 
 pub use api::syscall::service;
 
-/// Resolve the live provider tid of a well-known service.
+/// Resolve the live provider **binding** of a well-known service
+/// (`LookupServiceBound`): which Cell incarnation serves it, not only where to
+/// send.
 ///
-/// Returns `Some(tid)` when a live provider is registered. Returns `None` during
-/// the brief death→respawn window — the caller should retry with a small delay.
+/// Returns `None` when nothing is registered, during the death→respawn window
+/// (the caller should retry with a small delay) and while the provider is
+/// hidden behind a hot-swap pause.
 ///
 /// # Example
 /// ```no_run
 /// let vfs = ostd::service::lookup(ostd::service::service::VFS).expect("VFS not ready");
 /// ```
-pub fn lookup(service_id: u16) -> Option<usize> {
-    syscall::sys_lookup_service(service_id)
+pub fn lookup(service_id: u16) -> Option<ServiceBinding> {
+    let mut record = [0u8; SERVICE_BINDING_LEN];
+    syscall::sys_lookup_service_bound(service_id, &mut record)
+}
+
+/// Where to send to `service_id` right now: the tid of its live bound provider
+/// ([`lookup`]). A tid is an address, never an identity: to decide whether a
+/// received message came from the provider, use [`sender_is_live_provider`].
+pub fn provider_tid(service_id: u16) -> Option<usize> {
+    lookup(service_id).map(|binding| binding.tid as usize)
 }
 
 /// The [`api::syscall::service_flags`] the namespace owner (init, and the
@@ -116,9 +127,9 @@ impl<const ID: u16> ServiceRef<ID> {
 
     /// Resolve the live provider's binding, retrying like [`resolve`][Self::resolve].
     ///
-    /// Where [`lookup`] answers *where* to send, this answers *which provider
-    /// incarnation* is there, out of the kernel's own service registry
-    /// (`LookupServiceBound`). The handle caches it: the record is a descriptor, it
+    /// Like [`lookup`], it answers *which provider incarnation* is there, out of
+    /// the kernel's own service registry (`LookupServiceBound`). The handle caches
+    /// it: the record is a descriptor, it
     /// grants nothing, and the kernel re-verifies the live binding when the tid is
     /// actually used.
     ///
@@ -129,9 +140,8 @@ impl<const ID: u16> ServiceRef<ID> {
         if let Some(binding) = self.cached {
             return Some(binding);
         }
-        let mut record = [0u8; SERVICE_BINDING_LEN];
         for _ in 0..8 {
-            if let Some(binding) = syscall::sys_lookup_service_bound(ID, &mut record) {
+            if let Some(binding) = lookup(ID) {
                 self.cached = Some(binding);
                 return Some(binding);
             }
@@ -249,11 +259,7 @@ pub fn classify_call_failure(held: ServiceBinding, live: Option<ServiceBinding>)
 /// not yet registered (init registers a service after spawning it) is refused until
 /// it is. Never pass a tid taken from a message payload.
 pub fn sender_is_live_provider(service_id: u16, sender_tid: usize) -> bool {
-    let mut record = [0u8; SERVICE_BINDING_LEN];
-    binding_names_sender(
-        syscall::sys_lookup_service_bound(service_id, &mut record),
-        sender_tid,
-    )
+    binding_names_sender(lookup(service_id), sender_tid)
 }
 
 /// Pure rule behind [`sender_is_live_provider`]: the kernel's live binding must exist,

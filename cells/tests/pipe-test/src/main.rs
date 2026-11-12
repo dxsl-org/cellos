@@ -54,7 +54,7 @@ api::declare_syscalls![
     Exit,
     Send,
     Recv,
-    LookupService,
+    LookupServiceBound,
     GrantAlloc,
     GrantShare,
     GrantFree,

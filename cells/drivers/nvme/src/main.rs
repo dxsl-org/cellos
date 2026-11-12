@@ -37,10 +37,7 @@ use ostd::app::{AppContext, AppEvent};
 use ostd::io::print_fmt;
 use ostd::mmio;
 use ostd::sync::Mutex;
-use ostd::syscall::{
-    sys_find_pcie_device, sys_lookup_service, sys_register_block_device, BlockDevice,
-    PcieDeviceInfo,
-};
+use ostd::syscall::{sys_find_pcie_device, sys_register_block_device, BlockDevice, PcieDeviceInfo};
 
 /// NVMe PCIe class triple.
 const NVME_CLASS: u8 = 0x01;
@@ -67,7 +64,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }

@@ -196,7 +196,7 @@ impl SyscallSet {
 ///
 /// # Usage
 /// ```ignore
-/// api::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, LookupService];
+/// api::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, LookupServiceBound];
 /// ```
 /// Allowlist bit index declaring authority to mutate VFS state (create/write/unlink/rename).
 pub const VFS_MUTATE_DECLARATION_BIT: u8 = 63;
@@ -336,10 +336,10 @@ pub mod events {
 }
 
 /// Well-known service IDs for the kernel Service Registry (`RegisterService` /
-/// `LookupService`). Stable ABI — values must not change once shipped. `0` is reserved
-/// to mean "no provider" (the value `LookupService` returns when nothing is registered).
+/// `LookupServiceBound`). Stable ABI — values must not change once shipped. `0` is
+/// reserved to mean "no provider".
 ///
-/// A client resolves the live provider tid of a service by `LookupService(service::VFS)`
+/// A client resolves the live provider of a service by `LookupServiceBound(service::VFS)`
 /// instead of hard-coding a tid, so it transparently reconnects when the supervisor
 /// respawns that service under a new tid.
 pub mod service {
@@ -361,10 +361,10 @@ pub mod service {
     /// Cluster net-broker — the userspace trust anchor for all cross-machine
     /// communication (Noise KKpsk0 p2p, XChaCha20-Poly1305 gossip, RemoteServiceProxy).
     /// Supervised by init; respawning re-registers under a new tid, so clients
-    /// must resolve via `sys_lookup_service(service::NET_BROKER)`.
+    /// must resolve via `provider_tid(service::NET_BROKER)`.
     pub const NET_BROKER: u16 = 8;
-    /// NVMe / block device driver cell. Clients (VFS) call `LookupService(BLOCK_DRIVER)`
-    /// to find the provider tid and send IPC directly instead of using `BlkReadAsync`.
+    /// Retired single block-driver id: block routes are per device (416/432), and
+    /// the kernel refuses to register it.
     pub const BLOCK_DRIVER: u16 = 9;
     /// NIC driver cell. The net cell moves every frame through it; with none
     /// registered, no frame moves.

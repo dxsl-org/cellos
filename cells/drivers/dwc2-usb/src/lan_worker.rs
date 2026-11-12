@@ -16,7 +16,7 @@ api::declare_syscalls![
     RecvTimeout,
     Heartbeat,
     Log,
-    LookupService
+    LookupServiceBound
 ];
 
 const POLL_TICKS: u64 = 1;

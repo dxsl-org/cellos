@@ -3,9 +3,9 @@ use super::{
     CONFIG_BYTES, POSTED_BYTES, READY_BYTES, SUMMARY_BYTES,
 };
 use api::task::TaskPriority;
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_force_exit, sys_lookup_service, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned,
-    SyscallResult,
+    sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
 };
 use ostd::task::yield_now;
 use service_net_broker::bench_oracle::{
@@ -56,7 +56,7 @@ pub fn recv_summary(tid: usize) -> ClientSummary {
 }
 
 pub fn broker_snapshot(sequence: u64) -> Option<OracleSnapshot> {
-    let broker_tid = sys_lookup_service(api::syscall::service::NET_BROKER)?;
+    let broker_tid = provider_tid(api::syscall::service::NET_BROKER)?;
     let mut tx = [0u8; IPC_BUF_SIZE];
     let mut rx = [0u8; IPC_BUF_SIZE];
     let len = encode_snapshot_request(sequence, &mut tx).ok()?;

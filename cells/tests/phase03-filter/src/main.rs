@@ -85,7 +85,7 @@ api::declare_syscalls![
     Exit,
     Yield,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     SetTimer,
     MemInfo,

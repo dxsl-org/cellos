@@ -50,12 +50,12 @@ use modifier_state::ModifierState;
 use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
 use ostd::io::{print, print_usize, println};
 use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_get_time_ms, sys_heartbeat, sys_lookup_service,
-    sys_set_timer, sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
+    sys_get_resolution, sys_get_time, sys_get_time_ms, sys_heartbeat, sys_set_timer,
+    sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
 };
 use virtio_device::{find_and_init_inputs, InputDevice};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-// LookupService: the dispatcher resolves the compositor TID for mouse routing.
+// LookupServiceBound: the dispatcher resolves the compositor TID for mouse routing.
 // SetTimer: the owner loop parks for one tick when fully idle instead of spinning.
 api::declare_syscalls![
     Send,
@@ -68,7 +68,6 @@ api::declare_syscalls![
     ProbeVirtioMmio,
     GrantAlloc,
     GrantFree,
-    LookupService,
     GpuGetResolution,
     LookupServiceBound,
     CellSessionV1,
@@ -298,7 +297,7 @@ impl EventSources {
         }
         if tid == 0
             || kind != api::ipc::input_source::USB_HID_HOST
-            || sys_lookup_service(service::USB_HID_PRODUCER) != Some(tid)
+            || !ostd::service::sender_is_live_provider(service::USB_HID_PRODUCER, tid)
             || self.len == MAX_EVENT_SOURCES
         {
             return false;

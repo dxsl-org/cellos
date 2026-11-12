@@ -39,7 +39,7 @@ api::declare_manifest!(
 api::declare_syscalls![
     Send,
     Recv,
-    LookupService,
+    LookupServiceBound,
     Open,
     Read,
     Close,

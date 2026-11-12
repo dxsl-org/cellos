@@ -8,7 +8,8 @@ extern crate alloc;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_timeout, sys_send, SyscallResult};
 
 // 200ms per IPC call (system_ticks() runs at 100 Hz = 10ms per tick).
 // Each sys_recv_timeout gets a fresh 20-tick (200ms) relative timeout.
@@ -23,7 +24,7 @@ const MQTT_PORT: u16 = 1883;
 /// Opens a fresh TCP connection per call (fire-and-forget QoS-0). Gracefully
 /// skips if the net service is not registered or the broker is unreachable.
 pub fn publish_telemetry(payload: &str) {
-    let net_ep = match sys_lookup_service(service::NET) {
+    let net_ep = match provider_tid(service::NET) {
         Some(ep) => ep,
         None => {
             println("[robot-demo] no net service — skipping MQTT");

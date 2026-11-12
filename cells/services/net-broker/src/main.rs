@@ -54,7 +54,7 @@ api::declare_syscalls![
     TrySend,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     GetRandom,
     Spawn,

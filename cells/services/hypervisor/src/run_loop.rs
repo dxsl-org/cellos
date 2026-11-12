@@ -25,7 +25,8 @@ use crate::{
 use api::hypervisor::ViVmExit;
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::{sys_get_resolution, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_get_resolution;
 
 pub enum RunOutcome {
     Shutdown,
@@ -40,7 +41,7 @@ pub fn run(
         crate::persistent_disk::DiskSpec,
     )>,
 ) -> RunOutcome {
-    let compositor_tid = sys_lookup_service(service::COMPOSITOR).unwrap_or(0);
+    let compositor_tid = provider_tid(service::COMPOSITOR).unwrap_or(0);
     let (width, height) = sys_get_resolution();
 
     let mut pl011 = Pl011::new();
@@ -54,7 +55,7 @@ pub fn run(
     let mut blk = BlkDisk::new(disk_file, Some(vmm::device_irq(17)));
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(
-        sys_lookup_service(service::NET).unwrap_or(0),
+        provider_tid(service::NET).unwrap_or(0),
         Some(vmm::device_irq(18)),
     );
     let mut net_vmio = VirtioMmio::default();
@@ -194,7 +195,7 @@ pub fn run(
 
             // ── WFI — poll guest RX; Pi timer IRQ follows its deadline ───────
             ViVmExit::Wfi => {
-                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
+                gpu.reconnect_compositor(provider_tid(service::COMPOSITOR).unwrap_or(0));
                 // Input first: it is the interactive path, and the RX poll below
                 // is an IPC round trip the guest's echo should not wait behind.
                 forward_input_events(
@@ -241,7 +242,7 @@ pub fn run(
 
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
             ViVmExit::Preempted => {
-                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
+                gpu.reconnect_compositor(provider_tid(service::COMPOSITOR).unwrap_or(0));
                 forward_input_events(
                     &mut input,
                     &mut input_vmio,
@@ -362,7 +363,7 @@ fn forward_input_events(
 ) {
     #[cfg(feature = "board-rpi3")]
     {
-        let input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+        let input_tid = provider_tid(service::INPUT).unwrap_or(0);
         if input_tid != *focused_input_tid {
             *focused_input_tid = 0;
             if input_tid != 0 && ostd::input::request_focus() {

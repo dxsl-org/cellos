@@ -174,7 +174,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-// Exactly what the cell calls: the AppContext base set (`LookupService` also
+// Exactly what the cell calls: the AppContext base set (`LookupServiceBound` also
 // resolves the VFS sender), the exact-ID PCIe query and 434 record, the BAR
 // claim, block-route registration, the per-command clock budget, exit, the
 // DMA grant (and its release when authorization fails), and the completion
@@ -186,7 +186,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     RecvTimeout,
     FindPcieDeviceByVendor,

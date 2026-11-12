@@ -11,14 +11,15 @@ use api::c2c::RetryClass;
 use api::ipc::IPC_BUF_SIZE;
 use api::services::ipc::{VfsRequest, VfsResponse};
 use api::task::TaskPriority;
+use ostd::service::provider_tid;
 use ostd::{
     cluster_endpoint::{CellMethod, EndpointError, LocalEndpoint},
     io::println,
     ipc::{submit, take, wait, IpcTakeResult, IpcTerminal},
     service::ServiceRef,
     syscall::{
-        sys_exit, sys_lookup_service, sys_lookup_service_bound, sys_recv, sys_send,
-        sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
+        sys_exit, sys_lookup_service_bound, sys_recv, sys_send, sys_set_spawn_args,
+        sys_spawn_pinned, SyscallResult,
     },
     task::yield_now,
 };
@@ -1381,7 +1382,7 @@ fn settle() {
 /// below to appear. A capture bug (identity stored as 0/0) makes `lookup_bound`
 /// report no binding, so this leg fails loudly instead of passing on a stub.
 fn binding_leg() {
-    let vfs_tid = sys_lookup_service(api::syscall::service::VFS);
+    let vfs_tid = provider_tid(api::syscall::service::VFS);
     let mut buf = [0u8; api::service_binding::SERVICE_BINDING_LEN];
     match sys_lookup_service_bound(api::syscall::service::VFS, &mut buf) {
         Some(binding) => {
@@ -1398,9 +1399,8 @@ fn binding_leg() {
 
     // No provider: this image neither builds nor launches the AI cell, so the id
     // resolves to nothing and the bound lookup must say so rather than write a
-    // record. `0` from `LookupService` and "no binding" from
-    // `LookupServiceBound` are the same absence, stated two ways.
-    let absent_tid = sys_lookup_service(api::syscall::service::AI);
+    // record; `provider_tid` reports the same absence.
+    let absent_tid = provider_tid(api::syscall::service::AI);
     let absent_binding = sys_lookup_service_bound(api::syscall::service::AI, &mut buf);
     println(&format!(
         "[local-lifecycle] ABSENT-BINDING lookup={:?} bound_is_none={}",

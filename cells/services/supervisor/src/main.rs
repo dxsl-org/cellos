@@ -31,7 +31,8 @@ use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::ipc::Incoming;
-use ostd::syscall::{sys_lookup_service, sys_resolve_cell_image};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_resolve_cell_image;
 use protocol::{
     encode_status, parse_power_request, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_POWER,
     OP_SNAPSHOT, POWER_STATUS_PHASE, STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER,
@@ -129,7 +130,7 @@ fn handler(ctx: &mut AppContext, event: AppEvent) {
                 && data.len() == 1 + core::mem::size_of::<usize>()
                 && data[0] == 0xE1 =>
         {
-            if let Some(compositor) = sys_lookup_service(service::COMPOSITOR) {
+            if let Some(compositor) = provider_tid(service::COMPOSITOR) {
                 let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
                 relay[0] = 0xE2;
                 relay[1..].copy_from_slice(&data[1..]);

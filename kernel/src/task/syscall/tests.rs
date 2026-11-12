@@ -980,15 +980,6 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
             crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER),
             None
         );
-        assert_eq!(
-            super::handle_syscall(
-                tid,
-                Syscall::LookupService {
-                    service_id: api::syscall::service::BLOCK_DRIVER
-                }
-            ),
-            Ok(0)
-        );
 
         for owner in [1, 2, 3, 4, 5, 6] {
             release_bdfs_for(owner);

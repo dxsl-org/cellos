@@ -75,8 +75,8 @@ fn request_from_supervisor(
     output: &ostd::io::ProcessOutput,
     deadline: u64,
 ) -> ! {
-    use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
-    let Some(supervisor) = sys_lookup_service(api::syscall::service::SUPERVISOR) else {
+    use ostd::syscall::{sys_recv_timeout, sys_send, SyscallResult};
+    let Some(supervisor) = ostd::service::provider_tid(api::syscall::service::SUPERVISOR) else {
         exit_with(output, b"shutdown: supervisor unavailable\n", deadline);
     };
     let action = match action {

@@ -123,7 +123,7 @@ pub fn cmd_machine(args: &[String]) -> i32 {
 }
 
 fn run(invocation: Invocation) -> Result<i32, Failure> {
-    let init = ostd::syscall::sys_lookup_service(api::syscall::service::MACHINE_PIN)
+    let init = ostd::service::provider_tid(api::syscall::service::MACHINE_PIN)
         .ok_or(Failure::Unavailable)?;
     let MachinePinResponse::Status {
         state,

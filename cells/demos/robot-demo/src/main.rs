@@ -35,7 +35,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     Log,
-    LookupService,
+    LookupServiceBound,
     Heartbeat,
     RequestMmio
 ];

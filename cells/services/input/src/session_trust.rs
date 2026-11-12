@@ -180,9 +180,7 @@ impl Sessions {
         sender: usize,
     ) -> Result<(), Status> {
         if selector == 29 {
-            return if sys_lookup_service(api::syscall::service::VFS)
-                .is_some_and(|tid| tid == sender)
-            {
+            return if provider_tid(api::syscall::service::VFS).is_some_and(|tid| tid == sender) {
                 Ok(())
             } else {
                 Err(Status::Denied)

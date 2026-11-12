@@ -1,8 +1,9 @@
 //! Trusted compositor frame routing and lifecycle event polling.
 
+use crate::service::provider_tid;
 use api::syscall::service;
 
-use crate::syscall::{sys_lookup_service, SyscallResult};
+use crate::syscall::SyscallResult;
 
 use super::dispatcher;
 use super::events::{SurfaceEvent, MAX_SURFACE_EVENTS};
@@ -22,7 +23,7 @@ pub fn poll_surface_events(max: usize) -> heapless::Vec<SurfaceEvent, MAX_SURFAC
         };
         let _ = events.push(event);
     }
-    let Some(compositor_tid) = sys_lookup_service(service::COMPOSITOR) else {
+    let Some(compositor_tid) = provider_tid(service::COMPOSITOR) else {
         return events;
     };
     for _ in 0..limit.saturating_sub(events.len()) {

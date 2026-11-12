@@ -8,14 +8,14 @@
 
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::sys_lookup_service;
+use ostd::service::provider_tid;
 
 use super::hotswap_supervisor::{expect_reply, read_counter, spawn_cached_sender_probe};
 
 /// Drive the running v1 provider to counter 5. With `cached`, also spawn the
 /// cached-sender probe that injects one increment during the cutover.
 pub fn prime(cached: bool) {
-    let Some(tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
+    let Some(tid) = provider_tid(service::HOTSWAP_DEMO) else {
         fail("prime", "demo-v1 is not registered");
     };
     for _ in 0..5 {
@@ -27,7 +27,7 @@ pub fn prime(cached: bool) {
         fail("prime", "demo-v1 counter is not 5");
     }
     if cached {
-        if sys_lookup_service(service::SUPERVISOR).is_none() {
+        if provider_tid(service::SUPERVISOR).is_none() {
             fail("prime", "supervisor is not registered");
         }
         if !spawn_cached_sender_probe(tid) {
@@ -44,7 +44,7 @@ pub fn prime(cached: bool) {
 
 /// After the swap: the registered provider is v2 and holds `expected`.
 pub fn verify(expected: u32) {
-    let Some(tid) = sys_lookup_service(service::HOTSWAP_DEMO) else {
+    let Some(tid) = provider_tid(service::HOTSWAP_DEMO) else {
         fail("verify", "no provider registered after the swap");
     };
     match read_counter(tid, b"v2:") {

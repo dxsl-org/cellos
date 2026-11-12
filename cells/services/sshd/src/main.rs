@@ -31,7 +31,7 @@ api::declare_syscalls![
     Send,
     Recv,
     Log,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     GetProcs,
     GetRandom,
@@ -70,7 +70,7 @@ fn cell_main() {
     init_custom_heap();
     log("[sshd] Cellos SSH-2.0 daemon starting...");
 
-    while ostd::syscall::sys_lookup_service(api::syscall::service::VFS).is_none() {
+    while ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
         ostd::syscall::sys_yield();
     }
     let host_key = match host_key::load_or_create(kex::kernel_entropy) {

@@ -127,10 +127,6 @@ pub enum Syscall {
         tid: usize,
         flags: usize,
     },
-    /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
-    LookupService {
-        service_id: u16,
-    },
     /// 429: LookupServiceBound — resolve `service_id` to its live provider binding
     /// `{ tid, cell_id, generation }` (open; 0 = none). The record is written whole
     /// or refused, never partially.
@@ -1034,9 +1030,6 @@ pub(super) fn map_syscall(
             service_id: a0 as u16,
             tid: a1,
             flags: a2,
-        },
-        ViSyscall::LookupService => Syscall::LookupService {
-            service_id: a0 as u16,
         },
         ViSyscall::LookupServiceBound => Syscall::LookupServiceBound {
             service_id: a0 as u16,

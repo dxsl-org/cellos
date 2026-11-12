@@ -64,7 +64,7 @@ impl Service {
                         Readiness::Spec => self
                             .spec
                             .service_id
-                            .is_none_or(|id| syscall::sys_lookup_service(id) == Some(tid)),
+                            .is_none_or(|id| ostd::service::provider_tid(id) == Some(tid)),
                         Readiness::BlockRoute => routes_name(&block_routes(), tid),
                     }
             })
@@ -85,7 +85,7 @@ pub(crate) fn dependencies_available(services: &[Service], index: usize) -> bool
 /// helper may fall back after an ELF rejection, which consumes the staged argv;
 /// keeping the attempts here lets init republish it before the raw-path attempt.
 fn spawn_path(spec: &CellSpec) -> Option<usize> {
-    if let Some(vfs) = syscall::sys_lookup_service(service::VFS) {
+    if let Some(vfs) = ostd::service::provider_tid(service::VFS) {
         if let Ok((grant, len)) = ostd::fs::read_full_via_grant(&spec.path, vfs) {
             if !ostd::args::set_spawn_argv(&spec.args) {
                 syscall::sys_grant_free(grant);
@@ -128,7 +128,7 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
             matches!(
                 syscall::sys_register_service(id, tid, ostd::service::namespace_flags(id)),
                 SyscallResult::Ok(0)
-            ) && syscall::sys_lookup_service(id) == Some(tid)
+            ) && ostd::service::provider_tid(id) == Some(tid)
         }
         (Readiness::Spec, Registration::SelfReady, Some(id)) => {
             wait_for_exact_registration(id, tid, service.spec.ready_timeout_ticks)
@@ -160,7 +160,7 @@ pub(crate) fn wait_for_exact_registration(id: u16, expected_tid: usize, timeout:
     const POLL_LIMIT: usize = 5_000_000;
     let started = now_ticks();
     for _ in 0..POLL_LIMIT {
-        match syscall::sys_lookup_service(id) {
+        match ostd::service::provider_tid(id) {
             Some(tid) => return tid == expected_tid,
             None if now_ticks().wrapping_sub(started) >= timeout
                 || crate::activation::task_alive(expected_tid) == Some(false) =>

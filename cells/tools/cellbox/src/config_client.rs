@@ -31,7 +31,7 @@ impl ConfigClient {
 
     fn endpoint() -> Option<usize> {
         for _ in 0..8 {
-            if let Some(tid) = ostd::syscall::sys_lookup_service(api::syscall::service::CONFIG) {
+            if let Some(tid) = ostd::service::provider_tid(api::syscall::service::CONFIG) {
                 return Some(tid);
             }
             ostd::task::yield_now();

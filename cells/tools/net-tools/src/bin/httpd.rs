@@ -21,10 +21,11 @@ use api::syscall::service;
 use ostd::clients::VfsClient;
 use ostd::io::{print, println};
 use ostd::ipc::{service_call_typed, IpcError};
-use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 use ostd::ViError;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -285,14 +286,14 @@ fn cell_main() {
     };
 
     // ── Resolve service endpoints ─────────────────────────────────────────────
-    let net_ep = match sys_lookup_service(service::NET) {
+    let net_ep = match provider_tid(service::NET) {
         Some(ep) => ep,
         None => {
             println("httpd: no net service");
             return;
         }
     };
-    let vfs_ep = match sys_lookup_service(service::VFS) {
+    let vfs_ep = match provider_tid(service::VFS) {
         Some(ep) => ep,
         None => {
             println("httpd: no vfs service");

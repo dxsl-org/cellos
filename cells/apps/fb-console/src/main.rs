@@ -29,7 +29,7 @@ api::declare_syscalls![
     GrantUnregister,
     Send,
     Recv,
-    LookupService,
+    LookupServiceBound,
     ReadLog
 ];
 

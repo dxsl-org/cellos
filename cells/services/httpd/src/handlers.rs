@@ -180,10 +180,10 @@ pub(crate) fn api_cells() -> Response {
         ("config", service::CONFIG),
     ];
     for (name, id) in known {
-        if let Some(tid) = lookup(*id) {
+        if let Some(binding) = lookup(*id) {
             entries.push(format!(
                 r#"{{"name":"{}","tid":{},"state":"Running"}}"#,
-                name, tid
+                name, binding.tid
             ));
         }
     }

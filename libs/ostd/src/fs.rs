@@ -78,7 +78,7 @@ impl File {
     /// Returns `ViError::NotFound` if the path does not exist in the kernel FS.
     pub fn open(path: &str) -> ViResult<Self> {
         let cap_id = syscall::sys_open_cap(path).map_err(|_| ViError::NotFound)?;
-        let vfs_tid = crate::service::lookup(crate::service::service::VFS).unwrap_or(0);
+        let vfs_tid = crate::service::provider_tid(crate::service::service::VFS).unwrap_or(0);
         Ok(Self {
             cap_id,
             closed: false,

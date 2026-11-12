@@ -7,7 +7,8 @@ use api::hostile_backend_recovery::{
 use api::syscall::service;
 use ostd::io::println;
 use ostd::ipc::Incoming;
-use ostd::syscall::{sys_kill_cell, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_kill_cell;
 
 const HYPERVISOR_TASK_NAME: &str = "hypervisor";
 const BENCH_TASK_NAME: &str = "bench";
@@ -37,7 +38,7 @@ pub(crate) fn handle(sender_tid: usize, data: &[u8]) {
         reply(sender_tid, KILL_STATUS_SERVICE_NOT_ALLOWED);
         return;
     };
-    let Some(old_tid) = sys_lookup_service(service_id) else {
+    let Some(old_tid) = provider_tid(service_id) else {
         reply(sender_tid, KILL_STATUS_SERVICE_NOT_FOUND);
         return;
     };

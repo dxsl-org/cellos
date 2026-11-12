@@ -43,7 +43,7 @@ api::declare_syscalls![
     Send,
     Recv,
     TryRecv,
-    LookupService,
+    LookupServiceBound,
     GpuGetResolution,
     GetTime,
     // FrontendHost reaping and the idle backoff below sleep one tick at a time.

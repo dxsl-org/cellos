@@ -26,12 +26,12 @@ use core::sync::atomic::{AtomicU32, Ordering};
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 // `Rename` is the raw path-addressed syscall S6 commits through: this cell is
 // spawned without a cwd grant, so unlike a shell-launched child it is unsealed.
-api::declare_syscalls![Send, Recv, Log, LookupService, Rename, VfsMutate];
+api::declare_syscalls![Send, Recv, Log, LookupServiceBound, Rename, VfsMutate];
 
 fn vfs_tid() -> usize {
     use api::syscall::service;
     loop {
-        if let Some(tid) = ostd::syscall::sys_lookup_service(service::VFS) {
+        if let Some(tid) = ostd::service::provider_tid(service::VFS) {
             return tid;
         }
         ostd::task::yield_now();

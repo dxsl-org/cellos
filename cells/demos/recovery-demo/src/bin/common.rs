@@ -65,7 +65,7 @@ pub fn sleep(ticks: usize) {
 }
 
 pub fn lookup(service: u16) -> Option<usize> {
-    syscall::sys_lookup_service(service).filter(|tid| *tid != 0)
+    ostd::service::provider_tid(service).filter(|tid| *tid != 0)
 }
 
 /// Poll `service` until it resolves, at most `tries` one-tick waits.

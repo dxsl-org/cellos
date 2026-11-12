@@ -34,7 +34,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     SetTimer,
-    LookupService,
+    LookupServiceBound,
     StateStash,
     SpawnFromPath,
     GetRandom,

@@ -19,7 +19,7 @@ api::declare_syscalls![
     Log,
     GetTime,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     ResolveCellOwner,
     SetTimer,
     // Phase 03d multi-source caller (`c2c-msw-caller`): test-cell authority for

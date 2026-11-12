@@ -17,10 +17,10 @@ use driver_dwc2_usb::usb_channel::{self, TransferMode, UsbHostEngine};
 use driver_dwc2_usb::usb_hid;
 use driver_dwc2_usb::Dwc2Controller;
 use ostd::io::{print, println};
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_force_exit, sys_lookup_service, sys_notify_on_exit, sys_recv_timeout,
-    sys_register_nic_driver, sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send,
-    sys_yield, SyscallResult,
+    sys_force_exit, sys_notify_on_exit, sys_recv_timeout, sys_register_nic_driver,
+    sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send, sys_yield, SyscallResult,
 };
 
 declare_manifest!(
@@ -45,7 +45,7 @@ declare_syscalls![
     WaitIrq,
     GetTime,
     SpawnFromPath,
-    LookupService,
+    LookupServiceBound,
     RegisterNicDriver,
     RegisterUsbHidProducer,
     NotifyOnExit,
@@ -408,7 +408,7 @@ fn cell_main() {
 
     // Input-service endpoint, re-resolved whenever it is missing: the service is
     // supervised and comes back under a new tid after a restart.
-    let mut input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+    let mut input_tid = provider_tid(service::INPUT).unwrap_or(0);
     let mut source_registered = false;
     let mut events: alloc::vec::Vec<EvdevEvent> = alloc::vec::Vec::new();
     let mut in_buf = [0u8; 4096];
@@ -421,7 +421,7 @@ fn cell_main() {
         let turn_start = ostd::syscall::sys_get_time_ms().unwrap_or(0);
         // Re-resolve both endpoints: the input service restarts under a new tid.
         if input_tid == 0 {
-            input_tid = sys_lookup_service(service::INPUT).unwrap_or(0);
+            input_tid = provider_tid(service::INPUT).unwrap_or(0);
             source_registered = false;
         }
         if input_tid != 0 && !source_registered {

@@ -47,7 +47,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use device::BlkDevice;
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_lookup_service, sys_register_block_device, BlockDevice};
+use ostd::syscall::{sys_register_block_device, BlockDevice};
 
 static STATE: Mutex<Option<BlkDevice>> = Mutex::new(None);
 
@@ -61,7 +61,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }

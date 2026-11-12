@@ -45,7 +45,7 @@ api::declare_syscalls![
     Send,
     Recv,
     Log,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     // The entropy smoke calls `getentropy`, which the shim implements over
     // `GetRandom` (opcode 214). Without the allowlist bit the call is denied and

@@ -19,11 +19,10 @@
 
 use alloc::format;
 use api::syscall::service;
+use ostd::service::provider_tid;
 use ostd::{
     io::println,
-    syscall::{
-        sys_exit, sys_force_exit, sys_get_scheduler_ticks, sys_lookup_service, SyscallResult,
-    },
+    syscall::{sys_exit, sys_force_exit, sys_get_scheduler_ticks, SyscallResult},
     task::yield_now,
 };
 
@@ -70,7 +69,7 @@ fn fail(why: &str) -> ! {
 /// Force one exit, then wait for `init` to bring the service back. Returns the
 /// tick at which the exit was delivered.
 fn force_exit_and_await_restart(label: &str) -> u64 {
-    let Some(tid) = sys_lookup_service(TARGET_SERVICE) else {
+    let Some(tid) = provider_tid(TARGET_SERVICE) else {
         fail(&format!(
             "{label}: {TARGET_NAME} is already absent — init gave up before its budget was spent"
         ));
@@ -83,7 +82,7 @@ fn force_exit_and_await_restart(label: &str) -> u64 {
 
     let deadline = killed_at + RESTART_WAIT_TICKS;
     while now() < deadline {
-        match sys_lookup_service(TARGET_SERVICE) {
+        match provider_tid(TARGET_SERVICE) {
             Some(new_tid) if new_tid != tid => {
                 println(&format!(
                     "[init-giveup] {label}: restarted tid={new_tid} after {} ticks",
@@ -124,7 +123,7 @@ pub fn run() -> ! {
     let quiet_ticks = WINDOW_TICKS + ANCHOR_MARGIN_TICKS;
     let mut window_start = force_exit_and_await_restart("warmup");
     while now().wrapping_sub(window_start) <= quiet_ticks {
-        if sys_lookup_service(TARGET_SERVICE).is_none() {
+        if provider_tid(TARGET_SERVICE).is_none() {
             window_start = now();
         }
         yield_now();
@@ -154,7 +153,7 @@ pub fn run() -> ! {
     // The budget is spent: the service must stay down for a whole window's worth of ticks.
     let deadline = now() + ABSENT_TICKS;
     while now() < deadline {
-        if let Some(tid) = sys_lookup_service(TARGET_SERVICE) {
+        if let Some(tid) = provider_tid(TARGET_SERVICE) {
             fail(&format!(
                 "init restarted {TARGET_NAME} again (tid={tid}) — the crash-storm budget never engaged"
             ));

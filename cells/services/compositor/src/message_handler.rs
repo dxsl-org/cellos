@@ -7,7 +7,8 @@ mod view_frame;
 mod window;
 use api::display::Rect;
 use api::syscall::service;
-use ostd::syscall::{sys_grant_unregister, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::sys_grant_unregister;
 
 use crate::appearance::Appearance;
 use crate::input_handler::InputState;
@@ -65,9 +66,7 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
     if buf.is_empty() {
         return;
     }
-    if buf[0] == OWNER_EXITED_OPCODE
-        && sender == sys_lookup_service(service::SUPERVISOR).unwrap_or(0)
-    {
+    if buf[0] == OWNER_EXITED_OPCODE && sender == provider_tid(service::SUPERVISOR).unwrap_or(0) {
         let dead_tid = usize::from_le_bytes(
             buf[1..1 + core::mem::size_of::<usize>()]
                 .try_into()

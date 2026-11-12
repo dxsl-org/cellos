@@ -69,7 +69,7 @@ pub(super) fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
 
 fn request_vfs<'a>(len: usize, send: &[u8], recv: &'a mut [u8]) -> Result<&'a [u8], String> {
     let vfs = loop {
-        if let Some(tid) = syscall::sys_lookup_service(api::syscall::service::VFS) {
+        if let Some(tid) = ostd::service::provider_tid(api::syscall::service::VFS) {
             break tid;
         }
         ostd::task::yield_now();

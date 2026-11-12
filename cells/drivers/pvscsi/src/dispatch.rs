@@ -9,7 +9,6 @@ use crate::error::PvscsiError;
 use crate::scan::Disk;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::sync::Mutex;
-use ostd::syscall::sys_lookup_service;
 use scsi_block::ScsiError;
 use types::block_wire::{self, BlockOutcome, ReadRunRequest, SECTOR_SIZE};
 
@@ -25,7 +24,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if sys_lookup_service(api::syscall::service::VFS) == Some(sender_tid) {
+    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }

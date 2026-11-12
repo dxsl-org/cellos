@@ -13,7 +13,7 @@ use ostd::syscall;
 fn vfs_endpoint() -> usize {
     use api::syscall::service;
     loop {
-        if let Some(tid) = syscall::sys_lookup_service(service::VFS) {
+        if let Some(tid) = ostd::service::provider_tid(service::VFS) {
             return tid;
         }
         ostd::task::yield_now();

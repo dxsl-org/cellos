@@ -46,7 +46,7 @@ api::declare_syscalls![
     RecvTimeout,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     StateStash,
     StateRestore,

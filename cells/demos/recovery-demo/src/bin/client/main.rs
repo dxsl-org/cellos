@@ -29,7 +29,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     SetTimer,
-    LookupService,
+    LookupServiceBound,
     MemInfo,
     StateRestore
 ];

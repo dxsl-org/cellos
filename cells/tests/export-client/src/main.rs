@@ -21,9 +21,9 @@ use edu_export_proto::{
 use ostd::dma::{revoke_export, DmaBuf};
 use ostd::io::{print_fmt, println};
 use ostd::ipc::{self, PendingCall};
+use ostd::service::provider_tid;
 use ostd::syscall::{
-    sys_exit, sys_export_dma_range, sys_grant_free, sys_lookup_service, sys_map_dma_export,
-    DmaExportError,
+    sys_exit, sys_export_dma_range, sys_grant_free, sys_map_dma_export, DmaExportError,
 };
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
@@ -33,7 +33,7 @@ api::declare_syscalls![
     Send,
     Recv,
     GetTime,
-    LookupService,
+    LookupServiceBound,
     GrantAlloc,
     GrantFree,
     ExportDmaRange,
@@ -80,7 +80,7 @@ fn page_matches(buf: &DmaBuf, offset: usize, byte: impl Fn(usize) -> u8) -> bool
 fn cell_main() {
     let mut holder = None;
     for _ in 0..500 {
-        holder = sys_lookup_service(SERVICE_ID);
+        holder = provider_tid(SERVICE_ID);
         if holder.is_some() {
             break;
         }

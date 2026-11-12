@@ -51,7 +51,7 @@ api::declare_syscalls![
     Send,
     Recv,
     TryRecv,
-    LookupService,
+    LookupServiceBound,
     GpuGetResolution,
     GetTime,
     // Mkdir/Write/Append/Rename/Unlink/Rmdir through the VFS service (path policy applies).

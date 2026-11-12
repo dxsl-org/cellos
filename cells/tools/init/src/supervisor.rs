@@ -3,7 +3,8 @@ use api::retirement::{reason, RetirementState, ViRetirementV1};
 use api::syscall::service;
 use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_query_retirement, SyscallError};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_query_retirement, SyscallError};
 
 use crate::service_table::{self, now_ticks, Service};
 
@@ -235,7 +236,7 @@ fn relay_hypervisor_exit(dead: usize) {
     let mut message = [0u8; 1 + core::mem::size_of::<usize>()];
     message[0] = 0xE1;
     message[1..].copy_from_slice(&dead.to_le_bytes());
-    if let Some(supervisor) = sys_lookup_service(service::SUPERVISOR) {
+    if let Some(supervisor) = provider_tid(service::SUPERVISOR) {
         let _ = ostd::ipc::post(supervisor, &message);
     }
     println("Init: hypervisor exited — scanout cleanup relayed.");

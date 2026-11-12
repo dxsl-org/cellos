@@ -23,7 +23,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     ResolveCellOwner,
     GetTime,
     SetTimer,

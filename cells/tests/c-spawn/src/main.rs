@@ -22,7 +22,7 @@ api::declare_syscalls![
     Exit,
     Send,
     Recv,
-    LookupService,
+    LookupServiceBound,
     SpawnFromPath,
     SpawnFromElf,
     Wait,
@@ -49,7 +49,7 @@ const CHILD_PATH: &str = "/bin/c-spawn-child";
 #[no_mangle]
 pub extern "C" fn main() {
     // The launch transaction borrows these bytes; this host owns and frees them.
-    let (grant, len) = match ostd::service::lookup(ostd::service::service::VFS)
+    let (grant, len) = match ostd::service::provider_tid(ostd::service::service::VFS)
         .ok_or(())
         .and_then(|vfs| ostd::fs::read_full_via_grant(CHILD_PATH, vfs).map_err(|_| ()))
     {

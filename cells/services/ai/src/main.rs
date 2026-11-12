@@ -42,7 +42,7 @@ api::declare_syscalls![
     Recv,
     TryRecv,
     Log,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     Yield,
     // Model load prefers the kernel capability path: `ReadCap` moves a large buffer per *syscall*,

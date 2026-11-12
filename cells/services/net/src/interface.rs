@@ -9,9 +9,10 @@ extern crate alloc;
 
 use alloc::{boxed::Box, collections::VecDeque};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use ostd::service::provider_tid;
 use ostd::{
     io::println,
-    syscall::{sys_lookup_service, sys_recv_timeout, sys_try_send, SyscallResult},
+    syscall::{sys_recv_timeout, sys_try_send, SyscallResult},
 };
 use smoltcp::{
     phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
@@ -105,7 +106,7 @@ fn invalidate_cached_nic_driver(cache: &AtomicUsize, tid: usize) {
 /// Returns the active NIC Driver Cell TID, re-probing after absence or failure.
 fn nic_driver_tid() -> Option<usize> {
     resolve_cached_nic_driver(&NIC_DRIVER_TID, || {
-        sys_lookup_service(api::syscall::service::NIC_DRIVER)
+        provider_tid(api::syscall::service::NIC_DRIVER)
     })
 }
 

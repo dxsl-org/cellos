@@ -31,7 +31,7 @@ api::declare_syscalls![
     Recv,
     RecvTimeout,
     SetTimer,
-    LookupService,
+    LookupServiceBound,
     StateRestore,
     Spawn,
     GrantAlloc,

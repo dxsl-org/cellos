@@ -32,7 +32,7 @@ api::declare_syscalls![
     CloseCap,
     // `ostd::args()` reads the spawner's argv out of the state stash.
     StateRestore,
-    LookupService,
+    LookupServiceBound,
     Spawn,
     Yield,
     Exit
@@ -118,8 +118,7 @@ fn cell_main() {
     }
 
     // Connect to Hypervisor service (service ID 14)
-    let hv_tid =
-        ostd::syscall::sys_lookup_service(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
+    let hv_tid = ostd::service::provider_tid(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
     if hv_tid == 0 {
         println("[vm-runner] ERROR: Hypervisor service (ID 14) unavailable.");
         sys_exit(1);

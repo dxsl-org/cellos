@@ -54,7 +54,7 @@ api::declare_syscalls![
     Send,
     Recv,
     TryRecv,
-    LookupService,
+    LookupServiceBound,
     IpcSubmit,
     IpcTake,
     IpcWait,

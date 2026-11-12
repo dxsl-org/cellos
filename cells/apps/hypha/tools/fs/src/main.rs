@@ -36,7 +36,7 @@ api::declare_syscalls![
     SendGather,
     Recv,
     Log,
-    LookupService,
+    LookupServiceBound,
     VfsMutate,
     StateRestore
 ];

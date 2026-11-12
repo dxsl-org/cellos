@@ -196,12 +196,12 @@ fn kernel_origin_skips_the_allowlist_and_handle_syscall_does_not() {
     *SCHEDULER.lock() = saved;
 }
 
-/// CP1 D4 negative control: a retired number decodes to nothing, so the trap
+/// CP1 D4/D5 negative control: a retired number decodes to nothing, so the trap
 /// answers it as an unknown syscall — including through the raw fallback,
 /// which once mapped 3 to `SetTimer` behind the retired `Reply`.
 #[test]
 fn retired_numbers_decode_to_nothing() {
-    for id in [2, 3, 6, 218, 310, 311] {
+    for id in [2, 3, 6, 206, 218, 310, 311] {
         assert!(map_syscall(id, 0, 0, 0, 0).is_none(), "opcode {id} decodes");
     }
 }

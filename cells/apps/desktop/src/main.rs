@@ -40,7 +40,7 @@ api::declare_syscalls![
     Send,
     Recv,
     TryRecv,
-    LookupService,
+    LookupServiceBound,
     GpuGetResolution,
     GetTime,
     // Stages the LaunchIntent target as the handler's argv.

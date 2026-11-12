@@ -120,7 +120,7 @@ impl Repl {
     /// - the input service: a shell outside a terminal session releases
     ///   console focus while its foreground child runs, and serial bytes
     ///   reach that child only as key events once it claims focus. Needs the
-    ///   `Send`, `RecvTimeout` and `LookupService` syscalls.
+    ///   `Send`, `RecvTimeout` and `LookupServiceBound` syscalls.
     ///
     /// An `fd 0` error (endpoint gone, `Read` not granted) ends input: `Eof`.
     pub fn read_line(&mut self, prompt: &str) -> ReadResult {
@@ -164,7 +164,7 @@ impl Repl {
         use api::input::{decode_event, InputEvent, INPUT_EVENT_OPCODE};
         // Short enough that console bytes on fd 0 are still picked up promptly.
         const TIMEOUT_TICKS: u64 = 2;
-        let Some(input_tid) = syscall::sys_lookup_service(api::syscall::service::INPUT) else {
+        let Some(input_tid) = crate::service::provider_tid(api::syscall::service::INPUT) else {
             return false;
         };
         // Claim focus once per input-service incarnation, as Stdin does:

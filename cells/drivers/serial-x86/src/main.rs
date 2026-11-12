@@ -56,7 +56,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     GetTime,
     RecvTimeout,
     // Serial-port surface (shares allowlist bit 50 with the driver-registration

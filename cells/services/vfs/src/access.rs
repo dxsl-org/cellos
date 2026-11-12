@@ -223,7 +223,7 @@ enum AccessKind {
 
 #[cfg(target_os = "none")]
 fn default_service_lookup(service_id: u16) -> Option<usize> {
-    ostd::syscall::sys_lookup_service(service_id)
+    ostd::service::provider_tid(service_id)
 }
 
 #[cfg(not(target_os = "none"))]

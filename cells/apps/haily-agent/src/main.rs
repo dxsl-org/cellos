@@ -19,7 +19,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::time::Duration;
 use ostd::io::println;
-use ostd::syscall::{sys_exit, sys_lookup_service, sys_spawn_from_path, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_exit, sys_spawn_from_path, SyscallResult};
 use vimio::{Events, Selector};
 
 use cluster::{HailyClusterCoordinator, HailyNode, NodeRole, NodeState, TaskKind};
@@ -35,7 +36,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     SpawnFromPath,
-    LookupService,
+    LookupServiceBound,
     StateRestore,
     GetTime,
     GrantAlloc
@@ -78,7 +79,7 @@ fn cell_main() {
     }
 
     // 2. Discover C2C Network Broker & HTTP Gateway
-    if let Some(broker_tid) = sys_lookup_service(api::syscall::service::NET_BROKER) {
+    if let Some(broker_tid) = provider_tid(api::syscall::service::NET_BROKER) {
         println(&format!(
             "[haily-agent] C2C Net Broker discovered at tid: {}",
             broker_tid

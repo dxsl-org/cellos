@@ -23,10 +23,11 @@ use alloc::string::String;
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::println;
 use ostd::runtime::CellRuntime;
-use ostd::syscall::{sys_exit, sys_get_procs, sys_lookup_service};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_exit, sys_get_procs};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, SendGather, Recv, Log, GetProcs, LookupService];
+api::declare_syscalls![Send, SendGather, Recv, Log, GetProcs, LookupServiceBound];
 
 ostd::cell_main!(cell_main);
 
@@ -121,7 +122,7 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
                     }
                 }
             };
-            match sys_lookup_service(sid) {
+            match provider_tid(sid) {
                 Some(tid) => AgentToolResponse::Ok {
                     result_json: alloc::format!("{{\"service\":\"{}\",\"tid\":{}}}", svc_name, tid),
                 },

@@ -13,11 +13,12 @@ api::declare_manifest!(
     uart = false,
     hypervisor = false
 );
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupService];
+api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound];
 
 use ostd::clients::kms::{KmsClient, KmsClientError};
 use ostd::io::println;
-use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_timeout, sys_send, SyscallResult};
 use types::kms::KmsErrorCode;
 use types::silo::{
     DevelopmentSiloError, DevelopmentSiloRequest, DevelopmentSiloResponse,
@@ -78,7 +79,7 @@ fn cell_main() {
     }
 }
 fn direct_silo_denied() -> bool {
-    let Some(silo_tid) = sys_lookup_service(api::syscall::service::SILO) else {
+    let Some(silo_tid) = provider_tid(api::syscall::service::SILO) else {
         return false;
     };
     let request = DevelopmentSiloRequest::SignTls13ClientCertificateVerify {

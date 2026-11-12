@@ -58,7 +58,7 @@ impl TlsStream {
     /// handshake synchronously. Returns `ViError::NotFound` if the net service
     /// is unavailable, or `ViError::IO` if the handshake fails.
     pub fn connect(addr: [u8; 4], port: u16, hostname: &str) -> ViResult<Self> {
-        let net_tid = service::lookup(service::service::NET).ok_or(ViError::NotFound)?;
+        let net_tid = service::provider_tid(service::service::NET).ok_or(ViError::NotFound)?;
         let cap_id = tls_connect(net_tid, addr, port, hostname);
         if cap_id == 0 {
             return Err(ViError::IO);

@@ -37,7 +37,7 @@ api::declare_syscalls![
     Log,
     MemInfo,
     Heartbeat,
-    LookupService,
+    LookupServiceBound,
     SpawnFromPath,
     SpawnFromElf,
     Wait,
@@ -216,7 +216,7 @@ fn run_legacy_shell() {
     let _ = ostd::syscall::sys_log("shell: starting\n");
     // The graphical frontend has not been admitted to SessionV1. Preserve
     // its existing path; a serial session never falls back to public fd 0.
-    if ostd::syscall::sys_lookup_service(api::syscall::service::COMPOSITOR).is_some() {
+    if ostd::service::provider_tid(api::syscall::service::COMPOSITOR).is_some() {
         let mut shell = ViShell::new();
         ostd::executor::block_on(shell.run());
     } else if let Err(status) = run_serial_session() {

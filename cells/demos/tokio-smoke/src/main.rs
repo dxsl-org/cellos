@@ -8,7 +8,7 @@ extern crate alloc;
 
 use core::time::Duration;
 use ostd::io::println;
-use ostd::syscall::sys_lookup_service;
+use ostd::service::provider_tid;
 use vimio::{Events, Interest, Selector, Token, Waker};
 
 api::declare_manifest!(
@@ -29,7 +29,7 @@ api::declare_syscalls![
     TryRecv,
     RecvTimeout,
     Log,
-    LookupService,
+    LookupServiceBound,
     StateRestore,
     GetTime
 ];
@@ -82,7 +82,7 @@ fn cell_main() {
     }
 
     // Connect to network service if online
-    if let Some(net_tid) = sys_lookup_service(api::syscall::service::NET) {
+    if let Some(net_tid) = provider_tid(api::syscall::service::NET) {
         println(&alloc::format!(
             "[tokio-smoke] Network service available at tid: {}",
             net_tid
