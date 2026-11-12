@@ -49,6 +49,41 @@ fn shell_has_no_mem_launch_edge() {
     );
 }
 
+/// The hypervisor holds `hypervisor + net_l2`, so only init, the shell's `hv`
+/// and the Chrome launcher may start it: it has no generic user-target row that
+/// the desktop route, Hypha's tool-spawn or init autoload would hand out.
+#[test]
+fn only_init_the_shell_and_chrome_reach_the_hypervisor() {
+    assert_eq!(
+        super::targets::reviewed_user_target_ceiling("/bin/hypervisor"),
+        None
+    );
+    for name in ["desktop", "terminal", "hypha-tool-spawn", "files", "ocel"] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+            assert!(
+                authorize(caller(name, true, false), route, "/bin/hypervisor").is_none(),
+                "{name} {route:?}"
+            );
+        }
+    }
+    assert!(authorize(
+        caller("cellbox", false, false),
+        LaunchRoute::Elf,
+        "/bin/hypervisor"
+    )
+    .is_none());
+    let init = authorize(
+        caller("init", true, false),
+        LaunchRoute::Path,
+        "/bin/hypervisor",
+    )
+    .expect("init keeps its boot edge");
+    assert_eq!(
+        init.child_ceiling,
+        boot_ceiling::boot_ceiling("/bin/hypervisor")
+    );
+}
+
 /// Tier 3 is started on demand, so the shell carries the launch edge for the
 /// hypervisor cell — with exactly the authority the init edge gives it, and
 /// nothing else. A wider ceiling here would hand a user-typed command more than
@@ -84,7 +119,10 @@ fn chrome_can_launch_only_its_hypervisor_with_its_own_authority() {
     );
     assert!(authorize(chrome, LaunchRoute::Elf, "/bin/hypervisor").is_none());
     for other in ["/bin/cellbox", "/bin/terminal", "/bin/net"] {
-        assert!(authorize(chrome, LaunchRoute::Path, other).is_none(), "{other}");
+        assert!(
+            authorize(chrome, LaunchRoute::Path, other).is_none(),
+            "{other}"
+        );
     }
 }
 
@@ -1167,14 +1205,6 @@ fn every_pre_annex_target_row_keeps_observe_mutate() {
             "/bin/dwc2-usb",
             CapSet {
                 usb_driver: true,
-                ..CapSet::EMPTY
-            },
-        ),
-        (
-            "/bin/hypervisor",
-            CapSet {
-                hypervisor: true,
-                net_l2: true,
                 ..CapSet::EMPTY
             },
         ),

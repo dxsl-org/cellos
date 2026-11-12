@@ -86,6 +86,9 @@ pub(super) fn cellbox_profile(route: LaunchRoute, target: &str) -> Option<Launch
         // the caller-owned ELF route cannot start it). Its ceiling carries the admin
         // right and never the sign right ([`KMS_SSH_ADMIN_EDGE`]).
         LaunchRoute::Path if target == "/bin/kms-ssh-admin" => KMS_SSH_ADMIN_EDGE,
+        // Tier 3 on demand (`hv`): the kernel-resolved path route only, exactly the
+        // hypervisor's own ceiling. Not in the generic reviewed table.
+        LaunchRoute::Path if target == HYPERVISOR => hypervisor_edge()?,
         LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };
@@ -159,14 +162,24 @@ pub(super) fn pipe_test_profile(route: LaunchRoute, target: &str) -> Option<Laun
 /// kernel-resolved path route, with the hypervisor's own reviewed ceiling and
 /// nothing more.
 pub(super) fn chrome_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
-    if route != LaunchRoute::Path || target != "/bin/hypervisor" {
+    if route != LaunchRoute::Path || target != HYPERVISOR {
         return None;
     }
     Some(LaunchProfile::new(
-        reviewed_user_target_ceiling(target)?,
+        hypervisor_edge()?,
         "chrome-hypervisor-edge",
         false,
     ))
+}
+
+const HYPERVISOR: &str = "/bin/hypervisor";
+
+/// The ceiling the shell's `hv` and the Chrome launcher start the hypervisor
+/// with: its own catalog boot row (`hypervisor + net_l2` over the legacy rights),
+/// which init also uses. The hypervisor has no user-target row, so no other
+/// launcher reaches it.
+fn hypervisor_edge() -> Option<CapSet> {
+    crate::catalog::boot(HYPERVISOR)
 }
 
 /// GUI Terminal (`terminal`) may run exactly one program: the multicall shell

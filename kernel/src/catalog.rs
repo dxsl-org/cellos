@@ -344,18 +344,14 @@ pub const CELLS: &[Cell] = &[
         ..ROW
     },
     // The VMM's virtual NIC backend sends and receives raw frames (`net_l2`).
-    // Tier 3 on demand: the shell's `hv` edge gives exactly the init authority.
+    // No generic `user_target`: only init, the shell's `hv` edge and the Chrome
+    // launcher's edge start it, each with exactly this boot ceiling
+    // (`launch_profile::profiles::hypervisor_edge`). A user-target row would let
+    // every reviewed launcher (desktop route, Hypha tool-spawn) hand it out.
     Cell {
         path: "/bin/hypervisor",
         request: NET_L2,
         boot: Some(legacy_with(union(
-            NET_L2,
-            CapSet {
-                hypervisor: true,
-                ..CapSet::EMPTY
-            },
-        ))),
-        user_target: Some(legacy_with(union(
             NET_L2,
             CapSet {
                 hypervisor: true,

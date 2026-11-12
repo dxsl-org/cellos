@@ -332,3 +332,12 @@ The net service's L2 bridge no longer needs the `service-net/hypervisor-bridge` 
 | `NetRequest::L2Send { data }` | C | postcard `NetRequest` variant (unchanged) | none | frame 14..=1514 bytes (unchanged) | — | `L2` right; then the frame's source MAC must pass the same address check as `L2Recv` for this caller before anything is queued; a passing source becomes the port's address (learning bridge). A refused frame is answered and never sent | CP1 pending |
 | `NET_ERR_ADDR_IN_USE` (0xFB) `NetResponse::Err` code | C | new code beside 0xFC..0xFF | — | — | — | answered for an address the caller may not use (host's or another port's); 0xFD for no free port, 0xFF for a zero or multicast address | CP1 pending |
 | Bridge port lifetime | C | one port per caller Cell owner generation | — | at most 8 ports, 64 queued frames each (newest dropped when full) | — | released by the owner death watch with the owner's sockets, so a later session can reuse the address | CP1 pending |
+
+## 19. Records from the hypervisor launch narrowing (Tier 3 Chrome plan, follow-up)
+
+`/bin/hypervisor` holds `hypervisor + net_l2`; its catalog row had a generic `user_target`, so every launcher that grants reviewed user targets (desktop route, Hypha `tool-spawn`, init autoload, the shell on the ELF route) could start it. CP1 2026-11-12 (user), CP2 pending.
+
+| Family | Class | Identity | Version | Length | Reserved / unknown | Validation before effect | CP |
+|---|---|---|---|---|---|---|---|
+| Catalog row `/bin/hypervisor` | K | `kernel/src/catalog.rs`, exported to `scripts/catalog.generated.json` | — | — | — | `user_target` is now `None`; `boot` unchanged (`LEGACY + hypervisor + net_l2`) | CP1 2026-11-12 |
+| Launch edges to `/bin/hypervisor` | K | `launch_profile/profiles.rs` `hypervisor_edge` | — | — | — | only init (boot edge), the shell (`cellbox`, Path route: `hv`) and the Chrome launcher (Path route) authorize it, each with exactly the boot ceiling; desktop, Terminal, Files, Ocel and `hypha-tool-spawn` are refused on both routes (host test `only_init_the_shell_and_chrome_reach_the_hypervisor`) | CP1 2026-11-12 |
