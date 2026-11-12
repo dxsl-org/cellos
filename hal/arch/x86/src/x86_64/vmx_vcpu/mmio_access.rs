@@ -72,7 +72,7 @@ impl VmxVcpu {
         else {
             return Ok(unknown(ISS_UNDECODABLE));
         };
-        vmwrite(GUEST_RIP, rip.wrapping_add(u64::from(length)))?;
+        super::complete_instruction(rip.wrapping_add(u64::from(length)))?;
         Ok(exit)
     }
 }

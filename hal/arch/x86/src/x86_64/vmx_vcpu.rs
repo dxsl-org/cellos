@@ -338,6 +338,25 @@ unsafe fn program_pvh(entry_pc: u64, eptp: u64) -> ViResult<()> {
     Ok(())
 }
 
+/// Move the guest past an instruction the VMM completed for it.
+///
+/// Completing the instruction ends any STI/MOV-SS shadow it ran in
+/// (interruptibility bits 0-1), as the CPU would; NMI/SMI blocking stays.
+/// Linux idles with `sti; hlt`: left set, the shadow made every interrupt
+/// injected after a HLT exit look blocked (`inject_ext_irq_gated`), so timer
+/// ticks were dropped and guest sleeps took seconds.
+///
+/// # Safety
+/// This vCPU's VMCS is current.
+unsafe fn complete_instruction(next_rip: u64) -> ViResult<()> {
+    vmwrite(GUEST_RIP, next_rip)?;
+    let interruptibility = vmread(GUEST_INTERRUPTIBILITY_INFO)?;
+    if interruptibility & 0x3 != 0 {
+        vmwrite(GUEST_INTERRUPTIBILITY_INFO, interruptibility & !0x3)?;
+    }
+    Ok(())
+}
+
 impl VmxVcpu {
     /// Run the guest vCPU until an exit requires hypervisor handling.
     ///
@@ -380,11 +399,11 @@ impl VmxVcpu {
             let exit_reason = (raw_reason & 0xFFFF) as u32;
             let insn_len = vmread(VM_EXIT_INSTRUCTION_LEN).unwrap_or(0);
             let guest_rip = vmread(GUEST_RIP)?;
-            let advance = || vmwrite(GUEST_RIP, guest_rip.wrapping_add(insn_len));
+            let advance = || complete_instruction(guest_rip.wrapping_add(insn_len));
 
             match exit_reason {
                 EXIT_REASON_HLT => {
-                    let _ = advance();
+                    advance()?;
                     return Ok(ViVmExit::Hlt);
                 }
                 EXIT_REASON_EXTERNAL_INTERRUPT => {
@@ -403,7 +422,7 @@ impl VmxVcpu {
                     let size = (qual & 0x7) as u8 + 1; // 0=1 byte, 1=2 bytes, 3=4 bytes
                     let is_in = (qual & (1 << 3)) != 0;
                     let port = ((qual >> 16) & 0xFFFF) as u16;
-                    let _ = advance();
+                    advance()?;
 
                     if is_in {
                         return Ok(ViVmExit::PortIn { port, size });
@@ -420,7 +439,7 @@ impl VmxVcpu {
                 EXIT_REASON_MSR_READ | EXIT_REASON_MSR_WRITE => {
                     let write = exit_reason == EXIT_REASON_MSR_WRITE;
                     if let MsrOutcome::Done = self.handle_msr(write)? {
-                        let _ = advance();
+                        advance()?;
                     }
                     continue;
                 }
@@ -430,13 +449,13 @@ impl VmxVcpu {
                     self.gpr[3] = u64::from(b); // RBX
                     self.gpr[1] = u64::from(c); // RCX
                     self.gpr[2] = u64::from(d); // RDX
-                    let _ = advance();
+                    advance()?;
                     continue;
                 }
                 EXIT_REASON_CR_ACCESS => {
                     let qual = vmread(EXIT_QUALIFICATION)?;
                     if let CrOutcome::Done = self.handle_cr_access(qual)? {
-                        let _ = advance();
+                        advance()?;
                     }
                     continue;
                 }
