@@ -1,7 +1,7 @@
 ---
 phase: 11
 title: "One IPC operation model"
-status: in-progress
+status: completed
 priority: P1
 effort: "10–14d"
 dependencies: [10]
@@ -79,15 +79,15 @@ events (input, IRQ, notifications): bounded post, never a reply channel
 - [x] Registration flags, `fast_ipc` removed
 - [x] Waits folded, states collapsed
 - [x] Dead mechanisms removed
-- [ ] Bound lookup only
-- [ ] CP2
+- [x] Bound lookup only
+- [x] CP2 *(drafted with evidence; owner confirmation 2 pending)*
 
 ## Success Criteria
 
 - [x] New x86 fixture: a client that never receives does not park the supervisor, config or compositor (each service continues serving a second client) — fails on the tree before this phase. *(`bench nonreceiving-client`; fails on `e4755d8b0`)*
 - [x] Killing VFS mid-`Rename` returns an error to the caller within the deadline instead of wedging the task. *(host test on the real scheduler state; a QEMU kill cannot be timed, see Deviation Log)*
-- [ ] Existing C2C evidence lanes (saturation/deadline/caller-death, restart, peer pressure) pass unchanged.
-- [ ] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, two-node nightly lane; frozen-surface digest scripts pass or are re-pinned under CP2; review recorded.
+- [x] Existing C2C evidence lanes (saturation/deadline/caller-death, restart, peer pressure) pass unchanged. *(lifecycle 4/4, two-node TCG + negative, node restart + negative; CP2 §4)*
+- [x] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, two-node nightly lane; frozen-surface digest scripts pass or are re-pinned under CP2; review recorded. *(CP2 §4–§5; no regression vs `53b0d3200`; two-node run on TCG, not KVM/physical)*
 
 ## Risk Assessment
 
@@ -205,3 +205,4 @@ Phase 12 builds the shared service loop on this surface.
   - LOW, compositor input frames sent by `sys_try_send` while a client waits on a compositor call are dropped (one compositor turn): not changed; residual in CP2.
   - LOW, the kernel accepts any defined flag on any row from a `SupervisorCap` holder: not changed; flag policy is the namespace owner's by design (CP1 D1), and only `/bin/supervisor` holds the cap. Residual in CP2.
 - **Digest re-pins (CP1 §4.5).** `check-multi-source-wait-law1-digests.sh`: the "IRQ wake on a pending snapshot line" and "deadline keys on TIMER" literals moved, unchanged, from the scheduler sweep into `completion_wait::sweep_wake`; the script now pins them there plus the sweep's call. `check-lookupservicebound-law1-digests.sh`: "206 kept, bit 37 shared" becomes "206 is a bit-less reserved row, bit 37 on 429" (D5), and the test name follows. Negative controls: a bit on reserved 206, or flipping the TIMER rule, fails the scripts.
+- **Checkpoint** (2026-11-12, `haily-tester` on `ad5f4f73b`): no regression against `53b0d3200`; table and pre-existing failures in [CP2](cp2-ipc-model.md) §4. Phase complete pending owner confirmation 2.
