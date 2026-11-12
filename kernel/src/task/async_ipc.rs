@@ -432,7 +432,32 @@ fn new_token() -> Result<usize, Failure> {
         .map_err(|_| Failure::Busy)
 }
 
+/// Where a submitted request's bytes come from.
+#[derive(Clone, Copy)]
+pub enum Request<'a> {
+    /// `len` bytes at `ptr` in the owner's address space.
+    User { ptr: usize, len: usize },
+    /// Bytes the kernel built for a syscall it serves on the owner's behalf.
+    Kernel(&'a [u8]),
+}
+
+impl Request<'_> {
+    const fn len(&self) -> usize {
+        match self {
+            Self::User { len, .. } => *len,
+            Self::Kernel(bytes) => bytes.len(),
+        }
+    }
+}
+
 pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize, Failure> {
+    submit_request(owner, peer, Request::User { ptr, len })
+}
+
+/// Submit one exact operation from `owner` to `peer`. The operation belongs to
+/// `owner` exactly as an `IpcSubmit` would; the caller must take or cancel it.
+pub fn submit_request(owner: usize, peer: usize, request: Request<'_>) -> Result<usize, Failure> {
+    let len = request.len();
     if len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         return Err(Failure::Invalid);
     }
@@ -480,14 +505,24 @@ pub fn submit(owner: usize, peer: usize, ptr: usize, len: usize) -> Result<usize
         async_op: token,
     };
     // Copy outside SCHEDULER; no peer or user pointer persists in a task slot.
-    let wire = ipc_wire::IpcWireMessage::try_from_user(
-        header,
-        &view,
-        ptr,
-        len,
-        #[cfg(feature = "p01-trace")]
-        heap_owner,
-    )
+    let wire = match request {
+        Request::User { ptr, len } => ipc_wire::IpcWireMessage::try_from_user(
+            header,
+            &view,
+            ptr,
+            len,
+            #[cfg(feature = "p01-trace")]
+            heap_owner,
+        ),
+        Request::Kernel(bytes) => {
+            let wire = ipc_wire::IpcWireMessage::try_new(header, bytes);
+            #[cfg(feature = "p01-trace")]
+            if let Ok(wire) = &wire {
+                wire.observe_owner(heap_owner, crate::memory::heap::p01_owner::SENDER_WIRE);
+            }
+            wire
+        }
+    }
     .map_err(|_| Failure::Invalid)?;
     #[cfg(feature = "bench-counters")]
     crate::bench_counters::ipc_bytes(len);
@@ -904,6 +939,37 @@ pub fn take(
         .map_err(|_| Failure::Invalid)?;
     remove_operation(sched, owner_tid, token);
     Ok(true)
+}
+
+/// Take `owner`'s operation `token` into a kernel buffer if it is terminal;
+/// otherwise park `owner` until one of its operations changes, and return
+/// `None` so the caller yields and asks again.
+///
+/// A terminal returns its kind ([`api::syscall::ipc_status`]) and reply length,
+/// and the operation is gone. Parking checks this operation only: another
+/// operation of `owner` that is already terminal must not turn the wait into a
+/// spin. For a syscall the kernel serves with [`submit_request`].
+pub fn take_or_park_kernel(
+    owner: usize,
+    token: usize,
+    out: &mut [u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD],
+) -> Result<Option<(u32, usize)>, Failure> {
+    let mut guard = SCHEDULER.lock();
+    let sched = guard.as_mut().ok_or(Failure::Invalid)?;
+    let task = sched
+        .tasks
+        .get_mut(&owner)
+        .filter(|task| live(task))
+        .ok_or(Failure::Invalid)?;
+    let op = task.async_operations.find(token).ok_or(Failure::Invalid)?;
+    let Phase::Terminal { kind, len } = op.phase else {
+        super::arm_ipc_block_handoff(owner);
+        task.state = TaskState::WaitIpc { deadline: None };
+        return Ok(None);
+    };
+    out[..len].copy_from_slice(&op.reply.as_slice()[..len]);
+    remove_operation(sched, owner, token);
+    Ok(Some((kind, len)))
 }
 
 pub fn transfer_consumption(
@@ -3374,5 +3440,51 @@ mod tests {
             sched.tasks.get_mut(&OWNER).unwrap(),
             92
         ));
+    }
+
+    /// A syscall the kernel serves through an exact operation (Rename) ends
+    /// with a terminal when the provider dies after taking the request, never
+    /// with an unbounded wait.
+    #[test]
+    fn a_kernel_submitted_request_terminates_when_its_provider_dies_mid_request() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let saved = SCHEDULER.lock().replace(fixture());
+        let token = submit_request(OWNER, PROVIDER, Request::Kernel(b"rename"))
+            .expect("kernel request accepted");
+        let header = {
+            let guard = SCHEDULER.lock();
+            let provider = &guard.as_ref().unwrap().tasks[&PROVIDER];
+            let wire = provider.pending_msgs.as_slice()[0].wire.as_ref().unwrap();
+            assert_eq!(wire.as_slice(), b"rename");
+            wire.header
+        };
+        assert_eq!((header.sender_tid, header.async_op), (OWNER, token));
+        // The provider takes the request: the rename may now be running.
+        dispatch(SCHEDULER.lock().as_mut().unwrap(), PROVIDER, header);
+        let mut out = [0u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD];
+        assert_eq!(take_or_park_kernel(OWNER, token, &mut out), Ok(None));
+        assert!(matches!(
+            SCHEDULER.lock().as_ref().unwrap().tasks[&OWNER].state,
+            TaskState::WaitIpc { deadline: None }
+        ));
+        peer_died(SCHEDULER.lock().as_mut().unwrap(), PROVIDER, 1_003, 7);
+        assert!(
+            !matches!(
+                SCHEDULER.lock().as_ref().unwrap().tasks[&OWNER].state,
+                TaskState::WaitIpc { .. }
+            ),
+            "the provider's death must wake the parked caller"
+        );
+        assert_eq!(
+            take_or_park_kernel(OWNER, token, &mut out),
+            Ok(Some((api::syscall::ipc_status::PEER_GONE, 0)))
+        );
+        assert_eq!(
+            take_or_park_kernel(OWNER, token, &mut out),
+            Err(Failure::Invalid)
+        );
+        crate::sched::hart_local::ready::remove_from_all(OWNER);
+        crate::sched::hart_local::ready::remove_from_all(PROVIDER);
+        *SCHEDULER.lock() = saved;
     }
 }

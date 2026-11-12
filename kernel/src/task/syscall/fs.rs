@@ -517,6 +517,11 @@ pub(super) fn fstat(caller_id: usize, fd: usize, out_ptr: usize, out_len: usize)
 }
 
 /// Handler for `Syscall::Rename` (extracted from the dispatcher).
+///
+/// The kernel submits one exact operation to the live VFS on the caller's
+/// behalf and parks the caller until it is terminal. VFS death, expiry
+/// (`OPERATION_TIMEOUT_TICKS`) and cancellation all end it, so the caller gets
+/// an error instead of waiting on a VFS that will never answer.
 pub(super) fn rename(
     caller_id: usize,
     old_ptr: usize,
@@ -524,6 +529,8 @@ pub(super) fn rename(
     new_ptr: usize,
     new_len: usize,
 ) -> SyscallResult {
+    use crate::task::async_ipc::{self, Failure, Request};
+
     let old_path = read_user_string(caller_id, old_ptr, old_len, MAX_LOG_MSG)?;
     let new_path = read_user_string(caller_id, new_ptr, new_len, MAX_LOG_MSG)?;
     let vfs_tid = crate::cell::service_registry::lookup(api::syscall::service::VFS)
@@ -535,27 +542,30 @@ pub(super) fn rename(
     let mut request_buf = [0u8; api::ipc::IPC_BUF_SIZE];
     let encoded =
         api::ipc::encode(&request, &mut request_buf).map_err(|_| SyscallError::InvalidCommand)?;
-    match crate::task::ipc_send_kernel(caller_id, vfs_tid, encoded) {
-        Ok(0) => {}
-        Ok(1) => crate::task::yield_cpu(),
-        Err(crate::task::IpcSendError::Backpressure) => return Err(SyscallError::TryAgain),
-        Ok(_) => return Err(SyscallError::InvalidCommand),
-        Err(crate::task::IpcSendError::TargetGone) => return Err(SyscallError::InvalidCommand),
-    }
+    let token = match async_ipc::submit_request(caller_id, vfs_tid, Request::Kernel(encoded)) {
+        Ok(token) => token,
+        Err(Failure::Busy) => return Err(SyscallError::TryAgain),
+        Err(_) => return Err(SyscallError::InvalidCommand),
+    };
 
     let mut response_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    loop {
-        let response = crate::task::ipc_recv_kernel(caller_id, vfs_tid, &mut response_buf)
-            .map_err(|_| SyscallError::InvalidCommand)?;
-        match response {
-            Some((_, len)) => {
-                return match api::ipc::decode::<api::ipc::VfsResponse>(&response_buf[..len]) {
-                    Ok(api::ipc::VfsResponse::Ok) => Ok(0),
-                    _ => Err(SyscallError::PermissionDenied),
-                };
-            }
-            None => crate::task::yield_cpu(),
+    let (kind, len) = loop {
+        match async_ipc::take_or_park_kernel(caller_id, token, &mut response_buf) {
+            Ok(Some(terminal)) => break terminal,
+            Ok(None) => crate::task::yield_cpu(),
+            Err(_) => return Err(SyscallError::Unknown),
         }
+    };
+    match kind {
+        api::syscall::ipc_status::REPLY => {}
+        // VFS never took the request: nothing ran, a retry is safe.
+        api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => return Err(SyscallError::TryAgain),
+        // Gone after taking it, or expired: the rename may have happened.
+        _ => return Err(SyscallError::Unknown),
+    }
+    match api::ipc::decode::<api::ipc::VfsResponse>(&response_buf[..len]) {
+        Ok(api::ipc::VfsResponse::Ok) => Ok(0),
+        _ => Err(SyscallError::PermissionDenied),
     }
 }
 

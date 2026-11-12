@@ -2259,11 +2259,10 @@ pub fn ipc_send(
 }
 
 /// Send kernel-owned IPC bytes with the same receiver-mask and delivery-token
-/// semantics as [`ipc_send`].
+/// semantics as [`ipc_send`], which copies the caller's bytes and calls this.
 ///
-/// Kernel-mediated RPCs cannot expose temporary postcard buffers in Cell memory,
-/// but they must never use the fire-and-forget path: a masked nested receive
-/// must retain its target restriction.
+/// It must never use the fire-and-forget path: a masked nested receive must
+/// retain its target restriction.
 pub fn ipc_send_kernel(
     caller_id: usize,
     target_id: usize,
@@ -2379,7 +2378,9 @@ pub fn ipc_post_nonblock(
     msg: &[u8],
 ) -> core::result::Result<(), ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if !sched.tasks.contains_key(&target_id) {
+        // A retiring or terminated target never receives: fail now, as a
+        // blocking send does, instead of queueing a message nobody takes.
+        if ipc_target_gone(sched, target_id) {
             return Err(());
         }
         if paused_target_rejects(sched, sender_id, target_id) {
@@ -2520,68 +2521,6 @@ pub fn ipc_recv(
     }
     wake_sender_token(sched, sender_id, caller_id, header);
     Ok(sender_id)
-}
-
-/// Receive an IPC payload into kernel-owned storage.
-///
-/// The normal receive path copies into caller memory. Kernel-mediated RPCs need
-/// the same delivery-token, caller-context, and sender-wake semantics without
-/// exposing a temporary response buffer to the requesting Cell.
-pub fn ipc_recv_kernel(
-    caller_id: usize,
-    mask: usize,
-    out: &mut [u8],
-) -> core::result::Result<Option<(usize, usize)>, ()> {
-    // Copy and commit while holding SCHEDULER. The destination is kernel-owned,
-    // so this cannot fault or allocate after VFS has committed a mutation.
-    let mut guard = SCHEDULER.lock();
-    let sched = guard.as_mut().ok_or(())?;
-    let slot = sched
-        .tasks
-        .get(&caller_id)
-        .ok_or(())?
-        .pending_msgs
-        .iter()
-        .position(|message| message.wire.is_some() && (mask == 0 || message.sender_tid == mask));
-    let Some(index) = slot else {
-        arm_ipc_block_handoff(caller_id);
-        if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-            caller.state = TaskState::Recv {
-                mask,
-                buf_ptr: 0,
-                buf_len: 0,
-                deadline: None,
-            };
-        }
-        return Ok(None);
-    };
-
-    let (sender_id, header, len, held) = {
-        let receiver = sched.tasks.get_mut(&caller_id).ok_or(())?;
-        let record = receiver.pending_msgs.as_slice().get(index).ok_or(())?;
-        let wire = record.wire.as_ref().ok_or(())?;
-        let len = wire.len();
-        if len > out.len() {
-            return Err(());
-        }
-        out[..len].copy_from_slice(wire.as_slice());
-        let sender_id = record.sender_tid;
-        let header = wire.header;
-        receiver.pending_msgs.remove(index);
-        let held = receiver.set_received_request_context(
-            sender_id,
-            header.sender_cell_id,
-            header.sender_generation,
-            header.async_op,
-        );
-        (sender_id, header, len, held)
-    };
-    if let Some(token) = held {
-        sched.async_index.note_holder(caller_id, token);
-    }
-    async_ipc::dispatch(sched, caller_id, header);
-    wake_sender_token(sched, sender_id, caller_id, header);
-    Ok(Some((sender_id, len)))
 }
 
 pub fn ipc_try_recv(

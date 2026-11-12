@@ -145,8 +145,8 @@ fn send_to_a_target_blocked_sending_to_us_queues() -> bool {
     ok
 }
 
-/// `ipc_send_kernel` backs raw Rename. Unlike `ipc_post_nonblock`, it must not
-/// wake a VFS task parked in a nested receive for a different sender.
+/// `ipc_send_kernel` backs every blocking send. Unlike `ipc_post_nonblock`, it
+/// must not wake a VFS task parked in a nested receive for a different sender.
 fn kernel_send_respects_receiver_mask() -> bool {
     let payload = b"kernel-mask";
     prepare_receiver(usize::MAX);
