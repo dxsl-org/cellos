@@ -148,13 +148,15 @@ def run(args) -> list:
             and "[hv-x86] guest exited" in t, 30)))
         checks.append(("close-releases-guest-port", vm.wait_for(
             lambda t: "[net-bridge] guest port released" in t, 10)))
-        # The launcher's surface goes with its Cell (compositor owner death); the
-        # hypervisor reports its own end above. Both exits are kernel-logged.
+        # The hypervisor names its launcher's tid when the session binds; both
+        # Cells' exits are kernel-logged after Close.
+        bound = re.search(r"app session bound to tid=(\d+)", log)
         after_close = len(log)
         vm.wait_for(lambda t: t[after_close:].count("Syscall::Exit: task") >= 2, 15)
         tail = vm.log()[after_close:]
         checks.append(("close-both-cells-gone",
-                       "[compositor] owner death" in tail
+                       bound is not None
+                       and f"Syscall::Exit: task {bound.group(1)} exited" in tail
                        and tail.count("Syscall::Exit: task") >= 2))
     finally:
         vm.stop()

@@ -19,9 +19,12 @@ PART_START=2048
 for tool in sfdisk mkfs.fat mcopy; do
     command -v "$tool" >/dev/null || { echo "ERROR: $tool is required" >&2; exit 1; }
 done
-missing=0
-for file in "${FILES[@]}"; do [[ -f "$GUEST_DIR/$file" ]] || missing=1; done
-if (( missing )); then
+stale=0
+for file in "${FILES[@]}"; do [[ -f "$GUEST_DIR/$file" ]] || stale=1; done
+# An image built from an older builder or guest init is rebuilt, not reused.
+[[ "$(cat "$GUEST_DIR/INPUTS.sha256" 2>/dev/null)" == "$(bash "$REPO_ROOT/scripts/chrome-guest/inputs-digest.sh")" ]] \
+    || stale=1
+if (( stale )); then
     bash "$REPO_ROOT/scripts/build-chrome-guest-image.sh" "$GUEST_DIR"
 fi
 (cd "$GUEST_DIR" && sha256sum --quiet -c SHA256SUMS) \

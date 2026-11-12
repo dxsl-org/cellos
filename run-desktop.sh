@@ -98,12 +98,29 @@ trap cleanup EXIT INT TERM
 # Dọn dẹp QMP socket cũ nếu còn tồn tại
 rm -f /tmp/qmp-desktop.sock
 
+# Chrome (Tier 3): the guest root disk from scripts/make-chrome-guest-disk.sh, when present.
+# VFS mounts the lowest-addressed disk as /mnt/sd, so the guest disk is created before
+# the boot disk; the guest needs 1536 MiB of the machine's RAM.
+CHROME_DISK="build/chrome-guest-disk.img"
+MEMORY=2048M
+DISK_OPTS=(-drive file="$ISO",format=qcow2,if=virtio)
+if [[ -f "$CHROME_DISK" ]]; then
+    echo "  [Chrome]   Đĩa khách Chrome: $CHROME_DISK (gắn làm /mnt/sd)."
+    MEMORY=3072M
+    DISK_OPTS=(-drive file="$CHROME_DISK",if=none,id=sd,format=raw
+               -device nvme,drive=sd,serial=CELLOSSD
+               -drive file="$ISO",format=qcow2,if=none,id=boot
+               -device virtio-blk-pci,drive=boot,bootindex=0)
+else
+    echo "  [Chrome]   Chưa có $CHROME_DISK: chạy bash scripts/make-chrome-guest-disk.sh $CHROME_DISK"
+fi
+
 exec qemu-system-x86_64 \
   "${ACCEL_OPTS[@]}" \
   -machine q35,vmport=on \
-  -m 2048M \
+  -m "$MEMORY" \
   -smp 2 \
-  -drive file="$ISO",format=qcow2,if=virtio \
+  "${DISK_OPTS[@]}" \
   -netdev user,id=net0,hostfwd=tcp::2222-:22 \
   -device e1000,netdev=net0 \
   -device virtio-keyboard-pci \

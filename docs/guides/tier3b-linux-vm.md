@@ -19,10 +19,12 @@
 > Under nested KVM Chromium's UI appears ~130 s after the taskbar click; guest disk reads
 > still move one 512-byte sector per block IPC. The machine needs about 3 GiB.
 >
-> To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`, then add
-> `-m 3G -drive file=build/chrome-guest-disk.img,if=none,id=sd,format=raw
-> -device nvme,drive=sd,serial=CELLOSSD -nic user,model=e1000` to the desktop's QEMU
-> command. `scripts/qemu-tier3-chrome-x86.sh` is the KVM lane (not in CI: no nested VMX).
+> To run it: `bash scripts/make-chrome-guest-disk.sh build/chrome-guest-disk.img`; `run-desktop.sh`
+> then attaches that disk (as the lowest-addressed disk, which VFS mounts as `/mnt/sd`) and gives
+> the machine 3 GiB. By hand: `-m 3G -drive file=build/chrome-guest-disk.img,if=none,id=sd,format=raw
+> -device nvme,drive=sd,serial=CELLOSSD` placed before the boot disk, plus a NIC.
+> `scripts/qemu-tier3-chrome-x86.sh` is the KVM lane (not in CI: no nested VMX). Only init, the
+> shell's `hv` and the Chrome launcher may start `/bin/hypervisor`.
 
 ---
 

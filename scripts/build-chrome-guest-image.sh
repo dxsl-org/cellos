@@ -11,6 +11,8 @@
 #   chrome-guest.sqfs   the guest root
 #   packages.txt        installed package set (name-version), sorted
 #   SHA256SUMS          checksums of both
+#   INPUTS.sha256       digest of this builder and the guest init, so a consumer
+#                       (scripts/make-chrome-guest-disk.sh) can tell a stale image
 #
 # Usage: bash scripts/build-chrome-guest-image.sh [OUT_DIR]
 set -euo pipefail
@@ -37,7 +39,8 @@ PACKAGES=(
 
 command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required" >&2; exit 1; }
 mkdir -p "$OUT_DIR" "$(dirname "$MODLOOP")"
-rm -f "$OUT_DIR/chrome-guest.sqfs" "$OUT_DIR/packages.txt" "$OUT_DIR/SHA256SUMS"
+rm -f "$OUT_DIR/chrome-guest.sqfs" "$OUT_DIR/packages.txt" "$OUT_DIR/SHA256SUMS" \
+    "$OUT_DIR/INPUTS.sha256"
 if [[ ! -f "$MODLOOP" ]]; then
     curl -fsSL -o "$MODLOOP.part" "$MODLOOP_URL"
     mv "$MODLOOP.part" "$MODLOOP"
@@ -69,3 +72,4 @@ EOF
 echo "[chrome-guest] $(du -h "$OUT_DIR/chrome-guest.sqfs" | cut -f1) $OUT_DIR/chrome-guest.sqfs"
 echo "[chrome-guest] $(wc -l < "$OUT_DIR/packages.txt") packages"
 cat "$OUT_DIR/SHA256SUMS"
+bash "$REPO_ROOT/scripts/chrome-guest/inputs-digest.sh" > "$OUT_DIR/INPUTS.sha256"
