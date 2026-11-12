@@ -39,7 +39,8 @@ api::declare_syscalls![
     GrantShare,
     GrantSlice,
     ShmAlloc,
-    ShmMap
+    ShmMap,
+    GetTime,
 ];
 
 ostd::cell_main!(cell_main);

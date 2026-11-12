@@ -37,7 +37,8 @@ api::declare_syscalls![
     Log,
     LookupServiceBound,
     Heartbeat,
-    RequestMmio
+    RequestMmio,
+    GetTime,
 ];
 
 const ACTUATOR_PIN: u8 = 3;

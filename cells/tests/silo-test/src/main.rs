@@ -13,7 +13,7 @@ api::declare_manifest!(
     uart = false,
     hypervisor = false
 );
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound];
+api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound, GetTime];
 
 use ostd::clients::kms::{KmsClient, KmsClientError};
 use ostd::io::println;

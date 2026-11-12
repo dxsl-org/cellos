@@ -25,7 +25,7 @@ use ostd::service::provider_tid;
 use ostd::syscall::sys_yield;
 use ostd::ViError;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

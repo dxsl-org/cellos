@@ -166,7 +166,11 @@ require_in "$K_SYSCALL" "let mask = u32::try_from(a0).unwrap_or(u32::MAX);" \
 require_in "$K_MSI" "irq_wait::hint_msi_wake();" "the MSI handler raises the wake hint"
 require_in "$K_SCHED" "| crate::dev::irq_wait::take_wake_hint();" \
     "the hart-0 pass swaps the MSI wake hint every time"
-require_in "$K_SCHED" "if crate::task::completion_wait::irq_wake_due(task, *source) =>" \
+# Re-pinned 2026-11-12 (Phase 11 step 5, CP2): the sweep's completion rules
+# moved, unchanged, into completion_wait::sweep_wake.
+require_in "$K_SCHED" "match sweep_wake(task, *source, *delivery, *deadline, now as u64) {" \
+    "the sweep applies the one completion-wait rule"
+require_in "$K_WAIT" "Delivery::Queue if irq_wake_due(task, source) => SweepWake::Ready," \
     "the sweep wakes an IRQ wait on a pending snapshot line"
 forbid_in "$K_WAIT" "PROTO_IPC" "no kernel-private prototype bit remains"
 require_in "$K_ASYNC" "source & api::completion::source::IPC != 0" \
@@ -176,7 +180,7 @@ require_in "$K_ASYNC" "pub(crate) fn restore_notification(task: &mut Task, token
     "a failed copy-out re-arms the notification"
 require_in "$K_TASK" "if source & api::completion::source::NET_RX != 0" \
     "raw mailbox interrupts only masks naming NET_RX"
-require_in "$K_SCHED" "timed_out = *source & api::completion::source::TIMER == 0;" \
+require_in "$K_WAIT" "timed_out: source & api::completion::source::TIMER == 0," \
     "deadline sweep keys on the TIMER bit"
 
 if [[ "$failures" -ne 0 ]]; then

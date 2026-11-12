@@ -31,7 +31,8 @@ api::declare_syscalls![
     SetTimer,
     LookupServiceBound,
     MemInfo,
-    StateRestore
+    StateRestore,
+    GetTime,
 ];
 
 ostd::cell_main!(cell_main);

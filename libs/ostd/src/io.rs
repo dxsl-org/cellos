@@ -257,7 +257,7 @@ pub struct Stdin;
 impl Stdin {
     /// Read one line from stdin, echoing characters as they arrive.
     ///
-    /// When the input service is online (registered via `sys_lookup_service`),
+    /// When the input service is online (resolved via `provider_tid`),
     /// reads via the input-service IPC path so that the caller participates in
     /// the focus model. Callers must have called `ostd::input::request_focus()`
     /// at least once before this returns meaningful data; without focus the input

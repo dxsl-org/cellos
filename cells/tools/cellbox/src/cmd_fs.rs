@@ -1,7 +1,7 @@
 //! Filesystem-oriented shell built-ins: wc, head, tail, mkdir, rm, rmdir, touch.
 //!
 //! VFS-write operations (mkdir, rm, rmdir) send IPC to the VFS service cell
-//! resolved via `sys_lookup_service`.  Read operations use the kernel's `sys_open`/`sys_read` path,
+//! resolved via `ostd::service::provider_tid`.  Read operations use the kernel's `sys_open`/`sys_read` path,
 //! gated by [`bootfs_fallback_allowed`] so a VFS refusal is never bypassed.
 
 use ostd::prelude::*;

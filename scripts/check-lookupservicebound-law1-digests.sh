@@ -58,6 +58,23 @@ PY
     fi
 }
 
+# require_reserved <number> <former name> <item description>
+require_reserved() {
+    local number="$1" former="$2" item="$3"
+    if ! python3 - "$TABLE" "$number" "$former" <<'PY'
+import sys, tomllib
+table, number, former = sys.argv[1:]
+data = tomllib.load(open(table, "rb"))
+rows = [r for r in data.get("reserved", []) if r["number"] == int(number)]
+live = [r for r in data["syscall"] if r["number"] == int(number)]
+sys.exit(0 if len(rows) == 1 and rows[0]["former"] == former and "bit" not in rows[0] and not live else 1)
+PY
+    then
+        echo "FAIL: $item — $TABLE has no bit-less reserved row number=$number former=$former" >&2
+        failures=$((failures + 1))
+    fi
+}
+
 # require_in <file> <literal> <item description>
 require_in() {
     local file="$1" needle="$2" item="$3"
@@ -86,14 +103,16 @@ forbid_in() {
 
 # ── libs/api: the opcode (record §1 items 1-3, 6, 7, 14) ──────────────────────
 require_row LookupServiceBound 429 37 "opcode 429 declared, decodes to the variant, allowlist bit 37"
-require_row LookupService 206 37 "allowlist bit 37 shared with LookupService (206 kept)"
+# Re-pinned 2026-11-12 (Phase 11 D5, CP2): LookupService (206) is retired;
+# bit 37 stays with LookupServiceBound and 206 is a reserved number.
+require_reserved 206 "LookupService" "206 retired as a reserved number; bit 37 stays with 429"
 require_row SerialConfigure 428 50 "428 kept as the preceding opcode"
 require_row Unknown 9999 none "Unknown sentinel kept"
 require_in "$TESTS" "(429, ViSyscall::LookupServiceBound)," "CASES round-trip row for 429"
 require_in "$TESTS" "assert_eq!(ViSyscall::LookupServiceBound as usize, 429);" \
     "discriminant pinned in a test"
-require_in "$TESTS" "fn lookup_bound_shares_open_lookup_authority()" \
-    "allowlist-sharing test present"
+require_in "$TESTS" "fn lookup_bound_keeps_the_retired_lookup_bit()" \
+    "bit-37 test present"
 
 # ── libs/api: the record (record §1 items 8-12) ───────────────────────────────
 require_in "$ABI_MOD" "pub mod service_binding;" "record module declared"

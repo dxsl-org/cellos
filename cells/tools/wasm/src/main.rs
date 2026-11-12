@@ -14,7 +14,15 @@ use driver_wasm::imports::register_vi_imports;
 use driver_wasm::{HostState, WasmConfig, WasmRuntime};
 use loader::load_wasm_bytes;
 
-api::declare_syscalls![Send, Recv, Log, Heartbeat, LookupServiceBound, StateRestore];
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    Heartbeat,
+    LookupServiceBound,
+    StateRestore,
+    SendGather
+];
 
 ostd::cell_main!(cell_main);
 

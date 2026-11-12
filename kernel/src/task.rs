@@ -2408,7 +2408,23 @@ pub fn ipc_post_nonblock(
         } else {
             wire.observe_synthetic();
         }
+        let sender_is_task = sched.tasks.contains_key(&sender_id);
         let wake = if let Some(target) = sched.tasks.get_mut(&target_id) {
+            // One Cell may hold only part of a target's mailbox with posts, so a
+            // client posting faster than its service drains (damage every
+            // frame) cannot crowd out other clients' requests and events.
+            // Kernel senders (UART relay, power button; no task) keep the whole
+            // queue.
+            if sender_is_task
+                && target
+                    .pending_msgs
+                    .iter()
+                    .filter(|queued| queued.sender_tid == sender_id)
+                    .count()
+                    >= tcb::POST_QUOTA_PER_SENDER
+            {
+                return Err(());
+            }
             queue_wire_msg(target, wire, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
             // Caller-context assignment is deferred to the dequeue/commit path
             // so the request generation advances exactly once.

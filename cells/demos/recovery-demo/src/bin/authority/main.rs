@@ -43,7 +43,8 @@ api::declare_syscalls![
     GrantAlloc,
     GrantShare,
     GrantSlice,
-    GrantFree
+    GrantFree,
+    GetTime,
 ];
 
 ostd::cell_main!(cell_main);

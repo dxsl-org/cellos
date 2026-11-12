@@ -48,7 +48,8 @@ api::declare_syscalls![
     SpawnFromPath,
     LookupServiceBound,
     GrantAlloc,
-    StateStash
+    StateStash,
+    GetTime,
 ];
 
 const GATEWAY_PATH: &str = "/bin/llm-gateway";
@@ -258,7 +259,12 @@ fn operator_approves(call: &ToolCall) -> bool {
 /// complete their exact operations and never wait in the mailbox.
 fn discard_typed_ahead() {
     let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
-    while !matches!(sys_try_recv(0, &mut frame), SyscallResult::Ok(0)) {}
+    // Bounded by the mailbox depth: a persistent receive error cannot spin.
+    for _ in 0..64 {
+        if matches!(sys_try_recv(0, &mut frame), SyscallResult::Ok(0)) {
+            break;
+        }
+    }
 }
 
 /// One `AgentToolRequest::Invoke` exact request/reply operation with tool cell `cell_tid`.

@@ -3,7 +3,7 @@
 //! Handles [`AgentToolRequest::Invoke`] for read-only OS queries:
 //! - `list_cells` — running cells via [`sys_get_procs`]
 //! - `sys_info`   — static OS / arch string
-//! - `lookup_service` — service name → provider tid via [`sys_lookup_service`]
+//! - `lookup_service` — service name → provider tid via [`ostd::service::provider_tid`]
 //! - `caller_tid` — the kernel-stamped tid of the requester, as `{"tid":N}`
 //!
 //! No SpawnCap required — all syscalls are open to any cell, so this cell

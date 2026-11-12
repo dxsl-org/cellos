@@ -2411,3 +2411,39 @@ fn shm_accessible_by_owner_and_authorized_recipient() {
     assert!(shm_accessible_by(FRAME, 30, 1).is_none());
     assert!(shm_accessible_by(FRAME, 10, 2).is_none()); // Different generation
 }
+
+/// One Cell's posts may fill only `POST_QUOTA_PER_SENDER` slots of a target's
+/// mailbox, so a client posting every frame cannot crowd out other clients;
+/// another Cell and the kernel still get in.
+#[test]
+fn a_cell_posts_into_a_bounded_share_of_a_mailbox() {
+    use crate::task::tcb::POST_QUOTA_PER_SENDER;
+    const TARGET: usize = 2;
+    const OTHER: usize = 3;
+    with_scheduler_task(0, |poster| {
+        {
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().expect("test scheduler");
+            for (tid, cell) in [(TARGET, 8), (OTHER, 9)] {
+                sched.tasks.insert(
+                    tid,
+                    alloc::boxed::Box::new(Task::new(
+                        tid,
+                        CellId(cell),
+                        "post-quota",
+                        alloc::vec::Vec::new(),
+                    )),
+                );
+            }
+        }
+        for _ in 0..POST_QUOTA_PER_SENDER {
+            assert_eq!(crate::task::ipc_post_nonblock(poster, TARGET, b"d"), Ok(()));
+        }
+        assert_eq!(
+            crate::task::ipc_post_nonblock(poster, TARGET, b"d"),
+            Err(())
+        );
+        assert_eq!(crate::task::ipc_post_nonblock(OTHER, TARGET, b"r"), Ok(()));
+        assert_eq!(crate::task::ipc_post_nonblock(0, TARGET, b"k"), Ok(()));
+    });
+}

@@ -24,6 +24,11 @@ use types::*;
 /// back off.  Messages are drained to the new cell in Step 5 (UNFREEZE).
 pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
 
+/// Most messages one Cell may have queued in one target's mailbox by `post`
+/// (`SendGather`): a quarter of [`HOTSWAP_MSG_QUEUE_DEPTH`], so one busy
+/// poster leaves room for other clients' requests and events.
+pub const POST_QUOTA_PER_SENDER: usize = 16;
+
 /// Deeper bound for nonblocking input-service events queued to a client.
 ///
 /// Keyboard events use blocking `sys_send`, so they do not rely on this mailbox
@@ -797,7 +802,9 @@ impl Task {
         // A RETAINS_OUTER_CALLER provider uses a wildcard receive only at its
         // public request loop. Masked receives are nested dependency replies
         // and keep the outer authority.
+        // Nothing to drop without a caller context: skip the registry read.
         if mask == 0
+            && (self.caller.current.is_some() || self.current_async_op != 0)
             && crate::cell::service_registry::retains_outer_caller(
                 self.cell_id.0,
                 self.cell_generation,

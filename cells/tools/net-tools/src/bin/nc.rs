@@ -20,7 +20,7 @@ const HELLO: &[u8] = b"HELLO_ViCell\n";
 /// its own DNS query deadline.
 const NET_CALL_TICKS: u64 = 1_000;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
 

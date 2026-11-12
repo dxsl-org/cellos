@@ -8,7 +8,7 @@ use ostd::service::provider_tid;
 use ostd::tls::{tls_close, tls_connect, tls_read, tls_write};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupServiceBound];
+api::declare_syscalls![Send, Recv, Log, LookupServiceBound, GetTime];
 
 // example.com — 93.184.216.34
 const EXAMPLE_IP: [u8; 4] = [93, 184, 216, 34];

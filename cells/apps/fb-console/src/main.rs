@@ -31,7 +31,8 @@ api::declare_syscalls![
     SendGather,
     Recv,
     LookupServiceBound,
-    ReadLog
+    ReadLog,
+    GetTime,
 ];
 
 // Foreground/background colours (BGRA).

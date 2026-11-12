@@ -31,7 +31,8 @@ api::declare_syscalls![
     SendGather,
     Recv,
     TryRecv,
-    LookupServiceBound
+    LookupServiceBound,
+    GetTime,
 ];
 
 const DISPLAY_W: u32 = 640;
