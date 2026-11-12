@@ -71,6 +71,23 @@ fn shell_can_launch_the_hypervisor_cell_with_only_its_own_authority() {
     );
 }
 
+/// The Chrome launcher starts its guest's hypervisor with exactly the shell's
+/// hypervisor edge, and nothing else: no other target, no other route.
+#[test]
+fn chrome_can_launch_only_its_hypervisor_with_its_own_authority() {
+    let chrome = caller("chrome", true, false);
+    let edge = authorize(chrome, LaunchRoute::Path, "/bin/hypervisor")
+        .expect("chrome must reach the hypervisor");
+    assert_eq!(
+        edge.child_ceiling,
+        shell_edge(LaunchRoute::Path, "/bin/hypervisor").child_ceiling
+    );
+    assert!(authorize(chrome, LaunchRoute::Elf, "/bin/hypervisor").is_none());
+    for other in ["/bin/cellbox", "/bin/terminal", "/bin/net"] {
+        assert!(authorize(chrome, LaunchRoute::Path, other).is_none(), "{other}");
+    }
+}
+
 fn net_rights(c: CapSet) -> (bool, bool, bool, bool) {
     (c.net_resolve, c.net_connect, c.net_listen, c.net_l2)
 }

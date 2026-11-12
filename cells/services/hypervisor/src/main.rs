@@ -70,6 +70,8 @@ api::declare_syscalls![
     GpuGetResolution,
     WaitForEvent,
     VfsMutate,
+    // The `app` argument from a Tier 3 launcher (`app_session_x86`).
+    StateRestore,
 ];
 
 // VMM syscall wrappers — only the two arches with a kernel VMM backend have a
@@ -127,6 +129,8 @@ mod virtqueue_guard;
 // ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────
 #[cfg(target_arch = "x86_64")]
 mod acpi;
+#[cfg(target_arch = "x86_64")]
+mod app_session_x86;
 #[cfg(target_arch = "x86_64")]
 mod boot_info;
 #[cfg(target_arch = "x86_64")]

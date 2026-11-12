@@ -8,7 +8,8 @@
 # (selected by the /virtio-e2e file). Boots it, starts the hypervisor with the
 # serial shell's `hv`, and checks:
 #   - guest markers: framebuffer bound, pattern written, virtio-input bound,
-#     display interrupts (ISA IRQ 3) delivered;
+#     display interrupts (ISA IRQ 3) delivered, guest XMM registers intact
+#     across VM exits (fpu-check.S);
 #   - the screen shows the guest's exact two-band pattern (BGRA 0x40 top half,
 #     0xC0 bottom half), and the screen before `hv` does not (control).
 #
@@ -30,7 +31,7 @@ mkdir -p "$W"
 
 blocked() { echo "BLOCKED_ENVIRONMENT: $*" >&2; exit 2; }
 [[ -w /dev/kvm ]] && grep -qw vmx /proc/cpuinfo || blocked "needs a writable /dev/kvm on an Intel VMX host"
-for tool in "$QEMU_X86_BIN" mcopy python3 cargo; do
+for tool in "$QEMU_X86_BIN" mcopy python3 cargo as ld; do
     command -v "$tool" >/dev/null || blocked "$tool not found"
 done
 [[ -f .alpine-cache-x86/vmlinux && -f .alpine-cache-x86/initramfs-virt ]] \
@@ -43,8 +44,10 @@ CARGO_TARGET_DIR="$W/cells-target" python3 scripts/assemble-x86-image.py --profi
 echo "==> [tier3-display] adding the guest kernel and fixture initramfs"
 # mkfat32 sizes the image to its contents, so the image is rebuilt with the guest files.
 # The assembler manifest no longer describes the result and is removed.
+as tests/guests/x86-gpu-pattern/fpu-check.S -o "$W/fpu-check.o"
+ld -static "$W/fpu-check.o" -o "$W/fpu-check"
 python3 tools/repack-initramfs.py .alpine-cache-x86/initramfs-virt "$W/initrd.gz" \
-    --add /bin/virtio-e2e-init "$FIXTURE" 100755
+    --add /bin/virtio-e2e-init "$FIXTURE" 100755 --add /bin/fpu-check "$W/fpu-check" 100755
 printf 'rdinit=/bin/virtio-e2e-init\n' > "$W/virtio-e2e"
 rm -rf "$W/fat" && mkdir -p "$W/fat"
 mcopy -s -n -i "$W/embedded/kernel_fs.img" ::/ "$W/fat/"

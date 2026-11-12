@@ -30,7 +30,9 @@
 
 use core::arch::global_asm;
 
+mod guest_fpu;
 mod host_ext_state;
+pub use guest_fpu::GuestFpu;
 use host_ext_state::HostExtState;
 
 use super::msr;
@@ -46,6 +48,7 @@ extern "C" {
 ///
 /// `guest_pkru` is the vCPU's PKRU: loaded before entry, refreshed from the
 /// register at exit, after which the host PKRU/XCR0 are back in place.
+/// `guest_fpu` is its x87/SSE image, loaded before entry and saved at exit.
 ///
 /// # Arguments
 /// * `guest_vmcb_pa` — physical address of the guest VMCB (4 KiB-aligned).
@@ -63,9 +66,12 @@ pub unsafe fn svm_vmrun(
     gpr_ptr: *mut u64,
     host_vmcb_pa: u64,
     guest_pkru: &mut u32,
+    guest_fpu: &mut GuestFpu,
 ) {
     let host = HostExtState::enter(*guest_pkru);
+    guest_fpu.load();
     svm_world_switch(guest_vmcb_pa, gpr_ptr, host_vmcb_pa);
+    guest_fpu.save();
     host.exit(guest_pkru);
 }
 
@@ -91,14 +97,16 @@ pub struct VmxGuestRegs {
     /// none of them, and the guest writes them only through emulated `WRMSR`
     /// (no MSR bitmap), so they are loaded before entry and never read back.
     pub syscall: [u64; 4],
+    /// x87/SSE image, loaded before entry and saved at exit.
+    pub fpu: GuestFpu,
 }
 
 /// Enter the VMX guest via `vmlaunch` (if `launched == 0`) or `vmresume`.
 ///
 /// Returns 0 on VM exit, 1 on VMfailInvalid, 2 on VMfailValid. The host's
 /// PKRU, XCR0, KERNEL_GS_BASE, SYSCALL MSRs and CR8 are identical before and
-/// after the call; `guest` carries the guest's PKRU/KERNEL_GS_BASE across
-/// exits. CR8 is restored only as a backstop: the VMCS sets CR8-load/store
+/// after the call (its x87/SSE registers are not: the syscall path restores
+/// them); `guest` carries the guest's PKRU/KERNEL_GS_BASE/FPU across exits. CR8 is restored only as a backstop: the VMCS sets CR8-load/store
 /// exiting, so the guest never reaches the physical TPR.
 ///
 /// # Safety
@@ -122,7 +130,9 @@ pub unsafe fn vmx_vmrun(gpr_ptr: *mut u64, launched: u64, guest: &mut VmxGuestRe
         }
     }
     let host = HostExtState::enter(guest.pkru);
+    guest.fpu.load();
     let status = vmx_world_switch(gpr_ptr, launched);
+    guest.fpu.save();
     host.exit(&mut guest.pkru);
     for (slot, &index) in SYSCALL_MSRS.iter().enumerate() {
         if guest.syscall[slot] != host_syscall[slot] {

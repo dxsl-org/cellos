@@ -154,6 +154,21 @@ pub(super) fn pipe_test_profile(route: LaunchRoute, target: &str) -> Option<Laun
     Some(LaunchProfile::new(LEGACY, "pipe-test-peer-edge", false))
 }
 
+/// Tier 3 Chrome launcher (`chrome`, ADR-0017 §5d) may start exactly one
+/// program: the hypervisor that runs its own Linux guest, on the
+/// kernel-resolved path route, with the hypervisor's own reviewed ceiling and
+/// nothing more.
+pub(super) fn chrome_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if route != LaunchRoute::Path || target != "/bin/hypervisor" {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        reviewed_user_target_ceiling(target)?,
+        "chrome-hypervisor-edge",
+        false,
+    ))
+}
+
 /// GUI Terminal (`terminal`) may run exactly one program: the multicall shell
 /// `/bin/cellbox`, on the kernel-resolved path route. The child ceiling is
 /// [`SHELL_EDGE`]: the pre-annex X/M/W rights (`LEGACY`) plus the Q Config-write

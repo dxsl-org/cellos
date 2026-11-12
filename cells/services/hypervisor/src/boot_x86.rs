@@ -55,6 +55,16 @@ fn stream_file(path: &str, vm_id: usize, gpa: u64) -> ViResult<u64> {
 
 pub fn run() {
     println("[hv-x86] hypervisor cell starting (SVM PVH)");
+    // A launcher-spawned hypervisor boots the guest at its window's size and
+    // shows it there; without a launcher it fills the screen.
+    let session = if crate::app_session_x86::app_mode() {
+        match crate::app_session_x86::wait_for_launch() {
+            Some(bound) => Some(bound),
+            None => return,
+        }
+    } else {
+        None
+    };
 
     let vm_id = vmm::create_vm(GUEST_RAM_PAGES);
     if vm_id == 0 || vm_id == usize::MAX {
@@ -176,6 +186,12 @@ pub fn run() {
         }
     };
     println("[hv-x86] vCPU ready — entering run loop");
-    run_loop_x86::run(vm_id, vcpu_id, persistent_disk);
+    let app_launched = session.is_some();
+    run_loop_x86::run(vm_id, vcpu_id, persistent_disk, session);
     println("[hv-x86] guest exited");
+    if app_launched {
+        // The launcher's window is gone or the guest stopped: this Cell has
+        // nothing left to serve, and its exit reclaims the VM.
+        ostd::syscall::sys_exit(0);
+    }
 }

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 //! VirtIO-GPU 2D device model (DeviceID=16, MMIO slot 3, SPI 19).
 
+mod client_scanout;
 mod command;
 mod dispatch;
 mod resource;
@@ -10,50 +11,119 @@ mod wire;
 
 use crate::virtio_mmio::{QueueCfg, VirtioDevice};
 use crate::virtqueue::process_notify;
+use client_scanout::ClientScanout;
 use resource::ResourceTable;
 use scanout::ScanoutBridge;
+
+/// `virtio_gpu_config.events_read` bit: the display configuration changed.
+const EVENT_DISPLAY: u32 = 1;
+
+/// Where the guest scanout is shown: a full-screen compositor surface (console
+/// and lane use, `hv`), or the window of the launcher bound to the session.
+pub enum Presenter {
+    Compositor(ScanoutBridge),
+    Client(ClientScanout),
+}
+
+impl Presenter {
+    fn notify_damage(&mut self, resources: &ResourceTable, rect: command::Rect) {
+        match self {
+            Self::Compositor(bridge) => bridge.notify_damage(rect),
+            Self::Client(client) => client.notify_damage(resources, rect),
+        }
+    }
+}
 
 #[cfg(target_arch = "aarch64")]
 const GPU_SPI: u32 = 19;
 
 pub struct GpuDev {
     resources: ResourceTable,
-    scanout: ScanoutBridge,
+    presenter: Presenter,
     width: u32,
     height: u32,
+    events_read: u32,
     last_avail: [u16; 2],
     used_idx: [u16; 2],
 }
 
 impl GpuDev {
+    /// A device shown on a full-screen compositor surface.
     pub fn new(compositor_tid: usize, width: u32, height: u32) -> Self {
-        Self {
-            resources: ResourceTable::new(),
-            scanout: ScanoutBridge::new(compositor_tid, width, height),
+        Self::with_presenter(
+            Presenter::Compositor(ScanoutBridge::new(compositor_tid, width, height)),
             width,
             height,
+        )
+    }
+
+    /// A device shown in the window of the launcher `client_tid`.
+    pub fn for_client(client_tid: usize, width: u32, height: u32) -> Self {
+        Self::with_presenter(
+            Presenter::Client(ClientScanout::new(client_tid, width, height)),
+            width,
+            height,
+        )
+    }
+
+    fn with_presenter(presenter: Presenter, width: u32, height: u32) -> Self {
+        Self {
+            resources: ResourceTable::new(),
+            presenter,
+            width,
+            height,
+            events_read: 0,
             last_avail: [0; 2],
             used_idx: [0; 2],
         }
     }
 
     pub fn bring_up(&mut self) {
-        self.scanout.bring_up(&mut self.resources);
+        match &mut self.presenter {
+            Presenter::Compositor(bridge) => bridge.bring_up(&mut self.resources),
+            Presenter::Client(client) => client.bring_up(&mut self.resources),
+        }
     }
 
     pub fn poll_damage(&mut self) {
-        self.scanout.poll_damage();
+        match &mut self.presenter {
+            Presenter::Compositor(bridge) => bridge.poll_damage(),
+            Presenter::Client(client) => client.poll(&self.resources),
+        }
     }
 
     pub fn reconnect_compositor(&mut self, compositor_tid: usize) {
-        self.scanout.reconnect(compositor_tid, &mut self.resources);
+        if let Presenter::Compositor(bridge) = &mut self.presenter {
+            bridge.reconnect(compositor_tid, &mut self.resources);
+        }
     }
 
+    /// Stop presenting; a bound launcher is told the guest stopped.
     pub fn shutdown(&mut self) {
-        self.scanout.reset(&mut self.resources);
+        match &mut self.presenter {
+            Presenter::Compositor(bridge) => bridge.reset(&mut self.resources),
+            Presenter::Client(client) => {
+                client.exited(0);
+                self.resources.teardown_scanout();
+            }
+        }
     }
-    pub fn surface_cap(&self) -> u32 {
-        self.scanout.surface_cap()
+
+    /// Change the display size the guest is offered (launcher window resize).
+    /// Returns `true` when the guest must be told through a config-change
+    /// interrupt; it re-reads the display info and sets a new scanout.
+    pub fn resize(&mut self, width: u32, height: u32) -> bool {
+        if (width, height) == (self.width, self.height) {
+            return false;
+        }
+        let Presenter::Client(client) = &mut self.presenter else {
+            return false;
+        };
+        self.width = width;
+        self.height = height;
+        client.resize(&mut self.resources, width, height);
+        self.events_read |= EVENT_DISPLAY;
+        true
     }
 
     /// Scanout dimensions the guest framebuffer is presented at.
@@ -73,8 +143,16 @@ impl VirtioDevice for GpuDev {
 
     fn config_read(&self, offset: usize) -> u32 {
         match offset {
+            0 => self.events_read,
             8 => 1,
             _ => 0,
+        }
+    }
+
+    fn config_write(&mut self, offset: usize, value: u32) {
+        // events_clear: the guest acknowledges handled events.
+        if offset == 4 {
+            self.events_read &= !value;
         }
     }
     fn notify(&mut self, queue: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) -> bool {
@@ -87,7 +165,7 @@ impl VirtioDevice for GpuDev {
                 |bufs| {
                     dispatch::handle_control(
                         &mut self.resources,
-                        &mut self.scanout,
+                        &mut self.presenter,
                         bufs,
                         vm_id,
                         self.width,
@@ -109,24 +187,59 @@ impl VirtioDevice for GpuDev {
         }
         if queue == 1 {
             if let Some((_, width, height, _)) = self.resources.bound_resource() {
-                self.scanout.notify_damage(command::Rect {
-                    x: 0,
-                    y: 0,
-                    width,
-                    height,
-                });
+                self.presenter.notify_damage(
+                    &self.resources,
+                    command::Rect {
+                        x: 0,
+                        y: 0,
+                        width,
+                        height,
+                    },
+                );
             }
         }
         // aarch64 raises the SPI here; x86 delivers the ISR status that
         // `notify`'s `true` sets through the emulated PIC (x86_irq_dispatch).
         #[cfg(target_arch = "aarch64")]
         crate::vmm::inject_irq(vm_id, vcpu_id, crate::vmm::device_irq(GPU_SPI));
+        #[cfg(not(target_arch = "aarch64"))]
+        let _ = vcpu_id;
         true
     }
 
     fn reset(&mut self) {
-        self.scanout.reset(&mut self.resources);
+        match &mut self.presenter {
+            Presenter::Compositor(bridge) => bridge.reset(&mut self.resources),
+            // A driver reset is not the guest stopping: the launcher keeps its
+            // Grant, and the guest sets its scanout again.
+            Presenter::Client(_) => self.resources.reset(),
+        }
         self.last_avail = [0; 2];
         self.used_idx = [0; 2];
+    }
+}
+
+/// `rect` clipped to a `width`x`height` scanout; `None` if nothing remains.
+fn clip_rect(rect: command::Rect, width: u32, height: u32) -> Option<command::Rect> {
+    let clipped = command::Rect {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width.min(width.saturating_sub(rect.x)),
+        height: rect.height.min(height.saturating_sub(rect.y)),
+    };
+    (clipped.width != 0 && clipped.height != 0).then_some(clipped)
+}
+
+/// The smallest rectangle covering `a` and `b`.
+fn union_rect(a: command::Rect, b: command::Rect) -> command::Rect {
+    let left = a.x.min(b.x);
+    let top = a.y.min(b.y);
+    let right = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
+    let bottom = a.y.saturating_add(a.height).max(b.y.saturating_add(b.height));
+    command::Rect {
+        x: left,
+        y: top,
+        width: right.saturating_sub(left),
+        height: bottom.saturating_sub(top),
     }
 }

@@ -256,6 +256,11 @@ impl VirtioMmio {
         self.intr_status |= 1;
     }
 
+    /// Mark a device-configuration change pending until the guest ACKs ISR bit 1.
+    pub fn signal_config_change(&mut self) {
+        self.intr_status |= 2;
+    }
+
     #[cfg(any(target_arch = "x86_64", test))]
     pub fn interrupt_pending(&self) -> bool {
         self.intr_status != 0

@@ -399,8 +399,11 @@ fn forward_input_events(
                 };
                 input.push_key(code, pressed);
             }
-            api::input::InputEvent::MouseMove { dx, dy, .. } => {
-                input.push_mouse_move(dx, dy);
+            api::input::InputEvent::MouseMove { x, y, .. } => {
+                use api::services::vmm_session::{abs_position, ABS_X, ABS_Y};
+                let (width, height) = ostd::syscall::sys_get_resolution();
+                input.push_abs(ABS_X, abs_position(x, width));
+                input.push_abs(ABS_Y, abs_position(y, height));
             }
             api::input::InputEvent::MouseButton { button, state } => {
                 let pressed = state == api::input::KeyState::Pressed;

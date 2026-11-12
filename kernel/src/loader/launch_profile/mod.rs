@@ -80,6 +80,7 @@ pub fn authorize(
         }
         // Reviewed GUI Terminal edge (Phase 04 S3): the only row `terminal` owns.
         "terminal" => profiles::terminal_profile(route, target),
+        "chrome" => profiles::chrome_profile(route, target),
         // Private Phase04 fixture: the same one edge for the test driver that links
         // the Terminal's SDK host. Never compiled into an ordinary image.
         #[cfg(feature = "phase04-driver-profile")]

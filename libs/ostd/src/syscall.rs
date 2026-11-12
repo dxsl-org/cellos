@@ -2240,6 +2240,67 @@ pub fn sys_grant_copy_to_slice(grant_id: usize, dst: &mut [u8]) -> Option<usize>
     Some(n)
 }
 
+/// One rectangle copy out of a Grant: `rows` rows of `row_len` bytes, the
+/// first starting at byte `src_offset` of the Grant and `dst_offset` of the
+/// destination, rows `src_stride` / `dst_stride` bytes apart.
+#[derive(Clone, Copy, Debug)]
+pub struct GrantRows {
+    pub src_offset: usize,
+    pub src_stride: usize,
+    pub dst_offset: usize,
+    pub dst_stride: usize,
+    pub row_len: usize,
+    pub rows: usize,
+}
+
+impl GrantRows {
+    /// Whether every row lies inside a `src_len`-byte Grant and `dst_len`-byte destination.
+    fn fits(&self, src_len: usize, dst_len: usize) -> Option<()> {
+        if self.rows == 0 {
+            return Some(());
+        }
+        let last = self.rows - 1;
+        let src_end = self
+            .src_offset
+            .checked_add(last.checked_mul(self.src_stride)?)?
+            .checked_add(self.row_len)?;
+        let dst_end = self
+            .dst_offset
+            .checked_add(last.checked_mul(self.dst_stride)?)?
+            .checked_add(self.row_len)?;
+        (src_end <= src_len && dst_end <= dst_len).then_some(())
+    }
+}
+
+/// Copy `rows` out of a Grant owned by `owner_tid` into `dst`, leasing the
+/// Grant for the copy (the owner cannot unregister it meanwhile; see
+/// [`sys_grant_slice_with_len_leased_owned_by`]). `None` when the Grant is not
+/// resolvable as `owner_tid`'s, or any row would fall outside it or `dst`.
+pub fn sys_grant_copy_rows_owned_by(
+    grant_id: usize,
+    owner_tid: usize,
+    rows: GrantRows,
+    dst: &mut [u8],
+) -> Option<()> {
+    let (ptr, len) = sys_grant_slice_with_len_leased_owned_by(grant_id, owner_tid)?;
+    rows.fits(len, dst.len())?;
+    for row in 0..rows.rows {
+        let from = rows.src_offset + row * rows.src_stride;
+        let to = rows.dst_offset + row * rows.dst_stride;
+        // SAFETY: `fits` bounds every row by the leased Grant length and by
+        // `dst`; the lease keeps the Grant registered until this task's next
+        // receive, and `copy` tolerates an aliasing destination as above.
+        unsafe {
+            core::ptr::copy(
+                (ptr as *const u8).add(from),
+                dst.as_mut_ptr().add(to),
+                rows.row_len,
+            );
+        }
+    }
+    Some(())
+}
+
 /// Copy the prefix of `src` into an accessible Grant.
 ///
 /// # Parameters

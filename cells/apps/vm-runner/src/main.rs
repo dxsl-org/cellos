@@ -204,38 +204,4 @@ mod tests {
         assert_eq!(cfg.ram_mb, 1024);
         assert_eq!(cfg.entrypoint, "/opt/app/nginx/nginx");
     }
-
-    #[test]
-    fn test_vmm_launch_round_trip() {
-        let req = api::services::vmm_session::VmmLaunchRequest::new("chrome", 1024, 768);
-        let mut buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
-        assert!(req.encode(&mut buf).is_ok());
-
-        let decoded = api::services::vmm_session::VmmLaunchRequest::decode(&buf).unwrap();
-        assert_eq!(
-            decoded.opcode,
-            api::services::vmm_session::VMM_OP_LAUNCH_APP
-        );
-        assert_eq!(decoded.width, 1024);
-        assert_eq!(decoded.height, 768);
-        assert_eq!(&decoded.app_name[..6], b"chrome");
-
-        let reply = api::services::vmm_session::VmmLaunchReply {
-            status: api::services::vmm_session::VMM_STATUS_OK,
-            session_id: 42,
-            surface_cap: 100,
-            scanout_width: 1024,
-            scanout_height: 768,
-        };
-        let mut rep_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
-        assert!(reply.encode(&mut rep_buf).is_ok());
-
-        let rep_decoded = api::services::vmm_session::VmmLaunchReply::decode(&rep_buf).unwrap();
-        assert_eq!(
-            rep_decoded.status,
-            api::services::vmm_session::VMM_STATUS_OK
-        );
-        assert_eq!(rep_decoded.session_id, 42);
-        assert_eq!(rep_decoded.surface_cap, 100);
-    }
 }

@@ -3,12 +3,12 @@ use crate::virtqueue::DescBuf;
 use super::{
     command,
     resource::{ResourceError, ResourceTable},
-    scanout::ScanoutBridge,
+    Presenter,
 };
 
 pub fn handle_control(
     resources: &mut ResourceTable,
-    scanout: &mut ScanoutBridge,
+    presenter: &mut Presenter,
     bufs: &[DescBuf],
     vm_id: usize,
     width: u32,
@@ -67,7 +67,7 @@ pub fn handle_control(
                 header,
                 resources
                     .flush_resource(cmd.resource_id, cmd.rect)
-                    .map(|_| scanout.notify_damage(cmd.rect)),
+                    .map(|_| presenter.notify_damage(resources, cmd.rect)),
             )
         }
         _ => command::write_error(bufs, vm_id, header, command::ERR_UNSPEC),

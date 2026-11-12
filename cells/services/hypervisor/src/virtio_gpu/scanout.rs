@@ -106,17 +106,11 @@ impl ScanoutBridge {
         if self.surface_cap == 0 {
             return;
         }
-        let rect = command::Rect {
-            x: rect.x,
-            y: rect.y,
-            width: rect.width.min(self.width.saturating_sub(rect.x)),
-            height: rect.height.min(self.height.saturating_sub(rect.y)),
-        };
-        if rect.width == 0 || rect.height == 0 {
+        let Some(rect) = super::clip_rect(rect, self.width, self.height) else {
             return;
-        }
+        };
         self.pending_damage = Some(match self.pending_damage {
-            Some(previous) => union_rect(previous, rect),
+            Some(previous) => super::union_rect(previous, rect),
             None => rect,
         });
         self.poll_damage();
@@ -191,19 +185,5 @@ impl ScanoutBridge {
             sys_yield();
         }
         None
-    }
-}
-fn union_rect(a: command::Rect, b: command::Rect) -> command::Rect {
-    let left = a.x.min(b.x);
-    let top = a.y.min(b.y);
-    let right = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
-    let bottom =
-        a.y.saturating_add(a.height)
-            .max(b.y.saturating_add(b.height));
-    command::Rect {
-        x: left,
-        y: top,
-        width: right.saturating_sub(left),
-        height: bottom.saturating_sub(top),
     }
 }

@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Tier 3 Linux MicroVM App Session IPC contract.
 //!
-//! Governs communication between user-facing application runners
-//! (`cells/apps/chrome`, `cells/apps/vm-runner`) and the Hypervisor Service
-//! (`service 14`, `/bin/hypervisor`).
+//! Governs communication between a user-facing app launcher (`cells/apps/chrome`)
+//! and the hypervisor Cell it spawned (`/bin/hypervisor app`).
 //!
-//! Enables zero-Linux-desktop single-app kiosk sessions: an app runner binds
-//! itself to the running MicroVM's session, and the hypervisor injects the
-//! runner's pointer/keyboard events into the guest kernel via VirtIO-Input.
-//! Only the runner that sent the latest launch may forward input or terminate.
+//! The launcher owns the window. It sends [`VmmLaunchRequest`] with the window's
+//! content size; the hypervisor binds the session to that sender, boots the guest
+//! at that display size, and from then on posts [`events`] to the launcher: the
+//! guest scanout Grant (shared read-only), damaged rectangles, and the guest's exit.
+//! The launcher forwards its window's input with [`VmmInputForwardRequest`], asks
+//! for a new display size with [`VmmResizeRequest`], and ends the guest with
+//! `VMM_OP_TERMINATE_APP`. Only the bound launcher may do any of these.
 
 use types::{ViError, ViResult};
+
+pub mod events;
+pub use events::*;
 
 pub const VMM_OP_LAUNCH_APP: u8 = 1;
 pub const VMM_OP_RESIZE_APP: u8 = 2;
@@ -28,9 +33,24 @@ pub const VMM_STATUS_UNSUPPORTED: u32 = 5;
 /// Linux evdev event types and codes carried by [`VmmInputForwardRequest`].
 pub const EV_KEY: u16 = 0x01;
 pub const EV_REL: u16 = 0x02;
+pub const EV_ABS: u16 = 0x03;
 pub const REL_X: u16 = 0x00;
 pub const REL_Y: u16 = 0x01;
 pub const REL_WHEEL: u16 = 0x08;
+pub const ABS_X: u16 = 0x00;
+pub const ABS_Y: u16 = 0x01;
+/// The guest pointer's absolute axis range: `0..=ABS_MAX` spans the display.
+pub const ABS_MAX: i32 = 0x7fff;
+
+/// `pos` within `0..extent` pixels as a guest absolute-axis value, clamped to
+/// the axis; an empty extent maps everything to 0.
+pub fn abs_position(pos: i32, extent: u32) -> i32 {
+    if extent <= 1 {
+        return 0;
+    }
+    let pos = i64::from(pos.clamp(0, (extent - 1) as i32));
+    (pos * i64::from(ABS_MAX) / i64::from(extent - 1)) as i32
+}
 pub const BTN_LEFT: u16 = 0x110;
 pub const BTN_RIGHT: u16 = 0x111;
 pub const BTN_MIDDLE: u16 = 0x112;
@@ -101,13 +121,14 @@ impl VmmLaunchRequest {
     }
 }
 
-/// Reply payload returned by the hypervisor upon app launch.
+/// Reply payload returned by the hypervisor upon app launch. The display size
+/// the guest boots with; the scanout Grant follows as a [`VmmScanoutEvent`].
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VmmLaunchReply {
     pub status: u32,
     pub session_id: u32,
-    pub surface_cap: u32,
+    pub reserved: u32,
     pub scanout_width: u32,
     pub scanout_height: u32,
 }
@@ -121,7 +142,7 @@ impl VmmLaunchReply {
         }
         out[0..4].copy_from_slice(&self.status.to_le_bytes());
         out[4..8].copy_from_slice(&self.session_id.to_le_bytes());
-        out[8..12].copy_from_slice(&self.surface_cap.to_le_bytes());
+        out[8..12].copy_from_slice(&self.reserved.to_le_bytes());
         out[12..16].copy_from_slice(&self.scanout_width.to_le_bytes());
         out[16..20].copy_from_slice(&self.scanout_height.to_le_bytes());
         Ok(Self::LEN)
@@ -134,7 +155,7 @@ impl VmmLaunchReply {
         Ok(Self {
             status: u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
             session_id: u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]),
-            surface_cap: u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
+            reserved: u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
             scanout_width: u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]),
             scanout_height: u32::from_le_bytes([buf[16], buf[17], buf[18], buf[19]]),
         })
@@ -222,7 +243,7 @@ mod tests {
         let reply = VmmLaunchReply {
             status: VMM_STATUS_OK,
             session_id: 42,
-            surface_cap: 101,
+            reserved: 0,
             scanout_width: 1280,
             scanout_height: 800,
         };
@@ -243,6 +264,16 @@ mod tests {
 
         let decoded = VmmInputForwardRequest::decode(&buf[..len]).unwrap();
         assert_eq!(decoded, req);
+    }
+
+    #[test]
+    fn absolute_positions_span_the_axis_and_clamp() {
+        assert_eq!(abs_position(0, 1280), 0);
+        assert_eq!(abs_position(1279, 1280), ABS_MAX);
+        assert_eq!(abs_position(640, 1281), ABS_MAX / 2);
+        assert_eq!(abs_position(-5, 1280), 0);
+        assert_eq!(abs_position(5000, 1280), ABS_MAX);
+        assert_eq!(abs_position(3, 0), 0);
     }
 
     #[test]

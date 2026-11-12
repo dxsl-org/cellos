@@ -20,7 +20,7 @@ use super::vmexit_decode::{
     decode, decode_mmio, is_mmio_data_npf, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR, VMEXIT_INVALID,
     VMEXIT_IOIO, VMEXIT_MSR, VMEXIT_NPF, VMEXIT_PAUSE, VMEXIT_SHUTDOWN, VMEXIT_VMMCALL,
 };
-use super::world_switch::svm_vmrun;
+use super::world_switch::{svm_vmrun, GuestFpu};
 
 const MSR_EFER: u32 = 0xC000_0080;
 const MSR_APIC_BASE: u32 = 0x1B;
@@ -70,6 +70,8 @@ pub struct SvmVcpu {
     pause_backlog: u32,
     /// Guest PKRU, swapped with the host's around every VMRUN.
     guest_pkru: u32,
+    /// Guest x87/SSE image, loaded and saved around every VMRUN.
+    guest_fpu: GuestFpu,
 }
 
 // SAFETY: single-CPU kernel context in the current TCG bring-up (mirror
@@ -114,6 +116,7 @@ impl SvmVcpu {
             last_pause_tick_ns: 0,
             pause_backlog: 0,
             guest_pkru: 0,
+            guest_fpu: GuestFpu::default(),
         }
     }
 
@@ -256,6 +259,7 @@ impl SvmVcpu {
                     self.gpr.as_mut_ptr(),
                     self.host_pa,
                     &mut self.guest_pkru,
+                    &mut self.guest_fpu,
                 );
             }
 

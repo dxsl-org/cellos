@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 //! VirtIO-Input device model (DeviceID=18, virtio-mmio slot 4 -> SPI 20).
 //!
-//! Enables guest Linux environments (X11 / Wayland / Chromium) to receive
-//! native keyboard and mouse input events from CellOS.
+//! One keyboard + absolute-pointer (tablet) device. Events come only from the
+//! launcher bound to the session (`app_session_x86`), which forwards its own
+//! window's input in window coordinates.
 extern crate alloc;
 use alloc::collections::VecDeque;
 
 use crate::virtio_mmio::{QueueCfg, VirtioDevice};
 use crate::virtqueue::read_descriptor_chain;
+#[cfg(target_arch = "aarch64")]
 pub const INPUT_SPI: u32 = 20;
 
 // VirtIO Input Config Selectors (VirtIO 1.1 §5.8.4)
@@ -19,19 +21,15 @@ const VIRTIO_INPUT_CFG_ID_DEVIDS: u8 = 0x03;
 #[allow(dead_code)]
 const VIRTIO_INPUT_CFG_PROP_BITS: u8 = 0x10;
 const VIRTIO_INPUT_CFG_EV_BITS: u8 = 0x11;
-#[allow(dead_code)]
 const VIRTIO_INPUT_CFG_ABS_INFO: u8 = 0x12;
 
 // Linux Event Types
 pub const EV_SYN: u16 = 0x00;
 pub const EV_KEY: u16 = 0x01;
 pub const EV_REL: u16 = 0x02;
-#[allow(dead_code)]
 pub const EV_ABS: u16 = 0x03;
 
 pub const SYN_REPORT: u16 = 0;
-pub const REL_X: u16 = 0x00;
-pub const REL_Y: u16 = 0x01;
 pub const REL_WHEEL: u16 = 0x08;
 pub const BTN_LEFT: u16 = 0x110;
 pub const BTN_RIGHT: u16 = 0x111;
@@ -125,24 +123,14 @@ impl InputDev {
         }]);
     }
 
-    /// Push relative mouse movement followed by a SYN_REPORT.
-    pub fn push_mouse_move(&mut self, dx: i32, dy: i32) {
-        let x = VirtioInputEvent {
-            event_type: EV_REL,
-            code: REL_X,
-            value: dx as u32,
-        };
-        let y = VirtioInputEvent {
-            event_type: EV_REL,
-            code: REL_Y,
-            value: dy as u32,
-        };
-        match (dx != 0, dy != 0) {
-            (true, true) => self.push_report(&[x, y]),
-            (true, false) => self.push_report(&[x]),
-            (false, true) => self.push_report(&[y]),
-            (false, false) => self.push_report(&[]),
-        }
+    /// Push an absolute pointer position on `axis` (ABS_X/ABS_Y, range
+    /// `0..=ABS_MAX`) followed by a SYN_REPORT.
+    pub fn push_abs(&mut self, axis: u16, value: i32) {
+        self.push_report(&[VirtioInputEvent {
+            event_type: EV_ABS,
+            code: axis,
+            value: value as u32,
+        }]);
     }
 
     /// Push mouse button press or release followed by a SYN_REPORT.
@@ -266,11 +254,20 @@ impl InputDev {
                 // EV_KEY: keys 0..127, then BTN_LEFT..BTN_EXTRA at 0x110 / 8.
                 (1, 0..=15) => 0xFF,
                 (1, 34) => 0x1F,
-                // EV_REL: REL_X | REL_Y, then REL_WHEEL (8).
-                (2, 0) => 0x03,
+                // EV_REL: REL_WHEEL (8) only; the pointer is absolute.
                 (2, 1) => 0x01,
+                // EV_ABS: ABS_X | ABS_Y (a tablet: the launcher knows window coordinates).
+                (3, 0) => 0x03,
                 _ => 0,
             },
+            VIRTIO_INPUT_CFG_ABS_INFO if self.subsel <= 1 => {
+                // virtio_input_absinfo: min, max, fuzz, flat, res (u32 LE each).
+                let max = (api::services::vmm_session::ABS_MAX as u32).to_le_bytes();
+                match byte_idx {
+                    4..=7 => max[byte_idx - 4],
+                    _ => 0,
+                }
+            }
             _ => 0,
         }
     }
@@ -306,9 +303,11 @@ impl VirtioDevice for InputDev {
                     VIRTIO_INPUT_CFG_EV_BITS => match self.subsel {
                         0 => 1,  // EV_SYN
                         1 => 35, // EV_KEY: keys + the button byte at 0x110 / 8
-                        2 => 2,  // EV_REL (X, Y, Wheel)
+                        2 => 2,  // EV_REL (Wheel)
+                        3 => 1,  // EV_ABS (X, Y)
                         _ => 0,
                     },
+                    VIRTIO_INPUT_CFG_ABS_INFO if self.subsel <= 1 => 20,
                     _ => 0,
                 };
                 (self.select as u32) | ((self.subsel as u32) << 8) | ((size as u32) << 16)
@@ -370,6 +369,20 @@ mod tests {
         assert_eq!(cfg_byte(&dev, 8 + 1), 0xFF);
         assert_eq!(cfg_byte(&dev, 8 + 15), 0xFF);
         assert_eq!(cfg_byte(&dev, 8 + 34), 0x1F);
+    }
+
+    #[test]
+    fn pointer_is_absolute_with_the_session_range() {
+        let mut dev = InputDev::new(None);
+        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_ABS) << 8));
+        assert_eq!(cfg_byte(&dev, 2), 1);
+        assert_eq!(cfg_byte(&dev, 8), 0x03);
+        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_EV_BITS) | (u32::from(EV_REL) << 8));
+        assert_eq!((cfg_byte(&dev, 8), cfg_byte(&dev, 9)), (0, 0x01), "wheel only");
+        dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_ABS_INFO) | (1 << 8));
+        assert_eq!(cfg_byte(&dev, 2), 20);
+        let max: alloc::vec::Vec<u8> = (12..16).map(|i| cfg_byte(&dev, i)).collect();
+        assert_eq!(max, (api::services::vmm_session::ABS_MAX as u32).to_le_bytes());
     }
 
     #[test]

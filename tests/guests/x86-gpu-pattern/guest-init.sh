@@ -2,6 +2,7 @@
 # Tier 3 x86 display fixture: bind virtio-gpu and virtio-input, then fill the
 # guest framebuffer with a two-band test pattern the lane checks on screen:
 # top half bytes 0x40, bottom half bytes 0xC0 (BGRA grey 64 / grey 192).
+# Then /bin/fpu-check (fpu-check.S) proves guest XMM state survives VM exits.
 
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 /bin/busybox --install -s /bin
@@ -48,5 +49,7 @@ echo "X86_GPU_PATTERN_WRITTEN"
 grep -qi 'virtio' /proc/bus/input/devices || fail no-virtio-input
 echo "X86_INPUT_BOUND"
 echo "X86_DISPLAY_IRQ:$(awk '$1 == "3:" { print $2 }' /proc/interrupts)"
+# XMM registers must survive the VM exits taken while it spins.
+/bin/fpu-check
 
 while :; do sleep 3600; done
