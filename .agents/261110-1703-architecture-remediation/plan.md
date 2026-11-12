@@ -37,7 +37,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 09 | [Kernel residents, selftests and module layout](phase-09-kernel-residents.md) — completed 2026-11-11 ([evidence](reports/phase-09-evidence.md)); S4b closed | S4 | 08 | — | ✓ |
 | 10 | [Lock ranks and scheduler hot paths](phase-10-lock-ranks-scheduler.md) — completed 2026-11-11 (G1 barrier move deferred by owner); S5 closed | S5 IPC | 09 | — | |
 | 11 | [One IPC operation model](phase-11-ipc-model.md) — completed 2026-11-12 ([CP2](cp2-ipc-model.md) confirmed) | S5 | 10 | CP1/CP2 | ✓ |
-| 12 | [Shared service runtime and wire modules](phase-12-service-runtime.md) | S6 userspace | 11 | CP1/CP2 | |
+| 12 | [Shared service runtime and wire modules](phase-12-service-runtime.md) — in progress ([CP1](cp1-service-wire.md) confirmed 2026-11-13) | S6 userspace | 11 | CP1/CP2 | |
 | 13 | [Init reduction, hot-swap decision, `api` split](phase-13-init-hotswap-api.md) | S6 | 12 | CP1/CP2 | ✓ |
 | 14 | [Kernel `arch/` seam and boot split](phase-14-arch-seam.md) | S7 arch/memory | 09 | — | |
 | 15 | [x86-64 Tier-2 parity](phase-15-x86-tier2-parity.md) | S7 | 14 | — | |

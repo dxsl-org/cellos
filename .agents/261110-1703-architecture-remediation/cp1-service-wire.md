@@ -175,3 +175,12 @@ One commit per step, split per service inside migration steps:
 2. **W2:** add the timeout to `Recv`'s `a3` (recommended: no new opcode or bit). The alternative needs no ABI change: services disarm the heartbeat around a blocking receive, which loses attested `on_idle` ticks for ai and compositor.
 3. **Scope:** input, net-broker and silo stay hand-rolled in Phase 12.
 4. **Seeded trust stores:** no runtime migration from `/srv/.cellos-trust`; images are re-seeded at the new path by the provisioner.
+
+## 8. Owner confirmation 1 — 2026-11-13
+
+The owner confirmed W1–W5 as the Law-1 delta of Phase 12.
+
+- **W2:** the timeout goes into `Recv` `a3` bits 8–31; no new opcode or allowlist bit.
+- **Scope:** input, net-broker and silo stay hand-rolled in Phase 12.
+- **Trust stores:** no runtime migration; the provisioner seeds `/srv/cellos/kms/ssh_known_hosts`.
+- **Next:** steps 2–8 open, in the §5 order, under the request §3 file set.

@@ -10,3 +10,4 @@ The owner approved S6 **staged**:
 - **Multi-sector block requests:** done by plan `261112-1035` (`OP_READ_RUN`); dropped from Phase 12.
 - **Commits:** one per step, split per service inside migration steps. Nothing is pushed.
 - **Lane:** the Intel WIP lane moves to S6. **Ends** when Phase 12 closes.
+**CP1 confirmed 2026-11-13** ([cp1-service-wire.md §8](cp1-service-wire.md)). Steps 2–8 are open under the [request](s6-handoff-request.md) §3 file set.

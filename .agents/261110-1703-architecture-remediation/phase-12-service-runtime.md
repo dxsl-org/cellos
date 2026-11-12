@@ -1,7 +1,7 @@
 ---
 phase: 12
 title: "Shared service runtime and wire modules"
-status: pending
+status: in-progress
 priority: P1
 effort: "9–13d"
 dependencies: [11]
@@ -73,7 +73,7 @@ libs/api/src/services/proto/<service>.rs  ◄─ server, ostd client, tools, ker
 
 ## Todo List
 
-- [ ] CP1
+- [x] CP1
 - [ ] Proto modules, literals gone
 - [ ] `serve` + first three services
 - [ ] VFS liveness and block path
