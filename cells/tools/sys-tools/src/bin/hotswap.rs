@@ -4,8 +4,9 @@
 extern crate ostd;
 
 use api::syscall::service;
+use ostd::ipc::IpcError;
 use ostd::service::provider_tid;
-use ostd::syscall::{self, sys_recv_timeout, sys_send, SyscallResult};
+use ostd::syscall;
 
 ostd::cell_main!(cell_main);
 
@@ -29,7 +30,8 @@ const MALFORMED_REPLY: &str = "hotswap: protocol error: malformed supervisor rep
 /// Phase 02 keeps this CLI service-only on purpose: the supervisor routes
 /// hotswap requests by registered `service::*` id, not arbitrary tids.
 /// The reply timeout spans the supervisor's bounded snapshot/freeze/spawn/
-/// restore/publish sequence rather than a single IPC hop.
+/// restore/publish sequence rather than a single IPC hop; it also bounds
+/// admission of the request.
 fn cell_main() {
     let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| syscall::sys_exit(1));
     let argv = ostd::args();
@@ -48,14 +50,7 @@ fn cell_main() {
         exit_with_message(output.stderr(), "hotswap: supervisor unavailable");
     };
 
-    if !send_request(supervisor_tid, &request) {
-        exit_with_message(
-            output.stderr(),
-            "hotswap: cannot send request to supervisor",
-        );
-    }
-
-    match recv_status(supervisor_tid) {
+    match request_status(supervisor_tid, &request) {
         Ok(()) => {
             emit(
                 output.stdout(),
@@ -108,24 +103,25 @@ fn encode_hotswap_request(
     Ok(request)
 }
 
-fn send_request(supervisor_tid: usize, request: &[u8; REQUEST_LEN]) -> bool {
+/// One hotswap exchange: the supervisor answers each request with exactly one
+/// status record.
+fn request_status(supervisor_tid: usize, request: &[u8; REQUEST_LEN]) -> Result<(), StatusError> {
     let mut envelope = [0u8; APP_MESSAGE_PREFIX.len() + REQUEST_LEN];
     envelope[..APP_MESSAGE_PREFIX.len()].copy_from_slice(&APP_MESSAGE_PREFIX);
     envelope[APP_MESSAGE_PREFIX.len()..].copy_from_slice(request);
-    matches!(sys_send(supervisor_tid, &envelope), SyscallResult::Ok(_))
-}
-
-fn recv_status(supervisor_tid: usize) -> Result<(), StatusError> {
     let mut status = [0u8; STATUS_LEN];
-    match sys_recv_timeout(supervisor_tid, &mut status, REPLY_TIMEOUT_TICKS) {
-        SyscallResult::Ok(0) => Err(StatusError::Message(
+    match ostd::ipc::call_bytes(supervisor_tid, &envelope, &mut status, REPLY_TIMEOUT_TICKS) {
+        Ok(reply) => match <[u8; STATUS_LEN]>::try_from(reply) {
+            Ok(status) => parse_status(status),
+            Err(_) => Err(StatusError::Message(MALFORMED_REPLY)),
+        },
+        Err(IpcError::Send | IpcError::Busy | IpcError::PeerGone) => Err(StatusError::Message(
+            "hotswap: cannot send request to supervisor",
+        )),
+        Err(IpcError::PreDispatchTimeout | IpcError::Indeterminate) => Err(StatusError::Message(
             "hotswap: timed out waiting for supervisor status",
         )),
-        SyscallResult::Ok(sender) if sender != supervisor_tid => Err(StatusError::Message(
-            "hotswap: protocol error: reply came from an unexpected sender",
-        )),
-        SyscallResult::Ok(_) => parse_status(status),
-        SyscallResult::Err(_) => Err(StatusError::Message(
+        Err(_) => Err(StatusError::Message(
             "hotswap: protocol error: recv from supervisor failed",
         )),
     }

@@ -257,31 +257,31 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/16-rustc-tcb.md:232` — 7. Comparison with Prior Art
 - `docs/specs/16-rustc-tcb.md:248` — 8. Cross-References
 - `docs/specs/17-ipc-wire-contract.md:20` — 1. Scope & model
-- `docs/specs/17-ipc-wire-contract.md:48` — 2. The recv-mask rule (most important)
-- `docs/specs/17-ipc-wire-contract.md:95` — 3. Byte-0 discriminant registry
-- `docs/specs/17-ipc-wire-contract.md:141` — 4. Framing
-- `docs/specs/17-ipc-wire-contract.md:159` — 5. Buffer sizes
-- `docs/specs/17-ipc-wire-contract.md:179` — 6. Blocking discipline & the input queue
-- `docs/specs/17-ipc-wire-contract.md:205` — 7. Fail loud, never silent
-- `docs/specs/17-ipc-wire-contract.md:224` — 8. Case studies (the evidence this spec is built on)
-- `docs/specs/17-ipc-wire-contract.md:248` — 9. Compliance checklist & amendments
-- `docs/specs/17-ipc-wire-contract.md:378` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
-- `docs/specs/17-ipc-wire-contract.md:387` — 10.1 `NET_READY` frame
-- `docs/specs/17-ipc-wire-contract.md:402` — 10.2 Collision-safety invariants (normative)
-- `docs/specs/17-ipc-wire-contract.md:418` — 10.3 Interest registration
-- `docs/specs/17-ipc-wire-contract.md:432` — 10.4 Edge semantics + delivery
-- `docs/specs/17-ipc-wire-contract.md:444` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
-- `docs/specs/17-ipc-wire-contract.md:463` — 10.6 One recv consumer per tid + demux
-- `docs/specs/17-ipc-wire-contract.md:483` — 10.7 Handle namespace (frozen)
-- `docs/specs/17-ipc-wire-contract.md:493` — 11. Caller attestation — Ratified 2026-07-30
-- `docs/specs/17-ipc-wire-contract.md:498` — 11.1 The problem
-- `docs/specs/17-ipc-wire-contract.md:516` — 11.2 The mechanism
-- `docs/specs/17-ipc-wire-contract.md:533` — 11.3 Normative rules
-- `docs/specs/17-ipc-wire-contract.md:553` — 11.4 Direct (non-`ecall`) service calls
-- `docs/specs/17-ipc-wire-contract.md:580` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
-- `docs/specs/17-ipc-wire-contract.md:584` — 12.1 Copied IPC across Domain Boundaries
-- `docs/specs/17-ipc-wire-contract.md:594` — 12.2 Inter-Domain Zero-Copy Grants
-- `docs/specs/17-ipc-wire-contract.md:601` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+- `docs/specs/17-ipc-wire-contract.md:63` — 2. The recv-mask rule (most important)
+- `docs/specs/17-ipc-wire-contract.md:110` — 3. Byte-0 discriminant registry
+- `docs/specs/17-ipc-wire-contract.md:156` — 4. Framing
+- `docs/specs/17-ipc-wire-contract.md:174` — 5. Buffer sizes
+- `docs/specs/17-ipc-wire-contract.md:194` — 6. Blocking discipline & the input queue
+- `docs/specs/17-ipc-wire-contract.md:224` — 7. Fail loud, never silent
+- `docs/specs/17-ipc-wire-contract.md:243` — 8. Case studies (the evidence this spec is built on)
+- `docs/specs/17-ipc-wire-contract.md:267` — 9. Compliance checklist & amendments
+- `docs/specs/17-ipc-wire-contract.md:414` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
+- `docs/specs/17-ipc-wire-contract.md:423` — 10.1 `NET_READY` frame
+- `docs/specs/17-ipc-wire-contract.md:438` — 10.2 Collision-safety invariants (normative)
+- `docs/specs/17-ipc-wire-contract.md:454` — 10.3 Interest registration
+- `docs/specs/17-ipc-wire-contract.md:468` — 10.4 Edge semantics + delivery
+- `docs/specs/17-ipc-wire-contract.md:480` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+- `docs/specs/17-ipc-wire-contract.md:499` — 10.6 One recv consumer per tid + demux
+- `docs/specs/17-ipc-wire-contract.md:519` — 10.7 Handle namespace (frozen)
+- `docs/specs/17-ipc-wire-contract.md:529` — 11. Caller attestation — Ratified 2026-07-30
+- `docs/specs/17-ipc-wire-contract.md:534` — 11.1 The problem
+- `docs/specs/17-ipc-wire-contract.md:552` — 11.2 The mechanism
+- `docs/specs/17-ipc-wire-contract.md:569` — 11.3 Normative rules
+- `docs/specs/17-ipc-wire-contract.md:589` — 11.4 Direct (non-`ecall`) service calls
+- `docs/specs/17-ipc-wire-contract.md:616` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+- `docs/specs/17-ipc-wire-contract.md:620` — 12.1 Copied IPC across Domain Boundaries
+- `docs/specs/17-ipc-wire-contract.md:630` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:637` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:91` — 2.1 Tier 1 admission — `cellos-sign`

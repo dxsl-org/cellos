@@ -231,7 +231,7 @@ api::declare_syscalls![
     Send, Recv, Log, Exit,
     GetTime,
     GetRandom,
-    LookupService,
+    LookupServiceBound,
     AnonAllocate  // for malloc
 ];
 ```

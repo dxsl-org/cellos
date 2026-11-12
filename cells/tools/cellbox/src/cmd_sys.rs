@@ -210,6 +210,9 @@ mod tests {
     }
 }
 
+/// 5 s: one net-service request; `GetLocalIp` is answered once, from memory.
+const NET_CALL_TICKS: u64 = 500;
+
 /// `ifconfig` / `ip` — query and print the network interface IP address from service-net.
 pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     use api::ipc::{NetRequest, NetResponse};
@@ -221,36 +224,35 @@ pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult
 
     let mut send = [0u8; 512];
     let mut reply = [0u8; 512];
-    let len = api::ipc::encode(&NetRequest::GetLocalIp, &mut send)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    ostd::syscall::sys_send(net_tid, &send[..len]);
-
-    if ostd::ipc::recv_from(net_tid, &mut reply).is_ok() {
-        if let Ok(NetResponse::Addr(ip)) = api::ipc::decode::<NetResponse>(&reply) {
-            if ip == [0, 0, 0, 0] {
-                crate::executor::shell_println("eth0: link up, waiting for address assignment...");
-            } else if ip[0] == 169 && ip[1] == 254 {
-                crate::executor::shell_println(&alloc::format!(
-                    "eth0: inet {}.{}.{}.{}  netmask 255.255.0.0  (Link-Local RFC 3927)",
-                    ip[0],
-                    ip[1],
-                    ip[2],
-                    ip[3]
-                ));
-            } else {
-                crate::executor::shell_println(&alloc::format!(
-                    "eth0: inet {}.{}.{}.{}  netmask 255.255.255.0  (DHCP)",
-                    ip[0],
-                    ip[1],
-                    ip[2],
-                    ip[3]
-                ));
-            }
-            return Ok(());
-        }
+    let Ok(NetResponse::Addr(ip)) = ostd::ipc::service_call_typed_bounded::<_, NetResponse>(
+        net_tid,
+        &NetRequest::GetLocalIp,
+        &mut send,
+        &mut reply,
+        NET_CALL_TICKS,
+    ) else {
+        crate::executor::shell_println("ifconfig: no response from network service");
+        return Ok(());
+    };
+    if ip == [0, 0, 0, 0] {
+        crate::executor::shell_println("eth0: link up, waiting for address assignment...");
+    } else if ip[0] == 169 && ip[1] == 254 {
+        crate::executor::shell_println(&alloc::format!(
+            "eth0: inet {}.{}.{}.{}  netmask 255.255.0.0  (Link-Local RFC 3927)",
+            ip[0],
+            ip[1],
+            ip[2],
+            ip[3]
+        ));
+    } else {
+        crate::executor::shell_println(&alloc::format!(
+            "eth0: inet {}.{}.{}.{}  netmask 255.255.255.0  (DHCP)",
+            ip[0],
+            ip[1],
+            ip[2],
+            ip[3]
+        ));
     }
-    crate::executor::shell_println("ifconfig: no response from network service");
     Ok(())
 }
 

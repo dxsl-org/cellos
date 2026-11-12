@@ -31,6 +31,7 @@ api::declare_manifest!(
 // command.
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     RecvTimeout,

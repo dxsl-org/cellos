@@ -791,6 +791,23 @@ pub fn service_call_bounded<'r, Req: Serialize>(
     Ok(&recv_buf[..len])
 }
 
+/// [`service_call_bounded`] for a service's own byte protocol: `request` is
+/// sent as is and the reply bytes are returned, with the same exact-operation,
+/// scheduler-tick budget and cleanup contract.
+///
+/// This is the request path for raw-frame protocols (TLS, KMS, compositor,
+/// net-tools opcodes). A provider that answers with several messages delivers
+/// only the first through the operation; it must post the others.
+pub fn call_bytes<'r>(
+    service_tid: usize,
+    request: &[u8],
+    reply: &'r mut [u8],
+    timeout_ticks: u64,
+) -> Result<&'r [u8], IpcError> {
+    let len = exchange(service_tid, request, reply, Some(timeout_ticks))?;
+    Ok(&reply[..len])
+}
+
 /// [`service_call_bounded`] that decodes the reply into `Resp`.
 ///
 /// Uses the same end-to-end scheduler-tick budget and exact-operation cleanup as

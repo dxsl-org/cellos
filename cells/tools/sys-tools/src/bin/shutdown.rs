@@ -63,7 +63,8 @@ const APP_MESSAGE_PREFIX: [u8; 2] = [0xAC, 0x00];
 const OP_POWER: u8 = 0x04;
 #[cfg(target_arch = "x86_64")]
 const OP_STATUS: u8 = 0x03;
-/// Covers the supervisor's freeze sweep and settle window with a wide margin.
+/// Covers the supervisor's freeze sweep and settle window with a wide margin;
+/// the same budget bounds admission of the request.
 #[cfg(target_arch = "x86_64")]
 const REPLY_TIMEOUT_TICKS: u64 = 3_000;
 
@@ -75,7 +76,7 @@ fn request_from_supervisor(
     output: &ostd::io::ProcessOutput,
     deadline: u64,
 ) -> ! {
-    use ostd::syscall::{sys_recv_timeout, sys_send, SyscallResult};
+    use ostd::ipc::IpcError;
     let Some(supervisor) = ostd::service::provider_tid(api::syscall::service::SUPERVISOR) else {
         exit_with(output, b"shutdown: supervisor unavailable\n", deadline);
     };
@@ -89,18 +90,17 @@ fn request_from_supervisor(
         OP_POWER,
         action as u8,
     ];
-    if !matches!(sys_send(supervisor, &request), SyscallResult::Ok(_)) {
-        exit_with(
-            output,
-            b"shutdown: cannot send request to supervisor\n",
-            deadline,
-        );
-    }
     let mut status = [0u8; 3];
-    match sys_recv_timeout(supervisor, &mut status, REPLY_TIMEOUT_TICKS) {
-        SyscallResult::Ok(sender) if sender == supervisor && status[0] == OP_STATUS => exit_with(
+    match ostd::ipc::call_bytes(supervisor, &request, &mut status, REPLY_TIMEOUT_TICKS) {
+        Ok(reply) if reply.first() == Some(&OP_STATUS) => exit_with(
             output,
             b"shutdown: refused; the supervisor resumed the system\n",
+            deadline,
+        ),
+        // Nothing reached the supervisor: the request was never accepted or dispatched.
+        Err(IpcError::Send | IpcError::Busy | IpcError::PreDispatchTimeout) => exit_with(
+            output,
+            b"shutdown: cannot send request to supervisor\n",
             deadline,
         ),
         _ => exit_with(

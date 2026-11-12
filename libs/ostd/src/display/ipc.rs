@@ -1,17 +1,28 @@
 //! Compositor lifecycle IPC transactions.
+//!
+//! Each request is one exact operation, so only the compositor's reply to it
+//! is taken. Events the compositor sends while serving it (a configure's state
+//! change, a palette announcement) are posted to the mailbox and stay there in
+//! order for [`super::poll_surface_events`] and [`crate::input::poll_events`],
+//! which route every compositor frame.
 
-use api::display::{compositor_events, compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
+use api::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
 use types::{ViError, ViResult};
 
-use crate::syscall::{sys_recv, sys_send, SyscallResult};
+use crate::ipc::{call_bytes, post, IpcError};
 
-use super::route_compositor_frame;
+/// Scheduler ticks (10 ms) one compositor request may take end to end: 5 s.
+/// The compositor answers each request within one loop turn; longer means it
+/// is stalled.
+pub(super) const COMPOSITOR_CALL_TICKS: u64 = 500;
 
+/// Budget of each teardown request `ViSurface::drop` makes: 1 s, so dropping a
+/// surface against a stalled compositor holds the task only briefly.
+pub(super) const TEARDOWN_CALL_TICKS: u64 = 100;
+
+/// Post a one-way lifecycle frame; the compositor sends no reply.
 pub(super) fn send_lifecycle_request(comp_tid: usize, frame: &[u8]) -> ViResult<()> {
-    match sys_send(comp_tid, frame) {
-        SyscallResult::Ok(_) => Ok(()),
-        SyscallResult::Err(_) => Err(ViError::IO),
-    }
+    post(comp_tid, frame).map_err(|_| ViError::IO)
 }
 
 pub(super) fn create_surface(comp_tid: usize, w: u32, h: u32, role: SurfaceRole) -> ViResult<u32> {
@@ -20,22 +31,18 @@ pub(super) fn create_surface(comp_tid: usize, w: u32, h: u32, role: SurfaceRole)
     req[1..5].copy_from_slice(&w.to_le_bytes());
     req[5..9].copy_from_slice(&h.to_le_bytes());
     req[9] = role as u8;
-    sys_send(comp_tid, &req);
-
-    loop {
-        let mut resp = [0u8; 72];
-        match sys_recv(comp_tid, &mut resp) {
-            SyscallResult::Ok(sender) if sender == comp_tid => {
-                // A palette broadcast can precede the reply; its nonzero
-                // generation tells it from `cap:u32` + four zero bytes.
-                if super::appearance::note_frame(&resp) {
-                    continue;
-                }
-                let cap = u32::from_le_bytes([resp[0], resp[1], resp[2], resp[3]]);
-                return if cap == 0 { Err(ViError::IO) } else { Ok(cap) };
-            }
-            _ => return Err(ViError::IO),
-        }
+    // The reply is the new cap as `u64` LE; zero means refused.
+    let mut reply = [0u8; 8];
+    let reply =
+        call_bytes(comp_tid, &req, &mut reply, COMPOSITOR_CALL_TICKS).map_err(|_| ViError::IO)?;
+    let cap = match reply {
+        [a, b, c, d, ..] => u32::from_le_bytes([*a, *b, *c, *d]),
+        _ => return Err(ViError::IO),
+    };
+    if cap == 0 {
+        Err(ViError::IO)
+    } else {
+        Ok(cap)
     }
 }
 
@@ -47,22 +54,17 @@ pub(super) fn surface_byte_len(width: u32, height: u32, fmt: PixelFormat) -> ViR
     Ok(bytes as usize)
 }
 
-/// Receive a status while routing interleaved lifecycle and input frames.
-pub(super) fn receive_status(comp_tid: usize, expected_status: u8) -> ViResult<()> {
-    loop {
-        let mut frame = [0u8; 72];
-        match sys_recv(comp_tid, &mut frame) {
-            SyscallResult::Ok(sender) if sender == comp_tid => match frame[0] {
-                api::input::INPUT_EVENT_OPCODE
-                | compositor_events::WINDOW_CONFIGURE
-                | compositor_events::WINDOW_CLOSE_REQUEST
-                | compositor_events::WINDOW_STATE_CHANGED
-                | compositor_events::APPEARANCE_CHANGED => route_compositor_frame(&frame),
-                status if status == expected_status => return Ok(()),
-                _ => return Err(ViError::IO),
-            },
-            _ => return Err(ViError::IO),
-        }
+/// Send `request` and require the one-byte `expected_status` reply within `ticks`.
+pub(super) fn request_status(
+    comp_tid: usize,
+    request: &[u8],
+    expected_status: u8,
+    ticks: u64,
+) -> ViResult<()> {
+    let mut reply = [0u8; 1];
+    match call_bytes(comp_tid, request, &mut reply, ticks) {
+        Ok([status]) if *status == expected_status => Ok(()),
+        _ => Err(ViError::IO),
     }
 }
 
@@ -70,24 +72,22 @@ pub(super) fn configure_ack(comp_tid: usize, cap: u32, serial: u32) -> ViResult<
     let ack = api::display::ConfigureAck::new(cap, serial)
         .encode()
         .map_err(|_| ViError::InvalidInput)?;
-    sys_send(comp_tid, &ack);
-    receive_status(comp_tid, 0x01)
+    request_status(comp_tid, &ack, 0x01, COMPOSITOR_CALL_TICKS)
 }
 
-pub(super) fn detach_grant(comp_tid: usize, cap: u32) -> ViResult<()> {
+/// Detach the Grant `cap` presents, waiting at most `ticks` for the reply.
+pub(super) fn detach_grant(comp_tid: usize, cap: u32, ticks: u64) -> ViResult<()> {
     let mut request = [0u8; 9];
     request[0] = compositor_ops::DETACH_GRANT;
     request[1..].copy_from_slice(&(cap as u64).to_le_bytes());
-    sys_send(comp_tid, &request);
-    receive_status(comp_tid, 0x01)
+    request_status(comp_tid, &request, 0x01, ticks)
 }
 
 pub(super) fn detach_replaced_grant(comp_tid: usize, cap: u32, old_reg_id: usize) -> ViResult<()> {
     let request = api::display::DetachReplacedGrant::new(cap, old_reg_id as u64)
         .encode()
         .map_err(|_| ViError::InvalidInput)?;
-    sys_send(comp_tid, &request);
-    receive_status(comp_tid, 0x01)
+    request_status(comp_tid, &request, 0x01, COMPOSITOR_CALL_TICKS)
 }
 
 pub(super) enum AttachGrantResult {
@@ -97,6 +97,10 @@ pub(super) enum AttachGrantResult {
 }
 
 /// Send `ATTACH_GRANT`, preserving the rejection/transport-failure distinction.
+///
+/// Only an outcome that proves the compositor holds no reference to the Grant
+/// is `Rejected`: its `0x00` reply, or expiry before dispatch. Provider death,
+/// expiry after dispatch and any other failure are `AmbiguousFailure`.
 pub(super) fn stage_grant(
     comp_tid: usize,
     cap: u32,
@@ -114,24 +118,11 @@ pub(super) fn stage_grant(
         width: w,
         height: h,
     };
-    if !matches!(sys_send(comp_tid, &ag.encode()), SyscallResult::Ok(_)) {
-        return AttachGrantResult::AmbiguousFailure;
-    }
-    loop {
-        let mut frame = [0u8; 72];
-        match sys_recv(comp_tid, &mut frame) {
-            SyscallResult::Ok(sender) if sender == comp_tid => match frame[0] {
-                api::input::INPUT_EVENT_OPCODE
-                | compositor_events::WINDOW_CONFIGURE
-                | compositor_events::WINDOW_CLOSE_REQUEST
-                | compositor_events::WINDOW_STATE_CHANGED
-                | compositor_events::APPEARANCE_CHANGED => route_compositor_frame(&frame),
-                0x01 => return AttachGrantResult::Attached,
-                0x00 => return AttachGrantResult::Rejected,
-                _ => return AttachGrantResult::AmbiguousFailure,
-            },
-            _ => return AttachGrantResult::AmbiguousFailure,
-        }
+    let mut reply = [0u8; 1];
+    match call_bytes(comp_tid, &ag.encode(), &mut reply, COMPOSITOR_CALL_TICKS) {
+        Ok([0x01]) => AttachGrantResult::Attached,
+        Ok([0x00]) | Err(IpcError::PreDispatchTimeout) => AttachGrantResult::Rejected,
+        _ => AttachGrantResult::AmbiguousFailure,
     }
 }
 
@@ -149,12 +140,12 @@ pub(super) fn attach_grant(
     }
 }
 
-pub(super) fn destroy_surface(comp_tid: usize, cap: u32) -> ViResult<()> {
+/// Destroy surface `cap`, waiting at most `ticks` for the compositor's reply.
+pub(super) fn destroy_surface(comp_tid: usize, cap: u32, ticks: u64) -> ViResult<()> {
     let mut req = [0u8; 9];
     req[0] = compositor_ops::DESTROY_SURFACE;
     req[1..9].copy_from_slice(&(cap as u64).to_le_bytes());
-    sys_send(comp_tid, &req);
-    receive_status(comp_tid, 0x00)
+    request_status(comp_tid, &req, 0x00, ticks)
 }
 
 /// Unregister attempts [`release_grant`] makes before leaving the Grant to

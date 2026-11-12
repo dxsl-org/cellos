@@ -5,6 +5,7 @@
 use alloc::format;
 use api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
 use ostd::io::println;
+use ostd::ipc::Incoming;
 use ostd::syscall::{self, SyscallResult};
 use recovery_demo::ledger::Authority;
 #[cfg(feature = "fault-inject")]
@@ -134,8 +135,9 @@ impl Provider {
         ));
     }
 
-    /// `Status` frame followed by the last verdict record (zero when none).
-    pub fn report(&self, to: usize) {
+    /// `Status` frame followed by the last verdict record (zero when none), as
+    /// the one answer to the `Report` request `to` captured.
+    pub fn report(&self, to: &Incoming) {
         let committed = self.auth.committed();
         let status = Msg::Status {
             state: self.state,
@@ -152,7 +154,7 @@ impl Provider {
         if let Some(verdict) = self.verdict {
             out[FRAME_LEN..].copy_from_slice(&verdict.encode());
         }
-        let _ = syscall::sys_send(to, &out);
+        let _ = common::reply_bytes(to, &out);
     }
 }
 

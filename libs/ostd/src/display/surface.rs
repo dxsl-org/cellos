@@ -3,7 +3,8 @@
 use api::display::{compositor_ops, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use types::{ViError, ViResult};
 
-use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice, sys_send};
+use crate::ipc::post;
+use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice};
 
 use super::ipc;
 
@@ -78,7 +79,7 @@ impl ViSurface {
             ipc::release_grant(reg_id);
         })?;
         ipc::attach_grant(comp_tid, cap, reg_id, width, height, fmt).inspect_err(|_| {
-            let _ = ipc::destroy_surface(comp_tid, cap);
+            let _ = ipc::destroy_surface(comp_tid, cap, ipc::COMPOSITOR_CALL_TICKS);
             ipc::release_grant(reg_id);
         })?;
         Ok(Self {
@@ -123,6 +124,8 @@ impl ViSurface {
     }
 
     /// Mark the surface-local `rect` dirty for a later compositor blend.
+    ///
+    /// Posted without waiting: a full compositor mailbox drops it.
     pub fn damage(&self, rect: Rect) {
         let msg = DamageNotify {
             opcode: compositor_ops::DAMAGE_NOTIFY,
@@ -130,7 +133,7 @@ impl ViSurface {
             cap: self.cap,
             rect,
         };
-        sys_send(self.comp_tid, &msg.encode());
+        let _ = post(self.comp_tid, &msg.encode());
     }
 
     /// Mark every current surface pixel dirty for a later compositor blend.
@@ -152,7 +155,7 @@ impl ViSurface {
         let mut buf17 = [0u8; 17];
         buf17[..13].copy_from_slice(&buf);
         buf17[13..17].copy_from_slice(&y.to_le_bytes());
-        sys_send(self.comp_tid, &buf17);
+        let _ = post(self.comp_tid, &buf17);
     }
 
     /// Raise this surface above every other compositor surface.
@@ -160,6 +163,6 @@ impl ViSurface {
         let mut buf = [0u8; 9];
         buf[0] = compositor_ops::RAISE_SURFACE;
         buf[1..9].copy_from_slice(&(self.cap as u64).to_le_bytes());
-        sys_send(self.comp_tid, &buf);
+        let _ = post(self.comp_tid, &buf);
     }
 }

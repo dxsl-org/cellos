@@ -27,6 +27,7 @@ api::declare_manifest!(
 // (no Open), so the grant is console input only.
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     Log,

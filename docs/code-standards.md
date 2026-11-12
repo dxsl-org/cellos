@@ -642,7 +642,7 @@ Cellos organizes cells into 8 semantic groups (parallel to code, not functionali
 cells/
 ├─ tools/        — System utilities (shell, init, sys-tools, net-tools)
 ├─ apps/         — User applications (choose tier by execution boundary and runtime profile)
-├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
+├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, etc.)
 ├─ drivers/      — Hardware device drivers (trusted native cells; gpio, i2c, spi, uart, etc.)
 ├─ services/     — System services (vfs, net, input, compositor, silo, hypervisor, etc.)
 ├─ runtimes/     — Trusted native runtime profiles (lua; MicroPython historical only)

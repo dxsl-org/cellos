@@ -7,8 +7,7 @@
 //! `PermissionDenied`.
 //!
 //! Every call here is bounded: the service sends no reply at all to a frame it cannot
-//! decode, so the unbounded receive of the older calls would block forever. A timeout
-//! poisons the client (see [`KmsClientError::Timeout`]).
+//! decode. A timeout poisons the client (see [`KmsClientError::Timeout`]).
 //!
 //! Replies are verified before a call reports success: handle, canonical chunk plan,
 //! chunk index and cumulative length, and the echo of the payload `request_id`.

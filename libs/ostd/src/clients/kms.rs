@@ -15,7 +15,8 @@ pub use types::kms::{
     KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
 };
 
-use crate::{syscall, task};
+use crate::ipc::{self, IpcError};
+use crate::task;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use types::kms::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsOpcode, KmsRequestV1,
@@ -26,6 +27,9 @@ use types::kms::{
 };
 
 const FIRST_REQUEST_ID: u32 = 1;
+/// Budget of one node-identity or relay request: 1,000 ticks = 10 s. These opcodes run
+/// no KDF; the slowest write one record through VFS.
+const KMS_CALL_TICKS: u64 = 1_000;
 /// First payload `request_id` (nonzero; the service requires each to exceed its floor).
 const FIRST_PAYLOAD_ID: u64 = 1;
 
@@ -39,9 +43,9 @@ pub enum KmsClientError {
     InvalidPayload,
     Wire(KmsWireError),
     Service(KmsErrorCode),
-    /// No reply inside the bound of a bounded (SSH) call. The client is poisoned: a late
-    /// reply would otherwise be taken for the next call's, so every later call returns
-    /// this too, without sending anything.
+    /// No reply inside the bound of an SSH call. The request may still execute in KMS,
+    /// leaving the SSH session state unknown, so the client is poisoned: every later SSH
+    /// call returns this too, without sending anything.
     Timeout,
 }
 
@@ -178,20 +182,14 @@ impl KmsClient {
         self.call(&request)
     }
 
+    /// One bounded node-identity round trip; no reply inside [`KMS_CALL_TICKS`] is
+    /// `Ipc`, as any other transport failure, and does not poison the client.
     fn call(&self, request: &KmsRequestV1) -> Result<KmsResponseV1, KmsClientError> {
-        match syscall::sys_send(self.tid, &request.to_bytes()) {
-            syscall::SyscallResult::Ok(_) => {}
-            syscall::SyscallResult::Err(_) => return Err(KmsClientError::Ipc),
-        }
-
-        let mut bytes = [0u8; KMS_MESSAGE_LEN];
-        // KMS replies must be correlated to the live service tid so queued
-        // traffic from other senders cannot be consumed as a false reply.
-        match syscall::sys_recv(self.tid, &mut bytes) {
-            syscall::SyscallResult::Ok(sender) if sender == self.tid => {}
-            syscall::SyscallResult::Ok(_) => return Err(KmsClientError::WrongSender),
-            syscall::SyscallResult::Err(_) => return Err(KmsClientError::Ipc),
-        }
+        let bytes = match self.exchange(&request.to_bytes(), KMS_CALL_TICKS) {
+            Ok(bytes) => bytes,
+            Err(KmsClientError::Timeout) => return Err(KmsClientError::Ipc),
+            Err(error) => return Err(error),
+        };
 
         let response = KmsResponseV1::from_bytes(&bytes).map_err(KmsClientError::Wire)?;
         if response.opcode().map_err(KmsClientError::Wire)?
@@ -236,11 +234,10 @@ impl KmsClient {
         self.call_bounded(&mut request, ticks)
     }
 
-    /// `sys_send`, then a receive bounded by `ticks` scheduler ticks (10 ms each). A frame
-    /// the service cannot decode gets no reply at all, so the unbounded receive of
-    /// [`Self::call`] would block forever. The request's payload and the frame built from
+    /// One exchange bounded by `ticks` scheduler ticks (10 ms each): a frame the service
+    /// cannot decode gets no reply at all. The request's payload and the frame built from
     /// it are wiped once sent (an unlock chunk carries passphrase bytes). A timeout poisons
-    /// the client: a late reply must never be taken for the next call's.
+    /// the client: the timed-out request may still run, so the session state is unknown.
     fn call_bounded(
         &self,
         request: &mut KmsRequestV1,
@@ -274,8 +271,10 @@ impl KmsClient {
         Ok(response)
     }
 
-    /// One request frame out, one reply frame in, or `Timeout`. The only place the SSH
-    /// path touches the kernel, so host tests replace it with a script.
+    /// One exact operation: the request frame out, this request's reply frame in, or
+    /// `Timeout` when none arrived within `ticks` (expiry before or after dispatch). The
+    /// only place the client touches the kernel, so host tests replace it with a script.
+    /// A shorter reply is zero-padded to the fixed frame, as the raw receive did.
     fn exchange(
         &self,
         frame: &[u8; KMS_MESSAGE_LEN],
@@ -285,22 +284,13 @@ impl KmsClient {
         if let Some(script) = &self.script {
             return script.exchange(frame, ticks);
         }
-        match syscall::sys_send(self.tid, frame) {
-            syscall::SyscallResult::Ok(_) => {}
-            syscall::SyscallResult::Err(_) => return Err(KmsClientError::Ipc),
-        }
         let mut bytes = [0u8; KMS_MESSAGE_LEN];
-        match syscall::sys_recv_timeout(self.tid, &mut bytes, ticks) {
-            syscall::SyscallResult::Ok(0) => {
-                // One non-blocking drain: a reply that raced the deadline is taken here
-                // so the service's own blocking send is not left waiting on this Cell.
-                let mut late = [0u8; KMS_MESSAGE_LEN];
-                let _ = syscall::sys_try_recv(self.tid, &mut late);
+        match ipc::call_bytes(self.tid, frame, &mut bytes, ticks).map(|reply| reply.len()) {
+            Ok(_) => Ok(bytes),
+            Err(IpcError::PreDispatchTimeout | IpcError::Indeterminate) => {
                 Err(KmsClientError::Timeout)
             }
-            syscall::SyscallResult::Ok(sender) if sender == self.tid => Ok(bytes),
-            syscall::SyscallResult::Ok(_) => Err(KmsClientError::WrongSender),
-            syscall::SyscallResult::Err(_) => Err(KmsClientError::Ipc),
+            Err(_) => Err(KmsClientError::Ipc),
         }
     }
 

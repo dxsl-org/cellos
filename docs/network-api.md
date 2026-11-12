@@ -60,9 +60,9 @@ driver's entire padded receive buffer rather than the sender's byte count. The
 Net Cell limits frames to 1514 bytes. The VirtIO provider accepts up to 1514
 bytes; the e1000 provider's internal buffer permits up to 2048 bytes.
 
-If no Driver Cell is registered, the adapter calls the legacy kernel
-`NetTx`/`NetRx` syscalls. Their current backend is disabled (`false`/zero), so
-networking remains unavailable rather than falling back to a kernel NIC driver.
+If no Driver Cell is registered, no frame moves: `L2Send` is refused and a frame
+queued while a driver was live is answered as failed. There is no kernel NIC
+fallback (the legacy `NetTx`/`NetRx` syscalls were retired in Phase 11).
 
 ---
 
@@ -320,7 +320,6 @@ KMS program, so `curl`/`wget` here are HTTP/1.0 clients.
 |------|---------|
 | `cells/drivers/virtio-net/` | VirtIO NIC Driver Cell (DMA, IRQ, shared NIC IPC) |
 | `cells/drivers/e1000/` | e1000 PCIe Driver Cell (DMA rings, polled Tx/Rx, shared NIC IPC) |
-| `kernel/src/task/drivers/nic.rs` | Disabled legacy `NetTx`/`NetRx` syscall backend |
 | `cells/services/net/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/net/src/interface.rs` | smoltcp Device adapter (RX queue, TX via IPC) |
 | `cells/services/net/src/socket_table.rs` | CapId → smoltcp SocketHandle mapping |

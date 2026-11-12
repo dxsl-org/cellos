@@ -161,6 +161,10 @@ pub struct AppContext {
     attest_callers: bool,
     /// Kernel-attested identity of the sender of the event being handled.
     caller: Option<api::caller_identity::CallerIdentity>,
+    /// The request being handled, captured at its receive: a handler that does
+    /// its own IPC before replying (a receive replaces the kernel's record of
+    /// the current request) still answers the caller's exact operation.
+    request: Option<crate::ipc::Incoming>,
 }
 
 impl AppContext {
@@ -174,6 +178,7 @@ impl AppContext {
             heartbeat_ticks: 0,
             attest_callers: false,
             caller: None,
+            request: None,
         }
     }
 
@@ -237,6 +242,10 @@ impl AppContext {
         if attested && matches!(result, syscall::SyscallResult::Ok(tid) if tid != 0) {
             self.caller = api::caller_identity::CallerIdentity::from_recv_buf(&self.recv_buf);
         }
+        self.request = match result {
+            syscall::SyscallResult::Ok(tid) if tid != 0 => Some(crate::ipc::Incoming::current(tid)),
+            _ => None,
+        };
         match result {
             syscall::SyscallResult::Ok(0) if wait.is_some() => Some(None),
             syscall::SyscallResult::Ok(tid) => Some(Some(tid)),
@@ -300,12 +309,19 @@ impl AppContext {
         }
     }
 
-    /// Answer the request `tid` sent, without parking: see [`crate::ipc::reply_to`].
+    /// Answer the request `tid` sent, without parking. The request this loop
+    /// received from `tid` is answered through its captured operation, even
+    /// after the handler did other IPC; any other `tid` goes through
+    /// [`crate::ipc::reply_to`].
     ///
     /// # Errors
     /// `IO` when the reply could not be delivered.
     pub fn reply(&self, tid: usize, data: &[u8]) -> ViResult<()> {
-        crate::ipc::reply_to(tid, data).map_err(|_| ViError::IO)
+        match self.request {
+            Some(request) if request.sender() == tid => request.reply(data),
+            _ => crate::ipc::reply_to(tid, data),
+        }
+        .map_err(|_| ViError::IO)
     }
 
     /// Queue an App SDK envelope message for `tid`, without parking.

@@ -20,11 +20,26 @@
 ## 1. Scope & model
 
 Cellos IPC is **kernel-mediated message passing** between cells (not the direct
-vtable call that `specs/01` aspires to — see `system-architecture.md`). The
-primitives (`libs/api/src/abi/syscall.rs`, kernel `task.rs`):
+vtable call that `specs/01` aspires to — see `system-architecture.md`). There is
+one request/reply model and one event model (Phase 11, §9 amendment 2026-11-12):
 
-- `sys_send(target, &[u8])` — blocking: parks the caller in `Sending{target}`
-  until the target is in `Recv` and copies the bytes into the target's recv buffer.
+- **Request/reply is an exact operation.** The caller submits one operation
+  (`IpcSubmit`) and waits for *that operation's* terminal (`IpcWait`/
+  `WaitCompletion(IPC)` → `IpcTake`): the reply, provider death (`PeerGone`), or
+  kernel expiry. Request bytes and reply storage are kernel-owned. The provider
+  answers with `IpcReply` on the token it captured at receive time
+  (`ostd::ipc::Incoming`), or through `ostd::ipc::reply_to`, which the kernel bridge
+  checks against the operation's caller. SDK: `ostd::ipc::call_bytes` (byte
+  protocols), `service_call*_bounded` (postcard), `ServiceRef::call` (typed
+  `CallOutcome`: `Reply | Refused | Uncertain`).
+- **Events are posts.** `ostd::ipc::post(target, &[u8])` (`SendGather`) queues into
+  the target's bounded mailbox and never parks; it fails `Busy` when the mailbox is
+  full. Events never carry a reply.
+- `sys_send(target, &[u8])` is the raw blocking primitive: it parks the caller
+  until the target takes the message, with no deadline. Outside `libs/ostd` and
+  `cells/tests` it is forbidden by the workspace `clippy.toml`; the one sanctioned
+  blocking path is `ostd::ipc::post_blocking`, for input-source registration and
+  HID events only (§6).
 - `sys_try_send(target, &[u8])` — non-blocking: delivers iff the target is in a
   matching `Recv`, else drops (special-cased for the input service — see §6).
 - `sys_recv(mask, &mut [u8]) -> sender_tid` — blocks until a message arrives;
@@ -34,11 +49,11 @@ primitives (`libs/api/src/abi/syscall.rs`, kernel `task.rs`):
   kernel-written caller identity in the tail of the buffer (§11).
 - `sys_recv_timeout(mask, &mut [u8], ticks)` — as `sys_recv`, returns `Ok(0)` on
   timeout (10 ms/tick).
-- `sys_reply` / `current_caller` — the request/reply short-circuit.
-- SDK RPC (`service_call` and its typed/bounded variants) uses
-  `IpcSubmit` → `IpcWait` → `IpcTake`: request bytes and reply storage are kernel-owned,
-  and completion names one operation rather than an arbitrary sender message.
-  Ordinary Send/Recv remains the raw mailbox/event interface.
+- Providers are resolved by binding (`LookupServiceBound`,
+  `ostd::service::lookup`): a tid says where to send, the binding which Cell
+  incarnation is there. A provider check on a received message uses
+  `ostd::service::sender_is_live_provider`. The retired opcodes (`Call` 2,
+  `Reply` 3, `LookupService` 206) decode as unknown syscalls.
 
 There is exactly **one recv buffer per cell**. Everything below exists because
 that buffer is untyped and shared across every sender and every protocol.
@@ -178,17 +193,21 @@ recoverable from the buffer.
 
 ## 6. Blocking discipline & the input queue
 
-- **Driver replies to bounded operations use `IpcReply` with the captured token**;
-  cancelled or gone clients cannot park the driver in a blocking Send. Raw mailbox
-  driver replies use `sys_try_send` with client `sys_recv_timeout`. A dropped raw
-  reply does not prove non-execution: retry only under the method's idempotency policy.
-- **Keyboard input uses blocking backpressure.** The input service sends keyboard
-  events with `sys_send`, so it stops consuming upstream input until the focused
-  cell re-enters `Recv`. The kernel wakes a blocked sender with an error if the
-  focused cell dies; the input service then clears that stale focus. Mouse delivery
-  remains nonblocking and may be dropped when its bounded queue is saturated.
-  The UART relay reaches the input service through a separate bounded hop so a
-  paste-speed burst is paced end to end. Bounds:
+- **A service never parks on a client.** Replies go through the captured
+  operation (`Incoming::reply` / `reply_to` → `IpcReply`), or are posted when the
+  request came by raw `Send`; events a service emits while serving are posts. A
+  client that never receives cannot stall a service (fixture
+  `bench nonreceiving-client`). A dropped or expired reply does not prove
+  non-execution: retry only under the method's idempotency policy.
+- **Requests are bounded.** Every SDK request path is an exact operation with a
+  scheduler-tick budget; expiry before dispatch means nothing ran
+  (`PreDispatchTimeout`), after dispatch the request may have run (`Indeterminate`).
+- **Input.** USB HID producers register and deliver events to the input service
+  with `post_blocking` (the input service never waits in a receive for them, so
+  backpressure is the only pacing). The input service delivers translated events
+  to the focused cell non-blocking; events that do not fit are dropped and counted,
+  never by stalling the cells behind it. The UART relay reaches the input service
+  through a separate bounded hop so a paste-speed burst is paced end to end. Bounds:
   - `HOTSWAP_MSG_QUEUE_DEPTH = 64` — kernel-to-input UART staging, also used for
     messages buffered for a *frozen* cell during hot-swap.
   - `INPUT_EVENT_QUEUE_DEPTH = 512` — scheduling cushion for nonblocking events
@@ -255,11 +274,12 @@ A new or modified IPC path is compliant when:
       registered in §3 and carries an **explicit length** (§4).
 - [ ] The recv buffer is `IPC_BUF_SIZE`; replies fit the frame after the
       envelope; chunks leave headroom (§5).
-- [ ] Driver replies use captured operation tokens, or raw `sys_try_send` with
-      client `recv_timeout`; no blocking-reply-to-maybe-gone (§6).
+- [ ] Requests are exact operations with a tick budget; replies use the captured
+      operation (`Incoming::reply` / `reply_to`) or a post; events are posts; no
+      blocking `sys_send` outside `libs/ostd` and `cells/tests` (§1, §6).
 - [ ] No silent-empty / silent-drop / silent-fallback path (§7).
-- [ ] Prefer `ostd::ipc::service_call` (encapsulates §2/§4/§7) over hand-rolled
-      send+recv.
+- [ ] Prefer `ostd::ipc::service_call*_bounded` / `call_bytes` / `ServiceRef::call`
+      (encapsulate §2/§4/§7) over hand-rolled send+recv.
 - [ ] A service that **authorizes** requests reads the caller from the kernel
       attestation (§11), never from the sender tid or the payload, and denies when
       the attestation is absent.
@@ -372,6 +392,22 @@ the reason the value is safe against existing owners.
   - **Unchanged:** opcode 242, its four arguments, allowlist bit 42, `WaitIrq = 234`, the `NET_RX`,
     `TIMER` and `IPC` semantics, and the raw-message rule for masks naming `NET_RX`.
   - Pinned by `scripts/check-multi-source-wait-law1-digests.sh` (amended in the same commit).
+- 2026-11-12 — **One IPC operation model (architecture remediation Phase 11; Law-1 confirmation 1
+  at CP1: `.agents/261110-1703-architecture-remediation/cp1-ipc-model.md`; confirmation 2 is
+  `…/cp2-ipc-model.md`).**
+  - **Model (§1):** request/reply is an exact operation; `Send` is a raw primitive and events are
+    posts. Services reply through the captured operation or post; SDK requests are bounded.
+  - **D1 `RegisterService` (205):** `a2` is `flags` (`api::syscall::service_flags`:
+    `RETAINS_OUTER_CALLER`, `OWNER_WATCH`), namespace owner only. They replace the kernel's
+    "VFS cell" rule and its owner-watch table.
+  - **D2/D3:** `WaitIrq` (234), `WaitForEvent` (217) and `IpcWait` (258) park as completion-source
+    waits; results unchanged. No ABI change.
+  - **D4/D5 retired numbers:** `Call` 2, `Reply` 3, `Exec` 6, `AudioPlay` 218, `NetTx` 310, `NetRx` 311
+    and `LookupService` 206 are reserved rows in `libs/api/abi/syscalls.toml`; their allowlist bits
+    are never reused (bit 37 stays with `LookupServiceBound`). `Yield` 104 is not retired.
+  - **D6:** `ProcessInfo.state` keeps 0/1/2/3; 3 means Terminated or Retiring.
+  - **Unchanged:** frames, byte-0 registry, envelopes, attested tails, buffer sizes, the
+    `IpcSubmit`…`IpcReply` operation ABI and `IPC_STATUS`.
 
 ---
 
@@ -552,9 +588,9 @@ invisible to every existing parser.
 
 ### 11.4 Direct (non-`ecall`) service calls
 
-**Status: accepted Tier-1 rewrite; direct dispatch is not reachable today.** Separately linked
-Cells hold private handler tables, and no loader import-resolution bridge connects them to
-`kernel::fast_ipc`. Current calls therefore use the governed message fallback.
+**Status: accepted Tier-1 rewrite; no direct dispatch exists.** The unreachable `fast_ipc`
+scaffolding was deleted in Phase 11 (§9 amendment 2026-11-12); every call uses the governed
+message path.
 
 A future direct path would bypass the trap, so there would be no sender tid and nothing in the
 arguments would be trustworthy. It MUST derive identity from live scheduler state, never from a

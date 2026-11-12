@@ -20,6 +20,9 @@ fn vfs_endpoint() -> usize {
     }
 }
 
+/// 5 s: one VFS `ListDir`, which may read a directory from disk.
+const VFS_LIST_CALL_TICKS: u64 = 500;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Return VFS metadata for a path without reading its contents.
@@ -926,17 +929,14 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     }
     use api::ipc::{VfsRequest, VfsResponse};
     let mut send = [0u8; 512];
-    let n = match api::ipc::encode(&VfsRequest::ListDir(dir), &mut send) {
-        Ok(s) => s.len(),
-        Err(_) => return,
-    };
-    ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    let raw = match ostd::ipc::recv_from(vfs_tid, &mut reply) {
-        Ok(raw) => raw,
-        Err(_) => return,
-    };
-    if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(raw) {
+    if let Ok(VfsResponse::Data(entries)) = ostd::ipc::service_call_typed_bounded::<_, VfsResponse>(
+        vfs_tid,
+        &VfsRequest::ListDir(dir),
+        &mut send,
+        &mut reply,
+        VFS_LIST_CALL_TICKS,
+    ) {
         let text = core::str::from_utf8(entries).unwrap_or("");
         for entry in text.lines() {
             let (kind, name) = if let Some(rest) = entry.strip_prefix("d:") {
@@ -972,26 +972,26 @@ pub(crate) fn vfs_list_dir_details(
     use api::ipc::{VfsRequest, VfsResponse};
     let vfs_tid = vfs_endpoint();
     let mut send = [0u8; 512];
-    let n = api::ipc::encode(&VfsRequest::ListDir(dir), &mut send)
-        .ok()?
-        .len();
-    ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    if ostd::ipc::recv_from(vfs_tid, &mut reply).is_ok() {
-        if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(&reply) {
-            let text = core::str::from_utf8(entries).ok()?;
-            let mut list = alloc::vec::Vec::new();
-            for entry in text.lines() {
-                if let Some(name) = entry.strip_prefix("d:") {
-                    list.push((alloc::string::String::from(name), true));
-                } else if let Some(name) = entry.strip_prefix("f:") {
-                    list.push((alloc::string::String::from(name), false));
-                }
-            }
-            return Some(list);
+    let Ok(VfsResponse::Data(entries)) = ostd::ipc::service_call_typed_bounded::<_, VfsResponse>(
+        vfs_tid,
+        &VfsRequest::ListDir(dir),
+        &mut send,
+        &mut reply,
+        VFS_LIST_CALL_TICKS,
+    ) else {
+        return None;
+    };
+    let text = core::str::from_utf8(entries).ok()?;
+    let mut list = alloc::vec::Vec::new();
+    for entry in text.lines() {
+        if let Some(name) = entry.strip_prefix("d:") {
+            list.push((alloc::string::String::from(name), true));
+        } else if let Some(name) = entry.strip_prefix("f:") {
+            list.push((alloc::string::String::from(name), false));
         }
     }
-    None
+    Some(list)
 }
 
 /// List entries in a directory from the Userspace VFS Service via IPC.

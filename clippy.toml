@@ -1,0 +1,10 @@
+# A blocking `Send` parks the sender until the receiver takes the message, with
+# no deadline (architecture remediation Phase 11, CP1 §3). Requests are exact
+# operations (`ostd::ipc::call_bytes`, `service_call*_bounded`, `ServiceRef::call`),
+# one-way messages are `ostd::ipc::post`, and `ostd::ipc::post_blocking` is the
+# one sanctioned blocking path. `libs/ostd` and `cells/tests` keep their own
+# clippy.toml without this rule: the SDK implements those paths, and tests that
+# exercise raw `Send` keep it.
+disallowed-methods = [
+    { path = "ostd::syscall::sys_send", reason = "parks without a deadline: use ostd::ipc::call_bytes / service_call_bounded for a request, ostd::ipc::post for an event" },
+]

@@ -5,7 +5,7 @@ use api::display::{
 };
 use types::{ViError, ViResult};
 
-use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice, sys_send};
+use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice};
 
 use super::ipc::{self, AttachGrantResult};
 use super::surface::ViSurface;
@@ -123,7 +123,7 @@ impl ViSurface {
             AttachGrantResult::AmbiguousFailure => return Err(ViError::IO),
         }
         if ipc::configure_ack(self.comp_tid, self.cap, configure.serial).is_err() {
-            if ipc::detach_grant(self.comp_tid, self.cap).is_ok() {
+            if ipc::detach_grant(self.comp_tid, self.cap, ipc::COMPOSITOR_CALL_TICKS).is_ok() {
                 self.staged_reg_id = None;
                 ipc::release_grant(new_reg_id);
             }
@@ -177,14 +177,14 @@ impl ViSurface {
     }
 }
 
+/// Teardown is two bounded compositor requests, at most
+/// `2 * TEARDOWN_CALL_TICKS` against a stalled compositor and immediate
+/// against a dead one. A failed request leaves the surface for the compositor
+/// to reclaim when this task exits.
 impl Drop for ViSurface {
     fn drop(&mut self) {
-        let mut detach = [0u8; 9];
-        detach[0] = compositor_ops::DETACH_GRANT;
-        detach[1..9].copy_from_slice(&(self.cap as u64).to_le_bytes());
-        sys_send(self.comp_tid, &detach);
-        let _ = ipc::receive_status(self.comp_tid, 0x01);
-        let _ = ipc::destroy_surface(self.comp_tid, self.cap);
+        let _ = ipc::detach_grant(self.comp_tid, self.cap, ipc::TEARDOWN_CALL_TICKS);
+        let _ = ipc::destroy_surface(self.comp_tid, self.cap, ipc::TEARDOWN_CALL_TICKS);
         ipc::release_grant(self.reg_id);
         if let Some(reg_id) = self.staged_reg_id {
             ipc::release_grant(reg_id);

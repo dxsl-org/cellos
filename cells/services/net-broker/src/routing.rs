@@ -5,7 +5,6 @@
 #![allow(dead_code)]
 
 use api::syscall::service;
-use ostd::service::provider_tid;
 /// RemoteServiceProxy — broker-side routing table + cluster-RPC dispatch.
 ///
 /// ## Protocol (matches libs/ostd/src/cluster.rs byte layout)
@@ -32,6 +31,7 @@ use ostd::service::provider_tid;
 ///
 /// P06 ships the data structures and LookupRemote dispatch; P08 wires gossip
 /// announcements into insert_route / remove_routes_for_peer.
+use ostd::service::provider_tid;
 
 // ── Opcodes ────────────────────────────────────────────────────────────────────
 

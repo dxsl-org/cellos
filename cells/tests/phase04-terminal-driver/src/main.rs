@@ -59,6 +59,7 @@ api::declare_manifest!(
 // repeat-open/close leak check. No Wait, no SpawnFromElf, no capability.
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     TryRecv,
     RecvTimeout,

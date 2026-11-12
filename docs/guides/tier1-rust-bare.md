@@ -105,7 +105,7 @@ Common syscalls:
 - `Exit` — `sys_exit()`
 - `GetTime` — `sys_get_time()`
 - `Heartbeat` — `sys_heartbeat()` (watchdog)
-- `LookupService` — `sys_lookup_service()`
+- `LookupServiceBound` — `ostd::service::lookup()` (binding) / `provider_tid()`
 - `GetRandom` — entropy
 
 See [api-reference.md](../api-reference.md) for the full list.

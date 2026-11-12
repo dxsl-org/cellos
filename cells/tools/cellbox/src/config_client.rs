@@ -6,6 +6,9 @@ use api::ipc::{ConfigRequest, ConfigResponse, CONFIG_ERR_DENIED, IPC_BUF_SIZE};
 use ostd::prelude::*;
 use ostd::sync::Mutex;
 
+/// 2 s: one in-memory Config lookup or store; the service answers each request once.
+const CONFIG_CALL_TICKS: u64 = 200;
+
 /// Client for the Config service.
 ///
 /// Uses typed postcard IPC (`ConfigRequest` / `ConfigResponse`) matching the
@@ -63,26 +66,17 @@ impl ViConfig for ConfigClient {
 
         let mut req_buf = [0u8; IPC_BUF_SIZE];
         let req = ConfigRequest::Get(key);
-        let encoded = api::ipc::encode(&req, &mut req_buf).map_err(|_| ViError::IO)?;
-
-        if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(sid, encoded) {
-            let mut resp_buf = self.resp_buf.lock();
-            // Masked recv: a wildcard here can consume a queued input key event
-            // as the config reply while the shell holds input focus.
-            match ostd::syscall::sys_recv(sid, &mut resp_buf[..]) {
-                ostd::syscall::SyscallResult::Ok(sender) if sender == sid => {
-                    match api::ipc::decode::<ConfigResponse>(&resp_buf[..]) {
-                        Ok(ConfigResponse::Value(val)) => {
-                            Ok(Box::leak(String::from(val).into_boxed_str()))
-                        }
-                        Ok(ConfigResponse::NotFound) => Err(ViError::NotFound),
-                        _ => Err(ViError::IO),
-                    }
-                }
-                _ => Err(ViError::IO),
-            }
-        } else {
-            Err(ViError::IO)
+        let mut resp_buf = self.resp_buf.lock();
+        match ostd::ipc::service_call_typed_bounded::<_, ConfigResponse>(
+            sid,
+            &req,
+            &mut req_buf,
+            &mut resp_buf[..],
+            CONFIG_CALL_TICKS,
+        ) {
+            Ok(ConfigResponse::Value(val)) => Ok(Box::leak(String::from(val).into_boxed_str())),
+            Ok(ConfigResponse::NotFound) => Err(ViError::NotFound),
+            _ => Err(ViError::IO),
         }
     }
 
@@ -92,15 +86,9 @@ impl ViConfig for ConfigClient {
         let mut req_buf = [0u8; IPC_BUF_SIZE];
         let encoded = encode_set(key, value, &mut req_buf)?;
 
-        if !matches!(
-            ostd::syscall::sys_send(sid, encoded),
-            ostd::syscall::SyscallResult::Ok(_)
-        ) {
-            return Err(ViError::IO);
-        }
-
         let mut ack = [0u8; 64];
-        let raw = ostd::ipc::recv_from(sid, &mut ack).map_err(|_| ViError::IO)?;
+        let raw = ostd::ipc::call_bytes(sid, encoded, &mut ack, CONFIG_CALL_TICKS)
+            .map_err(|_| ViError::IO)?;
         set_reply(raw)
     }
 }

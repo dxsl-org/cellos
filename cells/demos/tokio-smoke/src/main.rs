@@ -40,6 +40,8 @@ ostd::declare_custom_heap!(2 * 1024 * 1024);
 const SERVER_TOKEN: Token = Token(1);
 const WAKER_TOKEN: Token = Token(2);
 const HTTP_PORT: u16 = 8088;
+/// 5 s: one net-service `TcpListen`, answered once from the socket table.
+const NET_CALL_TICKS: u64 = 500;
 
 #[cfg(not(test))]
 ostd::cell_main!(cell_main);
@@ -92,24 +94,25 @@ fn cell_main() {
         let mut req_buf = [0u8; 128];
         let mut resp_buf = [0u8; 128];
 
-        if let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) {
-            let _ = ostd::syscall::sys_send(net_tid, encoded);
-            let _ = ostd::syscall::sys_recv(net_tid, &mut resp_buf);
-
-            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
-                api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf)
+        if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
+            ostd::ipc::service_call_typed_bounded::<_, api::ipc::NetResponse<'_>>(
+                net_tid,
+                &req,
+                &mut req_buf,
+                &mut resp_buf,
+                NET_CALL_TICKS,
+            )
+        {
+            println(&alloc::format!(
+                "[tokio-smoke] Listening on :{} with cap_id={}",
+                HTTP_PORT,
+                listener_cap
+            ));
+            if selector
+                .register(listener_cap, SERVER_TOKEN, Interest::READABLE)
+                .is_ok()
             {
-                println(&alloc::format!(
-                    "[tokio-smoke] Listening on :{} with cap_id={}",
-                    HTTP_PORT,
-                    listener_cap
-                ));
-                if selector
-                    .register(listener_cap, SERVER_TOKEN, Interest::READABLE)
-                    .is_ok()
-                {
-                    println("[tokio-smoke] Registered listener socket with Selector.");
-                }
+                println("[tokio-smoke] Registered listener socket with Selector.");
             }
         }
     } else {

@@ -4,7 +4,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::ipc::{VfsRequest, VfsResponse};
-use ostd::syscall;
+
+/// 5 s: one VFS `Stat` or `ListDir`, which may read metadata from disk.
+const VFS_CALL_TICKS: u64 = 500;
 
 pub(super) struct DirEntry {
     pub is_dir: bool,
@@ -74,11 +76,8 @@ fn request_vfs<'a>(len: usize, send: &[u8], recv: &'a mut [u8]) -> Result<&'a [u
         }
         ostd::task::yield_now();
     };
-    syscall::sys_send(vfs, &send[..len]);
-    match ostd::ipc::recv_from(vfs, recv) {
-        Ok(_) => Ok(recv),
-        _ => Err(String::from("VFS request failed")),
-    }
+    ostd::ipc::call_bytes(vfs, &send[..len], recv, VFS_CALL_TICKS)
+        .map_err(|_| String::from("VFS request failed"))
 }
 
 pub(super) fn join_path(dir: &str, name: &str) -> String {

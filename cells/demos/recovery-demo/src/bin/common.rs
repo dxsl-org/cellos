@@ -1,9 +1,14 @@
 //! IPC and timing helpers shared by the three recovery-demo Cells; each Cell
 //! uses a subset.
+//!
+//! A request expecting an answer is one exact operation ([`call`],
+//! [`call_raw`]); its answer goes back through the [`Incoming`] captured when
+//! the request was received ([`reply`]). One-way messages are [`post`]ed.
 
 #![allow(dead_code)]
 
 use api::caller_identity::CallerIdentity;
+use ostd::ipc::Incoming;
 use ostd::syscall::{self, SyscallResult};
 use recovery_demo::wire::Msg;
 use recovery_demo::RECV_LEN;
@@ -15,6 +20,8 @@ pub struct Received {
     pub msg: Option<Msg>,
     pub identity: Option<CallerIdentity>,
     pub bytes: [u8; RECV_LEN],
+    /// Where the answer to this frame goes; captured before any other receive.
+    pub request: Incoming,
 }
 
 impl Received {
@@ -26,8 +33,32 @@ impl Received {
     }
 }
 
-pub fn send(tid: usize, msg: Msg) -> bool {
-    matches!(syscall::sys_send(tid, &msg.encode()), SyscallResult::Ok(_))
+/// Request `msg` from `tid` and take its one answer frame within `timeout_ticks`
+/// (admission included). `None` on refusal, expiry, peer death or a malformed answer.
+pub fn call(tid: usize, msg: Msg, timeout_ticks: u64) -> Option<Msg> {
+    let mut bytes = [0u8; RECV_LEN];
+    let reply = ostd::ipc::call_bytes(tid, &msg.encode(), &mut bytes, timeout_ticks).ok()?;
+    Msg::decode(reply)
+}
+
+/// Like [`call`] but leaves the raw answer in `bytes` (frame plus trailing record).
+pub fn call_raw(tid: usize, msg: Msg, timeout_ticks: u64, bytes: &mut [u8]) -> bool {
+    ostd::ipc::call_bytes(tid, &msg.encode(), bytes, timeout_ticks).is_ok()
+}
+
+/// Answer the request `to` captured.
+pub fn reply(to: &Incoming, msg: Msg) -> bool {
+    reply_bytes(to, &msg.encode())
+}
+
+/// Answer the request `to` captured with raw bytes (a frame plus a trailing record).
+pub fn reply_bytes(to: &Incoming, bytes: &[u8]) -> bool {
+    to.reply(bytes).is_ok()
+}
+
+/// One-way message: nothing answers it.
+pub fn post(tid: usize, msg: Msg) -> bool {
+    ostd::ipc::post(tid, &msg.encode()).is_ok()
 }
 
 /// Blocking attested receive from `mask` (0 = anyone).
@@ -36,6 +67,7 @@ pub fn recv_attested(mask: usize) -> Option<Received> {
     match syscall::sys_recv_attested(mask, &mut bytes) {
         SyscallResult::Ok(sender) if sender != 0 && sender != usize::MAX => Some(Received {
             sender,
+            request: Incoming::current(sender),
             msg: Msg::decode(&bytes),
             identity: CallerIdentity::from_recv_buf(&bytes),
             bytes,
@@ -44,20 +76,17 @@ pub fn recv_attested(mask: usize) -> Option<Received> {
     }
 }
 
-/// Reply frame from exactly `tid`, or `None` on timeout or peer death (the
-/// kernel completes a receive masked to a dead peer with a zero payload, which
-/// is not a frame).
-pub fn recv_from(tid: usize, timeout_ticks: u64) -> Option<Msg> {
+/// Request frame from exactly `tid` with the [`Incoming`] that answers it, or
+/// `None` on timeout or peer death (the kernel completes a receive masked to a
+/// dead peer with a zero payload, which is not a frame).
+pub fn recv_request_from(tid: usize, timeout_ticks: u64) -> Option<(Option<Msg>, Incoming)> {
     let mut bytes = [0u8; RECV_LEN];
     match syscall::sys_recv_timeout(tid, &mut bytes, timeout_ticks) {
-        SyscallResult::Ok(sender) if sender == tid => Msg::decode(&bytes),
+        SyscallResult::Ok(sender) if sender == tid => {
+            Some((Msg::decode(&bytes), Incoming::current(sender)))
+        }
         _ => None,
     }
-}
-
-/// Like [`recv_from`] but returns the raw bytes too (multi-part replies).
-pub fn recv_raw_from(tid: usize, timeout_ticks: u64, bytes: &mut [u8]) -> bool {
-    matches!(syscall::sys_recv_timeout(tid, bytes, timeout_ticks), SyscallResult::Ok(sender) if sender == tid)
 }
 
 pub fn sleep(ticks: usize) {

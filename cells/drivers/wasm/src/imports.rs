@@ -21,9 +21,11 @@ pub fn register_vi_imports(linker: &mut Linker<HostState>) {
 
 /// `vi.send(target: i32, ptr: i32, len: i32) → i32`
 ///
-/// Reads `len` bytes at `ptr` from WASM linear memory and sends them
-/// to kernel task `target` via `sys_send`.  Returns 0 on success, -1
-/// on invalid arguments (negative values, out-of-bounds ptr+len).
+/// Reads `len` bytes at `ptr` from WASM linear memory and posts them to
+/// kernel task `target`'s mailbox without parking: a guest that wants an
+/// answer receives it with `vi.recv`. Returns 0 on success, -1 on invalid
+/// arguments (negative values, out-of-bounds ptr+len) or when the target is
+/// gone or its mailbox is full.
 fn vi_send(caller: Caller<'_, HostState>, target: i32, ptr: i32, len: i32) -> i32 {
     if target < 0 || ptr < 0 || len < 0 {
         return -1;
@@ -38,8 +40,10 @@ fn vi_send(caller: Caller<'_, HostState>, target: i32, ptr: i32, len: i32) -> i3
     if end > data.len() {
         return -1;
     }
-    ostd::syscall::sys_send(target as usize, &data[start..end]);
-    0
+    match ostd::ipc::post(target as usize, &data[start..end]) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }
 
 // ── vi.recv ───────────────────────────────────────────────────────────────────

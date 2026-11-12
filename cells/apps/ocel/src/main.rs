@@ -52,6 +52,7 @@ api::declare_syscalls![
     GrantSlice,
     GrantUnregister,
     Send,
+    SendGather,
     Recv,
     TryRecv,
     LookupServiceBound,

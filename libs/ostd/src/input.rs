@@ -26,7 +26,8 @@ use alloc::vec::Vec;
 // Re-export api::input types so consumers can use `ostd::input::KeyState` etc.
 pub use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
 
-use crate::syscall::{sys_send, sys_try_recv, SyscallResult};
+use crate::ipc::post;
+use crate::syscall::{sys_try_recv, SyscallResult};
 use api::{
     input::{decode_event, INPUT_EVENT_OPCODE},
     ipc::{InputRequest, IPC_BUF_SIZE},
@@ -44,13 +45,14 @@ use api::{
 /// keys to the window the user selected. Windowed apps receive those keys from
 /// the compositor through [`poll_events`].
 ///
-/// SetFocus is fire-and-forget: focus is granted atomically when the input service
-/// receives the message. No reply is sent or awaited — a blocking reply caused a
-/// scheduling race where input service ran before the caller entered sys_recv,
-/// leaving a dangling send that blocked for the full watchdog interval (G18 fix).
+/// SetFocus is posted without waiting: focus is granted atomically when the input
+/// service receives the message. No reply is sent or awaited — a blocking reply
+/// caused a scheduling race where input service ran before the caller entered
+/// sys_recv, leaving a dangling send that blocked for the full watchdog interval
+/// (G18 fix).
 ///
-/// Returns `true` when focus is sent. Returns `false` when the input service
-/// is not yet registered (boot race) or `sys_send` fails (service dead).
+/// Returns `true` when the request is queued. Returns `false` when the input
+/// service is not yet registered (boot race), is gone, or its mailbox is full.
 pub fn request_focus() -> bool {
     let Some(input_tid) = provider_tid(service::INPUT) else {
         return false;
@@ -62,17 +64,16 @@ pub fn request_focus() -> bool {
         return false;
     };
 
-    // Abort immediately if send fails (input service dead).
-    !matches!(sys_send(input_tid, encoded), SyscallResult::Err(_))
+    post(input_tid, encoded).is_ok()
 }
 
 /// Release keyboard/mouse focus from this cell.
 ///
 /// Sends `InputRequest::ClearFocus` to the input service. The service clears
 /// focus only if the sender is currently the focused cell (kernel-verified TID).
-/// No-op if the input service is not registered or the send fails.
+/// No-op if the input service is not registered or the post is undeliverable.
 ///
-/// ClearFocus is fire-and-forget (same rationale as SetFocus). Call this before
+/// ClearFocus is posted without waiting (same rationale as SetFocus). Call this before
 /// blocking in `sys_wait` for a child cell, then re-request focus afterwards.
 pub fn release_focus() {
     let Some(input_tid) = provider_tid(service::INPUT) else {
@@ -83,19 +84,18 @@ pub fn release_focus() {
     let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else {
         return;
     };
-    let _ = sys_send(input_tid, encoded);
+    let _ = post(input_tid, encoded);
 }
 
 /// Drain any pending IPC messages sent by the input service to this cell.
 ///
 /// Shell reads UART via `sys_read(0)` (ring buffer) and also registers focus
 /// with the input service (for VirtIO keyboard). The same keystroke arrives via
-/// BOTH paths. After shell processes Enter from the UART path and exits
-/// `read_line`, input service is blocked in `sys_send(shell, Enter_event)`
-/// because shell is no longer in `sys_recv`. Call this before `release_focus()`
-/// in `spawn_external` to drain via `sys_try_recv(input_tid)`, unblocking
-/// input service so the subsequent `sys_send(input_tid, ClearFocus)` does not
-/// deadlock (both would be in Sending state indefinitely).
+/// BOTH paths, so the input-service copy of a line already read from UART stays
+/// queued here. Call this before `release_focus()` in `spawn_external` to
+/// discard those duplicates (`sys_try_recv(input_tid)`). Neither side parks on
+/// the other: the input service delivers with a non-parking send and focus
+/// changes are posted.
 pub fn drain_pending_input_events() {
     let Some(input_tid) = provider_tid(service::INPUT) else {
         return;

@@ -2941,18 +2941,12 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
             if state::bg_spawn() {
                 return 0;
             }
-            // Drain any pending input-service IPC events before ClearFocus.
             // Shell reads UART via sys_read(0), so Enter arrives via BOTH the ring
-            // buffer (consumed in read_line) AND input-service EV_ASCII IPC. The IPC
-            // path blocks input service in sys_send(shell, Enter_event) while shell
-            // is not in sys_recv. drain_pending_input_events() uses sys_try_recv with
-            // mask=input_tid (the correct G18 wildcard) to drain the queued message,
-            // unblocking input service so release_focus does not deadlock.
+            // buffer (consumed in read_line) AND input-service EV_ASCII IPC: drop the
+            // queued duplicates before the child takes the console.
             ostd::input::drain_pending_input_events();
-            // Release keyboard focus before blocking in sys_wait. While the shell
-            // is in sys_wait it is NOT in sys_recv, so the input service would
-            // block indefinitely trying to dispatch key events to this cell and
-            // eventually be killed by its own heartbeat watchdog (G18 deadlock).
+            // Release keyboard focus before blocking in sys_wait, so key events
+            // go to the child rather than queue for a shell that is not reading.
             ostd::input::release_focus();
             // Foreground: block until the child exits so it owns the console
             // (stdin/UART). Without this the shell loops back to read the next

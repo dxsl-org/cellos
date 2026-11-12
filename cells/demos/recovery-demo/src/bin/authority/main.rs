@@ -18,6 +18,7 @@ mod lifecycle;
 
 use alloc::format;
 use ostd::io::println;
+use ostd::ipc::Incoming;
 use recovery_demo::ledger::Sender;
 use recovery_demo::state;
 use recovery_demo::wire::{Msg, Refusal};
@@ -31,6 +32,7 @@ api::declare_syscalls![
     Log,
     Exit,
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     SetTimer,
@@ -75,11 +77,13 @@ fn cell_main() {
             generation,
         };
         let Some(msg) = rx.msg else { continue };
-        dispatch(&mut provider, from, msg);
+        dispatch(&mut provider, from, msg, &rx.request);
     }
 }
 
-fn dispatch(provider: &mut Provider, from: Sender, msg: Msg) {
+/// Every request gets exactly one answer through `request`; `Restored` and
+/// `RestoreFailed` are one-way events and get none.
+fn dispatch(provider: &mut Provider, from: Sender, msg: Msg, request: &Incoming) {
     let reply = match msg {
         Msg::Attach { nonce } => match provider.auth.attach(nonce, from) {
             Ok((epoch, committed)) => {
@@ -132,12 +136,12 @@ fn dispatch(provider: &mut Provider, from: Sender, msg: Msg) {
             .commit(epoch, from, expected_revision, &binding, new_state),
         Msg::Lookup { epoch, binding } => provider.auth.lookup(epoch, from, &binding),
         Msg::Report => {
-            provider.report(from.tid);
+            provider.report(request);
             return;
         }
         #[cfg(feature = "fault-inject")]
         Msg::Fence | Msg::Corrupt { .. } | Msg::Heal | Msg::Lend => inject::handle(provider, msg),
         _ => return,
     };
-    common::send(from.tid, reply);
+    common::reply(request, reply);
 }

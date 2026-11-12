@@ -6,9 +6,9 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::ipc::recv_from;
+use ostd::ipc::{service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
-use ostd::syscall::{sys_get_time_ms, sys_send, sys_yield};
+use ostd::syscall::{sys_get_time_ms, sys_yield};
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -26,9 +26,27 @@ const EXCHANGE_BUDGET_MS: u64 = 30_000;
 /// Hard stop when the wall clock is unavailable or never advances.
 const EXCHANGE_POLL_CEILING: usize = 200_000;
 
+/// 10 s: one net-service request; covers a `Resolve` the service holds until
+/// its own DNS query deadline.
+const NET_CALL_TICKS: u64 = 1_000;
+
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
+
+/// Exchange one `NetRequest` with service-net as an exact operation.
+///
+/// The service answers every request with exactly one reply. `Err` is a dead
+/// or unanswering service (`PeerGone`, `PreDispatchTimeout`, `Indeterminate`),
+/// an unencodable request, or an undecodable reply (`Decode`).
+fn net_call<'r>(
+    net_ep: usize,
+    req: &NetRequest<'_>,
+    reply: &'r mut [u8; IPC_BUF_SIZE],
+) -> Result<NetResponse<'r>, IpcError> {
+    let mut send = [0u8; IPC_BUF_SIZE];
+    service_call_typed_bounded(net_ep, req, &mut send, reply, NET_CALL_TICKS)
+}
 
 fn cell_main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
@@ -78,26 +96,23 @@ fn cell_main() {
     }
 
     // ── TcpConnect (atomic create + connect) ─────────────────────────────────
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpConnect { addr, port }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let cap_id = match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::CapId(c)) => c,
-            Ok(NetResponse::Err(NET_ERR_DENIED)) => {
-                print("curl: connect: ");
-                println(NET_DENIED);
-                return;
-            }
-            _ => {
-                println("curl: connect failed");
-                return;
-            }
-        },
-        _ => {
+    let cap_id = match net_call(
+        net_ep,
+        &NetRequest::TcpConnect { addr, port },
+        &mut resp_buf,
+    ) {
+        Ok(NetResponse::CapId(c)) => c,
+        Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+            print("curl: connect: ");
+            println(NET_DENIED);
+            return;
+        }
+        Ok(_) | Err(IpcError::Decode) => {
+            println("curl: connect failed");
+            return;
+        }
+        Err(_) => {
             println("curl: TcpConnect syscall failed");
             return;
         }
@@ -122,31 +137,21 @@ fn cell_main() {
         }
         let rem = &request_data[sent_bytes..request_len];
         let chunk = rem.len().min(480);
-        let mut send_buf = [0u8; IPC_BUF_SIZE];
-        let send_len = api::ipc::encode(
-            &NetRequest::TcpSend {
-                cap_id,
-                data: &rem[..chunk],
-            },
-            &mut send_buf,
-        )
-        .map(|b| b.len())
-        .unwrap_or(0);
-        sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut cnt_buf) {
-            Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
-                Ok(NetResponse::Data(b)) if b.len() >= 4 => {
-                    let mut arr = [0u8; 4];
-                    arr.copy_from_slice(&b[0..4]);
-                    let n = u32::from_le_bytes(arr) as usize;
-                    sent_bytes += n;
-                    if n == 0 {
-                        sys_yield();
-                    }
+        let send_req = NetRequest::TcpSend {
+            cap_id,
+            data: &rem[..chunk],
+        };
+        match net_call(net_ep, &send_req, &mut cnt_buf) {
+            Ok(NetResponse::Data(b)) if b.len() >= 4 => {
+                let mut arr = [0u8; 4];
+                arr.copy_from_slice(&b[0..4]);
+                let n = u32::from_le_bytes(arr) as usize;
+                sent_bytes += n;
+                if n == 0 {
+                    sys_yield();
                 }
-                _ => break,
-            },
+            }
             _ => break,
         }
     }
@@ -155,57 +160,39 @@ fn cell_main() {
     let mut response = [0u8; RESP_BUF];
     let mut resp_len = 0usize;
 
-    // Pre-encode the TcpRecv request once and reuse it across all iterations.
-    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
-    let recv_req_len = api::ipc::encode(
-        &NetRequest::TcpRecv {
-            cap_id,
-            buf_len: 500,
-        },
-        &mut recv_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
+    let recv_req = NetRequest::TcpRecv {
+        cap_id,
+        buf_len: 500,
+    };
 
     'recv: for _ in 0..EXCHANGE_POLL_CEILING {
-        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut data_buf) {
-            Ok(_) => {
-                match api::ipc::decode::<NetResponse>(&data_buf) {
-                    Ok(NetResponse::Data(b)) if !b.is_empty() => {
+        match net_call(net_ep, &recv_req, &mut data_buf) {
+            Ok(NetResponse::Data(b)) if !b.is_empty() => {
+                let n = b.len().min(RESP_BUF - resp_len);
+                response[resp_len..resp_len + n].copy_from_slice(&b[..n]);
+                resp_len += n;
+                if resp_len >= RESP_BUF {
+                    break 'recv;
+                }
+            }
+            Ok(NetResponse::Data(_)) => {
+                // 0 bytes: check TCP state to distinguish "nothing yet" from FIN.
+                let st = query_state(cap_id, net_ep);
+                if st == 0x06 || st == 0x00 {
+                    // CloseWait / Closed — drain one final recv before exiting.
+                    let mut fb = [0u8; IPC_BUF_SIZE];
+                    if let Ok(NetResponse::Data(b)) = net_call(net_ep, &recv_req, &mut fb) {
                         let n = b.len().min(RESP_BUF - resp_len);
                         response[resp_len..resp_len + n].copy_from_slice(&b[..n]);
                         resp_len += n;
-                        if resp_len >= RESP_BUF {
-                            break 'recv;
-                        }
                     }
-                    Ok(NetResponse::Data(_)) => {
-                        // 0 bytes: check TCP state to distinguish "nothing yet" from FIN.
-                        let st = query_state(cap_id, net_ep);
-                        if st == 0x06 || st == 0x00 {
-                            // CloseWait / Closed — drain one final recv before exiting.
-                            sys_send(net_ep, &recv_req_buf[..recv_req_len]);
-                            let mut fb = [0u8; IPC_BUF_SIZE];
-                            if recv_from(net_ep, &mut fb).is_ok() {
-                                if let Ok(NetResponse::Data(b)) =
-                                    api::ipc::decode::<NetResponse>(&fb)
-                                {
-                                    let n = b.len().min(RESP_BUF - resp_len);
-                                    response[resp_len..resp_len + n].copy_from_slice(&b[..n]);
-                                    resp_len += n;
-                                }
-                            }
-                            break 'recv;
-                        }
-                        if exchange_expired(started_ms) {
-                            break 'recv;
-                        }
-                        sys_yield();
-                    }
-                    _ => break,
+                    break 'recv;
                 }
+                if exchange_expired(started_ms) {
+                    break 'recv;
+                }
+                sys_yield();
             }
             _ => break,
         }
@@ -244,30 +231,17 @@ fn exchange_expired(started_ms: u64) -> bool {
 
 /// Send `NetRequest::SocketState` and return the 1-byte smoltcp state code.
 fn query_state(cap_id: u32, net_ep: usize) -> u8 {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::State(s)) => s,
-            _ => 0x00,
-        },
+    match net_call(net_ep, &NetRequest::SocketState { cap_id }, &mut resp_buf) {
+        Ok(NetResponse::State(s)) => s,
         _ => 0x00,
     }
 }
 
 /// Send `NetRequest::TcpClose` and drain the acknowledgement.
 fn close_socket(cap_id: u32, net_ep: usize) {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpClose { cap_id }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let _ = recv_from(net_ep, &mut resp_buf);
+    let _ = net_call(net_ep, &NetRequest::TcpClose { cap_id }, &mut resp_buf);
 }
 
 /// Append `src` into `buf` at `pos`; returns new pos.
@@ -303,18 +277,14 @@ fn parse_url(s: &str) -> Option<(&str, u16, &str)> {
 /// The error is the reason to print: a denied lookup is not a DNS failure.
 fn resolve_host(host: &str, net_ep: usize) -> Result<[u8; 4], &'static str> {
     const UNRESOLVED: &str = "cannot resolve host";
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
-        .map_err(|_| UNRESOLVED)?
-        .len();
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::Addr(addr)) => Ok(addr),
-            Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
-            _ => Err(UNRESOLVED),
-        },
+    match net_call(
+        net_ep,
+        &NetRequest::Resolve { hostname: host },
+        &mut resp_buf,
+    ) {
+        Ok(NetResponse::Addr(addr)) => Ok(addr),
+        Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
         _ => Err(UNRESOLVED),
     }
 }

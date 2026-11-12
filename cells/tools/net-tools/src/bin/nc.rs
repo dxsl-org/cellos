@@ -6,9 +6,9 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_ERR_DENIED};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::ipc::recv_from;
+use ostd::ipc::{service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
-use ostd::syscall::{sys_send, sys_yield};
+use ostd::syscall::sys_yield;
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -16,9 +16,27 @@ const NET_DENIED: &str = "permission denied (no network right)";
 /// Payload sent and expected back from the echo server.
 const HELLO: &[u8] = b"HELLO_ViCell\n";
 
+/// 10 s: one net-service request; covers a `Resolve` the service holds until
+/// its own DNS query deadline.
+const NET_CALL_TICKS: u64 = 1_000;
+
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound];
 
 ostd::cell_main!(cell_main);
+
+/// Exchange one `NetRequest` with service-net as an exact operation.
+///
+/// The service answers every request with exactly one reply. `Err` is a dead
+/// or unanswering service (`PeerGone`, `PreDispatchTimeout`, `Indeterminate`),
+/// an unencodable request, or an undecodable reply (`Decode`).
+fn net_call<'r>(
+    net_ep: usize,
+    req: &NetRequest<'_>,
+    reply: &'r mut [u8; IPC_BUF_SIZE],
+) -> Result<NetResponse<'r>, IpcError> {
+    let mut send = [0u8; IPC_BUF_SIZE];
+    service_call_typed_bounded(net_ep, req, &mut send, reply, NET_CALL_TICKS)
+}
 
 /// nc <host> <port>  |  nc -l <port>
 fn cell_main() {
@@ -83,26 +101,23 @@ fn cell_main() {
     };
 
     // ── TcpConnect (atomic create + connect) ─────────────────────────────────
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpConnect { addr, port }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let cap_id = match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::CapId(c)) => c,
-            Ok(NetResponse::Err(NET_ERR_DENIED)) => {
-                print("nc: connect: ");
-                println(NET_DENIED);
-                return;
-            }
-            _ => {
-                println("nc: connect failed");
-                return;
-            }
-        },
-        _ => {
+    let cap_id = match net_call(
+        net_ep,
+        &NetRequest::TcpConnect { addr, port },
+        &mut resp_buf,
+    ) {
+        Ok(NetResponse::CapId(c)) => c,
+        Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+            print("nc: connect: ");
+            println(NET_DENIED);
+            return;
+        }
+        Ok(_) | Err(IpcError::Decode) => {
+            println("nc: connect failed");
+            return;
+        }
+        Err(_) => {
             println("nc: TcpConnect syscall failed");
             return;
         }
@@ -116,57 +131,43 @@ fn cell_main() {
             break;
         }
         let rem = &HELLO[sent_bytes..];
-        let mut send_buf = [0u8; IPC_BUF_SIZE];
-        let send_len = api::ipc::encode(&NetRequest::TcpSend { cap_id, data: rem }, &mut send_buf)
-            .map(|b| b.len())
-            .unwrap_or(0);
-        sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut cnt_buf) {
-            Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
-                Ok(NetResponse::Data(b)) if b.len() >= 4 => {
-                    let mut arr = [0u8; 4];
-                    arr.copy_from_slice(&b[0..4]);
-                    let n = u32::from_le_bytes(arr) as usize;
-                    sent_bytes += n;
-                    if n == 0 {
-                        sys_yield();
-                    }
+        match net_call(
+            net_ep,
+            &NetRequest::TcpSend { cap_id, data: rem },
+            &mut cnt_buf,
+        ) {
+            Ok(NetResponse::Data(b)) if b.len() >= 4 => {
+                let mut arr = [0u8; 4];
+                arr.copy_from_slice(&b[0..4]);
+                let n = u32::from_le_bytes(arr) as usize;
+                sent_bytes += n;
+                if n == 0 {
+                    sys_yield();
                 }
-                _ => break,
-            },
+            }
             _ => break,
         }
     }
 
     // ── Recv echo — poll until data arrives ───────────────────────────────────
-    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
-    let recv_req_len = api::ipc::encode(
-        &NetRequest::TcpRecv {
-            cap_id,
-            buf_len: 256,
-        },
-        &mut recv_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
-
+    let recv_req = NetRequest::TcpRecv {
+        cap_id,
+        buf_len: 256,
+    };
     for _ in 0..500 {
-        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut data_buf) {
-            Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
-                Ok(NetResponse::Data(b)) if !b.is_empty() => {
-                    if let Ok(s) = core::str::from_utf8(b) {
-                        print(s);
-                    }
-                    break;
+        match net_call(net_ep, &recv_req, &mut data_buf) {
+            Ok(NetResponse::Data(b)) if !b.is_empty() => {
+                if let Ok(s) = core::str::from_utf8(b) {
+                    print(s);
                 }
-                _ => {
-                    sys_yield();
-                }
-            },
-            _ => break,
+                break;
+            }
+            Ok(_) | Err(IpcError::Decode) => {
+                sys_yield();
+            }
+            Err(_) => break,
         }
     }
 
@@ -177,26 +178,19 @@ fn cell_main() {
 /// back to the peer, then close when the peer closes.
 fn server_mode(port: u16, net_ep: usize) {
     // TcpListen (atomic create + listen)
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpListen { port }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let listen_cap = match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::CapId(c)) => c,
-            Ok(NetResponse::Err(NET_ERR_DENIED)) => {
-                print("nc: listen: ");
-                println(NET_DENIED);
-                return;
-            }
-            _ => {
-                println("nc: listen failed");
-                return;
-            }
-        },
-        _ => {
+    let listen_cap = match net_call(net_ep, &NetRequest::TcpListen { port }, &mut resp_buf) {
+        Ok(NetResponse::CapId(c)) => c,
+        Ok(NetResponse::Err(NET_ERR_DENIED)) => {
+            print("nc: listen: ");
+            println(NET_DENIED);
+            return;
+        }
+        Ok(_) | Err(IpcError::Decode) => {
+            println("nc: listen failed");
+            return;
+        }
+        Err(_) => {
             println("nc: TcpListen syscall failed");
             return;
         }
@@ -205,29 +199,9 @@ fn server_mode(port: u16, net_ep: usize) {
     ostd::io::print_usize(port as usize);
     println("");
 
-    // Pre-encode TcpAccept for the listen cap (reused across accept polls).
-    let mut accept_req_buf = [0u8; IPC_BUF_SIZE];
-    let accept_req_len = api::ipc::encode(
-        &NetRequest::TcpAccept { cap_id: listen_cap },
-        &mut accept_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
-
-    let stream_cap: u32 = loop {
-        sys_send(net_ep, &accept_req_buf[..accept_req_len]);
-        let mut r = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut r) {
-            Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
-                Ok(NetResponse::CapId(c)) => break c,
-                _ => {
-                    sys_yield();
-                }
-            },
-            _ => {
-                sys_yield();
-            }
-        }
+    let Some(stream_cap) = accept_next(listen_cap, net_ep) else {
+        println("nc: accept failed");
+        return;
     };
     println("connected");
 
@@ -236,74 +210,63 @@ fn server_mode(port: u16, net_ep: usize) {
     // Accept loop — keep accepting connections on the same listener.
     loop {
         println("waiting for next connection");
-        let next_cap: u32 = loop {
-            sys_send(net_ep, &accept_req_buf[..accept_req_len]);
-            let mut r = [0u8; IPC_BUF_SIZE];
-            match recv_from(net_ep, &mut r) {
-                Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
-                    Ok(NetResponse::CapId(c)) => break c,
-                    _ => {
-                        sys_yield();
-                    }
-                },
-                _ => {
-                    sys_yield();
-                }
-            }
+        let Some(next_cap) = accept_next(listen_cap, net_ep) else {
+            println("nc: accept failed");
+            return;
         };
         println("connected");
         serve_connection(next_cap, net_ep);
     }
 }
 
+/// Poll `TcpAccept` on `listen_cap` until a connection arrives.
+///
+/// "Nothing pending" and a slow service are retried; `None` only when the net
+/// service is gone, since no later poll can then succeed.
+fn accept_next(listen_cap: u32, net_ep: usize) -> Option<u32> {
+    let accept_req = NetRequest::TcpAccept { cap_id: listen_cap };
+    loop {
+        let mut r = [0u8; IPC_BUF_SIZE];
+        match net_call(net_ep, &accept_req, &mut r) {
+            Ok(NetResponse::CapId(c)) => return Some(c),
+            Err(IpcError::PeerGone) => return None,
+            _ => sys_yield(),
+        }
+    }
+}
+
 /// Recv loop: print received bytes to serial and echo back to peer.
 /// Exits when the peer closes the connection.
 fn serve_connection(cap: u32, net_ep: usize) {
-    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
-    let recv_req_len = api::ipc::encode(
-        &NetRequest::TcpRecv {
-            cap_id: cap,
-            buf_len: 256,
-        },
-        &mut recv_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
+    let recv_req = NetRequest::TcpRecv {
+        cap_id: cap,
+        buf_len: 256,
+    };
 
     'recv: for _ in 0..500_000 {
-        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match recv_from(net_ep, &mut data_buf) {
-            Ok(_) => {
-                match api::ipc::decode::<NetResponse>(&data_buf) {
-                    Ok(NetResponse::Data(b)) if !b.is_empty() => {
-                        if let Ok(s) = core::str::from_utf8(b) {
-                            print(s);
-                        }
-                        // Echo back to peer.
-                        let mut echo_buf = [0u8; IPC_BUF_SIZE];
-                        let echo_len = api::ipc::encode(
-                            &NetRequest::TcpSend {
-                                cap_id: cap,
-                                data: b,
-                            },
-                            &mut echo_buf,
-                        )
-                        .map(|e| e.len())
-                        .unwrap_or(0);
-                        sys_send(net_ep, &echo_buf[..echo_len]);
-                        let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-                        let _ = recv_from(net_ep, &mut cnt_buf);
-                    }
-                    Ok(NetResponse::Data(_)) => {
-                        let st = query_state(cap, net_ep);
-                        if st == 0x06 || st == 0x00 {
-                            break 'recv;
-                        }
-                        sys_yield();
-                    }
-                    _ => break,
+        match net_call(net_ep, &recv_req, &mut data_buf) {
+            Ok(NetResponse::Data(b)) if !b.is_empty() => {
+                if let Ok(s) = core::str::from_utf8(b) {
+                    print(s);
                 }
+                // Echo back to peer.
+                let mut cnt_buf = [0u8; IPC_BUF_SIZE];
+                let _ = net_call(
+                    net_ep,
+                    &NetRequest::TcpSend {
+                        cap_id: cap,
+                        data: b,
+                    },
+                    &mut cnt_buf,
+                );
+            }
+            Ok(NetResponse::Data(_)) => {
+                let st = query_state(cap, net_ep);
+                if st == 0x06 || st == 0x00 {
+                    break 'recv;
+                }
+                sys_yield();
             }
             _ => break,
         }
@@ -312,29 +275,16 @@ fn serve_connection(cap: u32, net_ep: usize) {
 }
 
 fn query_state(cap_id: u32, net_ep: usize) -> u8 {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::State(s)) => s,
-            _ => 0x00,
-        },
+    match net_call(net_ep, &NetRequest::SocketState { cap_id }, &mut resp_buf) {
+        Ok(NetResponse::State(s)) => s,
         _ => 0x00,
     }
 }
 
 fn close_socket(cap_id: u32, net_ep: usize) {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpClose { cap_id }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let _ = recv_from(net_ep, &mut resp_buf);
+    let _ = net_call(net_ep, &NetRequest::TcpClose { cap_id }, &mut resp_buf);
 }
 
 /// Resolve `host` through the net service (`NetRequest::Resolve`).
@@ -345,18 +295,14 @@ fn close_socket(cap_id: u32, net_ep: usize) {
 /// The error is the reason to print: a denied lookup is not a DNS failure.
 fn resolve_host(host: &str, net_ep: usize) -> Result<[u8; 4], &'static str> {
     const UNRESOLVED: &str = "cannot resolve host";
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::Resolve { hostname: host }, &mut req_buf)
-        .map_err(|_| UNRESOLVED)?
-        .len();
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match recv_from(net_ep, &mut resp_buf) {
-        Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::Addr(addr)) => Ok(addr),
-            Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
-            _ => Err(UNRESOLVED),
-        },
+    match net_call(
+        net_ep,
+        &NetRequest::Resolve { hostname: host },
+        &mut resp_buf,
+    ) {
+        Ok(NetResponse::Addr(addr)) => Ok(addr),
+        Ok(NetResponse::Err(NET_ERR_DENIED)) => Err(NET_DENIED),
         _ => Err(UNRESOLVED),
     }
 }

@@ -161,7 +161,7 @@ api::declare_manifest!(
     gpio = false
 );
 
-api::declare_syscalls![Send, Recv, Log, Exit, LookupService];
+api::declare_syscalls![Send, Recv, Log, Exit, LookupServiceBound];
 ```
 
 ---

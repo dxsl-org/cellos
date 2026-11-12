@@ -27,8 +27,9 @@ use hypha_core::preamble::system_preamble;
 use hypha_core::{tool_gate, tool_owner};
 use ostd::input::request_focus;
 use ostd::io::{print, println, stdin};
+use ostd::ipc::IpcError;
 use ostd::syscall::{
-    sys_exit, sys_recv, sys_send, sys_spawn_from_path, sys_spawn_from_path_raw, SyscallResult,
+    sys_exit, sys_spawn_from_path, sys_spawn_from_path_raw, sys_try_recv, SyscallResult,
 };
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
@@ -38,8 +39,10 @@ api::declare_manifest!(block_io = false, network = false, spawn = true);
 // StateStash: publishes the owner argv each bound tool cell is spawned with.
 api::declare_syscalls![
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
+    TryRecv,
     Read,
     Log,
     SpawnFromPath,
@@ -56,6 +59,10 @@ const TOOL_SPAWN_PATH: &str = "/bin/tool-spawn";
 const PROMPT_MAX: usize = 3500;
 // Tool call agentic loop guard — prevents infinite tool chains.
 const MAX_TOOL_ROUNDS: usize = 5;
+/// 5 min: one LLM completion, which may run on-device inference or a remote model.
+const LLM_CALL_TICKS: u64 = 30_000;
+/// 30 s: one tool invocation (file I/O, a process list, or a spawn).
+const TOOL_CALL_TICKS: u64 = 3_000;
 
 /// Holds the tid for each tool cell. 0 means unavailable (failed to spawn).
 struct Tools {
@@ -194,34 +201,24 @@ fn run_turn(gw: usize, tools: &Tools, prompt: &str) -> Result<String, String> {
     ))
 }
 
-/// One IPC round-trip with the gateway: send `LlmRequest`, receive `LlmReply`.
+/// One exact request/reply operation with the gateway: `LlmRequest` in, `LlmReply` out.
 fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
     let req = LlmRequest::Complete { prompt };
     let mut out = [0u8; 4096];
     let encoded = postcard::to_slice(&req, &mut out)
         .map_err(|_| String::from("prompt too large for one IPC message"))?;
 
-    match sys_send(gw, encoded) {
-        SyscallResult::Ok(_) => {}
-        _ => return Err(String::from("send to gateway failed")),
-    }
-
     let mut buf = [0u8; 4096];
-    // mask=0 (wildcard): accept from any sender so that input-service EV_ASCII events
-    // dispatched to this cell (because it holds keyboard focus) don't deadlock the
-    // input service. G18 enforces the mask in ipc_send — a masked recv blocks senders
-    // that don't match, so we must use 0 here and filter by sender in the match arm.
-    loop {
-        match sys_recv(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender == gw => {
-                return match postcard::take_from_bytes::<LlmReply>(&buf) {
-                    Ok((reply, _)) => Ok(reply),
-                    Err(_) => Err(String::from("bad LlmReply encoding")),
-                };
+    let reply =
+        ostd::ipc::call_bytes(gw, encoded, &mut buf, LLM_CALL_TICKS).map_err(|e| match e {
+            IpcError::Send | IpcError::Busy | IpcError::PreDispatchTimeout => {
+                String::from("send to gateway failed")
             }
-            SyscallResult::Ok(_) => continue, // non-gw message (e.g. input event) — discard
-            _ => return Err(String::from("no reply from gateway")),
-        }
+            _ => String::from("no reply from gateway"),
+        })?;
+    match postcard::take_from_bytes::<LlmReply>(reply) {
+        Ok((reply, _)) => Ok(reply),
+        Err(_) => Err(String::from("bad LlmReply encoding")),
     }
 }
 
@@ -247,41 +244,43 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
 }
 
 /// Show the exact call and wait for the operator's answer on this console.
-/// Keys typed while the model was answering were discarded by `ask()`'s receive
-/// loop, so only an answer typed after the prompt can approve.
+/// Keys typed while the model was answering are discarded first, so only an
+/// answer typed after the prompt can approve.
 fn operator_approves(call: &ToolCall) -> bool {
+    discard_typed_ahead();
     print(tool_gate::confirmation_prompt(&call.name, &call.args_json).as_str());
     let mut answer = String::new();
     stdin().read_line(&mut answer).is_ok() && tool_gate::is_confirmed(&answer)
 }
 
-/// One `AgentToolRequest::Invoke` round trip with tool cell `cell_tid`.
+/// Drop every queued mailbox message. The input service keeps queueing this
+/// console's keystrokes while a call is in flight; gateway and tool replies
+/// complete their exact operations and never wait in the mailbox.
+fn discard_typed_ahead() {
+    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    while !matches!(sys_try_recv(0, &mut frame), SyscallResult::Ok(0)) {}
+}
+
+/// One `AgentToolRequest::Invoke` exact request/reply operation with tool cell `cell_tid`.
 fn invoke(cell_tid: usize, name: &str, args_json: &str) -> Result<String, String> {
     let req = AgentToolRequest::Invoke { name, args_json };
     let mut out = [0u8; 4096];
     let encoded =
         postcard::to_slice(&req, &mut out).map_err(|_| String::from("tool request too large"))?;
 
-    match sys_send(cell_tid, encoded) {
-        SyscallResult::Ok(_) => {}
-        _ => return Err(alloc::format!("send to tool cell '{}' failed", name)),
-    }
-
     let mut buf = [0u8; 4096];
-    // mask=0: same fix as ask() — accept from any sender to avoid G18 deadlock with
-    // the input service; filter by cell_tid in the match arm.
-    loop {
-        match sys_recv(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender == cell_tid => {
-                return match postcard::take_from_bytes::<AgentToolResponse>(&buf) {
-                    Ok((AgentToolResponse::Ok { result_json }, _)) => Ok(result_json),
-                    Ok((AgentToolResponse::Err { message }, _)) => Err(message),
-                    Err(_) => Err(String::from("bad AgentToolResponse encoding")),
-                };
+    let reply = ostd::ipc::call_bytes(cell_tid, encoded, &mut buf, TOOL_CALL_TICKS).map_err(
+        |e| match e {
+            IpcError::Send | IpcError::Busy | IpcError::PreDispatchTimeout => {
+                alloc::format!("send to tool cell '{}' failed", name)
             }
-            SyscallResult::Ok(_) => continue,
-            _ => return Err(alloc::format!("no reply from tool cell '{}'", name)),
-        }
+            _ => alloc::format!("no reply from tool cell '{}'", name),
+        },
+    )?;
+    match postcard::take_from_bytes::<AgentToolResponse>(reply) {
+        Ok((AgentToolResponse::Ok { result_json }, _)) => Ok(result_json),
+        Ok((AgentToolResponse::Err { message }, _)) => Err(message),
+        Err(_) => Err(String::from("bad AgentToolResponse encoding")),
     }
 }
 

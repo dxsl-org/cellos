@@ -1,0 +1,2 @@
+# Exempt from the workspace `disallowed-methods` rule on `sys_send` (see the
+# root clippy.toml): this tree implements or deliberately exercises raw `Send`.

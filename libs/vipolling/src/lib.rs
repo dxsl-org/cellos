@@ -19,7 +19,70 @@ use api::ipc::{
     NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
 };
 use api::syscall::service;
-use ostd::syscall::{sys_recv_timeout, sys_try_recv, sys_try_send, SyscallResult};
+use ostd::ipc::{IpcError, IpcSubmitError, IpcTerminal, PendingCall};
+use ostd::syscall::{
+    sys_get_scheduler_ticks, sys_recv_timeout, sys_try_recv, sys_try_send, sys_yield, SyscallResult,
+};
+
+/// Scheduler ticks between mailbox checks while a TcpReady wait is outstanding:
+/// one tick (10 ms) bounds how late a waker is seen.
+const WAKE_POLL_TICKS: u64 = 1;
+
+/// How one TcpReady exchange with the net service ended.
+enum ReadyCall {
+    /// The net service's reply, of this many bytes.
+    Reply(usize),
+    /// A message, normally a `REACTOR_WAKE` from `notify`, reached the mailbox first.
+    Interrupted,
+    /// The budget ran out, or the operation expired, without a reply.
+    Elapsed,
+}
+
+/// One TcpReady exact operation bounded by `budget` scheduler ticks.
+///
+/// The net service parks a waiting request until readiness or its own
+/// deadline, so between short parks the mailbox is checked and any message
+/// ends the call, as the wildcard receive this replaces did: a waker is never
+/// held behind the readiness wait. Dropping the unsettled call cancels it; a
+/// readiness query has no effects to reconcile.
+fn ready_call(
+    net_tid: usize,
+    request: &[u8],
+    reply: &mut [u8],
+    budget: u64,
+) -> Result<ReadyCall, IpcError> {
+    let started = sys_get_scheduler_ticks().ok_or(IpcError::InvalidOperation)?;
+    let elapsed = || sys_get_scheduler_ticks().map_or(budget, |now| now.wrapping_sub(started));
+    let call = loop {
+        match PendingCall::submit(net_tid, request) {
+            Ok(call) => break call,
+            Err(IpcSubmitError::Busy) if elapsed() < budget => sys_yield(),
+            Err(IpcSubmitError::Busy) => return Ok(ReadyCall::Elapsed),
+            Err(IpcSubmitError::PeerGone) => return Err(IpcError::PeerGone),
+            Err(IpcSubmitError::InvalidRequest) => return Err(IpcError::Send),
+        }
+    };
+    loop {
+        if let Some(done) = call.wait_and_take(reply, WAKE_POLL_TICKS, 1)? {
+            return match done.terminal {
+                IpcTerminal::Reply => Ok(ReadyCall::Reply(done.len)),
+                IpcTerminal::PeerGone => Err(IpcError::PeerGone),
+                IpcTerminal::PreDispatchTimeout
+                | IpcTerminal::Indeterminate
+                | IpcTerminal::Cancelled => Ok(ReadyCall::Elapsed),
+            };
+        }
+        let mut mail = [0u8; 64];
+        if let SyscallResult::Ok(sender) = sys_try_recv(0, &mut mail) {
+            if sender > 0 {
+                return Ok(ReadyCall::Interrupted);
+            }
+        }
+        if elapsed() >= budget {
+            return Ok(ReadyCall::Elapsed);
+        }
+    }
+}
 
 /// An observed I/O readiness event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -267,35 +330,21 @@ impl Poller {
             return Err(PollerError::InvalidInput);
         };
 
-        // 5. Send request to net service
-        if let SyscallResult::Err(_) = ostd::syscall::sys_send(net_tid, req_bytes) {
-            return Err(PollerError::IpcError);
-        }
-
-        // 6. Receive response with timeout
+        // 5. Exchange the request for its reply, interruptible by notify
         let timeout_ticks = timeout
             .map(|d| (d.as_millis() / 10).max(1) as u64)
             .unwrap_or(3000); // Default 30s timeout if None
 
         let mut resp_buf = [0u8; 1536];
-        let recv_res = sys_recv_timeout(0, &mut resp_buf, timeout_ticks);
-
-        let sender = match recv_res {
-            SyscallResult::Ok(0) => return Ok(0), // Timeout expired
-            SyscallResult::Ok(s) => s,
-            SyscallResult::Err(_) => return Err(PollerError::IpcError),
+        let len = match ready_call(net_tid, req_bytes, &mut resp_buf, timeout_ticks) {
+            Ok(ReadyCall::Reply(len)) => len,
+            // Woken by notify (or other mail), or the timeout expired.
+            Ok(ReadyCall::Interrupted | ReadyCall::Elapsed) => return Ok(0),
+            Err(_) => return Err(PollerError::IpcError),
         };
 
-        // Check if interrupted by self notify
-        if sender != net_tid {
-            if resp_buf.first() == Some(&REACTOR_WAKE_OPCODE) {
-                return Ok(0); // Woken by notify
-            }
-            return Ok(0);
-        }
-
         // Decode NetResponse
-        let Ok(response) = api::ipc::decode::<NetResponse<'_>>(&resp_buf) else {
+        let Ok(response) = api::ipc::decode::<NetResponse<'_>>(&resp_buf[..len]) else {
             return Err(PollerError::IpcError);
         };
 

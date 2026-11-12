@@ -10,7 +10,7 @@ use recovery_demo::{AUTHORITY_SERVICE, WORKER_SERVICE};
 
 use crate::common;
 
-/// Reply wait for one worker or authority round trip.
+/// One worker or authority round trip, admission included.
 const REPLY_TICKS: u64 = 400;
 /// Wait for a replacement to be published.
 const PUBLISH_TICKS: usize = 3_000;
@@ -63,17 +63,11 @@ impl Client {
     }
 
     pub fn worker_call(&self, msg: Msg) -> Option<Msg> {
-        if !common::send(self.worker, msg) {
-            return None;
-        }
-        common::recv_from(self.worker, REPLY_TICKS)
+        common::call(self.worker, msg, REPLY_TICKS)
     }
 
     pub fn authority_call(&self, msg: Msg) -> Option<Msg> {
-        if !common::send(self.authority, msg) {
-            return None;
-        }
-        common::recv_from(self.authority, REPLY_TICKS)
+        common::call(self.authority, msg, REPLY_TICKS)
     }
 
     /// `(counter, revision, epoch)` from the published worker.
@@ -99,9 +93,7 @@ impl Client {
 
     pub fn status(&self) -> Status {
         let mut bytes = [0u8; 256];
-        if !common::send(self.authority, Msg::Report)
-            || !common::recv_raw_from(self.authority, REPLY_TICKS, &mut bytes)
-        {
+        if !common::call_raw(self.authority, Msg::Report, REPLY_TICKS, &mut bytes) {
             fail("authority report");
         }
         let Some(Msg::Status {

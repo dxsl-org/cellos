@@ -20,9 +20,9 @@ use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::clients::VfsClient;
 use ostd::io::{print, println};
-use ostd::ipc::{service_call_typed, IpcError};
+use ostd::ipc::{service_call_typed, service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
-use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::syscall::sys_yield;
 use ostd::ViError;
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound];
@@ -35,6 +35,9 @@ const NOT_FOUND_RESPONSE: &[u8] =
     b"HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
 const INTERNAL_ERROR_RESPONSE: &[u8] =
     b"HTTP/1.0 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
+
+/// 10 s: one net-service request.
+const NET_CALL_TICKS: u64 = 1_000;
 
 enum FileReadOutcome {
     NotFound,
@@ -71,37 +74,33 @@ fn parse_u16(s: &str) -> Option<u16> {
     Some(n as u16)
 }
 
-fn recv_net_response<'a>(
+/// Exchange one `NetRequest` with service-net as an exact operation.
+///
+/// The service answers every request with exactly one reply. `Err` is a dead
+/// or unanswering service (`PeerGone`, `PreDispatchTimeout`, `Indeterminate`),
+/// an unencodable request, or an undecodable reply (`Decode`).
+fn net_call<'r>(
     net_ep: usize,
-    resp_buf: &'a mut [u8; IPC_BUF_SIZE],
-) -> Option<NetResponse<'a>> {
-    match sys_recv(net_ep, resp_buf) {
-        SyscallResult::Ok(sender) if sender == net_ep => {
-            api::ipc::decode::<NetResponse>(resp_buf).ok()
-        }
-        _ => None,
-    }
+    req: &NetRequest<'_>,
+    reply: &'r mut [u8; IPC_BUF_SIZE],
+) -> Result<NetResponse<'r>, IpcError> {
+    let mut send = [0u8; IPC_BUF_SIZE];
+    service_call_typed_bounded(net_ep, req, &mut send, reply, NET_CALL_TICKS)
 }
 
 fn close_cap(cap: u32, net_ep: usize) {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpClose { cap_id: cap }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut r = [0u8; IPC_BUF_SIZE];
-    let _ = recv_net_response(net_ep, &mut r);
+    let _ = net_call(net_ep, &NetRequest::TcpClose { cap_id: cap }, &mut r);
 }
 
 fn query_state(cap: u32, net_ep: usize) -> u8 {
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::SocketState { cap_id: cap }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match recv_net_response(net_ep, &mut resp_buf) {
-        Some(NetResponse::State(s)) => s,
+    match net_call(
+        net_ep,
+        &NetRequest::SocketState { cap_id: cap },
+        &mut resp_buf,
+    ) {
+        Ok(NetResponse::State(s)) => s,
         _ => 0,
     }
 }
@@ -166,22 +165,12 @@ fn tcp_send(cap: u32, data: &[u8], net_ep: usize) -> bool {
     while sent < data.len() {
         let rem = &data[sent..];
         let chunk = rem.len().min(480);
-        let mut send_buf = [0u8; IPC_BUF_SIZE];
-        let send_len = api::ipc::encode(
-            &NetRequest::TcpSend {
-                cap_id: cap,
-                data: &rem[..chunk],
-            },
-            &mut send_buf,
-        )
-        .map(|b| b.len())
-        .unwrap_or(0);
-        if send_len == 0 {
-            return false;
-        }
-        sys_send(net_ep, &send_buf[..send_len]);
+        let send_req = NetRequest::TcpSend {
+            cap_id: cap,
+            data: &rem[..chunk],
+        };
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match decode_tcp_send_progress(recv_net_response(net_ep, &mut cnt_buf)) {
+        match decode_tcp_send_progress(net_call(net_ep, &send_req, &mut cnt_buf).ok()) {
             Some(0) => {
                 zero_progress_retries += 1;
                 if zero_progress_retries > TCP_SEND_MAX_ZERO_PROGRESS_RETRIES {
@@ -202,21 +191,14 @@ fn tcp_send(cap: u32, data: &[u8], net_ep: usize) -> bool {
 
 /// Drain the HTTP request until the header terminator `\r\n\r\n` is seen.
 fn drain_request(cap: u32, net_ep: usize) {
-    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
-    let recv_req_len = api::ipc::encode(
-        &NetRequest::TcpRecv {
-            cap_id: cap,
-            buf_len: 256,
-        },
-        &mut recv_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
+    let recv_req = NetRequest::TcpRecv {
+        cap_id: cap,
+        buf_len: 256,
+    };
 
     for _ in 0..200 {
-        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match recv_net_response(net_ep, &mut data_buf) {
+        match net_call(net_ep, &recv_req, &mut data_buf).ok() {
             Some(NetResponse::Data(b)) if !b.is_empty() => {
                 if b.windows(4).any(|w| w == b"\r\n\r\n") {
                     break;
@@ -304,14 +286,9 @@ fn cell_main() {
     let mut vfs = VfsClient::new();
 
     // ── TcpListen (atomic create + listen) ───────────────────────────────────
-    let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let len = api::ipc::encode(&NetRequest::TcpListen { port }, &mut req_buf)
-        .map(|b| b.len())
-        .unwrap_or(0);
-    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let listen_cap = match recv_net_response(net_ep, &mut resp_buf) {
-        Some(NetResponse::CapId(c)) => c,
+    let listen_cap = match net_call(net_ep, &NetRequest::TcpListen { port }, &mut resp_buf) {
+        Ok(NetResponse::CapId(c)) => c,
         _ => {
             println("httpd: listen failed");
             return;
@@ -321,22 +298,20 @@ fn cell_main() {
     ostd::io::print_usize(port as usize);
     println("");
 
-    // Pre-encode TcpAccept for the listen cap (reused across iterations).
-    let mut accept_req_buf = [0u8; IPC_BUF_SIZE];
-    let accept_req_len = api::ipc::encode(
-        &NetRequest::TcpAccept { cap_id: listen_cap },
-        &mut accept_req_buf,
-    )
-    .map(|b| b.len())
-    .unwrap_or(0);
+    let accept_req = NetRequest::TcpAccept { cap_id: listen_cap };
 
     // Accept loop — serve one connection at a time.
     loop {
+        // "Nothing pending" and a slow service are retried; a dead net service
+        // can never accept again.
         let stream_cap: u32 = loop {
-            sys_send(net_ep, &accept_req_buf[..accept_req_len]);
             let mut r = [0u8; IPC_BUF_SIZE];
-            match recv_net_response(net_ep, &mut r) {
-                Some(NetResponse::CapId(c)) => break c,
+            match net_call(net_ep, &accept_req, &mut r) {
+                Ok(NetResponse::CapId(c)) => break c,
+                Err(IpcError::PeerGone) => {
+                    println("httpd: accept failed");
+                    return;
+                }
                 _ => {
                     sys_yield();
                 }

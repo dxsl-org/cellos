@@ -28,6 +28,7 @@ api::declare_syscalls![
     Log,
     Exit,
     Send,
+    SendGather,
     Recv,
     RecvTimeout,
     SetTimer,
@@ -42,6 +43,9 @@ api::declare_syscalls![
 ];
 
 ostd::cell_main!(cell_main);
+
+/// Attach round trip with the authority, admission included.
+const ATTACH_TICKS: u64 = 500;
 
 fn recovery_failed(why: &str) -> ! {
     println(&format!("[recovery-worker] RecoveryFailed: {why}"));
@@ -61,10 +65,8 @@ fn cell_main() {
     let Some(authority) = common::wait_lookup(AUTHORITY_SERVICE, 500) else {
         recovery_failed("authority unavailable")
     };
-    if !common::send(authority, Msg::Attach { nonce }) {
-        recovery_failed("authority unreachable");
-    }
-    let (epoch, revision, counter) = match common::recv_from(authority, 500) {
+    let attached = common::call(authority, Msg::Attach { nonce }, ATTACH_TICKS);
+    let (epoch, revision, counter) = match attached {
         Some(Msg::Attached {
             epoch,
             revision,
@@ -72,7 +74,8 @@ fn cell_main() {
             counter,
         }) => {
             if schema != SCHEMA {
-                common::send(authority, Msg::RestoreFailed { epoch });
+                // One-way: the authority fences and answers nothing.
+                common::post(authority, Msg::RestoreFailed { epoch });
                 recovery_failed(&format!("schema {schema} is not {SCHEMA}"));
             }
             (epoch, revision, counter)
@@ -80,7 +83,10 @@ fn cell_main() {
         Some(Msg::Refused(refusal)) => recovery_failed(&format!("attach refused {refusal:?}")),
         _ => recovery_failed("no attach reply"),
     };
-    common::send(authority, Msg::Restored { epoch, revision });
+    // One-way: publication is the authority's decision and it answers nothing.
+    if !common::post(authority, Msg::Restored { epoch, revision }) {
+        recovery_failed("authority unreachable");
+    }
     println(&format!(
         "[recovery-worker] restored epoch={epoch} revision={revision} counter={counter}"
     ));

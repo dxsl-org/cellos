@@ -1,8 +1,10 @@
 //! TLS 1.3 client helpers for app cells.
 //!
 //! Wraps the raw TLS IPC opcodes (0x30–0x32) exposed by the net service cell
-//! into ergonomic functions.  All helpers are blocking; they send one IPC
-//! message and wait for the reply.
+//! into ergonomic functions. Each helper is one exact operation bounded by a
+//! tick budget just above the net service's own deadline for that request, so
+//! the service's failure answer arrives before the budget ends; a dead or
+//! stalled service yields the helper's failure value.
 //!
 //! ## Usage
 //! ```no_run
@@ -21,14 +23,20 @@
 
 extern crate alloc;
 
-use crate::ipc::recv_from;
-use crate::syscall::sys_send;
+use crate::ipc::call_bytes;
 
 // TLS IPC opcodes (mirrors cells/services/net/src/poll_driver.rs cell_opcodes).
 const TLS_CONNECT: u8 = 0x30;
 const TLS_SEND: u8 = 0x31;
 const TLS_RECV: u8 = 0x32;
 const CLOSE: u8 = 0x15;
+
+/// Budget of `tls_connect`: 50 s, above the net service's 15 s TCP connect plus
+/// 30 s handshake deadlines.
+const TLS_CONNECT_TICKS: u64 = 5_000;
+/// Budget of `tls_write`, `tls_read` and `tls_close`: 35 s, above the net
+/// service's 30 s deadline for one TLS operation.
+const TLS_IO_TICKS: u64 = 3_500;
 
 /// Open a TLS 1.3 connection to `addr:port` with the given SNI `hostname`.
 ///
@@ -49,10 +57,9 @@ pub fn tls_connect(net_tid: usize, addr: [u8; 4], port: u16, hostname: &str) -> 
     msg[15..17].copy_from_slice(&(hn_len as u16).to_le_bytes());
     msg[17..17 + hn_len].copy_from_slice(&hn[..hn_len]);
 
-    sys_send(net_tid, &msg);
     let mut reply = [0u8; 8];
-    match recv_from(net_tid, &mut reply) {
-        Ok(_) => u64::from_le_bytes(reply),
+    match call_bytes(net_tid, &msg, &mut reply, TLS_CONNECT_TICKS) {
+        Ok(&[a, b, c, d, e, f, g, h]) => u64::from_le_bytes([a, b, c, d, e, f, g, h]),
         _ => 0,
     }
 }
@@ -70,11 +77,10 @@ pub fn tls_write(net_tid: usize, cap_id: u64, data: &[u8]) -> usize {
     msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
     msg[9..11].copy_from_slice(&(payload_len as u16).to_le_bytes());
     msg[11..11 + payload_len].copy_from_slice(&data[..payload_len]);
-    sys_send(net_tid, &msg);
     let mut reply = [0u8; 4];
-    match recv_from(net_tid, &mut reply) {
-        Ok(_) => {
-            let count = u32::from_le_bytes(reply) as usize;
+    match call_bytes(net_tid, &msg, &mut reply, TLS_IO_TICKS) {
+        Ok(&[a, b, c, d]) => {
+            let count = u32::from_le_bytes([a, b, c, d]) as usize;
             // The service reserves u32::MAX for errors, never byte progress.
             if count <= payload_len {
                 count
@@ -119,11 +125,8 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> crate::ViResult<
     let want = (want_len as u32).to_le_bytes();
     msg[9..13].copy_from_slice(&want);
 
-    if let crate::syscall::SyscallResult::Err(_) = sys_send(net_tid, &msg) {
-        return Err(crate::ViError::IO);
-    }
     let mut tmp = alloc::vec![0u8; 2 + want_len];
-    match recv_from(net_tid, &mut tmp) {
+    match call_bytes(net_tid, &msg, &mut tmp, TLS_IO_TICKS) {
         Ok(slice) => parse_tls_read_reply(slice, buf),
         Err(_) => Err(crate::ViError::IO),
     }
@@ -134,9 +137,8 @@ pub fn tls_close(net_tid: usize, cap_id: u64) {
     let mut msg = [0u8; 9];
     msg[0] = CLOSE;
     msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-    sys_send(net_tid, &msg);
     let mut r = [0u8; 1];
-    let _ = recv_from(net_tid, &mut r);
+    let _ = call_bytes(net_tid, &msg, &mut r, TLS_IO_TICKS);
 }
 
 #[cfg(test)]

@@ -41,6 +41,8 @@ ostd::declare_custom_heap!(2 * 1024 * 1024);
 
 const ECHO_PORT: u16 = 7070;
 const SERVER_TOKEN: usize = 1;
+/// 5 s: one net-service `TcpListen`, answered once from the socket table.
+const NET_CALL_TICKS: u64 = 500;
 
 #[cfg(not(test))]
 ostd::cell_main!(cell_main);
@@ -97,26 +99,27 @@ fn cell_main() {
         let mut req_buf = [0u8; 128];
         let mut resp_buf = [0u8; 128];
 
-        if let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) {
-            let _ = ostd::syscall::sys_send(net_tid, encoded);
-            let _ = ostd::syscall::sys_recv(net_tid, &mut resp_buf);
+        if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
+            ostd::ipc::service_call_typed_bounded::<_, api::ipc::NetResponse<'_>>(
+                net_tid,
+                &req,
+                &mut req_buf,
+                &mut resp_buf,
+                NET_CALL_TICKS,
+            )
+        {
+            println(&alloc::format!(
+                "[async-echo] TCP listener established, cap_id={}, listening on :{}",
+                listener_cap,
+                ECHO_PORT
+            ));
 
-            if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
-                api::ipc::decode::<api::ipc::NetResponse<'_>>(&resp_buf)
+            // Register listener socket with poller
+            if poller
+                .add(listener_cap, Event::readable(SERVER_TOKEN))
+                .is_ok()
             {
-                println(&alloc::format!(
-                    "[async-echo] TCP listener established, cap_id={}, listening on :{}",
-                    listener_cap,
-                    ECHO_PORT
-                ));
-
-                // Register listener socket with poller
-                if poller
-                    .add(listener_cap, Event::readable(SERVER_TOKEN))
-                    .is_ok()
-                {
-                    println("[async-echo] Listener socket registered with Poller.");
-                }
+                println("[async-echo] Listener socket registered with Poller.");
             }
         }
     }

@@ -95,10 +95,8 @@ pub fn fenced_writer(client: &mut Client) {
     if client.authority_call(Msg::Fence) != Some(Msg::Ack) {
         fail("E5: fence");
     }
-    if !crate::common::send(old, Msg::Go) {
-        fail("E5: go");
-    }
-    match crate::common::recv_from(old, 400) {
+    // `Go` is its own request: the stalled worker answers it with the commit outcome.
+    match crate::common::call(old, Msg::Go, 400) {
         Some(Msg::Failed {
             refusal: Refusal::StaleEpoch,
             ..

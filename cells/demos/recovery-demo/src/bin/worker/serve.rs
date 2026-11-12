@@ -1,16 +1,19 @@
 //! The worker's request loop. Every mutation is looked up and then committed at
 //! the authority under the worker's epoch before the client sees a reply, so a
 //! crash at any point leaves either no effect or a committed, reconcilable one.
+//! Each client request is answered exactly once, through its own [`Incoming`].
 
 use alloc::format;
 use ostd::io::println;
+use ostd::ipc::Incoming;
 use recovery_demo::ledger::apply;
 use recovery_demo::wire::{Binding, Fault, Msg, Refusal};
 use recovery_demo::EXIT_FENCED;
 
 use crate::common;
 
-/// Ticks to wait for an authority reply before failing the request closed.
+/// Ticks for one authority round trip, admission included, before failing the
+/// request closed.
 const AUTHORITY_TICKS: u64 = 500;
 /// Ticks a stalled mutation waits for the client's `Go`.
 const STALL_TICKS: u64 = 2_000;
@@ -36,8 +39,8 @@ pub fn run(mut worker: Worker) -> ! {
         let rights = rx.identity.map_or(0, |id| id.flags);
         match rx.msg {
             Some(Msg::Get) => {
-                common::send(
-                    rx.sender,
+                common::reply(
+                    &rx.request,
                     Msg::Value {
                         counter: worker.counter,
                         revision: worker.revision,
@@ -59,11 +62,11 @@ pub fn run(mut worker: Worker) -> ! {
                     rights,
                     payload: amount,
                 };
-                worker.mutate(rx.sender, binding, fault);
+                worker.mutate(rx.request, binding, fault);
             }
             #[cfg(feature = "fault-inject")]
             Some(Msg::Crash { mode, arg }) => {
-                common::send(rx.sender, Msg::Ack);
+                common::reply(&rx.request, Msg::Ack);
                 crate::fault::scenario(mode, arg);
             }
             _ => {}
@@ -73,21 +76,20 @@ pub fn run(mut worker: Worker) -> ! {
 
 impl Worker {
     fn call(&self, msg: Msg) -> Option<Msg> {
-        if !common::send(self.authority, msg) {
-            return None;
-        }
-        common::recv_from(self.authority, AUTHORITY_TICKS)
+        common::call(self.authority, msg, AUTHORITY_TICKS)
     }
 
-    fn mutate(&mut self, client: usize, binding: Binding, fault: Fault) {
+    /// `request` is the client's `Mutate`. On the stall path `Staged` answers
+    /// it and the outcome answers the client's later `Go` instead.
+    fn mutate(&mut self, mut request: Incoming, binding: Binding, fault: Fault) {
         let request_id = binding.request_id;
         match self.call(Msg::Lookup {
             epoch: self.epoch,
             binding,
         }) {
             Some(Msg::Present { revision, result }) => {
-                common::send(
-                    client,
+                common::reply(
+                    &request,
                     Msg::Done {
                         request_id,
                         result,
@@ -98,17 +100,30 @@ impl Worker {
                 return;
             }
             Some(Msg::Absent) => {}
-            Some(Msg::Refused(refusal)) => return self.refuse(client, request_id, refusal),
-            _ => return self.refuse(client, request_id, Refusal::RecoveryFailed),
+            Some(Msg::Refused(refusal)) => return self.refuse(&request, request_id, refusal),
+            _ => return self.refuse(&request, request_id, Refusal::RecoveryFailed),
         }
         let Some(new_state) = apply(binding.method, self.counter, binding.payload) else {
-            return self.refuse(client, request_id, Refusal::InvalidMutation);
+            return self.refuse(&request, request_id, Refusal::InvalidMutation);
         };
         self.fault_point(fault, Fault::BeforeCommit);
         if cfg!(feature = "fault-inject") && fault == Fault::Stall {
-            common::send(client, Msg::Staged { request_id });
-            if common::recv_from(client, STALL_TICKS) != Some(Msg::Go) {
-                return self.refuse(client, request_id, Refusal::Denied);
+            let client = request.sender();
+            common::reply(&request, Msg::Staged { request_id });
+            match common::recv_request_from(client, STALL_TICKS) {
+                Some((Some(Msg::Go), go)) => request = go,
+                Some((_, other)) => return self.refuse(&other, request_id, Refusal::Denied),
+                None => {
+                    // No request is left to answer: tell the client one-way.
+                    common::post(
+                        client,
+                        Msg::Failed {
+                            request_id,
+                            refusal: Refusal::Denied,
+                        },
+                    );
+                    return;
+                }
             }
         }
         let commit = Msg::Commit {
@@ -122,8 +137,8 @@ impl Worker {
                 self.revision = revision;
                 self.counter = result;
                 self.fault_point(fault, Fault::AfterCommit);
-                common::send(
-                    client,
+                common::reply(
+                    &request,
                     Msg::Done {
                         request_id,
                         result,
@@ -133,8 +148,8 @@ impl Worker {
                 );
             }
             Some(Msg::Present { revision, result }) => {
-                common::send(
-                    client,
+                common::reply(
+                    &request,
                     Msg::Done {
                         request_id,
                         result,
@@ -143,15 +158,15 @@ impl Worker {
                     },
                 );
             }
-            Some(Msg::Refused(refusal)) => self.refuse(client, request_id, refusal),
-            _ => self.refuse(client, request_id, Refusal::RecoveryFailed),
+            Some(Msg::Refused(refusal)) => self.refuse(&request, request_id, refusal),
+            _ => self.refuse(&request, request_id, Refusal::RecoveryFailed),
         }
     }
 
     /// A fenced writer reports the refusal and exits: it can never commit again.
-    fn refuse(&self, client: usize, request_id: u64, refusal: Refusal) {
-        common::send(
-            client,
+    fn refuse(&self, request: &Incoming, request_id: u64, refusal: Refusal) {
+        common::reply(
+            request,
             Msg::Failed {
                 request_id,
                 refusal,
