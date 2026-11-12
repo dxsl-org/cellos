@@ -16,6 +16,9 @@ use alloc::vec::Vec;
 use crate::backend::{fill_page, FsBackend, ListPage};
 use crate::blk_router::DeviceRef;
 use crate::block_stream::{BlockStream, CachedBlockStream};
+use crate::fat_extent_map::{ExtentCache, ExtentMap, FileKey};
+use alloc::sync::Arc;
+use core::cell::RefCell;
 use api::ipc::vfs_dir_page::EntryKind;
 use ostd::io::println;
 
@@ -28,12 +31,17 @@ type DataFs =
 /// Convenience alias for a FAT directory handle — avoids repeating the full generic.
 type DataDir<'a> =
     fatfs::Dir<'a, CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+type DataFile<'a> =
+    fatfs::File<'a, CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
 
 pub struct FatBackend {
     fs: Option<DataFs>,
     prefix: Box<str>,
     /// Device the volume lives on; `sync` flushes only this device.
     dev: DeviceRef,
+    /// The partition, for reads that bypass fatfs (see [`Self::read_mapped`]).
+    volume: BlockStream,
+    extents: RefCell<ExtentCache>,
 }
 
 /// Reads sector 0 of the FAT partition and returns `true` when the volume is
@@ -69,6 +77,8 @@ impl FatBackend {
                 fs: None,
                 prefix: prefix.into(),
                 dev,
+                volume: BlockStream::new(dev, base_lba, sectors),
+                extents: RefCell::new(ExtentCache::new()),
             };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
@@ -107,7 +117,46 @@ impl FatBackend {
             fs,
             prefix: prefix.into(),
             dev,
+            volume: BlockStream::new(dev, base_lba, sectors),
+            extents: RefCell::new(ExtentCache::new()),
         }
+    }
+
+    /// Read file bytes through the file's cached [`ExtentMap`] straight from
+    /// the device: no seek, no chain walk per read. `None` when the file
+    /// cannot be mapped (missing, empty, or too fragmented) and fatfs must
+    /// serve it.
+    fn read_mapped(&self, fs: &DataFs, rel: &str, offset: u64, buf: &mut [u8]) -> Option<usize> {
+        let mut file = fs.root_dir().open_file(rel).ok()?;
+        let key = file_key(&mut file)?;
+        let cached = self.extents.borrow_mut().get(key);
+        let map = match cached {
+            Some(entry) => entry?,
+            None => {
+                let map = map_file(&mut file).map(Arc::new);
+                self.extents.borrow_mut().insert(key, map.clone());
+                map?
+            }
+        };
+        let mut total = 0usize;
+        for (disk, len) in map.pieces(offset, buf.len() as u64) {
+            let len = len as usize;
+            if !self.volume.read_bytes_at(disk, &mut buf[total..total + len]) {
+                break;
+            }
+            total += len;
+        }
+        if total < buf.len() {
+            println(&alloc::format!(
+                "[vfs] short read path={} offset={} got={} want={} size={}",
+                rel,
+                offset,
+                total,
+                buf.len(),
+                map.size()
+            ));
+        }
+        Some(total)
     }
 
     /// Whether a FAT32 volume was opened.
@@ -152,6 +201,28 @@ impl FatBackend {
         };
         page_dir(&dir, start, out, skip)
     }
+}
+
+/// The file's [`FileKey`]: where its first cluster lies; `None` when empty.
+fn file_key(file: &mut DataFile<'_>) -> Option<FileKey> {
+    file.extents().next()?.ok().map(|extent| extent.offset)
+}
+
+/// Walk `file`'s cluster chain once into an [`ExtentMap`]; `None` when a FAT
+/// read fails or the file is too fragmented to map.
+fn map_file(file: &mut DataFile<'_>) -> Option<ExtentMap> {
+    let mut failed = false;
+    let map = ExtentMap::build(file.extents().map_while(|extent| match extent {
+        Ok(extent) => Some((extent.offset, u64::from(extent.size))),
+        Err(_) => {
+            failed = true;
+            None
+        }
+    }));
+    if failed {
+        return None;
+    }
+    map
 }
 
 /// Split `"sub/dir/file"` into `("sub/dir", "file")`. `"file"` → `("", "file")`.
@@ -371,6 +442,9 @@ impl FsBackend for FatBackend {
             Some(r) => r,
             None => return 0,
         };
+        if let Some(read) = self.read_mapped(fs, rel, offset, buf) {
+            return read;
+        }
         let mut file = match fs.root_dir().open_file(rel) {
             Ok(f) => f,
             Err(_) => return 0,
@@ -435,6 +509,8 @@ impl FsBackend for FatBackend {
                 return false;
             }
         };
+        // Replacing the file frees its clusters for any other file to reuse.
+        self.extents.get_mut().clear();
         let _ = dir.remove(name);
         let mut file = match dir.create_file(name) {
             Ok(f) => f,
@@ -482,6 +558,10 @@ impl FsBackend for FatBackend {
             Ok(f) => f,
             Err(_) => return false,
         };
+        if let Some(key) = file_key(&mut file) {
+            let end = offset.saturating_add(content.len() as u64);
+            self.extents.get_mut().written(key, end);
+        }
         if file.seek(fatfs::SeekFrom::Start(offset)).is_err() {
             return false;
         }
@@ -520,6 +600,10 @@ impl FsBackend for FatBackend {
                 Err(_) => return false,
             },
         };
+        // An append always grows the file past its mapped size.
+        if let Some(key) = file_key(&mut file) {
+            self.extents.get_mut().written(key, u64::MAX);
+        }
         if file.seek(fatfs::SeekFrom::End(0)).is_err() {
             return false;
         }
@@ -549,6 +633,8 @@ impl FsBackend for FatBackend {
             Some(r) => r,
             None => return false,
         };
+        // Freed clusters may be reused by any file's next write.
+        self.extents.get_mut().clear();
         // Reject any path component that is ".." — defense-in-depth even though
         // fatfs confines resolution to the volume root.
         if rel.split('/').any(|c| c == "..") {
@@ -571,6 +657,8 @@ impl FsBackend for FatBackend {
             Some(r) => r,
             None => return false,
         };
+        // Freed clusters may be reused by any file's next write.
+        self.extents.get_mut().clear();
         if fs.root_dir().open_file(rel).is_err() {
             return false;
         }
@@ -588,6 +676,8 @@ impl FsBackend for FatBackend {
             Some(r) => r,
             None => return false,
         };
+        // Freed clusters may be reused by any file's next write.
+        self.extents.get_mut().clear();
         // Defense-in-depth: reject ".." before the recursive delete amplifies any
         // path-confusion. fatfs also confines to the volume root, but explicit is safer.
         if rel.split('/').any(|c| c == "..") {

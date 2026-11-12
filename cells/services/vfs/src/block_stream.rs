@@ -8,9 +8,10 @@
 //! Every sector goes through `blk_router` to the stream's own [`DeviceRef`];
 //! a flush flushes only that device.
 
-use crate::blk_router::{blk_flush, blk_read, blk_write, DeviceRef};
+use crate::blk_router::{blk_flush, blk_read, blk_read_sectors, blk_write, DeviceRef};
 use crate::page_cache::{PageCache, SectorDevice};
-use types::block_wire::BlockOutcome;
+use alloc::vec::Vec;
+use types::block_wire::{BlockOutcome, MAX_RUN_SECTORS};
 
 const SECTOR_SIZE: u64 = 512;
 
@@ -51,6 +52,38 @@ impl BlockStream {
             return None;
         }
         self.base_lba.checked_add(sector)
+    }
+
+    /// Fill `dst` from partition byte `offset` with multi-sector device reads,
+    /// independent of the stream position. `false` when any of the range lies
+    /// outside the partition or the device failed [`RAW_IO_ATTEMPTS`] times.
+    pub fn read_bytes_at(&self, offset: u64, dst: &mut [u8]) -> bool {
+        if dst.is_empty() {
+            return true;
+        }
+        let first = offset / SECTOR_SIZE;
+        let skip = (offset % SECTOR_SIZE) as usize;
+        let count = (skip + dst.len()).div_ceil(SECTOR_SIZE as usize) as u64;
+        let (Some(lba), Some(_)) = (self.abs_lba(first), self.abs_lba(first + count - 1)) else {
+            return false;
+        };
+        let Ok(count) = u32::try_from(count) else {
+            return false;
+        };
+        let aligned = skip == 0 && dst.len().is_multiple_of(SECTOR_SIZE as usize);
+        let mut scratch = if aligned {
+            Vec::new()
+        } else {
+            alloc::vec![0u8; count as usize * SECTOR_SIZE as usize]
+        };
+        let target: &mut [u8] = if aligned { &mut *dst } else { &mut scratch };
+        if !(0..RAW_IO_ATTEMPTS).any(|_| blk_read_sectors(self.dev, lba, count, target)) {
+            return false;
+        }
+        if !aligned {
+            dst.copy_from_slice(&scratch[skip..skip + dst.len()]);
+        }
+        true
     }
 }
 
@@ -184,6 +217,36 @@ impl SectorDevice for BlockStream {
 pub struct CachedBlockStream {
     inner: BlockStream,
     cache: PageCache,
+    /// Read-ahead window for file data (see [`Self::read_bulk`]).
+    ahead: ReadAhead,
+    /// The sector the last small read came from. fatfs walks a cluster chain
+    /// one 4-byte FAT entry per read, and re-walks it from the file's first
+    /// cluster on every seek; without this, each entry cost a cache lookup, an
+    /// LRU touch and a 512-byte copy. Dropped on any write, like `ahead`.
+    last: Option<(u64, [u8; 512])>,
+}
+
+/// Fills are whole `OP_READ_RUN`s: the sectors past the request in the last
+/// run cost no extra round trip, and reading further ahead would make a random
+/// read pay for data nobody asked for.
+const RUN_SECTORS: u64 = MAX_RUN_SECTORS as u64;
+
+/// The last bulk read: `data` holds the partition-relative sectors from `first`.
+/// Filled from the device and dropped on any write, so it never differs from the
+/// medium (the same rule the write-through page cache keeps).
+#[derive(Default)]
+struct ReadAhead {
+    first: u64,
+    data: Vec<u8>,
+}
+
+impl ReadAhead {
+    /// Bytes of `pos` onward that the window holds.
+    fn hit(&self, pos: u64) -> Option<&[u8]> {
+        let start = self.first * SECTOR_SIZE;
+        let offset = usize::try_from(pos.checked_sub(start)?).ok()?;
+        self.data.get(offset..).filter(|rest| !rest.is_empty())
+    }
 }
 
 impl CachedBlockStream {
@@ -191,7 +254,44 @@ impl CachedBlockStream {
         Self {
             inner: BlockStream::new(dev, base_lba, sectors),
             cache: PageCache::new(),
+            ahead: ReadAhead::default(),
+            last: None,
         }
+    }
+
+    /// File data: fatfs reads a sector-aligned run of whole sectors (up to a
+    /// cluster) straight into the caller's buffer. Serve it from the read-ahead
+    /// window, refilling it with the requested sectors rounded up to whole
+    /// [`RUN_SECTORS`] runs, instead of one device round trip per 512 bytes. The data
+    /// bypasses the sector cache, which stays for metadata (FAT, directories).
+    fn read_bulk(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
+        let pos = self.inner.pos;
+        if self.ahead.hit(pos).is_none() {
+            let wanted = (buf.len() as u64).div_ceil(SECTOR_SIZE);
+            self.fill_ahead(pos / SECTOR_SIZE, wanted.next_multiple_of(RUN_SECTORS))?;
+        }
+        let window = self.ahead.hit(pos).ok_or(())?;
+        let n = window.len().min(buf.len());
+        buf[..n].copy_from_slice(&window[..n]);
+        self.inner.pos += n as u64;
+        Ok(n)
+    }
+
+    fn fill_ahead(&mut self, sector: u64, count: u64) -> Result<(), ()> {
+        self.ahead.data.clear();
+        let count = count.min(self.inner.sectors.checked_sub(sector).ok_or(())?);
+        let lba = self.inner.abs_lba(sector).ok_or(())?;
+        // The last sector of the window is inside the partition by `count`.
+        self.inner.abs_lba(sector + count - 1).ok_or(())?;
+        let mut data = core::mem::take(&mut self.ahead.data);
+        data.resize(count as usize * SECTOR_SIZE as usize, 0);
+        for _ in 0..RAW_IO_ATTEMPTS {
+            if blk_read_sectors(self.inner.dev, lba, count as u32, &mut data) {
+                self.ahead = ReadAhead { first: sector, data };
+                return Ok(());
+            }
+        }
+        Err(())
     }
 }
 
@@ -204,12 +304,19 @@ impl fatfs::Read for CachedBlockStream {
         if buf.is_empty() {
             return Ok(0);
         }
+        if self.inner.pos.is_multiple_of(SECTOR_SIZE) && buf.len() >= 2 * SECTOR_SIZE as usize {
+            return self.read_bulk(buf);
+        }
         let sector = self.inner.pos / SECTOR_SIZE;
         let off = (self.inner.pos % SECTOR_SIZE) as usize;
-        let mut sec = [0u8; 512];
-        if !self.cache.read_sector(&mut self.inner, sector, &mut sec) {
-            return Err(());
+        if self.last.as_ref().map(|(s, _)| *s) != Some(sector) {
+            let mut sec = [0u8; 512];
+            if !self.cache.read_sector(&mut self.inner, sector, &mut sec) {
+                return Err(());
+            }
+            self.last = Some((sector, sec));
         }
+        let (_, sec) = self.last.as_ref().ok_or(())?;
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
         buf[..n].copy_from_slice(&sec[off..off + n]);
         self.inner.pos += n as u64;
@@ -219,6 +326,9 @@ impl fatfs::Read for CachedBlockStream {
 
 impl fatfs::Write for CachedBlockStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, ()> {
+        // Any write may change sectors the read-ahead window or `last` holds.
+        self.ahead.data.clear();
+        self.last = None;
         let mut written = 0usize;
         while written < buf.len() {
             let sector = self.inner.pos / SECTOR_SIZE;
@@ -289,6 +399,19 @@ mod tests {
         let mut buf = [0u8; 512];
         assert!(!bs.read_raw_sector(PART_FAT32_SECTORS, &mut buf));
         assert!(!bs.write_raw_sector(u64::MAX, &buf));
+    }
+
+    #[test]
+    fn the_read_ahead_window_serves_only_the_bytes_it_holds() {
+        let ahead = super::ReadAhead {
+            first: 10,
+            data: alloc::vec![7u8; 4 * 512],
+        };
+        assert!(ahead.hit(9 * 512).is_none(), "before the window");
+        assert_eq!(ahead.hit(10 * 512).map(<[u8]>::len), Some(4 * 512));
+        assert_eq!(ahead.hit(13 * 512 + 100).map(<[u8]>::len), Some(412));
+        assert!(ahead.hit(14 * 512).is_none(), "past the window");
+        assert!(super::ReadAhead::default().hit(0).is_none(), "empty window");
     }
 
     #[test]

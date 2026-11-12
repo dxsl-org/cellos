@@ -36,6 +36,7 @@ mod dispatch_file_handles;
 mod dispatch_grants;
 mod dispatch_paths;
 mod fast_handler;
+mod fat_extent_map;
 mod file_handles;
 mod grant_read;
 mod grant_write;
