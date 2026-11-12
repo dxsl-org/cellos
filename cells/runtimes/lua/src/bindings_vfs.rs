@@ -26,7 +26,7 @@ pub fn vfs_ok(vfs: &mut VfsRef, req: &api::ipc::VfsRequest<'_>) -> bool {
     let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
     matches!(
         vfs.call::<api::ipc::VfsRequest, api::ipc::VfsResponse>(req, &mut reply),
-        Ok(api::ipc::VfsResponse::Ok)
+        ostd::call_outcome::CallOutcome::Reply(api::ipc::VfsResponse::Ok)
     )
 }
 
