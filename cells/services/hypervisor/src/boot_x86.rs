@@ -6,9 +6,8 @@
 
 extern crate alloc;
 
-use crate::boot_x86_profile::{
-    guest_cmdline, GUEST_RAM_PAGES, GUEST_RAM_SIZE, INITRD_PATH, VMLINUX_PATH,
-};
+use crate::boot_x86_profile::{GuestProfile, CHROME_DISK_NAME, VMLINUX_PATH};
+use crate::persistent_disk::{DiskSpec, PersistentDisk};
 use crate::{
     acpi,
     boot_info::{self, BootInfoParams},
@@ -57,7 +56,8 @@ pub fn run() {
     println("[hv-x86] hypervisor cell starting (SVM PVH)");
     // A launcher-spawned hypervisor boots the guest at its window's size and
     // shows it there; without a launcher it fills the screen.
-    let session = if crate::app_session_x86::app_mode() {
+    let app_mode = crate::app_session_x86::app_mode();
+    let session = if app_mode {
         match crate::app_session_x86::wait_for_launch() {
             Some(bound) => Some(bound),
             None => return,
@@ -65,18 +65,45 @@ pub fn run() {
     } else {
         None
     };
+    let profile = GuestProfile::select(app_mode);
 
-    let vm_id = vmm::create_vm(GUEST_RAM_PAGES);
+    match boot(profile) {
+        Some((vm_id, vcpu_id, disk)) => {
+            println("[hv-x86] vCPU ready — entering run loop");
+            run_loop_x86::run(vm_id, vcpu_id, disk, session);
+            println("[hv-x86] guest exited");
+        }
+        None => {
+            if let Some((session, _, _)) = &session {
+                session.report_exit(1);
+            }
+        }
+    }
+    if app_mode {
+        // The launcher's window is gone or the guest stopped: this Cell has
+        // nothing left to serve, and its exit reclaims the VM.
+        ostd::syscall::sys_exit(0);
+    }
+}
+
+/// Everything before the run loop: guest RAM, kernel, initramfs, ACPI, boot
+/// info, vCPU and disk. `None` after logging the failed step.
+#[allow(clippy::type_complexity)]
+fn boot(profile: GuestProfile) -> Option<(usize, usize, Option<(PersistentDisk, DiskSpec)>)> {
+    // Open the disk first: a missing Chromium image must fail before the
+    // large guest-RAM carve.
+    let disk = open_disk(profile)?;
+    let vm_id = vmm::create_vm(profile.ram_pages());
     if vm_id == 0 || vm_id == usize::MAX {
         // Causes, in likelihood order: HypervisorCap not granted to this cell
         // (CreateVm → PermissionDenied), SVM root not active, or no contiguous
         // guest-RAM run. The kernel logs the precise reason (`[hv-x86] …`).
         println("[hv-x86] create_vm failed — see kernel log (cap / SVM / OOM)");
-        return;
+        return None;
     }
-    if vmm::map_guest_memory(vm_id, 0, GUEST_RAM_SIZE as usize, true) == usize::MAX {
+    if vmm::map_guest_memory(vm_id, 0, profile.ram_size() as usize, true) == usize::MAX {
         println("[hv-x86] map_guest_memory failed");
-        return;
+        return None;
     }
 
     // ── Parse vmlinux ELF + PVH entry note ────────────────────────────────────
@@ -87,7 +114,7 @@ pub fn run() {
                 "[hv-x86] parse {} failed: {:?} — need an uncompressed vmlinux with a PHYS32_ENTRY note",
                 VMLINUX_PATH, e
             ));
-            return;
+            return None;
         }
     };
 
@@ -102,7 +129,7 @@ pub fn run() {
                 "[hv-x86] load_segments failed: {:?} (no PHYS32_ENTRY note? need uncompressed vmlinux)",
                 e
             ));
-            return;
+            return None;
         }
     };
     let kernel_end = info
@@ -112,15 +139,16 @@ pub fn run() {
         .max()
         .unwrap_or(0);
     let initrd_gpa = (kernel_end + ALIGN_2M - 1) & !(ALIGN_2M - 1);
-    let initrd_size = match stream_file(INITRD_PATH, vm_id, initrd_gpa) {
+    let initrd_path = profile.initrd_path();
+    let initrd_size = match stream_file(initrd_path, vm_id, initrd_gpa) {
         Ok(n) => n,
         Err(e) => {
             println(&alloc::format!(
                 "[hv-x86] stream {} failed: {:?}",
-                INITRD_PATH,
+                initrd_path,
                 e
             ));
-            return;
+            return None;
         }
     };
     println(&alloc::format!(
@@ -135,63 +163,74 @@ pub fn run() {
     let (acpi_blob, rsdp_paddr) = acpi::build();
     if wg(vm_id, acpi::ACPI_BASE_GPA, &acpi_blob).is_err() {
         println("[hv-x86] write ACPI tables failed");
-        return;
+        return None;
     }
 
     // ── Boot-info blob (hvm_start_info + e820 + initramfs module + cmdline) ───
     let (blob, start_info_gpa) = boot_info::build(&BootInfoParams {
-        ram_size: GUEST_RAM_SIZE,
+        ram_size: profile.ram_size(),
         initrd_gpa,
         initrd_size,
-        cmdline: guest_cmdline(),
+        cmdline: &profile.cmdline(),
         rsdp_paddr,
     });
     if wg(vm_id, start_info_gpa, &blob).is_err() {
         println("[hv-x86] write boot_info failed");
-        return;
+        return None;
     }
 
     // ── vCPU at the PVH entry; RBX = hvm_start_info GPA ───────────────────────
     let vcpu_id = vmm::create_vcpu(vm_id, entry32);
     if vcpu_id == 0 || vcpu_id == usize::MAX {
         println("[hv-x86] create_vcpu failed");
-        return;
+        return None;
     }
     let mut rb = [0u64; 32];
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
     rb[3] = start_info_gpa; // RBX (x86 gpr index 3)
     vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
+    Some((vm_id, vcpu_id, disk))
+}
 
-    #[cfg(feature = "volatile-disk")]
-    let persistent_disk = {
-        println("[hv-x86] volatile disk selected by build policy");
-        None
+/// The guest's only disk. Chrome always runs from its read-only image; the
+/// other profiles follow the build's disk policy.
+#[allow(clippy::type_complexity)]
+fn open_disk(profile: GuestProfile) -> Option<Option<(PersistentDisk, DiskSpec)>> {
+    let spec = match profile {
+        GuestProfile::Chrome => DiskSpec {
+            name: CHROME_DISK_NAME,
+            read_only: true,
+        },
+        GuestProfile::Console | GuestProfile::Fixture => {
+            #[cfg(feature = "volatile-disk")]
+            {
+                println("[hv-x86] volatile disk selected by build policy");
+                return Some(None);
+            }
+            #[cfg(not(feature = "volatile-disk"))]
+            crate::persistent_disk::GUEST_DISK
+        }
     };
-    #[cfg(not(feature = "volatile-disk"))]
-    let persistent_disk = match crate::persistent_disk::open() {
+    match crate::persistent_disk::open(spec) {
         Ok(Some(disk)) => {
             println(&alloc::format!(
-                "[hv-x86] persistent disk: /mnt/sd/guest_disk.img (size={})",
-                disk.2
+                "[hv-x86] persistent disk: /mnt/sd/{} (size={}{})",
+                spec.name,
+                disk.2,
+                if spec.read_only { ", read-only" } else { "" }
             ));
-            Some(disk)
+            Some(Some((disk, spec)))
         }
         Ok(None) => {
             println("[hv-x86] persistent disk unavailable: VFS absent");
-            return;
+            None
         }
         Err(()) => {
-            println("[hv-x86] persistent disk open failed");
-            return;
+            println(&alloc::format!(
+                "[hv-x86] persistent disk open failed: /mnt/sd/{}",
+                spec.name
+            ));
+            None
         }
-    };
-    println("[hv-x86] vCPU ready — entering run loop");
-    let app_launched = session.is_some();
-    run_loop_x86::run(vm_id, vcpu_id, persistent_disk, session);
-    println("[hv-x86] guest exited");
-    if app_launched {
-        // The launcher's window is gone or the guest stopped: this Cell has
-        // nothing left to serve, and its exit reclaims the VM.
-        ostd::syscall::sys_exit(0);
     }
 }

@@ -46,11 +46,14 @@ pub enum Backend {
         poisoned_tid: usize,
         file: api::vfs_file_handles::ViVfsFileHandle,
         size: u64,
+        spec: crate::persistent_disk::DiskSpec,
     },
 }
 
 pub struct BlkDisk {
     backend: Backend,
+    /// Advertised as `VIRTIO_BLK_F_RO`; writes are refused, not just discouraged.
+    read_only: bool,
     num_sectors: u64,
     last_avail: u16,
     used_idx: u16,
@@ -58,24 +61,29 @@ pub struct BlkDisk {
 }
 
 impl BlkDisk {
+    /// `file` is an opened persistent disk and the spec it was opened with;
+    /// `None` selects the 4 MiB volatile disk.
     pub fn new(
-        file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>,
+        file: Option<(crate::persistent_disk::PersistentDisk, crate::persistent_disk::DiskSpec)>,
         irq: Option<u32>,
     ) -> Self {
-        let (backend, num_sectors) = match file {
-            Some((vfs_tid, file, size)) => (
+        let (backend, num_sectors, read_only) = match file {
+            Some(((vfs_tid, file, size), spec)) => (
                 Backend::Persistent {
                     vfs_tid,
                     poisoned_tid: 0,
                     file,
                     size,
+                    spec,
                 },
                 size / (SECTOR_SIZE as u64),
+                spec.read_only,
             ),
-            None => (Backend::Volatile(vec![0u8; DISK_SIZE]), NUM_SECTORS),
+            None => (Backend::Volatile(vec![0u8; DISK_SIZE]), NUM_SECTORS, false),
         };
         Self {
             backend,
+            read_only,
             num_sectors,
             last_avail: 0,
             used_idx: 0,
@@ -89,7 +97,8 @@ impl VirtioDevice for BlkDisk {
         2
     }
     fn device_features_lo(&self) -> u32 {
-        (1 << 9) | (1 << 2) // VIRTIO_BLK_F_FLUSH | VIRTIO_BLK_F_SEG_MAX
+        // VIRTIO_BLK_F_FLUSH | VIRTIO_BLK_F_SEG_MAX, plus VIRTIO_BLK_F_RO.
+        (1 << 9) | (1 << 2) | if self.read_only { 1 << 5 } else { 0 }
     }
 
     /// virtio-blk config: capacity in sectors at bytes 0-7; maximum number
@@ -109,12 +118,13 @@ impl VirtioDevice for BlkDisk {
         }
         // Disjoint field borrows: backend / last_avail / used_idx
         let backend = &mut self.backend;
+        let read_only = self.read_only;
         let published = process_notify(
             vm_id,
             qcfg,
             &mut self.last_avail,
             &mut self.used_idx,
-            |bufs| handle_blk_request(backend, bufs, vm_id),
+            |bufs| handle_blk_request(backend, read_only, bufs, vm_id),
         );
         if published > 0 {
             if let Some(irq) = self.irq {
@@ -159,6 +169,7 @@ fn ensure_persistent_connected(backend: &mut Backend) -> bool {
         poisoned_tid,
         file,
         size,
+        spec,
     } = backend
     else {
         return true;
@@ -176,7 +187,7 @@ fn ensure_persistent_connected(backend: &mut Backend) -> bool {
     let expected_size = *size;
     let mut poisoned = false;
     let Some((new_tid, new_file, new_size)) =
-        crate::persistent_disk::open_for(current_tid, &mut poisoned)
+        crate::persistent_disk::open_for(current_tid, *spec, &mut poisoned)
     else {
         *vfs_tid = 0;
         if poisoned {
@@ -224,7 +235,7 @@ fn force_persistent_unavailable_once(backend: &mut Backend) {
     }
 }
 
-fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> u32 {
+fn handle_blk_request(backend: &mut Backend, read_only: bool, bufs: &[DescBuf], vm_id: usize) -> u32 {
     if bufs.len() < 2 {
         println("[hv-blk] descriptor chain has fewer than two buffers");
         return 0;
@@ -259,6 +270,7 @@ fn handle_blk_request(backend: &mut Backend, bufs: &[DescBuf], vm_id: usize) -> 
     let data_bufs = &bufs[1..status_idx];
     let status = match req_type {
         BLK_T_IN if bufs.len() >= 3 => blk_read(backend, sector, data_bufs, vm_id),
+        BLK_T_OUT if read_only => 1,
         BLK_T_OUT if bufs.len() >= 3 => blk_write(backend, sector, data_bufs, vm_id),
         BLK_T_FLUSH if bufs.len() == 2 => blk_flush(backend),
         BLK_T_IN | BLK_T_OUT | BLK_T_FLUSH => 1,

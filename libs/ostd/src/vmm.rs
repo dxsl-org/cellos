@@ -172,3 +172,12 @@ pub fn inject_irq(vm_id: usize, vcpu_id: usize, intid: u32) -> usize {
     // memory.
     unsafe { vmm_call(ViSyscall::InjectIrq, vm_id, vcpu_id, intid as usize, 0) }
 }
+
+/// The host's time-stamp counter, which an x86 guest reads unchanged: guest
+/// RDTSC does not exit and both VMM backends run with a TSC offset of 0.
+#[cfg(target_arch = "x86_64")]
+pub fn read_tsc() -> u64 {
+    // SAFETY: RDTSC reads a counter register only; it touches no memory and
+    // the kernel leaves CR4.TSD clear, so it does not fault at CPL 3.
+    unsafe { core::arch::x86_64::_rdtsc() }
+}

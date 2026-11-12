@@ -14,6 +14,10 @@
 //! - **VMX / SVM** (leaf 1, 0x8000_0001, 0x8000_000A): nested virtualization is
 //!   not provided; every VMX/SVM instruction exits.
 //! - **x2APIC** (leaf 1): the guest LAPIC is the RAM-backed xAPIC MMIO window.
+//! - **TSC-deadline timer** (leaf 1): `IA32_TSC_DEADLINE` is an unemulated MSR
+//!   whose writes are dropped, so a guest that knows its TSC frequency and
+//!   picks this clockevent never receives a timer interrupt again (its boot
+//!   stopped after the virtio-gpu probe). Hidden, Linux keeps the PIT tick.
 //! - **Hypervisor leaves** (0x4000_0000..=0x4FFF_FFFF): when Cellos itself
 //!   runs under KVM/Hyper-V, the host's leaves name that outer hypervisor; a
 //!   guest believing it would use its paravirtual MSRs (kvm-clock), which this
@@ -29,6 +33,7 @@ pub type CpuidRegs = [u32; 4];
 const LEAF1_ECX_MONITOR: u32 = 1 << 3;
 const LEAF1_ECX_VMX: u32 = 1 << 5;
 const LEAF1_ECX_X2APIC: u32 = 1 << 21;
+const LEAF1_ECX_TSC_DEADLINE: u32 = 1 << 24;
 const LEAF7_EBX_INVPCID: u32 = 1 << 10;
 const LEAF7_ECX_WAITPKG: u32 = 1 << 5;
 const LEAF1_ECX_XSAVE: u32 = 1 << 26;
@@ -39,6 +44,7 @@ const EXT1_ECX_SVM: u32 = 1 << 2;
 const LEAF1_ECX_HIDDEN: u32 = LEAF1_ECX_MONITOR
     | LEAF1_ECX_VMX
     | LEAF1_ECX_X2APIC
+    | LEAF1_ECX_TSC_DEADLINE
     | LEAF1_ECX_XSAVE
     | LEAF1_ECX_OSXSAVE
     | LEAF1_ECX_AVX;

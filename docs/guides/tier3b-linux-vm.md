@@ -8,6 +8,12 @@
 > material, not permission to resume those platform programs. Tier 3 C2C guest
 > adapters are a required target; the Tier 3 Chrome desktop app is unparked
 > (ADR-0017 §5d), other browser/GUI expansion stays parked.
+>
+> **Chrome guest:** the taskbar's Chrome runs Chromium under cage in an Alpine guest
+> whose read-only root is `/mnt/sd/chrome-guest.sqfs` (`scripts/build-chrome-guest-image.sh`).
+> Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the guest holds
+> no credentials (user data lives in tmpfs and is gone at exit). Startup currently takes
+> ~18 minutes because guest disk reads run at ~2 MB/s (one 512-byte sector per block IPC).
 
 ---
 

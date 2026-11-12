@@ -11,20 +11,21 @@ SCREEN_W, SCREEN_H = 1280, 800
 
 
 class Vm:
-    def __init__(self, qemu: str, iso: Path, work: Path, name: str):
+    def __init__(self, qemu: str, iso: Path, work: Path, name: str, memory: str = "1G",
+                 extra: tuple = ()):
         self.work = work
         self.name = name
         self.serial_log = work / f"{name}-serial.log"
         for path in (self._sock("serial"), self._sock("qmp"), self.serial_log):
             path.unlink(missing_ok=True)
         self.process = subprocess.Popen([
-            qemu, "-machine", "q35", "-accel", "kvm", "-cpu", "host", "-m", "1G",
+            qemu, "-machine", "q35", "-accel", "kvm", "-cpu", "host", "-m", memory,
             "-display", "none", "-chardev",
             f"socket,id=s0,path={self._sock('serial')},server=on,wait=off,"
             f"logfile={self.serial_log}",
             "-serial", "chardev:s0", "-qmp", f"unix:{self._sock('qmp')},server=on,wait=off",
             "-monitor", "none", "-cdrom", str(iso), "-boot", "d", "-no-reboot", "-nic", "none",
-            "-device", "virtio-keyboard-pci", "-device", "virtio-tablet-pci"],
+            "-device", "virtio-keyboard-pci", "-device", "virtio-tablet-pci", *extra],
             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     def _sock(self, kind: str) -> Path:

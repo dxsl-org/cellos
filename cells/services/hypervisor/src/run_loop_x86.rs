@@ -52,7 +52,10 @@ pub enum RunOutcome {
 pub fn run(
     vm_id: usize,
     vcpu_id: usize,
-    disk_file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>,
+    disk_file: Option<(
+        crate::persistent_disk::PersistentDisk,
+        crate::persistent_disk::DiskSpec,
+    )>,
     launcher: Option<(AppSession, u32, u32)>,
 ) -> RunOutcome {
     let net_tid = ostd::syscall::sys_lookup_service(api::syscall::service::NET).unwrap_or(0);

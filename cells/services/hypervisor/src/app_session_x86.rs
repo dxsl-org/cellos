@@ -96,6 +96,13 @@ impl AppSession {
         self.client_tid
     }
 
+    /// Tell the launcher the guest will not run (boot failed before the run
+    /// loop, which otherwise reports the exit through the GPU presenter).
+    pub fn report_exit(&self, code: u32) {
+        let event = api::services::vmm_session::VmmEvent::Exited { code };
+        let _ = sys_post(self.client_tid, &event.encode());
+    }
+
     /// Drain the launcher's queued requests into the devices.
     pub fn poll(
         &mut self,

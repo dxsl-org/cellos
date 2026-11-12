@@ -194,10 +194,10 @@ pub fn boot_arm() {
         None
     };
     #[cfg(not(feature = "volatile-disk"))]
-    let persistent_disk = match persistent_disk::open() {
+    let persistent_disk = match persistent_disk::open(persistent_disk::GUEST_DISK) {
         Ok(Some(disk)) => {
             println("[hv] persistent disk: /mnt/sd/guest_disk.img");
-            Some(disk)
+            Some((disk, persistent_disk::GUEST_DISK))
         }
         Ok(None) => {
             #[cfg(feature = "board-rpi3")]

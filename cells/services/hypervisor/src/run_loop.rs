@@ -35,7 +35,10 @@ pub enum RunOutcome {
 pub fn run(
     vm_id: usize,
     vcpu_id: usize,
-    disk_file: Option<(usize, api::vfs_file_handles::ViVfsFileHandle, u64)>,
+    disk_file: Option<(
+        crate::persistent_disk::PersistentDisk,
+        crate::persistent_disk::DiskSpec,
+    )>,
 ) -> RunOutcome {
     let compositor_tid = sys_lookup_service(service::COMPOSITOR).unwrap_or(0);
     let (width, height) = sys_get_resolution();
