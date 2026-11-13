@@ -206,7 +206,7 @@ contexts = ["boot", "normal"]
 seal = "latched at most once in kmain on the BSP before start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "Relaxed single-writer latch set before APs start. The flag stays system-wide because no CPU runs tasks without root operation: an AP that cannot enter it parks with X86_AP_ROOT_REFUSED and never sets HART_ONLINE, so a vCPU can only be scheduled on a CPU in root operation (CP1 p02-debt-semantic #1)."
-review = "kernel/src/cpu_features.rs:enter_x86_root_on_current_cpu; kernel/src/main.rs (BSP root entry); kernel/src/sched/smp.rs:x86_secondary_main; kernel/src/sched/smp.rs:start_secondaries; kernel/src/task/cap.rs:396-399"
+review = "kernel/src/cpu_features.rs:enter_x86_root_on_current_cpu; kernel/src/main.rs (BSP root entry); kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main; kernel/src/sched/smp.rs:start_secondaries; kernel/src/task/cap.rs:396-399"
 
 [[global]]
 key = "kernel::system_config::LOGGING_EXPLICIT"
@@ -1351,7 +1351,7 @@ contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: rewritten by every switch out of / into the idle context"
 retirement = "never: lives for the whole run"
 rationale = "No lock: soundness rests on hart_id=current_hart_id() and yield_cpu executing cli before selecting, so the owning CPU cannot be re-entered mid-save; the slot is only accessed through &raw pointers. task.rs:yield_cpu is reached from the x86 timer ISR (hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch Route::Timer -> task.rs:vi_timer_tick), the IPI ISR (task.rs:vi_ipi_service), the user-fault path (vi_terminate_on_user_trap_fault) and the AP idle loop (smp.rs:x86_secondary_main, only after X86_BOOT_COMPLETE); the AP's slot is first written when x86_secondary_main enters its yield_cpu loop."
-review = "kernel/src/task.rs:boot_context_for; kernel/src/task.rs:yield_cpu; kernel/src/sched/smp.rs:x86_secondary_main"
+review = "kernel/src/task.rs:boot_context_for; kernel/src/task.rs:yield_cpu; kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main"
 
 [[global]]
 key = "kernel::task::note_task_dispatch()::REPORTED @cfg(any (target_arch = \"aarch64\" , target_arch = \"x86_64\"))"
@@ -1516,7 +1516,7 @@ contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "each slot set true once during boot/AP bring-up; never cleared"
 retirement = "never: no CPU offline path"
 rationale = "Release store / Acquire load publishes AP readiness. Readers include TLB shootdown, the RT destination in push_ready and pend_preempt under SCHEDULER (timer ISR via yield_cpu). is_rt_hart_online uses Relaxed, which is acceptable only because it gates RT routing and the ready queues it routes into are themselves Spinlock-protected statics."
-review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86_secondary_main; kernel/src/sched/smp.rs:is_rt_hart_online; kernel/src/sched/hart_local/ready.rs:destination_hart"
+review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main; kernel/src/sched/smp.rs:is_rt_hart_online; kernel/src/sched/hart_local/ready.rs:destination_hart"
 
 [[global]]
 key = "kernel::sched::smp::topology::CPU_TOPOLOGY"
@@ -1527,7 +1527,7 @@ contexts = ["boot", "ap"]
 seal = "each slot written at most once (compare_exchange from UNMAPPED) before the CPU it names is started; never cleared; a refused publish withdraws only the reverse claim it made itself"
 retirement = "never: no CPU offline path"
 rationale = "Logical->physical and physical->logical slots are AcqRel compare_exchange-claimed (reverse first), so racing publishers cannot give one physical id two logical harts or move a logical hart; a reverse entry is reported only when its forward slot confirms it. The x86 AP reads its own pair after the BSP's Release store to goto_address. No timer-IRQ access on x86_64."
-review = "kernel/src/sched/smp/topology.rs:publish; kernel/src/sched/smp/topology.rs:logical; kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86_secondary_main"
+review = "kernel/src/sched/smp/topology.rs:publish; kernel/src/sched/smp/topology.rs:logical; kernel/src/sched/smp.rs:start_secondaries; kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main"
 
 [[global]]
 key = "kernel::sched::smp::TLB_FLUSH_REQUEST"
@@ -1585,7 +1585,7 @@ rationale = "Written only by the owning CPU in yield_cpu after cli and swapped i
 review = "kernel/src/sched/smp.rs:capture_retirement_boundary; kernel/src/sched/smp.rs:complete_captured_retirement_boundary; kernel/src/task.rs:yield_cpu"
 
 [[global]]
-key = "kernel::sched::smp::X86_READY @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_READY @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::sched::smp x86 AP handshake step 1: each AP stores its own logical id after its reciprocal TLB-flush proof; the BSP waits in x86_start_ap for its current AP's id"
@@ -1593,10 +1593,10 @@ contexts = ["boot", "ap"]
 seal = "written once per AP during bring-up (logical ids 1..online, increasing); never written after X86_BOOT_COMPLETE"
 retirement = "never: lives for the whole run (inert after bring-up)"
 rationale = "Release store by the AP / Acquire bounded wait on the BSP orders the AP's hart_local::install and flush proof before qualification. APs are released one at a time and the BSP waits for exactly the id it released, so an earlier AP's value cannot satisfy a later wait (phase 07b). Only AP bring-up and the boot CPU touch it; BSP timer IRQs during the sti window do not read it."
-review = "kernel/src/sched/smp.rs:x86_secondary_main; kernel/src/sched/smp.rs:start_secondaries"
+review = "kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main; kernel/src/sched/smp.rs:start_secondaries"
 
 [[global]]
-key = "kernel::sched::smp::X86_QUALIFIED @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_QUALIFIED @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::sched::smp x86 handshake step 2: BSP stores the logical id of each AP that answered its IPI flush; that AP waits for a value >= its id; x86_substrate_qualified reads it (non-zero) for domain admission"
@@ -1604,10 +1604,10 @@ contexts = ["boot", "ap", "normal"]
 seal = "written once per AP by the BSP in x86_start_ap, increasing; never written after X86_BOOT_COMPLETE"
 retirement = "never: lives for the whole run"
 rationale = "Release/Acquire handshake between BSP and AP; monotone because APs are qualified in increasing logical order, and every online AP was qualified before it set HART_ONLINE. Afterwards a read-only gate for loader::domain_admission. No timer-IRQ access."
-review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86_substrate_qualified; kernel/src/loader/domain_admission.rs:370"
+review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/arch/x86_64/smp_bringup.rs:x86_substrate_qualified; kernel/src/loader/domain_admission.rs:370"
 
 [[global]]
-key = "kernel::sched::smp::X86_BOOT_COMPLETE @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_BOOT_COMPLETE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::sched::smp: BSP sets it at the end of start_secondaries (or the IDT fixture); gates x86_scheduler_ready for yield_cpu, vi_timer_tick and vi_ipi_service"
@@ -1615,10 +1615,10 @@ contexts = ["boot", "ap", "normal", "irq", "exception"]
 seal = "set true once by the BSP at the end of start_secondaries; never cleared"
 retirement = "never: lives for the whole run"
 rationale = "Release store / Acquire load: the AP spins on it before entering its yield_cpu loop and every timer/IPI ISR checks it before scheduling, so no ISR schedules before SMP bring-up is complete."
-review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/sched/smp.rs:x86_scheduler_ready; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:vi_ipi_service"
+review = "kernel/src/sched/smp.rs:start_secondaries; kernel/src/arch/x86_64/smp_bringup.rs:x86_scheduler_ready; kernel/src/task.rs:vi_timer_tick; kernel/src/task.rs:vi_ipi_service"
 
 [[global]]
-key = "kernel::sched::smp::X86_PREEMPT @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_PREEMPT @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cpu"
 mutation = "atomic"
 owner = "kernel::sched::smp x86 preemption mailbox: Scheduler::pend_preempt_if_needed and cpu_accounting set slot N; CPU N consumes it in vi_ipi_service"
@@ -1629,7 +1629,7 @@ rationale = "Release store then IPI; the target swaps it with AcqRel in the IPI 
 review = "kernel/src/sched/smp.rs:request_preemption; kernel/src/sched/smp.rs:take_preemption; kernel/src/sched/scheduler.rs:808; kernel/src/task.rs:vi_ipi_service"
 
 [[global]]
-key = "kernel::sched::smp::X86_SECONDARY @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_SECONDARY @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::sched::smp::x86_start_ap (BSP) writes slot `logical` (stack_top/CR3/logical/lapic_id) of a [X86SecondaryContext; MAX_HARTS] array of AtomicUsize fields; read only by the vi_x86_secondary_entry asm on that AP"
@@ -1637,10 +1637,10 @@ contexts = ["boot", "ap"]
 seal = "each slot written once by the BSP (Relaxed) before the Release store to that AP's Limine goto_address; never rewritten"
 retirement = "never: lives for the whole run (inert after the AP starts)"
 rationale = "One slot per logical AP, so no AP's handoff is rewritten for a later AP (phase 07b). The Relaxed field stores are ordered before the AP's plain reads by goto_address.store(Release) and x86 TSO; the AP reads its slot via LimineMpInfo.extra_argument before switching CR3/RSP. No timer-IRQ access."
-review = "kernel/src/sched/smp.rs:x86_start_ap; kernel/src/sched/smp.rs:X86SecondaryContext"
+review = "kernel/src/arch/x86_64/smp_bringup.rs:x86_start_ap; kernel/src/sched/smp.rs:X86SecondaryContext"
 
 [[global]]
-key = "kernel::sched::smp::global_asm!#1 @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::global_asm!#1 @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "none"
 owner = "kernel::sched::smp x86 AP entry trampoline vi_x86_secondary_entry"
@@ -1648,7 +1648,7 @@ contexts = ["ap"]
 seal = "no storage: code only"
 retirement = "never: code lives for the whole run"
 rationale = "The asm block emits only the .text symbol vi_x86_secondary_entry (cli, loads its X86_SECONDARY slot's fields via extra_argument, sets CR3/RSP, calls x86_secondary_main) and defines no .data/.bss storage. Executed only on each AP during bring-up."
-review = "kernel/src/sched/smp.rs:vi_x86_secondary_entry; kernel/src/sched/smp.rs:x86_secondary_main"
+review = "kernel/src/sched/smp.rs:vi_x86_secondary_entry; kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main"
 
 [[global]]
 key = "kernel::sched::quiesce::PARK_REQUEST"
@@ -2440,7 +2440,7 @@ debt = "Blocked, deliberately deferred: enforcing the owner admission gate needs
 
 # ---- added 2026-11-01 with the debt fixes ----
 [[global]]
-key = "kernel::sched::smp::X86_AP_ROOT_REFUSED @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::X86_AP_ROOT_REFUSED @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "sched::smp: an AP stores its own logical id in x86_secondary_main instead of X86_READY when enter_x86_root_on_current_cpu fails; x86_start_ap on the BSP compares it with the id it released"
@@ -2448,7 +2448,7 @@ contexts = ["boot", "ap"]
 seal = "written at most once (by the first refusing AP) during start_secondaries, before X86_BOOT_COMPLETE; bring-up stops at that AP"
 retirement = "never: lives for the whole run; the refusing AP stays parked"
 rationale = "Release store by the AP after it logs and before it parks with interrupts off; Acquire load by the BSP's bounded wait, which then stops bring-up and finishes topology with the APs already online instead of panicking. The AP never sets HART_ONLINE, so TLB shootdowns and deferred release never target it (CP1 p02-debt-semantic #1)."
-review = "kernel/src/sched/smp.rs:x86_secondary_main; kernel/src/sched/smp.rs:x86_start_ap"
+review = "kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main; kernel/src/arch/x86_64/smp_bringup.rs:x86_start_ap"
 
 [[global]]
 key = "hal-x86::x86_64::ist::__boot_stack_guard @cfg(target_arch = \"x86_64\")"
@@ -3087,3 +3087,7 @@ seal = "none: changes with every export and drop for the whole run"
 retirement = "never: returns to 0 when every lease is dropped"
 rationale = "reap_owner reads it Relaxed to skip EXPORTS on the common death of a task that never exported; a lease the dying owner holds was created by that task's own earlier 437, whose EXPORTS critical section and the scheduler handoffs to the retirement funnel order the increment before the read, so a dying owner never reads a stale zero for its own lease. holder_domain_revoked deliberately does not use it."
 review = "kernel/src/task/syscall/dma_export.rs:reap_owner; kernel/src/task/syscall/dma_export.rs:holder_domain_revoked"
+
+[[unreached]]
+path = "kernel/src/arch/x86_64/smp_bringup.rs"
+reason = "reached as `crate::sched::smp::x86` through `#[path = \"../arch/x86_64/smp_bringup.rs\"]`; the scanner keys that file as kernel/src/sched/../arch/x86_64/smp_bringup.rs (no `..` normalization) and scans it under that name"

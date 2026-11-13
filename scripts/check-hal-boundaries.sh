@@ -66,8 +66,8 @@ fi
 
 # Phase 14 ratchet: architecture code moves into kernel/src/arch/. These
 # ceilings only go down; lower them in the commit that moves code.
-arch_cfg_max=1222
-arch_asm_max=15
+arch_cfg_max=1190
+arch_asm_max=4
 
 count_outside_arch() {
     { grep -RIn --include='*.rs' -E "$1" kernel/src || true; } |

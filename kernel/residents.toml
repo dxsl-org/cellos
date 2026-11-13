@@ -120,6 +120,7 @@
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/smp_bringup.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/x86_64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/user_access.rs" = { category = "A", owner = "arch" }
