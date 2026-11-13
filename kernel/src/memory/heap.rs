@@ -61,9 +61,7 @@ static FAIL_SITE: [AtomicUsize; 8] = [const { AtomicUsize::new(0) }; 8];
 /// guard), so reading it would fault inside the allocator.
 #[cfg(target_arch = "riscv64")]
 unsafe fn capture_fail_site() {
-    let sp: usize;
-    // SAFETY: reading `sp` has no side effects.
-    unsafe { core::arch::asm!("mv {}, sp", out(reg) sp) };
+    let sp = crate::arch::cpu::oom_stack_pointer();
     let mut index = 0usize;
     let mut offset = 0usize;
     let mut last = 0usize;
@@ -434,9 +432,7 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     // print the stack words that point into .text (bounded, deduped).
     #[cfg(target_arch = "riscv64")]
     {
-        let sp: usize;
-        // SAFETY: reading `sp` is side-effect free.
-        unsafe { core::arch::asm!("mv {}, sp", out(reg) sp) };
+        let sp = crate::arch::cpu::oom_stack_pointer();
         let mut shown = 0usize;
         let mut offset = 0usize;
         while offset < 4096 && shown < 12 {
@@ -452,14 +448,7 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     // Panic recovery is not possible for OOM, but we loop to avoid double-panics
     // if the panic handler tries to allocate.
     loop {
-        #[cfg(target_arch = "x86_64")]
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack))
-        };
-        #[cfg(not(target_arch = "x86_64"))]
-        unsafe {
-            core::arch::asm!("wfi")
-        };
+        crate::arch::cpu::idle();
     }
 }
 

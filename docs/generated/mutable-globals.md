@@ -431,10 +431,12 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::INIT_ELF @cfg(cellos_wide)` | `kernel/src/main.rs` | static | `&[u8]` | syntactically immutable |
 | `kernel::TEST_SAFE_ROOT @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/main.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::TEST_STATE_LOCK @cfg(test)` | `kernel/src/main.rs` | static | `sync::Spinlock<()>` | cfg inactive in this profile |
+| `kernel::arch::aarch64::cpu::global_asm!#1 @cfg(target_arch = "aarch64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/aarch64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::arch::legacy::dev::ps2_keyboard::STATE @cfg(not (cellos_wide) & target_arch = "x86")` | `kernel/src/arch/legacy/../x86_64/dev/ps2_keyboard.rs` | static | `Spinlock<Ps2State>` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::FILE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU64` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::PHASE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::ROOT @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::arch::riscv64::cpu::global_asm!#1 @cfg(target_arch = "riscv64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/riscv64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::arch::riscv64::dev::iommu_riscv::BAR0 @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/iommu_riscv.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/iommu_riscv.rs` | static | `Spinlock<()>` | cfg inactive in this profile |
 | `kernel::arch::riscv64::dev::iommu_riscv::CQ_VIRT @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/iommu_riscv.rs` | static | `AtomicUsize` | cfg inactive in this profile |
@@ -486,6 +488,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::arch::riscv64::task::retirement_selftest::ROOT_EXIT_KERNEL_ATTRIBUTION @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/task/retirement_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::riscv64::task::retirement_selftest::ROOT_EXIT_QUOTA_RELEASED @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/task/retirement_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::riscv64::task::retirement_selftest::ROOT_EXIT_QUOTA_SATURATED @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/task/retirement_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
+| `kernel::arch::x86_64::cpu::global_asm!#1 @cfg(target_arch = "x86_64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/x86_64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::arch::x86_64::dev::fb_font::FONT_8X16 @cfg(target_arch = "x86_64")` | `kernel/src/arch/x86_64/dev/fb_font.rs` | static | `[[u8;16];95]` | syntactically immutable |
 | `kernel::arch::x86_64::task::x86_idt_cpl3::A_TID @cfg(target_arch = "x86_64" & feature = "x86-idt-cpl3-test")` | `kernel/src/arch/x86_64/task/x86_idt_cpl3.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::x86_64::task::x86_idt_cpl3::B_TID @cfg(target_arch = "x86_64" & feature = "x86-idt-cpl3-test")` | `kernel/src/arch/x86_64/task/x86_idt_cpl3.rs` | static | `AtomicUsize` | cfg inactive in this profile |
@@ -680,9 +683,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::snapshot_engine::KERNEL_DEVICE @cfg(any (feature = "snapshot-qualified" , test))` | `kernel/src/snapshot_engine.rs` | static | `KernelDevice` | cfg inactive in this profile |
 | `kernel::snapshot_engine::KERNEL_MEMORY @cfg(any (feature = "snapshot-qualified" , test))` | `kernel/src/snapshot_engine.rs` | static | `KernelMemory` | cfg inactive in this profile |
 | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` | `kernel/src/snapshot_engine.rs` | static | `Spinlock<Option<ScratchRegion>>` | cfg inactive in this profile |
-| `kernel::snapshot_engine::global_asm!#1 @cfg(any (feature = "snapshot-qualified" , test) & target_arch = "aarch64")` | `kernel/src/snapshot_engine.rs` | global_asm | `` | cfg inactive in this profile |
-| `kernel::snapshot_engine::global_asm!#1 @cfg(any (feature = "snapshot-qualified" , test) & target_arch = "riscv64")` | `kernel/src/snapshot_engine.rs` | global_asm | `` | cfg inactive in this profile |
-| `kernel::snapshot_engine::global_asm!#1 @cfg(any (feature = "snapshot-qualified" , test) & target_arch = "x86_64")` | `kernel/src/snapshot_engine.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::snapshot_engine::host_scratch::NEXT @cfg(any (feature = "snapshot-qualified" , test) & test)` | `kernel/src/snapshot_engine.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::snapshot_engine::host_scratch::POOL @cfg(any (feature = "snapshot-qualified" , test) & test)` | `kernel/src/snapshot_engine.rs` | static mut | `Pool` | cfg inactive in this profile |
 | `kernel::snapshot_engine::kernel_image()::__domain_text_start @cfg(any (feature = "snapshot-qualified" , test) & any (target_arch = "riscv64" , target_arch = "aarch64"))` | `kernel/src/snapshot_engine.rs` | extern static | `u8` | cfg inactive in this profile |

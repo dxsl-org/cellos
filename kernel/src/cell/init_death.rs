@@ -216,16 +216,7 @@ fn park() -> ! {
     use crate::hal::Arch;
     crate::hal::ARCH.disable_interrupts();
     loop {
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        // SAFETY: `cli; hlt` stops this hart; nothing runs afterwards.
-        unsafe {
-            core::arch::asm!("cli; hlt", options(nomem, nostack));
-        }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-        // SAFETY: `wfi` idles this hart with interrupts masked.
-        unsafe {
-            core::arch::asm!("wfi", options(nomem, nostack));
-        }
+        crate::arch::cpu::halt();
     }
 }
 

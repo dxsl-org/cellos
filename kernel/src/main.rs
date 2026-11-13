@@ -1846,18 +1846,9 @@ fn panic(info: &PanicInfo) -> ! {
     puts("[KERNEL PANIC] halting...\n");
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    // On riscv this is unreachable after system_reset.
     loop {
-        unsafe {
-            core::arch::asm!("cli; hlt", options(nomem, nostack));
-        }
-    }
-    // Fallback halt for all non-x86 arches (including riscv — unreachable after system_reset).
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-    loop {
-        unsafe {
-            core::arch::asm!("wfi", options(nomem, nostack));
-        }
+        crate::arch::cpu::halt();
     }
 }
 

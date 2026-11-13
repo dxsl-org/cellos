@@ -846,46 +846,7 @@ pub(super) fn blk_flush(caller_id: usize) -> SyscallResult {
 /// Handler for `Syscall::Shutdown` (extracted from the dispatcher).
 pub(super) fn shutdown(caller_id: usize) -> SyscallResult {
     authorize_raw_shutdown(caller_id)?;
-    #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
-    crate::qemu_exit(true);
-
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    crate::qemu_exit(true);
-
-    #[cfg(all(not(feature = "test-hooks"), target_arch = "riscv64"))]
-    unsafe {
-        // SAFETY: ecall traps to OpenSBI which powers off QEMU; no return.
-        core::arch::asm!(
-            "li a7, 0x53525354", // SBI_EXT_SRST
-            "li a6, 0",          // fid = SYSTEM_RESET
-            "li a0, 0",          // reset_type = Shutdown
-            "li a1, 0",          // reset_reason = NoReason
-            "ecall",
-            options(noreturn)
-        );
-    }
-    #[cfg(all(not(feature = "test-hooks"), target_arch = "aarch64"))]
-    unsafe {
-        // PSCI SYSTEM_OFF via HVC (QEMU virt machine default)
-        core::arch::asm!(
-            "mov x0, #0x0008",
-            "movk x0, #0x8400, lsl #16",
-            "hvc #0",
-            options(noreturn)
-        );
-    }
-    #[cfg(target_arch = "x86_64")]
-    loop {
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack));
-        }
-    }
-    #[cfg(not(cellos_wide))]
-    loop {
-        unsafe {
-            core::arch::asm!("wfi", options(nomem, nostack));
-        }
-    }
+    crate::arch::power::shutdown()
 }
 
 /// Handler for `Syscall::BlkRead` (extracted from the dispatcher).

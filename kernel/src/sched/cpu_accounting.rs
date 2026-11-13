@@ -790,17 +790,7 @@ fn mutate<T>(_: &Scheduler, f: impl FnOnce(&mut Accounting) -> Result<T>) -> Res
 pub(crate) fn fatal(error: Error) -> ! {
     // ACCOUNTING is dropped; the caller may still hold SCHEDULER. No console
     // polling, allocation or retirement is permitted on the incoming failure path.
-    unsafe {
-        core::arch::asm!("cli");
-    }
-    unsafe {
-        core::arch::asm!("out dx, eax", in("dx") 0xf4u16, in("eax") 0x20u32 + error as u32);
-    }
-    loop {
-        unsafe {
-            core::arch::asm!("hlt");
-        }
-    }
+    crate::arch::power::g1_abort(0x20u32 + error as u32)
 }
 pub(crate) fn require<T>(r: Result<T>) -> T {
     match r {
@@ -1503,14 +1493,7 @@ pub(crate) fn safe_point() {
         header.state,
         header.error
     );
-    unsafe {
-        core::arch::asm!("out dx, eax", in("dx") 0xf4u16, in("eax") 0x10u32);
-    }
-    loop {
-        unsafe {
-            core::arch::asm!("cli", "hlt");
-        }
-    }
+    crate::arch::power::g1_cutoff()
 }
 
 #[cfg(test)]

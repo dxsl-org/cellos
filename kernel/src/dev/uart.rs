@@ -410,27 +410,9 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                 }
                 #[cfg(target_arch = "x86")]
                 {
-                    let lsr = unsafe {
-                        let value: u8;
-                        core::arch::asm!(
-                            "in al, dx",
-                            in("dx") (0x3F8u16 + LSR as u16),
-                            out("al") value,
-                            options(nomem, nostack)
-                        );
-                        value
-                    };
+                    let lsr = unsafe { crate::arch::pio::inb(0x3F8u16 + LSR as u16) };
                     let byte = if lsr & _LSR_RX_READY != 0 {
-                        let value: u8;
-                        unsafe {
-                            core::arch::asm!(
-                                "in al, dx",
-                                in("dx") 0x3F8u16,
-                                out("al") value,
-                                options(nomem, nostack)
-                            );
-                        }
-                        Some(value)
+                        Some(unsafe { crate::arch::pio::inb(0x3F8u16) })
                     } else {
                         None
                     };

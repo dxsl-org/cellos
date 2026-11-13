@@ -1409,96 +1409,11 @@ pub fn reserve_scratch_region_at_boot() {
 /// never saves, or it refuses.
 const SCRATCH_STACK_SUPPORTED: bool = cfg!(cellos_wide);
 
-/// The stack pointer of the running frame, as a virtual address.
-#[cfg(target_arch = "riscv64")]
-fn stack_pointer() -> usize {
-    let sp: usize;
-    // SAFETY: reading `sp` has no effect on memory or the control flow.
-    unsafe { core::arch::asm!("mv {}, sp", out(reg) sp, options(nomem, nostack)) };
-    sp
-}
-
-/// The stack pointer of the running frame, as a virtual address.
-#[cfg(target_arch = "aarch64")]
-fn stack_pointer() -> usize {
-    let sp: usize;
-    // SAFETY: reading `sp` has no effect on memory or the control flow.
-    unsafe { core::arch::asm!("mov {}, sp", out(reg) sp, options(nomem, nostack)) };
-    sp
-}
-
-/// The stack pointer of the running frame, as a virtual address.
-#[cfg(target_arch = "x86_64")]
-fn stack_pointer() -> usize {
-    let sp: usize;
-    // SAFETY: reading `rsp` has no effect on memory or the control flow.
-    unsafe { core::arch::asm!("mov {}, rsp", out(reg) sp, options(nomem, nostack)) };
-    sp
-}
-
-/// No stack switch exists here, so [`run_on_stack`] cannot stage outside the
-/// in-flight stack; the caller's stack-pointer proof refuses the capture.
-#[cfg(not(cellos_wide))]
-fn stack_pointer() -> usize {
-    0
-}
-
-// The switch itself: `__cellos_snapshot_stack_run(new_sp, run, arg)` keeps the
-// old stack pointer in a callee-saved register, moves `sp` to the reserved
-// region, calls `run(arg)`, then restores `sp` — so the caller returns normally
-// while everything `run` does (its frame, its buffers) is in the region.
-
-#[cfg(target_arch = "riscv64")]
-core::arch::global_asm!(
-    ".globl __cellos_snapshot_stack_run",
-    "__cellos_snapshot_stack_run:",
-    "addi sp, sp, -32",
-    "sd ra, 0(sp)",
-    "sd s0, 8(sp)",
-    "mv s0, sp",
-    "mv sp, a0",
-    "mv t0, a1",
-    "mv a0, a2",
-    "jalr t0",
-    "mv sp, s0",
-    "ld s0, 8(sp)",
-    "ld ra, 0(sp)",
-    "addi sp, sp, 32",
-    "ret",
-);
-
-#[cfg(target_arch = "aarch64")]
-core::arch::global_asm!(
-    ".globl __cellos_snapshot_stack_run",
-    "__cellos_snapshot_stack_run:",
-    "stp x29, x30, [sp, #-32]!",
-    "str x19, [sp, #16]",
-    "mov x29, sp",
-    "mov sp, x0",
-    "mov x19, x1",
-    "mov x0, x2",
-    "blr x19",
-    "mov sp, x29",
-    "ldr x19, [sp, #16]",
-    "ldp x29, x30, [sp], #32",
-    "ret",
-);
-
-#[cfg(target_arch = "x86_64")]
-core::arch::global_asm!(
-    ".text",
-    ".globl __cellos_snapshot_stack_run",
-    "__cellos_snapshot_stack_run:",
-    "push rbp",
-    "mov rbp, rsp",
-    "mov rsp, rdi",
-    "mov rax, rsi",
-    "mov rdi, rdx",
-    "call rax",
-    "mov rsp, rbp",
-    "pop rbp",
-    "ret",
-);
+// The switch itself is `crate::arch::cpu`'s `__cellos_snapshot_stack_run(new_sp,
+// run, arg)`: it keeps the old stack pointer in a callee-saved register, moves
+// `sp` to the reserved region, calls `run(arg)`, then restores `sp` — so the
+// caller returns normally while everything `run` does (its frame, its buffers)
+// is in the region.
 
 #[cfg(cellos_wide)]
 unsafe extern "C" {
@@ -2830,7 +2745,7 @@ fn capture_window(
     scratch: &mut FrozenScratch,
     layout: RamLayout,
 ) -> Result<u32, SnapshotError> {
-    let sp = stack_pointer();
+    let sp = crate::arch::cpu::stack_pointer();
     if !SCRATCH_STACK_SUPPORTED || !scratch.region.owns_stack(sp) {
         // Not running on the workspace the stage-check approved: refuse rather
         // than save the caller's own in-flight stack.
@@ -2979,9 +2894,7 @@ fn halt_mixed_ram(reason: &'static str) -> ! {
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
     loop {
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        unsafe {
-            core::arch::asm!("wfi", options(nomem, nostack));
-        }
+        crate::arch::cpu::halt();
         #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
         core::hint::spin_loop();
     }
@@ -5254,7 +5167,7 @@ mod tests {
 
     #[test]
     fn snapshot_frozen_window_runs_on_the_reserved_scratch_stack() {
-        let here = stack_pointer();
+        let here = crate::arch::cpu::stack_pointer();
         let disk = FakeDisk::new();
         let ram = ram_with_image();
         let mut scratch = FrozenScratch::with_bounds(FRAMES, fake_run_bound());
@@ -5295,17 +5208,17 @@ mod tests {
     #[test]
     fn snapshot_stack_switch_returns_to_the_caller() {
         let region = host_scratch::region(SCRATCH_STACK_BYTES);
-        let caller_sp = stack_pointer();
+        let caller_sp = crate::arch::cpu::stack_pointer();
         // The closure's own state stays on the caller's stack; only execution
         // moves.
-        let observed = unsafe { run_on_stack(region.stack_top(), stack_pointer) };
+        let observed = unsafe { run_on_stack(region.stack_top(), crate::arch::cpu::stack_pointer) };
         assert!(
             region.owns_stack(observed),
             "the switched frame must run in the workspace: sp={observed:#x}"
         );
         assert!(!region.owns_stack(caller_sp));
         assert_eq!(
-            stack_pointer(),
+            crate::arch::cpu::stack_pointer(),
             caller_sp,
             "the caller's stack must be restored"
         );

@@ -4,6 +4,10 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::hypervisor::pending_irqs` is now `crate::arch::hypervisor::pending_irqs`).
 
+pub mod power;
+
+pub mod cpu;
+
 pub mod clock;
 
 pub mod irq;
