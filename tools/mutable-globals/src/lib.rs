@@ -451,7 +451,7 @@ impl<'ast> Visit<'ast> for FileVisitor<'_, '_> {
         let mut scope = self.scope.clone();
         scope.push(name.clone());
         let (file, mod_dir) = if let Some(p) = path_attr(&i.attrs) {
-            let f = self.file_dir.join(p);
+            let f = normalize(&self.file_dir.join(p));
             let d = f.parent().map(Path::to_path_buf).unwrap_or_default();
             (f, d)
         } else {
@@ -561,6 +561,22 @@ pub struct Discovery {
 
 fn rel(root: &Path, p: &Path) -> String {
     p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/")
+}
+
+/// Lexically resolve `..` (a `#[path = "../x.rs"]` module), so a file is keyed
+/// by one name however it is reached. `components()` already drops interior
+/// `.`; a leading `.` (relative crate root) stays.
+fn normalize(p: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        if c == Component::ParentDir && matches!(out.components().next_back(), Some(Component::Normal(_))) {
+            out.pop();
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {

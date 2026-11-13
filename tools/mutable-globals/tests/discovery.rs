@@ -203,3 +203,14 @@ fn unreached_source_files_must_be_acknowledged_and_acknowledgements_must_stay_tr
     let out = check(f.root(), &f.config(&format!("{ack}{}", entry("k::orphan::HIDDEN"))));
     assert_eq!(out.problems, ["stale unreached acknowledgement `k/src/orphan.rs`"]);
 }
+
+#[test]
+fn a_parent_relative_path_module_reaches_its_file_by_the_normalized_name() {
+    let f = Fixture::new("dotdot");
+    f.file("k/src/lib.rs", "mod b;\n")
+        .file("k/src/b/mod.rs", "#[path = \"../arch/x_impl.rs\"] mod x;\n")
+        .file("k/src/arch/x_impl.rs", "static X: T = T;\n");
+    let out = check(f.root(), &f.config(&entry("k::b::x::X")));
+    assert!(out.problems.is_empty(), "{:?}", out.problems);
+    assert!(out.discovery.reached.contains("k/src/arch/x_impl.rs"));
+}

@@ -10,7 +10,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 3 | `CONSOLE_DRV` | `kernel::dev::console_drv::CONSOLE` (kernel/src/dev/console_drv.rs) |
 | 4 | `PENDING_ASCII` | `kernel::dev::console_drv::PENDING_ASCII` (kernel/src/dev/console_drv.rs) |
 | 5 | `PCI_DEVICES` | `kernel::dev::pcie_ecam::PCI_DEVICES` (kernel/src/dev/pcie_ecam.rs) |
-| 6 | `PS2_STATE` | `kernel::arch::legacy::dev::ps2_keyboard::STATE @cfg(not (cellos_wide) & target_arch = "x86")` (kernel/src/arch/legacy/../x86_64/dev/ps2_keyboard.rs, cfg inactive here); `kernel::arch::x86_64::dev::ps2_keyboard::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/ps2_keyboard.rs) |
+| 6 | `PS2_STATE` | `kernel::arch::legacy::dev::ps2_keyboard::STATE @cfg(not (cellos_wide) & target_arch = "x86")` (kernel/src/arch/x86_64/dev/ps2_keyboard.rs, cfg inactive here); `kernel::arch::x86_64::dev::ps2_keyboard::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/ps2_keyboard.rs) |
 | 7 | `UART_SERIAL` | `kernel::dev::uart::SERIAL` (kernel/src/dev/uart.rs) |
 | 8 | `VIFS1` | `kernel::fs::VIFS1` (kernel/src/fs.rs) |
 | 9 | `TEST_STATE_LOCK` | `kernel::TEST_STATE_LOCK @cfg(test)` (kernel/src/main.rs, cfg inactive here) |

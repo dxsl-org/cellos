@@ -3088,6 +3088,3 @@ retirement = "never: returns to 0 when every lease is dropped"
 rationale = "reap_owner reads it Relaxed to skip EXPORTS on the common death of a task that never exported; a lease the dying owner holds was created by that task's own earlier 437, whose EXPORTS critical section and the scheduler handoffs to the retirement funnel order the increment before the read, so a dying owner never reads a stale zero for its own lease. holder_domain_revoked deliberately does not use it."
 review = "kernel/src/task/syscall/dma_export.rs:reap_owner; kernel/src/task/syscall/dma_export.rs:holder_domain_revoked"
 
-[[unreached]]
-path = "kernel/src/arch/x86_64/smp_bringup.rs"
-reason = "reached as `crate::sched::smp::x86` through `#[path = \"../arch/x86_64/smp_bringup.rs\"]`; the scanner keys that file as kernel/src/sched/../arch/x86_64/smp_bringup.rs (no `..` normalization) and scans it under that name"
