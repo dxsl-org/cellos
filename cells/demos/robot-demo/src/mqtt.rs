@@ -5,11 +5,11 @@
 
 extern crate alloc;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::io::println;
 use ostd::ipc::IpcError;
 use ostd::service::provider_tid;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 
 // 200ms per net-service request (system_ticks() runs at 100 Hz = 10ms per tick).
 // Each call gets a fresh 20-tick budget covering admission and the reply.

@@ -68,13 +68,13 @@ Run with an explicit host target (the workspace default is RISC-V bare-metal):
 
 ```bash
 # Windows
-cargo test -p types -p api --target x86_64-pc-windows-msvc
+cargo test -p types -p abi -p wire --target x86_64-pc-windows-msvc
 
 # Linux / macOS
-cargo test -p types -p api --target x86_64-unknown-linux-gnu
+cargo test -p types -p abi -p wire --target x86_64-unknown-linux-gnu
 ```
 
-`libs/types` and `libs/api` use `#![cfg_attr(not(test), no_std)]` so that the
+`libs/types`, `libs/abi` and `libs/wire` use `#![cfg_attr(not(test), no_std)]` so that the
 `#[test]` harness can link against `std` on the host while production builds
 remain bare-metal.
 
@@ -124,7 +124,7 @@ cargo test --manifest-path tests/integration/Cargo.toml \
 rustup component add llvm-tools-preview
 
 # Run coverage (host-runnable crates only)
-cargo llvm-cov --target x86_64-unknown-linux-gnu -p types -p api --html
+cargo llvm-cov --target x86_64-unknown-linux-gnu -p types -p abi -p wire --html
 # Report at: target/llvm-cov/html/index.html
 ```
 

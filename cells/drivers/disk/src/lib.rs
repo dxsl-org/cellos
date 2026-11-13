@@ -9,9 +9,9 @@ extern crate alloc;
 // dependency build never sees it) lets `std` provide both, and the guest keeps
 // `no_std` unchanged.
 
+use abi::block::ViBlockDevice;
 use alloc::vec;
 use alloc::vec::Vec;
-use api::block::ViBlockDevice;
 use ostd::prelude::*;
 
 // 4MB RamDisk (Reduced from 40MB to be safer on heap)

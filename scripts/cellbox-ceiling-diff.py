@@ -41,7 +41,9 @@ def strip_comments(text: str) -> str:
 
 
 def macro_body(text: str, name: str, opener: str, closer: str) -> str:
-    match = re.search(r"\b(?:api::)?" + re.escape(name) + r"\s*!\s*" + re.escape(opener), text)
+    # The baseline shell spells the macro `api::` (the crate before Phase 13), the
+    # candidate `abi::`.
+    match = re.search(r"\b(?:(?:api|abi)::)?" + re.escape(name) + r"\s*!\s*" + re.escape(opener), text)
     if not match:
         raise ExtractionError(f"no {name}!{opener}...{closer} invocation found")
     start = match.end()

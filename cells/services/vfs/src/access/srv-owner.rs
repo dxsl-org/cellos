@@ -10,7 +10,7 @@
 //! chosen by its spawner, so neither says which *program* is calling. The
 //! kernel measures the image at admission and reports, per live `(cell,
 //! generation)`, the anchor that verified its signature and the name in its
-//! signed `__ViCell_image` section (`api::cell_image`). An unsigned image
+//! signed `__ViCell_image` section (`abi::cell_image`). An unsigned image
 //! carries no name, so it never matches, whatever path it came from.
 //!
 //! Anchors: the release anchor always qualifies; the dev anchor qualifies
@@ -28,7 +28,7 @@
 //! rule stops in-system Cells only.
 
 use crate::caller::Caller;
-use api::cell_image::{CellImage, ANCHOR_DEV, ANCHOR_RELEASE};
+use abi::cell_image::{CellImage, ANCHOR_DEV, ANCHOR_RELEASE};
 
 const NAMESPACE: &str = "/srv/sshd";
 const PREFIX: &str = "/srv/sshd/";

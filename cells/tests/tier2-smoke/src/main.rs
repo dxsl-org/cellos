@@ -37,16 +37,16 @@ const GRANT_LIFECYCLE_OPEN: bool = true;
 #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 const GRANT_LIFECYCLE_OPEN: bool = false;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
 // `GrantSlice`/`GrantUnregister` are declared on every target so one manifest
 // serves both postures; the closed branch never calls them.
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Yield,
     GetTime,

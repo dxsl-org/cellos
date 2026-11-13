@@ -2,10 +2,10 @@
 
 pub(crate) mod ascii;
 
-use api::cluster::{CellNetId, PeerTicket};
 use ascii::{
     eq_slice, parse_addr, parse_hex32, parse_ipv4, parse_u16_ascii, starts_with, trim_ascii,
 };
+use wire::cluster::{CellNetId, PeerTicket};
 
 pub const MAX_PEERS: usize = 8;
 

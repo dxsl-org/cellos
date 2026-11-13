@@ -13,7 +13,7 @@
 //! dispatches them to the currently focused cell.
 //!
 //! ## IPC protocol (inbound from kernel, sender == 0)
-//! Producer frames, wire in `api::services::proto::input`:
+//! Producer frames, wire in `wire::proto::input`:
 //! ```text
 //! byte[0]   = event kind: EV_KEY, EV_REL, EV_ABS, EV_ASCII (or an EV_DEVICE frame)
 //! byte[1..5]= code  (u32 LE: scancode, REL_*, ABS_* axis)
@@ -22,12 +22,12 @@
 //! Sender 0 is the kernel; these raw frames bypass postcard decoding entirely.
 //!
 //! ## Focus IPC (inbound from compositor/shell, sender > 0)
-//! Typed `InputRequest` encoded with postcard — see `api::ipc::InputRequest`.
+//! Typed `InputRequest` encoded with postcard — see `wire::ipc::InputRequest`.
 //! Sender > 0 always routes to postcard decode; opcode collisions with kernel
 //! frames are impossible by construction.
 //!
 //! ## IPC protocol (outbound to focused cell)
-//! See `dispatcher::Dispatcher::dispatch` and `api::input::encode_event`.
+//! See `dispatcher::Dispatcher::dispatch` and `wire::input::encode_event`.
 
 extern crate alloc;
 
@@ -40,15 +40,8 @@ mod mouse_state;
 mod session;
 mod virtio_device;
 
+use abi::syscall::service;
 use alloc::vec::Vec;
-use api::input::{InputEvent, KeyEvent, KeyState, KeySym};
-use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
-use api::services::proto::input::{
-    DEVICE_FRAME_LEN, EV_ABS, EV_ASCII, EV_DEVICE, EV_KEY, EV_REL, OP_HID_DEVICE_REMOVED,
-    OP_SET_LEDS, PRODUCER_FRAME_LEN,
-};
-use api::services::vmm_session as evdev;
-use api::syscall::service;
 use dispatcher::Dispatcher;
 use focus_routes::Requester;
 use layout_us_qwerty::{key_state_from_evdev, modifier_for_scancode, translate};
@@ -60,10 +53,17 @@ use ostd::syscall::{
     sys_try_recv_attested, sys_try_send, sys_yield, SyscallResult,
 };
 use virtio_device::{find_and_init_inputs, InputDevice};
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+use wire::input::{InputEvent, KeyEvent, KeyState, KeySym};
+use wire::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
+use wire::proto::input::{
+    DEVICE_FRAME_LEN, EV_ABS, EV_ASCII, EV_DEVICE, EV_KEY, EV_REL, OP_HID_DEVICE_REMOVED,
+    OP_SET_LEDS, PRODUCER_FRAME_LEN,
+};
+use wire::vmm_session as evdev;
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 // LookupServiceBound: the dispatcher resolves the compositor TID for mouse routing.
 // SetTimer: the owner loop parks for one tick when fully idle instead of spinning.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     TrySend,
     TryRecv,
@@ -144,7 +144,7 @@ pub fn main() {
         // UART ESC deadlines and physical-device polling on the same owner loop.
         // The kernel overwrites the caller trailer; clear it before each attempt
         // so an empty receive can never reuse a previous principal.
-        buf[IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN..].fill(0);
+        buf[IPC_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN..].fill(0);
         match sys_try_recv_attested(0, &mut buf) {
             SyscallResult::Ok(0) => {
                 // Real timeout — no IPC input.
@@ -161,7 +161,7 @@ pub fn main() {
                 );
                 // The buffer carried a relayed keystroke (possibly a typed secret): wipe it before reuse.
                 ostd::session::zeroize(
-                    &mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN],
+                    &mut buf[..IPC_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN],
                 );
             }
             SyscallResult::Ok(sender) => {
@@ -177,7 +177,7 @@ pub fn main() {
                 );
                 // SessionV1 records (typed text, raw bytes, paste chunks) must not linger in the receive buffer.
                 ostd::session::zeroize(
-                    &mut buf[..IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN],
+                    &mut buf[..IPC_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN],
                 );
             }
             _ => {}
@@ -275,7 +275,7 @@ impl EventSources {
         self.tids[..self.len]
             .iter()
             .zip(self.kinds[..self.len].iter())
-            .any(|(&source, &kind)| source == tid && kind == api::ipc::input_source::USB_HID_HOST)
+            .any(|(&source, &kind)| source == tid && kind == wire::ipc::input_source::USB_HID_HOST)
     }
 
     /// Record the kernel-verified USB HID producer.
@@ -287,7 +287,7 @@ impl EventSources {
             return self.kinds[index] == kind;
         }
         if tid == 0
-            || kind != api::ipc::input_source::USB_HID_HOST
+            || kind != wire::ipc::input_source::USB_HID_HOST
             || !ostd::service::sender_is_live_provider(service::USB_HID_PRODUCER, tid)
             || self.len == MAX_EVENT_SOURCES
         {
@@ -481,7 +481,7 @@ fn handle_message(
 
 /// Handle a raw VirtIO event pushed by the kernel (sender == 0).
 ///
-/// Wire format (`api::services::proto::input`): `[opcode:1][code:4 LE][value:4 LE]`
+/// Wire format (`wire::proto::input`): `[opcode:1][code:4 LE][value:4 LE]`
 /// EV_KEY = keyboard key or mouse button via BTN_* scancode ≥ 0x110
 /// EV_REL = relative mouse: REL_X/Y/WHEEL
 /// EV_ABS = absolute mouse: ABS_X/Y in guest framebuffer pixels
@@ -625,15 +625,15 @@ fn handle_typed_request(
     sources: &mut EventSources,
 ) {
     let mut resp_buf = [0u8; 64];
-    let payload_end = IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+    let payload_end = IPC_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN;
     if let Ok(InputRequest::SessionV1(record)) =
-        api::ipc::decode::<InputRequest<'_>>(&buf[..payload_end])
+        wire::ipc::decode::<InputRequest<'_>>(&buf[..payload_end])
     {
-        let caller = api::caller_identity::CallerIdentity::from_recv_buf(buf);
+        let caller = abi::caller_identity::CallerIdentity::from_recv_buf(buf);
         dispatcher.sessions.request(record, caller, sender);
         return;
     }
-    match api::ipc::decode::<InputRequest<'_>>(&buf[..payload_end]) {
+    match wire::ipc::decode::<InputRequest<'_>>(&buf[..payload_end]) {
         Ok(InputRequest::SessionV1(_)) => {}
         Ok(InputRequest::SetFocus { cell_tid: _ }) => {
             if dispatcher.sessions.physical_active() {
@@ -650,7 +650,7 @@ fn handle_typed_request(
         }
         Ok(InputRequest::GetFocus) => {
             let focused = dispatcher.focus() as u32;
-            if let Ok(encoded) = api::ipc::encode(&InputResponse::Focus(focused), &mut resp_buf) {
+            if let Ok(encoded) = wire::ipc::encode(&InputResponse::Focus(focused), &mut resp_buf) {
                 if let Some(operation) = ostd::ipc::current() {
                     let _ = ostd::ipc::reply(operation, encoded);
                 } else {
@@ -686,12 +686,12 @@ fn handle_typed_request(
 /// equal the incarnation the kernel binds to the well-known id, which only
 /// trusted init or the supervisor can register.
 fn focus_requester(buf: &[u8; IPC_BUF_SIZE], sender: usize) -> Requester {
-    let mut record = [0u8; api::service_binding::SERVICE_BINDING_LEN];
+    let mut record = [0u8; abi::service_binding::SERVICE_BINDING_LEN];
     let Some(binding) = ostd::syscall::sys_lookup_service_bound(service::COMPOSITOR, &mut record)
     else {
         return Requester::ClientHeadless;
     };
-    let caller = api::caller_identity::CallerIdentity::from_recv_buf(buf);
+    let caller = abi::caller_identity::CallerIdentity::from_recv_buf(buf);
     let is_compositor = binding.tid == sender as u64
         && caller.is_some_and(|caller| {
             caller.cell_id == binding.cell_id && caller.generation == binding.generation
@@ -706,7 +706,7 @@ fn focus_requester(buf: &[u8; IPC_BUF_SIZE], sender: usize) -> Requester {
 #[cfg(test)]
 mod hid_device_tests {
     use super::HidDeviceStates;
-    use api::input::KeyState;
+    use wire::input::KeyState;
 
     #[test]
     fn disconnect_releases_only_its_own_pressed_keys() {

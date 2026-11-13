@@ -4,11 +4,11 @@ use crate::child_context::{ChildContext, GrantSlot};
 use crate::service::provider_tid;
 use crate::syscall::{sys_recv_timeout, SyscallResult};
 use crate::*;
+use abi::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
+use abi::syscall::service;
 use alloc::string::String;
-use api::cell_session::{ObjectRefV1, Status, TRANSFER_MAX};
-use api::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
-use api::ipc::IPC_BUF_SIZE;
-use api::syscall::service;
+use wire::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
+use wire::ipc::IPC_BUF_SIZE;
 
 // ─── embedded-io glue ────────────────────────────────────────────────────────
 

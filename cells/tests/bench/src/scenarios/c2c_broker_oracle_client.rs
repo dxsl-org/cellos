@@ -18,7 +18,7 @@ use support::{
     wait_start,
 };
 
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
+const IPC_BUF_SIZE: usize = wire::ipc::IPC_BUF_SIZE;
 const ECHO_BODY: &[u8] = b"c2c-oracle";
 const ASYNC_BATCH_CAP: usize = 4;
 

@@ -6,7 +6,7 @@
 //!   `bench hotswap-prime [cached]` → `hotswap hotswap-demo /bin/hotswap-demo-v2`
 //!   → `bench hotswap-verify N`.
 
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
 

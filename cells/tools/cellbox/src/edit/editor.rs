@@ -11,12 +11,12 @@
 use alloc::format;
 use alloc::string::String;
 
-use api::ipc::{Observation, SaveExpect};
 use ostd::ViError;
 use terminal_sdk::codec::{KeyState, KeySymbol};
 use text_engine::editor::highlight::Lang;
 use text_engine::editor::{EditBuffer, EditError, Found, MAX_QUERY};
 use vitui::event::{Event, Key};
+use wire::ipc::{Observation, SaveExpect};
 
 /// Longest Save As path typed at the prompt.
 pub const MAX_PATH: usize = 4096;

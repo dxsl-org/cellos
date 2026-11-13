@@ -47,7 +47,7 @@ extern crate ostd;
 
 use alloc::{boxed::Box, string::String, vec, vec::Vec};
 
-use api::display::PixelFormat;
+use wire::display::PixelFormat;
 
 use viui::{
     animation::AnimatedSignal,

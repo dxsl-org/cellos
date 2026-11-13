@@ -1,6 +1,6 @@
-use api::ipc::IPC_BUF_SIZE;
+use wire::ipc::IPC_BUF_SIZE;
 
-pub const LOCAL_PAYLOAD_CAP: usize = IPC_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+pub const LOCAL_PAYLOAD_CAP: usize = IPC_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN;
 pub const REQUEST_HEADER_LEN: usize = 10;
 pub const RESPONSE_HEADER_LEN: usize = 20;
 pub const MAX_REQUEST_BODY: usize = LOCAL_PAYLOAD_CAP - REQUEST_HEADER_LEN;

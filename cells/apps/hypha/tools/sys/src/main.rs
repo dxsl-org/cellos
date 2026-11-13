@@ -26,8 +26,8 @@ use ostd::runtime::CellRuntime;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_exit, sys_get_procs};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, SendGather, Recv, Log, GetProcs, LookupServiceBound];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Send, SendGather, Recv, Log, GetProcs, LookupServiceBound];
 
 ostd::cell_main!(cell_main);
 
@@ -65,7 +65,7 @@ fn handle(ctx: &AppContext, sender: usize, data: &[u8]) {
 fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
     match name {
         "list_cells" => {
-            let mut procs = [api::syscall::ProcessInfo::default(); 32];
+            let mut procs = [abi::syscall::ProcessInfo::default(); 32];
             let count = match sys_get_procs(&mut procs) {
                 Ok(n) => n,
                 Err(_) => {
@@ -111,11 +111,11 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
         "lookup_service" => {
             let svc_name = args_extract_str(args_json, "name").unwrap_or("vfs");
             let sid: u16 = match svc_name {
-                "vfs" | "VFS" => api::syscall::service::VFS,
-                "net" | "NET" => api::syscall::service::NET,
-                "input" | "INPUT" => api::syscall::service::INPUT,
-                "config" | "CONFIG" => api::syscall::service::CONFIG,
-                "compositor" | "COMPOSITOR" => api::syscall::service::COMPOSITOR,
+                "vfs" | "VFS" => abi::syscall::service::VFS,
+                "net" | "NET" => abi::syscall::service::NET,
+                "input" | "INPUT" => abi::syscall::service::INPUT,
+                "config" | "CONFIG" => abi::syscall::service::CONFIG,
+                "compositor" | "COMPOSITOR" => abi::syscall::service::COMPOSITOR,
                 other => {
                     return AgentToolResponse::Err {
                         message: alloc::format!("unknown service name: {}", other),

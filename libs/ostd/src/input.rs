@@ -23,15 +23,15 @@ extern crate alloc;
 use crate::service::provider_tid;
 use alloc::vec::Vec;
 
-// Re-export api::input types so consumers can use `ostd::input::KeyState` etc.
-pub use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
+// Re-export wire::input types so consumers can use `ostd::input::KeyState` etc.
+pub use wire::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
 
 use crate::ipc::post;
 use crate::syscall::{sys_try_recv, SyscallResult};
-use api::{
+use abi::syscall::service;
+use wire::{
     input::{decode_event, INPUT_EVENT_OPCODE},
     ipc::{InputRequest, IPC_BUF_SIZE},
-    syscall::service,
 };
 
 /// Register this cell as the keyboard/mouse focus recipient.
@@ -60,7 +60,7 @@ pub fn request_focus() -> bool {
 
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = InputRequest::SetFocus { cell_tid: 0 };
-    let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else {
+    let Ok(encoded) = wire::ipc::encode(&req, &mut req_buf) else {
         return false;
     };
 
@@ -81,7 +81,7 @@ pub fn release_focus() {
     };
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = InputRequest::ClearFocus { cell_tid: 0 };
-    let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else {
+    let Ok(encoded) = wire::ipc::encode(&req, &mut req_buf) else {
         return;
     };
     let _ = post(input_tid, encoded);

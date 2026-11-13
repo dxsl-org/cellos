@@ -36,7 +36,7 @@ SECTIONS
         KEEP(*(__ViCell_manifest))
     }
 
-    /* Syscall allowlist emitted by api::declare_syscalls!(). */
+    /* Syscall allowlist emitted by abi::declare_syscalls!(). */
     __ViCell_syscalls : ALIGN(4096) {
         KEEP(*(__ViCell_syscalls))
     }

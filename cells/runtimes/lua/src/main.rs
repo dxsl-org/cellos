@@ -4,19 +4,19 @@
 #![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
-extern crate api;
 extern crate ostd;
+extern crate posix_shim;
 
 // Lua Cell has no direct network device access; vnet delegates via net service IPC.
 // Scripts load from VFS only; io.popen/os.execute/debug are stripped at init.
 // Tier 2 (own address space): the interpreter is C with no bytecode verifier,
 // running untrusted VFS/network-sourced scripts, so a memory-safety bug in it
 // must stay inside this cell rather than reach the shared address space.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 // Read + RecvTimeout: console input for the interactive REPL (`ostd::repl::Repl`).
 // Read is fd 0 (a terminal session's stdin stream, or the legacy console
@@ -25,7 +25,7 @@ api::declare_manifest!(
 // child of a shell outside a terminal session. Without them the REPL hears
 // nothing. Read on any other fd needs a descriptor this cell cannot obtain
 // (no Open), so the grant is console input only.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

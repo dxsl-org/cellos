@@ -3,16 +3,16 @@
 //! Entries are minted once, linked to the source, and sealed but unpublished.
 //! The kernel's immutable issuer receipt is the only publication decision. Every
 //! ordinary ingress reconciles that decision before looking up a directory.
-use alloc::collections::{BTreeMap, BTreeSet};
-use alloc::vec::Vec;
-use api::cell_session::{
+use abi::cell_session::{
     ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, RequestHeaderV1, ResultHeaderV1,
     Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
 };
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsResponse, IPC_BUF_SIZE};
+use abi::dir_handles::ViDirHandle;
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
 use sha2::{Digest, Sha256};
 use types::CellId;
+use wire::ipc::{VfsResponse, IPC_BUF_SIZE};
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
@@ -363,9 +363,9 @@ impl PreparedCwd {
             return Err(Status::QuotaExceeded);
         }
         let charge = RESERVATION_CHARGE + path.len() as u64;
-        let mut binding = [0u8; api::service_binding::SERVICE_BINDING_LEN];
+        let mut binding = [0u8; abi::service_binding::SERVICE_BINDING_LEN];
         let issuer =
-            ostd::syscall::sys_lookup_service_bound(api::syscall::service::VFS, &mut binding)
+            ostd::syscall::sys_lookup_service_bound(abi::syscall::service::VFS, &mut binding)
                 .ok_or(Status::Revoked)?;
         let id = if self.next == 0 { 1 } else { self.next };
         self.next = id.checked_add(1).ok_or(Status::QuotaExceeded)?;
@@ -697,7 +697,7 @@ fn validate_grant(bytes: &[u8], expected: ObjectRefV1) -> Result<(), Status> {
         || r.u16()? != 0
         || r.u16()? != 4
         || r.u16()? != 0
-        || r.u64()? != api::syscall::service::VFS as u64
+        || r.u64()? != abi::syscall::service::VFS as u64
         || r.reference()? != expected
         || r.u64()? != 0
     {
@@ -1406,7 +1406,7 @@ mod tests {
         w.u16(0).unwrap();
         w.u16(4).unwrap();
         w.u16(0).unwrap();
-        w.u64(api::syscall::service::VFS as u64).unwrap();
+        w.u64(abi::syscall::service::VFS as u64).unwrap();
         w.reference(reference).unwrap();
         w.u64(0).unwrap();
         assert_eq!(validate_grant(&bytes, reference), Ok(()));

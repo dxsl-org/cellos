@@ -1,15 +1,15 @@
 //! Owned, nonblocking IPC submissions for the HTTP reactor.
 //! Every request is copied into the kernel's bounded operation queue before returning.
 
-use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
 use serde::Serialize;
+use wire::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 pub(crate) type Op = IpcOpId;
 
 pub(crate) fn submit<T: Serialize>(peer: usize, req: &T) -> Result<Op, IpcSubmitError> {
     let mut bytes = [0u8; IPC_BUF_SIZE];
-    let encoded = api::ipc::encode(req, &mut bytes).map_err(|_| IpcSubmitError::InvalidRequest)?;
+    let encoded = wire::ipc::encode(req, &mut bytes).map_err(|_| IpcSubmitError::InvalidRequest)?;
     ipc::submit(peer, encoded)
 }
 
@@ -28,11 +28,11 @@ pub(crate) fn take(op: Op, reply: &mut [u8; IPC_BUF_SIZE]) -> Option<Result<&[u8
 }
 
 pub(crate) fn net<'a>(reply: &'a [u8]) -> Option<NetResponse<'a>> {
-    api::ipc::decode(reply).ok()
+    wire::ipc::decode(reply).ok()
 }
 
 pub(crate) fn vfs<'a>(reply: &'a [u8]) -> Option<VfsResponse<'a>> {
-    api::ipc::decode(reply).ok()
+    wire::ipc::decode(reply).ok()
 }
 
 pub(crate) fn send_net(peer: usize, req: &NetRequest<'_>) -> Result<Op, IpcSubmitError> {

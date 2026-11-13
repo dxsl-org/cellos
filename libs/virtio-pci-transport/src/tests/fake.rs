@@ -4,7 +4,7 @@
 //! strides with `notify_off_multiplier` 4.
 
 use crate::{AccessPlatform, BarMapper, VirtioPciTransport};
-use api::pcie_function::{
+use abi::pcie_function::{
     PcieBar, PcieCap, ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64, PCIE_FUNCTION_BARS,
 };
 use core::ptr::NonNull;

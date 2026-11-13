@@ -10,13 +10,13 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::net::NetError;
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::{service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
 use ostd::syscall::sys_yield;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::net::NetError;
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -25,7 +25,7 @@ const NET_DENIED: &str = "permission denied (no network right)";
 /// its own DNS query deadline.
 const NET_CALL_TICKS: u64 = 1_000;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
+abi::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
 

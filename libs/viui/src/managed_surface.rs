@@ -7,7 +7,7 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, rc::Rc};
-use api::display::{WindowCloseRequest, WindowConfigure};
+use wire::display::{WindowCloseRequest, WindowConfigure};
 use ostd::display::{poll_surface_events, ViSurface};
 
 use crate::app_runner::ViApp;

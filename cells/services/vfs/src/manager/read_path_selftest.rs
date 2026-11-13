@@ -5,10 +5,10 @@
 use alloc::format;
 use alloc::vec::Vec;
 
-use api::dir_handles::ViDirHandle;
-use api::ipc::vfs_dir_page::{self, entries};
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use abi::dir_handles::ViDirHandle;
 use types::CellId;
+use wire::ipc::vfs_dir_page::{self, entries};
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::{handle, MAX_INLINE_PAYLOAD};

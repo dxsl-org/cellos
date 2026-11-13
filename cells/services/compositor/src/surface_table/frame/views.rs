@@ -1,6 +1,6 @@
 //! IPC view lifecycle: create, destroy and select a tab view.
 
-use api::display::{CreateViewRequest, FramePlacement, ViewOpResponse, ViewOpResult, ViewRef};
+use wire::display::{CreateViewRequest, FramePlacement, ViewOpResponse, ViewOpResult, ViewRef};
 
 use super::{Frame, FrameRegistry, Reselected, View, MAX_FRAMES, MAX_VIEWS_PER_FRAME};
 
@@ -94,7 +94,7 @@ impl FrameRegistry {
         let frame_generation = self.frames.get(&frame_id).map_or(1, |f| f.generation);
 
         Ok(ViewOpResponse {
-            opcode: api::display::compositor_ops::CREATE_VIEW,
+            opcode: wire::display::compositor_ops::CREATE_VIEW,
             result: ViewOpResult::Success,
             _pad: [0; 2],
             frame_id,
@@ -142,7 +142,7 @@ impl FrameRegistry {
 
         Ok((
             ViewOpResponse {
-                opcode: api::display::compositor_ops::DESTROY_VIEW,
+                opcode: wire::display::compositor_ops::DESTROY_VIEW,
                 result: ViewOpResult::Success,
                 _pad: [0; 2],
                 frame_id,
@@ -192,7 +192,7 @@ impl FrameRegistry {
         });
 
         Ok(ViewOpResponse {
-            opcode: api::display::compositor_ops::SELECT_VIEW,
+            opcode: wire::display::compositor_ops::SELECT_VIEW,
             result: ViewOpResult::Success,
             _pad: [0; 2],
             frame_id,

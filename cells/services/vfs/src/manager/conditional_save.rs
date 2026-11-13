@@ -3,7 +3,7 @@
 
 use alloc::string::String;
 
-use api::ipc::{Observation, SaveExpect, SaveOutcome};
+use wire::ipc::{Observation, SaveExpect, SaveOutcome};
 
 use crate::fs_error::FsError;
 use crate::manager::VfsManager;
@@ -53,7 +53,7 @@ impl VfsManager {
         let created = self.would_create(dst);
         let outcome = match self.mounts.backend_mut(dst) {
             Some(backend) => backend.publish_if(stage, sealed, dst, expect),
-            None => SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED),
+            None => SaveOutcome::NotPublished(wire::ipc::save_refusal::REFUSED),
         };
         // An indeterminate publication may have reached storage, so it marks too.
         if outcome.published().is_some() || outcome == SaveOutcome::Indeterminate {

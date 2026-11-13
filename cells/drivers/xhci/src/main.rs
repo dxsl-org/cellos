@@ -40,8 +40,8 @@ mod legacy;
 mod regs;
 mod topology;
 
+use abi::syscall::service;
 use alloc::vec::Vec;
-use api::syscall::service;
 use controller::XhciController;
 use driver_hid::{decode_boot_report, BootState, EvdevEvent, HidDeviceId, HidKind};
 use ostd::app::{AppContext, AppEvent};
@@ -249,7 +249,7 @@ pub fn main() {
 // PcieDriverCap and UsbDriverCap are granted by init via the reviewed
 // `/bin/xhci` launch edge (not a manifest flag). This manifest declares NO
 // privileged flags.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -268,7 +268,7 @@ api::declare_manifest!(
 // MSI-X vector + event-ring wait of `irq.rs`.
 // `Exit`/`ForceExit`/`Yield` carry no allowlist bit and are always permitted, but
 // naming them keeps the intent explicit (the macro skips bit-less names).
-api::declare_syscalls![
+abi::declare_syscalls![
     // AppContext event-loop base set.
     Send,
     Recv,

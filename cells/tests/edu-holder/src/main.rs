@@ -20,8 +20,8 @@
 #![no_main]
 #![forbid(unsafe_code)]
 
-use api::completion::source;
-use api::pcie_function::{IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
+use abi::completion::source;
+use abi::pcie_function::{IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
 use edu_export_proto::{
     Msg, EDU_DEVICE, EDU_VENDOR, MSG_LEN, OP_COPY, OP_DIE, OP_DMA_TO, OP_HELLO, OP_MAP,
     OP_STALE_AFTER_DEATH, OP_STATUS, STATUS_BAD_REQUEST, STATUS_DMA_FAILED, STATUS_MAP_REFUSED,
@@ -36,8 +36,8 @@ use ostd::syscall::{
     sys_recv, sys_send, DmaExportError, PcieDeviceInfo, SyscallResult,
 };
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

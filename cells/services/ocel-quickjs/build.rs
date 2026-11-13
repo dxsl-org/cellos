@@ -8,11 +8,11 @@
 //! * **No external libc.** Lua links the toolchain's `libc.a`/`libm.a` on
 //!   riscv64, which is why CI cannot build it (`Ubuntu's bare-elf gcc ships no
 //!   libc.a`). QuickJS here links nothing but the Rust crates it depends on:
-//!   `libs/api` already exports the C ABI it needs (allocation, strings,
+//!   `libs/posix-shim` already exports the C ABI it needs (allocation, strings,
 //!   stdio), and this cell supplies the rest itself: the three OS symbols that
 //!   ABI does not have (`gettimeofday`, `clock_gettime`, `localtime_r`), the
 //!   C99 math set over an integer-only boundary (`src/float_abi.rs`) rather
-//!   than `libs/api`'s `double`-signature exports, and an `errno`-free config
+//!   than `libs/posix-shim`'s `double`-signature exports, and an `errno`-free config
 //!   that avoids float `printf` and `strtod` entirely.
 //! * **We own the headers.** Upstream includes `<stdlib.h>`, `<stdio.h>`,
 //!   `<math.h>`, … which no bare-elf toolchain provides; `vendor/include/`
@@ -62,7 +62,7 @@ fn main() {
 
     let target = std::env::var("TARGET").unwrap_or_default();
 
-    // The engine links against the Tier-A C ABI, which `libs/api` provides only
+    // The engine links against the Tier-A C ABI, which `libs/posix-shim` provides only
     // on riscv64/aarch64 (`#![cfg(any(target_arch = "riscv64",
     // target_arch = "aarch64", …))]` in `libs/posix-shim/src/lib.rs`). On any
     // other target — and on a host with no ELF-capable C compiler — the cell

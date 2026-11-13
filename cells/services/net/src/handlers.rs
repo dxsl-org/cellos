@@ -8,8 +8,6 @@ mod tests;
 mod udp;
 
 use alloc::collections::{BTreeMap, BTreeSet};
-use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::{net::NetError, tls};
 use ostd::ipc::{post, reply_to};
 use ostd::sync::Mutex;
 use smoltcp::{
@@ -17,6 +15,8 @@ use smoltcp::{
     socket::tcp as smoltcp_tcp,
     wire::IpAddress,
 };
+use wire::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::{net::NetError, tls};
 
 use crate::{
     bridge_ports::PortError,

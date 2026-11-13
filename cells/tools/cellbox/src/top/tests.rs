@@ -1,19 +1,19 @@
 //! Host tests of the interactive `top` view: the same snapshot through the TUI, batch
 //! text and records; the key reducer; drill-down; geometry; state rendering; the
-//! seed-capture exit path. Snapshots are constructed with `api::telemetry` (D64-14).
+//! seed-capture exit path. Snapshots are constructed with `abi::telemetry` (D64-14).
 
 extern crate std;
 
 use super::tui::{self, color_mode, run_with, Outcome, Source, MAX_VIEW};
 use super::view::{Notice, RowId, Step, ViewState, INTERRUPTED};
-use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
-use api::cell_session::frontend::{FRONTEND_KIND_GUI, FRONTEND_KIND_SERIAL, FRONTEND_KIND_SSH};
-use api::telemetry::{
+use abi::cell_session::frontend::{FRONTEND_KIND_GUI, FRONTEND_KIND_SERIAL, FRONTEND_KIND_SSH};
+use abi::telemetry::{
     cell_flags, cell_state, encode_name, header_flags, task_flags, task_state, TelemetryCellV1,
     TelemetryHeaderV1, TelemetrySnapshot, TelemetryTaskV1, SCOPE_SYSTEM, TELEMETRY_VERSION,
 };
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use terminal_sdk::codec::{KeyState, KeySymbol, Modifiers};
 use text_engine::pipeline::{Item, Value};
 use text_engine::top::records::frame_items;

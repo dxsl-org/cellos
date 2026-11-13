@@ -8,7 +8,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_pwm_gpio::BitBangPwm;
 use hal_pwm::ViPwm;

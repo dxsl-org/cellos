@@ -7,8 +7,8 @@ use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::tls::{tls_close, tls_connect, tls_read, tls_write};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupServiceBound, GetTime];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Send, Recv, Log, LookupServiceBound, GetTime];
 
 // example.com — 93.184.216.34
 const EXAMPLE_IP: [u8; 4] = [93, 184, 216, 34];
@@ -22,7 +22,7 @@ ostd::cell_main!(cell_main);
 fn cell_main() {
     println("[https-demo] TLS 1.3 HTTPS demo starting");
 
-    let net_tid = match provider_tid(api::syscall::service::NET) {
+    let net_tid = match provider_tid(abi::syscall::service::NET) {
         Some(tid) => tid,
         None => {
             println("[https-demo] ERROR: net service not found");

@@ -8,7 +8,7 @@ use super::types::{
     STALE_REPLY_RING_CAP,
 };
 use crate::local_ingress::{ParseError, ParsedLocalRequest, ReplyStatus};
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 
 #[derive(Clone, Copy)]
 struct CallerKey {

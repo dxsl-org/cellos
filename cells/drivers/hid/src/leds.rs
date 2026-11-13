@@ -106,7 +106,7 @@ impl LedOutput {
         self.len
     }
 
-    /// Encode `leds` (an `api::ipc::led_bits` bitmap) into `out`, returning the
+    /// Encode `leds` (an `wire::ipc::led_bits` bitmap) into `out`, returning the
     /// payload length to send.
     ///
     /// LEDs the report does not declare are dropped rather than placed by
@@ -139,9 +139,9 @@ fn is_led_usage(usage: u32) -> bool {
 /// Whether `leds` turns on the LED a usage names.
 fn led_is_on(usage: u32, leds: u8) -> bool {
     let bit = match usage & 0xFFFF {
-        LED_NUM_LOCK => api::ipc::led_bits::NUM_LOCK,
-        LED_CAPS_LOCK => api::ipc::led_bits::CAPS_LOCK,
-        LED_SCROLL_LOCK => api::ipc::led_bits::SCROLL_LOCK,
+        LED_NUM_LOCK => wire::ipc::led_bits::NUM_LOCK,
+        LED_CAPS_LOCK => wire::ipc::led_bits::CAPS_LOCK,
+        LED_SCROLL_LOCK => wire::ipc::led_bits::SCROLL_LOCK,
         _ => return false,
     };
     leds & bit != 0
@@ -151,7 +151,7 @@ fn led_is_on(usage: u32, leds: u8) -> bool {
 mod tests {
     use super::{LedOutput, MAX_LED_REPORT};
     use crate::parse_report_descriptor;
-    use api::ipc::led_bits;
+    use wire::ipc::led_bits;
 
     /// A keyboard that declares the boot LED byte: five one-bit LEDs then three
     /// padding bits, no report IDs, alongside a boot-shaped input report.

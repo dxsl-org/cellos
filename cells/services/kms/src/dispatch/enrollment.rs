@@ -1,4 +1,4 @@
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{
     p256_spki_der, KmsErrorCode, KmsRequestV1, RelayActivePublicKeyPayload,
     RelayCsrChunkRequestPayload, RelayCsrChunkResponsePayload, RelayEnrollmentAbortRequestPayload,

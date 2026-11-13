@@ -2,7 +2,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use super::owner_counts;
 use crate::caller::Caller;

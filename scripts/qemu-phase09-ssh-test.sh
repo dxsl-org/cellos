@@ -184,7 +184,7 @@ if [[ "$KSSH" == 1 ]]; then
         [[ "$(stat -c %a "$W")" == 700 ]] || pfail "work directory $W is not mode 700"
         tree_digests() {
             local d
-            for d in cells/services/kms cells/tools/kms-ssh-admin libs/ostd libs/vissh libs/terminal libs/kms-codec/src libs/api/src \
+            for d in cells/services/kms cells/tools/kms-ssh-admin libs/ostd libs/vissh libs/terminal libs/kms-codec/src \
                 libs/abi/src libs/wire/src libs/posix-shim/src \
                 libs/cellos-fs cells/services/vfs cells/tools/cellbox cells/tests/phase04-terminal-driver; do
                 printf '%s %s\n' "$(cd "$ROOT" && find "$d" -type f -not -path '*/target/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" "$d"

@@ -23,8 +23,8 @@ mod rpi3_storage;
 
 // Declare the syscall allowlist and manifest so the kernel enforces a minimal
 // capability set for this test cell.
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     Recv,
     RecvTimeout,
@@ -45,7 +45,7 @@ api::declare_syscalls![
 /// Spins (yield-looping) until init has registered vfs — safe because init
 /// spawns vfs before vfs-test and vfs registers itself before yielding.
 fn vfs_tid() -> usize {
-    use api::syscall::service;
+    use abi::syscall::service;
     loop {
         if let Some(tid) = ostd::service::provider_tid(service::VFS) {
             return tid;
@@ -59,14 +59,14 @@ static FAILED: AtomicU32 = AtomicU32::new(0);
 
 // ── Test harness ─────────────────────────────────────────────────────────────
 
-fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
-    let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+fn vfs_req(req: &wire::ipc::VfsRequest<'_>) -> wire::ipc::VfsResponse<'static> {
+    let mut send_buf = [0u8; wire::ipc::IPC_BUF_SIZE];
     // Leak the receive buffer so VfsResponse::Data borrows from it safely.
     // This is fine in a test cell that runs and exits.
-    let recv_buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
-        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
+    let recv_buf: &'static mut [u8; wire::ipc::IPC_BUF_SIZE] =
+        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; wire::ipc::IPC_BUF_SIZE]));
     ostd::ipc::service_call_typed(vfs_tid(), req, &mut send_buf, recv_buf)
-        .unwrap_or(api::ipc::VfsResponse::Err(0xFD))
+        .unwrap_or(wire::ipc::VfsResponse::Err(0xFD))
 }
 
 /// Send bytes to the VFS exactly as given, without encoding them first.
@@ -74,23 +74,23 @@ fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
 /// The only way to put a message on the wire that the request type cannot
 /// express — an invalid-UTF-8 name, for instance, which Rust will not let a
 /// `&str` hold but a hostile sender has no trouble producing.
-fn vfs_raw(msg: &[u8]) -> api::ipc::VfsResponse<'static> {
+fn vfs_raw(msg: &[u8]) -> wire::ipc::VfsResponse<'static> {
     let service_tid = vfs_tid();
     if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_send(service_tid, msg) {
-        return api::ipc::VfsResponse::Err(0xFD);
+        return wire::ipc::VfsResponse::Err(0xFD);
     }
 
     // Raw requests cannot use service_call_typed, but replies still must come
     // from VFS and an unexpected sender must never be decoded as a reply.
-    let buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
-        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
+    let buf: &'static mut [u8; wire::ipc::IPC_BUF_SIZE] =
+        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; wire::ipc::IPC_BUF_SIZE]));
     match ostd::syscall::sys_recv(service_tid, buf) {
         ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
-            api::ipc::decode::<api::ipc::VfsResponse>(buf)
-                .unwrap_or(api::ipc::VfsResponse::Err(0xFE))
+            wire::ipc::decode::<wire::ipc::VfsResponse>(buf)
+                .unwrap_or(wire::ipc::VfsResponse::Err(0xFE))
         }
-        ostd::syscall::SyscallResult::Ok(_) => api::ipc::VfsResponse::Err(0xFC),
-        ostd::syscall::SyscallResult::Err(_) => api::ipc::VfsResponse::Err(0xFD),
+        ostd::syscall::SyscallResult::Ok(_) => wire::ipc::VfsResponse::Err(0xFC),
+        ostd::syscall::SyscallResult::Err(_) => wire::ipc::VfsResponse::Err(0xFD),
     }
 }
 
@@ -123,7 +123,7 @@ fn fail(msg: &str) {
 macro_rules! assert_ok {
     ($req:expr, $msg:literal) => {
         match vfs_req(&$req) {
-            api::ipc::VfsResponse::Ok => pass($msg),
+            wire::ipc::VfsResponse::Ok => pass($msg),
             _ => fail($msg),
         }
     };
@@ -132,8 +132,8 @@ macro_rules! assert_ok {
 macro_rules! assert_err {
     ($req:expr, $code:expr, $msg:literal) => {
         match vfs_req(&$req) {
-            api::ipc::VfsResponse::Err(c) if c == $code => pass($msg),
-            api::ipc::VfsResponse::Err(c) => {
+            wire::ipc::VfsResponse::Err(c) if c == $code => pass($msg),
+            wire::ipc::VfsResponse::Err(c) => {
                 ostd::io::print("[FAIL] ");
                 ostd::io::print($msg);
                 ostd::io::print(" — wrong code: ");
@@ -151,15 +151,15 @@ macro_rules! assert_err {
 /// 1. File lifecycle: write → stat → unlink → stat-gone.
 fn test_file_lifecycle() {
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/test_lifecycle.txt",
             content: b"hello world"
         },
         "write /tmp/test_lifecycle.txt"
     );
 
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp/test_lifecycle.txt")) {
-        api::ipc::VfsResponse::Stat {
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp/test_lifecycle.txt")) {
+        wire::ipc::VfsResponse::Stat {
             size: 11,
             is_dir: false,
         } => pass("stat size=11 is_file"),
@@ -167,12 +167,12 @@ fn test_file_lifecycle() {
     }
 
     assert_ok!(
-        api::ipc::VfsRequest::Unlink("/tmp/test_lifecycle.txt"),
+        wire::ipc::VfsRequest::Unlink("/tmp/test_lifecycle.txt"),
         "unlink /tmp/test_lifecycle.txt"
     );
 
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp/test_lifecycle.txt")) {
-        api::ipc::VfsResponse::Err(_) => pass("stat after unlink returns Err"),
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp/test_lifecycle.txt")) {
+        wire::ipc::VfsResponse::Err(_) => pass("stat after unlink returns Err"),
         _ => fail("stat after unlink should return Err"),
     }
 }
@@ -180,19 +180,19 @@ fn test_file_lifecycle() {
 /// 2. Directory operations: mkdir, write inside, listdir, rmdir.
 fn test_directory_ops() {
     assert_ok!(
-        api::ipc::VfsRequest::Mkdir("/tmp/testdir"),
+        wire::ipc::VfsRequest::Mkdir("/tmp/testdir"),
         "mkdir /tmp/testdir"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/testdir/file.txt",
             content: b"x"
         },
         "write inside testdir"
     );
 
-    match vfs_req(&api::ipc::VfsRequest::ListDir("/tmp/testdir")) {
-        api::ipc::VfsResponse::Data(bytes) => {
+    match vfs_req(&wire::ipc::VfsRequest::ListDir("/tmp/testdir")) {
+        wire::ipc::VfsResponse::Data(bytes) => {
             if bytes.windows(10).any(|w| w == b"f:file.txt") {
                 pass("listdir /tmp/testdir contains f:file.txt");
             } else {
@@ -202,9 +202,9 @@ fn test_directory_ops() {
         _ => fail("listdir /tmp/testdir failed"),
     }
 
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/testdir/file.txt"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/testdir/file.txt"));
     assert_ok!(
-        api::ipc::VfsRequest::Rmdir("/tmp/testdir"),
+        wire::ipc::VfsRequest::Rmdir("/tmp/testdir"),
         "rmdir /tmp/testdir after cleanup"
     );
 }
@@ -212,7 +212,7 @@ fn test_directory_ops() {
 /// 3. Access control: write to /bin/ → PermissionDenied (Err 3).
 fn test_access_control() {
     assert_err!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/bin/evil",
             content: b"hack"
         },
@@ -221,13 +221,13 @@ fn test_access_control() {
     );
 
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/access_ok.txt",
             content: b"ok"
         },
         "write /tmp/ still works"
     );
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/access_ok.txt"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/access_ok.txt"));
 
     // ── Destructive-op authorization ─────────────────────────────────────────
     //
@@ -242,12 +242,12 @@ fn test_access_control() {
     // delete there already failed at the backend with Err(1) — that arm proves
     // ordering, not that a deletion was ever possible.)
     assert_err!(
-        api::ipc::VfsRequest::Unlink("/readme.txt"),
+        wire::ipc::VfsRequest::Unlink("/readme.txt"),
         3,
         "unlink /readme.txt (read-only / prefix) → PermissionDenied"
     );
-    match vfs_req(&api::ipc::VfsRequest::Stat("/readme.txt")) {
-        api::ipc::VfsResponse::Stat { is_dir: false, .. } => {
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/readme.txt")) {
+        wire::ipc::VfsResponse::Stat { is_dir: false, .. } => {
             pass("/readme.txt survived the refused unlink")
         }
         _ => fail("/readme.txt survived the refused unlink"),
@@ -258,14 +258,14 @@ fn test_access_control() {
     // backend and reported Err(1) (not found). A non-existent target keeps this
     // assertion non-destructive if it is ever run against an ungated build.
     assert_err!(
-        api::ipc::VfsRequest::Rmdir("/no_such_dir"),
+        wire::ipc::VfsRequest::Rmdir("/no_such_dir"),
         3,
         "rmdir under / → PermissionDenied (authorized before backend)"
     );
     // Also proves the check precedes `collect_dir_bytes`, so an unauthorized
     // caller cannot use this op to probe subtree sizes.
     assert_err!(
-        api::ipc::VfsRequest::RmdirRecursive("/no_such_dir"),
+        wire::ipc::VfsRequest::RmdirRecursive("/no_such_dir"),
         3,
         "rmdir_recursive under / → PermissionDenied (before subtree walk)"
     );
@@ -274,7 +274,7 @@ fn test_access_control() {
     // denial. The invalid grant must stay untouched because cap resolution
     // fails before grant access.
     assert_err!(
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap: 0,
             offset: 0,
             grant: 0,
@@ -308,24 +308,24 @@ fn test_grant_write() {
     const PATCHED: &[u8] = b"prXXixgrant!";
 
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: PATH,
             content: INITIAL
         },
         "grant-write: create writable target"
     );
-    let dir = match vfs_req(&api::ipc::VfsRequest::OpenRootDir { path: "/tmp" }) {
-        api::ipc::VfsResponse::DirHandle(dir) => dir,
+    let dir = match vfs_req(&wire::ipc::VfsRequest::OpenRootDir { path: "/tmp" }) {
+        wire::ipc::VfsResponse::DirHandle(dir) => dir,
         _ => {
             fail("grant-write: open /tmp directory capability");
             return;
         }
     };
-    let file = match vfs_req(&api::ipc::VfsRequest::OpenFileAt {
+    let file = match vfs_req(&wire::ipc::VfsRequest::OpenFileAt {
         dir,
         name: "grant-write.txt",
     }) {
-        api::ipc::VfsResponse::FileHandle(file) => file,
+        wire::ipc::VfsResponse::FileHandle(file) => file,
         _ => {
             fail("grant-write: open service file handle");
             return;
@@ -347,20 +347,20 @@ fn test_grant_write() {
             return;
         }
     };
-    match vfs_req(&api::ipc::VfsRequest::WriteGrant {
+    match vfs_req(&wire::ipc::VfsRequest::WriteGrant {
         cap: file.0,
         offset: INITIAL.len() as u64,
         grant: grant.id(),
         bytes: APPEND.len(),
     }) {
-        api::ipc::VfsResponse::GrantDone { bytes } if bytes == APPEND.len() => {
+        wire::ipc::VfsResponse::GrantDone { bytes } if bytes == APPEND.len() => {
             pass("grant-write: commits exact bytes before acknowledgement")
         }
         _ => fail("grant-write: commits exact bytes before acknowledgement"),
     }
 
     assert_err!(
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap: file.0,
             offset: EXPECTED.len() as u64 + 1,
             grant: 0,
@@ -380,7 +380,7 @@ fn test_grant_write() {
         }
     };
     assert_err!(
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap: file.0,
             offset: 0,
             grant: short_grant.id(),
@@ -397,7 +397,7 @@ fn test_grant_write() {
         }
     };
     assert_err!(
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap: file.0,
             offset: 0,
             grant: unshared_grant.id(),
@@ -424,13 +424,13 @@ fn test_grant_write() {
             return;
         }
     };
-    match vfs_req(&api::ipc::VfsRequest::WriteGrant {
+    match vfs_req(&wire::ipc::VfsRequest::WriteGrant {
         cap: file.0,
         offset: 2,
         grant: patch_grant.id(),
         bytes: PATCH.len(),
     }) {
-        api::ipc::VfsResponse::GrantDone { bytes } if bytes == PATCH.len() => {
+        wire::ipc::VfsResponse::GrantDone { bytes } if bytes == PATCH.len() => {
             pass("grant-write: copies into exact bounded destination range")
         }
         _ => fail("grant-write: copies into exact bounded destination range"),
@@ -444,25 +444,25 @@ fn test_grant_write() {
         _ => fail("grant-write: bounded copy preserves prefix and suffix"),
     }
 
-    let root = match vfs_req(&api::ipc::VfsRequest::OpenRootDir { path: "/" }) {
-        api::ipc::VfsResponse::DirHandle(root) => root,
+    let root = match vfs_req(&wire::ipc::VfsRequest::OpenRootDir { path: "/" }) {
+        wire::ipc::VfsResponse::DirHandle(root) => root,
         _ => {
             fail("grant-write: open read-only root capability");
             return;
         }
     };
-    let read_only = match vfs_req(&api::ipc::VfsRequest::OpenFileAt {
+    let read_only = match vfs_req(&wire::ipc::VfsRequest::OpenFileAt {
         dir: root,
         name: "readme.txt",
     }) {
-        api::ipc::VfsResponse::FileHandle(file) => file,
+        wire::ipc::VfsResponse::FileHandle(file) => file,
         _ => {
             fail("grant-write: open read-only file handle");
             return;
         }
     };
     assert_err!(
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap: read_only.0,
             offset: 0,
             grant: 0,
@@ -471,13 +471,13 @@ fn test_grant_write() {
         3,
         "grant-write: write authorization precedes grant access"
     );
-    let _ = vfs_req(&api::ipc::VfsRequest::CloseFile { file: read_only });
-    let _ = vfs_req(&api::ipc::VfsRequest::CloseDir { dir: root });
+    let _ = vfs_req(&wire::ipc::VfsRequest::CloseFile { file: read_only });
+    let _ = vfs_req(&wire::ipc::VfsRequest::CloseDir { dir: root });
 
     #[cfg(feature = "test-hooks")]
     {
         assert_err!(
-            api::ipc::VfsRequest::WriteGrant {
+            wire::ipc::VfsRequest::WriteGrant {
                 cap: file.0,
                 offset: 0,
                 grant: 0,
@@ -486,8 +486,8 @@ fn test_grant_write() {
             2,
             "grant-write: quota overflow is refused before grant access"
         );
-        match vfs_req(&api::ipc::VfsRequest::Stat(PATH)) {
-            api::ipc::VfsResponse::Stat {
+        match vfs_req(&wire::ipc::VfsRequest::Stat(PATH)) {
+            wire::ipc::VfsResponse::Stat {
                 size,
                 is_dir: false,
             } if size == EXPECTED.len() as u64 => {
@@ -497,25 +497,25 @@ fn test_grant_write() {
         }
     }
 
-    let _ = vfs_req(&api::ipc::VfsRequest::CloseFile { file });
-    let _ = vfs_req(&api::ipc::VfsRequest::CloseDir { dir });
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink(PATH));
+    let _ = vfs_req(&wire::ipc::VfsRequest::CloseFile { file });
+    let _ = vfs_req(&wire::ipc::VfsRequest::CloseDir { dir });
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink(PATH));
 }
 
 /// 5. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
 fn test_async_read() {
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/async_test.txt",
             content: b"async content"
         },
         "write file for async read"
     );
 
-    let handle = match vfs_req(&api::ipc::VfsRequest::ReadAsync {
+    let handle = match vfs_req(&wire::ipc::VfsRequest::ReadAsync {
         path: "/tmp/async_test.txt",
     }) {
-        api::ipc::VfsResponse::PendingHandle(h) => {
+        wire::ipc::VfsResponse::PendingHandle(h) => {
             pass("ReadAsync returns PendingHandle");
             h
         }
@@ -526,8 +526,8 @@ fn test_async_read() {
     };
 
     if handle != 0 {
-        match vfs_req(&api::ipc::VfsRequest::Poll { handle }) {
-            api::ipc::VfsResponse::Data(bytes) => {
+        match vfs_req(&wire::ipc::VfsRequest::Poll { handle }) {
+            wire::ipc::VfsResponse::Data(bytes) => {
                 if bytes.starts_with(b"async content") {
                     pass("Poll returns correct data");
                 } else {
@@ -538,57 +538,57 @@ fn test_async_read() {
         }
 
         assert_err!(
-            api::ipc::VfsRequest::Poll { handle },
+            wire::ipc::VfsRequest::Poll { handle },
             4,
             "Poll stale handle returns Err"
         );
     }
 
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/async_test.txt"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/async_test.txt"));
 }
 
 /// 6. RamFS (/tmp) volatile write and stat.
 fn test_ramfs() {
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/volatile.txt",
             content: b"volatile"
         },
         "write /tmp/volatile.txt"
     );
 
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp/volatile.txt")) {
-        api::ipc::VfsResponse::Stat {
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp/volatile.txt")) {
+        wire::ipc::VfsResponse::Stat {
             size: 8,
             is_dir: false,
         } => pass("stat /tmp/volatile.txt size=8"),
         _ => fail("stat /tmp/volatile.txt"),
     }
 
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp")) {
-        api::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("stat /tmp is_dir=true"),
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp")) {
+        wire::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("stat /tmp is_dir=true"),
         _ => fail("stat /tmp"),
     }
 }
 
 /// 7. Stat on /tmp root directory.
 fn test_stat_dir() {
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp")) {
-        api::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("stat /tmp is_dir=true"),
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp")) {
+        wire::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("stat /tmp is_dir=true"),
         _ => fail("stat /tmp should return is_dir=true"),
     }
 }
 
 /// 8. Edge cases: nonexistent path stat and listdir.
 fn test_edge_cases() {
-    match vfs_req(&api::ipc::VfsRequest::Stat("/tmp/does_not_exist_xyz.txt")) {
-        api::ipc::VfsResponse::Err(_) => pass("stat nonexistent returns Err"),
+    match vfs_req(&wire::ipc::VfsRequest::Stat("/tmp/does_not_exist_xyz.txt")) {
+        wire::ipc::VfsResponse::Err(_) => pass("stat nonexistent returns Err"),
         _ => fail("stat nonexistent should Err"),
     }
 
-    match vfs_req(&api::ipc::VfsRequest::ListDir("/tmp/nonexistent_dir")) {
-        api::ipc::VfsResponse::Data([]) => pass("listdir nonexistent = empty"),
-        api::ipc::VfsResponse::Err(_) => pass("listdir nonexistent = Err"),
+    match vfs_req(&wire::ipc::VfsRequest::ListDir("/tmp/nonexistent_dir")) {
+        wire::ipc::VfsResponse::Data([]) => pass("listdir nonexistent = empty"),
+        wire::ipc::VfsResponse::Err(_) => pass("listdir nonexistent = Err"),
         _ => fail("listdir nonexistent unexpected response"),
     }
 }
@@ -610,14 +610,14 @@ fn test_edge_cases() {
 fn test_quota_limit() {
     let chunk = [b'q'; 400];
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/q1.bin",
             content: &chunk
         },
         "quota write 1 (400B) fits"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/q2.bin",
             content: &chunk
         },
@@ -625,7 +625,7 @@ fn test_quota_limit() {
     );
     // Third write → 1208 total > 1100 → quota exceeded.
     assert_err!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/q3.bin",
             content: &chunk
         },
@@ -634,19 +634,19 @@ fn test_quota_limit() {
     );
     // Releasing q1 frees 800B; q3 (800B) now fits.
     assert_ok!(
-        api::ipc::VfsRequest::Unlink("/tmp/q1.bin"),
+        wire::ipc::VfsRequest::Unlink("/tmp/q1.bin"),
         "unlink q1 releases quota"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/q3.bin",
             content: &chunk
         },
         "quota write after release succeeds"
     );
     // Cleanup: net 0 delta (q2+q3=1600B remain, but test_rmdir starts fresh).
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/q2.bin"));
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/q3.bin"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/q2.bin"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/q3.bin"));
 }
 
 /// 10. RmdirRecursive releases quota (test-hooks only, 1.1 KiB quota).
@@ -660,18 +660,18 @@ fn test_quota_limit() {
 fn test_rmdir_recursive_quota() {
     let chunk = [b'r'; 400];
     assert_ok!(
-        api::ipc::VfsRequest::Mkdir("/tmp/rdir_q"),
+        wire::ipc::VfsRequest::Mkdir("/tmp/rdir_q"),
         "rdir-quota: mkdir"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/rdir_q/a.bin",
             content: &chunk
         },
         "rdir-quota: write a.bin (400B)"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/rdir_q/b.bin",
             content: &chunk
         },
@@ -679,7 +679,7 @@ fn test_rmdir_recursive_quota() {
     );
     let small = [b'x'; 300];
     assert_err!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/rdir_quota_overflow.bin",
             content: &small
         },
@@ -687,17 +687,17 @@ fn test_rmdir_recursive_quota() {
         "rdir-quota: overflow write correctly blocked before delete"
     );
     assert_ok!(
-        api::ipc::VfsRequest::RmdirRecursive("/tmp/rdir_q"),
+        wire::ipc::VfsRequest::RmdirRecursive("/tmp/rdir_q"),
         "rdir-quota: RmdirRecursive releases 800B"
     );
     assert_ok!(
-        api::ipc::VfsRequest::Write {
+        wire::ipc::VfsRequest::Write {
             path: "/tmp/rdir_quota_ok.bin",
             content: &small
         },
         "rdir-quota: write after recursive delete succeeds (quota freed)"
     );
-    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/rdir_quota_ok.bin"));
+    let _ = vfs_req(&wire::ipc::VfsRequest::Unlink("/tmp/rdir_quota_ok.bin"));
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────────

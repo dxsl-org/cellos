@@ -6,7 +6,8 @@ license = "AGPL-3.0-or-later"
 description = "Owner-scoped native MuPDF PDF raster service for RV64"
 
 [dependencies]
-api = { path = "../../../libs/api", version = "0.1.0" }
+abi = { path = "../../../libs/abi", version = "0.1.0" }
+posix-shim = { path = "../../../libs/posix-shim", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 ocel-pdf-proto = { path = "../../../libs/ocel-pdf-proto", version = "0.1.0" }
 postcard = { version = "1.0", default-features = false, features = ["alloc"] }

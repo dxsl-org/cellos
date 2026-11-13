@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
-use api::declare_manifest;
+// Links the Tier-A C library (libc symbols) the C objects call.
+extern crate posix_shim;
+use abi::declare_manifest;
 use ostd::{io::println, syscall::sys_exit};
 
 // No ambient lifecycle authority: the child launch is authorized by the exact
@@ -14,10 +16,10 @@ declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

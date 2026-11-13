@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Authenticated CellSessionV1 transport and operation-scoped request correlation.
-use api::cell_session::{
+use abi::cell_session::{
     KernelOp, ObjectRefV1, RequestHeaderV1, ResultHeaderV1, Status, HEADER_LEN, MAX_REQUEST_LEN,
     MAX_SERVICE_RECORD_LEN,
 };
-use api::service_binding::ServiceBinding;
+use abi::service_binding::ServiceBinding;
 
 /// Execute exactly one bounded kernel request. Errors remain in `header.status`.
 pub fn kernel_request(
@@ -403,7 +403,7 @@ fn write_stream_with(
     deadline_ns: u64,
     call: impl FnOnce(KernelOp, ObjectRefV1, bool, &[u8], &mut [u8]) -> Result<ResultHeaderV1, Status>,
 ) -> Result<usize, Status> {
-    use api::cell_session::{Reader, Writer, TRANSFER_MAX};
+    use abi::cell_session::{Reader, Writer, TRANSFER_MAX};
 
     if bytes.is_empty() || bytes.len() > TRANSFER_MAX || deadline_ns == 0 || deadline_ns == u64::MAX
     {
@@ -457,9 +457,9 @@ pub fn service_call(
     body: &[u8],
     reply: &mut [u8],
 ) -> Result<ResultHeaderV1, Status> {
-    let (query, ack) = if service == api::syscall::service::INPUT {
+    let (query, ack) = if service == abi::syscall::service::INPUT {
         (19, 18)
-    } else if service == api::syscall::service::VFS {
+    } else if service == abi::syscall::service::VFS {
         (5, 4)
     } else {
         return Err(Status::Denied);
@@ -492,38 +492,36 @@ pub fn service_call(
         }
         .encode(&mut record[..HEADER_LEN])?;
         record[HEADER_LEN..n].copy_from_slice(body);
-        let mut send = Scrub::<{ api::ipc::IPC_BUF_SIZE }>::new();
-        let mut recv = Scrub::<{ api::ipc::IPC_BUF_SIZE }>::new();
-        let inner = if service == api::syscall::service::INPUT {
-            let req = api::ipc::InputRequest::SessionV1(&record[..n]);
-            let response =
-                crate::ipc::service_call_typed_bounded::<_, api::ipc::InputResponse<'_>>(
-                    binding.tid as usize,
-                    &req,
-                    &mut send,
-                    &mut recv,
-                    100,
+        let mut send = Scrub::<{ wire::ipc::IPC_BUF_SIZE }>::new();
+        let mut recv = Scrub::<{ wire::ipc::IPC_BUF_SIZE }>::new();
+        let inner =
+            if service == abi::syscall::service::INPUT {
+                let req = wire::ipc::InputRequest::SessionV1(&record[..n]);
+                let response = crate::ipc::service_call_typed_bounded::<
+                    _,
+                    wire::ipc::InputResponse<'_>,
+                >(
+                    binding.tid as usize, &req, &mut send, &mut recv, 100
                 )
                 .map_err(ipc_status)?;
-            match response {
-                api::ipc::InputResponse::SessionV1(bytes) => bytes,
-                _ => return Err(Status::Malformed),
-            }
-        } else {
-            let req = api::ipc::VfsRequest::PreparedChildV1(&record[..n]);
-            let response = crate::ipc::service_call_typed_bounded::<_, api::ipc::VfsResponse<'_>>(
-                binding.tid as usize,
-                &req,
-                &mut send,
-                &mut recv,
-                100,
-            )
-            .map_err(ipc_status)?;
-            match response {
-                api::ipc::VfsResponse::PreparedChildV1(bytes) => bytes,
-                _ => return Err(Status::Malformed),
-            }
-        };
+                match response {
+                    wire::ipc::InputResponse::SessionV1(bytes) => bytes,
+                    _ => return Err(Status::Malformed),
+                }
+            } else {
+                let req = wire::ipc::VfsRequest::PreparedChildV1(&record[..n]);
+                let response = crate::ipc::service_call_typed_bounded::<
+                    _,
+                    wire::ipc::VfsResponse<'_>,
+                >(
+                    binding.tid as usize, &req, &mut send, &mut recv, 100
+                )
+                .map_err(ipc_status)?;
+                match response {
+                    wire::ipc::VfsResponse::PreparedChildV1(bytes) => bytes,
+                    _ => return Err(Status::Malformed),
+                }
+            };
         if service_binding(service)? != binding {
             return Err(Status::Stale);
         }
@@ -545,18 +543,18 @@ pub fn service_call(
 /// lane is the single-use challenge Ref; it is kept only while the outcome is
 /// indeterminate (retry the identical descriptor to resolve it).
 pub fn register_trust_challenge(
-    descriptor: &api::cell_session::trust::TrustChallengeV1<'_>,
+    descriptor: &abi::cell_session::trust::TrustChallengeV1<'_>,
 ) -> Result<ObjectRefV1, Status> {
-    use api::cell_session::trust::TrustChallengeV1;
-    let owner = service_binding(api::syscall::service::INPUT)?;
+    use abi::cell_session::trust::TrustChallengeV1;
+    let owner = service_binding(abi::syscall::service::INPUT)?;
     let mut body = [0u8; TrustChallengeV1::MAX_LEN];
     let len = descriptor.encode(&mut body)?;
     let mut reply = [0u8; HEADER_LEN + 16];
     let result = service_call(
         owner,
-        api::syscall::service::INPUT,
+        abi::syscall::service::INPUT,
         descriptor.challenge,
-        api::cell_session::InputOp::RegisterTrustChallenge as u16,
+        abi::cell_session::InputOp::RegisterTrustChallenge as u16,
         true,
         &body[..len],
         &mut reply,
@@ -578,15 +576,15 @@ pub fn register_trust_challenge(
 /// [`trust_descriptor_sha256`] of the own record, before acting on it.
 pub fn collect_trust_decision(
     confirmation: ObjectRefV1,
-) -> Result<api::cell_session::trust::TrustDecisionV1, Status> {
-    use api::cell_session::trust::TrustDecisionV1;
-    let owner = service_binding(api::syscall::service::INPUT)?;
+) -> Result<abi::cell_session::trust::TrustDecisionV1, Status> {
+    use abi::cell_session::trust::TrustDecisionV1;
+    let owner = service_binding(abi::syscall::service::INPUT)?;
     let mut reply = [0u8; HEADER_LEN + TrustDecisionV1::LEN];
     let result = service_call(
         owner,
-        api::syscall::service::INPUT,
+        abi::syscall::service::INPUT,
         confirmation,
-        api::cell_session::InputOp::CollectTrustDecision as u16,
+        abi::cell_session::InputOp::CollectTrustDecision as u16,
         true,
         &confirmation.to_bytes(),
         &mut reply,
@@ -609,9 +607,9 @@ pub fn collect_trust_decision(
 
 /// SHA-256 of a descriptor's canonical bytes, as `TrustDecisionV1::descriptor_sha256` binds it.
 pub fn trust_descriptor_sha256(
-    descriptor: &api::cell_session::trust::TrustChallengeV1<'_>,
+    descriptor: &abi::cell_session::trust::TrustChallengeV1<'_>,
 ) -> Result<[u8; 32], Status> {
-    let mut body = [0u8; api::cell_session::trust::TrustChallengeV1::MAX_LEN];
+    let mut body = [0u8; abi::cell_session::trust::TrustChallengeV1::MAX_LEN];
     let len = descriptor.encode(&mut body)?;
     Ok(sha256(&body[..len]))
 }
@@ -807,7 +805,7 @@ mod tests {
             id: 92,
             generation: 4,
         };
-        let bytes = [0xFF; api::cell_session::TRANSFER_MAX];
+        let bytes = [0xFF; abi::cell_session::TRANSFER_MAX];
         let result = write_stream_with(
             operation,
             endpoint,
@@ -818,7 +816,7 @@ mod tests {
                 assert_eq!(lineage, operation);
                 assert!(mutating);
                 assert_eq!(body.len(), 32 + bytes.len());
-                let mut reader = api::cell_session::Reader::new(body);
+                let mut reader = abi::cell_session::Reader::new(body);
                 assert_eq!(reader.reference()?, endpoint);
                 assert_eq!(reader.u32()? as usize, bytes.len());
                 assert_eq!(reader.u32()?, 0);
@@ -843,7 +841,7 @@ mod tests {
             id: 12,
             generation: 2,
         };
-        let oversized = [0; api::cell_session::TRANSFER_MAX + 1];
+        let oversized = [0; abi::cell_session::TRANSFER_MAX + 1];
         for (bytes, deadline) in [
             (&b""[..], 1),
             (&oversized[..], 1),

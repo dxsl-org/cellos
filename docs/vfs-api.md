@@ -186,7 +186,7 @@ Seek to end of file and append data. Semantically equivalent to OP_WRITE but ens
 
 Block devices (Phase 09C). Each block Driver Cell publishes a route for the one device
 it owns (syscall 416); VFS enumerates the routes once at start (syscall 432,
-`api::block_route::ViBlockRouteV1`). The **primary** disk is the only device whose MBR
+`abi::block_route::ViBlockRouteV1`). The **primary** disk is the only device whose MBR
 carries the Cellos P2 entry (type `0x7F`); otherwise the lowest device key. Every other
 disk with a FAT32 volume at LBA 2048 is mounted at `/mnt/disk/<name>`, where `<name>` is
 `pci-BB-DD-F` (PCI location) or `mmio-<base>` (platform window). Each device has its own

@@ -1,10 +1,10 @@
 //! Serving grant-addressed operations (read/write/sync over memory grants).
 
+use abi::dir_handles::ViDirHandle;
 use alloc::string::String;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{vfs_dir_page, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::ipc::{vfs_dir_page, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::MAX_INLINE_PAYLOAD;
@@ -32,7 +32,7 @@ pub(crate) fn read_handle_grant<'a>(
     if !matches!(vfs.stat(&path), Ok(Some((_, false)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    let max_read = size.min(api::ipc::VFS_GRANT_CHUNK);
+    let max_read = size.min(wire::ipc::VFS_GRANT_CHUNK);
     match ostd::grant::with_shared_bytes_mut(grant, |buf| {
         let n = max_read.min(buf.len());
         if n == 0 {
@@ -83,7 +83,7 @@ pub(crate) fn write_handle_grant<'a>(
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
     }
-    if bytes > api::ipc::VFS_GRANT_CHUNK {
+    if bytes > wire::ipc::VFS_GRANT_CHUNK {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let file_len = match vfs.stat(&path) {
@@ -311,7 +311,7 @@ mod health_tests {
         let backend = vfs.mounts.add_backend(Box::new(Faulted(poisoned.clone())));
         vfs.mounts.mount("/data", backend);
         let caller = Caller {
-            flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+            flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
             ..Caller::principal(types::CellId(44), 1)
         };
         let _ = vfs.dirs.on_contact(caller);
@@ -379,7 +379,7 @@ mod health_tests {
             crate::dispatch_dirs::handle(
                 &mut vfs,
                 caller,
-                &api::ipc::VfsRequest::ReadAt {
+                &wire::ipc::VfsRequest::ReadAt {
                     dir: root,
                     name: "data"
                 },
@@ -392,8 +392,8 @@ mod health_tests {
             VfsResponse::Err(code) if code == VfsError::Io as u8
         ));
         let mut request = [0; IPC_BUF_SIZE];
-        api::ipc::encode(
-            &api::ipc::VfsRequest::ReadAsync { path: "/data" },
+        wire::ipc::encode(
+            &wire::ipc::VfsRequest::ReadAsync { path: "/data" },
             &mut request,
         )
         .unwrap();
@@ -417,7 +417,7 @@ mod health_tests {
             .insert(caller, "/data/a", alloc::vec![1, 2], None);
         let mut request = [0; IPC_BUF_SIZE];
         let mut buffer = [0; IPC_BUF_SIZE];
-        api::ipc::encode(&api::ipc::VfsRequest::Poll { handle }, &mut request).unwrap();
+        wire::ipc::encode(&wire::ipc::VfsRequest::Poll { handle }, &mut request).unwrap();
         let other = Caller::principal(types::CellId(45), 1);
         assert!(matches!(
             crate::dispatch::handle_request(&mut vfs, &request, Some(other), &mut buffer),

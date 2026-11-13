@@ -46,15 +46,13 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::dir_handles::ViDirHandle;
+use abi::syscall::{ProcessInfo, ProcessInfoV2};
+use abi::telemetry::{header_flags, request, TelemetrySnapshot};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::syscall::{ProcessInfo, ProcessInfoV2};
-use api::telemetry::{header_flags, request, TelemetrySnapshot};
 use ostd::child_context::{ChildContext, GrantSlot};
 use ostd::service::VfsRef;
 use ostd::syscall::{
@@ -62,8 +60,10 @@ use ostd::syscall::{
     SyscallError,
 };
 use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -72,7 +72,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,
@@ -104,7 +104,7 @@ const ROWS: usize = 64;
 /// 16 KiB snapshot buffer: whole rows only; a fuller system reports truncation.
 const TELEMETRY_WORDS: usize = 2048;
 /// 192 bytes: the 96-byte header and one 96-byte Cell row (D65-8 T-a).
-const TRUNC_WORDS: usize = (api::telemetry::HEADER_LEN + api::telemetry::CELL_LEN) / 8;
+const TRUNC_WORDS: usize = (abi::telemetry::HEADER_LEN + abi::telemetry::CELL_LEN) / 8;
 
 /// The committed endpoint a parent delegated into `slot`.
 fn granted(context: &ChildContext, slot: GrantSlot) -> Option<Endpoint> {
@@ -309,7 +309,7 @@ fn cell_main() {
 #[cfg(test)]
 mod tests {
     use super::trunc_result;
-    use api::telemetry::{
+    use abi::telemetry::{
         cell_state, header_flags, TelemetryCellV1, TelemetryHeaderV1, SCOPE_SYSTEM,
         TELEMETRY_VERSION,
     };
@@ -330,7 +330,7 @@ mod tests {
         }
     }
 
-    fn cell() -> [u8; api::telemetry::CELL_LEN] {
+    fn cell() -> [u8; abi::telemetry::CELL_LEN] {
         TelemetryCellV1 {
             cell_id: 1,
             generation: 3,

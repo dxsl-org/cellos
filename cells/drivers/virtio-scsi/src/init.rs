@@ -5,7 +5,7 @@ use crate::config::{self, ConfigError, Limits};
 use crate::dma::{DmaArea, DmaError};
 use crate::queue::{RequestQueue, REQUEST_QUEUE};
 use crate::ring;
-use api::pcie_function::{ViPcieFunctionV1, FLAG_DMA_REMAPPED};
+use abi::pcie_function::{ViPcieFunctionV1, FLAG_DMA_REMAPPED};
 use core::fmt;
 use ostd::syscall::{sys_find_pcie_device_by_vendor, PcieDeviceInfo};
 use virtio_drivers::transport::Transport;

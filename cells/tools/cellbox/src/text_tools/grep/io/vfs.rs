@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::ipc::{VfsRequest, VfsResponse};
+use wire::ipc::{VfsRequest, VfsResponse};
 
 /// 5 s: one VFS `Stat` or `ListDir`, which may read metadata from disk.
 const VFS_CALL_TICKS: u64 = 500;
@@ -14,14 +14,14 @@ pub(super) struct DirEntry {
 }
 
 pub(super) fn stat_path(path: &str) -> Result<Option<bool>, String> {
-    let mut send = [0u8; api::ipc::IPC_BUF_SIZE];
-    let len = api::ipc::encode(&VfsRequest::Stat(path), &mut send)
+    let mut send = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let len = wire::ipc::encode(&VfsRequest::Stat(path), &mut send)
         .map_err(|_| String::from("failed to encode VFS stat request"))?
         .len();
-    let mut recv = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut recv = [0u8; wire::ipc::IPC_BUF_SIZE];
     let raw = request_vfs(len, &send, &mut recv)?;
     Ok(
-        match api::ipc::decode::<VfsResponse>(raw)
+        match wire::ipc::decode::<VfsResponse>(raw)
             .map_err(|_| String::from("failed to decode VFS stat response"))?
         {
             VfsResponse::Stat { is_dir, .. } => Some(is_dir),
@@ -32,13 +32,13 @@ pub(super) fn stat_path(path: &str) -> Result<Option<bool>, String> {
 }
 
 pub(super) fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
-    let mut send = [0u8; api::ipc::IPC_BUF_SIZE];
-    let len = api::ipc::encode(&VfsRequest::ListDir(path), &mut send)
+    let mut send = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let len = wire::ipc::encode(&VfsRequest::ListDir(path), &mut send)
         .map_err(|_| String::from("failed to encode VFS list request"))?
         .len();
-    let mut recv = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut recv = [0u8; wire::ipc::IPC_BUF_SIZE];
     let raw = request_vfs(len, &send, &mut recv)?;
-    let data = match api::ipc::decode::<VfsResponse>(raw)
+    let data = match wire::ipc::decode::<VfsResponse>(raw)
         .map_err(|_| String::from("failed to decode VFS list response"))?
     {
         VfsResponse::Data(data) => data,
@@ -71,7 +71,7 @@ pub(super) fn list_dir(path: &str) -> Result<Vec<DirEntry>, String> {
 
 fn request_vfs<'a>(len: usize, send: &[u8], recv: &'a mut [u8]) -> Result<&'a [u8], String> {
     let vfs = loop {
-        if let Some(tid) = ostd::service::provider_tid(api::syscall::service::VFS) {
+        if let Some(tid) = ostd::service::provider_tid(abi::syscall::service::VFS) {
             break tid;
         }
         ostd::task::yield_now();

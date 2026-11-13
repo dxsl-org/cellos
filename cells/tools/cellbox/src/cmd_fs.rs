@@ -11,7 +11,7 @@ use ostd::syscall;
 /// Spins (yield-looping) until init has registered vfs — safe at startup
 /// because init spawns vfs before shell and vfs registers before yielding.
 fn vfs_endpoint() -> usize {
-    use api::syscall::service;
+    use abi::syscall::service;
     loop {
         if let Some(tid) = ostd::service::provider_tid(service::VFS) {
             return tid;
@@ -69,7 +69,7 @@ fn collect_lines(data: &[u8]) -> Vec<&str> {
 }
 
 /// Send a typed VfsRequest to the VFS cell and return whether it succeeded.
-fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
+fn vfs_req_ok(req: &wire::ipc::VfsRequest<'_>) -> bool {
     // Spec 17 §9 compliant exemplar: service_call_typed recvs MASKED to the VFS
     // tid (a wildcard recv here once decoded a queued keystroke as the reply —
     // "vwrite failed" while the write succeeded — and desynced every later VFS
@@ -77,13 +77,13 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
     let mut send_buf = [0u8; 512];
     let mut reply = [0u8; 64];
     matches!(
-        ostd::ipc::service_call_typed::<_, api::ipc::VfsResponse>(
+        ostd::ipc::service_call_typed::<_, wire::ipc::VfsResponse>(
             vfs_endpoint(),
             req,
             &mut send_buf,
             &mut reply,
         ),
-        Ok(api::ipc::VfsResponse::Ok)
+        Ok(wire::ipc::VfsResponse::Ok)
     )
 }
 
@@ -281,13 +281,13 @@ pub fn cmd_mkdir(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()>
                 if matches!(stat_file_vfs(&prefix), Some((_, true))) {
                     continue;
                 }
-                if vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&prefix)) && verbose {
+                if vfs_req_ok(&wire::ipc::VfsRequest::Mkdir(&prefix)) && verbose {
                     crate::executor::shell_println(&alloc::format!(
                         "mkdir: created directory '{prefix}'"
                     ));
                 }
             }
-        } else if vfs_req_ok(&api::ipc::VfsRequest::Mkdir(&resolved)) {
+        } else if vfs_req_ok(&wire::ipc::VfsRequest::Mkdir(&resolved)) {
             if verbose {
                 crate::executor::shell_println(&alloc::format!(
                     "mkdir: created directory '{path}'"
@@ -334,7 +334,7 @@ pub fn cmd_rmdir(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()>
             let mut cur = path;
             while !cur.is_empty() && cur != "/" && cur != "." {
                 let resolved = resolve_shell_path(cur);
-                if vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
+                if vfs_req_ok(&wire::ipc::VfsRequest::Rmdir(&resolved)) {
                     if verbose {
                         crate::executor::shell_println(&alloc::format!(
                             "rmdir: removing directory, '{cur}'"
@@ -359,7 +359,7 @@ pub fn cmd_rmdir(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()>
             }
         } else {
             let resolved = resolve_shell_path(path);
-            if vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&resolved)) {
+            if vfs_req_ok(&wire::ipc::VfsRequest::Rmdir(&resolved)) {
                 if verbose {
                     crate::executor::shell_println(&alloc::format!(
                         "rmdir: removing directory, '{path}'"
@@ -461,7 +461,7 @@ pub fn cmd_rm(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
         let ok = if recursive && resolved.starts_with("/data/") {
             rm_recursive(&resolved)
         } else {
-            vfs_req_ok(&api::ipc::VfsRequest::Unlink(&resolved))
+            vfs_req_ok(&wire::ipc::VfsRequest::Unlink(&resolved))
         };
         if !ok && !force {
             crate::executor::shell_stderr("rm: cannot remove '");
@@ -522,7 +522,7 @@ fn copy_single_file(src: &str, dst: &str) -> bool {
 }
 
 fn copy_dir_recursive(src: &str, dst: &str) -> bool {
-    let _ = vfs_req_ok(&api::ipc::VfsRequest::Mkdir(dst));
+    let _ = vfs_req_ok(&wire::ipc::VfsRequest::Mkdir(dst));
     let entries = match vfs_list_dir_details(src) {
         Some(e) => e,
         None => return false,
@@ -586,7 +586,7 @@ pub fn cmd_mv(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
         };
 
         let moved = if src_resolved.starts_with("/srv/") && final_dst.starts_with("/srv/") {
-            vfs_req_ok(&api::ipc::VfsRequest::Rename {
+            vfs_req_ok(&wire::ipc::VfsRequest::Rename {
                 old: &src_resolved,
                 new: &final_dst,
             })
@@ -605,13 +605,13 @@ pub fn cmd_mv(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
                     if src_resolved.starts_with("/data/") {
                         rm_recursive(&src_resolved)
                     } else {
-                        vfs_req_ok(&api::ipc::VfsRequest::Rmdir(&src_resolved))
+                        vfs_req_ok(&wire::ipc::VfsRequest::Rmdir(&src_resolved))
                     }
                 } else {
                     false
                 }
             } else if copy_single_file(&src_resolved, &final_dst) {
-                vfs_req_ok(&api::ipc::VfsRequest::Unlink(&src_resolved))
+                vfs_req_ok(&wire::ipc::VfsRequest::Unlink(&src_resolved))
             } else {
                 false
             }
@@ -708,19 +708,19 @@ pub fn cmd_cp(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
 
 /// Recursively delete a `/data/` directory tree via VFS IPC.
 pub fn rm_recursive(path: &str) -> bool {
-    vfs_req_ok(&api::ipc::VfsRequest::RmdirRecursive(path))
+    vfs_req_ok(&wire::ipc::VfsRequest::RmdirRecursive(path))
 }
 
 /// Write `content` to `path` via typed VFS IPC.
 /// The VFS server enforces `/data/`/`/tmp/` path authorization.
 pub fn write_file(path: &str, content: &[u8]) -> bool {
-    vfs_req_ok(&api::ipc::VfsRequest::Write { path, content })
+    vfs_req_ok(&wire::ipc::VfsRequest::Write { path, content })
 }
 
 /// Append `content` to `path` via typed VFS IPC.
 /// Caller must chunk if content exceeds the 512-byte IPC buffer capacity.
 pub fn append_file(path: &str, content: &[u8]) -> bool {
-    vfs_req_ok(&api::ipc::VfsRequest::Append { path, content })
+    vfs_req_ok(&wire::ipc::VfsRequest::Append { path, content })
 }
 
 /// Write `data` to `path`, splitting into ≤400-byte chunks to stay within the
@@ -927,7 +927,7 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     if depth >= FIND_MAX_DEPTH {
         return;
     }
-    use api::ipc::{VfsRequest, VfsResponse};
+    use wire::ipc::{VfsRequest, VfsResponse};
     let mut send = [0u8; 512];
     let mut reply = [0u8; 512];
     if let Ok(VfsResponse::Data(entries)) = ostd::ipc::service_call_typed_bounded::<_, VfsResponse>(
@@ -969,7 +969,7 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
 pub(crate) fn vfs_list_dir_details(
     dir: &str,
 ) -> Option<alloc::vec::Vec<(alloc::string::String, bool)>> {
-    use api::ipc::{VfsRequest, VfsResponse};
+    use wire::ipc::{VfsRequest, VfsResponse};
     let vfs_tid = vfs_endpoint();
     let mut send = [0u8; 512];
     let mut reply = [0u8; 512];

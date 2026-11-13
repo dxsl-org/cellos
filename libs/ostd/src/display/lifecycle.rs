@@ -1,6 +1,6 @@
 //! Managed-surface lifecycle requests, Grant replacement, and cleanup.
 
-use api::display::{
+use wire::display::{
     compositor_ops, AppearancePalette, SetAppearance, SetIcon, SetTitle, SurfaceStateRequest, WindowConfigure,
 };
 use types::{ViError, ViResult};
@@ -146,7 +146,7 @@ impl ViSurface {
     /// # Errors
     /// Returns `InvalidInput` for an invalid wire frame and `IO` when delivery fails.
     pub fn respond_close(&self, serial: u32, accept: bool) -> ViResult<()> {
-        let frame = api::display::CloseResponse::new(self.cap, serial, accept)
+        let frame = wire::display::CloseResponse::new(self.cap, serial, accept)
             .encode()
             .map_err(|_| ViError::InvalidInput)?;
         ipc::send_lifecycle_request(self.comp_tid, &frame)

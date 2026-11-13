@@ -3,24 +3,24 @@ use super::{fail, pass, vfs_req};
 const MARKER: &[u8] = b"cellos-rpi3-storage-pass-20260826";
 
 fn read_marker(path: &'static str) -> Option<bool> {
-    let handle = match vfs_req(&api::ipc::VfsRequest::ReadAsync { path }) {
-        api::ipc::VfsResponse::PendingHandle(handle) => handle,
+    let handle = match vfs_req(&wire::ipc::VfsRequest::ReadAsync { path }) {
+        wire::ipc::VfsResponse::PendingHandle(handle) => handle,
         _ => return None,
     };
-    match vfs_req(&api::ipc::VfsRequest::Poll { handle }) {
-        api::ipc::VfsResponse::Data(data) => Some(data == MARKER),
+    match vfs_req(&wire::ipc::VfsRequest::Poll { handle }) {
+        wire::ipc::VfsResponse::Data(data) => Some(data == MARKER),
         _ => None,
     }
 }
 
 fn verify_existing(path: &'static str, label: &str) {
-    match vfs_req(&api::ipc::VfsRequest::Stat(path)) {
-        api::ipc::VfsResponse::Err(_) => {
+    match vfs_req(&wire::ipc::VfsRequest::Stat(path)) {
+        wire::ipc::VfsResponse::Err(_) => {
             ostd::io::print("[rpi3-storage] arming first-boot marker on ");
             ostd::io::println(label);
             fail("RPi3 marker exists from prior boot");
         }
-        api::ipc::VfsResponse::Stat { is_dir: false, .. } => match read_marker(path) {
+        wire::ipc::VfsResponse::Stat { is_dir: false, .. } => match read_marker(path) {
             Some(true) => {
                 ostd::io::print("[rpi3-storage] persisted ");
                 ostd::io::println(label);
@@ -33,11 +33,11 @@ fn verify_existing(path: &'static str, label: &str) {
 }
 
 fn write_and_read(path: &'static str, label: &str) {
-    match vfs_req(&api::ipc::VfsRequest::Write {
+    match vfs_req(&wire::ipc::VfsRequest::Write {
         path,
         content: MARKER,
     }) {
-        api::ipc::VfsResponse::Ok => {}
+        wire::ipc::VfsResponse::Ok => {}
         _ => {
             fail("RPi3 storage marker write");
             return;

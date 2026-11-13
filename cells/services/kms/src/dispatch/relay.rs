@@ -1,4 +1,4 @@
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, KmsProviderKind, KmsRequestV1, RelayProviderAssessment,
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,

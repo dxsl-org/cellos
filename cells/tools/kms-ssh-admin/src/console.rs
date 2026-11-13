@@ -7,8 +7,8 @@
 //! when the reader stops, the rest of the paste is consumed and dropped: left in the input
 //! queue it would reach the shell as typed commands.
 
-use api::services::session::{key_code, modifiers};
 use terminal_sdk::input::EventKind;
+use wire::session::{key_code, modifiers};
 
 use crate::armor::END;
 use crate::secret::Secret;
@@ -239,7 +239,7 @@ pub use tty::{refuse_without_terminal, Tty};
 mod tty {
     use super::{read_block, read_word, Block, Console, Events, Next, Word};
     use crate::secret::Secret;
-    use api::cell_session::Status;
+    use abi::cell_session::Status;
     use ostd::child_context::{ChildContext, GrantSlot};
     use terminal_sdk::session::TerminalSession;
     use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};

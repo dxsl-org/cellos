@@ -82,7 +82,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
+    if ostd::service::sender_is_live_provider(abi::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }
@@ -261,7 +261,7 @@ ostd::run_app!(handler);
 // ── Capability manifest ───────────────────────────────────────────────────────
 // PcieDriverCap is granted by init via the reviewed `/bin/ahci` launch edge
 // (not a manifest flag). This manifest declares NO privileged flags.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -285,7 +285,7 @@ api::declare_manifest!(
 // `F09C-DIE-SHM` seam only.
 macro_rules! ahci_syscalls {
     ($($extra:ident),*) => {
-        api::declare_syscalls![
+        abi::declare_syscalls![
             // AppContext event-loop base set.
             Send,
             SendGather,

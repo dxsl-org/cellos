@@ -7,7 +7,7 @@
 
 use core::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
-use api::display::{AppearanceChanged, AppearancePalette};
+use wire::display::{AppearanceChanged, AppearancePalette};
 
 static PALETTE: AtomicU8 = AtomicU8::new(AppearancePalette::Light as u8);
 static SERIAL: AtomicU32 = AtomicU32::new(0);

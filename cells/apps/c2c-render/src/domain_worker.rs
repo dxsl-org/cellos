@@ -4,13 +4,13 @@
 
 extern crate alloc;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, IpcCurrent, IpcReply, GetTime];
+abi::declare_syscalls![Log, Recv, IpcCurrent, IpcReply, GetTime];
 
 ostd::cell_main!(cell_main);
 

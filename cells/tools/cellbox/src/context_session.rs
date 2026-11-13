@@ -24,7 +24,7 @@
 //! order. Without the entry the holder's stdout and stderr writers stay separate.
 
 #[cfg(any(test, not(feature = "shell_test")))]
-use api::cell_session::Status;
+use abi::cell_session::Status;
 #[cfg(not(feature = "shell_test"))]
 use terminal_sdk::context::ChildContext;
 #[cfg(not(feature = "shell_test"))]
@@ -196,7 +196,7 @@ mod tests {
     }
 
     fn merged_for(environment: &[(&str, &str)]) -> bool {
-        use api::cell_session::ObjectRefV1;
+        use abi::cell_session::ObjectRefV1;
         use terminal_sdk::context::ChildContext;
         let operation = ObjectRefV1 {
             id: 5,

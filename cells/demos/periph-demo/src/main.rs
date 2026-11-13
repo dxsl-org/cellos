@@ -11,7 +11,7 @@ extern crate alloc;
 #[path = "bcm-gpio-gate.rs"]
 mod bcm_gpio_gate;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_serial::Pl011Uart;
 use hal_gpio::{Edge, PinDir, ViGpio};
@@ -31,9 +31,9 @@ declare_manifest!(
 const SELF_PATH: &str = "/bin/periph-demo";
 const PINNED_WORKER_ARG: &str = "--pinned-worker";
 /// Priority of the pinned poll worker. The spawn contract bounds this by
-/// `api::TaskPriority::RealTime`; a raw `200` was refused (silently, as
+/// `abi::TaskPriority::RealTime`; a raw `200` was refused (silently, as
 /// `spawn_pinned unavailable`) because the gate denies anything above that.
-const POLL_PRIORITY: u8 = api::TaskPriority::RealTime as u8;
+const POLL_PRIORITY: u8 = abi::TaskPriority::RealTime as u8;
 
 ostd::cell_main!(cell_main);
 

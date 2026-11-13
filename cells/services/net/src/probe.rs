@@ -6,7 +6,7 @@
 #[cfg(feature = "loop-trace")]
 use core::sync::atomic::Ordering;
 
-use api::syscall::events::NET_RX;
+use abi::syscall::events::NET_RX;
 use ostd::io::println;
 #[cfg(not(feature = "ipc-wake-oracle"))]
 use ostd::syscall::sys_wait_completion;

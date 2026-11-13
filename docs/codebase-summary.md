@@ -15,7 +15,7 @@
 | Kernel | 1 | Size tracked in [generated metrics](code-metrics.generated.md); shared completion queue (`NET_RX` + finite `TIMER`), supervisor hotswap, exact launch profiles |
 | HAL | 23 | `hal/core`, 4 SoC crates, 15 trait crates, 3 arch crates; HAL↔kernel Rust ABI signatures are single-sourced in `hal/traits/arch/src/kernel_abi.rs` |
 | Boards | 1 | `cellos-boards` no_std descriptor crate; 7 active integration descriptors plus placeholder-only docs for `q35-x86_32`, `virt-riscv32`, `virt-aarch32` |
-| Libraries | 10 | `types`, `api`, `ostd`, plus attestation, HTTP, text, mlibc shim, agent protocol, and ViUI crates |
+| Libraries | 10 | `types`, `abi`, `wire`, `ostd`, plus attestation, HTTP, text, mlibc shim, agent protocol, and ViUI crates |
 | Tools | 5 | `init`, `shell`, `sys-tools`, `net-tools`, `wasm` |
 | Apps | 7 | `fb-console`, `robot-dashboard`, Hypha core/gateway/tool cells |
 | Demos | 21 | hello, ViUI, hotswap, HTTP(S), DOOM/Tetris, audio, robot, and peripheral demos |

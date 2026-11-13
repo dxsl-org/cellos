@@ -327,7 +327,7 @@ KMS program, so `curl`/`wget` here are HTTP/1.0 clients.
 | `cells/services/net/src/dhcp.rs` | DHCPv4 boot client (also captures lease option 6) |
 | `cells/services/net/src/poll_driver.rs` | IPC opcode constants + message decoder |
 | `cells/tools/net-tools/src/bin/{curl,wget,nc,mqtt}.rs` | Consumer tools; all resolve through the service |
-| `libs/api/src/services/posix/net.rs` | C ABI: BSD sockets + `gethostbyname` on the same resolver |
+| `libs/posix-shim/src/net.rs` | C ABI: BSD sockets + `gethostbyname` on the same resolver |
 | `tests/integration/tests/boot.rs` | RISC-V boot and network integration scenarios |
 | `tests/integration/tests/nic-riscv.rs` | RISC-V VirtIO NIC scenarios |
 | `tests/integration/tests/nic-x86.rs` | q35 e1000 DHCP and VT-d data-plane gates |

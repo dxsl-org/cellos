@@ -1,6 +1,6 @@
 //! Window actions the pointer starts: window-menu items and stacked tabs.
 
-use api::display::{Rect, WindowState};
+use wire::display::{Rect, WindowState};
 
 use super::{control, window_menu, OpenMenu, PointerRouter, RouteContext};
 use crate::stacking;

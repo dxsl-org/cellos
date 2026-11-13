@@ -10,14 +10,14 @@
 
 #![no_std]
 #![no_main]
-extern crate api;
 extern crate ostd;
+extern crate posix_shim;
 use ostd::syscall::sys_exit;
 
 use core::ffi::c_void;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Write, Log, Exit];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Write, Log, Exit];
 
 // ---------------------------------------------------------------------------
 // Math symbols — all backed by Rust libm in posix/math.rs

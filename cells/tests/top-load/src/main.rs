@@ -36,7 +36,7 @@ extern crate ostd;
 
 mod command;
 
-use api::cell_session::Status;
+use abi::cell_session::Status;
 use command::{
     parse, parse_workers, per_call_ns, Command, InputLine, OutputLine, Tids, MAX_WORKERS,
 };
@@ -49,7 +49,7 @@ use ostd::syscall::{
 use terminal_sdk::input::EventKind;
 use terminal_sdk::session::TerminalSession;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -58,7 +58,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,
@@ -83,7 +83,7 @@ const CANCELLED: i32 = 130;
 /// No deadline: block until the reader takes the bytes, closes or cancels.
 const FOREVER: u64 = u64::MAX;
 /// The Enter key symbol of a typed key event.
-const ENTER: u32 = api::session::key_code::ENTER;
+const ENTER: u32 = wire::session::key_code::ENTER;
 /// Parked workers re-read their command word every this many scheduler ticks.
 const PARK_TICKS: usize = 10;
 /// Spin iterations between two reads of the command word.

@@ -9,7 +9,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::string::String;
-use api::*;
+use abi::*;
+use types::*;
+use wire::*;
 
 // ============================================================================
 // Reference Implementation 1: Simple Counter with ViStateTransfer

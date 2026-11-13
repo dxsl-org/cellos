@@ -1,7 +1,6 @@
 use crate::beacon::{self, BeaconChannel, BeaconPlain, PeerTable};
 use crate::rng::BrokerRng;
 use crate::transport::StaticKeypair;
-use api::cluster::ClusterId;
 use ostd::service::NetRef;
 use ostd::sync::{Mutex, MutexGuard};
 use ostd::syscall::{
@@ -18,6 +17,7 @@ use service_net_broker::reply_pump::{
     reply_turn_budget, retain_busy_reply, RetainBusyResult, TrySendResult,
 };
 use service_net_broker::runtime_roles::{start_runtime_roles, RuntimeRole};
+use wire::cluster::ClusterId;
 
 #[path = "local_runtime/request_dispatch.rs"]
 mod request_dispatch;
@@ -27,7 +27,7 @@ pub(crate) mod restart_oracle;
 
 use request_dispatch::process_request;
 
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
+const IPC_BUF_SIZE: usize = wire::ipc::IPC_BUF_SIZE;
 // This broker-local deadline covers the bounded 512-turn saturation probe plus
 // scheduler margin; it does not relax the kernel's global heartbeat policy.
 const NETWORK_HEARTBEAT_TICKS: u64 = 1_000;
@@ -197,7 +197,7 @@ pub fn receive_once() {
     match sys_recv_attested(0, &mut buf) {
         SyscallResult::Ok(sender) if sender > 0 => {
             let operation = ostd::ipc::current();
-            let identity = api::caller_identity::CallerIdentity::from_recv_buf(&buf);
+            let identity = abi::caller_identity::CallerIdentity::from_recv_buf(&buf);
             let parsed = parse_request(&buf);
             #[cfg(feature = "restart-oracle")]
             if restart_oracle::request_matches(sender, identity.as_ref(), parsed.as_ref().ok()) {

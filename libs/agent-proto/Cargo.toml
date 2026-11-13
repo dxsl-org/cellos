@@ -5,7 +5,7 @@ edition = "2021"
 license = "MPL-2.0"
 
 # Shared IPC contract types for the Hypha agent (core ↔ llm-gateway ↔ tool Cells).
-# Serialized with postcard at the call sites (same as libs/api ipc types); this
+# Serialized with postcard at the call sites (same as libs/wire ipc types); this
 # crate only defines the types + their serde derives.
 
 [lints.rust]

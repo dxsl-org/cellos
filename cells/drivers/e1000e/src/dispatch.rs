@@ -1,12 +1,12 @@
 //! IPC request dispatcher for the e1000e NIC Driver Cell — the unchanged NIC
 //! wire `/bin/e1000` and `/bin/igb` serve, defined in
-//! [`api::services::proto::nic`].
+//! [`wire::proto::nic`].
 
 use crate::controller::{E1000eController, BUF_SIZE};
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 use ostd::service::{sender_is_live_provider, service};
 use ostd::sync::Mutex;
 use ostd::syscall::sys_try_send;
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 /// Total output buffer size: 2-byte length header + full frame payload.
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;

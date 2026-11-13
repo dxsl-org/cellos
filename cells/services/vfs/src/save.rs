@@ -11,11 +11,11 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use api::ipc::{
+use sha2::{Digest, Sha256};
+use wire::ipc::{
     save_refusal, Observation, SaveOutcome, VfsRequest, VfsResponse, VFS_SAVE_CHUNK, VFS_SAVE_MAX,
 };
-use api::services::proto::vfs::VfsError;
-use sha2::{Digest, Sha256};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -268,7 +268,7 @@ fn commit(
     vfs: &mut VfsManager,
     caller: Caller,
     id: u32,
-    expect: api::ipc::SaveExpect,
+    expect: wire::ipc::SaveExpect,
 ) -> VfsResponse<'static> {
     let Some(slot) = vfs.saves.owned(caller, id) else {
         return VfsResponse::Err(VfsError::Handle as u8);
@@ -303,8 +303,8 @@ fn commit(
         };
         // Same net-delta rule as `paths::write_file`.
         let old_size = match expect {
-            api::ipc::SaveExpect::Absent => 0,
-            api::ipc::SaveExpect::Present { .. } => vfs.file_size(&dst).unwrap_or(0),
+            wire::ipc::SaveExpect::Absent => 0,
+            wire::ipc::SaveExpect::Present { .. } => vfs.file_size(&dst).unwrap_or(0),
         };
         let refund = if vfs.quota.writer_of(&dst) == Some(caller.cell) {
             old_size

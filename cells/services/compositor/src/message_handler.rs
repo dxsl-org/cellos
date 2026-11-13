@@ -5,11 +5,11 @@ mod surface;
 mod view;
 mod view_frame;
 mod window;
-use api::display::Rect;
-use api::services::proto::compositor::{OWNER_EXITED_LEN, OWNER_EXITED_RELAY};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_grant_unregister;
+use wire::display::Rect;
+use wire::proto::compositor::{OWNER_EXITED_LEN, OWNER_EXITED_RELAY};
 
 use crate::appearance::Appearance;
 use crate::input_handler::InputState;
@@ -77,21 +77,21 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
 
     #[allow(deprecated)] // WRITE_PIXELS kept for legacy clients; new code uses ATTACH_GRANT
     match buf[0] {
-        api::display::compositor_ops::CREATE_SURFACE
-        | api::display::compositor_ops::WRITE_PIXELS
-        | api::display::compositor_ops::DAMAGE_SURFACE
-        | api::display::compositor_ops::MOVE_SURFACE
-        | api::display::compositor_ops::RAISE_SURFACE
-        | api::display::compositor_ops::DESTROY_SURFACE => {
+        wire::display::compositor_ops::CREATE_SURFACE
+        | wire::display::compositor_ops::WRITE_PIXELS
+        | wire::display::compositor_ops::DAMAGE_SURFACE
+        | wire::display::compositor_ops::MOVE_SURFACE
+        | wire::display::compositor_ops::RAISE_SURFACE
+        | wire::display::compositor_ops::DESTROY_SURFACE => {
             surface::handle(buf, sender, input, table, frames, z_order, pending_dirty)
         }
-        api::display::compositor_ops::SET_TITLE
-        | api::display::compositor_ops::SET_ICON
-        | api::display::compositor_ops::CONFIGURE_ACK
-        | api::display::compositor_ops::CLOSE_RESPONSE
-        | api::display::compositor_ops::MINIMIZE
-        | api::display::compositor_ops::MAXIMIZE
-        | api::display::compositor_ops::RESTORE => window::handle(
+        wire::display::compositor_ops::SET_TITLE
+        | wire::display::compositor_ops::SET_ICON
+        | wire::display::compositor_ops::CONFIGURE_ACK
+        | wire::display::compositor_ops::CLOSE_RESPONSE
+        | wire::display::compositor_ops::MINIMIZE
+        | wire::display::compositor_ops::MAXIMIZE
+        | wire::display::compositor_ops::RESTORE => window::handle(
             buf,
             sender,
             MessageContext {
@@ -105,20 +105,20 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 appearance,
             },
         ),
-        api::display::compositor_ops::ATTACH_GRANT
-        | api::display::compositor_ops::DETACH_REPLACED_GRANT
-        | api::display::compositor_ops::DAMAGE_NOTIFY
-        | api::display::compositor_ops::DETACH_GRANT
-        | api::display::compositor_ops::GET_SCREEN_SIZE => {
+        wire::display::compositor_ops::ATTACH_GRANT
+        | wire::display::compositor_ops::DETACH_REPLACED_GRANT
+        | wire::display::compositor_ops::DAMAGE_NOTIFY
+        | wire::display::compositor_ops::DETACH_GRANT
+        | wire::display::compositor_ops::GET_SCREEN_SIZE => {
             grant::handle(buf, sender, table, frames, appearance, (screen_w, screen_h))
         }
-        api::display::compositor_ops::CREATE_VIEW
-        | api::display::compositor_ops::DESTROY_VIEW
-        | api::display::compositor_ops::SELECT_VIEW
-        | api::display::compositor_ops::GROUP_VIEW
-        | api::display::compositor_ops::DETACH_VIEW
-        | api::display::compositor_ops::SNAP_FRAME
-        | api::display::compositor_ops::TOGGLE_FULLSCREEN => view::handle(
+        wire::display::compositor_ops::CREATE_VIEW
+        | wire::display::compositor_ops::DESTROY_VIEW
+        | wire::display::compositor_ops::SELECT_VIEW
+        | wire::display::compositor_ops::GROUP_VIEW
+        | wire::display::compositor_ops::DETACH_VIEW
+        | wire::display::compositor_ops::SNAP_FRAME
+        | wire::display::compositor_ops::TOGGLE_FULLSCREEN => view::handle(
             buf,
             sender,
             MessageContext {
@@ -132,9 +132,9 @@ pub(crate) fn handle_message(buf: &[u8; 512], sender: usize, context: MessageCon
                 appearance,
             },
         ),
-        api::display::compositor_ops::SET_APPEARANCE => {
-            let frame = &buf[..api::display::SET_APPEARANCE_WIRE_SIZE];
-            let changed = api::display::SetAppearance::decode(frame)
+        wire::display::compositor_ops::SET_APPEARANCE => {
+            let frame = &buf[..wire::display::SET_APPEARANCE_WIRE_SIZE];
+            let changed = wire::display::SetAppearance::decode(frame)
                 .is_ok_and(|request| appearance.apply(&request, sender, table));
             if changed {
                 // Every frame and panel shadow on screen changes colour, and

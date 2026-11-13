@@ -8,13 +8,13 @@ use alloc::vec::Vec;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex as HostMutex};
 
-use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
-use api::dir_handles::ViDirHandle;
-use api::ipc::vfs_dir_page::{self, entries, EntryKind};
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
+use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
+use abi::dir_handles::ViDirHandle;
 use types::CellId;
+use wire::ipc::vfs_dir_page::{self, entries, EntryKind};
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::access::{AccessTable, PathRule};
 use crate::backend::FsBackend;
@@ -64,12 +64,12 @@ fn manager() -> VfsManager {
 /// Encode, dispatch and decode one request the way the receive loop does.
 fn call(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest<'_>) -> Reply {
     let mut request = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(req, &mut request).expect("request fits");
+    wire::ipc::encode(req, &mut request).expect("request fits");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(vfs, &request, Some(caller), &mut resp_buf);
     let mut wire = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(&resp, &mut wire).expect("reply fits one frame");
-    match api::ipc::decode::<VfsResponse>(&wire).expect("reply decodes") {
+    wire::ipc::encode(&resp, &mut wire).expect("reply fits one frame");
+    match wire::ipc::decode::<VfsResponse>(&wire).expect("reply decodes") {
         VfsResponse::DirHandle(dir) => Reply::Dir(dir),
         VfsResponse::FileHandle(file) => Reply::File(file),
         VfsResponse::DirPage {

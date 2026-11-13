@@ -14,7 +14,7 @@
 
 use alloc::vec::Vec;
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 
 /// The two kernel calls a watch needs.
 pub trait WatchSys {

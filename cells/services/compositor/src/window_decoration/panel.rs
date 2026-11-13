@@ -7,8 +7,8 @@
 //! (`ostd::display::linear::PANEL_RADIUS`), so the clipped corner and its
 //! 1px border coincide.
 
-use api::display::Rect;
 use ostd::display::linear::{Radii, RoundRect};
+use wire::display::Rect;
 
 use super::{end, RADIUS, SHADOW_MARGIN};
 

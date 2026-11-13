@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     fn the_shell_launch_environment_is_exactly_the_merged_streams_entry_and_is_a_valid_context() {
-        use api::cell_session::ObjectRefV1;
+        use abi::cell_session::ObjectRefV1;
         use ostd::child_context::ChildContext;
         assert_eq!(SHELL_ENV, [("CELLBOX_STREAMS", "merged")]);
         // The exact list the launch passes survives the context encoder's validation

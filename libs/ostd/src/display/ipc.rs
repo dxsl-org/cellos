@@ -6,9 +6,9 @@
 //! order for [`super::poll_surface_events`] and [`crate::input::poll_events`],
 //! which route every compositor frame.
 
-use api::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
-use api::services::proto::compositor::DESTROY_OK;
 use types::{ViError, ViResult};
+use wire::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
+use wire::proto::compositor::DESTROY_OK;
 
 use crate::ipc::{call_bytes, post, IpcError};
 
@@ -70,7 +70,7 @@ pub(super) fn request_status(
 }
 
 pub(super) fn configure_ack(comp_tid: usize, cap: u32, serial: u32) -> ViResult<()> {
-    let ack = api::display::ConfigureAck::new(cap, serial)
+    let ack = wire::display::ConfigureAck::new(cap, serial)
         .encode()
         .map_err(|_| ViError::InvalidInput)?;
     request_status(comp_tid, &ack, 0x01, COMPOSITOR_CALL_TICKS)
@@ -85,7 +85,7 @@ pub(super) fn detach_grant(comp_tid: usize, cap: u32, ticks: u64) -> ViResult<()
 }
 
 pub(super) fn detach_replaced_grant(comp_tid: usize, cap: u32, old_reg_id: usize) -> ViResult<()> {
-    let request = api::display::DetachReplacedGrant::new(cap, old_reg_id as u64)
+    let request = wire::display::DetachReplacedGrant::new(cap, old_reg_id as u64)
         .encode()
         .map_err(|_| ViError::InvalidInput)?;
     request_status(comp_tid, &request, 0x01, COMPOSITOR_CALL_TICKS)

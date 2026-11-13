@@ -11,13 +11,13 @@
 //! DMA decision; safe mode only withholds services, and init does the
 //! withholding after asking this Cell (`MachinePinRequest::Gate`).
 
+use abi::machine_facts::{MachineFactsRecord, FLAG_HYPERVISOR, PROFILE_SOURCE_CMDLINE};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::machine_facts::{MachineFactsRecord, FLAG_HYPERVISOR, PROFILE_SOURCE_CMDLINE};
-use api::services::machine_pin::{PinState, Refusal};
 use ostd::io::println;
 use ostd::syscall::SyscallError;
+use wire::machine_pin::{PinState, Refusal};
 
 use crate::diff;
 use crate::store::{PinRead, PinStore};

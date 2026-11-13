@@ -3,7 +3,7 @@
 extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use api::display::{FramePlacement, Rect, ViewRef};
+use wire::display::{FramePlacement, Rect, ViewRef};
 
 mod membership;
 #[cfg(test)]

@@ -18,10 +18,10 @@
 use crate::call_outcome::Uncertainty;
 use crate::call_outcome::{self, CallOutcome, Refusal};
 use crate::{syscall, ViError, ViResult};
-use api::ipc::IPC_BUF_SIZE;
-use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+use abi::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+use wire::ipc::IPC_BUF_SIZE;
 
-pub use api::syscall::service;
+pub use abi::syscall::service;
 
 pub mod owners;
 pub mod serve;
@@ -52,7 +52,7 @@ pub fn provider_tid(service_id: u16) -> Option<usize> {
     lookup(service_id).map(|binding| binding.tid as usize)
 }
 
-/// The [`api::syscall::service_flags`] the namespace owner (init, and the
+/// The [`abi::syscall::service_flags`] the namespace owner (init, and the
 /// supervisor when it rolls a hot swap back) registers `service_id` with.
 ///
 /// VFS keeps its outer caller across nested IPC and watches the owners it
@@ -60,7 +60,7 @@ pub fn provider_tid(service_id: u16) -> Option<usize> {
 /// resources they reclaim. Each entry is an owner decision with its own reclaim
 /// consumer.
 pub const fn namespace_flags(service_id: u16) -> usize {
-    use api::syscall::service_flags::{ALL, OWNER_WATCH};
+    use abi::syscall::service_flags::{ALL, OWNER_WATCH};
     match service_id {
         service::VFS => ALL,
         service::NET | service::COMPOSITOR | service::XE_GPU => OWNER_WATCH,
@@ -98,7 +98,7 @@ pub fn register(service_id: u16, tid: usize) -> ViResult<()> {
 /// # Usage
 /// ```no_run
 /// use ostd::service::{service, ServiceRef};
-/// use ostd::services::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+/// use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 /// use ostd::ViResult;
 ///
 /// # fn stat() -> ViResult<()> {
@@ -295,7 +295,7 @@ pub type CompositorRef = ServiceRef<{ service::COMPOSITOR }>;
 #[cfg(test)]
 mod tests {
     use super::{namespace_flags, service};
-    use api::syscall::service_flags::{ALL, OWNER_WATCH};
+    use abi::syscall::service_flags::{ALL, OWNER_WATCH};
 
     /// Tripwire: which services the namespace owner flags is an owner decision.
     /// Adding one is a reviewed change with its own reclaim consumer and kernel

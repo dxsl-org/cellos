@@ -995,7 +995,7 @@ jobs:
       # Whole workspace, like the RV64 lint job. Excluded: the RV64 job's C-core
       # crates, plus three crates that only build for riscv64 (ocel-pdf and
       # ocel-quickjs assert the target in build.rs; posix-shim-test uses
-      # RV64-only api::posix items). Verified clean locally on 2026-11-10.
+      # RV64-only posix_shim items). Verified clean locally on 2026-11-10.
       - name: Clippy (x86_64 workspace)
         env:
           CC_x86_64_unknown_none: cc
@@ -2005,11 +2005,11 @@ jobs:
           cache-on-failure: true
 
       - name: Run host-side unit tests
-        # libs/types, libs/kms-codec, libs/abi, libs/wire, libs/api (the facade over
-        # them and libs/posix-shim) and libs/text-engine use cfg_attr(not(test), no_std)
-        # and define no panic/alloc lang items, so they run on the host without a
-        # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
-        # cellbox cannot host-test itself (it links ostd, which owns those items).
+        # libs/types, libs/kms-codec, libs/abi, libs/wire and libs/text-engine use
+        # cfg_attr(not(test), no_std) and define no panic/alloc lang items, so they
+        # run on the host without a bare-metal target. text-engine holds the pure
+        # grep/sed/awk/top logic that cellbox cannot host-test itself (it links ostd,
+        # which owns those items).
         # ai-proto/ai-sdk (the frozen AI wire contract and client) and hypha-llm-gateway
         # (whose local-backend decision table is policy, not plumbing) are host-testable
         # for the same reason: ai-sdk keeps `ostd` behind the `ostd-transport` feature,
@@ -2026,7 +2026,6 @@ jobs:
           cargo test -p types       --target x86_64-unknown-linux-gnu
           cargo test -p kms-codec   --target x86_64-unknown-linux-gnu
           cargo test -p abi -p wire --target x86_64-unknown-linux-gnu
-          cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
           cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway -p hypha-core \
             -p hypha-tool-fs -p hypha-tool-spawn --target x86_64-unknown-linux-gnu

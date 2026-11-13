@@ -1,7 +1,7 @@
 //! Cursor position updates and hardware/software repaint policy.
 
-use api::display::Rect;
 use ostd::syscall::sys_gpu_cursor;
+use wire::display::Rect;
 
 use crate::cursor_sprite::{CURSOR_H, CURSOR_W};
 

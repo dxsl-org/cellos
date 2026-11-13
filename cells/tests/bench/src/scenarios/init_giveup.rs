@@ -17,8 +17,8 @@
 //!
 //! Markers: `[init-giveup] PASS` / `[init-giveup] SKIP` / `[init-giveup] FAIL — <reason>`.
 
+use abi::syscall::service;
 use alloc::format;
-use api::syscall::service;
 use ostd::service::provider_tid;
 use ostd::{
     io::println,

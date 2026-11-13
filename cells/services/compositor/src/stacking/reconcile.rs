@@ -1,9 +1,9 @@
 //! Converging a stack's hidden tabs on the size and state of the shown tab,
 //! one configure per window at a time.
 
-use api::display::{ConfigureKind, Rect, WindowState};
 #[cfg(not(test))]
 use ostd::syscall::{sys_try_send, SyscallResult};
+use wire::display::{ConfigureKind, Rect, WindowState};
 
 use super::MAX_CONTENT;
 use crate::surface_table::{FrameRegistry, SurfaceTable};

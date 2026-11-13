@@ -6,6 +6,7 @@ license = "MPL-2.0"
 description = "CellOS native Poller implementation for async-io and smol ecosystem"
 
 [dependencies]
-api = { path = "../api", version = "0.1.0" }
+abi = { path = "../abi", version = "0.1.0" }
+wire = { path = "../wire", version = "0.1.0" }
 ostd = { path = "../ostd", version = "0.2.0" }
 spin = { workspace = true }

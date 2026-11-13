@@ -12,7 +12,7 @@ extern crate ostd;
 // `cellbox sh` carries no ambient launch or lifecycle authority. Exact reviewed
 // launch edges are enforced in-kernel (`loader::launch_profile`) per
 // `(caller= cellbox, route, target path)`.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -29,7 +29,7 @@ api::declare_manifest!(
 // client needs kernel entropy for KEX. Entropy grants no authority; the network
 // rights stay on that path's launch edge only. Nothing else may be added for one
 // command.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -213,7 +213,7 @@ fn run_legacy_shell() {
     let _ = ostd::syscall::sys_log("shell: starting\n");
     // The graphical frontend has not been admitted to SessionV1. Preserve
     // its existing path; a serial session never falls back to public fd 0.
-    if ostd::service::provider_tid(api::syscall::service::COMPOSITOR).is_some() {
+    if ostd::service::provider_tid(abi::syscall::service::COMPOSITOR).is_some() {
         let mut shell = ViShell::new();
         ostd::executor::block_on(shell.run());
     } else if let Err(status) = run_serial_session() {
@@ -228,7 +228,7 @@ fn run_legacy_shell() {
 /// Serial is an actual owner-backed terminal consumer, not a public-stdin
 /// adapter. The existing dispatcher retains aliases, configuration and grammar.
 #[cfg(all(not(test), not(feature = "shell_test")))]
-fn run_serial_session() -> Result<(), api::cell_session::Status> {
+fn run_serial_session() -> Result<(), abi::cell_session::Status> {
     executor::start_serial_session()?;
     run_session_loop()
 }
@@ -236,7 +236,7 @@ fn run_serial_session() -> Result<(), api::cell_session::Status> {
 /// The line editor and dispatcher over the installed terminal session (serial or
 /// frontend). Returns when the session reports end of input.
 #[cfg(all(not(test), not(feature = "shell_test")))]
-fn run_session_loop() -> Result<(), api::cell_session::Status> {
+fn run_session_loop() -> Result<(), abi::cell_session::Status> {
     let mut shell = ViShell::new();
     let mut lines = alloc::vec::Vec::<alloc::string::String>::new();
     executor::terminal_stdout(

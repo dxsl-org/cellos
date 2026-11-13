@@ -2,7 +2,7 @@
 
 use super::fake::{qemu_caps, record, record_with, vcap, BAR, MULTIPLIER, NOTIFY};
 use crate::{parse_caps, CapRegion, CfgType, TransportError};
-use api::pcie_function::{BAR_KIND_IO, PCIE_FUNCTION_CAPS_MAX};
+use abi::pcie_function::{BAR_KIND_IO, PCIE_FUNCTION_CAPS_MAX};
 
 fn region(bar: u8, offset: u32, length: u32) -> CapRegion {
     CapRegion {

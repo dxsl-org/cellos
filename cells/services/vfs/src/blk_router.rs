@@ -21,7 +21,7 @@ mod tests;
 pub use self::discovery::Discovery;
 
 use self::router::Router;
-use api::block_route::ViBlockRouteV1;
+use abi::block_route::ViBlockRouteV1;
 use ostd::prelude::Mutex;
 #[cfg(target_os = "none")]
 use ostd::syscall as sys;
@@ -165,7 +165,7 @@ pub fn discover() -> Discovery {
 #[cfg(target_os = "none")]
 fn wait_for_vfs_registration() {
     let start = sys::sys_get_scheduler_ticks();
-    while ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
+    while ostd::service::provider_tid(abi::syscall::service::VFS).is_none() {
         let waited = match (start, sys::sys_get_scheduler_ticks()) {
             (Some(start), Some(now)) => now.saturating_sub(start),
             _ => u64::MAX,

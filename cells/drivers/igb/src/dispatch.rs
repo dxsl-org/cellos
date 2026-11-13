@@ -1,11 +1,11 @@
 //! IPC request dispatcher for the igb NIC Driver Cell.
 //!
-//! It serves the NIC wire in [`api::services::proto::nic`], so the net service
+//! It serves the NIC wire in [`wire::proto::nic`], so the net service
 //! consumes this cell exactly as it consumes `/bin/e1000` — one network
 //! surface, no device-specific path.
 
 use crate::controller::{IgbController, BUF_SIZE};
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 /// Total output buffer size: 2-byte length header + full frame payload.
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;

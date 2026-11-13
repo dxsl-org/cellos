@@ -35,7 +35,7 @@
 
 // Constants (magic/version, tiers, flag bits, mask) live in the sibling
 // `manifest_flags` module (Law 5: `foo.rs` parallel to `foo/`, keeps this file
-// under 200 LOC) and are re-exported here so `api::manifest::MANIFEST_FLAG_*`,
+// under 200 LOC) and are re-exported here so `abi::manifest::MANIFEST_FLAG_*`,
 // `PROTECTION_CLASS_*`, and `TIER_*` keep resolving unchanged for every caller.
 pub use super::manifest_flags::*;
 

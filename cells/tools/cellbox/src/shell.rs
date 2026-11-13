@@ -5,8 +5,8 @@ use crate::executor;
 use crate::history::History;
 use crate::jobs::Jobs;
 use crate::parser;
-use api::config::ViConfig;
 use ostd::prelude::*;
+use wire::config::ViConfig;
 
 use alloc::collections::VecDeque;
 use alloc::string::String;

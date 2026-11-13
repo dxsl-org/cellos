@@ -1,11 +1,11 @@
 use super::super::session::VfsReadOps;
 use crate::ViResult;
+use abi::dir_handles::ViDirHandle;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum MockReply {

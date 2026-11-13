@@ -9,18 +9,18 @@
 //! directory, the cached parent and one file. Authority is exactly the caller's
 //! VFS table: no BootFS fallback, no grant, no seal.
 
+use abi::dir_handles::ViDirHandle;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::vfs_dir_page::EntryKind as VfsKind;
-use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::clients::vfs::VFS_DIR_PAGE_MAX;
 use ostd::clients::VfsClient;
 use ostd::prelude::ViError;
 use vigrep::io;
 use vigrep::walk::{DirEntry, EntryKind, FileState, Handle, PageInfo, ViSearchTree};
+use wire::ipc::vfs_dir_page::EntryKind as VfsKind;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 /// An open directory being listed.
 pub struct VfsDir {

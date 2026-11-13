@@ -9,7 +9,6 @@ from pathlib import Path
 from .checks import GIT, cached_paths, canonical_digest, exact, safe_file
 
 ROOTS = (
-    "libs/api/src/lib.rs",
     "libs/abi/src/lib.rs",
     "libs/wire/src/lib.rs",
     "libs/posix-shim/src/lib.rs",

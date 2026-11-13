@@ -32,7 +32,9 @@ kssh-faults = []
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
-api = { path = "../../../libs/api", version = "0.1.0" }
+types = { path = "../../../libs/types", version = "0.1.0" }
+abi = { path = "../../../libs/abi", version = "0.1.0" }
+wire = { path = "../../../libs/wire", version = "0.1.0" }
 terminal-sdk = { path = "../../../libs/terminal", version = "0.1.0" }
 # Pure argv/pattern/record/grep/sed/awk/top logic — a sibling crate rather than a
 # module so it can be host-tested without ostd's panic/alloc lang items.

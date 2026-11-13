@@ -29,7 +29,7 @@
 
 mod revoke;
 
-use api::dir_handles::ViDirHandle;
+use abi::dir_handles::ViDirHandle;
 
 use super::{CellState, DirError, DirTable, RevokeOutcome};
 use crate::caller::Caller;

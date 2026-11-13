@@ -44,7 +44,7 @@ pub enum Backend {
     Persistent {
         vfs_tid: usize,
         poisoned_tid: usize,
-        file: api::vfs_file_handles::ViVfsFileHandle,
+        file: wire::vfs_file_handles::ViVfsFileHandle,
         size: u64,
         spec: crate::persistent_disk::DiskSpec,
     },
@@ -154,7 +154,7 @@ impl VirtioDevice for BlkDisk {
     fn hostile_backend_fault(&mut self, command: u32) {
         if command == 1
             && matches!(self.backend, Backend::Persistent { .. })
-            && crate::backend_fault_control::disconnect(api::syscall::service::VFS)
+            && crate::backend_fault_control::disconnect(abi::syscall::service::VFS)
         {
             force_persistent_unavailable_once(&mut self.backend);
         }
@@ -183,7 +183,7 @@ fn ensure_persistent_connected(backend: &mut Backend) -> bool {
     else {
         return true;
     };
-    let Some(current_tid) = ostd::service::provider_tid(api::syscall::service::VFS) else {
+    let Some(current_tid) = ostd::service::provider_tid(abi::syscall::service::VFS) else {
         *vfs_tid = 0;
         return false;
     };
@@ -320,7 +320,7 @@ fn blk_flush(backend: &mut Backend) -> u8 {
             file,
             ..
         } => {
-            let req = api::ipc::VfsRequest::SyncHandle { file: *file };
+            let req = wire::ipc::VfsRequest::SyncHandle { file: *file };
             let mut send_buf = [0u8; 512];
             let mut resp_buf = [0u8; 512];
             // A flush is not a 4 KiB round trip: the VFS walks its dirty state
@@ -333,7 +333,7 @@ fn blk_flush(backend: &mut Backend) -> u8 {
                 &req,
                 &mut send_buf,
                 &mut resp_buf,
-                chunk_timeout_ticks(api::ipc::VFS_GRANT_CHUNK),
+                chunk_timeout_ticks(wire::ipc::VFS_GRANT_CHUNK),
             );
             let poison = matches!(
                 &result,
@@ -341,7 +341,7 @@ fn blk_flush(backend: &mut Backend) -> u8 {
                     | ostd::ipc::IpcError::PeerGone
                     | ostd::ipc::IpcError::Indeterminate)
             );
-            if matches!(&result, Ok(api::ipc::VfsResponse::Ok)) {
+            if matches!(&result, Ok(wire::ipc::VfsResponse::Ok)) {
                 0
             } else {
                 println(&alloc::format!("[hv-blk] VFS flush failed: {:?}", result));
@@ -414,7 +414,7 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                         return 1;
                     }
 
-                    let req = api::ipc::VfsRequest::ReadHandleGrant {
+                    let req = wire::ipc::VfsRequest::ReadHandleGrant {
                         file: *file,
                         offset: off + done as u64,
                         size: chunk,
@@ -436,7 +436,7 @@ fn blk_read(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize) 
                             | ostd::ipc::IpcError::Indeterminate)
                     );
                     let ok = match result {
-                        Ok(api::ipc::VfsResponse::GrantDone { bytes }) if bytes == chunk => {
+                        Ok(wire::ipc::VfsResponse::GrantDone { bytes }) if bytes == chunk => {
                             // The safe accessor carries the exclusivity proof: the
                             // handle is the region's only owner wrapper.
                             let scattered = grant.with_bytes(|data| {
@@ -558,7 +558,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                         return 1;
                     }
 
-                    let req = api::ipc::VfsRequest::WriteHandleGrant {
+                    let req = wire::ipc::VfsRequest::WriteHandleGrant {
                         file: *file,
                         offset: off + done as u64,
                         bytes: chunk,
@@ -580,7 +580,7 @@ fn blk_write(backend: &mut Backend, sector: u64, bufs: &[DescBuf], vm_id: usize)
                             | ostd::ipc::IpcError::Indeterminate)
                     );
                     let ok = match result {
-                        Ok(api::ipc::VfsResponse::GrantDone { bytes }) => bytes == chunk,
+                        Ok(wire::ipc::VfsResponse::GrantDone { bytes }) => bytes == chunk,
                         Ok(response) => {
                             println(&alloc::format!(
                                 "[hv-blk] VFS write response: {:?}",
@@ -621,7 +621,7 @@ fn alloc_chunk_grant(want: usize) -> Option<(ostd::grant::GrantHandle<u8>, usize
     // A request can be smaller than the chunk cap — a single sector, or the
     // tail of a chain — so the halving floor is one byte: refusing a small
     // request outright would fail writes the device is supposed to serve.
-    let mut chunk = want.min(api::ipc::VFS_GRANT_CHUNK);
+    let mut chunk = want.min(wire::ipc::VFS_GRANT_CHUNK);
     loop {
         if let Some(handle) = ostd::grant::GrantHandle::<u8>::alloc(chunk) {
             return Some((handle, chunk));

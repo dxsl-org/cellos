@@ -7,7 +7,7 @@ use std::format;
 use std::string::String;
 use std::vec::Vec;
 
-use api::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+use abi::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
 use kms_codec::{
     ssh_chunk_count, KmsCapabilityReadiness, KmsCustodyPosture, KmsKeyAlgorithm, KmsOpcode,
     KmsProviderKind, KmsRequestV1, KmsSshKeyCustody, SshAbortRequestPayload, SshChunkAckPayload,

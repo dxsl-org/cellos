@@ -306,17 +306,17 @@ pub enum StdinStop {
     /// The arena could not hold the next chunk.
     Allocation,
     /// The stream failed (not an end of stream).
-    Read(api::cell_session::Status),
+    Read(abi::cell_session::Status),
 }
 
 /// Read `read` to end of stream, keeping at most `bound` bytes. `read` returns the
 /// number of bytes it placed in the buffer, or `Err(Status::Eof)` at the end.
 #[cfg(any(test, not(feature = "shell_test")))]
 pub fn read_bounded(
-    mut read: impl FnMut(&mut [u8]) -> Result<usize, api::cell_session::Status>,
+    mut read: impl FnMut(&mut [u8]) -> Result<usize, abi::cell_session::Status>,
     bound: usize,
 ) -> Result<alloc::vec::Vec<u8>, StdinStop> {
-    use api::cell_session::Status;
+    use abi::cell_session::Status;
     let mut bytes = alloc::vec::Vec::new();
     let mut chunk = [0u8; 512];
     loop {
@@ -339,7 +339,7 @@ pub fn read_bounded(
 /// failure still needs its one stderr line. A failed stdout makes the one-shot end with
 /// 1 (DS0-4); a command that already failed has reported its own diagnostic.
 #[cfg(any(test, not(feature = "shell_test")))]
-pub fn final_status(status: i32, stdout_failure: Option<api::cell_session::Status>) -> (i32, bool) {
+pub fn final_status(status: i32, stdout_failure: Option<abi::cell_session::Status>) -> (i32, bool) {
     match stdout_failure {
         Some(_) => (OUTPUT_FAILED_STATUS, status == 0),
         None => (status, false),
@@ -470,9 +470,9 @@ mod runtime {
 mod tests {
     use super::*;
     use crate::ledger::{Surface, LEDGER};
+    use abi::cell_session::Status;
     use alloc::collections::BTreeSet;
     use alloc::vec::Vec;
-    use api::cell_session::Status;
 
     const STAGES: [&str; 6] = ["select", "where", "sort-by", "take", "to", "from"];
 

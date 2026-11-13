@@ -147,7 +147,7 @@ value**:
 the VFS service a focus target / net-interest owner / reactor host, MUST re-check
 this table first. Same standing obligation the `NetRequest` 17/18 rows carry.
 
-**Rule:** a new protocol MUST either (a) use postcard (`api::ipc::encode`), or
+**Rule:** a new protocol MUST either (a) use postcard (`wire::ipc::encode`), or
 (b) claim an unused byte-0 value here in §3 and §9. Never reuse a value for a
 second meaning on the same receiver.
 
@@ -159,7 +159,7 @@ Raw `sys_recv` hands the receiver its **entire recv buffer** (up to
 `IPC_BUF_SIZE` = 4096) with **no length**. The message boundary is not
 recoverable from the buffer.
 
-- **Typed messages: use postcard.** `api::ipc::{encode, decode}` /
+- **Typed messages: use postcard.** `wire::ipc::{encode, decode}` /
   `take_from_bytes` — self-delimiting, tolerant of trailing zeros left by a
   previous larger message. This is the default; prefer it for all new IPC.
 - **Raw byte protocols MUST carry an explicit length.** The NIC wire protocol
@@ -173,7 +173,7 @@ recoverable from the buffer.
 
 ## 5. Buffer sizes
 
-- `IPC_BUF_SIZE = 4096` (`libs/api/src/services/ipc.rs`) is the recv-buffer and
+- `IPC_BUF_SIZE = 4096` (`libs/abi/src/kernel_ipc.rs`, re-exported as `wire::ipc::IPC_BUF_SIZE`) is the recv-buffer and
   max message size. A cell's recv buffer MUST be `IPC_BUF_SIZE` bytes.
 - **A receiver that opts into caller attestation (§11) gives up the last 32
   bytes** of its recv buffer to the kernel. Max usable payload for it is
@@ -305,7 +305,7 @@ the reason the value is safe against existing owners.
   Includes user confirm #1 (of the Law-1 2×) for appending `NetRequest`
   variants 17/18; confirm #2 happens at implementation time.
 - 2026-07-30 — **Ratified (Law-1 2× confirmed):** new §11 "Caller attestation".
-  Adds `api::caller_identity` (`CallerIdentity`, `CALLER_IDENTITY_LEN`,
+  Adds `abi::caller_identity` (`CallerIdentity`, `CALLER_IDENTITY_LEN`,
   `RECV_ATTEST_CALLER`) and a flag on the previously-unused fourth `Recv`
   argument. No message enum changes, no discriminant changes, no framing change
   for any existing receiver.
@@ -327,7 +327,7 @@ the reason the value is safe against existing owners.
   only with no fast arm, async, grant, or raw-pointer lifetime. The §3 postcard
   range widens to `0x19`.
 - 2026-10-08 — **Recorded for a changed syscall surface; no ratified wire rule moved:**
-  `ViSyscall::LookupServiceBound = 429` was added (`libs/api/src/abi/syscall.rs`) and shares
+  `ViSyscall::LookupServiceBound = 429` was added (`libs/abi/src/syscall.rs`) and shares
   the syscall **allowlist bit 37** with `LookupService = 206`, which owns it as an open
   syscall — the same sharing form already used by the `ReadCap`/`WriteCap` cap syscalls, and
   the reason no cell's pre-existing `__ViCell_syscalls` section is silently denied. No frame,
@@ -347,7 +347,7 @@ the reason the value is safe against existing owners.
 - 2026-11-02 — **Recorded for a changed syscall surface; no ratified wire rule moved (Law-1 2×
   confirmed: `.agents/260927-1100-c2c-anywhere-tier-aware/phase-03d-multi-source-wait-cp1-approval.md`
   and `…-cp2-approval.md`).**
-  - **New source:** `api::completion::source::IPC = 1 << 2` (bytes `04 00 00 00`) is appended.
+  - **New source:** `abi::completion::source::IPC = 1 << 2` (bytes `04 00 00 00`) is appended.
   - **Mask rule:** `WaitCompletion = 242` takes a non-empty subset of `NET_RX | TIMER | IPC`
     (`source::is_wait_mask_supported`); `TIMER` still needs a finite timeout. Arguments, the return
     convention and allowlist bit 42 are unchanged.
@@ -376,7 +376,7 @@ the reason the value is safe against existing owners.
 - 2026-11-05 — **Recorded for a changed syscall surface; no ratified wire rule moved (Law-1
   confirmation 1 at CP1: `.agents/261103-2218-x86-platform-breadth/cp1-04b-waitcompletion-irq.md`;
   confirmation 2 is the CP2 decision in `…/cp2-04b-waitcompletion-irq.md`).**
-  - **New source:** `api::completion::source::IRQ = 1 << 3` (bytes `08 00 00 00`) is appended.
+  - **New source:** `abi::completion::source::IRQ = 1 << 3` (bytes `08 00 00 00`) is appended.
     The mask rule becomes a non-empty subset of `NET_RX | TIMER | IPC | IRQ`; record v1, its
     length, version and magic are unchanged.
   - **IRQ records (x86_64 only):** a wait naming `IRQ` covers every MSI/MSI-X line the calling
@@ -397,13 +397,13 @@ the reason the value is safe against existing owners.
   `…/cp2-ipc-model.md`).**
   - **Model (§1):** request/reply is an exact operation; `Send` is a raw primitive and events are
     posts. Services reply through the captured operation or post; SDK requests are bounded.
-  - **D1 `RegisterService` (205):** `a2` is `flags` (`api::syscall::service_flags`:
+  - **D1 `RegisterService` (205):** `a2` is `flags` (`abi::syscall::service_flags`:
     `RETAINS_OUTER_CALLER`, `OWNER_WATCH`), namespace owner only. They replace the kernel's
     "VFS cell" rule and its owner-watch table.
   - **D2/D3:** `WaitIrq` (234), `WaitForEvent` (217) and `IpcWait` (258) park as completion-source
     waits; results unchanged. No ABI change.
   - **D4/D5 retired numbers:** `Call` 2, `Reply` 3, `Exec` 6, `AudioPlay` 218, `NetTx` 310, `NetRx` 311
-    and `LookupService` 206 are reserved rows in `libs/api/abi/syscalls.toml`; their allowlist bits
+    and `LookupService` 206 are reserved rows in `libs/abi/abi/syscalls.toml`; their allowlist bits
     are never reused (bit 37 stays with `LookupServiceBound`). `Yield` 104 is not retired.
   - **D6:** `ProcessInfo.state` keeps 0/1/2/3; 3 means Terminated or Retiring.
   - **Unchanged:** frames, byte-0 registry, envelopes, attested tails, buffer sizes, the
@@ -412,7 +412,7 @@ the reason the value is safe against existing owners.
   Law-1 confirmation 1 at CP1: `.agents/261110-1703-architecture-remediation/cp1-service-wire.md`;
   confirmation 2 is `…/cp2-service-wire.md`).**
   - **W1 owners:** every service opcode, status and error byte lives in one module under
-    `libs/api/src/services/proto/` (`app_envelope`, `supervisor`, `net`, `tls`, `nic`, `vfs`,
+    `libs/wire/src/proto/` (`app_envelope`, `supervisor`, `net`, `tls`, `nic`, `vfs`,
     `config`, `input`, `compositor`), pinned to its previous byte by `proto_tests.rs`.
     `scripts/check-service-wire-literals.py` (CI) refuses copies. The byte-0 collisions listed
     there (net `0xFF` failure/EOF, `0x10` screen size/input event, `TLS_CLOSE` = the next
@@ -606,7 +606,7 @@ invisible to every existing parser.
   `RecvTimeout` already uses the fourth argument for its deadline, and
   `RecvScatter` has no single buffer tail to write. A service that authorizes and
   needs a deadline passes the timeout in `Recv`'s `a3` bits 8–31
-  (`api::caller_identity::recv_flags`, Phase 12 W2): the trailer rule holds, and
+  (`abi::caller_identity::recv_flags`, Phase 12 W2): the trailer rule holds, and
   expiry is the generic error sentinel, never sender 0.
 - **The trailer must name the sender.** `ostd::service::serve` accepts a trailer
   only when its `sender_tid` equals the returned sender; a death record (sender =
@@ -663,7 +663,7 @@ does not approve a new Law-1 ABI by itself.
 ### 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 
 Normative cutover contract for `Grant*` between two Tier-2 private roots. Public syscall
-numbers and result conventions are unchanged (`libs/api`, `libs/types` are frozen); the
+numbers and result conventions are unchanged (`libs/abi`, `libs/types` are frozen); the
 alloc-safe sentinel for `GrantAlloc`/`GrantRegister` stays `0` and the "not authorized"
 sentinel for `GrantSlice` stays `usize::MAX`.
 

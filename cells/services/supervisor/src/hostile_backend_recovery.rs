@@ -1,15 +1,15 @@
+use abi::caller_identity::CallerIdentity;
+use abi::syscall::service;
 use alloc::format;
-use api::caller_identity::CallerIdentity;
-use api::hostile_backend_recovery::{
-    encode_kill_response, parse_kill_request, DISCONNECT_LOG_MARKER, KILL_STATUS_INVALID_REQUEST,
-    KILL_STATUS_KILL_FAILED, KILL_STATUS_OK, KILL_STATUS_REJECTED_CALLER,
-    KILL_STATUS_SERVICE_NOT_ALLOWED, KILL_STATUS_SERVICE_NOT_FOUND,
-};
-use api::syscall::service;
 use ostd::io::println;
 use ostd::ipc::Incoming;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_kill_cell;
+use wire::hostile_backend_recovery::{
+    encode_kill_response, parse_kill_request, DISCONNECT_LOG_MARKER, KILL_STATUS_INVALID_REQUEST,
+    KILL_STATUS_KILL_FAILED, KILL_STATUS_OK, KILL_STATUS_REJECTED_CALLER,
+    KILL_STATUS_SERVICE_NOT_ALLOWED, KILL_STATUS_SERVICE_NOT_FOUND,
+};
 
 /// Signed programs reviewed to request a kill (see `sender_is_program`).
 const HYPERVISOR_PROGRAM: &str = "hypervisor";

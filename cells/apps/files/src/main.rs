@@ -30,7 +30,6 @@ mod views;
 use crate::app::{FilesApp, PromptKind};
 use crate::fs::FileSystem;
 use crate::model::ViewMode;
-use api::display::PixelFormat;
 use ostd::display::linear::icons::LineIcon;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
@@ -39,8 +38,9 @@ use ostd::syscall::{
 };
 use ostd::typography::TextFonts;
 use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+use wire::display::PixelFormat;
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Log,
     SpawnFromPath,
     GrantAlloc,
@@ -296,7 +296,7 @@ fn cell_main() {
         sys_yield();
     }
 }
-fn dispatch_launch_intent(intent: &api::services::mime::LaunchIntent) {
+fn dispatch_launch_intent(intent: &wire::mime::LaunchIntent) {
     ostd::io::print("[files] LaunchIntent: ");
     ostd::io::print(intent.action.as_str());
     ostd::io::print(" target=");
@@ -304,7 +304,7 @@ fn dispatch_launch_intent(intent: &api::services::mime::LaunchIntent) {
     ostd::io::print(" app=");
     ostd::io::println(intent.app_binary);
 
-    let spawned = if intent.action == api::services::mime::FileAction::Run
+    let spawned = if intent.action == wire::mime::FileAction::Run
         && intent.target_path.starts_with("/bin/")
     {
         sys_spawn_from_path(&intent.target_path)

@@ -48,7 +48,7 @@ impl Default for MockTransport {
 impl Transport for MockTransport {
     fn lookup(&mut self, service: u16) -> Option<usize> {
         let state = self.state.borrow();
-        if service == api::syscall::service::OCEL_ACTIVATOR {
+        if service == abi::syscall::service::OCEL_ACTIVATOR {
             if state.missing_broker {
                 None
             } else {

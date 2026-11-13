@@ -9,7 +9,7 @@ ostd::cell_main!(cell_main);
 /// List running tasks from the kernel task table.
 fn cell_main() {
     let output = ostd::io::ProcessOutput::read_own().unwrap_or_else(|_| syscall::sys_exit(1));
-    let mut buf = [api::syscall::ProcessInfo::default(); 32];
+    let mut buf = [abi::syscall::ProcessInfo::default(); 32];
     match syscall::sys_get_procs(&mut buf) {
         Ok(count) => {
             emit(

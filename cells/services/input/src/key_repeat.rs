@@ -1,5 +1,5 @@
 //! One repeat owner for all keyboard producers; no allocation or catch-up bursts.
-use api::input::{KeyState, KeySym};
+use wire::input::{KeyState, KeySym};
 
 const DELAY_MS: u64 = 400;
 const INTERVAL_MS: u64 = 33;

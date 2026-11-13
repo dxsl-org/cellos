@@ -3,7 +3,7 @@
 //!
 //! `request_input_focus` and `collect_input_events` delegate to `ostd::input`
 //! for service-discovery and IPC; this module handles only the
-//! `api::input::InputEvent` → `viui::Event` mapping.
+//! `wire::input::InputEvent` → `viui::Event` mapping.
 //!
 //! A Pressed/Repeated key with a printable character emits BOTH `KeyPress` AND
 //! `Char(c)` so text-edit widgets and shortcut handlers both fire. A Released
@@ -14,9 +14,9 @@ use alloc::vec::Vec;
 
 use crate::event::{Event, KeyCode, Modifiers, MouseButton};
 use crate::layout::Point;
-use api::input::{InputEvent, KeyEvent, KeyState};
+use wire::input::{InputEvent, KeyEvent, KeyState};
 
-// ─── Modifier bit constants (api::input::Modifiers bitmask) ──────────────────
+// ─── Modifier bit constants (wire::input::Modifiers bitmask) ──────────────────
 
 const MOD_SHIFT: u8 = 0b0000_0001;
 const MOD_CTRL: u8 = 0b0000_0010;
@@ -36,7 +36,7 @@ pub fn request_input_focus() -> bool {
 /// Drain pending input events from the input service (non-blocking).
 ///
 /// Calls `ostd::input::poll_events(max_events)` then maps each
-/// `api::input::InputEvent` to the equivalent `viui::Event`(s).
+/// `wire::input::InputEvent` to the equivalent `viui::Event`(s).
 /// Typically called once per frame before `ViApp::tick_with_dt`.
 pub fn collect_input_events(max_events: usize) -> Vec<Event> {
     ostd::input::poll_events(max_events)
@@ -45,7 +45,7 @@ pub fn collect_input_events(max_events: usize) -> Vec<Event> {
         .collect()
 }
 
-// ─── api::input::InputEvent → viui::Event conversion ────────────────────────
+// ─── wire::input::InputEvent → viui::Event conversion ────────────────────────
 
 fn input_event_to_viui(ev: &InputEvent) -> Vec<Event> {
     match ev {
@@ -95,11 +95,11 @@ fn convert_mouse_move(x: i32, y: i32) -> Vec<Event> {
     alloc::vec![Event::MouseMove { pos }]
 }
 
-fn convert_mouse_button(button: &api::input::MouseButton, state: &KeyState) -> Vec<Event> {
+fn convert_mouse_button(button: &wire::input::MouseButton, state: &KeyState) -> Vec<Event> {
     let btn = match button {
-        api::input::MouseButton::Left => MouseButton::Left,
-        api::input::MouseButton::Right => MouseButton::Right,
-        api::input::MouseButton::Middle => MouseButton::Middle,
+        wire::input::MouseButton::Left => MouseButton::Left,
+        wire::input::MouseButton::Right => MouseButton::Right,
+        wire::input::MouseButton::Middle => MouseButton::Middle,
         // Back/Forward have no viui::MouseButton equivalent — drop silently.
         _ => return Vec::new(),
     };

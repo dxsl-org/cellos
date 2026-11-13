@@ -9,14 +9,14 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::dir_handles::ViDirHandle;
-use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::net::NetError;
-use api::syscall::service;
+use abi::dir_handles::ViDirHandle;
+use abi::syscall::service;
 use ostd::io::{print, println};
 use ostd::ipc::{service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_get_time_ms, sys_yield};
+use wire::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::net::NetError;
 
 /// service-net refused the request: this Cell holds no network right for it.
 const NET_DENIED: &str = "permission denied (no network right)";
@@ -39,7 +39,7 @@ const NET_CALL_TICKS: u64 = 1_000;
 /// 10 s: one VFS request, a backing-store write included.
 const VFS_CALL_TICKS: u64 = 1_000;
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     Log,

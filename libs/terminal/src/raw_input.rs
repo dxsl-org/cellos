@@ -20,9 +20,9 @@
 use crate::codec::{Decoder, KeyAction, KeyState, KeySymbol, Modifiers};
 use crate::input::{Event, EventKind};
 use crate::session::TerminalSession;
+use abi::cell_session::{ObjectRefV1, Status};
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use api::cell_session::{ObjectRefV1, Status};
 
 /// Raw routing plus bracketed paste (`TerminalMode` bits 0 and 4).
 pub const RAW_SHELL_MODE: u32 = 1 | 16;

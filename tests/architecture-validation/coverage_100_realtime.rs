@@ -7,7 +7,9 @@
 
 extern crate alloc;
 use alloc::vec::Vec;
-use api::*;
+use abi::*;
+use types::*;
+use wire::*;
 
 /// Mock arena allocator for testing
 struct MockArena {

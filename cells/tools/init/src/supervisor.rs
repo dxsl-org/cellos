@@ -1,13 +1,13 @@
+use abi::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
+use abi::retirement::{reason, RetirementState, ViRetirementV1};
+use abi::service_binding::ServiceBinding;
+use abi::syscall::service;
 use alloc::string::String;
-use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
-use api::retirement::{reason, RetirementState, ViRetirementV1};
-use api::service_binding::ServiceBinding;
-use api::services::proto::supervisor::{OWNER_EXITED_LEN, OWNER_EXITED_NOTICE};
-use api::syscall::service;
 use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_notify_on_exit, sys_query_retirement, SyscallError, SyscallResult};
+use wire::proto::supervisor::{OWNER_EXITED_LEN, OWNER_EXITED_NOTICE};
 
 use crate::pin_gate::SafeConsole;
 use crate::service_table::{self, now_ticks, task_alive, Service};
@@ -296,7 +296,7 @@ fn relay_hypervisor_exit(dead: usize) {
 #[cfg(test)]
 mod restart_decision_tests {
     use super::{decision_line, restart_decision, Decision};
-    use api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_VERSION};
+    use abi::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_VERSION};
     use ostd::syscall::SyscallError;
 
     fn record(state: RetirementState, reasons: u32) -> ViRetirementV1 {
@@ -397,7 +397,7 @@ mod restart_decision_tests {
 #[cfg(test)]
 mod swap_adoption_tests {
     use super::{swap_successor, HOTSWAP_EXIT_REASON};
-    use api::service_binding::ServiceBinding;
+    use abi::service_binding::ServiceBinding;
 
     const LIVE_41: ServiceBinding = ServiceBinding::new(41, 7, 2);
 

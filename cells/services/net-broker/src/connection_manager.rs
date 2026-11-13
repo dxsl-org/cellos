@@ -10,11 +10,11 @@
 // it remains available for future authenticated routing integration.
 #![allow(dead_code)]
 
-use api::cluster::{CellNetId, PeerTicket};
-use api::ipc::{NetRequest, NetResponse};
 use ostd::service::NetRef;
 use ostd::syscall::sys_heartbeat;
 use ostd::{ViError, ViResult};
+use wire::cluster::{CellNetId, PeerTicket};
+use wire::ipc::{NetRequest, NetResponse};
 
 use crate::rng::BrokerRng;
 use crate::transport::{ConnectionPool, NoiseSession, StaticKeypair};
@@ -99,7 +99,7 @@ impl<'a> ConnectionManager<'a> {
         if self.pool.is_full() {
             return Err(ViError::WouldBlock);
         }
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut resp = [0u8; wire::ipc::IPC_BUF_SIZE];
 
         sys_heartbeat(HEARTBEAT_MS);
         let cap = match net

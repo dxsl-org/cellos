@@ -1,6 +1,6 @@
 use super::*;
 use crate::local_ingress::{ParsedLocalRequest, ReplyStatus};
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 
 fn identity(cell_id: u64, generation: u64, sender_tid: u64) -> CallerIdentity {
     CallerIdentity {

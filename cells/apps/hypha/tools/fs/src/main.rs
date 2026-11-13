@@ -29,9 +29,9 @@ use ostd::io::println;
 use ostd::runtime::CellRuntime;
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 // StateRestore: reads the spawn argv that names the owning core.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

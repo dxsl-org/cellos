@@ -1,8 +1,8 @@
 use crate::caller::Caller;
 use crate::manager::VfsManager;
 use alloc::vec;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use types::CellId;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 const CELL_OLD: Caller = Caller::principal(CellId(44), 1);
 const CELL_OTHER: Caller = Caller::principal(CellId(55), 1);

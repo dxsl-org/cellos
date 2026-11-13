@@ -9,7 +9,7 @@
 //! # Message envelope
 //!
 //! Messages sent through [`AppContext::send_msg`] carry the envelope header
-//! defined by [`api::services::proto::app_envelope`]: the magic byte (a
+//! defined by [`wire::proto::app_envelope`]: the magic byte (a
 //! namespace guard against raw-protocol collisions), then the event kind
 //! (message, shutdown, snapshot, restore, capability revocation), then the
 //! caller-defined payload.
@@ -34,7 +34,7 @@ extern crate alloc;
 
 use crate::{syscall, ViError, ViResult};
 use alloc::vec::Vec;
-use api::services::proto::app_envelope::{
+use wire::proto::app_envelope::{
     CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, KIND_MESSAGE, KIND_RESTORE, KIND_SHUTDOWN,
     KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SHUTDOWN_PARENT_DIED, SHUTDOWN_WATCHDOG,
     SNAPSHOT_LEN,
@@ -85,7 +85,7 @@ pub enum AppEvent {
     /// Automatically decoded from the 65-byte `0x10`-opcode IPC message.
     /// Cells must call [`AppContext::request_input_focus`] at startup to
     /// receive these events.
-    Input(api::input::InputEvent),
+    Input(wire::input::InputEvent),
     /// The receive deadline elapsed (only from [`AppContext::run_with_timeout`]).
     Timeout,
     /// Kernel-requested graceful shutdown (legacy form — no reason byte in envelope).
@@ -135,7 +135,7 @@ pub enum AppEvent {
     /// subsystem that depended on the capability and stop retrying it, rather
     /// than discovering the loss through a fault.
     ///
-    /// `mask` uses the `api::syscall::cap_mask` bits the kernel revoked.
+    /// `mask` uses the `abi::syscall::cap_mask` bits the kernel revoked.
     CapRevoked {
         /// The revoked capability mask.
         mask: u32,
@@ -160,7 +160,7 @@ pub struct AppContext {
     /// for a caller-identity trailer.
     attest_callers: bool,
     /// Kernel-attested identity of the sender of the event being handled.
-    caller: Option<api::caller_identity::CallerIdentity>,
+    caller: Option<abi::caller_identity::CallerIdentity>,
     /// The request being handled, captured at its receive: a handler that does
     /// its own IPC before replying (a receive replaces the kernel's record of
     /// the current request) still answers the caller's exact operation.
@@ -183,7 +183,7 @@ impl AppContext {
     }
 
     /// Ask the kernel to attest the sender of every later event
-    /// (`api::caller_identity`). Call from the `Init` arm, before the first
+    /// (`abi::caller_identity`). Call from the `Init` arm, before the first
     /// receive. The last `CALLER_IDENTITY_LEN` bytes of the receive buffer then
     /// belong to the kernel and are cut from every event's payload. Only untimed waits are attested: with a heartbeat
     /// or a timeout armed, [`Self::caller`] is `None`, which a service must treat
@@ -196,7 +196,7 @@ impl AppContext {
     /// so a handler never sees trailer bytes as payload.
     fn payload(&self) -> &[u8] {
         if self.attest_callers {
-            &self.recv_buf[..RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]
+            &self.recv_buf[..RECV_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN]
         } else {
             &self.recv_buf
         }
@@ -205,7 +205,7 @@ impl AppContext {
     /// Kernel-attested identity of the sender of the event being handled, or
     /// `None` when attestation is off, the wait was timed, or the kernel wrote
     /// no valid trailer. `None` means "unknown caller": deny.
-    pub fn caller(&self) -> Option<api::caller_identity::CallerIdentity> {
+    pub fn caller(&self) -> Option<abi::caller_identity::CallerIdentity> {
         self.caller
     }
 
@@ -231,7 +231,7 @@ impl AppContext {
         if attested {
             // A message the kernel does not attest must not inherit the
             // previous sender's trailer.
-            let tail = RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+            let tail = RECV_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN;
             self.recv_buf[tail..].fill(0);
         }
         let result = match wait {
@@ -240,7 +240,7 @@ impl AppContext {
             Some(ticks) => syscall::sys_recv_timeout(0, &mut self.recv_buf, ticks),
         };
         if attested && matches!(result, syscall::SyscallResult::Ok(tid) if tid != 0) {
-            self.caller = api::caller_identity::CallerIdentity::from_recv_buf(&self.recv_buf);
+            self.caller = abi::caller_identity::CallerIdentity::from_recv_buf(&self.recv_buf);
         }
         self.request = match result {
             syscall::SyscallResult::Ok(tid) if tid != 0 => Some(crate::ipc::Incoming::current(tid)),
@@ -449,7 +449,7 @@ impl AppContext {
                     data: buf[HEADER_LEN..].to_vec(),
                 },
             }
-        } else if buf.len() >= 2 && buf[0] == api::input::INPUT_EVENT_OPCODE {
+        } else if buf.len() >= 2 && buf[0] == wire::input::INPUT_EVENT_OPCODE {
             if let Some(ev) = crate::input::parse_frame(buf) {
                 return AppEvent::Input(ev);
             }

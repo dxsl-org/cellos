@@ -436,10 +436,10 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
     use crate::canvas::{FramebufferCanvas, ViCanvas};
     use crate::widget::PaintCx;
     use crate::window::{decode_input_event, translate_input, WindowChrome};
-    use api::display::PixelFormat;
     use ostd::display::{wait_for_compositor, ViSurface};
     use ostd::input::InputEvent;
     use ostd::syscall::{sys_recv, SyscallResult};
+    use wire::display::PixelFormat;
 
     let comp_tid = wait_for_compositor();
     let w = 640u32;

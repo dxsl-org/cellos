@@ -6,8 +6,8 @@
 // #![no_std] // Commented out for integration test on Host which has std
 // extern crate alloc; // Available via std prelude or we can just use std
 
-use api::vm::*;
-use api::*;
+use abi::vm::*;
+use types::*;
 
 /// Mock VMM for ViVmRuntime testing.
 struct MockVMM {

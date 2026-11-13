@@ -1,6 +1,6 @@
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
 use types::CellId;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -15,10 +15,10 @@ fn guest_disk_security_boundary_is_fail_closed() {
         cell: CellId(60),
         generation: 1,
         sender_tid: 50,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
-        (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
+        (id == abi::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
     });
     let _ = vfs.dirs.on_contact(hv_caller);
     vfs.dirs.mark_attested(hv_caller);
@@ -29,7 +29,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         cell: CellId(60),
         generation: 2,
         sender_tid: 52,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     vfs.access = crate::access::AccessTable::with_service_lookup(|_| None);
     assert!(!vfs.access.can_write(dead_caller, "/mnt/sd/guest_disk.img"));
@@ -37,14 +37,14 @@ fn guest_disk_security_boundary_is_fail_closed() {
         .access
         .can_write(respawned_caller, "/mnt/sd/guest_disk.img"));
     vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
-        (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(52)
+        (id == abi::hypervisor::HYPERVISOR_SERVICE_ID).then_some(52)
     });
     assert!(!vfs.access.can_write(dead_caller, "/mnt/sd/guest_disk.img"));
     assert!(vfs
         .access
         .can_write(respawned_caller, "/mnt/sd/guest_disk.img"));
     vfs.access = crate::access::AccessTable::with_service_lookup(|id| {
-        (id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
+        (id == abi::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
     });
 
     for protected in [
@@ -73,7 +73,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         content: b"extra",
     };
     let mut req_buf = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(&req, &mut req_buf).expect("encode");
+    wire::ipc::encode(&req, &mut req_buf).expect("encode");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
     assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
@@ -100,7 +100,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         bytes: 1024,
     };
     let mut req_buf = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(&over_req, &mut req_buf).expect("encode");
+    wire::ipc::encode(&over_req, &mut req_buf).expect("encode");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
     assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
@@ -111,7 +111,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         grant: 0,
         bytes: 1,
     };
-    api::ipc::encode(&over_boundary_req, &mut req_buf).expect("encode");
+    wire::ipc::encode(&over_boundary_req, &mut req_buf).expect("encode");
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
     assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
 
@@ -121,7 +121,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
         grant: 0,
         bytes: 512,
     };
-    api::ipc::encode(&within_req, &mut req_buf).expect("encode");
+    wire::ipc::encode(&within_req, &mut req_buf).expect("encode");
     let resp = crate::dispatch::handle_request(&mut vfs, &req_buf, Some(hv_caller), &mut resp_buf);
     assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Io as u8));
 
@@ -139,7 +139,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
             content: b"extra",
         };
         let mut req_b = [0u8; IPC_BUF_SIZE];
-        api::ipc::encode(&append_alias, &mut req_b).expect("encode");
+        wire::ipc::encode(&append_alias, &mut req_b).expect("encode");
         let mut resp_b = [0u8; IPC_BUF_SIZE];
         let resp = crate::dispatch::handle_request(&mut vfs, &req_b, Some(hv_caller), &mut resp_b);
         assert!(matches!(resp, VfsResponse::Err(code) if code == VfsError::Denied as u8));
@@ -185,7 +185,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
             bytes: 512,
         };
         let mut req_other = [0u8; IPC_BUF_SIZE];
-        api::ipc::encode(&grant_req, &mut req_other).expect("encode");
+        wire::ipc::encode(&grant_req, &mut req_other).expect("encode");
         let mut resp_other = [0u8; IPC_BUF_SIZE];
         let resp = crate::dispatch::handle_request(
             &mut vfs,

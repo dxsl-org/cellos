@@ -201,8 +201,8 @@ profile for trusted C/C++/Zig libraries.
 Built-in; no customization needed. The Lua Cell declares:
 
 ```rust
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, Heartbeat];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Send, Recv, Log, Heartbeat];
 ```
 
 Scripts access VFS via IPC (the Lua Cell forwards requests).

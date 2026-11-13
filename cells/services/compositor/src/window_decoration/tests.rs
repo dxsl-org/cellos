@@ -144,7 +144,7 @@ fn compose(content: Rect, count: usize) -> alloc::vec::Vec<u8> {
     let labels = [label; 3];
     let style = Style {
         active: true,
-        palette: chrome(api::display::AppearancePalette::Light),
+        palette: chrome(wire::display::AppearancePalette::Light),
         tabs: &labels[..count],
         selected: 0,
         offset: 0,
@@ -175,7 +175,7 @@ fn content_never_covers_the_rounded_outline() {
     for count in [1, 3] {
         let pixels = compose(CONTENT, count);
         let [_, body] = shapes(CONTENT, Tabs::stack(count, 0));
-        let outline = chrome(api::display::AppearancePalette::Light)
+        let outline = chrome(wire::display::AppearancePalette::Light)
             .active
             .outline;
         for row in 0..body.h {
@@ -233,7 +233,7 @@ fn paint_stays_inside_bounds_and_dirty() {
     ];
     let style = Style {
         active: false,
-        palette: chrome(api::display::AppearancePalette::Dark),
+        palette: chrome(wire::display::AppearancePalette::Dark),
         tabs: &tabs,
         selected: 1,
         offset: 0,

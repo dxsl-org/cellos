@@ -5,19 +5,19 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::caller_identity::CallerIdentity;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use api::caller_identity::CallerIdentity;
-use api::ipc::{ConfigRequest, ConfigResponse};
-use api::services::proto::config::ConfigError;
 use ostd::hotswap::ViStateTransfer;
 use ostd::prelude::*;
+use wire::ipc::{ConfigRequest, ConfigResponse};
+use wire::proto::config::ConfigError;
 
 mod rights;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -88,7 +88,7 @@ fn handle<'o>(
             ConfigResponse::Keys(list.as_str())
         }
     };
-    let encoded = api::ipc::encode(&response, out)
+    let encoded = wire::ipc::encode(&response, out)
         .ok()
         .map(|slice| slice.len());
     match encoded {
@@ -98,7 +98,7 @@ fn handle<'o>(
 }
 
 fn encode<'o>(response: &ConfigResponse<'_>, out: &'o mut [u8]) -> Option<&'o [u8]> {
-    api::ipc::encode(response, out).ok().map(|slice| &*slice)
+    wire::ipc::encode(response, out).ok().map(|slice| &*slice)
 }
 
 #[cfg(target_os = "none")]
@@ -106,7 +106,7 @@ ostd::cell_main!(cell_main);
 
 #[cfg(target_os = "none")]
 fn cell_main() {
-    use api::ipc::IPC_BUF_SIZE;
+    use wire::ipc::IPC_BUF_SIZE;
 
     ostd::io::println("[config] Config Service v0.4 (typed IPC, attested writes)");
 
@@ -120,13 +120,13 @@ fn cell_main() {
 #[cfg(target_os = "none")]
 struct ConfigService {
     store: ConfigStore,
-    resp_buf: [u8; api::ipc::IPC_BUF_SIZE],
+    resp_buf: [u8; wire::ipc::IPC_BUF_SIZE],
 }
 
 #[cfg(target_os = "none")]
 impl ostd::service::Handler for ConfigService {
     fn on_request(&mut self, request: ostd::service::Request<'_>) {
-        let decoded = api::ipc::decode::<ConfigRequest>(request.payload()).ok();
+        let decoded = wire::ipc::decode::<ConfigRequest>(request.payload()).ok();
         if let Some(reply) = handle(
             &mut self.store,
             decoded,
@@ -219,8 +219,8 @@ fn take_str<'b>(rest: &mut &'b [u8]) -> Result<&'b str, ViError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_VFS_MUTATE};
-    use api::ipc::IPC_BUF_SIZE;
+    use abi::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_VFS_MUTATE};
+    use wire::ipc::IPC_BUF_SIZE;
 
     const SHELL: CallerIdentity = CallerIdentity {
         flags: CALLER_FLAG_CONFIG_WRITE | CALLER_FLAG_VFS_MUTATE,
@@ -245,7 +245,7 @@ mod tests {
         let reply = handle(store, Some(request), caller, &mut out).expect("reply encodes");
         alloc::format!(
             "{:?}",
-            api::ipc::decode::<ConfigResponse>(reply).expect("reply decodes")
+            wire::ipc::decode::<ConfigResponse>(reply).expect("reply decodes")
         )
     }
 
@@ -343,7 +343,7 @@ mod tests {
         let mut out = [0u8; IPC_BUF_SIZE];
         let reply = handle(&mut store, None, Some(&SHELL), &mut out).expect("reply encodes");
         assert!(matches!(
-            api::ipc::decode::<ConfigResponse>(reply),
+            wire::ipc::decode::<ConfigResponse>(reply),
             Ok(ConfigResponse::Err(code)) if code == ConfigError::Malformed as u8
         ));
     }

@@ -5,9 +5,9 @@
 use crate::gpu_tests::{test_gpu, TestGpu};
 use crate::owner_watch::WatchSys;
 use crate::service::{Outcome, Service};
+use abi::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use alloc::vec;
 use alloc::vec::Vec;
-use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use intel_gpu_core::uapi::ioctl::*;
 use intel_gpu_core::uapi::query::{DRM_XE_DEVICE_QUERY_GT_LIST, DRM_XE_DEVICE_QUERY_GT_TOPOLOGY};
 use intel_gpu_core::uapi::{u16_at, u32_at, u64_at, UserMemory};
@@ -75,7 +75,7 @@ fn client(tid: usize, cell: u64, generation: u64) -> Client {
 
 /// A receive buffer as the kernel leaves it: request first, attested trailer last.
 fn attested(frame: &[u8], sender: usize, cell: u64, generation: u64) -> Vec<u8> {
-    let mut buf = vec![0u8; api::ipc::IPC_BUF_SIZE];
+    let mut buf = vec![0u8; wire::ipc::IPC_BUF_SIZE];
     buf[..frame.len()].copy_from_slice(frame);
     let identity = CallerIdentity {
         flags: 0,
@@ -83,7 +83,7 @@ fn attested(frame: &[u8], sender: usize, cell: u64, generation: u64) -> Vec<u8> 
         generation,
         sender_tid: sender as u64,
     };
-    buf[api::ipc::IPC_BUF_SIZE - CALLER_IDENTITY_LEN..].copy_from_slice(&identity.to_trailer());
+    buf[wire::ipc::IPC_BUF_SIZE - CALLER_IDENTITY_LEN..].copy_from_slice(&identity.to_trailer());
     buf
 }
 
@@ -296,7 +296,7 @@ fn client_death_releases_its_files() {
 
     // An unattributed message from a tid that is not a watched root: ignored.
     let mut reply = [0u8; MAX_REPLY_LEN];
-    let zero = vec![0u8; api::ipc::IPC_BUF_SIZE];
+    let zero = vec![0u8; wire::ipc::IPC_BUF_SIZE];
     assert_eq!(
         svc.handle(&zero, 3001, &mut reply, &mut w),
         Outcome::Dropped
@@ -488,7 +488,7 @@ fn gem_create_needs_the_senders_export_and_death_zaps_before_revoking() {
     // The kernel reports cell 3 dead: contexts stopped, leaves cleared, then the revoke,
     // which finds no leaf into its window.
     let mut reply = [0u8; MAX_REPLY_LEN];
-    let zero = vec![0u8; api::ipc::IPC_BUF_SIZE];
+    let zero = vec![0u8; wire::ipc::IPC_BUF_SIZE];
     assert_eq!(
         svc.handle(&zero, 3000, &mut reply, &mut w),
         Outcome::Released { files: 1 }

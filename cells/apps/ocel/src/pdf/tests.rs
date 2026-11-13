@@ -184,7 +184,7 @@ struct LeaseTrace {
 struct PdfTransport(alloc::rc::Rc<core::cell::RefCell<LeaseTrace>>);
 impl Transport for PdfTransport {
     fn lookup(&mut self, service: u16) -> Option<usize> {
-        Some(if service == api::syscall::service::OCEL_ACTIVATOR {
+        Some(if service == abi::syscall::service::OCEL_ACTIVATOR {
             10
         } else {
             20

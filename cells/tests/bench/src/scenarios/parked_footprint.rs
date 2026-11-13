@@ -1,6 +1,6 @@
 //! Finite private P01 fixture. Lifecycle success is not resource-settlement evidence.
+use abi::task::TaskPriority;
 use alloc::format;
-use api::task::TaskPriority;
 use ostd::io::println;
 use ostd::ipc::{self, IpcTerminal, PendingCall};
 use ostd::syscall::{self, SyscallError, SyscallResult};
@@ -47,7 +47,7 @@ fn exchange(tid: usize, phase: u8, index: u8, deadline: u64) -> bool {
 }
 
 fn all_live(tids: &[usize]) -> bool {
-    let mut rows = [api::syscall::ProcessInfo::default(); 64];
+    let mut rows = [abi::syscall::ProcessInfo::default(); 64];
     let Ok(count) = syscall::sys_get_procs(&mut rows) else {
         return false;
     };

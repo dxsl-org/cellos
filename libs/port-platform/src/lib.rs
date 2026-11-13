@@ -9,7 +9,6 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use api::display::PixelFormat;
 use ostd::{
     clients::{net::SocketId, NetClient, VfsClient},
     display::{wait_for_compositor, ViSurface},
@@ -18,6 +17,7 @@ use ostd::{
     task::yield_now,
     ViResult,
 };
+use wire::display::PixelFormat;
 
 /// Capability-scoped host services supplied to one C application port.
 pub struct PlatformHost {

@@ -3,12 +3,12 @@ use super::sample::{Cpu, Frame, Quality, Rows, Sampler, SysMem};
 use super::text::{format_bytes, render_frame, TopError, MAX_WIDTH};
 use super::*;
 use crate::pipeline::{value_to_json, Item, Value};
-use alloc::string::String;
-use alloc::vec::Vec;
-use api::telemetry::{
+use abi::telemetry::{
     cell_flags, cell_state, encode_name, header_flags, task_flags, task_state, TelemetryCellV1,
     TelemetryHeaderV1, TelemetrySnapshot, TelemetryTaskV1, SCOPE_SYSTEM, TELEMETRY_VERSION,
 };
+use alloc::string::String;
+use alloc::vec::Vec;
 
 const EPOCH: u64 = 0x9e37_79b9_7f4a_7c15;
 const SEC: u64 = 1_000_000_000;
@@ -782,7 +782,7 @@ fn sort_aliases_follow_the_row_kind() {
 
 #[test]
 fn request_flags_ask_for_tasks_only_when_shown() {
-    use api::telemetry::request;
+    use abi::telemetry::request;
     assert_eq!(request_flags(View::Cells, false), 0);
     assert_eq!(request_flags(View::Cells, true), request::SYSTEM_MEMORY);
     assert_eq!(request_flags(View::Tasks, false), request::TASKS);

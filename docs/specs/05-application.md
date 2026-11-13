@@ -125,7 +125,7 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 | Build | Rust only | WSL2 Meson build first |
 | Default | Yes | Opt-in via feature |
 
-**CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses the POSIX services shim. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
+**CRITICAL mutual exclusion:** `posix-shim = { features = ["mlibc"] }` suppresses the POSIX shim. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
 
 See `docs/mlibc-build.md` for the full mlibc build guide. See also: [`docs/posix-ledger.md`](../posix-ledger.md) for the per-adapter POSIX export, sysdep and evidence ledger.
 
@@ -134,7 +134,7 @@ See `docs/mlibc-build.md` for the full mlibc build guide. See also: [`docs/posix
 ```
 [Tier 1 ffi-posix link flow - mlibc profile:]
   cell.rs (Rust, owns the cell)
-    └── api = { features = ["mlibc"] }  ← POSIX services shim suppressed
+    └── posix-shim = { features = ["mlibc"] }  ← POSIX shim suppressed
     └── mlibc-shim                      ← links third_party/mlibc/build/libc.a
     └── extern "C" { fn rknn_init(...); }   ← FFI bindings
          ↓ links statically
@@ -144,7 +144,7 @@ See `docs/mlibc-build.md` for the full mlibc build guide. See also: [`docs/posix
          ↓ → ViSyscall (VFS IPC, Net IPC, GetTime, GetRandom)
 ```
 
-**Implementation hiện tại** (`libs/api/src/services/posix.rs`, feature flag `posix`):
+**Implementation hiện tại** (`libs/posix-shim/src/lib.rs`, crate `posix-shim`):
 
 | Nhóm | Functions | Status |
 |---|---|---|
@@ -191,7 +191,7 @@ cell. What the profile actually provides, and where:
 
 | Concern | Where it lives |
 |---|---|
-| `operator new`/`delete` (all six forms), `__cxa_pure_virtual`, `__cxa_guard_*`, `abort` | The POSIX shim's C++ ABI layer: `libs/api/src/services/posix/alloc.rs`, `cxxabi.rs` |
+| `operator new`/`delete` (all six forms), `__cxa_pure_virtual`, `__cxa_guard_*`, `abort` | The POSIX shim's C++ ABI layer: `libs/posix-shim/src/alloc.rs`, `cxxabi.rs` |
 | `atexit` / `__cxa_atexit` | Same layer; registration is accepted and never fires (a cell has no process teardown — the kernel reclaims the address space) |
 | Static constructors | `ostd` crt0 walks `__init_array` on all three architectures (`libs/ostd/src/startup.rs:42-43,67-70,91-92`) |
 | Types and helpers | The cell's own `cpp/cxx_support.hpp` (compiler builtins; see below) |
@@ -206,7 +206,7 @@ is the separate `cpp-hosted` profile below, with its own size measurement.
 
 **Admitted on RV64, AArch64 and x86_64**, because the profile's runtime layer is the POSIX shim,
 whose module is compiled for those targets and wasm32
-(`libs/api/src/services/posix.rs:13-22`), and the cell's build script selects a compiler for each
+(`libs/posix-shim/src/lib.rs:12-21`), and the cell's build script selects a compiler for each
 of them (`cells/tests/cpp-smoke/build.rs:62-152`). It fails with that reason on any other target
 instead of leaving an undefined-symbol dump.
 
@@ -228,7 +228,7 @@ Tier-1 cells, RV64 and AArch64 may not use it yet.
 | C++ ABI, exceptions, RTTI, thread-safe statics, `operator new`/`delete` | libc++abi; the Tier-A layer is compiled out under `mlibc` |
 | Unwinding | libunwind, `.eh_frame_hdr` through mlibc's `dl_iterate_phdr` |
 | Threads, `thread_local` | mlibc pthread and static TLS on `Spawn`, `FutexWait`/`FutexWake`, `SetTlsBase` |
-| Libc | mlibc `libc.a` through `libs/mlibc-shim`; `api` with `features = ["mlibc"]` |
+| Libc | mlibc `libc.a` through `libs/mlibc-shim`; `posix-shim` with `features = ["mlibc"]` |
 | Witness | `cells/tests/cpp-hosted-smoke`; runner `scripts/x86/qemu-cpp-hosted-smoke.sh` |
 
 Translation units choose `-fexceptions -frtti` (llama.cpp) or `-fno-exceptions -fno-rtti` (Mesa)

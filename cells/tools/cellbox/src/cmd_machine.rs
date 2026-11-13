@@ -1,6 +1,6 @@
 //! `machine pin [--confirm]`: the console client of the machine-pin cell (ADR-0029 §3
 //! as amended in Phase 13, the ADR-0028 CLI pattern). The shell holds no pin authority:
-//! it asks the `service::MACHINE_PIN` provider with the [`api::services::machine_pin`]
+//! it asks the `service::MACHINE_PIN` provider with the [`wire::machine_pin`]
 //! frame and prints the answer. The cell honours `Confirm` only in safe mode and only
 //! from the console shell init started (init hands it that shell's tid), identified by
 //! the kernel-attested sender tid, so the request is sent from this task: the builtin
@@ -13,8 +13,8 @@
 use alloc::format;
 use alloc::string::String;
 
-use api::services::machine_pin::{MachinePinRequest, MachinePinResponse, PinState, Refusal};
 use ostd::ipc::{IpcTerminal, PendingCall};
+use wire::machine_pin::{MachinePinRequest, MachinePinResponse, PinState, Refusal};
 
 pub const USAGE: &str = "usage: machine pin [--confirm]";
 const USAGE_STATUS: i32 = 2;
@@ -124,7 +124,7 @@ pub fn cmd_machine(args: &[String]) -> i32 {
 }
 
 fn run(invocation: Invocation) -> Result<i32, Failure> {
-    let pin = ostd::service::provider_tid(api::syscall::service::MACHINE_PIN)
+    let pin = ostd::service::provider_tid(abi::syscall::service::MACHINE_PIN)
         .ok_or(Failure::Unavailable)?;
     let MachinePinResponse::Status {
         state,
@@ -160,7 +160,7 @@ fn run(invocation: Invocation) -> Result<i32, Failure> {
 /// terminal taken, releasing the slot; a reply that wins the cancel is still used.
 fn call(pin: usize, request: MachinePinRequest) -> Result<MachinePinResponse, Failure> {
     let pending = PendingCall::submit(pin, &request.encode()).map_err(|_| Failure::NoReply)?;
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     let completion = match pending.wait_and_take(&mut reply, ROUND_TICKS, ROUNDS) {
         Ok(Some(completion)) => completion,
         Ok(None) | Err(_) => {

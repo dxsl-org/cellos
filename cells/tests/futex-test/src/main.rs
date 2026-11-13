@@ -39,16 +39,16 @@ use ostd::syscall::{
     sys_exit, sys_futex_wait, sys_futex_wake, sys_yield, FutexWaitOutcome, SyscallResult,
 };
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
 // Futex wait/wake are always permitted (no allowlist bit exists); declaring them
 // documents intent and costs nothing.
-api::declare_syscalls![Log, Exit, Spawn, Yield, GetTime, FutexWait, FutexWake];
+abi::declare_syscalls![Log, Exit, Spawn, Yield, GetTime, FutexWait, FutexWake];
 
 ostd::cell_main!(cell_main);
 

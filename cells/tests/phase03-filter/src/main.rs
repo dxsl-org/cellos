@@ -53,19 +53,19 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::cell_session::Status;
 use alloc::format;
 use alloc::string::String;
-use api::cell_session::Status;
-use api::ipc::{ConfigRequest, ConfigResponse, NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::{config::ConfigError, net::NetError};
 use ostd::child_context::{ChildContext, GrantSlot};
 use ostd::service::{ConfigRef, NetRef};
 use ostd::syscall::sys_exit;
 use terminal_sdk::raw_input::RawInput;
 use terminal_sdk::session::TerminalSession;
 use terminal_sdk::stream::{Endpoint, EndpointRef, OperationRef};
+use wire::ipc::{ConfigRequest, ConfigResponse, NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::{config::ConfigError, net::NetError};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -74,7 +74,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,

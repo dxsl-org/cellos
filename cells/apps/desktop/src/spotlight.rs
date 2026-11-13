@@ -58,7 +58,7 @@ pub enum SpotlightAction {
     None,
     Close,
     LaunchApp(&'static str),
-    LaunchIntent(api::services::mime::LaunchIntent),
+    LaunchIntent(wire::mime::LaunchIntent),
     TogglePin(&'static str),
     SwitchTask(usize),
     CycleTheme,
@@ -309,8 +309,8 @@ fn render_applications(
     sw: u32,
 ) {
     if state.query.starts_with('/') {
-        let intent = api::services::mime::AssociationRegistry::resolve_intent(&state.query, None);
-        let app_name = api::services::mime::AssociationRegistry::default_app(intent.mime)
+        let intent = wire::mime::AssociationRegistry::resolve_intent(&state.query, None);
+        let app_name = wire::mime::AssociationRegistry::default_app(intent.mime)
             .map(|a| a.app_name)
             .unwrap_or(intent.app_id);
         let row_y = LIST_START_Y;
@@ -672,10 +672,8 @@ pub fn handle_key(
         KeySym::Return => match state.section {
             SpotlightSection::Cells => {
                 if state.query.starts_with('/') {
-                    let intent = api::services::mime::AssociationRegistry::resolve_intent(
-                        &state.query,
-                        None,
-                    );
+                    let intent =
+                        wire::mime::AssociationRegistry::resolve_intent(&state.query, None);
                     state.close();
                     SpotlightAction::LaunchIntent(intent)
                 } else {
@@ -756,10 +754,8 @@ pub fn handle_click(
                 let row_y = LIST_START_Y;
                 let row_h = ROW_HEIGHT as i32;
                 if is_inside(x, y, 14, row_y, sw - 28, row_h as u32) {
-                    let intent = api::services::mime::AssociationRegistry::resolve_intent(
-                        &state.query,
-                        None,
-                    );
+                    let intent =
+                        wire::mime::AssociationRegistry::resolve_intent(&state.query, None);
                     state.close();
                     return SpotlightAction::LaunchIntent(intent);
                 }
@@ -903,9 +899,9 @@ mod tests {
         match action {
             SpotlightAction::LaunchIntent(intent) => {
                 assert_eq!(intent.target_path, "/data/manual.pdf");
-                assert_eq!(intent.mime, api::services::mime::MimeType::ApplicationPdf);
+                assert_eq!(intent.mime, wire::mime::MimeType::ApplicationPdf);
                 assert_eq!(intent.app_id, "ocel");
-                assert_eq!(intent.action, api::services::mime::FileAction::Open);
+                assert_eq!(intent.action, wire::mime::FileAction::Open);
             }
             other => panic!("expected LaunchIntent, got {:?}", other),
         }

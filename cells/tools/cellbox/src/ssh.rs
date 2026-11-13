@@ -14,12 +14,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use api::services::ssh_completion as sc;
 use ostd::clients::kms::{
     KmsClient, KmsClientError, KmsErrorCode, KmsSshKeyCustody, SshSignResponsePayload,
 };
 use vissh::args::{self, Host};
 use vissh::session::{Credential, Dispatch, Ending, Outcome, Phase, SignRequest, Signed};
+use wire::ssh_completion as sc;
 
 /// Install path of the cellbox ELF that carries the ssh client rights.
 pub const SSH_PATH: &str = "/bin/cellbox-ssh";
@@ -45,8 +45,8 @@ pub fn trust_added(host: &str, port: u16) -> String {
 
 /// What a host-trust lookup answer (`None`: the store could not be asked) means.
 pub fn lookup_answer(code: Option<u8>) -> vissh::session::Trust {
-    use api::ipc::ssh_trust;
     use vissh::session::Trust;
+    use wire::ipc::ssh_trust;
     match code {
         Some(ssh_trust::KNOWN_EXACT) => Trust::KnownExact,
         Some(ssh_trust::UNKNOWN) => Trust::Unknown,
@@ -58,8 +58,8 @@ pub fn lookup_answer(code: Option<u8>) -> vissh::session::Trust {
 
 /// What a `CommitTrustChallenge` (or challenge refusal) code means for the session.
 pub fn commit_trust(code: u8) -> vissh::session::Trust {
-    use api::ipc::ssh_trust;
     use vissh::session::Trust;
+    use wire::ipc::ssh_trust;
     match code {
         ssh_trust::KNOWN_EXACT => Trust::KnownExact,
         ssh_trust::MISMATCH => Trust::Mismatch,
@@ -574,7 +574,7 @@ mod child {
 
     impl Transport for NetTransport<'_> {
         fn send(&mut self, data: &[u8]) -> Result<usize, TransportError> {
-            let chunk = &data[..data.len().min(api::ipc::NET_TCP_INLINE_DATA_MAX)];
+            let chunk = &data[..data.len().min(wire::ipc::NET_TCP_INLINE_DATA_MAX)];
             self.net
                 .tcp_send_some(self.socket, chunk)
                 .map_err(|_| TransportError::Io)
@@ -759,8 +759,8 @@ mod child {
 
         /// A session operation failed: these answers mean the session (or this child's
         /// foreground in it) is gone for good, not a transient condition.
-        fn note(&mut self, status: api::cell_session::Status) {
-            use api::cell_session::Status as S;
+        fn note(&mut self, status: abi::cell_session::Status) {
+            use abi::cell_session::Status as S;
             if matches!(
                 status,
                 S::Stale | S::Revoked | S::BrokenPipe | S::WrongSession | S::WrongEpoch
@@ -835,7 +835,7 @@ mod child {
             }
             match RawInput::enter(self.session) {
                 Ok(raw) => self.raw = Some(raw),
-                Err(api::cell_session::Status::WouldBlock) => {
+                Err(abi::cell_session::Status::WouldBlock) => {
                     if let Ok(mut stale) = self.session.next_event(0) {
                         stale.scrub();
                     }
@@ -895,7 +895,7 @@ mod child {
                         Input::Data(len)
                     }
                 }
-                Err(api::cell_session::Status::Eof) => {
+                Err(abi::cell_session::Status::Eof) => {
                     self.stdin_ended = true;
                     let mut out = Vec::new();
                     self.escape.flush(&mut out);
@@ -972,7 +972,7 @@ mod child {
                     match self.session.begin_trust_confirmation(confirmation) {
                         Ok(()) => challenge,
                         // A Serial or headless terminal has no trusted way to answer.
-                        Err(api::cell_session::Status::Unsupported) => {
+                        Err(abi::cell_session::Status::Unsupported) => {
                             return (Trust::NoConfirmation, false)
                         }
                         Err(_) => return (Trust::Unavailable, false),
@@ -985,11 +985,14 @@ mod child {
             let give_up = now_ms().saturating_add(CONFIRM_MS);
             loop {
                 match kms.trust_commit(challenge) {
-                    Ok(api::ipc::ssh_trust::PENDING) if now_ms() < give_up => {
+                    Ok(wire::ipc::ssh_trust::PENDING) if now_ms() < give_up => {
                         let _ = ostd::syscall::sys_set_timer(CONFIRM_POLL_TICKS);
                     }
                     Ok(code) => {
-                        return (commit_trust(code), code == api::ipc::ssh_trust::KNOWN_EXACT)
+                        return (
+                            commit_trust(code),
+                            code == wire::ipc::ssh_trust::KNOWN_EXACT,
+                        )
                     }
                     Err(_) => return (Trust::Unavailable, false),
                 }
@@ -1159,9 +1162,9 @@ mod child {
                 Ok(n) if n > 0 && n <= buf.len() => Input::Data(n),
                 Ok(_)
                 | Err(
-                    api::cell_session::Status::WouldBlock | api::cell_session::Status::TimedOut,
+                    abi::cell_session::Status::WouldBlock | abi::cell_session::Status::TimedOut,
                 ) => Input::Idle,
-                Err(api::cell_session::Status::Eof) => {
+                Err(abi::cell_session::Status::Eof) => {
                     self.stdin_ended = true;
                     Input::Eof
                 }
@@ -1220,7 +1223,7 @@ mod child {
             let mut event = match session.next_event(until) {
                 Ok(event) => event,
                 Err(
-                    api::cell_session::Status::TimedOut | api::cell_session::Status::WouldBlock,
+                    abi::cell_session::Status::TimedOut | abi::cell_session::Status::WouldBlock,
                 ) => {
                     if until == 0 {
                         let _ = ostd::syscall::sys_set_timer(1);

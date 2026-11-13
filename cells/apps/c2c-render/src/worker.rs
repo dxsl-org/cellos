@@ -4,8 +4,8 @@
 
 extern crate alloc;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Log, Recv, IpcCurrent, IpcReply, GetTime, GrantSlice];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Log, Recv, IpcCurrent, IpcReply, GetTime, GrantSlice];
 
 ostd::cell_main!(cell_main);
 

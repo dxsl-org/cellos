@@ -4,7 +4,7 @@
 //! The store is one file under the KMS namespace (`/srv/cellos/kms`, which the VFS admits
 //! only to the live KMS), seeded by the provisioner (D79-10). A lookup compares the
 //! caller's configured host identifier, port, algorithm and complete key blob with it and
-//! answers one [`api::ipc::ssh_trust`] code; the store's contents never leave the
+//! answers one [`wire::ipc::ssh_trust`] code; the store's contents never leave the
 //! service. Only an attested caller holding the outbound-connect right may ask. A query
 //! is staged in [`query`] (opcodes 25-27, 29) because host and key do not fit one frame.
 //!
@@ -26,14 +26,14 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use api::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT};
-use api::cell_session::ObjectRefV1 as Ref;
-use api::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
+use abi::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT};
+use abi::cell_session::ObjectRefV1 as Ref;
 use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshAbortRequestPayload, SshChunkRequestPayload,
     SshImportCommitRequestPayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
     TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,
 };
+use wire::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
 
 use crate::auth::attested_caller;
 use crate::reply::SuccessPayload;

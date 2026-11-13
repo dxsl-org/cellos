@@ -4,8 +4,8 @@
 //! (which has SpawnCap).  Only `run_worker` is called from bench-probe.
 
 use crate::framework::{counters, timer::ticks_to_ns};
+use abi::task::TaskPriority;
 use alloc::format;
-use api::task::TaskPriority;
 use core::hint::black_box;
 use ostd::{
     io::println,

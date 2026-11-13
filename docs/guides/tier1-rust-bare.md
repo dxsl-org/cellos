@@ -62,7 +62,7 @@ Always add `_ => {}` wildcard to future-proof your code.
 Declare capabilities and permitted syscalls:
 
 ```rust
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,   // raw disk I/O
     network = false,    // network access
     spawn = false,      // spawn other Cells
@@ -71,7 +71,7 @@ api::declare_manifest!(
     hypervisor = false  // create VMs (Tier 3 linux-guest, G2+)
 );
 
-api::declare_syscalls![Send, Recv, Log, Exit, GetTime];
+abi::declare_syscalls![Send, Recv, Log, Exit, GetTime];
 ```
 
 **Capabilities** are kernel grants (honored only for `/bin/*` binaries). **Syscalls** are the thin whitelist the kernel enforces. Omit what you don't use.
@@ -120,8 +120,8 @@ See [api-reference.md](../api-reference.md) for the full list.
 
 use ostd::io::println;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Log, Exit];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Log, Exit];
 
 ostd::app_entry!(handler = main_handler);
 

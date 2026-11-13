@@ -1,12 +1,12 @@
 extern crate alloc;
 
+use abi::dir_handles::ViDirHandle;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::service::VfsRef;
 use ostd::{ViError, ViResult};
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 const MAX_READ_CHUNK: u32 = 4000;
 
@@ -58,10 +58,10 @@ pub(super) fn read_file(
 }
 
 fn path_components(path: &str) -> ViResult<Vec<&str>> {
-    api::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ViError::InvalidInput)?;
+    wire::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ViError::InvalidInput)?;
     path[1..]
         .split('/')
-        .map(|part| api::dir_name::validate_dir_component(part.as_bytes()))
+        .map(|part| wire::dir_name::validate_dir_component(part.as_bytes()))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| ViError::InvalidInput)
 }

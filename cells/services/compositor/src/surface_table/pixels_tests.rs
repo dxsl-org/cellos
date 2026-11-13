@@ -1,6 +1,6 @@
 extern crate std;
 
-use api::display::{PixelFormat, SurfaceRole};
+use wire::display::{PixelFormat, SurfaceRole};
 
 use super::SurfaceState;
 

@@ -1,6 +1,6 @@
 //! Public compositor lifecycle event types.
 
-use api::display::{WindowCloseRequest, WindowConfigure, WindowStateChanged};
+use wire::display::{WindowCloseRequest, WindowConfigure, WindowStateChanged};
 
 /// A typed lifecycle event sent by the trusted compositor to a surface owner.
 ///

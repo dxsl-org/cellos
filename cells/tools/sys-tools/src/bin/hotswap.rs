@@ -3,16 +3,16 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-use api::services::proto::supervisor::{
+use abi::syscall::service;
+use ostd::ipc::IpcError;
+use ostd::service::provider_tid;
+use ostd::syscall;
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use wire::proto::supervisor::{
     HotswapError, ELF_PATH_LEN, HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_HOTSWAP_DONE,
     PHASE_HOTSWAP_ERROR, PHASE_REFUSED, STATUS_INVALID_REQUEST, STATUS_OK, STATUS_REJECTED_CALLER,
     STATUS_REPLY_LEN, STATUS_SERVICE_NOT_FOUND, SVC_NAME_LEN,
 };
-use api::syscall::service;
-use ostd::ipc::IpcError;
-use ostd::service::provider_tid;
-use ostd::syscall;
 
 ostd::cell_main!(cell_main);
 

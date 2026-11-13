@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 /// Size of one AI IPC message.
 ///
-/// Must equal `api::ipc::IPC_BUF_SIZE`; `libs/ai-sdk` asserts that equality so a future change to
+/// Must equal `wire::ipc::IPC_BUF_SIZE`; `libs/ai-sdk` asserts that equality so a future change to
 /// the system-wide buffer cannot silently desynchronise this contract.
 pub const AI_IPC_BUF_SIZE: usize = 4096;
 
@@ -391,7 +391,7 @@ pub fn validate_request(request: &AiRequest<'_>) -> Result<(), AiError> {
 
 /// Serialize `msg` into `buf`; returns the written prefix.
 ///
-/// Mirrors `api::ipc::encode` so cells use one calling convention.
+/// Mirrors `wire::ipc::encode` so cells use one calling convention.
 pub fn encode<'a, T: Serialize>(msg: &T, buf: &'a mut [u8]) -> postcard::Result<&'a mut [u8]> {
     postcard::to_slice(msg, buf)
 }

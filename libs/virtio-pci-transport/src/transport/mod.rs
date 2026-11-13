@@ -9,7 +9,7 @@ use crate::error::{InitFailure, TransportError};
 use crate::features::{AccessPlatform, ACCESS_PLATFORM};
 use crate::identity::device_type_for;
 use crate::regs::CommonRegs;
-use api::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_BARS};
+use abi::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_BARS};
 use core::ptr::NonNull;
 use virtio_drivers::transport::{DeviceStatus, DeviceType};
 

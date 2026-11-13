@@ -4,8 +4,8 @@
 //! round-trip from the ecall instruction back to the next user-mode
 //! instruction.  PDR target: < 10 µs.
 
-use api::benchmark::ViBenchmark;
 use ostd::syscall::sys_yield;
+use wire::benchmark::ViBenchmark;
 
 pub struct SyscallYieldBench;
 
@@ -14,7 +14,7 @@ impl ViBenchmark for SyscallYieldBench {
         "syscall_yield"
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         sys_yield();
         Ok(0)
     }

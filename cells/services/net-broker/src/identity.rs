@@ -20,9 +20,9 @@ extern crate alloc;
 use crate::export_registry::{load_remote_exports, RegistrySource, RemoteExports};
 use crate::peer_config::{parse_peer_config_bytes, MAX_PEERS};
 use crate::relay_config::{parse_relay_endpoint_bytes, RelayEndpoint};
-use api::cluster::{CellNetId, PeerTicket};
 use ostd::clients::vfs::VfsClient;
 use ostd::io::{print, println};
+use wire::cluster::{CellNetId, PeerTicket};
 
 const CFG_PATH: &str = "/etc/cellos/cluster.cfg";
 const CFG_READ_MAX_BYTES: usize = 4 * 1024;

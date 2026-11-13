@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Scoped input-owner mode leases. Rendering helpers are not mode authority.
 use crate::{controls::ScreenControls, session::TerminalSession};
+use abi::cell_session::{ObjectRefV1, Status};
 use alloc::vec::Vec;
-use api::cell_session::{ObjectRefV1, Status};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalMode {
     pub raw: bool,

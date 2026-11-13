@@ -1,4 +1,4 @@
-use api::display::{PixelFormat, Rect, SurfaceRole};
+use wire::display::{PixelFormat, Rect, SurfaceRole};
 
 use super::{configure::PendingConfigure, lifecycle::PendingClose};
 
@@ -33,9 +33,9 @@ pub struct SurfaceState {
     title: alloc::string::String,
     /// Icon on the Cell Tab (`SET_ICON`); generic until the owner names one.
     icon: ostd::display::linear::icons::LineIcon,
-    pub(super) state: api::display::WindowState,
+    pub(super) state: wire::display::WindowState,
     pub(super) normal_rect: Rect,
-    pub(super) minimized_from: api::display::WindowState,
+    pub(super) minimized_from: wire::display::WindowState,
     pub(super) pending_configure: Option<PendingConfigure>,
     pub(super) retired_grant_id: Option<usize>,
     pub(super) pending_close: Option<PendingClose>,
@@ -61,8 +61,8 @@ impl SurfaceState {
             role,
             title: alloc::string::String::new(),
             icon: ostd::display::linear::icons::LineIcon::Application,
-            state: api::display::WindowState::Normal,
-            minimized_from: api::display::WindowState::Normal,
+            state: wire::display::WindowState::Normal,
+            minimized_from: wire::display::WindowState::Normal,
             normal_rect: rect,
             pending_configure: None,
             retired_grant_id: None,
@@ -87,11 +87,11 @@ impl SurfaceState {
 
     /// Everything this surface may paint on screen: content plus compositor
     /// chrome (window frame and margin, or a panel's shadow margin).
-    pub fn paint_region(&self) -> api::display::Rect {
+    pub fn paint_region(&self) -> wire::display::Rect {
         let rect = self.screen_rect();
         if self.is_window_managed() {
             crate::window_decoration::bounds(rect)
-        } else if self.role == api::display::SurfaceRole::Panel {
+        } else if self.role == wire::display::SurfaceRole::Panel {
             crate::window_decoration::panel_region(rect)
         } else {
             rect
@@ -105,7 +105,7 @@ impl SurfaceState {
     }
 
     /// Current compositor-managed state.
-    pub const fn state(&self) -> api::display::WindowState {
+    pub const fn state(&self) -> wire::display::WindowState {
         self.state
     }
 
@@ -113,7 +113,7 @@ impl SurfaceState {
     pub const fn is_visible_for_paint(&self) -> bool {
         matches!(
             self.state,
-            api::display::WindowState::Normal | api::display::WindowState::Maximized
+            wire::display::WindowState::Normal | wire::display::WindowState::Maximized
         )
     }
 
@@ -148,7 +148,7 @@ impl SurfaceState {
     pub fn move_to(&mut self, x: i32, y: i32) {
         self.x = x;
         self.y = y;
-        if self.state == api::display::WindowState::Normal {
+        if self.state == wire::display::WindowState::Normal {
             self.normal_rect.x = x;
             self.normal_rect.y = y;
         }

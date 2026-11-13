@@ -1,6 +1,6 @@
-use api::display::{compositor_ops, Rect, SurfaceRole};
-use api::services::proto::compositor::{DESTROY_OK, DESTROY_REFUSED};
 use ostd::ipc::reply_to;
+use wire::display::{compositor_ops, Rect, SurfaceRole};
+use wire::proto::compositor::{DESTROY_OK, DESTROY_REFUSED};
 
 use crate::input_handler::InputState;
 use crate::stacking;

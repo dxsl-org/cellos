@@ -22,12 +22,12 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::cell_session::{
+    ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Status, Writer, HEADER_LEN,
+};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::cell_session::{
-    ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Status, Writer, HEADER_LEN,
-};
 use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 use ostd::io::println;
@@ -45,7 +45,7 @@ mod ssh;
 mod top_load;
 use screen::{is_cell_identity, Color, Screen};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -57,7 +57,7 @@ api::declare_manifest!(
 // Exactly what FrontendHost needs (frontend register/bind/query/submit/drain, governed child
 // launch through SpawnFromPath/PrepareChild/CommitChild, timing) plus MemInfo for the
 // repeat-open/close leak check. No Wait, no SpawnFromElf, no capability.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -793,10 +793,10 @@ fn raw_input(
     body: &[u8],
     reply: &mut [u8],
 ) -> Result<(Status, usize), Status> {
-    let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
+    let owner = ostd::session::service_binding(abi::syscall::service::INPUT)?;
     let header = ostd::session::service_call(
         owner,
-        api::syscall::service::INPUT,
+        abi::syscall::service::INPUT,
         op,
         selector as u16,
         true,
@@ -1978,7 +1978,7 @@ fn raw_submit_text(
     attachment: ObjectRefV1,
     text: &[u8],
 ) -> Result<Status, Status> {
-    let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
+    let owner = ostd::session::service_binding(abi::syscall::service::INPUT)?;
     let mut body = [0u8; 128];
     let mut w = Writer::new(&mut body);
     w.reference(session)?;
@@ -1997,7 +1997,7 @@ fn raw_submit_text(
     let mut reply = [0u8; HEADER_LEN + 8];
     let header = ostd::session::service_call(
         owner,
-        api::syscall::service::INPUT,
+        abi::syscall::service::INPUT,
         op,
         InputOp::SubmitEvents as u16,
         true,

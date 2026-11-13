@@ -5,7 +5,7 @@
 //! x86_64; `main.rs` gates the module accordingly. The syscall `unsafe` lives
 //! in `ostd::vmm`; this module is safe code.
 
-use api::hypervisor::ViVmExit;
+use abi::hypervisor::ViVmExit;
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub use ostd::vmm::guest_timer_regs;
 pub use ostd::vmm::{

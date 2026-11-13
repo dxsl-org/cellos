@@ -4,7 +4,7 @@
 // loop's RemoteServiceProxy routing is still a TODO (main.rs:152). Not wired yet.
 #![allow(dead_code)]
 
-use api::syscall::service;
+use abi::syscall::service;
 /// RemoteServiceProxy — broker-side routing table + cluster-RPC dispatch.
 ///
 /// ## Protocol (matches libs/ostd/src/cluster.rs byte layout)

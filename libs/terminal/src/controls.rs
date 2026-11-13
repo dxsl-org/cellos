@@ -254,7 +254,7 @@ impl ViewportSize {
 
     /// Revalidate public fields at service boundaries before changing state.
     pub fn validate(&self) -> Result<(), crate::error::TerminalError> {
-        api::services::session::validate_dimensions(self.rows, self.cols)
+        wire::session::validate_dimensions(self.rows, self.cols)
             .map_err(|_| crate::error::TerminalError::InvalidInput)
     }
 

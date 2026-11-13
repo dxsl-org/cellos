@@ -11,10 +11,10 @@
 use super::view::{Step, ViewState, INTERRUPTED};
 use super::TelemetryReader;
 use crate::executor::{TerminalKey, TerminalKeys, TuiSink};
+use abi::cell_session::frontend::{FRONTEND_ATTACHED, FRONTEND_KIND_GUI, LOST_FRONTEND};
+use abi::cell_session::Status;
 use alloc::format;
 use alloc::string::String;
-use api::cell_session::frontend::{FRONTEND_ATTACHED, FRONTEND_KIND_GUI, LOST_FRONTEND};
-use api::cell_session::Status;
 use terminal_sdk::session::TerminalSession;
 use text_engine::top::sample::{Frame, Sampler};
 use text_engine::top::text::TopError;

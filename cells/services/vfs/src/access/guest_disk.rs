@@ -80,7 +80,7 @@ pub(crate) fn live_hypervisor_matches(caller: Caller, lookup: fn(u16) -> Option<
     usize::try_from(caller.sender_tid)
         .ok()
         .and_then(|sender| {
-            lookup(api::hypervisor::HYPERVISOR_SERVICE_ID).filter(|live| *live == sender)
+            lookup(abi::hypervisor::HYPERVISOR_SERVICE_ID).filter(|live| *live == sender)
         })
         .is_some()
 }

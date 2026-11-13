@@ -2,9 +2,9 @@
 #![allow(non_snake_case)] // Lua C API convention
 
 use crate::ffi::LuaState;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
 use core::ffi::{c_char, c_int};
 use ostd::service::NetRef;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
 
 const MAX_RECV: usize = 512;
 const RETRIES: usize = 500;

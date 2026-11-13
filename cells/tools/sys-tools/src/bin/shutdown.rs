@@ -61,7 +61,7 @@ const RELAY_WINDOW_NS: u64 = 300_000_000;
 const REPLY_TIMEOUT_TICKS: u64 = 3_000;
 
 /// Send the supervisor-private `PowerRequest`
-/// ([`api::services::proto::supervisor`]) in the App SDK envelope and wait; the
+/// ([`wire::proto::supervisor`]) in the App SDK envelope and wait; the
 /// action byte is the 436 a0 value. A successful request freezes this worker
 /// and resets or powers off the machine, so any return here is a failure.
 #[cfg(target_arch = "x86_64")]
@@ -70,15 +70,15 @@ fn request_from_supervisor(
     output: &ostd::io::ProcessOutput,
     deadline: u64,
 ) -> ! {
-    use api::services::proto::app_envelope::{KIND_MESSAGE, MAGIC};
-    use api::services::proto::supervisor::{OP_POWER, OP_STATUS, STATUS_REPLY_LEN};
     use ostd::ipc::IpcError;
-    let Some(supervisor) = ostd::service::provider_tid(api::syscall::service::SUPERVISOR) else {
+    use wire::proto::app_envelope::{KIND_MESSAGE, MAGIC};
+    use wire::proto::supervisor::{OP_POWER, OP_STATUS, STATUS_REPLY_LEN};
+    let Some(supervisor) = ostd::service::provider_tid(abi::syscall::service::SUPERVISOR) else {
         exit_with(output, b"shutdown: supervisor unavailable\n", deadline);
     };
     let action = match action {
-        ostd::syscall::SystemPowerAction::Reboot => api::syscall::system_power::ACTION_REBOOT,
-        ostd::syscall::SystemPowerAction::PowerOff => api::syscall::system_power::ACTION_POWEROFF,
+        ostd::syscall::SystemPowerAction::Reboot => abi::syscall::system_power::ACTION_REBOOT,
+        ostd::syscall::SystemPowerAction::PowerOff => abi::syscall::system_power::ACTION_POWEROFF,
     };
     let request = [MAGIC, KIND_MESSAGE, OP_POWER, action as u8];
     let mut status = [0u8; STATUS_REPLY_LEN];

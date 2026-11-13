@@ -85,7 +85,7 @@ fn timed_echo_reply_round_trips_worker_and_send_timestamps() {
         Err(OracleError::TruncatedReply)
     );
 
-    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
     let frame_len = crate::local_ingress::encode_reply(
         crate::local_ingress::ReplyStatus::Success,
         1,
@@ -107,7 +107,7 @@ fn timed_echo_reply_round_trips_worker_and_send_timestamps() {
 fn reply_send_stamp_does_not_mutate_snapshot_payload() {
     let mut snapshot = [0u8; SNAPSHOT_BYTES];
     encode_snapshot_payload(&sample_counters(), 77, &mut snapshot);
-    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
     let frame_len = crate::local_ingress::encode_reply(
         crate::local_ingress::ReplyStatus::Success,
         1,
@@ -139,7 +139,7 @@ fn snapshot_payload_is_fixed_width_and_little_endian() {
 
 #[test]
 fn request_and_reply_frames_round_trip() {
-    let mut req = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut req = [0u8; wire::ipc::IPC_BUF_SIZE];
     let req_len = encode_echo_request(9, b"abc", &mut req).expect("frame encodes");
     assert_eq!(u64::from_le_bytes(req[..8].try_into().unwrap()), 9);
     assert_eq!(u16::from_le_bytes(req[8..10].try_into().unwrap()), 4);
@@ -153,7 +153,7 @@ fn request_and_reply_frames_round_trip() {
         assert_eq!(&req[10..restart_len], &[OP_ECHO, OP_RESTART]);
     }
 
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     let reply_len = crate::local_ingress::encode_reply(
         crate::local_ingress::ReplyStatus::Busy,
         17,
@@ -171,7 +171,7 @@ fn request_and_reply_frames_round_trip() {
 #[test]
 fn reply_decoder_rejects_bad_frames() {
     assert_eq!(decode_reply_frame(&[]), Err(OracleError::InvalidReplyTag));
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     reply[0] = crate::local_ingress::STATUS_TAG;
     reply[1] = 9;
     assert_eq!(

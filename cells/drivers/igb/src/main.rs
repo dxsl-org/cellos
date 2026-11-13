@@ -36,7 +36,6 @@ mod dma_layout;
 mod identity;
 mod sync;
 
-use api::services::proto::nic::NicStatus;
 use controller::IgbController;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use identity::{classify, sku_name, IgbSku, QUERY_DEVICE_IDS, VENDOR_INTEL};
@@ -48,6 +47,7 @@ use ostd::sync::Mutex;
 use ostd::syscall::{
     sys_find_pcie_device_by_vendor, sys_register_nic_driver, sys_try_send, PcieDeviceInfo,
 };
+use wire::proto::nic::NicStatus;
 
 /// BAR0 window — every igb part exposes a 128 KiB register aperture (QEMU `igb`:
 /// `E1000E_MMIO_SIZE = 128 KiB`).
@@ -215,7 +215,7 @@ ostd::run_app!(handler);
 // ── Capability manifest ───────────────────────────────────────────────────────
 // PcieDriverCap is granted by init via the reviewed `/bin/igb` launch edge (not
 // a manifest flag). This manifest declares NO privileged flags.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -231,7 +231,7 @@ api::declare_manifest!(
 // NIC registration, the try_send reply path, the exit path, and the DMA calls
 // behind `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and
 // are always permitted; naming them documents the intent.
-api::declare_syscalls![
+abi::declare_syscalls![
     // AppContext event-loop base set.
     Send,
     TrySend,

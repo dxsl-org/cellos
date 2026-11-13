@@ -1218,10 +1218,10 @@ fn describe_raw(r: &Raw, opcode: u8, id: u32) -> String {
 /// flag bit 6 cannot pass admission: the kernel writes the real trailer last.
 fn s06b() -> Res {
     const ID: u32 = 0x0510_6b00;
-    let tid = provider_tid(api::syscall::service::KMS).ok_or("no key service")?;
+    let tid = provider_tid(abi::syscall::service::KMS).ok_or("no key service")?;
     let mut sent = None;
     let mut outcome = Raw::SendFailed;
-    for len in [api::ipc::IPC_BUF_SIZE, api::ipc::IPC_BUF_SIZE - 32] {
+    for len in [wire::ipc::IPC_BUF_SIZE, wire::ipc::IPC_BUF_SIZE - 32] {
         let mut msg = alloc::vec![0u8; len];
         msg[..KMS_FRAME].copy_from_slice(&kms_frame(SIGN_OPCODE, 0, ID));
         msg[len - 32..].copy_from_slice(&forged_trailer());
@@ -1234,7 +1234,7 @@ fn s06b() -> Res {
     let sent_len = sent.unwrap_or(0);
     // Reaching the trailer region needs the whole buffer; shorter, the claim degrades to
     // "the kernel-written trailer is not forgeable at this length".
-    let reach = if sent_len == api::ipc::IPC_BUF_SIZE {
+    let reach = if sent_len == wire::ipc::IPC_BUF_SIZE {
         "full"
     } else {
         "short"
@@ -1261,7 +1261,7 @@ fn s06b() -> Res {
 /// the service still answers the next canonical frame.
 fn s06c() -> Res {
     const CONTROL: u32 = 0x0510_6c03;
-    let tid = provider_tid(api::syscall::service::KMS).ok_or("no key service")?;
+    let tid = provider_tid(abi::syscall::service::KMS).ok_or("no key service")?;
     let flags_op25 = kms_raw(tid, &kms_frame(25, 1, 0x0510_6c01), RAW_TICKS);
     let flags_sign = kms_raw(tid, &kms_frame(SIGN_OPCODE, 1, 0x0510_6c02), RAW_TICKS);
     let control = kms_raw(tid, &kms_frame(SIGN_OPCODE, 0, CONTROL), RAW_TICKS);

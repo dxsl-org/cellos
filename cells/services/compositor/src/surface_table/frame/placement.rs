@@ -1,6 +1,6 @@
 //! IPC frame placement: snap zones and fullscreen.
 
-use api::display::{FramePlacement, Rect, SnapZone, ViewOpResponse, ViewOpResult};
+use wire::display::{FramePlacement, Rect, SnapZone, ViewOpResponse, ViewOpResult};
 
 use super::FrameRegistry;
 
@@ -47,7 +47,7 @@ impl FrameRegistry {
 
         Ok((
             ViewOpResponse {
-                opcode: api::display::compositor_ops::SNAP_FRAME,
+                opcode: wire::display::compositor_ops::SNAP_FRAME,
                 result: ViewOpResult::Success,
                 _pad: [0; 2],
                 frame_id,
@@ -120,7 +120,7 @@ impl FrameRegistry {
 
         Ok((
             ViewOpResponse {
-                opcode: api::display::compositor_ops::TOGGLE_FULLSCREEN,
+                opcode: wire::display::compositor_ops::TOGGLE_FULLSCREEN,
                 result: ViewOpResult::Success,
                 _pad: [0; 2],
                 frame_id,

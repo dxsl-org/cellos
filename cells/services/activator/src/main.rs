@@ -17,8 +17,8 @@
 extern crate alloc;
 extern crate ostd;
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

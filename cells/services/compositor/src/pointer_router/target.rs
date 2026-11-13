@@ -1,5 +1,5 @@
-use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 use ostd::syscall::sys_try_send;
+use wire::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
 
 use crate::stacking;
 use crate::surface_table::{FrameRegistry, SurfaceTable};

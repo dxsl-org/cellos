@@ -5,7 +5,7 @@
 //! - `core` ↔ tool Cells:    [`AgentToolRequest`] / [`AgentToolResponse`]
 //!
 //! Serialized with `postcard` at the call sites (same convention as
-//! `libs/api` ipc types). Borrowed fields (`&'a str`) point into the caller's
+//! `libs/wire` ipc types). Borrowed fields (`&'a str`) point into the caller's
 //! IPC buffer and must be consumed before the buffer is reused.
 
 #![no_std]

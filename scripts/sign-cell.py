@@ -19,7 +19,7 @@ The same objcopy pass (re)writes `__ViCell_image`: the program name, which is
 the artifact file name without its `service-`/`app-`/`driver-` crate prefix
 (`service-sshd` → `sshd`). It lies inside the signed bytes, so the kernel
 reports it for a verified image and VFS binds `/srv/sshd/` to it
-(`api::cell_image`). An artifact name that is not a valid program name gets no
+(`abi::cell_image`). An artifact name that is not a valid program name gets no
 section; such a cell still loads, with no name. Any section of that name the
 input already carried is dropped, so only the signer decides names.
 
@@ -85,7 +85,7 @@ MANIFEST_SECTION = "__ViCell_manifest"
 IMAGE_SECTION = "__ViCell_image"
 # Crate-family prefixes of cell artifact names, stripped to get the program name.
 IMAGE_NAME_PREFIXES = ("service-", "app-", "driver-")
-# Mirrors `api::cell_image::is_valid_image_name`.
+# Mirrors `abi::cell_image::is_valid_image_name`.
 _IMAGE_NAME = re.compile(rb"[a-z0-9_-]{1,24}")
 
 

@@ -196,26 +196,25 @@ impl KeyAction {
 }
 
 pub fn validate_text(bytes: &[u8]) -> Result<&str, TerminalError> {
-    api::services::session::validate_text(bytes).map_err(codec_error)?;
+    wire::session::validate_text(bytes).map_err(codec_error)?;
     core::str::from_utf8(bytes).map_err(|_| TerminalError::UnsupportedInput)
 }
 
 pub fn validate_paste(bytes: &[u8]) -> Result<&str, TerminalError> {
-    api::services::session::validate_paste(bytes).map_err(codec_error)?;
+    wire::session::validate_paste(bytes).map_err(codec_error)?;
     core::str::from_utf8(bytes).map_err(|_| TerminalError::UnsupportedInput)
 }
 
-fn codec_error(status: api::cell_session::Status) -> TerminalError {
+fn codec_error(status: abi::cell_session::Status) -> TerminalError {
     match status {
-        api::cell_session::Status::QuotaExceeded => TerminalError::BufferOverflow,
-        api::cell_session::Status::Malformed => TerminalError::InvalidInput,
+        abi::cell_session::Status::QuotaExceeded => TerminalError::BufferOverflow,
+        abi::cell_session::Status::Malformed => TerminalError::InvalidInput,
         _ => TerminalError::UnsupportedInput,
     }
 }
 
 fn validate_key(symbol: KeySymbol, mods: Modifiers) -> Result<(), TerminalError> {
-    api::services::session::encode_key(symbol.code()?, mods.bits(), 0, &mut [0; 16])
-        .map_err(codec_error)?;
+    wire::session::encode_key(symbol.code()?, mods.bits(), 0, &mut [0; 16]).map_err(codec_error)?;
     Ok(())
 }
 
@@ -250,7 +249,7 @@ pub fn encode_key_action_with_paste(
             state,
         } => {
             let mut bytes = ostd::session::Scrub::<16>::new();
-            let count = api::services::session::encode_key(
+            let count = wire::session::encode_key(
                 symbol.code()?,
                 modifiers.bits(),
                 *state as u8,
@@ -268,7 +267,7 @@ pub fn encode_key_action_with_paste(
 /// Call `expire` at `deadline_ns` even if the frontend has gone quiet.
 #[derive(Debug)]
 pub struct Decoder {
-    inner: api::services::session::SerialDecoder,
+    inner: wire::session::SerialDecoder,
     last_now: Option<u64>,
     in_paste: bool,
     paste: Vec<u8>,
@@ -288,7 +287,7 @@ impl Decoder {
 
     pub fn new() -> Self {
         Self {
-            inner: api::services::session::SerialDecoder::new(),
+            inner: wire::session::SerialDecoder::new(),
             last_now: None,
             in_paste: false,
             paste: Vec::new(),
@@ -306,7 +305,7 @@ impl Decoder {
     }
     fn reset(&mut self) {
         // A fresh decoder (not `reset`) also overwrites the pending-sequence bytes.
-        self.inner = api::services::session::SerialDecoder::new();
+        self.inner = wire::session::SerialDecoder::new();
         self.in_paste = false;
         ostd::session::zeroize_vec(&mut self.paste);
     }
@@ -317,7 +316,7 @@ impl Decoder {
         out: &mut Vec<KeyAction>,
     ) -> Result<(), TerminalError> {
         self.expire(now_ns, out)?;
-        let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
+        let mut frame = ostd::session::Scrub::<{ wire::session::EVENT_MAX }>::new();
         for &byte in input {
             let result = self
                 .inner
@@ -333,7 +332,7 @@ impl Decoder {
     }
     pub fn expire(&mut self, now_ns: u64, out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
         self.clock(now_ns)?;
-        let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
+        let mut frame = ostd::session::Scrub::<{ wire::session::EVENT_MAX }>::new();
         let result = self
             .inner
             .expire(now_ns, &mut frame)
@@ -346,7 +345,7 @@ impl Decoder {
     }
     /// EOF never completes a missing scalar, control or paste terminator.
     pub fn flush(&mut self, out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
-        let mut frame = ostd::session::Scrub::<{ api::services::session::EVENT_MAX }>::new();
+        let mut frame = ostd::session::Scrub::<{ wire::session::EVENT_MAX }>::new();
         let result = self
             .inner
             .finish(&mut frame)
@@ -374,10 +373,10 @@ impl Decoder {
         Ok(())
     }
     fn one_frame(&mut self, frame: &[u8], out: &mut Vec<KeyAction>) -> Result<(), TerminalError> {
-        use api::services::session::event_kind;
+        use wire::session::event_kind;
         // Internal decoder frames have no owner sequence/epoch. Paste text may
         // contain HT/CR/LF, unlike ordinary TEXT; validate it as a whole batch.
-        let mut reader = api::cell_session::Reader::new(frame);
+        let mut reader = abi::cell_session::Reader::new(frame);
         let _sequence = reader.u64().map_err(codec_error)?;
         let _epoch = reader.u64().map_err(codec_error)?;
         let kind = reader.u16().map_err(codec_error)?;
@@ -389,7 +388,7 @@ impl Decoder {
         reader.finish().map_err(codec_error)?;
         match kind {
             event_kind::KEY if !self.in_paste => {
-                let mut key = api::cell_session::Reader::new(payload);
+                let mut key = abi::cell_session::Reader::new(payload);
                 let code = key.u32().map_err(codec_error)?;
                 let modifiers = key.u32().map_err(codec_error)?;
                 let pressed = key.u8().map_err(codec_error)?;

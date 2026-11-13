@@ -1,7 +1,7 @@
 //! System palette for compositor-drawn chrome, set by the shell.
 
-use api::display::{AppearanceChanged, AppearancePalette, SetAppearance, SurfaceRole};
 use ostd::syscall::sys_try_send;
+use wire::display::{AppearanceChanged, AppearancePalette, SetAppearance, SurfaceRole};
 
 use crate::surface_table::SurfaceTable;
 

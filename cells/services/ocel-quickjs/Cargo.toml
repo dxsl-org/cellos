@@ -6,7 +6,8 @@ license.workspace = true
 description = "Ocel's opt-in Tier 2 QuickJS script engine (vendored quickjs-2025-09-13)"
 
 [dependencies]
-api = { path = "../../../libs/api", version = "0.1.0" }
+abi = { path = "../../../libs/abi", version = "0.1.0" }
+posix-shim = { path = "../../../libs/posix-shim", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 dom-arena = { path = "../../../libs/dom-arena", version = "0.1.0" }
 postcard = { version = "1.0", default-features = false, features = ["alloc"] }

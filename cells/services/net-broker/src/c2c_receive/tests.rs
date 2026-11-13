@@ -1,7 +1,7 @@
 use super::*;
 use crate::c2c_dedup::DEDUP_CAPACITY;
 use crate::c2c_envelope::{RelativeDeadline, RetryClass, MAX_C2C_PAYLOAD};
-use api::services::cluster::{CellNetId, ClusterId};
+use wire::cluster::{CellNetId, ClusterId};
 
 fn request(epoch: ServerEpoch, request_id: u64) -> C2cEnvelope<'static> {
     C2cEnvelope {

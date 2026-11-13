@@ -95,7 +95,7 @@ Cellos/
 
 ## 3. The Coding Laws
 **Luật 1: Interface là "Thánh chỉ"**
-- Mọi thay đổi trong libs/api hoặc libs/types phải XÁC NHẬN 2 LẦN với User.
+- Mọi thay đổi trong libs/abi hoặc libs/types phải XÁC NHẬN 2 LẦN với User.
 - Các Trait trong api phải dùng #[repr(C)] để bảo đảm Stable ABI.
 
 **Luật 2: An toàn bộ nhớ SAS**
@@ -144,7 +144,7 @@ Cellos/
 
 ## 4. Agent Workflow
 - **Check Spec**: Đọc file trong design/ để hiểu "Tại sao".
-- **Interface First**: Định nghĩa Trait trong libs/api trước khi code phần thực thi.
+- **Interface First**: Định nghĩa Trait trong libs/wire (hợp đồng dịch vụ) hoặc libs/abi (ABI kernel) trước khi code phần thực thi.
 - **Thực thi**: Code logic, chú ý xử lý Result thay vì panic! để hỗ trợ Panic Recovery.
 - **Verification**: Viết test KUnit cho mọi logic quan trọng.
 
@@ -195,7 +195,7 @@ heap cho large data (>page).
 |---|---|---|
 | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
 | Cellos kernel | SAS memory allocator, scheduler, IPC, ELF loader | [generated nLOC](../code-metrics.generated.md) |
-| `libs/api` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
+| `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 
 ### Không nằm trong TCB (by design)
 

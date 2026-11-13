@@ -1,5 +1,5 @@
-use api::display::{ConfigureKind, Rect};
 use ostd::syscall::{sys_try_send, SyscallResult};
+use wire::display::{ConfigureKind, Rect};
 
 use crate::surface_table::SurfaceTable;
 use crate::window_decoration::ResizeEdge;

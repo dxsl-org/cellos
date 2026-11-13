@@ -10,7 +10,7 @@ proven. It is not a conformance statement.
   `docs/decisions/0018-cell-native-portability-and-runtime-profiles.md`). It is not
   the native SAS ABI and not a kernel syscall coverage target. A native Cell links
   no POSIX code, and nothing here adds a kernel POSIX implementation.
-- **Tier A and Tier B are mutually exclusive.** Enabling `api` feature `mlibc`
+- **Tier A and Tier B are mutually exclusive.** Enabling `posix-shim` feature `mlibc`
   compiles out every Tier A module (`libs/posix-shim/src/lib.rs:33-55`), and
   `mlibc-shim` then injects mlibc's `libc.a` (`libs/mlibc-shim/src/lib.rs:1-9`).
   A Cell uses one or the other, never both.
@@ -80,11 +80,11 @@ stay `unverified`.
 
 | layer | what it is | contract | where |
 |---|---|---|---|
-| Native transport | `ViSyscall` plus typed IPC (VFS, Net and other services) through `api`/`ostd`. This is the native SAS ABI every Cell uses. | Native ABI; no POSIX names | `libs/abi/src/syscall.rs`, `libs/wire/src/ipc.rs` |
+| Native transport | `ViSyscall` plus typed IPC (VFS, Net and other services) through `abi`/`wire`/`ostd`. This is the native SAS ABI every Cell uses. | Native ABI; no POSIX names | `libs/abi/src/syscall.rs`, `libs/wire/src/ipc.rs` |
 | POSIX adapters | Optional userspace C ABI translation onto native transport: Tier A Rust shim or Tier B mlibc sysdeps. | This ledger | `libs/posix-shim/src/`, `third_party/mlibc/sysdeps/vicell/` |
 | Linux VM | Tier 3 `linux-guest`: a Linux kernel and userspace in a VM run by the Hypervisor Cell, with VirtIO devices forwarded to Cellos services. Linux syscalls are served by the guest kernel, not by Cellos. | Spec 05 §4 | `docs/specs/05-application.md` §4.2 |
 
-## Tier A: `api::services::posix` (Rust C-ABI shim)
+## Tier A: `posix_shim` (Rust C-ABI shim)
 
 The adapter is active on bare-metal RV64, AArch64 and x86_64 (and wasm32) when
 `mlibc` is off (`libs/posix-shim/src/lib.rs:12-55`). One row covers one symbol,
@@ -260,7 +260,7 @@ and talks to the Net service over typed IPC (`libs/posix-shim/src/net.rs:19-43`)
 
 ## Tier B: mlibc `sysdeps/vicell`
 
-Opt-in with `api = { features = ["mlibc"] }` plus `mlibc-shim`. The mlibc build
+Opt-in with `posix-shim = { features = ["mlibc"] }` plus `mlibc-shim`. The mlibc build
 enables its `posix` option set and keeps `linux`, `glibc` and `bsd` off
 (`third_party/mlibc/sysdeps/vicell/meson.build:9-18`). mlibc's own `libc.a`
 exports the consumer-visible libc functions. Cellos supplies the sysdep hooks

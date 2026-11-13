@@ -4,9 +4,8 @@
 
 extern crate alloc;
 
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
-use api::syscall::service;
-use api::{declare_manifest, declare_syscalls};
+use abi::syscall::service;
+use abi::{declare_manifest, declare_syscalls};
 use driver_dwc2_usb::dispatch::{handle, NicReply, REPLY_BUF};
 use driver_dwc2_usb::hid::EvdevEvent;
 use driver_dwc2_usb::hub::UsbHub;
@@ -21,6 +20,7 @@ use ostd::syscall::{
     sys_force_exit, sys_notify_on_exit, sys_recv_timeout, sys_register_nic_driver,
     sys_register_usb_hid_producer, sys_spawn_from_path, sys_try_send, sys_yield, SyscallResult,
 };
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 declare_manifest!(
     block_io = false,
@@ -425,7 +425,7 @@ fn cell_main() {
         }
         if input_tid != 0 && !source_registered {
             source_registered =
-                usb_hid::register_as_source(input_tid, api::ipc::input_source::USB_HID_HOST);
+                usb_hid::register_as_source(input_tid, wire::ipc::input_source::USB_HID_HOST);
             if source_registered {
                 println("[usb-hid] registered as an input event source");
             }
@@ -567,7 +567,7 @@ fn cell_main() {
                         lan_deferred.clear();
                     }
                     // A NIC reply must not skip HID polling on this iteration.
-                } else if sender_tid == input_tid && in_buf[0] == api::ipc::OP_SET_LEDS {
+                } else if sender_tid == input_tid && in_buf[0] == wire::ipc::OP_SET_LEDS {
                     // Input owns lock state; translate it to each keyboard's
                     // descriptor-defined Output report.
                     let leds = in_buf[1];
@@ -616,7 +616,7 @@ fn cell_main() {
                     }
                 } else {
                     if let Some(request_len) = nic_request_len(&in_buf) {
-                        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+                        let mut request = [0u8; wire::ipc::IPC_BUF_SIZE];
                         if let Some(len) = lan_ipc::encode_request(
                             sender_tid,
                             ostd::ipc::current(),

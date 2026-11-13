@@ -4,12 +4,10 @@
 
 extern crate alloc;
 
+use abi::dir_handles::ViDirHandle;
 #[cfg(test)]
 use alloc::string::ToString;
 use alloc::{format, string::String, vec, vec::Vec};
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::vfs_file_handles::ViVfsFileHandle;
 use app_c2c_render::{percentile, pixel_hash, Clock};
 use ostd::grant::GrantHandle;
 use ostd::ipc::IpcError;
@@ -21,9 +19,11 @@ use render_core::{
     render_tile, Output, RenderConfig, RenderError, RenderStats, Request, Response, Scene, Tile,
     COPIED_TILE_MAX_BYTES,
 };
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Log,
     Send,
     Recv,
@@ -205,11 +205,11 @@ impl Worker {
     }
 
     fn call(&self, request: &Request) -> Result<(Response, usize), String> {
-        let mut send = [0u8; api::ipc::IPC_BUF_SIZE];
-        let mut receive = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut send = [0u8; wire::ipc::IPC_BUF_SIZE];
+        let mut receive = [0u8; wire::ipc::IPC_BUF_SIZE];
         // Request admission and completion belong to the exact returned worker
         // TID and one kernel operation, never a global service or arbitrary recv.
-        let encoded = api::ipc::encode(request, &mut send)
+        let encoded = wire::ipc::encode(request, &mut send)
             .map_err(|_| String::from("request exceeds IPC frame"))?;
         let request_bytes = encoded.len();
         let call = ostd::ipc::PendingCall::submit(self.tid, encoded)
@@ -233,7 +233,7 @@ impl Worker {
         }
         let raw = &receive[..completion.len];
         let response =
-            api::ipc::decode(raw).map_err(|_| String::from("invalid worker response encoding"))?;
+            wire::ipc::decode(raw).map_err(|_| String::from("invalid worker response encoding"))?;
         Ok((response, request_bytes + raw.len()))
     }
 
@@ -326,8 +326,8 @@ struct Slot {
     worker: Worker,
     grant: Option<GrantHandle<u8>>,
     pending: Option<ActiveTile>,
-    send: [u8; api::ipc::IPC_BUF_SIZE],
-    receive: [u8; api::ipc::IPC_BUF_SIZE],
+    send: [u8; wire::ipc::IPC_BUF_SIZE],
+    receive: [u8; wire::ipc::IPC_BUF_SIZE],
     completed: u32,
 }
 
@@ -355,7 +355,7 @@ impl Slot {
             scene_hash,
             output,
         };
-        let encoded = api::ipc::encode(&request, &mut self.send)
+        let encoded = wire::ipc::encode(&request, &mut self.send)
             .map_err(|_| String::from("request exceeds IPC frame"))?;
         let request_bytes = encoded.len();
         let started_ns = clock.now_ns();
@@ -398,8 +398,8 @@ impl Pool {
                 worker,
                 grant: None,
                 pending: None,
-                send: [0; api::ipc::IPC_BUF_SIZE],
-                receive: [0; api::ipc::IPC_BUF_SIZE],
+                send: [0; wire::ipc::IPC_BUF_SIZE],
+                receive: [0; wire::ipc::IPC_BUF_SIZE],
                 completed: 0,
             });
             let slot = pool.slots.last_mut().unwrap();

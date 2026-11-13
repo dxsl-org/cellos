@@ -23,12 +23,12 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use api::ViError;
 use ostd::app::{AppContext, AppEvent};
 use ostd::hotswap::{hotswap_key, restore_transfer, stash_transfer, ViStateTransfer};
 use ostd::io::println;
 use ostd::sync::Mutex;
 use ostd::syscall::sys_hotswap_ready;
+use types::ViError;
 
 // spawn = true grants StateStash / StateRestore / HotSwapReady allowlist bits
 // (bits 33, 34, 32) that the hotswap state-transfer protocol requires.
@@ -74,7 +74,7 @@ static STATE: Mutex<DemoState> = Mutex::new(DemoState::new());
 fn main_handler(ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            match ostd::syscall::sys_register_service(api::syscall::service::HOTSWAP_DEMO, 0, 0) {
+            match ostd::syscall::sys_register_service(abi::syscall::service::HOTSWAP_DEMO, 0, 0) {
                 ostd::syscall::SyscallResult::Ok(_) => {
                     println("[hotswap-demo-v1] service registered")
                 }

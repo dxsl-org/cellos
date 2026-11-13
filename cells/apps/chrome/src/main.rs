@@ -26,8 +26,8 @@ mod frame;
 mod guest;
 mod input_bridge;
 
-api::declare_manifest!(block_io = true, network = true, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = true, network = true, spawn = true);
+abi::declare_syscalls![
     Log,
     SpawnFromPath,
     StateStash,

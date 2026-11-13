@@ -116,7 +116,7 @@ impl DevelopmentSiloProvider {
         request: DevelopmentSiloRequest,
     ) -> Result<DevelopmentSiloResponse, RelaySignError> {
         let silo_tid =
-            provider_tid(api::syscall::service::SILO).ok_or(RelaySignError::Unavailable)?;
+            provider_tid(abi::syscall::service::SILO).ok_or(RelaySignError::Unavailable)?;
         // Queued, never parked: the receive below bounds the whole exchange.
         if ostd::ipc::post(silo_tid, &request.encode()).is_err() {
             return self.fail(RelaySignError::Unavailable);

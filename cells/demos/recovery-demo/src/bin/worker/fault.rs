@@ -4,10 +4,10 @@
 #![allow(unsafe_code)]
 
 use alloc::format;
-use api::ipc::{VfsRequest, VfsResponse};
 use ostd::io::println;
 use ostd::syscall::{self, SyscallResult};
 use recovery_demo::{crash, HOLD_LEASE_PATH};
+use wire::ipc::{VfsRequest, VfsResponse};
 
 use crate::common;
 
@@ -55,7 +55,7 @@ pub fn scenario(mode: u8, arg: u64) -> ! {
 /// lease the `recovery-fixture` VFS withholds, so owner death finds a live
 /// borrower that has not acknowledged.
 fn hold_lease() -> ! {
-    let Some(vfs) = common::lookup(api::syscall::service::VFS) else {
+    let Some(vfs) = common::lookup(abi::syscall::service::VFS) else {
         crash()
     };
     let Some(grant) = syscall::sys_grant_alloc(4096) else {

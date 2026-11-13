@@ -25,10 +25,9 @@
 
 extern crate alloc;
 
+use abi::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 use alloc::format;
 use alloc::vec;
-use api::ipc::IPC_BUF_SIZE;
-use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 use ostd::io::println;
 use ostd::service::ServiceRef;
 use ostd::syscall::{sys_exit, sys_get_time_ms, sys_lookup_service_bound, sys_send, SyscallResult};
@@ -37,12 +36,13 @@ use ostd::ViError;
 use tier2_rpc_proto::{
     checksum, EchoRequest, EchoResponse, METHOD_ECHO, METHOD_UNAUTHORIZED, SERVICE_ID, UNAUTHORIZED,
 };
+use wire::ipc::IPC_BUF_SIZE;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
 // `LookupService` also authorizes `LookupServiceBound` (allowlist bit 37), which is the
 // whole resolution path this driver needs.
-api::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupServiceBound, GetTime];
+abi::declare_syscalls![Log, Exit, Send, Recv, Yield, LookupServiceBound, GetTime];
 
 ostd::cell_main!(cell_main);
 

@@ -57,7 +57,7 @@ fn worker(index: usize, yields: bool) {
         SyscallResult::Ok(sender) if sender != 0 => sender,
         _ => invalid("release-receive"),
     };
-    let caller = api::caller_identity::CallerIdentity::from_recv_buf(&release)
+    let caller = abi::caller_identity::CallerIdentity::from_recv_buf(&release)
         .unwrap_or_else(|| invalid("release-sender-unavailable"));
     if caller.sender_tid != sender as u64 || release[0] != 0x71 || release[1] != index as u8 {
         invalid("release-sender-token");

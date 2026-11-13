@@ -6,8 +6,8 @@
 //! any wallpaper; tab text keeps >= 4.5:1 and control glyphs >= 3:1 (WCAG
 //! non-text contrast) against their background in every state.
 
-use api::display::AppearancePalette;
 use ostd::display::linear::{Bgra, Shadow};
+use wire::display::AppearancePalette;
 
 /// Colours for one focus state.
 pub(crate) struct FocusColors {

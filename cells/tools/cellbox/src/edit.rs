@@ -14,9 +14,8 @@ mod tests;
 use alloc::format;
 use alloc::string::String;
 
-use api::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
-use api::cell_session::Status;
-use api::ipc::{Observation, SaveExpect};
+use abi::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
+use abi::cell_session::Status;
 use ostd::ViError;
 use terminal_sdk::session::TerminalSession;
 use text_engine::editor::{EditBuffer, OpenError, MAX_BYTES};
@@ -24,6 +23,7 @@ use vitui::event::Event;
 use vitui::ratatui::core::layout::Size;
 use vitui::session::{SessionError, TuiSession};
 use vitui::theme::Theme;
+use wire::ipc::{Observation, SaveExpect};
 
 use crate::executor::{TerminalKey, TerminalKeys, TuiSink};
 use editor::{Editor, Step, Store, SESSION_LOST};

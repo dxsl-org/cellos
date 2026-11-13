@@ -1664,11 +1664,11 @@ pub const UPSTREAM_NOT_STARTED_STATUS: i32 = 141;
 /// the last stage decides the pipeline status. `Cancelled` for the last stage, and
 /// every other spawn error, remains a failure.
 pub fn spawn_cancel_means_consumer_finished(
-    status: api::cell_session::Status,
+    status: abi::cell_session::Status,
     index: usize,
     stages: usize,
 ) -> bool {
-    status == api::cell_session::Status::Cancelled && index + 1 < stages
+    status == abi::cell_session::Status::Cancelled && index + 1 < stages
 }
 
 /// Non-final stage diagnostics: one `NAME exited with status N` line per failed
@@ -2630,7 +2630,7 @@ mod tests {
 
     #[test]
     fn upstream_cancel_at_spawn_is_a_finished_consumer() {
-        use api::cell_session::Status;
+        use abi::cell_session::Status;
         assert!(spawn_cancel_means_consumer_finished(
             Status::Cancelled,
             0,

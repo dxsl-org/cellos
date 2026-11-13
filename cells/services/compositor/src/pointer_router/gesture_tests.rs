@@ -1,5 +1,5 @@
-use api::display::SurfaceRole;
-use api::input::{KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
+use wire::display::SurfaceRole;
+use wire::input::{KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
 
 use super::*;
 

@@ -1,6 +1,6 @@
-use api::services::cluster::{CellNetId, ClusterId};
 use ostd::cluster_endpoint::{CellMethod, EndpointError, RemoteCallError, RemoteEndpoint};
 use types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
+use wire::cluster::{CellNetId, ClusterId};
 
 struct Ping;
 
@@ -35,7 +35,7 @@ fn remote_call_fails_explicitly_without_broker_contact() {
         ServerEpoch::new(6).unwrap(),
     )
     .unwrap();
-    let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
     assert_eq!(RelativeDeadline::new(0), None);
     assert_eq!(
         endpoint.call(&(), RelativeDeadline::new(25).unwrap(), &mut response,),
@@ -58,7 +58,7 @@ fn remote_endpoint_rejects_zero_identity() {
 
 #[test]
 fn a_failed_exchange_is_stale_when_the_descriptor_no_longer_matches() {
-    use api::service_binding::ServiceBinding;
+    use abi::service_binding::ServiceBinding;
     use ostd::service::{classify_call_failure, CallFailure};
 
     let held = ServiceBinding::new(15, 3, 7);

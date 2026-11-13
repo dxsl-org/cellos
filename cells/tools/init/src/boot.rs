@@ -2,7 +2,7 @@ use ostd::syscall::{sys_spawn_from_path, SyscallResult};
 
 /// Has `tid` terminated? A task the listing no longer carries has.
 fn task_terminated(tid: usize) -> bool {
-    let mut rows = [api::syscall::ProcessInfo::default(); 64];
+    let mut rows = [abi::syscall::ProcessInfo::default(); 64];
     match ostd::syscall::sys_get_procs(&mut rows) {
         Ok(count) => rows
             .iter()
@@ -55,7 +55,7 @@ enum PlatformWait {
 
 /// Order bootstrap lifetimes only: absence/termination is not scan-success attestation.
 fn platform_wait_step(
-    rows: &[api::syscall::ProcessInfo],
+    rows: &[abi::syscall::ProcessInfo],
     count: Result<usize, ()>,
     elapsed_ms: Option<u64>,
 ) -> Result<PlatformWait, PlatformWaitError> {
@@ -88,13 +88,13 @@ fn platform_wait_step(
 /// fall through into a partial boot. Host tests inject the same flow's syscall edges.
 fn platform_boot_flow<R>(
     x86: bool,
-    mut snapshot: impl FnMut(&mut [api::syscall::ProcessInfo]) -> Result<usize, ()>,
+    mut snapshot: impl FnMut(&mut [abi::syscall::ProcessInfo]) -> Result<usize, ()>,
     mut now_ms: impl FnMut() -> Option<u64>,
     mut yield_now: impl FnMut(),
     start: impl FnOnce() -> R,
 ) -> Result<R, PlatformWaitError> {
     if x86 {
-        let mut rows = [api::syscall::ProcessInfo::default(); PLATFORM_PROCESS_ROWS];
+        let mut rows = [abi::syscall::ProcessInfo::default(); PLATFORM_PROCESS_ROWS];
         let started = now_ms();
         loop {
             let count = snapshot(&mut rows);
@@ -121,8 +121,8 @@ pub(crate) fn start_after_platform(start: impl FnOnce()) -> Result<(), PlatformW
 #[cfg(test)]
 mod platform_wait_tests {
     use super::{platform_boot_flow, PlatformWaitError, PLATFORM_PROCESS_ROWS, PLATFORM_WAIT_MS};
+    use abi::syscall::ProcessInfo;
     use alloc::{vec, vec::Vec};
-    use api::syscall::ProcessInfo;
     use core::cell::RefCell;
 
     #[derive(Debug, PartialEq, Eq)]

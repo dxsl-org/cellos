@@ -1,4 +1,4 @@
-use api::display::{PixelFormat, Rect};
+use wire::display::{PixelFormat, Rect};
 
 use super::{state::PixelSource, SurfaceState};
 
@@ -30,7 +30,7 @@ impl SurfaceState {
         self.h = h;
         self.fmt = fmt;
         self.source = source;
-        if self.state == api::display::WindowState::Normal {
+        if self.state == wire::display::WindowState::Normal {
             self.normal_rect = self.screen_rect();
         }
         true

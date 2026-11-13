@@ -9,7 +9,7 @@
 
 | | **POSIX shim profile** | **mlibc profile** |
 |---|---|---|
-| **Setup** | `api = { features = ["posix"] }` | Requires `scripts/build-mlibc.sh` in WSL2; then `api = { features = ["mlibc"] }` |
+| **Setup** | `posix-shim` dependency + `extern crate posix_shim;` | Requires `scripts/build-mlibc.sh` in WSL2; then `posix-shim = { features = ["mlibc"] }` |
 | **Function coverage** | ~20 POSIX symbols (getentropy, socket, printf, malloc) | Full POSIX + glibc extensions |
 | **Link size** | ~5 KB | ~400 KB |
 | **Use case** | Quick C interop for simple functions | Heavy C code (curl, zlib, sqlite, etc.) |
@@ -21,16 +21,18 @@
 
 ## POSIX Shim Profile
 
-Minimal C ABI for common functions. Declared in `libs/api/src/services/posix.rs`.
+Minimal C ABI for common functions. Declared in the `posix-shim` crate (`libs/posix-shim/src/lib.rs`).
 
 ### Setup
 
 ```rust
 // Cargo.toml
 [dependencies]
-api = { path = "libs/api", features = ["posix"] }
+posix-shim = { path = "libs/posix-shim" }
 
 // main.rs
+extern crate posix_shim; // links the shim's C symbols
+
 extern "C" {
     fn malloc(size: usize) -> *mut u8;
     fn free(ptr: *mut u8);
@@ -133,10 +135,11 @@ kernel preserves the Cell's SSE state (runtime plan phase R5).
 ```rust
 // Cargo.toml
 [dependencies]
-api = { path = "libs/api", features = ["mlibc"] }
+abi = { path = "libs/abi" }
+posix-shim = { path = "libs/posix-shim", features = ["mlibc"] }
 
 // Manifest: block_io false (unless you need raw disk)
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
 // main.rs
 extern "C" {
@@ -221,13 +224,13 @@ Cellos SAS laws apply to C code too (since it's in a Rust Cell):
 ## Manifest & Syscalls
 
 ```rust
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,     // Use VFS, not raw disk
     network = true,       // If using sockets
     spawn = false         // Only if you're init/shell
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send, Recv, Log, Exit,
     GetTime,
     GetRandom,
@@ -306,9 +309,9 @@ Reference cell: [cells/tests/cpp-smoke](../../cells/tests/cpp-smoke/); runner:
 emitted.
 
 **Runtime:** you do not supply it. The POSIX shim already provides the C++ ABI layer —
-`operator new`/`delete` (all six forms) in `libs/api/src/services/posix/alloc.rs`,
+`operator new`/`delete` (all six forms) in `libs/posix-shim/src/alloc.rs`,
 `__cxa_pure_virtual`, `__cxa_guard_*`, `abort`, and `atexit`/`__cxa_atexit` in
-`libs/api/src/services/posix/cxxabi.rs`. Static destructors never run (registration is accepted
+`libs/posix-shim/src/cxxabi.rs`. Static destructors never run (registration is accepted
 and ignored — a cell has no process teardown). Static constructors do run: `ostd` crt0 walks
 `__init_array` (`libs/ostd/src/startup.rs:42-43,67-70,91-92`).
 
@@ -324,7 +327,7 @@ construction, `new`/`delete` — are all available.
 need them.
 
 **Architectures:** RV64, AArch64 and x86_64. The profile's runtime layer is the POSIX shim, which is
-compiled for these three targets and wasm32 (`libs/api/src/services/posix.rs:13-22`), and the cell's
+compiled for these three targets and wasm32 (`libs/posix-shim/src/lib.rs:12-21`), and the cell's
 build script selects a compiler for each (`cells/tests/cpp-smoke/build.rs:62-152`). On any other
 target the build script fails and states this reason.
 
@@ -353,7 +356,7 @@ bash scripts/build-mlibc.sh
 bash scripts/build-llvm-runtimes.sh x86_64      # or `all`: host dry run, cross build, size table
 ```
 
-**Cell setup.** Use the same crate dependencies as an mlibc cell: `api` with `features = ["mlibc"]`
+**Cell setup.** Use the same crate dependencies as an mlibc cell: `posix-shim` with `features = ["mlibc"]`
 plus `mlibc-shim`. `build.rs` compiles with `clang++` and these flags:
 
 ```text
@@ -454,7 +457,7 @@ Every Rust Cell target on x86_64 is soft-float (`rustc-abi: softfloat`). `tools/
 - an x86 vector type (`__m64`…`__m512`);
 - a struct or union containing one of the above.
 
-Callbacks count in both directions. Pointers to such values are allowed. The two sides pass these values in different registers, so a violation computes wrong numbers silently. Such Cells do not link the Tier-A `libs/api` POSIX shim, because its C99 math exports take `double`.
+Callbacks count in both directions. Pointers to such values are allowed. The two sides pass these values in different registers, so a violation computes wrong numbers silently. Such Cells do not link the Tier-A `libs/posix-shim` POSIX shim, because its C99 math exports take `double`.
 
 Check a boundary with:
 

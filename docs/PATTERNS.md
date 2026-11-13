@@ -31,7 +31,7 @@ See [code-standards.md](code-standards.md) for full enforcement rules.
 
 | Law | Rule |
 |-----|------|
-| 1 | `libs/api/` and `libs/types/` changes require two-step owner confirmation; independent promotion uses explicit GitHub `YES`/`NO` from another member |
+| 1 | `libs/abi/` and `libs/types/` changes require two-step owner confirmation; independent promotion uses explicit GitHub `YES`/`NO` from another member |
 | 2 | No `&mut [u8]` across async boundaries — use `Box<[u8]>` |
 | 3 | Use `VAddr`/`PAddr`, never raw `u64` for addresses |
 | 4 | `#![forbid(unsafe_code)]` in all Cells |

@@ -643,11 +643,11 @@ impl SystemPalette {
     }
 
     /// The compositor chrome palette for this system palette.
-    pub const fn appearance(self) -> api::display::AppearancePalette {
+    pub const fn appearance(self) -> wire::display::AppearancePalette {
         match self {
-            Self::Light => api::display::AppearancePalette::Light,
-            Self::Dark => api::display::AppearancePalette::Dark,
-            Self::Paper => api::display::AppearancePalette::Paper,
+            Self::Light => wire::display::AppearancePalette::Light,
+            Self::Dark => wire::display::AppearancePalette::Dark,
+            Self::Paper => wire::display::AppearancePalette::Paper,
         }
     }
 

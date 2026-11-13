@@ -22,7 +22,7 @@ pub mod raw_input;
 pub mod session;
 pub mod stream;
 
-pub use api::cell_session::Status;
+pub use abi::cell_session::Status;
 pub use codec::{encode_key_action, Decoder, KeyAction, KeyState, KeySymbol, Modifiers};
 pub use controls::{Color, ScreenControls, TextAttributes, ViewportSize};
 pub use error::{StreamError, TerminalError};

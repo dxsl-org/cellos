@@ -46,7 +46,7 @@ Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file
 
 Khi mày gõ lệnh `ls` trong `cells/apps/shell`, đây là cách 3 khu vực này phối hợp mà không cần `memcpy`:
 
-1. **App Cell (`shell`)**: Gọi syscall `open("/")` thông qua **`libs/api`**.
+1. **App Cell (`shell`)**: Gọi syscall `open("/")` thông qua **`libs/abi`** (`abi::fs`).
 2. **Service Cell (`vfs_dispatcher`)**: Nhận trap, kiểm tra bảng mount, thấy `/` thuộc về `viRamDisk`, liền gọi sang Driver tương ứng.
 3. **Driver Cell (`viRamDisk`)**: Nhờ **SAS**, nó chỉ việc trả về một vùng nhớ chứa danh sách file.
 4. **Kết quả**: `shell` nhận được dữ liệu và in ra UART (cũng là một Driver).

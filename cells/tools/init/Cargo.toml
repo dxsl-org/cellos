@@ -5,7 +5,8 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-api = { path = "../../../libs/api", version = "0.1.0" }
+abi = { path = "../../../libs/abi", version = "0.1.0" }
+wire = { path = "../../../libs/wire", version = "0.1.0" }
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 cellos-boot-config = { path = "../../../libs/boot-config", version = "0.1.0" }
 
@@ -41,7 +42,7 @@ tier3-autostart = []
 # Tier-3 app to start fast enable this instead.
 hv-autostart = []
 # Include the hostile-only supervisor control Cell (implies `supervisor`).
-hostile-backend-recovery = ["api/hostile-backend-recovery"]
+hostile-backend-recovery = ["wire/hostile-backend-recovery"]
 # Package the development/reference Silo service with exact self-ready registration.
 development-silo-provider = []
 # Package the fail-closed C2C broker only in images provisioning its cluster key.

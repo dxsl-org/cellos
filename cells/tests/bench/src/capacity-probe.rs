@@ -5,11 +5,11 @@
 extern crate alloc;
 extern crate ostd;
 
-use api::task::TaskPriority;
+use abi::task::TaskPriority;
 use ostd::syscall::{SyscallError, SyscallResult};
 
-api::declare_syscalls![Log, SpawnPinned, StateStash, StateRestore, Exit, Yield];
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![Log, SpawnPinned, StateStash, StateRestore, Exit, Yield];
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
 
 ostd::cell_main!(cell_main);
 

@@ -1,6 +1,6 @@
 //! [`BarMapper`] over the kernel MMIO Resource Registry.
 
-use api::pcie_function::PCIE_FUNCTION_BARS;
+use abi::pcie_function::PCIE_FUNCTION_BARS;
 use core::ptr::NonNull;
 use ostd::mmio::{request_region, MmioRegion};
 use virtio_pci_transport::BarMapper;

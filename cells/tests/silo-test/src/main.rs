@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -13,7 +13,7 @@ api::declare_manifest!(
     uart = false,
     hypervisor = false
 );
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound, GetTime];
+abi::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound, GetTime];
 
 use kms_codec::KmsErrorCode;
 use ostd::clients::kms::{KmsClient, KmsClientError};
@@ -79,7 +79,7 @@ fn cell_main() {
     }
 }
 fn direct_silo_denied() -> bool {
-    let Some(silo_tid) = provider_tid(api::syscall::service::SILO) else {
+    let Some(silo_tid) = provider_tid(abi::syscall::service::SILO) else {
         return false;
     };
     let request = DevelopmentSiloRequest::SignTls13ClientCertificateVerify {

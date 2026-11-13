@@ -27,7 +27,7 @@ pub const MAX_SURFACES: usize = 32;
 // pass blits each surface's single active Grant. The kernel refuses a holder's
 // 65th distinct lease as an unknown id, which `resolve_pixels` would treat as a
 // released buffer and detach, so every surface must fit one holder's table.
-const _: () = assert!(MAX_SURFACES <= api::syscall::grant_slice::MAX_LEASES_PER_HOLDER);
+const _: () = assert!(MAX_SURFACES <= abi::syscall::grant_slice::MAX_LEASES_PER_HOLDER);
 
 /// Largest width or height a client may request. Keeps `w * h * bpp` and
 /// `x + w` arithmetic far from `u32`/`i32` overflow on every target.

@@ -13,13 +13,13 @@ pub(crate) fn record_buffer_allocation() {
 }
 
 use alloc::collections::BTreeMap;
-use api::services::proto::tls as proto_tls;
 use embedded_tls::TlsError;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
     time::Instant,
     wire::{EthernetAddress, HardwareAddress},
 };
+use wire::proto::tls as proto_tls;
 
 use crate::{
     interface::VirtioNetDevice,

@@ -15,18 +15,18 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::syscall::service;
 use alloc::vec::Vec;
-use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::syscall::service;
 use ostd::clients::VfsClient;
 use ostd::io::{print, println};
 use ostd::ipc::{service_call_typed, service_call_typed_bounded, IpcError};
 use ostd::service::provider_tid;
 use ostd::syscall::sys_yield;
 use ostd::ViError;
+use wire::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
+abi::declare_syscalls![Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

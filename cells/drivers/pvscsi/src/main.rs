@@ -31,7 +31,7 @@ mod regs;
 mod rings;
 mod scan;
 
-use api::pcie_function::{ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64};
+use abi::pcie_function::{ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64};
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::print_fmt;
 use ostd::sync::Mutex;
@@ -165,7 +165,7 @@ ostd::run_app!(handler);
 
 // PcieDriverCap is granted by init via the reviewed `/bin/pvscsi` launch
 // edge; this manifest declares no privileged flags.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -179,7 +179,7 @@ api::declare_manifest!(
 // claim, block-route registration, the per-command clock budget, exit, the
 // DMA grant (and its release when authorization fails), and the completion
 // interrupt (435 at start, `WaitCompletion(IRQ)` parks).
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

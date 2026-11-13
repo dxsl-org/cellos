@@ -10,7 +10,7 @@ extern crate alloc;
 ))]
 compile_error!("development-silo-provider is restricted to AArch64 bare-metal QEMU builds");
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -18,7 +18,7 @@ api::declare_manifest!(
     uart = false,
     hypervisor = true
 );
-api::declare_syscalls![
+abi::declare_syscalls![
     TrySend,
     Recv,
     Log,
@@ -148,7 +148,7 @@ fn silo_main() {
             return;
         }
     };
-    if ostd::service::register(api::syscall::service::SILO, 0).is_err() {
+    if ostd::service::register(abi::syscall::service::SILO, 0).is_err() {
         println("[silo] readiness registration denied");
         return;
     }

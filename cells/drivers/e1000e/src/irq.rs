@@ -17,8 +17,8 @@ use crate::regs::{
     ivar, RegisterFile, CTRL_EXT, CTRL_EXT_PBA_SUPPORT, EIAC, ICR, ICR_LSC, ICR_OTHER, ICR_TXQ0,
     IMC, IMS, IVAR,
 };
-use api::completion::source::IRQ;
-use api::pcie_function::IRQ_MODE_ALLOW_MSIX;
+use abi::completion::source::IRQ;
+use abi::pcie_function::IRQ_MODE_ALLOW_MSIX;
 use ostd::io::print_fmt;
 use ostd::ipc::{wait_any, Wake};
 use ostd::syscall::sys_alloc_pcie_irq;

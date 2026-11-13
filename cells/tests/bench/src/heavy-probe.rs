@@ -24,8 +24,8 @@ use alloc::format;
 use alloc::vec::Vec;
 use ostd::syscall::{sys_grant_alloc, sys_recv};
 
-api::declare_syscalls![GrantAlloc, Recv, Log, Exit];
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![GrantAlloc, Recv, Log, Exit];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
 /// Resident heap arena. Every page is touched, so this is frames, not slack.
 ///

@@ -11,7 +11,7 @@ Cellos C ports are statically linked native cells. Select the lane before editin
 
 ## Choose the runtime
 
-- **POSIX shim:** `api = { features = ["posix"] }`. Its exact exported ABI is generated at
+- **POSIX shim:** depend on `posix-shim` and write `extern crate posix_shim;`. Its exact exported ABI is generated at
   [`posix-shim-contract.generated.md`](posix-shim-contract.generated.md). Any symbol absent from
   that table is unsupported; do not discover this at final link time.
 - **mlibc:** follow [the mlibc build guide](../mlibc-build.md). It replaces—not supplements—the

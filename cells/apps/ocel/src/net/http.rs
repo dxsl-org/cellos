@@ -6,12 +6,12 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::{net::NetError, tls};
 use core::task::Poll;
 use ostd::ipc::{self, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
 use ostd::service::provider_tid;
 use ostd::syscall::sys_get_time_ms;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::{net::NetError, tls};
 
 const HEADER_LIMIT: usize = 16 * 1024;
 const URL_LIMIT: usize = 2048;
@@ -549,7 +549,7 @@ impl Transport for KernelTransport {
         if closing_count() >= CLOSE_LIMIT {
             return None;
         }
-        let endpoint = provider_tid(api::syscall::service::NET)?;
+        let endpoint = provider_tid(abi::syscall::service::NET)?;
         if ACTIVE_JOBS
             .fetch_update(
                 core::sync::atomic::Ordering::Relaxed,
@@ -880,7 +880,7 @@ impl<T: Transport> FetchJob<T> {
             },
             Stage::Done => return Err("Load already finished".into()),
         };
-        api::ipc::encode(&req, buf)
+        wire::ipc::encode(&req, buf)
             .map(|b| b.len())
             .map_err(|_| "Cannot encode network request".into())
     }
@@ -1005,7 +1005,7 @@ impl<T: Transport> FetchJob<T> {
                 "[ocel/net] Resolve reply len={}",
                 bytes.len()
             ));
-            let addr = match api::ipc::decode::<NetResponse>(bytes) {
+            let addr = match wire::ipc::decode::<NetResponse>(bytes) {
                 Ok(NetResponse::Addr(addr)) => {
                     crate::trace::stamp(&alloc::format!(
                         "dns {} -> {}.{}.{}.{}",
@@ -1039,7 +1039,7 @@ impl<T: Transport> FetchJob<T> {
                         .map_err(|_| "Malformed TLS connect reply")?,
                 )
             } else {
-                match api::ipc::decode::<NetResponse>(bytes) {
+                match wire::ipc::decode::<NetResponse>(bytes) {
                     Ok(NetResponse::CapId(cap)) => cap as u64,
                     Ok(NetResponse::Err(code)) if code == NetError::Denied as u8 => {
                         return Err(NET_DENIED_MESSAGE.into())
@@ -1064,7 +1064,7 @@ impl<T: Transport> FetchJob<T> {
             return Ok(());
         }
         if self.stage == Stage::WaitConnect {
-            match api::ipc::decode::<NetResponse>(bytes) {
+            match wire::ipc::decode::<NetResponse>(bytes) {
                 Ok(NetResponse::State(0x03)) => self.stage = Stage::Send,
                 Ok(NetResponse::State(0x01 | 0x02)) | Ok(NetResponse::NotReady) => {}
                 _ => return Err("TCP connection failed before establishment".into()),
@@ -1076,7 +1076,7 @@ impl<T: Transport> FetchJob<T> {
                 u32::from_le_bytes(bytes.try_into().map_err(|_| "Malformed TLS send reply")?)
                     as usize
             } else {
-                match api::ipc::decode::<NetResponse>(bytes) {
+                match wire::ipc::decode::<NetResponse>(bytes) {
                     Ok(NetResponse::WriteProgress(n)) => n as usize,
                     Ok(NetResponse::NotReady) => return Ok(()),
                     _ => return Err("TCP write failed".into()),
@@ -1120,7 +1120,7 @@ impl<T: Transport> FetchJob<T> {
             if self.decoder.status == 0 {
                 self.first_read_ms = self.io.now();
             }
-            match api::ipc::decode::<NetResponse>(bytes) {
+            match wire::ipc::decode::<NetResponse>(bytes) {
                 Ok(NetResponse::Data(data)) if !data.is_empty() => self.decoder.feed(data),
                 Ok(NetResponse::Eof) => self.decoder.eof(),
                 Ok(NetResponse::NotReady) => Ok(()),
@@ -1151,7 +1151,7 @@ impl<T: Transport> FetchJob<T> {
                     let cap = if self.url.tls() {
                         buf[..len].try_into().ok().map(u64::from_le_bytes)
                     } else {
-                        match api::ipc::decode::<NetResponse>(&buf[..len]) {
+                        match wire::ipc::decode::<NetResponse>(&buf[..len]) {
                             Ok(NetResponse::CapId(cap)) => Some(cap as u64),
                             _ => None,
                         }
@@ -1267,7 +1267,7 @@ impl Closing {
             bytes[1..9].copy_from_slice(&self.cap.to_le_bytes());
             tls::HEADER_LEN
         } else {
-            match api::ipc::encode(
+            match wire::ipc::encode(
                 &NetRequest::TcpClose {
                     cap_id: self.cap as u32,
                 },

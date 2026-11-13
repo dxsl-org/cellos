@@ -5,13 +5,13 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use std::sync::{Arc, Mutex as HostMutex};
 
-use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
+use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
+use abi::dir_handles::ViDirHandle;
 use cellos_fs::disk::{BlockDevice, FsError};
 use cellos_fs::format::BLOCK_SIZE;
 use types::CellId;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -66,7 +66,7 @@ fn manager() -> VfsManager {
 
 fn call(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest<'_>) -> Reply {
     let mut request = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(req, &mut request).expect("request fits");
+    wire::ipc::encode(req, &mut request).expect("request fits");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match crate::dispatch::handle_request(vfs, &request, Some(caller), &mut resp_buf) {
         VfsResponse::Ok => Reply::Ok,

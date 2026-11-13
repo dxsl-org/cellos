@@ -5,7 +5,7 @@
 //! rendezvous — encoding the request, both `ecall`s, and both context switches —
 //! and runs the handler on the caller's own thread. It does **not** skip the
 //! handler body, nor encoding and decoding the reply (the fast handler still
-//! ends in `api::ipc::encode`), nor resolving the caller's identity.
+//! ends in `wire::ipc::encode`), nor resolving the caller's identity.
 //!
 //! So: `saving ≈ round_trip`, `total ≈ round_trip + handler_body`, and the
 //! fraction saved is `round_trip / (round_trip + handler_body)`.
@@ -30,13 +30,13 @@
 //! between stages is what this measurement is for, and a ratio that favours a
 //! direct call here must still be confirmed on a board.
 
-use api::{
-    benchmark::ViBenchmark,
-    ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE},
-    ViError,
-};
 use core::hint::black_box;
 use ostd::syscall::{self, sys_get_time, SyscallResult};
+use types::ViError;
+use wire::{
+    benchmark::ViBenchmark,
+    ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE},
+};
 
 /// Operations per `run_once`, chosen so the runner's two-syscall bracket is
 /// under a per-mille of a sample.
@@ -66,9 +66,9 @@ pub fn run_resp_echo() -> ! {
             SyscallResult::Ok(sid) if sid != 0 => sid,
             _ => continue,
         };
-        let request: Result<VfsRequest, _> = api::ipc::decode(&rx);
+        let request: Result<VfsRequest, _> = wire::ipc::decode(&rx);
         let encoded = request
-            .and_then(|_| api::ipc::encode(&REPLY, &mut tx))
+            .and_then(|_| wire::ipc::encode(&REPLY, &mut tx))
             .map(|bytes| &bytes[..]);
         match encoded {
             Ok(bytes) => {
@@ -97,11 +97,11 @@ impl ViBenchmark for EncodeRequestBench {
         "stage_encode_request_x1000"
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         for _ in 0..INNER {
             let req = VfsRequest::GetFile(black_box(PATH));
             let encoded =
-                api::ipc::encode(&req, &mut self.buf).map_err(|_| ViError::InvalidInput)?;
+                wire::ipc::encode(&req, &mut self.buf).map_err(|_| ViError::InvalidInput)?;
             let _ = black_box(encoded);
         }
         Ok(0)
@@ -129,18 +129,18 @@ impl ViBenchmark for DecodeReplyBench {
         "stage_decode_reply_x1000"
     }
 
-    fn setup(&mut self) -> api::ViResult<()> {
-        self.len = api::ipc::encode(&REPLY, &mut self.encoded)
+    fn setup(&mut self) -> types::ViResult<()> {
+        self.len = wire::ipc::encode(&REPLY, &mut self.encoded)
             .map_err(|_| ViError::InvalidInput)?
             .len();
         Ok(())
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         let bytes = &self.encoded[..self.len];
         for _ in 0..INNER {
             let response: VfsResponse =
-                api::ipc::decode(black_box(bytes)).map_err(|_| ViError::InvalidInput)?;
+                wire::ipc::decode(black_box(bytes)).map_err(|_| ViError::InvalidInput)?;
             let _ = black_box(response);
         }
         Ok(0)
@@ -158,7 +158,7 @@ impl ViBenchmark for TrapRoundTripBench {
         "stage_ecall_roundtrip_x1000"
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         for _ in 0..INNER {
             let _ = black_box(sys_get_time());
         }
@@ -192,11 +192,11 @@ impl ViBenchmark for RoundTripBench {
         "total_typed_roundtrip_x1000"
     }
 
-    fn setup(&mut self) -> api::ViResult<()> {
+    fn setup(&mut self) -> types::ViResult<()> {
         if !syscall::sys_set_spawn_args("resp-echo") {
             return Err(ViError::IO);
         }
-        self.peer = match syscall::sys_spawn_pinned(PROBE_PATH, api::TaskPriority::Normal as u8, 0)
+        self.peer = match syscall::sys_spawn_pinned(PROBE_PATH, abi::TaskPriority::Normal as u8, 0)
         {
             SyscallResult::Ok(tid) if tid != 0 => tid,
             _ => return Err(ViError::NotFound),
@@ -207,13 +207,13 @@ impl ViBenchmark for RoundTripBench {
         Ok(())
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         if self.peer == 0 {
             return Err(ViError::NotFound);
         }
         for _ in 0..INNER {
             let req = VfsRequest::GetFile(black_box(PATH));
-            let n = api::ipc::encode(&req, &mut self.send_buf)
+            let n = wire::ipc::encode(&req, &mut self.send_buf)
                 .map_err(|_| ViError::InvalidInput)?
                 .len();
             if !matches!(
@@ -229,13 +229,13 @@ impl ViBenchmark for RoundTripBench {
                 SyscallResult::Err(_) => return Err(ViError::IO),
             }
             let response: VfsResponse =
-                api::ipc::decode(&self.recv_buf).map_err(|_| ViError::InvalidInput)?;
+                wire::ipc::decode(&self.recv_buf).map_err(|_| ViError::InvalidInput)?;
             let _ = black_box(response);
         }
         Ok(0)
     }
 
-    fn teardown(&mut self) -> api::ViResult<()> {
+    fn teardown(&mut self) -> types::ViResult<()> {
         if self.peer == 0 {
             return Ok(());
         }

@@ -1,4 +1,4 @@
-use api::display::{ConfigureKind, PixelFormat, Rect, WindowConfigure, WindowState};
+use wire::display::{ConfigureKind, PixelFormat, Rect, WindowConfigure, WindowState};
 
 use super::{state::PixelSource, SurfaceState};
 
@@ -13,7 +13,7 @@ pub(super) struct PendingConfigure {
 
 /// Result of accepting a state request.
 pub enum StateTransition {
-    StateChanged(api::display::WindowStateChanged),
+    StateChanged(wire::display::WindowStateChanged),
     Configure(WindowConfigure),
 }
 
@@ -28,7 +28,7 @@ impl SurfaceState {
         opcode: u8,
         maximum_rect: Rect,
     ) -> Option<StateTransition> {
-        use api::display::compositor_ops;
+        use wire::display::compositor_ops;
 
         if !self.is_window_managed() || self.state == WindowState::Closing {
             return None;
@@ -80,7 +80,7 @@ impl SurfaceState {
             staged_source: None,
         });
         Some(WindowConfigure {
-            opcode: api::display::compositor_events::WINDOW_CONFIGURE,
+            opcode: wire::display::compositor_events::WINDOW_CONFIGURE,
             kind,
             _pad: [0; 2],
             cap,
@@ -118,7 +118,7 @@ impl SurfaceState {
         &mut self,
         cap: u32,
         serial: u32,
-    ) -> Option<(Rect, Rect, api::display::WindowStateChanged)> {
+    ) -> Option<(Rect, Rect, wire::display::WindowStateChanged)> {
         let mut pending = self.pending_configure.take()?;
         if pending.serial != serial {
             self.pending_configure = Some(pending);

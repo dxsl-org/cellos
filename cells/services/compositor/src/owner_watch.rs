@@ -16,7 +16,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use api::display::{compositor_ops, Rect};
+use wire::display::{compositor_ops, Rect};
 
 use crate::input_handler::InputState;
 use crate::surface_table::{FrameRegistry, SurfaceTable};
@@ -82,9 +82,9 @@ pub(crate) fn death_line(released: &Released, removed: usize) -> Option<String> 
 mod tests {
     extern crate std;
     use super::*;
-    use api::display::SurfaceRole;
-    use api::display::{CreateViewRequest, ViewOpResult};
-    use api::services::proto::compositor::OWNER_EXITED_RELAY;
+    use wire::display::SurfaceRole;
+    use wire::display::{CreateViewRequest, ViewOpResult};
+    use wire::proto::compositor::OWNER_EXITED_RELAY;
 
     #[test]
     fn only_create_requests_need_a_watch() {

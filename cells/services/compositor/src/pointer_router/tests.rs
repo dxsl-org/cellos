@@ -1,4 +1,4 @@
-use api::display::SurfaceRole;
+use wire::display::SurfaceRole;
 
 use super::*;
 
@@ -141,8 +141,8 @@ fn pressing_a_stacked_tab_shows_and_focuses_its_window() {
     let tab = window_decoration::tab_slot(content, stacking::tabs_of(&frames, b), 0);
     let mut router = PointerRouter::new();
     let press = InputEvent::MouseButton {
-        button: api::input::MouseButton::Left,
-        state: api::input::KeyState::Pressed,
+        button: wire::input::MouseButton::Left,
+        state: wire::input::KeyState::Pressed,
     };
     let maximum = window_decoration::maximized_content(1280, 800);
     let context = RouteContext::new(

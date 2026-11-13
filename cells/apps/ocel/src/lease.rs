@@ -131,8 +131,8 @@ fn bounded_call(
 
 fn service(engine: Engine) -> u16 {
     match engine {
-        Engine::JavaScript => api::syscall::service::OCEL_JS,
-        Engine::Pdf => api::syscall::service::OCEL_PDF,
+        Engine::JavaScript => abi::syscall::service::OCEL_JS,
+        Engine::Pdf => abi::syscall::service::OCEL_PDF,
     }
 }
 fn name(engine: Engine) -> &'static str {
@@ -154,7 +154,7 @@ impl<T: Transport> Lease<T> {
         self.transport.now()
     }
     pub(crate) fn acquire_with(engine: Engine, mut transport: T) -> Result<Self, String> {
-        let broker = transport.lookup(api::syscall::service::OCEL_ACTIVATOR)
+        let broker = transport.lookup(abi::syscall::service::OCEL_ACTIVATOR)
             .ok_or_else(|| format!("{} engine is unavailable: activation service is not registered. No fallback engine is available.", name(engine)))?;
         let mut frame = [0u8; FRAME_BYTES];
         // Exact operation tokens authenticate the provider incarnation: unlike
@@ -218,7 +218,7 @@ impl<T: Transport> Lease<T> {
 
     fn validate(&mut self) -> Result<(), String> {
         if self.token.is_none()
-            || self.transport.lookup(api::syscall::service::OCEL_ACTIVATOR) != Some(self.broker)
+            || self.transport.lookup(abi::syscall::service::OCEL_ACTIVATOR) != Some(self.broker)
             || self.transport.lookup(service(self.engine)) != Some(self.provider)
             || self.provider == 0
         {
@@ -240,7 +240,7 @@ impl<T: Transport> Lease<T> {
         let Some(token) = self.token else {
             return Ok(());
         };
-        if self.transport.lookup(api::syscall::service::OCEL_ACTIVATOR) != Some(self.broker) {
+        if self.transport.lookup(abi::syscall::service::OCEL_ACTIVATOR) != Some(self.broker) {
             self.token = None; // The old broker incarnation cannot own live leases.
             return Err(String::from(
                 "Engine activation provider stopped before release.",

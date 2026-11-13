@@ -46,7 +46,7 @@ Row major, left-to-right, top-to-bottom.
 ## Compositor IPC Protocol
 
 All messages are sent to the compositor's IPC endpoint
-(`api::display::COMPOSITOR_ENDPOINT = 5`).
+(`wire::display::COMPOSITOR_ENDPOINT = 5`).
 
 ### Request envelope
 
@@ -238,7 +238,7 @@ A tick is skipped if no surface has a non-empty damage rect.
 
 ## Screen Resolution
 
-Default: **1024 × 768** (`FALLBACK_WIDTH` × `FALLBACK_HEIGHT` in `api::display`).
+Default: **1024 × 768** (`FALLBACK_WIDTH` × `FALLBACK_HEIGHT` in `wire::display`).
 
 The kernel probes the actual resolution from VirtIO GPU `GET_DISPLAY_INFO` during
 `init_driver()`.  The compositor cell queries `GET_SCREEN_SIZE` on startup to size
@@ -265,8 +265,8 @@ pub fn fill_rect(rect: Rect, rgba: u32) -> ViResult<()>
 
 | File | Purpose |
 |------|---------|
-| `libs/api/src/display.rs` | `Rect`, `PixelFormat`, `SurfaceCap`, opcode constants |
-| `libs/api/src/services/display.rs` | `CreateViewRequest`, `ViewOpResponse`, `ViewRef`, `FrameRef`, `ViewOpResult`, view opcodes |
+| `libs/wire/src/display.rs` | `Rect`, `PixelFormat`, `SurfaceCap`, opcode constants |
+| `libs/wire/src/display.rs` | `CreateViewRequest`, `ViewOpResponse`, `ViewRef`, `FrameRef`, `ViewOpResult`, view opcodes |
 | `cells/services/compositor/src/surface_table/frame.rs` | `FrameRegistry`, `Frame`, `View`, capacity limits, generational tracking, snap math, fullscreen restoration |
 | `cells/services/compositor/src/message_handler/view.rs` | Authenticated view IPC handler with validation, focus routing, dirty tracking |
 | `cells/services/compositor/src/lib.rs` | IPC receive loop + message dispatch |

@@ -20,11 +20,11 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use api::cell_session::trust::{self as tr, TrustChallengeV1, TrustPromptV1};
-use api::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
-use api::ipc::{ssh_trust, Observation, SaveOutcome};
+use abi::cell_session::trust::{self as tr, TrustChallengeV1, TrustPromptV1};
+use abi::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
 use kms_codec::{KmsErrorCode, TrustOutcomePayload};
 use sha2::{Digest, Sha256};
+use wire::ipc::{ssh_trust, Observation, SaveOutcome};
 
 use super::{
     base64_encode, blob_names, canonical_host, lookup, owner, parse, Principal, TrustIo, TrustLeaf,
@@ -208,7 +208,7 @@ pub(super) fn challenge(
     ))
 }
 
-/// One `api::ipc::ssh_trust` code for the caller's own `challenge`.
+/// One `wire::ipc::ssh_trust` code for the caller's own `challenge`.
 pub(super) fn commit(leaf: &mut TrustLeaf, caller: Principal, challenge: Ref) -> u8 {
     // Only the caller's own challenge: a guessed or another caller's ref is refused.
     let Some(n) = leaf

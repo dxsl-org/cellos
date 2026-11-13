@@ -5,9 +5,9 @@
 //! grouping (stack onto a nearby window, detach this tab, untile). Which
 //! items show depends on the frame; nothing unavailable shows.
 
-use api::display::Rect;
 use ostd::display::linear::icons::{paint_icon, LineIcon, ICON_SIZE};
 use ostd::display::linear::{Bgra, Canvas, Radii, RoundRect, CONTROL_RADIUS, PANEL_RADIUS};
+use wire::display::Rect;
 
 use super::palette::ChromePalette;
 use super::raster::paint_glyph;

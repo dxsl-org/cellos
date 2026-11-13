@@ -21,7 +21,7 @@ extern crate ostd;
 
 // No network, no spawn, no block I/O, no peripherals, no hypervisor. The right this cell
 // holds comes from the kernel launch edge, never from a manifest bit.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -34,7 +34,7 @@ api::declare_manifest!(
 // launch syscall): IPC to the session owner and to the key service, logging, the clock and
 // the one-tick timer. Deliberately absent: GetRandom, every net and spawn call, VFS and
 // grants. `Exit` and `Yield` are always permitted by the allowlist layer.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,

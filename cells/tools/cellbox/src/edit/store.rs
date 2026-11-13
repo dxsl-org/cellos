@@ -1,8 +1,8 @@
 //! [`Store`] over the VFS D03 protocol.
 
-use api::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 use ostd::clients::VfsClient;
 use ostd::ViError;
+use wire::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 
 use super::editor::{SaveResult, Store};
 

@@ -5,7 +5,7 @@
 //! quota accounting (net-delta on overwrite), async-read pending table, and
 //! zero-copy grant I/O.
 
-use api::services::proto::vfs::VfsError;
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -24,10 +24,10 @@ pub fn handle_request<'a>(
     vfs: &mut VfsManager,
     buf: &[u8],
     caller: Option<Caller>,
-    resp_buf: &'a mut [u8; api::ipc::IPC_BUF_SIZE],
-) -> api::ipc::VfsResponse<'a> {
+    resp_buf: &'a mut [u8; wire::ipc::IPC_BUF_SIZE],
+) -> wire::ipc::VfsResponse<'a> {
     let Some(caller) = caller else {
-        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+        return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
     };
 
     // Settle what the kernel says this cell inherited before acting on anything
@@ -36,18 +36,18 @@ pub fn handle_request<'a>(
     // answer landed would be one path-string operation ahead of the seal.
     crate::dir_admission::admit(vfs, caller);
     if !crate::prepared_cwd::ready(vfs, caller) {
-        return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+        return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
 
     // Decode typed request; `take_from_bytes` tolerates trailing bytes in the
     // receive buffer — both zeros left by a previous message and the kernel's
     // caller-identity trailer at the very end.
-    let req = match api::ipc::decode::<api::ipc::VfsRequest>(buf) {
+    let req = match wire::ipc::decode::<wire::ipc::VfsRequest>(buf) {
         Ok(r) => r,
-        Err(_) => return api::ipc::VfsResponse::Err(VfsError::Malformed as u8),
+        Err(_) => return wire::ipc::VfsResponse::Err(VfsError::Malformed as u8),
     };
 
-    if let api::ipc::VfsRequest::PreparedChildV1(record) = req {
+    if let wire::ipc::VfsRequest::PreparedChildV1(record) = req {
         return crate::prepared_cwd::handle(vfs, caller, record, resp_buf);
     }
 
@@ -55,22 +55,22 @@ pub fn handle_request<'a>(
     // BEFORE path sealing, handle resolution, or backend work. There is no
     // exception: the machine-pin Cell that writes `/srv/.cellos-machine` holds W.
     if req.requires_mutation_authority() && !caller.may_mutate() {
-        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+        return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
     // A cell that has given up path strings is refused here, before the request
     // reaches an arm that could serve it. Refusing at the entry rather than in
     // each arm is what makes the guarantee hold for every path-addressed
     // operation, including any added later.
     if req.is_path_addressed() && vfs.dirs.is_sealed(caller) {
-        return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+        return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
     }
 
     // A source may not disappear between issuer sealing and kernel commit.
     // Abort-if-uncommitted linearizes against commit before the revoke walks
     // the existing directory lineage.
-    if let api::ipc::VfsRequest::CloseDir { dir } = req {
+    if let wire::ipc::VfsRequest::CloseDir { dir } = req {
         if !crate::prepared_cwd::before_revoke(vfs, caller, dir) {
-            return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+            return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
         }
     }
 
@@ -78,11 +78,11 @@ pub fn handle_request<'a>(
     // stay as tombstones so every later request keeps its byte; they are unsupported.
     if matches!(
         req,
-        api::ipc::VfsRequest::TrustLookup { .. }
-            | api::ipc::VfsRequest::TrustChallenge { .. }
-            | api::ipc::VfsRequest::TrustCommit { .. }
+        wire::ipc::VfsRequest::TrustLookup { .. }
+            | wire::ipc::VfsRequest::TrustChallenge { .. }
+            | wire::ipc::VfsRequest::TrustCommit { .. }
     ) {
-        return api::ipc::VfsResponse::Err(VfsError::Unsupported as u8);
+        return wire::ipc::VfsResponse::Err(VfsError::Unsupported as u8);
     }
     if let Some(resp) = crate::save::handle(vfs, caller, &req) {
         return resp;
@@ -92,46 +92,46 @@ pub fn handle_request<'a>(
     }
 
     match req {
-        api::ipc::VfsRequest::ListDir(p) => {
+        wire::ipc::VfsRequest::ListDir(p) => {
             if !vfs.access.can_read(caller, p) {
-                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs.healthy(p) {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             if !matches!(vfs.stat(p), Ok(Some((_, true)))) {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let listed = vfs.list_dir(p, resp_buf);
             if !vfs.healthy(p) {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let Ok(n) = listed else {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             };
-            api::ipc::VfsResponse::Data(&resp_buf[..n])
+            wire::ipc::VfsResponse::Data(&resp_buf[..n])
         }
-        api::ipc::VfsRequest::ReadAsync { path } => {
+        wire::ipc::VfsRequest::ReadAsync { path } => {
             // Authorize BEFORE reading: the read happens now (the disk backend is
             // still blocking) and `Poll` only hands over what was already read, so
             // this is the only point where the path is known.
             if !vfs.access.can_read(caller, path) {
-                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             // A handle records durable state against the caller, so it needs a
             // caller that cannot be confused with a later one.
             if !caller.may_own_state() {
-                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, false)))) {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let lease = if path.starts_with("/srv") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
-                    return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                    return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
                 };
                 let Ok(l) = vfs.ledger.acquire_service_handle(&k) else {
-                    return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                    return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
                 };
                 Some(l)
             } else {
@@ -139,17 +139,17 @@ pub fn handle_request<'a>(
             };
             let data = vfs.read_to_vec(path);
             if !vfs.healthy(path) {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             // A read that failed part way is an error, never a short handle.
             let Ok(data) = data else {
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             };
             let handle = vfs.pending.insert(caller, path, data, lease);
-            api::ipc::VfsResponse::PendingHandle(handle)
+            wire::ipc::VfsResponse::PendingHandle(handle)
         }
 
-        api::ipc::VfsRequest::Poll { handle } => {
+        wire::ipc::VfsRequest::Poll { handle } => {
             // With a synchronous backend data is always ready on first poll.
             //
             // Two independent checks, in this order.  Ownership first: a handle
@@ -160,10 +160,10 @@ pub fn handle_request<'a>(
             // only what policy said then, and a slot can outlive a rule change.
             let readable = match vfs.pending.owned_path(caller, handle) {
                 Some(path) => vfs.access.can_read(caller, path),
-                None => return api::ipc::VfsResponse::Err(VfsError::Handle as u8),
+                None => return wire::ipc::VfsResponse::Err(VfsError::Handle as u8),
             };
             if !readable {
-                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             if !vfs
                 .pending
@@ -171,7 +171,7 @@ pub fn handle_request<'a>(
                 .is_some_and(|path| vfs.healthy(path))
             {
                 let _ = vfs.pending.poll(caller, handle);
-                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             match vfs.pending.poll(caller, handle) {
                 Some(data) => {
@@ -181,33 +181,33 @@ pub fn handle_request<'a>(
                     // saw an empty reply (surfaced by /bin ELF reads).
                     let n = data.len().min(480);
                     resp_buf[..n].copy_from_slice(&data[..n]);
-                    api::ipc::VfsResponse::Data(&resp_buf[..n])
+                    wire::ipc::VfsResponse::Data(&resp_buf[..n])
                 }
-                None => api::ipc::VfsResponse::Err(VfsError::Handle as u8),
+                None => wire::ipc::VfsResponse::Err(VfsError::Handle as u8),
             }
         }
 
         // ── Zero-Copy Grant I/O (Storage 2.0) ──────────────────────────────
-        api::ipc::VfsRequest::ReadGrant {
+        wire::ipc::VfsRequest::ReadGrant {
             cap,
             offset,
             size,
             grant,
         } => crate::grant_read::read_grant(vfs, caller, cap, offset, size, grant),
 
-        api::ipc::VfsRequest::WriteGrant {
+        wire::ipc::VfsRequest::WriteGrant {
             cap,
             offset,
             grant,
             bytes,
         } => {
             if !caller.may_mutate() {
-                return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
+                return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
             crate::grant_write::write(vfs, caller, cap, offset, grant, bytes)
         }
 
-        api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
+        wire::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
             crate::grant_read::read_file_grant(vfs, caller, path, grant, max)
         }
 
@@ -216,51 +216,51 @@ pub fn handle_request<'a>(
         // counterpart above, and interleaving them would put the two addressing
         // models in one match where a reader has to check which one each arm is
         // in.
-        api::ipc::VfsRequest::WriteHandleGrant { .. }
-        | api::ipc::VfsRequest::SyncHandle { .. }
-        | api::ipc::VfsRequest::WriteAt { .. }
-        | api::ipc::VfsRequest::UnlinkAt { .. }
-        | api::ipc::VfsRequest::MkdirAt { .. }
-        | api::ipc::VfsRequest::RmdirAt { .. }
-        | api::ipc::VfsRequest::RenameAt { .. }
+        wire::ipc::VfsRequest::WriteHandleGrant { .. }
+        | wire::ipc::VfsRequest::SyncHandle { .. }
+        | wire::ipc::VfsRequest::WriteAt { .. }
+        | wire::ipc::VfsRequest::UnlinkAt { .. }
+        | wire::ipc::VfsRequest::MkdirAt { .. }
+        | wire::ipc::VfsRequest::RmdirAt { .. }
+        | wire::ipc::VfsRequest::RenameAt { .. }
             if !caller.may_mutate() =>
         {
-            api::ipc::VfsResponse::Err(VfsError::Denied as u8)
+            wire::ipc::VfsResponse::Err(VfsError::Denied as u8)
         }
 
-        api::ipc::VfsRequest::OpenRootDir { .. }
-        | api::ipc::VfsRequest::OpenDir { .. }
-        | api::ipc::VfsRequest::ReadAt { .. }
-        | api::ipc::VfsRequest::WriteAt { .. }
-        | api::ipc::VfsRequest::StatAt { .. }
-        | api::ipc::VfsRequest::ListAt { .. }
-        | api::ipc::VfsRequest::ListAtPage { .. }
-        | api::ipc::VfsRequest::FileHandleState { .. }
-        | api::ipc::VfsRequest::UnlinkAt { .. }
-        | api::ipc::VfsRequest::CloseDir { .. }
-        | api::ipc::VfsRequest::SealPaths
-        | api::ipc::VfsRequest::OpenFileAt { .. }
-        | api::ipc::VfsRequest::ReadFileHandle { .. }
-        | api::ipc::VfsRequest::CloseFile { .. }
-        | api::ipc::VfsRequest::ReadHandleGrant { .. }
-        | api::ipc::VfsRequest::WriteHandleGrant { .. }
-        | api::ipc::VfsRequest::SyncHandle { .. }
-        | api::ipc::VfsRequest::MkdirAt { .. }
-        | api::ipc::VfsRequest::RmdirAt { .. }
-        | api::ipc::VfsRequest::RenameAt { .. } => {
+        wire::ipc::VfsRequest::OpenRootDir { .. }
+        | wire::ipc::VfsRequest::OpenDir { .. }
+        | wire::ipc::VfsRequest::ReadAt { .. }
+        | wire::ipc::VfsRequest::WriteAt { .. }
+        | wire::ipc::VfsRequest::StatAt { .. }
+        | wire::ipc::VfsRequest::ListAt { .. }
+        | wire::ipc::VfsRequest::ListAtPage { .. }
+        | wire::ipc::VfsRequest::FileHandleState { .. }
+        | wire::ipc::VfsRequest::UnlinkAt { .. }
+        | wire::ipc::VfsRequest::CloseDir { .. }
+        | wire::ipc::VfsRequest::SealPaths
+        | wire::ipc::VfsRequest::OpenFileAt { .. }
+        | wire::ipc::VfsRequest::ReadFileHandle { .. }
+        | wire::ipc::VfsRequest::CloseFile { .. }
+        | wire::ipc::VfsRequest::ReadHandleGrant { .. }
+        | wire::ipc::VfsRequest::WriteHandleGrant { .. }
+        | wire::ipc::VfsRequest::SyncHandle { .. }
+        | wire::ipc::VfsRequest::MkdirAt { .. }
+        | wire::ipc::VfsRequest::RmdirAt { .. }
+        | wire::ipc::VfsRequest::RenameAt { .. } => {
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
-        _ => api::ipc::VfsResponse::Err(VfsError::Malformed as u8),
+        _ => wire::ipc::VfsResponse::Err(VfsError::Malformed as u8),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use api::caller_identity::CALLER_FLAG_NET_CONNECT;
-    use api::cell_session::ObjectRefV1;
-    use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-    use api::services::proto::vfs::VfsError;
+    use abi::caller_identity::CALLER_FLAG_NET_CONNECT;
+    use abi::cell_session::ObjectRefV1;
     use types::CellId;
+    use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+    use wire::proto::vfs::VfsError;
 
     use crate::caller::Caller;
     use crate::manager::VfsManager;
@@ -298,7 +298,7 @@ mod tests {
             VfsRequest::TrustCommit { challenge: session },
         ] {
             let mut request = [0u8; IPC_BUF_SIZE];
-            api::ipc::encode(&req, &mut request).expect("request fits");
+            wire::ipc::encode(&req, &mut request).expect("request fits");
             let mut resp_buf = [0u8; IPC_BUF_SIZE];
             let resp = super::handle_request(&mut vfs, &request, Some(caller), &mut resp_buf);
             assert!(

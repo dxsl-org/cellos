@@ -15,10 +15,10 @@
 //! Settling what a cell inherited, before any of this runs, lives in
 //! [`crate::dir_admission`].
 
+use abi::dir_handles::ViDirHandle;
 use alloc::string::String;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
@@ -145,7 +145,7 @@ fn open_root<'a>(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsRespons
     // Checked as raw bytes, before anything is joined or cleaned up: this is the
     // one operation left that takes a path, so it is the one place a traversal
     // could still enter the handle graph.
-    let Ok(checked) = api::dir_name::validate_dir_path(path.as_bytes()) else {
+    let Ok(checked) = wire::dir_name::validate_dir_path(path.as_bytes()) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
     if !vfs.access.can_read(caller, checked) {

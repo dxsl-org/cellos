@@ -70,7 +70,7 @@ pub fn untracked_export(client: &mut Client) {
         fail("E9: no verdict")
     };
     if state_name(&v) != "Unproven"
-        || v.reasons & api::retirement::reason::SHM_UNTRACKED == 0
+        || v.reasons & abi::retirement::reason::SHM_UNTRACKED == 0
         || v.shm_frames_released == 0
     {
         fail(&format!(

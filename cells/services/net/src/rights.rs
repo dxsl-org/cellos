@@ -12,11 +12,11 @@
 //! answers it before the owner watch, both intercepts and dispatch, so no socket,
 //! DNS query, owner watch or frame exists because of a denied request.
 
-use api::caller_identity::{
+use abi::caller_identity::{
     CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN, CALLER_FLAG_NET_RESOLVE,
 };
-use api::ipc::{self, NetRequest, NetResponse};
-use api::services::proto::{net::NetError, tls};
+use wire::ipc::{self, NetRequest, NetResponse};
+use wire::proto::{net::NetError, tls};
 
 use crate::tls_wire::{parse_raw_tls_request, RawTlsRequest};
 

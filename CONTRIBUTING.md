@@ -135,9 +135,9 @@ cargo check --workspace
 cargo fmt --all --check
 cargo clippy --workspace -- -D warnings
 
-# Run host-side unit tests (types + api crates)
-cargo test -p types -p api --target x86_64-pc-windows-msvc   # Windows
-cargo test -p types -p api --target x86_64-unknown-linux-gnu  # Linux
+# Run host-side unit tests (types + abi + wire crates)
+cargo test -p types -p abi -p wire --target x86_64-pc-windows-msvc   # Windows
+cargo test -p types -p abi -p wire --target x86_64-unknown-linux-gnu  # Linux
 ```
 
 ### 6 — Commit
@@ -184,7 +184,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 **Types:** `feat` · `fix` · `docs` · `refactor` · `test` · `chore` · `perf`
 
-**Scopes:** `kernel` · `hal` · `vfs` · `shell` · `input` · `net` · `types` · `api`
+**Scopes:** `kernel` · `hal` · `vfs` · `shell` · `input` · `net` · `types` · `abi` · `wire`
 
 ---
 

@@ -149,7 +149,7 @@ ostd::run_app!(handler);
 
 // PcieDriverCap is granted by loader.rs via path match (/bin/virtio-gpu).
 // No manifest flags are needed; the cap is granted via direct TCB write at spawn.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,

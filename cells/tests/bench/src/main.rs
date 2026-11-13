@@ -15,7 +15,7 @@ mod scenarios;
 mod cpu_accounting;
 
 #[cfg(not(feature = "g1-cpu-workload"))]
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -44,7 +44,7 @@ api::declare_syscalls![
     GrantFree
 ];
 #[cfg(feature = "g1-cpu-workload")]
-api::declare_syscalls![
+abi::declare_syscalls![
     Spawn,
     Wait,
     Send,
@@ -57,9 +57,8 @@ api::declare_syscalls![
     Exit,
     Yield
 ];
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
 
-use api::benchmark::{BenchReport, ViBenchmark};
 use framework::{counters, report, runner};
 use ostd::io::println;
 use scenarios::{
@@ -67,6 +66,7 @@ use scenarios::{
     ipc_send_recv::IpcSendRecvBench, memory_footprint::MemoryFootprintBench,
     syscall_yield::SyscallYieldBench,
 };
+use wire::benchmark::{BenchReport, ViBenchmark};
 
 /// Collector profile identity: the workload/QEMU machine contract this build
 /// emits under. The accelerator is deliberately not part of it; the collector
@@ -163,7 +163,7 @@ fn spawn_role(role: &str, priority: u8) -> Option<usize> {
 
 /// Attempt every requested load-cell admission, retaining successful tids for cleanup.
 fn spawn_load() -> ([usize; LOAD_CELLS], bool) {
-    use api::task::TaskPriority;
+    use abi::task::TaskPriority;
     let mut tids = [0usize; LOAD_CELLS];
     let mut complete = true;
     for slot in &mut tids {
@@ -192,7 +192,7 @@ fn kill_all(tids: &[usize]) -> bool {
 }
 
 fn run_rt_preempt(invalid: &mut u32, passed: &mut u32, failed: &mut u32) {
-    use api::task::TaskPriority;
+    use abi::task::TaskPriority;
 
     let (load_tids, load_complete) = spawn_load();
     if !load_complete {
@@ -252,7 +252,7 @@ fn run_rt_preempt(invalid: &mut u32, passed: &mut u32, failed: &mut u32) {
 }
 
 fn run_rt_control_loop(invalid: &mut u32, passed: &mut u32, failed: &mut u32) {
-    use api::task::TaskPriority;
+    use abi::task::TaskPriority;
 
     let (load_tids, load_complete) = spawn_load();
     if !load_complete {
@@ -297,15 +297,15 @@ fn run_rt_control_loop(invalid: &mut u32, passed: &mut u32, failed: &mut u32) {
         ostd::syscall::sys_send(probe_tid, &[0u8]),
         ostd::syscall::SyscallResult::Ok(_)
     ) {
-        Err(api::ViError::IO)
+        Err(types::ViError::IO)
     } else {
         match ostd::syscall::sys_recv(probe_tid, &mut result_buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender == probe_tid => {
                 received_response = true;
                 scenarios::control_loop::decode_result(&result_buf)
             }
-            ostd::syscall::SyscallResult::Ok(_) => Err(api::ViError::InvalidInput),
-            ostd::syscall::SyscallResult::Err(_) => Err(api::ViError::IO),
+            ostd::syscall::SyscallResult::Ok(_) => Err(types::ViError::InvalidInput),
+            ostd::syscall::SyscallResult::Err(_) => Err(types::ViError::IO),
         }
     };
 

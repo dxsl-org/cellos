@@ -1,7 +1,7 @@
 //! Grant-backed compositor surface allocation and immediate drawing operations.
 
-use api::display::{compositor_ops, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use types::{ViError, ViResult};
+use wire::display::{compositor_ops, DamageNotify, PixelFormat, Rect, SurfaceRole};
 
 use crate::ipc::post;
 use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice};

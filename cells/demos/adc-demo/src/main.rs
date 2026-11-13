@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_adc_sim::{SimAdc, SimChannel};
 use hal_adc::ViAdc;
 use ostd::io::println;

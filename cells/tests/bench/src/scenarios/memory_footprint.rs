@@ -3,7 +3,7 @@
 //! Reports physical frames committed by the kernel frame allocator. This
 //! includes the reserved kernel heap and is not a resident-set measurement.
 
-use api::benchmark::ViBenchmark;
+use wire::benchmark::ViBenchmark;
 
 pub struct MemoryFootprintBench {
     measured_bytes: u64,
@@ -25,15 +25,15 @@ impl ViBenchmark for MemoryFootprintBench {
         "memory_footprint"
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
-        let info = ostd::syscall::sys_mem_info().map_err(|_| api::ViError::IO)?;
+    fn run_once(&mut self) -> types::ViResult<u64> {
+        let info = ostd::syscall::sys_mem_info().map_err(|_| types::ViError::IO)?;
         if info.total_frames != info.used_frames.saturating_add(info.free_frames) {
-            return Err(api::ViError::InvalidInput);
+            return Err(types::ViError::InvalidInput);
         }
         self.measured_bytes = info
             .used_frames
             .checked_mul(info.page_size)
-            .ok_or(api::ViError::InvalidInput)?;
+            .ok_or(types::ViError::InvalidInput)?;
         Ok(self.measured_bytes)
     }
 }

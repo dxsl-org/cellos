@@ -9,8 +9,8 @@
 //! from a successful, complete listing of the parent directory that lacks the
 //! entry; every other failure is `Unavailable`, which never writes.
 
+use abi::machine_facts::MACHINE_FACTS_CAPACITY;
 use alloc::vec::Vec;
-use api::machine_facts::MACHINE_FACTS_CAPACITY;
 use ostd::clients::VfsClient;
 use ostd::{ViError, ViResult};
 

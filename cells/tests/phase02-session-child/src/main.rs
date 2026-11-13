@@ -11,10 +11,10 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::cell_session::{ObjectRefV1, Status};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::cell_session::{ObjectRefV1, Status};
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 use ostd::io::println;
 use ostd::syscall::{sys_exit, sys_set_timer};
@@ -22,7 +22,7 @@ use terminal_sdk::input::EventKind;
 use terminal_sdk::session::TerminalSession;
 use terminal_sdk::stream::{Endpoint, EndpointRef, EndpointRights, Operation, OperationRef};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -31,7 +31,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,

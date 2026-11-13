@@ -1,6 +1,6 @@
 //! VFS filesystem bindings exposed to Lua via C FFI (`vfs.*`).
 //!
-//! Uses the typed postcard IPC (`api::ipc::VfsRequest/VfsResponse`) introduced
+//! Uses the typed postcard IPC (`wire::ipc::VfsRequest/VfsResponse`) introduced
 //! at Milestone 2.1.  The old raw byte-opcode protocol (OP_READ=8, OP_WRITE=4…)
 //! was removed from the VFS cell and must not be used here.
 //!
@@ -22,11 +22,11 @@ const MAX_CHUNK: usize = 400;
 // ─── IPC helpers ──────────────────────────────────────────────────────────────
 
 /// Send a typed VfsRequest to the live VFS service and return `true` when the reply is `Ok`.
-pub fn vfs_ok(vfs: &mut VfsRef, req: &api::ipc::VfsRequest<'_>) -> bool {
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+pub fn vfs_ok(vfs: &mut VfsRef, req: &wire::ipc::VfsRequest<'_>) -> bool {
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     matches!(
-        vfs.call::<api::ipc::VfsRequest, api::ipc::VfsResponse>(req, &mut reply),
-        ostd::call_outcome::CallOutcome::Reply(api::ipc::VfsResponse::Ok)
+        vfs.call::<wire::ipc::VfsRequest, wire::ipc::VfsResponse>(req, &mut reply),
+        ostd::call_outcome::CallOutcome::Reply(wire::ipc::VfsResponse::Ok)
     )
 }
 
@@ -66,7 +66,7 @@ fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
         } else {
             vfs_ok(
                 &mut vfs,
-                &api::ipc::VfsRequest::Write { path, content: &[] },
+                &wire::ipc::VfsRequest::Write { path, content: &[] },
             )
         };
     }
@@ -75,12 +75,12 @@ fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
     for chunk in data.chunks(MAX_CHUNK) {
         let req = if first {
             first = false;
-            api::ipc::VfsRequest::Write {
+            wire::ipc::VfsRequest::Write {
                 path,
                 content: chunk,
             }
         } else {
-            api::ipc::VfsRequest::Append {
+            wire::ipc::VfsRequest::Append {
                 path,
                 content: chunk,
             }
@@ -199,7 +199,7 @@ pub unsafe extern "C" fn vfs_mkdir(L: *mut LuaState) -> c_int {
             return 1;
         }
     };
-    let ok = vfs_ok(&mut VfsRef::new(), &api::ipc::VfsRequest::Mkdir(path));
+    let ok = vfs_ok(&mut VfsRef::new(), &wire::ipc::VfsRequest::Mkdir(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };
     1
 }
@@ -292,7 +292,7 @@ pub unsafe extern "C" fn vfs_remove(L: *mut LuaState) -> c_int {
             return 1;
         }
     };
-    let ok = vfs_ok(&mut VfsRef::new(), &api::ipc::VfsRequest::Unlink(path));
+    let ok = vfs_ok(&mut VfsRef::new(), &wire::ipc::VfsRequest::Unlink(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };
     1
 }

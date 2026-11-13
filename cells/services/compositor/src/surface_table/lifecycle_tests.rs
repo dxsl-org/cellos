@@ -1,6 +1,6 @@
 //! A configure the owner is slow to answer never blocks closing or minimizing.
 
-use api::display::{
+use wire::display::{
     CloseResponseAction, ConfigureKind, PixelFormat, Rect, SurfaceRole, WindowState,
 };
 
@@ -49,7 +49,7 @@ fn a_window_minimizes_while_its_maximize_is_unanswered_and_restores_maximized() 
         .begin_configure(1, ConfigureKind::Maximize, BIGGER)
         .unwrap();
     assert!(surface
-        .request_state(1, api::display::compositor_ops::MINIMIZE, BIGGER)
+        .request_state(1, wire::display::compositor_ops::MINIMIZE, BIGGER)
         .is_some());
     assert!(surface.attach_grant(0x1000, BIGGER.w, BIGGER.h, PixelFormat::Bgra8888));
     surface.acknowledge_configure(1, configure.serial).unwrap();
@@ -59,7 +59,7 @@ fn a_window_minimizes_while_its_maximize_is_unanswered_and_restores_maximized() 
         "the ack does not un-minimize"
     );
     assert!(surface
-        .request_state(1, api::display::compositor_ops::RESTORE, BIGGER)
+        .request_state(1, wire::display::compositor_ops::RESTORE, BIGGER)
         .is_some());
     assert_eq!(surface.state(), WindowState::Maximized);
 }
@@ -74,6 +74,6 @@ fn a_second_configure_still_waits_for_the_first() {
         .begin_configure(1, ConfigureKind::Resize, BIGGER)
         .is_none());
     assert!(surface
-        .request_state(1, api::display::compositor_ops::MAXIMIZE, BIGGER)
+        .request_state(1, wire::display::compositor_ops::MAXIMIZE, BIGGER)
         .is_none());
 }

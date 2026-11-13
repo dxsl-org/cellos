@@ -11,7 +11,7 @@
 //! `network` holders) revocation is blocked — use the supervisor replacement flow instead.
 
 use crate::syscall::{sys_cap_revoke, SyscallError};
-use api::syscall::cap_mask;
+use abi::syscall::cap_mask;
 
 /// A handle representing a revocable capability delegation to another cell.
 ///

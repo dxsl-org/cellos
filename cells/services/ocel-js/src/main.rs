@@ -23,13 +23,13 @@ use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 // holds no SpawnCap, and the kernel refuses ordinary `RegisterService` without
 // it. `init` spawns this cell and registers `service::OCEL_JS` on its behalf
 // (cells/tools/init/src/boot.rs, `spawn_optional_services`).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
+abi::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
 
 ostd::cell_main!(cell_main);
 

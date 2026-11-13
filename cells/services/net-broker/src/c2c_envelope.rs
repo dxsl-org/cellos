@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Canonical bounded V1 envelope for authenticated C2C transport records.
 
-use api::services::cluster::{CellNetId, ClusterId};
 pub use types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
+use wire::cluster::{CellNetId, ClusterId};
 
 pub const C2C_VERSION: u8 = 1;
 pub const C2C_HEADER_LEN: usize = 112;
 // V1 forbids streaming. The frame must fit both the attested local request body
 // and one conservative net-cell TcpSend after Noise adds its AEAD tag.
 pub const NOISE_TAG_LEN: usize = 16;
-const NOISE_PLAINTEXT_CAP: usize = api::ipc::NET_TCP_INLINE_DATA_MAX - NOISE_TAG_LEN;
+const NOISE_PLAINTEXT_CAP: usize = wire::ipc::NET_TCP_INLINE_DATA_MAX - NOISE_TAG_LEN;
 const NOISE_BODY_CAP: usize = NOISE_PLAINTEXT_CAP - C2C_HEADER_LEN;
 pub const MAX_C2C_PAYLOAD: usize = if crate::local_ingress::MAX_REQUEST_BODY < NOISE_BODY_CAP {
     crate::local_ingress::MAX_REQUEST_BODY

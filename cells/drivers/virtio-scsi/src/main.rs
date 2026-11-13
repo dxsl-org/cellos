@@ -54,7 +54,7 @@ fn sender_is_vfs(sender_tid: usize) -> bool {
     if cached != 0 && cached == sender_tid {
         return true;
     }
-    if ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
+    if ostd::service::sender_is_live_provider(abi::syscall::service::VFS, sender_tid) {
         VFS_TID.store(sender_tid, Ordering::Relaxed);
         return true;
     }
@@ -183,7 +183,7 @@ ostd::run_app!(handler);
 
 // PcieDriverCap is granted by the loader at spawn; this manifest declares NO
 // privileged flags.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,

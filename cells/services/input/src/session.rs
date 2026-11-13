@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 //! SessionV1 input authority. All identities enter through the attested receive
 //! trailer; kernel endpoints, prepared children and publication remain kernel owned.
-use alloc::{collections::VecDeque, vec::Vec};
-use api::cell_session::{
+use abi::cell_session::{
     frontend as fe, FRONTEND_SEAL_LEN, GRANT_KIND_INPUT_FRONTEND, SLOT_FRONTEND,
 };
-use api::cell_session::{
+use abi::cell_session::{
     ChildRefV1, KernelOp, ObjectRefV1 as Ref, PrincipalV1 as Principal, Reader, RequestHeaderV1,
     ResultHeaderV1, Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
 };
-use api::{caller_identity::CallerIdentity, service_binding::ServiceBinding};
+use abi::{caller_identity::CallerIdentity, service_binding::ServiceBinding};
+use alloc::{collections::VecDeque, vec::Vec};
 use sys::{
     provider_tid, sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service_bound,
     sys_try_send,
@@ -58,7 +58,7 @@ fn now() -> u64 {
 /// the designated serial shell from another cell. Images that run untrusted cells without a
 /// compositor therefore must not expose SessionV1 to them.
 fn compositor_registered() -> bool {
-    provider_tid(api::syscall::service::COMPOSITOR).is_some()
+    provider_tid(abi::syscall::service::COMPOSITOR).is_some()
 }
 fn principal(c: CallerIdentity) -> Principal {
     Principal {
@@ -220,7 +220,7 @@ struct Session {
     frozen: bool,
     closed: bool,
     input_failure: Option<Status>,
-    decoder: api::services::session::SerialDecoder,
+    decoder: wire::session::SerialDecoder,
     physical_paste: Option<Secret>,
     physical_paste_expires: u64,
     physical_paste_complete: bool,
@@ -377,7 +377,7 @@ impl Sessions {
     }
     fn binding(&mut self) -> Result<ServiceBinding, Status> {
         let mut bytes = [0; 24];
-        let binding = sys_lookup_service_bound(api::syscall::service::INPUT, &mut bytes)
+        let binding = sys_lookup_service_bound(abi::syscall::service::INPUT, &mut bytes)
             .ok_or(Status::Revoked)?;
         if let Some(old) = self.issuer {
             if old != binding {
@@ -850,9 +850,9 @@ impl Sessions {
         o.pending = false;
     }
     fn send(bytes: &[u8], sender: usize, token: usize) -> bool {
-        let mut envelope = Scrub::<{ api::ipc::IPC_BUF_SIZE }>::new();
+        let mut envelope = Scrub::<{ wire::ipc::IPC_BUF_SIZE }>::new();
         let Ok(encoded) =
-            api::ipc::encode(&api::ipc::InputResponse::SessionV1(bytes), &mut envelope)
+            wire::ipc::encode(&wire::ipc::InputResponse::SessionV1(bytes), &mut envelope)
         else {
             return false;
         };
@@ -1573,7 +1573,7 @@ impl Sessions {
                 // Input ends: no answer to a trust prompt can arrive any more.
                 self.end_capture(
                     i,
-                    api::cell_session::trust::DECISION_CANCELLED,
+                    abi::cell_session::trust::DECISION_CANCELLED,
                     trust::End::Release,
                 );
                 self.sessions[i].draining = true;
@@ -1709,7 +1709,7 @@ impl Sessions {
             frozen: false,
             closed: false,
             input_failure: None,
-            decoder: api::services::session::SerialDecoder::new(),
+            decoder: wire::session::SerialDecoder::new(),
             physical_paste: None,
             physical_paste_expires: 0,
             physical_paste_complete: false,
@@ -1886,7 +1886,7 @@ impl Sessions {
             || slot != SLOT_FRONTEND
             || rights != 0
             || tail != 0
-            || owner_service != api::syscall::service::INPUT as u64
+            || owner_service != abi::syscall::service::INPUT as u64
             || object != frontend
         {
             return Err(Status::InvalidChild);
@@ -2067,7 +2067,7 @@ impl Sessions {
         // No frontend can type the answer any more: the trust capture ends cancelled.
         self.end_capture(
             i,
-            api::cell_session::trust::DECISION_CANCELLED,
+            abi::cell_session::trust::DECISION_CANCELLED,
             trust::End::Release,
         );
         let _ = self.control(i, 8, &fe::LOST_FRONTEND.to_le_bytes());
@@ -2323,7 +2323,7 @@ impl Sessions {
                 zeroize_deque(&mut s.raw);
                 s.paste = None;
                 s.physical_paste = None;
-                s.decoder = api::services::session::SerialDecoder::new();
+                s.decoder = wire::session::SerialDecoder::new();
                 s.delivered_cursor = 0;
                 s.physical_paste_complete = false;
                 s.physical_paste_discard = false;
@@ -2413,7 +2413,7 @@ impl Sessions {
         // cancelled and unsent owner notices are dropped (the controller ends its prompt).
         self.end_capture(
             i,
-            api::cell_session::trust::DECISION_CANCELLED,
+            abi::cell_session::trust::DECISION_CANCELLED,
             trust::End::Silent,
         );
         self.sessions[i].notices.clear();
@@ -2424,7 +2424,7 @@ impl Sessions {
         zeroize_deque(&mut s.raw);
         s.paste = None;
         s.physical_paste = None;
-        s.decoder = api::services::session::SerialDecoder::new();
+        s.decoder = wire::session::SerialDecoder::new();
         s.delivered_cursor = 0;
         s.modes.clear();
         s.mode = 2;
@@ -2485,7 +2485,7 @@ impl Sessions {
         }
         self.end_capture(
             i,
-            api::cell_session::trust::DECISION_CANCELLED,
+            abi::cell_session::trust::DECISION_CANCELLED,
             trust::End::Silent,
         );
         self.sessions[i].notices.clear();
@@ -2497,7 +2497,7 @@ impl Sessions {
         zeroize_deque(&mut s.raw);
         s.paste = None;
         s.physical_paste = None;
-        s.decoder = api::services::session::SerialDecoder::new();
+        s.decoder = wire::session::SerialDecoder::new();
         s.modes.clear();
         s.attachment = None;
         if self.serial == Some(s.reference) {
@@ -2638,9 +2638,9 @@ impl Sessions {
             let payload = bytes
                 .get(offset + 24..offset + 24 + length)
                 .ok_or(Status::Malformed)?;
-            api::services::session::validate_event(kind, payload)?;
+            wire::session::validate_event(kind, payload)?;
             if kind == 2 {
-                api::services::session::validate_text(payload)?;
+                wire::session::validate_text(payload)?;
             }
             let ctrl_c = kind == 1
                 && payload[4..8] == 2u32.to_le_bytes()
@@ -2657,7 +2657,7 @@ impl Sessions {
             let interrupt = ctrl_c;
             let mut encoded = Scrub::<512>::new();
             let encoded_len = if kind == 1 {
-                api::services::session::encode_key(
+                wire::session::encode_key(
                     u32::from_le_bytes(payload[..4].try_into().map_err(|_| Status::Malformed)?),
                     u32::from_le_bytes(payload[4..8].try_into().map_err(|_| Status::Malformed)?),
                     payload[8],
@@ -2799,7 +2799,7 @@ impl Sessions {
         }
     }
     fn admit_paste(&mut self, i: usize, bytes: &[u8]) -> Result<u64, Status> {
-        api::services::session::validate_paste(bytes)?;
+        wire::session::validate_paste(bytes)?;
         let text = core::str::from_utf8(bytes).map_err(|_| Status::UnsupportedInput)?;
         let mut chunks = [(0usize, 0usize); 130];
         let mut count = 0;
@@ -3279,14 +3279,14 @@ impl Sessions {
         }
         Ok(())
     }
-    pub fn keyboard(&mut self, key: &api::input::KeyEvent) -> bool {
+    pub fn keyboard(&mut self, key: &wire::input::KeyEvent) -> bool {
         if !self.physical_active() {
             return false;
         }
         let Some(i) = self.physical_index() else {
             return true;
         };
-        use api::input::{KeyState, KeySym as K};
+        use wire::input::{KeyState, KeySym as K};
         if key.modifiers.0 & 8 != 0 {
             self.physical_loss(i, 3);
             return true;

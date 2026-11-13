@@ -6,7 +6,7 @@
 //! Lives in ostd so the compositor draws the same app icons on Cell Tabs that
 //! ViUI apps draw in their own UI.
 
-use api::services::mime::MimeType;
+use wire::mime::MimeType;
 
 use super::{Bgra, Canvas, Radii, RoundRect};
 

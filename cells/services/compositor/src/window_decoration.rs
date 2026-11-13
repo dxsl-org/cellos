@@ -10,8 +10,8 @@
 //! Vertical layout above the content: `TITLE` rows of tab, the last of which is
 //! the hairline shared by the tab and the frame body.
 
-use api::display::Rect;
 use ostd::display::linear::{Radii, RoundRect, PANEL_RADIUS};
+use wire::display::Rect;
 
 mod menu;
 mod palette;

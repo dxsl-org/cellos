@@ -21,7 +21,7 @@ pub struct IpcTransport {
 impl IpcTransport {
     /// The live `XE_GPU` provider (`service::XE_GPU`, registered by init per CP1 D-G8).
     pub fn connect() -> Result<Self, i32> {
-        ostd::service::provider_tid(api::syscall::service::XE_GPU)
+        ostd::service::provider_tid(abi::syscall::service::XE_GPU)
             .map(|provider| Self { provider })
             .ok_or(ENODEV)
     }

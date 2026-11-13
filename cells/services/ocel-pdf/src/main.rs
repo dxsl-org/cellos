@@ -3,8 +3,8 @@
 #![no_main]
 
 extern crate alloc;
-extern crate api;
 extern crate ostd;
+extern crate posix_shim;
 
 use alloc::{string::String, vec::Vec};
 use ocel_pdf_proto::{DocumentOwner, Request, Response, IPC_BYTES, MAX_DOCUMENT_BYTES};
@@ -12,13 +12,13 @@ use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
 mod engine;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Recv,
     Send,

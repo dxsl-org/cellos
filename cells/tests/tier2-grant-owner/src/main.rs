@@ -65,14 +65,14 @@ use ostd::syscall::{
     sys_grant_slice, sys_grant_unregister, sys_recv, sys_send, sys_yield, SyscallResult,
 };
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     StateRestore,
@@ -175,7 +175,7 @@ fn name_eq(row: &[u8; 32], want: &[u8]) -> bool {
 /// wake, or a peer-death notice for a task it did not spawn). Only a live task
 /// on the receiver's launch path may move the owner forward.
 fn is_receiver(tid: usize, receiver_name: &[u8]) -> bool {
-    let mut rows = [api::syscall::ProcessInfo::default(); 64];
+    let mut rows = [abi::syscall::ProcessInfo::default(); 64];
     match sys_get_procs(&mut rows) {
         Ok(count) => rows
             .iter()

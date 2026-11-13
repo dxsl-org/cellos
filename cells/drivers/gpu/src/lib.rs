@@ -10,8 +10,8 @@
 //! The actual GPU hardware interaction happens in the kernel-side VirtIO GPU
 //! driver (`kernel/src/task/drivers/virtio_gpu.rs`) via the `GpuFlush` syscall.
 
-use api::display::Rect;
 use types::ViResult;
+use wire::display::Rect;
 
 /// Flush a rectangular region of BGRA8888 pixels to the VirtIO GPU.
 ///

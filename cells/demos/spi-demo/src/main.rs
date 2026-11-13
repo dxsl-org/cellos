@@ -8,7 +8,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_spi_bcm::BcmSpi0;
 use driver_spi_gpio::BitBangSpi;

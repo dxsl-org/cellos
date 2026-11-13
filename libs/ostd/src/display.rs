@@ -3,7 +3,7 @@
 //! ## Usage
 //! ```no_run
 //! use ostd::display::{wait_for_compositor, ViSurface};
-//! use ostd::services::display::PixelFormat;
+//! use wire::display::PixelFormat;
 //!
 //! # fn create_surface() -> ostd::ViResult<()> {
 //! let comp_tid = wait_for_compositor();
@@ -29,7 +29,7 @@ pub use routing::poll_surface_events;
 pub use surface::ViSurface;
 
 use crate::service::provider_tid;
-use api::syscall::service;
+use abi::syscall::service;
 pub(crate) use dispatcher::{route_compositor_frame, take_forwarded_input_event};
 pub(crate) use routing::drain_compositor_once;
 

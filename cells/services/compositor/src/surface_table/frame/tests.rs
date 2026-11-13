@@ -1,12 +1,12 @@
 extern crate std;
 
-use api::display::{CreateViewRequest, FrameRef, SurfaceRole, ViewOpResult, ViewRef};
+use wire::display::{CreateViewRequest, FrameRef, SurfaceRole, ViewOpResult, ViewRef};
 
 use super::*;
 
 pub(super) fn dummy_req(frame_id: u32, frame_gen: u32) -> CreateViewRequest {
     CreateViewRequest {
-        opcode: api::display::compositor_ops::CREATE_VIEW,
+        opcode: wire::display::compositor_ops::CREATE_VIEW,
         role: SurfaceRole::Interactive,
         _pad: [0; 2],
         frame_id,

@@ -4,10 +4,10 @@
 //! child (the ssh client), the live KMS registering and collecting, and the frontend
 //! holder typing. The kernel is the in-process model of `session_tests.rs`.
 use super::*;
-use api::cell_session::trust::{
+use abi::cell_session::trust::{
     self as tr, BeginTrustConfirmationV1, TrustChallengeV1, TrustDecisionV1, TrustPromptV1,
 };
-use api::services::session::{event_kind, key_code, modifiers};
+use wire::session::{event_kind, key_code, modifiers};
 
 const KMS: Principal = Principal {
     cell_id: 40,
@@ -98,7 +98,7 @@ struct Trust {
 impl Trust {
     fn new() -> Self {
         let mut h = Harness::new();
-        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
+        fake::SERVICES.with(|s| s.borrow_mut().push((abi::syscall::service::KMS, KMS_TID)));
         let a = h.attach();
         Self::foreground(h, a)
     }
@@ -106,7 +106,7 @@ impl Trust {
     /// it is the physical UART session, a byte stream without key/paste provenance.
     fn serial() -> Self {
         let mut h = Harness::new();
-        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
+        fake::SERVICES.with(|s| s.borrow_mut().push((abi::syscall::service::KMS, KMS_TID)));
         let mut create = [0; 40];
         let mut w = Writer::new(&mut create);
         w.reference(S_OP).unwrap();
@@ -284,7 +284,7 @@ impl Trust {
         let mut out = Vec::new();
         let mut offset = 0;
         while offset < bytes.len() {
-            let header = api::services::session::EventHeaderV1::decode(
+            let header = wire::session::EventHeaderV1::decode(
                 &bytes[offset
                     ..offset
                         + 24
@@ -363,7 +363,7 @@ fn only_the_live_kms_task_registers_within_the_sixty_second_window() {
         t.h.call_as(KMS, KMS_TID, challenge(1), 29, &body).0,
         Status::Denied
     );
-    fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
+    fake::SERVICES.with(|s| s.borrow_mut().push((abi::syscall::service::KMS, KMS_TID)));
     // The deadline must lie in (now, now + 60 s].
     assert_eq!(
         t.h.call_as(
@@ -924,7 +924,7 @@ fn send(
         .with(|s| s.borrow_mut().drain(..).collect::<Vec<_>>())
         .iter()
         .map(|envelope| {
-            let api::ipc::InputResponse::SessionV1(result) = api::ipc::decode(envelope).unwrap()
+            let wire::ipc::InputResponse::SessionV1(result) = wire::ipc::decode(envelope).unwrap()
             else {
                 panic!("wrong response")
             };

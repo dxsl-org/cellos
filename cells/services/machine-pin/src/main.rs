@@ -16,8 +16,8 @@
 extern crate alloc;
 extern crate ostd;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -50,7 +50,7 @@ mod store;
 #[cfg(test)]
 mod tests;
 
-use api::syscall::ProcessInfo;
+use abi::syscall::ProcessInfo;
 use ostd::service::ServeConfig;
 
 ostd::cell_main!(extern "C" cell_main);

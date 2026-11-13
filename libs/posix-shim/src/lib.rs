@@ -56,9 +56,8 @@ pub mod sysio;
 #[cfg(not(feature = "mlibc"))]
 pub mod vfs_at;
 
-// Re-export the public API that was previously in the monolithic posix.rs,
-// so existing callers (api::posix::getentropy, api::posix::socket, etc.) still compile
-// through the `api` facade (`pub use posix_shim as posix`).
+// Re-export the public API that was previously in the monolithic posix.rs, so
+// callers write `posix_shim::getentropy`, `posix_shim::socket`, etc.
 #[cfg(not(feature = "mlibc"))]
 pub use entropy::{arc4random_buf, getentropy};
 #[cfg(not(feature = "mlibc"))]

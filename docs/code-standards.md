@@ -39,7 +39,7 @@
 
 ### Law 1: Interface is Sacred
 
-- **Scope**: `libs/api/` and `libs/types/`
+- **Scope**: `libs/abi/` (frozen kernel ABI) and `libs/types/`; service contracts in `libs/wire/` are extensible without it
 - **Rule**: Any change requires two explicit confirmations from the accountable
   maintainer at separate checkpoints: design approval before editing, then
   implementation approval after reviewing the exact ABI delta and evidence.
@@ -369,7 +369,7 @@ foo/
 - The `*-cellos` suffix (e.g. the former `tui-cellos`, `mio-cellos`, `polling-cellos`) is **retired**. Adapters of upstream crates are also named `vi*` (`vimio` adapts the mio API, `vipolling` the polling API, `vitui` Ratatui).
 - **Do not repeat** `cellos` or `vi` inside a name: no `vitui-cellos`, `cellos-vitui` or `vi-vi*`.
 - A framework's parts are **modules of one crate** (`vitui::session`), not sibling crates, unless a dependency boundary requires a split. Example: a part that must not pull Ratatui into consumers that don't need it.
-- Existing non-`vi` crates (`api`, `ostd`, `types`, `terminal-sdk`, `cellos-fs`, `cellos-boot-config`, …) keep their names until renamed by an explicit decision. New crates must follow this rule.
+- Existing non-`vi` crates (`abi`, `wire`, `ostd`, `types`, `terminal-sdk`, `cellos-fs`, `cellos-boot-config`, …) keep their names until renamed by an explicit decision. New crates must follow this rule.
 
 ### Law 7: Trait Objects for Polymorphism
 
@@ -831,7 +831,8 @@ assert a signature or runtime measurement and does not mutate the ELF.
 #![no_std]
 extern crate alloc;
 
-use api::{declare_manifest, sys_recv, sys_send, MessageBuf};
+use abi::declare_manifest;
+use ostd::syscall::{sys_recv, sys_send, MessageBuf};
 
 declare_manifest!(spawn = true);
 
@@ -849,7 +850,7 @@ pub extern "C" fn main() {
 
 **After (app_entry! macro)**:
 ```rust
-use api::{app_entry, CellRuntime, VfsClient};
+use ostd::{app_entry, clients::VfsClient, runtime::CellRuntime};
 
 app_entry!(handler = run);
 
@@ -908,7 +909,7 @@ Cellos integrates [`embedded-io`](https://docs.rs/embedded-io) for byte-stream I
 
 ## Deprecations & Breaking Changes
 
-When changing public API in `libs/api/`:
+When changing public API in `libs/abi/` or `libs/wire/`:
 
 ```rust
 #[deprecated(since = "0.3.0", note = "use ViAsyncFileSystem instead")]

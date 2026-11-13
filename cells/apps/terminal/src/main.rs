@@ -18,7 +18,6 @@ mod roundtrip;
 mod session;
 mod sink;
 
-use api::display::PixelFormat;
 use ostd::display::linear::icons::LineIcon;
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
 use ostd::input::{InputEvent, KeyState, MouseButton};
@@ -27,12 +26,13 @@ use ostd::typography::{FontFace, TextFonts};
 use viui::canvas::Color;
 use viui::surface::fill_rect;
 use viui::theme::{self, ViTheme};
+use wire::display::PixelFormat;
 
 use crate::grid::{Color as GridColor, TerminalCell, Width};
 use crate::session::{TerminalSession, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Log,
     SpawnFromPath,
     GrantAlloc,
@@ -434,7 +434,7 @@ mod tests {
         assert_eq!(grid_dims(4096, 4096, 9.0, 18.0), (454, 227));
         assert_eq!(grid_dims(60_000, 60_000, 9.0, 18.0), (MAX_COLS, MAX_ROWS));
         let (cols, rows) = grid_dims(60_000, 60_000, 9.0, 18.0);
-        assert!(api::services::session::validate_dimensions(rows as u16, cols as u16).is_ok());
+        assert!(wire::session::validate_dimensions(rows as u16, cols as u16).is_ok());
     }
 
     #[test]

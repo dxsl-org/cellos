@@ -109,11 +109,10 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 // d8–d15 callee-saved, so a hardfloat build must save/restore them. But a
 // softfloat target (`aarch64-unknown-none-softfloat`, NEON disabled) has no FP
 // registers live across the call, AND `d`-register instructions fail to assemble
-// (`instruction requires: fp-armv8`). Critically, libs/api is linked into the
-// SOFTFLOAT kernel (which never calls setjmp, but `#[no_mangle]` keeps the
-// symbol and forces codegen) — so the softfloat variant is required for the
-// kernel to build at all on aarch64. Omitting the FP saves is correct there:
-// softfloat code never touches d8–d15.
+// (`instruction requires: fp-armv8`). Every softfloat crate that links the shim
+// codegens setjmp even if it never calls it (`#[no_mangle]` keeps the symbol), so
+// the softfloat variant is required for those crates to build at all on aarch64.
+// Omitting the FP saves is correct there: softfloat code never touches d8–d15.
 
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 #[unsafe(naked)]

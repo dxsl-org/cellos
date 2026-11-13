@@ -6,7 +6,7 @@ license.workspace = true
 description = "Cell-side virtio-over-PCI transport built from the QueryPcieFunction (434) record"
 
 [dependencies]
-api = { path = "../api", version = "0.1.0" }
+abi = { path = "../abi", version = "0.1.0" }
 virtio-drivers = "0.7"
 
 [dev-dependencies]

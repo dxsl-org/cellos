@@ -3,10 +3,10 @@
 extern crate alloc;
 
 use alloc::vec;
-use api::display::Rect;
 use core::sync::atomic::{AtomicBool, Ordering};
 use ostd::display::linear::{Bgra, Canvas, RoundRect, Shadow};
 use ostd::syscall::{sys_get_resolution, sys_gpu_flush};
+use wire::display::Rect;
 
 use crate::cursor_sprite::{cursor_pixel, CURSOR_H, CURSOR_W};
 use crate::surface_table::SurfaceState;

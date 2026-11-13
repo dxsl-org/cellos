@@ -1,10 +1,10 @@
 #![allow(unsafe_code)]
 
-use api::cell_image::{CellImage, CELL_IMAGE_LEN};
-use api::cell_owner::{CellOwner, CELL_OWNER_LEN};
-use api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
-use api::completion::{ViCompletion, COMPLETION_LEN};
-use api::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
+use abi::cell_image::{CellImage, CELL_IMAGE_LEN};
+use abi::cell_owner::{CellOwner, CELL_OWNER_LEN};
+use abi::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
+use abi::completion::{ViCompletion, COMPLETION_LEN};
+use abi::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
 use core::arch::asm;
 
 #[derive(Debug, Copy, Clone)]
@@ -39,11 +39,11 @@ pub enum SyscallError {
     OutOfMemory,
 }
 
-// Shared with the kernel encoder: `api::syscall::result_sentinel`.
-const SYSCALL_DENIED: isize = -1 - api::syscall::result_sentinel::GENERIC as isize;
-const SYSCALL_OOM: isize = -1 - api::syscall::result_sentinel::OUT_OF_MEMORY as isize;
+// Shared with the kernel encoder: `abi::syscall::result_sentinel`.
+const SYSCALL_DENIED: isize = -1 - abi::syscall::result_sentinel::GENERIC as isize;
+const SYSCALL_OOM: isize = -1 - abi::syscall::result_sentinel::OUT_OF_MEMORY as isize;
 /// A stream write with no reader end left.
-const SYSCALL_BROKEN_PIPE: isize = -1 - api::syscall::result_sentinel::BROKEN_PIPE as isize;
+const SYSCALL_BROKEN_PIPE: isize = -1 - abi::syscall::result_sentinel::BROKEN_PIPE as isize;
 
 fn decode_spawn_result(ret: isize) -> SyscallResult {
     if ret > 0 {
@@ -155,7 +155,7 @@ pub(crate) unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3:
 /// Invoke a syscall by raw numeric id (bypasses the `ViSyscall` enum).
 ///
 /// Used for block I/O (ids 500/501) which intentionally have no `ViSyscall`
-/// entry — keeping them out of `libs/api` avoids the Interface-is-Sacred
+/// entry — keeping them out of `libs/abi` avoids the Interface-is-Sacred
 /// 2x-confirmation gate. The kernel dispatches them via the numeric fallback
 /// in `ViCell_syscall_dispatch`.
 #[inline(always)]
@@ -200,7 +200,7 @@ unsafe fn syscall_raw(id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> 
 
 /// Read one 512-byte sector from the VirtIO block device. Returns `true` on success.
 ///
-/// Raw syscall 500 — has no `ViSyscall` entry to preserve `libs/api` stability.
+/// Raw syscall 500 — has no `ViSyscall` entry to preserve `libs/abi` stability.
 /// `buf` is filled only when this returns `true`.
 pub fn sys_blk_read(sector: u64, buf: &mut [u8; 512]) -> bool {
     // SAFETY: buf is a fixed 512-byte stack array; the kernel validates the
@@ -223,7 +223,7 @@ pub fn sys_blk_flush() -> bool {
 /// Request a clean system shutdown via the kernel's SBI SRST path. Never returns when the
 /// kernel accepts it.
 ///
-/// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/api` to avoid the
+/// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/abi` to avoid the
 /// ABI 2x-confirm gate (same pattern as `sys_blk_read`/`sys_blk_write` above). The kernel
 /// accepts it only from the reviewed `shutdown` worker.
 pub fn sys_shutdown() -> ! {
@@ -939,13 +939,13 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
 }
 
 /// Register `tid` as the current provider of a well-known `service_id`
-/// (see [`api::syscall::service`]).
+/// (see [`abi::syscall::service`]).
 ///
 /// Well-known ids need trusted init or SupervisorCap; a SpawnCap-only caller may
 /// publish only a private id (`>= 0x100`) that no other live registrar owns. A
 /// kernel-defined narrow capability may instead authorize one fixed service ID
 /// with `tid=0` self-registration.
-/// `flags` ([`api::syscall::service_flags`]) are the namespace owner's: any other
+/// `flags` ([`abi::syscall::service_flags`]) are the namespace owner's: any other
 /// caller passes 0. [`crate::service::namespace_flags`] is init's policy for them.
 /// Returns `Ok(0)` on success and `Err` when authority is absent, the target is
 /// invalid, or the registry is full.
@@ -979,14 +979,14 @@ pub fn sys_register_service(service_id: u16, tid: usize, flags: usize) -> Syscal
 /// a cell asking about itself.
 ///
 /// Returns `None` when the call was refused, `buf` is shorter than
-/// [`api::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
+/// [`abi::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
 /// or the record does not parse. Every one of those means "no attested set", and
 /// the only correct response to that is to bind nothing.
 pub fn sys_query_dir_handles(
     cell_id: u64,
     buf: &mut [u8],
-) -> Option<api::dir_attestation::ViDirHandleAttestation> {
-    if buf.len() < api::dir_attestation::DIR_ATTESTATION_LEN {
+) -> Option<abi::dir_attestation::ViDirHandleAttestation> {
+    if buf.len() < abi::dir_attestation::DIR_ATTESTATION_LEN {
         return None;
     }
     // SAFETY: `buf` is a live writable slice for the whole call and its length
@@ -1001,10 +1001,10 @@ pub fn sys_query_dir_handles(
             0,
         )
     };
-    if (ret as usize) != api::dir_attestation::DIR_ATTESTATION_LEN {
+    if (ret as usize) != abi::dir_attestation::DIR_ATTESTATION_LEN {
         return None;
     }
-    api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
+    abi::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
 }
 
 /// Resolve the live root endpoint for the current VFS receive principal or a
@@ -1132,8 +1132,8 @@ pub fn sys_resolve_cell_image(cell_id: u64, generation: u64) -> Option<CellImage
 pub fn sys_lookup_service_bound(
     service_id: u16,
     buf: &mut [u8],
-) -> Option<api::service_binding::ServiceBinding> {
-    if buf.len() < api::service_binding::SERVICE_BINDING_LEN {
+) -> Option<abi::service_binding::ServiceBinding> {
+    if buf.len() < abi::service_binding::SERVICE_BINDING_LEN {
         return None;
     }
     // SAFETY: `buf` is a live writable slice for the whole call and its length is
@@ -1148,10 +1148,10 @@ pub fn sys_lookup_service_bound(
             0,
         )
     };
-    if (ret as usize) != api::service_binding::SERVICE_BINDING_LEN {
+    if (ret as usize) != abi::service_binding::SERVICE_BINDING_LEN {
         return None;
     }
-    api::service_binding::ServiceBinding::from_bytes(buf)
+    abi::service_binding::ServiceBinding::from_bytes(buf)
 }
 
 pub fn sys_shm_alloc(size: usize) -> SyscallResult {
@@ -1359,7 +1359,7 @@ pub fn sys_ipc_submit(target: usize, bytes: &[u8]) -> isize {
 pub fn sys_ipc_take(
     token: usize,
     reply: &mut [u8],
-    status: &mut [u8; api::syscall::IPC_STATUS_LEN],
+    status: &mut [u8; abi::syscall::IPC_STATUS_LEN],
 ) -> isize {
     // SAFETY: both output buffers remain exclusively borrowed for this syscall.
     unsafe {
@@ -1532,7 +1532,7 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
 /// Blocking receive that also asks the kernel to attest who sent the message.
 ///
 /// Identical to [`sys_recv`] except that the kernel writes a
-/// `api::caller_identity::CallerIdentity` into the **last
+/// `abi::caller_identity::CallerIdentity` into the **last
 /// `CALLER_IDENTITY_LEN` bytes of `buf`** once the payload is in place. Read it
 /// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
 /// and the request must be denied, never handled on a guessed identity.
@@ -1549,7 +1549,7 @@ pub fn sys_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
             mask,
             buf.as_mut_ptr() as usize,
             buf.len(),
-            api::caller_identity::RECV_ATTEST_CALLER,
+            abi::caller_identity::RECV_ATTEST_CALLER,
         )
     };
     SyscallResult::Ok(ret as usize)
@@ -1570,7 +1570,7 @@ pub fn sys_recv_attested_timeout(mask: usize, buf: &mut [u8], timeout_ticks: u64
             mask,
             buf.as_mut_ptr() as usize,
             buf.len(),
-            api::caller_identity::recv_flags(true, timeout_ticks),
+            abi::caller_identity::recv_flags(true, timeout_ticks),
         )
     };
     if ret >= 0 {
@@ -1603,7 +1603,7 @@ pub fn sys_try_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
 /// Non-blocking receive with kernel-attested caller identity.
 ///
 /// Identical to [`sys_try_recv`] except that the kernel writes a
-/// `api::caller_identity::CallerIdentity` into the **last
+/// `abi::caller_identity::CallerIdentity` into the **last
 /// `CALLER_IDENTITY_LEN` bytes of `buf`** when a message is returned. Read it
 /// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
 /// and the request must be denied.
@@ -1614,7 +1614,7 @@ pub fn sys_try_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
             mask,
             buf.as_mut_ptr() as usize,
             buf.len(),
-            api::caller_identity::RECV_ATTEST_CALLER,
+            abi::caller_identity::RECV_ATTEST_CALLER,
         )
     };
     SyscallResult::Ok(ret as usize)
@@ -1664,7 +1664,7 @@ pub fn sys_set_timer(ticks: usize) -> SyscallResult {
     }
 }
 
-pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
+pub fn sys_get_procs(buffer: &mut [abi::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(
             ViSyscall::GetProcs,
@@ -1686,7 +1686,7 @@ pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, 
 /// Each row reports a scheduler-tick sample timestamp, cumulative CPU run ticks,
 /// heap bytes, and owned bytes for one live task. Requires the `GetProcs2`
 /// syscall permission in the caller's embedded allowlist.
-pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usize, SyscallError> {
+pub fn sys_get_procs2(buffer: &mut [abi::syscall::ProcessInfoV2]) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(
             ViSyscall::GetProcs2,
@@ -1705,9 +1705,9 @@ pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usiz
 
 /// Capture one Cell-aware telemetry snapshot (Phase 06 S6-1).
 ///
-/// `out` is 8-byte aligned by type; `flags` are [`api::telemetry::request`] bits.
+/// `out` is 8-byte aligned by type; `flags` are [`abi::telemetry::request`] bits.
 /// Returns the bytes written into `out` — decode them with
-/// [`api::telemetry::TelemetrySnapshot::parse`]. Requires a `GetProcs2` or
+/// [`abi::telemetry::TelemetrySnapshot::parse`]. Requires a `GetProcs2` or
 /// `TelemetrySnapshot` declaration (shared bit 55) and the caller's
 /// `observe_tasks` right.
 ///
@@ -1719,10 +1719,10 @@ pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usiz
 /// - `OutOfMemory`: the kernel could not allocate the transient capture.
 pub fn sys_telemetry_snapshot(out: &mut [u64], flags: usize) -> Result<usize, SyscallError> {
     let len = core::mem::size_of_val(out);
-    if len < api::telemetry::HEADER_LEN {
+    if len < abi::telemetry::HEADER_LEN {
         return Err(SyscallError::BufferTooSmall);
     }
-    if flags & !api::telemetry::request::ALL != 0 {
+    if flags & !abi::telemetry::request::ALL != 0 {
         return Err(SyscallError::InvalidCommand);
     }
     // SAFETY: `out` is a live, aligned, writable slice of `len` bytes and the
@@ -1745,7 +1745,7 @@ pub fn sys_telemetry_snapshot(out: &mut [u64], flags: usize) -> Result<usize, Sy
 }
 
 /// The first `written` bytes of a [`sys_telemetry_snapshot`] buffer, ready for
-/// [`api::telemetry::TelemetrySnapshot::parse`]. `written` past the buffer is
+/// [`abi::telemetry::TelemetrySnapshot::parse`]. `written` past the buffer is
 /// clamped to it.
 pub fn telemetry_bytes(out: &[u64], written: usize) -> &[u8] {
     let len = written.min(core::mem::size_of_val(out));
@@ -1761,15 +1761,15 @@ pub fn telemetry_bytes(out: &[u64], written: usize) -> &[u8] {
 ///
 /// # Errors
 /// - `FileNotFound`: no record (unknown or evicted root); treat as
-///   [`api::retirement::RetirementState::Unproven`].
+///   [`abi::retirement::RetirementState::Unproven`].
 /// - `Unknown`: the kernel refused the length or the buffer (`InvalidInput`), or
 ///   wrote bytes that are not a valid V1 record.
 /// - `PermissionDenied`: every other refusal: not a watcher of that root and no
 ///   `SupervisorCap`.
 pub fn sys_query_retirement(
     root_tid: usize,
-) -> Result<api::retirement::ViRetirementV1, SyscallError> {
-    use api::retirement::{ViRetirementV1, RETIREMENT_RECORD_LEN};
+) -> Result<abi::retirement::ViRetirementV1, SyscallError> {
+    use abi::retirement::{ViRetirementV1, RETIREMENT_RECORD_LEN};
     let mut out = [0u8; RETIREMENT_RECORD_LEN];
     // SAFETY: `out` is a live, writable buffer of exactly `RETIREMENT_RECORD_LEN`
     // bytes and the kernel writes at most that many.
@@ -2145,7 +2145,7 @@ pub fn sys_grant_slice_with_len_leased_owned_by(
     if owner_tid == 0 {
         return None;
     }
-    grant_slice_with_len(grant_id, owner_tid, api::syscall::grant_slice::LEASE)
+    grant_slice_with_len(grant_id, owner_tid, abi::syscall::grant_slice::LEASE)
 }
 
 fn grant_slice_with_len(
@@ -2411,7 +2411,7 @@ pub fn sys_request_mmio(base: usize, len: usize) -> usize {
 ///   (x86_64).
 pub fn sys_probe_virtio_mmio(
     base: usize,
-) -> Result<api::syscall::virtio_probe::SlotIdentity, SyscallError> {
+) -> Result<abi::syscall::virtio_probe::SlotIdentity, SyscallError> {
     // SAFETY: no pointer crosses the boundary; the kernel validates `base`
     // against its own slot list and the caller's capability at dispatch.
     let ret = unsafe { syscall(ViSyscall::ProbeVirtioMmio, base, 0, 0, 0) };
@@ -2420,7 +2420,7 @@ pub fn sys_probe_virtio_mmio(
         -3 => Err(SyscallError::FileNotFound),
         -4 => Err(SyscallError::InvalidCommand),
         ret => {
-            api::syscall::virtio_probe::decode(ret as usize).ok_or(SyscallError::PermissionDenied)
+            abi::syscall::virtio_probe::decode(ret as usize).ok_or(SyscallError::PermissionDenied)
         }
     }
 }
@@ -2525,7 +2525,7 @@ pub fn sys_get_random(buf: &mut [u8]) -> usize {
 /// Strip capabilities from a live running cell (runtime revocation).
 ///
 /// `cap_mask` selects which capability classes to revoke — use the constants in
-/// `api::syscall::cap_mask` (e.g. `SPAWN`, `NETWORK`, `MMIO_MASK`).
+/// `abi::syscall::cap_mask` (e.g. `SPAWN`, `NETWORK`, `MMIO_MASK`).
 ///
 /// The revoke applies to the target's whole Cell incarnation (root and every
 /// thread), whichever of its tasks `target_tid` names.
@@ -2553,7 +2553,7 @@ pub fn sys_cap_revoke(target_tid: usize, cap_mask: u32) -> Result<(), SyscallErr
 /// Block until one or more bits in `mask` fire, or `timeout_ticks` 10ms ticks elapse.
 ///
 /// `timeout_ticks = 0` blocks indefinitely.  Returns the fired event bits (> 0) on
-/// wake, or 0 on timeout.  See `api::syscall::events` for bit definitions.
+/// wake, or 0 on timeout.  See `abi::syscall::events` for bit definitions.
 ///
 /// Requires `WaitForEvent` in the cell's `declare_syscalls!` list.
 pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
@@ -2583,7 +2583,7 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
 /// `IRQ` completion (x86_64) reports one fired MSI/MSI-X line this task holds
 /// from [`sys_alloc_pcie_irq`]; `result` is the line.
 ///
-/// `mask` is a non-empty set of `api::completion::source` bits; the record
+/// `mask` is a non-empty set of `abi::completion::source` bits; the record
 /// names exactly one of them.
 ///
 /// # Errors
@@ -2764,7 +2764,7 @@ pub enum BlockRegisterError {
 /// same device again (a restarted driver) takes its route back, and no caller can
 /// publish another device's route. VFS finds routes with [`sys_lookup_block_route`].
 pub fn sys_register_block_device(device: BlockDevice) -> Result<(), BlockRegisterError> {
-    use api::block_route::{BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    use abi::block_route::{BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
     let (kind, id) = match device {
         BlockDevice::Pci { bdf } => (BLOCK_DEVICE_PCI, bdf as usize),
         BlockDevice::Mmio { base } => (BLOCK_DEVICE_MMIO, base as usize),
@@ -2791,8 +2791,8 @@ pub fn sys_register_block_device(device: BlockDevice) -> Result<(), BlockRegiste
 /// - `PermissionDenied`: the caller holds neither capability.
 pub fn sys_lookup_block_route(
     index: u32,
-) -> Result<Option<api::block_route::ViBlockRouteV1>, SyscallError> {
-    use api::block_route::{ViBlockRouteV1, BLOCK_ROUTE_RECORD_LEN};
+) -> Result<Option<abi::block_route::ViBlockRouteV1>, SyscallError> {
+    use abi::block_route::{ViBlockRouteV1, BLOCK_ROUTE_RECORD_LEN};
     let mut out = [0u8; BLOCK_ROUTE_RECORD_LEN];
     // SAFETY: `out` is a live, writable buffer of exactly `BLOCK_ROUTE_RECORD_LEN`
     // bytes and the kernel writes at most that many.
@@ -2826,8 +2826,8 @@ pub fn sys_lookup_block_route(
 /// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a
 ///   valid V1 record.
 /// - `PermissionDenied`: the caller holds no SpawnCap.
-pub fn sys_query_machine_facts() -> Result<api::machine_facts::MachineFactsRecord, SyscallError> {
-    use api::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
+pub fn sys_query_machine_facts() -> Result<abi::machine_facts::MachineFactsRecord, SyscallError> {
+    use abi::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
     let mut out = alloc::vec![0u8; MACHINE_FACTS_CAPACITY];
     // SAFETY: `out` is a live, writable heap buffer of exactly
     // `MACHINE_FACTS_CAPACITY` bytes and the kernel writes at most that many.
@@ -2893,7 +2893,7 @@ pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
     let ret = unsafe {
         syscall(
             ViSyscall::RegisterService,
-            api::syscall::service::GPU_DRIVER as usize,
+            abi::syscall::service::GPU_DRIVER as usize,
             0, // tid=0 means "register the caller itself"
             0,
             0,
@@ -3170,7 +3170,7 @@ pub enum PcieFunctionError {
 }
 
 fn pcie_function_error(ret: usize) -> PcieFunctionError {
-    use api::pcie_function as pf;
+    use abi::pcie_function as pf;
     match ret {
         pf::ERR_NOT_FOUND => PcieFunctionError::NotFound,
         pf::ERR_INVALID_INPUT => PcieFunctionError::InvalidInput,
@@ -3185,8 +3185,8 @@ fn pcie_function_error(ret: usize) -> PcieFunctionError {
 /// MSI/MSI-X summary and up to 16 standard capabilities with their bytes.
 pub fn sys_query_pcie_function(
     bdf: u32,
-) -> Result<api::pcie_function::ViPcieFunctionV1, PcieFunctionError> {
-    use api::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_RECORD_LEN};
+) -> Result<abi::pcie_function::ViPcieFunctionV1, PcieFunctionError> {
+    use abi::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_RECORD_LEN};
     let mut buf = [0u8; PCIE_FUNCTION_RECORD_LEN];
     // SAFETY: `buf` is a live, writable buffer of exactly the length passed.
     let ret = unsafe {
@@ -3205,7 +3205,7 @@ pub fn sys_query_pcie_function(
 }
 
 /// 435: allocate up to `want` (1..=32) MSI-X or MSI interrupts for the owned
-/// function at `bdf`; `mode` holds `api::pcie_function::IRQ_MODE_*` bits.
+/// function at `bdf`; `mode` holds `abi::pcie_function::IRQ_MODE_*` bits.
 /// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`,
 /// or on every held line at once with `ipc::wait_any(source::IRQ, ticks)`.
 /// A repeat call returns the same allocation; it lives until the caller dies.
@@ -3213,10 +3213,10 @@ pub fn sys_alloc_pcie_irq(
     bdf: u32,
     want: usize,
     mode: usize,
-) -> Result<api::pcie_function::PcieIrqAlloc, PcieFunctionError> {
+) -> Result<abi::pcie_function::PcieIrqAlloc, PcieFunctionError> {
     // SAFETY: scalar arguments only.
     let ret = unsafe { syscall(ViSyscall::AllocPcieIrq, bdf as usize, want, mode, 0) } as usize;
-    api::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
+    abi::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
 }
 
 /// The `SystemPower` (436) action.
@@ -3238,7 +3238,7 @@ pub enum SystemPowerError {
 }
 
 fn system_power_error(ret: usize) -> SystemPowerError {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     match ret {
         sp::ERR_INVALID_INPUT => SystemPowerError::InvalidInput,
         sp::ERR_NOT_SUPPORTED => SystemPowerError::NotSupported,
@@ -3250,7 +3250,7 @@ fn system_power_error(ret: usize) -> SystemPowerError {
 /// shutdown is the caller's job before this call. Returns only when the kernel
 /// refused or the action did not take effect.
 pub fn sys_system_power(action: SystemPowerAction) -> SystemPowerError {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     let a0 = match action {
         SystemPowerAction::Reboot => sp::ACTION_REBOOT,
         SystemPowerAction::PowerOff => sp::ACTION_POWEROFF,
@@ -3260,7 +3260,7 @@ pub fn sys_system_power(action: SystemPowerAction) -> SystemPowerError {
     system_power_error(ret)
 }
 
-/// Why a DMA export call (437-439) was refused ([`api::dma_export`]).
+/// Why a DMA export call (437-439) was refused ([`abi::dma_export`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DmaExportError {
     /// Holder not eligible, range not owned, not the lease holder, or no
@@ -3282,7 +3282,7 @@ pub enum DmaExportError {
 }
 
 fn dma_export_error(ret: usize) -> DmaExportError {
-    use api::dma_export as de;
+    use abi::dma_export as de;
     match ret {
         de::ERR_FILE_NOT_FOUND => DmaExportError::NotFound,
         de::ERR_INVALID_INPUT | de::ERR_BUFFER_TOO_SMALL => DmaExportError::InvalidInput,
@@ -3305,7 +3305,7 @@ fn decode_export_id(ret: usize) -> Result<u64, DmaExportError> {
 
 /// 437: export `[va, va + len)` of this Cell's own memory (inside a Grant it
 /// owns) to the live provider of `holder_service`; `flags` may carry
-/// [`api::dma_export::EXPORT_DEVICE_WRITE`]. The range stays locked (it cannot
+/// [`abi::dma_export::EXPORT_DEVICE_WRITE`]. The range stays locked (it cannot
 /// be freed) until the lease is revoked. Returns the export id to send to the
 /// holder beside the request it backs.
 pub fn sys_export_dma_range(
@@ -3334,15 +3334,15 @@ pub fn sys_export_dma_range(
 pub fn sys_map_dma_export(
     export_id: u64,
     bdf: u32,
-) -> Result<api::dma_export::ViDmaExportV1, DmaExportError> {
-    use api::dma_export::{ViDmaExportV1, DMA_EXPORT_RECORD_LEN};
+) -> Result<abi::dma_export::ViDmaExportV1, DmaExportError> {
+    use abi::dma_export::{ViDmaExportV1, DMA_EXPORT_RECORD_LEN};
     let mut buf = [0u8; DMA_EXPORT_RECORD_LEN];
     sys_map_dma_export_into(export_id, bdf, &mut buf)?;
     ViDmaExportV1::decode(&buf).map_err(|_| DmaExportError::Malformed)
 }
 
 /// 438 with a caller-chosen output buffer, passed with its own length. The
-/// kernel accepts exactly [`api::dma_export::DMA_EXPORT_RECORD_LEN`] bytes and
+/// kernel accepts exactly [`abi::dma_export::DMA_EXPORT_RECORD_LEN`] bytes and
 /// refuses any other length with [`DmaExportError::InvalidInput`] before any
 /// effect; prefer [`sys_map_dma_export`], which decodes the record.
 pub fn sys_map_dma_export_into(
@@ -3404,7 +3404,7 @@ mod tests {
         decode_snapshot_result, decode_spawn_result, decode_wait_completion_result,
         system_power_error, SyscallError, SyscallResult, SystemPowerError, WaitCompletionResult,
     };
-    use api::completion::{source, ViCompletion, COMPLETION_LEN};
+    use abi::completion::{source, ViCompletion, COMPLETION_LEN};
 
     #[test]
     fn spawn_result_decoder_preserves_additive_oom() {
@@ -3470,7 +3470,7 @@ mod tests {
 
     #[test]
     fn system_power_decoder_names_each_sentinel() {
-        use api::syscall::system_power as sp;
+        use abi::syscall::system_power as sp;
         assert_eq!(
             system_power_error(sp::ERR_INVALID_INPUT),
             SystemPowerError::InvalidInput
@@ -3491,7 +3491,7 @@ mod tests {
     #[test]
     fn dma_export_decoder_names_each_sentinel() {
         use super::{decode_export_id, DmaExportError as E};
-        use api::dma_export as de;
+        use abi::dma_export as de;
         assert_eq!(decode_export_id(1), Ok(1));
         assert_eq!(decode_export_id(isize::MAX as usize), Ok(isize::MAX as u64));
         for (ret, want) in [

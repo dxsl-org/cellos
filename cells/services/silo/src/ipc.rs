@@ -1,7 +1,7 @@
 //! Attested KMS-only ingress for the development Silo provider.
 
-use api::caller_identity::CallerIdentity;
-use api::syscall::service;
+use abi::caller_identity::CallerIdentity;
+use abi::syscall::service;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_recv_attested, sys_try_send, SyscallResult};
 use service_silo::protocol::{PeerIdentity, ProtocolState};
@@ -13,7 +13,7 @@ use crate::guest::GuestSession;
 pub fn run(mut guest: GuestSession) -> ! {
     let mut state = ProtocolState::new();
     loop {
-        let mut buffer = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut buffer = [0u8; wire::ipc::IPC_BUF_SIZE];
         let sender = match sys_recv_attested(0, &mut buffer) {
             SyscallResult::Ok(sender) if sender > 0 => sender,
             _ => continue,

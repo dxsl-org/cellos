@@ -6,7 +6,7 @@
 //! exists so that a failure is never mistaken for an answer — in particular a
 //! read that hit a device error fails instead of returning truncated bytes.
 
-use api::services::proto::vfs::VfsError;
+use wire::proto::vfs::VfsError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]

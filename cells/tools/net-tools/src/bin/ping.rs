@@ -3,7 +3,7 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-api::declare_syscalls![Log];
+abi::declare_syscalls![Log];
 
 ostd::cell_main!(cell_main);
 

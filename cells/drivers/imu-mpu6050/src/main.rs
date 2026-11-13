@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_i2c_bcm::BcmBscI2c;
 use driver_imu_mpu6050::{Mpu6050, DEFAULT_I2C_ADDR};
 use ostd::io::println;

@@ -4,11 +4,11 @@
 use alloc::collections::VecDeque;
 use alloc::string::ToString;
 
-use api::services::vmm_session::{
+use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
+use wire::vmm_session::{
     VmmEvent, VmmInputForwardRequest, VmmLaunchReply, VmmLaunchRequest, VmmResizeRequest,
     VMM_OP_TERMINATE_APP, VMM_STATUS_OK,
 };
-use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
 
 use crate::input_bridge::GuestEvent;
 

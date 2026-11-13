@@ -15,10 +15,10 @@
 use alloc::string::ToString;
 use alloc::vec;
 
-use api::ipc::VfsResponse;
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::syscall::sys_grant_copy_from_slice;
+use wire::ipc::VfsResponse;
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::fs_error::FsError;

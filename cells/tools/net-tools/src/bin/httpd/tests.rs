@@ -3,10 +3,10 @@ use super::{
     write_content_length, FileReadOutcome, StatPreflight, MAX_FILE_READ_BYTES,
 };
 use alloc::{vec, vec::Vec};
-use api::ipc::{NetResponse, VfsResponse};
-use api::services::proto::vfs::VfsError;
 use ostd::ipc::IpcError;
 use ostd::ViError;
+use wire::ipc::{NetResponse, VfsResponse};
+use wire::proto::vfs::VfsError;
 
 #[test]
 fn parse_u16_accepts_valid_ports() {

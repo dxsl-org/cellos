@@ -1,10 +1,10 @@
 //! C ABI of the vendored engine, plus the shim symbols it needs that the
-//! Tier-A C ABI (`api::services::posix`) does not export.
+//! Tier-A C ABI (`posix_shim`) does not export.
 //!
 //! Everything else the engine links against — `malloc`/`free`/`realloc`,
 //! `mem*`/`str*`, `snprintf`/`vsnprintf`/`fprintf`/`fputc`/`fwrite`,
-//! `stdout`/`stderr` and `abort` — comes from `libs/api`, which every cell
-//! already links; the C99 math set comes from this cell's `float_abi`. This
+//! `stdout`/`stderr` and `abort` — comes from `libs/posix-shim`, which this cell
+//! links explicitly; the C99 math set comes from this cell's `float_abi`. This
 //! file therefore carries only the declarations of upstream `quickjs.h` that
 //! the engine driver uses, and the three bodies upstream expects from an OS:
 //! the clock and the epoch conversion behind `Date`.

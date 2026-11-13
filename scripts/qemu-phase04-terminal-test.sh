@@ -278,7 +278,7 @@ for path in sorted((root / "cells/tools/sys-tools/src/bin").glob("*.rs")):
     relative = path.relative_to(root)
     before, after = baseline(relative).decode(), path.read_text()
     def declarations(source):
-        return re.findall(r"api::declare_(?:manifest|syscalls)!\s*[\[(].*?[\])]\s*;", source, re.S)
+        return re.findall(r"abi::declare_(?:manifest|syscalls)!\s*[\[(].*?[\])]\s*;", source, re.S)
     old, new = declarations(before), declarations(after)
     if path.stem == "free":
         old = [re.sub(r",?\s*GetTime\s*,?", "", d) for d in old]

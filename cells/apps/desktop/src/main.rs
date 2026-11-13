@@ -14,7 +14,6 @@ mod draw;
 mod spotlight;
 mod taskbar;
 
-use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{
@@ -23,13 +22,14 @@ use ostd::syscall::{
 };
 use ostd::typography::TextFonts;
 use viui::theme::{ThemePreferenceState, ViTheme};
+use wire::display::PixelFormat;
 
 use crate::apps::AppRegistry;
 use crate::spotlight::{SpotlightAction, SpotlightState};
 use crate::taskbar::{TaskbarAction, TaskbarState};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Log,
     SpawnFromPath,
     GrantAlloc,
@@ -380,16 +380,14 @@ fn announce_appearance(tb_surf: &ViSurface, pref: ThemePreferenceState) {
 
 /// Spawn the handler for a Spotlight path intent. A `Run` of a `/bin` program
 /// spawns that program; any other action hands the handler the target as argv[0].
-fn launch_intent(intent: &api::services::mime::LaunchIntent) {
+fn launch_intent(intent: &wire::mime::LaunchIntent) {
     ostd::io::print("[desktop] Spotlight: Launching intent ");
     ostd::io::print(intent.action.as_str());
     ostd::io::print(" target=");
     ostd::io::print(&intent.target_path);
     ostd::io::print(" with app=");
     ostd::io::println(intent.app_binary);
-    if intent.action == api::services::mime::FileAction::Run
-        && intent.target_path.starts_with("/bin/")
-    {
+    if intent.action == wire::mime::FileAction::Run && intent.target_path.starts_with("/bin/") {
         launch_application(&intent.target_path);
         return;
     }

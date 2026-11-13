@@ -62,7 +62,7 @@ static GLOBAL_VFS: ostd::prelude::Mutex<Option<VfsManager>> = ostd::prelude::Mut
 // Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 // part_data/part_lfs scope the raw block syscalls to P1 (FAT32) + P4
 // (littlefs) — P2 cell-table and P3 snapshot stay kernel-only (P03 design).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = true,
     network = false,
     spawn = false,
@@ -76,7 +76,7 @@ api::declare_manifest!(
 // `Read` syscall is deliberately ABSENT: it is an async transformation that
 // requires the caller to park immediately, which a service dispatch loop
 // cannot do (see backend_bootfs.rs::read_to_vec).
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -188,9 +188,9 @@ struct Vfs {
 impl ostd::service::Handler for Vfs {
     fn on_request(&mut self, request: ostd::service::Request<'_>) {
         let caller = caller::Caller::from_attested(*request.caller());
-        let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut encoded = [0u8; wire::ipc::IPC_BUF_SIZE];
         let encoded_len = {
-            let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+            let mut resp_buf = [0u8; wire::ipc::IPC_BUF_SIZE];
             let mut guard = GLOBAL_VFS.lock();
             let vfs = guard
                 .as_mut()
@@ -199,7 +199,7 @@ impl ostd::service::Handler for Vfs {
             let response =
                 dispatch::handle_request(vfs, request.payload(), Some(caller), &mut resp_buf);
             self.idle_work = prepared_cwd::idle_work(vfs);
-            api::ipc::encode(&response, &mut encoded)
+            wire::ipc::encode(&response, &mut encoded)
                 .map(|bytes| bytes.len())
                 .unwrap_or(0)
         };
@@ -209,9 +209,9 @@ impl ostd::service::Handler for Vfs {
 
     /// No owner watch, no durable state: the request is refused.
     fn on_unwatched(&mut self, request: ostd::service::Request<'_>) {
-        let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
-        let denied = api::ipc::VfsResponse::Err(api::services::proto::vfs::VfsError::Denied as u8);
-        let len = api::ipc::encode(&denied, &mut encoded)
+        let mut encoded = [0u8; wire::ipc::IPC_BUF_SIZE];
+        let denied = wire::ipc::VfsResponse::Err(wire::proto::vfs::VfsError::Denied as u8);
+        let len = wire::ipc::encode(&denied, &mut encoded)
             .map(|bytes| bytes.len())
             .unwrap_or(0);
         let _ = request.reply(&encoded[..len]);

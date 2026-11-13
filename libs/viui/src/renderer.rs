@@ -20,8 +20,8 @@
 extern crate alloc;
 
 use alloc::rc::Rc;
-use api::display::Rect as SurfaceRect;
 use core::cell::RefCell;
+use wire::display::Rect as SurfaceRect;
 
 use crate::canvas::{FramebufferCanvas, ViCanvas};
 use crate::layout::Rect;

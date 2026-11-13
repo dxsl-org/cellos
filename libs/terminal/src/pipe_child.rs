@@ -32,10 +32,10 @@
 //! writer copies once the stages that need them are spawned. A reader passed as
 //! stdin is moved to the child at commit (the kernel consumes the caller's copy).
 use crate::stream::{ok, Endpoint, EndpointRights, Operation, OperationRef, ReceiptRef};
-use api::cell_session::{
+use abi::cell_session::{
     ChildRefV1, KernelOp, ObjectRefV1, Reader, Status, VfsOp, Writer, HEADER_LEN,
 };
-use api::service_binding::ServiceBinding;
+use abi::service_binding::ServiceBinding;
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 
 /// Maximum immutable-context argv / cwd / environment sizes (ABI limits).
@@ -520,7 +520,7 @@ impl Pipeline {
         let vfs_owner = if spec.cwd.is_empty() {
             None
         } else {
-            Some(ostd::session::service_binding(api::syscall::service::VFS)?)
+            Some(ostd::session::service_binding(abi::syscall::service::VFS)?)
         };
         if let Some(owner) = vfs_owner {
             let lease = cwd_lease.insert(CwdLease::new(owner, operation.reference()));
@@ -534,21 +534,21 @@ impl Pipeline {
                     let generation = stderr.inspect()?.holder.generation;
                     let mut send = [0u8; 4096];
                     let mut recv = [0u8; 4096];
-                    let request = api::ipc::VfsRequest::OpenRootDir { path };
+                    let request = wire::ipc::VfsRequest::OpenRootDir { path };
                     let response = ostd::ipc::service_call_typed_bounded::<
                         _,
-                        api::ipc::VfsResponse<'_>,
+                        wire::ipc::VfsResponse<'_>,
                     >(
                         owner.tid as usize, &request, &mut send, &mut recv, 100
                     )
                     .map_err(|_| Status::Indeterminate)?;
                     let id = match response {
-                        api::ipc::VfsResponse::DirHandle(handle) => handle.0,
+                        wire::ipc::VfsResponse::DirHandle(handle) => handle.0,
                         _ => return Err(Status::Denied),
                     };
                     // From here the lease closes the handle on every exit.
-                    lease.dir = Some(api::dir_handles::ViDirHandle(id));
-                    if ostd::session::service_binding(api::syscall::service::VFS)? != owner {
+                    lease.dir = Some(abi::dir_handles::ViDirHandle(id));
+                    if ostd::session::service_binding(abi::syscall::service::VFS)? != owner {
                         return Err(Status::Stale);
                     }
                     ObjectRefV1 { id, generation }
@@ -709,7 +709,7 @@ fn vfs(
 ) -> Result<usize, Status> {
     let header = ostd::session::service_call(
         owner,
-        api::syscall::service::VFS,
+        abi::syscall::service::VFS,
         operation.raw(),
         op as u16,
         true,
@@ -753,7 +753,7 @@ fn close_bounded(operation: OperationRef) -> Result<(), Status> {
 pub(crate) struct CwdLease {
     owner: ServiceBinding,
     operation: OperationRef,
-    pub(crate) dir: Option<api::dir_handles::ViDirHandle>,
+    pub(crate) dir: Option<abi::dir_handles::ViDirHandle>,
     pub(crate) receipt: Option<ReceiptRef>,
 }
 impl CwdLease {
@@ -768,15 +768,15 @@ impl CwdLease {
 }
 impl Drop for CwdLease {
     fn drop(&mut self) {
-        if ostd::session::service_binding(api::syscall::service::VFS).ok() != Some(self.owner) {
+        if ostd::session::service_binding(abi::syscall::service::VFS).ok() != Some(self.owner) {
             return;
         }
         if let Some(dir) = self.dir {
             let mut send = [0u8; 4096];
             let mut recv = [0u8; 4096];
-            let _ = ostd::ipc::service_call_typed_bounded::<_, api::ipc::VfsResponse<'_>>(
+            let _ = ostd::ipc::service_call_typed_bounded::<_, wire::ipc::VfsResponse<'_>>(
                 self.owner.tid as usize,
-                &api::ipc::VfsRequest::CloseDir { dir },
+                &wire::ipc::VfsRequest::CloseDir { dir },
                 &mut send,
                 &mut recv,
                 100,
@@ -791,7 +791,7 @@ impl Drop for CwdLease {
             {
                 let _ = ostd::session::service_call(
                     self.owner,
-                    api::syscall::service::VFS,
+                    abi::syscall::service::VFS,
                     self.operation.raw(),
                     VfsOp::ResolveCwd as u16,
                     false,

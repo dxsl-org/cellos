@@ -11,8 +11,8 @@
 //! the device sends a message for every cause while its vector is unmasked
 //! and the cell never has to re-arm a vector.
 
-use api::completion::source::IRQ;
-use api::pcie_function::IRQ_MODE_ALLOW_MSIX;
+use abi::completion::source::IRQ;
+use abi::pcie_function::IRQ_MODE_ALLOW_MSIX;
 use ostd::io::print_fmt;
 use ostd::ipc::{wait_any, Wake};
 use ostd::syscall::sys_alloc_pcie_irq;

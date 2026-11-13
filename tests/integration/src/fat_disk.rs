@@ -1,5 +1,5 @@
 //! Raw disk fixture for the x86 storage lanes: a FAT32 volume at
-//! `api::disk::PART_FAT32_BASE_LBA` and no Cellos MBR, so the CellosFS, `/data`
+//! `abi::disk::PART_FAT32_BASE_LBA` and no Cellos MBR, so the CellosFS, `/data`
 //! and `/bin` partitions past the volume are simply absent. The same image
 //! serves as a SATA (`ide-hd`) or NVMe namespace; the file is removed on drop.
 
@@ -7,9 +7,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// `api::disk::PART_FAT32_BASE_LBA` in bytes (LBA 2048).
+/// `abi::disk::PART_FAT32_BASE_LBA` in bytes (LBA 2048).
 const FAT_BASE_OFFSET: u64 = 2_048 * 512;
-/// `api::disk::PART_FAT32_SECTORS`.
+/// `abi::disk::PART_FAT32_SECTORS`.
 const FAT_SECTORS: u64 = 524_288;
 
 /// The first working Python 3 interpreter on PATH (the FAT32 formatter is a

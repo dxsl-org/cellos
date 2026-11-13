@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use api::{declare_manifest, declare_syscalls};
+use abi::{declare_manifest, declare_syscalls};
 use core::sync::atomic::{AtomicBool, Ordering};
 use driver_bcm_display::mailbox::BcmMailbox;
 use driver_bcm_display::BcmFramebuffer;

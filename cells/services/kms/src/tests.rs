@@ -1,4 +1,4 @@
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{BrokerBindingPayload, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1};
 
 use super::*;

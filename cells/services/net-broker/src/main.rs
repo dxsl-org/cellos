@@ -36,16 +36,16 @@ extern crate alloc;
 
 // NetworkCap (TCP/UDP) + VFS read cap (for /etc/cellos/cluster.key in P04).
 // spawn = false: the broker routes IPC, it never spawns cells.
-api::declare_manifest!(block_io = false, network = true, spawn = false);
+abi::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Declare cluster membership — broker participates in the "robots" private cluster.
 // Hardcoded demo cluster name; P09 enrollment will replace this with a config read.
-api::declare_cluster!(mode = Private, name = "robots");
+wire::declare_cluster!(mode = Private, name = "robots");
 
 // Allow-list narrow enough for the broker dispatch loop; expanded in P04/P05.
 // RegisterService is NOT listed — init registers service::NET_BROKER on the
 // broker's behalf (init has SpawnCap; the broker does not).
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

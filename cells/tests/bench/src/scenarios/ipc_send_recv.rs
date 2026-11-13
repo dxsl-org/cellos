@@ -9,10 +9,11 @@
 //! `IpcSendRecvBench::domain` uses the Tier-2 `bench-peer-t2` peer. A domain
 //! peer that cannot be spawned or admitted fails setup; there is no SAS fallback.
 
-use api::{benchmark::ViBenchmark, ViError};
 use ostd::syscall::{
     sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
 };
+use types::ViError;
+use wire::benchmark::ViBenchmark;
 
 // Use bench-probe (VA 0x19000000) so the echo peer doesn't collide with the
 // orchestrator's pages (VA 0x18000000) in the shared SAS page table.
@@ -59,12 +60,12 @@ impl ViBenchmark for IpcSendRecvBench {
         self.name
     }
 
-    fn setup(&mut self) -> api::ViResult<()> {
+    fn setup(&mut self) -> types::ViResult<()> {
         // The domain peer ignores its arguments; setting them keeps both spawns identical.
         if !sys_set_spawn_args("ipc-echo") {
             return Err(ViError::IO);
         }
-        self.echo_tid = match sys_spawn_pinned(self.peer_path, api::TaskPriority::Normal as u8, 0) {
+        self.echo_tid = match sys_spawn_pinned(self.peer_path, abi::TaskPriority::Normal as u8, 0) {
             SyscallResult::Ok(tid) if tid != 0 => tid,
             _ => return Err(ViError::NotFound),
         };
@@ -74,7 +75,7 @@ impl ViBenchmark for IpcSendRecvBench {
         Ok(())
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         if self.echo_tid == 0 {
             return Err(ViError::NotFound);
         }
@@ -94,7 +95,7 @@ impl ViBenchmark for IpcSendRecvBench {
         Ok(0)
     }
 
-    fn teardown(&mut self) -> api::ViResult<()> {
+    fn teardown(&mut self) -> types::ViResult<()> {
         if self.echo_tid == 0 {
             return Ok(());
         }

@@ -1,6 +1,6 @@
 //! Real-time benchmark report — tail latency + jitter for RT determinism.
 //!
-//! `BenchReport` (libs/api) carries min/p50/p99/max. RT determinism cares about
+//! `BenchReport` (libs/wire) carries min/p50/p99/max. RT determinism cares about
 //! the *tail* — p99.9, max, and jitter (max − min) — plus deadline-miss counts
 //! for periodic loops. These are computed here in the bench cell so the stable
 //! `BenchReport` ABI (Law 1) stays untouched.

@@ -12,13 +12,13 @@ extern crate alloc;
 mod draw;
 mod game;
 
-use api::declare_manifest;
-use api::display::PixelFormat;
-use api::input::{InputEvent, KeyState, KeySym};
+use abi::declare_manifest;
 use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
+use wire::display::PixelFormat;
+use wire::input::{InputEvent, KeyState, KeySym};
 
 declare_manifest!(block_io = false, network = false, spawn = false);
 
@@ -32,8 +32,8 @@ fn cell_main() {
     let comp = wait_for_compositor();
     let mut surf = match ViSurface::create(
         comp,
-        api::display::FALLBACK_WIDTH,
-        api::display::FALLBACK_HEIGHT,
+        wire::display::FALLBACK_WIDTH,
+        wire::display::FALLBACK_HEIGHT,
         PixelFormat::Bgra8888,
     ) {
         Ok(s) => s,

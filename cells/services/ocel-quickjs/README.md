@@ -34,14 +34,14 @@ exactly the upstream `libquickjs` file set (`Makefile`: `QJS_LIB_OBJS`).
 Everything else the engine needs from libc is satisfied without an external
 libc:
 
-- memory, string and stdio come from the Tier-A C ABI that `libs/api`
-  already exports (`api::services::posix`);
+- memory, string and stdio come from the Tier-A C ABI that `libs/posix-shim`
+  already exports (`posix_shim`);
 - the C99 math set is `vendor/include/math.h`: `static inline` wrappers that
   pass each `double` as its IEEE-754 bit pattern to the cell's integer-only
   `cellos_qjs_<name>_bits` exports (`src/float_abi.rs`, over `libm`), so no
   float crosses between the C and the Rust on any architecture (rule H1: x86_64
   C is hard-float SSE2, x86_64 Rust is soft-float). The engine never calls
-  `libs/api`'s `double`-signature math exports — never pass `-lm`;
+  `libs/posix-shim`'s `double`-signature math exports — never pass `-lm`;
 - the cell passes its own `JSMallocFunctions` to `JS_NewRuntime2`, so the
   allocator is the cell's Rust heap;
 - `malloc_usable_size` does not exist in that ABI and the C code only calls it

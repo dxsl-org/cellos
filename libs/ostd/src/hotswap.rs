@@ -26,7 +26,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::ViError;
+use types::ViError;
 
 // ── Public error type ─────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ pub fn hotswap_key_str(swap_id: u64) -> String {
 /// # Example
 /// ```no_run
 /// use ostd::hotswap::{ViStateTransfer, stash, restore, clear, hotswap_key};
-/// use api::ViError;
+/// use types::ViError;
 ///
 /// struct MyState { counter: u64, name: [u8; 32] }
 ///

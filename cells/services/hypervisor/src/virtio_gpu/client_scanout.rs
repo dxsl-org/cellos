@@ -6,7 +6,7 @@
 //! vCPU loop; damage is coalesced and retried at the next poll.
 
 use super::{command, resource::ResourceTable};
-use api::services::vmm_session::VmmEvent;
+use wire::vmm_session::VmmEvent;
 use ostd::syscall::{sys_grant_share, sys_post, SyscallResult};
 
 pub struct ClientScanout {

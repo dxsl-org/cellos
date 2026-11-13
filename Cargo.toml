@@ -34,7 +34,6 @@ members = [
     "libs/abi",
     "libs/wire",
     "libs/posix-shim",
-    "libs/api",
     "libs/ostd",
     "libs/ai-proto",
     "libs/tensor-math",

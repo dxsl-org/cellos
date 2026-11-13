@@ -21,8 +21,8 @@
 extern crate alloc;
 extern crate ostd;
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Log,
     Exit,
     SpawnFromPath,
@@ -206,7 +206,7 @@ mod grant_pair {
     /// Has `tid` terminated? A task the listing no longer carries has; a listing
     /// that cannot be taken is not evidence of death.
     fn terminated(tid: usize) -> bool {
-        let mut rows = [api::syscall::ProcessInfo::default(); 64];
+        let mut rows = [abi::syscall::ProcessInfo::default(); 64];
         match ostd::syscall::sys_get_procs(&mut rows) {
             Ok(count) => rows
                 .iter()

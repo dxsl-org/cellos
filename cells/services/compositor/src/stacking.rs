@@ -6,7 +6,7 @@
 //! configure it to the shown window's size and state one request at a time.
 //! This module is the only writer of the behind-tab flag.
 
-use api::display::Rect;
+use wire::display::Rect;
 
 use crate::surface_table::{FrameRegistry, Reselected, SurfaceTable};
 use crate::window_decoration::{self, Tabs};

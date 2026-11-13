@@ -14,7 +14,7 @@
 //! `POSIX-RENAME`, `POSIX-ENTROPY`, `POSIX-NET`, and `POSIX-DNS` markers.
 //!
 //! The shell's cwd grant seals this cell in VFS, so the path smokes run through
-//! the shim's handle route (`api::posix::install_working_dir`), relative to
+//! the shim's handle route (`posix_shim::install_working_dir`), relative to
 //! the granted working directory.
 
 #![no_std]
@@ -34,14 +34,14 @@ use ostd::io::println;
 const ECHO_IP: [u8; 4] = [10, 0, 2, 2];
 const ECHO_PORT: u16 = 10009;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 // Add only the file trio needed by the fstat smoke to the existing restrictive set.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     Log,
@@ -58,7 +58,7 @@ api::declare_syscalls![
     VfsMutate
 ];
 
-// Declare C ABI directly — works whether the symbols come from api::posix (Tier A)
+// Declare C ABI directly — works whether the symbols come from posix_shim (Tier A)
 // or mlibc/libc.a (Tier B); avoids Rust feature-unification breaking the lookup.
 #[repr(C)]
 struct SockaddrIn {

@@ -15,7 +15,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use api::cell_session::ObjectRefV1 as Ref;
+use abi::cell_session::ObjectRefV1 as Ref;
 use kms_codec::{
     ssh_chunk_count, ssh_chunk_len, KmsErrorCode, KmsTrustQueryKind, SshChunkAckPayload,
     SshChunkRequestPayload, SshImportCommitRequestPayload, SshTransferBeginResponsePayload,

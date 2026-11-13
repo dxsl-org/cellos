@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
-use api::declare_manifest;
+// Links the Tier-A C library (libc symbols) the C objects call.
+extern crate posix_shim;
+use abi::declare_manifest;
 use ostd::syscall::sys_exit;
 
 // The granted child holds no capability of its own and no launch edge: it can
@@ -11,10 +13,10 @@ declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
-api::declare_syscalls![Log, Exit, Recv, StateRestore, PipeWrite, Yield];
+abi::declare_syscalls![Log, Exit, Recv, StateRestore, PipeWrite, Yield];
 
 unsafe extern "C" {
     fn cellos_spawn_child_witness() -> i32;

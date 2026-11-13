@@ -13,13 +13,13 @@ extern crate alloc;
 
 mod echo;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Send, Recv, Log, Exit, Yield];
+abi::declare_syscalls![Send, Recv, Log, Exit, Yield];
 
 ostd::cell_main!(cell_main);
 

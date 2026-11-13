@@ -15,8 +15,8 @@ import sys
 import os
 
 SECTOR_SIZE       = 512
-CELL_TABLE_BASE_LBA = 526_336         # must match api::disk::PART_CELLTBL_BASE_LBA
-CELL_TABLE_SECTORS  = 73_664          # must match api::disk::PART_CELLTBL_SECTORS
+CELL_TABLE_BASE_LBA = 526_336         # must match abi::disk::PART_CELLTBL_BASE_LBA
+CELL_TABLE_SECTORS  = 73_664          # must match abi::disk::PART_CELLTBL_SECTORS
 CELL_TABLE_END_LBA  = CELL_TABLE_BASE_LBA + CELL_TABLE_SECTORS  # P3 starts here
 CELL_TABLE_MAGIC  = 0x5649_4F53_5F43_454C  # "Cellos_CEL"
 CELL_PATH_LEN     = 64

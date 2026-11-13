@@ -6,7 +6,7 @@ extern crate alloc;
 
 mod sht3x;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_gpio_bcm::BcmGpio;
 use driver_i2c_bcm::BcmBscI2c;

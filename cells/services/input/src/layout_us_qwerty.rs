@@ -10,7 +10,7 @@
 //! ([`LayoutEntry::is_alpha`]), and Num Lock chooses between a keypad key's
 //! digit face and its navigation face ([`LayoutEntry::keypad`]).
 
-use api::input::{KeyState, KeySym, Modifiers};
+use wire::input::{KeyState, KeySym, Modifiers};
 
 /// One entry in the layout table.
 pub struct LayoutEntry {
@@ -328,7 +328,7 @@ pub fn key_state_from_evdev(value: u32) -> KeyState {
 #[cfg(test)]
 mod tests {
     use super::{toggle_modifier_for_scancode, translate};
-    use api::input::{KeySym, Modifiers};
+    use wire::input::{KeySym, Modifiers};
 
     /// The evdev codes the driver sends for the keys these tests press.
     const A: u32 = 0x1E;

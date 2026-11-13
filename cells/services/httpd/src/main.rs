@@ -8,8 +8,8 @@
 
 extern crate alloc;
 
+use abi::syscall::service;
 use alloc::string::String;
-use api::syscall::service;
 use ostd::io::{print, println};
 use ostd::service::provider_tid;
 use ostd::syscall::sys_yield;
@@ -19,7 +19,7 @@ mod net_ipc;
 mod reactor;
 mod router;
 
-api::declare_syscalls![Send, Recv, Log, LookupServiceBound, StateRestore, GetTime];
+abi::declare_syscalls![Send, Recv, Log, LookupServiceBound, StateRestore, GetTime];
 
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(8 * 1024 * 1024);

@@ -51,7 +51,7 @@ pub fn execute(cmd: &str) -> String {
         }
         "clear" => String::from("\x1b[2J\x1b[H"),
         "ps" => {
-            let mut rows = [api::syscall::ProcessInfo::default(); 32];
+            let mut rows = [abi::syscall::ProcessInfo::default(); 32];
             let mut out =
                 String::from("  PID  STATE      NAME\r\n  ---  ---------  ----------------\r\n");
             if let Ok(count) = ostd::syscall::sys_get_procs(&mut rows) {

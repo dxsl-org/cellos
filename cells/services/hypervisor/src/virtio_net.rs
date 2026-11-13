@@ -254,7 +254,7 @@ impl VirtioDevice for NetDev {
 
     #[cfg(feature = "hostile-backend-recovery")]
     fn hostile_backend_fault(&mut self, command: u32) {
-        if command == 1 && crate::backend_fault_control::disconnect(api::syscall::service::NET) {
+        if command == 1 && crate::backend_fault_control::disconnect(abi::syscall::service::NET) {
             self.backend.force_unavailable_once();
             ostd::io::println("[hv-backend-fault-host] net unavailable");
         }
@@ -273,7 +273,7 @@ fn handle_tx(bufs: &[DescBuf], vm_id: usize, backend: &mut crate::net_backend::C
     else {
         return false;
     };
-    if total <= VIRTIO_NET_HDR_V1_LEN || total > api::ipc::IPC_BUF_SIZE {
+    if total <= VIRTIO_NET_HDR_V1_LEN || total > wire::ipc::IPC_BUF_SIZE {
         ostd::io::println("[hv-virtio-host] reject net-tx-payload");
         return false;
     }

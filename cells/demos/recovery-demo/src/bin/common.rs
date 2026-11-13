@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use ostd::ipc::Incoming;
 use ostd::syscall::{self, SyscallResult};
 use recovery_demo::wire::Msg;

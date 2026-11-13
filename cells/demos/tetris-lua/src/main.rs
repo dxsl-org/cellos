@@ -11,16 +11,14 @@
 #![allow(unsafe_code)]
 #![allow(static_mut_refs)]
 
+// Links the Tier-A C library (libc symbols) the C objects call.
 extern crate alloc;
+extern crate posix_shim;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 
 // All implementation-specific imports are gated so the fallback stub compiles
 // cleanly when no ELF C compiler is available (lua_c_unavailable).
-#[cfg(not(lua_c_unavailable))]
-use api::display::PixelFormat;
-#[cfg(not(lua_c_unavailable))]
-use api::input::{InputEvent, KeyState, KeySym};
 #[cfg(not(lua_c_unavailable))]
 use core::ffi::{c_char, c_int};
 #[cfg(not(lua_c_unavailable))]
@@ -33,18 +31,22 @@ use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 #[cfg(not(lua_c_unavailable))]
 use ostd::task::yield_now;
+#[cfg(not(lua_c_unavailable))]
+use wire::display::PixelFormat;
+#[cfg(not(lua_c_unavailable))]
+use wire::input::{InputEvent, KeyState, KeySym};
 
 declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
 #[cfg(not(lua_c_unavailable))]
-const SURF_W: u32 = api::display::FALLBACK_WIDTH;
+const SURF_W: u32 = wire::display::FALLBACK_WIDTH;
 #[cfg(not(lua_c_unavailable))]
-const SURF_H: u32 = api::display::FALLBACK_HEIGHT;
+const SURF_H: u32 = wire::display::FALLBACK_HEIGHT;
 
 // ── Full implementation (requires Lua C library) ──────────────────────────────
 

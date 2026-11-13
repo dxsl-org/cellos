@@ -1,6 +1,6 @@
 //! IPC regrouping: move a view into another frame or out into its own.
 
-use api::display::{FramePlacement, FrameRef, ViewOpResponse, ViewOpResult, ViewRef};
+use wire::display::{FramePlacement, FrameRef, ViewOpResponse, ViewOpResult, ViewRef};
 
 use super::{Frame, FrameRegistry, MAX_FRAMES, MAX_VIEWS_PER_FRAME};
 
@@ -33,7 +33,7 @@ impl FrameRegistry {
             .ok_or(ViewOpResult::FrameNotFound)?;
         if target.frame_id == source.frame_id {
             return Ok(response(
-                api::display::compositor_ops::GROUP_VIEW,
+                wire::display::compositor_ops::GROUP_VIEW,
                 target.frame_id,
                 dst.generation,
                 view_ref,
@@ -72,7 +72,7 @@ impl FrameRegistry {
         };
         self.refresh(target.frame_id);
         Ok(response(
-            api::display::compositor_ops::GROUP_VIEW,
+            wire::display::compositor_ops::GROUP_VIEW,
             target.frame_id,
             dst_gen,
             view_ref,
@@ -115,7 +115,7 @@ impl FrameRegistry {
         self.unlink(view.view_id, source.frame_id);
         let frame_id = self.insert_single_frame(view, caller_tid, (x, y, w, h));
         Ok(response(
-            api::display::compositor_ops::DETACH_VIEW,
+            wire::display::compositor_ops::DETACH_VIEW,
             frame_id,
             1,
             view,

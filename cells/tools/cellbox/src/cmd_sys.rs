@@ -215,9 +215,9 @@ const NET_CALL_TICKS: u64 = 500;
 
 /// `ifconfig` / `ip` — query and print the network interface IP address from service-net.
 pub fn cmd_ifconfig(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
-    use api::ipc::{NetRequest, NetResponse};
+    use wire::ipc::{NetRequest, NetResponse};
 
-    let Some(net_tid) = provider_tid(api::syscall::service::NET) else {
+    let Some(net_tid) = provider_tid(abi::syscall::service::NET) else {
         crate::executor::shell_println("ifconfig: network service (/bin/net) is not running");
         return Ok(());
     };

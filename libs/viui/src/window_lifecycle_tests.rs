@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use api::display::{
+use wire::display::{
     compositor_events, ConfigureKind, Rect, WindowCloseRequest, WindowConfigure, WindowState,
     WindowStateChanged,
 };

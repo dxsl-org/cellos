@@ -9,11 +9,12 @@
 
 #![forbid(unsafe_code)]
 
-use api::{benchmark::ViBenchmark, ViError};
 use ostd::ring_channel::ChannelHost;
 use ostd::syscall::{
     sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
 };
+use types::ViError;
+use wire::benchmark::ViBenchmark;
 
 const SELF_PATH: &str = "/bin/bench-probe";
 
@@ -42,14 +43,14 @@ impl ViBenchmark for IpcFastpathBench {
         "ipc_fastpath"
     }
 
-    fn setup(&mut self) -> api::ViResult<()> {
+    fn setup(&mut self) -> types::ViResult<()> {
         let host = ChannelHost::new().ok_or(ViError::OutOfMemory)?;
 
         if !sys_set_spawn_args("fastpath-echo") {
             return Err(ViError::IO);
         }
 
-        self.echo_tid = match sys_spawn_pinned(SELF_PATH, api::TaskPriority::Normal as u8, 0) {
+        self.echo_tid = match sys_spawn_pinned(SELF_PATH, abi::TaskPriority::Normal as u8, 0) {
             SyscallResult::Ok(tid) if tid != 0 => tid,
             _ => return Err(ViError::NotFound),
         };
@@ -80,7 +81,7 @@ impl ViBenchmark for IpcFastpathBench {
         Ok(())
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         let host = self.host.as_ref().ok_or(ViError::NotFound)?;
         let endpoint = host.endpoint();
 
@@ -96,7 +97,7 @@ impl ViBenchmark for IpcFastpathBench {
         Ok(0)
     }
 
-    fn teardown(&mut self) -> api::ViResult<()> {
+    fn teardown(&mut self) -> types::ViResult<()> {
         if self.echo_tid != 0 {
             // Stop the echo before its channel Grant is freed: the client's view
             // must not outlive the memory under it.

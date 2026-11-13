@@ -22,8 +22,8 @@ use crate::{
     virtio_net::NetDev,
     vmm,
 };
-use api::hypervisor::ViVmExit;
-use api::syscall::service;
+use abi::hypervisor::ViVmExit;
+use abi::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_get_resolution;
@@ -373,12 +373,12 @@ fn forward_input_events(
     }
     for ev in ostd::input::poll_events(16) {
         match ev {
-            api::input::InputEvent::Key(ke) => {
-                let pressed = ke.state == api::input::KeyState::Pressed
-                    || ke.state == api::input::KeyState::Repeated;
+            wire::input::InputEvent::Key(ke) => {
+                let pressed = ke.state == wire::input::KeyState::Pressed
+                    || ke.state == wire::input::KeyState::Repeated;
                 #[cfg(feature = "board-rpi3")]
                 if pressed {
-                    use api::input::KeySym;
+                    use wire::input::KeySym;
                     match ke.keysym {
                         KeySym::Return => pl011.push_rx(b'\r'),
                         KeySym::Backspace => pl011.push_rx(0x7f),
@@ -403,17 +403,17 @@ fn forward_input_events(
                 };
                 input.push_key(code, pressed);
             }
-            api::input::InputEvent::MouseMove { x, y, .. } => {
-                use api::services::vmm_session::{abs_position, ABS_X, ABS_Y};
+            wire::input::InputEvent::MouseMove { x, y, .. } => {
+                use wire::vmm_session::{abs_position, ABS_X, ABS_Y};
                 let (width, height) = ostd::syscall::sys_get_resolution();
                 input.push_abs(ABS_X, abs_position(x, width));
                 input.push_abs(ABS_Y, abs_position(y, height));
             }
-            api::input::InputEvent::MouseButton { button, state } => {
-                let pressed = state == api::input::KeyState::Pressed;
+            wire::input::InputEvent::MouseButton { button, state } => {
+                let pressed = state == wire::input::KeyState::Pressed;
                 input.push_mouse_button(crate::virtio_input::button_code(button), pressed);
             }
-            api::input::InputEvent::MouseScroll { dy, .. } => {
+            wire::input::InputEvent::MouseScroll { dy, .. } => {
                 input.push_mouse_scroll(dy);
             }
         }

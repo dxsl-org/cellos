@@ -24,7 +24,7 @@ pub struct BinOverlay {
 }
 
 impl BinOverlay {
-    /// `store_base_lba`/`store_sectors` = `api::disk::PART_CELLSTORE_*` on the
+    /// `store_base_lba`/`store_sectors` = `abi::disk::PART_CELLSTORE_*` on the
     /// primary disk `dev`. The cell-store FAT is mounted with prefix `/bin` so
     /// `/bin/<cell>` strips to `<cell>` at the FAT root — matching the layout
     /// gen_disk writes into the cell-store.

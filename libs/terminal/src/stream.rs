@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Typed handles over the canonical kernel pipe owner, never a local authority table.
-use api::cell_session::{ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, Status, Writer};
+use abi::cell_session::{ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, Status, Writer};
 
 macro_rules! reference {
     ($name:ident) => {
@@ -159,7 +159,7 @@ impl Operation {
         self.prepare(path, context_len, None)
     }
     /// Route 2: launch `path` from ELF bytes the caller supplies in a grant it owns
-    /// (`api::cell_session::PREPARE_ROUTE_ELF`). The kernel authorizes the edge as an
+    /// (`abi::cell_session::PREPARE_ROUTE_ELF`). The kernel authorizes the edge as an
     /// ELF launch, which never carries a capability-bearing ceiling.
     pub fn prepare_child_elf(
         self,
@@ -184,7 +184,7 @@ impl Operation {
             other => return other,
         }
         let vfs =
-            ostd::service::provider_tid(api::syscall::service::VFS).ok_or(Status::NotFound)?;
+            ostd::service::provider_tid(abi::syscall::service::VFS).ok_or(Status::NotFound)?;
         let (grant, len) =
             ostd::fs::read_full_via_grant(path, vfs).map_err(|_| Status::NotFound)?;
         let prepared = self.prepare_child_elf(path, grant, len, context_len);
@@ -200,15 +200,15 @@ impl Operation {
         if path.is_empty()
             || path.len() > 4096
             || path.as_bytes().contains(&0)
-            || !(api::cell_session::CONTEXT_HEADER_LEN..=api::cell_session::CONTEXT_MAX)
+            || !(abi::cell_session::CONTEXT_HEADER_LEN..=abi::cell_session::CONTEXT_MAX)
                 .contains(&context_len)
         {
             return Err(Status::Malformed);
         }
         let route = if elf.is_some() {
-            api::cell_session::PREPARE_ROUTE_ELF
+            abi::cell_session::PREPARE_ROUTE_ELF
         } else {
-            api::cell_session::PREPARE_ROUTE_PATH
+            abi::cell_session::PREPARE_ROUTE_PATH
         };
         let mut body = [0u8; 4144];
         let mut w = Writer::new(&mut body);
@@ -468,7 +468,7 @@ impl PreparedChild {
         &mut self,
         kind: u16,
         slot: u16,
-        issuer: api::service_binding::ServiceBinding,
+        issuer: abi::service_binding::ServiceBinding,
         receipt: ReceiptRef,
     ) -> Result<(), Status> {
         let mut body = [0u8; 64];
@@ -490,7 +490,7 @@ impl PreparedChild {
     }
     pub fn authorize_input(
         &mut self,
-        issuer: api::service_binding::ServiceBinding,
+        issuer: abi::service_binding::ServiceBinding,
         stdin_writer: Endpoint,
         control_writer: Endpoint,
     ) -> Result<(), Status> {

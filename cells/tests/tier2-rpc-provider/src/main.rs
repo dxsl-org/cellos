@@ -28,8 +28,6 @@
 extern crate alloc;
 
 use alloc::format;
-use api::ipc::IPC_BUF_SIZE;
-use api::services::ipc::{VfsRequest, VfsResponse};
 use ostd::io::println;
 use ostd::service::{service, ServiceRef};
 use ostd::syscall::{sys_exit, sys_recv, sys_send, SyscallResult};
@@ -37,17 +35,19 @@ use tier2_rpc_proto::{
     checksum, decode_request, encode_response, EchoResponse, METHOD_ECHO, METHOD_UNAUTHORIZED,
     UNAUTHORIZED,
 };
+use wire::ipc::IPC_BUF_SIZE;
+use wire::ipc::{VfsRequest, VfsResponse};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
 // No capability bit is declared: `LookupServiceBound` (allowlist bit 37) is open,
 // and `Send`/`Recv` are ordinary IPC.
-api::declare_syscalls![Log, Exit, Send, Recv, LookupServiceBound];
+abi::declare_syscalls![Log, Exit, Send, Recv, LookupServiceBound];
 
 ostd::cell_main!(cell_main);
 

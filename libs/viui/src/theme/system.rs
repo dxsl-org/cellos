@@ -7,7 +7,7 @@
 //! (`ViApp::set_theme`) or draws itself.
 
 use super::{SystemPalette, ViTheme, DARK_THEME, LIGHT_THEME, PAPER_THEME};
-use api::display::AppearancePalette;
+use wire::display::AppearancePalette;
 
 impl SystemPalette {
     pub const fn from_appearance(palette: AppearancePalette) -> Self {

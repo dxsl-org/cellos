@@ -11,7 +11,9 @@ use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use api::*;
+use abi::*;
+use types::*;
+use wire::*;
 
 /// Mock async TCP stack for scalability testing
 struct MockAsyncTcpStack {

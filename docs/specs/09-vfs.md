@@ -7,7 +7,7 @@
 
 ## 1. VFS Contract (The Interface)
 
-Trong Cellos, VFS là một bộ các **Traits** định nghĩa trong `libs/api` để đảm bảo tính hoán đổi giữa các bản Implementation.
+Trong Cellos, VFS là một bộ các **Traits** định nghĩa trong `libs/abi` (`abi::fs`) để đảm bảo tính hoán đổi giữa các bản Implementation.
 
 * **Stable ABI**: Các Trait được bọc trong `#[repr(C)]` để đảm bảo ứng dụng không bị vỡ khi nâng cấp Cell hệ thống.
 * **Async by Design**: Mọi thao tác I/O đều trả về `Future`, tận dụng tối đa mô hình phi tập trung của Cellos.
@@ -64,7 +64,7 @@ Quyết định và lý lẽ nằm ở [ADR 09c](09c-vfs-directory-capabilities-
 chỉ ghi mô hình đang chạy.
 
 Một cell không còn phải đặt câu hỏi "tôi có được đọc path này không". Nó cầm một
-**directory handle** (`api::dir_handles::ViDirHandle` — kiểu riêng, **không phải**
+**directory handle** (`abi::dir_handles::ViDirHandle` — kiểu riêng, **không phải**
 `CapId`) và gửi `(handle, tên)`. Vì `tên` không được chứa separator, VFS resolve ra
 đúng một mức bên trong thư mục của handle: **không có path nào ngoài handle mà cell
 diễn đạt được**, nên không còn gì để check.
@@ -78,7 +78,7 @@ diễn đạt được**, nên không còn gì để check.
 | `CloseDir { dir }` | Trả lại `dir` **và mọi handle dẫn xuất từ nó** |
 | `SealPaths` | Một chiều. Từ đây mọi request path-addressed của cell đó bị `Err(3)` |
 
-**Kiểm tra tên làm trên byte thô, trước mọi normalize** (`api::dir_name`): rỗng, `.`,
+**Kiểm tra tên làm trên byte thô, trước mọi normalize** (`wire::dir_name`): rỗng, `.`,
 `..`, mọi `/` hoặc `\`, byte điều khiển/NUL, quá dài, và UTF-8 không hợp lệ đều bị từ
 chối. Không normalize trước — normalize chính là nơi sinh ra lỗ traversal.
 

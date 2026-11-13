@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use core::sync::atomic::{AtomicU32, Ordering};
 use driver_gpio::Pl061Gpio;
 use driver_serial::Pl011Uart;

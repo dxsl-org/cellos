@@ -1,6 +1,6 @@
 use alloc::collections::BTreeMap;
-use api::display::SurfaceRole;
 use types::ViError;
+use wire::display::SurfaceRole;
 
 use super::{SurfaceState, MAX_SURFACES, MAX_SURFACE_DIM};
 
@@ -107,7 +107,7 @@ impl SurfaceTable {
 
 #[cfg(test)]
 mod tests {
-    use api::display::PixelFormat;
+    use wire::display::PixelFormat;
 
     use super::*;
 

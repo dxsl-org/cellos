@@ -5,14 +5,14 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
-use api::ipc::{
-    save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
-};
-use api::services::proto::vfs::VfsError;
+use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use cellos_fs::format::BLOCK_SIZE;
 use sha2::{Digest, Sha256};
 use types::CellId;
+use wire::ipc::{
+    save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
+};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -68,7 +68,7 @@ fn call<'a>(
     resp: &'a mut [u8; IPC_BUF_SIZE],
 ) -> VfsResponse<'a> {
     let mut request = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(req, &mut request).expect("request fits");
+    wire::ipc::encode(req, &mut request).expect("request fits");
     crate::dispatch::handle_request(vfs, &request, Some(caller), resp)
 }
 
@@ -100,8 +100,8 @@ fn staged(vfs: &mut VfsManager, dst: &str, bytes: &[u8]) -> Option<u32> {
     ) else {
         return None;
     };
-    for (index, piece) in bytes.chunks(api::ipc::VFS_SAVE_CHUNK).enumerate() {
-        let offset = (index * api::ipc::VFS_SAVE_CHUNK) as u64;
+    for (index, piece) in bytes.chunks(wire::ipc::VFS_SAVE_CHUNK).enumerate() {
+        let offset = (index * wire::ipc::VFS_SAVE_CHUNK) as u64;
         if !ok(
             vfs,
             ALICE,

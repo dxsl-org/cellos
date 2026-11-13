@@ -5,9 +5,9 @@
 //! size. The session is bound to that sender for the VM's whole life: only it
 //! may forward input, resize the guest display, or end the guest. Every other
 //! sender's message is dropped. The session protocol is
-//! `api::services::vmm_session`.
+//! `wire::vmm_session`.
 
-use api::services::vmm_session::{
+use wire::vmm_session::{
     self as vmm_ipc, display_size_valid, VmmInputForwardRequest, VmmLaunchReply,
     VmmLaunchRequest, VmmResizeRequest,
 };
@@ -100,7 +100,7 @@ impl AppSession {
     /// Tell the launcher the guest will not run (boot failed before the run
     /// loop, which otherwise reports the exit through the GPU presenter).
     pub fn report_exit(&self, code: u32) {
-        let event = api::services::vmm_session::VmmEvent::Exited { code };
+        let event = wire::vmm_session::VmmEvent::Exited { code };
         let _ = sys_post(self.client_tid, &event.encode());
     }
 

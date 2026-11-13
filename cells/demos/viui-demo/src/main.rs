@@ -6,7 +6,6 @@ extern crate alloc;
 extern crate ostd;
 
 use alloc::boxed::Box;
-use api::display::PixelFormat;
 use ostd::{
     display::{linear::icons::LineIcon, wait_for_compositor, ViSurface},
     syscall::sys_exit,
@@ -17,11 +16,12 @@ use viui::{
     input_bridge::collect_input_events,
     managed_surface::{ClosePolicy, ManagedSurfaceApp, ManagedTick},
 };
+use wire::display::PixelFormat;
 
 // Counter is generated from counter.vi by viui-build into OUT_DIR.
 include!(concat!(env!("OUT_DIR"), "/counter.rs"));
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     GrantRegister,
     GrantShare,

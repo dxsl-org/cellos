@@ -7,13 +7,13 @@ use crate::{
         call, ok, Endpoint, EndpointRef, EndpointRights, Operation, OperationRef, ReceiptRef,
     },
 };
-use alloc::{collections::VecDeque, vec::Vec};
-use api::cell_session::frontend::{CreateForFrontendResultV1, CreateForFrontendV1};
-use api::cell_session::trust::BeginTrustConfirmationV1;
-use api::cell_session::{
+use abi::cell_session::frontend::{CreateForFrontendResultV1, CreateForFrontendV1};
+use abi::cell_session::trust::BeginTrustConfirmationV1;
+use abi::cell_session::{
     ChildRefV1, InputOp, KernelOp, ObjectRefV1, PrincipalV1, Reader, Status, VfsOp, Writer,
 };
-use api::service_binding::ServiceBinding;
+use abi::service_binding::ServiceBinding;
+use alloc::{collections::VecDeque, vec::Vec};
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,7 +197,7 @@ impl TerminalSession {
         create: impl FnOnce(&mut Self, OperationRef, ObjectRefV1, &mut [u8]) -> Result<(), Status>,
     ) -> Result<Self, Status> {
         let operation = Operation::create(None)?.reference();
-        let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
+        let owner = ostd::session::service_binding(abi::syscall::service::INPUT)?;
         let mut body = [0u8; 48];
         let mut w = Writer::new(&mut body);
         w.reference(operation.raw())?;
@@ -286,7 +286,7 @@ impl TerminalSession {
         let control_ref = r.reference()?;
         let owner = r.binding()?;
         r.finish()?;
-        if ostd::session::service_binding(api::syscall::service::INPUT)? != owner {
+        if ostd::session::service_binding(abi::syscall::service::INPUT)? != owner {
             return Err(Status::Stale);
         }
         let mut stdio = [None; 4];
@@ -681,11 +681,11 @@ impl TerminalSession {
         payload[..4].copy_from_slice(&code.to_le_bytes());
         payload[4..8].copy_from_slice(&modifiers.to_le_bytes());
         payload[8] = pressed;
-        api::services::session::validate_event(1, &payload)?;
+        wire::session::validate_event(1, &payload)?;
         self.submit_action(1, &payload)
     }
     pub fn submit_text(&mut self, text: &str) -> Result<u64, Status> {
-        api::services::session::validate_text(text.as_bytes())?;
+        wire::session::validate_text(text.as_bytes())?;
         if text.is_empty() || text.len() > 512 {
             return Err(Status::Malformed);
         }
@@ -716,7 +716,7 @@ impl TerminalSession {
     }
     /// Entire paste validation occurs before the first owner mutation.
     pub fn submit_paste(&mut self, text: &str) -> Result<u64, Status> {
-        api::services::session::validate_paste(text.as_bytes())?;
+        wire::session::validate_paste(text.as_bytes())?;
         let mut body = [0u8; 48];
         let mut w = Writer::new(&mut body);
         w.reference(self.reference.0)?;
@@ -877,7 +877,7 @@ fn input(
 ) -> Result<usize, Status> {
     let h = ostd::session::service_call(
         owner,
-        api::syscall::service::INPUT,
+        abi::syscall::service::INPUT,
         operation.raw(),
         op as u16,
         mutating,
@@ -896,7 +896,7 @@ fn vfs(
 ) -> Result<usize, Status> {
     let h = ostd::session::service_call(
         owner,
-        api::syscall::service::VFS,
+        abi::syscall::service::VFS,
         operation.raw(),
         op as u16,
         true,
@@ -1115,7 +1115,7 @@ impl TerminalSession {
             None => None,
         };
         let vfs_owner = if !cwd.is_empty() {
-            Some(ostd::session::service_binding(api::syscall::service::VFS)?)
+            Some(ostd::session::service_binding(abi::syscall::service::VFS)?)
         } else {
             None
         };
@@ -1130,20 +1130,20 @@ impl TerminalSession {
                     let path = core::str::from_utf8(cwd).map_err(|_| Status::UnsupportedInput)?;
                     let mut send = [0u8; 4096];
                     let mut recv = [0u8; 4096];
-                    let req = api::ipc::VfsRequest::OpenRootDir { path };
+                    let req = wire::ipc::VfsRequest::OpenRootDir { path };
                     let response = ostd::ipc::service_call_typed_bounded::<
                         _,
-                        api::ipc::VfsResponse<'_>,
+                        wire::ipc::VfsResponse<'_>,
                     >(
                         owner.tid as usize, &req, &mut send, &mut recv, 100
                     )
                     .map_err(|_| Status::Indeterminate)?;
                     let id = match response {
-                        api::ipc::VfsResponse::DirHandle(handle) => handle.0,
+                        wire::ipc::VfsResponse::DirHandle(handle) => handle.0,
                         _ => return Err(Status::Denied),
                     };
-                    lease.dir = Some(api::dir_handles::ViDirHandle(id));
-                    if ostd::session::service_binding(api::syscall::service::VFS)? != owner {
+                    lease.dir = Some(abi::dir_handles::ViDirHandle(id));
+                    if ostd::session::service_binding(abi::syscall::service::VFS)? != owner {
                         return Err(Status::Stale);
                     }
                     ObjectRefV1 {

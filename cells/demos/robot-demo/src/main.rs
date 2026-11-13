@@ -13,7 +13,7 @@ extern crate alloc;
 mod mqtt;
 mod sht3x;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_i2c_gpio::BitBangI2c;
 use hal_gpio::{PinDir, ViGpio};
@@ -30,7 +30,7 @@ declare_manifest!(
     uart = false
 );
 #[cfg(not(test))]
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     RecvTimeout,

@@ -1,5 +1,5 @@
 use super::alloc::vec;
-use api::display::SurfaceRole;
+use wire::display::SurfaceRole;
 
 use super::*;
 

@@ -27,7 +27,7 @@
 //! ```
 
 use crate::app::{AppContext, AppEvent};
-use api::syscall::{SyscallSet, ViSyscall};
+use abi::syscall::{SyscallSet, ViSyscall};
 
 // ── SyscallSet profiles ───────────────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ macro_rules! app_entry {
         spawn    = $spawn:literal,
         handler  = $handler:expr $(,)?
     ) => {
-        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
+        $crate::__declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
@@ -259,7 +259,7 @@ macro_rules! app_entry {
         help     = $help:literal,
         handler  = $handler:expr $(,)?
     ) => {
-        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
+        $crate::__declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
@@ -277,7 +277,7 @@ macro_rules! app_entry {
     };
     // Full explicit 3-cap form + explicit protection class (Manifest v2 opt-in)
     // — e.g. an FFI cell requesting
-    // `tier = api::manifest::PROTECTION_CLASS_FFI` for PKU key 2. Additive:
+    // `tier = abi::manifest::PROTECTION_CLASS_FFI` for PKU key 2. Additive:
     // every pre-existing form keeps the default PROTECTION_CLASS_LEGACY.
     (
         block_io = $bio:literal,
@@ -286,7 +286,7 @@ macro_rules! app_entry {
         tier     = $tier:expr,
         handler  = $handler:expr $(,)?
     ) => {
-        api::declare_manifest!(
+        $crate::__declare_manifest!(
             block_io = $bio,
             network = $net,
             spawn = $spawn,

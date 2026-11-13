@@ -13,7 +13,7 @@ use ostd::io::println;
 use ostd::service::provider_tid;
 use vipolling::{Event, Events, Poller};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = true,
     spawn = false,
@@ -24,7 +24,7 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TrySend,
@@ -77,7 +77,7 @@ fn cell_main() {
     }
 
     // Resolve network service
-    let net_tid = match provider_tid(api::syscall::service::NET) {
+    let net_tid = match provider_tid(abi::syscall::service::NET) {
         Some(tid) => {
             println(&alloc::format!(
                 "[async-echo] Network service discovered at tid: {}",
@@ -95,12 +95,12 @@ fn cell_main() {
 
     if net_tid > 0 {
         // Request TCP listen on port 7070
-        let req = api::ipc::NetRequest::TcpListen { port: ECHO_PORT };
+        let req = wire::ipc::NetRequest::TcpListen { port: ECHO_PORT };
         let mut req_buf = [0u8; 128];
         let mut resp_buf = [0u8; 128];
 
-        if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
-            ostd::ipc::service_call_typed_bounded::<_, api::ipc::NetResponse<'_>>(
+        if let Ok(wire::ipc::NetResponse::CapId(listener_cap)) =
+            ostd::ipc::service_call_typed_bounded::<_, wire::ipc::NetResponse<'_>>(
                 net_tid,
                 &req,
                 &mut req_buf,

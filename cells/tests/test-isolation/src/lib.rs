@@ -14,7 +14,7 @@ use ostd::prelude::*;
 #[allow(dead_code)]
 fn test_api_usage() {
     // We can reference API types
-    use api::fs::{OpenMode, SeekFrom};
+    use abi::fs::{OpenMode, SeekFrom};
     let _mode = OpenMode::Read;
     let _seek = SeekFrom::Start(0);
 }

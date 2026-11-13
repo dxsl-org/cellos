@@ -1,7 +1,7 @@
 //! Serving path-string addressed operations.
 
-use api::ipc::{VfsRequest, VfsResponse};
-use api::services::proto::vfs::VfsError;
+use wire::ipc::{VfsRequest, VfsResponse};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;

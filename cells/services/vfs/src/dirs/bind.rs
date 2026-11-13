@@ -23,9 +23,9 @@
 //! direction is deliberate: if a refused bind left path strings available, the
 //! failure would *widen* the child's reach relative to success.
 
+use abi::dir_attestation::ViDirHandleAttestation;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::dir_attestation::ViDirHandleAttestation;
 use types::CellId;
 
 use super::DirTable;
@@ -107,9 +107,9 @@ impl DirTable {
         &mut self,
         parent: Caller,
         child: Caller,
-        source: api::dir_handles::ViDirHandle,
+        source: abi::dir_handles::ViDirHandle,
         revoked: &mut Vec<u64>,
-    ) -> Result<api::dir_handles::ViDirHandle, super::DirError> {
+    ) -> Result<abi::dir_handles::ViDirHandle, super::DirError> {
         let path = self
             .owned(parent, source)
             .ok_or(super::DirError::UnknownHandle)?

@@ -4,17 +4,17 @@
 
 extern crate ostd;
 
-use api::cell_session::Status;
-use api::input::{InputEvent, KeyState};
+use abi::cell_session::Status;
 use ostd::app::{AppContext, AppEvent};
 use ostd::child_context::ChildContext;
 use ostd::io::println;
 use ostd::syscall::sys_exit;
 use terminal_sdk::input::EventKind;
 use terminal_sdk::session::TerminalSession;
+use wire::input::{InputEvent, KeyState};
 
 // No hardware caps — input delivery uses IPC only.
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
 ostd::cell_main!(cell_main);
 

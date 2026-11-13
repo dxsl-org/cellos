@@ -103,7 +103,8 @@ Boards
 
 Public API (Stable ABI)
 ├── libs/types          Core types (VAddr, PAddr, ViError)
-├── libs/api            Kernel-Cell boundary traits and syscall ABI
+├── libs/abi            Frozen Kernel-Cell syscall ABI and boundary traits
+├── libs/wire           Service contracts (IPC wire types, service traits)
 ├── libs/ostd           Cells' standard library (syscall wrappers, I/O, alloc)
 └── libs/*              attestation, http-core, text-engine, trusted ffi-posix support, ViUI, agent protocol
 

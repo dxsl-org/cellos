@@ -1,5 +1,5 @@
 use crate::caller::Caller;
-use api::syscall::service;
+use abi::syscall::service;
 
 const KMS_NAMESPACE: &str = "/srv/cellos";
 
@@ -65,7 +65,7 @@ mod tests {
         cell: CellId(5),
         generation: 1,
         sender_tid: 50,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     fn live_table() -> AccessTable {

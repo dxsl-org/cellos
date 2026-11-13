@@ -26,7 +26,7 @@ native browser engine. See [ADR-0017](../decisions/0017-dual-browser-strategy-oc
 
 The viewer requires the `ostd::ipc` exact-operation wrappers and the exhaustive
 error mappings in `ServiceRef` and `LocalEndpoint`; the syscall numbers and
-status wire format are defined in `api::syscall`. These dependencies must be
+status wire format are defined in `abi::syscall`. These dependencies must be
 committed with the viewer rather than supplied by a dirty working tree.
 
 From a clean checkout, use the RV64 PIC flags already used by CI:
@@ -45,7 +45,7 @@ provide that kernel backend.
 
 ## How the script engine is wired (and why it is Tier 2)
 
-1. Both engine cells declare `tier = api::manifest::PROTECTION_CLASS_UNTRUSTED`.
+1. Both engine cells declare `tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED`.
    The loader classifies a signed UNTRUSTED (or unsigned) artifact as a domain
    cell, so the kernel admits it to Tier 2 and binds a private page table to it
    (`kernel/src/task/launch.rs`, log line `[domain] admitted cell
@@ -218,8 +218,8 @@ What the port needed, and what it did **not**:
 
 | Need | Resolution |
 |---|---|
-| libc (memory, strings, stdio) | Already exported as the Tier-A C ABI in `libs/api/src/services/posix/`; the engine links no external libc, so this cell builds on CI's bare-elf GCC, which ships no `libc.a` |
-| math (`sqrt`, `pow`, `exp`, …) | Not from `libs/api`: `vendor/include/math.h` maps each name to a C wrapper that passes the `double` as raw 64-bit bits to `src/float_abi.rs` (over `libm`). No float crosses C↔Rust, because on x86_64 the C is SSE2 and the Rust is soft-float, so their float registers differ |
+| libc (memory, strings, stdio) | Already exported as the Tier-A C ABI in `libs/posix-shim/src/`; the engine links no external libc, so this cell builds on CI's bare-elf GCC, which ships no `libc.a` |
+| math (`sqrt`, `pow`, `exp`, …) | Not from `libs/posix-shim`: `vendor/include/math.h` maps each name to a C wrapper that passes the `double` as raw 64-bit bits to `src/float_abi.rs` (over `libm`). No float crosses C↔Rust, because on x86_64 the C is SSE2 and the Rust is soft-float, so their float registers differ |
 | float `printf`, `strtod` | Not needed: this release carries its own float64 parse/print (`dtoa.c`, `js_dtoa`/`js_atod`) and only formats `%u`/`%s` |
 | `setjmp`/`longjmp` | Not needed either (upstream includes `<setjmp.h>` in `dtoa.c` and never jumps); Tier A exports them regardless |
 | `malloc`/`free`/`realloc` | Tier A, over the cell's own heap (`ostd::declare_custom_heap!`) |

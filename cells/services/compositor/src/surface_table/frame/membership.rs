@@ -7,7 +7,7 @@
 //! (`owner_tid == None`), which closes every owner-gated IPC view op on it.
 
 use alloc::vec::Vec;
-use api::display::ViewRef;
+use wire::display::ViewRef;
 
 use super::{FrameRegistry, View, MAX_FRAMES, MAX_VIEWS_PER_FRAME};
 

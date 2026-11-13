@@ -45,10 +45,10 @@
 //! state and direction (`kernel/src/task/cell_session.rs:873-881`), and the pipe layer
 //! exposes reader/writer counts, not buffered bytes (`kernel/src/task/pipe.rs:462-464`).
 use super::*;
-use api::cell_session::trust::{
+use abi::cell_session::trust::{
     self as tr, BeginTrustConfirmationV1, TrustChallengeV1, TrustDecisionV1, TrustPromptV1,
 };
-use api::services::session::{event_kind, key_code, modifiers};
+use wire::session::{event_kind, key_code, modifiers};
 
 /// An uncollected final record is released this long after its deadline.
 const RETAIN_NS: u64 = tr::EXPIRY_MAX_NS;
@@ -180,7 +180,7 @@ impl Sessions {
         sender: usize,
     ) -> Result<(), Status> {
         if selector == 29 {
-            return if provider_tid(api::syscall::service::KMS).is_some_and(|tid| tid == sender) {
+            return if provider_tid(abi::syscall::service::KMS).is_some_and(|tid| tid == sender) {
                 Ok(())
             } else {
                 Err(Status::Denied)
@@ -512,7 +512,7 @@ impl Sessions {
         s.physical_paste = None;
         s.physical_paste_complete = false;
         s.physical_paste_discard = false;
-        s.decoder = api::services::session::SerialDecoder::new();
+        s.decoder = wire::session::SerialDecoder::new();
     }
 
     /// AcknowledgeControl from the controller while a foreground child is the reader: the
@@ -625,9 +625,9 @@ impl Sessions {
             let payload = bytes
                 .get(offset + 24..offset + 24 + length)
                 .ok_or(Status::Malformed)?;
-            api::services::session::validate_event(kind, payload)?;
+            wire::session::validate_event(kind, payload)?;
             if kind == 2 {
-                api::services::session::validate_text(payload)?;
+                wire::session::validate_text(payload)?;
             }
             offset += 24 + length;
         }

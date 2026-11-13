@@ -4,8 +4,8 @@
 
 use super::*;
 use crate::access::AccessTable;
-use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
-use api::cell_image::{ImageIdentity, ANCHOR_PRIVATE};
+use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
+use abi::cell_image::{ImageIdentity, ANCHOR_PRIVATE};
 use types::CellId;
 
 pub(super) const SSHD: Caller = Caller {

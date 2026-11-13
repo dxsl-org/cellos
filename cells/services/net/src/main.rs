@@ -5,7 +5,7 @@
 //!
 //! Drives a smoltcp TCP/IPv4 stack backed by the registered NIC Driver Cell.
 //! Provides BSD-style socket IPC for consumer cells via typed postcard messages
-//! (`api::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
+//! (`wire::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
 //! from `ostd::tls` are handled by the raw fallback in `handlers`.
 
 #[cfg(all(
@@ -35,10 +35,10 @@ extern crate alloc;
 ostd::declare_custom_heap!(8 * 1024 * 1024);
 
 // Declares network capability; the kernel grants NetworkCap at spawn.
-api::declare_manifest!(block_io = false, network = true, spawn = false);
+abi::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Narrow syscall allowlist -- kernel enforces this at dispatch (Phase 27).
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

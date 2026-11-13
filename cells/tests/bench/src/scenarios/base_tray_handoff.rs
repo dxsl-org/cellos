@@ -460,7 +460,7 @@ mod runner {
         ostd::io::println("[base-tray-handoff] START: BASE-01 native QEMU witness");
         ostd::syscall::sys_heartbeat(0);
 
-        let Some(vfs_tid) = ostd::service::provider_tid(api::syscall::service::VFS) else {
+        let Some(vfs_tid) = ostd::service::provider_tid(abi::syscall::service::VFS) else {
             fail("VFS service is not registered");
         };
         ostd::io::println(&alloc::format!(

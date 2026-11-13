@@ -1,10 +1,10 @@
-use api::input::{decode_event, INPUT_EVENT_OPCODE};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::executor::yield_now;
 use ostd::input::{InputEvent, KeyState, KeySym};
 use ostd::prelude::*;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_recv_timeout, SyscallResult};
+use wire::input::{decode_event, INPUT_EVENT_OPCODE};
 
 pub struct AsyncStdin;
 

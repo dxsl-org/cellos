@@ -11,7 +11,7 @@
 #![allow(unsafe_code)]
 
 use crate::device::BlkDevice;
-use api::syscall::virtio_probe::STATUS_DRIVER_OK;
+use abi::syscall::virtio_probe::STATUS_DRIVER_OK;
 use core::ptr::NonNull;
 use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio, BlockDevice};
 use virtio_drivers::{

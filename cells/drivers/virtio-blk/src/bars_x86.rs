@@ -6,7 +6,7 @@
 //! the transport, its failure record is no longer reachable; the cell reads
 //! `device_status` through the common configuration structure instead.
 
-use api::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_BARS};
+use abi::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_BARS};
 use core::ptr::NonNull;
 use ostd::mmio::{request_region, MmioRegion};
 use virtio_pci_transport::{caps::parse_caps, BarMapper};

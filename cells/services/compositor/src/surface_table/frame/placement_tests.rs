@@ -1,6 +1,6 @@
 extern crate std;
 
-use api::display::{FramePlacement, Rect, SnapZone, ViewOpResult};
+use wire::display::{FramePlacement, Rect, SnapZone, ViewOpResult};
 
 use super::placement::calculate_snap_rect;
 use super::tests::dummy_req;

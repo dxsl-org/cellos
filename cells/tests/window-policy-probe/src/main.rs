@@ -10,10 +10,10 @@ extern crate ostd;
 mod events;
 mod roles;
 
-use api::display::PixelFormat;
 use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::io::println;
 use ostd::task::yield_now;
+use wire::display::PixelFormat;
 
 use crate::events::EventHandler;
 use crate::roles::{parse_role, print_usage};

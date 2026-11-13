@@ -5,7 +5,7 @@
 //! the "tabstops" of the group and cannot drift from the windows.
 
 use alloc::vec::Vec;
-use api::display::{Rect, WindowState};
+use wire::display::{Rect, WindowState};
 
 use crate::stacking;
 use crate::surface_table::frame::Side;
@@ -185,7 +185,7 @@ pub fn restore_group(
         else {
             continue;
         };
-        let restore = api::display::compositor_ops::RESTORE;
+        let restore = wire::display::compositor_ops::RESTORE;
         if let Some(StateTransition::StateChanged(state)) =
             surface.request_state(other as u32, restore, surface.screen_rect())
         {

@@ -9,7 +9,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use api::*;
+use abi::*;
+use types::*;
+use wire::*;
 
 /// Example: Simple RAM-based FileSystem Cell
 /// Tests: How easy is it to implement FileSystem trait?

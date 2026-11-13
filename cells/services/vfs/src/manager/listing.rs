@@ -6,8 +6,8 @@
 //! or dropped: whatever does not fit one page is on the next one.
 
 use alloc::vec::Vec;
-use api::dir_name::join_component;
-use api::ipc::vfs_dir_page::{push_entry, EntryKind, ENTRY_HEADER_LEN};
+use wire::dir_name::join_component;
+use wire::ipc::vfs_dir_page::{push_entry, EntryKind, ENTRY_HEADER_LEN};
 
 use crate::backend::{FsBackend, ListPage};
 use crate::manager::VfsManager;

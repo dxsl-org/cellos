@@ -89,7 +89,7 @@ impl DmaBuf {
             return Err(DmaExportError::InvalidInput);
         }
         let flags = if device_write {
-            api::dma_export::EXPORT_DEVICE_WRITE
+            abi::dma_export::EXPORT_DEVICE_WRITE
         } else {
             0
         };

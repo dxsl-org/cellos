@@ -27,8 +27,8 @@ use cluster::{HailyClusterCoordinator, HailyNode, NodeRole, NodeState, TaskKind}
 use dto::{HailyRequest, HailyResponse};
 use tools::ToolRouter;
 
-api::declare_manifest!(block_io = false, network = true, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = true, spawn = true);
+abi::declare_syscalls![
     Send,
     Recv,
     RecvTimeout,
@@ -79,7 +79,7 @@ fn cell_main() {
     }
 
     // 2. Discover C2C Network Broker & HTTP Gateway
-    if let Some(broker_tid) = provider_tid(api::syscall::service::NET_BROKER) {
+    if let Some(broker_tid) = provider_tid(abi::syscall::service::NET_BROKER) {
         println(&format!(
             "[haily-agent] C2C Net Broker discovered at tid: {}",
             broker_tid

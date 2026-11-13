@@ -4,10 +4,10 @@
 //! its key, its name and the provider requests currently go to. A device found
 //! through 432 never uses the kernel block path; only [`DeviceRef::Kernel`] does.
 
+use abi::block_route::{DeviceKey, ViBlockRouteV1};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::block_route::{DeviceKey, ViBlockRouteV1};
 
 use super::discovery::device_name;
 use super::{BlockSys, Call, DeviceRef, BLOCK_REPLY_TICKS, STALL_RETRY_TICKS};

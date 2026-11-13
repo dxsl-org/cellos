@@ -11,8 +11,9 @@ path = "src/main.rs"
 
 [dependencies]
 # Enable mlibc feature: suppresses posix.rs C symbols so mlibc's libc.a can link.
-# CRITICAL: if you add api without this feature, you will get duplicate-symbol errors.
-api       = { path = "../../../libs/api", version = "0.1.0", features = ["mlibc"] }
+# CRITICAL: if you add posix-shim without this feature, you will get duplicate-symbol errors.
+abi       = { path = "../../../libs/abi", version = "0.1.0" }
+posix-shim = { path = "../../../libs/posix-shim", version = "0.1.0", features = ["mlibc"] }
 ostd      = { path = "../../../libs/ostd", version = "0.2.0" }
 mlibc-shim = { path = "../../../libs/mlibc-shim", version = "0.1.0" }
 

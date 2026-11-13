@@ -9,9 +9,9 @@ use alloc::string::ToString;
 
 use alloc::vec::Vec;
 
-use api::ipc::VfsResponse;
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::ipc::VfsResponse;
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;

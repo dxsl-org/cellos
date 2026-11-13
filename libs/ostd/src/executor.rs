@@ -1,7 +1,7 @@
 #![allow(unsafe_code)]
 
+use abi::completion::source;
 use alloc::sync::Arc;
-use api::completion::source;
 use core::future::Future;
 use core::mem::ManuallyDrop;
 use core::sync::atomic::{AtomicBool, Ordering};

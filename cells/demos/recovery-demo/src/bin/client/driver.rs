@@ -1,9 +1,9 @@
 //! Client-side calls. Results are what a consumer observes: worker replies,
 //! service lookups, the authority's status and the kernel verdict it relays.
 
+use abi::retirement::{RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
 use alloc::format;
 use alloc::vec::Vec;
-use api::retirement::{RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
 use ostd::io::println;
 use recovery_demo::wire::{Fault, Msg, FRAME_LEN};
 use recovery_demo::{AUTHORITY_SERVICE, WORKER_SERVICE};

@@ -5,10 +5,10 @@
 /// sender, and a measured image for that `(cell, generation)` signed as
 /// `program`. A missing trailer or record is an unknown caller: refused.
 pub(crate) fn caller_runs_program(
-    caller: Option<api::caller_identity::CallerIdentity>,
+    caller: Option<abi::caller_identity::CallerIdentity>,
     sender_tid: usize,
     program: &str,
-    resolve: impl Fn(u64, u64) -> Option<api::cell_image::CellImage>,
+    resolve: impl Fn(u64, u64) -> Option<abi::cell_image::CellImage>,
 ) -> bool {
     let Some(caller) = caller else {
         return false;
@@ -21,8 +21,8 @@ pub(crate) fn caller_runs_program(
 #[cfg(test)]
 mod tests {
     use super::caller_runs_program;
-    use api::caller_identity::CallerIdentity;
-    use api::cell_image::{CellImage, ImageIdentity, ANCHOR_DEV};
+    use abi::caller_identity::CallerIdentity;
+    use abi::cell_image::{CellImage, ImageIdentity, ANCHOR_DEV};
 
     const CELL: u64 = 40;
     const GENERATION: u64 = 7;

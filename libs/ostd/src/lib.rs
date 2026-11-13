@@ -6,7 +6,7 @@
 // proprietary Cells that link against this crate.
 
 // Disable `no_std` when running the test harness so `#[test]` can link (same
-// pattern as `libs/api/src/lib.rs`). Normal `riscv64gc-unknown-none-elf` builds
+// pattern as `libs/abi/src/lib.rs`). Normal `riscv64gc-unknown-none-elf` builds
 // keep `no_std`.
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(target_os = "none", feature(alloc_error_handler))]
@@ -18,7 +18,13 @@ extern crate alloc;
 
 // ostd - Cellos Standard Library for Cells
 
-pub use api::*;
+/// Cellos' error and result types, used throughout ostd's public API and prelude.
+pub use types::{ViError, ViResult};
+
+/// `app_entry!` expands to the manifest macro through this path, so a Cell that
+/// only calls `ostd::app_entry!` needs no direct `abi` dependency.
+#[doc(hidden)]
+pub use abi::declare_manifest as __declare_manifest;
 
 /// Runtime capability delegation handles — [`CapHandle`] for supervisor cells.
 pub mod cap;

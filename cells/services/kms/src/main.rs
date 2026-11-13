@@ -4,12 +4,12 @@
 
 extern crate ostd;
 
-use api::syscall::service;
+use abi::syscall::service;
 use kms_codec::KMS_MESSAGE_LEN;
 use service_kms::{boot_probe_store, KmsService, ServiceRegistrySnapshot};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

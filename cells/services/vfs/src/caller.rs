@@ -4,12 +4,12 @@
 //! thread reports its own tid while belonging to its parent cell, so its quota
 //! and its handles landed under a `CellId` matching no cell at all; and it made
 //! identity a property of the transport rather than something vouched for. Both
-//! disappear once the kernel states the identity — see `api::caller_identity`.
+//! disappear once the kernel states the identity — see `abi::caller_identity`.
 //!
 //! Every authorization decision and every quota charge in this cell reads a
 //! [`Caller`], and a [`Caller`] can only be built from an attested identity.
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use types::CellId;
 
 /// A caller VFS is willing to act for.
@@ -78,7 +78,7 @@ impl Caller {
 
     /// Whether the caller declared VfsMutate authority.
     pub fn may_mutate(&self) -> bool {
-        (self.flags & api::caller_identity::CALLER_FLAG_VFS_MUTATE) != 0
+        (self.flags & abi::caller_identity::CALLER_FLAG_VFS_MUTATE) != 0
     }
 }
 
@@ -157,7 +157,7 @@ mod tests {
             cell: CellId(4),
             generation: 1,
             sender_tid: 77,
-            flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+            flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
         };
         assert!(mutator.may_mutate());
     }

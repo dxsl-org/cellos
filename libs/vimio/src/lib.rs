@@ -14,14 +14,14 @@ use core::time::Duration;
 use ostd::service::provider_tid;
 use spin::Mutex;
 
-use api::ipc::{
-    encode_tcp_interests, net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent,
-    NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
-};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::ipc::{IpcError, IpcSubmitError, IpcTerminal, PendingCall};
 use ostd::syscall::{
     sys_get_scheduler_ticks, sys_recv_timeout, sys_try_recv, sys_try_send, sys_yield, SyscallResult,
+};
+use wire::ipc::{
+    encode_tcp_interests, net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent,
+    NET_READY_RECORD_BYTES, REACTOR_WAKE_OPCODE,
 };
 
 /// Scheduler ticks between mailbox checks while a TcpReady wait is outstanding:
@@ -346,7 +346,7 @@ impl Selector {
         };
 
         let mut req_buf = [0u8; 1536];
-        let Ok(req_bytes) = api::ipc::encode(&req, &mut req_buf) else {
+        let Ok(req_bytes) = wire::ipc::encode(&req, &mut req_buf) else {
             return Err(MioError::InvalidInput);
         };
 
@@ -374,7 +374,7 @@ impl Selector {
             Err(_) => return Err(MioError::IpcError),
         };
 
-        let Ok(response) = api::ipc::decode::<NetResponse<'_>>(&resp_buf[..len]) else {
+        let Ok(response) = wire::ipc::decode::<NetResponse<'_>>(&resp_buf[..len]) else {
             return Err(MioError::IpcError);
         };
 

@@ -11,7 +11,7 @@
 //! # Wire discipline (Spec 17)
 //!
 //! - Typed actor traffic rides the existing App SDK envelope
-//!   ([`api::services::proto::app_envelope`]) with kind `KIND_MESSAGE`, so
+//!   ([`wire::proto::app_envelope`]) with kind `KIND_MESSAGE`, so
 //!   [`Actor`] implementations keep receiving `Shutdown`, `CapRevoked`, and
 //!   hot-swap events on the same mailbox. No new byte-0 value
 //!   is claimed (§3).
@@ -38,7 +38,7 @@ use serde::Serialize;
 use crate::app::{AppContext, AppEvent};
 use crate::syscall::SyscallResult;
 use crate::{syscall, ViError, ViResult};
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
 
 pub use supervisor::{Backoff, Child, ChildSpec, Decision, Policy, Strategy, Tree};
 
@@ -120,9 +120,9 @@ impl<'a> ActorCtx<'a> {
     /// Encode `msg` in the App SDK envelope into `frame`; returns its length.
     ///
     /// The payload must fit the frame *after* the 2-byte envelope (Spec 17 §5).
-    fn frame<T: Serialize>(msg: &T, frame: &mut [u8; api::ipc::IPC_BUF_SIZE]) -> ViResult<usize> {
-        let mut scratch = [0u8; api::ipc::IPC_BUF_SIZE];
-        let payload_len = api::ipc::encode(msg, &mut scratch)
+    fn frame<T: Serialize>(msg: &T, frame: &mut [u8; wire::ipc::IPC_BUF_SIZE]) -> ViResult<usize> {
+        let mut scratch = [0u8; wire::ipc::IPC_BUF_SIZE];
+        let payload_len = wire::ipc::encode(msg, &mut scratch)
             .map_err(|_| ViError::InvalidArgument)?
             .len();
         let total = payload_len + HEADER_LEN;
@@ -141,7 +141,7 @@ impl<'a> ActorCtx<'a> {
     /// `InvalidArgument` when the message does not fit, `IO` when `to` is gone
     /// or its mailbox is full.
     pub fn send_msg<T: Serialize>(&mut self, to: usize, msg: &T) -> ViResult<()> {
-        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
         let len = Self::frame(msg, &mut frame)?;
         crate::ipc::post(to, &frame[..len]).map_err(|_| ViError::IO)
     }
@@ -152,7 +152,7 @@ impl<'a> ActorCtx<'a> {
     /// # Errors
     /// As [`ActorCtx::send_msg`].
     pub fn reply<T: Serialize>(&mut self, to: usize, msg: &T) -> ViResult<()> {
-        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
         let len = Self::frame(msg, &mut frame)?;
         self.app.reply(to, &frame[..len])
     }
@@ -168,7 +168,7 @@ impl<'a> ActorCtx<'a> {
         Resp: DeserializeOwned,
     {
         self.send_msg(to, req)?;
-        let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut buf = [0u8; wire::ipc::IPC_BUF_SIZE];
         match syscall::sys_recv(to, &mut buf) {
             SyscallResult::Ok(sender) if sender == to => {}
             SyscallResult::Ok(_) => return Err(ViError::IO),
@@ -177,7 +177,7 @@ impl<'a> ActorCtx<'a> {
         if buf[0] != MAGIC || buf[1] != KIND_MESSAGE {
             return Err(ViError::IO);
         }
-        api::ipc::decode::<Resp>(&buf[HEADER_LEN..]).map_err(|_| ViError::IO)
+        wire::ipc::decode::<Resp>(&buf[HEADER_LEN..]).map_err(|_| ViError::IO)
     }
 
     /// Spawn a cell from a path. Returns its tid.
@@ -248,7 +248,7 @@ pub fn run<A: Actor>(mut actor: A) -> ! {
     app.run_with_timeout(ACTOR_TICK_TICKS, move |app, ev| {
         let mut ctx = ActorCtx::new(app);
         match ev {
-            AppEvent::Message { sender_tid, data } => match api::ipc::decode::<A::Msg>(&data) {
+            AppEvent::Message { sender_tid, data } => match wire::ipc::decode::<A::Msg>(&data) {
                 Ok(msg) => actor.on_message(&mut ctx, sender_tid, msg),
                 Err(_) => log!(
                     "[actor] undecodable message from tid={sender_tid} (len={}): dropped loudly",

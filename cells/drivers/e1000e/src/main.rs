@@ -153,7 +153,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 ostd::run_app!(handler);
 
 // PcieDriverCap comes from the reviewed launch edge; no privileged manifest flag.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -166,7 +166,7 @@ api::declare_manifest!(
 // query, BAR0 claim, NIC role, exit, DMA grants) plus the MSI-X allocation and
 // the bounded IRQ park of `irq.rs`. Without this section the kernel would leave
 // the TCB's `u64::MAX` allowlist in place.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     TrySend,
     Recv,

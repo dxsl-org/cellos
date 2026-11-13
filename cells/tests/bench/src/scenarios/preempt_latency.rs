@@ -12,8 +12,8 @@
 extern crate alloc;
 use crate::framework::rt_report::RtReport;
 use alloc::vec::Vec;
-use api::ViError;
 use ostd::syscall::{sys_get_time, sys_recv, sys_send, SyscallResult};
+use types::ViError;
 
 const WARMUP: u32 = 50;
 const ITERS: u32 = 500;
@@ -39,7 +39,7 @@ pub fn run_probe() -> ! {
 }
 
 /// Orchestrator side: drive the probe `WARMUP + ITERS` times and report deltas.
-pub fn measure(probe_tid: usize) -> api::ViResult<RtReport> {
+pub fn measure(probe_tid: usize) -> types::ViResult<RtReport> {
     let mut samples: Vec<u64> = Vec::with_capacity(ITERS as usize);
     let mut rbuf = [0u8; 8];
     for i in 0..(WARMUP + ITERS) {

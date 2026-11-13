@@ -5,13 +5,13 @@ const CELL: Caller = Caller {
     cell: CellId(5),
     generation: 1,
     sender_tid: 50,
-    flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+    flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
 };
 
 #[test]
 fn guest_disk_is_writable_only_by_live_hypervisor() {
     let hv_table = AccessTable::with_service_lookup(|service_id| {
-        (service_id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
+        (service_id == abi::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
     });
     assert!(hv_table.can_read(CELL, "/mnt/sd/guest_disk.img"));
     assert!(hv_table.can_write(CELL, "/mnt/sd/guest_disk.img"));
@@ -28,7 +28,7 @@ fn death_clears_authorization_and_new_tid_is_authorized() {
     static LIVE_HV_TID: AtomicUsize = AtomicUsize::new(50);
 
     let table = AccessTable::with_service_lookup(|service_id| {
-        if service_id == api::hypervisor::HYPERVISOR_SERVICE_ID {
+        if service_id == abi::hypervisor::HYPERVISOR_SERVICE_ID {
             let tid = LIVE_HV_TID.load(Ordering::SeqCst);
             (tid != 0).then_some(tid)
         } else {
@@ -40,19 +40,19 @@ fn death_clears_authorization_and_new_tid_is_authorized() {
         cell: CellId(60),
         generation: 1,
         sender_tid: 50,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     let hv_v2 = Caller {
         cell: CellId(60),
         generation: 2,
         sender_tid: 52,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
     let impostor = Caller {
         cell: CellId(61),
         generation: 1,
         sender_tid: 99,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     // 1. Initial live hypervisor (TID 50) is authorized.
@@ -85,7 +85,7 @@ fn death_clears_authorization_and_new_tid_is_authorized() {
 #[test]
 fn guest_disk_ancestors_and_image_cannot_be_removed_recursively() {
     let hv_table = AccessTable::with_service_lookup(|service_id| {
-        (service_id == api::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
+        (service_id == abi::hypervisor::HYPERVISOR_SERVICE_ID).then_some(50)
     });
     for protected in [
         "/",

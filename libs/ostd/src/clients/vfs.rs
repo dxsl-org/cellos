@@ -9,14 +9,14 @@ mod stream;
 
 use crate::service::VfsRef;
 use crate::{ViError, ViResult};
+use abi::dir_handles::ViDirHandle;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{
-    Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE, VFS_SAVE_CHUNK,
-};
-use api::vfs_file_handles::ViVfsFileHandle;
 use read_file::wire::vfs_err_from_code;
 pub use stream::{VfsDirPage, VfsFileState, VFS_DIR_PAGE_MAX, VFS_READ_CHUNK_MAX};
+use wire::ipc::{
+    Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE, VFS_SAVE_CHUNK,
+};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 const DEFAULT_READ_FILE_MAX_BYTES: usize = 64 * 1024;
 

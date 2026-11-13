@@ -11,7 +11,7 @@
 
 use crate::error::TransportError;
 use crate::regs::COMMON_CFG_LEN;
-use api::pcie_function::{
+use abi::pcie_function::{
     PcieCap, ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64, PCIE_FUNCTION_BARS,
     PCIE_FUNCTION_CAPS_MAX,
 };

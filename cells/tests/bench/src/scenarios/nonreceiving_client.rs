@@ -6,16 +6,9 @@
 //! Before services replied without parking, the service sat in `Sending` until
 //! the first client exited, and the second call timed out.
 
+use abi::syscall::service;
+use abi::task::TaskPriority;
 use alloc::format;
-use api::ipc::IPC_BUF_SIZE;
-use api::services::ipc::ConfigRequest;
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-use api::services::proto::supervisor::{
-    OP_SNAPSHOT, OP_STATUS, PHASE_REFUSED, SNAPSHOT_REQUEST_LEN, STATUS_REJECTED_CALLER,
-    STATUS_REPLY_LEN,
-};
-use api::syscall::service;
-use api::task::TaskPriority;
 use ostd::service::provider_tid;
 use ostd::{
     io::println,
@@ -25,6 +18,13 @@ use ostd::{
         sys_spawn_pinned, sys_try_send, SyscallResult,
     },
     task::yield_now,
+};
+use wire::ipc::ConfigRequest;
+use wire::ipc::IPC_BUF_SIZE;
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use wire::proto::supervisor::{
+    OP_SNAPSHOT, OP_STATUS, PHASE_REFUSED, SNAPSHOT_REQUEST_LEN, STATUS_REJECTED_CALLER,
+    STATUS_REPLY_LEN,
 };
 
 const PROBE_PATH: &str = "/bin/bench-probe";
@@ -53,7 +53,7 @@ fn fail(reason: &str) -> ! {
 /// The request every client sends to `service_id`, in `buf`.
 fn request(service_id: u16, buf: &mut [u8; IPC_BUF_SIZE]) -> usize {
     match service_id {
-        service::CONFIG => api::ipc::encode(&ConfigRequest::Get("OS"), buf)
+        service::CONFIG => wire::ipc::encode(&ConfigRequest::Get("OS"), buf)
             .map(|bytes| bytes.len())
             .unwrap_or_else(|_| fail("config request encode")),
         service::SUPERVISOR => {
@@ -62,7 +62,7 @@ fn request(service_id: u16, buf: &mut [u8; IPC_BUF_SIZE]) -> usize {
             HEADER_LEN + SNAPSHOT_REQUEST_LEN
         }
         service::COMPOSITOR => {
-            buf[0] = api::display::compositor_ops::GET_SCREEN_SIZE;
+            buf[0] = wire::display::compositor_ops::GET_SCREEN_SIZE;
             1
         }
         _ => fail("unknown service"),
@@ -73,8 +73,8 @@ fn request(service_id: u16, buf: &mut [u8; IPC_BUF_SIZE]) -> usize {
 fn reply_matches(service_id: u16, reply: &[u8]) -> bool {
     match service_id {
         service::CONFIG => matches!(
-            api::ipc::decode::<api::services::ipc::ConfigResponse>(reply),
-            Ok(api::services::ipc::ConfigResponse::Value("Cellos"))
+            wire::ipc::decode::<wire::ipc::ConfigResponse>(reply),
+            Ok(wire::ipc::ConfigResponse::Value("Cellos"))
         ),
         service::SUPERVISOR => reply == SUPERVISOR_REFUSAL,
         service::COMPOSITOR => reply.len() == 8,

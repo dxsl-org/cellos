@@ -34,7 +34,7 @@ SECTIONS
         KEEP(*(__ViCell_manifest))
     }
 
-    /* syscall allowlist emitted by api::declare_syscalls!().
+    /* syscall allowlist emitted by abi::declare_syscalls!().
      * Must be a named output section so the kernel's get_section() can find it. */
     __ViCell_syscalls : ALIGN(4096) {
         KEEP(*(__ViCell_syscalls))

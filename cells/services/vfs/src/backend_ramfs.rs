@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 
 use crate::backend::{fill_page, FsBackend, ListPage};
 use crate::fs_error::FsError;
-use api::ipc::vfs_dir_page::EntryKind;
+use wire::ipc::vfs_dir_page::EntryKind;
 #[cfg(feature = "c2c-oracle-k1-fixture")]
 const ORACLE_CLUSTER_KEY: &[u8; 32] =
     include_bytes!(concat!(env!("OUT_DIR"), "/c2c-oracle-cluster.key"));

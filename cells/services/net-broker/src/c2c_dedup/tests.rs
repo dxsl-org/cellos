@@ -1,7 +1,7 @@
 use super::*;
 use crate::c2c_envelope::ServerEpoch;
 use crate::c2c_envelope::MAX_C2C_PAYLOAD;
-use api::services::cluster::CellNetId;
+use wire::cluster::CellNetId;
 mod saturation;
 
 fn key(id: u64) -> DedupKey {

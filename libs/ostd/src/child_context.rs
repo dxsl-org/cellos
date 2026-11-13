@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Canonical immutable invocation context; no shared spawn stash or secret logging.
-use alloc::vec::Vec;
-use api::cell_session::{
+use abi::cell_session::{
     KernelOp, ObjectRefV1, Reader, Status, Writer, CONTEXT_HEADER_LEN, CONTEXT_MAX,
     CONTEXT_MAX_GRANTS, GRANT_KIND_INPUT_FRONTEND, GRANT_LEN, HEADER_LEN,
 };
+use alloc::vec::Vec;
 
 /// Context grant slots. Kind-1 endpoint slots: Stdin/Control readers, Stdout/Stderr and
 /// Completion writers. Completion carries the child's completion-record stream; it is
@@ -45,7 +45,7 @@ impl Grant {
             kind: 2,
             rights: 0,
             slot: GrantSlot::Cwd,
-            owner_service: api::syscall::service::VFS as u64,
+            owner_service: abi::syscall::service::VFS as u64,
             object,
         };
         g.validate()?;
@@ -58,7 +58,7 @@ impl Grant {
             kind: GRANT_KIND_INPUT_FRONTEND,
             rights: 0,
             slot: GrantSlot::Frontend,
-            owner_service: api::syscall::service::INPUT as u64,
+            owner_service: abi::syscall::service::INPUT as u64,
             object,
         };
         g.validate()?;
@@ -82,7 +82,7 @@ impl Grant {
             2 => {
                 if self.slot != GrantSlot::Cwd
                     || self.rights != 0
-                    || self.owner_service != api::syscall::service::VFS as u64
+                    || self.owner_service != abi::syscall::service::VFS as u64
                 {
                     return Err(Status::Malformed);
                 }
@@ -91,7 +91,7 @@ impl Grant {
             GRANT_KIND_INPUT_FRONTEND => {
                 if self.slot != GrantSlot::Frontend
                     || self.rights != 0
-                    || self.owner_service != api::syscall::service::INPUT as u64
+                    || self.owner_service != abi::syscall::service::INPUT as u64
                 {
                     return Err(Status::Malformed);
                 }
@@ -475,7 +475,7 @@ mod tests {
                 grant.slot as u16,
                 grant.owner_service
             ),
-            (6, 0, 8, api::syscall::service::INPUT as u64)
+            (6, 0, 8, abi::syscall::service::INPUT as u64)
         );
         let grants = [
             Grant::endpoint(GrantSlot::Stdin, ENDPOINT, 1).unwrap(),
@@ -512,7 +512,7 @@ mod tests {
             Some(Status::Malformed)
         );
         forged = Grant::frontend(FRONTEND).unwrap();
-        forged.owner_service = api::syscall::service::VFS as u64;
+        forged.owner_service = abi::syscall::service::VFS as u64;
         assert_eq!(
             ChildContext::new(OPERATION, &[], b"", &[], &[forged]).err(),
             Some(Status::Malformed)
@@ -534,7 +534,7 @@ mod tests {
         // decodes but admits only a kind-1 writer, so kind 6 there is Malformed.
         let mut raw = [0u8; 40];
         raw[0..2].copy_from_slice(&6u16.to_le_bytes());
-        raw[8..16].copy_from_slice(&(api::syscall::service::INPUT as u64).to_le_bytes());
+        raw[8..16].copy_from_slice(&(abi::syscall::service::INPUT as u64).to_le_bytes());
         raw[16..32].copy_from_slice(&FRONTEND.to_bytes());
         for (slot, status) in [
             (5u16, Status::Malformed),
@@ -596,7 +596,7 @@ mod tests {
         );
         // A forged non-kernel owner or a non-endpoint kind in slot 5 is refused on encode and decode.
         let mut forged = one;
-        forged.owner_service = api::syscall::service::VFS as u64;
+        forged.owner_service = abi::syscall::service::VFS as u64;
         assert_eq!(
             ChildContext::new(OPERATION, &[], b"", &[], &[forged]).err(),
             Some(Status::Malformed)

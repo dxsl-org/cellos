@@ -1,7 +1,7 @@
 //! The Chrome window: guest start, event loop, status text.
 
-use api::display::{PixelFormat, Rect};
-use api::services::vmm_session::VmmEvent;
+use wire::display::{PixelFormat, Rect};
+use wire::vmm_session::VmmEvent;
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 use viui::theme;

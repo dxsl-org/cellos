@@ -12,8 +12,8 @@ DEFINITIONS
 
 "Cell" means a self-contained software unit compiled independently from
 the Cellos Standard Runtime that interacts with Cellos ONLY through the
-public interfaces declared in libs/api/ (ABI traits) and the public API
-of the Cellos Standard Runtime, and does not incorporate source code
+public interfaces declared in libs/abi/, libs/wire/ and libs/posix-shim/
+(ABI traits) and the public API of the Cellos Standard Runtime, and does not incorporate source code
 copied from MPL-2.0 covered files.
 
 "Single Address Space (SAS)" means the runtime model in which one or more
@@ -30,7 +30,8 @@ special permission to convey a Cell that:
   (a) links statically or dynamically against the Cellos Standard Runtime,
   (b) is loaded into the same virtual address space as the Cellos kernel,
   (c) communicates with the Cellos kernel and Standard Runtime ONLY through
-      the public interfaces in libs/api/ and the public API of ostd/,
+      the public interfaces in libs/abi/, libs/wire/ and libs/posix-shim/
+      and the public API of ostd/,
 
 under terms of your choosing, without such linking, loading, or address-space
 co-residence causing the Cell to be considered "Covered Software" or part of
@@ -67,7 +68,7 @@ This Exception does NOT apply if:
   3. The Cell communicates with the kernel through mechanisms other than
      the declared public ABI (e.g., direct memory manipulation of kernel
      data structures, unsafe pointer casts to kernel types not in
-     libs/api/).
+     libs/abi/, libs/wire/ or libs/posix-shim/).
 
 INTENT
 ------

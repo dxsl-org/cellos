@@ -46,7 +46,7 @@ pub(crate) enum DiskMount {
 /// FAT32 volume with the P1 geometry. Every mount carries its partition length:
 /// the FAT geometry on disk is untrusted and must not reach a neighbour.
 pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
-    use api::disk::*;
+    use abi::disk::*;
     let dev = discovery.primary;
     let mut plan = alloc::vec![
         // FAT32 P1 remains the interoperability/config override volume.
@@ -141,9 +141,9 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
 mod tests {
     use super::{disk_mounts, DiskMount};
     use crate::blk_router::{DeviceRef, Discovery};
+    use abi::disk::*;
     use alloc::string::String;
     use alloc::vec::Vec;
-    use api::disk::*;
 
     fn prefixes(plan: &[DiskMount]) -> Vec<&str> {
         plan.iter()

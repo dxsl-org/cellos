@@ -1,11 +1,11 @@
-use api::display::{CloseResponseAction, Rect, WindowCloseRequest, WindowStateChanged};
+use wire::display::{CloseResponseAction, Rect, WindowCloseRequest, WindowStateChanged};
 
 use super::SurfaceState;
 
 /// A close request awaiting an owner response.
 pub(super) struct PendingClose {
     pub(super) serial: u32,
-    pub(super) restore_state: api::display::WindowState,
+    pub(super) restore_state: wire::display::WindowState,
 }
 
 impl SurfaceState {
@@ -17,7 +17,7 @@ impl SurfaceState {
         // A configure the owner never answers must not keep its window from
         // closing; if it lands while the close is asked, the restore state
         // takes its outcome (`acknowledge_configure`).
-        if !self.is_window_managed() || self.state == api::display::WindowState::Closing {
+        if !self.is_window_managed() || self.state == wire::display::WindowState::Closing {
             return None;
         }
         let old_rect = self.screen_rect();
@@ -27,9 +27,9 @@ impl SurfaceState {
             serial: close_serial,
             restore_state,
         });
-        self.state = api::display::WindowState::Closing;
+        self.state = wire::display::WindowState::Closing;
         let close = WindowCloseRequest {
-            opcode: api::display::compositor_events::WINDOW_CLOSE_REQUEST,
+            opcode: wire::display::compositor_events::WINDOW_CLOSE_REQUEST,
             _pad: [0; 3],
             cap,
             serial: close_serial,
@@ -91,7 +91,7 @@ impl SurfaceState {
 
     pub(super) fn state_changed(&mut self, cap: u32) -> WindowStateChanged {
         WindowStateChanged {
-            opcode: api::display::compositor_events::WINDOW_STATE_CHANGED,
+            opcode: wire::display::compositor_events::WINDOW_STATE_CHANGED,
             state: self.state,
             _pad: [0; 2],
             cap,

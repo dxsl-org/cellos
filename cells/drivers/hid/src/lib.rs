@@ -37,7 +37,7 @@ pub mod report;
 extern crate alloc;
 
 use alloc::vec::Vec;
-use api::services::proto::input::{DEVICE_FRAME_LEN, EV_DEVICE, EV_KEY, EV_REL};
+use wire::proto::input::{DEVICE_FRAME_LEN, EV_DEVICE, EV_KEY, EV_REL};
 
 pub use decode::{decode_auto, decode_report, HidValue};
 pub use leds::{LedOutput, MAX_LED_REPORT};
@@ -48,7 +48,7 @@ pub use report::{parse_report_descriptor, HidCollection, HidReportMap};
 pub struct HidDeviceId(pub u32);
 
 /// Length of a device-identified input event: the `EV_DEVICE` frame of
-/// `api::services::proto::input`.
+/// `wire::proto::input`.
 pub const DEVICE_EVENT_LEN: usize = DEVICE_FRAME_LEN;
 
 /// Serialise an event from one logical HID interface.

@@ -1,6 +1,6 @@
 //! Typed IPC message enums for ViCell services.
 //!
-//! Cell crates link to `libs/wire` (directly or through `libs/api`), so these types are shared
+//! Cell crates link to `libs/wire` (directly or through `ostd`), so these types are shared
 //! across the IPC boundary without any unsafe casting.
 //!
 //! ## Wire format

@@ -16,11 +16,11 @@ use crate::backend::{fill_page, FsBackend, ListPage};
 use crate::fs_error::FsError;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::ipc::vfs_dir_page::EntryKind;
 use core::cell::RefCell;
 use ostd::syscall::{
     sys_close, sys_close_cap, sys_open, sys_open_cap, sys_read_cap, sys_readdir, sys_seek_cap,
 };
+use wire::ipc::vfs_dir_page::EntryKind;
 
 /// An open `OpenCap` plus the position it has read up to.
 struct ReadCursor {

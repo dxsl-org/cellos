@@ -1,11 +1,11 @@
-use api::ipc::{NetRequest, NetResponse};
 use ostd::service::NetRef;
 use ostd::{ViError, ViResult};
+use wire::ipc::{NetRequest, NetResponse};
 
 /// Send `message` prefixed with a two-byte little-endian length.
 pub(super) fn write_message(net: &mut NetRef, cap_id: u32, message: &[u8]) -> ViResult<()> {
     let length = (message.len() as u16).to_le_bytes();
-    let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
     net.call::<NetRequest, NetResponse>(
         &NetRequest::TcpSend {
             cap_id,
@@ -29,7 +29,7 @@ pub(super) fn write_message(net: &mut NetRef, cap_id: u32, message: &[u8]) -> Vi
 
 /// Receive one length-prefixed message into `buffer`.
 pub(super) fn read_message(net: &mut NetRef, cap_id: u32, buffer: &mut [u8]) -> ViResult<usize> {
-    let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
     let header = match net
         .call::<NetRequest, NetResponse>(&NetRequest::TcpRecv { cap_id, buf_len: 2 }, &mut response)
         .into_result()

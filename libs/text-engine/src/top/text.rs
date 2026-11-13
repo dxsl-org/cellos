@@ -8,10 +8,10 @@
 
 use super::sample::{CellSample, Cpu, Frame, Quality, Rows, SysMem, TaskSample};
 use super::{Field, RowKind};
+use abi::telemetry::TelemetryDecodeError;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use api::telemetry::TelemetryDecodeError;
 use core::fmt::Write;
 
 /// Widest line the batch renderer emits (the 79-column GUI grid).

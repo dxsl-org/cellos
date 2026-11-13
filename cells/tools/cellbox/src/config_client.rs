@@ -1,11 +1,11 @@
+use abi::caller_identity::CALLER_IDENTITY_LEN;
 use alloc::boxed::Box;
 use alloc::string::String;
-use api::caller_identity::CALLER_IDENTITY_LEN;
-use api::config::ViConfig;
-use api::ipc::{ConfigRequest, ConfigResponse, IPC_BUF_SIZE};
-use api::services::proto::config::ConfigError;
 use ostd::prelude::*;
 use ostd::sync::Mutex;
+use wire::config::ViConfig;
+use wire::ipc::{ConfigRequest, ConfigResponse, IPC_BUF_SIZE};
+use wire::proto::config::ConfigError;
 
 /// 2 s: one in-memory Config lookup or store; the service answers each request once.
 const CONFIG_CALL_TICKS: u64 = 200;
@@ -35,7 +35,7 @@ impl ConfigClient {
 
     fn endpoint() -> Option<usize> {
         for _ in 0..8 {
-            if let Some(tid) = ostd::service::provider_tid(api::syscall::service::CONFIG) {
+            if let Some(tid) = ostd::service::provider_tid(abi::syscall::service::CONFIG) {
                 return Some(tid);
             }
             ostd::task::yield_now();
@@ -61,7 +61,7 @@ impl ViConfig for ConfigClient {
     /// satisfy the signature; callers must therefore not poll config in a loop.
     /// The shell currently never calls `get()`, so nothing leaks today — the fix
     /// is to change the trait to return `String`, which is a change to
-    /// `libs/api` and out of this crate's scope.
+    /// `libs/wire` and out of this crate's scope.
     fn get(&self, key: &str) -> ViResult<&str> {
         let sid = Self::endpoint().ok_or(ViError::IO)?;
 
@@ -99,7 +99,7 @@ impl ViConfig for ConfigClient {
 /// request reaching into that tail would be overwritten: refuse it here.
 fn encode_set<'b>(key: &str, value: &str, buf: &'b mut [u8; IPC_BUF_SIZE]) -> ViResult<&'b [u8]> {
     let req = ConfigRequest::Set { key, value };
-    let encoded = api::ipc::encode(&req, &mut buf[..]).map_err(|_| ViError::InvalidArgument)?;
+    let encoded = wire::ipc::encode(&req, &mut buf[..]).map_err(|_| ViError::InvalidArgument)?;
     if encoded.len() > IPC_BUF_SIZE - CALLER_IDENTITY_LEN {
         return Err(ViError::InvalidArgument);
     }
@@ -109,7 +109,7 @@ fn encode_set<'b>(key: &str, value: &str, buf: &'b mut [u8; IPC_BUF_SIZE]) -> Vi
 /// Map service-config's reply to a `Set`. Only the service decides admission;
 /// [`ConfigError::Denied`] is a refusal, anything else unexpected is unavailability.
 fn set_reply(raw: &[u8]) -> ViResult<()> {
-    match api::ipc::decode::<ConfigResponse>(raw) {
+    match wire::ipc::decode::<ConfigResponse>(raw) {
         Ok(ConfigResponse::Ok) => Ok(()),
         Ok(ConfigResponse::Err(code)) if code == ConfigError::Denied as u8 => {
             Err(ViError::PermissionDenied)
@@ -136,7 +136,7 @@ mod tests {
 
     fn reply(response: ConfigResponse<'_>) -> alloc::vec::Vec<u8> {
         let mut out = [0u8; 64];
-        api::ipc::encode(&response, &mut out)
+        wire::ipc::encode(&response, &mut out)
             .expect("encodes")
             .to_vec()
     }

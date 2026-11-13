@@ -14,10 +14,10 @@ mod view;
 #[cfg(test)]
 mod tests;
 
+use abi::telemetry::{header_flags, request, TelemetrySnapshot, CELL_LEN, HEADER_LEN, TASK_LEN};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use api::telemetry::{header_flags, request, TelemetrySnapshot, CELL_LEN, HEADER_LEN, TASK_LEN};
 use ostd::syscall::{self, SyscallError};
 use text_engine::top::sample::{Frame, Rows, Sampler};
 use text_engine::top::text::TopError;

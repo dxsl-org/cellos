@@ -4,12 +4,12 @@ use super::super::super::stream::{
 };
 use super::support::{MockOps, MockReply};
 use crate::ViError;
+use abi::dir_handles::ViDirHandle;
 use alloc::vec;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::vfs_dir_page::{push_entry, EntryKind, CHANGED, COMPLETE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::ipc::vfs_dir_page::{push_entry, EntryKind, CHANGED, COMPLETE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 fn packed(entries: &[(EntryKind, &str)]) -> Vec<u8> {
     let mut out = vec![0u8; VFS_DIR_PAGE_MAX];

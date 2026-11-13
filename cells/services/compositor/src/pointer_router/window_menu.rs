@@ -2,7 +2,7 @@
 //! re-checked when an item runs (the screen may change while it is open).
 
 use alloc::vec::Vec;
-use api::display::Rect;
+use wire::display::Rect;
 
 use crate::stacking;
 use crate::surface_table::{FrameRegistry, SurfaceTable};
@@ -140,7 +140,7 @@ fn covers(outer: Rect, inner: Rect) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use api::display::SurfaceRole;
+    use wire::display::SurfaceRole;
 
     use super::*;
 

@@ -1,7 +1,7 @@
-use api::input::{InputEvent, MouseButton};
-use api::services::vmm_session as evdev;
+use wire::input::{InputEvent, MouseButton};
+use wire::vmm_session as evdev;
 
-// The Linux evdev codes of `api::services::vmm_session`, widened to the u32
+// The Linux evdev codes of `wire::vmm_session`, widened to the u32
 // code field of the producer frame.
 const REL_X: u32 = evdev::REL_X as u32;
 const REL_Y: u32 = evdev::REL_Y as u32;

@@ -1,10 +1,10 @@
 //! Snapshot and restore IPC envelopes shared by the supervisor swap flow.
 
-use api::services::proto::app_envelope::{
+use ostd::ipc::post;
+use wire::proto::app_envelope::{
     HEADER_LEN, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SNAPSHOT_LEN,
 };
-use api::services::proto::supervisor::HotswapError;
-use ostd::ipc::post;
+use wire::proto::supervisor::HotswapError;
 
 pub fn send_snapshot_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
     let mut buf = [0u8; SNAPSHOT_LEN];

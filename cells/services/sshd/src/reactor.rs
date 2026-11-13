@@ -1,10 +1,10 @@
 //! The TCP side: listen on :22, serve one connection at a time.
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::syscall::service;
+use abi::syscall::service;
 use ed25519_compact::KeyPair;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_get_time_ms, sys_yield};
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 
 use crate::session::{SessionPhase, SshSession};
 use crate::{authorized_keys, kex, log, LOGIN_GRACE_MS};

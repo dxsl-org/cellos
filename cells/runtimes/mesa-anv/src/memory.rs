@@ -62,7 +62,7 @@ impl ClientMemory for DmaClientMemory {
     fn export(&mut self, buf: &ClientBuffer, device_write: bool) -> Option<u64> {
         self.buffers
             .get(&buf.id)?
-            .export(0, buf.size, api::syscall::service::XE_GPU, device_write)
+            .export(0, buf.size, abi::syscall::service::XE_GPU, device_write)
             .ok()
     }
 

@@ -209,7 +209,7 @@ impl PeerTicket {
 /// # Example
 ///
 /// ```ignore
-/// api::declare_cluster!(mode = Private, name = "robots");
+/// wire::declare_cluster!(mode = Private, name = "robots");
 /// ```
 ///
 /// `mode` must be one of `Isolated`, `Public`, or `Private`.

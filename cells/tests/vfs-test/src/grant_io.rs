@@ -1,7 +1,7 @@
-use api::ipc::{VfsRequest, VfsResponse};
-use api::services::proto::vfs::VfsError;
 use ostd::grant::GrantHandle;
 use ostd::syscall::{sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share};
+use wire::ipc::{VfsRequest, VfsResponse};
+use wire::proto::vfs::VfsError;
 
 const WRITE_ONLY_GRANT: u8 = 1;
 const READ_WRITE_GRANT: u8 = 2;

@@ -19,7 +19,7 @@ use service_net_broker::bench_oracle::{
 use service_net_broker::local_ingress::ReplyStatus;
 
 #[cfg(feature = "restart-oracle")]
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
+const IPC_BUF_SIZE: usize = wire::ipc::IPC_BUF_SIZE;
 #[cfg(feature = "restart-oracle")]
 const RESTART_SEQUENCE: u64 = 0xC2C0_0300;
 #[cfg(feature = "restart-oracle")]
@@ -34,7 +34,7 @@ pub fn run() -> bool {
 
 #[cfg(feature = "restart-oracle")]
 pub fn run() -> bool {
-    let Some(old_tid) = provider_tid(api::syscall::service::NET_BROKER) else {
+    let Some(old_tid) = provider_tid(abi::syscall::service::NET_BROKER) else {
         print_result(0, 0, false, false, false, false, None);
         return false;
     };
@@ -48,7 +48,7 @@ pub fn run() -> bool {
     let stale_len = encode_echo_request(RESTART_SEQUENCE, RESTART_BODY, &mut tx).unwrap_or(0);
     let stale_indeterminate =
         stale_len != 0 && !matches!(sys_send(old_tid, &tx[..stale_len]), SyscallResult::Ok(_));
-    let gap_observed = provider_tid(api::syscall::service::NET_BROKER) != Some(old_tid);
+    let gap_observed = provider_tid(abi::syscall::service::NET_BROKER) != Some(old_tid);
     let Some(new_tid) = wait_for_replacement(old_tid) else {
         print_result(
             old_tid,
@@ -80,7 +80,7 @@ pub fn run() -> bool {
 #[cfg(feature = "restart-oracle")]
 fn wait_for_replacement(old_tid: usize) -> Option<usize> {
     for _ in 0..RELOOKUP_TURNS {
-        if let Some(tid) = provider_tid(api::syscall::service::NET_BROKER) {
+        if let Some(tid) = provider_tid(abi::syscall::service::NET_BROKER) {
             if tid != old_tid {
                 return Some(tid);
             }

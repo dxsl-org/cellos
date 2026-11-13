@@ -11,8 +11,8 @@ use std::vec::Vec;
 /// Kernel/IPC fakes with the exact signatures of the production `sys` re-exports.
 pub mod fake {
     use super::MODEL;
-    use api::cell_session::{KernelOp, ObjectRefV1, ResultHeaderV1, Status, HEADER_LEN};
-    use api::service_binding::ServiceBinding;
+    use abi::cell_session::{KernelOp, ObjectRefV1, ResultHeaderV1, Status, HEADER_LEN};
+    use abi::service_binding::ServiceBinding;
     use std::cell::{Cell, RefCell};
     use std::vec::Vec;
     thread_local! {
@@ -288,7 +288,7 @@ impl Model {
                 w.u16(0)?;
                 w.u16(8)?;
                 w.u16(0)?;
-                w.u64(api::syscall::service::INPUT as u64)?;
+                w.u64(abi::syscall::service::INPUT as u64)?;
                 w.reference(p.frontend)?;
                 w.u64(0)?;
                 w.u32(32)?;
@@ -592,7 +592,7 @@ impl Harness {
         };
         self.sessions.request(&record, Some(identity), tid);
         let envelope = fake::SENT.with(|s| s.borrow_mut().pop()).expect("a reply");
-        let api::ipc::InputResponse::SessionV1(result) = api::ipc::decode(&envelope).unwrap()
+        let wire::ipc::InputResponse::SessionV1(result) = wire::ipc::decode(&envelope).unwrap()
         else {
             panic!("wrong response")
         };
@@ -700,7 +700,7 @@ impl Harness {
         let controls = &self.session(reference).controls;
         for e in controls {
             assert_eq!(
-                api::services::session::validate_event(
+                wire::session::validate_event(
                     u16::from_le_bytes([e.bytes[16], e.bytes[17]]),
                     &e.bytes[24..]
                 ),

@@ -17,10 +17,10 @@
 // intended caller, but the wiring hasn't landed.
 #![allow(dead_code)]
 
-use api::ipc::{NetRequest, NetResponse};
 use ostd::service::NetRef;
 use ostd::syscall::sys_heartbeat;
 use ostd::{ViError, ViResult};
+use wire::ipc::{NetRequest, NetResponse};
 
 const HEARTBEAT_MS: u64 = 500;
 const STUN_MAGIC: u32 = 0x2112_A442;
@@ -35,7 +35,7 @@ pub fn query_reflexive_addr(
     stun_port: u16,
     rng_bytes: &[u8; 12],
 ) -> ViResult<([u8; 4], u16)> {
-    let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut resp = [0u8; wire::ipc::IPC_BUF_SIZE];
 
     // 1. Create UDP socket.
     let cap_id = match net
@@ -60,7 +60,7 @@ fn do_stun_query(
     stun_ip: [u8; 4],
     stun_port: u16,
     tx_id: &[u8; 12],
-    resp: &mut [u8; api::ipc::IPC_BUF_SIZE],
+    resp: &mut [u8; wire::ipc::IPC_BUF_SIZE],
 ) -> ViResult<([u8; 4], u16)> {
     // 2. Build 20-byte STUN Binding Request.
     let mut req = [0u8; 20];

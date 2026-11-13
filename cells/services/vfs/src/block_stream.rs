@@ -59,7 +59,7 @@ pub struct BlockStream {
     pos: u64,
     /// Absolute base LBA of this volume's partition, added to the relative
     /// sector before the block syscall so fatfs and the page cache only ever
-    /// see partition-relative sectors. `api::disk::PART_FAT32_BASE_LBA` for the
+    /// see partition-relative sectors. `abi::disk::PART_FAT32_BASE_LBA` for the
     /// `/mnt/sd` volume; `PART_CELLSTORE_BASE_LBA` for the `/bin` cell-store.
     base_lba: u64,
     /// Partition length in sectors. fatfs derives sector numbers from the
@@ -415,7 +415,7 @@ mod tests {
     use super::{BlockStream, StreamError};
     use crate::blk_router::DeviceRef;
     use crate::page_cache::SectorDevice;
-    use api::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
+    use abi::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
     use types::block_wire::BlockOutcome;
 
     #[test]

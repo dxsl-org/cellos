@@ -10,14 +10,14 @@
 
 use super::{KmsClient, KmsClientError, SSH_FRAME_TICKS};
 use crate::session::sha256;
+use abi::cell_session::ObjectRefV1;
 use alloc::vec::Vec;
-use api::cell_session::ObjectRefV1;
-use api::ipc::ssh_trust;
 use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshImportCommitRequestPayload,
     SshTransferBeginResponsePayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
     TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,
 };
+use wire::ipc::ssh_trust;
 
 /// Bound of the two commits (27, 28): 3,000 ticks = 30 s. A commit reads the store (at most
 /// 1 MiB) through the VFS, registers with or collects from the input owner, and an
@@ -40,7 +40,7 @@ fn denied_as_code<T>(
 }
 
 impl KmsClient {
-    /// Host-trust lookup: one of `api::ipc::ssh_trust` for the configured `host`/`port`
+    /// Host-trust lookup: one of `wire::ipc::ssh_trust` for the configured `host`/`port`
     /// and the complete SSH key blob `key`.
     pub fn trust_lookup(
         &self,
@@ -68,7 +68,7 @@ impl KmsClient {
 
     /// First trust (S9-4c): ask for a challenge for a host and port the store does not
     /// hold. `Ok(Ok((confirmation, challenge)))` to begin and commit; `Ok(Err(code))` with
-    /// an `api::ipc::ssh_trust` refusal (`KNOWN_EXACT`/`MISMATCH` need no prompt).
+    /// an `wire::ipc::ssh_trust` refusal (`KNOWN_EXACT`/`MISMATCH` need no prompt).
     /// `session`/`epoch` are the caller's own terminal session the confirmation runs on.
     pub fn trust_challenge(
         &self,
@@ -100,7 +100,7 @@ impl KmsClient {
     }
 
     /// First trust (S9-4c): complete the caller's own challenge; one of
-    /// `api::ipc::ssh_trust` (`PENDING` until the confirmation is decided).
+    /// `wire::ipc::ssh_trust` (`PENDING` until the confirmation is decided).
     pub fn trust_commit(&self, challenge: ObjectRefV1) -> Result<u8, KmsClientError> {
         if challenge.is_zero() {
             return Err(KmsClientError::InvalidPayload);

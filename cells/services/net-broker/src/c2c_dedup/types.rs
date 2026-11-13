@@ -1,4 +1,4 @@
-use api::services::cluster::CellNetId;
+use wire::cluster::CellNetId;
 
 use crate::c2c_envelope::{RetryClass, ServerEpoch, MAX_C2C_PAYLOAD};
 

@@ -22,7 +22,7 @@ fn begin_request() -> [u8; 128] {
     request(KmsOpcode::BeginRelayEnrollment, &payload.encode())
 }
 
-fn supervisor_caller(tid: usize) -> Option<api::caller_identity::CallerIdentity> {
+fn supervisor_caller(tid: usize) -> Option<abi::caller_identity::CallerIdentity> {
     Some(caller(90, 5, tid))
 }
 
@@ -69,7 +69,7 @@ fn enroll(service: &mut KmsService) -> (RelayEnrollmentBeginResponsePayload, Vec
     (begin, csr)
 }
 
-fn net_caller(tid: usize) -> Option<api::caller_identity::CallerIdentity> {
+fn net_caller(tid: usize) -> Option<abi::caller_identity::CallerIdentity> {
     Some(caller(60, 3, tid))
 }
 

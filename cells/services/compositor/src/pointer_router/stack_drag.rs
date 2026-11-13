@@ -4,8 +4,8 @@
 //! and tile group (or just move a lone window). Shift + drag of a lone tab
 //! slides it along the frame's top edge.
 
-use api::display::Rect;
-use api::input::{KeyEvent, KeyState, Modifiers};
+use wire::display::Rect;
+use wire::input::{KeyEvent, KeyState, Modifiers};
 
 use super::{Capture, PointerRouter, RouteContext};
 use crate::stacking;
@@ -76,7 +76,7 @@ pub(super) fn modifiers_after(key: &KeyEvent) -> Modifiers {
 /// A Shift/Ctrl/Alt/Win key event on its own: a modifier transition sent
 /// to the compositor only, never to be forwarded to an app.
 pub fn is_modifier_key(key: &KeyEvent) -> bool {
-    key.keysym == api::input::KeySym::Unknown
+    key.keysym == wire::input::KeySym::Unknown
         && matches!(
             key.scancode,
             0x2A | 0x36 | 0x1D | 0x61 | 0x38 | 0x64 | LEFT_META | RIGHT_META

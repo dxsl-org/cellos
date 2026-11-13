@@ -1,7 +1,7 @@
 //! Pointer routing and compositor-owned window decoration gestures.
 
-use api::display::Rect;
-use api::input::InputEvent;
+use wire::display::Rect;
+use wire::input::InputEvent;
 
 pub use stack_drag::{is_modifier_key, DragFeedback, DragMode};
 
@@ -113,7 +113,7 @@ pub struct PointerRouter {
     /// (its window went away); taken by the main loop.
     stale: Option<Rect>,
     /// Modifier keys held, as of the last key event (Win/Shift tab drags).
-    pub(super) modifiers: api::input::Modifiers,
+    pub(super) modifiers: wire::input::Modifiers,
     /// Ghost and target of a Win+drag in progress.
     pub(super) feedback: Option<DragFeedback>,
 }
@@ -128,13 +128,13 @@ impl PointerRouter {
             last_title_press: None,
             hover: None,
             stale: None,
-            modifiers: api::input::Modifiers(0),
+            modifiers: wire::input::Modifiers(0),
             feedback: None,
         }
     }
 
     /// Track the modifier keys from a key event.
-    pub fn note_key(&mut self, key: &api::input::KeyEvent) {
+    pub fn note_key(&mut self, key: &wire::input::KeyEvent) {
         self.modifiers = stack_drag::modifiers_after(key);
     }
 

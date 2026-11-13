@@ -25,21 +25,21 @@ mod sender_identity;
 mod snapshot;
 mod transfer;
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
+use abi::syscall::service;
+use ostd::ipc::Incoming;
+use ostd::service::{provider_tid, Handler, Request, ServeConfig};
+use ostd::syscall::sys_resolve_cell_image;
+use protocol::{encode_status, parse_power_request, HotswapRequest, SnapshotRequest};
 #[cfg(feature = "hostile-backend-recovery")]
-use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_SHUTDOWN, MAGIC};
-use api::services::proto::supervisor::{
+use wire::hostile_backend_recovery::KILL_REQUEST_OPCODE;
+use wire::proto::app_envelope::{HEADER_LEN, KIND_SHUTDOWN, MAGIC};
+use wire::proto::supervisor::{
     KERNEL_SENDER, OP_HOTSWAP, OP_POWER, OP_SNAPSHOT, OWNER_EXITED_LEN, OWNER_EXITED_NOTICE,
     OWNER_EXITED_RELAY, PHASE_HOTSWAP_DONE, PHASE_HOTSWAP_ERROR, PHASE_POWER, PHASE_REFUSED,
     STATUS_INVALID_REQUEST, STATUS_OK, STATUS_REJECTED_CALLER, STATUS_SERVICE_NOT_FOUND,
     STATUS_UNAVAILABLE,
 };
-use api::syscall::service;
-use ostd::ipc::Incoming;
-use ostd::service::{provider_tid, Handler, Request, ServeConfig};
-use ostd::syscall::sys_resolve_cell_image;
-use protocol::{encode_status, parse_power_request, HotswapRequest, SnapshotRequest};
 
 /// Signed program names (`__ViCell_image`) of the reviewed requesters. The
 /// kernel attests the sender's Cell; 441 answers with its measured image only
@@ -79,7 +79,7 @@ impl Handler for Supervisor {
             ostd::syscall::sys_exit(0);
         }
         if sender == KERNEL_SENDER
-            && payload.starts_with(&[MAGIC, api::services::proto::app_envelope::KIND_MESSAGE])
+            && payload.starts_with(&[MAGIC, wire::proto::app_envelope::KIND_MESSAGE])
             && payload.get(HEADER_LEN) == Some(&OP_POWER)
         {
             handle_power(None, Incoming::current(sender), &payload[HEADER_LEN..]);
@@ -224,7 +224,7 @@ fn supervisor_main() {
 // - spawn = true  → SpawnCap (for sys_spawn_from_path + sys_register_service)
 // - SupervisorCap is granted by the kernel loader via path match "/bin/supervisor"
 //   (not a manifest flag — v1 manifest is full; v2 requires a Law-1 bump)
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = true,

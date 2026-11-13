@@ -48,7 +48,7 @@ const MAX_PORTS: u32 = 8;
 /// harness to attach and inject, short enough that the cell still reports.
 const POLL_WINDOW_MS: u64 = 10_000;
 
-api::declare_syscalls![
+abi::declare_syscalls![
     // AppContext event-loop base set.
     Send,
     TrySend,

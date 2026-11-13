@@ -9,7 +9,7 @@
 //! (`BeginTrustConfirmation`). From then on input itself captures that session's
 //! typed/raw/paste input (it never reaches the child) and asks the session controller
 //! to render a fixed prompt built only from the descriptor (`TrustPrompt` /
-//! `TrustPromptEnd` control events, see `api::services::session::event_kind`). Only the
+//! `TrustPromptEnd` control events, see `wire::session::event_kind`). Only the
 //! registering KMS principal collects the decision (`CollectTrustDecision`).
 //!
 //! Every record here is a request or result *body* (the 24-byte header is separate).

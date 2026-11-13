@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_display_ssd1306::{Ssd1306, HEIGHT, WIDTH};
 use driver_gpio_bcm::BcmGpio;
 use driver_spi_bcm::BcmSpi0;

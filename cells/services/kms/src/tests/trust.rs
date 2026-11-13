@@ -8,8 +8,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use api::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT, CALLER_FLAG_VFS_MUTATE};
-use api::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
+use abi::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT, CALLER_FLAG_VFS_MUTATE};
 use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsRequestV1, KmsTrustQueryKind, SshAbortRequestPayload,
     SshChunkAckPayload, SshChunkRequestPayload, SshImportCommitRequestPayload,
@@ -17,6 +16,7 @@ use kms_codec::{
     TrustQueryBeginRequestPayload, KMS_SSH_CHUNK_LEN,
 };
 use sha2::{Digest, Sha256};
+use wire::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
 
 use crate::trust::{lookup, TrustIo};
 use crate::{KmsService, ServiceRegistrySnapshot};
@@ -90,7 +90,7 @@ impl TrustIo for MemStore {
 
     fn publish(&mut self, bytes: &[u8], expect: SaveExpect) -> SaveOutcome {
         if self.broken || !self.dir {
-            return SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED);
+            return SaveOutcome::NotPublished(wire::ipc::save_refusal::REFUSED);
         }
         let matches = match (expect, &self.file) {
             (SaveExpect::Absent, None) => true,
@@ -119,8 +119,8 @@ impl TrustIo for MemStore {
 /// bound to the session the confirming client began on. A final decision is handed out
 /// once, as the real owner does.
 pub mod owner {
-    use api::cell_session::trust::{TrustChallengeV1, TrustDecisionV1, DECISION_PENDING};
-    use api::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
+    use abi::cell_session::trust::{TrustChallengeV1, TrustDecisionV1, DECISION_PENDING};
+    use abi::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
     use sha2::{Digest, Sha256};
     use std::cell::{Cell, RefCell};
     use std::string::String;
@@ -214,10 +214,10 @@ pub mod owner {
     }
 }
 
-use api::cell_session::trust::{
+use abi::cell_session::trust::{
     DECISION_ACCEPT, DECISION_CANCELLED, DECISION_EXPIRED, DECISION_REJECT,
 };
-use api::cell_session::ObjectRefV1 as Ref;
+use abi::cell_session::ObjectRefV1 as Ref;
 
 const fn identity(cell_id: u64, tid: u64, flags: u32) -> CallerIdentity {
     CallerIdentity {

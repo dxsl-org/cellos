@@ -1,7 +1,7 @@
+use abi::block_route::{ViBlockRouteV1, MAX_BLOCK_ROUTES};
+use abi::syscall::{service, ProcessInfo};
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::block_route::{ViBlockRouteV1, MAX_BLOCK_ROUTES};
-use api::syscall::{service, ProcessInfo};
 use cellos_boot_config::{CellSpec, Registration, RestartPolicy};
 use ostd::syscall::{self, SyscallError, SyscallResult};
 
@@ -275,7 +275,7 @@ fn wait_for_block_route(tid: usize, timeout: u64) -> bool {
 #[cfg(test)]
 mod route_readiness_tests {
     use super::routes_name;
-    use api::block_route::{
+    use abi::block_route::{
         ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION, FLAG_PROVIDER_LIVE,
     };
 

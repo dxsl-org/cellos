@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Bottom Taskbar renderer and interaction handler for CellOS Desktop.
 
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::display::ViSurface;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_get_time;

@@ -11,9 +11,9 @@
 
 extern crate alloc;
 
+use abi::syscall::service;
 use alloc::format;
 use alloc::string::ToString;
-use api::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_heartbeat;

@@ -23,7 +23,7 @@ compile_error!("alpine-gui-guest is defined for the aarch64 guest path");
 extern crate alloc;
 
 // Manifest: requires HypervisorCap (allowlist bit 44).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -33,7 +33,7 @@ api::declare_manifest!(
 );
 
 // Narrow syscall allowlist enforced by the kernel.
-api::declare_syscalls![
+abi::declare_syscalls![
     // IPC / service discovery
     Send,
     TrySend,

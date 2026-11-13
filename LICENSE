@@ -19,7 +19,6 @@ ABI AND TYPE DEFINITIONS (permissive)
   libs/abi/        — Apache License, Version 2.0
   libs/wire/       — Apache License, Version 2.0
   libs/posix-shim/ — Apache License, Version 2.0
-  libs/api/        — Apache License, Version 2.0 (facade over the three above)
   libs/types/      — Mozilla Public License 2.0 (MPL-2.0)
   libs/kms-codec/  — Mozilla Public License 2.0 (MPL-2.0)
   Files that carry their own SPDX header keep that licence.
@@ -61,6 +60,6 @@ SUMMARY FOR COMMERCIAL USERS
   Cellos without license fees, provided you:
   1. Do not modify the Cellos kernel or ostd without sharing those
      modifications back under MPL-2.0 (file-level copyleft only), AND
-  2. Interact with the OS only through the public ABI in libs/api/
-     (libs/abi/, libs/wire/ and libs/posix-shim/ behind it).
+  2. Interact with the OS only through the public ABI in libs/abi/,
+     libs/wire/ and libs/posix-shim/.
   See libs/ostd/LICENSE-EXCEPTION for the full legal statement.

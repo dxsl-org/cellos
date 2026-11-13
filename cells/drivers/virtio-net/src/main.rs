@@ -34,13 +34,13 @@ mod mmio;
 #[cfg(target_arch = "x86_64")]
 mod pci_x86;
 
-use api::services::proto::nic::NicStatus;
 use device::NetDevice;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
 use ostd::service::{sender_is_live_provider, service};
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_register_nic_driver, sys_try_send};
+use wire::proto::nic::NicStatus;
 
 static STATE: Mutex<Option<NetDevice>> = Mutex::new(None);
 
@@ -115,7 +115,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 ostd::run_app!(handler);
 
 // PcieDriverCap is granted by loader.rs via path match (/bin/virtio-net).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,

@@ -38,7 +38,7 @@ mod regs;
 mod rings;
 mod shared;
 
-use api::pcie_function::{PcieBar, BAR_KIND_MEM32, BAR_KIND_MEM64};
+use abi::pcie_function::{PcieBar, BAR_KIND_MEM32, BAR_KIND_MEM64};
 use controller::Vmxnet3;
 use identity::{classify, QUERY_DEVICE_IDS, VENDOR_VMWARE};
 use ostd::app::{AppContext, AppEvent};
@@ -153,7 +153,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 ostd::run_app!(handler);
 
 // PcieDriverCap comes from the reviewed launch edge; no privileged manifest flag.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -165,7 +165,7 @@ api::declare_manifest!(
 // Exactly what the cell calls: `/bin/e1000e`'s set (AppContext base, exact-ID
 // PCIe query, BAR claims, NIC role, exit, DMA grant and free, MSI-X and the
 // bounded IRQ park) plus the 434 function record for BAR0/BAR1.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     TrySend,
     Recv,

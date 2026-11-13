@@ -1,7 +1,7 @@
 use super::super::types::{IngressDecision, QueuedReply, RequestKey, WorkerRequest};
 use super::BrokerState;
 use crate::local_ingress::ReplyStatus;
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 
 impl BrokerState {
     pub(super) fn immediate(

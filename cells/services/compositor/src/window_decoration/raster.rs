@@ -1,6 +1,6 @@
-use api::display::Rect;
 use ostd::display::linear::icons::{paint_icon, LineIcon, ICON_SIZE};
 use ostd::display::linear::{Bgra, Canvas, Radii, RoundRect, CONTROL_RADIUS};
+use wire::display::Rect;
 
 use super::palette::ChromePalette;
 use super::title::TitleFont;

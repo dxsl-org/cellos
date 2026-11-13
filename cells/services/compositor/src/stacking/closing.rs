@@ -1,7 +1,7 @@
 //! Closing tabs of a stack: the shown tab hands over to its neighbour, and
 //! "Close all tabs" asks each tab in turn.
 
-use api::display::{Rect, WindowState};
+use wire::display::{Rect, WindowState};
 
 use super::{deliver, show, sync};
 use crate::surface_table::{FrameRegistry, SurfaceTable};

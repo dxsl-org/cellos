@@ -33,7 +33,7 @@ extern crate alloc;
 use crate::service;
 use crate::tls::{tls_close, tls_connect, tls_read, tls_write};
 use crate::{ViError, ViResult};
-use api::services::proto::tls::{CONNECT_FAILED, MAX_SEND};
+use wire::proto::tls::{CONNECT_FAILED, MAX_SEND};
 
 /// Bound write-side zero-progress retries; receive never retries EOF or errors.
 const WRITE_RETRY_BUDGET: u32 = 100_000;

@@ -1,9 +1,9 @@
 //! Cell Tab title text (ADR-0027: a tab shows the application's name).
 
-use api::display::Rect;
 use ostd::display::linear::Bgra;
 use ostd::font_atlas::GlyphAtlas;
 use ostd::typography::INTER_SEMIBOLD;
+use wire::display::Rect;
 
 const TITLE_PX: f32 = 13.0;
 const ELLIPSIS: &str = "\u{2026}";

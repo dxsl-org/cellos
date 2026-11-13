@@ -1,6 +1,6 @@
 //! The guest scanout Grant and copies from it into the window surface.
 
-use api::display::Rect;
+use wire::display::Rect;
 use ostd::syscall::{sys_grant_copy_rows_owned_by, GrantRows};
 
 const BYTES_PER_PIXEL: usize = 4;

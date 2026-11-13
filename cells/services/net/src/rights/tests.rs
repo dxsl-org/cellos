@@ -1,6 +1,6 @@
 use super::*;
-use api::caller_identity::CALLER_FLAG_NET_RIGHTS_MASK;
-use api::ipc::IPC_BUF_SIZE;
+use abi::caller_identity::CALLER_FLAG_NET_RIGHTS_MASK;
+use wire::ipc::IPC_BUF_SIZE;
 
 /// Every `NetRequest` variant with its wire discriminant and required right.
 fn census() -> [(NetRequest<'static>, u8, Option<Right>); 21] {

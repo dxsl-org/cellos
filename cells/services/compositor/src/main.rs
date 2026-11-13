@@ -33,8 +33,6 @@ mod tiling;
 mod window_decoration;
 mod z_order;
 
-use api::display::Rect;
-use api::services::proto::input::INPUT_EVENT_OPCODE;
 use framebuffer::ScreenFb;
 use input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
 use ostd::io::println;
@@ -42,6 +40,8 @@ use ostd::service::{serve, Handler, Owner, Request, ServeConfig, Wait, WatchPoli
 use ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor};
 use render::render_frame;
 use surface_table::SurfaceTable;
+use wire::display::Rect;
+use wire::proto::input::INPUT_EVENT_OPCODE;
 use z_order::ZOrder;
 
 /// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.

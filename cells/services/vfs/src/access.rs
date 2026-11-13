@@ -220,11 +220,11 @@ fn default_service_lookup(_service_id: u16) -> Option<usize> {
 }
 
 #[cfg(target_os = "none")]
-fn default_image_lookup(cell: u64, generation: u64) -> Option<api::cell_image::CellImage> {
+fn default_image_lookup(cell: u64, generation: u64) -> Option<abi::cell_image::CellImage> {
     ostd::syscall::sys_resolve_cell_image(cell, generation)
 }
 
 #[cfg(not(target_os = "none"))]
-fn default_image_lookup(_cell: u64, _generation: u64) -> Option<api::cell_image::CellImage> {
+fn default_image_lookup(_cell: u64, _generation: u64) -> Option<abi::cell_image::CellImage> {
     None
 }

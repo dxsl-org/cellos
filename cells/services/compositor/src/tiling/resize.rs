@@ -1,7 +1,7 @@
 //! Resizing a tile group: the edge two glued frames share moves for both.
 
 use alloc::vec::Vec;
-use api::display::{ConfigureKind, Rect};
+use wire::display::{ConfigureKind, Rect};
 
 use super::{end, group_windows, MIN_H, MIN_W};
 use crate::stacking;

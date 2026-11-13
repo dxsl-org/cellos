@@ -32,12 +32,12 @@ use ostd::syscall::{
     sys_exit, sys_spawn_from_path, sys_spawn_from_path_raw, sys_try_recv, SyscallResult,
 };
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
 // GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
 // GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
 // one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
 // StateStash: publishes the owner argv each bound tool cell is spawned with.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -258,7 +258,7 @@ fn operator_approves(call: &ToolCall) -> bool {
 /// console's keystrokes while a call is in flight; gateway and tool replies
 /// complete their exact operations and never wait in the mailbox.
 fn discard_typed_ahead() {
-    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
     // Bounded by the mailbox depth: a persistent receive error cannot spin.
     for _ in 0..64 {
         if matches!(sys_try_recv(0, &mut frame), SyscallResult::Ok(0)) {

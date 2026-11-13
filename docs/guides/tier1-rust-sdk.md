@@ -135,7 +135,7 @@ ctx.reply(sender_tid, &my_bytes)?;
 Look up well-known services by ID:
 
 ```rust
-use api::service;
+use abi::syscall::service;
 
 let vfs_tid = ctx.lookup_service(service::VFS)?
     .ok_or(ViError::IO)?;
@@ -145,7 +145,7 @@ let net_tid = ctx.lookup_service(service::NET)?
     .ok_or(ViError::IO)?;
 ```
 
-Service IDs are defined in `libs/api/src/service.rs`. Modern code should use `ctx.vfs()` and `ctx.net()` instead of manual lookup.
+Service IDs are defined in `libs/abi/src/syscall.rs` (`abi::syscall::service`). Modern code should use `ctx.vfs()` and `ctx.net()` instead of manual lookup.
 
 ---
 
@@ -154,14 +154,14 @@ Service IDs are defined in `libs/api/src/service.rs`. Modern code should use `ct
 Declare what you need:
 
 ```rust
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,   // false — use VFS instead
     network = true,     // true if you use ctx.net()
     spawn = false,      // leave false unless you're init/shell
     gpio = false
 );
 
-api::declare_syscalls![Send, Recv, Log, Exit, LookupServiceBound];
+abi::declare_syscalls![Send, Recv, Log, Exit, LookupServiceBound];
 ```
 
 ---
@@ -176,12 +176,12 @@ ctx.request_input_focus();
 
 // In your event loop, handle:
 AppEvent::Input(input_event) => {
-    // input_event is an api::input::InputEvent
+    // input_event is a wire::input::InputEvent
     // (keyboard key / mouse move / button)
     match input_event {
-        api::input::InputEvent::Key { key, pressed } => { /* ... */ }
-        api::input::InputEvent::Motion { x, y } => { /* ... */ }
-        api::input::InputEvent::Button { button, pressed } => { /* ... */ }
+        wire::input::InputEvent::Key { key, pressed } => { /* ... */ }
+        wire::input::InputEvent::Motion { x, y } => { /* ... */ }
+        wire::input::InputEvent::Button { button, pressed } => { /* ... */ }
         _ => {}
     }
 }

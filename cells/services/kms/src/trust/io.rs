@@ -5,8 +5,8 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use api::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 use ostd::clients::vfs::VfsClient;
+use wire::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 
 use super::TrustIo;
 

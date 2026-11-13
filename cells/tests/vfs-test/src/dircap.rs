@@ -11,9 +11,9 @@
 //! Runs last, because sealing is one-way and every scenario before it needs the
 //! path-string operations.
 
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse};
-use api::vfs_file_handles::ViVfsFileHandle;
+use abi::dir_handles::ViDirHandle;
+use wire::ipc::{VfsRequest, VfsResponse};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::grant_io;
 use crate::{fail, pass, vfs_req};

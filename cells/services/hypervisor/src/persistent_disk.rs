@@ -1,6 +1,6 @@
 //! Opens the persistent guest block image through the VFS capability API.
 
-pub type PersistentDisk = (usize, api::vfs_file_handles::ViVfsFileHandle, u64);
+pub type PersistentDisk = (usize, wire::vfs_file_handles::ViVfsFileHandle, u64);
 
 /// Which file under `/mnt/sd` backs the guest's only disk, and whether the
 /// guest may write it.
@@ -22,18 +22,18 @@ pub const GUEST_DISK: DiskSpec = DiskSpec {
 const VFS_CALL_TIMEOUT_TICKS: u64 = 1_000;
 
 pub fn open(spec: DiskSpec) -> Result<Option<PersistentDisk>, ()> {
-    let Some(vfs_tid) = ostd::service::provider_tid(api::syscall::service::VFS) else {
+    let Some(vfs_tid) = ostd::service::provider_tid(abi::syscall::service::VFS) else {
         return Ok(None);
     };
     let mut poisoned = false;
     open_for(vfs_tid, spec, &mut poisoned).map(Some).ok_or(())
 }
 
-fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: &mut bool) {
-    let request = api::ipc::VfsRequest::CloseDir { dir: root };
-    let mut send_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
-    let mut response_buffer = [0u8; api::ipc::IPC_BUF_SIZE];
-    let result: Result<api::ipc::VfsResponse<'_>, _> = ostd::ipc::service_call_typed_bounded(
+fn close_partial(vfs_tid: usize, root: abi::dir_handles::ViDirHandle, poisoned: &mut bool) {
+    let request = wire::ipc::VfsRequest::CloseDir { dir: root };
+    let mut send_buffer = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let mut response_buffer = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let result: Result<wire::ipc::VfsResponse<'_>, _> = ostd::ipc::service_call_typed_bounded(
         vfs_tid,
         &request,
         &mut send_buffer,
@@ -54,8 +54,8 @@ fn close_partial(vfs_tid: usize, root: api::dir_handles::ViDirHandle, poisoned: 
 /// block-driver reply. A partial open returns `None`; callers retain persistent
 /// mode and reconnect through service discovery after an uncertain receive.
 pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<PersistentDisk> {
-    let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
-    let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let mut request = [0u8; wire::ipc::IPC_BUF_SIZE];
     let mut cleanup_root = None;
     macro_rules! call {
         ($step:literal, $request:expr) => {{
@@ -91,9 +91,9 @@ pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<P
             }
         }};
     }
-    let root_request = api::ipc::VfsRequest::OpenRootDir { path: "/" };
+    let root_request = wire::ipc::VfsRequest::OpenRootDir { path: "/" };
     let root = match call!("open-root", &root_request) {
-        api::ipc::VfsResponse::DirHandle(root) => root,
+        wire::ipc::VfsResponse::DirHandle(root) => root,
         other => {
             ostd::io::println(&alloc::format!(
                 "[hv-disk] open-root returned unexpected response: {:?}",
@@ -103,12 +103,12 @@ pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<P
         }
     };
     cleanup_root = Some(root);
-    let mnt_request = api::ipc::VfsRequest::OpenDir {
+    let mnt_request = wire::ipc::VfsRequest::OpenDir {
         dir: root,
         name: "mnt",
     };
     let mnt = match call!("open-mnt", &mnt_request) {
-        api::ipc::VfsResponse::DirHandle(mnt) => mnt,
+        wire::ipc::VfsResponse::DirHandle(mnt) => mnt,
         other => {
             ostd::io::println(&alloc::format!(
                 "[hv-disk] open-mnt returned unexpected response: {:?}",
@@ -118,12 +118,12 @@ pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<P
             return None;
         }
     };
-    let sd_request = api::ipc::VfsRequest::OpenDir {
+    let sd_request = wire::ipc::VfsRequest::OpenDir {
         dir: mnt,
         name: "sd",
     };
     let sd = match call!("open-sd", &sd_request) {
-        api::ipc::VfsResponse::DirHandle(sd) => sd,
+        wire::ipc::VfsResponse::DirHandle(sd) => sd,
         other => {
             ostd::io::println(&alloc::format!(
                 "[hv-disk] open-sd returned unexpected response: {:?}",
@@ -133,12 +133,12 @@ pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<P
             return None;
         }
     };
-    let file_request = api::ipc::VfsRequest::OpenFileAt {
+    let file_request = wire::ipc::VfsRequest::OpenFileAt {
         dir: sd,
         name: spec.name,
     };
     let file = match call!("open-file", &file_request) {
-        api::ipc::VfsResponse::FileHandle(file) => file,
+        wire::ipc::VfsResponse::FileHandle(file) => file,
         other => {
             ostd::io::println(&alloc::format!(
                 "[hv-disk] open-file returned unexpected response: {:?}",
@@ -149,9 +149,9 @@ pub fn open_for(vfs_tid: usize, spec: DiskSpec, poisoned: &mut bool) -> Option<P
         }
     };
     let path = alloc::format!("/mnt/sd/{}", spec.name);
-    let stat = api::ipc::VfsRequest::Stat(&path);
+    let stat = wire::ipc::VfsRequest::Stat(&path);
     match call!("stat", &stat) {
-        api::ipc::VfsResponse::Stat {
+        wire::ipc::VfsResponse::Stat {
             size,
             is_dir: false,
         } => Some((vfs_tid, file, size)),

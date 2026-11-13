@@ -11,8 +11,8 @@
 //! `sys_register_nic_driver()`: that role is the singleton NIC owner and
 //! claiming it would redirect network IPC to this cell.
 
-use api::ipc::{self, input_source, InputRequest};
 use driver_hid::{EvdevEvent, HidDeviceId, DEVICE_EVENT_LEN};
+use wire::ipc::{self, input_source, InputRequest};
 
 /// Register this cell as a raw event producer with the input service.
 ///

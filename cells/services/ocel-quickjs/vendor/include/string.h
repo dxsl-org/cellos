@@ -1,5 +1,5 @@
-/* Cellos freestanding declarations for the C ABI that libs/api exports
- * (api::services::posix). Implementations live in Rust; see
+/* Cellos freestanding declarations for the C ABI that libs/posix-shim exports
+ * (the `posix_shim` crate). Implementations live in Rust; see
  * cells/services/ocel-quickjs/README.md. Declarations only — no libc here. */
 #ifndef QJS_VIOS_STRING_H
 #define QJS_VIOS_STRING_H

@@ -1,6 +1,6 @@
 extern crate std;
 
-use api::display::{Rect, SnapZone, ViewOpResult};
+use wire::display::{Rect, SnapZone, ViewOpResult};
 
 use super::tests::dummy_req;
 use super::*;

@@ -82,7 +82,7 @@ tracking = "unsafe-allowlist re-review 2026-11-10: _sbrk aliasing + i32::MIN ove
 [[file]]
 path = "cells/demos/tetris-c/src/main.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): starts the Tetris-OS C core and exports its platform callbacks, one of which hands C the surface pointer. Re-reviewed 2026-11-10 (7 sites, 0 with SAFETY comments, 5 with `# Safety` docs): sound because all callbacks run on the single cell task under tetris_cell_run, and C bounds every surface write to 1024x768 — which holds only while vicell_platform.c's hardcoded SURF_W/SURF_H keep matching api::display::FALLBACK_*."
+reason = "C FFI (Tier 1b): starts the Tetris-OS C core and exports its platform callbacks, one of which hands C the surface pointer. Re-reviewed 2026-11-10 (7 sites, 0 with SAFETY comments, 5 with `# Safety` docs): sound because all callbacks run on the single cell task under tetris_cell_run, and C bounds every surface write to 1024x768 — which holds only while vicell_platform.c's hardcoded SURF_W/SURF_H keep matching wire::display::FALLBACK_*."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 review_by = "2027-02-08"

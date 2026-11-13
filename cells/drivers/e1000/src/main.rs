@@ -27,7 +27,6 @@ mod dispatch;
 mod dma_layout;
 mod identity;
 
-use api::services::proto::nic::NicStatus;
 use controller::E1000Controller;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use identity::{classify, sku_name, E1000Sku, QUERY_DEVICE_IDS, VENDOR_INTEL};
@@ -39,6 +38,7 @@ use ostd::sync::Mutex;
 use ostd::syscall::{
     sys_find_pcie_device_by_vendor, sys_register_nic_driver, sys_try_send, PcieDeviceInfo,
 };
+use wire::proto::nic::NicStatus;
 
 /// BAR0 window size — e1000 register space is 128 KiB.
 const E1000_BAR0_LEN: usize = 0x2_0000; // 128 KiB
@@ -187,7 +187,7 @@ ostd::run_app!(handler);
 
 // ── Capability manifest ───────────────────────────────────────────────────────
 // PcieDriverCap is granted by init via direct TCB write (not a manifest flag).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -203,7 +203,7 @@ api::declare_manifest!(
 // NIC registration, the try_send reply path, the exit path, and the DMA calls
 // behind `DmaBuf::alloc`/`authorize`. `Exit`/`Yield` carry no allowlist bit and
 // are always permitted; naming them documents the intent.
-api::declare_syscalls![
+abi::declare_syscalls![
     // AppContext event-loop base set.
     Send,
     TrySend,

@@ -14,13 +14,13 @@ extern crate alloc;
 extern crate ostd;
 
 use alloc::string::String;
-use api::display::PixelFormat;
 use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::syscall::{sys_exit, sys_read_log, sys_yield};
 use ostd::typography::{is_combining_mark, FontFace, TextFonts};
+use wire::display::PixelFormat;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Log,
     GpuGetResolution,
     GrantRegister,

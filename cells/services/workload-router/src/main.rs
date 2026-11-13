@@ -10,8 +10,8 @@ extern crate ostd;
 
 use ostd::io::println;
 
-api::declare_manifest!(block_io = false, network = true, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = true, spawn = false);
+abi::declare_syscalls![
     Send,
     Recv,
     TryRecv,

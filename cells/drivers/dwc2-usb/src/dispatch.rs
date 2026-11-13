@@ -1,12 +1,12 @@
 //! IPC request dispatcher for the LAN9514 NIC Driver Cell.
 //!
-//! Serves the NIC wire defined in [`api::services::proto::nic`], shared with
+//! Serves the NIC wire defined in [`wire::proto::nic`], shared with
 //! virtio-net and e1000. Only [`NicStatus::Ok`] means the frame went out; every
 //! other status is a refusal the Net Cell retries, and the value names which
 //! kind (the chip refused versus the driver was not ready).
 
 use crate::lan9514::Lan9514Device;
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 pub const FRAME_BUF: usize = 1514;
 pub const REPLY_BUF: usize = 2 + FRAME_BUF;

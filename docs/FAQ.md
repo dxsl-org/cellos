@@ -75,7 +75,7 @@ changes. No Pi4/Pi5/HiFive or other purchase/port is scheduled by this direction
 
 ## 7. Why no Linux compatibility?
 
-A POSIX compatibility shim is tracked in `libs/api/src/services/posix.rs` for basic
+A POSIX compatibility shim is tracked in `libs/posix-shim/src/lib.rs` for basic
 syscall forwarding, but full Linux ABI compatibility is not a goal.  Cellos is a
 research OS exploring a different design point; apps are written as Cells, not
 POSIX processes.  For Linux app compat, see Redox or Asterinas.

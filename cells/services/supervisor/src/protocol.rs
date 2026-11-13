@@ -1,5 +1,5 @@
 //! Parsing and encoding of the Supervisor Cell's requests and status replies.
-//! The bytes and frame layouts are owned by [`api::services::proto::supervisor`].
+//! The bytes and frame layouts are owned by [`wire::proto::supervisor`].
 //!
 //! Snapshot is global whole-RAM state, so the request is opcode-only. The App
 //! SDK hands the supervisor a zero-padded receive buffer; snapshot and power
@@ -11,12 +11,12 @@
 //! exist: the `/bin/shutdown` worker and the kernel's ACPI power-button relay
 //! (sender 0, `kernel/src/acpi/sci.rs`, poweroff only).
 
-use api::services::proto::supervisor::{
+use ostd::syscall::SystemPowerAction;
+use wire::proto::supervisor::{
     HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_POWER, OP_SNAPSHOT, OP_STATUS, PHASE_SNAPSHOT,
     POWER_ACTION_POWEROFF, POWER_ACTION_REBOOT, POWER_REQUEST_LEN, SNAPSHOT_REQUEST_LEN, STATUS_OK,
     STATUS_REPLY_LEN, STATUS_UNAVAILABLE, SVC_NAME_LEN,
 };
-use ostd::syscall::SystemPowerAction;
 
 /// Hotswap request from an authorized `hotswap` CLI caller.
 pub struct HotswapRequest<'a> {
@@ -140,12 +140,12 @@ pub fn encode_snapshot_unavailable() -> [u8; STATUS_REPLY_LEN] {
 #[cfg(test)]
 mod tests {
     use super::{parse_power_request, HotswapRequest, SnapshotRequest};
-    use api::services::proto::app_envelope::HEADER_LEN;
-    use api::services::proto::supervisor::{
+    use ostd::syscall::SystemPowerAction;
+    use wire::proto::app_envelope::HEADER_LEN;
+    use wire::proto::supervisor::{
         HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_POWER, OP_SNAPSHOT, POWER_ACTION_POWEROFF,
         POWER_ACTION_REBOOT, POWER_BUTTON_REQUEST, SVC_NAME_LEN,
     };
-    use ostd::syscall::SystemPowerAction;
 
     #[test]
     fn parse_accepts_canonical_service_request() {

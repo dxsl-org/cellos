@@ -1,4 +1,4 @@
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{
     BindingEpoch, BrokerBindingPayload, KmsErrorCode, ServiceNetBindingEpoch,
     ServiceNetBindingPayload,
@@ -174,8 +174,8 @@ pub(crate) enum SshClass {
 /// Classify an attested caller from the kernel-attested flag word.
 #[cfg(feature = "ssh-dev-custody")]
 pub(crate) fn classify_ssh(caller: &CallerIdentity) -> SshClass {
-    let sign = caller.flags & api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN != 0;
-    let admin = caller.flags & api::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN != 0;
+    let sign = caller.flags & abi::caller_identity::CALLER_FLAG_KMS_SSH_SIGN != 0;
+    let admin = caller.flags & abi::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN != 0;
     match (sign, admin) {
         (true, false) => SshClass::Login,
         (false, true) => SshClass::Admin,

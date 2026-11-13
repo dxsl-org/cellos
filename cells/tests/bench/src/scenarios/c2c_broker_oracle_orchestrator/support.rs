@@ -2,7 +2,7 @@ use super::{
     decode_posted, decode_ready, decode_summary, encode_config, ClientConfig, ClientSummary,
     CONFIG_BYTES, POSTED_BYTES, READY_BYTES, SUMMARY_BYTES,
 };
-use api::task::TaskPriority;
+use abi::task::TaskPriority;
 use ostd::service::provider_tid;
 use ostd::syscall::{
     sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
@@ -13,7 +13,7 @@ use service_net_broker::bench_oracle::{
 };
 use service_net_broker::local_ingress::ReplyStatus;
 
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
+const IPC_BUF_SIZE: usize = wire::ipc::IPC_BUF_SIZE;
 const PROBE_PATH: &str = "/bin/bench-probe";
 
 pub fn spawn_and_ready(config: ClientConfig) -> (usize, usize) {
@@ -56,7 +56,7 @@ pub fn recv_summary(tid: usize) -> ClientSummary {
 }
 
 pub fn broker_snapshot(sequence: u64) -> Option<OracleSnapshot> {
-    let broker_tid = provider_tid(api::syscall::service::NET_BROKER)?;
+    let broker_tid = provider_tid(abi::syscall::service::NET_BROKER)?;
     let mut tx = [0u8; IPC_BUF_SIZE];
     let mut rx = [0u8; IPC_BUF_SIZE];
     let len = encode_snapshot_request(sequence, &mut tx).ok()?;

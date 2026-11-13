@@ -9,7 +9,7 @@
 //! ## Why a cell cannot name what it does not hold
 //! A handle-addressed request carries a directory and one component. The
 //! component is checked as raw bytes before anything is joined to it
-//! (`api::dir_name`), so it cannot contain a separator or be `..`. The resolved
+//! (`wire::dir_name`), so it cannot contain a separator or be `..`. The resolved
 //! path is therefore always exactly one level below a directory the caller was
 //! given. There is no path outside the handle the caller can express, which is
 //! the difference between this and an access check.
@@ -20,11 +20,11 @@
 pub mod bind;
 pub mod lifecycle;
 
+use abi::dir_handles::ViDirHandle;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::dir_name::{join_component, validate_dir_component, DirNameError};
+use wire::dir_name::{join_component, validate_dir_component, DirNameError};
 
 use crate::caller::Caller;
 use crate::paths::{may_alias, may_alias_within};
@@ -32,7 +32,7 @@ use crate::paths::{may_alias, may_alias_within};
 /// Most handles one cell may hold at once.
 ///
 /// Bounds the table against a cell that opens directories in a loop. Well above
-/// `api::dir_handles::MAX_SPAWN_DIR_HANDLES`, so a cell can always derive from
+/// `abi::dir_handles::MAX_SPAWN_DIR_HANDLES`, so a cell can always derive from
 /// everything it inherited.
 pub const MAX_HANDLES_PER_CELL: usize = 32;
 
@@ -220,8 +220,8 @@ impl Default for DirTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::dir_attestation::ViDirHandleAttestation;
-    use api::dir_handles::{DirHandleSet, ViSpawnDirHandles};
+    use abi::dir_attestation::ViDirHandleAttestation;
+    use abi::dir_handles::{DirHandleSet, ViSpawnDirHandles};
     use types::CellId;
 
     #[test]

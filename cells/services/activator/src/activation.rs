@@ -2,13 +2,13 @@
 //! [`ostd::service::serve`]. Readiness uses exact operations, so waiting for a
 //! provider never consumes requests or death records; a nested VFS exchange
 //! defers every other message and the handler replays them after the turn.
-use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
-use api::ipc::{VfsRequest, VfsResponse};
-use api::syscall::{service, ProcessInfo};
+use abi::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
+use abi::syscall::{service, ProcessInfo};
 use ocel_service_proto::{Engine, Failure, Request, Response, FRAME_BYTES};
 use ostd::ipc::{self, Incoming, IpcTakeResult, IpcTerminal};
 use ostd::service::{Handler, Wait};
 use ostd::syscall::{self, SyscallResult};
+use wire::ipc::{VfsRequest, VfsResponse};
 
 use crate::now_ticks;
 use crate::state::{Effects, Owner, Phase, Principal, Provider, State};
@@ -375,7 +375,7 @@ impl Activator {
             return Err(Failure::Unavailable);
         }
         let stat = self.vfs_exchange(vfs, &VfsRequest::Stat(engine.path()))?;
-        let size = match api::ipc::decode::<VfsResponse<'_>>(&stat[..PAYLOAD_BYTES]) {
+        let size = match wire::ipc::decode::<VfsResponse<'_>>(&stat[..PAYLOAD_BYTES]) {
             Ok(VfsResponse::Stat {
                 size,
                 is_dir: false,
@@ -396,7 +396,7 @@ impl Activator {
             },
         );
         let attempt = match read {
-            Ok(bytes) => match api::ipc::decode::<VfsResponse<'_>>(&bytes[..PAYLOAD_BYTES]) {
+            Ok(bytes) => match wire::ipc::decode::<VfsResponse<'_>>(&bytes[..PAYLOAD_BYTES]) {
                 Ok(VfsResponse::GrantDone { bytes }) if bytes > 0 && bytes <= size => {
                     match syscall::sys_spawn_from_elf(grant, bytes, engine.path()) {
                         SyscallResult::Ok(tid) if tid != 0 => Ok(tid),
@@ -417,7 +417,7 @@ impl Activator {
         request: &VfsRequest<'_>,
     ) -> Result<[u8; MESSAGE_BYTES], Failure> {
         let mut send = [0u8; 512];
-        let bytes = api::ipc::encode(request, &mut send).map_err(|_| Failure::Failed)?;
+        let bytes = wire::ipc::encode(request, &mut send).map_err(|_| Failure::Failed)?;
         let started = now_ticks();
         let mut admitted = false;
         for _ in 0..POLL_LIMIT {
@@ -508,8 +508,8 @@ fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
 fn readiness(provider: Provider) -> bool {
     let mut send = [0u8; 16];
     let encoded = match provider.engine {
-        Engine::JavaScript => api::ipc::encode(&dom_arena::OcelJsRequest::Ping, &mut send),
-        Engine::Pdf => api::ipc::encode(&ocel_pdf_proto::Request::Ping, &mut send),
+        Engine::JavaScript => wire::ipc::encode(&dom_arena::OcelJsRequest::Ping, &mut send),
+        Engine::Pdf => wire::ipc::encode(&ocel_pdf_proto::Request::Ping, &mut send),
     };
     let Ok(encoded) = encoded else {
         return false;
@@ -517,7 +517,7 @@ fn readiness(provider: Provider) -> bool {
     let Ok(operation) = ipc::submit(provider.tid, encoded) else {
         return false;
     };
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     let started = now_ticks();
     for _ in 0..POLL_LIMIT {
         match ipc::take(operation, &mut reply) {
@@ -527,11 +527,11 @@ fn readiness(provider: Provider) -> bool {
             }) => {
                 return match provider.engine {
                     Engine::JavaScript => matches!(
-                        api::ipc::decode::<dom_arena::OcelJsReply>(&reply[..len]),
+                        wire::ipc::decode::<dom_arena::OcelJsReply>(&reply[..len]),
                         Ok(dom_arena::OcelJsReply::Ready)
                     ),
                     Engine::Pdf => matches!(
-                        api::ipc::decode::<ocel_pdf_proto::Response>(&reply[..len]),
+                        wire::ipc::decode::<ocel_pdf_proto::Response>(&reply[..len]),
                         Ok(ocel_pdf_proto::Response::Ready)
                     ),
                 };

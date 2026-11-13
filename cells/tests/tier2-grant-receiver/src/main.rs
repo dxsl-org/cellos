@@ -65,14 +65,14 @@ use ostd::syscall::{
     SyscallResult,
 };
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     StateRestore,
@@ -149,7 +149,7 @@ const INTERACTIVE_OWNER_NAME: &str = "tier2-smoke";
 /// `GetProcs` surface — the boot-order lane has no shell to type a tid at.
 fn find_owner(owner_name: &[u8]) -> Option<usize> {
     for _ in 0..POLL_LIMIT {
-        let mut rows = [api::syscall::ProcessInfo::default(); 64];
+        let mut rows = [abi::syscall::ProcessInfo::default(); 64];
         if let Ok(count) = sys_get_procs(&mut rows) {
             for row in rows.iter().take(count) {
                 if row.state != 3 && name_eq(&row.name, owner_name) {

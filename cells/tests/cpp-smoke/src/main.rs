@@ -19,8 +19,10 @@
 #![no_std]
 #![no_main]
 
+// Links the Tier-A C library (libc symbols) the C objects call.
 extern crate alloc;
 extern crate ostd;
+extern crate posix_shim;
 
 mod cpp;
 
@@ -29,14 +31,14 @@ use ostd::clients::VfsClient;
 use ostd::io::println;
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     LookupServiceBound,

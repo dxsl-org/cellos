@@ -161,10 +161,10 @@ impl Repl {
     /// Wait briefly for one key event from the input service and queue its
     /// bytes. Returns `false` when no input service is registered.
     fn poll_input_service(&mut self) -> bool {
-        use api::input::{decode_event, InputEvent, INPUT_EVENT_OPCODE};
+        use wire::input::{decode_event, InputEvent, INPUT_EVENT_OPCODE};
         // Short enough that console bytes on fd 0 are still picked up promptly.
         const TIMEOUT_TICKS: u64 = 2;
-        let Some(input_tid) = crate::service::provider_tid(api::syscall::service::INPUT) else {
+        let Some(input_tid) = crate::service::provider_tid(abi::syscall::service::INPUT) else {
             return false;
         };
         // Claim focus once per input-service incarnation, as Stdin does:
@@ -175,7 +175,7 @@ impl Repl {
             }
             self.focused_on = input_tid;
         }
-        let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut frame = [0u8; wire::ipc::IPC_BUF_SIZE];
         if let syscall::SyscallResult::Ok(sender) =
             syscall::sys_recv_timeout(0, &mut frame, TIMEOUT_TICKS)
         {
@@ -299,8 +299,8 @@ impl Repl {
 /// events (the input service maps C0 controls to `Escape`/`Return`/`Backspace`
 /// and passes the rest as `Printable` with the raw byte) and physical keys
 /// feed the same byte state machine. Returns how many bytes were written.
-fn key_bytes(key: &api::input::KeyEvent, out: &mut [u8; 4]) -> usize {
-    use api::input::{KeyState, KeySym, Modifiers};
+fn key_bytes(key: &wire::input::KeyEvent, out: &mut [u8; 4]) -> usize {
+    use wire::input::{KeyState, KeySym, Modifiers};
     if key.state == KeyState::Released {
         return 0;
     }
@@ -335,7 +335,7 @@ impl Default for Repl {
 #[cfg(test)]
 mod tests {
     use super::key_bytes;
-    use api::input::{KeyEvent, KeyState, KeySym, Modifiers};
+    use wire::input::{KeyEvent, KeyState, KeySym, Modifiers};
 
     fn key(keysym: KeySym, character: u32, modifiers: Modifiers, state: KeyState) -> KeyEvent {
         KeyEvent {

@@ -7,10 +7,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use std::sync::{Arc, Mutex as HostMutex};
 
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
+use abi::dir_handles::ViDirHandle;
 use cellos_fs::format::BLOCK_SIZE;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
 
 use super::tests::{lookup, OTHER_PROGRAM, RESPAWNED, SSHD, UNSIGNED_SSHD};
 use crate::access::AccessTable;
@@ -76,7 +76,7 @@ fn manager(callers: &[Caller]) -> VfsManager {
 
 fn call(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest<'_>) -> Reply {
     let mut request = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(req, &mut request).expect("request fits");
+    wire::ipc::encode(req, &mut request).expect("request fits");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(vfs, &request, Some(caller), &mut resp_buf);
     match resp {

@@ -12,7 +12,7 @@
 //! the cell's first request, or a cell whose spawner placed it in the capability
 //! world would get one path-string operation in ahead of the seal.
 
-use api::dir_attestation::DIR_ATTESTATION_LEN;
+use abi::dir_attestation::DIR_ATTESTATION_LEN;
 
 use crate::caller::Caller;
 use crate::dirs::bind::BindOutcome;

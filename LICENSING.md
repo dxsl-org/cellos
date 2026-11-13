@@ -6,7 +6,7 @@ The Cellos kernel and core libraries are licensed under the **Mozilla Public Lic
 
 ### Covered Components
 - **Kernel** (`kernel/`)
-- **Core Libraries** (`libs/api` with `libs/abi`, `libs/wire` and `libs/posix-shim`, `libs/ostd`, `libs/types`, `libs/kms-codec`)
+- **Core Libraries** (`libs/abi`, `libs/wire`, `libs/posix-shim`, `libs/ostd`, `libs/types`, `libs/kms-codec`)
 - **HAL** (`hal/`)
 
 ### Why MPL 2.0?

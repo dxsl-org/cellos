@@ -15,16 +15,18 @@
 #![allow(static_mut_refs)] // single-task cell — no data race on SURFACE / KEY_QUEUE
 #![allow(clippy::missing_safety_doc)] // reason: DG_* hooks are C callbacks; their contract lives in doomgeneric's headers, all single-task
 
+// Links the Tier-A C library (libc symbols) the C objects call.
 extern crate alloc;
+extern crate posix_shim;
 
+use abi::declare_manifest;
 use alloc::vec::Vec;
-use api::declare_manifest;
-use api::display::PixelFormat;
-use api::input::{InputEvent, KeyState, KeySym};
 use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
+use wire::display::PixelFormat;
+use wire::input::{InputEvent, KeyState, KeySym};
 
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -37,8 +39,8 @@ const DOOM_H: u32 = 200;
 // no scaling, so DOOM scales its own 320×200 framebuffer up into a screen-sized
 // surface (nearest-neighbour). Stretching 320×200 → 1024×768 (both 4:3) yields
 // DOOM's intended 4:3 aspect (its pixels are non-square by design).
-const SCREEN_W: u32 = api::display::FALLBACK_WIDTH; // 1024
-const SCREEN_H: u32 = api::display::FALLBACK_HEIGHT; // 768
+const SCREEN_W: u32 = wire::display::FALLBACK_WIDTH; // 1024
+const SCREEN_H: u32 = wire::display::FALLBACK_HEIGHT; // 768
 
 // Source-column lookup (dst-x → src-x), filled once on the first frame so the
 // per-pixel scale loop avoids a division per pixel.
@@ -49,7 +51,7 @@ declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
 /// Size of the static arena behind picolibc's `_sbrk` (10 MiB).

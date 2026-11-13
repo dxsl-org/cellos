@@ -36,8 +36,8 @@ use ostd::app::{AppContext, AppEvent};
 use ostd::io::{print, print_usize, println};
 use ostd::runtime::CellRuntime;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, SendGather, Recv, Log, LookupServiceBound, GetTime];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Send, SendGather, Recv, Log, LookupServiceBound, GetTime];
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // 10.0.2.2 = QEMU user-net gateway = the host (pin the IP — os-gap G3).

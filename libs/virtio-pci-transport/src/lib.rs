@@ -2,7 +2,7 @@
 //! Cell-side virtio 1.x PCI transport (ADR-0031 phase 05).
 //!
 //! A Driver Cell runs in ring 3 and cannot touch PCI configuration space; all
-//! it knows about its function is the [`api::pcie_function::ViPcieFunctionV1`]
+//! it knows about its function is the [`abi::pcie_function::ViPcieFunctionV1`]
 //! record returned by `QueryPcieFunction` (434). This crate turns that record
 //! into a [`virtio_drivers::transport::Transport`]:
 //!

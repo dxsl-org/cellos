@@ -7,7 +7,7 @@
 
 use alloc::vec::Vec;
 
-use api::services::vmm_session::{
+use wire::vmm_session::{
     abs_position, ABS_X, ABS_Y, BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE, EV_ABS,
     EV_KEY, EV_REL, REL_WHEEL,
 };
@@ -98,14 +98,14 @@ fn button_code(button: MouseButton) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::input::KeyEvent;
-    use api::services::vmm_session::ABS_MAX;
+    use wire::input::KeyEvent;
+    use wire::vmm_session::ABS_MAX;
 
     fn key(scancode: u32, modifiers: Modifiers, state: KeyState) -> InputEvent {
         InputEvent::Key(KeyEvent {
             timestamp_ticks: 0,
             scancode,
-            keysym: api::input::KeySym::Printable,
+            keysym: wire::input::KeySym::Printable,
             character: 0,
             modifiers,
             state,

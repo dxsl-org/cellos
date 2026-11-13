@@ -35,16 +35,16 @@ use draw::{
 use loader::{load_document, DocumentLoadJob, LoadedDocument};
 use parser::DocFormat;
 
-use api::display::PixelFormat;
 use ostd::display::ViSurface;
 use ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
 use ostd::syscall::{sys_get_resolution, sys_yield};
 use ostd::typography::{FontFace, TextFonts};
 use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
+use wire::display::PixelFormat;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     GrantAlloc,
     GrantRegister,
@@ -1590,21 +1590,21 @@ impl OcelViewer {
         );
         let top_h = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
         if navigation_dirty {
-            self.surface.damage(api::display::Rect {
+            self.surface.damage(wire::display::Rect {
                 x: 0,
                 y: 0,
                 w,
                 h: top_h,
             });
         }
-        self.surface.damage(api::display::Rect {
+        self.surface.damage(wire::display::Rect {
             x: 0,
             y: h.saturating_sub(STATUS_HEIGHT) as i32,
             w,
             h: STATUS_HEIGHT,
         });
         if document_dirty {
-            self.surface.damage(api::display::Rect {
+            self.surface.damage(wire::display::Rect {
                 x: 0,
                 y: view_y,
                 w,
@@ -1646,7 +1646,8 @@ impl OcelViewer {
                 15.0,
                 true,
             );
-            self.surface.damage(api::display::Rect { x: 0, y: 0, w, h });
+            self.surface
+                .damage(wire::display::Rect { x: 0, y: 0, w, h });
         }
     }
 

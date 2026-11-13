@@ -13,7 +13,7 @@ use crate::jobs::Jobs;
 use core::sync::atomic::{AtomicU32, Ordering};
 use ostd::service::provider_tid;
 
-const VFS_SVC: u16 = api::syscall::service::VFS;
+const VFS_SVC: u16 = abi::syscall::service::VFS;
 
 /// Wait for the VFS service to register (blocks until init has spawned vfs).
 fn wait_for_vfs() {

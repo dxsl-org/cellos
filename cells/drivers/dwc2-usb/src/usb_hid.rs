@@ -963,8 +963,8 @@ pub fn register_as_source(tid: usize, kind: u8) -> bool {
         return false;
     }
     let mut buf = [0u8; 32];
-    match api::ipc::encode(
-        &api::ipc::InputRequest::RegisterEventSource { kind },
+    match wire::ipc::encode(
+        &wire::ipc::InputRequest::RegisterEventSource { kind },
         &mut buf,
     ) {
         // A queued Send, like the events it gates: the input service polls with a

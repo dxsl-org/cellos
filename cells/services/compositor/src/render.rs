@@ -1,6 +1,6 @@
 //! Damage aggregation and ordered scanout composition.
 
-use api::display::{AppearancePalette, Rect, SurfaceRole};
+use wire::display::{AppearancePalette, Rect, SurfaceRole};
 
 use crate::framebuffer::ScreenFb;
 use crate::pointer_router::{DragFeedback, MenuButtonHover, OpenMenu};
@@ -175,7 +175,7 @@ fn label(surface: &crate::surface_table::SurfaceState) -> TabLabel<'_> {
     TabLabel {
         icon: surface.icon(),
         title: surface.title(),
-        dimmed: surface.state() == api::display::WindowState::Closing,
+        dimmed: surface.state() == wire::display::WindowState::Closing,
     }
 }
 
@@ -191,7 +191,7 @@ fn paint_menu(
 ) {
     let maximized = table
         .get(menu.cap)
-        .is_some_and(|s| s.state() == api::display::WindowState::Maximized);
+        .is_some_and(|s| s.state() == wire::display::WindowState::Maximized);
     let stacked = crate::stacking::tabs_of(frames, menu.cap).count > 1;
     let blank = MenuEntry {
         glyph: MenuGlyph::Detach,

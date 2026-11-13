@@ -1,6 +1,6 @@
 //! Pure `top`/`ps` core over the Cell-aware telemetry provider (Phase 06 S6-2).
 //!
-//! The shell captures [`api::telemetry::TelemetrySnapshot`]s; this module turns
+//! The shell captures [`abi::telemetry::TelemetrySnapshot`]s; this module turns
 //! them into bounded, typed frames:
 //!
 //! - [`parse_options`]: the D64-2 command line ([`USAGE`]);
@@ -19,8 +19,8 @@ pub mod text;
 mod tests;
 
 use crate::pipeline;
+use abi::telemetry::request;
 use alloc::vec::Vec;
-use api::telemetry::request;
 
 /// Rows per frame of one kind (DV-11); rows beyond it make the frame incomplete.
 pub const MAX_FRAME_ROWS: usize = pipeline::MAX_SORT_RECORDS;

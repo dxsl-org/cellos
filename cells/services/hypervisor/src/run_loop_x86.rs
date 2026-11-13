@@ -35,7 +35,7 @@ use crate::{
     vmm,
 };
 use crate::app_session_x86::{AppSession, SessionRequest};
-use api::hypervisor::ViVmExit;
+use abi::hypervisor::ViVmExit;
 use ostd::io::println;
 use x86_mmio_dispatch::{MmioDevices, MmioDevicesMut};
 
@@ -58,7 +58,7 @@ pub fn run(
     )>,
     launcher: Option<(AppSession, u32, u32)>,
 ) -> RunOutcome {
-    let net_tid = ostd::service::provider_tid(api::syscall::service::NET).unwrap_or(0);
+    let net_tid = ostd::service::provider_tid(abi::syscall::service::NET).unwrap_or(0);
     let mut blk = BlkDisk::new(disk_file, None);
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid, None);
@@ -69,7 +69,7 @@ pub fn run(
             Some(session),
         ),
         None => {
-            let comp_tid = ostd::service::provider_tid(api::syscall::service::COMPOSITOR)
+            let comp_tid = ostd::service::provider_tid(abi::syscall::service::COMPOSITOR)
                 .unwrap_or(0);
             let (width, height) = ostd::syscall::sys_get_resolution();
             let gpu = GpuDev::new(
@@ -295,7 +295,7 @@ fn serve_host(
                 push_console_event(input, event);
             }
             gpu.reconnect_compositor(
-                ostd::service::provider_tid(api::syscall::service::COMPOSITOR)
+                ostd::service::provider_tid(abi::syscall::service::COMPOSITOR)
                     .unwrap_or(0),
             );
             false
@@ -309,25 +309,25 @@ fn serve_host(
 
 /// Host input with keyboard focus on the console `hv` reaches the guest's tablet
 /// as keys, buttons and wheel; relative motion has no absolute position to map to.
-fn push_console_event(input: &mut InputDev, event: api::input::InputEvent) {
+fn push_console_event(input: &mut InputDev, event: wire::input::InputEvent) {
     match event {
-        api::input::InputEvent::Key(key) => {
+        wire::input::InputEvent::Key(key) => {
             let pressed = matches!(
                 key.state,
-                api::input::KeyState::Pressed | api::input::KeyState::Repeated
+                wire::input::KeyState::Pressed | wire::input::KeyState::Repeated
             );
             if key.scancode > 0 {
                 input.push_key(key.scancode as u16, pressed);
             }
         }
-        api::input::InputEvent::MouseButton { button, state } => {
+        wire::input::InputEvent::MouseButton { button, state } => {
             input.push_mouse_button(
                 crate::virtio_input::button_code(button),
-                state == api::input::KeyState::Pressed,
+                state == wire::input::KeyState::Pressed,
             );
         }
-        api::input::InputEvent::MouseScroll { dy, .. } => input.push_mouse_scroll(dy),
-        api::input::InputEvent::MouseMove { .. } => {}
+        wire::input::InputEvent::MouseScroll { dy, .. } => input.push_mouse_scroll(dy),
+        wire::input::InputEvent::MouseMove { .. } => {}
     }
 }
 

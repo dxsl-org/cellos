@@ -10,20 +10,20 @@
 
 #![no_std]
 #![no_main]
-extern crate api;
 extern crate drm_cellos;
 extern crate mlibc_shim;
 extern crate ostd;
+extern crate posix_shim;
 
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![
+abi::declare_syscalls![
     Write, Log, Exit, GetTime, Yield, FutexWait, FutexWake, Open, Read, Close, Fstat, GetRandom
 ];
 

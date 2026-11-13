@@ -5,14 +5,14 @@
 //! TX queue.
 
 use super::*;
-use api::caller_identity::{
+use abi::caller_identity::{
     CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN, CALLER_FLAG_NET_RESOLVE,
     CALLER_FLAG_NET_RIGHTS_MASK,
 };
 use smoltcp::{iface::Config, socket::udp, wire::HardwareAddress};
 
 use crate::socket_state::SocketState;
-use api::services::proto::tls;
+use wire::proto::tls;
 
 /// A TID no host file descriptor can match: host replies fail with `EBADF`
 /// instead of touching a real descriptor.

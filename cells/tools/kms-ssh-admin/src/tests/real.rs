@@ -13,7 +13,7 @@ use core::cell::{Cell, RefCell};
 use std::string::String;
 use std::vec::Vec;
 
-use api::caller_identity::{CallerIdentity, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+use abi::caller_identity::{CallerIdentity, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
 use kms_codec::{
     KmsOpcode, KmsRequestV1, SshAbortRequestPayload, SshChunkRequestPayload,
     SshDeleteRequestPayload, SshImportBeginRequestPayload, SshImportCommitRequestPayload,

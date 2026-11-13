@@ -45,7 +45,7 @@ use cell::cell_main;
 
 ostd::cell_main!(cell_main);
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -54,7 +54,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     TrySend,
     Recv,

@@ -1,15 +1,15 @@
 //! Runtime witness for state-preserving Supervisor Cell replacement.
 
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-use api::services::proto::supervisor::{
-    HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER,
-    STATUS_REPLY_LEN, SVC_NAME_LEN,
-};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{
     sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned, SyscallResult,
+};
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use wire::proto::supervisor::{
+    HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_REFUSED, STATUS_REJECTED_CALLER,
+    STATUS_REPLY_LEN, SVC_NAME_LEN,
 };
 
 const WAIT_TICKS: usize = 500;
@@ -168,7 +168,7 @@ pub(super) fn spawn_cached_sender_probe(old_tid: usize) -> bool {
     let role = alloc::format!("hotswap-cached-inc:{old_tid}");
     sys_set_spawn_args(&role);
     matches!(
-        sys_spawn_pinned("/bin/bench-probe", api::task::TaskPriority::Normal as u8, 0),
+        sys_spawn_pinned("/bin/bench-probe", abi::task::TaskPriority::Normal as u8, 0),
         SyscallResult::Ok(_)
     )
 }

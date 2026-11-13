@@ -1,7 +1,7 @@
 //! Trusted compositor frame routing and lifecycle event polling.
 
 use crate::service::provider_tid;
-use api::syscall::service;
+use abi::syscall::service;
 
 use crate::syscall::SyscallResult;
 

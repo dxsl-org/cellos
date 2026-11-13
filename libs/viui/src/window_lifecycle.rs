@@ -10,7 +10,7 @@
 //! Single-window apps call [`WindowLifecycle::poll`] once per loop turn; it
 //! drains every pending compositor event for the cell.
 
-use api::display::{WindowCloseRequest, WindowConfigure, WindowState};
+use wire::display::{WindowCloseRequest, WindowConfigure, WindowState};
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
 
 /// How a compositor close request is answered.

@@ -3,7 +3,7 @@
 //! floor advance only after success, reply. Nothing is read, parsed or written
 //! before the class check passes.
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, KmsOpcode, SshAbortRequestPayload,
     SshChunkRequestPayload, SshDeleteRequestPayload, SshImportBeginRequestPayload,

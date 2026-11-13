@@ -18,7 +18,7 @@ name = "backend-worker"
 path = "src/bin/backend-worker.rs"
 
 [dependencies]
-api    = { path = "../../../libs/api", version = "0.1.0" }
+abi    = { path = "../../../libs/abi", version = "0.1.0" }
 ostd   = { path = "../../../libs/ostd", version = "0.2.0" }
 serde  = { version = "1", default-features = false, features = ["derive"] }
 

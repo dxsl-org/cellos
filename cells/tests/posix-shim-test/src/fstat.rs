@@ -56,10 +56,10 @@ fn stat_bytes(value: &core::mem::MaybeUninit<Stat>) -> &[u8] {
 }
 
 fn validate_open_fstat(fd: i32) -> bool {
-    let mut wire = api::syscall::ViFstatV1::default();
-    if ostd::syscall::sys_fstat(fd as usize, &mut wire) != Ok(api::syscall::VI_FSTAT_V1_LEN)
-        || wire.kind != api::syscall::VI_FSTAT_KIND_REGULAR
-        || wire.access != api::syscall::VI_FSTAT_ACCESS_READ
+    let mut wire = abi::syscall::ViFstatV1::default();
+    if ostd::syscall::sys_fstat(fd as usize, &mut wire) != Ok(abi::syscall::VI_FSTAT_V1_LEN)
+        || wire.kind != abi::syscall::VI_FSTAT_KIND_REGULAR
+        || wire.access != abi::syscall::VI_FSTAT_ACCESS_READ
         || wire.reserved != [0; 2]
         || wire.size == 0
     {

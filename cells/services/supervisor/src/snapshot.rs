@@ -1,8 +1,8 @@
 //! Snapshot orchestration for the Supervisor Cell.
 
 use crate::protocol::{encode_snapshot_ok, encode_snapshot_unavailable};
-use api::services::proto::supervisor::STATUS_REPLY_LEN;
 use ostd::syscall::{sys_snapshot, SyscallResult};
+use wire::proto::supervisor::STATUS_REPLY_LEN;
 
 /// Execute the kernel snapshot syscall and map it to a bounded supervisor reply.
 pub fn run() -> [u8; STATUS_REPLY_LEN] {
@@ -18,9 +18,7 @@ fn map_snapshot_result(result: SyscallResult) -> [u8; STATUS_REPLY_LEN] {
 
 #[cfg(test)]
 mod tests {
-    use api::services::proto::supervisor::{
-        OP_STATUS, PHASE_SNAPSHOT, STATUS_OK, STATUS_UNAVAILABLE,
-    };
+    use wire::proto::supervisor::{OP_STATUS, PHASE_SNAPSHOT, STATUS_OK, STATUS_UNAVAILABLE};
 
     #[test]
     fn success_status_is_stable() {

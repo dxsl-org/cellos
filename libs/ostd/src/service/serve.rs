@@ -27,10 +27,10 @@
 //! without an operation to answer. The same bytes from anyone else are an
 //! ordinary request.
 
+use abi::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use alloc::vec::Vec;
-use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
-use api::ipc::IPC_BUF_SIZE;
-use api::services::proto::app_envelope::{
+use wire::ipc::IPC_BUF_SIZE;
+use wire::proto::app_envelope::{
     HEADER_LEN as ENVELOPE_HEADER_LEN, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, RESTORE_LEN,
     SNAPSHOT_LEN,
 };
@@ -362,7 +362,7 @@ fn receive_ticks(wait: Wait, heartbeat_ticks: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{receive_ticks, swap_envelope, Swap, Wait};
-    use api::services::proto::app_envelope::{
+    use wire::proto::app_envelope::{
         KIND_MESSAGE, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, SNAPSHOT_LEN,
     };
 

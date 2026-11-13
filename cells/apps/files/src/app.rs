@@ -66,7 +66,7 @@ pub struct FilesApp<F: FileSystem> {
     pub width: u32,
     pub height: u32,
     pub quick_look: QuickLookState,
-    pub pending_intent: Option<api::services::mime::LaunchIntent>,
+    pub pending_intent: Option<wire::mime::LaunchIntent>,
     pub trash_stack: Vec<TrashRecord>,
     pub active_pane: ActivePane,
     pub secondary_pane: Option<PaneState>,
@@ -189,7 +189,7 @@ impl<F: FileSystem> FilesApp<F> {
         if item.is_dir {
             self.load_directory(&item.path);
         } else {
-            let intent = api::services::mime::AssociationRegistry::resolve_intent(&item.path, None);
+            let intent = wire::mime::AssociationRegistry::resolve_intent(&item.path, None);
             self.status_message = format!(
                 "{} {} with {}",
                 intent.action.as_str(),
@@ -206,7 +206,7 @@ impl<F: FileSystem> FilesApp<F> {
             return;
         };
         if !item.is_dir {
-            if let Some(intent) = api::services::mime::AssociationRegistry::resolve_intent_with_app(
+            if let Some(intent) = wire::mime::AssociationRegistry::resolve_intent_with_app(
                 &item.path, app_id, None,
             ) {
                 self.status_message = format!(
@@ -220,7 +220,7 @@ impl<F: FileSystem> FilesApp<F> {
         }
     }
 
-    pub fn take_launch_intent(&mut self) -> Option<api::services::mime::LaunchIntent> {
+    pub fn take_launch_intent(&mut self) -> Option<wire::mime::LaunchIntent> {
         self.pending_intent.take()
     }
 
@@ -710,7 +710,7 @@ mod tests {
         app.open_selected();
         let intent = app.take_launch_intent().expect("staged launch intent");
         assert_eq!(intent.target_path, "/tmp/c5dir/a.txt");
-        assert_eq!(intent.action, api::services::mime::FileAction::Open);
+        assert_eq!(intent.action, wire::mime::FileAction::Open);
         assert_eq!(intent.app_id, "terminal");
     }
     #[test]

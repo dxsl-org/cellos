@@ -13,7 +13,7 @@ use ostd::input::InputEvent;
 use ostd::input::{KeyState, KeySym};
 use ostd::syscall::sys_recv;
 
-use api::display::PixelFormat;
+use wire::display::PixelFormat;
 
 use crate::canvas::{FramebufferCanvas, ViCanvas};
 use crate::event::{Event, KeyCode, Modifiers, MouseButton};

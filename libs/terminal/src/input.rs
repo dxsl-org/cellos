@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Incremental epoch-bound event/control framing, independent of any GUI toolkit.
+use abi::cell_session::{Reader, Status};
 use alloc::string::String;
-use api::cell_session::{Reader, Status};
 #[derive(Clone, PartialEq, Eq)]
 pub struct Event {
     pub sequence: u64,
@@ -98,7 +98,7 @@ impl Event {
         }
         let payload = r.take(len)?;
         r.finish()?;
-        api::services::session::validate_event(kind, payload)?;
+        wire::session::validate_event(kind, payload)?;
         let mut r = Reader::new(payload);
         let kind = match kind {
             1 => {
@@ -128,7 +128,7 @@ impl Event {
             7 => EventKind::Eof,
             8 => EventKind::Lost(r.u32()?),
             9 => {
-                let p = api::cell_session::trust::TrustPromptV1::decode(payload)?;
+                let p = abi::cell_session::trust::TrustPromptV1::decode(payload)?;
                 EventKind::TrustPrompt {
                     host: String::from(p.host),
                     port: p.port,
@@ -137,7 +137,7 @@ impl Event {
                 }
             }
             10 => EventKind::TrustPromptEnd {
-                accepted: api::cell_session::trust::decode_prompt_end(payload)?,
+                accepted: abi::cell_session::trust::decode_prompt_end(payload)?,
             },
             _ => return Err(Status::UnsupportedInput),
         };

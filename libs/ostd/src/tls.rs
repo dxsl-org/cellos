@@ -1,6 +1,6 @@
 //! TLS 1.3 client helpers for app cells.
 //!
-//! Wraps the raw TLS IPC frames ([`api::services::proto::tls`]) exposed by the
+//! Wraps the raw TLS IPC frames ([`wire::proto::tls`]) exposed by the
 //! net service cell into ergonomic functions. Each helper is one exact operation bounded by a
 //! tick budget just above the net service's own deadline for that request, so
 //! the service's failure answer arrives before the budget ends; a dead or
@@ -24,7 +24,7 @@
 extern crate alloc;
 
 use crate::ipc::call_bytes;
-use api::services::proto::tls as wire;
+use wire::proto::tls as wire;
 
 /// Budget of `tls_connect`: 50 s, above the net service's 15 s TCP connect plus
 /// 30 s handshake deadlines.

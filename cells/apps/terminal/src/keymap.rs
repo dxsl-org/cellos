@@ -2,12 +2,12 @@
 //! Compositor/focus key events -> normalized terminal session input.
 //!
 //! Key codes and modifier bits follow the frozen `cellos-vt1` namespace in
-//! `api::services::session` (named keys at `0x110000+`, characters as their own
+//! `wire::session` (named keys at `0x110000+`, characters as their own
 //! code point). The input service turns them into bytes; this module never
 //! produces escape sequences itself.
 
-use api::services::session::{encode_key, key_code, modifiers};
 use ostd::input::{KeyEvent, KeyState, KeySym, Modifiers};
+use wire::session::{encode_key, key_code, modifiers};
 
 /// One normalized input to submit to the session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -473,7 +473,7 @@ mod tests {
             payload[4..8].copy_from_slice(&modifiers.to_le_bytes());
             payload[8] = pressed;
             assert!(
-                api::services::session::validate_event(1, &payload).is_ok(),
+                wire::session::validate_event(1, &payload).is_ok(),
                 "{sym:?}"
             );
         }

@@ -1,6 +1,6 @@
 //! Bounded Silo VM-exit dispatch.
 
-use api::hypervisor::ViVmExit;
+use abi::hypervisor::ViVmExit;
 use ostd::vmm;
 use service_silo::layout::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 use service_silo::vm_exit::{diagnose_hvc, UnexpectedHvc};

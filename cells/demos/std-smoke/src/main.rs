@@ -3,7 +3,7 @@
 
 extern crate ostd;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = true,
@@ -14,7 +14,7 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log, Yield, GetTime, GetRandom, StateRestore,
     Spawn, Wait, SetTlsBase, FutexWait, FutexWake, GetCpuCount
 ];

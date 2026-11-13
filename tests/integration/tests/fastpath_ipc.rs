@@ -1,4 +1,4 @@
-use api::ring_channel::{BiRingChannel, RingError};
+use wire::ring_channel::{BiRingChannel, RingError};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;

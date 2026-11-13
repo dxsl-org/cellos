@@ -1,6 +1,6 @@
 //! Bounded storage for compositor lifecycle and forwarded input events.
 
-use api::display::{compositor_events, WindowCloseRequest, WindowConfigure, WindowStateChanged};
+use wire::display::{compositor_events, WindowCloseRequest, WindowConfigure, WindowStateChanged};
 
 use super::events::{SurfaceEvent, MAX_SURFACE_EVENT_CAPS};
 
@@ -34,7 +34,7 @@ impl SurfaceEventSlot {
 struct SurfaceEventDispatcher {
     next_sequence: u64,
     slots: [SurfaceEventSlot; MAX_SURFACE_EVENT_CAPS],
-    forwarded_input: heapless::Vec<api::input::InputEvent, MAX_FORWARDED_INPUT_EVENTS>,
+    forwarded_input: heapless::Vec<wire::input::InputEvent, MAX_FORWARDED_INPUT_EVENTS>,
 }
 
 impl SurfaceEventDispatcher {
@@ -147,7 +147,7 @@ pub(crate) fn route_compositor_frame(frame: &[u8]) {
     };
     let mut dispatcher = SURFACE_EVENTS.lock();
     match opcode {
-        api::input::INPUT_EVENT_OPCODE => {
+        wire::input::INPUT_EVENT_OPCODE => {
             if let Some(event) = crate::input::parse_frame(frame) {
                 let _ = dispatcher.forwarded_input.push(event);
             }
@@ -174,7 +174,7 @@ pub(crate) fn route_compositor_frame(frame: &[u8]) {
     }
 }
 
-pub(crate) fn take_forwarded_input_event() -> Option<api::input::InputEvent> {
+pub(crate) fn take_forwarded_input_event() -> Option<wire::input::InputEvent> {
     let mut dispatcher = SURFACE_EVENTS.lock();
     if dispatcher.forwarded_input.is_empty() {
         None

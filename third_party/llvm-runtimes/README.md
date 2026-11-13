@@ -62,7 +62,7 @@ clang++ --target=x86_64-unknown-none-elf -std=c++17
 **Link.** The Rust Cell host links (`tools/cellos-cc:3-4`):
 - `-lc++ -lc++abi -lunwind` (static);
 - mlibc's `libc.a` and `libgcc.a` through `libs/mlibc-shim`;
-- `api` with `features = ["mlibc"]`, so the Tier-A C++ ABI layer stays out.
+- `posix-shim` with `features = ["mlibc"]`, so the Tier-A C++ ABI layer stays out.
 
 Every C ABI entry point called from Rust is `extern "C"` and `noexcept`.
 

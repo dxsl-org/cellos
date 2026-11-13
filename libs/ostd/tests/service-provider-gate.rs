@@ -2,7 +2,7 @@
 //! Tx/Rx/GetMac request (audit H-20): only the tid the kernel's registry names
 //! as the live provider may drive the NIC.
 
-use api::service_binding::ServiceBinding;
+use abi::service_binding::ServiceBinding;
 use ostd::service::binding_names_sender;
 
 const NET_TID: usize = 41;

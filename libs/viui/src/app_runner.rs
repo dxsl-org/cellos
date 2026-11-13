@@ -124,7 +124,7 @@ const KEY_REPEAT_INTERVAL_MS: u64 = 50;
 ///
 /// # Hardware vs software repeat
 /// The input service already sends `state=Repeated` events for hardware
-/// auto-repeat (see `api::input::KeyState::Repeated`). `input_bridge::parse_input_message`
+/// auto-repeat (see `wire::input::KeyState::Repeated`). `input_bridge::parse_input_message`
 /// treats those identically to `Pressed`, so hardware repeat already works without
 /// this struct. `KeyRepeatState` provides *software* repeat for platforms that do NOT
 /// forward hardware repeat (serial consoles, touch keyboards, synthetic input in tests).
@@ -475,7 +475,7 @@ impl ViApp {
 
         // ── Software key-repeat injection ─────────────────────────────────────
         // Only runs when time is advancing (dt_ms > 0) and a key is held.
-        // Platforms that send hardware repeat events (api::input::KeyState::Repeated)
+        // Platforms that send hardware repeat events (wire::input::KeyState::Repeated)
         // already inject repeats via input_bridge, so this path fires only when
         // held_ms crosses the thresholds without hardware-repeat interruption.
         if dt_ms > 0 {

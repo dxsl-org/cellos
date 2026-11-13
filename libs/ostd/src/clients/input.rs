@@ -5,7 +5,7 @@
 use super::vierr_from_code;
 use crate::service::InputRef;
 use crate::{ViError, ViResult};
-use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
+use wire::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
 
 /// Ergonomic client for the input service.
 ///

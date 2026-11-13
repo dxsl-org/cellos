@@ -26,8 +26,8 @@ compile_error!(
 extern crate alloc;
 extern crate ostd;
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -82,11 +82,11 @@ fn cell_main() {
     boot_stop()
 }
 
-/// Leave with [`api::retirement::INIT_BOOT_STOP`], never a plain return: the kernel
+/// Leave with [`abi::retirement::INIT_BOOT_STOP`], never a plain return: the kernel
 /// records this death and halts, where any other init death resets the machine.
 fn boot_stop() -> ! {
     println("Init: boot cannot continue — exiting with INIT_BOOT_STOP (the kernel halts).");
-    ostd::syscall::sys_exit(api::retirement::INIT_BOOT_STOP)
+    ostd::syscall::sys_exit(abi::retirement::INIT_BOOT_STOP)
 }
 
 /// Test hook (`init-death-fixture`, packaged only by
@@ -223,7 +223,7 @@ fn start_services() {
 /// Init's own tid, found by name in the process table; 2 when the table
 /// cannot be read (the fallback init has always used here).
 fn own_tid() -> usize {
-    let mut procs = [api::syscall::ProcessInfo::default(); 16];
+    let mut procs = [abi::syscall::ProcessInfo::default(); 16];
     if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
         for proc in procs.iter().take(count) {
             if &proc.name[..4] == b"init" && (proc.name[4] == 0 || proc.name[4] == b' ') {

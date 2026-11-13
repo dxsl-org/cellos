@@ -1,10 +1,10 @@
-use api::display::{
+use ostd::ipc::{post, reply_to};
+use ostd::syscall::{sys_try_send, SyscallResult};
+use wire::display::{
     compositor_ops, CloseResponse, ConfigureAck, Rect, SetIcon, SetTitle, SurfaceStateRequest,
     WindowState,
 };
-use api::services::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
-use ostd::ipc::{post, reply_to};
-use ostd::syscall::{sys_try_send, SyscallResult};
+use wire::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
 
 use super::MessageContext;
 use crate::input_handler::InputState;

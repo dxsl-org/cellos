@@ -5,10 +5,10 @@
 //! tree. `install_working_dir` hands that grant to the POSIX shim; `create`
 //! writes fixtures through the same grant, independently of the shim under test.
 
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use abi::dir_handles::ViDirHandle;
 use ostd::call_outcome::CallOutcome;
 use ostd::service::VfsRef;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 /// Give the shim this cell's granted working directory, if it was launched
 /// with one. Returns whether the cell is sealed (a grant was installed).
@@ -19,12 +19,12 @@ pub(super) fn install_working_dir() -> bool {
     let (Some(grant), Ok(cwd)) = (context.cwd_grant(), core::str::from_utf8(context.cwd())) else {
         return false;
     };
-    api::posix::install_working_dir(ViDirHandle(grant.id), cwd)
+    posix_shim::install_working_dir(ViDirHandle(grant.id), cwd)
 }
 
 /// Create or overwrite the file at absolute `path` with `content`.
 pub(super) fn create(path: &str, content: &[u8]) -> bool {
-    let Some((cwd_dir, cwd)) = api::posix::working_dir() else {
+    let Some((cwd_dir, cwd)) = posix_shim::working_dir() else {
         // An unsealed cell still names the path.
         return ostd::clients::VfsClient::new()
             .write_file(path, content)

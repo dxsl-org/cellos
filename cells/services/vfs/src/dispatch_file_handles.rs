@@ -1,7 +1,7 @@
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
+use abi::dir_handles::ViDirHandle;
+use wire::ipc::{VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::{resolve, MAX_INLINE_PAYLOAD};

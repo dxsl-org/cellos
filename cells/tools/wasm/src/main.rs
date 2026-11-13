@@ -14,7 +14,7 @@ use driver_wasm::imports::register_vi_imports;
 use driver_wasm::{HostState, WasmConfig, WasmRuntime};
 use loader::load_wasm_bytes;
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     Log,

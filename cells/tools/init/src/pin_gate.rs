@@ -11,7 +11,7 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::services::machine_pin::{MachinePinRequest, MachinePinResponse, PinState};
+use wire::machine_pin::{MachinePinRequest, MachinePinResponse, PinState};
 use ostd::io::println;
 use ostd::ipc::{IpcTerminal, PendingCall};
 
@@ -81,7 +81,7 @@ pub(crate) fn gate(services: &mut [Service], index: Option<usize>) -> Decision {
 /// expired an earlier submission before it was answered.
 fn ask_gate(pin: usize) -> Option<(PinState, bool)> {
     let request = MachinePinRequest::Gate.encode();
-    let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     for _ in 0..GATE_ATTEMPTS {
         let pending = PendingCall::submit(pin, &request).ok()?;
         if let Ok(Some(completion)) = pending.wait_and_take(&mut reply, GATE_ROUND_TICKS, GATE_ROUNDS)

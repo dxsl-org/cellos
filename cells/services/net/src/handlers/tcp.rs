@@ -1,13 +1,13 @@
 use alloc::collections::BTreeMap;
-use api::ipc::{
-    net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
-};
-use api::services::proto::net::{NetError, TCP_RECV_EOF};
 use smoltcp::{
     iface::{Interface, SocketSet},
     socket::tcp,
     wire::{IpAddress, IpEndpoint},
 };
+use wire::ipc::{
+    net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
+};
+use wire::proto::net::{NetError, TCP_RECV_EOF};
 
 use super::{make_tcp, send_typed, tcp_state_byte, try_promote};
 use crate::{
@@ -50,8 +50,8 @@ pub(crate) fn handle_tcp_request(
             table.set_state(cap, SocketState::Connecting);
             // A cancelled exact call cannot retain a socket capability the
             // client never received. Legacy callers still get their reply.
-            let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
-            let delivered = api::ipc::encode(&R::CapId(cap as u32), &mut response)
+            let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
+            let delivered = wire::ipc::encode(&R::CapId(cap as u32), &mut response)
                 .ok()
                 .is_some_and(|bytes| {
                     if let Some(token) = ostd::ipc::current() {
@@ -286,7 +286,7 @@ pub(crate) fn handle_tcp_request(
             } else {
                 match readiness(interests, *cursor, owner, sockets, table) {
                     Ok((events, next_cursor)) => {
-                        let mut packed = [0u8; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES];
+                        let mut packed = [0u8; READY_PAGE * wire::ipc::NET_READY_RECORD_BYTES];
                         let bytes = pack_events(&events, &mut packed);
                         send_typed(
                             sender,
@@ -334,15 +334,15 @@ pub(crate) fn readiness(
     table: &SocketTable,
 ) -> Result<(ReadyEvents, u16), ()> {
     if interests.is_empty()
-        || interests.len() > MAX_INTERESTS * api::ipc::NET_READY_RECORD_BYTES
+        || interests.len() > MAX_INTERESTS * wire::ipc::NET_READY_RECORD_BYTES
         || !interests
             .len()
-            .is_multiple_of(api::ipc::NET_READY_RECORD_BYTES)
+            .is_multiple_of(wire::ipc::NET_READY_RECORD_BYTES)
     {
         return Err(());
     }
-    let count = interests.len() / api::ipc::NET_READY_RECORD_BYTES;
-    for raw in interests.chunks_exact(api::ipc::NET_READY_RECORD_BYTES) {
+    let count = interests.len() / wire::ipc::NET_READY_RECORD_BYTES;
+    for raw in interests.chunks_exact(wire::ipc::NET_READY_RECORD_BYTES) {
         let interest = TcpInterest::decode(raw).ok_or(())?;
         if interest.mask == 0
             || interest.mask
@@ -363,8 +363,8 @@ pub(crate) fn readiness(
     let mut next = start;
     for _ in 0..count {
         let interest = TcpInterest::decode(
-            &interests[next * api::ipc::NET_READY_RECORD_BYTES
-                ..(next + 1) * api::ipc::NET_READY_RECORD_BYTES],
+            &interests[next * wire::ipc::NET_READY_RECORD_BYTES
+                ..(next + 1) * wire::ipc::NET_READY_RECORD_BYTES],
         )
         .ok_or(())?;
         let cap = interest.cap_id as u64;
@@ -415,12 +415,12 @@ pub(crate) fn readiness(
 
 pub(crate) fn pack_events<'a>(
     events: &[TcpReadyEvent],
-    out: &'a mut [u8; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES],
+    out: &'a mut [u8; READY_PAGE * wire::ipc::NET_READY_RECORD_BYTES],
 ) -> &'a [u8] {
-    let len = events.len() * api::ipc::NET_READY_RECORD_BYTES;
+    let len = events.len() * wire::ipc::NET_READY_RECORD_BYTES;
     for (event, chunk) in events
         .iter()
-        .zip(out[..len].chunks_exact_mut(api::ipc::NET_READY_RECORD_BYTES))
+        .zip(out[..len].chunks_exact_mut(wire::ipc::NET_READY_RECORD_BYTES))
     {
         chunk[..4].copy_from_slice(&event.cap_id.to_le_bytes());
         chunk[4] = event.ready;

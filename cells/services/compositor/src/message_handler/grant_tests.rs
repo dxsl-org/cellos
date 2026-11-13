@@ -6,7 +6,7 @@
 
 extern crate std;
 
-use api::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
+use wire::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
 
 use super::admit_grant;
 use crate::surface_table::SurfaceTable;

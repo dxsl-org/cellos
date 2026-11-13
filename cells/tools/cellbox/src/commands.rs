@@ -197,7 +197,7 @@ pub(crate) fn ls_collect(
                 if name.is_empty() {
                     continue;
                 }
-                let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                let is_dir = matches!(entry.file_type, types::FileType::Directory);
                 push_unique(
                     &mut entries,
                     alloc::string::String::from(name),
@@ -231,7 +231,7 @@ pub(crate) fn ls_collect(
                     if name.is_empty() {
                         continue;
                     }
-                    let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                    let is_dir = matches!(entry.file_type, types::FileType::Directory);
                     entries.push(LsEntry {
                         name: alloc::string::String::from(name),
                         is_dir,
@@ -250,7 +250,7 @@ pub(crate) fn ls_collect(
                         if name.is_empty() {
                             continue;
                         }
-                        let is_dir = matches!(entry.file_type, ostd::FileType::Directory);
+                        let is_dir = matches!(entry.file_type, types::FileType::Directory);
                         entries.push(LsEntry {
                             name: alloc::string::String::from(name),
                             is_dir,

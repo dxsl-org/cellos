@@ -5,8 +5,8 @@
 use ostd::syscall::sys_exit;
 
 // This test-hooks image-only cell holds no authority and exits on its first run.
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Exit];
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![Exit];
 
 ostd::cell_main!(cell_main);
 

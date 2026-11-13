@@ -6,12 +6,12 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 433 |
+| Sections scanned | 434 |
 | Sections with an anchor | 19 |
-| Ratified/Accepted sections | 293 |
+| Ratified/Accepted sections | 294 |
 | …of those, anchored | 18 |
 | Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 275 |
+| Coverage gaps (ratified, unanchored) | 276 |
 | Status-prose hits | 80 |
 | Plans linked from status docs | 14 |
 | Structural errors (plan frontmatter, doc links) | 0 |
@@ -93,13 +93,13 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/03-runtime.md:17` — Quy tắc "Owned Buffers ONLY"
 - `docs/specs/03-runtime.md:22` — Async Pinning Registry (Lá chắn Unload)
 - `docs/specs/03-runtime.md:27` — 3. Hot-Swap & State Transfer
-- `docs/specs/03-runtime.md:37` — 4. Boot Optimization (Snapshot)
-- `docs/specs/03-runtime.md:47` — 4.1 Mục tiêu
-- `docs/specs/03-runtime.md:53` — 4.2 Cơ chế hoạt động
-- `docs/specs/03-runtime.md:79` — 4.3 Snapshot Format (internal v2)
-- `docs/specs/03-runtime.md:131` — 4.4 Ràng buộc triển khai
-- `docs/specs/03-runtime.md:143` — 4.5 Prerequisites trước khi bật
-- `docs/specs/03-runtime.md:157` — 5. Tooling: `ostd` & `cargo-Cellos`
+- `docs/specs/03-runtime.md:54` — 4. Boot Optimization (Snapshot)
+- `docs/specs/03-runtime.md:64` — 4.1 Mục tiêu
+- `docs/specs/03-runtime.md:70` — 4.2 Cơ chế hoạt động
+- `docs/specs/03-runtime.md:96` — 4.3 Snapshot Format (internal v2)
+- `docs/specs/03-runtime.md:148` — 4.4 Ràng buộc triển khai
+- `docs/specs/03-runtime.md:160` — 4.5 Prerequisites trước khi bật
+- `docs/specs/03-runtime.md:174` — 5. Tooling: `ostd` & `cargo-Cellos`
 - `docs/specs/04-hardware.md:7` — 1. Multi-Architecture Strategy (The "Trait" Contract)
 - `docs/specs/04-hardware.md:10` — Trait-Based Abstraction
 - `docs/specs/04-hardware.md:17` — 2. Platform HAL vs. Device Driver Cells
@@ -190,20 +190,20 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/10-testing.md:163` — Running Layer-2 tests
 - `docs/specs/10-testing.md:196` — Test availability and SKIP behaviour
 - `docs/specs/12-reliability.md:14` — 1. What "Never-Die" Means — Six Independent Axes
-- `docs/specs/12-reliability.md:33` — 2. Isolation Strategy Decision (2026-06-05)
-- `docs/specs/12-reliability.md:78` — 3. Current Status — Scored per Axis
-- `docs/specs/12-reliability.md:103` — 4. Completion Criteria — The Reliability Track
-- `docs/specs/12-reliability.md:107` — 4.1 — Stop silent death (P0, cheap)
-- `docs/specs/12-reliability.md:122` — 4.2 — Detection (P0)
-- `docs/specs/12-reliability.md:147` — 4.3 — Recovery: Supervisor Tree (P0, highest ROI)
-- `docs/specs/12-reliability.md:186` — 4.4 — Stop slow death (P1)
-- `docs/specs/12-reliability.md:227` — 4.5 — Realtime hardening (P1–P2)
-- `docs/specs/12-reliability.md:238` — Target trajectory
-- `docs/specs/12-reliability.md:244` — 5. Prior Art — State of the Field
-- `docs/specs/12-reliability.md:258` — Why no OS gets all six
-- `docs/specs/12-reliability.md:271` — The two never-die regimes — and why "scalable systems look closest to 6"
-- `docs/specs/12-reliability.md:295` — The unifying insight (Cellos-relevant)
-- `docs/specs/12-reliability.md:316` — 6. Cross-References
+- `docs/specs/12-reliability.md:46` — 2. Isolation Strategy Decision (2026-06-05)
+- `docs/specs/12-reliability.md:91` — 3. Current Status — Scored per Axis
+- `docs/specs/12-reliability.md:116` — 4. Completion Criteria — The Reliability Track
+- `docs/specs/12-reliability.md:120` — 4.1 — Stop silent death (P0, cheap)
+- `docs/specs/12-reliability.md:135` — 4.2 — Detection (P0)
+- `docs/specs/12-reliability.md:167` — 4.3 — Recovery: Supervisor Tree (P0, highest ROI)
+- `docs/specs/12-reliability.md:206` — 4.4 — Stop slow death (P1)
+- `docs/specs/12-reliability.md:247` — 4.5 — Realtime hardening (P1–P2)
+- `docs/specs/12-reliability.md:258` — Target trajectory
+- `docs/specs/12-reliability.md:264` — 5. Prior Art — State of the Field
+- `docs/specs/12-reliability.md:278` — Why no OS gets all six
+- `docs/specs/12-reliability.md:291` — The two never-die regimes — and why "scalable systems look closest to 6"
+- `docs/specs/12-reliability.md:315` — The unifying insight (Cellos-relevant)
+- `docs/specs/12-reliability.md:336` — 6. Cross-References
 - `docs/specs/14-viui.md:9` — 1. Decision
 - `docs/specs/14-viui.md:20` — 2. Runtime architecture
 - `docs/specs/14-viui.md:47` — 3. Dual authoring layer
@@ -265,23 +265,23 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/17-ipc-wire-contract.md:224` — 7. Fail loud, never silent
 - `docs/specs/17-ipc-wire-contract.md:243` — 8. Case studies (the evidence this spec is built on)
 - `docs/specs/17-ipc-wire-contract.md:267` — 9. Compliance checklist & amendments
-- `docs/specs/17-ipc-wire-contract.md:414` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
-- `docs/specs/17-ipc-wire-contract.md:423` — 10.1 `NET_READY` frame
-- `docs/specs/17-ipc-wire-contract.md:438` — 10.2 Collision-safety invariants (normative)
-- `docs/specs/17-ipc-wire-contract.md:454` — 10.3 Interest registration
-- `docs/specs/17-ipc-wire-contract.md:468` — 10.4 Edge semantics + delivery
-- `docs/specs/17-ipc-wire-contract.md:480` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
-- `docs/specs/17-ipc-wire-contract.md:499` — 10.6 One recv consumer per tid + demux
-- `docs/specs/17-ipc-wire-contract.md:519` — 10.7 Handle namespace (frozen)
-- `docs/specs/17-ipc-wire-contract.md:529` — 11. Caller attestation — Ratified 2026-07-30
-- `docs/specs/17-ipc-wire-contract.md:534` — 11.1 The problem
-- `docs/specs/17-ipc-wire-contract.md:552` — 11.2 The mechanism
-- `docs/specs/17-ipc-wire-contract.md:569` — 11.3 Normative rules
-- `docs/specs/17-ipc-wire-contract.md:589` — 11.4 Direct (non-`ecall`) service calls
-- `docs/specs/17-ipc-wire-contract.md:616` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
-- `docs/specs/17-ipc-wire-contract.md:620` — 12.1 Copied IPC across Domain Boundaries
-- `docs/specs/17-ipc-wire-contract.md:630` — 12.2 Inter-Domain Zero-Copy Grants
-- `docs/specs/17-ipc-wire-contract.md:637` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
+- `docs/specs/17-ipc-wire-contract.md:434` — 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
+- `docs/specs/17-ipc-wire-contract.md:443` — 10.1 `NET_READY` frame
+- `docs/specs/17-ipc-wire-contract.md:458` — 10.2 Collision-safety invariants (normative)
+- `docs/specs/17-ipc-wire-contract.md:474` — 10.3 Interest registration
+- `docs/specs/17-ipc-wire-contract.md:488` — 10.4 Edge semantics + delivery
+- `docs/specs/17-ipc-wire-contract.md:500` — 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+- `docs/specs/17-ipc-wire-contract.md:519` — 10.6 One recv consumer per tid + demux
+- `docs/specs/17-ipc-wire-contract.md:539` — 10.7 Handle namespace (frozen)
+- `docs/specs/17-ipc-wire-contract.md:549` — 11. Caller attestation — Ratified 2026-07-30
+- `docs/specs/17-ipc-wire-contract.md:554` — 11.1 The problem
+- `docs/specs/17-ipc-wire-contract.md:572` — 11.2 The mechanism
+- `docs/specs/17-ipc-wire-contract.md:589` — 11.3 Normative rules
+- `docs/specs/17-ipc-wire-contract.md:615` — 11.4 Direct (non-`ecall`) service calls
+- `docs/specs/17-ipc-wire-contract.md:642` — 12. Addendum: Tier 2 Native Domain IPC & Boundary Contracts
+- `docs/specs/17-ipc-wire-contract.md:646` — 12.1 Copied IPC across Domain Boundaries
+- `docs/specs/17-ipc-wire-contract.md:656` — 12.2 Inter-Domain Zero-Copy Grants
+- `docs/specs/17-ipc-wire-contract.md:663` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:91` — 2.1 Tier 1 admission — `cellos-sign`
@@ -316,16 +316,17 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/23-native-sdk-contract.md:39` — 2.1 Stability
 - `docs/specs/23-native-sdk-contract.md:52` — 2.2 Availability
 - `docs/specs/23-native-sdk-contract.md:82` — 3. Public-surface denominator
-- `docs/specs/23-native-sdk-contract.md:102` — 3.1 Ratification denominator tuples
-- `docs/specs/23-native-sdk-contract.md:132` — 4. SDK layers and ownership
-- `docs/specs/23-native-sdk-contract.md:144` — 4.1 Exhaustive public-surface inventory
-- `docs/specs/23-native-sdk-contract.md:167` — 5. Capability matrix (seed for Phase 02 ledger)
-- `docs/specs/23-native-sdk-contract.md:187` — 5.1 Deterministic Phase 02 handoff
-- `docs/specs/23-native-sdk-contract.md:211` — 6. Compatibility, versions, and errors
-- `docs/specs/23-native-sdk-contract.md:244` — 7. Security and tier behavior
-- `docs/specs/23-native-sdk-contract.md:258` — 8. Conformance and release gates
-- `docs/specs/23-native-sdk-contract.md:279` — 9. Evidence ledger and known gaps
-- `docs/specs/23-native-sdk-contract.md:303` — 10. Cross-references
+- `docs/specs/23-native-sdk-contract.md:105` — 3.1 Ratification denominator tuples
+- `docs/specs/23-native-sdk-contract.md:135` — 4. SDK layers and ownership
+- `docs/specs/23-native-sdk-contract.md:147` — 4.1 Exhaustive public-surface inventory
+- `docs/specs/23-native-sdk-contract.md:171` — 4.2 Retired `api` facade (Phase 13)
+- `docs/specs/23-native-sdk-contract.md:191` — 5. Capability matrix (seed for Phase 02 ledger)
+- `docs/specs/23-native-sdk-contract.md:211` — 5.1 Deterministic Phase 02 handoff
+- `docs/specs/23-native-sdk-contract.md:235` — 6. Compatibility, versions, and errors
+- `docs/specs/23-native-sdk-contract.md:268` — 7. Security and tier behavior
+- `docs/specs/23-native-sdk-contract.md:282` — 8. Conformance and release gates
+- `docs/specs/23-native-sdk-contract.md:303` — 9. Evidence ledger and known gaps
+- `docs/specs/23-native-sdk-contract.md:327` — 10. Cross-references
 - `docs/specs/24-ai-inference-architecture.md:23` — 1. Context & Motivation
 - `docs/specs/24-ai-inference-architecture.md:32` — Rejected Alternatives
 - `docs/specs/24-ai-inference-architecture.md:41` — 2. Unified Native AI Architecture (`libs/ai-sdk`)
@@ -349,7 +350,7 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/00-context.md:10` — `✅` in: - ✅ **YES** Cellular architecture with zero-copy IPC
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for safety, not hardware MMU
 - `docs/specs/00-context.md:196` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
-- `docs/specs/00-context.md:198` — `LOC` in: | `libs/api` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
+- `docs/specs/00-context.md:198` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 - `docs/specs/04-hardware.md:109` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
@@ -380,13 +381,13 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/09-vfs.md:56` — `LOC` in: * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI
 - `docs/specs/09b-vfs-native-fs-adr.md:16` — `LOC` in: Use **RedoxFS** (MIT licence, approximately 10 K LOC Rust) as the `/srv` backend. Do not
 - `docs/specs/09b-vfs-native-fs-adr.md:44` — `LOC` in: | Option | LOC | Licence | CoW | Checksum | `no_std` | Verdict |
-- `docs/specs/12-reliability.md:247` — `✅` in: specialize. Scoring the strongest contenders (✅ strong · 🟡 partial/conditional · ❌ weak/delegated):
-- `docs/specs/12-reliability.md:251` — `✅` in: | **QNX Neutrino** | ✅ MMU | ✅ HAM watchdog | ✅ restart | ✅ hard RT | 🟡 per-component | ❌ needs redundant HW |
-- `docs/specs/12-reliability.md:252` — `✅` in: | **INTEGRITY** (Green Hills) | ✅ separation kernel | ✅ | ✅ | ✅ hard RT | 🟡 | ❌ |
-- `docs/specs/12-reliability.md:253` — `✅` in: | **seL4** | ✅ *proven* | ❌ DIY | ❌ DIY | ✅ *proven WCET* | ❌ | ❌ |
-- `docs/specs/12-reliability.md:254` — `✅` in: | **Erlang/OTP** (BEAM) | 🟡 in-VM only | ✅ | ✅ supervision tree | ❌ soft RT (GC) | ✅ hot code load | 🟡 via distribution 
-- `docs/specs/12-reliability.md:255` — `✅` in: | **HP NonStop** (Tandem) | ✅ | ✅ | ✅ process-pairs | ❌ not RT | ✅ online upgrade | ✅ lockstep HW |
-- `docs/specs/12-reliability.md:256` — `✅` in: | **VxWorks** | 🟡 | ✅ watchdog | 🟡 | ✅ hard RT | 🟡 remote patch | 🟡 redundant configs |
+- `docs/specs/12-reliability.md:267` — `✅` in: specialize. Scoring the strongest contenders (✅ strong · 🟡 partial/conditional · ❌ weak/delegated):
+- `docs/specs/12-reliability.md:271` — `✅` in: | **QNX Neutrino** | ✅ MMU | ✅ HAM watchdog | ✅ restart | ✅ hard RT | 🟡 per-component | ❌ needs redundant HW |
+- `docs/specs/12-reliability.md:272` — `✅` in: | **INTEGRITY** (Green Hills) | ✅ separation kernel | ✅ | ✅ | ✅ hard RT | 🟡 | ❌ |
+- `docs/specs/12-reliability.md:273` — `✅` in: | **seL4** | ✅ *proven* | ❌ DIY | ❌ DIY | ✅ *proven WCET* | ❌ | ❌ |
+- `docs/specs/12-reliability.md:274` — `✅` in: | **Erlang/OTP** (BEAM) | 🟡 in-VM only | ✅ | ✅ supervision tree | ❌ soft RT (GC) | ✅ hot code load | 🟡 via distribution 
+- `docs/specs/12-reliability.md:275` — `✅` in: | **HP NonStop** (Tandem) | ✅ | ✅ | ✅ process-pairs | ❌ not RT | ✅ online upgrade | ✅ lockstep HW |
+- `docs/specs/12-reliability.md:276` — `✅` in: | **VxWorks** | 🟡 | ✅ watchdog | 🟡 | ✅ hard RT | 🟡 remote patch | 🟡 redundant configs |
 - `docs/specs/13-peripherals.md:70` — `✅` in: - ✅ **`ViI2c`** (`hal/traits/i2c/src/lib.rs`) — synchronous master, `write`/`read`/`write_read`. Implemented 2026-06.
 - `docs/specs/13-peripherals.md:71` — `✅` in: - ✅ **`ViSpi`** (`hal/traits/spi/src/lib.rs`) — synchronous master Mode 0, `cs_select`/`cs_deselect`/`transfer`/`write`.
 - `docs/specs/13-peripherals.md:72` — `✅` in: - ✅ **`ViPwm`** (`hal/traits/pwm/src/lib.rs`) — `set_frequency`/`set_duty`/`enable`/`disable`/`tick`. Bit-bang over GPIO

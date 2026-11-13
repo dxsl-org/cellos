@@ -8,9 +8,9 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::net::NetError;
 use ostd::service::provider_tid;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::net::NetError;
 
 const BACKEND_TIMEOUT_TICKS: u64 = 200;
 /// First guest address (locally administered). Session `n` of those running at
@@ -100,7 +100,7 @@ impl Connection {
     }
 
     fn active_tid(&mut self) -> Option<usize> {
-        let active_tid = provider_tid(api::syscall::service::NET)?;
+        let active_tid = provider_tid(abi::syscall::service::NET)?;
         if active_tid == self.poisoned_tid {
             // The poison exists because a reply that arrives after its deadline
             // could be read as the answer to the next request. Collect whatever

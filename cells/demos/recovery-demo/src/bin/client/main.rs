@@ -21,8 +21,8 @@ mod faults;
 use alloc::format;
 use ostd::io::println;
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

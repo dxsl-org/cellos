@@ -8,8 +8,8 @@ use super::vierr_from_code;
 use crate::service::NetRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
-use api::services::proto::net::NetError;
+use wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
+use wire::proto::net::NetError;
 
 /// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
 /// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
@@ -285,7 +285,7 @@ impl embedded_io::Read for TcpStream {
                 }
                 Err(ViError::Unknown) => {
                     // EOF: net service sent `Err(TCP_RECV_EOF)` signalling FIN/RST
-                    // (`api::services::proto::net::TCP_RECV_EOF`).
+                    // (`wire::proto::net::TCP_RECV_EOF`).
                     return Ok(0);
                 }
                 Err(e) => return Err(crate::io::OstdError(e)),

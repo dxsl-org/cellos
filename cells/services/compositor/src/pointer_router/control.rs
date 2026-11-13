@@ -1,4 +1,4 @@
-use api::display::{compositor_ops, Rect, WindowState};
+use wire::display::{compositor_ops, Rect, WindowState};
 
 use crate::surface_table::{StateTransition, SurfaceTable};
 use crate::window_decoration::{self, Control};

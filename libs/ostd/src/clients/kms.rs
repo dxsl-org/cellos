@@ -67,7 +67,7 @@ impl KmsClient {
     /// Resolve the live KMS provider with bounded scheduler retries.
     pub fn connect() -> Result<Self, KmsClientError> {
         for _ in 0..8 {
-            if let Some(tid) = crate::service::provider_tid(api::syscall::service::KMS) {
+            if let Some(tid) = crate::service::provider_tid(abi::syscall::service::KMS) {
                 return Ok(Self {
                     tid,
                     next_request_id: AtomicU32::new(FIRST_REQUEST_ID),

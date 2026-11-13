@@ -30,7 +30,7 @@ pub struct FileItem {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
-    pub mime: api::services::mime::MimeType,
+    pub mime: wire::mime::MimeType,
     /// `Stat` size; `None` for folders and when the VFS refused the `Stat`.
     pub size: Option<u64>,
     pub icon: LineIcon,
@@ -46,9 +46,9 @@ impl FileItem {
         let name = name.into();
         let path = path.into();
         let mime = if is_dir {
-            api::services::mime::MimeType::InodeDirectory
+            wire::mime::MimeType::InodeDirectory
         } else {
-            api::services::mime::MimeType::from_path(&path)
+            wire::mime::MimeType::from_path(&path)
         };
         let icon = LineIcon::for_mime(mime);
 

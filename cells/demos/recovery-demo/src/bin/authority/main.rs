@@ -26,9 +26,9 @@ use recovery_demo::WORKER_SERVICE;
 
 use lifecycle::Provider;
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

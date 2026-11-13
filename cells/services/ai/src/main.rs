@@ -27,17 +27,17 @@
 extern crate alloc;
 extern crate ostd;
 
+use abi::caller_identity::CallerIdentity;
 use ai_engine::{Engine, EngineError, SamplingParams};
 use ai_proto::{
     self, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
     MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
 };
 use alloc::vec::Vec;
-use api::caller_identity::CallerIdentity;
 use ostd::io::{print, print_usize, println};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

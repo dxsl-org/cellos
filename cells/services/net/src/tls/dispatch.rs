@@ -16,7 +16,6 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::services::proto::tls;
 use core::future::Future;
 use core::ops::Bound::{Excluded, Unbounded};
 use core::pin::Pin;
@@ -26,6 +25,7 @@ use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::tcp,
 };
+use wire::proto::tls;
 
 const TCP_TIMEOUT: u64 = 150_000_000; // 15 seconds (sys_get_time: 10 MHz)
 const TLS_TIMEOUT: u64 = 300_000_000; // 30 seconds for one TLS operation

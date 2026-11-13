@@ -11,7 +11,7 @@ use ostd::io::println;
 use ostd::service::provider_tid;
 use vimio::{Events, Interest, Selector, Token, Waker};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = true,
     spawn = false,
@@ -22,7 +22,7 @@ api::declare_manifest!(
     spi = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     Recv,
     TrySend,
@@ -84,18 +84,18 @@ fn cell_main() {
     }
 
     // Connect to network service if online
-    if let Some(net_tid) = provider_tid(api::syscall::service::NET) {
+    if let Some(net_tid) = provider_tid(abi::syscall::service::NET) {
         println(&alloc::format!(
             "[tokio-smoke] Network service available at tid: {}",
             net_tid
         ));
 
-        let req = api::ipc::NetRequest::TcpListen { port: HTTP_PORT };
+        let req = wire::ipc::NetRequest::TcpListen { port: HTTP_PORT };
         let mut req_buf = [0u8; 128];
         let mut resp_buf = [0u8; 128];
 
-        if let Ok(api::ipc::NetResponse::CapId(listener_cap)) =
-            ostd::ipc::service_call_typed_bounded::<_, api::ipc::NetResponse<'_>>(
+        if let Ok(wire::ipc::NetResponse::CapId(listener_cap)) =
+            ostd::ipc::service_call_typed_bounded::<_, wire::ipc::NetResponse<'_>>(
                 net_tid,
                 &req,
                 &mut req_buf,

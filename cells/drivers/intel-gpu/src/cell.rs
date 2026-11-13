@@ -29,7 +29,7 @@ const CLIENT_SYSMEM_BYTES: u64 = 1 << 38;
 
 // A request and the kernel's caller-identity trailer must share one receive buffer.
 const _: () =
-    assert!(MAX_REQUEST_LEN + api::caller_identity::CALLER_IDENTITY_LEN <= api::ipc::IPC_BUF_SIZE);
+    assert!(MAX_REQUEST_LEN + abi::caller_identity::CALLER_IDENTITY_LEN <= wire::ipc::IPC_BUF_SIZE);
 
 /// Device IDs from `include/drm/intel/pciids.h` (PTL, WCL and LNL lists).
 pub const QUERY_DEVICE_IDS: &[u16] = &[
@@ -116,7 +116,7 @@ fn find_gpu() -> Option<(PcieDeviceInfo, u16)> {
 type CellGpu = Gpu<mmio::MmioRegion, KernelClock, KernelDma, KernelExports>;
 
 fn serve(mut service: Service<CellGpu>) -> ! {
-    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut buf = [0u8; wire::ipc::IPC_BUF_SIZE];
     let mut reply = [0u8; MAX_REPLY_LEN];
     let mut unavailable_logged = false;
     let mut faults = service.gpu.faults;
@@ -211,7 +211,7 @@ impl ExportMapper for KernelExports {
             owner_generation: record.owner_generation,
             iova: record.iova,
             len: record.len,
-            device_write: record.flags & api::dma_export::EXPORT_DEVICE_WRITE != 0,
+            device_write: record.flags & abi::dma_export::EXPORT_DEVICE_WRITE != 0,
         })
     }
 

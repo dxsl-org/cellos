@@ -211,7 +211,8 @@ path = "tests/desktop-x86.rs"
 
 [dev-dependencies]
 tempfile = "3"
-api = { path = "../../libs/api" }
+abi = { path = "../../libs/abi" }
+wire = { path = "../../libs/wire" }
 cellos-boards = { path = "../../boards" }
 
 # Detach from the parent workspace so the riscv64 default target is not inherited.

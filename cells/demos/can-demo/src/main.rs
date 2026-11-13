@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use driver_can_loopback::LoopbackCan;
 use hal_can::{CanFrame, ViCan};
 use ostd::io::println;

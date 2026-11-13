@@ -3,7 +3,7 @@
 
 Usage: machine_pin_disk.py DISK_IMG [--corrupt-pin]
 
-Writes a sparse private disk laid out like `api::abi::disk`:
+Writes a sparse private disk laid out like `abi::disk`:
   P1 FAT32 (/mnt/sd)  empty: the image's own /etc/cellos plan applies.
   P5 CellosFS (/srv)  provisioned offline by tools/cellos-fs-provision, blank, so
                       init's first boot records /srv/.cellos-machine/pin.

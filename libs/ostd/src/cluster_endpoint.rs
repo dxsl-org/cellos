@@ -6,12 +6,12 @@
 //! metadata; Phase 04 deliberately exposes no transmit method while remote
 //! dispatch remains disabled.
 
-use api::ipc::IPC_BUF_SIZE;
-use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
-use api::services::cluster::{CellNetId, ClusterId};
+use abi::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 use core::marker::PhantomData;
 use serde::{Deserialize, Serialize};
 use types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
+use wire::cluster::{CellNetId, ClusterId};
+use wire::ipc::IPC_BUF_SIZE;
 
 use crate::call_outcome::{self, CallOutcome};
 use crate::ipc;

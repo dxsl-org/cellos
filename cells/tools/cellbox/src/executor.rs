@@ -44,8 +44,8 @@ use ostd::prelude::*;
 use ostd::syscall;
 use text_engine::pipeline::InterruptLatch;
 
-use api::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
-use api::cell_session::Status;
+use abi::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
+use abi::cell_session::Status;
 use core::sync::atomic::{AtomicBool, Ordering};
 use terminal_sdk::input::EventKind;
 use terminal_sdk::pipe_child::{PipeChild, PipeSpec, Pipeline};
@@ -648,7 +648,7 @@ pub const SHELL_LINE_MAX: usize = 4096;
 /// input grammar), and Control+J is accept-line, as in readline, so a client that ends lines
 /// with LF alone submits them. Key-level TUI reading (`TerminalKeys`) keeps Control+J a key.
 pub(crate) fn submits_line(code: u32, modifiers: u32) -> bool {
-    use api::services::session::{key_code, modifiers as key_modifiers};
+    use wire::session::{key_code, modifiers as key_modifiers};
     (code == key_code::ENTER && modifiers == 0)
         || (code == u32::from(b'j') && modifiers == key_modifiers::CONTROL)
 }
@@ -657,7 +657,7 @@ pub(crate) fn submits_line(code: u32, modifiers: u32) -> bool {
 /// key, and nothing (`0`, which no reader handles) for any other modified key.
 fn line_key(code: u32, modifiers: u32) -> u32 {
     if submits_line(code, modifiers) {
-        api::services::session::key_code::ENTER
+        wire::session::key_code::ENTER
     } else if modifiers == 0 {
         code
     } else {
@@ -3473,7 +3473,7 @@ mod tests {
     #[test]
     fn enter_and_control_j_submit_a_line_other_modified_keys_do_not() {
         use super::{line_key, submits_line};
-        use api::services::session::{key_code, modifiers};
+        use wire::session::{key_code, modifiers};
         let j = u32::from(b'j');
         assert!(submits_line(key_code::ENTER, 0));
         assert!(submits_line(j, modifiers::CONTROL));
@@ -3493,8 +3493,8 @@ mod tests {
     #[test]
     fn prompt_answers_on_control_j_but_not_inside_a_paste_or_on_release() {
         use super::{prompt_step, PromptStep, Wiped};
-        use api::services::session::modifiers;
         use terminal_sdk::input::EventKind;
+        use wire::session::modifiers;
         let mut line = Wiped::with_capacity(128);
         let mut paste = false;
         let ctrl = |c: u8, pressed| EventKind::Key {
@@ -3539,8 +3539,8 @@ mod tests {
     #[test]
     fn serial_lf_cr_and_crlf_submit_through_the_real_decoder() {
         use super::{prompt_step, PromptStep, Wiped};
-        use api::services::session::{SerialDecoder, EVENT_HEADER_LEN, EVENT_MAX};
         use terminal_sdk::input::{Event, EventKind};
+        use wire::session::{SerialDecoder, EVENT_HEADER_LEN, EVENT_MAX};
         fn events(bytes: &[u8]) -> alloc::vec::Vec<EventKind> {
             let mut decoder = SerialDecoder::new();
             let mut out = alloc::vec::Vec::new();
@@ -3844,7 +3844,7 @@ mod tests {
     #[test]
     fn frontend_detach_and_attach_notices_never_discard_an_answer() {
         use super::{frontend_notice, prompt_step, EventKind, PromptStep, Wiped};
-        use api::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
+        use abi::cell_session::frontend::{FRONTEND_ATTACHED, LOST_FRONTEND};
         assert!(frontend_notice(LOST_FRONTEND) && frontend_notice(FRONTEND_ATTACHED));
         for routine in [0, 1, 2, 3, 6] {
             assert!(!frontend_notice(routine));
@@ -3868,8 +3868,8 @@ mod tests {
     #[test]
     fn owner_trust_prompt_is_built_only_from_the_owner_notice() {
         use super::{trust_prompt_text, EventKind};
-        use api::cell_session::trust::TrustPromptV1;
-        use api::services::session::{event_kind, EventHeaderV1};
+        use abi::cell_session::trust::TrustPromptV1;
+        use wire::session::{event_kind, EventHeaderV1};
         // The exact frame input writes to the controller's control ring.
         let prompt = TrustPromptV1 {
             port: 2222,
@@ -3907,7 +3907,7 @@ mod tests {
     #[test]
     fn owner_notice_acknowledgement_retries_transient_refusals_only_within_its_bound() {
         use super::{acknowledge_with, ACK_ATTEMPTS};
-        use api::cell_session::Status;
+        use abi::cell_session::Status;
         // Drive the acknowledgement over a scripted sequence of owner answers.
         fn run(script: &[Result<(), Status>]) -> (Result<(), Status>, usize, usize) {
             let (mut calls, mut pauses) = (0usize, 0usize);
@@ -3963,7 +3963,7 @@ mod tests {
     #[test]
     fn a_failed_prompt_handshake_keeps_cancelling_until_it_is_in() {
         use super::{cancel_step, CancelStep, OwnerPrompt};
-        use api::cell_session::Status;
+        use abi::cell_session::Status;
         // Cancelled now, already, or the operation is over: nothing left to do.
         for result in [
             Ok(()),
@@ -4403,7 +4403,7 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
         .then(|| {
             let mut frames = [0u8; 4096];
             let n = child.read_completion(&mut frames).unwrap_or(0);
-            api::services::ssh_completion::last_frame(&frames[..n])
+            wire::ssh_completion::last_frame(&frames[..n])
         })
         .flatten();
     // Reaped and restored: release the child operation so the session's 32-child
@@ -4417,7 +4417,7 @@ fn run_foreground(prog: &str, args: &[String], completion: bool) -> (i32, Option
     (code, record)
 }
 
-type SshCompletion = api::services::ssh_completion::CompletionV1;
+type SshCompletion = wire::ssh_completion::CompletionV1;
 
 /// The newest `cellbox ssh` completion record of this shell (`completion` builtin).
 static SSH_COMPLETION: ostd::sync::Mutex<Option<SshCompletion>> = ostd::sync::Mutex::new(None);
@@ -5107,11 +5107,11 @@ impl ExtRun {
                         // frame is ignored). The newest ssh stage's record is the shell's.
                         let mut frames = [0u8; 4096];
                         let n = child.read_completion(&mut frames).unwrap_or(0);
-                        let record = api::services::ssh_completion::last_frame(&frames[..n]);
+                        let record = wire::ssh_completion::last_frame(&frames[..n]);
                         set_ssh_completion(crate::ssh::settle(
                             record,
                             code,
-                            api::services::ssh_completion::Mode::Exec,
+                            wire::ssh_completion::Mode::Exec,
                         ));
                     }
                     code

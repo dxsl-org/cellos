@@ -5,7 +5,7 @@
 //! track press/release symmetrically.
 
 use crate::layout_us_qwerty::{modifier_for_scancode, toggle_modifier_for_scancode};
-use api::input::{KeyState, Modifiers};
+use wire::input::{KeyState, Modifiers};
 
 /// Tracks the current state of all modifier keys.
 #[derive(Debug, Default, Clone, Copy)]
@@ -51,18 +51,18 @@ impl ModifierState {
     ///
     /// The lock keys are the one piece of keyboard state the host has to write
     /// back: a keyboard shows Caps/Num/Scroll Lock on its own LEDs and nothing
-    /// else can light them. The bits are the ones [`api::ipc::OP_SET_LEDS`]
+    /// else can light them. The bits are the ones [`wire::ipc::OP_SET_LEDS`]
     /// defines, so this value goes out unchanged.
     pub fn led_bitmap(&self) -> u8 {
         let mut bits = 0u8;
         if self.0.contains(Modifiers::NUM_LOCK) {
-            bits |= api::ipc::led_bits::NUM_LOCK;
+            bits |= wire::ipc::led_bits::NUM_LOCK;
         }
         if self.0.contains(Modifiers::CAPS_LOCK) {
-            bits |= api::ipc::led_bits::CAPS_LOCK;
+            bits |= wire::ipc::led_bits::CAPS_LOCK;
         }
         if self.0.contains(Modifiers::SCROLL_LOCK) {
-            bits |= api::ipc::led_bits::SCROLL_LOCK;
+            bits |= wire::ipc::led_bits::SCROLL_LOCK;
         }
         bits
     }
@@ -79,8 +79,8 @@ impl ModifierState {
 #[cfg(test)]
 mod tests {
     use super::ModifierState;
-    use api::input::{KeyState, Modifiers};
-    use api::ipc::led_bits;
+    use wire::input::{KeyState, Modifiers};
+    use wire::ipc::led_bits;
 
     const CAPS_LOCK: u32 = 0x3A;
     const NUM_LOCK: u32 = 0x45;

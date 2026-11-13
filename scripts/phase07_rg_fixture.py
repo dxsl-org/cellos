@@ -38,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BASE_LBA = 2048
 SECTORS = 524_288
-# Sparse, and as large as the whole `api::abi::disk` layout (the cell-store ends at LBA
+# Sparse, and as large as the whole `abi::disk` layout (the cell-store ends at LBA
 # 1,127,680), so mounts of the other, empty partitions never read past the device.
 DISK_BYTES = 1_127_680 * 512
 SRV_BASE_LBA = 931_072

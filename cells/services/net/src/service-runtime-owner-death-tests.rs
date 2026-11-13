@@ -5,8 +5,8 @@
 //! is tested in the kernel crate and the `serve` loop itself is bare-metal only.
 
 use super::*;
+use abi::caller_identity::CallerIdentity;
 use alloc::vec::Vec;
-use api::caller_identity::CallerIdentity;
 use ostd::service::owners::{OwnerWatches, WatchSys};
 use smoltcp::{
     iface::{Config, SocketHandle},

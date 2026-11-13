@@ -21,8 +21,8 @@ pub fn run<const ALLOW_SHARED: bool>() -> ! {
     let scene_hash = scene.fingerprint();
     let mut owner = None;
     let mut copied = Vec::with_capacity(COPIED_TILE_MAX_BYTES);
-    let mut incoming = [0u8; api::ipc::IPC_BUF_SIZE];
-    let mut outgoing = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut incoming = [0u8; wire::ipc::IPC_BUF_SIZE];
+    let mut outgoing = [0u8; wire::ipc::IPC_BUF_SIZE];
     loop {
         incoming.fill(0);
         let sender = match sys_recv(owner.unwrap_or(0), &mut incoming) {
@@ -154,7 +154,7 @@ pub fn run<const ALLOW_SHARED: bool>() -> ! {
             }
             _ => Response::Error(RenderError::InvalidOutput),
         };
-        let sent = api::ipc::encode(&response, &mut outgoing)
+        let sent = wire::ipc::encode(&response, &mut outgoing)
             .map_err(|_| ostd::ipc::IpcError::Encode)
             .and_then(|encoded| ostd::ipc::reply(operation, encoded));
         if let Response::Done { pixels, .. } = response {

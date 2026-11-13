@@ -42,14 +42,14 @@ use ostd::syscall::{
     SyscallResult,
 };
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

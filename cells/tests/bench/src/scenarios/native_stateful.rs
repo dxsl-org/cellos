@@ -20,12 +20,12 @@
 extern crate alloc;
 
 use alloc::format;
-use api::dir_handles::ViDirHandle;
-use api::services::hostile_backend_recovery::{
+use abi::dir_handles::ViDirHandle;
+use wire::hostile_backend_recovery::{
     encode_kill_request, parse_kill_response, KILL_STATUS_OK,
 };
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-use api::syscall::service;
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+use abi::syscall::service;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{

@@ -1,7 +1,7 @@
-use api::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
-use api::services::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
 use ostd::ipc::reply_to;
 use ostd::syscall::sys_grant_slice_with_len_owned_by;
+use wire::display::{compositor_ops, AttachGrant, DamageNotify, DetachReplacedGrant, PixelFormat};
+use wire::proto::compositor::{REPLY_FALSE, REPLY_TRUE};
 
 use crate::appearance::Appearance;
 use crate::framebuffer;

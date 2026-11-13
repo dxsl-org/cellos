@@ -5,18 +5,18 @@ use crate::{
     net_ipc::{self, Op, RequestReadError},
     router::{self, Route},
 };
+use abi::dir_handles::ViDirHandle;
 use alloc::{
     format,
     string::{String, ToString},
     vec::Vec,
 };
-use api::dir_handles::ViDirHandle;
-use api::ipc::{net_ready, NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::services::proto::vfs::VfsError;
-use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::ipc::{self, IpcSubmitError};
 use ostd::service::provider_tid;
 use ostd::syscall::sys_get_scheduler_ticks;
+use wire::ipc::{net_ready, NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::proto::vfs::VfsError;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 const STATIC_FILE_MAX_BYTES: usize = 64 * 1024;
 const MAX_CONNECTIONS: usize = 257; // 256 held clients and one fast probe.
@@ -105,14 +105,14 @@ enum FileStep {
 
 impl FileSession {
     fn new(path: &str) -> Result<Self, ()> {
-        api::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ())?;
+        wire::dir_name::validate_dir_path(path.as_bytes()).map_err(|_| ())?;
         if path.starts_with("/srv") || path.starts_with("/etc") || path.starts_with("/.cellos") {
             return Err(());
         }
         let components = path[1..]
             .split('/')
             .map(|part| {
-                api::dir_name::validate_dir_component(part.as_bytes()).map(|_| part.to_string())
+                wire::dir_name::validate_dir_component(part.as_bytes()).map(|_| part.to_string())
             })
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| ())?;
@@ -851,13 +851,13 @@ impl Reactor<'_> {
                 if self.backend_count() >= MAX_BACKENDS {
                     return false;
                 }
-                if let Some(ai) = provider_tid(api::syscall::service::AI) {
+                if let Some(ai) = provider_tid(abi::syscall::service::AI) {
                     if infer.peer.is_some_and(|peer| peer != ai) {
                         conn.respond(handlers::infer_failed("ServiceNotFound"), now);
                         return true;
                     }
                     let mut bytes = [0u8; IPC_BUF_SIZE];
-                    if let Ok(encoded) = api::ipc::encode(&infer.request(), &mut bytes) {
+                    if let Ok(encoded) = wire::ipc::encode(&infer.request(), &mut bytes) {
                         if self.outstanding < MAX_OPERATIONS {
                             match ipc::submit(ai, encoded) {
                                 Ok(op) => {
@@ -1142,7 +1142,7 @@ impl Reactor<'_> {
             #[cfg(target_os = "none")]
             Phase::Infer(infer) => {
                 let result =
-                    raw.and_then(|bytes| api::ipc::decode::<ai_proto::AiResponse<'_>>(bytes).ok());
+                    raw.and_then(|bytes| wire::ipc::decode::<ai_proto::AiResponse<'_>>(bytes).ok());
                 if let Some(resp) = infer.complete(result, conn.disconnected) {
                     conn.respond(resp, now);
                 }
@@ -1156,10 +1156,10 @@ impl Reactor<'_> {
 mod state_tests {
     use super::{Connection, FileSession, FileStep, Phase, READ_TIMEOUT, SEND_TIMEOUT};
     use crate::handlers;
-    use api::dir_handles::ViDirHandle;
-    use api::ipc::VfsResponse;
-    use api::services::proto::vfs::VfsError;
-    use api::vfs_file_handles::ViVfsFileHandle;
+    use abi::dir_handles::ViDirHandle;
+    use wire::ipc::VfsResponse;
+    use wire::proto::vfs::VfsError;
+    use wire::vfs_file_handles::ViVfsFileHandle;
 
     #[test]
     fn read_deadline_is_elapsed_time_not_iteration_count() {

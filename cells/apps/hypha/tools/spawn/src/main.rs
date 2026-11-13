@@ -24,13 +24,13 @@ use ostd::io::println;
 use ostd::runtime::CellRuntime;
 use ostd::syscall::{sys_exit, sys_force_exit, sys_spawn_from_path, SyscallResult};
 
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+abi::declare_manifest!(block_io = false, network = false, spawn = true);
 // ForceExit is always-permitted (SpawnCap-gated at kernel dispatch, not allowlist).
 // GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
 // GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
 // one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
 // StateRestore: reads the spawn argv that names the owning core.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,

@@ -8,7 +8,7 @@
 //! A second power-button press ends the window at once. If 436 returns, every
 //! Cell this sweep froze is resumed and the 436 error is returned.
 
-use api::syscall::{service, ProcessInfo};
+use abi::syscall::{service, ProcessInfo};
 use ostd::io::print_fmt;
 use ostd::service::provider_tid;
 use ostd::syscall::{
@@ -16,7 +16,7 @@ use ostd::syscall::{
     sys_system_power, SyscallResult, SystemPowerAction, SystemPowerError,
 };
 
-use api::services::proto::supervisor::POWER_BUTTON_REQUEST;
+use wire::proto::supervisor::POWER_BUTTON_REQUEST;
 
 /// Who asked: the `/bin/shutdown` worker or the kernel's power-button relay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,7 +30,7 @@ const STATE_TERMINATED: usize = 3;
 /// Upper bound of the settle window, in 10 ms scheduler ticks.
 const SETTLE_TICKS: u64 = 50;
 const SETTLE_POLL_TICKS: u64 = 5;
-const KEEP_MAX: usize = 2 + api::block_route::MAX_BLOCK_ROUTES;
+const KEEP_MAX: usize = 2 + abi::block_route::MAX_BLOCK_ROUTES;
 
 fn action_name(action: SystemPowerAction) -> &'static str {
     match action {
@@ -111,10 +111,10 @@ fn storage_stack(keep: &mut [usize; KEEP_MAX]) -> usize {
             add(tid);
         }
     }
-    for index in 0..api::block_route::MAX_BLOCK_ROUTES as u32 {
+    for index in 0..abi::block_route::MAX_BLOCK_ROUTES as u32 {
         match sys_lookup_block_route(index) {
             Ok(Some(route)) => {
-                if route.flags & api::block_route::FLAG_PROVIDER_LIVE != 0 {
+                if route.flags & abi::block_route::FLAG_PROVIDER_LIVE != 0 {
                     add(route.provider_tid as usize);
                 }
             }

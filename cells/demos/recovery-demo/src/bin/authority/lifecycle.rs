@@ -2,8 +2,8 @@
 //! on death, wait for the kernel's retirement verdict (K1, syscall 431), and
 //! restart only a contained or explicitly quarantined incarnation.
 
+use abi::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
 use alloc::format;
-use api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
 use ostd::io::println;
 use ostd::ipc::Incoming;
 use ostd::syscall::{self, SyscallResult};

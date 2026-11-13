@@ -6,8 +6,8 @@
 //! operation is what guarantees a sealed cell meets exactly the access,
 //! namespace-reservation and quota rules an unsealed one does.
 
-use api::ipc::VfsResponse;
-use api::services::proto::vfs::VfsError;
+use wire::ipc::VfsResponse;
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;

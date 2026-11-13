@@ -2,14 +2,14 @@
 #![no_main]
 #![forbid(unsafe_code)]
 
-use api::syscall::service;
+use abi::syscall::service;
 use driver_dwc2_usb::lan_ipc;
 use ostd::io::println;
 use ostd::service::sender_is_live_provider;
 use ostd::syscall::{sys_heartbeat, sys_recv_timeout, SyscallResult};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_syscalls![
     Send,
     SendGather,
     TrySend,
@@ -28,7 +28,7 @@ ostd::cell_main!(cell_main);
 /// because that registration requires USB authority; this worker serializes the
 /// untrusted client envelope and has no device capability of its own.
 fn cell_main() {
-    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut buf = [0u8; wire::ipc::IPC_BUF_SIZE];
     // Attach only from the registered NIC endpoint: the DWC2 host publishes
     // `service::NIC_DRIVER` before it spawns this worker, so the kernel's registry
     // names it. First-come attach let any cell that guessed this tid bind the

@@ -76,7 +76,7 @@ fn the_kms_seam_is_exactly_opcodes_15_to_20() {
 #[test]
 fn the_allowlist_is_the_terminal_session_child_set() {
     let main = include_str!("../main.rs");
-    let start = main.find("api::declare_syscalls![").unwrap();
+    let start = main.find("abi::declare_syscalls![").unwrap();
     let block = &main[start..start + main[start..].find("];").unwrap()];
     let names: Vec<&str> = block
         .lines()
@@ -118,7 +118,7 @@ fn the_allowlist_is_the_terminal_session_child_set() {
         assert!(!names.contains(&forbidden), "{forbidden}");
     }
     // The manifest is all false.
-    let manifest = &main[main.find("api::declare_manifest!(").unwrap()..];
+    let manifest = &main[main.find("abi::declare_manifest!(").unwrap()..];
     let manifest = &manifest[..manifest.find(");").unwrap()];
     for field in ["block_io", "network", "spawn", "gpio", "uart", "hypervisor"] {
         assert!(

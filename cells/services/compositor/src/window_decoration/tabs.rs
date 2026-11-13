@@ -1,6 +1,6 @@
 //! Cell Tab geometry: one tab per window, side by side across a stack.
 
-use api::display::Rect;
+use wire::display::Rect;
 
 use super::{body_rect, end, BORDER, CONTROL, CONTROL_PAD, RADIUS, TITLE};
 

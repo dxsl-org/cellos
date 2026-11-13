@@ -21,7 +21,7 @@ mod ledger_tests;
 mod wire_tests;
 
 /// Cell-private fixture service ids (same pattern as init's 0x7A01 fixture);
-/// no `libs/api` constant. Init registers the authority from autoload config.
+/// no `abi`/`wire` constant. Init registers the authority from autoload config.
 pub const AUTHORITY_SERVICE: u16 = 0x7A0A;
 /// Published by the authority only after a replacement restored and validated.
 pub const WORKER_SERVICE: u16 = 0x7A0B;

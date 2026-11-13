@@ -1,6 +1,6 @@
 //! Frame-level IPC view ops: regroup a view, snap or fullscreen a frame.
 
-use api::display::{compositor_ops, FrameRef, Rect, ViewOpResult, ViewRef};
+use wire::display::{compositor_ops, FrameRef, Rect, ViewOpResult, ViewRef};
 
 use super::view::{send_error, send_response};
 use crate::stacking;
@@ -158,7 +158,7 @@ pub(super) fn snap(
     let frame_id = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
     let frame_gen = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
     let zone_byte = buf[9];
-    let Some(zone) = api::display::SnapZone::from_u8(zone_byte) else {
+    let Some(zone) = wire::display::SnapZone::from_u8(zone_byte) else {
         send_error(
             sender,
             compositor_ops::SNAP_FRAME,

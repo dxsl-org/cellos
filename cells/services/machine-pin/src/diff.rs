@@ -7,13 +7,13 @@
 //! and every byte outside printable ASCII escaped, so they cannot break a line
 //! or forge another one.
 
-use alloc::format;
-use alloc::string::String;
-use alloc::vec::Vec;
-use api::machine_facts::{
+use abi::machine_facts::{
     PciFunctionId, ViMachineFactsV1, FLAG_ACPI_OEM, FLAG_DMAR_PRESENT, FLAG_HYPERVISOR,
     FLAG_PCI_ECAM, FLAG_SMBIOS, FLAG_SMBIOS_UUID, FLAG_VTD_ACTIVE, PROFILE_SOURCE_CMDLINE,
 };
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt::Write;
 
 /// Most PCI lines printed before the rest are counted.

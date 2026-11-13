@@ -2,7 +2,7 @@
 //! classes, legacy isolation-tier aliases, and capability flag bits. Split out
 //! of `manifest.rs` to keep that file under the 200-LOC law; re-exported from
 //! `manifest.rs` so callers see one surface
-//! (`api::manifest::MANIFEST_FLAG_*` etc. keep working unchanged).
+//! (`abi::manifest::MANIFEST_FLAG_*` etc. keep working unchanged).
 
 /// Magic value identifying a valid manifest (`0x5649_4345`, "VICE" as a u32).
 pub const MANIFEST_MAGIC: u32 = 0x5649_4345;
@@ -64,9 +64,9 @@ pub const MANIFEST_FLAG_UART: u16 = 1 << 4;
 /// RISC-V H-extension (hypervisor) CSR access for VMM cells.  Grants `HypervisorCap`
 /// only when the CPU also reports H-ext at boot.
 pub const MANIFEST_FLAG_HYPERVISOR: u16 = 1 << 5;
-/// Block-I/O sector range grant: MBR partition P1 (FAT32, `api::disk`).
+/// Block-I/O sector range grant: MBR partition P1 (FAT32, `abi::disk`).
 pub const MANIFEST_FLAG_PART_DATA: u16 = 1 << 6;
-/// Block-I/O sector range grant: MBR partition P4 (littlefs, `api::disk`).
+/// Block-I/O sector range grant: MBR partition P4 (littlefs, `abi::disk`).
 pub const MANIFEST_FLAG_PART_LFS: u16 = 1 << 7;
 /// CAN bus controller MMIO (v2 — freed by the u16 widening).  Grants the CAN
 /// device class via `sys_request_mmio`.

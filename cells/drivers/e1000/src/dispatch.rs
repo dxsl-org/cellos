@@ -1,9 +1,9 @@
 //! IPC request dispatcher for the e1000 NIC Driver Cell.
 //!
-//! Serves the NIC wire defined in [`api::services::proto::nic`].
+//! Serves the NIC wire defined in [`wire::proto::nic`].
 
 use crate::controller::{E1000Controller, BUF_SIZE};
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 /// Total output buffer size: 2-byte length header + full frame payload.
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;

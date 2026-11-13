@@ -21,8 +21,8 @@ use alloc::string::String;
 use ostd::io::println;
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(block_io = true, network = true, spawn = true);
-api::declare_syscalls![
+abi::declare_manifest!(block_io = true, network = true, spawn = true);
+abi::declare_syscalls![
     Log,
     Send,
     SendGather,
@@ -118,7 +118,7 @@ fn cell_main() {
     }
 
     // Connect to Hypervisor service (service ID 14)
-    let hv_tid = ostd::service::provider_tid(api::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
+    let hv_tid = ostd::service::provider_tid(abi::hypervisor::HYPERVISOR_SERVICE_ID).unwrap_or(0);
     if hv_tid == 0 {
         println("[vm-runner] ERROR: Hypervisor service (ID 14) unavailable.");
         sys_exit(1);
@@ -133,8 +133,8 @@ fn cell_main() {
         config.base_image, config.app_image, config.mode, config.ram_mb
     ));
 
-    let launch_req = api::services::vmm_session::VmmLaunchRequest::new(&app_name, 1024, 768);
-    let mut req_buf = [0u8; api::services::vmm_session::VmmLaunchRequest::LEN];
+    let launch_req = wire::vmm_session::VmmLaunchRequest::new(&app_name, 1024, 768);
+    let mut req_buf = [0u8; wire::vmm_session::VmmLaunchRequest::LEN];
     if launch_req.encode(&mut req_buf).is_err() {
         println("[vm-runner] ERROR: Failed to encode VmmLaunchRequest.");
         sys_exit(1);
@@ -150,12 +150,12 @@ fn cell_main() {
         sys_exit(1);
     }
 
-    let mut reply_buf = [0u8; api::services::vmm_session::VmmLaunchReply::LEN];
+    let mut reply_buf = [0u8; wire::vmm_session::VmmLaunchReply::LEN];
     // RecvTimeout returns the sender tid (0 on timeout), not a byte count.
     match ostd::syscall::sys_recv_timeout(hv_tid, &mut reply_buf, 200) {
         ostd::syscall::SyscallResult::Ok(sender) if sender == hv_tid => {
-            match api::services::vmm_session::VmmLaunchReply::decode(&reply_buf) {
-                Ok(reply) if reply.status == api::services::vmm_session::VMM_STATUS_OK => {
+            match wire::vmm_session::VmmLaunchReply::decode(&reply_buf) {
+                Ok(reply) if reply.status == wire::vmm_session::VMM_STATUS_OK => {
                     println(&format!(
                         "[vm-runner] MicroVM active (session_id={}). Session ready.",
                         reply.session_id

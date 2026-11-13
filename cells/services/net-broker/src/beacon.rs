@@ -15,8 +15,6 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use api::cluster::CellNetId;
-use api::ipc::{NetRequest, NetResponse};
 use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
@@ -29,6 +27,8 @@ use service_net_broker::ipc_deadline::{
     SendAdmission,
 };
 use sha2::{Digest, Sha256};
+use wire::cluster::CellNetId;
+use wire::ipc::{NetRequest, NetResponse};
 
 use crate::rng::BrokerRng;
 
@@ -220,10 +220,10 @@ impl BeaconChannel {
     fn call_bounded<'r>(
         service_tid: usize,
         request: &NetRequest<'_>,
-        send_buffer: &mut [u8; api::ipc::IPC_BUF_SIZE],
-        response_buffer: &'r mut [u8; api::ipc::IPC_BUF_SIZE],
+        send_buffer: &mut [u8; wire::ipc::IPC_BUF_SIZE],
+        response_buffer: &'r mut [u8; wire::ipc::IPC_BUF_SIZE],
     ) -> Result<Option<NetResponse<'r>>, ()> {
-        let encoded = api::ipc::encode(request, send_buffer).map_err(|_| ())?;
+        let encoded = wire::ipc::encode(request, send_buffer).map_err(|_| ())?;
         let started_at = ostd::syscall::sys_get_scheduler_ticks().ok_or(())?;
         let admission = admit_request_until_deadline(
             started_at,
@@ -290,13 +290,13 @@ impl BeaconChannel {
         }
         match receive_result.map_err(|_| ())?.ok_or(())? {
             sender if sender == service_tid => {
-                api::ipc::decode(response_buffer).map(Some).map_err(|_| ())
+                wire::ipc::decode(response_buffer).map(Some).map_err(|_| ())
             }
             _ => Err(()),
         }
     }
     pub fn init(net: &mut NetRef) -> Option<Self> {
-        let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut resp = [0u8; wire::ipc::IPC_BUF_SIZE];
         let cap_id = match net
             .call::<NetRequest, NetResponse>(&NetRequest::UdpCreate, &mut resp)
             .into_result()
@@ -336,8 +336,8 @@ impl BeaconChannel {
 
     pub fn send_frame(&self, net: &mut NetRef, frame: &[u8; WIRE_LEN]) -> Result<bool, ()> {
         let service_tid = net.resolve().ok_or(())?;
-        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
-        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut request = [0u8; wire::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
         let result = Self::call_bounded(
             service_tid,
@@ -366,8 +366,8 @@ impl BeaconChannel {
             return Ok(None);
         }
         let service_tid = net.resolve().ok_or(())?;
-        let mut request = [0u8; api::ipc::IPC_BUF_SIZE];
-        let mut response = [0u8; api::ipc::IPC_BUF_SIZE];
+        let mut request = [0u8; wire::ipc::IPC_BUF_SIZE];
+        let mut response = [0u8; wire::ipc::IPC_BUF_SIZE];
         let result = Self::call_bounded(
             service_tid,
             &NetRequest::UdpRecv {
@@ -493,7 +493,7 @@ impl PeerTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::services::proto::net::NetError;
+    use wire::proto::net::NetError;
 
     #[test]
     fn machine_id_uses_the_specified_sha256_domain_separation() {

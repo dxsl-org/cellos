@@ -99,7 +99,7 @@ long labs(long);
 long long llabs(long long);
 void qsort(void *, size_t, size_t, int (*)(const void *, const void *));
 void *bsearch(const void *, const void *, size_t, size_t, int (*)(const void *, const void *));
-/* FILE is opaque and owned by api::services::posix. */
+/* FILE is opaque and owned by the posix_shim crate. */
 typedef struct ocel_pdf_FILE FILE;
 extern FILE *stdin, *stdout, *stderr;
 FILE *fopen(const char *, const char *);

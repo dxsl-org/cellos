@@ -1,5 +1,5 @@
-use api::display::Rect;
-use api::input::{InputEvent, KeyState, MouseButton};
+use wire::display::Rect;
+use wire::input::{InputEvent, KeyState, MouseButton};
 
 use crate::window_decoration::{self, Control, Hit};
 

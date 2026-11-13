@@ -4,7 +4,7 @@ use super::super::wire::{vfs_err_from_code, MAX_READ_CHUNK};
 use super::support::{MockOps, MockReply};
 use crate::ViError;
 use alloc::vec;
-use api::services::proto::vfs::VfsError;
+use wire::proto::vfs::VfsError;
 
 /// Every read path stats the file before its first chunk, so each mock sequence
 /// carries the reply for that call. A backend that refuses it is a separate case

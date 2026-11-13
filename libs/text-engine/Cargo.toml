@@ -17,5 +17,5 @@ license = "Apache-2.0 OR MIT"
 # cells/tools/cellbox/Cargo.toml exactly so cargo keeps one copy in the graph.
 regex-automata = { version = "0.4.16", default-features = false, features = ["meta", "hybrid"] }
 regex-syntax = { version = "0.8.8", default-features = false }
-# Telemetry snapshot ABI (`api::telemetry`) decoded by the pure `top` sampler.
-api = { path = "../api", version = "0.1.0" }
+# Telemetry snapshot ABI (`abi::telemetry`) decoded by the pure `top` sampler.
+abi = { path = "../abi", version = "0.1.0" }

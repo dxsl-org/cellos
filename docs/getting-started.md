@@ -299,7 +299,7 @@ pub fn handle_syscall(id: usize, args: &[usize]) -> isize {
 | `kernel/src/memory/frame.rs` | Physical frame allocator |
 | `kernel/src/loader/elf.rs` | ELF loader + runtime linker |
 | `libs/types/src/lib.rs` | VAddr, PAddr, ViError, ViResult |
-| `libs/api/src/*.rs` | Trait definitions (stable ABI) |
+| `libs/abi/src/*.rs`, `libs/wire/src/*.rs` | Trait definitions (frozen kernel ABI in `abi`, service contracts in `wire`) |
 | `hal/arch/riscv/src/rv64/` | RISC-V 64-bit HAL impl |
 
 ---
@@ -507,7 +507,7 @@ DISK           python3 create_ramdisk.py
 DEBUG GDB      riscv64-unknown-elf-gdb + target remote localhost:1234
 
 GOLDEN RULES (read CLAUDE.md)
-1. Interface is sacred (libs/api/ needs 2x confirmation to change)
+1. Interface is sacred (libs/abi/ and libs/types/ need 2x confirmation to change)
 2. Owned buffers for async (not &mut [u8])
 3. Multi-arch aware (use VAddr, PAddr, not u64)
 4. Cells forbid unsafe (except kernel)

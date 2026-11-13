@@ -8,7 +8,9 @@
 extern crate alloc;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
-use api::*;
+use abi::*;
+use types::*;
+use wire::*;
 
 /// Mock network driver with complex state for ViStateTransfer testing.
 struct MockNetworkDriver {

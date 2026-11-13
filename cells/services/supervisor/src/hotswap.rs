@@ -12,7 +12,6 @@
 extern crate alloc;
 
 use crate::transfer::{send_restore_event, send_snapshot_event};
-use api::services::proto::supervisor::HotswapError;
 use ostd::hotswap::hotswap_key;
 use ostd::service::namespace_flags;
 use ostd::service::provider_tid;
@@ -21,6 +20,7 @@ use ostd::syscall::{
     sys_query_hotswap_ready, sys_register_service, sys_resume_cell, sys_spawn_replacement,
     sys_state_restore, sys_state_stash_clear, sys_yield,
 };
+use wire::proto::supervisor::HotswapError;
 
 /// Budget for the stash and for readiness, in 10 ms scheduler ticks (5 s). The
 /// snapshot and restore events are queued, not handed over, so the budget is

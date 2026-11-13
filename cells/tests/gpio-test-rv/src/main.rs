@@ -4,7 +4,7 @@
 
 extern crate alloc;
 
-use api::declare_manifest;
+use abi::declare_manifest;
 use core::sync::atomic::{AtomicU32, Ordering};
 use driver_gpio_sifive::SiFiveGpio;
 use hal_gpio::{PinDir, ViGpio};

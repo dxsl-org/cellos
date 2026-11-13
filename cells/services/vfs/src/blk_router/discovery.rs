@@ -1,15 +1,15 @@
 //! Block-device discovery at VFS start: device table, names, primary disk.
 
+use abi::block_route::{DeviceKey, BLOCK_DEVICE_PCI, MAX_BLOCK_ROUTES};
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::block_route::{DeviceKey, BLOCK_DEVICE_PCI, MAX_BLOCK_ROUTES};
 use types::block_wire::SECTOR_SIZE;
 
 use super::router::Router;
 use super::{BlockSys, DeviceRef};
 
-/// Partition type of the Cellos cell bootstrap table (P2, `api::disk`).
+/// Partition type of the Cellos cell bootstrap table (P2, `abi::disk`).
 const CELLOS_PARTITION_TYPE: u8 = 0x7F;
 
 /// Stable device name: `pci-BB-DD-F` for a PCI function, `mmio-{base:x}` otherwise.
@@ -125,7 +125,7 @@ pub fn discover(router: &mut Router, sys: &mut impl BlockSys) -> Discovery {
 mod tests {
     use super::super::tests::{cellos_mbr, AHCI, NVME};
     use super::{choose_primary, device_name, has_cellos_partition, PrimaryReason};
-    use api::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
     use types::block_wire::SECTOR_SIZE;
 
     #[test]

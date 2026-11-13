@@ -19,31 +19,33 @@
 #![allow(unsafe_code)]
 #![allow(static_mut_refs)] // single-task cell — no data race on SURFACE / KEY_QUEUE
 
+// Links the Tier-A C library (libc symbols) the C objects call.
 extern crate alloc;
+extern crate posix_shim;
 
+use abi::declare_manifest;
 use alloc::vec::Vec;
-use api::declare_manifest;
-use api::display::PixelFormat;
-use api::input::{InputEvent, KeyState, KeySym};
 use ostd::display::{linear::icons::LineIcon, wait_for_compositor, ViSurface};
 use ostd::font::FONT8X8;
 use ostd::input::{poll_events, request_focus};
 use ostd::io::println;
 use ostd::syscall::sys_exit;
 use ostd::task::yield_now;
+use wire::display::PixelFormat;
+use wire::input::{InputEvent, KeyState, KeySym};
 
 // ── Screen geometry ───────────────────────────────────────────────────────
 // VGA canvas: 320×200.  3× nearest-neighbour scale → 960×600.
 // Centred in 1024×768: X offset = (1024-960)/2 = 32, Y = (768-600)/2 = 84.
-const SURF_W: u32 = api::display::FALLBACK_WIDTH; // 1024
-const SURF_H: u32 = api::display::FALLBACK_HEIGHT; // 768
+const SURF_W: u32 = wire::display::FALLBACK_WIDTH; // 1024
+const SURF_H: u32 = wire::display::FALLBACK_HEIGHT; // 768
 const SCALE: u32 = 3;
 
 declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
 // ── Compositor surface ────────────────────────────────────────────────────

@@ -6,8 +6,8 @@
 //! budget and never to a hang. A refusal by `AllocPcieIrq` (435) or by
 //! `WaitCompletion(IRQ)` (242) keeps the polled path and says why.
 
-use api::completion::source::IRQ;
-use api::pcie_function::{IRQ_KIND_MSIX, IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
+use abi::completion::source::IRQ;
+use abi::pcie_function::{IRQ_KIND_MSIX, IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
 use ostd::io::print_fmt;
 use ostd::ipc::{wait_any, Wake};
 use ostd::syscall::sys_alloc_pcie_irq;

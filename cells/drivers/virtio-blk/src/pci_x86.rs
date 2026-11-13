@@ -12,7 +12,7 @@
 use crate::bars_x86::BarRegions;
 use crate::device::{BlkDevice, CellBlk};
 use crate::hal_x86;
-use api::pcie_function::FLAG_DMA_REMAPPED;
+use abi::pcie_function::FLAG_DMA_REMAPPED;
 use core::fmt;
 use ostd::io::print_fmt;
 use ostd::syscall::{

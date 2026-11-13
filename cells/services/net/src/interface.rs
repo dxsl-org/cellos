@@ -8,7 +8,6 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, collections::VecDeque};
-use api::services::proto::nic::{NicStatus, MIN_FRAME, OP_GETMAC, OP_RX, OP_TX};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use ostd::service::provider_tid;
 use ostd::{
@@ -19,6 +18,7 @@ use smoltcp::{
     phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
     time::Instant,
 };
+use wire::proto::nic::{NicStatus, MIN_FRAME, OP_GETMAC, OP_RX, OP_TX};
 
 use crate::bridge_ports::{Bridge, PortError};
 use crate::socket_table::SocketOwner;
@@ -91,7 +91,7 @@ fn invalidate_cached_nic_driver(cache: &AtomicUsize, tid: usize) {
 /// Returns the active NIC Driver Cell TID, re-probing after absence or failure.
 fn nic_driver_tid() -> Option<usize> {
     resolve_cached_nic_driver(&NIC_DRIVER_TID, || {
-        provider_tid(api::syscall::service::NIC_DRIVER)
+        provider_tid(abi::syscall::service::NIC_DRIVER)
     })
 }
 
@@ -691,11 +691,11 @@ impl VirtioNetDevice {
             }
             let mut encoded = [0u8; 8];
             let response = if accepted {
-                api::ipc::NetResponse::Ok
+                wire::ipc::NetResponse::Ok
             } else {
-                api::ipc::NetResponse::Err(status)
+                wire::ipc::NetResponse::Err(status)
             };
-            let Ok(bytes) = api::ipc::encode(&response, &mut encoded) else {
+            let Ok(bytes) = wire::ipc::encode(&response, &mut encoded) else {
                 break;
             };
             let delivered = match target {

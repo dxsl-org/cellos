@@ -22,9 +22,9 @@ use recovery_demo::ledger::SCHEMA;
 use recovery_demo::wire::Msg;
 use recovery_demo::{AUTHORITY_SERVICE, EXIT_RECOVERY_FAILED};
 
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     Exit,
     Send,

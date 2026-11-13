@@ -8,8 +8,8 @@
 //! resolves the prepared record (removed with the Operation), Commit/Resolve need a
 //! reservation, and Acknowledge/Query need the log. Operation references are never
 //! reused, so a removed scope cannot be named again.
+use abi::cell_session::{KernelOp, ObjectRefV1, Status, Writer, HEADER_LEN};
 use alloc::vec::Vec;
-use api::cell_session::{KernelOp, ObjectRefV1, Status, Writer, HEADER_LEN};
 use types::CellId;
 
 use super::{kernel_query, scope, PreparedCwd, Scope, LOG_CHARGE};

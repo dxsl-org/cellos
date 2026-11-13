@@ -1,11 +1,11 @@
-use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
-use api::services::proto::net::NetError;
 use ostd::ipc::reply_to;
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::{udp, Socket},
     wire::{IpAddress, IpEndpoint},
 };
+use wire::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use wire::proto::net::NetError;
 
 use super::send_typed;
 use crate::{

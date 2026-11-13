@@ -1,4 +1,4 @@
-use api::display::{compositor_ops, SurfaceRole};
+use wire::display::{compositor_ops, SurfaceRole};
 
 use super::*;
 use crate::window_decoration::ResizeEdge;

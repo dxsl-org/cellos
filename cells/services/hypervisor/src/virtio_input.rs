@@ -7,7 +7,7 @@
 extern crate alloc;
 use alloc::collections::VecDeque;
 
-use api::services::vmm_session::{
+use wire::vmm_session::{
     BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE, EV_ABS, EV_KEY, EV_REL, REL_WHEEL,
 };
 
@@ -27,7 +27,7 @@ const VIRTIO_INPUT_CFG_PROP_BITS: u8 = 0x10;
 const VIRTIO_INPUT_CFG_EV_BITS: u8 = 0x11;
 const VIRTIO_INPUT_CFG_ABS_INFO: u8 = 0x12;
 
-// Linux event types and codes beyond those `api::services::vmm_session` owns.
+// Linux event types and codes beyond those `wire::vmm_session` owns.
 pub const EV_SYN: u16 = 0x00;
 pub const SYN_REPORT: u16 = 0;
 
@@ -37,13 +37,13 @@ const MAX_PENDING_EVENTS: usize = 256;
 
 /// Linux evdev code for a host mouse button; side buttons map the way Linux
 /// HID does so guest browsers see them as back/forward, not as a left click.
-pub fn button_code(button: api::input::MouseButton) -> u16 {
+pub fn button_code(button: wire::input::MouseButton) -> u16 {
     match button {
-        api::input::MouseButton::Left => BTN_LEFT,
-        api::input::MouseButton::Right => BTN_RIGHT,
-        api::input::MouseButton::Middle => BTN_MIDDLE,
-        api::input::MouseButton::Back => BTN_SIDE,
-        api::input::MouseButton::Forward => BTN_EXTRA,
+        wire::input::MouseButton::Left => BTN_LEFT,
+        wire::input::MouseButton::Right => BTN_RIGHT,
+        wire::input::MouseButton::Middle => BTN_MIDDLE,
+        wire::input::MouseButton::Back => BTN_SIDE,
+        wire::input::MouseButton::Forward => BTN_EXTRA,
     }
 }
 
@@ -256,7 +256,7 @@ impl InputDev {
             },
             VIRTIO_INPUT_CFG_ABS_INFO if self.subsel <= 1 => {
                 // virtio_input_absinfo: min, max, fuzz, flat, res (u32 LE each).
-                let max = (api::services::vmm_session::ABS_MAX as u32).to_le_bytes();
+                let max = (wire::vmm_session::ABS_MAX as u32).to_le_bytes();
                 match byte_idx {
                     4..=7 => max[byte_idx - 4],
                     _ => 0,
@@ -386,10 +386,7 @@ mod tests {
         dev.config_write(0, u32::from(VIRTIO_INPUT_CFG_ABS_INFO) | (1 << 8));
         assert_eq!(cfg_byte(&dev, 2), 20);
         let max: alloc::vec::Vec<u8> = (12..16).map(|i| cfg_byte(&dev, i)).collect();
-        assert_eq!(
-            max,
-            (api::services::vmm_session::ABS_MAX as u32).to_le_bytes()
-        );
+        assert_eq!(max, (wire::vmm_session::ABS_MAX as u32).to_le_bytes());
     }
 
     #[test]

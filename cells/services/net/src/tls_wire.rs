@@ -1,10 +1,10 @@
 //! Strict fail-closed parser and encoders for the raw TLS IPC wire
-//! ([`api::services::proto::tls`]).
+//! ([`wire::proto::tls`]).
 
 extern crate alloc;
 
 use alloc::vec::Vec;
-use api::services::proto::tls;
+use wire::proto::tls;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RawTlsRequest<'a> {

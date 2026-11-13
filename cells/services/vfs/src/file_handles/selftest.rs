@@ -1,7 +1,7 @@
 use alloc::string::String;
 
-use api::vfs_file_handles::ViVfsFileHandle;
 use types::CellId;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 use super::{FileHandleError, FileHandleTable, MAX_FILE_HANDLES_PER_CALLER};
 use crate::caller::Caller;

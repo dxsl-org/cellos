@@ -565,8 +565,8 @@ cp "$EMBED_DIR/init" kernel/src/embedded/init
 #   P4 CellosFS @800000 · P5 CellosFS @931072 · P6 FAT cell-store @1062144 +65536
 echo "==> assembling $DISK"
 DISK_SECTORS=1127680                       # P6 end: 1062144 + 65536
-CELLSTORE_BASE_LBA=1062144                 # MUST match api::disk::PART_CELLSTORE_BASE_LBA
-CELLSTORE_SECTORS=65536                    # MUST match api::disk::PART_CELLSTORE_SECTORS
+CELLSTORE_BASE_LBA=1062144                 # MUST match abi::disk::PART_CELLSTORE_BASE_LBA
+CELLSTORE_SECTORS=65536                    # MUST match abi::disk::PART_CELLSTORE_SECTORS
 
 # Keep operator runtime overrides across disk recreation; even empty/invalid
 # files remain authoritative for init rather than silently becoming defaults.

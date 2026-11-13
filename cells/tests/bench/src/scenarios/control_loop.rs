@@ -35,9 +35,9 @@ fn get_u64(buf: &[u8; 64], offset: usize) -> u64 {
     u64::from_le_bytes(buf[offset..offset + 8].try_into().unwrap_or([0; 8]))
 }
 
-pub fn decode_result(buf: &[u8; 64]) -> api::ViResult<RtReport> {
+pub fn decode_result(buf: &[u8; 64]) -> types::ViResult<RtReport> {
     if buf[0] != 0 || buf[RESULT_LEN..].iter().any(|&byte| byte != 0xa5) {
-        return Err(api::ViError::InvalidInput);
+        return Err(types::ViError::InvalidInput);
     }
     let min = get_u64(buf, 1);
     let p50 = get_u64(buf, 9);
@@ -46,7 +46,7 @@ pub fn decode_result(buf: &[u8; 64]) -> api::ViResult<RtReport> {
     let max = get_u64(buf, 33);
     let jitter = get_u64(buf, 41);
     if min > p50 || p50 > p99 || p99 > p99_9 || p99_9 > max || jitter != max.saturating_sub(min) {
-        return Err(api::ViError::InvalidInput);
+        return Err(types::ViError::InvalidInput);
     }
     Ok(RtReport {
         name: "control_loop",
@@ -57,7 +57,7 @@ pub fn decode_result(buf: &[u8; 64]) -> api::ViResult<RtReport> {
         p99_9,
         max,
         jitter,
-        deadline_miss: u32::try_from(get_u64(buf, 49)).map_err(|_| api::ViError::InvalidInput)?,
+        deadline_miss: u32::try_from(get_u64(buf, 49)).map_err(|_| types::ViError::InvalidInput)?,
     })
 }
 

@@ -1,7 +1,7 @@
-use api::display::WindowState;
-use api::input::{InputEvent, KeyState, MouseButton};
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
 use ostd::io::println;
+use wire::display::WindowState;
+use wire::input::{InputEvent, KeyState, MouseButton};
 
 use crate::roles::{ClosePolicy, ProbeRole};
 

@@ -11,7 +11,7 @@
 //! RamFS mutates its tree (FAT uses fatfs interior mutability and ignores it).
 
 use alloc::vec::Vec;
-use api::ipc::vfs_dir_page::{push_entry, EntryKind};
+use wire::ipc::vfs_dir_page::{push_entry, EntryKind};
 
 use crate::fs_error::FsError;
 
@@ -23,7 +23,7 @@ pub(crate) const BACKEND_CURSOR_LIMIT: u32 = 1 << 30;
 /// One page written by [`FsBackend::list_page`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ListPage {
-    /// Bytes of packed `api::ipc::vfs_dir_page` entries written to `out`.
+    /// Bytes of packed `wire::ipc::vfs_dir_page` entries written to `out`.
     pub written: usize,
     /// Cursor of the first entry that did not fit; `None` when this page ends
     /// the listing.
@@ -169,7 +169,7 @@ pub trait FsBackend: Send {
 
     /// Exact identity of `path` (absence is `Observation::Absent`); `Ok(None)`
     /// when the backend can name no identity for it.
-    fn observe(&self, path: &str) -> Result<Option<api::ipc::Observation>, FsError> {
+    fn observe(&self, path: &str) -> Result<Option<wire::ipc::Observation>, FsError> {
         let _ = path;
         Err(FsError::Unsupported)
     }
@@ -194,9 +194,9 @@ pub trait FsBackend: Send {
         stage: &str,
         sealed: (u64, u64),
         dst: &str,
-        expect: api::ipc::SaveExpect,
-    ) -> api::ipc::SaveOutcome {
+        expect: wire::ipc::SaveExpect,
+    ) -> wire::ipc::SaveOutcome {
         let _ = (stage, sealed, dst, expect);
-        api::ipc::SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED)
+        wire::ipc::SaveOutcome::NotPublished(wire::ipc::save_refusal::REFUSED)
     }
 }

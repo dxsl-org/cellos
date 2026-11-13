@@ -196,7 +196,7 @@ impl SyscallSet {
 ///
 /// # Usage
 /// ```ignore
-/// api::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, LookupServiceBound];
+/// abi::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, LookupServiceBound];
 /// ```
 /// Allowlist bit index declaring authority to mutate VFS state (create/write/unlink/rename).
 pub const VFS_MUTATE_DECLARATION_BIT: u8 = 63;

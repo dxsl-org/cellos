@@ -1,4 +1,4 @@
-use api::services::proto::vfs::VfsError;
+use wire::proto::vfs::VfsError;
 
 use crate::ViError;
 

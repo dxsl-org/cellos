@@ -12,9 +12,9 @@
 //! it before touching the store. The client never pre-filters: this module is
 //! the only decision point.
 
-use api::caller_identity::{CallerIdentity, CALLER_FLAG_CONFIG_WRITE};
-use api::ipc::ConfigRequest;
-use api::services::proto::config::ConfigError;
+use abi::caller_identity::{CallerIdentity, CALLER_FLAG_CONFIG_WRITE};
+use wire::ipc::ConfigRequest;
+use wire::proto::config::ConfigError;
 
 /// Keys seeded by the service and never writable at runtime.
 pub(crate) const SYSTEM_KEYS: [&str; 2] = ["PATH", "OS"];
@@ -59,7 +59,7 @@ pub(crate) fn admit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use api::caller_identity::{CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE};
+    use abi::caller_identity::{CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE};
 
     const fn caller(flags: u32) -> CallerIdentity {
         CallerIdentity {

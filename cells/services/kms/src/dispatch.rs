@@ -4,7 +4,7 @@ mod relay;
 #[cfg(feature = "ssh-dev-custody")]
 mod ssh;
 
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use kms_codec::{
     BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1, ServiceNetBindingEpoch,
 };

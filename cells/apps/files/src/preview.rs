@@ -38,13 +38,12 @@ impl PreviewKind {
             Self::Folder
         } else {
             match item.mime {
-                api::services::mime::MimeType::ImagePng
-                | api::services::mime::MimeType::ImageJpeg
-                | api::services::mime::MimeType::ImagePpm => Self::Image,
-                api::services::mime::MimeType::TextMarkdown => Self::Markdown,
-                api::services::mime::MimeType::TextPlain
-                | api::services::mime::MimeType::TextSource => Self::Code,
-                api::services::mime::MimeType::ApplicationPdf => Self::Pdf,
+                wire::mime::MimeType::ImagePng
+                | wire::mime::MimeType::ImageJpeg
+                | wire::mime::MimeType::ImagePpm => Self::Image,
+                wire::mime::MimeType::TextMarkdown => Self::Markdown,
+                wire::mime::MimeType::TextPlain | wire::mime::MimeType::TextSource => Self::Code,
+                wire::mime::MimeType::ApplicationPdf => Self::Pdf,
                 _ => Self::Unsupported,
             }
         }
@@ -72,9 +71,9 @@ pub struct QuickLookState {
     pub file_name: String,
     pub file_path: String,
     pub kind: PreviewKind,
-    pub mime: api::services::mime::MimeType,
+    pub mime: wire::mime::MimeType,
     pub default_app: Option<&'static str>,
-    pub candidates: &'static [api::services::mime::AppCandidate],
+    pub candidates: &'static [wire::mime::AppCandidate],
     pub lines: Vec<String>,
 }
 
@@ -85,7 +84,7 @@ impl QuickLookState {
             file_name: String::new(),
             file_path: String::new(),
             kind: PreviewKind::Unsupported,
-            mime: api::services::mime::MimeType::Unknown,
+            mime: wire::mime::MimeType::Unknown,
             default_app: None,
             candidates: &[],
             lines: Vec::new(),
@@ -101,8 +100,8 @@ impl QuickLookState {
         self.kind = PreviewKind::of(item);
         self.mime = item.mime;
         self.default_app =
-            api::services::mime::AssociationRegistry::default_app(item.mime).map(|a| a.app_name);
-        self.candidates = api::services::mime::AssociationRegistry::candidates_for_mime(item.mime);
+            wire::mime::AssociationRegistry::default_app(item.mime).map(|a| a.app_name);
+        self.candidates = wire::mime::AssociationRegistry::candidates_for_mime(item.mime);
         self.lines.clear();
         match text {
             Some(Ok(bytes)) if bytes.is_empty() => self.lines.push(String::from("(empty file)")),

@@ -26,16 +26,16 @@
 //! (bounded reaping).
 use crate::stream::{call, ok, Endpoint, EndpointRights, Operation, ReceiptRef};
 use crate::Status;
-use api::cell_session::frontend::{
+use abi::cell_session::frontend::{
     BindFrontendChildV1, FrontendStatusV1, ReattachFrontendV1, ReattachResultV1,
     RegisterFrontendV1, FRONTEND_KIND_GUI, FRONTEND_STATE_ATTACHED, FRONTEND_STATE_BOUND,
     FRONTEND_STATE_CLOSED, FRONTEND_STATE_LOST, FRONTEND_STATE_PENDING,
 };
-use api::cell_session::{
+use abi::cell_session::{
     ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Writer, GRANT_KIND_INPUT_FRONTEND,
     HEADER_LEN, SLOT_FRONTEND,
 };
-use api::service_binding::ServiceBinding;
+use abi::service_binding::ServiceBinding;
 use ostd::child_context::{ChildContext, Grant, GrantSlot};
 
 /// Largest chunk one `drain_*` call can return (one stream read frame).
@@ -271,10 +271,10 @@ impl FrontendHost {
     /// Create the holder operation and the output rings for a `rows`×`cols` terminal.
     /// Nothing is registered or launched yet.
     pub fn open(rows: u16, cols: u16) -> Result<Self, Status> {
-        api::services::session::validate_dimensions(rows, cols)?;
+        wire::session::validate_dimensions(rows, cols)?;
         let operation = Operation::create(None)?;
         let result = (|| {
-            let owner = ostd::session::service_binding(api::syscall::service::INPUT)?;
+            let owner = ostd::session::service_binding(abi::syscall::service::INPUT)?;
             let (output, stdout_writer) = operation.create_stream(RING_CAPACITY)?;
             let (diagnostic, stderr_writer) = operation.create_stream(RING_CAPACITY)?;
             Ok(Self {
@@ -308,7 +308,7 @@ impl FrontendHost {
         let mutating = op != InputOp::QueryFrontend;
         let h = ostd::session::service_call(
             self.owner,
-            api::syscall::service::INPUT,
+            abi::syscall::service::INPUT,
             shell.operation.reference().raw(),
             op as u16,
             mutating,
@@ -533,11 +533,11 @@ impl FrontendHost {
         payload[..4].copy_from_slice(&code.to_le_bytes());
         payload[4..8].copy_from_slice(&modifiers.to_le_bytes());
         payload[8] = pressed;
-        api::services::session::validate_event(1, &payload)?;
+        wire::session::validate_event(1, &payload)?;
         self.submit_event(1, &payload)
     }
     pub fn submit_text(&mut self, text: &str) -> Result<(), Status> {
-        api::services::session::validate_text(text.as_bytes())?;
+        wire::session::validate_text(text.as_bytes())?;
         if text.is_empty() || text.len() > 512 {
             return Err(Status::Malformed);
         }
@@ -555,7 +555,7 @@ impl FrontendHost {
     }
     /// Entire paste validation occurs before the first owner mutation.
     pub fn submit_paste(&mut self, text: &str) -> Result<(), Status> {
-        api::services::session::validate_paste(text.as_bytes())?;
+        wire::session::validate_paste(text.as_bytes())?;
         let link = self.link()?;
         let mut body = [0u8; 48];
         let mut w = Writer::new(&mut body);
@@ -650,7 +650,7 @@ impl FrontendHost {
         if self.closed {
             return Err(Status::Revoked);
         }
-        api::services::session::validate_dimensions(rows, cols)?;
+        wire::session::validate_dimensions(rows, cols)?;
         self.rows = rows;
         self.cols = cols;
         let Some(link) = self.link else { return Ok(()) };
@@ -772,7 +772,7 @@ impl FrontendHost {
             return Err(Status::WrongSession);
         }
         let resume = self.resume.ok_or(Status::Stale)?;
-        api::services::session::validate_dimensions(rows, cols)?;
+        wire::session::validate_dimensions(rows, cols)?;
         let frontend = self.register(rows, cols)?;
         let mut body = [0u8; ReattachFrontendV1::LEN];
         ReattachFrontendV1 { frontend, resume }.encode(&mut body)?;
@@ -1055,7 +1055,7 @@ mod tests {
                     GRANT_KIND_INPUT_FRONTEND,
                     GrantSlot::Frontend,
                     0,
-                    api::syscall::service::INPUT as u64,
+                    abi::syscall::service::INPUT as u64,
                     r(13, 1)
                 ),
             ]

@@ -88,14 +88,17 @@ complete public surface that resolves under the pinned compiler window:
   profile, and Tier; an unpinned or different tuple is outside the claim;
 - target JSON/triple, `cfg`, Cargo feature set, and profile must be named;
 - public modules, macros, types, traits, functions, and `pub use` re-exports
-  reachable from `api`, `ostd`, `viui`, and supported bindings count;
+  reachable from `abi`, `wire`, `types`, `kms_codec`, `posix_shim`, `ostd`,
+  `viui`, and supported bindings count;
 - C, Zig, and Lua bindings count only where the respective binding, build path,
   manifest form, and runnable test/example are evidenced;
 - in-tree examples, templates, build/package/sign/manifest validation tools,
   and generated `.vi` source count when documented as a developer path.
 
-The `api::*` flat re-exports are part of this denominator. A reorganization MUST
-preserve those paths or provide the §6 deprecation migration. Feature-gated
+The crate-root paths of `abi`, `wire`, `types`, `kms_codec` and `posix_shim` are
+part of this denominator. A reorganization MUST preserve those paths or provide
+the §6 deprecation migration. The former `api` facade paths were retired that
+way in Phase 13; §4.2 maps each one to its replacement. Feature-gated
 surfaces (for example `ostd::http`, `ostd::json`, and `viui/gles2`) are absent
 when their feature is absent; they are not implied by another profile.
 
@@ -114,15 +117,15 @@ each row is **PARTIAL** until Phase 02 records all witness classes in §2.2.
 | RISC-V native | `nightly-2026-05-01`; `riscv64gc-unknown-none-elf`; `cfg(target_arch="riscv64")`; `-C relocation-model=pic`; profile/feature/package command recorded per Cell; Tier 1 `rust-no-std` | Source + CI configuration only: `rust-toolchain.toml:1-5`; `scripts/cargo-config-linux.toml:14-18,38-47`; `.github/workflows/ci.yml:27,63,97`. |
 | AArch64 native | `nightly-2026-05-01`; `aarch64-unknown-none-softfloat`; `cfg(target_arch="aarch64")`; `-C relocation-model=pic -C target-feature=+bti,+paca,+pacg`; board feature named per command; Tier 1 `rust-no-std` | Source + CI configuration only: `scripts/cargo-config-linux.toml:32-36,49-61`; `.github/workflows/ci.yml:33,110-141`. The compiler component target `aarch64-unknown-none` is not a substitute for this build tuple. |
 | x86_64 native | `nightly-2026-05-01`; `x86_64-unknown-none`; `cfg(target_arch="x86_64")`; Cell builds must explicitly use `-C relocation-model=pic` rather than the template's kernel static flags; package feature set named per command; Tier 1 `rust-no-std` | Source + CI configuration only: `scripts/cargo-config-linux.toml:63-85`; `.github/workflows/ci.yml:30,211-219`. |
-| Rust SDK features | Same native tuple plus `api` `{default, posix, mlibc, posix+mlibc}`; `ostd` `{default, json, http, json+http}`; and `viui` `{default, gles2}`, exactly as selected | Source only: `libs/api/Cargo.toml:18-23`; `libs/ostd/Cargo.toml:21-33`; `libs/viui/Cargo.toml:18-22`. `api/posix` is an empty compatibility marker, not a capability gate; `mlibc` changes shim symbol exposure. |
-| C `ffi-posix` | Native tuple is RISC-V or AArch64 only; `api::services::posix` is architecture-visible automatically on those arches; `mlibc` absent exposes shim symbols, while `mlibc` suppresses them and consuming Cells require `mlibc-shim`/libc.a; named C compiler/sysroot tuple | **PARTIAL** source/build-path witness only: `libs/api/src/services/posix.rs:13-53`; `cells/demos/tetris-c/build.rs:28-109`; `scripts/cargo-config-linux.toml:19-36`. `wasm32` is source-visible in the module cfg but outside this ratified native denominator; x86_64 shim is not advertised. |
+| Rust SDK features | Same native tuple plus `posix-shim` `{default, mlibc}`; `ostd` `{default, json, http, json+http}`; and `viui` `{default, gles2}`, exactly as selected | Source only: `libs/posix-shim/Cargo.toml:15-19`; `libs/ostd/Cargo.toml:21-33`; `libs/viui/Cargo.toml:18-22`. `mlibc` changes shim symbol exposure; the retired `api/posix` marker gated nothing and has no successor. |
+| C `ffi-posix` | Native tuple is RISC-V or AArch64 only; `posix_shim` is architecture-visible automatically on those arches to a Cell that depends on `posix-shim` and links it (`extern crate posix_shim;`); `mlibc` absent exposes shim symbols, while `mlibc` suppresses them and consuming Cells require `mlibc-shim`/libc.a; named C compiler/sysroot tuple | **PARTIAL** source/build-path witness only: `libs/posix-shim/src/lib.rs:10-73`; `cells/demos/tetris-c/build.rs:28-109`; `scripts/cargo-config-linux.toml:19-36`. `wasm32` is source-visible in the module cfg but outside this ratified native denominator; x86_64 shim is not advertised. |
 | Zig `ffi-posix` | Zig ≥0.13; `riscv64-freestanding-none` or `aarch64-freestanding-none`; `build.zig`; legacy v1 manifest; mlibc smoke only on RISC-V/AArch64 with prebuilt `libc.a` | **PARTIAL** source/build-path witness only: `scripts/build-zig-cells.ps1:19-57`; `libs/zig-syscall/src/manifest.zig:1-32`; `cells/tests/zig-mlibc-smoke/build.zig:30-44`. The script does not bind signing. |
 | Lua `lua` | Cargo `release` for the named native target, `cells/runtimes/lua/build.rs`, and an ELF-capable C compiler selected by `CC_*`/clang/cross-GCC | **PARTIAL** source/build-path witness only: `cells/runtimes/lua/build.rs:1-37,82-136,191-258`. Missing compiler yields a no-op stub only on x86_64/AArch64 discovery paths; the RISC-V compilation/link path may fail. |
 
-The exact SDK feature lattice is `api` `{default, posix, mlibc, posix+mlibc}` ×
+The exact SDK feature lattice is `posix-shim` `{default, mlibc}` ×
 `ostd` `{default, json, http, json+http}` × `viui` `{default, gles2}`. The
-default feature lists are empty. `api/posix` is an empty marker and does not
-gate `api::services::posix`; `api/mlibc` is the symbol-suppression choice.
+default feature lists are empty. A Cell gets `posix_shim` only by depending on
+`posix-shim`; `posix-shim/mlibc` is the symbol-suppression choice.
 Only the remaining named feature combinations are opt-in module surfaces. For a
 delivery claim, Cargo profile is `release`; the runtime profile is independently one of
 `rust-no-std`, `rust-std`, `ffi-posix`, or `lua`. A host `cfg(test)` command is
@@ -133,7 +136,7 @@ feature is part of the tuple and must be recorded verbatim by Phase 02.
 
 | Layer | Owner / contract boundary |
 |---|---|
-| Foundation | `api::abi`, manifest, entry/lifecycle, capability declaration, syscall and IPC/grant primitives. ABI owns binary compatibility; services may evolve separately. |
+| Foundation | `abi`, manifest, entry/lifecycle, capability declaration, syscall and IPC/grant primitives. ABI owns binary compatibility; services may evolve separately. |
 | Runtime profiles | Profile integration owns language/runtime startup and supported target set: `rust-no-std`, future `rust-std`, trusted `ffi-posix`, and trusted Rust-hosted `lua`. |
 | Service clients | `ostd` owns typed IPC, VFS, net, input, and discovery facades; service owners own their wire operation semantics. |
 | UI/graphics | `ostd` owns surface/input access; `viui` owns Elm and reactive-v2 APIs, `.vi` integration, and optional GPU surface. |
@@ -151,11 +154,12 @@ not SDK imports even if Rust visibility supports crate composition.
 
 | Crate/path group | Exhaustive public module/re-export inventory | Inherited classification / exceptions | Anchor |
 |---|---|---|---|
-| `api` root | `types::*`; `abi`; `services`; `abi::*`; `services::*`; `ViSyscall`; `TaskPriority` | Foundation row. `abi` is **FROZEN**; `services` and `types::*` are **STABLE** source contracts; all root re-exports preserve their current path. | `libs/api/src/lib.rs:19-31` |
-| `types::*` items re-exported by `api` | `HalResult`, `Result`, `HalError`, `CellId`, `GrantId`, `GrantPerm`, `CellState`, `SemVer`, `PhysAddr`, `VAddr`, `ViResult`, `ViError`, `FileType`, `DirEntry`; paths `api::kms` and `api::silo` (originating from `types::kms` and `types::silo`) | Foundation row, **STABLE** source contract and **PARTIAL** availability. `api::kms` is a service-wire model; `api::silo` is a hardware-capability wire model. A type becomes **FROZEN** only when a declared `api::abi` layout includes it. | `libs/api/src/lib.rs:19`; `libs/types/src/lib.rs:14-167`; `libs/types/src/kms.rs:13-24`; `libs/types/src/silo.rs:10-108` |
-| `api::abi` | `caller_identity`, `cap`, `completion`, `dir_attestation`, `dir_handles`, `dir_handles_tests`, `disk`, `fast_ipc`, `hypervisor`, `manifest`, `manifest_flags`, `manifest_macro`, `manifest_parse`, `syscall`, `syscall_tests`, `task`, `vm` | Foundation row; **FROZEN**. `*_tests` are public code organization, not a separate runtime guarantee. | `libs/api/src/abi.rs:2-32` |
-| `api::services` | `allocator`, `async_io`, `benchmark`, `block`, `cluster`, `config`, `dir_name`, `dir_name_tests`, `display`, `driver`, `fs`, `hotswap`, `input`, `ipc`, `net`, `posix`, `serde_helpers`, `vfs_file_handles` | Service-client row. Explicit exception: `dir_name_tests` is **INTERNAL** test organization; `posix` also follows the `ffi-posix` exception. | `libs/api/src/services.rs:2-25` |
-| `ostd` root re-exports | `api::*`, `CapHandle`, `boxed`, `string`, `vec`, `Result`, `embedded_io`, `heapless`, `args`, `check_help`, `set_spawn_argv`, `MTIME_TICKS_PER_MS`, `run_app!` | Foundation/middleware row, **STABLE** source contract and **PARTIAL** availability. All nested `api::*` paths follow the `api` rows; `run_app!` follows lifecycle. | `libs/ostd/src/lib.rs:15-41,77-81,149-176` |
+| `abi` root | `anon_memory`, `app_envelope`, `block`, `block_route`, `caller_identity`, `cap`, `cell_image`, `cell_owner`, `cell_session`, `completion`, `dir_attestation`, `dir_handles`, `dir_handles_tests`, `disk`, `dma_export`, `fast_ipc`, `fs`, `hypervisor`, `input_producer`, `kernel_ipc`, `machine_facts`, `manifest`, `manifest_flags`, `manifest_macro`, `manifest_parse`, `pcie_function`, `retirement`, `service_binding`, `supervisor_power`, `syscall`, `syscall_tests`, `task`, `telemetry`, `vm`; `ViSyscall`; `TaskPriority`; `declare_syscalls!`; `declare_manifest!` | Foundation row; **FROZEN**. `*_tests` are public code organization, not a separate runtime guarantee. | `libs/abi/src/lib.rs:1-68` |
+| `wire` root | `allocator`, `async_io`, `benchmark`, `block` (re-export of `abi::block`), `cluster`, `config`, `dir_name`, `dir_name_tests`, `display`, `driver`, `fs` (re-export of `abi::fs`), conditional `hostile_backend_recovery`, `input`, `ipc`, `machine_pin`, `mime`, `net`, `net_reply`, `proto`, `ring_channel`, `session`, `ssh_completion`, `vfs_file_handles`, `vmm_session`; `declare_cluster!` | Service-client row. Explicit exceptions: `dir_name_tests` is **INTERNAL** test organization; `hostile_backend_recovery` exists only under the non-production `hostile-backend-recovery` feature. | `libs/wire/src/lib.rs:1-44` |
+| `types` root | `HalResult`, `Result`, `HalError`, `CellId`, `GrantId`, `GrantPerm`, `CellState`, `SemVer`, `PhysAddr`, `VAddr`, `ViResult`, `ViError`, `FileType`, `DirEntry`; `block_wire`, `c2c`, `silo` | Foundation row, **STABLE** source contract and **PARTIAL** availability. `silo` is a hardware-capability wire model. A type becomes **FROZEN** only when a declared `abi` layout includes it. | `libs/types/src/lib.rs:14-168`; `libs/types/src/silo.rs` |
+| `kms_codec` root | `KmsRequestV1`, `KmsResponseV1`; the `model`, `payload`, `csr` and `ssh` re-exports; `KMS_ABI_VERSION`, `KMS_MESSAGE_LEN`, `KMS_PAYLOAD_LEN`, `KMS_NODE_KEY_ID_C2C` | Service-client row, **STABLE** source contract and **PARTIAL** availability; a service-wire model. | `libs/kms-codec/src/lib.rs:1-43` |
+| `posix_shim` root | `alloc`, `cxxabi`, `entropy`, `math`, `net`, `setjmp`, `stdio`, `stdio_fmt`, `strings`, `sysio`, `vfs_at` and their root re-exports; the `#[no_mangle]` C symbols | Follows the `ffi-posix` exception. Empty under `mlibc` and on targets outside its `cfg`. | `libs/posix-shim/src/lib.rs:10-73` |
+| `ostd` root re-exports | `ViError`, `ViResult`, `CapHandle`, `boxed`, `string`, `vec`, `Result`, `embedded_io`, `heapless`, `args`, `check_help`, `set_spawn_argv`, `MTIME_TICKS_PER_MS`, `run_app!` | Foundation/middleware row, **STABLE** source contract and **PARTIAL** availability. `ViError`/`ViResult` follow the `types` row; `run_app!` follows lifecycle. The hidden `__declare_manifest` path (what `app_entry!` expands through) is **INTERNAL**. | `libs/ostd/src/lib.rs:21-53,101,188` |
 | `ostd` Foundation/lifecycle | `cap`, `entry`, `grant`, `ipc`, `mmio`, `startup`, `sync`, `syscall`, `app`, `runtime`, `task` | Foundation/middleware rows, **STABLE** except future domain variants **PLANNED**; **PARTIAL**. `grant` and raw MMIO are Tier 1 SAS/capability-bound. | `libs/ostd/src/lib.rs:17-52,101-122,139-147` |
 | `ostd` core helpers | `collections`, `heap`, `io`, `fs`, `repl`, `prelude`, `executor`, `font`, `font_atlas`, `input` | Middleware/UI rows, **STABLE** source contract and **PARTIAL** availability. `heap` is **INTERNAL** pending implementation; prelude adds no separate promise. | `libs/ostd/src/lib.rs:29-69,86-90,103-113`; `libs/ostd/src/prelude.rs:1-12` |
 | `ostd` service/security/operations helpers | `tls`, `silo`, `display`, `service`, `system_info`, `hotswap`, `cluster`, `dma` | Service-client/operations rows, **EXPERIMENTAL** and **PARTIAL**. `silo` is a hardware capability, `dma` is Tier 1 driver support, and `tls`/`cluster`/`hotswap` retain service-specific behavior. | `libs/ostd/src/lib.rs:71-75,83-116` |
@@ -163,6 +167,26 @@ not SDK imports even if Rust visibility supports crate composition.
 | `ostd::clients` and prelude | `input`, `kms`, `net`, `vfs`, conditional `tls_stream`; `InputClient`, `KmsClient`, `NetClient`, `TcpStream`, conditional `TlsStream`, `VfsClient`; prelude re-exports `AppContext`, `AppEvent`, `ShutdownReason`, clients, collections, IO, `CellRuntime`, mutex, result, allocation/types/errors | Service-client and middleware rows. `TlsStream` requires `http` or `json`; prelude contains no additional stability promise. | `libs/ostd/src/clients.rs:26-49`; `libs/ostd/src/prelude.rs:1-12` |
 | `viui` root | `animation`, `app_runner`, `canvas`, `dirty`, `elm`, `event`, `executor`, `font_context`, conditional `gles2_canvas`, `gpu_canvas`, `gpu_cmd`, `gpu_renderer`, `input_bridge`, `layout`, `navigation`, `node`, `node_widgets`, `overlay`, `prelude`, `render_ctx`, `renderer`, `response`, `signal`, `state_store`, `surface_renderer`, `theme`, `widget`, `widgets`, `window`; `CommandExecutor`, `CpuExecutor`, `GpuRenderer`, `vi_design`, `vstack!`, `hstack!` | UI/graphics row. Elm and reactive-v2 coexist as **EXPERIMENTAL**; `gles2_canvas` requires `gles2` and remains **PLANNED**. | `libs/viui/src/lib.rs:24-109` |
 | `viui::widgets`, `node_widgets`, `navigation`, prelude | v1: `button`, `checkbox`, `column`, `image`, `label`, `row`, `scroll_area`, `space`, `text_edit` plus their re-exports; v2: `bar_chart`, `button`, `card`, `checkbox`, `column`, `dialog`, `divider`, `dropdown`, `flex_box`, `image`, `label`, `line_chart`, `list_view`, `progress_bar`, `row`, `scroll_area`, `slider`, `space`, `text_edit`, `toast`, `touch_area` plus listed re-exports; navigation `router`, `stack_nav`, `tab_nav` and re-exports; prelude’s canvas/Elm/event/layout/response/state/theme/widget re-exports | UI/graphics row, **EXPERIMENTAL**. This is the explicit exception to any inference that an Elm widget and its v2 peer have one canonical stable API. | `libs/viui/src/widgets.rs:1-21`; `libs/viui/src/node_widgets.rs:1-42`; `libs/viui/src/navigation.rs:1-19`; `libs/viui/src/prelude.rs:1-12` |
+
+### 4.2 Retired `api` facade (Phase 13)
+
+Phase 13 split `api` into `abi`, `wire`, `posix-shim` and `kms-codec`. The facade
+re-exported every old path for one cycle while in-tree imports migrated, then was
+deleted with `libs/api`. Replacements:
+
+| Retired path | Replacement |
+|---|---|
+| `api::abi::X`, and a root `api::X` naming an `abi` module, `ViSyscall`, `TaskPriority`, `declare_syscalls!` or `declare_manifest!` | `abi::X` |
+| `api::services::X`, and a root `api::X` naming a `wire` module or `declare_cluster!` | `wire::X` (`api::services::proto::…` → `wire::proto::…`) |
+| `api::X` for a `types` item (`ViError`, `CellId`, …) | `types::X` |
+| `api::kms` (formerly `types::kms`) | `kms_codec` |
+| `api::silo` | `types::silo` |
+| `api::posix`, `api::services::posix`; Cargo `api` feature `mlibc` | `posix_shim`; Cargo `posix-shim` feature `mlibc` |
+| Cargo `api` feature `hostile-backend-recovery` | `wire` feature `hostile-backend-recovery` |
+| `ostd::X` reached through `ostd`'s former `pub use api::*` | the owning crate's path above; `ostd::ViError` and `ostd::ViResult` remain |
+
+A C Cell that relied on `ostd` to link the Tier-A shim now depends on
+`posix-shim` and writes `extern crate posix_shim;`.
 
 ## 5. Capability matrix (seed for Phase 02 ledger)
 
@@ -173,10 +197,10 @@ bound to compile, test/runtime, and delivery records in the Phase 02 ledger.
 
 | ID / Module | `rust-no-std` | `rust-std` | `ffi-posix` | `lua` | T1 | Future T2 rule/state | Stability | Evidence | Blocker / limitation |
 |---|---|---|---|---|---|---|---|---|---|
-| C2-FDN / Foundation: ABI, manifest, lifecycle, capabilities, IPC/grants | **PARTIAL** | **PLANNED** | **PARTIAL** | **PARTIAL** | **PARTIAL** trusted SAS | **BLOCKED**: copied/domain-safe IPC and explicit grants only after Spec 22 | ABI **FROZEN**; lifecycle **STABLE** | Source witnesses: `libs/api/src/abi.rs:2-12`; `libs/api/src/abi/manifest.rs:1-33`; `libs/ostd/src/runtime.rs:3-11`; `libs/ostd/src/grant.rs:1-10` | Missing content-addressed compile/test/runtime/delivery ledger; current grants expose an SAS identity address. |
+| C2-FDN / Foundation: ABI, manifest, lifecycle, capabilities, IPC/grants | **PARTIAL** | **PLANNED** | **PARTIAL** | **PARTIAL** | **PARTIAL** trusted SAS | **BLOCKED**: copied/domain-safe IPC and explicit grants only after Spec 22 | ABI **FROZEN**; lifecycle **STABLE** | Source witnesses: `libs/abi/src/lib.rs:2-12`; `libs/abi/src/manifest.rs:1-33`; `libs/ostd/src/runtime.rs:3-11`; `libs/ostd/src/grant.rs:1-10` | Missing content-addressed compile/test/runtime/delivery ledger; current grants expose an SAS identity address. |
 | C2-RNS / Runtime profile: `rust-no-std` | **PARTIAL** | **N/A** | **N/A** | **N/A** | **PARTIAL** | **BLOCKED** pending native-domain runtime evidence | **STABLE** | Source witnesses: `libs/ostd/src/lib.rs:8-15`; `rust-toolchain.toml:1-5`; `cells/demos/sdk-demo/src/main.rs:1-20` | Missing exact tuple compile/test/runtime/delivery ledger; supported only under §3.1. |
 | C2-RST / Runtime profile: `rust-std` | **N/A** | **PLANNED** | **N/A** | **N/A** | **PLANNED** | **PLANNED** | **PLANNED** | Source/design anchors: `docs/decisions/0003-application-tier-taxonomy.md:102-106`; `libs/ostd/src/lib.rs:8-9` | G4 custom target and pure-Rust PAL exist in-tree (`targets/*-unknown-cellos.json`, `patches/rust-std-cellos.patch`) and are exercised by a QEMU smoke lane, but the profile has no admission, no published triple and no approved live benchmark; it is not `std` over mlibc. |
-| C2-FFI / Runtime profile: `ffi-posix`, including Zig | **N/A** | **N/A** | **PARTIAL** | **N/A** | **PARTIAL**, trusted | **UNSUPPORTED** until a domain-safe FFI/runtime contract passes Spec 22 | **EXPERIMENTAL** | Source witnesses: `libs/api/src/services/posix.rs:1-53`; `cells/tests/zig-hello/src/main.zig:1-41`; `scripts/build-zig-cells.ps1:19-57` | Missing compile/test/runtime/delivery ledger; profile-specific and trusted; Zig uses v1 manifest (`libs/zig-syscall/src/manifest.zig:1-32`) and its builder does not compose a signing chain. |
+| C2-FFI / Runtime profile: `ffi-posix`, including Zig | **N/A** | **N/A** | **PARTIAL** | **N/A** | **PARTIAL**, trusted | **UNSUPPORTED** until a domain-safe FFI/runtime contract passes Spec 22 | **EXPERIMENTAL** | Source witnesses: `libs/posix-shim/src/lib.rs:1-73`; `cells/tests/zig-hello/src/main.zig:1-41`; `scripts/build-zig-cells.ps1:19-57` | Missing compile/test/runtime/delivery ledger; profile-specific and trusted; Zig uses v1 manifest (`libs/zig-syscall/src/manifest.zig:1-32`) and its builder does not compose a signing chain. |
 | C2-LUA / Runtime profile: Lua | **N/A** | **N/A** | **N/A** | **PARTIAL** | **PARTIAL**, trusted Rust-hosted runtime | **UNSUPPORTED** until domain-safe native runtime design and evidence exist | **EXPERIMENTAL** | Source witnesses: `cells/runtimes/lua/src/main.rs:1-20`; `cells/runtimes/lua/build.rs:1-37`; `docs/scripting-guide.md:3-16` | Missing compile/test/runtime/delivery ledger; Lua is not containment; only x86_64/AArch64 missing-compiler discovery uses a no-op stub, while RISC-V compilation/link may fail. |
 | C2-SVC / Service clients: IPC, VFS, net, discovery | **PARTIAL** | **PLANNED** | **PARTIAL** | **PARTIAL** | **PARTIAL** where declared service/capability exists | **BLOCKED** until copied IPC and explicit domain grants are implemented | **STABLE** | Source witnesses: `libs/ostd/src/clients.rs:3-29`; `libs/ostd/src/service.rs:15-42`; `libs/ostd/src/service.rs:95-128`; `libs/ostd/src/app.rs:136-230` | Missing content-addressed compile/test/runtime/delivery ledger; coverage remains service-specific. |
 | C2-UI / UI/graphics: surface, input, ViUI, `.vi`, GLES2 | **PARTIAL** | **PLANNED** | **UNSUPPORTED** | **UNSUPPORTED** | **PARTIAL** | **BLOCKED** pending domain-safe surface/input/grant design | Elm **EXPERIMENTAL**; reactive-v2 **EXPERIMENTAL**; GLES2 **PLANNED** | Source witnesses: `libs/viui/src/lib.rs:1-30`; `libs/viui/src/lib.rs:37-76`; `tools/viui-build/src/lib.rs:1-53`; `libs/viui/src/gles2_canvas.rs:1-10` | Missing compile/test/runtime/delivery ledger; legacy Elm and reactive v2 coexist; GLES2 is a no-op skeleton. |
@@ -210,7 +234,7 @@ Phase 02 may change the ledger; it is never a silent exemption.
 
 ## 6. Compatibility, versions, and errors
 
-1. **Frozen ABI.** `api::abi` is immutable under its existing 2× confirmation
+1. **Frozen ABI.** `abi` is immutable under its existing 2× confirmation
    rule. Manifest v2 stays 16 bytes; no source-level SDK decision may repurpose
    reserved bytes or reinterpret its compatibility aliases.
 2. **Source additions.** A new public SDK item is additive only when it does not
@@ -220,8 +244,8 @@ Phase 02 may change the ledger; it is never a silent exemption.
 3. **Breaking change.** Before removing or materially changing a **STABLE**
    source item, maintain the old path with a documented replacement for at
    least one supported 0.x release cycle, add a migration note and test, then
-   remove only in a declared breaking release. `api::*` re-exports are old paths
-   and MUST remain during that window.
+   remove only in a declared breaking release. Old re-export paths MUST remain
+   during that window; §4.2 is the migration note for the retired `api` facade.
 4. **Experimental and planned.** **EXPERIMENTAL** may break in 0.x with a
    release note. **PLANNED** is no compatibility promise. **INTERNAL** may move
    without SDK compatibility treatment.
@@ -280,10 +304,10 @@ records evidence cohorts and derives program qualification.
 
 | Claim | Current anchor |
 |---|---|
-| Frozen ABI and 2× confirmation | `libs/api/src/abi.rs:2-12` |
-| Extensible, non-ABI services | `libs/api/src/services.rs:2-6` |
-| Manifest v2 record and v1 compatibility | `libs/api/src/abi/manifest.rs:1-33` |
-| Flat public API re-exports | `libs/api/src/lib.rs:19-31` |
+| Frozen ABI and 2× confirmation | `libs/abi/src/lib.rs:2-12` |
+| Extensible, non-ABI services | `libs/wire/src/lib.rs:1-11` |
+| Manifest v2 record and v1 compatibility | `libs/abi/src/manifest.rs:1-33` |
+| Public crate roots | `libs/abi/src/lib.rs:25-68`; `libs/wire/src/lib.rs:19-44` |
 | `no_std` SDK and optional features | `libs/ostd/src/lib.rs:8-15`; `libs/ostd/Cargo.toml:21-33` |
 | Lifecycle, clients, discovery, and typed calls | `libs/ostd/src/app.rs:136-230`; `libs/ostd/src/clients.rs:19-49`; `libs/ostd/src/service.rs:95-128` |
 | SAS grant identity limitation | `libs/ostd/src/grant.rs:1-10`; `libs/ostd/src/grant.rs:67-124` |

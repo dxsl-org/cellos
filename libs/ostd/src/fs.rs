@@ -10,8 +10,8 @@
 use crate::syscall;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::ipc::{VfsRequest, VfsResponse};
 use types::*;
+use wire::ipc::{VfsRequest, VfsResponse};
 
 /// Iterator over directory entries returned by the kernel.
 pub struct ReadDir {

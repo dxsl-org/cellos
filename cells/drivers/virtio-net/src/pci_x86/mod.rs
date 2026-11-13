@@ -24,9 +24,9 @@ pub use hal::PciHal;
 pub use raw_net::PciNet;
 
 use crate::device::NetDevice;
+use abi::pcie_function::FLAG_DMA_REMAPPED;
 use alloc::format;
 use alloc::vec::Vec;
-use api::pcie_function::FLAG_DMA_REMAPPED;
 use claims::BarClaims;
 use core::fmt::{self, Display, Formatter};
 use core::ptr::NonNull;

@@ -1,10 +1,10 @@
 //! Authenticated session view and frame IPC dispatch.
 
-use api::display::{
+use ostd::ipc::reply_to;
+use wire::display::{
     compositor_ops, CreateViewRequest, Rect, SurfaceRole, ViewOpResponse, ViewOpResult,
     CREATE_VIEW_REQUEST_WIRE_SIZE, VIEW_OP_RESPONSE_WIRE_SIZE,
 };
-use ostd::ipc::reply_to;
 
 use super::{view_frame, MessageContext};
 use crate::stacking;

@@ -7,12 +7,12 @@
 
 use super::text::TopError;
 use super::{Field, RowKind, SortSpec, View, MAX_FRAME_ROWS};
-use alloc::string::String;
-use alloc::vec::Vec;
-use api::telemetry::{
+use abi::telemetry::{
     cell_flags, cell_state, header_flags, name_bytes, task_flags, task_state, TelemetryCellV1,
     TelemetrySnapshot, TelemetryTaskV1,
 };
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::cmp::Ordering;
 
 /// How a row's `cpu_tenths` was (or was not) derived.
@@ -608,7 +608,7 @@ fn note_cpu(unavailable: &mut FieldSet, cpu: &Cpu) {
     }
 }
 
-fn row_name(name: &[u8; api::telemetry::NAME_LEN]) -> String {
+fn row_name(name: &[u8; abi::telemetry::NAME_LEN]) -> String {
     String::from_utf8_lossy(name_bytes(name)).into_owned()
 }
 
@@ -656,7 +656,7 @@ fn task_sample(row: &TelemetryTaskV1, owner: Option<(u64, u64)>, cpu: Cpu) -> Ta
     }
 }
 
-fn system_memory(header: &api::telemetry::TelemetryHeaderV1) -> SysMem {
+fn system_memory(header: &abi::telemetry::TelemetryHeaderV1) -> SysMem {
     if header.has(header_flags::SYSMEM_DENIED) {
         return SysMem::Denied;
     }

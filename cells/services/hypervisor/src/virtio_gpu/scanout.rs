@@ -1,9 +1,9 @@
 //! Non-blocking compositor bridge for the VMM-owned scanout Grant.
 
 use super::{command, resource::ResourceTable};
-use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
 use ostd::io::println;
 use ostd::syscall::{sys_grant_share, sys_recv_timeout, sys_try_send, sys_yield, SyscallResult};
+use wire::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect, SurfaceRole};
 pub struct ScanoutBridge {
     compositor_tid: usize,
     surface_cap: u32,

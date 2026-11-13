@@ -8,11 +8,11 @@
 //! honoured only in safe mode, only from that live console shell, and only
 //! for the current digest; a confirmed pin takes effect at the next boot.
 
+use abi::machine_facts::MachineFactsRecord;
 use alloc::format;
-use api::machine_facts::MachineFactsRecord;
-use api::services::machine_pin::{MachinePinRequest, MachinePinResponse, Refusal};
 use ostd::io::println;
 use ostd::service::{Handler, Request};
+use wire::machine_pin::{MachinePinRequest, MachinePinResponse, Refusal};
 
 use crate::gate::{authorize_confirm, short, Gate};
 use crate::store::{PinStore, VfsPinStore};

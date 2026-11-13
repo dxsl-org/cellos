@@ -139,8 +139,8 @@ and once at registration:
 
 | Offset | Size | Field | Description |
 |--------|------|-------|-------------|
-| 0 | 1 | opcode | `0x03` = `api::ipc::OP_SET_LEDS` |
-| 1 | 1 | leds | `api::ipc::led_bits` bitmap: bit 0 Num Lock, bit 1 Caps Lock, bit 2 Scroll Lock |
+| 0 | 1 | opcode | `0x03` = `wire::ipc::OP_SET_LEDS` |
+| 1 | 1 | leds | `wire::ipc::led_bits` bitmap: bit 0 Num Lock, bit 1 Caps Lock, bit 2 Scroll Lock |
 
 Fire-and-forget — the service owns lock state and has nothing to do with a
 reply. The HID driver turns the bitmap into the device's own LED output report
@@ -199,7 +199,7 @@ Rules:
 
 Phase 17 will expose a typed `read_key() -> KeyEvent` helper in
 `libs/ostd/src/input.rs`.  Until then, consumer cells decode the raw 65-byte
-IPC message using `api::input::InputEvent`.
+IPC message using `wire::input::InputEvent`.
 
 ---
 
@@ -207,7 +207,7 @@ IPC message using `api::input::InputEvent`.
 
 | File | Purpose |
 |------|---------|
-| `libs/api/src/services/input.rs` | Type definitions (`InputEvent`, `KeyEvent`, `Modifiers`, …) |
+| `libs/wire/src/input.rs` | Type definitions (`InputEvent`, `KeyEvent`, `Modifiers`, …) |
 | `cells/services/input/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/input/src/layout_us_qwerty.rs` | Scancode → KeySym table |
 | `cells/services/input/src/modifier_state.rs` | Modifier state machine |

@@ -6,7 +6,7 @@ Cellos uses a two-tier C library strategy:
 
 | Tier | Crate | When to use |
 |------|-------|------------|
-| **A — posix shim** | `libs/api` (default) | Simple cells, embedded, no-std, small binary size |
+| **A — posix shim** | `libs/posix-shim` (default) | Simple cells, embedded, no-std, small binary size |
 | **B — mlibc** | `libs/mlibc-shim` + `api/mlibc` feature | Complex C apps needing Grisu3 printf, real malloc, broad POSIX |
 
 The two tiers are **mutually exclusive within a single binary**. Never link both.
@@ -130,12 +130,13 @@ SHA: TBD — record the commit used during first build here
 
 ```toml
 [dependencies]
-api        = { path = "../../../libs/api", features = ["mlibc"] }
+abi        = { path = "../../../libs/abi" }
+posix-shim = { path = "../../../libs/posix-shim", features = ["mlibc"] }
 ostd       = { path = "../../../libs/ostd" }
 mlibc-shim = { path = "../../../libs/mlibc-shim" }
 ```
 
-**Critical:** `api` must have `features = ["mlibc"]`. Without it, posix.rs is NOT suppressed and you will get duplicate-symbol link errors.
+**Critical:** `posix-shim` must have `features = ["mlibc"]`. Without it, the shim is NOT suppressed and you will get duplicate-symbol link errors.
 
 ### Rust source
 
@@ -187,7 +188,7 @@ mlibc printf("%.15g", x)
                                         └──── CRITICAL: aarch64 uses x0=nr, NOT x8
 ```
 
-### Syscall constants (from `libs/api/src/syscall.rs`)
+### Syscall constants (from `libs/abi/src/syscall.rs`)
 
 | Symbol | Number |
 |--------|--------|
@@ -215,7 +216,7 @@ mlibc's allocator (`frg::slab_allocator`) is backed by a **4 MB static bump aren
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `mlibc libc.a is missing` at `cargo check` | Haven't built mlibc yet | Windows: `pwsh scripts/setup-mlibc.ps1`; WSL2: `bash scripts/build-mlibc.sh` |
-| Duplicate symbol `printf` / `malloc` at link | `api` missing mlibc feature | Add `features = ["mlibc"]` to api dependency |
+| Duplicate symbol `printf` / `malloc` at link | `posix-shim` missing mlibc feature | Add `features = ["mlibc"]` to the posix-shim dependency |
 | `__mlibc_int_fast8 != __INT_FAST8_TYPE__` ninja failure | GCC bare-metal fast-int ABI mismatch | Already fixed via `-D__INT_FAST8_TYPE__=__INT8_TYPE__` etc. in `sysdeps/Cellos/meson.build`. Re-run setup script if you see it. |
 | `undefined reference to mlibc::sys_write` | Sysdeps not being picked up | Check `[host_machine] system = 'Cellos'` in the `.cross` file; do NOT pass `-Dsysdeps=Cellos` (invalid option) |
 | Wrong output on aarch64 (garbage data) | Wrong register layout in syscall.h | aarch64 ABI uses x0=nr (not x8) — see syscall.h |

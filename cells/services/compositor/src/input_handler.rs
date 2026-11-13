@@ -8,12 +8,12 @@
 //!   - On mouse move, unions the old and new 16×16 cursor rects into
 //!     `pending_dirty` so the compositor repaints both positions (no trail).
 
-use api::display::Rect;
-use api::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
-use api::ipc::{InputRequest, IPC_BUF_SIZE};
-use api::syscall::service;
+use abi::syscall::service;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_try_send;
+use wire::display::Rect;
+use wire::input::{decode_event, InputEvent, INPUT_EVENT_IPC_SIZE, INPUT_EVENT_OPCODE};
+use wire::ipc::{InputRequest, IPC_BUF_SIZE};
 
 use crate::cursor_state;
 use crate::pointer_router::{PointerRouter, RouteContext};
@@ -131,7 +131,7 @@ impl InputState {
                 .selected_cap()
                 .and_then(|cap| table.get(cap))
                 .is_some_and(|surface| {
-                    surface.role == api::display::SurfaceRole::Panel
+                    surface.role == wire::display::SurfaceRole::Panel
                         && surface.owner == self.pointer.focused_owner()
                         && surface.screen_rect().contains_point(x, y)
                 });
@@ -165,7 +165,7 @@ fn set_input_focus(input_tid: usize, compositor_tid: usize) {
     let req = InputRequest::SetFocus {
         cell_tid: compositor_tid as u32,
     };
-    if let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) {
+    if let Ok(encoded) = wire::ipc::encode(&req, &mut req_buf) {
         // Input can synchronously send a key to this compositor. Never wait for
         // its receive loop here, or click activation can form a two-way IPC wait.
         let _ = sys_try_send(input_tid, encoded);
@@ -230,8 +230,8 @@ pub fn handle_input_event(
                 return;
             }
             // Esc abandons a Win+drag of a tab instead of reaching the app.
-            if key.keysym == api::input::KeySym::Escape
-                && key.state == api::input::KeyState::Pressed
+            if key.keysym == wire::input::KeySym::Escape
+                && key.state == wire::input::KeyState::Pressed
             {
                 if let Some(area) = state.pointer.cancel_stack_drag() {
                     queue_dirty(pending_dirty, area);
@@ -239,8 +239,8 @@ pub fn handle_input_event(
                 }
             }
             // Esc closes an open window menu instead of reaching the app.
-            if key.keysym == api::input::KeySym::Escape && state.pointer.open_menu().is_some() {
-                if key.state == api::input::KeyState::Pressed {
+            if key.keysym == wire::input::KeySym::Escape && state.pointer.open_menu().is_some() {
+                if key.state == wire::input::KeyState::Pressed {
                     if let Some(area) = state.pointer.close_menu() {
                         queue_dirty(pending_dirty, area);
                     }
@@ -339,15 +339,15 @@ fn route_pointer(
     );
     if let InputEvent::MouseButton {
         button,
-        state: api::input::KeyState::Pressed,
+        state: wire::input::KeyState::Pressed,
     } = event
     {
-        state.note_press(button == api::input::MouseButton::Left, table);
+        state.note_press(button == wire::input::MouseButton::Left, table);
     }
 }
 
 fn find_shell_tid() -> usize {
-    let mut procs = [api::syscall::ProcessInfo::default(); 32];
+    let mut procs = [abi::syscall::ProcessInfo::default(); 32];
     if let Ok(count) = ostd::syscall::sys_get_procs(&mut procs) {
         for p in procs.iter().take(count) {
             if &p.name[..7] == b"cellbox" {
@@ -405,7 +405,7 @@ fn on_screen(rect: Rect, screen_w: u32, screen_h: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use api::display::SurfaceRole;
+    use wire::display::SurfaceRole;
 
     use super::*;
 

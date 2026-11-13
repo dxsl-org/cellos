@@ -30,14 +30,14 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use ostd::io::println;
 use ostd::syscall::{sys_exit, sys_set_tls_base, sys_yield, SyscallResult};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
 
-api::declare_syscalls![Log, Exit, Spawn, Yield, GetTime];
+abi::declare_syscalls![Log, Exit, Spawn, Yield, GetTime];
 
 ostd::cell_main!(cell_main);
 

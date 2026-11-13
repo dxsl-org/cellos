@@ -33,7 +33,7 @@ Cellos provides a minimal, well-defined API surface for Cells to interact with t
 ├─────────────────────────────────────┤
 │      libs/ostd (syscall wrappers)   │  ← User-space library
 ├─────────────────────────────────────┤
-│      libs/api (trait definitions)   │  ← ABI contract
+│      libs/abi (trait definitions)   │  ← ABI contract
 ├─────────────────────────────────────┤
 │      Kernel (trait implementations) │  ← Kernel space
 └─────────────────────────────────────┘
@@ -47,7 +47,7 @@ Cellos provides a minimal, well-defined API surface for Cells to interact with t
 
 Syscalls are the only way for Cells to interact with the kernel. Cellos has a minimal set of ~15 syscalls (compared to Linux's 300+).
 
-**Syscall Enumeration** (`libs/api/src/syscall.rs`):
+**Syscall Enumeration** (`libs/abi/src/syscall.rs`):
 
 ```rust
 #[repr(usize)]
@@ -215,7 +215,7 @@ sys_get_random(&mut key)?;  // Fill with hardware entropy
 
 ### ViFileSystem Trait
 
-**Location**: `libs/api/src/fs.rs`
+**Location**: `libs/abi/src/fs.rs`
 
 **Purpose**: Abstract filesystem operations for any filesystem implementation (FAT32, ext4, TFS, etc.)
 
@@ -353,7 +353,7 @@ pub enum FileType {
 ### Usage Example
 
 ```rust
-use api::fs::{ViFileSystem, OpenMode, SeekFrom};
+use abi::fs::{ViFileSystem, OpenMode, SeekFrom};
 
 fn read_config(fs: &dyn ViFileSystem) -> Result<String, ViError> {
     // Open file
@@ -388,7 +388,7 @@ fn write_log(fs: &dyn ViFileSystem, message: &str) -> Result<(), ViError> {
 
 ### ViBlockDevice Trait
 
-**Location**: `libs/api/src/block.rs`
+**Location**: `libs/abi/src/block.rs`
 
 **Purpose**: Abstract interface for block storage devices (disks, SSDs, ramdisks)
 
@@ -455,7 +455,7 @@ fn write_sector(device: &mut dyn ViBlockDevice, sector: usize, data: &[u8]) -> R
 
 ### ViDriver Trait
 
-**Location**: `libs/api/src/driver.rs`
+**Location**: `libs/wire/src/driver.rs`
 
 **Purpose**: Generic driver interface for hardware devices
 
@@ -832,7 +832,7 @@ fn must_open(fs: &dyn ViFileSystem, path: &str) -> Box<dyn ViFile> {
 ### Example 1: File I/O Service
 
 ```rust
-use api::fs::{ViFileSystem, ViFile, OpenMode};
+use abi::fs::{ViFileSystem, ViFile, OpenMode};
 
 pub struct FileService {
     fs: Arc<dyn ViFileSystem + Send + Sync>,

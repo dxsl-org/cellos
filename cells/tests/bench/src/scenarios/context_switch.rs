@@ -4,8 +4,8 @@
 //! context-switch overhead.  Two consecutive yields are timed; the delta
 //! approximates one context switch.  PDR target: < 100 µs on QEMU.
 
-use api::benchmark::ViBenchmark;
 use ostd::syscall::sys_yield;
+use wire::benchmark::ViBenchmark;
 
 pub struct ContextSwitchBench;
 
@@ -14,7 +14,7 @@ impl ViBenchmark for ContextSwitchBench {
         "context_switch"
     }
 
-    fn run_once(&mut self) -> api::ViResult<u64> {
+    fn run_once(&mut self) -> types::ViResult<u64> {
         // Yield twice; the caller times the whole run_once() call, so the
         // measured delta ≈ one round-trip through the scheduler.
         sys_yield();

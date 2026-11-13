@@ -12,5 +12,6 @@ license = "Apache-2.0 OR MIT"
 
 [dependencies]
 types = { path = "../types", version = "0.1.0" }
-api = { path = "../api", version = "0.1.0" }
+abi = { path = "../abi", version = "0.1.0" }
+wire = { path = "../wire", version = "0.1.0" }
 ostd = { path = "../ostd", version = "0.2.0" }

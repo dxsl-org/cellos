@@ -4,10 +4,10 @@ use crate::blk_router::DeviceRef;
 use crate::disk_cellosfs::CellosPartitionDisk;
 use crate::fs_error::FsError as VfsFsError;
 use alloc::{format, string::String, vec::Vec};
-use api::ipc::vfs_dir_page::EntryKind;
-use api::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 use cellos_fs::{disk::FsError, CellosFs, Expect};
 use ostd::prelude::Mutex;
+use wire::ipc::vfs_dir_page::EntryKind;
+use wire::ipc::{save_refusal, Observation, SaveExpect, SaveOutcome};
 
 #[derive(Clone, Copy)]
 enum Operation {

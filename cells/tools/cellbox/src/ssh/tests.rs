@@ -81,7 +81,7 @@ fn status_and_message_per_ending() {
 #[test]
 fn completion_records_carry_dispatch_uncertainty_and_exact_remote_outcomes() {
     use super::{completion, settle, CANCELLED};
-    use api::services::ssh_completion::{Dispatch as D, Mode, Outcome as O, Phase as P};
+    use wire::ssh_completion::{Dispatch as D, Mode, Outcome as O, Phase as P};
     let key = HostKey {
         algorithm: "ssh-ed25519",
         key: [1; 32],
@@ -191,7 +191,7 @@ fn completion_records_carry_dispatch_uncertainty_and_exact_remote_outcomes() {
 #[test]
 fn kms_lookup_answers_map_to_session_trust() {
     use super::lookup_answer;
-    use api::ipc::ssh_trust;
+    use wire::ipc::ssh_trust;
     for (code, trust) in [
         (Some(ssh_trust::KNOWN_EXACT), Trust::KnownExact),
         (Some(ssh_trust::UNKNOWN), Trust::Unknown),
@@ -209,7 +209,7 @@ fn kms_lookup_answers_map_to_session_trust() {
 #[test]
 fn first_trust_answers_map_to_session_outcomes_and_messages() {
     use super::{commit_trust, trust_added, NO_FRONTEND};
-    use api::ipc::ssh_trust;
+    use wire::ipc::ssh_trust;
     // Only a stored key continues; an undecided wait that ran out is an expiry.
     assert_eq!(commit_trust(ssh_trust::KNOWN_EXACT), Trust::KnownExact);
     for (code, trust) in [
@@ -365,7 +365,7 @@ fn every_credential_has_a_distinct_short_ascii_code_and_a_secret_free_message() 
 
 #[test]
 fn a_credential_ending_is_a_local_error_before_dispatch_in_the_auth_phase() {
-    use api::services::ssh_completion::{Dispatch as D, Mode, Outcome as O, Phase as P};
+    use wire::ssh_completion::{Dispatch as D, Mode, Outcome as O, Phase as P};
     let host = Host::Name("h".into());
     for credential in ALL_CREDENTIALS {
         let out = outcome(Dispatch::NotSent, Ending::Credential(credential), false);

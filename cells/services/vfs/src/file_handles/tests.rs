@@ -1,7 +1,7 @@
 use super::*;
 use crate::caller::Caller;
-use api::vfs_file_handles::ViVfsFileHandle;
 use types::CellId;
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 const CELL_A: Caller = Caller::principal(CellId(11), 1);
 const CELL_B: Caller = Caller::principal(CellId(22), 1);

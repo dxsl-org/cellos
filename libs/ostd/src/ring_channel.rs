@@ -28,12 +28,12 @@ use crate::grant::GrantHandle;
 use crate::syscall::{
     sys_grant_share, sys_grant_slice_with_len, sys_grant_slice_with_len_owned_by,
 };
-pub use api::ring_channel::{
-    BiRingChannel, RingError, RingMessageMeta, SpscRing, SpscSlot, RING_CAPACITY, RING_SLOT_BYTES,
-};
 use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU32, Ordering};
+pub use wire::ring_channel::{
+    BiRingChannel, RingError, RingMessageMeta, SpscRing, SpscSlot, RING_CAPACITY, RING_SLOT_BYTES,
+};
 
 /// Producer half of a single-producer single-consumer ring channel.
 pub struct RingSender<'a> {

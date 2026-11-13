@@ -15,12 +15,12 @@
 
 extern crate alloc;
 
-use api::hypervisor::ViVmExit;
+use abi::hypervisor::ViVmExit;
 use ostd::io::println;
 use ostd::vmm;
 
 // Declare manifest: hypervisor = true (grants HypervisorCap at EL2).
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -29,7 +29,7 @@ api::declare_manifest!(
     hypervisor = true
 );
 // Declare allowlist bit 44 (HypervisorCap syscalls).
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     CreateVm,
     CreateVcpu,

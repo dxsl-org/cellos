@@ -10,7 +10,7 @@ mod framework;
 mod scenarios;
 
 // Probe/load roles do not spawn further children.
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     SendGather,
     Recv,
@@ -31,7 +31,7 @@ api::declare_syscalls![
     // `fastpath-echo` resolves the host's channel Grant (owner-checked).
     GrantSlice
 ];
-api::declare_manifest!(block_io = false, network = false, spawn = false);
+abi::declare_manifest!(block_io = false, network = false, spawn = false);
 
 ostd::cell_main!(cell_main);
 

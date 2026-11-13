@@ -3,7 +3,7 @@
 
 Usage: phase09_trust_disk.py DISK_IMG CONFIG_DIR HOST_KEY_PUB PORT [REKEY_PORT]
 
-Writes a sparse private disk laid out like `api::abi::disk`:
+Writes a sparse private disk laid out like `abi::disk`:
   P1 FAT32 (/mnt/sd)  the lane's own /etc/cellos (P1 is the config override volume).
   P5 CellosFS (/srv)  /cellos/kms/ssh_known_hosts (the KMS-owned store), seeded
                       offline by tools/cellos-fs-provision --seed, in store format v1

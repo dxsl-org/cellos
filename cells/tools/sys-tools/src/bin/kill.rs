@@ -3,7 +3,7 @@
 #![forbid(unsafe_code)]
 extern crate ostd;
 
-use api::syscall::ProcessInfo;
+use abi::syscall::ProcessInfo;
 use ostd::{io, syscall};
 
 ostd::cell_main!(cell_main);

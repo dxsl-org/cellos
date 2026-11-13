@@ -1,7 +1,6 @@
 use super::{tcp_read_msg, tcp_write_msg, StaticKeypair, HEARTBEAT_MS, NOISE_MSG_BUF, NOISE_TAG};
 use crate::rng::BrokerRng;
 use alloc::boxed::Box;
-use api::cluster::CellNetId;
 use clatter::{
     crypto::{cipher::ChaChaPoly, hash::Sha256},
     handshakepattern::noise_kk_psk0,
@@ -13,6 +12,7 @@ use ostd::service::NetRef;
 use ostd::{syscall::sys_heartbeat, ViError, ViResult};
 use service_net_broker::kms_dh::KmsBackedX25519;
 use service_net_broker::noise_identity::handshake_prologue;
+use wire::cluster::CellNetId;
 
 type Hs = NqHandshakeCore<KmsBackedX25519, ChaChaPoly, Sha256, BrokerRng>;
 type Ts = TransportState<ChaChaPoly, Sha256>;

@@ -2,10 +2,10 @@ use super::path::FileReadPlan;
 use super::wire::{vfs_err_from_code, MAX_READ_CHUNK};
 use crate::service::VfsRef;
 use crate::{ViError, ViResult};
+use abi::dir_handles::ViDirHandle;
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::vfs_file_handles::ViVfsFileHandle;
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 /// The one-request seam every VFS client path goes through; tests replace it.
 pub(in crate::clients::vfs) trait VfsReadOps {

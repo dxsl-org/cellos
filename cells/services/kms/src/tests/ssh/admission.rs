@@ -4,7 +4,7 @@
 
 use std::vec::Vec;
 
-use api::caller_identity::{
+use abi::caller_identity::{
     CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
     CALLER_FLAG_NET_RESOLVE, CALLER_FLAG_VFS_MUTATE,
 };

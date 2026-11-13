@@ -53,7 +53,7 @@ pub fn wait_config() -> (usize, ClientConfig) {
 
 pub fn wait_broker() -> Option<usize> {
     for _ in 0..200 {
-        if let Some(broker_tid) = provider_tid(api::syscall::service::NET_BROKER) {
+        if let Some(broker_tid) = provider_tid(abi::syscall::service::NET_BROKER) {
             return Some(broker_tid);
         }
         yield_now();

@@ -4,7 +4,6 @@ use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use api::ipc::{Observation, SaveExpect};
 use ostd::ViError;
 use terminal_sdk::codec::{KeyState, KeySymbol, Modifiers};
 use text_engine::editor::EditBuffer;
@@ -12,6 +11,7 @@ use vitui::event::{Event, Key};
 use vitui::ratatui::core::buffer::Buffer;
 use vitui::ratatui::core::layout::Rect;
 use vitui::theme::{ColorMode, Theme};
+use wire::ipc::{Observation, SaveExpect};
 
 use super::editor::{Editor, Mode, SaveResult, Step, Store, SESSION_LOST};
 

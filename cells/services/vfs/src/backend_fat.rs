@@ -19,9 +19,9 @@ use crate::block_stream::{BlockStream, CachedBlockStream, StreamError};
 use crate::fat_extent_map::{ExtentCache, ExtentMap, FileKey};
 use crate::fs_error::FsError;
 use alloc::sync::Arc;
-use api::ipc::vfs_dir_page::EntryKind;
 use core::cell::RefCell;
 use ostd::io::println;
+use wire::ipc::vfs_dir_page::EntryKind;
 
 /// Concrete `fatfs::FileSystem` type for the VirtIO FAT volume.
 ///

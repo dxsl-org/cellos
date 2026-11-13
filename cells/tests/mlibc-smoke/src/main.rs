@@ -3,7 +3,7 @@
 //! Calls mlibc C symbols (printf, malloc/free, clock_gettime) via extern "C".
 //! If any symbol is missing the linker fails at build time — the cell acts as a
 //! compile+link proof that:
-//!   1. posix.rs Tier A symbols are suppressed (api/mlibc feature)
+//!   1. posix.rs Tier A symbols are suppressed (posix-shim/mlibc feature)
 //!   2. mlibc's libc.a symbols are available (mlibc-shim)
 //!   3. The ViCell sysdeps (vicell/syscall.h) dispatch correctly
 //!
@@ -15,19 +15,19 @@
 
 #![no_std]
 #![no_main]
-extern crate api;
 extern crate mlibc_shim;
 extern crate ostd;
+extern crate posix_shim;
 
 use ostd::syscall::sys_exit;
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_FFI
+    tier = abi::manifest::PROTECTION_CLASS_FFI
 );
-api::declare_syscalls![Write, Log, Exit, GetTime];
+abi::declare_syscalls![Write, Log, Exit, GetTime];
 
 // ─── mlibc C symbols ─────────────────────────────────────────────────────────
 

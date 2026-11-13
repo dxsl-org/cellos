@@ -61,30 +61,22 @@ pub enum AiClientError {
 /// Result alias for this crate's boundaries.
 pub type AiResult<T> = Result<T, AiClientError>;
 
-impl From<AiClientError> for crate::types::ViError {
+impl From<AiClientError> for types::ViError {
     fn from(error: AiClientError) -> Self {
         match error {
-            AiClientError::Transport | AiClientError::PollLimitExceeded => {
-                crate::types::ViError::IO
-            }
-            AiClientError::NoService => crate::types::ViError::NotFound,
-            AiClientError::Protocol => crate::types::ViError::InvalidInput,
+            AiClientError::Transport | AiClientError::PollLimitExceeded => types::ViError::IO,
+            AiClientError::NoService => types::ViError::NotFound,
+            AiClientError::Protocol => types::ViError::InvalidInput,
             AiClientError::Service(error) => match error {
-                AiError::BadRequest(_) => crate::types::ViError::InvalidArgument,
-                AiError::Busy => crate::types::ViError::WouldBlock,
-                AiError::NoModel => crate::types::ViError::NotFound,
-                AiError::NotSupported => crate::types::ViError::NotSupported,
-                AiError::UnknownRequest | AiError::NotRunning => {
-                    crate::types::ViError::InvalidArgument
-                }
-                AiError::Internal => crate::types::ViError::IO,
+                AiError::BadRequest(_) => types::ViError::InvalidArgument,
+                AiError::Busy => types::ViError::WouldBlock,
+                AiError::NoModel => types::ViError::NotFound,
+                AiError::NotSupported => types::ViError::NotSupported,
+                AiError::UnknownRequest | AiError::NotRunning => types::ViError::InvalidArgument,
+                AiError::Internal => types::ViError::IO,
             },
         }
     }
-}
-
-mod types {
-    pub use api::ViError;
 }
 
 /// Parameters for one inference request.
@@ -529,8 +521,8 @@ mod tests {
             AiClientError::Service(AiError::Busy)
         );
         // Busy collapses to WouldBlock for ViError callers.
-        let vi: crate::types::ViError = AiClientError::Service(AiError::Busy).into();
-        assert_eq!(vi, crate::types::ViError::WouldBlock);
+        let vi: types::ViError = AiClientError::Service(AiError::Busy).into();
+        assert_eq!(vi, types::ViError::WouldBlock);
     }
 
     #[test]

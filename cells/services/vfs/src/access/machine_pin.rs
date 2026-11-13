@@ -11,7 +11,7 @@
 //! or offline attacker is out of scope.
 
 use crate::caller::Caller;
-use api::syscall::service;
+use abi::syscall::service;
 
 const MACHINE_PIN_NAMESPACE: &str = "/srv/.cellos-machine";
 const MACHINE_PIN_PREFIX: &str = "/srv/.cellos-machine/";
@@ -61,14 +61,14 @@ mod tests {
         cell: CellId(7),
         generation: 1,
         sender_tid: 70,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     const OTHER: Caller = Caller {
         cell: CellId(8),
         generation: 1,
         sender_tid: 80,
-        flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+        flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
     };
 
     const INSIDE: [&str; 4] = [

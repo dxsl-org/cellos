@@ -27,7 +27,7 @@ struct Trace {
 struct Fake(Rc<RefCell<Trace>>);
 fn typed(response: NetResponse<'_>) -> Vec<u8> {
     let mut bytes = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(&response, &mut bytes).unwrap().to_vec()
+    wire::ipc::encode(&response, &mut bytes).unwrap().to_vec()
 }
 impl Transport for Fake {
     fn now(&self) -> u64 {
@@ -63,7 +63,7 @@ impl Transport for Fake {
                     .pop_front()
                     .unwrap_or_else(|| tls::RECV_EOF.to_le_bytes().to_vec()),
             ),
-            _ => match api::ipc::decode::<NetRequest>(bytes).unwrap() {
+            _ => match wire::ipc::decode::<NetRequest>(bytes).unwrap() {
                 NetRequest::Resolve { .. } => {
                     (Stage::Resolve, typed(NetResponse::Addr([127, 0, 0, 1])))
                 }

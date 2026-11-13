@@ -1,7 +1,7 @@
 //! Hostile-image-only backend fault control.
 
-use api::hostile_backend_recovery::{encode_kill_request, parse_kill_response, KILL_STATUS_OK};
-use api::syscall::service;
+use abi::syscall::service;
+use wire::hostile_backend_recovery::{encode_kill_request, parse_kill_response, KILL_STATUS_OK};
 
 const CONTROL_TIMEOUT_TICKS: u64 = 20;
 

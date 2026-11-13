@@ -4,7 +4,7 @@
 //! `cell.rs` owns the receive loop and supplies the kernel watch calls.
 
 use crate::owner_watch::{OwnerWatches, WatchSys};
-use api::caller_identity::CallerIdentity;
+use abi::caller_identity::CallerIdentity;
 use intel_gpu_core::hw::GpuHw;
 use intel_gpu_core::server::{Caller, XeServer};
 use intel_gpu_core::uapi::query::DeviceInfo;

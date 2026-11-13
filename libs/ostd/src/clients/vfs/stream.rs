@@ -10,10 +10,10 @@
 use super::read_file::session::VfsReadOps;
 use super::read_file::wire::{vfs_err_from_code, MAX_READ_CHUNK};
 use crate::{ViError, ViResult};
-use api::dir_handles::ViDirHandle;
-use api::ipc::vfs_dir_page::{self, Entry, MalformedPage};
-use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-use api::vfs_file_handles::ViVfsFileHandle;
+use abi::dir_handles::ViDirHandle;
+use wire::ipc::vfs_dir_page::{self, Entry, MalformedPage};
+use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use wire::vfs_file_handles::ViVfsFileHandle;
 
 /// Most bytes one [`read_chunk`][super::VfsClient::read_chunk] returns.
 pub const VFS_READ_CHUNK_MAX: usize = MAX_READ_CHUNK as usize;

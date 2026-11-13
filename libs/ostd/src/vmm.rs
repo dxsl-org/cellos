@@ -18,8 +18,8 @@
 //! exclusively.
 #![allow(unsafe_code)]
 
-use api::hypervisor::ViVmExit;
-use api::syscall::ViSyscall;
+use abi::hypervisor::ViVmExit;
+use abi::syscall::ViSyscall;
 
 use crate::syscall::syscall;
 
@@ -113,7 +113,7 @@ pub fn read_guest_memory(vm_id: usize, gpa: u64, dst: &mut [u8]) -> usize {
 pub fn run_vcpu(vm_id: usize, vcpu_id: usize, budget_ns: u64, exit: &mut ViVmExit) -> usize {
     // SAFETY: `exit` is exclusively borrowed for the whole call. The kernel
     // writes exactly `size_of::<ViVmExit>()` bytes (80, pinned by const asserts
-    // in `api::hypervisor` and the kernel's `vmm_wire`): first all zeros — tag 0
+    // in `abi::hypervisor` and the kernel's `vmm_wire`): first all zeros — tag 0
     // with zero payload, a valid `MmioRead` — then `encode_exit`'s image, whose
     // tag is a declared discriminant, whose `bool`s are 0/1 and whose padding is
     // zero. The guest runs on stage-2 mappings of its carve only, so the world

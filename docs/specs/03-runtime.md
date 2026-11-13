@@ -8,7 +8,7 @@
 Trong Cellos, khái niệm IPC truyền thống bị loại bỏ. Mọi tương tác giữa các Cell là **gọi hàm trực tiếp (Direct Call)** thông qua Rust Traits.
 
 * **Performance**: Chi phí tương đương một lời gọi hàm ảo (~2-3 chu kỳ CPU).
-* **Interface**: Định nghĩa trong crate `libs/api`. Sử dụng `#[repr(C)]` cho các cấu trúc dữ liệu ở biên giới (Boundaries) để đảm bảo **Stable ABI**.
+* **Interface**: Định nghĩa trong crate `libs/abi` (ABI kernel) và `libs/wire` (hợp đồng dịch vụ). Sử dụng `#[repr(C)]` cho các cấu trúc dữ liệu ở biên giới (Boundaries) để đảm bảo **Stable ABI**.
 * **Data Flow**: Mặc định là **Zero-copy**. Dữ liệu được truyền dưới dạng tham chiếu (`&T`) hoặc quyền sở hữu (`Box<T>`).
 
 ## 2. Async/Await & Safety (Owned Buffers)

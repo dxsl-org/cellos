@@ -6,13 +6,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use std::sync::{Arc, Mutex as HostMutex};
 
-use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
-use api::ipc::{
-    save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
-};
-use api::services::proto::vfs::VfsError;
+use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
 use sha2::{Digest, Sha256};
 use types::CellId;
+use wire::ipc::{
+    save_refusal, Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE,
+};
+use wire::proto::vfs::VfsError;
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
@@ -83,12 +83,12 @@ fn manager() -> (VfsManager, Disk) {
 
 fn call(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest<'_>) -> Reply {
     let mut request = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(req, &mut request).expect("request fits");
+    wire::ipc::encode(req, &mut request).expect("request fits");
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let resp = crate::dispatch::handle_request(vfs, &request, Some(caller), &mut resp_buf);
     let mut wire = [0u8; IPC_BUF_SIZE];
-    api::ipc::encode(&resp, &mut wire).expect("reply fits");
-    match api::ipc::decode::<VfsResponse>(&wire).expect("reply decodes") {
+    wire::ipc::encode(&resp, &mut wire).expect("reply fits");
+    match wire::ipc::decode::<VfsResponse>(&wire).expect("reply decodes") {
         VfsResponse::Ok => Reply::Ok,
         VfsResponse::Err(code) => Reply::Err(code),
         VfsResponse::SaveId(id) => Reply::Id(id),
@@ -111,8 +111,8 @@ fn staged(vfs: &mut VfsManager, caller: Caller, dst: &str, bytes: &[u8]) -> u32 
     let Reply::Id(id) = call(vfs, caller, &VfsRequest::SaveBegin { dst }) else {
         panic!("begin {dst}")
     };
-    for (index, piece) in bytes.chunks(api::ipc::VFS_SAVE_CHUNK).enumerate() {
-        let offset = (index * api::ipc::VFS_SAVE_CHUNK) as u64;
+    for (index, piece) in bytes.chunks(wire::ipc::VFS_SAVE_CHUNK).enumerate() {
+        let offset = (index * wire::ipc::VFS_SAVE_CHUNK) as u64;
         assert_eq!(
             call(
                 vfs,

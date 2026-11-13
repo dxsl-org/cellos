@@ -12,7 +12,7 @@ static EXITED_ROLES: AtomicUsize = AtomicUsize::new(0);
 
 pub fn request_matches(
     sender: usize,
-    identity: Option<&api::caller_identity::CallerIdentity>,
+    identity: Option<&abi::caller_identity::CallerIdentity>,
     request: Option<&ParsedLocalRequest>,
 ) -> bool {
     identity

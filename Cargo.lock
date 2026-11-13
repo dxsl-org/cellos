@@ -43,7 +43,7 @@ dependencies = [
 name = "adc-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-adc-sim",
  "hal-adc",
@@ -194,17 +194,17 @@ name = "ai-sdk"
 version = "0.1.0"
 dependencies = [
  "ai-proto",
- "api",
  "ostd",
+ "types",
 ]
 
 [[package]]
 name = "ai-test"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "ai-proto",
  "ai-sdk",
- "api",
  "cell-build",
  "ostd",
 ]
@@ -238,32 +238,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "api"
-version = "0.1.0"
-dependencies = [
- "abi",
- "kms-codec",
- "posix-shim",
- "types",
- "wire",
-]
-
-[[package]]
 name = "app-async-echo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
  "vipolling",
+ "wire",
 ]
 
 [[package]]
 name = "app-backend"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "serde",
@@ -273,67 +263,75 @@ dependencies = [
 name = "app-bench"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "cellos-fs",
  "ostd",
  "service-net-broker",
+ "types",
+ "wire",
 ]
 
 [[package]]
 name = "app-c-math-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-c-spawn"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-c-spawn-child"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-c2c-render"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "postcard",
  "render-core",
+ "wire",
 ]
 
 [[package]]
 name = "app-cellbox"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "sha2 0.11.1",
  "terminal-sdk",
  "text-engine",
+ "types",
  "vigrep",
  "vissh",
  "vitui",
+ "wire",
  "zeroize",
 ]
 
@@ -341,50 +339,54 @@ dependencies = [
 name = "app-chrome"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "viui",
+ "wire",
 ]
 
 [[package]]
 name = "app-cpp-hosted-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "mlibc-shim",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-cpp-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-drm-lite-x86"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "drm-cellos",
  "mlibc-shim",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-futex-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -393,8 +395,8 @@ dependencies = [
 name = "app-haily-agent"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
- "api",
  "cell-build",
  "ostd",
  "postcard",
@@ -408,7 +410,7 @@ dependencies = [
 name = "app-hello"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -417,7 +419,6 @@ dependencies = [
 name = "app-http-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "types",
@@ -427,7 +428,7 @@ dependencies = [
 name = "app-https-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -436,60 +437,65 @@ dependencies = [
 name = "app-init"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "cellos-boot-config",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "app-kms-ssh-admin"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "base64ct",
  "cell-build",
  "kms-codec",
  "ostd",
  "service-kms",
  "terminal-sdk",
+ "wire",
 ]
 
 [[package]]
 name = "app-mlibc-posix-x86"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "mlibc-shim",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-mlibc-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "mlibc-shim",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
 name = "app-net-tools"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "app-phase02-session-child"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
@@ -499,7 +505,7 @@ dependencies = [
 name = "app-phase02-session-parent"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
@@ -509,27 +515,29 @@ dependencies = [
 name = "app-phase03-filter"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
+ "wire",
 ]
 
 [[package]]
 name = "app-phase04-terminal-driver"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
+ "wire",
 ]
 
 [[package]]
 name = "app-pipe-peer"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -538,7 +546,7 @@ dependencies = [
 name = "app-pipe-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -547,27 +555,30 @@ dependencies = [
 name = "app-posix-shim-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "port-platform",
+ "posix-shim",
+ "wire",
 ]
 
 [[package]]
 name = "app-s2tw-probe"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
+ "wire",
 ]
 
 [[package]]
 name = "app-silo-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "kms-codec",
  "ostd",
@@ -578,27 +589,29 @@ dependencies = [
 name = "app-srv-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "app-sys-tools"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "app-tls-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -607,38 +620,41 @@ dependencies = [
 name = "app-tokio-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
  "vimio",
+ "wire",
 ]
 
 [[package]]
 name = "app-top-load"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
+ "wire",
 ]
 
 [[package]]
 name = "app-vfs-test"
 version = "0.2.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "app-wasm"
 version = "0.2.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-wasm",
  "ostd",
@@ -668,7 +684,7 @@ checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
 name = "atomic-publication-probe"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -787,10 +803,11 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 name = "c-pthread"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
 ]
 
 [[package]]
@@ -806,7 +823,7 @@ dependencies = [
 name = "can-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-can-loopback",
  "hal-can",
@@ -923,7 +940,6 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 name = "cfi-test"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
 ]
@@ -1400,11 +1416,12 @@ dependencies = [
 name = "desktop"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "text-engine",
  "viui",
+ "wire",
 ]
 
 [[package]]
@@ -1453,10 +1470,12 @@ dependencies = [
 name = "doom"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
+ "wire",
 ]
 
 [[package]]
@@ -1471,7 +1490,7 @@ dependencies = [
 name = "driver-ahci"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1481,7 +1500,7 @@ dependencies = [
 name = "driver-bcm-display"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "hal-soc-bcm27xx",
  "ostd",
@@ -1492,10 +1511,11 @@ dependencies = [
 name = "driver-bcm57xx"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -1510,7 +1530,7 @@ dependencies = [
 name = "driver-disk"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1520,7 +1540,7 @@ dependencies = [
 name = "driver-display-ssd1306"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio-bcm",
  "driver-spi-bcm",
@@ -1534,39 +1554,41 @@ dependencies = [
 name = "driver-dwc2-usb"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-hid",
  "hal-soc-bcm27xx",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-e1000"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-e1000e"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-gpio"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "hal-gpio",
  "ostd",
@@ -1577,7 +1599,6 @@ dependencies = [
 name = "driver-gpio-bcm"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "hal-gpio",
  "ostd",
@@ -1588,7 +1609,6 @@ dependencies = [
 name = "driver-gpio-sifive"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "hal-gpio",
  "ostd",
@@ -1599,17 +1619,17 @@ dependencies = [
 name = "driver-gpu"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-hid"
 version = "0.1.0"
 dependencies = [
- "api",
+ "wire",
 ]
 
 [[package]]
@@ -1636,37 +1656,40 @@ dependencies = [
 name = "driver-i40e"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-igb"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-igc"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-imu-mpu6050"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-i2c-bcm",
  "hal-i2c",
@@ -1678,28 +1701,30 @@ dependencies = [
 name = "driver-intel-gpu"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "intel-gpu-core",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-ixgbe"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-nvme"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1709,7 +1734,7 @@ dependencies = [
 name = "driver-pvscsi"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "scsi-block",
@@ -1729,17 +1754,17 @@ dependencies = [
 name = "driver-r8169"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-serial"
 version = "0.2.0"
 dependencies = [
- "api",
  "cell-build",
  "hal-uart",
  "ostd",
@@ -1750,7 +1775,7 @@ dependencies = [
 name = "driver-serial-x86"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1780,7 +1805,7 @@ dependencies = [
 name = "driver-virtio-blk"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1792,7 +1817,7 @@ dependencies = [
 name = "driver-virtio-gpu"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -1803,19 +1828,20 @@ dependencies = [
 name = "driver-virtio-net"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
  "virtio-drivers",
  "virtio-pci-transport",
+ "wire",
 ]
 
 [[package]]
 name = "driver-virtio-scsi"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "bitflags 2.13.1",
  "cell-build",
  "ostd",
@@ -1829,17 +1855,17 @@ dependencies = [
 name = "driver-vmxnet3"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "driver-wasm"
 version = "0.2.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "types",
@@ -1850,11 +1876,12 @@ dependencies = [
 name = "driver-xhci"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-hid",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -1937,7 +1964,7 @@ version = "0.1.0"
 name = "edu-holder"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "edu-export-proto",
  "ostd",
@@ -2049,7 +2076,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 name = "export-client"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "edu-export-proto",
  "ostd",
@@ -2068,9 +2095,10 @@ dependencies = [
 name = "fb-console"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
@@ -2105,11 +2133,12 @@ checksum = "64cd1e32ddd350061ae6edb1b082d7c54915b5c672c389143b9a63403a109f24"
 name = "files"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "text-engine",
  "viui",
+ "wire",
 ]
 
 [[package]]
@@ -2122,7 +2151,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 name = "fixture-launcher"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -2198,7 +2227,7 @@ dependencies = [
 name = "gpio-test-rv"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio-sifive",
  "hal-gpio",
@@ -2467,7 +2496,6 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 name = "hello-cell"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
 ]
@@ -2503,18 +2531,19 @@ dependencies = [
 name = "hotswap-demo-v1"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "types",
 ]
 
 [[package]]
 name = "hotswap-demo-v2"
 version = "0.2.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
+ "types",
 ]
 
 [[package]]
@@ -2547,7 +2576,7 @@ dependencies = [
 name = "hypervisor-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -2556,23 +2585,24 @@ dependencies = [
 name = "hypha-core"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
- "api",
  "cell-build",
  "hypha-tool-fs",
  "hypha-tool-spawn",
  "ostd",
  "postcard",
+ "wire",
 ]
 
 [[package]]
 name = "hypha-llm-gateway"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
  "ai-proto",
  "ai-sdk",
- "api",
  "cell-build",
  "ostd",
  "postcard",
@@ -2582,8 +2612,8 @@ dependencies = [
 name = "hypha-tool-fs"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
- "api",
  "cell-build",
  "ostd",
  "postcard",
@@ -2593,8 +2623,8 @@ dependencies = [
 name = "hypha-tool-spawn"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
- "api",
  "cell-build",
  "ostd",
  "postcard",
@@ -2604,8 +2634,8 @@ dependencies = [
 name = "hypha-tool-sys"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "agent-proto",
- "api",
  "cell-build",
  "ostd",
  "postcard",
@@ -2648,11 +2678,12 @@ dependencies = [
 name = "input-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -2768,10 +2799,12 @@ dependencies = [
 name = "lua"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
+ "wire",
 ]
 
 [[package]]
@@ -2790,7 +2823,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "mesa-anv-shim"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "intel-gpu-core",
  "ostd",
@@ -2874,8 +2907,8 @@ dependencies = [
 name = "ocel"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "ai-image-webp",
- "api",
  "cell-build",
  "dom-arena",
  "no_std_io",
@@ -2885,6 +2918,7 @@ dependencies = [
  "postcard",
  "taffy",
  "viui",
+ "wire",
  "zune-core",
  "zune-jpeg",
  "zune-png",
@@ -2894,7 +2928,7 @@ dependencies = [
 name = "ocel-js"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "dom-arena",
  "ostd",
@@ -2906,11 +2940,12 @@ dependencies = [
 name = "ocel-pdf"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ocel-pdf-proto",
  "ostd",
+ "posix-shim",
  "postcard",
 ]
 
@@ -2925,12 +2960,13 @@ dependencies = [
 name = "ocel-quickjs"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "dom-arena",
  "libm",
  "ostd",
+ "posix-shim",
  "postcard",
 ]
 
@@ -2955,7 +2991,7 @@ name = "ostd"
 version = "0.2.0"
 dependencies = [
  "ab_glyph",
- "api",
+ "abi",
  "embedded-io 0.7.1",
  "hashbrown 0.15.5",
  "heapless 0.8.0",
@@ -2966,6 +3002,7 @@ dependencies = [
  "spin",
  "types",
  "unicode-normalization",
+ "wire",
 ]
 
 [[package]]
@@ -3029,7 +3066,7 @@ dependencies = [
 name = "periph-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-gpio-bcm",
@@ -3044,7 +3081,7 @@ dependencies = [
 name = "periph-test"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-serial",
@@ -3125,8 +3162,8 @@ dependencies = [
 name = "port-platform"
 version = "0.1.0"
 dependencies = [
- "api",
  "ostd",
+ "wire",
 ]
 
 [[package]]
@@ -3208,7 +3245,7 @@ dependencies = [
 name = "pwm-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-pwm-gpio",
@@ -3307,9 +3344,10 @@ dependencies = [
 name = "recovery-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
@@ -3419,17 +3457,17 @@ dependencies = [
 name = "robot-dashboard"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "viui",
+ "wire",
 ]
 
 [[package]]
 name = "robot-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-i2c-gpio",
@@ -3437,6 +3475,7 @@ dependencies = [
  "hal-i2c",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -3515,7 +3554,6 @@ version = "0.1.0"
 name = "sdk-demo"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "types",
@@ -3548,7 +3586,7 @@ dependencies = [
 name = "sensor-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-gpio-bcm",
@@ -3616,21 +3654,22 @@ dependencies = [
 name = "service-activator"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "dom-arena",
  "ocel-pdf-proto",
  "ocel-service-proto",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "service-ai"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "ai-engine",
  "ai-proto",
- "api",
  "cell-build",
  "ostd",
 ]
@@ -3639,63 +3678,68 @@ dependencies = [
 name = "service-compositor"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "service-config"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "service-httpd"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "ai-proto",
  "ai-sdk",
- "api",
  "cell-build",
  "httparse",
  "ostd",
  "serde",
  "serde_json",
+ "wire",
 ]
 
 [[package]]
 name = "service-hypervisor"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
  "vm-fdt",
+ "wire",
 ]
 
 [[package]]
 name = "service-input"
 version = "0.2.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
  "virtio-drivers",
+ "wire",
 ]
 
 [[package]]
 name = "service-kms"
 version = "0.1.0"
 dependencies = [
+ "abi",
  "aes 0.9.3",
- "api",
  "bcrypt-pbkdf",
  "blake2",
  "blowfish",
@@ -3708,6 +3752,7 @@ dependencies = [
  "p256",
  "sha2 0.10.9",
  "types",
+ "wire",
  "zeroize",
 ]
 
@@ -3715,16 +3760,17 @@ dependencies = [
 name = "service-machine-pin"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "service-net"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ed25519-dalek 2.2.0",
  "embedded-io 0.7.1",
@@ -3744,13 +3790,14 @@ dependencies = [
  "smoltcp",
  "types",
  "webpki-roots",
+ "wire",
 ]
 
 [[package]]
 name = "service-net-broker"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "chacha20poly1305",
  "clatter",
@@ -3760,13 +3807,14 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.10.9",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "service-platform"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
@@ -3776,7 +3824,6 @@ dependencies = [
 name = "service-power"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
 ]
@@ -3785,18 +3832,19 @@ dependencies = [
 name = "service-silo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "sha2 0.10.9",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "service-sshd"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "chacha20 0.9.1",
  "chacha20poly1305",
@@ -3807,6 +3855,7 @@ dependencies = [
  "sha2 0.10.9",
  "types",
  "vissh",
+ "wire",
  "x25519-dalek 2.0.1",
 ]
 
@@ -3814,7 +3863,7 @@ dependencies = [
 name = "service-vfs"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "cellos-fs",
  "driver-disk",
@@ -3822,6 +3871,7 @@ dependencies = [
  "ostd",
  "sha2 0.10.9",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -3931,7 +3981,7 @@ dependencies = [
 name = "spi-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "driver-gpio",
  "driver-spi-bcm",
@@ -4092,10 +4142,11 @@ dependencies = [
 name = "supervisor"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -4154,7 +4205,7 @@ dependencies = [
 name = "terminal"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "terminal-sdk",
@@ -4162,22 +4213,24 @@ dependencies = [
  "unicode-width",
  "vitui",
  "viui",
+ "wire",
 ]
 
 [[package]]
 name = "terminal-sdk"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
 name = "test-isolation"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -4186,37 +4239,42 @@ dependencies = [
 name = "tetris"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
 name = "tetris-c"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
  "port-platform",
+ "posix-shim",
+ "wire",
 ]
 
 [[package]]
 name = "tetris-lua"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cc",
  "cell-build",
  "ostd",
+ "posix-shim",
+ "wire",
 ]
 
 [[package]]
 name = "text-engine"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "regex-automata",
  "regex-syntax",
 ]
@@ -4265,7 +4323,7 @@ dependencies = [
 name = "tier2-exploit"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -4274,7 +4332,7 @@ dependencies = [
 name = "tier2-grant-owner"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -4283,7 +4341,7 @@ dependencies = [
 name = "tier2-grant-receiver"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -4292,10 +4350,11 @@ dependencies = [
 name = "tier2-rpc-driver"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "tier2-rpc-proto",
+ "wire",
 ]
 
 [[package]]
@@ -4310,17 +4369,18 @@ dependencies = [
 name = "tier2-rpc-provider"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "tier2-rpc-proto",
+ "wire",
 ]
 
 [[package]]
 name = "tier2-smoke"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
 ]
@@ -4561,18 +4621,20 @@ dependencies = [
 name = "vimio"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "ostd",
  "spin",
+ "wire",
 ]
 
 [[package]]
 name = "vipolling"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "ostd",
  "spin",
+ "wire",
 ]
 
 [[package]]
@@ -4589,7 +4651,7 @@ dependencies = [
 name = "virtio-pci-transport"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "bitflags 2.13.1",
  "virtio-drivers",
 ]
@@ -4623,9 +4685,9 @@ dependencies = [
 name = "viui"
 version = "0.2.0"
 dependencies = [
- "api",
  "ostd",
  "viui-macros",
+ "wire",
 ]
 
 [[package]]
@@ -4639,11 +4701,12 @@ dependencies = [
 name = "viui-demo"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
  "viui",
  "viui-build",
+ "wire",
 ]
 
 [[package]]
@@ -4666,9 +4729,10 @@ dependencies = [
 name = "vm-runner"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "cell-build",
  "ostd",
+ "wire",
 ]
 
 [[package]]
@@ -4742,10 +4806,10 @@ dependencies = [
 name = "window-policy-probe"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -4847,7 +4911,6 @@ dependencies = [
 name = "wx-test"
 version = "0.1.0"
 dependencies = [
- "api",
  "cell-build",
  "ostd",
 ]

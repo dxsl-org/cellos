@@ -23,7 +23,7 @@ qemu-plaintext-llm = []
 
 [dependencies]
 ostd        = { path = "../../../../libs/ostd", version = "0.2.0", features = ["json"] }
-api         = { path = "../../../../libs/api", version = "0.1.0" }
+abi         = { path = "../../../../libs/abi", version = "0.1.0" }
 agent-proto = { path = "../../../../libs/agent-proto", version = "0.1.0" }
 # Spec 24 consumer path: the gateway asks the on-device inference service (`service::AI`) first.
 ai-proto    = { path = "../../../../libs/ai-proto", version = "0.1.0" }

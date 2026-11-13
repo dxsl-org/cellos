@@ -17,8 +17,8 @@
 #![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
-extern crate api;
 extern crate ostd;
+extern crate posix_shim;
 #[cfg(test)]
 extern crate std;
 
@@ -27,13 +27,13 @@ use dom_arena::{ipc::JsServiceSession, JsContext, JsEngine, OcelJsRequest, OCEL_
 #[cfg(not(qjs_c_unavailable))]
 use ostd::syscall::{sys_recv, sys_yield, SyscallResult};
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
-    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 );
-api::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
+abi::declare_syscalls![Log, Recv, Send, SendGather, TryRecv, GetTime];
 
 // Cell heap includes QuickJS's 3 MiB accounted heap, Rust transfer buffers,
 // snapshot source and allocator overhead; the engine's own ceiling stays lower.

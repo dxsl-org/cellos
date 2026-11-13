@@ -1,6 +1,4 @@
 use alloc::{collections::BTreeMap, string::String};
-use api::ipc::{self, NetRequest, NetResponse};
-use api::services::proto::net::NetError;
 use core::sync::atomic::Ordering;
 use ostd::service::Owner;
 use ostd::syscall::SyscallResult;
@@ -9,6 +7,8 @@ use smoltcp::{
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr},
 };
+use wire::ipc::{self, NetRequest, NetResponse};
+use wire::proto::net::NetError;
 #[cfg(target_os = "none")]
 use {
     alloc::vec::Vec,

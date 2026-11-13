@@ -9,7 +9,7 @@ use recovery_demo::wire::{Fault, Msg, Refusal};
 
 use crate::driver::{fail, state_name, Client};
 
-fn expect_contained(step: &str, v: &api::retirement::ViRetirementV1) {
+fn expect_contained(step: &str, v: &abi::retirement::ViRetirementV1) {
     if state_name(v) != "Contained" {
         fail(&format!(
             "{step}: retirement {} reasons={:#x}",
@@ -134,7 +134,7 @@ pub fn abandoned_lock(client: &mut Client) {
     };
     let before = client.get();
     let v = client.crash(crash::LOCK_AND_DIE, grant);
-    if v.writable_borrows == 0 || v.reasons & api::retirement::reason::WRITABLE_BORROW == 0 {
+    if v.writable_borrows == 0 || v.reasons & abi::retirement::reason::WRITABLE_BORROW == 0 {
         fail(&format!(
             "E10: writable borrow not reported ({:#x})",
             v.reasons

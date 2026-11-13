@@ -8,8 +8,8 @@
 //! This module contains no remote transport, network transmission, or public ABI.
 //! Production constructors for trust proofs are deliberately absent.
 
-use api::services::cluster::{CellNetId, ClusterId};
 use types::c2c::ServerEpoch;
+use wire::cluster::{CellNetId, ClusterId};
 
 use crate::c2c_dedup::{C2cStatus, CachedReply, DedupCache, DedupDecision, DedupError, DedupKey};
 use crate::c2c_envelope::{
@@ -410,8 +410,8 @@ impl IngressDecisionCore {
 mod tests {
     use super::*;
     use crate::c2c_envelope::MAX_C2C_PAYLOAD;
-    use api::services::cluster::{CellNetId, ClusterId};
     use types::c2c::RelativeDeadline;
+    use wire::cluster::{CellNetId, ClusterId};
 
     fn node(id: u8) -> CellNetId {
         let mut b = [0u8; 32];

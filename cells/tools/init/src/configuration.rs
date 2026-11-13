@@ -1,9 +1,9 @@
 use alloc::format;
 use alloc::vec::Vec;
-use api::ipc::{VfsRequest, VfsResponse};
-use api::services::proto::vfs::VfsError;
 use cellos_boot_config::{parse_cells, validate_plan, CellConfig, MAX_CONFIG_BYTES};
 use ostd::clients::VfsClient;
+use wire::ipc::{VfsRequest, VfsResponse};
+use wire::proto::vfs::VfsError;
 
 const SERVICES_PATH: &str = "/etc/cellos/services.toml";
 const AUTOLOAD_PATH: &str = "/etc/cellos/autoload.toml";
@@ -15,7 +15,7 @@ pub(crate) fn wait_for_vfs(tid: usize, timeout: u64) -> bool {
     let mut send = [0u8; 512];
     let mut recv = [0u8; 512];
     for _ in 0..10_000 {
-        if ostd::service::provider_tid(api::syscall::service::VFS) != Some(tid)
+        if ostd::service::provider_tid(abi::syscall::service::VFS) != Some(tid)
             || crate::service_table::task_alive(tid) == Some(false)
         {
             return false;
@@ -53,7 +53,7 @@ pub(crate) fn load() -> Result<(CellConfig, CellConfig), alloc::string::String> 
     // failures; it cannot distinguish those two cases at this boundary.
     let mut send = [0u8; 512];
     let mut recv = [0u8; 512];
-    let tid = ostd::service::provider_tid(api::syscall::service::VFS)
+    let tid = ostd::service::provider_tid(abi::syscall::service::VFS)
         .ok_or_else(|| format!("{AUTOLOAD_PATH}: VFS unavailable"))?;
     let response = ostd::ipc::service_call_typed_bounded::<_, VfsResponse<'_>>(
         tid,

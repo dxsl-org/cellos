@@ -18,10 +18,9 @@
 //! `scenarios::local_service_lifecycle` (synchronous leg: the caller is never woken)
 //! and is not duplicated here.
 
+use abi::task::TaskPriority;
 use alloc::format;
 use alloc::vec::Vec;
-use api::ipc::IPC_BUF_SIZE;
-use api::task::TaskPriority;
 use ostd::io::println;
 use ostd::ipc::{current, reply, wait, wait_any, PendingCall, Wake};
 use ostd::syscall::{
@@ -29,10 +28,11 @@ use ostd::syscall::{
     sys_set_spawn_args, sys_spawn_pinned, sys_try_send, SyscallResult,
 };
 use ostd::task::yield_now;
+use wire::ipc::IPC_BUF_SIZE;
 
 #[cfg(target_arch = "x86_64")]
-use api::completion::source::IRQ;
-use api::completion::source::{IPC, NET_RX, TIMER};
+use abi::completion::source::IRQ;
+use abi::completion::source::{IPC, NET_RX, TIMER};
 
 const PROBE_PATH: &str = "/bin/bench-probe";
 const ECHO_PREFIX: &str = "c2c-echo-reverse:";

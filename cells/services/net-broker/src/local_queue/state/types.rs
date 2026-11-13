@@ -1,5 +1,5 @@
 use crate::local_ingress::{encode_reply, ReplyStatus, MAX_REQUEST_BODY};
-use api::ipc::IPC_BUF_SIZE;
+use wire::ipc::IPC_BUF_SIZE;
 
 pub const LOCAL_REQUEST_QUEUE_CAP: usize = 16;
 pub const LOCAL_REPLY_QUEUE_CAP: usize = 16;

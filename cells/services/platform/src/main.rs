@@ -42,7 +42,7 @@ const ECAM_BYTES_PER_BUS: usize = 0x10_0000;
 // Syscall allowlist stays explicit: app_entry!'s generated set (app_syscall_set)
 // lacks RequestMmio/RegisterPcieBar/RegisterPciDevice, which this cell needs.
 // Must come before run_app! (run_app! does not emit VICELL_SYSCALLS).
-api::declare_syscalls![
+abi::declare_syscalls![
     Log,
     RequestMmio,
     RegisterPcieBar,
@@ -51,7 +51,7 @@ api::declare_syscalls![
 ];
 
 // No privileged manifest flags: PlatformCap is granted by path match, not here.
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,

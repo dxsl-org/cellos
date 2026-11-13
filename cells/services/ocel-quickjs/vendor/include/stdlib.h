@@ -1,4 +1,4 @@
-/* Cellos freestanding declarations for the C ABI that libs/api exports. */
+/* Cellos freestanding declarations for the C ABI that libs/posix-shim exports. */
 #ifndef QJS_VIOS_STDLIB_H
 #define QJS_VIOS_STDLIB_H
 

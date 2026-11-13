@@ -7,7 +7,7 @@
 #       Contains release-built cell ELFs + /hostname + /readme.
 #       Served by the kernel's internal filesystem (sys_open / ReadDir).
 #
-#   disk_v3.img  (~455 MB, MBR — see tools/write-mbr.py and api::disk)
+#   disk_v3.img  (~455 MB, MBR — see tools/write-mbr.py and abi::disk)
 #       Passed to QEMU as a VirtIO block device (-drive file=disk_v3.img).
 #       P1 @2048:   FAT32 interop volume (/mnt/sd)
 #       P2 @526336: Cell bootstrap table read by the early loader.
@@ -742,7 +742,7 @@ if ($LASTEXITCODE -ne 0) { throw "Cannot preserve operator boot configuration" }
 Write-Host "Creating blank disk image (disk_v3.img, MBR, ~577 MB)..."
 # Grown for the P6 FAT cell-store (G2 loader redesign): base LBA 1_062_144 +
 # 65_536 sectors = 1_127_680. Written non-sparsely below, so the array is large
-# but transient. P1-P4 in the MBR; P5/P6 are constant-addressed (see api::disk).
+# but transient. P1-P4 in the MBR; P5/P6 are constant-addressed (see abi::disk).
 $disk_sectors = 1127680
 $diskSize = $disk_sectors * 512
 $blankImg = New-Object byte[] $diskSize
@@ -776,8 +776,8 @@ if ($LASTEXITCODE -ne 0) {
 # reachable once the raw P2 table + kernel block reader are retired (phases
 # 05-06). Reuses $table_args (source of truth for the cell set) — VIFS1 wins in
 # the overlay for cells present in both, so the superset is harmless.
-$CELLSTORE_BASE_LBA = 1062144   # MUST match api::disk::PART_CELLSTORE_BASE_LBA
-$CELLSTORE_SECTORS  = 65536     # MUST match api::disk::PART_CELLSTORE_SECTORS (32 MB)
+$CELLSTORE_BASE_LBA = 1062144   # MUST match abi::disk::PART_CELLSTORE_BASE_LBA
+$CELLSTORE_SECTORS  = 65536     # MUST match abi::disk::PART_CELLSTORE_SECTORS (32 MB)
 Write-Host "Building FAT cell-store (P6 @ LBA $CELLSTORE_BASE_LBA)..."
 $cellstore_args = @("cell_store.img")
 foreach ($entry in $table_args) {

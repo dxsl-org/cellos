@@ -1,4 +1,4 @@
-use api::display::{ConfigureKind, SurfaceRole, WindowState};
+use wire::display::{ConfigureKind, SurfaceRole, WindowState};
 
 use super::reconcile::reconcile;
 use super::*;
@@ -346,7 +346,7 @@ fn close_all_asks_one_tab_at_a_time_in_tab_order() {
         let serial = surface.close_serial().unwrap();
         surface.close_response(cap as u32, serial, action);
     };
-    answer(&mut world, a, api::display::CloseResponseAction::Reject);
+    answer(&mut world, a, wire::display::CloseResponseAction::Reject);
     advance_close(
         &mut world.frames,
         &mut world.table,
@@ -356,7 +356,7 @@ fn close_all_asks_one_tab_at_a_time_in_tab_order() {
     .unwrap();
     assert!(closing(&world, b) && !closing(&world, a));
     // b accepts but is not gone yet: c is asked, and nothing is left after it.
-    answer(&mut world, b, api::display::CloseResponseAction::Accept);
+    answer(&mut world, b, wire::display::CloseResponseAction::Accept);
     advance_close(
         &mut world.frames,
         &mut world.table,

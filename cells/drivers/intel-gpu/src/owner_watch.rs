@@ -5,8 +5,8 @@
 //! Cell's **root** tid, so a watched Cell carries every tid that opened a file for it.
 //! Syscall-free so host tests drive it; `main.rs` supplies the kernel through [`WatchSys`].
 
+use abi::caller_identity::CallerIdentity;
 use alloc::vec::Vec;
-use api::caller_identity::CallerIdentity;
 use intel_gpu_core::server::MAX_CLIENTS;
 
 /// The two kernel calls a watch needs.

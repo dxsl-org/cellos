@@ -11,7 +11,7 @@ pub(super) fn recv_from_broker(broker_tid: usize, buf: &mut [u8]) -> bool {
         ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => sender,
         _ => return false,
     };
-    let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(buf) else {
+    let Some(identity) = abi::caller_identity::CallerIdentity::from_recv_buf(buf) else {
         return false;
     };
     identity.generation != 0

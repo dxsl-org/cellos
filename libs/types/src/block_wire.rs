@@ -28,7 +28,7 @@ pub const OP_FLUSH: u16 = 2;
 /// Request opcode: read `count` consecutive sectors, returned inline.
 pub const OP_READ_RUN: u16 = 3;
 /// Most sectors one `OP_READ_RUN` may name: the reply (outcome byte plus the
-/// sectors) must fit one 4096-byte IPC message (`api::services::ipc::IPC_BUF_SIZE`).
+/// sectors) must fit one 4096-byte IPC message (`wire::ipc::IPC_BUF_SIZE`).
 pub const MAX_RUN_SECTORS: u16 = 7;
 
 /// Sector size carried by one request.

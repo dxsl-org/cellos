@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the Cellos MBR partition table to LBA 0 of a disk image.
 
-Layout (must match kernel/src/loader/disk_layout.rs and api::disk):
+Layout (must match kernel/src/loader/disk_layout.rs and abi::disk):
 
     P1  type 0x0C (FAT32 LBA)  @ LBA   2,048  size 524,288   /mnt/sd interop volume
     P2  type 0x7F (Cellos)     @ LBA 526,336  size  73,664   cell bootstrap table + ELF blobs
@@ -9,7 +9,7 @@ Layout (must match kernel/src/loader/disk_layout.rs and api::disk):
     P4  type 0x7E (Cellos)     @ LBA 800,000  size 131,072   littlefs /data (Milestone 2.5 P04)
 
 Total disk: 1,127,680 sectors (~551 MB): P5 /srv and P6 cell-store follow P4 and
-have no MBR slot (api::disk). The image is written sparsely by gen_disk.
+have no MBR slot (abi::disk). The image is written sparsely by gen_disk.
 
 Only the partition table bytes (446..510) and the 0x55AA signature are written —
 the rest of LBA 0 is left untouched so this is safe to run before or after the

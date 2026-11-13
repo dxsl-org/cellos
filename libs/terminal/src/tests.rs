@@ -557,7 +557,7 @@ fn deadline_overflow_is_rejected_without_an_action() {
 #[test]
 fn immutable_context_roundtrips_exact_argv_raw_cwd_and_sorted_environment() {
     use crate::context::{ChildContext, Grant};
-    use api::cell_session::ObjectRefV1;
+    use abi::cell_session::ObjectRefV1;
     let operation = ObjectRefV1 {
         id: 11,
         generation: 7,
@@ -589,7 +589,7 @@ fn immutable_context_roundtrips_exact_argv_raw_cwd_and_sorted_environment() {
 #[test]
 fn immutable_context_rejects_malformed_environment_and_duplicate_slots() {
     use crate::context::{ChildContext, Grant, GrantSlot};
-    use api::cell_session::{ObjectRefV1, Status};
+    use abi::cell_session::{ObjectRefV1, Status};
     let operation = ObjectRefV1 {
         id: 1,
         generation: 1,
@@ -662,7 +662,7 @@ fn immutable_context_rejects_malformed_environment_and_duplicate_slots() {
 
 fn foreground_grants(cwd: bool, completion: bool) -> Vec<crate::context::Grant> {
     use crate::context::{Grant, GrantSlot};
-    use api::cell_session::ObjectRefV1;
+    use abi::cell_session::ObjectRefV1;
     let r = |id| ObjectRefV1 { id, generation: 3 };
     let mut grants = std::vec![
         Grant::endpoint(GrantSlot::Stdin, r(1), 17).unwrap(),
@@ -684,7 +684,7 @@ fn foreground_grants(cwd: bool, completion: bool) -> Vec<crate::context::Grant> 
 fn foreground_context_len_counts_the_completion_grant() {
     use crate::context::ChildContext;
     use crate::session::foreground_context_len;
-    use api::cell_session::{ObjectRefV1, Status};
+    use abi::cell_session::{ObjectRefV1, Status};
     let operation = ObjectRefV1 {
         id: 9,
         generation: 1,
@@ -714,7 +714,7 @@ fn foreground_context_len_counts_the_completion_grant() {
 fn completion_writer_is_the_slot_5_endpoint_on_the_context_operation() {
     use crate::completion_writer;
     use crate::context::ChildContext;
-    use api::cell_session::ObjectRefV1;
+    use abi::cell_session::ObjectRefV1;
     let operation = ObjectRefV1 {
         id: 9,
         generation: 1,
@@ -742,7 +742,7 @@ fn completion_writer_is_the_slot_5_endpoint_on_the_context_operation() {
 fn pipeline_stage_context_carries_the_completion_slot_only_when_requested() {
     use crate::context::{ChildContext, Grant, GrantSlot};
     use crate::pipe_child::{validate, PipeSpec};
-    use api::cell_session::ObjectRefV1;
+    use abi::cell_session::ObjectRefV1;
     let operation = ObjectRefV1 {
         id: 9,
         generation: 1,
@@ -812,7 +812,7 @@ fn pipeline_stage_context_carries_the_completion_slot_only_when_requested() {
 }
 
 fn event_frame(sequence: u64, epoch: u64, kind: u16, payload: &[u8]) -> Vec<u8> {
-    use api::services::session::EventHeaderV1;
+    use wire::session::EventHeaderV1;
     let mut bytes = std::vec![0; 24 + payload.len()];
     EventHeaderV1 {
         sequence,
@@ -833,7 +833,7 @@ fn feed_reader(
     bytes: &[u8],
     epoch: u64,
     out: &mut std::collections::VecDeque<crate::input::Event>,
-) -> Result<(), api::cell_session::Status> {
+) -> Result<(), abi::cell_session::Status> {
     decoder.feed(
         bytes,
         epoch,
@@ -846,7 +846,7 @@ fn feed_reader(
 #[test]
 fn event_decode_validates_key_namespace_state_and_payload_limits() {
     use crate::input::{Event, EventKind};
-    use api::cell_session::Status;
+    use abi::cell_session::Status;
     let mut payload = [0; 16];
     payload[..4].copy_from_slice(&0x110010u32.to_le_bytes());
     payload[4..8].copy_from_slice(&2u32.to_le_bytes());
@@ -959,7 +959,7 @@ fn control_decoder_reassembles_frames_and_preserves_owner_sequence() {
 #[test]
 fn control_decoder_rejects_wrong_epoch_malformed_and_oversize_without_delivery() {
     use crate::input::ControlDecoder;
-    use api::cell_session::Status;
+    use abi::cell_session::Status;
     use std::collections::VecDeque;
     let mut decoder = ControlDecoder::default();
     let mut out = VecDeque::new();
@@ -1005,7 +1005,7 @@ fn control_decoder_rejects_wrong_epoch_malformed_and_oversize_without_delivery()
 #[test]
 fn control_event_payload_lengths_are_exact_not_prefix_decodes() {
     use crate::input::Event;
-    use api::cell_session::Status;
+    use abi::cell_session::Status;
     for (kind, valid_payload) in [
         (5, &[24, 0, 80, 0][..]),
         (6, &b""[..]),
@@ -1119,9 +1119,9 @@ fn control_decoder_clear_discards_a_partial_frame() {
 #[test]
 fn controller_ring_delivers_owner_trust_notices_and_drops_what_an_ended_epoch_left() {
     use crate::input::{ControlDecoder, EventKind};
-    use api::cell_session::trust::TrustPromptV1;
-    use api::services::session::event_kind;
+    use abi::cell_session::trust::TrustPromptV1;
     use std::collections::VecDeque;
+    use wire::session::event_kind;
     // Exactly what input writes to the controller's own control ring during a foreground
     // (epoch 6): the prompt descriptor, then the end notice. Before it, an unread Resize
     // and an end notice from the controller's earlier epoch 4 are still in the ring.
@@ -1185,7 +1185,7 @@ fn controller_ring_delivers_owner_trust_notices_and_drops_what_an_ended_epoch_le
     let mut decoder = ControlDecoder::default();
     assert_eq!(
         feed_reader(&mut decoder, &ring, 6, &mut VecDeque::new()),
-        Err(api::cell_session::Status::WrongEpoch)
+        Err(abi::cell_session::Status::WrongEpoch)
     );
     // A forged prompt carrying a terminal escape in a field never decodes.
     let mut forged = event_frame(11, 6, event_kind::TRUST_PROMPT, &payload[..len]);
@@ -1194,7 +1194,7 @@ fn controller_ring_delivers_owner_trust_notices_and_drops_what_an_ended_epoch_le
     let mut notices = VecDeque::new();
     assert_eq!(
         decoder.feed(&forged, 6, &mut VecDeque::new(), &mut notices, true),
-        Err(api::cell_session::Status::Malformed)
+        Err(abi::cell_session::Status::Malformed)
     );
     assert!(notices.is_empty());
 }

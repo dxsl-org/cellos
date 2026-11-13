@@ -14,7 +14,6 @@ mod phy;
 mod regs;
 mod rings;
 
-use api::services::proto::nic::NicStatus;
 use controller::RtlController;
 use dispatch::{handle, NicReply, REPLY_BUF};
 use identity::{classify, QUERY_DEVICE_IDS, VENDOR_REALTEK};
@@ -26,6 +25,7 @@ use ostd::sync::Mutex;
 use ostd::syscall::{
     sys_find_pcie_device_by_vendor, sys_register_nic_driver, sys_try_send, PcieDeviceInfo,
 };
+use wire::proto::nic::NicStatus;
 
 const RTL_BAR0_LEN: usize = 0x1000;
 const RTL_MMIO_MIN: usize = 0x0100;
@@ -155,7 +155,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
 ostd::run_app!(handler);
 
-api::declare_manifest!(
+abi::declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
@@ -164,7 +164,7 @@ api::declare_manifest!(
     hypervisor = false
 );
 
-api::declare_syscalls![
+abi::declare_syscalls![
     Send,
     TrySend,
     Recv,

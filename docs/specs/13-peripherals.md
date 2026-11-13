@@ -36,7 +36,7 @@ thư viện tin cậy) + **Resource Registry** cấp vùng MMIO độc quyền c
 └───────────────┬───────────────────────────┬───────────────┘
                 │ safe-MMIO (ostd)          │ typed IPC (postcard)
 ┌───────────────▼───────────┐   ┌───────────▼───────────────┐
-│ ostd::mmio::MmioRegion     │   │ libs/api::periph (enums)   │
+│ ostd::mmio::MmioRegion     │   │ libs/wire::periph (enums)  │
 │  - read/write_volatile<T>  │   │  PeriphRequest/Response    │
 │  - bounds-checked, unsafe  │   └────────────────────────────┘
 │    ẩn trong ostd           │
@@ -51,7 +51,7 @@ thư viện tin cậy) + **Resource Registry** cấp vùng MMIO độc quyền c
 
 ---
 
-## 3. HAL Traits (libs/api hoặc hal/traits) — bám khuôn `SerialPort`
+## 3. HAL Traits (libs/wire hoặc hal/traits) — bám khuôn `SerialPort`
 
 ```rust
 // ViGpio — digital I/O
@@ -73,7 +73,7 @@ pub trait ViUart: SerialPort {
 - ✅ **`ViAdc`** (`hal/traits/adc/src/lib.rs`) — `read_raw`/`max_value`/`num_channels`/`to_millivolts`. Simulation driver. Implemented 2026-06-15.
 - ✅ **`ViCan`** (`hal/traits/can/src/lib.rs`) — `configure`/`send_frame`/`recv_frame` + `CanFrame` type. Loopback driver. Implemented 2026-06-15.
 - 📋 Defer: MMIO hardware controllers for CAN/ADC (require manifest v2 for new flags — see §8).
-- ⚠️ Traits live in `hal/traits/` (NOT `libs/api`) → no Law 1 change. Driver Cells dep on the trait crate directly.
+- ⚠️ Traits live in `hal/traits/` (NOT `libs/abi`/`libs/wire`) → no Law 1 change. Driver Cells dep on the trait crate directly.
 
 ---
 
@@ -128,14 +128,14 @@ mà KHÔNG cần direct-IPC vtable (Phase 27-3, vốn là G2).
 > **Implementation note (v1):** I2C and SPI v1 use the **rlib-consumed-by-app** pattern:
 > `BitBangI2c<G>` and `BitBangSpi<G>` are rlib crates (`driver-i2c-gpio`, `driver-spi-gpio`)
 > generic over `ViGpio`. The demo/test app owns the GPIO MMIO directly and calls the trait
-> in-process — **no IPC broker, no `libs/api` change**. This is the correct pattern for
+> in-process — **no IPC broker, no `libs/abi`/`libs/wire` change**. This is the correct pattern for
 > single-app bus ownership (KISS/YAGNI). The IPC broker below applies only to
 > **multi-Cell shared-bus** scenarios (future: I2C sensor hub serving multiple Cells).
 
 Chỉ áp dụng khi nhiều Cell chia sẻ 1 ngoại vi qua **driver Cell môi giới** (vd bus I2C chung nhiều sensor):
 
 ```rust
-// libs/api::periph — typed postcard, y khuôn VfsRequest (Milestone 3.3) + net
+// libs/wire::periph — typed postcard, y khuôn VfsRequest (Milestone 3.3) + net
 pub enum PeriphRequest  { GpioWrite{pin,level}, GpioRead{pin}, UartWrite(Box<[u8]>), … }
 pub enum PeriphResponse { Ok, Level(bool), Data(Box<[u8]>), Err(ViError) }
 ```

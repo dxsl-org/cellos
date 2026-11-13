@@ -12,8 +12,8 @@
 //! [`super::SshTransferBeginResponsePayload`], [`super::SshImportCommitRequestPayload`],
 //! [`super::SshAbortRequestPayload`]).
 //!
-//! The outcome byte is one of `api::ipc::ssh_trust` (0-7); this crate does not depend on
-//! `api`, so only its range is checked here.
+//! The outcome byte is one of `wire::ipc::ssh_trust` (0-7); this crate does not depend on
+//! `wire`, so only its range is checked here.
 
 use super::{put_u16, put_u64, read_32, read_u16, read_u64};
 use crate::KmsTrustQueryKind;
@@ -27,9 +27,9 @@ pub const KMS_TRUST_KEY_MAX: usize = 4096;
 /// Longest staged query (`host || algorithm || key`).
 pub const KMS_TRUST_QUERY_MAX: usize =
     KMS_TRUST_HOST_MAX + KMS_TRUST_ALGORITHM_MAX + KMS_TRUST_KEY_MAX;
-/// Highest `api::ipc::ssh_trust` outcome (`PENDING`).
+/// Highest `wire::ipc::ssh_trust` outcome (`PENDING`).
 pub const KMS_TRUST_OUTCOME_MAX: u8 = 7;
-/// `api::ipc::ssh_trust::UNKNOWN`: the outcome that accompanies an issued challenge.
+/// `wire::ipc::ssh_trust::UNKNOWN`: the outcome that accompanies an issued challenge.
 pub const KMS_TRUST_OUTCOME_UNKNOWN: u8 = 1;
 
 fn is_zero(bytes: &[u8]) -> bool {
@@ -132,7 +132,7 @@ impl TrustQueryBeginRequestPayload {
 
 /// `CommitTrustQuery` and `CommitTrustChallenge` response.
 ///
-/// `outcome` is one `api::ipc::ssh_trust` code. A challenge issued by `CommitTrustQuery`
+/// `outcome` is one `wire::ipc::ssh_trust` code. A challenge issued by `CommitTrustQuery`
 /// sets `challenged`, carries the outcome Unknown and both nonzero refs: the input-issued
 /// `confirmation` the caller begins on its terminal, and the KMS-issued `challenge` it
 /// commits. Every other reply has `challenged == 0` and zero refs.

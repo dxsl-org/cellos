@@ -1,9 +1,9 @@
 //! IPC request dispatcher for the Broadcom BCM57xx NIC Driver Cell.
 //!
-//! Serves the NIC wire defined in [`api::services::proto::nic`].
+//! Serves the NIC wire defined in [`wire::proto::nic`].
 
 use crate::controller::{BcmController, BUF_SIZE};
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 pub const REPLY_BUF: usize = 2 + BUF_SIZE;
 

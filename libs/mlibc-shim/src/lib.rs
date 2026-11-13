@@ -12,7 +12,7 @@
 //! cell-initial-stack-auxv, AX-6).
 //!
 //! **Exclusivity:** a cell that depends on mlibc-shim MUST also enable the
-//! `mlibc` feature on `api` (`api = { features = ["mlibc"] }`).  Failing to
+//! `mlibc` feature on `posix-shim` (`posix-shim = { features = ["mlibc"] }`).  Failing to
 //! do so links BOTH posix.rs symbols AND mlibc symbols, which is a
 //! duplicate-symbol link error.
 

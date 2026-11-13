@@ -12,7 +12,7 @@ use crate::syscall::{
     sys_get_scheduler_ticks, sys_recv, sys_try_recv, sys_wait_completion_detailed, sys_yield,
     SyscallResult, WaitCompletionResult,
 };
-use api::completion::source;
+use abi::completion::source;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -91,7 +91,7 @@ pub fn submit(peer_tid: usize, request: &[u8]) -> Result<IpcOpId, IpcSubmitError
 /// bytes are owned by the kernel until this succeeds; an undersized `reply`
 /// never consumes the result. A terminal result releases the operation slot.
 pub fn take(op: IpcOpId, reply: &mut [u8]) -> Result<IpcTakeResult, IpcError> {
-    let mut status = [0u8; api::syscall::IPC_STATUS_LEN];
+    let mut status = [0u8; abi::syscall::IPC_STATUS_LEN];
     match crate::syscall::sys_ipc_take(op, reply, &mut status) {
         0 => Ok(IpcTakeResult::Pending),
         1 => {
@@ -99,15 +99,15 @@ pub fn take(op: IpcOpId, reply: &mut [u8]) -> Result<IpcTakeResult, IpcError> {
             let kind = u32::from_le_bytes(status[4..8].try_into().unwrap());
             let len = u32::from_le_bytes(status[8..12].try_into().unwrap()) as usize;
             let reserved = u32::from_le_bytes(status[12..16].try_into().unwrap());
-            if version != api::syscall::IPC_STATUS_VERSION || reserved != 0 || len > reply.len() {
+            if version != abi::syscall::IPC_STATUS_VERSION || reserved != 0 || len > reply.len() {
                 return Err(IpcError::Decode);
             }
             let status = match kind {
-                api::syscall::ipc_status::REPLY => IpcTerminal::Reply,
-                api::syscall::ipc_status::PEER_GONE => IpcTerminal::PeerGone,
-                api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => IpcTerminal::PreDispatchTimeout,
-                api::syscall::ipc_status::INDETERMINATE => IpcTerminal::Indeterminate,
-                api::syscall::ipc_status::CANCELLED => IpcTerminal::Cancelled,
+                abi::syscall::ipc_status::REPLY => IpcTerminal::Reply,
+                abi::syscall::ipc_status::PEER_GONE => IpcTerminal::PeerGone,
+                abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => IpcTerminal::PreDispatchTimeout,
+                abi::syscall::ipc_status::INDETERMINATE => IpcTerminal::Indeterminate,
+                abi::syscall::ipc_status::CANCELLED => IpcTerminal::Cancelled,
                 _ => return Err(IpcError::Decode),
             };
             Ok(IpcTakeResult::Terminal { status, len })
@@ -155,7 +155,7 @@ pub enum Wake {
 
 /// Park on several completion sources at once and report the one that fired.
 ///
-/// `sources` is a non-empty set of `api::completion::source::{NET_RX, TIMER,
+/// `sources` is a non-empty set of `abi::completion::source::{NET_RX, TIMER,
 /// IPC, IRQ}`; `TIMER` needs a nonzero `timeout_ticks`, and zero otherwise
 /// waits without a deadline. Ready sources rotate, so none starves another;
 /// each IPC terminal is reported once, and its outcome stays behind [`take`].
@@ -224,7 +224,7 @@ fn completion_wait_permitted() -> bool {
 }
 
 const fn allowlist_permits_completion_wait(allowlist: u64) -> bool {
-    match api::syscall::ViSyscall::WaitCompletion.allowlist_bit() {
+    match abi::syscall::ViSyscall::WaitCompletion.allowlist_bit() {
         Some(bit) => allowlist & (1u64 << bit) != 0,
         None => true,
     }
@@ -475,7 +475,7 @@ fn completion_len(completion: Completion) -> Result<usize, IpcError> {
 /// is needed only on an error path: cancellation does not overwrite terminal Reply.
 fn discard_call(call: &PendingCall) {
     let _ = call.cancel();
-    let mut scratch = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut scratch = [0u8; wire::ipc::IPC_BUF_SIZE];
     let _ = call.try_take(&mut scratch);
 }
 
@@ -595,7 +595,7 @@ pub fn service_call<'r, Req: Serialize>(
     send_buf: &mut [u8],
     recv_buf: &'r mut [u8],
 ) -> Result<&'r [u8], IpcError> {
-    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
+    let encoded = wire::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
     let len = exchange(service_tid, encoded, recv_buf, None)?;
     Ok(&recv_buf[..len])
 }
@@ -680,7 +680,7 @@ mod tests {
     #[test]
     fn wait_path_follows_the_compiled_allowlist_without_probing() {
         use super::{allowlist_permits_completion_wait, completion_wait_permitted};
-        use api::syscall::ViSyscall;
+        use abi::syscall::ViSyscall;
         let bit = ViSyscall::WaitCompletion.allowlist_bit().unwrap();
         assert_eq!(ViSyscall::WaitForEvent.allowlist_bit(), Some(bit));
         assert!(allowlist_permits_completion_wait(u64::MAX));
@@ -696,7 +696,7 @@ mod tests {
     fn completion_records_decode_to_exactly_one_wake_source() {
         use super::{decode_wake, Wake};
         use crate::syscall::WaitCompletionResult;
-        use api::completion::{source, ViCompletion, RESULT_ABANDONED};
+        use abi::completion::{source, ViCompletion, RESULT_ABANDONED};
         let record = |src, result| {
             WaitCompletionResult::Completion(ViCompletion {
                 slot: 3,
@@ -733,7 +733,7 @@ mod tests {
     fn an_irq_record_decodes_to_its_line_and_an_out_of_range_line_is_refused() {
         use super::{decode_wake, Wake};
         use crate::syscall::WaitCompletionResult;
-        use api::completion::{source, ViCompletion};
+        use abi::completion::{source, ViCompletion};
         let record = |result| {
             WaitCompletionResult::Completion(ViCompletion {
                 slot: 1,
@@ -764,7 +764,7 @@ where
     Resp: Deserialize<'r>,
 {
     let raw = service_call(service_tid, req, send_buf, recv_buf)?;
-    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
+    wire::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
 /// One bounded request/reply exchange with `service_tid`.
@@ -786,7 +786,7 @@ pub fn service_call_bounded<'r, Req: Serialize>(
     recv_buf: &'r mut [u8],
     timeout_ticks: u64,
 ) -> Result<&'r [u8], IpcError> {
-    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
+    let encoded = wire::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
     let len = exchange(service_tid, encoded, recv_buf, Some(timeout_ticks))?;
     Ok(&recv_buf[..len])
 }
@@ -829,7 +829,7 @@ where
     Resp: Deserialize<'r>,
 {
     let raw = service_call_bounded(service_tid, req, send_buf, recv_buf, timeout_ticks)?;
-    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
+    wire::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
 /// Fastpath zero-trap RPC service call over an established SPSC ring channel endpoint.
@@ -843,7 +843,7 @@ pub fn fastpath_call<'r, Req: Serialize>(
     send_buf: &mut [u8],
     recv_buf: &'r mut [u8],
 ) -> Result<&'r [u8], IpcError> {
-    let encoded = api::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
+    let encoded = wire::ipc::encode(req, send_buf).map_err(|_| IpcError::Encode)?;
     let len = endpoint
         .call(encoded, recv_buf)
         .map_err(|_| IpcError::Send)?;
@@ -862,7 +862,7 @@ where
     Resp: Deserialize<'r>,
 {
     let raw = fastpath_call(endpoint, req, send_buf, recv_buf)?;
-    api::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
+    wire::ipc::decode::<Resp>(raw).map_err(|_| IpcError::Decode)
 }
 
 // ── Async recv (naive-executor future) ────────────────────────────────────────

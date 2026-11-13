@@ -5,13 +5,9 @@
 //! must terminate either caller with PeerGone, not leave a masked Recv stranded.
 //! The same lane witnesses quota retention, real expiry and queued caller death.
 
+use abi::task::TaskPriority;
 use alloc::format;
 use alloc::vec::Vec;
-use api::c2c::RetryClass;
-use api::ipc::IPC_BUF_SIZE;
-use api::services::ipc::{VfsRequest, VfsResponse};
-use api::services::proto::supervisor::OWNER_EXITED_NOTICE;
-use api::task::TaskPriority;
 use ostd::service::provider_tid;
 use ostd::{
     cluster_endpoint::{CellMethod, EndpointError, LocalEndpoint},
@@ -24,6 +20,10 @@ use ostd::{
     },
     task::yield_now,
 };
+use types::c2c::RetryClass;
+use wire::ipc::IPC_BUF_SIZE;
+use wire::ipc::{VfsRequest, VfsResponse};
+use wire::proto::supervisor::OWNER_EXITED_NOTICE;
 
 const PROBE_PATH: &str = "/bin/bench-probe";
 const PROVIDER_ROLE: &str = "c2c-provider";
@@ -194,7 +194,7 @@ pub fn run_nested_provider() -> ! {
         _ => fail("nested provider request"),
     };
     let operation = ostd::ipc::current().unwrap_or_else(|| fail("nested provider token"));
-    let mut vfs = ServiceRef::<{ api::syscall::service::VFS }>::new();
+    let mut vfs = ServiceRef::<{ abi::syscall::service::VFS }>::new();
     let mut response = [0u8; IPC_BUF_SIZE];
     if !matches!(
         vfs.call::<VfsRequest, VfsResponse>(&VfsRequest::Stat("/"), &mut response)
@@ -1383,9 +1383,9 @@ fn settle() {
 /// below to appear. A capture bug (identity stored as 0/0) makes `lookup_bound`
 /// report no binding, so this leg fails loudly instead of passing on a stub.
 fn binding_leg() {
-    let vfs_tid = provider_tid(api::syscall::service::VFS);
-    let mut buf = [0u8; api::service_binding::SERVICE_BINDING_LEN];
-    match sys_lookup_service_bound(api::syscall::service::VFS, &mut buf) {
+    let vfs_tid = provider_tid(abi::syscall::service::VFS);
+    let mut buf = [0u8; abi::service_binding::SERVICE_BINDING_LEN];
+    match sys_lookup_service_bound(abi::syscall::service::VFS, &mut buf) {
         Some(binding) => {
             println(&format!(
                 "[local-lifecycle] VFS-BINDING tid={} cell={} gen={} matches_lookup={}",
@@ -1401,8 +1401,8 @@ fn binding_leg() {
     // No provider: this image neither builds nor launches the AI cell, so the id
     // resolves to nothing and the bound lookup must say so rather than write a
     // record; `provider_tid` reports the same absence.
-    let absent_tid = provider_tid(api::syscall::service::AI);
-    let absent_binding = sys_lookup_service_bound(api::syscall::service::AI, &mut buf);
+    let absent_tid = provider_tid(abi::syscall::service::AI);
+    let absent_binding = sys_lookup_service_bound(abi::syscall::service::AI, &mut buf);
     println(&format!(
         "[local-lifecycle] ABSENT-BINDING lookup={:?} bound_is_none={}",
         absent_tid,
@@ -1479,10 +1479,10 @@ fn async_leg() {
 /// `ostd::service::classify_call_failure`'s host tests and becomes a lane witness when the
 /// Phase-02 cross-tier fixture registers a service and is killed.
 fn sdk_leg() {
-    let mut record = [0u8; api::service_binding::SERVICE_BINDING_LEN];
-    let raw = sys_lookup_service_bound(api::syscall::service::VFS, &mut record);
+    let mut record = [0u8; abi::service_binding::SERVICE_BINDING_LEN];
+    let raw = sys_lookup_service_bound(abi::syscall::service::VFS, &mut record);
 
-    let mut vfs: ServiceRef<{ api::syscall::service::VFS }> = ServiceRef::new();
+    let mut vfs: ServiceRef<{ abi::syscall::service::VFS }> = ServiceRef::new();
     let sdk = vfs.binding();
     println(&format!(
         "[local-lifecycle] SDK-BINDING matches_raw={} tid={:?}",
@@ -1505,7 +1505,7 @@ fn sdk_leg() {
     let (request, label) = match cwd {
         Some(grant) => (
             VfsRequest::ListAtPage {
-                dir: api::dir_handles::ViDirHandle(grant.id),
+                dir: abi::dir_handles::ViDirHandle(grant.id),
                 cursor: 0,
             },
             "ListAtPage(cwd)",
@@ -1538,7 +1538,7 @@ fn sdk_leg() {
 
     // The binding the handle holds is still the live one, and the unresolved case says so
     // without querying: an unbound handle is not live.
-    let mut absent = ServiceRef::<{ api::syscall::service::AI }>::new();
+    let mut absent = ServiceRef::<{ abi::syscall::service::AI }>::new();
     let resolved_still_live = vfs.is_live();
     let unresolved_live = absent.is_live();
     println(&format!(
@@ -1573,7 +1573,7 @@ impl CellMethod for AbsentService {
     type Request = ();
     type Response<'a> = ();
 
-    const SERVICE_ID: u16 = api::syscall::service::AI;
+    const SERVICE_ID: u16 = abi::syscall::service::AI;
     const EXPORT_ID: u16 = 0;
     const RETRY_CLASS: RetryClass = RetryClass::Idempotent;
 }

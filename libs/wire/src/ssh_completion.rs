@@ -120,7 +120,7 @@ impl CompletionV1 {
     }
 
     // reason: the unit error is this public decoder's API; a malformed frame has
-    // no cause callers act on, and changing the type is a libs/api ABI change.
+    // no cause callers act on, and changing the type is a libs/wire contract change.
     #[allow(clippy::result_unit_err)]
     pub fn decode(f: &[u8]) -> Result<Self, ()> {
         if f.len() != FRAME_LEN

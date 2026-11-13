@@ -1,5 +1,5 @@
 use super::*;
-use api::services::proto::tls;
+use wire::proto::tls;
 
 #[test]
 fn parse_close_exact() {

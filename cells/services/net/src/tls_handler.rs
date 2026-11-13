@@ -13,7 +13,6 @@ use crate::{
 };
 use alloc::collections::BTreeMap;
 use alloc::string::ToString;
-use api::services::proto::tls;
 use ostd::io::println;
 use ostd::ipc::{post, reply_to};
 use smoltcp::{
@@ -21,6 +20,7 @@ use smoltcp::{
     socket::tcp,
     wire::{IpAddress, IpEndpoint},
 };
+use wire::proto::tls;
 fn authenticated_time_available() -> bool {
     crate::tls::clock::observe().is_some()
 }

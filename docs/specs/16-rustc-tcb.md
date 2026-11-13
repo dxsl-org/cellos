@@ -26,7 +26,7 @@ type system at compile time. This shifts the TCB:
 |--------------------|------------|
 | Kernel (ring-0 code) | `rustc` (compiler) |
 | Hardware MMU | Cellos kernel (scheduler, IPC, cap enforcement) |
-| CPU privilege model | `libs/api` + `libs/types` (stable ABI) |
+| CPU privilege model | `libs/abi` + `libs/types` (stable ABI) |
 
 `rustc` becomes load-bearing because every Cell isolation invariant is enforced by the
 compiler, not hardware. If `rustc` is wrong, the whole Cell boundary model collapses.
@@ -61,7 +61,7 @@ protection wall. `rustc` is the only wall.
 Type transmutation (`mem::transmute`, raw casts, union punning) is `unsafe`. Combined
 with `#![forbid(unsafe_code)]`, no Cell can reinterpret another Cell's data layout.
 
-**Why load-bearing**: IPC between Cells passes typed values (via `api::ipc::encode` /
+**Why load-bearing**: IPC between Cells passes typed values (via `wire::ipc::encode` /
 `postcard`). If a Cell could freely transmute, it could forge a `CapSet` handle or a
 `GrantId` to escalate privilege.
 
@@ -140,7 +140,7 @@ layers outside `rustc`'s purview.
 |---|---|---|---|
 | `rustc` (nightly Rust compiler + LLVM backend) | Enforce all LBI invariants listed in §2 | ~3–5M (compiler) + ~1M (LLVM) | Open-source; Ferrocene-audited subset for ARM64/x86 |
 | Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | [generated nLOC](../code-metrics.generated.md) | Only privileged code; strict boundary law per Spec 15 |
-| `libs/api` | Stable ABI — syscall numbers, capability types, IPC encoding | ~2K | Law 1: any change requires 2× user confirmation |
+| `libs/abi` | Frozen ABI — syscall numbers, capability types (IPC encoding lives in `libs/wire`) | ~2K | Law 1: any change requires 2× user confirmation |
 | `libs/types` | Primitive types shared by kernel and Cells (`VAddr`, `PAddr`, `ViError`) | ~800 | Law 1: same change protocol |
 
 **Outside the TCB by design:**
@@ -186,7 +186,7 @@ the primary reference build independently; do not wait for a speculative qualifi
 unsoundness in `unsafe` code — that rustc's static analysis would miss. Run `miri`
 in CI on:
 - All kernel `unsafe` blocks (layout assumptions, raw pointer arithmetic, interrupt handlers)
-- `libs/types` and `libs/api` FFI boundary code
+- `libs/types` and `libs/abi` FFI boundary code
 
 This catches a class of bugs that would silently corrupt the TCB.
 

@@ -5,7 +5,7 @@ const CELL: Caller = Caller {
     cell: CellId(5),
     generation: 1,
     sender_tid: 50,
-    flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+    flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
 };
 
 #[test]

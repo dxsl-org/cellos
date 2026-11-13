@@ -1,10 +1,10 @@
 //! IPC request dispatcher for the virtio-net Driver Cell.
 //!
-//! Serves the NIC wire in [`api::services::proto::nic`], shared with e1000 so
+//! Serves the NIC wire in [`wire::proto::nic`], shared with e1000 so
 //! the `net` service IPC is the same for every NIC.
 
 use crate::device::NetDevice;
-use api::services::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
+use wire::proto::nic::{NicStatus, OP_GETMAC, OP_RX, OP_TX};
 
 /// Max frame size (1514 bytes Ethernet + 2-byte length header).
 pub const FRAME_BUF: usize = 1514;
