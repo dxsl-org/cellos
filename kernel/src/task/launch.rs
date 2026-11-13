@@ -24,7 +24,7 @@ pub struct StagedMeasurement {
     pub digest: [u8; 32],
     /// Identity bound to the published root (`Task::bind_image`); its digest
     /// is `digest`, plus the signing anchor and vouched name if verified.
-    pub image: api::cell_image::ImageIdentity,
+    pub image: abi::cell_image::ImageIdentity,
     /// The kernel resolved `path` itself and it may name its Cell
     /// (`catalog::names_launch_identity`); copied to `Task::launch_named`.
     pub launch_named: bool,
@@ -191,7 +191,7 @@ pub fn publish_prepared(
         task.bind_image(measurement.image);
         task.launch_named = measurement.launch_named;
     }
-    let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
+    let owner = abi::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
     state.granted.apply_to(&mut task);
     #[cfg(feature = "test-hooks")]
     {
@@ -490,7 +490,7 @@ fn log_domain_admitted(name: &str) {
 /// no resolve/watch path can observe as live.
 pub(crate) struct SessionPublication {
     pub(crate) task: alloc::boxed::Box<super::Task>,
-    pub(crate) owner: api::cell_owner::CellOwner,
+    pub(crate) owner: abi::cell_owner::CellOwner,
     state: TaskLaunchState,
     quota: crate::memory::cell_quota::QuotaReservation,
     authority: crate::cell::cspace::AuthorityReservation,
@@ -571,7 +571,7 @@ impl SessionPublication {
                 .development_silo
                 .then(super::cap::DevelopmentSiloRegistrationCap::new);
         }
-        let owner = api::cell_owner::CellOwner::new(cell.0, task.cell_generation, tid as u64);
+        let owner = abi::cell_owner::CellOwner::new(cell.0, task.cell_generation, tid as u64);
         let authority = crate::cell::cspace::AuthorityReservation::reserve(cell, owner.generation)?;
         let path_len = state.measurement.as_ref().map_or(0, |m| m.path.len());
         let claim = PublicationClaim::charge(

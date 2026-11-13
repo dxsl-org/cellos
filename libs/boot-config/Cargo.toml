@@ -6,6 +6,6 @@ license = "MPL-2.0"
 description = "Bounded no_std TOML boot configuration and dependency validation"
 
 [dependencies]
-api = { path = "../api", version = "0.1.0" }
+abi = { path = "../abi", version = "0.1.0" }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
 toml = { version = "0.9.8", default-features = false, features = ["parse", "serde"] }

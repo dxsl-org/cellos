@@ -96,7 +96,7 @@ pub fn file_open(caller_id: usize, path: &str) -> core::result::Result<usize, ()
             Some(heap_owner),
             crate::memory::heap::p01_owner::TASK_IO,
         );
-        fs.open(&resolved.path, api::fs::OpenMode::Read)
+        fs.open(&resolved.path, abi::fs::OpenMode::Read)
             .map_err(|_| ())?
     };
 
@@ -211,8 +211,8 @@ pub fn file_readdir(fd: usize, buf: &mut [u8]) -> core::result::Result<usize, ()
 pub fn file_fstat(
     caller_id: usize,
     fd: usize,
-) -> core::result::Result<api::syscall::ViFstatV1, ()> {
-    use api::syscall::{
+) -> core::result::Result<abi::syscall::ViFstatV1, ()> {
+    use abi::syscall::{
         ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
         VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR,
     };
@@ -293,9 +293,9 @@ pub fn file_seek(fd: usize, offset: isize, whence: usize) -> core::result::Resul
         if let Some(task) = sched.current_task_mut() {
             if let Some(handle) = task.open_files.get_mut(&fd) {
                 let pos = match whence {
-                    0 => api::fs::SeekFrom::Start(offset as u64),
-                    1 => api::fs::SeekFrom::Current(offset as i64),
-                    2 => api::fs::SeekFrom::End(offset as i64),
+                    0 => abi::fs::SeekFrom::Start(offset as u64),
+                    1 => abi::fs::SeekFrom::Current(offset as i64),
+                    2 => abi::fs::SeekFrom::End(offset as i64),
                     _ => return Err(()), // Invalid whence
                 };
 

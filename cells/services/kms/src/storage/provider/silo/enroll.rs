@@ -5,8 +5,8 @@
 
 use core::hint::black_box;
 
+use kms_codec::RELAY_HOSTNAME_MAX;
 use ostd::syscall::sys_get_random;
-use types::kms::RELAY_HOSTNAME_MAX;
 use types::silo::{DevelopmentSiloRequest, DevelopmentSiloResponse};
 
 use super::{map_error, DevelopmentSiloProvider};

@@ -1,4 +1,4 @@
-use types::kms::{KmsProviderKind, RotateNodeIdentityReason};
+use kms_codec::{KmsProviderKind, RotateNodeIdentityReason};
 
 use super::super::capability::{EnrollmentKeyDestroyConfirmation, RelayP256Status, RelaySignError};
 #[cfg(test)]

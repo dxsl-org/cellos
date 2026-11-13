@@ -241,7 +241,7 @@ fn ready_reservation_contract() -> bool {
     if crate::sched::smp::is_rt_hart_online() || ready::total_ready_count() != 0 {
         return true;
     }
-    let normal = api::TaskPriority::Normal as u8;
+    let normal = abi::TaskPriority::Normal as u8;
     let cleanup = |tids: &[usize]| {
         for tid in tids {
             ready::remove_from_all(*tid);
@@ -436,7 +436,7 @@ fn authority_reservation_contract() -> bool {
 /// syntax error (echoing zero), and denies a nonzero request from a task that is
 /// not a live Cell before any owner state is consulted.
 fn session_header_contract() -> bool {
-    use api::cell_session::{ResultHeaderV1, Status, HEADER_LEN};
+    use abi::cell_session::{ResultHeaderV1, Status, HEADER_LEN};
     let mut request = [0u8; HEADER_LEN];
     request[0..4].copy_from_slice(&1u32.to_le_bytes());
     request[4..6].copy_from_slice(&13u16.to_le_bytes());
@@ -459,12 +459,12 @@ fn session_call(
     selector: u16,
     id: u64,
     body: &[u8],
-) -> (api::cell_session::Status, alloc::vec::Vec<u8>) {
+) -> (abi::cell_session::Status, alloc::vec::Vec<u8>) {
     let mut request = alloc::vec::Vec::new();
     request.extend_from_slice(&1u32.to_le_bytes());
     request.extend_from_slice(&selector.to_le_bytes());
     request.extend_from_slice(&0u16.to_le_bytes());
-    request.extend_from_slice(&((api::cell_session::HEADER_LEN + body.len()) as u32).to_le_bytes());
+    request.extend_from_slice(&((abi::cell_session::HEADER_LEN + body.len()) as u32).to_le_bytes());
     request.extend_from_slice(&0u32.to_le_bytes());
     request.extend_from_slice(&id.to_le_bytes());
     request.extend_from_slice(body);
@@ -472,10 +472,10 @@ fn session_call(
     let len = crate::ipc::cell_session::dispatch(tid, &request, &mut result);
     // Mirror the syscall layer: the reply was copied out, so it is observed.
     crate::ipc::cell_session::delivered(tid, &request);
-    match api::cell_session::ResultHeaderV1::decode(&result[..len]) {
+    match abi::cell_session::ResultHeaderV1::decode(&result[..len]) {
         Ok(header) => (
             header.status,
-            result[api::cell_session::HEADER_LEN..len].to_vec(),
+            result[abi::cell_session::HEADER_LEN..len].to_vec(),
         ),
         Err(status) => (status, alloc::vec::Vec::new()),
     }
@@ -486,7 +486,7 @@ fn session_call(
 /// and Cancelled distinct, acknowledgement, and subtree cancellation.
 fn session_owner_contract() -> bool {
     use crate::task::thread_cap_selftest::{insert, mk_task, remove};
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_001;
     const FOREIGN_TID: usize = 92_002;
     const GENERATION: u64 = 0x5E55_1001;
@@ -591,7 +591,7 @@ fn session_owner_contract() -> bool {
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
             crate::ipc::cell_session::retired(
                 sched,
-                api::cell_owner::CellOwner::new(cell, GENERATION, tid as u64),
+                abi::cell_owner::CellOwner::new(cell, GENERATION, tid as u64),
             );
         }
     }
@@ -630,7 +630,7 @@ fn retire_session_cells(tids: [usize; 2], cells: [u64; 2], generation: u64) {
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
             crate::ipc::cell_session::retired(
                 sched,
-                api::cell_owner::CellOwner::new(cell, generation, tid as u64),
+                abi::cell_owner::CellOwner::new(cell, generation, tid as u64),
             );
         }
     }
@@ -642,7 +642,7 @@ fn retire_session_cells(tids: [usize; 2], cells: [u64; 2], generation: u64) {
 /// never exhaust the shared table; and closing an operation reaps every ledger
 /// scoped to it (ids never reuse, so no fence reopens).
 fn session_ledger_contract() -> bool {
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_003;
     const GUESSER_TID: usize = 92_004;
     const GENERATION: u64 = 0x5E55_1002;
@@ -718,7 +718,7 @@ fn session_ledger_contract() -> bool {
 /// same receipt moves the refusal on to the next, unrelated precondition.
 fn session_unbound_receipt_contract() -> bool {
     use crate::ipc::cell_session::test_hooks as hooks;
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_005;
     const OTHER_TID: usize = 92_006;
     const GENERATION: u64 = 0x5E55_1003;
@@ -762,8 +762,8 @@ fn session_unbound_receipt_contract() -> bool {
 /// `BindOwnerReceipt` refuses another child's receipt outright.
 fn session_frontend_receipt_contract() -> bool {
     use crate::ipc::cell_session::test_hooks as hooks;
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
-    use api::service_binding::ServiceBinding;
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::service_binding::ServiceBinding;
     const OWNER_TID: usize = 92_017;
     const OTHER_TID: usize = 92_018;
     const GENERATION: u64 = 0x5E55_1009;
@@ -837,7 +837,7 @@ fn with_session_hold(probe: impl FnOnce(&mut Sched) -> Option<bool>) -> bool {
     probe(sched).unwrap_or(false)
 }
 
-fn create_stream_body(operation: api::cell_session::ObjectRefV1) -> alloc::vec::Vec<u8> {
+fn create_stream_body(operation: abi::cell_session::ObjectRefV1) -> alloc::vec::Vec<u8> {
     let mut body = alloc::vec::Vec::new();
     body.extend_from_slice(&operation.to_bytes());
     body.extend_from_slice(&64u32.to_le_bytes());
@@ -846,8 +846,8 @@ fn create_stream_body(operation: api::cell_session::ObjectRefV1) -> alloc::vec::
 }
 
 /// `n`th reference of a result payload.
-fn result_ref(bytes: &[u8], n: usize) -> Option<api::cell_session::ObjectRefV1> {
-    api::cell_session::ObjectRefV1::from_bytes(bytes.get(n * 16..n * 16 + 16)?).ok()
+fn result_ref(bytes: &[u8], n: usize) -> Option<abi::cell_session::ObjectRefV1> {
+    abi::cell_session::ObjectRefV1::from_bytes(bytes.get(n * 16..n * 16 + 16)?).ok()
 }
 
 /// Create an operation (`parent` or zero for a root) as `(cell, generation)` through the
@@ -856,11 +856,11 @@ fn stage_operation(
     sched: &mut Sched,
     cell: u64,
     generation: u64,
-    parent: api::cell_session::ObjectRefV1,
-) -> Option<api::cell_session::ObjectRefV1> {
+    parent: abi::cell_session::ObjectRefV1,
+) -> Option<abi::cell_session::ObjectRefV1> {
     use crate::ipc::cell_session::test_hooks as hooks;
     let (status, bytes) = hooks::exec(sched, cell, generation, 1, &parent.to_bytes());
-    if status != api::cell_session::Status::Ok {
+    if status != abi::cell_session::Status::Ok {
         return None;
     }
     result_ref(&bytes, 0)
@@ -985,7 +985,7 @@ fn ready_rollback_fifo_contract() -> bool {
 /// an unrelated operation survives, and cancelling again is a no-op.
 fn session_cancel_contract() -> bool {
     use crate::ipc::cell_session::test_hooks as hooks;
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_011;
     const WORKER_TID: usize = 92_012;
     const GENERATION: u64 = 0x5E55_1006;
@@ -1085,7 +1085,7 @@ fn session_cancel_contract() -> bool {
 /// the other session of the same bootstrap operation and its child survive.
 fn session_close_scope_contract() -> bool {
     use crate::ipc::cell_session::test_hooks as hooks;
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const CONTROLLER_TID: usize = 92_007;
     const CHILD_TID: usize = 92_008;
     const GENERATION: u64 = 0x5E55_1004;
@@ -1146,7 +1146,7 @@ fn session_close_scope_contract() -> bool {
 /// record an outstanding outcome names stays resolvable so its replay is exact.
 fn session_reclaim_contract() -> bool {
     use crate::ipc::cell_session::test_hooks as hooks;
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const OWNER_TID: usize = 92_009;
     const PEER_TID: usize = 92_010;
     const GENERATION: u64 = 0x5E55_1005;
@@ -1207,7 +1207,7 @@ fn session_reclaim_contract() -> bool {
 /// the shared receipt table.
 fn session_issuer_replacement_contract() -> bool {
     use crate::ipc::cell_session::{self, test_hooks as hooks};
-    use api::cell_session::{ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_013;
     const CHILD_TID: usize = 92_014;
     const GENERATION: u64 = 0x5E55_1007;
@@ -1256,7 +1256,7 @@ fn session_issuer_replacement_contract() -> bool {
                 .all(|peer| hooks::endpoint_state(sched, *peer) == Some(3));
         // The child dies; its terminal state remains queryable by the preparer
         // while the dead issuer's receipt is drained.
-        let owner = api::cell_owner::CellOwner::new(child, GENERATION, CHILD_ROOT);
+        let owner = abi::cell_owner::CellOwner::new(child, GENERATION, CHILD_ROOT);
         cell_session::retiring(sched, owner, usize::MAX);
         ok &= hooks::receipts_on(sched, operation) == 1;
         cell_session::retired(sched, owner);
@@ -1278,7 +1278,7 @@ fn session_issuer_replacement_contract() -> bool {
 /// carried only a VFS cwd receipt keeps its record after the receipt is removed.
 fn session_query_child_contract() -> bool {
     use crate::ipc::cell_session::{self, test_hooks as hooks};
-    use api::cell_session::{ChildRefV1, ObjectRefV1 as Ref, Status};
+    use abi::cell_session::{ChildRefV1, ObjectRefV1 as Ref, Status};
     const PREPARER_TID: usize = 92_015;
     const FOREIGN_TID: usize = 92_016;
     const GENERATION: u64 = 0x5E55_1008;
@@ -1336,7 +1336,7 @@ fn session_query_child_contract() -> bool {
     };
     ok &= query(PREPARER_TID, 202, unknown) == (Status::Stale, None);
     let other_identity = ChildRefV1 {
-        principal: api::cell_session::PrincipalV1 {
+        principal: abi::cell_session::PrincipalV1 {
             cell_id: child.principal.cell_id,
             generation: child.principal.generation + 1,
         },
@@ -1357,7 +1357,7 @@ fn session_query_child_contract() -> bool {
     ok &= with_session_hold(|sched| {
         cell_session::retiring(
             sched,
-            api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
+            abi::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
             EXIT_CODE,
         );
         Some(true)
@@ -1366,7 +1366,7 @@ fn session_query_child_contract() -> bool {
     ok &= with_session_hold(|sched| {
         cell_session::retired(
             sched,
-            api::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
+            abi::cell_owner::CellOwner::new(cells[1], child_generation, CHILD_ROOT),
         );
         Some(true)
     });
@@ -1395,7 +1395,7 @@ fn session_query_child_contract() -> bool {
             operation,
             VFS_CHILD_ROOT,
         );
-        let owner = api::cell_owner::CellOwner::new(cells[1], child_generation, VFS_CHILD_ROOT);
+        let owner = abi::cell_owner::CellOwner::new(cells[1], child_generation, VFS_CHILD_ROOT);
         cell_session::retiring(sched, owner, EXIT_CODE);
         cell_session::retired(sched, owner);
         Some(staged.is_some())

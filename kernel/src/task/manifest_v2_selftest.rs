@@ -6,7 +6,7 @@
 //! selection). Pure logic, no scheduler — runs on all three arches.
 
 use super::cap::{granted_protection_class, CapSet};
-use api::manifest::{
+use abi::manifest::{
     CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1,
     PROTECTION_CLASS_FFI, PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_STANDARD,
     PROTECTION_CLASS_TRUSTED_CORE, PROTECTION_CLASS_UNTRUSTED,

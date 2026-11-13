@@ -75,7 +75,7 @@ pub(crate) const MAX_GRANT_LEASES: usize = 128;
 /// the same key adds a hold instead of a slot, so this bounds the distinct
 /// client buffers one blit pass may touch between two receives.
 pub(crate) const MAX_GRANT_LEASES_PER_HOLDER: usize =
-    api::syscall::grant_slice::MAX_LEASES_PER_HOLDER;
+    abi::syscall::grant_slice::MAX_LEASES_PER_HOLDER;
 
 /// Why a region could not be pinned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

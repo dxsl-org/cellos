@@ -9,8 +9,8 @@
 //! and CellId reuse.
 
 use super::syscall::{handle_syscall, Syscall, SyscallError};
+use abi::syscall::ViSyscall;
 use alloc::vec;
-use api::syscall::ViSyscall;
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use types::CellId;
 
@@ -60,7 +60,7 @@ static HEARTBEAT_BOOT_COMPLETED: AtomicBool = AtomicBool::new(false);
 /// lower available quota slot forces the production `reserve_next` path to
 /// select this retiring generation's CellId. With the old quota-first ordering,
 /// that admission succeeds while the owner slot is still `Retiring`.
-pub fn observe_cell_id_release(owner: api::cell_owner::CellOwner) {
+pub fn observe_cell_id_release(owner: abi::cell_owner::CellOwner) {
     if owner.cell_id != CELL_RAW {
         return;
     }
@@ -672,7 +672,7 @@ fn run_heartbeat_terminal_identity_regression() {
         task.syscall_allowlist = 0;
         task.context.ra = heartbeat_no_successor_entry as *const () as usize;
         let owner =
-            api::cell_owner::CellOwner::new(HEARTBEAT_CELL_RAW, task.cell_generation, tid as u64);
+            abi::cell_owner::CellOwner::new(HEARTBEAT_CELL_RAW, task.cell_generation, tid as u64);
         if !scheduler.publish_live_cell_owner(owner) {
             log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — owner publication");
             return;
@@ -772,7 +772,7 @@ pub fn run_primary() {
             deadline: None,
         };
         let owner =
-            api::cell_owner::CellOwner::new(CELL_RAW, root.cell_generation, root_tid as u64);
+            abi::cell_owner::CellOwner::new(CELL_RAW, root.cell_generation, root_tid as u64);
         if !scheduler.publish_live_cell_owner(owner) {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root owner publication");
             return;
@@ -800,7 +800,7 @@ pub fn run_primary() {
             |worker| {
                 worker.root_tid = root_tid;
                 worker.cell_generation = owner.generation;
-                worker.priority = api::TaskPriority::RealTime as u8;
+                worker.priority = abi::TaskPriority::RealTime as u8;
                 worker.context.ra = remote_worker_entry as *const () as usize;
             },
         ) else {
@@ -1017,7 +1017,7 @@ pub fn run_primary() {
     wait_for(SWITCHED_AWAY);
     super::yield_cpu();
 
-    let replacement = api::cell_owner::CellOwner::new(
+    let replacement = abi::cell_owner::CellOwner::new(
         CELL_RAW,
         owner.generation.saturating_add(1),
         owner.root_tid.saturating_add(1),

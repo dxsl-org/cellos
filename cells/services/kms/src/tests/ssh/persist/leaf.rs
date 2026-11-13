@@ -120,7 +120,7 @@ fn an_import_after_a_delete_chains_to_the_tombstone() {
     assert_eq!(named.public_key, cheap_public());
 }
 
-fn status_of(leaf: &mut FileLeaf) -> types::kms::SshKeyStatusPayload {
+fn status_of(leaf: &mut FileLeaf) -> kms_codec::SshKeyStatusPayload {
     status(leaf, &Actor::admin(), NAME).unwrap()
 }
 

@@ -15,11 +15,11 @@ api::declare_manifest!(
 );
 api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupServiceBound, GetTime];
 
+use kms_codec::KmsErrorCode;
 use ostd::clients::kms::{KmsClient, KmsClientError};
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{sys_recv_timeout, sys_send, SyscallResult};
-use types::kms::KmsErrorCode;
 use types::silo::{
     DevelopmentSiloError, DevelopmentSiloRequest, DevelopmentSiloResponse,
     DEVELOPMENT_PROFILE_DIGEST, DEVELOPMENT_RELAY_GENERATION, DEVELOPMENT_SILO_FRAME_LEN,

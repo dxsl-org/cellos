@@ -29,7 +29,7 @@ use alloc::vec::Vec;
 use api::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT};
 use api::cell_session::ObjectRefV1 as Ref;
 use api::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
-use types::kms::{
+use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshAbortRequestPayload, SshChunkRequestPayload,
     SshImportCommitRequestPayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
     TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,

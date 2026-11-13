@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 GEN = ROOT / "scripts/gen-posix-shim-contract.py"
 DOC = ROOT / "docs/guides/posix-shim-contract.generated.md"
-SYSIO = ROOT / "libs/api/src/services/posix/sysio.rs"
+SYSIO = ROOT / "libs/posix-shim/src/sysio.rs"
 
 def run(expect_ok: bool):
     result = subprocess.run(

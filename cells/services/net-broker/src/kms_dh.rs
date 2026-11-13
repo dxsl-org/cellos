@@ -9,7 +9,7 @@ use clatter::crypto::dh::X25519;
 use clatter::error::{DhError, DhResult};
 use clatter::traits::{CryptoComponent, Dh, Rng};
 use clatter::KeyPair;
-use types::kms::{
+use kms_codec::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsProviderKind,
     NodeIdentityHandle, NodeIdentityState, NodeIdentityStatusPayload,
 };

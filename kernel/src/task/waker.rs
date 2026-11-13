@@ -87,7 +87,7 @@ pub(super) fn begin_signal_net_rx_for_test() -> Option<PendingCompletion> {
 
 #[cfg(not(cellos_posture = "release"))]
 pub(super) fn finish_signal_net_rx_for_test(pending: PendingCompletion) {
-    net_rx_reservation::finish_signal(pending, api::syscall::events::NET_RX as isize);
+    net_rx_reservation::finish_signal(pending, abi::syscall::events::NET_RX as isize);
 }
 
 /// Signal a NIC RX event.  Called from the VirtIO interrupt handler (ISR context).
@@ -104,7 +104,7 @@ pub(super) fn finish_signal_net_rx_for_test(pending: PendingCompletion) {
 pub fn signal_net_rx() {
     match net_rx_reservation::begin_signal() {
         Some(pending) => {
-            net_rx_reservation::finish_signal(pending, api::syscall::events::NET_RX as isize)
+            net_rx_reservation::finish_signal(pending, abi::syscall::events::NET_RX as isize)
         }
         None => NET_RX_PENDING.store(true, Ordering::Release),
     }
@@ -128,12 +128,12 @@ pub fn signal_net_rx() {
 /// two.
 pub fn consume_pending(mask: u32) -> u32 {
     let mut fired: u32 = 0;
-    if mask & api::syscall::events::NET_RX != 0
+    if mask & abi::syscall::events::NET_RX != 0
         && NET_RX_PENDING
             .compare_exchange(true, false, Ordering::AcqRel, Ordering::Relaxed)
             .is_ok()
     {
-        fired |= api::syscall::events::NET_RX;
+        fired |= abi::syscall::events::NET_RX;
     }
     fired
 }

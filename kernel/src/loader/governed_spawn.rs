@@ -77,8 +77,8 @@ fn prepare_gated(
                     &crate::audit::encode_u32x2(0, 0),
                 );
                 manifest.as_ref().is_some_and(|m| {
-                    m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
-                        || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
+                    m.protection_class() == abi::manifest::PROTECTION_CLASS_FFI
+                        || m.protection_class() == abi::manifest::PROTECTION_CLASS_UNTRUSTED
                 })
             }
             Ok(false) => {
@@ -173,8 +173,8 @@ fn prepare_gated(
 
     let allowlist = section_u64(elf, "__ViCell_syscalls");
     let cluster_mode = cluster_mode(elf);
-    if request.priority > api::TaskPriority::RealTime as u8
-        || (request.priority == api::TaskPriority::RealTime as u8 && cluster_mode != 0)
+    if request.priority > abi::TaskPriority::RealTime as u8
+        || (request.priority == abi::TaskPriority::RealTime as u8 && cluster_mode != 0)
     {
         super::atomic_checkpoint("AP-10")?;
         return Err(ViError::PermissionDenied);
@@ -191,7 +191,7 @@ fn prepare_gated(
     let requested_class = manifest
         .as_ref()
         .map(|m| m.protection_class())
-        .unwrap_or(api::manifest::PROTECTION_CLASS_LEGACY);
+        .unwrap_or(abi::manifest::PROTECTION_CLASS_LEGACY);
     #[cfg(target_arch = "x86_64")]
     let (pku_key, pku_value) = {
         let key = crate::task::cap::granted_protection_class(&granted, requested_class);
@@ -315,7 +315,7 @@ fn spawn_init(elf: &[u8], #[cfg(feature = "p01-trace")] bootstrap_init: bool) ->
         None,
         crate::memory::cell_quota::default_quota_bytes(),
         u64::MAX,
-        api::TaskPriority::Normal as u8,
+        abi::TaskPriority::Normal as u8,
         0,
         0,
         true,
@@ -332,7 +332,7 @@ fn spawn_init(elf: &[u8], #[cfg(feature = "p01-trace")] bootstrap_init: bool) ->
             digest: init_digest,
             // Trusted init is embedded in the kernel image, not admitted
             // through signature verification, so it states a digest only.
-            image: api::cell_image::ImageIdentity::unsigned(init_digest),
+            image: abi::cell_image::ImageIdentity::unsigned(init_digest),
             // Init is named by the trusted-init latch, not by an image.
             launch_named: false,
         }),

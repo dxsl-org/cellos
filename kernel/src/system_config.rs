@@ -4,8 +4,8 @@
 //! initialization have already happened: this config cannot change those earlier
 //! settings. Heap configuration lowers future cell defaults, never the ceiling.
 
+use abi::fs::OpenMode;
 use alloc::vec::Vec;
-use api::fs::OpenMode;
 use cellos_boot_config::{parse_system, LogLevel, SystemConfig, MAX_CONFIG_BYTES, SYSTEM_PATH};
 use core::sync::atomic::{AtomicBool, Ordering};
 use types::ViError;

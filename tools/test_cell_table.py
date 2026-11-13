@@ -34,8 +34,8 @@ def rust_const(path, name):
 WRITE = load("write-cell-table")
 ADD = load("add-cell-to-disk")
 MBR = load("write-mbr")
-BASE = rust_const("libs/api/src/abi/disk.rs", "PART_CELLTBL_BASE_LBA")
-SECTORS = rust_const("libs/api/src/abi/disk.rs", "PART_CELLTBL_SECTORS")
+BASE = rust_const("libs/abi/src/disk.rs", "PART_CELLTBL_BASE_LBA")
+SECTORS = rust_const("libs/abi/src/disk.rs", "PART_CELLTBL_SECTORS")
 MAX_ENTRIES = rust_const("kernel/src/loader/disk_layout.rs", "MAX_CELL_ENTRIES")
 
 
@@ -91,10 +91,10 @@ class CellTableTests(unittest.TestCase):
             self.assertEqual(module.CELL_TABLE_BASE_LBA, BASE)
             self.assertEqual(module.CELL_TABLE_SECTORS, SECTORS)
         self.assertIn((0x7F, BASE, SECTORS), MBR.PARTITIONS)
-        snapshot = rust_const("libs/api/src/abi/disk.rs", "PART_SNAPSHOT_BASE_LBA")
+        snapshot = rust_const("libs/abi/src/disk.rs", "PART_SNAPSHOT_BASE_LBA")
         self.assertEqual(snapshot, BASE + SECTORS)
         self.assertIn(
-            (0x7D, snapshot, rust_const("libs/api/src/abi/disk.rs", "PART_SNAPSHOT_SECTORS")),
+            (0x7D, snapshot, rust_const("libs/abi/src/disk.rs", "PART_SNAPSHOT_SECTORS")),
             MBR.PARTITIONS,
         )
 

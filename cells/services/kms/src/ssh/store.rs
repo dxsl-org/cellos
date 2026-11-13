@@ -2,11 +2,11 @@
 
 use core::fmt;
 
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsCustodyPosture, KmsKeyAlgorithm, KmsProviderKind, KmsSshKeyCustody,
     SshKeyStatusPayload, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN,
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use super::parser::{KDF_SALT_MAX, STORE_WRAPPED_CT_MAX};

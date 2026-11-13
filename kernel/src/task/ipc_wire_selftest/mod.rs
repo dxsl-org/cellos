@@ -86,7 +86,7 @@ fn setup_task(tid: usize, cell: u64, name: &'static str, va: usize) -> Option<Ar
     task.address_space = super::tcb::TaskAddressSpace::Domain(space.clone());
 
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-        let owner = api::cell_owner::CellOwner::new(cell, 1, tid as u64);
+        let owner = abi::cell_owner::CellOwner::new(cell, 1, tid as u64);
         sched.publish_live_cell_owner(owner);
         #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);
@@ -108,7 +108,7 @@ pub(super) fn cleanup_task(tid: usize, cell: u64) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             let owner =
-                api::cell_owner::CellOwner::new(cell, task.cell_generation, task.root_tid as u64);
+                abi::cell_owner::CellOwner::new(cell, task.cell_generation, task.root_tid as u64);
             sched.clear_live_cell_owner_for_test(owner);
         }
     }

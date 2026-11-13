@@ -1,4 +1,4 @@
-use api::block::ViBlockDevice;
+use abi::block::ViBlockDevice;
 use types::{ViError, ViResult};
 
 // Embed the kernel-internal FAT16 image as a read-only static slice.

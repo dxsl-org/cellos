@@ -16,7 +16,7 @@
 
 use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU8, Ordering};
 
-use api::services::proto::supervisor::{KERNEL_SENDER, POWER_BUTTON_REQUEST};
+use abi::supervisor_power::{KERNEL_SENDER, POWER_BUTTON_REQUEST};
 
 use super::power::{self, inb, inw, io_port, outb, outw};
 use super::AcpiInfo;
@@ -204,7 +204,7 @@ pub fn relay_pending() {
     if !PENDING.swap(false, Ordering::AcqRel) {
         return;
     }
-    let supervisor = crate::cell::service_registry::lookup(api::syscall::service::SUPERVISOR);
+    let supervisor = crate::cell::service_registry::lookup(abi::syscall::service::SUPERVISOR);
     match supervisor.filter(|&tid| {
         crate::task::ipc_post_nonblock(KERNEL_SENDER, tid, &POWER_BUTTON_REQUEST).is_ok()
     }) {

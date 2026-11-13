@@ -165,7 +165,6 @@ impl Default for DirEntry {
 
 pub mod block_wire;
 pub mod c2c;
-pub mod kms;
 pub mod silo;
 
 // ─── Host-runnable unit tests ─────────────────────────────────────────────────

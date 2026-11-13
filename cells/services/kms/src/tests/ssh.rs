@@ -8,8 +8,7 @@ use std::string::String;
 use std::vec::Vec;
 
 use api::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     ssh_chunk_count, KmsCapabilityReadiness, KmsCustodyPosture, KmsKeyAlgorithm, KmsOpcode,
     KmsProviderKind, KmsRequestV1, KmsSshKeyCustody, SshAbortRequestPayload, SshChunkAckPayload,
     SshChunkRequestPayload, SshDeleteRequestPayload, SshImportBeginRequestPayload,
@@ -17,6 +16,7 @@ use types::kms::{
     SshSignResponsePayload, SshStatusRequestPayload, SshTransferBeginResponsePayload,
     SshUnlockBeginRequestPayload, KMS_SSH_CHUNK_LEN,
 };
+use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::ssh::{NoPersist, SshLeaf, SshPersist};

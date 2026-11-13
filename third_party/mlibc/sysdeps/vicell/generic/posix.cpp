@@ -10,7 +10,7 @@
 
 namespace {
 
-// ViMemInfoV1 (libs/api/src/abi/syscall.rs): global frame-allocator snapshot.
+// ViMemInfoV1 (libs/abi/src/syscall.rs): global frame-allocator snapshot.
 struct vi_mem_info_v1 {
     uint64_t total_frames;
     uint64_t used_frames;

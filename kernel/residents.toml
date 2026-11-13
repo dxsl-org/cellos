@@ -360,6 +360,7 @@
 "kernel/src/task/syscall/ipc.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/misc.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/mod.rs" = { category = "A", owner = "task" }
+"kernel/src/task/syscall/rename_wire.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/spawn.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/syscall/vm.rs" = { category = "A", owner = "task" }

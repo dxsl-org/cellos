@@ -1,6 +1,6 @@
 //! Kernel producer of the machine facts record (syscall 433, ADR-0029 §3).
 //!
-//! [`query`] builds one canonical `api::machine_facts::ViMachineFactsV1` at
+//! [`query`] builds one canonical `abi::machine_facts::ViMachineFactsV1` at
 //! call time: the bound x86 profile and its source, the ACPI root OEM fields,
 //! SMBIOS type 1, the DMAR/VT-d/hypervisor flags, and the multiset of
 //! registered PCI functions re-read from config space, sorted without BDF.
@@ -10,7 +10,7 @@
 use alloc::vec::Vec;
 
 #[cfg(target_arch = "x86_64")]
-use api::machine_facts as wire;
+use abi::machine_facts as wire;
 
 /// The current record, or `None` when there are no facts: not x86, no
 /// profile bound yet, or more PCI functions than one record holds.

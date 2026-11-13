@@ -7,7 +7,7 @@
 //! layout: the `u8` tag at 0, the payload (a `repr(C)` struct per variant) at
 //! 8, the union's alignment.
 
-use api::hypervisor::ViVmExit;
+use abi::hypervisor::ViVmExit;
 
 /// Size of the `ViVmExit` record in the cell's buffer (frozen ABI).
 pub(crate) const EXIT_LEN: usize = core::mem::size_of::<ViVmExit>();

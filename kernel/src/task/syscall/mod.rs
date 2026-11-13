@@ -5,6 +5,7 @@
 
 use super::tcb::TaskState;
 use crate::sync::Spinlock;
+use abi::syscall::ViSpawnArgs;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 /// Only the private-root lifecycle helpers below name `Arc`; every other
@@ -18,7 +19,6 @@ use alloc::string::String;
 ))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use api::syscall::ViSpawnArgs;
 // use log::info;
 use super::copy_glue::TaskCopyView;
 use types::*;
@@ -52,6 +52,7 @@ pub(in crate::task) use fs::*;
 #[allow(unused_imports)]
 use fs::*;
 mod dev;
+mod rename_wire;
 #[allow(unused_imports)]
 pub(crate) use dev::*;
 #[allow(unused_imports)]
@@ -443,21 +444,21 @@ fn encode_syscall_result(
     match result {
         Ok(value) => value,
         Err(SyscallError::OutOfMemory) if supports_typed_oom => {
-            error_sentinel - api::syscall::result_sentinel::OUT_OF_MEMORY
+            error_sentinel - abi::syscall::result_sentinel::OUT_OF_MEMORY
         }
         // A broken pipe is a distinct, actionable condition for a stream write, so
         // it gets its own sentinel rather than collapsing into the generic error.
         Err(SyscallError::BrokenPipe) => {
-            error_sentinel - api::syscall::result_sentinel::BROKEN_PIPE
+            error_sentinel - abi::syscall::result_sentinel::BROKEN_PIPE
         }
-        Err(_) => error_sentinel - api::syscall::result_sentinel::GENERIC,
+        Err(_) => error_sentinel - abi::syscall::result_sentinel::GENERIC,
     }
 }
 
 /// Syscalls whose callers decode the typed out-of-memory sentinel
 /// (`error_sentinel - 1`); every other syscall keeps the single generic error.
 fn supports_typed_oom(syscall: &Syscall) -> bool {
-    syscall_to_vi(syscall).is_some_and(api::syscall::ViSyscall::typed_oom)
+    syscall_to_vi(syscall).is_some_and(abi::syscall::ViSyscall::typed_oom)
 }
 
 /// Tid of trusted init, published once by `loader::governed_spawn::spawn_init`
@@ -977,13 +978,13 @@ fn syscall_allowlist_for(caller_id: usize) -> Option<u64> {
 }
 
 /// The `ViSyscall` a decoded [`Syscall`] corresponds to, from the generated
-/// [`opcode_of`] (`libs/api/abi/syscalls.toml`). `None` for raw opcodes
+/// [`opcode_of`] (`libs/abi/abi/syscalls.toml`). `None` for raw opcodes
 /// outside `ViSyscall` (500–503, 100/110/111, 502, bench 504) and for kernel
 /// variants with no opcode. Total over every api row, unlike the hand-written
 /// map it replaces (architecture review H-5).
-fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
-    match api::syscall::ViSyscall::from(opcode_of(syscall)) {
-        api::syscall::ViSyscall::Unknown => None,
+fn syscall_to_vi(syscall: &Syscall) -> Option<abi::syscall::ViSyscall> {
+    match abi::syscall::ViSyscall::from(opcode_of(syscall)) {
+        abi::syscall::ViSyscall::Unknown => None,
         vi => Some(vi),
     }
 }
@@ -1855,7 +1856,7 @@ fn handle_syscall_inner(
 
 #[cfg(not(target_arch = "riscv32"))]
 use crate::hal::arch::ViTrapFrame;
-use api::syscall::ViSyscall;
+use abi::syscall::ViSyscall;
 
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {

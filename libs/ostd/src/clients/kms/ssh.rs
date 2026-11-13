@@ -14,7 +14,7 @@
 
 use super::{KmsClient, KmsClientError, Wiped};
 use crate::session::{sha256, zeroize};
-use types::kms::{
+use kms_codec::{
     ssh_chunk_len, validate_ssh_key_name, validate_ssh_username, KmsOpcode, SshAbortRequestPayload,
     SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
     SshImportBeginRequestPayload, SshImportCommitRequestPayload, SshKeyStatusPayload,
@@ -344,7 +344,7 @@ mod tests {
     use alloc::rc::Rc;
     use alloc::vec::Vec;
     use core::cell::{Cell, RefCell};
-    use types::kms::{
+    use kms_codec::{
         KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KmsKeyAlgorithm, KmsProviderKind,
         KmsRequestV1, KmsResponseV1, KmsSshKeyCustody, KmsWireError, KMS_MESSAGE_LEN,
     };

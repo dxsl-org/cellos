@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MPL-2.0
+//! Fixed-layout IPC contract for the key-management service.
+//!
+//! KMS owns the C2C X25519 private key. The contract exposes only public
+//! identity metadata, opaque handles, and policy-gated static-DH output.
+//!
+//! Split out of `types` (formerly `types::kms`) so the kernel does not link
+//! the KMS codecs.
+
+// `no_std` is disabled when the test harness is active so `#[test]` functions
+// can link against the host `std`.  All production builds remain bare-metal.
+#![cfg_attr(not(test), no_std)]
+
+mod csr;
+mod frame;
+mod model;
+mod payload;
+mod ssh;
+#[cfg(test)]
+mod tests;
+
+pub use csr::{
+    assemble_relay_csr, canonical_relay_cri, der_ecdsa_signature, p256_spki_der, validate_hostname,
+    CRI_MAX_LEN, NODE_ID_OID_CONTENT, RELAY_CHAIN_MAX_CERTS, RELAY_CHAIN_MAX_LEN,
+    RELAY_CSR_CHUNK_LEN, RELAY_CSR_MAX_LEN, RELAY_HOSTNAME_MAX,
+};
+pub use frame::{KmsRequestV1, KmsResponseV1};
+pub use model::*;
+pub use payload::*;
+pub use ssh::{
+    ssh_chunk_count, ssh_chunk_len, validate_ssh_key_name, validate_ssh_username,
+    KMS_SSH_CHUNK_LEN, KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN,
+    KMS_SSH_SECRET_MAX, KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
+};
+
+/// Current KMS ABI version. Versions and opcodes are append-only.
+pub const KMS_ABI_VERSION: u8 = 1;
+/// Exact request and response frame size.
+pub const KMS_MESSAGE_LEN: usize = 128;
+/// Payload remaining after the 16-byte frame header.
+pub const KMS_PAYLOAD_LEN: usize = 112;
+/// Singleton key slot reserved for Cell-to-Cell Anywhere.
+pub const KMS_NODE_KEY_ID_C2C: u16 = 1;

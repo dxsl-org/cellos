@@ -20,13 +20,13 @@
 //! bytes per CellId slot. The capture itself is transient and bounded by the
 //! caller's `out_len`.
 
-use alloc::vec::Vec;
-use api::syscall::ViMemInfoV1;
-use api::telemetry::{
+use abi::syscall::ViMemInfoV1;
+use abi::telemetry::{
     cell_flags, cell_state, encode_name, header_flags, task_flags, TelemetryCellV1,
     TelemetryHeaderV1, TelemetryTaskV1, CELL_LEN, HEADER_LEN, SCOPE_SYSTEM, TASK_LEN,
     TELEMETRY_VERSION,
 };
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 use types::{CellId, ViError};
 
@@ -248,8 +248,8 @@ pub(crate) fn request_is_valid(
     reserved: usize,
 ) -> bool {
     out_len >= HEADER_LEN
-        && out_ptr.is_multiple_of(api::telemetry::BUFFER_ALIGN)
-        && flags & !api::telemetry::request::ALL == 0
+        && out_ptr.is_multiple_of(abi::telemetry::BUFFER_ALIGN)
+        && flags & !abi::telemetry::request::ALL == 0
         && reserved == 0
 }
 
@@ -463,9 +463,9 @@ impl Capture {
 mod tests {
     use super::*;
     use crate::task::tcb::{Task, TaskState};
+    use abi::cell_owner::CellOwner;
+    use abi::telemetry::{name_bytes, TelemetryDecodeError, TelemetrySnapshot, NAME_LEN};
     use alloc::boxed::Box;
-    use api::cell_owner::CellOwner;
-    use api::telemetry::{name_bytes, TelemetryDecodeError, TelemetrySnapshot, NAME_LEN};
 
     const EPOCH: u64 = 77;
     const CELL_A: u64 = 57;

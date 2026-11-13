@@ -555,7 +555,7 @@ owner = "kernel syscall dispatcher: kernel/build.rs-generated opcode map (syscal
 contexts = ["none"]
 seal = "no storage: include! emits only `fn opcode_of` and `const RAW_OPCODES`"
 retirement = "no storage: compile-time items"
-rationale = "The included file is written by kernel/build.rs from libs/api/abi/syscalls.toml and contains one function and one const slice, no static, so no runtime storage or accessor exists."
+rationale = "The included file is written by kernel/build.rs from libs/abi/abi/syscalls.toml and contains one function and one const slice, no static, so no runtime storage or accessor exists."
 review = "kernel/src/task/syscall/mod.rs:syscall_to_vi; kernel/build.rs:emit_syscall_opcodes"
 
 [[global]]

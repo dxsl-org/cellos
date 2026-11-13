@@ -5,8 +5,8 @@
 //! and must not carry the serverAuth EKU; the served SPKI from KMS
 //! (opcode 14) must hash to the deployment NodeId.
 
+use kms_codec::{RELAY_CHAIN_MAX_CERTS, RELAY_CHAIN_MAX_LEN};
 use sha2::{Digest, Sha256};
-use types::kms::{RELAY_CHAIN_MAX_CERTS, RELAY_CHAIN_MAX_LEN};
 
 /// id-ce-extKeyUsage extension OID content (2.5.29.37).
 const EXTENDED_KEY_USAGE_OID: [u8; 3] = [0x55, 0x1D, 0x25];
@@ -258,7 +258,7 @@ pub fn validate_active_chain(
     let leaf = certs.first().ok_or(ChainError::MalformedDer)?;
     let profile = leaf_profile(leaf)?;
     let (canonical_spki, canonical_len) =
-        types::kms::p256_spki_der(active_spki_sec1).ok_or(ChainError::IdentityMismatch)?;
+        kms_codec::p256_spki_der(active_spki_sec1).ok_or(ChainError::IdentityMismatch)?;
     if profile.spki != &canonical_spki[..canonical_len] {
         return Err(ChainError::IdentityMismatch);
     }
@@ -308,7 +308,7 @@ mod tests {
         eku_oids: Option<&[&[u8]]>,
         unrelated_value: Option<&[u8]>,
     ) -> Vec<u8> {
-        let (spki, spki_len) = types::kms::p256_spki_der(spki_sec1).unwrap();
+        let (spki, spki_len) = kms_codec::p256_spki_der(spki_sec1).unwrap();
         let mut extensions = Vec::new();
         if let Some(value) = unrelated_value {
             append(&mut extensions, extension(&[0x2A, 0x03], value));
@@ -395,7 +395,7 @@ mod tests {
         let mut kms_key = [0x11; 65];
         kms_key[0] = 0x04;
         let leaf = relay_leaf(&kms_key, Some(&[&CLIENT_AUTH_EKU]), None);
-        let (spki, len) = types::kms::p256_spki_der(&kms_key).unwrap();
+        let (spki, len) = kms_codec::p256_spki_der(&kms_key).unwrap();
         let node_id: [u8; 32] = Sha256::digest(&spki[..len]).into();
         assert!(validate_active_chain(&leaf, &kms_key, &node_id, &node_id, &node_id).is_ok());
 

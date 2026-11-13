@@ -1234,7 +1234,7 @@ pub(super) fn set_timer(deadline: usize) -> SyscallResult {
 /// Handler for `Syscall::GetProcs` (extracted from the dispatcher).
 pub(super) fn get_procs(caller_id: usize, buf_ptr: usize, buf_len: usize) -> SyscallResult {
     let bytes_len = buf_len
-        .checked_mul(core::mem::size_of::<api::syscall::ProcessInfo>())
+        .checked_mul(core::mem::size_of::<abi::syscall::ProcessInfo>())
         .ok_or(SyscallError::InvalidInput)?;
     validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)?;
 
@@ -1242,7 +1242,7 @@ pub(super) fn get_procs(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sys
     let raw_bytes = unsafe {
         core::slice::from_raw_parts(
             rows.as_ptr() as *const u8,
-            rows.len() * core::mem::size_of::<api::syscall::ProcessInfo>(),
+            rows.len() * core::mem::size_of::<abi::syscall::ProcessInfo>(),
         )
     };
     write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)?;
@@ -1252,7 +1252,7 @@ pub(super) fn get_procs(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sys
 /// Handler for `Syscall::GetProcs2` (extracted from the dispatcher).
 pub(super) fn get_procs2(caller_id: usize, buf_ptr: usize, buf_len: usize) -> SyscallResult {
     let bytes_len = buf_len
-        .checked_mul(core::mem::size_of::<api::syscall::ProcessInfoV2>())
+        .checked_mul(core::mem::size_of::<abi::syscall::ProcessInfoV2>())
         .ok_or(SyscallError::InvalidInput)?;
     validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)?;
 
@@ -1261,7 +1261,7 @@ pub(super) fn get_procs2(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sy
     let raw_bytes = unsafe {
         core::slice::from_raw_parts(
             rows.as_ptr() as *const u8,
-            rows.len() * core::mem::size_of::<api::syscall::ProcessInfoV2>(),
+            rows.len() * core::mem::size_of::<abi::syscall::ProcessInfoV2>(),
         )
     };
     write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)?;
@@ -1270,7 +1270,7 @@ pub(super) fn get_procs2(caller_id: usize, buf_ptr: usize, buf_len: usize) -> Sy
 
 /// Handler for `Syscall::MemInfo` (extracted from the dispatcher).
 pub(super) fn mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -> SyscallResult {
-    let len = core::mem::size_of::<api::syscall::ViMemInfoV1>();
+    let len = core::mem::size_of::<abi::syscall::ViMemInfoV1>();
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -1278,7 +1278,7 @@ pub(super) fn mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -> Sysc
     let info = {
         let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = guard.as_ref().ok_or(SyscallError::OutOfMemory)?;
-        api::syscall::ViMemInfoV1 {
+        abi::syscall::ViMemInfoV1 {
             total_frames: allocator.total_frames() as u64,
             used_frames: allocator.used_frames() as u64,
             free_frames: allocator.free_frames() as u64,
@@ -1286,7 +1286,7 @@ pub(super) fn mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -> Sysc
         }
     };
     let raw_bytes = unsafe {
-        core::slice::from_raw_parts(&info as *const api::syscall::ViMemInfoV1 as *const u8, len)
+        core::slice::from_raw_parts(&info as *const abi::syscall::ViMemInfoV1 as *const u8, len)
     };
     write_user_slice(caller_id, out_ptr, raw_bytes, MAX_USER_BUF)?;
     Ok(len)
@@ -1448,7 +1448,7 @@ pub(super) fn wait_for_event(caller_id: usize, mask: u32, deadline: Option<u64>)
         if let Some(task) = sched.tasks.get_mut(&caller_id) {
             task.state = crate::task::tcb::TaskState::Blocked {
                 wait: crate::task::tcb::WaitKind::Completion {
-                    source: api::completion::source::NET_RX,
+                    source: abi::completion::source::NET_RX,
                     delivery: crate::task::tcb::Delivery::EventMask(mask),
                 },
                 deadline,

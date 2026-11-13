@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Development-only P-256 custody for the Stage-2 Silo guest.
 
+use kms_codec::{canonical_relay_cri, validate_hostname, CRI_MAX_LEN};
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
-use types::kms::{canonical_relay_cri, validate_hostname, CRI_MAX_LEN};
 
 /// Opaque one-time initialized guest state.
 pub struct SiloState {

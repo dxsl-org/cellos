@@ -1,4 +1,4 @@
-//! Kernel side of `ResolveCellImage` (syscall 441, `api::cell_image`).
+//! Kernel side of `ResolveCellImage` (syscall 441, `abi::cell_image`).
 //!
 //! The identity lives on the Cell's root task (`Task::bind_image`), bound from
 //! the admission measurement before the task is published and never rewritten.
@@ -7,8 +7,8 @@
 //! `CellId` is a different generation with its own root and its own image, and
 //! a dead or stale generation has no answer at all.
 
-use api::cell_image::CellImage;
-use api::cell_owner::CellOwnerRequest;
+use abi::cell_image::CellImage;
+use abi::cell_owner::CellOwnerRequest;
 use types::CellId;
 
 impl crate::sched::scheduler::Scheduler {
@@ -68,9 +68,9 @@ mod tests {
     use super::*;
     use crate::sched::scheduler::Scheduler;
     use crate::task::Task;
+    use abi::cell_image::{ImageIdentity, ANCHOR_RELEASE};
+    use abi::cell_owner::CellOwner;
     use alloc::boxed::Box;
-    use api::cell_image::{ImageIdentity, ANCHOR_RELEASE};
-    use api::cell_owner::CellOwner;
 
     const ROOT: usize = 60_441;
     const CELL: u64 = 62;

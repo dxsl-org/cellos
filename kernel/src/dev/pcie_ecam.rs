@@ -1451,7 +1451,7 @@ pub fn devices() -> Vec<PciDevice> {
 /// `None` without an admitted ECAM window. Read-only: `PCI_DEVICES`,
 /// registration and `PLATFORM_REGISTERED` are untouched.
 #[cfg(target_arch = "x86_64")]
-pub fn fingerprint_functions() -> Option<Vec<api::machine_facts::PciFunctionId>> {
+pub fn fingerprint_functions() -> Option<Vec<abi::machine_facts::PciFunctionId>> {
     let (ecam_base, bus_start, bus_end) = ecam_window();
     if ecam_base == 0 {
         return None;
@@ -1474,7 +1474,7 @@ unsafe fn fingerprint_in_window(
     bus_start: u8,
     bus_end: u8,
     bdfs: &[(u8, u8, u8)],
-) -> Vec<api::machine_facts::PciFunctionId> {
+) -> Vec<abi::machine_facts::PciFunctionId> {
     bdfs.iter()
         .filter_map(|&(bus, dev, fun)| {
             // SAFETY: the caller guarantees the window is live and mapped.
@@ -1483,7 +1483,7 @@ unsafe fn fingerprint_in_window(
             // SAFETY: as above.
             let (class, subclass, prog_if) =
                 unsafe { class_code_in_range(ecam_base, bus_start, bus_end, bus, dev, fun)? };
-            Some(api::machine_facts::PciFunctionId {
+            Some(abi::machine_facts::PciFunctionId {
                 vendor,
                 device,
                 class,
@@ -1824,7 +1824,7 @@ mod tests {
         let ids = unsafe { fingerprint_in_window(ecam.as_mut_ptr() as usize, 0, 2, &[pcnet.bdf]) };
         assert_eq!(
             ids,
-            [api::machine_facts::PciFunctionId {
+            [abi::machine_facts::PciFunctionId {
                 vendor: 0x1022,
                 device: 0x2000,
                 class: 0x02,
@@ -2115,7 +2115,7 @@ mod tests {
         };
         assert_eq!(
             ids,
-            [api::machine_facts::PciFunctionId {
+            [abi::machine_facts::PciFunctionId {
                 vendor: 0x8086,
                 device: 0x100e,
                 class: 0x02,

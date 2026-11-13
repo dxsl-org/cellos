@@ -15,7 +15,7 @@
 #include <stdint.h>
 
 /* BEGIN generated syscall numbers (scripts/gen-syscall-headers.py) */
-/* Source: libs/api/abi/syscalls.toml. Do not edit by hand. */
+/* Source: libs/abi/abi/syscalls.toml. Do not edit by hand. */
 #define CELLOS_SYSCALL_LOG 11u
 /* END generated syscall numbers */
 

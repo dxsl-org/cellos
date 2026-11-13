@@ -16,12 +16,12 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use api::cell_session::ObjectRefV1 as Ref;
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     ssh_chunk_count, ssh_chunk_len, KmsErrorCode, KmsTrustQueryKind, SshChunkAckPayload,
     SshChunkRequestPayload, SshImportCommitRequestPayload, SshTransferBeginResponsePayload,
     TrustQueryBeginRequestPayload, KMS_SSH_CHUNK_LEN,
 };
+use sha2::{Digest, Sha256};
 
 use super::{owner, Principal};
 

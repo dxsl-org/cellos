@@ -4,8 +4,8 @@ use super::super::super::{
     tcb::{Task, TaskState},
     SCHEDULER,
 };
+use abi::cell_owner::CellOwner;
 use alloc::boxed::Box;
-use api::cell_owner::CellOwner;
 use types::CellId;
 
 const RAW_GRANT_REGISTER: usize = 215;

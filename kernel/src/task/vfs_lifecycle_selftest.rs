@@ -53,7 +53,7 @@ fn grant_vfs_role() {
                 tid,
                 cell_id,
                 generation,
-                api::syscall::service_flags::ALL,
+                abi::syscall::service_flags::ALL,
             );
         }
     }
@@ -952,7 +952,7 @@ fn vfs_owner_watch() -> bool {
             task.cell_generation = owner_generation;
             task.root_tid = CLIENT_OWNER_TID;
         }
-        let owner = api::cell_owner::CellOwner::new(
+        let owner = abi::cell_owner::CellOwner::new(
             CLIENT_CELL_ID,
             owner_generation,
             CLIENT_OWNER_TID as u64,

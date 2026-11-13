@@ -60,6 +60,6 @@ cargo +nightly-2026-05-01 check \
     -Z build-std=core,alloc,std \
     -Z json-target-spec \
     --target "$TARGET_SPEC" \
-    --manifest-path "libs/api/Cargo.toml"
+    --manifest-path "libs/api/Cargo.toml" # the facade: abi, wire, posix-shim, types
 
 echo "==> Sysroot validation for $TARGET PASS"

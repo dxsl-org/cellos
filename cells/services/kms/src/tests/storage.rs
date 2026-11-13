@@ -166,12 +166,12 @@ fn keyed_corruption_rejects_slot_decode() {
 fn known_provider_kind_decodes_without_expanding_unknown_values() {
     let mut store = FakeStore::default();
     let mut record = JournalRecord::placeholder(SlotId::A, 2, 5, [0; 32]);
-    record.provider = types::kms::KmsProviderKind::DiceSealed;
+    record.provider = kms_codec::KmsProviderKind::DiceSealed;
     store.put_record(SLOT_A_PATH, record);
     let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(
         state.active.unwrap().record.provider,
-        types::kms::KmsProviderKind::DiceSealed
+        kms_codec::KmsProviderKind::DiceSealed
     );
 
     let mut encoded = JournalRecord::placeholder(SlotId::A, 2, 5, [0; 32]).encode(&TEST_KEY);
@@ -204,7 +204,7 @@ fn protected_relay_lifecycle_round_trips_and_rejects_restart_regression() {
     assert_eq!(recovered.serving(), protected.active);
     assert!(matches!(
         RelayLifecycle::recover(41, protected),
-        Err(types::kms::KmsErrorCode::PolicyEpochRegressed)
+        Err(kms_codec::KmsErrorCode::PolicyEpochRegressed)
     ));
 
     // An authenticated slot with a torn lifecycle payload never recovers.

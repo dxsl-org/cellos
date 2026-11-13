@@ -14,16 +14,16 @@ use std::string::String;
 use std::vec::Vec;
 
 use api::caller_identity::{CallerIdentity, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+use kms_codec::{
+    KmsOpcode, KmsRequestV1, SshAbortRequestPayload, SshChunkRequestPayload,
+    SshDeleteRequestPayload, SshImportBeginRequestPayload, SshImportCommitRequestPayload,
+    SshStatusRequestPayload,
+};
 use ostd::clients::kms::{
     KmsClientError, SshChunkAckPayload, SshKeyStatusPayload, SshTransferBeginResponsePayload,
     KMS_SSH_CHUNK_LEN, KMS_SSH_PUBLIC_KEY_LEN,
 };
 use service_kms::{KmsService, ServiceRegistrySnapshot};
-use types::kms::{
-    KmsOpcode, KmsRequestV1, SshAbortRequestPayload, SshChunkRequestPayload,
-    SshDeleteRequestPayload, SshImportBeginRequestPayload, SshImportCommitRequestPayload,
-    SshStatusRequestPayload,
-};
 
 use super::{
     armor_text, key, pasted, plain_blob, public_blob, run_cell, text, wrapped_blob, TestConsole,

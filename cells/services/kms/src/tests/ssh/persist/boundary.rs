@@ -1,7 +1,7 @@
 //! Boundaries: admission before any I/O, the persister's independence from the
 //! relay journal and its lifecycle, and the production-exclusion structure.
 
-use types::kms::KmsOpcode;
+use kms_codec::KmsOpcode;
 
 use super::mem_io::Call;
 use super::*;

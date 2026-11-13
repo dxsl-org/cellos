@@ -17,7 +17,7 @@
 //! [`take_for_launch`] runs while the scheduler lock is held and produces the
 //! complete record installed in the unpublished child before insertion.
 
-use api::dir_handles::{DirHandleSet, InheritedDirHandles};
+use abi::dir_handles::{DirHandleSet, InheritedDirHandles};
 
 /// Record `set` as the handles `tid`'s next spawn should pass on.
 ///
@@ -72,7 +72,7 @@ pub(crate) fn take_for_launch(
 
 /// Returns `None` when `cell_id` names no live root-owned Cell generation.
 /// Cell IDs are bounded reusable quota slots, never task-table indexes.
-pub fn attestation_for(cell_id: u64) -> Option<api::dir_attestation::ViDirHandleAttestation> {
+pub fn attestation_for(cell_id: u64) -> Option<abi::dir_attestation::ViDirHandleAttestation> {
     if cell_id == 0 {
         return None;
     }
@@ -80,7 +80,7 @@ pub fn attestation_for(cell_id: u64) -> Option<api::dir_attestation::ViDirHandle
     let sched = guard.as_ref()?;
     let owner = sched.live_cell_owner_for_id(types::CellId(cell_id))?;
     let task = sched.tasks.get(&(owner.root_tid as usize))?;
-    Some(api::dir_attestation::ViDirHandleAttestation {
+    Some(abi::dir_attestation::ViDirHandleAttestation {
         cell_id,
         generation: owner.generation,
         spawner_cell_id: task.inherited_dirs.spawner_cell_id,

@@ -14,11 +14,11 @@ Fixture contract (docs/abi-boundary-records.md, "CellManifest"):
   is never produced by patching after signing.
 * One fixture is deliberately damaged AFTER signing (`corrupt_signature`): it
   is signature-failure evidence only and carries a valid current record.
-* Expected outcomes come from libs/api/src/abi/manifest_parse.rs and
+* Expected outcomes come from libs/abi/src/manifest_parse.rs and
   kernel/src/loader/{manifest_section,governed_spawn}.rs; the runner checks the
   kernel's own audit records, never a re-implementation of the parser.
 
-The record builders mirror the frozen layout in libs/api/src/abi/manifest.rs.
+The record builders mirror the frozen layout in libs/abi/src/manifest.rs.
 They are byte producers for fixtures, not a second decoder.
 """
 
@@ -30,7 +30,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-MANIFEST_MAGIC = 0x5649_4345  # libs/api/src/abi/manifest_flags.rs MANIFEST_MAGIC
+MANIFEST_MAGIC = 0x5649_4345  # libs/abi/src/manifest_flags.rs MANIFEST_MAGIC
 MANIFEST_SECTION = "__ViCell_manifest"
 SIG_SECTION = "__ViCell_sig"
 TIER_LEGACY = 0xFF

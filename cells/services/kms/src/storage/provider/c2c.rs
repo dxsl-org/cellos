@@ -1,4 +1,4 @@
-use types::kms::{KmsProviderKind, RotateNodeIdentityReason};
+use kms_codec::{KmsProviderKind, RotateNodeIdentityReason};
 
 use super::{C2cProvider, JournalRecord, ProviderAssessment, ProviderEpoch, ProviderOpenResult};
 

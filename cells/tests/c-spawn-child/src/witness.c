@@ -32,7 +32,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Kernel ABI opcodes (libs/api/src/abi/syscall.rs). */
+/* Kernel ABI opcodes (libs/abi/src/syscall.rs). */
 #define CELLOS_SYSCALL_PIPE_WRITE 23u
 
 #define PAYLOAD 192u

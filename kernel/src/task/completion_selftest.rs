@@ -46,7 +46,7 @@ pub(super) fn insert(tid: usize, cell: u64) {
     task.root_tid = tid;
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (cell as usize) < crate::memory::cell_quota::MAX_CELLS {
-            let owner = api::cell_owner::CellOwner::new(cell, 1, tid as u64);
+            let owner = abi::cell_owner::CellOwner::new(cell, 1, tid as u64);
             sched.publish_live_cell_owner(owner);
         }
         #[cfg(feature = "p01-trace")]
@@ -64,7 +64,7 @@ pub(super) fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
-                let owner = api::cell_owner::CellOwner::new(
+                let owner = abi::cell_owner::CellOwner::new(
                     task.cell_id.0,
                     task.cell_generation,
                     task.root_tid as u64,
@@ -103,8 +103,8 @@ fn wake_targets(q: &CompletionQueue) -> Option<alloc::vec::Vec<usize>> {
 }
 
 fn source_validation_is_fail_closed() -> bool {
-    let net_rx = api::completion::source::NET_RX;
-    let timer = api::completion::source::TIMER;
+    let net_rx = abi::completion::source::NET_RX;
+    let timer = abi::completion::source::TIMER;
     if !super::completion_wait::source_is_valid(net_rx, None) {
         return fail("an indefinite NET_RX wait was rejected");
     }
@@ -129,7 +129,7 @@ fn source_validation_is_fail_closed() -> bool {
         return fail("an unknown source bit was accepted");
     }
     // Phase 04b: IRQ (MSI/MSI-X lines from AllocPcieIrq) exists on x86_64 only.
-    let irq = api::completion::source::IRQ;
+    let irq = abi::completion::source::IRQ;
     let irq_valid = super::completion_wait::source_is_valid(irq | timer, Some(1));
     if irq_valid != cfg!(target_arch = "x86_64") {
         return fail("the IRQ source was accepted off x86_64 or refused on it");
@@ -148,13 +148,13 @@ fn round_trip() -> bool {
     match queue(TID_A) {
         Some(q) => match q.reserve() {
             Some(slot) => {
-                if !q.complete_from(slot, api::completion::source::TIMER, -7) {
+                if !q.complete_from(slot, abi::completion::source::TIMER, -7) {
                     ok = fail("completing a freshly reserved slot was refused");
                 }
                 match q.drain() {
                     Some(done)
                         if done.slot == slot
-                            && done.source == api::completion::source::TIMER
+                            && done.source == abi::completion::source::TIMER
                             && done.result == -7 => {}
                     other => {
                         ok = fail(&alloc::format!(
@@ -206,13 +206,13 @@ fn task_exit_defers_timer_release() -> bool {
         };
         if let Some(task) = sched.tasks.get_mut(&TID_A) {
             task.completion_wait = Some(super::tcb::CompletionWait {
-                source: api::completion::source::TIMER,
+                source: abi::completion::source::TIMER,
                 slot,
                 irq_lines: crate::dev::irq_wait::IrqLineSet::EMPTY,
             });
             task.state = TaskState::Blocked {
                 wait: WaitKind::Completion {
-                    source: api::completion::source::TIMER,
+                    source: abi::completion::source::TIMER,
                     delivery: Delivery::Queue,
                 },
                 deadline: Some(u64::MAX),

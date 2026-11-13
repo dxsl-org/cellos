@@ -10,7 +10,7 @@
 const builtin = @import("builtin");
 
 // BEGIN generated syscall numbers (scripts/gen-syscall-headers.py)
-// Source: libs/api/abi/syscalls.toml. Do not edit by hand.
+// Source: libs/abi/abi/syscalls.toml. Do not edit by hand.
 pub const SYS_EXIT: usize = 60;
 pub const SYS_LOG: usize = 11;
 pub const SYS_WRITE: usize = 109;

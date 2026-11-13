@@ -125,7 +125,7 @@ class CorpusValidatorBehaviorTests(ValidatorBehaviorTests):
     def test_authoritative_source_and_recomputed_corpus_substitution_fail(self):
         doc = copy.deepcopy(self.corpus)
         state = doc["derived_source_state"]
-        state["inputs"][0] = {"path": "libs/api/src/abi.rs", "sha256": VALIDATOR.file_digest(ROOT / "libs/api/src/abi.rs")}
+        state["inputs"][0] = {"path": "libs/abi/src/lib.rs", "sha256": VALIDATOR.file_digest(ROOT / "libs/abi/src/lib.rs")}
         state["inputs"].sort(key=lambda item: item["path"])
         state["derived_source_state_sha256"] = VALIDATOR.digest({"hash_algorithm": state["hash_algorithm"], "inputs": state["inputs"]})
         self.rejected(corpus=doc)

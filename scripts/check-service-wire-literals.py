@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Service wire single source of truth: `libs/api/src/services/proto/`.
+"""Service wire single source of truth: `libs/wire/src/proto/`.
 
 Phase 12 moved every service opcode, status and error byte into one proto
 module per service. This gate keeps them there:
@@ -23,14 +23,20 @@ SCAN = ("cells", "libs", "kernel/src", "tools")
 
 # Files that own a wire and may declare its names.
 OWNERS = (
-    "libs/api/src/services/proto/",
-    "libs/api/src/services/ipc.rs",
-    "libs/api/src/services/input.rs",
-    "libs/api/src/services/display.rs",
-    "libs/api/src/services/vmm_session",
-    "libs/api/src/services/hostile_backend_recovery.rs",
+    "libs/wire/src/proto/",
+    "libs/wire/src/ipc.rs",
+    "libs/wire/src/input.rs",
+    "libs/wire/src/display.rs",
+    "libs/wire/src/vmm_session",
+    "libs/wire/src/hostile_backend_recovery.rs",
+    # Wires the kernel emits itself live in `abi` (Phase 13 A2); `wire::proto`
+    # re-exports them at their service paths.
+    "libs/abi/src/app_envelope.rs",
+    "libs/abi/src/supervisor_power.rs",
+    "libs/abi/src/input_producer.rs",
+    "libs/abi/src/kernel_ipc.rs",
     "libs/types/src/silo",
-    "libs/types/src/kms",
+    "libs/kms-codec/src",
     "libs/types/src/block_wire.rs",
 )
 
@@ -97,7 +103,7 @@ def self_test() -> int:
         ("cells/drivers/e1000/src/dispatch.rs", "NicReply::Status(1)\n"),
     ]
     missed = [rel for rel, text in cases if not scan_text(rel, text)]
-    clean = scan_text("libs/api/src/services/proto/nic.rs", "pub const OP_TX: u8 = 0;\n")
+    clean = scan_text("libs/wire/src/proto/nic.rs", "pub const OP_TX: u8 = 0;\n")
     if missed or clean:
         print(f"FAIL self-test: missed {missed}, owner flagged {clean}")
         return 1

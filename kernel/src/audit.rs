@@ -98,7 +98,7 @@ pub enum AuditEvent {
     /// Cell incarnation (or was refused for HYPERVISOR). Payload:
     /// [`encode_subject`] with the **caller** as subject, `d0` = target tid,
     /// `d1` = `cap_mask`, where `cap_mask` matches
-    /// `api::syscall::cap_mask` constants (bit0=block_io, bit1=network, bit2=spawn,
+    /// `abi::syscall::cap_mask` constants (bit0=block_io, bit1=network, bit2=spawn,
     /// bit3=hypervisor, bits8-15=mmio_devices, bits16-23=block_regions).
     CapRevoked = 20,
     /// Cell binary signature verified at spawn (binary integrity gate).

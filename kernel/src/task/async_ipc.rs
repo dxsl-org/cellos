@@ -157,7 +157,7 @@ impl Operations {
                 && !matches!(op.phase, Phase::Terminal { .. })
             {
                 op.phase = Phase::Terminal {
-                    kind: api::syscall::ipc_status::PEER_GONE,
+                    kind: abi::syscall::ipc_status::PEER_GONE,
                     len: 0,
                 };
                 #[cfg(feature = "p01-trace")]
@@ -417,7 +417,7 @@ fn wake(sched: &mut Scheduler, owner: usize) {
             TaskState::Blocked {
                 wait: WaitKind::Completion { source, .. },
                 ..
-            } if source & api::completion::source::IPC != 0
+            } if source & abi::completion::source::IPC != 0
         );
         if waiting {
             task.state = TaskState::Ready;
@@ -687,7 +687,7 @@ fn terminal(
         .unwrap();
     if len > ipc_wire::MAX_IPC_WIRE_PAYLOAD {
         op.phase = Phase::Terminal {
-            kind: api::syscall::ipc_status::INDETERMINATE,
+            kind: abi::syscall::ipc_status::INDETERMINATE,
             len: 0,
         };
         #[cfg(feature = "p01-trace")]
@@ -702,9 +702,9 @@ fn terminal(
     }
     op.phase = Phase::Terminal {
         kind: if copied.is_ok() {
-            api::syscall::ipc_status::REPLY
+            abi::syscall::ipc_status::REPLY
         } else {
-            api::syscall::ipc_status::INDETERMINATE
+            abi::syscall::ipc_status::INDETERMINATE
         },
         len: if copied.is_ok() { len } else { 0 },
     };
@@ -876,9 +876,9 @@ fn cancel_in_sched(sched: &mut Scheduler, owner: usize, token: usize) -> Result<
     if !matches!(op.phase, Phase::Terminal { .. }) {
         op.phase = Phase::Terminal {
             kind: if queued {
-                api::syscall::ipc_status::CANCELLED
+                abi::syscall::ipc_status::CANCELLED
             } else {
-                api::syscall::ipc_status::INDETERMINATE
+                abi::syscall::ipc_status::INDETERMINATE
             },
             len: 0,
         };
@@ -926,7 +926,7 @@ pub fn take(
         return Err(Failure::TooSmall);
     }
     let view = TaskCopyView::of(caller);
-    view.validate_writable(status_ptr, api::syscall::IPC_STATUS_LEN)
+    view.validate_writable(status_ptr, abi::syscall::IPC_STATUS_LEN)
         .map_err(|_| Failure::Invalid)?;
     if !data.is_empty() {
         view.validate_writable(reply_ptr, data.len())
@@ -936,8 +936,8 @@ pub fn take(
         #[cfg(feature = "bench-counters")]
         crate::bench_counters::ipc_bytes(data.len());
     }
-    let mut status = [0u8; api::syscall::IPC_STATUS_LEN];
-    status[..4].copy_from_slice(&api::syscall::IPC_STATUS_VERSION.to_le_bytes());
+    let mut status = [0u8; abi::syscall::IPC_STATUS_LEN];
+    status[..4].copy_from_slice(&abi::syscall::IPC_STATUS_VERSION.to_le_bytes());
     status[4..8].copy_from_slice(&kind.to_le_bytes());
     status[8..12].copy_from_slice(&(data.len() as u32).to_le_bytes());
     view.write_bytes(status_ptr, &status)
@@ -950,7 +950,7 @@ pub fn take(
 /// otherwise park `owner` until one of its operations changes, and return
 /// `None` so the caller yields and asks again.
 ///
-/// A terminal returns its kind ([`api::syscall::ipc_status`]) and reply length,
+/// A terminal returns its kind ([`abi::syscall::ipc_status`]) and reply length,
 /// and the operation is gone. Parking checks this operation only: another
 /// operation of `owner` that is already terminal must not turn the wait into a
 /// spin. For a syscall the kernel serves with [`submit_request`].
@@ -971,7 +971,7 @@ pub fn take_or_park_kernel(
         super::arm_ipc_block_handoff(owner);
         task.state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -1066,9 +1066,9 @@ pub fn on_owner_exits(sched: &mut Scheduler, owner_tid: usize) {
             if let Some(op) = task.async_operations.find_mut(token) {
                 op.phase = Phase::Terminal {
                     kind: if queued {
-                        api::syscall::ipc_status::CANCELLED
+                        abi::syscall::ipc_status::CANCELLED
                     } else {
-                        api::syscall::ipc_status::INDETERMINATE
+                        abi::syscall::ipc_status::INDETERMINATE
                     },
                     len: 0,
                 };
@@ -1093,7 +1093,7 @@ pub fn wait(owner: usize, ticks: u64) -> Result<bool, Failure> {
         super::arm_ipc_block_handoff(owner);
         task.state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline,
@@ -1168,7 +1168,7 @@ pub(crate) fn cutover_peer(sched: &mut Scheduler, peer: usize, cell: u64, genera
                     && matches!(op.phase, Phase::Queued)
                 {
                     op.phase = Phase::Terminal {
-                        kind: api::syscall::ipc_status::PEER_GONE,
+                        kind: abi::syscall::ipc_status::PEER_GONE,
                         len: 0,
                     };
                     #[cfg(feature = "p01-trace")]
@@ -1210,9 +1210,9 @@ pub fn expire(sched: &mut Scheduler, now: u64) {
                     let queued = matches!(op.phase, Phase::Queued);
                     op.phase = Phase::Terminal {
                         kind: if queued {
-                            api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT
+                            abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT
                         } else {
-                            api::syscall::ipc_status::INDETERMINATE
+                            abi::syscall::ipc_status::INDETERMINATE
                         },
                         len: 0,
                     };
@@ -1355,7 +1355,7 @@ mod tests {
             .all(|op| matches!(
                 op.phase,
                 Phase::Terminal {
-                    kind: api::syscall::ipc_status::PEER_GONE,
+                    kind: abi::syscall::ipc_status::PEER_GONE,
                     len: 0
                 }
             )));
@@ -1386,7 +1386,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PEER_GONE,
+                kind: abi::syscall::ipc_status::PEER_GONE,
                 len: 0
             }
         ));
@@ -1465,7 +1465,7 @@ mod tests {
         serve(&mut sched, PROVIDER, OWNER, 12);
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -1497,14 +1497,14 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
+                kind: abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
                 len: 0
             }
         ));
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(12).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::INDETERMINATE,
+                kind: abi::syscall::ipc_status::INDETERMINATE,
                 len: 0
             }
         ));
@@ -1541,21 +1541,21 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
+                kind: abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
                 len: 0
             }
         ));
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(12).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::INDETERMINATE,
+                kind: abi::syscall::ipc_status::INDETERMINATE,
                 len: 0
             }
         ));
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(13).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
+                kind: abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
                 len: 0
             }
         ));
@@ -1664,7 +1664,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::REPLY,
+                kind: abi::syscall::ipc_status::REPLY,
                 ..
             }
         ));
@@ -1682,14 +1682,14 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::REPLY,
+                kind: abi::syscall::ipc_status::REPLY,
                 ..
             }
         ));
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(12).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PEER_GONE,
+                kind: abi::syscall::ipc_status::PEER_GONE,
                 ..
             }
         ));
@@ -1709,7 +1709,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::INDETERMINATE,
+                kind: abi::syscall::ipc_status::INDETERMINATE,
                 ..
             }
         ));
@@ -1860,7 +1860,7 @@ mod tests {
         add_operation(&mut sched, WORKER, PROVIDER, 12, Phase::Queued);
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -1911,7 +1911,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::CANCELLED,
+                kind: abi::syscall::ipc_status::CANCELLED,
                 ..
             }
         ));
@@ -1934,7 +1934,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::CANCELLED,
+                kind: abi::syscall::ipc_status::CANCELLED,
                 ..
             }
         ));
@@ -1942,7 +1942,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::CANCELLED,
+                kind: abi::syscall::ipc_status::CANCELLED,
                 len: 0
             }
         ));
@@ -1955,7 +1955,7 @@ mod tests {
             matches!(
                 sched.tasks[&OWNER].async_operations.find(11).unwrap().phase,
                 Phase::Terminal {
-                    kind: api::syscall::ipc_status::CANCELLED,
+                    kind: abi::syscall::ipc_status::CANCELLED,
                     len: 0
                 }
             ),
@@ -1964,7 +1964,7 @@ mod tests {
         assert!(matches!(
             sched.tasks[&OWNER].async_operations.find(12).unwrap().phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
+                kind: abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT,
                 len: 0
             }
         ));
@@ -2163,7 +2163,7 @@ mod tests {
     /// so no later receive can deliver it.
     #[test]
     fn definite_not_executed_outcomes_only_for_never_snapshotted_requests() {
-        use api::syscall::ipc_status::{CANCELLED, INDETERMINATE, PEER_GONE, PRE_DISPATCH_TIMEOUT};
+        use abi::syscall::ipc_status::{CANCELLED, INDETERMINATE, PEER_GONE, PRE_DISPATCH_TIMEOUT};
         #[derive(Clone, Copy, Debug)]
         enum Producer {
             Cancel,
@@ -2233,14 +2233,14 @@ mod tests {
     /// incarnation can settle neither; its own new operation completes.
     #[test]
     fn hotswap_cutover_ends_queued_work_and_the_replacement_cannot_settle_old_tokens() {
-        use api::syscall::ipc_status::{PEER_GONE, REPLY};
+        use abi::syscall::ipc_status::{PEER_GONE, REPLY};
         let mut sched = fixture();
         add_operation(&mut sched, OWNER, PROVIDER, 61, Phase::Queued);
         queue_op_wire(&mut sched, OWNER, PROVIDER, 61);
         add_operation(&mut sched, OWNER, PROVIDER, 62, Phase::Dispatched);
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -2274,9 +2274,12 @@ mod tests {
     /// and by reaping the exited owner.
     #[test]
     fn retained_terminals_stay_charged_and_terminal_transitions_do_not_allocate() {
-        use api::syscall::ipc_status::CANCELLED;
+        use abi::syscall::ipc_status::CANCELLED;
         let _guard = crate::TEST_STATE_LOCK.lock();
-        assert_eq!(ipc_wire::MAX_IPC_WIRE_PAYLOAD, api::ipc::IPC_BUF_SIZE);
+        assert_eq!(
+            ipc_wire::MAX_IPC_WIRE_PAYLOAD,
+            abi::kernel_ipc::IPC_BUF_SIZE
+        );
         let full_reply = || {
             ipc_wire::IpcWireMessage::try_new(
                 ipc_wire::IpcWireHeader {
@@ -2785,7 +2788,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::REPLY,
+                kind: abi::syscall::ipc_status::REPLY,
                 ..
             }
         ));
@@ -2796,7 +2799,7 @@ mod tests {
         serve(&mut sched, PROVIDER, OWNER, 102);
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -2815,7 +2818,7 @@ mod tests {
         add_operation(&mut sched, OWNER, PROVIDER, 103, Phase::Dispatched);
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::IPC,
+                source: abi::completion::source::IPC,
                 delivery: Delivery::IpcTerminal,
             },
             deadline: None,
@@ -2830,7 +2833,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::PEER_GONE,
+                kind: abi::syscall::ipc_status::PEER_GONE,
                 ..
             }
         ));
@@ -2852,7 +2855,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::REPLY,
+                kind: abi::syscall::ipc_status::REPLY,
                 ..
             }
         ));
@@ -2868,7 +2871,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::INDETERMINATE,
+                kind: abi::syscall::ipc_status::INDETERMINATE,
                 ..
             }
         ));
@@ -2884,7 +2887,7 @@ mod tests {
                 .unwrap()
                 .phase,
             Phase::Terminal {
-                kind: api::syscall::ipc_status::INDETERMINATE,
+                kind: abi::syscall::ipc_status::INDETERMINATE,
                 ..
             }
         ));
@@ -2895,9 +2898,9 @@ mod tests {
     use super::super::completion_wait::{
         select_locked, select_source, Selection, INITIAL_ROTOR, SELECTION_ORDER,
     };
-    const IPC: u32 = api::completion::source::IPC;
-    const NET_RX: u32 = api::completion::source::NET_RX;
-    const TIMER: u32 = api::completion::source::TIMER;
+    const IPC: u32 = abi::completion::source::IPC;
+    const NET_RX: u32 = abi::completion::source::NET_RX;
+    const TIMER: u32 = abi::completion::source::TIMER;
     const ALL_SOURCES: u32 = NET_RX | IPC | TIMER;
 
     /// Thread-local allocation counter for the wait-path measurement (M2).
@@ -2997,7 +3000,7 @@ mod tests {
             sched.tasks[&OWNER].async_operations.has_terminal(),
             "IpcWait keeps its level view of the retained result"
         );
-        assert_eq!(kind(&sched, 22), Some(api::syscall::ipc_status::REPLY));
+        assert_eq!(kind(&sched, 22), Some(abi::syscall::ipc_status::REPLY));
         assert_eq!(
             reply_in_sched(&mut sched, PROVIDER, 22, 0, 0),
             Err(Failure::Invalid),
@@ -3044,7 +3047,7 @@ mod tests {
 
     #[test]
     fn source_rotation_reaches_every_ready_source_within_four_selections() {
-        const IRQ: u32 = api::completion::source::IRQ;
+        const IRQ: u32 = abi::completion::source::IRQ;
         let order = [NET_RX, IPC, IRQ, TIMER];
         assert_eq!(SELECTION_ORDER, order);
         assert_eq!(select_source(0, 0), None);
@@ -3193,7 +3196,7 @@ mod tests {
         assert_eq!(notify(&mut sched), None);
         assert_eq!(
             kind(&sched, 41),
-            Some(api::syscall::ipc_status::INDETERMINATE)
+            Some(abi::syscall::ipc_status::INDETERMINATE)
         );
 
         // A replacement provider generation cannot settle or arm the old token.
@@ -3292,14 +3295,14 @@ mod tests {
         assert!(ready(&sched));
         crate::sched::hart_local::ready::remove_from_all(OWNER);
         assert_eq!(select(&mut sched, IPC, false, false).unwrap().result, 54);
-        assert_eq!(kind(&sched, 54), Some(api::syscall::ipc_status::PEER_GONE));
+        assert_eq!(kind(&sched, 54), Some(abi::syscall::ipc_status::PEER_GONE));
 
         // R4 expire versus reply, both orders: one terminal, one notification.
         sched.tasks.get_mut(&OWNER).unwrap().state = TaskState::Ready;
         add_operation(&mut sched, OWNER, WORKER, 55, Phase::Dispatched);
         settle(&mut sched, WORKER, 55);
         expire(&mut sched, u64::MAX);
-        assert_eq!(kind(&sched, 55), Some(api::syscall::ipc_status::REPLY));
+        assert_eq!(kind(&sched, 55), Some(abi::syscall::ipc_status::REPLY));
         add_operation(&mut sched, OWNER, WORKER, 56, Phase::Dispatched);
         expire(&mut sched, u64::MAX);
         assert_eq!(
@@ -3308,7 +3311,7 @@ mod tests {
         );
         assert_eq!(
             kind(&sched, 56),
-            Some(api::syscall::ipc_status::INDETERMINATE)
+            Some(abi::syscall::ipc_status::INDETERMINATE)
         );
         assert_eq!(notify(&mut sched), Some(55));
         assert_eq!(notify(&mut sched), Some(56));
@@ -3551,7 +3554,7 @@ mod tests {
         );
         assert_eq!(
             take_or_park_kernel(OWNER, token, &mut out),
-            Ok(Some((api::syscall::ipc_status::PEER_GONE, 0)))
+            Ok(Some((abi::syscall::ipc_status::PEER_GONE, 0)))
         );
         assert_eq!(
             take_or_park_kernel(OWNER, token, &mut out),

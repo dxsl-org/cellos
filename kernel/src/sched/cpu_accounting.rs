@@ -3,7 +3,7 @@
 use crate::sched::scheduler::Scheduler;
 use crate::sync::Spinlock;
 use crate::task::tcb::Task;
-use api::cell_owner::CellOwner;
+use abi::cell_owner::CellOwner;
 
 const N: usize = 64;
 const M: usize = 2;

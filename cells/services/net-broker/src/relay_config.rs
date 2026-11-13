@@ -1,5 +1,5 @@
 use crate::peer_config::ascii::{eq_slice, parse_ipv4, parse_u16_ascii, starts_with, trim_ascii};
-use types::kms::{validate_hostname, RELAY_HOSTNAME_MAX};
+use kms_codec::{validate_hostname, RELAY_HOSTNAME_MAX};
 
 /// Validated endpoint for a future authenticated relay transport.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

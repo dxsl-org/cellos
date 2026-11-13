@@ -1,12 +1,12 @@
 use api::caller_identity::CallerIdentity;
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     p256_spki_der, KmsErrorCode, KmsRequestV1, RelayActivePublicKeyPayload,
     RelayCsrChunkRequestPayload, RelayCsrChunkResponsePayload, RelayEnrollmentAbortRequestPayload,
     RelayEnrollmentBeginRequestPayload, RelayEnrollmentBeginResponsePayload,
     RelayGenerationCommitRequestPayload, RelayGenerationCommitResponsePayload,
     RelayStageProfileRequestPayload,
 };
+use sha2::{Digest, Sha256};
 
 use crate::auth::{authorize_supervisor, ServiceRegistrySnapshot};
 use crate::lifecycle::SupervisorContext;

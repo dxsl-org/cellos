@@ -322,9 +322,9 @@ pub struct Wake {
 /// IDs are monotonic transport identities. An absent key is the Empty slot.
 #[derive(Clone, Copy)]
 enum CellOwnerSlot {
-    Reserved(api::cell_owner::CellOwner),
-    Live(api::cell_owner::CellOwner),
-    Retiring(api::cell_owner::CellOwner),
+    Reserved(abi::cell_owner::CellOwner),
+    Live(abi::cell_owner::CellOwner),
+    Retiring(abi::cell_owner::CellOwner),
 }
 
 #[derive(Clone, Copy)]
@@ -334,7 +334,7 @@ struct CellOwnerWatch {
 }
 
 pub(crate) struct RootRetirement {
-    pub owner: api::cell_owner::CellOwner,
+    pub owner: abi::cell_owner::CellOwner,
     pub member_tids: Vec<usize>,
     /// Matching zombies move with their generation's resource release, rather
     /// than waiting for a later global zombie sweep after quota is reusable.
@@ -631,7 +631,7 @@ impl Scheduler {
     }
     pub(crate) fn reserve_session_owner(
         &mut self,
-        owner: api::cell_owner::CellOwner,
+        owner: abi::cell_owner::CellOwner,
     ) -> Result<(), types::ViError> {
         if owner.cell_id as usize >= crate::memory::cell_quota::MAX_CELLS {
             return Err(types::ViError::InvalidInput);
@@ -643,17 +643,17 @@ impl Scheduler {
         self.insert_cell_owner_slot(owner.cell_id, CellOwnerSlot::Reserved(owner));
         Ok(())
     }
-    pub(crate) fn session_owner_reserved(&self, owner: api::cell_owner::CellOwner) -> bool {
+    pub(crate) fn session_owner_reserved(&self, owner: abi::cell_owner::CellOwner) -> bool {
         matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Reserved(current)) if *current == owner)
     }
-    pub(crate) fn abort_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
+    pub(crate) fn abort_session_owner(&mut self, owner: abi::cell_owner::CellOwner) {
         if self.session_owner_reserved(owner) {
             self.cell_owners.remove(&owner.cell_id);
             self.tasks.abort_publication();
         }
     }
-    pub(crate) fn publish_session_owner(&mut self, owner: api::cell_owner::CellOwner) {
+    pub(crate) fn publish_session_owner(&mut self, owner: abi::cell_owner::CellOwner) {
         assert!(self.session_owner_reserved(owner));
         if let Some(slot) = self.cell_owners.get_mut(&owner.cell_id) {
             *slot = CellOwnerSlot::Live(owner);
@@ -665,7 +665,7 @@ impl Scheduler {
         &self,
         cell_id: CellId,
         generation: u64,
-    ) -> Option<api::cell_owner::CellOwner> {
+    ) -> Option<abi::cell_owner::CellOwner> {
         let slot = self.cell_owners.get(&cell_id.0)?;
         let CellOwnerSlot::Live(owner) = slot else {
             return None;
@@ -683,7 +683,7 @@ impl Scheduler {
 
     /// Publish the owner slot during the launch commit, after task initialization
     /// and before the task is made runnable.
-    pub(crate) fn publish_live_cell_owner(&mut self, owner: api::cell_owner::CellOwner) -> bool {
+    pub(crate) fn publish_live_cell_owner(&mut self, owner: abi::cell_owner::CellOwner) -> bool {
         if !owner.is_live() || !self.cell_owner_slot_is_empty(CellId(owner.cell_id)) {
             return false;
         }
@@ -703,7 +703,7 @@ impl Scheduler {
     pub(crate) fn live_cell_owner_for_id(
         &self,
         cell_id: CellId,
-    ) -> Option<api::cell_owner::CellOwner> {
+    ) -> Option<abi::cell_owner::CellOwner> {
         let CellOwnerSlot::Live(owner) = self.cell_owners.get(&cell_id.0)? else {
             return None;
         };
@@ -727,7 +727,7 @@ impl Scheduler {
         )
     }
 
-    fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
+    fn begin_root_retirement(&mut self, owner: abi::cell_owner::CellOwner) {
         #[cfg(feature = "g1-cpu-accounting")]
         crate::sched::cpu_accounting::require(crate::sched::cpu_accounting::begin_retirement(
             self, owner,
@@ -740,7 +740,7 @@ impl Scheduler {
     ///
     /// The result is the admission invariant: callers MUST retain the matching
     /// CellId quota unless this exact `Retiring(owner)` slot became `Empty`.
-    pub(crate) fn finish_root_retirement(&mut self, owner: api::cell_owner::CellOwner) -> bool {
+    pub(crate) fn finish_root_retirement(&mut self, owner: abi::cell_owner::CellOwner) -> bool {
         #[cfg(feature = "g1-cpu-accounting")]
         if !matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Retiring(current)) if *current == owner)
@@ -765,7 +765,7 @@ impl Scheduler {
     }
 
     #[cfg(not(cellos_posture = "release"))]
-    pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
+    pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: abi::cell_owner::CellOwner) {
         if matches!(self.cell_owners.get(&owner.cell_id),
             Some(CellOwnerSlot::Live(current)) if *current == owner)
         {
@@ -777,7 +777,7 @@ impl Scheduler {
     /// The flag is `true` for Retiring. Reserved (unpublished) slots are not Cells yet.
     pub(crate) fn telemetry_cell_owners(
         &self,
-    ) -> impl Iterator<Item = (api::cell_owner::CellOwner, bool)> + '_ {
+    ) -> impl Iterator<Item = (abi::cell_owner::CellOwner, bool)> + '_ {
         self.cell_owners.values().filter_map(|slot| match slot {
             CellOwnerSlot::Live(owner) => Some((*owner, false)),
             CellOwnerSlot::Retiring(owner) => Some((*owner, true)),
@@ -806,7 +806,7 @@ impl Scheduler {
     /// Snapshot every live or zombie task that belongs to `owner`'s exact
     /// generation. A zombie remains a member because its saved context can be
     /// the one still executing on another hart.
-    fn root_generation_member_tids(&self, owner: api::cell_owner::CellOwner) -> Vec<usize> {
+    fn root_generation_member_tids(&self, owner: abi::cell_owner::CellOwner) -> Vec<usize> {
         #[cfg(feature = "p01-trace")]
         let _semantic = crate::memory::heap::p01_owner::creation(
             None,
@@ -846,7 +846,7 @@ impl Scheduler {
         watcher_tid: usize,
         cell_id: CellId,
         generation: u64,
-    ) -> Option<(api::cell_owner::CellOwner, u64)> {
+    ) -> Option<(abi::cell_owner::CellOwner, u64)> {
         let watcher = self.tasks.get(&watcher_tid)?;
         if !may_watch_owner_deaths(watcher)
             || watcher.caller.cell_id != cell_id.0
@@ -907,13 +907,13 @@ impl Scheduler {
         let (priority, last_hart) = self
             .tasks
             .get(&id)
-            .map_or((api::TaskPriority::Normal as u8, None), |t| {
+            .map_or((abi::TaskPriority::Normal as u8, None), |t| {
                 (t.priority, t.last_hart)
             });
         // RT tasks go back to their last RT hart, else to the least-loaded
         // online RT hart; without one (single-hart systems, e.g. QEMU without
         // -smp 2) they fall back to the current hart like everything else.
-        let target_hart = if priority >= api::TaskPriority::RealTime as u8 {
+        let target_hart = if priority >= abi::TaskPriority::RealTime as u8 {
             crate::sched::smp::rt_destination(last_hart)
         } else {
             None
@@ -1569,7 +1569,7 @@ impl Scheduler {
     /// (triggered by clean root exit, unhandled user fault on root or worker, or authorized stop).
     pub(crate) fn retire_cell_incarnation_participants(
         &mut self,
-        owner: api::cell_owner::CellOwner,
+        owner: abi::cell_owner::CellOwner,
         trigger_tid: usize,
         exit_reason: usize,
     ) {
@@ -1752,7 +1752,7 @@ impl Scheduler {
         // at `prepare_drop`. Only the rare TIMER-wait exit pays a clone.
         let timer_release = self.tasks.get_mut(&tid).and_then(|task| {
             let wait = task.completion_wait.take()?;
-            if wait.source != api::completion::source::TIMER {
+            if wait.source != abi::completion::source::TIMER {
                 return None;
             }
             task.completion
@@ -2547,7 +2547,7 @@ impl Scheduler {
                         // Observability: an RT cell whose awaited message missed its deadline
                         // is a missed control-loop cycle — record it (no enforcement). Gated to
                         // RT priority so the safety-timeout use on Normal cells stays quiet.
-                        if task.priority >= api::TaskPriority::RealTime as u8 {
+                        if task.priority >= abi::TaskPriority::RealTime as u8 {
                             crate::audit::log_event(
                                 crate::audit::AuditEvent::RtDeadlineMiss,
                                 &crate::audit::encode_u32x2(
@@ -2683,7 +2683,7 @@ impl Scheduler {
                     task.sched_stats.cpu_run_ticks =
                         task.sched_stats.cpu_run_ticks.saturating_add(1);
                     // Only RealTime-priority tasks can livelock the system.
-                    if task.priority >= api::TaskPriority::RealTime as u8 {
+                    if task.priority >= abi::TaskPriority::RealTime as u8 {
                         task.sched_stats.run_ticks = task.sched_stats.run_ticks.saturating_add(1);
                         if task.sched_stats.run_ticks >= WATCHDOG_WARN_TICKS
                             && !task.sched_stats.rt_overrun_warned
@@ -3053,7 +3053,7 @@ mod retirement_tests {
         assert_eq!(crate::sched::hart_local::current_cell_id(), 0);
 
         scheduler.tasks.get_mut(&TID).expect("blocked task").state = TaskState::Ready;
-        crate::sched::hart_local::ready::push_on_hart(hart, TID, api::TaskPriority::Normal as u8);
+        crate::sched::hart_local::ready::push_on_hart(hart, TID, abi::TaskPriority::Normal as u8);
         let (curr, next) = scheduler
             .pick_next_local(hart, 0)
             .expect("woken task must be selectable from boot");
@@ -3127,7 +3127,7 @@ mod retirement_tests {
         crate::sched::hart_local::ready::push_on_hart(
             hart,
             SUCCESSOR_TID,
-            api::TaskPriority::Normal as u8,
+            abi::TaskPriority::Normal as u8,
         );
         let (curr, next) = scheduler
             .pick_next_local(hart, 0)
@@ -3157,7 +3157,7 @@ mod retirement_tests {
                 crate::sched::smp::HART_RT
             };
 
-        let owner = api::cell_owner::CellOwner::new(CELL_RAW, GENERATION, ROOT_TID as u64);
+        let owner = abi::cell_owner::CellOwner::new(CELL_RAW, GENERATION, ROOT_TID as u64);
         let mut scheduler = Scheduler::new();
         let mut root = Box::new(Task::new(
             ROOT_TID,

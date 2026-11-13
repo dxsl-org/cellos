@@ -34,7 +34,7 @@ pub fn validate_mount_path(path: &str) -> bool {
 
 /// Validate the relay hostname against the frozen DNS profile.
 pub fn validate_relay_hostname(hostname: &str) -> bool {
-    types::kms::validate_hostname(hostname.as_bytes())
+    kms_codec::validate_hostname(hostname.as_bytes())
 }
 
 /// Manifest sections and the only keys each accepts. Private-key fields are

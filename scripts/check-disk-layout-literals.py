@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disk layout single source of truth: `libs/api/src/abi/disk.rs`.
+"""Disk layout single source of truth: `libs/abi/src/disk.rs`.
 
 1. Reads the `pub const PART_*: u64` constants (refusing anything but plain
    integer literals), re-checks the contiguity the Rust `const _` asserts state,
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "libs/api/src/abi/disk.rs"
+SOURCE = ROOT / "libs/abi/src/disk.rs"
 GENERATED = ROOT / "scripts/disk-layout.json"
 CONST = re.compile(r"^pub const (PART_[A-Z0-9_]+): u64 = ([0-9_]+);", re.M)
 NUM = r"([0-9][0-9_,]*)"
@@ -97,7 +97,7 @@ def main() -> int:
     args = parser.parse_args()
 
     layout = canonical()
-    rendered = json.dumps({"source": "libs/api/src/abi/disk.rs", "sector_bytes": 512, **layout},
+    rendered = json.dumps({"source": "libs/abi/src/disk.rs", "sector_bytes": 512, **layout},
                           indent=2) + "\n"
     errors: list[str] = []
     if args.write:

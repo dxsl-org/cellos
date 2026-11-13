@@ -12,7 +12,7 @@ mod silo;
 pub(crate) use c2c::FixtureRootProvider;
 pub(crate) use relay::{EnrollmentKeyProof, ProviderSlot};
 
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayProviderAssessment,
     RotateNodeIdentityReason,
 };

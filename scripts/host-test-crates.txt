@@ -3,6 +3,7 @@
 # Checked by scripts/check-host-test-crates.py: a new crate with #[test] must get a row.
 # format: <crate> <status> [reason...]
 
+abi ci
 ai-engine ci
 ai-proto ci
 ai-sdk ci
@@ -63,6 +64,7 @@ hypha-llm-gateway ci
 hypha-tool-fs ci
 hypha-tool-spawn ci
 intel-gpu-core untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+kms-codec ci
 lua ci
 mesa-anv-shim untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 ocel untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
@@ -70,6 +72,7 @@ ocel-pdf-proto untested no ci.yml step runs it as of 2026-11-10; host build not 
 ocel-quickjs untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 ocel-service-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 ostd ci
+posix-shim not-host-testable the crate is cfg'd to bare-metal targets and is empty on the host, so its sysio #[test]s never build there (as under libs/api/src/services/posix before the Phase 13 split)
 recovery-demo untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 render-core untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 robot-demo ci
@@ -102,3 +105,4 @@ vissh untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 vitui untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 viui ci
 vm-runner untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+wire ci

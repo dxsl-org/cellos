@@ -3,7 +3,7 @@
 //! The supervisor (init) respawns a dead service under a NEW tid. Clients that
 //! addressed the service by its old tid would break. This registry adds an
 //! indirection: the supervisor registers each service's tid under a well-known
-//! `service_id` ([`api::syscall::service`]) and re-registers the new tid on
+//! `service_id` ([`abi::syscall::service`]) and re-registers the new tid on
 //! respawn; a client resolves `service_id → tid` right before sending, so it
 //! reconnects transparently. Keeping the map in the kernel (the never-die core)
 //! means it survives any service's death, and a dead provider is auto-cleared
@@ -14,8 +14,8 @@
 //! generation)`. A tid says where to send; it is not an identity, because a
 //! `CellId` slot may be reused later while the generation cannot. Recording the
 //! identity here is what lets `LookupServiceBound` answer with a binding instead
-//! of a bare tid, and it is the same axis [`api::caller_identity::CallerIdentity`]
-//! and [`api::cell_owner::CellOwner`] already use — one identity concept, not two.
+//! of a bare tid, and it is the same axis [`abi::caller_identity::CallerIdentity`]
+//! and [`abi::cell_owner::CellOwner`] already use — one identity concept, not two.
 //! A provider whose recorded identity is not live (`cell_id == 0` or
 //! `generation == 0`) is **not bindable** and is reported as "no live provider",
 //! so the kernel never states a binding it cannot stand behind.
@@ -42,7 +42,7 @@ struct ServiceEntry {
     tid: usize,
     cell_id: u64,
     generation: u64,
-    /// [`api::syscall::service_flags`] granted to this incarnation.
+    /// [`abi::syscall::service_flags`] granted to this incarnation.
     flags: usize,
     /// Hidden from lookups by a hot-swap quiesce; the provider still runs.
     paused: bool,
@@ -71,7 +71,7 @@ static REGISTRY: Spinlock<BTreeMap<u16, ServiceEntry>> =
 static OWNERS: Spinlock<BTreeMap<u16, usize>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::OWNERS);
 
-/// Ids below this are the well-known namespace of [`api::syscall::service`];
+/// Ids below this are the well-known namespace of [`abi::syscall::service`];
 /// ids at or above it are private ids a lifecycle parent publishes for its own
 /// children (the demo and test fixtures use `0x7Axx`).
 pub const PRIVATE_ID_BASE: u16 = 0x100;
@@ -110,7 +110,7 @@ pub fn register_as(
     generation: u64,
     flags: usize,
 ) -> Result<(), Refusal> {
-    if flags & !api::syscall::service_flags::ALL != 0 {
+    if flags & !abi::syscall::service_flags::ALL != 0 {
         return Err(Refusal::Rejected);
     }
     let Registrar::Spawner(spawner) = registrar else {
@@ -225,7 +225,7 @@ pub fn lookup_bound(service_id: u16) -> Option<(usize, u64, u64)> {
 /// Lock order SCHEDULER -> REGISTRY: callers hold the scheduler lock.
 pub fn retains_outer_caller(cell_id: u64, generation: u64) -> bool {
     REGISTRY.lock().values().any(|entry| {
-        entry.flags & api::syscall::service_flags::RETAINS_OUTER_CALLER != 0
+        entry.flags & abi::syscall::service_flags::RETAINS_OUTER_CALLER != 0
             && entry.names(cell_id, generation)
     })
 }
@@ -235,7 +235,7 @@ pub fn retains_outer_caller(cell_id: u64, generation: u64) -> bool {
 /// and a provider bound to one row has no right through another's binding.
 pub fn grants_owner_watch(cell_id: u64, generation: u64) -> bool {
     REGISTRY.lock().values().any(|entry| {
-        entry.flags & api::syscall::service_flags::OWNER_WATCH != 0
+        entry.flags & abi::syscall::service_flags::OWNER_WATCH != 0
             && !entry.paused
             && entry.names(cell_id, generation)
     })
@@ -351,28 +351,28 @@ mod tests {
 
     #[test]
     fn register_then_lookup() {
-        assert!(register(api::syscall::service::VFS, 4, CELL, GEN));
-        assert_eq!(lookup(api::syscall::service::VFS), Some(4));
+        assert!(register(abi::syscall::service::VFS, 4, CELL, GEN));
+        assert_eq!(lookup(abi::syscall::service::VFS), Some(4));
     }
 
     #[test]
     fn reject_zero_tid() {
-        assert!(!register(api::syscall::service::NET, 0, CELL, GEN));
-        assert_eq!(lookup(api::syscall::service::NET), None);
+        assert!(!register(abi::syscall::service::NET, 0, CELL, GEN));
+        assert_eq!(lookup(abi::syscall::service::NET), None);
     }
 
     #[test]
     fn reregister_updates_tid() {
-        register(api::syscall::service::INPUT, 7, CELL, GEN);
-        register(api::syscall::service::INPUT, 9, CELL + 1, GEN + 1);
-        assert_eq!(lookup(api::syscall::service::INPUT), Some(9));
+        register(abi::syscall::service::INPUT, 7, CELL, GEN);
+        register(abi::syscall::service::INPUT, 9, CELL + 1, GEN + 1);
+        assert_eq!(lookup(abi::syscall::service::INPUT), Some(9));
     }
 
     #[test]
     fn clear_tid_removes_dead_provider() {
-        register(api::syscall::service::CONFIG, 12, CELL, GEN);
+        register(abi::syscall::service::CONFIG, 12, CELL, GEN);
         clear_tid(12);
-        assert_eq!(lookup(api::syscall::service::CONFIG), None);
+        assert_eq!(lookup(abi::syscall::service::CONFIG), None);
     }
 
     #[test]
@@ -464,7 +464,7 @@ mod tests {
     /// KMS), while the namespace owner rebinds it freely.
     #[test]
     fn spawner_cannot_bind_well_known_ids() {
-        use api::syscall::service::{KMS, SUPERVISOR};
+        use abi::syscall::service::{KMS, SUPERVISOR};
         const HIJACKER: usize = 0x5_11A0;
         for id in [SUPERVISOR, KMS] {
             assert_eq!(
@@ -529,7 +529,7 @@ mod tests {
     /// and a hot-swap commit hands both to the replacement.
     #[test]
     fn registration_flags_follow_the_row() {
-        use api::syscall::service_flags::{ALL, OWNER_WATCH, RETAINS_OUTER_CALLER};
+        use abi::syscall::service_flags::{ALL, OWNER_WATCH, RETAINS_OUTER_CALLER};
         const ID: u16 = 0x7A0C;
         const OLD: usize = 0x5_11D0;
         const NEW: usize = 0x5_11D1;

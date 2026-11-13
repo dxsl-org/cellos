@@ -5,7 +5,7 @@ use blake2::{
     Blake2s256, Blake2sMac256, Digest,
 };
 use constant_time_eq::constant_time_eq;
-use types::kms::KmsProviderKind;
+use kms_codec::KmsProviderKind;
 
 pub(crate) const STORE_DIR: &str = "/srv/cellos/kms";
 pub(crate) const SLOT_A_PATH: &str = "/srv/cellos/kms/slot-a.bin";

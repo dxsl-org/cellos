@@ -22,7 +22,7 @@ use super::syscall::{validate_user_buf, SyscallError};
 use super::tcb::{CompletionWait, Delivery, Task, TaskState, WaitKind};
 use super::waker;
 use crate::dev::irq_wait::{self, IrqLineSet};
-use api::completion::{ViCompletion, COMPLETION_LEN};
+use abi::completion::{ViCompletion, COMPLETION_LEN};
 
 /// Removes this waiter's registration on every return path without erasing a
 /// newer waiter that may have replaced it on the shared per-cell queue.
@@ -99,17 +99,17 @@ impl Drop for WaiterRegistration<'_> {
 /// finite deadline to complete against. `IRQ` lines exist only on x86_64
 /// (MSI/MSI-X from `AllocPcieIrq`), so every other kernel refuses the bit.
 pub(super) fn source_is_valid(mask: u32, deadline: Option<u64>) -> bool {
-    api::completion::source::is_wait_mask_supported(mask)
-        && (mask & api::completion::source::TIMER == 0 || deadline.is_some())
-        && (cfg!(target_arch = "x86_64") || mask & api::completion::source::IRQ == 0)
+    abi::completion::source::is_wait_mask_supported(mask)
+        && (mask & abi::completion::source::TIMER == 0 || deadline.is_some())
+        && (cfg!(target_arch = "x86_64") || mask & abi::completion::source::IRQ == 0)
 }
 
 /// Rotation order across completion sources (CP1 §5.5; IRQ per 04b CP1 §3.3).
 pub(super) const SELECTION_ORDER: [u32; 4] = [
-    api::completion::source::NET_RX,
-    api::completion::source::IPC,
-    api::completion::source::IRQ,
-    api::completion::source::TIMER,
+    abi::completion::source::NET_RX,
+    abi::completion::source::IPC,
+    abi::completion::source::IRQ,
+    abi::completion::source::TIMER,
 ];
 
 /// A fresh task's rotor names TIMER as last delivered, so the first
@@ -143,7 +143,7 @@ fn irq_lines_ready(task: &Task) -> IrqLineSet {
 /// with `source`: the mask names `IRQ` and a snapshot line is pending. A
 /// pending line outside the snapshot never wakes it.
 pub(crate) fn irq_wake_due(task: &Task, source: u32) -> bool {
-    source & api::completion::source::IRQ != 0 && !irq_lines_ready(task).is_empty()
+    source & abi::completion::source::IRQ != 0 && !irq_lines_ready(task).is_empty()
 }
 
 /// What the event sweep does with a task parked in a completion-source wait.
@@ -186,7 +186,7 @@ pub(crate) fn sweep_wake(
     match delivery {
         Delivery::Queue if irq_wake_due(task, source) => SweepWake::Ready,
         Delivery::Queue if expired => SweepWake::Deadline {
-            timed_out: source & api::completion::source::TIMER == 0,
+            timed_out: source & abi::completion::source::TIMER == 0,
         },
         Delivery::EventMask(mask) => match waker::consume_pending(mask) {
             0 if expired => SweepWake::Deadline { timed_out: true },
@@ -236,31 +236,31 @@ pub(super) fn select_locked(
     timer_expired: bool,
 ) -> Option<Selection> {
     let mut ready = 0;
-    if net_rx_ready && mask & api::completion::source::NET_RX != 0 {
-        ready |= api::completion::source::NET_RX;
+    if net_rx_ready && mask & abi::completion::source::NET_RX != 0 {
+        ready |= abi::completion::source::NET_RX;
     }
-    if mask & api::completion::source::IPC != 0 && super::async_ipc::has_pending_notification(task)
+    if mask & abi::completion::source::IPC != 0 && super::async_ipc::has_pending_notification(task)
     {
-        ready |= api::completion::source::IPC;
+        ready |= abi::completion::source::IPC;
     }
-    let irq_ready = if mask & api::completion::source::IRQ != 0 {
+    let irq_ready = if mask & abi::completion::source::IRQ != 0 {
         irq_lines_ready(task)
     } else {
         IrqLineSet::EMPTY
     };
     if !irq_ready.is_empty() {
-        ready |= api::completion::source::IRQ;
+        ready |= abi::completion::source::IRQ;
     }
-    if timer_expired && mask & api::completion::source::TIMER != 0 {
-        ready |= api::completion::source::TIMER;
+    if timer_expired && mask & abi::completion::source::TIMER != 0 {
+        ready |= abi::completion::source::TIMER;
     }
     let (source, index) = select_source(task.completion_rotor, ready)?;
-    let (result, scanned) = if source == api::completion::source::IPC {
+    let (result, scanned) = if source == abi::completion::source::IPC {
         let notification = super::async_ipc::take_notification(task)?;
         (notification.token as isize, notification.scanned)
-    } else if source == api::completion::source::NET_RX {
-        (api::completion::source::NET_RX as isize, 0)
-    } else if source == api::completion::source::IRQ {
+    } else if source == abi::completion::source::NET_RX {
+        (abi::completion::source::NET_RX as isize, 0)
+    } else if source == abi::completion::source::IRQ {
         let line = irq_ready.next_after(task.completion_irq_cursor)?;
         task.completion_irq_cursor = line;
         (line as isize, 0)
@@ -271,8 +271,8 @@ pub(super) fn select_locked(
     Some(Selection {
         source,
         result,
-        relevel_net_rx: ready & api::completion::source::NET_RX != 0
-            && source != api::completion::source::NET_RX,
+        relevel_net_rx: ready & abi::completion::source::NET_RX != 0
+            && source != abi::completion::source::NET_RX,
         scanned,
     })
 }
@@ -302,10 +302,10 @@ pub(super) fn publish_wait_state_locked(
     source: u32,
     deadline: Option<u64>,
 ) -> CompletionParkDecision {
-    if source & api::completion::source::NET_RX != 0 && !task.pending_msgs.is_empty() {
+    if source & abi::completion::source::NET_RX != 0 && !task.pending_msgs.is_empty() {
         return CompletionParkDecision::MailboxPending;
     }
-    if source & api::completion::source::IPC != 0
+    if source & abi::completion::source::IPC != 0
         && super::async_ipc::has_pending_notification(task)
     {
         return CompletionParkDecision::IpcPending;
@@ -404,7 +404,7 @@ pub fn wait_completion(
     }
     validate_user_buf(out_ptr, COMPLETION_LEN, COMPLETION_LEN)?;
     // The snapshot takes the allocation lock alone, before any SCHEDULER hold.
-    let irq_lines = if mask & api::completion::source::IRQ != 0 {
+    let irq_lines = if mask & abi::completion::source::IRQ != 0 {
         let lines = owned_irq_lines(caller_id);
         if lines.is_empty() {
             return Err(SyscallError::PermissionDenied);
@@ -423,10 +423,10 @@ pub fn wait_completion(
     // Exit cleanup keys on who owns the slot: a NET_RX reservation is owned by
     // the waker (displaced later as abandoned); otherwise only this waiter holds
     // it and task exit must release it, exactly as for a lone TIMER wait.
-    let slot_owner = if mask & api::completion::source::NET_RX != 0 {
-        api::completion::source::NET_RX
+    let slot_owner = if mask & abi::completion::source::NET_RX != 0 {
+        abi::completion::source::NET_RX
     } else {
-        api::completion::source::TIMER
+        abi::completion::source::TIMER
     };
     let registration =
         WaiterRegistration::with_irq_lines(&queue, caller_id, slot, slot_owner, irq_lines);
@@ -437,10 +437,10 @@ pub fn wait_completion(
             return Err(SyscallError::Unknown);
         }
     };
-    if mask != api::completion::source::NET_RX && mask != api::completion::source::TIMER {
+    if mask != abi::completion::source::NET_RX && mask != abi::completion::source::TIMER {
         return wait_multi(caller_id, mask, deadline, out_ptr, &queue, slot);
     }
-    let is_net_rx = mask == api::completion::source::NET_RX;
+    let is_net_rx = mask == abi::completion::source::NET_RX;
     if is_net_rx {
         waker::arm_net_rx(queue.clone(), slot);
     }
@@ -463,7 +463,7 @@ pub fn wait_completion(
                 out_ptr,
                 Completion {
                     slot,
-                    source: api::completion::source::NET_RX,
+                    source: abi::completion::source::NET_RX,
                     result: mask as isize,
                 },
             );
@@ -541,7 +541,7 @@ pub fn wait_completion(
                     out_ptr,
                     Completion {
                         slot,
-                        source: api::completion::source::TIMER,
+                        source: abi::completion::source::TIMER,
                         result: 0,
                     },
                 );
@@ -576,7 +576,7 @@ fn wait_multi(
     queue: &alloc::sync::Arc<CompletionQueue>,
     slot: super::completion::SlotId,
 ) -> Result<usize, SyscallError> {
-    let has_net_rx = mask & api::completion::source::NET_RX != 0;
+    let has_net_rx = mask & abi::completion::source::NET_RX != 0;
     if has_net_rx {
         waker::arm_net_rx(queue.clone(), slot);
     }
@@ -585,7 +585,7 @@ fn wait_multi(
         // argument of the single-source path: a frame either completed the
         // reservation (drainable) or left the flag set.
         let net_rx_flag =
-            has_net_rx && waker::consume_pending(api::completion::source::NET_RX) != 0;
+            has_net_rx && waker::consume_pending(abi::completion::source::NET_RX) != 0;
         let net_rx_ready = net_rx_flag || (has_net_rx && queue.drainable() != 0);
         let timer_expired = deadline.is_some_and(|at| super::system_ticks() as u64 >= at);
         let chosen = {
@@ -598,7 +598,7 @@ fn wait_multi(
         match chosen {
             None => return abandon_multi(queue, slot, has_net_rx, net_rx_ready),
             Some(Some(selection))
-                if selection.source == api::completion::source::IRQ
+                if selection.source == abi::completion::source::IRQ
                     && !take_owned_line(caller_id, selection.result as u8) =>
             {
                 // Revoked between peek and take. The flag observation goes
@@ -724,7 +724,7 @@ fn finish_multi(
     let reported = settle_multi(queue, slot, has_net_rx, selection);
     let written = write_completion(caller_id, out_ptr, reported);
     if written.is_err() {
-        if reported.source == api::completion::source::IPC {
+        if reported.source == abi::completion::source::IPC {
             let mut guard = super::SCHEDULER.lock();
             if let Some(task) = guard
                 .as_mut()
@@ -732,9 +732,9 @@ fn finish_multi(
             {
                 let _ = super::async_ipc::restore_notification(task, reported.result as usize);
             }
-        } else if reported.source == api::completion::source::NET_RX {
+        } else if reported.source == abi::completion::source::NET_RX {
             waker::relevel_net_rx();
-        } else if reported.source == api::completion::source::IRQ {
+        } else if reported.source == abi::completion::source::IRQ {
             repend_owned_line(caller_id, reported.result as u8);
         }
     }
@@ -753,7 +753,7 @@ pub(super) fn settle_multi(
     has_net_rx: bool,
     selection: Selection,
 ) -> Completion {
-    if selection.source == api::completion::source::NET_RX {
+    if selection.source == abi::completion::source::NET_RX {
         // The reservation either completed (its record is reported) or the
         // level flag was the evidence (the released slot carries the record).
         return loop {
@@ -762,7 +762,7 @@ pub(super) fn settle_multi(
                 NetRxCleanupStep::NoRecord => {
                     break Completion {
                         slot,
-                        source: api::completion::source::NET_RX,
+                        source: abi::completion::source::NET_RX,
                         result: selection.result,
                     }
                 }
@@ -847,8 +847,8 @@ mod tests {
     use alloc::sync::Arc;
     use types::CellId;
 
-    const NET_RX: u32 = api::completion::source::NET_RX;
-    const IPC: u32 = api::completion::source::IPC;
+    const NET_RX: u32 = abi::completion::source::NET_RX;
+    const IPC: u32 = abi::completion::source::IPC;
     const TID: usize = 72_201;
 
     fn queue() -> Arc<CompletionQueue> {
@@ -1004,8 +1004,8 @@ mod tests {
 
     // ---- IRQ source (04b CP1 §3.3-§3.4, §9) ----
 
-    const IRQ: u32 = api::completion::source::IRQ;
-    const TIMER: u32 = api::completion::source::TIMER;
+    const IRQ: u32 = abi::completion::source::IRQ;
+    const TIMER: u32 = abi::completion::source::TIMER;
 
     /// A task mid-`WaitCompletion` whose snapshot holds `lines`.
     fn irq_waiter(lines: &[u8], slot: completion::SlotId) -> Box<Task> {

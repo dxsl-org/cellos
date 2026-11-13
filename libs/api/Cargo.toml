@@ -4,22 +4,23 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 
+# One-cycle facade over `types`, `abi`, `wire` and `posix-shim` (Phase 13 A1):
+# every `api::` path keeps compiling while imports migrate to the split crates.
+
 [lints.rust]
-# Deny unsafe code by default, but allow exceptions in specific modules (e.g., allocator)
 unsafe_code = "deny"
 
 [dependencies]
-libm = "0.2.15"
 types = { path = "../types", version = "0.1.0" }
-postcard = { version = "1", default-features = false, features = ["postcard-derive"] }
-serde = { version = "1", default-features = false, features = ["derive"] }
-
+abi = { path = "../abi", version = "0.1.0" }
+wire = { path = "../wire", version = "0.1.0" }
+posix-shim = { path = "../posix-shim", version = "0.1.0" }
+kms-codec = { path = "../kms-codec", version = "0.1.0" }
 
 [features]
 default = []
 # Non-production contract for hostile hypervisor backend recovery images.
-hostile-backend-recovery = []
-posix = []
-# Opt-in mlibc Tier B: suppresses posix.rs C symbols so mlibc's libc.a can link
+hostile-backend-recovery = ["wire/hostile-backend-recovery"]
+# Opt-in mlibc Tier B: suppresses the posix shim's C symbols so mlibc's libc.a can link
 # without duplicate-symbol errors.  Cells that opt in must also depend on mlibc-shim.
-mlibc = []
+mlibc = ["posix-shim/mlibc"]

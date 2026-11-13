@@ -82,7 +82,7 @@ fn test_dispatch_reserved_by_another_hart(_thief: usize, _task_id: usize) -> boo
     false
 }
 
-const RT_PRIO: u8 = api::TaskPriority::RealTime as u8;
+const RT_PRIO: u8 = abi::TaskPriority::RealTime as u8;
 
 /// Capacity claims against one `(hart, priority)` bucket.
 ///
@@ -936,7 +936,7 @@ pub(crate) fn test_rollback_keeps_fifo_position(base: usize) -> bool {
     // The other member of the always-scanned pair {0, 1} (`steal_candidate`);
     // every other queue is empty here, so it is the busiest victim.
     let victim = usize::from(hart == 0);
-    let priority = api::TaskPriority::Normal as u8;
+    let priority = abi::TaskPriority::Normal as u8;
     let tids: [usize; 6] = core::array::from_fn(|n| base + n);
     for tid in tids {
         push_on_hart(victim, tid, priority);
@@ -1025,7 +1025,7 @@ mod tests {
     /// RT tasks are never counted as stealable, and `permits` filters the rest.
     #[test]
     fn stealable_count_excludes_rt_and_unpermitted_tasks() {
-        let normal = api::TaskPriority::Normal as u8;
+        let normal = abi::TaskPriority::Normal as u8;
         let ready = map(&[(RT_PRIO, &[1, 2, 3]), (normal, &[4, 5, 6]), (0, &[7])]);
         assert_eq!(stealable_in(&ready, &|_| true), 4);
         assert_eq!(stealable_in(&ready, &|id| id != 5), 3);
@@ -1049,7 +1049,7 @@ mod tests {
         // Private hart slots and ids: no other host test touches these.
         let (origin, peer) = (MAX_HARTS - 10, MAX_HARTS - 9);
         let (outgoing, next) = (0x4807_0001, 0x4807_0002);
-        let normal = api::TaskPriority::Normal as u8;
+        let normal = abi::TaskPriority::Normal as u8;
 
         // Scheduler under SCHEDULER: the outgoing identity is replaced by the
         // incoming one, and the save guard plus selection pin are armed.

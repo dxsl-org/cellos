@@ -14,8 +14,8 @@
 //! subscriber lock; nothing here allocates or takes another lock.
 
 use crate::sync::Spinlock;
-use api::cell_owner::CellOwner;
-use api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_VERSION};
+use abi::cell_owner::CellOwner;
+use abi::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_VERSION};
 
 /// Records kept at once.
 pub const MAX_RECORDS: usize = 64;

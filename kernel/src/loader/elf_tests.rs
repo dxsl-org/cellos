@@ -5,12 +5,12 @@
 //! with standard `assert!`/`assert_eq!` — a failing assert panics the kernel,
 //! which is intentional (hard failure = detected early).
 
-use api::manifest::{
+use abi::manifest::{
     CellManifest, MANIFEST_FLAGS_MASK, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK,
     MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1, PROTECTION_CLASS_LEGACY,
     PROTECTION_CLASS_STANDARD,
 };
-use api::syscall::ViSyscall;
+use abi::syscall::ViSyscall;
 use types::{ViError, ViResult};
 
 /// Run all ELF + relocation tests and log a summary.

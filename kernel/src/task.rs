@@ -357,7 +357,7 @@ fn wake_after_ipc_publish(target: &mut Task, recv_eligible: bool) -> IpcWakeCaus
     } else if matches!(
         target.state,
         TaskState::Blocked { wait: WaitKind::Completion { source, delivery: Delivery::Queue, .. }, .. }
-            if source & api::completion::source::NET_RX != 0
+            if source & abi::completion::source::NET_RX != 0
     ) {
         IpcWakeCause::NetRxCompletionWait
     } else {
@@ -2638,7 +2638,7 @@ fn is_trusted_input_sender(caller_id: usize) -> bool {
     let input_tid =
         crate::dev::driver_cell::INPUT_CELL_TID.load(core::sync::atomic::Ordering::Acquire);
     let compositor_tid =
-        crate::cell::service_registry::lookup(api::syscall::service::COMPOSITOR).unwrap_or(0);
+        crate::cell::service_registry::lookup(abi::syscall::service::COMPOSITOR).unwrap_or(0);
     (caller_id == input_tid && input_tid != 0)
         || (caller_id == compositor_tid && compositor_tid != 0)
 }
@@ -2794,7 +2794,7 @@ pub fn ipc_try_send(
         (Some(c), Some(t)) => {
             c.cell_id == t.cell_id
                 && msg_bytes.len() <= 8
-                && msg_bytes.first() == Some(&api::ipc::REACTOR_WAKE_OPCODE)
+                && msg_bytes.first() == Some(&abi::kernel_ipc::REACTOR_WAKE_OPCODE)
         }
         _ => false,
     };
@@ -2813,7 +2813,7 @@ pub fn ipc_try_send(
             if target
                 .pending_msgs
                 .iter()
-                .any(|m| m.payload().first() == Some(&api::ipc::REACTOR_WAKE_OPCODE))
+                .any(|m| m.payload().first() == Some(&abi::kernel_ipc::REACTOR_WAKE_OPCODE))
             {
                 return Ok(());
             }

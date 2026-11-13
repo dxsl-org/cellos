@@ -7,7 +7,7 @@ proves POSIX behaviour, so a behavioural status needs a behavioural anchor.
 
 Discovery:
 
-    Tier A  libs/api/src/services/posix/**.rs
+    Tier A  libs/posix-shim/src/**.rs
             `#[no_mangle]` items that are `extern "C" fn` or `static`, plus
             identifiers passed to a `macro_rules!` macro whose body emits a
             `#[no_mangle]` function (the C99 math bridge). A symbol defined
@@ -53,7 +53,7 @@ from collections import Counter
 from pathlib import Path
 
 LEDGER = Path("docs/posix-ledger.md")
-TIER_A_DIR = Path("libs/api/src/services/posix")
+TIER_A_DIR = Path("libs/posix-shim/src")
 TIER_B_DIR = Path("third_party/mlibc/sysdeps/vicell/generic")
 EVIDENCE_DIR = "docs/evidence/"
 

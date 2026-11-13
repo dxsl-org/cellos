@@ -10,7 +10,7 @@
 #include <stddef.h>
 
 // BEGIN generated syscall numbers (scripts/gen-syscall-headers.py)
-// Source: libs/api/abi/syscalls.toml. Do not edit by hand.
+// Source: libs/abi/abi/syscalls.toml. Do not edit by hand.
 #define VI_SYS_EXIT 60
 #define VI_SYS_SPAWN 5
 #define VI_SYS_SET_TLS_BASE 9

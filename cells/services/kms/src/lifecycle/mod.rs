@@ -1,4 +1,4 @@
-use types::kms::{KmsErrorCode, RELAY_CSR_CHUNK_LEN, RELAY_CSR_MAX_LEN};
+use kms_codec::{KmsErrorCode, RELAY_CSR_CHUNK_LEN, RELAY_CSR_MAX_LEN};
 
 mod pending;
 
@@ -441,7 +441,7 @@ impl RelayLifecycle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use types::kms::KmsErrorCode;
+    use kms_codec::KmsErrorCode;
 
     fn supervisor() -> SupervisorContext {
         SupervisorContext {

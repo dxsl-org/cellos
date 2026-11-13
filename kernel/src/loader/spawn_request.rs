@@ -23,7 +23,7 @@ impl SpawnRequest {
         Self {
             spawner: crate::task::cap::Spawner::Root,
             caller: None,
-            priority: api::TaskPriority::Normal as u8,
+            priority: abi::TaskPriority::Normal as u8,
             replacement: None,
             inherit_from: 0,
             argv: None,
@@ -87,7 +87,7 @@ impl SpawnRequest {
                 generation,
                 ceiling: caller_authority,
             }),
-            priority: api::TaskPriority::Normal as u8,
+            priority: abi::TaskPriority::Normal as u8,
             replacement: Some(replacement),
             inherit_from: tid,
             argv,
@@ -116,7 +116,7 @@ mod tests {
             (3, 11),
             caller_authority,
             CapSet::EMPTY,
-            api::TaskPriority::Normal as u8,
+            abi::TaskPriority::Normal as u8,
             None,
             false,
         );

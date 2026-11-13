@@ -7,7 +7,7 @@ pub mod sd;
 pub mod sdhci;
 
 use crate::sync::Spinlock;
-use api::block::ViBlockDevice;
+use abi::block::ViBlockDevice;
 use emmc::EmmcBlock;
 use sd::SdBlock;
 use sdhci::SdhciAccessPolicy;

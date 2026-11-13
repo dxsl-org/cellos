@@ -1,5 +1,5 @@
 use super::mmc::MmcBlock;
-use api::block::ViBlockDevice;
+use abi::block::ViBlockDevice;
 use types::{ViError, ViResult};
 
 static MMC_ZST: MmcBlock = MmcBlock;

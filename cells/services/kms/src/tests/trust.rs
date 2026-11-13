@@ -10,13 +10,13 @@ use alloc::vec::Vec;
 
 use api::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT, CALLER_FLAG_VFS_MUTATE};
 use api::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsRequestV1, KmsTrustQueryKind, SshAbortRequestPayload,
     SshChunkAckPayload, SshChunkRequestPayload, SshImportCommitRequestPayload,
     SshTransferBeginResponsePayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
     TrustQueryBeginRequestPayload, KMS_SSH_CHUNK_LEN,
 };
+use sha2::{Digest, Sha256};
 
 use crate::trust::{lookup, TrustIo};
 use crate::{KmsService, ServiceRegistrySnapshot};

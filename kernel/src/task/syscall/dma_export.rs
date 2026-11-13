@@ -31,9 +31,9 @@
 use super::super::SCHEDULER;
 use super::SyscallError;
 use crate::sync::Spinlock;
+use abi::dma_export::{ViDmaExportV1, EXPORT_DEVICE_WRITE, EXPORT_FLAGS_KNOWN, EXPORT_MAX_BYTES};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use api::dma_export::{ViDmaExportV1, EXPORT_DEVICE_WRITE, EXPORT_FLAGS_KNOWN, EXPORT_MAX_BYTES};
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 const PAGE: usize = 4096;
@@ -55,7 +55,7 @@ pub(crate) const TEST_EXPORT_SERVICE: u16 = 0x7AE0;
 
 /// Services whose live provider may hold exports (D-G4). Each entry is an owner
 /// decision; `test-hooks` images also admit [`TEST_EXPORT_SERVICE`].
-pub(crate) const DMA_EXPORT_SERVICES: [u16; 1] = [api::syscall::service::XE_GPU];
+pub(crate) const DMA_EXPORT_SERVICES: [u16; 1] = [abi::syscall::service::XE_GPU];
 
 /// Whether `service` may name a holder in this image.
 pub(crate) fn holder_service_allowed(service: u16) -> bool {

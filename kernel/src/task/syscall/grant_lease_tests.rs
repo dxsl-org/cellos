@@ -14,8 +14,8 @@ use super::{
 use crate::memory::pin;
 use crate::sched::scheduler::Scheduler;
 use crate::task::{tcb::Task, SCHEDULER};
+use abi::syscall::{grant_slice::LEASE, ViSyscall};
 use alloc::collections::BTreeMap;
-use api::syscall::{grant_slice::LEASE, ViSyscall};
 use types::{CellId, GrantPerm};
 
 const HOLDER_TID: usize = 53_001;

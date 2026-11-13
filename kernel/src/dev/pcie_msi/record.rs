@@ -6,7 +6,7 @@ use super::config::{
 };
 use super::layout::MsixLayout;
 use crate::dev::pcie_ecam::{Bar, PciDevice};
-use api::pcie_function::{
+use abi::pcie_function::{
     PcieBar, PcieCap, ViPcieFunctionV1, BAR_FLAG_MSIX_CARVED, BAR_FLAG_PREFETCHABLE,
     BAR_KIND_ABSENT, BAR_KIND_IO, BAR_KIND_MEM32, BAR_KIND_MEM64, FLAG_DMA_REMAPPED,
     FLAG_MSIX_PRESENT, FLAG_MSI_FORBIDDEN_BY_FIRMWARE, FLAG_MSI_PRESENT, PCIE_CAP_BYTES,

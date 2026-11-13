@@ -1,7 +1,7 @@
 use super::super::tcb::Task;
+use abi::fs::{BoxFuture, FileResult, SeekFrom, ViFile};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use api::fs::{BoxFuture, FileResult, SeekFrom, ViFile};
 use types::{CellId, ViError, ViResult};
 
 pub(super) const TASK_A: usize = 0xF570;
@@ -106,7 +106,7 @@ pub(super) fn install_failing_file() {
                 crate::memory::heap::p01_owner::TASK_FIELDS,
             );
             task.open_files
-                .insert(FAILING_FD, api::fs::FileHandle::new(Box::new(FailingFile)));
+                .insert(FAILING_FD, abi::fs::FileHandle::new(Box::new(FailingFile)));
         }
     }
 }

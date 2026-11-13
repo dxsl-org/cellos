@@ -1,5 +1,5 @@
 use api::caller_identity::CallerIdentity;
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, KmsProviderKind, KmsRequestV1, RelayProviderAssessment,
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
 };

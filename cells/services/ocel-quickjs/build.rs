@@ -64,7 +64,7 @@ fn main() {
 
     // The engine links against the Tier-A C ABI, which `libs/api` provides only
     // on riscv64/aarch64 (`#![cfg(any(target_arch = "riscv64",
-    // target_arch = "aarch64", …))]` in `libs/api/src/services/posix.rs`). On any
+    // target_arch = "aarch64", …))]` in `libs/posix-shim/src/lib.rs`). On any
     // other target — and on a host with no ELF-capable C compiler — the cell
     // builds as a stub that says so instead of failing the workspace build at
     // link time. Same shape as the Lua cell's `lua_c_unavailable`.

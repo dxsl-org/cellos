@@ -14,7 +14,7 @@
 //! without overwriting the singleton NIC owner.
 
 use crate::sync::Spinlock;
-use api::block_route::{
+use abi::block_route::{
     DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION, FLAG_PROVIDER_LIVE,
     MAX_BLOCK_ROUTES,
 };
@@ -370,7 +370,7 @@ mod tests {
         publish_role_or_rollback, reset_block_routes, BlockDeviceName, NicDriverState,
         GPU_DRIVER_CELL, INPUT_CELL_TID, NIC_DRIVER_STATE, USB_HID_PRODUCER_CELL,
     };
-    use api::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI, MAX_BLOCK_ROUTES};
+    use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI, MAX_BLOCK_ROUTES};
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     fn pci(bdf: u64) -> DeviceKey {

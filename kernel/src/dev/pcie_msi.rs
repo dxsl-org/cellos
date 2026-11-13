@@ -17,11 +17,11 @@ pub use virtio_gate::dma_bypasses_iommu;
 
 use crate::dev::{irq_wait, pcie_ecam};
 use crate::sync::Spinlock;
-use alloc::vec::Vec;
-use api::pcie_function::{
+use abi::pcie_function::{
     PcieIrqAlloc, ViPcieFunctionV1, IRQ_KIND_MSI, IRQ_KIND_MSIX, IRQ_MODE_ALLOW_MSI,
     IRQ_MODE_ALLOW_MSIX, IRQ_WANT_MAX,
 };
+use alloc::vec::Vec;
 use config::{Config, CAP_ID_MSI, CAP_ID_MSIX};
 use core::sync::atomic::{AtomicBool, Ordering};
 use vectors::VectorPool;
@@ -366,13 +366,13 @@ mod tests {
         let other_alloc = allocate_for_test(OTHER_TID, 0x0020, 1);
 
         // Clear any leftover pending NET_RX.
-        let _ = crate::task::waker::consume_pending(api::syscall::events::NET_RX);
+        let _ = crate::task::waker::consume_pending(abi::syscall::events::NET_RX);
 
         // MSI for non-NIC driver: signals IRQ but does NOT signal NET_RX.
         on_msi(other_alloc.first_irq);
         assert!(irq_wait::take_pending(other_alloc.first_irq));
         assert_eq!(
-            crate::task::waker::consume_pending(api::syscall::events::NET_RX),
+            crate::task::waker::consume_pending(abi::syscall::events::NET_RX),
             0
         );
 
@@ -383,8 +383,8 @@ mod tests {
         on_msi(nic_alloc.first_irq);
         assert!(irq_wait::take_pending(nic_alloc.first_irq));
         assert_eq!(
-            crate::task::waker::consume_pending(api::syscall::events::NET_RX),
-            api::syscall::events::NET_RX
+            crate::task::waker::consume_pending(abi::syscall::events::NET_RX),
+            abi::syscall::events::NET_RX
         );
 
         // Deregister NIC driver.

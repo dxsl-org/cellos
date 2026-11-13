@@ -12,8 +12,8 @@ use core::cmp;
 use self::runs::RunMap;
 use crate::dev::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use crate::sync::Spinlock;
-use api::block::ViBlockDevice;
-use api::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
+use abi::block::ViBlockDevice;
+use abi::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
 use types::{ViError, ViResult}; // Using Spinlock for kernel level sync
 
 // Import io traits from fatfs (0.4)
@@ -410,11 +410,11 @@ impl ViFile for FatFile {
         Ok(n)
     }
 
-    fn seek(&mut self, pos: api::fs::SeekFrom) -> ViResult<u64> {
+    fn seek(&mut self, pos: abi::fs::SeekFrom) -> ViResult<u64> {
         let new_pos = match pos {
-            api::fs::SeekFrom::Start(off) => off,
-            api::fs::SeekFrom::Current(off) => (self.pos as i64 + off) as u64,
-            api::fs::SeekFrom::End(off) => {
+            abi::fs::SeekFrom::Start(off) => off,
+            abi::fs::SeekFrom::Current(off) => (self.pos as i64 + off) as u64,
+            abi::fs::SeekFrom::End(off) => {
                 // We need file size to seek from end
                 let fs_lock = self.fs.lock();
                 let root = fs_lock.root_dir();

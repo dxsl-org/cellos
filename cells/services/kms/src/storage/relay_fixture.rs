@@ -2,13 +2,13 @@ use core::cell::Cell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 mod enroll;
 
-use p256::ecdsa::signature::hazmat::PrehashSigner;
-use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayP256StatusPayload,
     RelayProviderAssessment,
 };
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
+use sha2::{Digest, Sha256};
 
 use super::{RelayP256Status, RelaySignError};
 

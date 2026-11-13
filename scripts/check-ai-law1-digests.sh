@@ -19,7 +19,7 @@ PROTO_CODES="libs/ai-proto/src/lib.rs"
 SDK="libs/ai-sdk/src/lib.rs"
 SDK_TRANSPORT="libs/ai-sdk/src/transport.rs"
 SDK_OSTD="libs/ai-sdk/src/ostd_transport.rs"
-ABI="libs/api/src/abi/syscall.rs"
+ABI="libs/abi/src/syscall.rs"
 SPEC17="docs/specs/17-ipc-wire-contract.md"
 
 for file in "$PROTO" "$SDK" "$SDK_TRANSPORT" "$SDK_OSTD" "$ABI" "$SPEC17"; do

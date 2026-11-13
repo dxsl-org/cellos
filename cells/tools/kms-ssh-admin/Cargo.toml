@@ -21,7 +21,7 @@ base64ct = { version = "1", default-features = false }
 # against the real KMS state machine with the SSH development custody. Local path edges
 # only; neither is a dependency of the cell itself.
 service-kms = { path = "../../services/kms", version = "0.1.0", features = ["ssh-dev-custody"] }
-types = { path = "../../../libs/types", version = "0.1.0" }
+kms-codec = { path = "../../../libs/kms-codec", version = "0.1.0" }
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

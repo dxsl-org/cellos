@@ -4,12 +4,12 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, SshAbortRequestPayload, SshChunkAckPayload,
     SshChunkRequestPayload, SshImportBeginRequestPayload, SshImportCommitRequestPayload,
     SshKeyStatusPayload, SshTransferBeginResponsePayload, KMS_SSH_CHUNK_LEN, KMS_SSH_KEY_NAME_MAX,
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
 
 use super::limits::STAGING_LEN;
@@ -17,7 +17,7 @@ use super::parser::{parse_outer, Cipher, Reject};
 use super::store::{key_status, StoredIdentity};
 use super::unwrap::plain_seed;
 use super::{LeafState, Principal, SshLeaf, SshPersist, Stored, Transfer, HANDLE_IMPORT};
-use types::kms::KmsCustodyPosture;
+use kms_codec::KmsCustodyPosture;
 
 /// One 64 KiB staging buffer, allocated lazily on the first Begin, retained
 /// for the life of the cell and wiped (never freed) on every exit: no heap

@@ -20,9 +20,9 @@ use super::tcb::{Task, TaskState};
 use super::{wake_sender_token, SCHEDULER};
 use crate::ipc::ipc_wire::IpcWireHeader;
 use crate::sched::smp::{is_rt_hart_online, HART_RT};
+use abi::TaskPriority;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use api::TaskPriority;
 use types::CellId;
 
 // Synthetic tids above the range the boot sequence assigns, removed before return.

@@ -1,6 +1,6 @@
 use super::fixture::{check, TASK_A, TASK_B, TEST_DIR, TEST_FILE};
-use api::fs::SeekFrom;
-use api::syscall::{
+use abi::fs::SeekFrom;
+use abi::syscall::{
     VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER, VI_FSTAT_KIND_DIRECTORY,
     VI_FSTAT_KIND_REGULAR,
 };

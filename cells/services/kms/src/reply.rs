@@ -1,4 +1,4 @@
-use types::kms::{KmsErrorCode, KMS_PAYLOAD_LEN};
+use kms_codec::{KmsErrorCode, KMS_PAYLOAD_LEN};
 
 pub(crate) struct SuccessPayload {
     bytes: [u8; KMS_PAYLOAD_LEN],

@@ -1,8 +1,8 @@
 //! K5-local bounds. Everything already frozen by the ABI is re-used from
-//! `types::kms`; the parser-side bounds (KDF salt/rounds, stored wrapped size)
+//! `kms_codec`; the parser-side bounds (KDF salt/rounds, stored wrapped size)
 //! live in `parser.rs` so that file stays `core`-only.
 
-use types::kms::{KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_USERNAME_MAX};
+use kms_codec::{KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_USERNAME_MAX};
 
 /// Consecutive `SshUnlockFailed` results after which the key is locked (O-5).
 pub(crate) const FAIL_LIMIT: u8 = 5;

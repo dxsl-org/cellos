@@ -1,11 +1,11 @@
 mod enroll;
 
-use ostd::service::provider_tid;
-use ostd::syscall::{sys_recv_timeout, SyscallResult};
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayP256StatusPayload,
     RelayProviderAssessment,
 };
+use ostd::service::provider_tid;
+use ostd::syscall::{sys_recv_timeout, SyscallResult};
 use types::silo::{
     DevelopmentSiloError, DevelopmentSiloRequest, DevelopmentSiloResponse,
     DEVELOPMENT_PROFILE_DIGEST, DEVELOPMENT_RELAY_GENERATION, DEVELOPMENT_SILO_FRAME_LEN,

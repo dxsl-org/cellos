@@ -13,7 +13,7 @@ use crate::session::sha256;
 use alloc::vec::Vec;
 use api::cell_session::ObjectRefV1;
 use api::ipc::ssh_trust;
-use types::kms::{
+use kms_codec::{
     KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshImportCommitRequestPayload,
     SshTransferBeginResponsePayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
     TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,
@@ -192,7 +192,7 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::rc::Rc;
     use core::cell::RefCell;
-    use types::kms::{
+    use kms_codec::{
         KmsRequestV1, KmsResponseV1, SshChunkAckPayload, SshChunkRequestPayload, KMS_MESSAGE_LEN,
     };
 

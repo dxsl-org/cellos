@@ -1,5 +1,5 @@
 use super::*;
-use types::kms::{
+use kms_codec::{
     NoiseStaticDhRequestPayload, RotateNodeIdentityReason, RotateNodeIdentityRequestPayload,
     KMS_NODE_KEY_ID_C2C,
 };
@@ -33,7 +33,7 @@ fn noise_dh_validates_metadata_before_root_gate() {
     let mut service = KmsService::new();
     let binding = bind(&mut service, 7);
     let mut payload = NoiseStaticDhRequestPayload {
-        handle: types::kms::NodeIdentityHandle(1),
+        handle: kms_codec::NodeIdentityHandle(1),
         key_id: KMS_NODE_KEY_ID_C2C,
         reserved: 0,
         binding_epoch: binding.binding_epoch,

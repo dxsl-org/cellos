@@ -641,7 +641,7 @@ impl CellAuthority {
     /// Allocate a CSpace slot for an open BootFS file, held by this Cell.
     pub fn allocate_file_slot(
         &mut self,
-        file_box: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
+        file_box: alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync>,
         rights: u32,
     ) -> Result<u64, ControlStatus> {
         let ticket = self.mint_kernel_root(ResourceKind::BootFSFile, rights, false)?;
@@ -658,7 +658,7 @@ impl CellAuthority {
         &mut self,
         ticket: u64,
         required_rights: u32,
-    ) -> Result<alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>, ControlStatus> {
+    ) -> Result<alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync>, ControlStatus> {
         let slot_idx = self.live_slot_index(ticket)?;
         let slot = &self.slots[slot_idx];
         if slot.kind != ResourceKind::BootFSFile {
@@ -684,7 +684,7 @@ impl CellAuthority {
     pub fn unpark_file(
         &mut self,
         ticket: u64,
-        file_box: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
+        file_box: alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync>,
     ) {
         crate::cell::cap_registry::unpark_ticket_file(
             (self.cell_id.0, self.generation, ticket),

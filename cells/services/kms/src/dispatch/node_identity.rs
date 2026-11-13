@@ -1,5 +1,5 @@
 use api::caller_identity::CallerIdentity;
-use types::kms::{
+use kms_codec::{
     BindingEpoch, KmsErrorCode, KmsRequestV1, NoiseStaticDhRequestPayload,
     RotateNodeIdentityRequestPayload, KMS_NODE_KEY_ID_C2C,
 };

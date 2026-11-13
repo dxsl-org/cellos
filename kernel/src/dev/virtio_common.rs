@@ -95,7 +95,7 @@ pub(crate) enum SlotProbe {
     NotASlot,
     /// No VirtIO transport a Cell can name answers there.
     NoTransport,
-    /// [`api::syscall::virtio_probe::encode`]d DeviceID and Status.
+    /// [`abi::syscall::virtio_probe::encode`]d DeviceID and Status.
     Identity(usize),
 }
 
@@ -103,7 +103,7 @@ pub(crate) enum SlotProbe {
 /// kernel mapping, without claiming the slot.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub(crate) fn probe_slot(base: usize) -> SlotProbe {
-    use api::syscall::virtio_probe::{
+    use abi::syscall::virtio_probe::{
         encode, DEVICE_ID_OFFSET, MAGIC, MAGIC_OFFSET, STATUS_OFFSET,
     };
     if !is_slot_base(base, virtio_slots().map(|slot| slot.base)) {

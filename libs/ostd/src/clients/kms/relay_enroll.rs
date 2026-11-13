@@ -1,4 +1,4 @@
-use types::kms::{
+use kms_codec::{
     validate_hostname, KmsOpcode, RelayActivePublicKeyPayload, RelayCsrChunkRequestPayload,
     RelayCsrChunkResponsePayload, RelayEnrollmentAbortRequestPayload,
     RelayEnrollmentBeginRequestPayload, RelayEnrollmentBeginResponsePayload,

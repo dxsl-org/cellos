@@ -216,7 +216,7 @@ pub(crate) fn observe_complete(sched: &crate::sched::scheduler::Scheduler, tid: 
         && (expected & trusted == 0
             || (task.is_critical
                 && task.rights.supervisor
-                && task.priority == api::TaskPriority::Normal as u8
+                && task.priority == abi::TaskPriority::Normal as u8
                 && task.rights == super::super::boot_ceiling::boot_ceiling("/bin/init")));
     if complete {
         LAST_OBSERVED.fetch_or(expected, Ordering::Release);

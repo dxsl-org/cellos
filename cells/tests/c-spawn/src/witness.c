@@ -41,7 +41,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Kernel ABI opcodes (libs/api/src/abi/syscall.rs). */
+/* Kernel ABI opcodes (libs/abi/src/syscall.rs). */
 #define CELLOS_SYSCALL_PIPE_CREATE 19u
 #define CELLOS_SYSCALL_PIPE_READ 22u
 #define CELLOS_SYSCALL_PIPE_CLOSE 24u

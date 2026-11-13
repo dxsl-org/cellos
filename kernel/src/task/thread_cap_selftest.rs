@@ -20,8 +20,8 @@
 use super::cap::CapSet;
 use super::syscall::{handle_syscall, Syscall, SyscallError};
 use super::tcb::Task;
-use api::services::proto::app_envelope;
-use api::syscall::cap_mask as CM;
+use abi::app_envelope;
+use abi::syscall::cap_mask as CM;
 use types::CellId;
 
 // Synthetic tids outside any range the boot sequence has assigned yet. Removed
@@ -79,7 +79,7 @@ pub(crate) fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
 pub(crate) fn insert(task: alloc::boxed::Box<Task>) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
-            let owner = api::cell_owner::CellOwner::new(
+            let owner = abi::cell_owner::CellOwner::new(
                 task.cell_id.0,
                 task.cell_generation,
                 task.root_tid as u64,
@@ -102,7 +102,7 @@ pub(crate) fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
-                let owner = api::cell_owner::CellOwner::new(
+                let owner = abi::cell_owner::CellOwner::new(
                     task.cell_id.0,
                     task.cell_generation,
                     task.root_tid as u64,

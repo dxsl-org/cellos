@@ -3,12 +3,12 @@ use crate::storage::{
     OpenedRoot, ProviderAssessment, ProviderOpenResult, SlotId,
 };
 use core::sync::atomic::{AtomicUsize, Ordering};
-use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState};
+use kms_codec::{BindingEpoch, KmsProviderKind, NodeIdentityState};
 
 fn status(
     provider: FixtureRootProvider,
     journal: JournalState,
-) -> types::kms::NodeIdentityStatusPayload {
+) -> kms_codec::NodeIdentityStatusPayload {
     assess_for_tests(&provider, &journal).status_payload(BindingEpoch(9))
 }
 

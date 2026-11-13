@@ -1,6 +1,6 @@
 //! Bounded, allocation-free classification of the manifest ELF section.
 use super::elf_section::{ElfSections, SHT_NOBITS};
-use api::manifest::{CellManifest, MANIFEST_VERSION, MANIFEST_VERSION_V1};
+use abi::manifest::{CellManifest, MANIFEST_VERSION, MANIFEST_VERSION_V1};
 
 const MANIFEST_NAME: &[u8] = b"__ViCell_manifest";
 

@@ -13,7 +13,7 @@
 
 use super::copy_glue::TaskCopyView;
 use super::syscall::{handle_syscall_kernel_origin, Syscall, SyscallError};
-use api::services::proto::app_envelope::{KIND_MESSAGE, MAGIC};
+use abi::app_envelope::{KIND_MESSAGE, MAGIC};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// One 64×64 BGRA8888 sprite, the only size `VirtIOGpu::setup_cursor` takes.
@@ -35,7 +35,7 @@ fn unpack(packed: usize) -> (usize, usize) {
 /// thread of the same Cell incarnation. Anyone else is refused.
 fn require_compositor(caller_id: usize) -> Result<(), SyscallError> {
     let Some((tid, cell_id, generation)) =
-        crate::cell::service_registry::lookup_bound(api::syscall::service::COMPOSITOR)
+        crate::cell::service_registry::lookup_bound(abi::syscall::service::COMPOSITOR)
     else {
         return Err(SyscallError::PermissionDenied);
     };

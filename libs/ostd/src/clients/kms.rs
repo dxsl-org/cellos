@@ -5,22 +5,22 @@ mod relay_enroll;
 mod ssh;
 mod trust;
 
-pub use ssh::{SSH_FRAME_TICKS, SSH_SIGN_TICKS};
-pub use trust::TRUST_COMMIT_TICKS;
 /// The K2 SSH custody types and bounds a caller needs, so `cellbox` and the admin cell
 /// depend on `ostd` alone (no extra `types` edge).
-pub use types::kms::{
+pub use kms_codec::{
     ssh_chunk_count, validate_ssh_key_name, validate_ssh_username, KmsCustodyPosture, KmsErrorCode,
     KmsSshKeyCustody, KmsWireError, SshChunkAckPayload, SshKeyStatusPayload,
     SshSignResponsePayload, SshTransferBeginResponsePayload, KMS_SSH_CHUNK_LEN,
     KMS_SSH_IMPORT_MAX_LEN, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX,
     KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN, KMS_SSH_USERNAME_MAX,
 };
+pub use ssh::{SSH_FRAME_TICKS, SSH_SIGN_TICKS};
+pub use trust::TRUST_COMMIT_TICKS;
 
 use crate::ipc::{self, IpcError};
 use crate::task;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use types::kms::{
+use kms_codec::{
     AcquireNodeIdentityPayload, BindingEpoch, BrokerBindingPayload, KmsOpcode, KmsRequestV1,
     KmsResponseV1, NodeIdentityHandle, NodeIdentityStatusPayload, NoiseStaticDhRequestPayload,
     NoiseStaticDhResponsePayload, RelayP256StatusPayload, RotateNodeIdentityReason,

@@ -6,10 +6,10 @@
 
 use core::sync::atomic::Ordering;
 
+use kms_codec::canonical_relay_cri;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{Signature, SigningKey};
 use sha2::{Digest, Sha256};
-use types::kms::canonical_relay_cri;
 
 use super::{FixtureRelayProvider, FixtureSignatureBehavior};
 use crate::storage::provider::EnrollmentKeyProof;
@@ -23,7 +23,7 @@ impl FixtureRelayProvider {
         hostname: &[u8],
     ) -> Result<EnrollmentKeyProof, RelaySignError> {
         self.record_creation();
-        if self.readiness != types::kms::KmsCapabilityReadiness::Ready {
+        if self.readiness != kms_codec::KmsCapabilityReadiness::Ready {
             return Err(RelaySignError::Unavailable);
         }
         let spki_sec1 = self.enrollment_sec1(pending_generation)?;

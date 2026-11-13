@@ -2,31 +2,32 @@
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // https://www.apache.org/licenses/LICENSE-2.0>.
 
-//! Public API for Cellos.
+//! Public API for Cellos — a one-cycle facade (Phase 13 A1).
+//!
+//! The crate was split into `abi` (frozen kernel ABI), `wire` (service
+//! contracts) and `posix-shim` (Tier-A C library), and the KMS codecs left
+//! `types` for `kms-codec`. This facade re-exports them so every existing
+//! `api::` path (including `api::kms`, Spec 23) keeps compiling while imports
+//! migrate to the split crates.
 
-// Disable `no_std` when running the test harness so `#[test]` can link
-// against the host libstd.  All production builds remain bare-metal.
 #![cfg_attr(not(test), no_std)]
-// Required for VaList::next_arg (posix stdio_fmt) on toolchains where c_variadic
-// is still unstable. The pinned nightly-2026-05-01 already stabilized it and
-// flags this declaration as unused; allow(unused_features) keeps both old and
-// new toolchains compiling clean instead of picking one at the other's expense.
-#![allow(unused_features)]
-#![feature(c_variadic)]
 
-extern crate alloc;
-
+pub use ::abi::*;
 pub use types::*;
+pub use wire::*;
 
-/// Frozen kernel ABI — changes require 2× explicit confirmation.
-pub mod abi;
-/// Extensible service interface contracts — new services go here.
-pub mod services;
+/// Frozen kernel ABI (`api::abi::…`).
+pub mod abi {
+    pub use ::abi::*;
+}
 
-// Flat re-exports: all existing `api::X` paths continue to work unchanged
-// in kernel and cell code. The abi/services split is organisational only.
-pub use abi::*;
-pub use services::*;
+/// Service interface contracts (`api::services::…`).
+pub mod services {
+    pub use posix_shim as posix;
+    pub use wire::*;
+}
 
-pub use abi::syscall::ViSyscall;
-pub use abi::task::TaskPriority;
+pub use posix_shim as posix;
+
+/// The KMS service wire (`api::kms`, formerly `types::kms`).
+pub use kms_codec as kms;

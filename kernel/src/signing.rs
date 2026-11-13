@@ -110,7 +110,7 @@ pub fn trust_anchor() -> (&'static str, [u8; 8]) {
     (posture, prefix)
 }
 
-/// The `api::cell_image` anchor class reported for an image this kernel's
+/// The `abi::cell_image` anchor class reported for an image this kernel's
 /// signature check verified. Follows the key `CELL_SIGNER_PUBKEY` actually
 /// selects (the private profile key overrides the others), not the feature
 /// list, so the class always names the key that did the verifying.
@@ -124,15 +124,15 @@ pub const fn anchor_class() -> u8 {
 
 const fn anchor_class_for(private: bool, release: bool, dev: bool) -> u8 {
     if private {
-        api::cell_image::ANCHOR_PRIVATE
+        abi::cell_image::ANCHOR_PRIVATE
     } else if release {
-        api::cell_image::ANCHOR_RELEASE
+        abi::cell_image::ANCHOR_RELEASE
     } else if dev {
-        api::cell_image::ANCHOR_DEV
+        abi::cell_image::ANCHOR_DEV
     } else {
         // The zero placeholder key verifies nothing, so no image ever reaches
         // the caller of this function with this value.
-        api::cell_image::ANCHOR_UNSIGNED
+        abi::cell_image::ANCHOR_UNSIGNED
     }
 }
 
@@ -140,7 +140,7 @@ const fn anchor_class_for(private: bool, release: bool, dev: bool) -> u8 {
 // one. A release kernel reporting `ANCHOR_DEV` would turn the public dev seed
 // into release authority, so such a build must not exist.
 const _: () = assert!(
-    !cfg!(feature = "release-signing-key") || anchor_class() != api::cell_image::ANCHOR_DEV
+    !cfg!(feature = "release-signing-key") || anchor_class() != abi::cell_image::ANCHOR_DEV
 );
 
 #[cfg(test)]
@@ -151,10 +151,10 @@ mod anchor_tests {
             let (private, release, dev) = (bits & 1 != 0, bits & 2 != 0, bits & 4 != 0);
             let class = super::anchor_class_for(private, release, dev);
             if release {
-                assert_ne!(class, api::cell_image::ANCHOR_DEV);
+                assert_ne!(class, abi::cell_image::ANCHOR_DEV);
             }
             if dev && !release && !private {
-                assert_eq!(class, api::cell_image::ANCHOR_DEV);
+                assert_eq!(class, abi::cell_image::ANCHOR_DEV);
             }
         }
     }

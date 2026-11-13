@@ -9,7 +9,7 @@
  * function returning a status.
  *
  * Freestanding build: there is no <setjmp.h>, so the posix shim's symbols
- * (libs/api/src/services/posix/setjmp.rs) are declared here. The buffer is
+ * (libs/posix-shim/src/setjmp.rs) are declared here. The buffer is
  * sized for the largest shim layout (aarch64: 22 u64 words; riscv64 uses 16,
  * x86_64 9) so one definition fits every target.
  */

@@ -1,7 +1,7 @@
 //! Per-login unlock slot (opcodes 22-24): one staged passphrase, consumed by
 //! exactly one signature attempt.
 
-use types::kms::{
+use kms_codec::{
     KmsErrorCode, SshAbortRequestPayload, SshChunkAckPayload, SshChunkRequestPayload,
     SshTransferBeginResponsePayload, SshUnlockBeginRequestPayload, KMS_SSH_CHUNK_LEN,
     KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SECRET_MAX,

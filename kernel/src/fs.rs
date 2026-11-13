@@ -3,9 +3,9 @@
 pub mod fat;
 
 use crate::sync::Spinlock;
+use abi::fs::{OpenMode, ViFileSystem};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use api::fs::{OpenMode, ViFileSystem};
 use types::{ViError, ViResult};
 
 /// Global BootFS / initramfs instance — the FAT16 `kernel_fs.img` baked into

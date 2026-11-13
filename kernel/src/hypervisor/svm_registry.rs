@@ -633,7 +633,7 @@ pub fn x86_smoke() {
 
     // Drive the vCPU through the PUBLIC syscall-level path so the P04 HAL→API
     // ViVmExit conversion (VERSION 2) is exercised, not just the HAL decode.
-    use api::hypervisor::ViVmExit as ApiVmExit;
+    use abi::hypervisor::ViVmExit as ApiVmExit;
     let mut e = ApiVmExit::Unknown { ec: 0, iss: 0 };
     let mut got_port = false;
     let mut got_hlt = false;
@@ -698,7 +698,7 @@ pub fn x86_mmio_smoke() {
         return;
     }
 
-    use api::hypervisor::ViVmExit as ApiVmExit;
+    use abi::hypervisor::ViVmExit as ApiVmExit;
     let mut read = ApiVmExit::Unknown { ec: 0, iss: 0 };
     let mut port = ApiVmExit::Unknown { ec: 0, iss: 0 };
     let mut hlt = ApiVmExit::Unknown { ec: 0, iss: 0 };
@@ -747,14 +747,14 @@ pub fn x86_mmio_smoke() {
 /// leaves the host IRQ pending, so each `Preempted` opens a one-instruction IF
 /// window to service it; without that the next entry exits on it again.
 #[cfg(any(feature = "test-hooks", feature = "x86-mmio-smoke"))]
-fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut api::hypervisor::ViVmExit) {
+fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut abi::hypervisor::ViVmExit) {
     let interrupts_were_enabled = interrupts_enabled();
     for _ in 0..1024 {
         // `owner` owns this single-vCPU VM; a failed run keeps the last exit.
         if let Ok(next) = super::registry::run_vcpu(owner, vm_id, 1, 0) {
             *exit = next;
         }
-        if !matches!(exit, api::hypervisor::ViVmExit::Preempted) {
+        if !matches!(exit, abi::hypervisor::ViVmExit::Preempted) {
             break;
         }
         // Service the pending host IRQ without parking or entering the scheduler;

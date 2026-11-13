@@ -7,7 +7,7 @@ use super::{
 use crate::sched::scheduler::Scheduler;
 use crate::task::cap::CapSet;
 use crate::task::{tcb::Task, SCHEDULER};
-use api::syscall::ViSyscall;
+use abi::syscall::ViSyscall;
 use types::CellId;
 
 /// One live task holding the pre-annex rights (`LEGACY_OBSERVE_MUTATE`), so
@@ -122,7 +122,7 @@ fn telemetry_syscalls_need_the_observe_rights_beyond_the_allowlist_bit() {
 /// in an explicit allowlist AND the `vfs_mutate` right.
 #[test]
 fn vfs_mutate_attestation_needs_the_right_and_the_declaration() {
-    use api::caller_identity::CALLER_FLAG_VFS_MUTATE;
+    use abi::caller_identity::CALLER_FLAG_VFS_MUTATE;
     let declared = (1u64 << 62) | (1u64 << 63);
     let w_only = CapSet {
         vfs_mutate: true,
@@ -159,7 +159,7 @@ fn vfs_mutate_attestation_needs_the_right_and_the_declaration() {
                 task.cell_generation = 1;
                 task.root_tid = tid;
                 assert!(sched
-                    .publish_live_cell_owner(api::cell_owner::CellOwner::new(7, 1, tid as u64)));
+                    .publish_live_cell_owner(abi::cell_owner::CellOwner::new(7, 1, tid as u64)));
             }
             let identity = super::attested_identity_of(tid).expect("live task has an identity");
             assert_eq!(
@@ -176,7 +176,7 @@ fn vfs_mutate_attestation_needs_the_right_and_the_declaration() {
 /// never appears for a Cell without the right.
 #[test]
 fn config_write_attestation_follows_the_cell_right_only() {
-    use api::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_NET_RIGHTS_MASK};
+    use abi::caller_identity::{CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_NET_RIGHTS_MASK};
     let q_only = CapSet {
         config_write: true,
         ..CapSet::EMPTY
@@ -209,7 +209,7 @@ fn config_write_attestation_follows_the_cell_right_only() {
                 task.cell_generation = 1;
                 task.root_tid = tid;
                 assert!(sched
-                    .publish_live_cell_owner(api::cell_owner::CellOwner::new(7, 1, tid as u64)));
+                    .publish_live_cell_owner(abi::cell_owner::CellOwner::new(7, 1, tid as u64)));
             }
             let identity = super::attested_identity_of(tid).expect("live task has an identity");
             assert_eq!(
@@ -234,7 +234,7 @@ fn config_write_attestation_follows_the_cell_right_only() {
 /// right of its Cell root.
 #[test]
 fn kms_ssh_attestation_follows_the_cell_right_only() {
-    use api::caller_identity::{
+    use abi::caller_identity::{
         CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN,
         CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE,
     };
@@ -287,7 +287,7 @@ fn kms_ssh_attestation_follows_the_cell_right_only() {
                 task.cell_generation = 1;
                 task.root_tid = tid;
                 assert!(sched
-                    .publish_live_cell_owner(api::cell_owner::CellOwner::new(7, 1, tid as u64)));
+                    .publish_live_cell_owner(abi::cell_owner::CellOwner::new(7, 1, tid as u64)));
                 // A thread of the same Cell generation holds no CapSet of its
                 // own; it must report whatever its Cell root holds.
                 let mut thread = alloc::boxed::Box::new(Task::new(
@@ -336,7 +336,7 @@ fn kms_ssh_attestation_follows_the_cell_right_only() {
 /// thread keeps authority the Cell lost.
 #[test]
 fn cap_revoke_on_a_worker_removes_the_right_from_every_thread_of_the_cell() {
-    use api::syscall::cap_mask as CM;
+    use abi::syscall::cap_mask as CM;
     const CONTROLLER: usize = 201;
     const ROOT: usize = 202;
     const WORKER: usize = 203;
@@ -404,7 +404,7 @@ fn cap_revoke_on_a_worker_removes_the_right_from_every_thread_of_the_cell() {
 /// already withholds the right from every task of the Cell.
 #[test]
 fn cap_revoke_pending_mask_holds_and_survives_target_exit() {
-    use api::syscall::cap_mask as CM;
+    use abi::syscall::cap_mask as CM;
     const CONTROLLER: usize = 211;
     const ROOT: usize = 212;
     const WORKER: usize = 213;
@@ -498,7 +498,7 @@ fn cap_revoke_pending_mask_holds_and_survives_target_exit() {
 /// is denied: this is the architecture review C-1 regression check.
 #[test]
 fn raw_shutdown_is_accepted_only_for_the_signed_shutdown_image() {
-    use api::cell_image::{ImageIdentity, ANCHOR_DEV};
+    use abi::cell_image::{ImageIdentity, ANCHOR_DEV};
     let _guard = crate::TEST_STATE_LOCK.lock();
     let mut previous = SCHEDULER.lock();
     let saved = previous.take();
@@ -604,7 +604,7 @@ fn staging_an_argv_without_a_live_task_stores_nothing() {
 #[test]
 fn telemetry_snapshot_maps_all_four_args_and_validates_them() {
     use crate::task::telemetry::request_is_valid;
-    use api::telemetry::{request, HEADER_LEN};
+    use abi::telemetry::{request, HEADER_LEN};
     let syscall = map_syscall(ViSyscall::TelemetrySnapshot as usize, 0x3000, 4096, 3, 0)
         .expect("TelemetrySnapshot must decode");
     match syscall {
@@ -639,7 +639,7 @@ fn telemetry_snapshot_maps_all_four_args_and_validates_them() {
 
 #[test]
 fn wait_completion_refuses_mask_bits_above_31_instead_of_dropping_them() {
-    use api::completion::source::{IRQ, TIMER};
+    use abi::completion::source::{IRQ, TIMER};
     let decode = |a0: usize| match map_syscall(ViSyscall::WaitCompletion as usize, a0, 5, 0, 0x6000)
     {
         Some(Syscall::WaitCompletion { mask, out_ptr, .. }) => (mask, out_ptr),
@@ -745,7 +745,7 @@ fn query_retirement_is_gated_by_the_verdict_with_typed_errors() {
         None
     );
     assert!(super::has_typed_errors(&syscall));
-    let len = api::retirement::RETIREMENT_RECORD_LEN;
+    let len = abi::retirement::RETIREMENT_RECORD_LEN;
     let query = |tid, root_tid, out_ptr, out_len| {
         super::handle_syscall(
             tid,
@@ -762,8 +762,8 @@ fn query_retirement_is_gated_by_the_verdict_with_typed_errors() {
             check_allowlist(ViSyscall::QueryRetirement as usize, tid),
             Ok(())
         );
-        let watched = api::cell_owner::CellOwner::new(0x431, 3, 77);
-        let foreign = api::cell_owner::CellOwner::new(0x432, 3, 78);
+        let watched = abi::cell_owner::CellOwner::new(0x431, 3, 77);
+        let foreign = abi::cell_owner::CellOwner::new(0x432, 3, 78);
         assert!(retirement_verdict::open(watched, &[tid]));
         assert!(retirement_verdict::open(foreign, &[tid + 1]));
 
@@ -804,7 +804,7 @@ fn insert_block_route_task(tid: usize, cell: u64, generation: u64, caps: CapSet)
 }
 
 fn block_routes_snapshot(
-) -> [Option<api::block_route::ViBlockRouteV1>; api::block_route::MAX_BLOCK_ROUTES] {
+) -> [Option<abi::block_route::ViBlockRouteV1>; abi::block_route::MAX_BLOCK_ROUTES] {
     core::array::from_fn(crate::dev::driver_cell::block_route_record)
 }
 
@@ -814,7 +814,7 @@ fn block_routes_snapshot(
 fn register_block_driver_binds_only_the_callers_owned_device_route() {
     use crate::dev::driver_cell::{deregister_all_for, reset_block_routes};
     use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
-    use api::block_route::MAX_BLOCK_ROUTES;
+    use abi::block_route::MAX_BLOCK_ROUTES;
     const BDF: usize = 0x4160;
     const FOREIGN_BDF: usize = 0x4161;
     const BASE: usize = 0x4_1600_0000;
@@ -977,7 +977,7 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
         assert_eq!(block_routes_snapshot(), full);
 
         assert_eq!(
-            crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER),
+            crate::cell::service_registry::lookup(abi::syscall::service::BLOCK_DRIVER),
             None
         );
 
@@ -997,7 +997,7 @@ fn lookup_block_route_is_gated_on_block_io_or_spawn_with_typed_errors() {
     use crate::dev::driver_cell::{
         block_route_record, deregister_all_for, publish_block_route, reset_block_routes,
     };
-    use api::block_route::{DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN};
+    use abi::block_route::{DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_RECORD_LEN};
     let syscall = map_syscall(ViSyscall::LookupBlockRoute as usize, 3, 0x5000, 40, 0)
         .expect("LookupBlockRoute must decode");
     match syscall {
@@ -1098,14 +1098,14 @@ fn register_service_refuses_the_retired_block_driver_id() {
         let refused = super::handle_syscall(
             tid,
             Syscall::RegisterService {
-                service_id: api::syscall::service::BLOCK_DRIVER,
+                service_id: abi::syscall::service::BLOCK_DRIVER,
                 tid,
                 flags: 0,
             },
         );
         assert_eq!(refused, Err(SyscallError::PermissionDenied));
         assert_eq!(
-            crate::cell::service_registry::lookup(api::syscall::service::BLOCK_DRIVER),
+            crate::cell::service_registry::lookup(abi::syscall::service::BLOCK_DRIVER),
             None
         );
     });
@@ -1116,7 +1116,7 @@ fn register_service_refuses_the_retired_block_driver_id() {
 /// and reports "no facts" while no x86 profile is bound.
 #[test]
 fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
-    use api::machine_facts::MACHINE_FACTS_CAPACITY as CAP;
+    use abi::machine_facts::MACHINE_FACTS_CAPACITY as CAP;
     let syscall = map_syscall(ViSyscall::QueryMachineFacts as usize, 0x5000, CAP, 0, 0)
         .expect("QueryMachineFacts must decode");
     match syscall {
@@ -1232,7 +1232,7 @@ fn vendor_lookup_skips_functions_owned_by_another_driver() {
 /// distinct so a driver can tell "keep polling" from "not yours".
 #[test]
 fn pcie_function_calls_are_gated_and_typed() {
-    use api::pcie_function as pf;
+    use abi::pcie_function as pf;
     let query = Syscall::QueryPcieFunction {
         bdf: 0x18,
         out_ptr: 0x5000,
@@ -1266,7 +1266,7 @@ fn pcie_function_calls_are_gated_and_typed() {
 /// PcieDriverCap holder `NotSupported` once the arguments are well formed.
 #[test]
 fn probe_virtio_mmio_is_gated_and_typed() {
-    use api::syscall::virtio_probe as vp;
+    use abi::syscall::virtio_probe as vp;
     let decoded = super::map_syscall(442, 0x1000_1000, 0, 0, 7);
     assert!(matches!(
         decoded,
@@ -1277,7 +1277,7 @@ fn probe_virtio_mmio_is_gated_and_typed() {
     ));
     assert_eq!(
         decoded.as_ref().and_then(super::syscall_to_vi),
-        Some(api::syscall::ViSyscall::ProbeVirtioMmio)
+        Some(abi::syscall::ViSyscall::ProbeVirtioMmio)
     );
     let call = |reserved| Syscall::ProbeVirtioMmio {
         base: 0x1000_1000,
@@ -1312,7 +1312,7 @@ fn probe_virtio_mmio_is_gated_and_typed() {
 /// the action is looked at, including holders of other authority.
 #[test]
 fn system_power_is_refused_without_supervisor_cap() {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     let decoded = super::map_syscall(436, sp::ACTION_POWEROFF, 0, 0, 0);
     assert!(matches!(
         decoded,
@@ -1325,7 +1325,7 @@ fn system_power_is_refused_without_supervisor_cap() {
     ));
     assert_eq!(
         decoded.as_ref().and_then(super::syscall_to_vi),
-        Some(api::syscall::ViSyscall::SystemPower)
+        Some(abi::syscall::ViSyscall::SystemPower)
     );
     let call = |action| Syscall::SystemPower {
         action,
@@ -1362,7 +1362,7 @@ fn system_power_is_refused_without_supervisor_cap() {
 /// `\_S5_`) is `NotSupported`; each keeps its own sentinel.
 #[test]
 fn system_power_checks_action_and_arguments_behind_the_gate() {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     let supervisor = CapSet {
         supervisor: true,
         ..CapSet::EMPTY
@@ -1387,7 +1387,7 @@ fn system_power_checks_action_and_arguments_behind_the_gate() {
 /// `MACHINE_PIN`; a SpawnCap holder that is not init is refused.
 #[test]
 fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
-    use api::syscall::service::MACHINE_PIN;
+    use abi::syscall::service::MACHINE_PIN;
     let spawn = CapSet {
         spawn: true,
         ..CapSet::EMPTY
@@ -1437,7 +1437,7 @@ fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
 /// and the spawn-only cell keeps publishing its own private id.
 #[test]
 fn register_service_refuses_well_known_hijack_by_a_spawn_only_cell() {
-    use api::syscall::service::VFS;
+    use abi::syscall::service::VFS;
     const HIJACKER: usize = 0x5_1D01;
     const SUPERVISOR: usize = 0x5_1D02;
     const PRIVATE_ID: u16 = 0x7A5E;
@@ -1493,7 +1493,7 @@ fn register_service_refuses_well_known_hijack_by_a_spawn_only_cell() {
         assert_eq!(register(SUPERVISOR, VFS, SUPERVISOR), Ok(0));
         assert_eq!(crate::cell::service_registry::lookup(VFS), Some(SUPERVISOR));
         // D1: flags are the namespace owner's, and undefined bits are refused.
-        let flags = api::syscall::service_flags::ALL;
+        let flags = abi::syscall::service_flags::ALL;
         assert_eq!(
             register_flagged(HIJACKER, PRIVATE_ID, HIJACKER, flags),
             Err(SyscallError::PermissionDenied)
@@ -1868,7 +1868,7 @@ fn owner_watch_scheduler() -> Scheduler {
         client.root_tid = tid;
         sched.tasks.insert(tid, client);
         assert!(
-            sched.publish_live_cell_owner(api::cell_owner::CellOwner::new(
+            sched.publish_live_cell_owner(abi::cell_owner::CellOwner::new(
                 cell, generation, tid as u64
             ))
         );
@@ -1883,9 +1883,9 @@ fn owner_watch_scheduler() -> Scheduler {
 /// The services these cases register with `OWNER_WATCH` (init's policy for
 /// them; which services init flags is pinned in `ostd::service`).
 const OWNER_WATCH_ROWS: [u16; 3] = [
-    api::syscall::service::NET,
-    api::syscall::service::COMPOSITOR,
-    api::syscall::service::XE_GPU,
+    abi::syscall::service::NET,
+    abi::syscall::service::COMPOSITOR,
+    abi::syscall::service::XE_GPU,
 ];
 
 fn owner_watch(
@@ -1894,10 +1894,10 @@ fn owner_watch(
     pause: Option<(u16, usize)>,
     cell: u64,
     generation: u64,
-) -> Option<(api::cell_owner::CellOwner, u64)> {
+) -> Option<(abi::cell_owner::CellOwner, u64)> {
     for &(service, tid, cell_id, gen) in registry {
         let flags = if OWNER_WATCH_ROWS.contains(&service) {
-            api::syscall::service_flags::OWNER_WATCH
+            abi::syscall::service_flags::OWNER_WATCH
         } else {
             0
         };
@@ -1942,7 +1942,7 @@ fn assert_owner_watch(
 
 /// Every service id the registry can bind that these cases register unflagged.
 fn services_outside_owner_watch_table() -> alloc::vec::Vec<u16> {
-    use api::syscall::service as s;
+    use abi::syscall::service as s;
     [
         s::VFS,
         s::NET,
@@ -1980,7 +1980,7 @@ fn assert_owner_watch_grant_for(service: u16) {
         .expect("registered watcher serving the client");
     assert_eq!(
         owner,
-        api::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID as u64)
+        abi::cell_owner::CellOwner::new(CLIENT_CELL, CLIENT_GEN, CLIENT_TID as u64)
     );
     assert!(token > 0);
     assert_eq!(sched.cell_owner_watch_count(), 1);
@@ -2149,7 +2149,7 @@ fn assert_owner_watch_grant_for(service: u16) {
 /// rule) is as before.
 #[test]
 fn owner_watch_grant_matrix() {
-    use api::syscall::service::{COMPOSITOR, NET};
+    use abi::syscall::service::{COMPOSITOR, NET};
     for &service in &OWNER_WATCH_ROWS {
         assert_owner_watch_grant_for(service);
     }
@@ -2227,11 +2227,11 @@ fn owner_watch_grant_matrix() {
     assert_eq!(
         crate::cell::service_registry::register_as(
             crate::cell::service_registry::Registrar::Namespace,
-            api::syscall::service::VFS,
+            abi::syscall::service::VFS,
             NET_TID,
             NET_CELL,
             NET_GEN,
-            api::syscall::service_flags::ALL,
+            abi::syscall::service_flags::ALL,
         ),
         Ok(())
     );
@@ -2450,7 +2450,7 @@ fn a_cell_posts_into_a_bounded_share_of_a_mailbox() {
 
 #[test]
 fn recv_timeout_bits_select_a_timed_receive_that_keeps_attestation() {
-    use api::caller_identity::{recv_flags, RECV_ATTEST_CALLER};
+    use abi::caller_identity::{recv_flags, RECV_ATTEST_CALLER};
     let recv = |a3: usize| map_syscall(ViSyscall::Recv as usize, 7, 0x4000, 4096, a3);
     // Untimed: the flag word every pre-existing caller passes.
     assert!(matches!(

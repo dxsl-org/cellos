@@ -2,7 +2,7 @@ use crate::storage::{
     assess_for_tests, ActiveSlot, FixtureRootProvider, JournalLoad, JournalRecord, JournalState,
     OpenedRoot, ProviderAssessment, ProviderOpenResult, SlotId,
 };
-use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
+use kms_codec::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
 
 fn status(provider: FixtureRootProvider, journal: JournalState) -> NodeIdentityStatusPayload {
     assess_for_tests(&provider, &journal).status_payload(BindingEpoch(9))

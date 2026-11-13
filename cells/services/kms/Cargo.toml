@@ -32,6 +32,7 @@ test = false
 [dependencies]
 api = { path = "../../../libs/api", version = "0.1.0" }
 types = { path = "../../../libs/types", version = "0.1.0" }
+kms-codec = { path = "../../../libs/kms-codec", version = "0.1.0" }
 blake2 = { version = "0.10.6", default-features = false }
 constant_time_eq = { version = "0.4.2", default-features = false }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }

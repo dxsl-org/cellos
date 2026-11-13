@@ -47,7 +47,7 @@ fn insert_parent() {
     parent.root_tid = PARENT_TID;
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (QUOTA_CELL as usize) < crate::memory::cell_quota::MAX_CELLS {
-            let owner = api::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);
+            let owner = abi::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);
             sched.publish_live_cell_owner(owner);
         }
         #[cfg(feature = "p01-trace")]
@@ -65,7 +65,7 @@ fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.remove(&tid) {
             if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
-                let owner = api::cell_owner::CellOwner::new(
+                let owner = abi::cell_owner::CellOwner::new(
                     task.cell_id.0,
                     task.cell_generation,
                     task.root_tid as u64,

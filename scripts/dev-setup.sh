@@ -142,13 +142,13 @@ fi
 
 # ── 4. Host unit tests ────────────────────────────────────────────────────────
 step "4/6 Host unit tests"
-# The three crates that define no panic/alloc lang items and so can run on the
+# The crates that define no panic/alloc lang items and so can run on the
 # host. This is the same command the `unit-tests` CI job runs, and it is the
 # cheapest proof that the toolchain works at all.
 if $CHECK_ONLY; then
   warn "skipped in --check mode"
 else
-  cargo test -p types -p api -p text-engine --target x86_64-unknown-linux-gnu \
+  cargo test -p types -p kms-codec -p abi -p wire -p api -p text-engine --target x86_64-unknown-linux-gnu \
     || die "host unit tests failed — the toolchain or config is wrong, stop here"
   info "host unit tests ✓"
 fi
@@ -186,7 +186,7 @@ step "Done"
 echo ""
 echo -e "${GREEN}${BOLD}Cellos development environment is ready.${NC}"
 echo ""
-echo "  Host tests:      cargo test -p types -p api -p text-engine --target x86_64-unknown-linux-gnu"
+echo "  Host tests:      cargo test -p types -p kms-codec -p abi -p wire -p api -p text-engine --target x86_64-unknown-linux-gnu"
 echo "  Lint (as CI):    cargo clippy --workspace --exclude app-mlibc-smoke --exclude doom \\"
 echo "                     --exclude tetris-c --exclude lua --exclude tetris-lua \\"
 echo "                     --target riscv64gc-unknown-none-elf -Z build-std=core,alloc -- -D warnings"

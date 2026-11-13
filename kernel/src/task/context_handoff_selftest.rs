@@ -50,7 +50,7 @@ fn spawn_handoff_task(
     let user_stack = super::stack::Stack::new_user(1)?;
     let tid = scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack)?;
     if let Some(task) = scheduler.tasks.get(&tid) {
-        let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
+        let owner = abi::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
         scheduler.publish_live_cell_owner(owner);
     }
     Ok(tid)

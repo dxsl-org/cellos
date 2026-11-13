@@ -8,7 +8,7 @@ use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 
 /// A parked BootFS file behind its CSpace ticket.
-type TicketFile = alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>;
+type TicketFile = alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync>;
 
 static CSPACE_FILES: Spinlock<BTreeMap<(u64, u64, u64), Option<TicketFile>>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::CSPACE_FILES);
@@ -23,7 +23,7 @@ pub fn park_ticket_file(key: (u64, u64, u64)) -> Option<TicketFile> {
 
 pub fn unpark_ticket_file(
     key: (u64, u64, u64),
-    file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
+    file: alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync>,
 ) {
     if let Some(opt) = CSPACE_FILES.lock().get_mut(&key) {
         *opt = Some(file);
@@ -45,7 +45,7 @@ pub(crate) fn has_ticket_file(key: (u64, u64, u64)) -> bool {
 pub(crate) struct InertFile;
 
 #[cfg(any(test, feature = "test-hooks"))]
-impl api::fs::ViFile for InertFile {
+impl abi::fs::ViFile for InertFile {
     fn read(&mut self, _buf: &mut [u8]) -> types::ViResult<usize> {
         Err(types::ViError::NotSupported)
     }
@@ -54,7 +54,7 @@ impl api::fs::ViFile for InertFile {
         Err(types::ViError::NotSupported)
     }
 
-    fn seek(&mut self, _pos: api::fs::SeekFrom) -> types::ViResult<u64> {
+    fn seek(&mut self, _pos: abi::fs::SeekFrom) -> types::ViResult<u64> {
         Err(types::ViError::NotSupported)
     }
 
@@ -62,9 +62,9 @@ impl api::fs::ViFile for InertFile {
         self: alloc::boxed::Box<Self>,
         _buf_ptr: usize,
         _buf_len: usize,
-    ) -> api::fs::BoxFuture<'static, api::fs::FileResult<usize>> {
+    ) -> abi::fs::BoxFuture<'static, abi::fs::FileResult<usize>> {
         alloc::boxed::Box::pin(async move {
-            let file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync> = self;
+            let file: alloc::boxed::Box<dyn abi::fs::ViFile + Send + Sync> = self;
             (file, Err(types::ViError::NotSupported))
         })
     }

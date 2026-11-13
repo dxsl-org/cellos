@@ -6,7 +6,9 @@ license = "MPL-2.0"
 
 [dependencies]
 types = { path = "../libs/types", version = "0.1.0" }
-api = { path = "../libs/api", version = "0.1.0" }
+# The kernel links the frozen ABI only (Phase 13 A3): no `wire`, postcard,
+# posix shim or KMS codecs.
+abi = { path = "../libs/abi", version = "0.1.0" }
 cellos-boot-config = { path = "../libs/boot-config", version = "0.1.0" }
 cell-initial-stack = { path = "../libs/cell-initial-stack", version = "0.1.0" }
 qemu-exit = { version = "4", optional = true }
@@ -63,6 +65,9 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 # boot parser (`boot::firmware_cpus`, `boot::fdt_nops`).
 [dev-dependencies]
 fdt = "0.1"
+# Pins the hand-encoded `Rename` bytes (task/syscall/rename_wire.rs) to postcard's
+# encoding of `wire::ipc::VfsRequest`/`VfsResponse`.
+wire = { path = "../libs/wire", version = "0.1.0" }
 
 
 

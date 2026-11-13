@@ -33,7 +33,7 @@ fn a_plain_import_makes_zero_writes_and_is_volatile() {
     assert_eq!(query.key_count, 0);
 }
 
-fn status_of(leaf: &mut FileLeaf) -> types::kms::SshKeyStatusPayload {
+fn status_of(leaf: &mut FileLeaf) -> kms_codec::SshKeyStatusPayload {
     status(leaf, &Actor::admin(), b"pk").unwrap()
 }
 

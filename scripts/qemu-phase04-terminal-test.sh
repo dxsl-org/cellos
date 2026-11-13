@@ -316,7 +316,8 @@ authority = {
     "kernel/src/loader/launch_profile/profiles.rs": "78058780bad2549c67ab7487b2a1e741d52580cbbdd27d1fccef132a69aa2930",
     "kernel/src/loader/launch_profile/targets.rs": "45834caee5979f219a8df2027958ff6969a5b9d6068da07dea7ce7fb5306a48f",
     "kernel/src/loader/launch_profile/tests.rs": "b41874eb9299487aa5d857617e41027f05f638fd39dc86b6bc4ce19c7a33bc3d",
-    "libs/api/src/abi/cell_session.rs": "590fe5ccaa74ae25c751dedb111d76ff6ec102edd52c088198daa28666441595",
+    # Moved unchanged from libs/api/src/abi/ (Phase 13 A1); the digest is untouched.
+    "libs/abi/src/cell_session.rs": "590fe5ccaa74ae25c751dedb111d76ff6ec102edd52c088198daa28666441595",
 }
 for name, expected in authority.items():
     path = root / name

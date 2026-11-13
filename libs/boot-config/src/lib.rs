@@ -5,9 +5,9 @@
 
 extern crate alloc;
 
+use abi::syscall::service;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use api::syscall::service;
 use core::fmt;
 use serde::Deserialize;
 

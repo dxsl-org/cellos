@@ -6,7 +6,7 @@
  *
  * The IMPLEMENTATIONS come from the Rust side of the cell binary:
  *   - mem*  : rust compiler_builtins
- *   - str*  : libs/api/src/services/posix/strings.rs (POSIX shim, -zmuldefs)
+ *   - str*  : libs/posix-shim/src/strings.rs (POSIX shim, -zmuldefs)
  * so this header must only declare, never define.
  */
 #ifndef _FREESTANDING_STRING_H

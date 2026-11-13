@@ -1,0 +1,13 @@
+[package]
+name = "abi"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lints.rust]
+# Deny unsafe code by default, but allow exceptions in specific modules.
+unsafe_code = "deny"
+
+[dependencies]
+types = { path = "../types", version = "0.1.0" }
+serde = { version = "1", default-features = false, features = ["derive"] }

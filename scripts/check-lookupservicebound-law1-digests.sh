@@ -23,10 +23,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-SYSCALL="libs/api/src/abi/syscall.rs"
-RECORD="libs/api/src/abi/service_binding.rs"
-TESTS="libs/api/src/abi/syscall_tests.rs"
-ABI_MOD="libs/api/src/abi.rs"
+SYSCALL="libs/abi/src/syscall.rs"
+RECORD="libs/abi/src/service_binding.rs"
+TESTS="libs/abi/src/syscall_tests.rs"
+# Re-pinned 2026-11-13 (Phase 13 A1): the ABI moved from `libs/api/src/abi/`
+# to the `abi` crate root, unchanged; only the paths below moved.
+ABI_MOD="libs/abi/src/lib.rs"
 OSTD="libs/ostd/src/syscall.rs"
 # The dispatcher and its helpers live in kernel/src/task/syscall/ (split in
 # architecture remediation Phase 08); the items are checked across the module.
@@ -37,11 +39,11 @@ K_REGISTRY="kernel/src/cell/service_registry.rs"
 
 failures=0
 # require_row <name> <number> <bit|none> <item description>
-# The syscall surface lives in `libs/api/abi/syscalls.toml` (architecture
-# remediation Phase 08, Law-1 CP1): `libs/api/build.rs` generates the enum
+# The syscall surface lives in `libs/abi/abi/syscalls.toml` (architecture
+# remediation Phase 08, Law-1 CP1): `libs/abi/build.rs` generates the enum
 # variant, its `From<usize>` decode arm and its `allowlist_bit` arm from one row,
 # so the row is the frozen item (re-pinned from the generated text 2026-11-11).
-TABLE="libs/api/abi/syscalls.toml"
+TABLE="libs/abi/abi/syscalls.toml"
 require_row() {
     local name="$1" number="$2" bit="$3" item="$4"
     if ! python3 - "$TABLE" "$name" "$number" "$bit" <<'PY'
@@ -101,7 +103,7 @@ forbid_in() {
     fi
 }
 
-# ── libs/api: the opcode (record §1 items 1-3, 6, 7, 14) ──────────────────────
+# ── libs/abi: the opcode (record §1 items 1-3, 6, 7, 14) ──────────────────────
 require_row LookupServiceBound 429 37 "opcode 429 declared, decodes to the variant, allowlist bit 37"
 # Re-pinned 2026-11-12 (Phase 11 D5, CP2): LookupService (206) is retired;
 # bit 37 stays with LookupServiceBound and 206 is a reserved number.
@@ -114,7 +116,7 @@ require_in "$TESTS" "assert_eq!(ViSyscall::LookupServiceBound as usize, 429);" \
 require_in "$TESTS" "fn lookup_bound_keeps_the_retired_lookup_bit()" \
     "bit-37 test present"
 
-# ── libs/api: the record (record §1 items 8-12) ───────────────────────────────
+# ── libs/abi: the record (record §1 items 8-12) ───────────────────────────────
 require_in "$ABI_MOD" "pub mod service_binding;" "record module declared"
 require_in "$RECORD" "pub const SERVICE_BINDING_LEN: usize = 24;" "record length 24"
 require_in "$RECORD" "pub struct ServiceBinding {" "record type declared"

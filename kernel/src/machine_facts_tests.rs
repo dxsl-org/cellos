@@ -4,11 +4,11 @@ use super::encode;
 use crate::acpi::AcpiOem;
 use crate::board::{PlatformIdentity, ProfileSource, X86BootFacts};
 use crate::smbios::{SmbiosString, SmbiosSystem};
-use alloc::vec::Vec;
-use api::machine_facts::{
+use abi::machine_facts::{
     MachineFactsRecord, PciFunctionId, FLAGS_KNOWN, FLAG_DMAR_PRESENT, FLAG_PCI_ECAM,
     FLAG_VTD_ACTIVE, MACHINE_FACTS_PCI_MAX, PROFILE_SOURCE_CMDLINE, PROFILE_SOURCE_DEFAULT,
 };
+use alloc::vec::Vec;
 
 fn q35(source: ProfileSource) -> X86BootFacts {
     X86BootFacts {

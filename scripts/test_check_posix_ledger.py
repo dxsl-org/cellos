@@ -22,7 +22,7 @@ _spec = importlib.util.spec_from_file_location("check_posix_ledger", REPO / "scr
 checker = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(checker)
 
-POSIX = "libs/api/src/services/posix"
+POSIX = "libs/posix-shim/src"
 SYSDEPS = "third_party/mlibc/sysdeps/vicell/generic/generic.cpp"
 
 SOURCES = {

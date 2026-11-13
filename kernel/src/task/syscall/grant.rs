@@ -874,11 +874,11 @@ pub(crate) fn release_vfs_context_lease(release: crate::sched::scheduler::VfsLea
     }
 }
 
-/// 437-439 results: each refusal keeps its own `api::dma_export::ERR_*`
+/// 437-439 results: each refusal keeps its own `abi::dma_export::ERR_*`
 /// sentinel (CP1 §5, E21); an export id is at most `isize::MAX`.
 #[cfg(not(target_arch = "riscv32"))]
 pub(super) fn encode_dma_export_result(result: SyscallResult) -> usize {
-    use api::dma_export as de;
+    use abi::dma_export as de;
     match result {
         Ok(value) => value,
         Err(SyscallError::InvalidInput | SyscallError::InvalidCommand) => de::ERR_INVALID_INPUT,
@@ -1726,21 +1726,21 @@ pub(super) fn anon_memory(
                 .unwrap_or(false)
         };
         if !is_domain {
-            return Ok(api::anon_memory::ERR_NOT_SUPPORTED);
+            return Ok(abi::anon_memory::ERR_NOT_SUPPORTED);
         }
         // No anonymous page can exist yet (no budget source, CP1 D-M4
         // default 0 = `NotSupported`), so every valid op is refused:
         // a 0 from UNMAP or PROTECT would claim a release or a guard
         // page that never took effect.
-        match api::anon_memory::decode_anon_request(op, addr, len, flags) {
-            Ok(_) => Ok(api::anon_memory::ERR_NOT_SUPPORTED),
+        match abi::anon_memory::decode_anon_request(op, addr, len, flags) {
+            Ok(_) => Ok(abi::anon_memory::ERR_NOT_SUPPORTED),
             Err(err) => Ok(err),
         }
     }
     #[cfg(not(target_arch = "x86_64"))]
     {
         let _ = (caller_id, op, addr, len, flags);
-        Ok(api::anon_memory::ERR_NOT_SUPPORTED)
+        Ok(abi::anon_memory::ERR_NOT_SUPPORTED)
     }
 }
 
@@ -1861,7 +1861,7 @@ pub(super) fn map_dma_export(
     out_ptr: usize,
     out_len: usize,
 ) -> SyscallResult {
-    if out_len != api::dma_export::DMA_EXPORT_RECORD_LEN {
+    if out_len != abi::dma_export::DMA_EXPORT_RECORD_LEN {
         return Err(SyscallError::InvalidInput);
     }
     caller_copy_view(caller_id)?
@@ -1873,7 +1873,7 @@ pub(super) fn map_dma_export(
     let publication = reserve_dma_publication(caller_id, barrier).ok_or(SyscallError::TryAgain)?;
     let record = dma_export::map(caller_id, export_id, bdf);
     drop(publication);
-    let mut bytes = [0u8; api::dma_export::DMA_EXPORT_RECORD_LEN];
+    let mut bytes = [0u8; abi::dma_export::DMA_EXPORT_RECORD_LEN];
     record?.encode(&mut bytes);
     write_user_slice(caller_id, out_ptr, &bytes, bytes.len())
         .map_err(|_| SyscallError::InvalidInput)?;
@@ -2097,10 +2097,10 @@ pub(super) fn grant_slice(
     // ABI a3 (approved 2026-11-10): unknown flag bits, and a lease with
     // no owner to key it by, answer exactly as an unknown id — before
     // any lookup, log or `size_out` validation.
-    if flags & !api::syscall::grant_slice::KNOWN_FLAGS != 0 {
+    if flags & !abi::syscall::grant_slice::KNOWN_FLAGS != 0 {
         return Ok(GRANT_DENY_SLICE);
     }
-    let lease = flags & api::syscall::grant_slice::LEASE != 0;
+    let lease = flags & abi::syscall::grant_slice::LEASE != 0;
     if lease && expected_owner_tid == 0 {
         return Ok(GRANT_DENY_SLICE);
     }

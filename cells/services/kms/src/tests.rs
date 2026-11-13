@@ -1,5 +1,5 @@
 use api::caller_identity::CallerIdentity;
-use types::kms::{BrokerBindingPayload, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1};
+use kms_codec::{BrokerBindingPayload, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1};
 
 use super::*;
 

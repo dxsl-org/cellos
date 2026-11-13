@@ -136,7 +136,7 @@ impl Dispatcher {
     /// The IPC message format is:
     /// ```text
     /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
-    /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
+    /// byte[1..] = encode_event() output (see libs/wire/src/input.rs)
     /// ```
     fn dispatch_to(&mut self, target: usize, event: &InputEvent) -> bool {
         if let InputEvent::Key(key) = event {
@@ -232,7 +232,7 @@ impl Dispatcher {
     /// The IPC message format is:
     /// ```text
     /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
-    /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
+    /// byte[1..] = encode_event() output (see libs/wire/src/input.rs)
     /// ```
     fn try_send_event(target: usize, event: &InputEvent) -> Result<(), ()> {
         // A focused-cell key event can be a typed secret: both staging buffers are wiped after the send.

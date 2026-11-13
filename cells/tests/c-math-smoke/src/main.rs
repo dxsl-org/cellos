@@ -1,6 +1,6 @@
 //! C runtime smoke test: validates math/stdio/setjmp posix shim linkage.
 //!
-//! Calls the `#[no_mangle] extern "C"` symbols from libs/api/src/posix/ via
+//! Calls the `#[no_mangle] extern "C"` symbols from libs/posix-shim/src/ via
 //! Rust extern declarations — if any symbol is missing the linker will fail.
 //! setjmp/longjmp are the exception: they are exercised by the C helper in
 //! src/setjmp_probe.c, because a returns-twice call must not be made from Rust.

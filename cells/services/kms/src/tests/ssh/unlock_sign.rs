@@ -380,7 +380,7 @@ fn wrong_passphrase_uniform_failure() {
             before_floor,
             "failure leaves the floor"
         );
-        let response = types::kms::KmsResponseV1::from_bytes(&reply).unwrap();
+        let response = kms_codec::KmsResponseV1::from_bytes(&reply).unwrap();
         assert_eq!(
             response.error_code().unwrap(),
             Some(KmsErrorCode::SshUnlockFailed),
@@ -457,7 +457,7 @@ fn self_verify_fault_injection() {
     let payload = sign_request(&login, public, SESSION_ID, b"user").encode();
     let reply = service.frame(KmsOpcode::SignSshUserauth, &payload, &login);
     FLIP_SIGNATURE.with(|flip| flip.set(false));
-    let response = types::kms::KmsResponseV1::from_bytes(&reply).unwrap();
+    let response = kms_codec::KmsResponseV1::from_bytes(&reply).unwrap();
     assert_eq!(
         response.error_code().unwrap(),
         Some(KmsErrorCode::InvalidSignature)

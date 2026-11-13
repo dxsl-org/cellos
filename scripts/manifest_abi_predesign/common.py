@@ -48,9 +48,9 @@ IMMUTABLE_BASE_REVISION = "2d61a4728834a0dd23ce63b6e09e5b735246c41a"
 SCHEMA_FILES = {"corpus": "manifest-v1-v2-corpus.schema.json", "inventory": "manifest-consumer-inventory.schema.json", "matrix": "manifest-downgrade-matrix.schema.json"}
 CORPUS_AUTHORITATIVE_SOURCES = (
     "kernel/src/loader/manifest_section_tests.rs", "kernel/src/task/manifest_v2_selftest.rs",
-    "libs/api/src/abi/manifest.rs", "libs/api/src/abi/manifest_compat_tests.rs",
-    "libs/api/src/abi/manifest_flags.rs", "libs/api/src/abi/manifest_macro.rs",
-    "libs/api/src/abi/manifest_parse.rs", "libs/zig-syscall/src/manifest.zig",
+    "libs/abi/src/manifest.rs", "libs/abi/src/manifest_compat_tests.rs",
+    "libs/abi/src/manifest_flags.rs", "libs/abi/src/manifest_macro.rs",
+    "libs/abi/src/manifest_parse.rs", "libs/zig-syscall/src/manifest.zig",
     "tools/elf_manifest.py", "tools/test_check_elf.py",
 )
 

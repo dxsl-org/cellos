@@ -15,7 +15,7 @@ extern crate alloc;
 use core::fmt;
 
 use blake2::{Blake2s256, Digest};
-use types::kms::{KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KMS_SSH_SECRET_MAX};
+use kms_codec::{KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KMS_SSH_SECRET_MAX};
 use zeroize::{Zeroize, Zeroizing};
 
 pub(crate) mod floor;
@@ -308,7 +308,7 @@ impl Transfer {
             principal,
             tid,
             total_len,
-            chunk_count: types::kms::ssh_chunk_count(total_len),
+            chunk_count: kms_codec::ssh_chunk_count(total_len),
             next_index: 0,
             received: 0,
         }
@@ -322,7 +322,7 @@ impl Transfer {
     /// at which its data goes.
     pub(crate) fn validate_chunk(
         &self,
-        chunk: &types::kms::SshChunkRequestPayload,
+        chunk: &kms_codec::SshChunkRequestPayload,
         principal: Principal,
         tid: usize,
     ) -> Result<usize, Violation> {
@@ -333,7 +333,7 @@ impl Transfer {
             return Err(Violation::Order);
         }
         let expected =
-            types::kms::ssh_chunk_len(self.total_len, chunk.chunk_index).ok_or(Violation::Order)?;
+            kms_codec::ssh_chunk_len(self.total_len, chunk.chunk_index).ok_or(Violation::Order)?;
         if chunk.chunk_len != expected {
             return Err(Violation::Order);
         }

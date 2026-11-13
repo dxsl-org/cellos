@@ -62,7 +62,7 @@ grep -q " [TWV] _ZSt" <<<"$symbols" || { echo "FAIL: $WITNESS carries no _ZSt* r
 strong_undefined="$(nm -u "$WITNESS" | awk '$1 == "U" { print $2 }')"
 [[ -z "$strong_undefined" ]] || { echo "FAIL: unresolved symbols: $strong_undefined" >&2; exit 1; }
 # The thread-safe-static guard must be libc++abi's (pthread-backed), not the
-# single-threaded Tier-A one from libs/api: same size as the archive's copy.
+# single-threaded Tier-A one from libs/posix-shim: same size as the archive's copy.
 cell_guard="$(nm -S "$WITNESS" | awk '$4 == "__cxa_guard_acquire" { print $2 }')"
 abi_guard="$(nm -S --defined-only "$RUNTIME/lib/libc++abi.a" 2>/dev/null | awk '$4 == "__cxa_guard_acquire" { print $2 }')"
 [[ -n "$cell_guard" && "$cell_guard" == "$abi_guard" ]] \

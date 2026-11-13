@@ -1,4 +1,4 @@
-use types::kms::{
+use kms_codec::{
     KmsOpcode, Tls13ClientCertificateVerifyRequestPayload,
     Tls13ClientCertificateVerifyResponsePayload,
 };

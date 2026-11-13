@@ -8,12 +8,12 @@ use super::{authority::*, decode::*, fs::*, grant::*, ipc::*, misc::*, spawn::*,
 
 /// 434/435 results: the typed sentinels of [`encode_ipc_result`] plus
 /// `NotSupported` and `OutOfMemory` (vectors exhausted), which a driver must
-/// tell apart to fall back to polling (`api::pcie_function::ERR_*`).
+/// tell apart to fall back to polling (`abi::pcie_function::ERR_*`).
 #[cfg(not(target_arch = "riscv32"))]
 pub(super) fn encode_pcie_function_result(result: SyscallResult) -> usize {
     match result {
-        Err(SyscallError::NotSupported) => api::pcie_function::ERR_NOT_SUPPORTED,
-        Err(SyscallError::OutOfMemory) => api::pcie_function::ERR_NO_VECTORS,
+        Err(SyscallError::NotSupported) => abi::pcie_function::ERR_NOT_SUPPORTED,
+        Err(SyscallError::OutOfMemory) => abi::pcie_function::ERR_NO_VECTORS,
         other => encode_ipc_result(other),
     }
 }
@@ -26,11 +26,11 @@ pub(super) fn is_pcie_function_call(syscall: &Syscall) -> bool {
     )
 }
 
-/// 436 results: each refusal keeps its own `api::syscall::system_power`
+/// 436 results: each refusal keeps its own `abi::syscall::system_power`
 /// sentinel. Success never returns to the caller.
 #[cfg(not(target_arch = "riscv32"))]
 pub(super) fn encode_system_power_result(result: SyscallResult) -> usize {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     match result {
         Ok(value) => value,
         Err(SyscallError::InvalidInput) => sp::ERR_INVALID_INPUT,
@@ -135,7 +135,7 @@ pub(super) fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, 
         crate::dev::driver_cell::register_usb_hid_producer,
         || {
             crate::cell::service_registry::register(
-                api::syscall::service::USB_HID_PRODUCER,
+                abi::syscall::service::USB_HID_PRODUCER,
                 caller_id,
                 cell_id,
                 generation,
@@ -200,7 +200,7 @@ pub(super) fn alloc_pcie_irq(
 /// return; poweroff returns only when the machine is still running.
 #[cfg(target_arch = "x86_64")]
 pub(super) fn system_power(caller_id: usize, action: usize) -> SyscallResult {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     match action {
         sp::ACTION_REBOOT => {
             log::warn!(
@@ -224,7 +224,7 @@ pub(super) fn system_power(caller_id: usize, action: usize) -> SyscallResult {
 /// Reset and S5 come from ACPI, which only x86_64 parses (CP1 §5).
 #[cfg(not(target_arch = "x86_64"))]
 pub(super) fn system_power(_caller_id: usize, action: usize) -> SyscallResult {
-    use api::syscall::system_power as sp;
+    use abi::syscall::system_power as sp;
     match action {
         sp::ACTION_REBOOT | sp::ACTION_POWEROFF => Err(SyscallError::NotSupported),
         _ => Err(SyscallError::InvalidInput),
@@ -301,7 +301,7 @@ pub(super) fn register_block_device_route(
     id: usize,
     reserved: (usize, usize),
 ) -> Result<usize, SyscallError> {
-    use api::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
     let key = u16::try_from(kind)
         .ok()
         .filter(|_| reserved == (0, 0))
@@ -349,7 +349,7 @@ pub(super) fn register_block_device_route(
 pub(super) fn query_pcie_function(
     caller_id: usize,
     bdf: usize,
-) -> Result<[u8; api::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
+) -> Result<[u8; abi::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
     let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
     crate::dev::pcie_msi::query(caller_id, bdf)
         .map(|record| record.encode())
@@ -361,7 +361,7 @@ pub(super) fn query_pcie_function(
 pub(super) fn query_pcie_function(
     _caller_id: usize,
     _bdf: usize,
-) -> Result<[u8; api::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
+) -> Result<[u8; abi::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
     Err(SyscallError::FileNotFound)
 }
 
@@ -447,7 +447,7 @@ pub(super) fn lookup_block_route(
     if !(caller_has_block_io(caller_id) || caller_has_spawn(caller_id)) {
         return Err(SyscallError::PermissionDenied);
     }
-    let len = api::block_route::BLOCK_ROUTE_RECORD_LEN;
+    let len = abi::block_route::BLOCK_ROUTE_RECORD_LEN;
     if out_len != len || reserved != 0 {
         return Err(SyscallError::InvalidInput);
     }
@@ -469,7 +469,7 @@ pub(super) fn query_machine_facts(
     if !caller_has_spawn(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    if out_len != api::machine_facts::MACHINE_FACTS_CAPACITY || a2 != 0 || a3 != 0 {
+    if out_len != abi::machine_facts::MACHINE_FACTS_CAPACITY || a2 != 0 || a3 != 0 {
         return Err(SyscallError::InvalidInput);
     }
     let record = crate::machine_facts::query().ok_or(SyscallError::FileNotFound)?;
@@ -538,7 +538,7 @@ pub(super) fn register_block_driver(
 pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
     register_driver_service(
         caller_id,
-        api::syscall::service::NIC_DRIVER,
+        abi::syscall::service::NIC_DRIVER,
         crate::dev::driver_cell::register_nic_driver,
         crate::dev::driver_cell::deregister_nic_driver,
     )
@@ -605,7 +605,7 @@ pub(super) fn query_pcie_function_syscall(
     if !caller_has_pcie_driver(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    if out_len != api::pcie_function::PCIE_FUNCTION_RECORD_LEN || reserved != 0 {
+    if out_len != abi::pcie_function::PCIE_FUNCTION_RECORD_LEN || reserved != 0 {
         return Err(SyscallError::InvalidInput);
     }
     let record = query_pcie_function(caller_id, bdf)?;
@@ -776,7 +776,7 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
         if let Some(task) = sched.tasks.get_mut(&caller_id) {
             task.state = crate::task::tcb::TaskState::Blocked {
                 wait: crate::task::tcb::WaitKind::Completion {
-                    source: api::completion::source::IRQ,
+                    source: abi::completion::source::IRQ,
                     delivery: crate::task::tcb::Delivery::IrqLine(irq),
                 },
                 deadline: None,

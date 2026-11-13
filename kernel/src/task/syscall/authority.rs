@@ -118,7 +118,7 @@ pub(super) fn caller_pci_query_allowed(caller_id: usize, allowed: impl Fn(&str) 
 /// `CALLER_FLAG_KMS_SSH_ADMIN`, KSSH K3). Every right except the VFS bit is read
 /// from the Cell root's `CapSet`, so every thread of a Cell reports the same
 /// right; the kernel attests it and the receiving service enforces it.
-pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::CallerIdentity> {
+pub fn attested_identity_of(sender_tid: usize) -> Option<abi::caller_identity::CallerIdentity> {
     let sched_guard = crate::task::SCHEDULER.lock();
     let sched = sched_guard.as_ref()?;
     let task = sched.tasks.get(&sender_tid)?;
@@ -138,7 +138,7 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
     // same root CapSet for the same reason. Attested, not enforced, here.
     flags |= root_caps.kms_caller_flags();
     (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
-        api::caller_identity::CallerIdentity {
+        abi::caller_identity::CallerIdentity {
             flags,
             cell_id: task.cell_id.0,
             generation: task.cell_generation,
@@ -161,7 +161,7 @@ pub(super) fn write_caller_identity(
     buf_len: usize,
     sender_tid: usize,
 ) {
-    let len = api::caller_identity::CALLER_IDENTITY_LEN;
+    let len = abi::caller_identity::CALLER_IDENTITY_LEN;
     let Some(offset) = buf_len.checked_sub(len) else {
         return; // buffer cannot hold a trailer; receiver sees no identity → deny
     };
@@ -171,7 +171,7 @@ pub(super) fn write_caller_identity(
     }
     let trailer = attested_identity_of(sender_tid)
         .map(|id| id.to_trailer())
-        .unwrap_or([0u8; api::caller_identity::CALLER_IDENTITY_LEN]);
+        .unwrap_or([0u8; abi::caller_identity::CALLER_IDENTITY_LEN]);
     if let Ok(view) = caller_copy_view(caller_id) {
         view.write_bytes(dst, &trailer).ok();
     } else {
@@ -242,15 +242,13 @@ pub(super) fn audit_syscall_denied(caller_id: usize, detail: u32) {
 }
 
 /// Notify `target_tid` that `mask` was revoked: `[MAGIC, KIND_CAP_REVOKED,
-/// mask_le4]` ([`api::services::proto::app_envelope`], `spec/17` §3).
+/// mask_le4]` ([`abi::app_envelope`], `spec/17` §3).
 ///
 /// Best-effort by design: the teardown already happened, and a Cell that ignores
 /// the event still lost the hardware. Returns `false` when the target is gone or
 /// its mailbox is full.
 pub(crate) fn send_cap_revoked_event(target_tid: usize, mask: u32) -> bool {
-    use api::services::proto::app_envelope::{
-        CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, MAGIC,
-    };
+    use abi::app_envelope::{CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, MAGIC};
     let mut msg = [0u8; CAP_REVOKED_LEN];
     msg[0] = MAGIC;
     msg[1] = KIND_CAP_REVOKED;
@@ -281,17 +279,17 @@ pub(super) fn read_cell_owner_request(
     caller_id: usize,
     request_ptr: usize,
     request_len: usize,
-) -> Result<api::cell_owner::CellOwnerRequest, SyscallError> {
-    let len = api::cell_owner::CELL_OWNER_REQUEST_LEN;
+) -> Result<abi::cell_owner::CellOwnerRequest, SyscallError> {
+    let len = abi::cell_owner::CELL_OWNER_REQUEST_LEN;
     if request_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
     validate_user_buf(request_ptr, len, MAX_USER_BUF)?;
-    let mut bytes = [0u8; api::cell_owner::CELL_OWNER_REQUEST_LEN];
+    let mut bytes = [0u8; abi::cell_owner::CELL_OWNER_REQUEST_LEN];
     let view = caller_copy_view(caller_id)?;
     view.read_into(request_ptr, &mut bytes)
         .map_err(|_| SyscallError::InvalidInput)?;
-    api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
+    abi::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
 }
 
 /// Withdraw `cap_mask` from the target's Cell incarnation after its Class-2
@@ -341,7 +339,7 @@ pub(super) fn cap_revoke_gate(
     target_tid: usize,
     cap_mask: u32,
 ) -> Result<(), SyscallError> {
-    use api::syscall::cap_mask as CM;
+    use abi::syscall::cap_mask as CM;
 
     if !sched.tasks.contains_key(&caller_id) || !sched.cell_rights(caller_id).spawn {
         return Err(SyscallError::PermissionDenied);
@@ -396,7 +394,7 @@ pub(super) fn revoke_mmio_classes(
 
 /// Handler for `Syscall::CapRevoke` (extracted from the dispatcher).
 pub(super) fn cap_revoke(caller_id: usize, target_tid: usize, cap_mask: u32) -> SyscallResult {
-    use api::syscall::cap_mask as CM;
+    use abi::syscall::cap_mask as CM;
 
     if target_tid == caller_id {
         return Err(SyscallError::InvalidCommand);
@@ -539,7 +537,7 @@ pub(super) fn register_service(
     tid: usize,
     flags: usize,
 ) -> SyscallResult {
-    if flags & !api::syscall::service_flags::ALL != 0 {
+    if flags & !abi::syscall::service_flags::ALL != 0 {
         return Err(SyscallError::InvalidInput);
     }
     // Flags are the namespace owner's decision for a named provider; the narrow
@@ -554,14 +552,14 @@ pub(super) fn register_service(
     }
     // `BLOCK_DRIVER` is retired: block routes are per device (416/432),
     // so no caller may publish the singleton service.
-    if service_id == api::syscall::service::BLOCK_DRIVER {
+    if service_id == abi::syscall::service::BLOCK_DRIVER {
         return Err(SyscallError::PermissionDenied);
     }
     // The machine pin endpoint is init's own: only trusted init may
     // register it, and only naming itself (ADR-0029 §3). The VFS admits
     // the live provider to the pin store, so a hijacked registration
     // would hand over pin write access.
-    if service_id == api::syscall::service::MACHINE_PIN
+    if service_id == abi::syscall::service::MACHINE_PIN
         && !(tid == caller_id && caller_is_trusted_init(caller_id))
     {
         return Err(SyscallError::PermissionDenied);
@@ -571,7 +569,7 @@ pub(super) fn register_service(
     // non-delegable cap is minted solely for the governed `/bin/silo`
     // root task in test-hooks kernels; HypervisorCap alone is insufficient.
     #[cfg(feature = "test-hooks")]
-    if service_id == api::syscall::service::SILO
+    if service_id == abi::syscall::service::SILO
         && tid == 0
         && caller_has_development_silo_registration(caller_id)
     {
@@ -588,7 +586,7 @@ pub(super) fn register_service(
     }
     // The state-transfer demo owns one non-production service ID and may
     // self-register (`tid=0`) so QEMU can exercise the real Supervisor path.
-    if service_id == api::syscall::service::HOTSWAP_DEMO && tid == 0 && caller_has_spawn(caller_id)
+    if service_id == abi::syscall::service::HOTSWAP_DEMO && tid == 0 && caller_has_spawn(caller_id)
     {
         // The caller is executing, so its identity is present. If it were
         // somehow absent, the entry records 0/0 and the legacy `lookup`
@@ -603,7 +601,7 @@ pub(super) fn register_service(
     if (caller_has_pcie_driver(caller_id)
         || caller_has_mmio_device(caller_id, crate::resource_registry::DEV_DISPLAY))
         && tid == 0
-        && service_id == api::syscall::service::GPU_DRIVER
+        && service_id == abi::syscall::service::GPU_DRIVER
     {
         let (cell_id, generation) = live_cell_identity(caller_id).unwrap_or((0, 0));
         // Role and route publish as one transaction against exact-TID
@@ -670,16 +668,16 @@ pub(super) fn lookup_service_bound(
     // use (`QueryDirHandles`, `ResolveCellOwner`) rather than partially
     // filled; an absent, paused or identity-less provider returns the `0`
     // absence sentinel — never a binding the kernel cannot stand behind.
-    if out_len < api::service_binding::SERVICE_BINDING_LEN {
+    if out_len < abi::service_binding::SERVICE_BINDING_LEN {
         return Err(SyscallError::BufferTooSmall);
     }
     let Some((tid, cell_id, generation)) = crate::cell::service_registry::lookup_bound(service_id)
     else {
         return Ok(0);
     };
-    let binding = api::service_binding::ServiceBinding::new(tid as u64, cell_id, generation);
+    let binding = abi::service_binding::ServiceBinding::new(tid as u64, cell_id, generation);
     write_user_slice(caller_id, out_ptr, &binding.to_bytes(), MAX_USER_BUF)?;
-    Ok(api::service_binding::SERVICE_BINDING_LEN)
+    Ok(abi::service_binding::SERVICE_BINDING_LEN)
 }
 
 /// Handler for `Syscall::ServiceLookup` (extracted from the dispatcher).
@@ -705,7 +703,7 @@ pub(super) fn resolve_cell_owner(
     out_ptr: usize,
     out_len: usize,
 ) -> SyscallResult {
-    let len = api::cell_owner::CELL_OWNER_LEN;
+    let len = abi::cell_owner::CELL_OWNER_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -742,7 +740,7 @@ pub(super) fn watch_cell_owner(
     out_ptr: usize,
     out_len: usize,
 ) -> SyscallResult {
-    let len = api::cell_owner::CELL_OWNER_LEN;
+    let len = abi::cell_owner::CELL_OWNER_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -767,7 +765,7 @@ pub(super) fn resolve_cell_owner_record(
     out_len: usize,
 ) -> SyscallResult {
     let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-    let len = api::cell_owner::CELL_OWNER_LEN;
+    let len = abi::cell_owner::CELL_OWNER_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -802,7 +800,7 @@ pub(super) fn resolve_cell_image(
     out_len: usize,
 ) -> SyscallResult {
     let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-    let len = api::cell_image::CELL_IMAGE_LEN;
+    let len = abi::cell_image::CELL_IMAGE_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -830,7 +828,7 @@ pub(super) fn watch_cell_owner_record(
     out_len: usize,
 ) -> SyscallResult {
     let request = read_cell_owner_request(caller_id, request_ptr, request_len)?;
-    let len = api::cell_owner::CELL_OWNER_LEN;
+    let len = abi::cell_owner::CELL_OWNER_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }

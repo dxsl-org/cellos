@@ -2,7 +2,7 @@
 
 use super::manifest_section::{classify, ManifestSection, ManifestVersion};
 use crate::task::tcb::TaskState;
-use api::manifest::{
+use abi::manifest::{
     MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, PROTECTION_CLASS_STANDARD,
 };
 use core::sync::atomic::Ordering;

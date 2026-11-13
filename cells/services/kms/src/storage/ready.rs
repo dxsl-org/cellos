@@ -1,4 +1,4 @@
-use types::kms::{KmsProviderKind, NodeIdentityState};
+use kms_codec::{KmsProviderKind, NodeIdentityState};
 
 use super::{JournalRecord, OpenedRoot};
 use crate::storage::root::RootAssessment;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the syscall-number blocks of the C and Zig headers from the table.
 
-`libs/api/abi/syscalls.toml` is the single source of syscall numbers
+`libs/abi/abi/syscalls.toml` is the single source of syscall numbers
 (architecture remediation Phase 08, Law-1 CP1). Each header keeps its own
 structure; only the block between its BEGIN/END markers is generated, from the
 header's own list of `(constant, ViSyscall name)` pairs below.
@@ -19,7 +19,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TABLE = ROOT / "libs/api/abi/syscalls.toml"
+TABLE = ROOT / "libs/abi/abi/syscalls.toml"
 BEGIN = "BEGIN generated syscall numbers (scripts/gen-syscall-headers.py)"
 END = "END generated syscall numbers"
 
@@ -53,7 +53,7 @@ def marker(prefix: str, text: str) -> str:
 
 def block(prefix: str, template: str, pairs: list[tuple[str, str]], numbers: dict[str, int]) -> list[str]:
     lines = [marker(prefix, BEGIN),
-             marker(prefix, "Source: libs/api/abi/syscalls.toml. Do not edit by hand.")]
+             marker(prefix, "Source: libs/abi/abi/syscalls.toml. Do not edit by hand.")]
     for const, name in pairs:
         if name not in numbers:
             sys.exit(f"gen-syscall-headers: {name} is not a ViSyscall row")
@@ -80,7 +80,7 @@ def main() -> int:
                 path.write_text("\n".join(new))
     if check and drift:
         for rel in drift:
-            print(f"FAIL {rel}: syscall numbers differ from libs/api/abi/syscalls.toml; "
+            print(f"FAIL {rel}: syscall numbers differ from libs/abi/abi/syscalls.toml; "
                   "run scripts/gen-syscall-headers.py")
         return 1
     print(f"syscall headers: {'OK' if check else 'written'} ({len(HEADERS)} headers)")

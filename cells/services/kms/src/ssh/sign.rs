@@ -2,7 +2,7 @@
 //! mandatory self-verification before any signature leaves the service.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
-use types::kms::{KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN};
+use kms_codec::{KMS_SSH_PUBLIC_KEY_LEN, KMS_SSH_SESSION_ID_LEN, KMS_SSH_SIGNATURE_LEN};
 
 use super::limits::{SIGN_INPUT_FIXED, SIGN_INPUT_MAX};
 

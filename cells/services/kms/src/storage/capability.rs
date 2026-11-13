@@ -1,4 +1,4 @@
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsKeyAlgorithm, KmsProviderKind, RelayP256StatusPayload,
     RelayProviderAssessment,
 };

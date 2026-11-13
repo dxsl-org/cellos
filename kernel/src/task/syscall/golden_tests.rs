@@ -9,17 +9,17 @@
 //!
 //! `CELLOS_SYSCALL_GOLDEN_WRITE=1 cargo test -p cellos-kernel --features
 //! compile-only --target x86_64-unknown-linux-gnu syscall_golden` rewrites
-//! `libs/api/abi/syscalls.golden.json`; otherwise the test fails on any drift.
+//! `libs/abi/abi/syscalls.golden.json`; otherwise the test fails on any drift.
 //! Run without feature flags that add opcodes (`bench-counters`).
 
 use super::{check_allowlist, map_syscall, supports_typed_oom, syscall_to_vi, SyscallError};
 use crate::sched::scheduler::Scheduler;
 use crate::task::cap::CapSet;
 use crate::task::{tcb::Task, SCHEDULER};
+use abi::syscall::ViSyscall;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use api::syscall::ViSyscall;
 use types::CellId;
 
 /// Highest opcode probed. Every assigned opcode today is below 1024.
@@ -113,16 +113,16 @@ fn syscall_golden() {
     *SCHEDULER.lock() = saved;
 
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../libs/api/abi/syscalls.golden.json");
+        .join("../libs/abi/abi/syscalls.golden.json");
     if std::env::var_os("CELLOS_SYSCALL_GOLDEN_WRITE").is_some() {
-        std::fs::create_dir_all(path.parent().expect("dir")).expect("mkdir libs/api/abi");
+        std::fs::create_dir_all(path.parent().expect("dir")).expect("mkdir libs/abi/abi");
         std::fs::write(&path, &text).expect("write syscalls.golden.json");
         return;
     }
     let committed = std::fs::read_to_string(&path).unwrap_or_default();
     assert!(
         committed == text,
-        "libs/api/abi/syscalls.golden.json differs from the code; the syscall surface moved"
+        "libs/abi/abi/syscalls.golden.json differs from the code; the syscall surface moved"
     );
 }
 

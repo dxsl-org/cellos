@@ -4,13 +4,13 @@
 //! before the class check passes.
 
 use api::caller_identity::CallerIdentity;
-use sha2::{Digest, Sha256};
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, KmsOpcode, SshAbortRequestPayload,
     SshChunkRequestPayload, SshDeleteRequestPayload, SshImportBeginRequestPayload,
     SshImportCommitRequestPayload, SshSignRequestPayload, SshSignResponsePayload,
     SshStatusRequestPayload, SshUnlockBeginRequestPayload, KMS_SSH_SECRET_MAX,
 };
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::auth::{attested_caller, classify_ssh, SshClass};
@@ -20,7 +20,7 @@ use crate::ssh::sign::{reconstruct, sign};
 use crate::ssh::store::{key_status, leaf_status, Secret};
 use crate::ssh::unwrap::unwrap_seed;
 use crate::ssh::{scrub_stack, LeafState, Principal, SshLeaf, SshPersist, Stored};
-use types::kms::KmsCustodyPosture;
+use kms_codec::KmsCustodyPosture;
 
 /// Opcode to class matrix (`k2-cp1.md` section 1.9): 15-18 and 20 admin; 19
 /// admin or login; 21-24 login.

@@ -1,4 +1,4 @@
-use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
+use kms_codec::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
 
 use super::{
     ready::ready_or_mismatch, C2cProvider, JournalRecord, JournalState, ProviderOpenResult,
@@ -34,7 +34,7 @@ impl RootAssessment {
         }
         if c2c.generation != assessment.current_epoch
             || c2c.policy_epoch != assessment.current_epoch
-            || c2c.algorithm != types::kms::KmsKeyAlgorithm::C2cX25519
+            || c2c.algorithm != kms_codec::KmsKeyAlgorithm::C2cX25519
         {
             return fail_closed(
                 NodeIdentityState::ProviderUnavailable,

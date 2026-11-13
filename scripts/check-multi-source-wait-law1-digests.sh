@@ -29,8 +29,10 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-COMPLETION="libs/api/src/abi/completion.rs"
-SYSCALL="libs/api/src/abi/syscall.rs"
+# Re-pinned 2026-11-13 (Phase 13 A1): the ABI moved from `libs/api/src/abi/`
+# to the `abi` crate root, unchanged; only the paths moved.
+COMPLETION="libs/abi/src/completion.rs"
+SYSCALL="libs/abi/src/syscall.rs"
 OSTD_IPC="libs/ostd/src/ipc.rs"
 OSTD_RUNTIME="libs/ostd/src/runtime.rs"
 OSTD_LIB="libs/ostd/src/lib.rs"
@@ -47,11 +49,11 @@ K_MSI="kernel/src/dev/pcie_msi.rs"
 
 failures=0
 # require_row <name> <number> <bit|none> <item description>
-# The syscall surface lives in `libs/api/abi/syscalls.toml` (architecture
-# remediation Phase 08, Law-1 CP1): `libs/api/build.rs` generates the enum
+# The syscall surface lives in `libs/abi/abi/syscalls.toml` (architecture
+# remediation Phase 08, Law-1 CP1): `libs/abi/build.rs` generates the enum
 # variant, its `From<usize>` decode arm and its `allowlist_bit` arm from one row,
 # so the row is the frozen item (re-pinned from the generated text 2026-11-11).
-TABLE="libs/api/abi/syscalls.toml"
+TABLE="libs/abi/abi/syscalls.toml"
 require_row() {
     local name="$1" number="$2" bit="$3" item="$4"
     if ! python3 - "$TABLE" "$name" "$number" "$bit" <<'PY'
@@ -105,7 +107,7 @@ forbid_in() {
     fi
 }
 
-# ── libs/api: the record and the source vocabulary (Spec 17 §9) ──────────────
+# ── libs/abi: the record and the source vocabulary (Spec 17 §9) ──────────────
 require_in "$COMPLETION" "pub const COMPLETION_LEN: usize = 24;" "record length 24"
 require_in "$COMPLETION" "pub const COMPLETION_VERSION: u32 = 1;" "record version 1"
 require_in "$COMPLETION" "pub const COMPLETION_MAGIC: u32 = 0x5649_4351;" "record magic VICQ"
@@ -130,7 +132,7 @@ require_in "$COMPLETION" "fn ipc_record_bytes_carry_the_token_without_moving_any
 require_in "$COMPLETION" "fn irq_record_carries_the_line_and_refuses_a_mixed_source_word()" \
     "IRQ record byte test present"
 
-# ── libs/api: opcode, allowlist and the exported allowlist symbol ─────────────
+# ── libs/abi: opcode, allowlist and the exported allowlist symbol ─────────────
 require_row WaitCompletion 242 42 "opcode 242 kept, decodes to the variant, allowlist bit 42 kept (shared)"
 require_in "$SYSCALL" '#[export_name = "__vicell_syscall_allowlist"]' \
     "declare_syscalls! exports the allowlist symbol"
@@ -151,15 +153,18 @@ require_in "$OSTD_IPC" "pub fn wait_any(sources: u32, timeout_ticks: u64) -> Res
     "wait_any API present"
 
 # ── kernel: mask rule, one-shot IPC source and the granted predicate lines ────
-require_in "$K_WAIT" "api::completion::source::is_wait_mask_supported(mask)" \
+# Re-pinned 2026-11-13 (Phase 13 A3): the kernel imports the ABI as `abi::`
+# instead of `api::`; every `api::completion::source::` literal below became
+# `abi::completion::source::`, the code is otherwise unchanged.
+require_in "$K_WAIT" "abi::completion::source::is_wait_mask_supported(mask)" \
     "syscall validates with the public mask rule"
-require_in "$K_WAIT" "if mask != api::completion::source::NET_RX && mask != api::completion::source::TIMER {" \
+require_in "$K_WAIT" "if mask != abi::completion::source::NET_RX && mask != abi::completion::source::TIMER {" \
     "lone NET_RX/TIMER keep the original path"
 require_in "$K_WAIT" "fn wait_multi(" "multi-source wait present"
 require_in "$K_WAIT" "pub(super) const SELECTION_ORDER: [u32; 4] = [" "rotation order present"
 require_in "$K_WAIT" "pub(super) const INITIAL_ROTOR: u8 = (SELECTION_ORDER.len() - 1) as u8;" \
     "a fresh rotor starts at NET_RX"
-require_in "$K_WAIT" '(cfg!(target_arch = "x86_64") || mask & api::completion::source::IRQ == 0)' \
+require_in "$K_WAIT" '(cfg!(target_arch = "x86_64") || mask & abi::completion::source::IRQ == 0)' \
     "IRQ is refused off x86_64"
 require_in "$K_WAIT" "return Err(SyscallError::PermissionDenied);" \
     "an IRQ wait without a held line is refused"
@@ -175,14 +180,14 @@ require_in "$K_SCHED" "match sweep_wake(task, *source, *delivery, *deadline, now
 require_in "$K_WAIT" "Delivery::Queue if irq_wake_due(task, source) => SweepWake::Ready," \
     "the sweep wakes an IRQ wait on a pending snapshot line"
 forbid_in "$K_WAIT" "PROTO_IPC" "no kernel-private prototype bit remains"
-require_in "$K_ASYNC" "source & api::completion::source::IPC != 0" \
+require_in "$K_ASYNC" "source & abi::completion::source::IPC != 0" \
     "IPC terminals wake an IPC-mask completion waiter"
 require_in "$K_ASYNC" ".min_by_key(|op| op.id)?;" "oldest submission is reported first"
 require_in "$K_ASYNC" "pub(crate) fn restore_notification(task: &mut Task, token: usize) -> bool {" \
     "a failed copy-out re-arms the notification"
-require_in "$K_TASK" "if source & api::completion::source::NET_RX != 0" \
+require_in "$K_TASK" "if source & abi::completion::source::NET_RX != 0" \
     "raw mailbox interrupts only masks naming NET_RX"
-require_in "$K_WAIT" "timed_out: source & api::completion::source::TIMER == 0," \
+require_in "$K_WAIT" "timed_out: source & abi::completion::source::TIMER == 0," \
     "deadline sweep keys on the TIMER bit"
 
 if [[ "$failures" -ne 0 ]]; then

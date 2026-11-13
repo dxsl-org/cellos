@@ -320,7 +320,7 @@ fn cellbox_ssh_edge_is_shell_only_path_only_client() {
 #[test]
 fn kms_ssh_admin_edge_is_shell_only_path_only_admin() {
     use super::profiles::KMS_SSH_ADMIN_EDGE;
-    use api::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN;
+    use abi::caller_identity::CALLER_FLAG_KMS_SSH_ADMIN;
 
     let edge = shell_edge(LaunchRoute::Path, "/bin/kms-ssh-admin");
     assert_eq!(
@@ -1581,7 +1581,7 @@ fn config_write_is_held_only_by_the_shell_edges() {
 fn kms_ssh_sign_is_held_only_by_the_ssh_edge() {
     use super::profiles::SSH_CLIENT_EDGE;
     use super::targets::{reviewed_user_target_ceiling, NET_CLIENT};
-    use api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN;
+    use abi::caller_identity::CALLER_FLAG_KMS_SSH_SIGN;
 
     // The constant is the shared client ceiling plus the one right, and the shared
     // ceiling itself is unchanged.

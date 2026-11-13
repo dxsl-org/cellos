@@ -1,0 +1,19 @@
+[package]
+name = "posix-shim"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+abi = { path = "../abi", version = "0.1.0" }
+wire = { path = "../wire", version = "0.1.0" }
+libm = "0.2.15"
+
+[features]
+default = []
+# Opt-in mlibc Tier B: suppresses the shim's C symbols so mlibc's libc.a can link
+# without duplicate-symbol errors.  Cells that opt in must also depend on mlibc-shim.
+mlibc = []

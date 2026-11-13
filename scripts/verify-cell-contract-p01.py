@@ -28,7 +28,8 @@ CENSUS = PACKAGE + '/consumer-census-source.json'
 DELTAS = [f'D{i:02}' for i in range(1, 13)] + [f'C{i:02}' for i in range(1, 12)]
 DELTA_MANIFEST = PACKAGE + '/exact-deltas/manifest.json'
 ACS = [f'AC-{i:02}' for i in range(1, 51)]
-EXPORT_ROOTS = ('libs/api/src/', 'libs/types/src/', 'libs/ostd/src/',
+EXPORT_ROOTS = ('libs/api/src/', 'libs/abi/src/', 'libs/wire/src/', 'libs/posix-shim/src/',
+                'libs/types/src/', 'libs/kms-codec/src/', 'libs/ostd/src/',
                 'kernel/src/task/', 'kernel/src/cell/', 'kernel/src/loader/')
 EXPORT_EXTRA = ('kernel/src/task.rs', 'kernel/src/cell.rs', 'kernel/src/loader.rs')
 SOURCE_ROOTS = ('libs/', 'kernel/', 'cells/', 'hal/', 'tests/',

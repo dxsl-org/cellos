@@ -1,5 +1,5 @@
 //! Immutable, bounded launch context validation before scheduler publication.
-use api::cell_session::{
+use abi::cell_session::{
     ObjectRefV1, Reader, Status, CONTEXT_MAX, CONTEXT_MAX_GRANTS, GRANT_KIND_INPUT_FRONTEND,
     SLOT_FRONTEND,
 };
@@ -122,13 +122,13 @@ pub(crate) fn validate(bytes: &[u8], operation: ObjectRefV1) -> Result<Context, 
                 } else {
                     rights & 3 == 2
                 }) => {}
-            2 if slot == 4 && rights == 0 && owner_service == api::syscall::service::VFS as u64 => {
+            2 if slot == 4 && rights == 0 && owner_service == abi::syscall::service::VFS as u64 => {
             }
             3..=5 => return Err(Status::Unsupported),
             GRANT_KIND_INPUT_FRONTEND
                 if slot == SLOT_FRONTEND
                     && rights == 0
-                    && owner_service == api::syscall::service::INPUT as u64 => {}
+                    && owner_service == abi::syscall::service::INPUT as u64 => {}
             _ => return Err(Status::Malformed),
         }
         grants[slot as usize] = Some(Grant {
@@ -167,8 +167,8 @@ impl Context {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use abi::syscall::service::{INPUT, VFS};
     use alloc::vec::Vec;
-    use api::syscall::service::{INPUT, VFS};
 
     const OPERATION: ObjectRefV1 = ObjectRefV1 {
         id: 7,

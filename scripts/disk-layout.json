@@ -1,5 +1,5 @@
 {
-  "source": "libs/api/src/abi/disk.rs",
+  "source": "libs/abi/src/disk.rs",
   "sector_bytes": 512,
   "PART_FAT32_BASE_LBA": 2048,
   "PART_FAT32_SECTORS": 524288,

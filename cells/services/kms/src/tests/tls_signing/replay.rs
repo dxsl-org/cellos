@@ -1,6 +1,6 @@
 use super::*;
 
-fn submit(service: &mut KmsService, request_id: u64) -> types::kms::KmsResponseV1 {
+fn submit(service: &mut KmsService, request_id: u64) -> kms_codec::KmsResponseV1 {
     service
         .handle(
             &sign_request(FIXTURE_PROFILE_DIGEST, FIXTURE_RELAY_GENERATION, request_id),
@@ -11,7 +11,7 @@ fn submit(service: &mut KmsService, request_id: u64) -> types::kms::KmsResponseV
         .unwrap()
 }
 
-fn assert_signed(response: types::kms::KmsResponseV1) {
+fn assert_signed(response: kms_codec::KmsResponseV1) {
     Tls13ClientCertificateVerifyResponsePayload::decode(response.payload().unwrap()).unwrap();
 }
 

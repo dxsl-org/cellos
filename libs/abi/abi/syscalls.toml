@@ -1,0 +1,2140 @@
+# SPDX-License-Identifier: MPL-2.0
+# The syscall table: the one source for ViSyscall, its raw-id decode and
+# allowlist bits (libs/abi/build.rs), and the C/Zig headers
+# (scripts/gen-syscall-headers.py). Law 1: numbers and bits are frozen;
+# libs/abi/abi/syscalls.golden.json pins them (kernel test `syscall_golden`).
+#
+# Fields: name, number, group (section), bit (absent = always permitted),
+# doc (rustdoc of the variant), group_note (comment opening its section),
+# bit_note (why the bit is what it is), comment (a plain source remark),
+# kernel (the kernel `Syscall` variant when its name differs), result
+# ("typed_oom": the call decodes the typed out-of-memory sentinel).
+#
+# [[raw]] rows are kernel-only opcodes outside `ViSyscall` (Law 1 keeps them
+# out of the stable ABI): id, kernel variant, gate bit (absent = always
+# permitted), feature (cargo feature that adds the opcode).
+#
+# [[reserved]] rows are retired numbers: number, the allowlist bit it held,
+# former (its ViSyscall name). Neither is ever reused; the kernel decodes the
+# number as an unknown syscall. Rows keep the historical order.
+
+[[syscall]]
+name = "Send"
+number = 0
+group = "IPC (0-9)"
+bit = 0
+
+[[syscall]]
+name = "Recv"
+number = 1
+group = "IPC (0-9)"
+bit = 1
+doc = '''
+Blocking receive.
+
+ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = flags → sender tid.
+
+a3 was unused (every pre-existing caller passes 0). Passing
+[`crate::caller_identity::RECV_ATTEST_CALLER`] additionally makes the
+kernel write a [`crate::caller_identity::CallerIdentity`] into the LAST
+`CALLER_IDENTITY_LEN` bytes of `buf`, after the payload — the only
+unforgeable answer to "which cell called me?" available to a service.
+Opting in reserves that tail; see that module for the invariants.
+
+a3 bits 8–31 ([`crate::caller_identity::RECV_TIMEOUT_SHIFT`]) carry a
+timeout in scheduler ticks; 0 keeps the untimed receive. A timed receive
+keeps the trailer rule and returns the generic error sentinel on expiry,
+never sender 0. Bits 1–7 are ignored. (Phase 12, CP1 W2.)
+'''
+
+[[reserved]]
+number = 2
+bit = 4
+former = "Call"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Legacy alias of the raw name lookup (100); no caller.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[reserved]]
+number = 3
+bit = 3
+former = "Reply"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Legacy reply: forced the served caller Ready without checking its state; no caller. Replies use IpcReply (257).
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[syscall]]
+name = "TrySend"
+number = 4
+group = "IPC (0-9)"
+bit = 0
+doc = '''
+Non-blocking send: delivers immediately if target is in `Recv`, otherwise
+drops the message and returns without blocking the caller.
+Prevents deadlock when the focused cell is busy (e.g. reading UART).
+'''
+bit_note = '''
+same allowlist bit as Send (subset of Send)
+'''
+
+[[syscall]]
+name = "TryRecv"
+number = 7
+group = "IPC (0-9)"
+bit = 2
+doc = '''
+Non-blocking receive: returns 0 immediately when no message is queued
+(vs `Recv`, which parks the task until a message arrives).
+'''
+
+[[syscall]]
+name = "Exit"
+number = 60
+group = "Process Management (10-49)"
+comment = '''
+Linux compat usually, but we define our own space
+'''
+
+[[syscall]]
+name = "ForceExit"
+number = 61
+group = "Process Management (10-49)"
+doc = '''
+Force-terminate another task by TID.  Non-blocking: caller continues.
+Requires `SpawnCap` on caller; rejected on system cells (block_io/network_cap).
+ABI: a0 = target_tid → 0 on success, usize::MAX on error.
+'''
+
+[[syscall]]
+name = "Spawn"
+number = 5
+group = "Process Management (10-49)"
+bit = 5
+
+[[reserved]]
+number = 6
+bit = 35
+former = "Exec"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Always answered NotSupported; no caller.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[syscall]]
+name = "SpawnFromMem"
+number = 10
+group = "Process Management (10-49)"
+result = "typed_oom"
+bit = 6
+doc = '''
+Spawn a cell from caller-supplied ELF bytes already resident in memory.
+
+The kernel still routes the request through the normal admission gate,
+but approval is by an exact launch profile on the mem route, not by the
+caller holding broad lifecycle authority. Phase 04 intentionally leaves
+this route fail-closed for shell/user cells.
+'''
+
+[[syscall]]
+name = "SpawnFromPath"
+number = 12
+group = "Process Management (10-49)"
+result = "typed_oom"
+bit = 7
+doc = '''
+Spawn a cell by reading its ELF from a VFS path.
+
+ABI: a0 = path_ptr, a1 = path_len → tid (>0) on success.
+Phase 04 approval is by an exact kernel launch profile for the tuple
+`(caller identity, SpawnFromPath, path)`. This is distinct from
+lifecycle operations that still require ambient `SpawnCap`.
+'''
+bit_note = '''
+Exact launch-profile route: path-based spawn authorization lives in
+the kernel profile table, but the allowlist still names this family
+of outward launch operations separately from lifecycle SpawnCap.
+'''
+
+[[syscall]]
+name = "OpenCap"
+number = 13
+group = "Process Management (10-49)"
+bit = 15
+doc = '''
+Open a file by path, returning a kernel capability ID.
+ABI: a0 = path_ptr, a1 = path_len → CapId (> 0) on success.
+'''
+
+[[syscall]]
+name = "ReadCap"
+number = 14
+group = "Process Management (10-49)"
+bit = 16
+doc = '''
+Read bytes from a cap-backed file.
+ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_read.
+'''
+
+[[syscall]]
+name = "CloseCap"
+number = 15
+group = "Process Management (10-49)"
+bit = 17
+doc = '''
+Revoke a capability (close).
+ABI: a0 = cap_id → 0 on success.
+'''
+
+[[syscall]]
+name = "SeekCap"
+number = 228
+group = "Process Management (10-49)"
+bit = 16
+doc = '''
+Seek a cap-backed file cursor.
+ABI: a0 = cap_id, a1 = offset (i64 bits), a2 = whence (0=Start,1=Current,2=End)
+     → new absolute position on success.
+Requires the same allowlist bit as ReadCap (bit 16).
+'''
+
+[[syscall]]
+name = "WriteCap"
+number = 229
+group = "Process Management (10-49)"
+bit = 45
+doc = '''
+Write bytes into a cap-backed file at the current cursor position.
+ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_written.
+Requires WriteCap allowlist bit (bit 45).
+'''
+
+[[syscall]]
+name = "StatCap"
+number = 230
+group = "Process Management (10-49)"
+bit = 16
+doc = '''
+Query the size of a cap-backed file in bytes.
+ABI: a0 = cap_id → file_size on success. Does NOT move the cursor.
+Shares the ReadCap allowlist bit (bit 16).
+'''
+
+[[syscall]]
+name = "TruncateCap"
+number = 231
+group = "Process Management (10-49)"
+bit = 46
+doc = '''
+Truncate a cap-backed file to exactly `len` bytes.
+ABI: a0 = cap_id, a1 = len → 0 on success.
+Returns an error if `len > current_size`; use `WriteCap` to extend.
+Requires TruncateCap allowlist bit (bit 46).
+'''
+
+[[syscall]]
+name = "SyncCap"
+number = 232
+group = "Process Management (10-49)"
+bit = 45
+doc = '''
+Flush all dirty pages for a cap-backed file to the underlying block device (fsync).
+ABI: a0 = cap_id → 0 on success.
+No-op on write-through filesystems (RamDisk). Hooks into device flush on NVMe (G2).
+Shares the WriteCap allowlist bit (bit 45).
+'''
+
+[[syscall]]
+name = "GrantDma"
+number = 233
+group = "Process Management (10-49)"
+bit = 48
+doc = '''
+Map a PCIe device's DMA range into the IOMMU for the calling Cell.
+ABI: a0 = bdf: u32, a1 = phys: u64, a2 = size: usize → IOVA (== phys for SAS) on success.
+Caller must own the BDF via Resource Registry; range must be within Cell memory quota.
+'''
+bit_note = '''
+GrantDma (bit 48): PCIe DMA authorization. Cells that need to drive
+hardware DMA (Driver Cells) declare this capability in their manifest.
+'''
+
+[[syscall]]
+name = "WaitIrq"
+number = 234
+group = "Process Management (10-49)"
+bit = 51
+doc = '''
+Block the calling Driver Cell until hardware IRQ `irq_num` fires.
+The kernel ISR sets an atomic flag (no lock); the scheduler sweep transitions the task
+to Ready. Lost-wakeup safe: an IRQ that fires between the Cell's queue-check and this
+call is not missed (take_pending before park). Requires PcieDriverCap or PlatformCap.
+ABI: a0 = irq_num (u8), a1 = mmio_base (VirtIO MMIO slot base for InterruptACK, or 0).
+'''
+bit_note = '''
+WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
+Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
+'''
+
+[[syscall]]
+name = "RegisterPcieBar"
+number = 235
+group = "Process Management (10-49)"
+bit = 52
+doc = '''
+Register a PCIe device BAR in the kernel ECAM BAR table (Platform Cell only).
+Called by the Platform Cell after scanning ECAM config space; populates the allowlist
+that Driver Cells consult via `sys_request_mmio`. Singleton PlatformCap required.
+ABI: a0 = bdf (u32), a1 = base (usize), a2 = len (usize) → 0 on success.
+'''
+bit_note = '''
+RegisterPcieBar (bit 52): Platform Cell announces a discovered BAR.
+Singleton PlatformCap is the gate — only one trusted Platform Cell may call this.
+'''
+
+[[syscall]]
+name = "RegisterPciDevice"
+number = 236
+group = "Process Management (10-49)"
+bit = 53
+doc = '''
+Register a discovered PCI device with class/BAR info (Platform Cell only).
+
+Called by the Platform Cell after ECAM scan; populates kernel `PCI_DEVICES` so
+`sys_find_pcie_device` queries work without a kernel-side ECAM scan.
+`bdf`       = `(bus<<8)|(dev<<3)|function`
+`cls`       = (class<<16)|(subclass<<8)|prog_if
+`bar0_base` = physical base of BAR0 (or 0 if absent)
+`bar0_size` = probed BAR0 size in bytes (or 0)
+Requires singleton PlatformCap (allowlist bit 53).
+'''
+bit_note = '''
+RegisterPciDevice (bit 53): Platform Cell announces a PCI device with class info.
+Populates kernel PCI_DEVICES so find_class() queries work without kernel ECAM scan.
+'''
+
+[[syscall]]
+name = "ReadLog"
+number = 237
+group = "Process Management (10-49)"
+bit = 54
+doc = '''
+Drain up to `max` bytes from the kernel user-log ring buffer into `buf`.
+
+Returns the number of bytes actually copied (may be 0 if no new output).
+The ring buffer is written by `sys_log` (cell stdout) and `print_user_log`
+(kernel's USER: prefixed UART path) — gives the fb-console cell a live
+mirror of everything that appears on the serial console.
+
+ABI: a0 = buf_ptr, a1 = max, a2 = log_source (0 = user log, 1 = audit log) → bytes_copied.
+Source 0 is gated by ReadLogCap (bit 54); source 1 also requires supervisor privilege.
+'''
+bit_note = '''
+ReadLog (bit 54): read the kernel user-log ring buffer.
+Gated so random cells cannot snoop on other cells' stdout.
+Declare with `ReadLog` in the cell manifest to enable.
+'''
+
+[[syscall]]
+name = "SpawnFromElf"
+number = 238
+group = "Process Management (10-49)"
+result = "typed_oom"
+bit = 7
+doc = '''
+Spawn a cell from ELF bytes supplied in a caller-owned Grant region.
+
+The userspace spawner (init/supervisor/shell) reads a cell's ELF from VFS
+into a Grant, then calls this. The kernel applies the IDENTICAL spawn trust
+gate as `SpawnFromPath` (Ed25519 signature, manifest-privilege, capability
+intersection, policy, syscall allowlist, cluster, quota, measurement) over
+the grant bytes — trust is over the bytes, so the source is irrelevant.
+Lets the kernel loader stop reading a filesystem for post-boot spawns
+(G2 loader redesign). Like `SpawnFromPath`, Phase 04 approval is by the
+exact kernel launch profile for `(caller identity, SpawnFromElf,
+path_hint)` rather than by broad lifecycle `SpawnCap`.
+
+ABI: a0 = grant_id, a1 = len (bytes), a2 = path_hint_ptr, a3 = path_hint_len
+     → tid (>0) on success. `path_hint` is advisory (drives the /bin/
+     privilege check, policy lookup, measurement label); a caller lying
+     about it can only LOSE privilege, never gain it.
+'''
+bit_note = '''
+SpawnFromElf shares the same outward-launch allowlist bit (7) as
+SpawnFromPath: both are exact launch-profile routes for reviewed
+path-based child launches.
+'''
+
+[[syscall]]
+name = "GetProcs2"
+number = 239
+group = "Process Management (10-49)"
+bit = 55
+doc = '''
+Return extended process telemetry rows into a caller-owned buffer.
+
+ABI: a0 = buf_ptr, a1 = row_capacity. Returns rows written.
+Preserves `GetProcs` v1 layout/opcode by exposing a separate v2 row type.
+'''
+bit_note = '''
+GetProcs2 (bit 55): richer task telemetry, opt-in like ReadLog.
+TelemetrySnapshot shares it: the same task-observation authority with
+Cell identity and ns CPU, and the u64 allowlist has no free bit.
+'''
+
+[[syscall]]
+name = "MemInfo"
+number = 243
+group = "Process Management (10-49)"
+bit = 56
+doc = '''
+Return one fixed-width global physical-frame allocator snapshot.
+
+ABI: a0 = out_ptr, a1 = out_len. On success writes exactly one
+[`ViMemInfoV1`] and returns its byte size. This aggregate telemetry is
+opt-in because used/free capacity is observable across cells.
+'''
+bit_note = '''
+MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
+'''
+
+[[syscall]]
+name = "SpawnPinned"
+number = 16
+group = "Process Management (10-49)"
+result = "typed_oom"
+bit = 8
+doc = '''
+Spawn a cell pinned to a specific hardware core.
+
+ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
+On single-core systems core_id must be 0; any other value returns NotSupported.
+Phase 04 approval is by the exact kernel launch profile for
+`(caller identity, SpawnPinned, path)`; lifecycle `SpawnCap` still gates
+`ForceExit`, `NotifyOnExit`, `RegisterService`, and snapshot control.
+'''
+bit_note = '''
+SpawnPinned keeps its own allowlist bit because affinity/pinned
+launches are a distinct external surface, even though Phase 04
+still routes approval through exact kernel launch profiles.
+'''
+
+[[syscall]]
+name = "Snapshot"
+number = 420
+group = "Process Management (10-49)"
+bit = 32
+doc = '''
+Serialize all allocated physical frames to the snapshot sector range.
+Triggers a warm-boot-capable snapshot.  Returns frame count on success.
+'''
+bit_note = '''
+Snapshot: privileged warm-boot operation; reuses compatibility bit 32
+(allowlist-only here; the kernel authority gate requires SupervisorCap).
+'''
+
+[[syscall]]
+name = "Wait"
+number = 8
+group = "Process Management (10-49)"
+bit = 9
+comment = '''
+Wait for task
+'''
+
+[[syscall]]
+name = "SetTlsBase"
+number = 9
+group = "Process Management (10-49)"
+doc = '''
+Set this task's user thread pointer (TLS base) and return the previous value.
+
+ABI: a0 = base → previous base (> 0), 0 when there was none, or `usize::MAX`
+on error. Self-only by construction — there is no target task parameter, so
+it can only change the caller's own thread pointer, and the value carries no
+authority. Always permitted (no allowlist bit).
+
+The kernel owns the register: a cell must set its base through this syscall
+rather than writing the register directly, because the value is reinstalled
+on every resume. The cell allocates its own TLS block; the kernel never
+dereferences the base.
+'''
+bit_note = '''
+SetTlsBase is self-only and carries no authority: it changes one word
+of the caller's own register state, and the allowlist bitmap is full
+(bits 0-62 assigned, 63 is the VFS-mutate declaration bit). Giving it
+a bit would silently deny every cell whose `__ViCell_syscalls` section
+predates it, for no authority reason.
+'''
+
+[[syscall]]
+name = "FutexWait"
+number = 17
+group = "Process Management (10-49)"
+doc = '''
+Park the caller until another task wakes the same word, the word no longer
+holds `expected`, or the deadline elapses.
+
+ABI: a0 = word address (must be 4-byte aligned, mapped, caller-owned),
+     a1 = expected value, a2 = timeout in 10 ms ticks (0 = block forever)
+     → 0 = woken, 1 = value mismatch (never parked, or woken without a
+       change), 2 = timed out; `usize::MAX` when the address is not a valid
+       caller word or the caller has no live task record.
+
+Waiters are matched by `(address space, generation, address)`, so two Tier 2
+domains using the same virtual address never wake each other. Always
+permitted: a caller can already write any word it can wait on, so the
+authority is the memory, not the syscall.
+'''
+bit_note = '''
+Futex wait/wake are keyed by (address space, generation, address) and
+carry no authority of their own: a caller can already write any word
+it can wait on, and the domain identity keeps a Tier 2 peer from
+waking a wait it does not share.
+'''
+
+[[syscall]]
+name = "FutexWake"
+number = 18
+group = "Process Management (10-49)"
+doc = '''
+Wake up to `count` waiters on the caller's key.
+
+ABI: a0 = word address, a1 = count (0 wakes every waiter on the key)
+     → number woken; `usize::MAX` on error.
+'''
+
+[[syscall]]
+name = "PipeCreate"
+number = 19
+group = "Process Management (10-49)"
+doc = '''
+Create a pipe and write both endpoint handles into the caller's 2-word buffer.
+
+ABI: a0 = capacity in bytes (0 = default 4096, clamped to [64, 65536]),
+     a1 = out_ptr (16 bytes on rv64, 8 on rv32) → 0 on success.
+The ring is kernel memory charged to the creating cell's quota.
+'''
+bit_note = '''
+Pipe endpoints carry their authority in ownership, not in a bit: a
+task can only use a handle it holds, and only the owner can share it.
+The allowlist bitmap is full (bits 0-62 assigned, 63 is the
+VFS-mutate declaration bit), so a bit would deny every cell whose
+`__ViCell_syscalls` section predates the opcode.
+'''
+
+[[syscall]]
+name = "PipeRead"
+number = 22
+group = "Process Management (10-49)"
+doc = '''
+Read up to `len` bytes from a pipe.
+
+ABI: a0 = handle, a1 = buf_ptr, a2 = len, a3 = timeout in 10 ms ticks
+     (0 = block forever) → bytes read (0 = EOF or deadline), `usize::MAX`
+     when the handle is not this task's.
+Blocks while the ring is empty and a writer end remains.
+'''
+
+[[syscall]]
+name = "PipeWrite"
+number = 23
+group = "Process Management (10-49)"
+doc = '''
+Write up to `len` bytes to a pipe.
+
+ABI: a0 = handle, a1 = buf_ptr, a2 = len, a3 = timeout in 10 ms ticks
+     (0 = block forever) → bytes written (0 = deadline), `usize::MAX - 2`
+     when no reader end remains (broken pipe).
+Blocks while the ring is full; a zero-length write closes the writer end.
+'''
+
+[[syscall]]
+name = "PipeClose"
+number = 24
+group = "Process Management (10-49)"
+doc = '''
+Close one endpoint this task owns. ABI: a0 = handle → 0.
+Closing the last writer end makes readers observe EOF.
+'''
+
+[[syscall]]
+name = "PipeShare"
+number = 25
+group = "Process Management (10-49)"
+doc = '''
+Duplicate an endpoint into another task's table.
+
+ABI: a0 = handle, a1 = target tid → 0 on success. Owner-only: a task cannot
+share an endpoint it does not hold.
+'''
+
+[[syscall]]
+name = "Yield"
+number = 104
+group = "Process Management (10-49)"
+comment = '''
+Linux sched_yield is 24, but we use 104 in current code
+'''
+bit_note = '''
+Yield, Exit, and ForceExit are always permitted — a Cell must be able
+to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
+regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
+NotifyOnExit, RegisterService, and CapRevoke are always permitted past
+the allowlist; dispatch applies SpawnCap or a narrower operation-specific
+capability gate.
+SpawnSetDirs (SpawnCap) and QueryDirHandles (VFS-provider or self)
+join them: giving them bits would silently deny every cell whose
+`__ViCell_syscalls` section was generated before those bits existed,
+and the authority check at dispatch is the real gate either way.
+'''
+
+[[syscall]]
+name = "SetTimer"
+number = 35
+group = "Process Management (10-49)"
+bit = 11
+comment = '''
+Added SetTimer
+'''
+
+[[syscall]]
+name = "ShmAlloc"
+number = 20
+group = "Process Management (10-49)"
+bit = 12
+comment = '''
+Allocate Shared Memory
+'''
+
+[[syscall]]
+name = "ShmMap"
+number = 21
+group = "Process Management (10-49)"
+bit = 13
+comment = '''
+Map Shared Memory to Task
+'''
+
+[[syscall]]
+name = "Log"
+number = 11
+group = "Logging (50-59)"
+bit = 10
+comment = '''
+Current implementation uses 11
+'''
+
+[[syscall]]
+name = "Open"
+number = 101
+group = "Filesystem (100-199)"
+bit = 18
+
+[[syscall]]
+name = "Read"
+number = 102
+group = "Filesystem (100-199)"
+bit = 19
+
+[[syscall]]
+name = "Close"
+number = 103
+group = "Filesystem (100-199)"
+bit = 21
+
+[[syscall]]
+name = "ReadDir"
+number = 105
+group = "Filesystem (100-199)"
+bit = 22
+
+[[syscall]]
+name = "Write"
+number = 109
+group = "Filesystem (100-199)"
+bit = 20
+
+[[syscall]]
+name = "Seek"
+number = 106
+group = "Filesystem (100-199)"
+bit = 23
+
+[[syscall]]
+name = "FileOp"
+number = 107
+group = "Filesystem (100-199)"
+bit = 24
+comment = '''
+Rename, Remove
+'''
+
+[[syscall]]
+name = "Chdir"
+number = 252
+group = "Filesystem (100-199)"
+kernel = "ChDir"
+bit = 60
+bit_note = '''
+CWD operations (bit 60): caller-scoped chdir and getcwd.
+Bounded lexical traversal that preserves task isolation.
+'''
+
+[[syscall]]
+name = "Getcwd"
+number = 253
+group = "Filesystem (100-199)"
+kernel = "GetCwd"
+bit = 60
+
+[[syscall]]
+name = "Fstat"
+number = 254
+group = "Filesystem (100-199)"
+bit = 61
+doc = '''
+Query caller-scoped descriptor metadata through a fixed-width wire record.
+
+ABI: a0 = fd, a1 = output pointer, a2 = output length → bytes written.
+The output must hold at least [`VI_FSTAT_V1_LEN`] bytes. Success writes
+exactly one [`ViFstatV1`] and returns `VI_FSTAT_V1_LEN`; failure writes
+nothing. Requires allowlist bit 61.
+'''
+bit_note = '''
+Caller-scoped descriptor metadata has its own opt-in authority.
+'''
+
+[[syscall]]
+name = "Rename"
+number = 255
+group = "Filesystem (100-199)"
+bit = 62
+doc = '''
+Atomic file rename syscall.
+
+ABI: a0 = old_path_ptr, a1 = old_path_len, a2 = new_path_ptr, a3 = new_path_len → 0 on success.
+Kernel admission requires allowlist bit 62. The VFS mutation transaction
+independently requires the bit-63 `VfsMutate` marker in the same explicit,
+non-`ALL` declaration; bit 63 alone never authorizes this opcode.
+'''
+bit_note = '''
+Atomic rename has its own opt-in authority.
+'''
+
+[[syscall]]
+name = "GetTime"
+number = 120
+group = "Time/System (120-129)"
+bit = 25
+
+[[syscall]]
+name = "GpuFlush"
+number = 300
+group = "GPU / Display (Phase 16)"
+bit = 26
+doc = '''
+Flush a pixel rectangle from a cell-provided buffer to the GPU framebuffer.
+ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)
+'''
+
+[[syscall]]
+name = "GpuCursor"
+number = 301
+group = "GPU / Display (Phase 16)"
+bit = 43
+doc = '''
+Set or move the VirtIO GPU hardware cursor.
+ABI: a0 = op (0=set sprite, 1=move), a1 = data_ptr (op=0: 64×64 BGRA sprite),
+     a2 = xy ((x<<16)|y), a3 = hot ((hot_x<<16)|hot_y, op=0 only).
+'''
+
+[[syscall]]
+name = "GpuGetResolution"
+number = 302
+group = "GPU / Display (Phase 16)"
+bit = 44
+doc = '''
+Query the VirtIO GPU's current scanout resolution.
+ABI: no args → returns (width as u32) << 32 | (height as u32).
+Falls back to (1280, 800) if GPU not yet initialized.
+'''
+
+[[reserved]]
+number = 310
+bit = 27
+former = "NetTx"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Discarded the frame and reported failure; the net service's no-driver path is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[reserved]]
+number = 311
+bit = 28
+former = "NetRx"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Never returned a frame; the net service's no-driver path is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[syscall]]
+name = "RecvTimeout"
+number = 201
+group = "Advanced IPC (Phase 20)"
+bit = 29
+doc = '''
+Recv with a deadline in monotonic ticks.
+ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = timeout_ticks → sender_id or ViError::Timeout.
+'''
+
+[[syscall]]
+name = "SendGather"
+number = 202
+group = "Advanced IPC (Phase 20)"
+bit = 30
+doc = '''
+Gather-send: one IPC message assembled from up to 8 non-contiguous buffers.
+ABI: a0 = target, a1 = iovec_ptr ([ptr:usize, len:usize] × count), a2 = iovec_count.
+'''
+
+[[syscall]]
+name = "RecvScatter"
+number = 203
+group = "Advanced IPC (Phase 20)"
+bit = 31
+doc = '''
+Scatter-receive: one IPC message written into up to 8 non-contiguous buffers.
+ABI: a0 = mask, a1 = iovec_ptr, a2 = iovec_count → sender_id.
+'''
+
+[[syscall]]
+name = "NotifyOnExit"
+number = 204
+group = "Advanced IPC (Phase 20)"
+doc = '''
+Register the caller as a watcher of `watched_tid`. When that task exits OR
+faults, the kernel delivers a death notification to the caller's pending
+`Recv` (`sender_id` = the dead tid, payload = the exit/fault reason), so a
+supervisor can wait-any across many children with a single recv loop.
+Requires `SpawnCap`. ABI: a0 = watched_tid → 0 on success, usize::MAX on error.
+'''
+
+[[syscall]]
+name = "RegisterService"
+number = 205
+group = "Advanced IPC (Phase 20)"
+doc = '''
+Register `tid` as the current provider of well-known `service_id`. SpawnCap
+owns the namespace. Narrow kernel-only exceptions may authorize one fixed
+service ID and `tid=0` self-registration; they grant no general registration
+authority. `flags` (`api::syscall::service_flags`) may be non-zero only from
+trusted init or a SupervisorCap holder; an undefined bit is refused.
+ABI: a0 = service_id (u16), a1 = tid, a2 = flags → 0 / usize::MAX.
+'''
+
+[[reserved]]
+number = 206
+former = "LookupService"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D5): answered a bare provider
+tid. Every caller resolves through LookupServiceBound (429), which keeps
+allowlist bit 37. The number is never reused; the kernel decodes it as an
+unknown syscall.
+'''
+
+[[syscall]]
+name = "Heartbeat"
+number = 207
+group = "Advanced IPC (Phase 20)"
+bit = 38
+doc = '''
+Liveness heartbeat: the caller asserts it is alive and will call again within
+`interval_ticks` 10 ms scheduler ticks. If it misses that deadline the kernel
+terminates it as HUNG — catching a silent hang (deadlock / stuck loop) that the
+CPU-monopoly watchdog cannot see — so the supervisor restarts it. `interval_ticks
+= 0` disables the heartbeat. Open to all cells. ABI: a0 = interval_ticks → 0.
+'''
+bit_note = '''
+Heartbeat is an open syscall (any cell asserts its own liveness).
+'''
+
+[[syscall]]
+name = "GrantAlloc"
+number = 208
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Allocate a kernel-managed Grant region of up to 4096 pages (16 MB).
+ABI: a0 = size (rounded up to pages, max 16777216) → base_paddr (> 0) on success, 0 on OOM.
+Requires GrantCap (allowlist bit 39).
+'''
+bit_note = '''
+GrantCap (bit 39): cells that need zero-copy large-file I/O via Grant API.
+'''
+
+[[syscall]]
+name = "GrantShare"
+number = 209
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Share Grant access with `target_task`.
+ABI: a0 = grant_id, a1 = target_task_id, a2 = GrantPerm (0=RO, 1=WO, 2=RW) → 0 on success.
+In the current SAS build those permission bits are a protocol contract,
+not Tier 2 hardware isolation against a malicious peer.
+Requires GrantCap (bit 39).
+'''
+
+[[syscall]]
+name = "GrantSlice"
+number = 210
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Return the raw pointer to a Grant region the caller has access to.
+ABI: a0 = grant_id, a1 = optional `size_out` pointer, a2 =
+`expected_owner_tid`, a3 = `flags` ([`grant_slice`]) → ptr (usize, same
+as grant_id for identity-mapped SAS) on success.
+
+`size_out` may be null. When non-null it must point to one aligned
+`usize` slot fully contained in the caller's own user stack; segment
+memory and arbitrary user mappings are rejected. An invalid `size_out`
+pointer makes the syscall fail with `InvalidInput`.
+
+`expected_owner_tid` (frozen 2026-11-06, H-27): `0` places no owner
+expectation. A nonzero value that is not the tid that allocated or
+registered the Grant returns exactly what an unknown `grant_id` returns
+(`usize::MAX`), with no other observable difference; a grantee uses it
+to bind a client-named Grant only to that client.
+
+`flags` (approved 2026-11-10): bit 0 [`grant_slice::LEASE`] publishes a
+lease keyed `(caller, owner, grant)` in the same grant-table
+transaction as the lookup and owner check; it requires a nonzero
+`expected_owner_tid`. A second lease on the same key adds a hold. All
+of the caller's leases on that owner end at the caller's next receive
+(any receive form), its next send to the owner (`Send`, `TrySend`,
+`SendGather`, `IpcSubmit`, `Reply`), or its death. Meanwhile the
+owner's `GrantFree`/`GrantUnregister` fails with `PermissionDenied`
+and the owner's death withholds the frames until the lease ends. Bits
+other than 0, `LEASE` with `expected_owner_tid = 0`, and a full lease
+table (64 distinct keys per caller) return `usize::MAX`.
+
+Returns usize::MAX on permission denied or not found.
+'''
+
+[[syscall]]
+name = "GrantFree"
+number = 211
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Release a Grant region: unmaps its pages and frees its frames.
+ABI: a0 = grant_id → 0 on success.
+'''
+
+[[syscall]]
+name = "BlkReadAsync"
+number = 212
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 36
+doc = '''
+Start an async sector read into a Grant buffer (poll-based stub; Phase 04 for true async).
+ABI: a0 = sector, a1 = grant_id → async_id (1 = immediately complete) on success.
+Requires BlockIoCap (bit 36) — same gate as raw block-I/O opcodes 500/501.
+'''
+bit_note = '''
+BlkReadAsync reuses BlockIoCap (bit 36) — same authority as raw block I/O.
+'''
+
+[[syscall]]
+name = "RequestMmio"
+number = 213
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 40
+doc = '''
+Request exclusive MMIO ownership for a peripheral Driver Cell.
+ABI: a0 = base (physical MMIO address), a1 = len → 0 on success.
+Requires the corresponding manifest flag (GPIO or UART) to be set.
+The kernel checks the Resource Registry allowlist; rejects unknown ranges.
+'''
+bit_note = '''
+RequestMmio: gated by GPIO (bit 40) or UART (bit 41) manifest flags.
+The kernel re-checks the manifest and allowlist at dispatch; here we
+assign bit 40 as the generic "peripheral MMIO" allowlist bit.
+ProbeVirtioMmio shares it: a Driver Cell probes a slot only to claim
+it, and the u64 allowlist has no free bit.
+'''
+
+[[syscall]]
+name = "GetRandom"
+number = 214
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 41
+doc = '''
+Fill caller buffer with VirtIO-RNG entropy (true hardware randomness).
+Required for TLS key generation — mtime-seeded PRNG is cryptographically broken.
+ABI: a0 = buf_ptr, a1 = len (max 64 per call, one VirtIO descriptor) → bytes written.
+Returns 0 if no VirtIO-RNG device is present.
+'''
+bit_note = '''
+GetRandom: any cell that needs entropy (TLS, crypto) declares this.
+Bit 41 was previously allocated as a UART MMIO alias; repurposing for entropy
+is safe because UART MMIO is enforced at dispatch by resource-registry check,
+not by this bit alone.
+'''
+
+[[syscall]]
+name = "GrantRegister"
+number = 215
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Allocate a persistent, pre-pinned Grant buffer for the cell's lifetime.
+Unlike GrantAlloc, the buffer is not freed until GrantUnregister or cell exit.
+ABI: a0 = size → reg_id (physical base, > 0) on success, 0 on OOM.
+Requires GrantCap (allowlist bit 39).
+'''
+
+[[syscall]]
+name = "GrantUnregister"
+number = 216
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 39
+doc = '''
+Release a registered buffer allocated via GrantRegister.
+ABI: a0 = reg_id → 0 on success.
+Requires GrantCap (allowlist bit 39).
+'''
+
+[[syscall]]
+name = "WaitForEvent"
+number = 217
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+bit = 42
+doc = '''
+Block until one or more bits in `mask` fire, or `timeout_ticks` 10ms ticks elapse.
+`timeout_ticks = 0` means block indefinitely.
+Returns the fired event bits (>0) on wake, or 0 on timeout.
+Bit 0 = NET_RX (NIC frame available). See `api::syscall::events`.
+ABI: a0 = mask (u32), a1 = timeout_ticks (u64 lo, a2 = hi) → fired_mask (usize).
+Allowlist-gated (bit 42). Requires `WaitForEvent` in `declare_syscalls!`.
+'''
+bit_note = '''
+WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
+'''
+
+[[reserved]]
+number = 218
+bit = 47
+former = "AudioPlay"
+comment = '''
+Retired (architecture remediation Phase 11, CP1 D4): Always failed (VirtIO sound output was never wired); its only caller, audio-demo, is removed.
+The number and the allowlist bit are never reused; the kernel decodes the
+number as an unknown syscall.
+'''
+
+[[syscall]]
+name = "CapRevoke"
+number = 219
+group = "Zero-Copy Grant (Storage 2.0, Phase 01)"
+doc = '''
+Revoke one or more capabilities from a live running cell (runtime revocation).
+
+The caller must hold `SpawnCap`.  System cells (`block_io_cap` / `network_cap`
+holders) are protected — revoking I/O caps from a running service mid-flight
+would corrupt driver state; use the supervisor freeze/pause/replacement flow instead.
+
+`cap_mask` bit layout (see `cap_mask` module constants):
+  bit 0 → block_io · bit 1 → network · bit 2 → spawn · bit 3 → hypervisor
+  bits  8-15 → mmio_devices sub-mask (matches resource_registry::DEV_*)
+  bits 16-23 → block_regions sub-mask (partition access bits)
+
+ABI: a0 = target_tid, a1 = cap_mask (u32) → 0 on success.
+Returns `PermissionDenied` if caller lacks SpawnCap or target is a system cell.
+Always permitted past the syscall allowlist (SpawnCap is the authority gate).
+'''
+
+[[syscall]]
+name = "CreateVm"
+number = 220
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+group_note = '''
+All six syscalls require `hypervisor = true` in the cell manifest AND the
+kernel to have booted at EL2 (ARM64) or with H-ext (RISC-V).  A cell
+without HypervisorCap calling any of these receives `PermissionDenied`.
+'''
+doc = '''
+Allocate guest RAM and a Stage-2 table; returns opaque `vm_id`.
+ABI: a0 = guest_pages → vm_id (>0) on success, 0 on OOM / unsupported.
+'''
+bit_note = '''
+HypervisorCap (bit 44): all 6 VMM syscalls share one bit.
+Bit 43 is already assigned to GpuCursor; 44 is the next free slot.
+'''
+
+[[syscall]]
+name = "CreateVcpu"
+number = 221
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Create a vCPU in `vm_id` with initial PC `entry_pc`; returns `vcpu_id`.
+ABI: a0 = vm_id, a1 = entry_pc → vcpu_id (>0).
+'''
+
+[[syscall]]
+name = "MapGuestMemory"
+number = 222
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Map guest IPA range `[ipa, ipa+size)` to kernel-managed frames in `vm_id`.
+ABI: a0 = vm_id, a1 = ipa, a2 = size (bytes), a3 = writable:bool → 0.
+'''
+
+[[syscall]]
+name = "RunVcpu"
+number = 223
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+World-switch into vCPU until exit or `budget_ns` ns expire; write `ViVmExit`.
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = budget_ns, a3 = out_ptr (*mut ViVmExit) → 0.
+'''
+
+[[syscall]]
+name = "VcpuRegs"
+number = 224
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Read (mode=0) or write (mode=1) 32 vCPU GP words (x0-x30, PC).
+Raspberry Pi 3 mode=2 reads a timer snapshot: CNTV_CTL_EL0 and
+CNTV_CVAL_EL0 in words 0 and 1, with words 2..31 zeroed. All modes
+require a writable 256-byte buffer owned by the calling Hypervisor Cell.
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = mode → 0.
+'''
+
+[[syscall]]
+name = "InjectIrq"
+number = 225
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.
+'''
+
+[[syscall]]
+name = "WriteGuestMemory"
+number = 226
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Copy `len` bytes from caller's `src_ptr` into guest physical RAM at `gpa`.
+Kernel validates `src_ptr + len` lies within the caller's mapped address space
+and `gpa + len` lies within the VM's carved guest-RAM region.
+ABI: a0 = vm_id, a1 = gpa, a2 = src_ptr, a3 = len → bytes_written.
+'''
+
+[[syscall]]
+name = "ReadGuestMemory"
+number = 227
+group = "Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44)"
+bit = 44
+doc = '''
+Copy `len` bytes from guest physical RAM at `gpa` into caller's `dst_ptr`.
+Kernel bounds-checks both sides: `dst_ptr + len` within caller's address space
+and `gpa + len` within the VM's carved guest-RAM region.
+ABI: a0 = vm_id, a1 = gpa, a2 = dst_ptr, a3 = len → bytes_read.
+'''
+
+[[syscall]]
+name = "HotSwapReady"
+number = 401
+group = "Hot-swap / state transfer (Phase 20)"
+bit = 32
+doc = '''
+Opcode 400 is retired and reserved. It must remain unmapped so older
+whole-sequence hot-swap callers fail closed instead of reaching a new ABI.
+Signal to the kernel that this cell has finished deserializing state and
+is ready to receive IPC. Called by the new cell during hot-swap Step 4.
+ABI: (no args) → 0 on success.
+'''
+bit_note = '''
+Bit 32 remains the compatibility bucket shared by the live ready
+signal and snapshot control after retiring opcode 400.
+'''
+
+[[syscall]]
+name = "StateStash"
+number = 410
+group = "Hot-swap / state transfer (Phase 20)"
+bit = 33
+doc = '''
+Stash a Cell's serialized state in the kernel under `key`, so a
+replacement instance can recover it across a hot-swap / respawn.
+ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes stored.
+'''
+
+[[syscall]]
+name = "StateRestore"
+number = 411
+group = "Hot-swap / state transfer (Phase 20)"
+bit = 34
+doc = '''
+Restore previously stashed state for `key` into the caller's buffer.
+ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes written (0 if none).
+'''
+
+[[syscall]]
+name = "StateStashClear"
+number = 412
+group = "Hot-swap / state transfer (Phase 20)"
+bit = 34
+doc = '''
+Delete the stash entry for `key`, freeing its slot.
+Call after a successful `StateRestore` to release kernel memory.
+ABI: a0 = key → 0 on success (no-op when key is absent).
+'''
+bit_note = '''
+StateStashClear: same allowlist bit as StateRestore (both are stash housekeeping).
+'''
+
+[[syscall]]
+name = "FreezeCell"
+number = 413
+group = "Supervisor Primitives (P03) — SupervisorCap-gated"
+bit = 49
+doc = '''
+413: Freeze a Cell. Requires SupervisorCap.
+ABI: a0 = target_tid → 0 on success.
+'''
+bit_note = '''
+SupervisorOp (bit 49): freeze/resume/kill/query a live Cell.
+Gated by SupervisorCap which is ONLY granted via direct kernel TCB write.
+'''
+
+[[syscall]]
+name = "ResumeCell"
+number = 414
+group = "Supervisor Primitives (P03) — SupervisorCap-gated"
+bit = 49
+doc = '''
+414: Resume a frozen Cell or atomically commit a hot-swap cutover.
+Requires SupervisorCap.
+ABI: plain resume uses a0 = target_tid and a1..a3 = 0. Atomic cutover
+uses a0 = new_tid, a1 = old_tid, a2 = service_id, a3 = 0.
+'''
+
+[[syscall]]
+name = "KillCell"
+number = 415
+group = "Supervisor Primitives (P03) — SupervisorCap-gated"
+bit = 49
+doc = '''
+415: Forcibly terminate a Cell. Requires SupervisorCap.
+ABI: a0 = target_tid, a1 = exit_code: u32 → exit_code on success.
+'''
+
+[[syscall]]
+name = "RegisterBlockDriver"
+number = 416
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+416: Publish the caller as the block driver of one device it owns
+([`crate::block_route`]).
+
+ABI: a0 = kind ([`crate::block_route::BLOCK_DEVICE_PCI`] or
+[`crate::block_route::BLOCK_DEVICE_MMIO`]), a1 = id (BDF `bus<<8|dev<<3|fn`
+≤ 0xFFFF, or the exact non-zero MMIO window base), a2 = a3 = 0 → 0 on
+success. The caller must hold PcieDriverCap or UsbDriverCap and own the
+device (its BDF lease, or the MMIO window owned by its Cell). The route slot
+is keyed by the device and bound to it for the boot: a re-registration of the
+same device takes the slot back, no caller can publish another device's slot.
+Errors: `usize::MAX - 2` the caller does not own the device;
+`usize::MAX - 3` unknown kind, id out of range or non-zero a2/a3;
+`usize::MAX` no driver capability, caller retiring, or no free slot.
+'''
+bit_note = '''
+DriverRegistration (bit 50): announce as the active block/NIC driver,
+discover PCIe device BARs, and announce the separate USB HID event
+producer role. RegisterUsbHidProducer shares this bit deliberately:
+the u64 allowlist is full (bits 0–62 assigned, 63 is the VFS-mutate
+declaration) and the role carries exactly the same usb_driver
+authority as RegisterNicDriver.
+'''
+
+[[syscall]]
+name = "RegisterNicDriver"
+number = 417
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+417: Register caller as the active NIC driver.
+ABI: (no args) → 0 on success. Requires PcieDriverCap.
+'''
+
+[[syscall]]
+name = "FindPcieDevice"
+number = 418
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+418: Find the first PCIe device matching (class, subclass, prog_if).
+ABI: a0=class(u8), a1=subclass(u8), a2=prog_if(u8), a3=out_ptr(*mut PcieDeviceInfo)
+→ 1 if found (out_ptr written), 0 if not found. Requires PcieDriverCap.
+`PcieDeviceInfo` is 48 bytes: `bdf`, `found`, first-BAR `bar0_base`/`bar0_len`,
+the appended first-**memory**-BAR `bar_mem_base`/`bar_mem_len` (the
+window a driver whose BAR0 is I/O — e.g. ICH9 AHCI at BAR5 — must map), and
+the appended `vendor_id`/`device_id` so a driver can confirm the device is
+its own controller family before programming a register model.
+'''
+
+[[syscall]]
+name = "QueryHotswapReady"
+number = 419
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 49
+doc = '''
+419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
+ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.
+'''
+
+[[syscall]]
+name = "SpawnReplacement"
+number = 421
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+result = "typed_oom"
+bit = 57
+doc = '''
+421: Spawn a replacement for a frozen Cell using its recorded capability ceiling.
+Requires SupervisorCap and a live kernel freeze record for `old_tid`.
+ABI: a0 = old_tid, a1 = path_ptr, a2 = path_len → new_task_id or error.
+'''
+bit_note = '''
+SpawnReplacement (bit 57): supervisor-only replacement spawn via a
+kernel-recorded frozen-cell ceiling. This stays separate from bit 49
+so older supervisor-op allowlists do not silently gain it.
+'''
+
+[[syscall]]
+name = "PauseService"
+number = 422
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 49
+doc = '''
+422: Atomically pause a service mapping before replacement snapshotting.
+Requires SupervisorCap. The mapping is cleared only when it still points
+at `expected_tid`, so a concurrent restart cannot be accidentally hidden.
+Success also means cached-TID ingress is blocked and accepted ingress drained.
+ABI: a0 = service_id, a1 = expected_tid → 0 on success.
+'''
+
+[[syscall]]
+name = "RegisterUsbHidProducer"
+number = 423
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+423: Announce caller as the kernel-verified USB HID event producer.
+ABI: (no args) → 0 on success. Requires `UsbDriverCap` (the `usb_driver`
+launch ceiling) — the same authority `/bin/dwc2-usb` and `/bin/xhci` hold.
+
+Publishes the caller's TID under [`service::USB_HID_PRODUCER`] so the
+input service can verify a USB HID producer *without* consulting the
+singleton [`service::NIC_DRIVER`]. On a PC that already has
+e1000/virtio-net, claiming the NIC role would steal the network route;
+this role is deliberately distinct and never overwrites the NIC owner.
+
+Allowlist: shares the DriverRegistration bit (50) with
+`RegisterBlockDriver`/`RegisterNicDriver`/`FindPcieDevice`, exactly as
+`WaitCompletion` shares bit 42. The `u64` allowlist is full (bits 0–62 are
+assigned to syscalls; bit 63 is the VFS-mutate declaration), so a fresh bit
+would require widening the ABI or reclaiming 63 — neither is append-only,
+and neither is needed: the `usb_driver` capability check at dispatch is
+the real authority gate.
+'''
+
+[[syscall]]
+name = "FindPcieDeviceByVendor"
+number = 424
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+424: Find the first PCIe device with an exact `(vendor_id, device_id)`.
+
+ABI: a0 = vendor_id (u16), a1 = device_id (u16),
+a2 = out_ptr (*mut PcieDeviceInfo) → 1 if found (out_ptr written),
+0 if not found. Requires `PcieDriverCap`.
+
+`FindPcieDevice` (418) matches `(class, subclass, prog_if)` only, so two
+Driver Cells in one class cannot each name their own controller:
+Ethernet `0x02:00:00` is shared by `/bin/e1000` and `/bin/igb`, and the
+class query has to hand the device to one of them while the other must
+decline and release it before the first can retry. This query names the
+device exactly, so each family cell claims its own controller with no
+sibling-exit dependency. The legacy query is unchanged and keeps serving
+the cell that has no competing family (the 82540EM `/bin/e1000`;
+`/bin/nvme` uses it for NVMe).
+
+Append-only: 418 is untouched and 424 is the next free opcode after 423,
+so an older caller that only knows 418 is unaffected. The Ethernet family
+gate is unchanged: a vendor:device match in the Ethernet class is offered
+only when a Driver Cell in this image drives that ID, and the kernel's
+scan keeps rejecting every other Ethernet ID by name.
+
+Allowlist: shares the DriverRegistration bit (50) with
+`FindPcieDevice`/`RegisterNicDriver`, exactly as `RegisterUsbHidProducer`
+shares it; the `PcieDriverCap` check at dispatch is the authority gate.
+'''
+
+[[syscall]]
+name = "SerialPortInfo"
+number = 425
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+425: Report one declared serial port's identity and whether it is usable.
+
+ABI: a0 = port index (u32), a1 = out_ptr (*mut SerialPortInfo) →
+1 when the port is registered and usable (out_ptr written), 0 when the
+index is out of range or the machine did not answer the 16550 probe.
+Requires the `serial_port` capability.
+
+Ports are declared by the board profile and probed by the kernel before
+any cell can see them, so "usable" here means the kernel already proved a
+16550 register set answers at that base. Index 0 is the console.
+'''
+
+[[syscall]]
+name = "SerialWrite"
+number = 426
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+426: Write bytes to a usable serial port.
+
+ABI: a0 = port index, a1 = ptr (*const u8), a2 = len → bytes written, or
+`u64::MAX` when the index is not a usable port. Requires `serial_port`.
+
+Blocking on the transmit holding register, like the console path: a
+bounded burst (the kernel caps `len`) cannot stall the cell indefinitely.
+'''
+
+[[syscall]]
+name = "SerialRead"
+number = 427
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+427: Poll bytes from a usable serial port without blocking.
+
+ABI: a0 = port index, a1 = ptr (*mut u8), a2 = len → bytes read
+(0 when nothing is pending), or `u64::MAX` for an unusable index.
+Requires `serial_port`.
+
+Polled, not interrupt-driven: each extra port would need its own IDT
+vector and an IIR-based demultiplexer, which this phase does not add. The
+console keeps its interrupt path.
+'''
+
+[[syscall]]
+name = "SerialConfigure"
+number = 428
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+428: Set a usable serial port's baud rate, keeping 8N1.
+
+ABI: a0 = port index, a1 = baud (u32) → 0 on success, 1 for an unusable
+index, 2 for an unsupported baud. Requires `serial_port`.
+
+Supported rates are the standard 16550 divisors from a 1.8432 MHz clock
+(115200, 57600, 38400, 19200, 9600). Anything else is refused rather than
+rounded to a rate the caller did not ask for.
+'''
+
+[[syscall]]
+name = "LookupServiceBound"
+number = 429
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 37
+doc = '''
+429: Resolve a well-known `service_id` to its **live provider binding**,
+not just its tid.
+
+ABI: a0 = service_id (u16), a1 = out_ptr, a2 = out_len →
+[`crate::service_binding::SERVICE_BINDING_LEN`] (24) bytes written on
+success; `0` if no live provider is registered (also the answer for a
+provider hidden behind a hot-swap pause); `Err` for a buffer shorter than
+the record — never a partial write.
+
+The record is
+[`crate::service_binding::ServiceBinding`] `{ tid, cell_id, generation }`,
+resolved and written in one instant under the scheduler lock. It replaced
+the bare-tid `LookupService = 206`, retired in Phase 11 (D5).
+
+`tid` alone is not an identity: it says where to send, not which Cell
+incarnation is there. `cell_id` alone is not one either, because Cell slots
+are reused. `generation` is the per-Cell epoch the kernel mints at cell
+creation, and it is the same axis [`crate::caller_identity::CallerIdentity`]
+and [`crate::cell_owner::CellOwner`] already use — one identity concept, not
+two.
+
+The binding is **boot-local**. It is not a remote replay epoch and carries no
+cross-reboot meaning; it grants no authority, and the kernel re-verifies the
+live binding when the returned tid is actually used.
+
+Allowlist: bit 37, the bit the retired `LookupService` held. It is an open
+syscall: any client resolves a service endpoint.
+'''
+bit_note = '''
+Open syscall (any client resolves a service endpoint). Bit 37 came from the
+retired LookupService (206); it consumes no fresh bit — the u64 allowlist is
+full (bits 0-62 syscalls, 63 the VFS-mutate declaration).
+'''
+
+[[syscall]]
+name = "TelemetrySnapshot"
+number = 430
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+result = "typed_oom"
+bit = 55
+doc = '''
+430: Capture one Cell-aware telemetry snapshot into a caller buffer
+(Phase 06 S6-1, [`crate::telemetry`]).
+
+ABI: a0 = out_ptr (8-byte aligned), a1 = out_len (bytes, at least
+[`crate::telemetry::HEADER_LEN`]), a2 = [`crate::telemetry::request`] flags,
+a3 = 0 → bytes written: a header, then whole Cell rows, then whole task
+rows; whatever does not fit is counted, never silently dropped.
+
+Needs the caller's `observe_tasks` right; a system-memory request without
+`observe_memory` is not an error — the header says `SYSMEM_DENIED`. A
+transient kernel allocation failure returns the typed out-of-memory code.
+
+Allowlist: shares bit 55 with [`Self::GetProcs2`] — the same task-observation
+authority, and the `u64` allowlist is full (bits 0–62 syscalls, 63 the
+VFS-mutate declaration). `GetProcs2`, `GetProcs` and `MemInfo` are unchanged.
+'''
+
+[[syscall]]
+name = "QueryRetirement"
+number = 431
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+431: Read the retirement verdict of a retired Cell incarnation root
+(Phase 09B K1, [`crate::retirement`]).
+
+ABI: a0 = root_tid, a1 = out_ptr, a2 = out_len (must equal
+[`crate::retirement::RETIREMENT_RECORD_LEN`]) →
+`RETIREMENT_RECORD_LEN` on success, the most recent
+[`crate::retirement::ViRetirementV1`] for that root written to `out_ptr`.
+Errors: `usize::MAX - 2` (`FileNotFound`) no record — unknown or evicted,
+which the caller must treat as `Unproven`; `usize::MAX - 3`
+(`InvalidInput`) `out_len` is not the exact record length, or `out_ptr`
+is not a writable caller buffer; `usize::MAX` the caller was not a death
+subscriber of that root when it retired and holds no `SupervisorCap`.
+
+Allowlist: none (the `u64` allowlist is full); always permitted past the
+allowlist like [`Self::NotifyOnExit`], gated at dispatch.
+'''
+bit_note = '''
+QueryRetirement: dispatch admits only a death subscriber of that
+root or a SupervisorCap holder; the allowlist has no free bit.
+'''
+
+[[syscall]]
+name = "LookupBlockRoute"
+number = 432
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+432: Read one block route slot ([`crate::block_route`]).
+
+ABI: a0 = index (`0..MAX_BLOCK_ROUTES`), a1 = out_ptr, a2 = out_len (must
+equal [`crate::block_route::BLOCK_ROUTE_RECORD_LEN`]), a3 = 0 →
+`BLOCK_ROUTE_RECORD_LEN` on success, the slot's
+[`crate::block_route::ViBlockRouteV1`] written to `out_ptr`. Slots fill in
+bind order and are never removed within a boot, so an enumeration stops at
+the first empty index. Errors: `usize::MAX - 2` (`FileNotFound`) no route at
+that index; `usize::MAX - 3` (`InvalidInput`) wrong `out_len`, non-zero a3 or
+an unwritable `out_ptr`; `usize::MAX` the caller holds neither BlockIoCap nor
+SpawnCap.
+
+Allowlist: none (the `u64` allowlist is full); always permitted past the
+allowlist like [`Self::QueryRetirement`], gated at dispatch.
+'''
+bit_note = '''
+LookupBlockRoute: dispatch admits only BlockIoCap or SpawnCap holders.
+'''
+
+[[syscall]]
+name = "QueryMachineFacts"
+number = 433
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+433: Read the machine facts record ([`crate::machine_facts`], ADR-0029 §3).
+
+ABI: a0 = out_ptr, a1 = out_len (must equal
+[`crate::machine_facts::MACHINE_FACTS_CAPACITY`]), a2 = 0, a3 = 0 → the
+record's `total_len`, with one [`crate::machine_facts::ViMachineFactsV1`]
+written to the start of `out_ptr`. The record is computed at call time
+from the bound x86 profile, the boot identity facts, the VT-d state and
+the registered PCI functions; the call has no other effect. Errors:
+`usize::MAX - 2` (`FileNotFound`) no facts — not x86, no profile bound
+yet, or more than `MACHINE_FACTS_PCI_MAX` PCI functions; `usize::MAX - 3`
+(`InvalidInput`) wrong `out_len`, non-zero a2/a3 or an unwritable
+`out_ptr`; `usize::MAX` the caller holds no SpawnCap.
+
+Allowlist: none (the `u64` allowlist is full); always permitted past the
+allowlist like [`Self::LookupBlockRoute`], gated at dispatch.
+'''
+bit_note = '''
+QueryMachineFacts: dispatch admits only SpawnCap holders.
+'''
+
+[[syscall]]
+name = "QueryPcieFunction"
+number = 434
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+434: Read the owned PCIe function's record ([`crate::pcie_function`], ADR-0031).
+
+ABI: a0 = bdf (`bus<<8 | dev<<3 | fn`), a1 = out_ptr, a2 = out_len (must
+equal [`crate::pcie_function::PCIE_FUNCTION_RECORD_LEN`]), a3 = 0 → 0 with
+one [`crate::pcie_function::ViPcieFunctionV1`] written. No device or kernel
+state changes. Errors: `InvalidInput` (wrong length, non-zero a3, BDF above
+16 bits, unwritable buffer), `PermissionDenied` (no `PcieDriverCap`, or the
+caller does not own the BDF through 418/424), `FileNotFound` (no function).
+
+Allowlist: shares the DriverRegistration bit (50) with 418/424; the
+`PcieDriverCap` and ownership checks at dispatch are the authority gate.
+'''
+
+[[syscall]]
+name = "AllocPcieIrq"
+number = 435
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 50
+doc = '''
+435: Allocate MSI-X or MSI interrupts for the owned PCIe function.
+
+ABI: a0 = bdf, a1 = want (1..=32), a2 = mode
+([`crate::pcie_function::IRQ_MODE_ALLOW_MSIX`] /
+[`crate::pcie_function::IRQ_MODE_ALLOW_MSI`], at least one), a3 = 0 →
+[`crate::pcie_function::PcieIrqAlloc`] packed. The cell then waits with
+`WaitIrq(first_irq + i, 0)`. A repeat call by the owner returns the
+existing allocation; it lives until the owner dies (no free call).
+Errors: `InvalidInput`, `PermissionDenied` (as 434), `NotSupported` (no
+allowed capability, firmware forbids MSI, or not x86), `OutOfMemory`
+(vectors exhausted).
+
+Allowlist: DriverRegistration bit (50), as 434.
+'''
+
+[[syscall]]
+name = "SystemPower"
+number = 436
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 49
+doc = '''
+436: Reboot or power off the machine ([`system_power`]).
+
+ABI: a0 = action ([`system_power::ACTION_REBOOT`] = 1,
+[`system_power::ACTION_POWEROFF`] = 2), a1..a5 = 0. No return on
+success. Reboot tries, in order, the FADT reset register, port `0xCF9`,
+the 8042 reset pulse and a triple fault. Poweroff writes `SLP_TYP |
+SLP_EN` to the PM1 control blocks (`SLEEP_CONTROL_REG` on
+hardware-reduced ACPI) from a static `\_S5_` package. The kernel reads
+a0..a3 only; a4/a5 never reach syscall dispatch. Errors:
+[`system_power::ERR_INVALID_INPUT`] unknown action or non-zero a1..a3;
+[`system_power::ERR_PERMISSION_DENIED`] no `SupervisorCap`;
+[`system_power::ERR_NOT_SUPPORTED`] not x86_64, poweroff without a
+static `\_S5_` or a usable PM1 control block, or the machine still runs
+after the sleep write.
+
+Allowlist: SupervisorOp bit (49), shared with 413-415/419/422; the
+`SupervisorCap` check at dispatch is the authority gate.
+'''
+
+[[syscall]]
+name = "ExportDmaRange"
+number = 437
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+437: Export client memory for device DMA ([`crate::dma_export`], ADR-0033).
+
+ABI: a0 = va, a1 = len, a2 = holder_service, a3 = flags → export_id.
+Errors: [`crate::dma_export::ERR_INVALID_INPUT`],
+[`crate::dma_export::ERR_PERMISSION_DENIED`],
+[`crate::dma_export::ERR_FILE_NOT_FOUND`],
+[`crate::dma_export::ERR_NOT_SUPPORTED`],
+[`crate::dma_export::ERR_OUT_OF_MEMORY`].
+Allowlist: none (dispatch gate).
+'''
+bit_note = '''
+437/439/440: no bit (ADR-0033 D-G9, D-M11); the dispatch gate
+(lease owner / x86_64 private root) is the authority.
+'''
+
+[[syscall]]
+name = "MapDmaExport"
+number = 438
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 48
+doc = '''
+438: Map client-exported DMA memory into holder domain ([`crate::dma_export`], ADR-0033).
+
+ABI: a0 = export_id, a1 = bdf, a2 = out_ptr, a3 = out_len (48) → 0 with
+[`crate::dma_export::ViDmaExportV1`] written.
+Allowlist: DriverRegistration bit (48), shared with [`Self::GrantDma`].
+'''
+
+[[syscall]]
+name = "RevokeDmaExport"
+number = 439
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+439: Revoke client-memory DMA export ([`crate::dma_export`], ADR-0033).
+
+ABI: a0 = export_id, a1..a3 = 0 → 0.
+Allowlist: none (dispatch gate).
+'''
+
+[[syscall]]
+name = "AnonMemory"
+number = 440
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+440: Manage Tier-2 large anonymous memory ([`crate::anon_memory`], ADR-0033).
+
+ABI: a0 = op, a1 = addr, a2 = len, a3 = prot/flags → base VA or 0.
+Allowlist: none (dispatch gate).
+'''
+
+[[syscall]]
+name = "ResolveCellImage"
+number = 441
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+doc = '''
+441: Resolve the kernel-measured image identity of one live Cell
+generation ([`crate::cell_image::CellImage`]).
+
+ABI: a0 = [`crate::cell_owner::CellOwnerRequest`] pointer, a1 = request
+length, a2 = output pointer, a3 = output length (at least
+[`crate::cell_image::CELL_IMAGE_LEN`]) → `CELL_IMAGE_LEN`. Fixed request
+record from the start so RV32 carries both identity words exactly.
+Errors: `PermissionDenied` unless the calling task belongs to the
+registered VFS Cell, or when `(cell_id, generation)` is not live (a stale
+generation never resolves); `BufferTooSmall`; `InvalidInput`. 437-440
+stay reserved for ADR-0033.
+
+Allowlist: none; the VFS-provider check at dispatch is the gate, as for
+`ResolveCellOwnerRecord`.
+'''
+bit_note = '''
+ResolveCellImage: dispatch admits only the registered VFS Cell.
+'''
+
+[[syscall]]
+name = "ProbeVirtioMmio"
+number = 442
+group = "Driver Cell Registration (P00) — DriverRegistration-gated (bit 50)"
+bit = 40
+doc = '''
+442: Read the identity of one VirtIO MMIO slot before claiming it
+([`virtio_probe`]).
+
+ABI: a0 = slot base (exactly one of the board's VirtIO MMIO slot bases),
+a1..a3 = 0 → [`virtio_probe::encode`]d `DeviceID` and `Status` byte.
+The kernel reads MagicValue, DeviceID and Status itself, so a Driver
+Cell picks its slot without touching MMIO it does not own — boot maps
+the VirtIO window kernel-only, and a claim (`RequestMmio`) is exclusive
+with no release, so claiming to probe would starve sibling drivers.
+Errors: [`virtio_probe::ERR_NOT_FOUND`] (no VirtIO transport answers),
+[`virtio_probe::ERR_INVALID_INPUT`] (not a slot base or a non-zero
+a1..a3), `usize::MAX` (no `PcieDriverCap`, or no VirtIO MMIO on this
+architecture).
+
+Allowlist: shares bit 40 with `RequestMmio`. Every caller probes in
+order to claim, so it already declares that bit, and the `u64`
+allowlist has no free bit; `PcieDriverCap` at dispatch is the gate.
+'''
+
+[[syscall]]
+name = "Unknown"
+number = 9999
+group = "Unknown"
+
+[[syscall]]
+name = "GetProcs"
+number = 30
+group = "Process Info"
+bit = 14
+
+[[syscall]]
+name = "SpawnSetDirs"
+number = 240
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+240: Name the directory handles the caller's NEXT spawn passes to its child.
+
+ABI: a0 = ptr to [`crate::dir_handles::ViSpawnDirHandles`] (0 clears a
+previously named set), a1..a3 reserved → 0 on success.
+
+Staged on the caller's own task rather than passed as a spawn argument
+because `SpawnFromElf` and `SpawnPinned` already use all four argument
+registers, and a carrier that reached only half the spawn entry points
+would leave the other half silently granting nothing. The set is consumed
+and cleared by the next spawn the caller makes, whether that spawn
+succeeds or fails, so a set can never attach to a later unrelated spawn.
+
+A malformed set (unknown version, over-long count, zero or repeated
+handle) is refused here rather than trimmed — see
+[`crate::dir_handles::DirHandleSetError`].
+
+Privileged: requires lifecycle `SpawnCap`. Exact launch-profile approval
+is evaluated later by the actual spawn syscalls; this carrier syscall is
+the staging authority for the caller's next child launch.
+Always permitted past the syscall allowlist, matching
+`RegisterService`/`CapRevoke`.
+'''
+
+[[syscall]]
+name = "QueryDirHandles"
+number = 241
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+241: Read the kernel's record of a cell's inherited directory handles.
+
+ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len → bytes written
+([`crate::dir_attestation::DIR_ATTESTATION_LEN`]).
+
+The kernel states which spawner named the set and what the set was. It
+does NOT state that the spawner held those handles — that is a question
+about the filesystem service's own table, and only the service can answer
+it. A buffer shorter than the record is an error, never a partial write.
+
+Restricted to the registered provider of `service::VFS` and to a cell
+asking about itself. Always permitted past the syscall allowlist; the
+identity check at dispatch is the gate.
+'''
+
+[[syscall]]
+name = "WaitCompletion"
+number = 242
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 42
+doc = '''
+242: Wait for one asynchronous result on the caller's completion queue.
+
+ABI: a0 = source mask (see [`crate::completion::source`]; bits 32..63
+must be zero), a1 = timeout_ticks_lo,
+a2 = timeout_ticks_hi, a3 = pointer to a
+[`crate::completion::COMPLETION_LEN`]-byte buffer → 1 when a completion
+was written there, 0 when the wait ended with nothing.
+
+Calling this **is** the submission: it reserves a slot on the caller's
+own queue, from the caller's own context, so the completion the source
+later appends can never fail to find somewhere to land. A queue with no
+free slot refuses here, where the caller can act on it, rather than in
+the interrupt handler that is trying to report a result.
+
+`mask` is a non-empty subset of `NET_RX | TIMER | IPC | IRQ`
+([`crate::completion::source::is_wait_mask_supported`]); one return
+reports exactly one source. Source-specific semantics are deliberate:
+- `NET_RX`: zero waits indefinitely; a finite deadline that expires
+  releases the reservation and reports 0 with no record. A queued raw
+  IPC message interrupts a wait whose mask names `NET_RX` with 0.
+- `TIMER`: a finite deadline is required, and expiry writes a completion
+  whose source is `TIMER` and whose result is 0.
+- `IPC`: one record per terminal operation the caller owns (exact
+  `(cell, generation)` and owner/consumer thread); `result` is the
+  operation token. The terminal kind and bytes stay behind `IpcTake`.
+  A result already reported, or already taken, is never reported again.
+- `IRQ` (x86_64 only): covers every MSI/MSI-X line the calling task
+  holds from `AllocPcieIrq` when the wait starts; `result` is the one
+  line consumed, and other pending lines stay pending. A queued raw IPC
+  message does not interrupt it. A line revoked mid-wait no longer
+  wakes it, so pass a deadline.
+- Several ready sources rotate (`NET_RX → IPC → IRQ → TIMER`), so none
+  starves.
+
+Errors: `InvalidInput` for an unknown or high mask bit, `TIMER` without
+a deadline, `IRQ` on a kernel that is not x86_64, or a null buffer;
+`PermissionDenied` when `IRQ` is named and the caller holds no
+`AllocPcieIrq` line (at entry, or after every line was revoked);
+`BufferTooSmall`; `TryAgain` when the queue has no free slot.
+
+Distinct from [`Self::WaitForEvent`], which reports only *that* an event
+bit fired. This reports *which submission* finished and with what result,
+which is what lets one parked thread serve several outstanding
+operations. Both exist; neither replaces the other.
+'''
+bit_note = '''
+WaitCompletion shares the WaitForEvent allowlist bit deliberately:
+same event-source authority, different return path. A fresh bit
+would deny the call to older cells for no security benefit.
+It shares bit 42 deliberately: a
+fresh bit would deny the call to every cell whose
+`__ViCell_syscalls` section was generated before that bit
+existed, and the two calls gate the same thing.
+'''
+
+[[syscall]]
+name = "ResolveCellOwner"
+number = 244
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+244: Attest the root task currently owning a Cell principal.
+
+ABI: a0 = cell_id, a1 = generation, a2 = output pointer, a3 = output
+length. The record is available only to the registered VFS provider while
+it is handling that exact principal.
+'''
+
+[[syscall]]
+name = "WatchCellOwner"
+number = 245
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+245: Atomically attest and subscribe to a Cell root's death.
+
+Uses the same arguments as `ResolveCellOwner`; returns an opaque non-zero
+watch token and writes the owner record on success.
+'''
+
+[[syscall]]
+name = "CancelCellOwnerWatch"
+number = 246
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+246: Cancel exactly one live Cell-owner watch. ABI: a0 = token.
+'''
+
+[[syscall]]
+name = "ResolveCellOwnerRecord"
+number = 247
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+247: RV32-safe root-owner attestation.
+
+ABI: a0 = [`crate::cell_owner::CellOwnerRequest`] pointer, a1 = request
+length, a2 = owner-record output pointer, a3 = output length. This is an
+additive record ABI; 244 remains unchanged for existing 64-bit callers.
+'''
+
+[[syscall]]
+name = "WatchCellOwnerRecord"
+number = 248
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+248: RV32-safe atomic root-owner watch.
+
+Uses the same fixed request and owner response records as 247. Its
+positive token result remains bounded to `isize::MAX`.
+'''
+
+[[syscall]]
+name = "GrantCacheSyncBegin"
+number = 249
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 58
+doc = '''
+Begin cache synchronization for an owned Grant subrange.
+
+ABI: a0 = grant_id, a1 = byte offset, a2 = byte length → non-zero
+operation token. The matching [`Self::GrantCacheSyncComplete`] is the
+only operation that can release the pin established here.
+'''
+bit_note = '''
+Cache synchronization is one authority split into an exact
+begin/complete lifecycle. A caller that cannot complete must
+leave the grant quarantined until task death/reboot.
+'''
+
+[[syscall]]
+name = "GrantCacheSyncComplete"
+number = 250
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 58
+doc = '''
+Complete one exact cache synchronization operation.
+
+ABI: a0 = token → 0. Foreign, stale, and duplicate tokens fail closed.
+'''
+
+[[syscall]]
+name = "RegisterDisplayFramebuffer"
+number = 251
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 59
+doc = '''
+Register the VideoCore-owned scanout allocation for the display cell.
+
+ABI: a0 = physical base, a1 = byte size, a2 = `(width << 16) | height`,
+a3 = pitch. The kernel validates the reserved range before mapping it.
+'''
+bit_note = '''
+A firmware framebuffer is distinct from peripheral MMIO and
+therefore receives a dedicated, opt-in authority bit.
+'''
+
+[[syscall]]
+name = "IpcSubmit"
+number = 256
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 0
+doc = '''
+256: Copy a bounded request into a live peer's mailbox without parking.
+a0=target tid, a1=request ptr, a2=request len, a3=0 -> positive operation
+token; -2 busy, -3 peer gone, -4 invalid request, -1 denied.
+'''
+
+[[syscall]]
+name = "IpcTake"
+number = 257
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 1
+doc = '''
+257: Take one terminal result by exact operation token.
+a0=token, a1=reply ptr, a2=reply capacity, a3=16-byte status ptr.
+Returns 0 while pending, 1 after copying reply/status and releasing the
+token, -5 for insufficient reply capacity (result retained).
+'''
+
+[[syscall]]
+name = "IpcWait"
+number = 258
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 1
+doc = '''
+258: Park until any owned IPC operation terminates, or timeout expires.
+a0=timeout ticks low, a1=high, a2=a3=0; 0 means indefinite.
+Returns 1 on retained terminal result, 0 on timeout.
+'''
+
+[[syscall]]
+name = "IpcCancel"
+number = 259
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 1
+doc = '''
+259: Terminalize one owned operation; queued work is removed, dispatched
+work is indeterminate and cannot be mistaken for a cancelled side effect.
+a0=token; returns 0 on success (terminal remains retrievable by IpcTake).
+'''
+
+[[syscall]]
+name = "IpcCurrent"
+number = 260
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 1
+doc = '''
+260: Return the exact async operation token of the service's current
+received request (0 for a legacy request). a0..a3=0.
+'''
+
+[[syscall]]
+name = "IpcReply"
+number = 261
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+bit = 0
+doc = '''
+261: Complete a deferred request received by this exact service
+generation. a0=token, a1=reply ptr, a2=reply len, a3=0 -> 0.
+'''
+
+[[syscall]]
+name = "CellSessionV1"
+number = 262
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+Owner-authenticated session/stream and prepared-child V1 transport.
+a0=request ptr, a1=request len, a2=result ptr, a3=result capacity.
+Returns zero after a complete typed result, or usize::MAX without effects.
+'''
+bit_note = '''
+This transport has no manifest bit: each selector must validate
+the caller's live owner/issuer generation and object rights.
+'''
+
+[[syscall]]
+name = "GetCpuCount"
+number = 263
+group = "Directory-handle inheritance (appended last; see abi.rs rules)"
+doc = '''
+263: Query the number of online CPUs / hardware harts.
+ABI: (no args) → online_hart_count (> 0).
+Always permitted (no allowlist bit). Required by `std::thread::available_parallelism`.
+'''
+bit_note = '''
+GetCpuCount returns scalar online hart count; carries no authority
+'''
+
+[[raw]]
+id = 100
+kernel = "ServiceLookup"
+comment = '''
+Legacy raw service lookup; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 110
+kernel = "MkDir"
+comment = '''
+Legacy raw mkdir; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 111
+kernel = "Create"
+comment = '''
+Legacy raw create; predates the allowlist bitmap, always permitted.
+'''
+
+[[raw]]
+id = 500
+kernel = "BlkRead"
+bit = 36
+comment = '''
+Raw block read; bit 36 plus BlockIoCap at the handler.
+'''
+
+[[raw]]
+id = 501
+kernel = "BlkWrite"
+bit = 36
+
+[[raw]]
+id = 502
+kernel = "Shutdown"
+comment = '''
+Raw power-off; gated by the measured `shutdown` identity at dispatch, not by a bit.
+'''
+
+[[raw]]
+id = 503
+kernel = "BlkFlush"
+bit = 36
+
+[[raw]]
+id = 504
+kernel = "BenchCounters"
+feature = "bench-counters"
+gate_as = "MemInfo"
+comment = '''
+Benchmark counters; borrows MemInfo's gate exactly (bit 56 and observe_memory).
+'''
+

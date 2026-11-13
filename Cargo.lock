@@ -32,6 +32,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "abi"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "types",
+]
+
+[[package]]
 name = "adc-demo"
 version = "0.1.0"
 dependencies = [
@@ -233,10 +241,11 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "api"
 version = "0.1.0"
 dependencies = [
- "libm",
- "postcard",
- "serde",
+ "abi",
+ "kms-codec",
+ "posix-shim",
  "types",
+ "wire",
 ]
 
 [[package]]
@@ -443,10 +452,10 @@ dependencies = [
  "api",
  "base64ct",
  "cell-build",
+ "kms-codec",
  "ostd",
  "service-kms",
  "terminal-sdk",
- "types",
 ]
 
 [[package]]
@@ -563,6 +572,7 @@ version = "0.1.0"
 dependencies = [
  "api",
  "cell-build",
+ "kms-codec",
  "ostd",
  "types",
 ]
@@ -866,7 +876,7 @@ version = "0.2.0"
 name = "cellos-boot-config"
 version = "0.1.0"
 dependencies = [
- "api",
+ "abi",
  "serde",
  "toml",
 ]
@@ -879,7 +889,7 @@ version = "0.1.0"
 name = "cellos-kernel"
 version = "0.2.1"
 dependencies = [
- "api",
+ "abi",
  "cell-initial-stack",
  "cellos-boards",
  "cellos-boot-config",
@@ -902,6 +912,7 @@ dependencies = [
  "types",
  "vergen-gitcl",
  "virtio-drivers",
+ "wire",
  "xmas-elf",
 ]
 
@@ -2681,6 +2692,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "kms-codec"
+version = "0.1.0"
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2939,6 +2954,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "heapless 0.8.0",
  "http-core",
+ "kms-codec",
  "linked_list_allocator",
  "serde",
  "spin",
@@ -3114,6 +3130,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
 dependencies = [
  "critical-section",
+]
+
+[[package]]
+name = "posix-shim"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "libm",
+ "wire",
 ]
 
 [[package]]
@@ -3660,6 +3685,7 @@ dependencies = [
  "constant_time_eq",
  "ctr 0.10.1",
  "ed25519-dalek 3.0.0",
+ "kms-codec",
  "ostd",
  "p256",
  "sha2 0.10.9",
@@ -3678,6 +3704,7 @@ dependencies = [
  "embedded-io-async",
  "embedded-tls",
  "heapless 0.8.0",
+ "kms-codec",
  "ostd",
  "p256",
  "p384",
@@ -3700,6 +3727,7 @@ dependencies = [
  "cell-build",
  "chacha20poly1305",
  "clatter",
+ "kms-codec",
  "ostd",
  "rand_chacha",
  "rand_core 0.6.4",
@@ -4777,6 +4805,16 @@ name = "winnow"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+
+[[package]]
+name = "wire"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "postcard",
+ "serde",
+ "types",
+]
 
 [[package]]
 name = "wx-test"

@@ -30,9 +30,9 @@
 //! `header.count` is bounded by [`MAX_CELL_ENTRIES`]; each entry carries its
 //! own `data_lba`, so the bound is a reader sanity limit, not a layout offset.
 
-// Partition constants live in `api::disk` (the Law-1 contract shared with
+// Partition constants live in `abi::disk` (the Law-1 contract shared with
 // cells and image tools); re-exported here so kernel code keeps short paths.
-pub use api::disk::{
+pub use abi::disk::{
     PART_CELLSTORE_BASE_LBA, PART_CELLSTORE_SECTORS, PART_CELLTBL_SECTORS, PART_FAT32_BASE_LBA,
     PART_FAT32_SECTORS, PART_LFS_BASE_LBA, PART_LFS_SECTORS, PART_SNAPSHOT_BASE_LBA,
     PART_SNAPSHOT_SECTORS, PART_SRV_BASE_LBA, PART_SRV_SECTORS,
@@ -41,7 +41,7 @@ pub use api::disk::{
 /// Sector offset (from LBA 0) where the cell bootstrap section (P2) begins.
 /// Equals `PART_FAT32_BASE_LBA + PART_FAT32_SECTORS` — the value predates the
 /// MBR and is kept identical so the early loader needs no migration.
-pub const CELL_TABLE_BASE_LBA: u64 = api::disk::PART_CELLTBL_BASE_LBA;
+pub const CELL_TABLE_BASE_LBA: u64 = abi::disk::PART_CELLTBL_BASE_LBA;
 
 /// Magic bytes at the start of `CellTableHeader`; identifies a valid table.
 pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "ViCell_CEL" in ASCII

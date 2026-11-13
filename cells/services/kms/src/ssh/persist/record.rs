@@ -31,7 +31,7 @@ use blake2::{
     Blake2s256, Blake2sMac256, Digest,
 };
 use constant_time_eq::constant_time_eq;
-use types::kms::{validate_ssh_key_name, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN};
+use kms_codec::{validate_ssh_key_name, KMS_SSH_KEY_NAME_MAX, KMS_SSH_PUBLIC_KEY_LEN};
 
 use super::blob_io::{Slot, RECORD_MAX};
 use super::devroot::mac_key;

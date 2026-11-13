@@ -1,5 +1,5 @@
 use super::*;
-use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
+use kms_codec::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
 
 #[test]
 fn live_broker_registers_with_nonzero_epoch() {

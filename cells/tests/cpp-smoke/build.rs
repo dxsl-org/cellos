@@ -145,7 +145,7 @@ fn main() {
         }
     } else {
         // The profile's runtime layer is the POSIX shim's C++ ABI
-        // (`libs/api/src/services/posix/{alloc.rs,cxxabi.rs}`).
+        // (`libs/posix-shim/src/{alloc.rs,cxxabi.rs}`).
         panic!(
             "cpp-freestanding is admitted on riscv64, aarch64, and x86_64 only (the POSIX shim's C++ \
              ABI layer does not exist for target `{target}`); see docs/specs/05-application.md § 3.2"

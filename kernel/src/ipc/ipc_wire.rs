@@ -12,9 +12,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 /// Maximum payload bytes for one bounded IPC message. Derived from the
-/// public wire ABI (`api::ipc::IPC_BUF_SIZE`): one queue record never admits
+/// public wire ABI (`abi::kernel_ipc::IPC_BUF_SIZE`): one queue record never admits
 /// more than the documented user-facing buffer.
-pub const MAX_IPC_WIRE_PAYLOAD: usize = api::ipc::IPC_BUF_SIZE;
+pub const MAX_IPC_WIRE_PAYLOAD: usize = abi::kernel_ipc::IPC_BUF_SIZE;
 
 /// Header containing scalar sender identity, generation, and a unique
 /// monotonic delivery token. The delivery token disambiguates multiple

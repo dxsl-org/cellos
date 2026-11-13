@@ -107,7 +107,7 @@ pub(crate) fn caller_copy_view_for(caller_id: usize) -> Result<TaskCopyView, Sys
 /// refused every classified VFS mutation whatever its ELF declares.
 pub(super) fn vfs_mutate_caller_flag(allowlist: u64, vfs_mutate: bool) -> u32 {
     if vfs_mutate && allowlist != u64::MAX && (allowlist & (1u64 << 63)) != 0 {
-        api::caller_identity::CALLER_FLAG_VFS_MUTATE
+        abi::caller_identity::CALLER_FLAG_VFS_MUTATE
     } else {
         0
     }
@@ -151,7 +151,7 @@ pub(super) fn may_query_dir_handles(caller_id: usize, target_cell: u64) -> bool 
     if caller_cell == target_cell {
         return true;
     }
-    crate::cell::service_registry::lookup(api::syscall::service::VFS)
+    crate::cell::service_registry::lookup(abi::syscall::service::VFS)
         .and_then(|tid| sched.tasks.get(&tid))
         .is_some_and(|vfs| vfs.cell_id.0 == caller_cell)
 }
@@ -503,7 +503,7 @@ pub(super) fn read_dir(
 
 /// Handler for `Syscall::Fstat` (extracted from the dispatcher).
 pub(super) fn fstat(caller_id: usize, fd: usize, out_ptr: usize, out_len: usize) -> SyscallResult {
-    let len = api::syscall::VI_FSTAT_V1_LEN;
+    let len = abi::syscall::VI_FSTAT_V1_LEN;
     if out_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -513,7 +513,7 @@ pub(super) fn fstat(caller_id: usize, fd: usize, out_ptr: usize, out_len: usize)
     let metadata = crate::fsapi::file_fstat(caller_id, fd).map_err(|_| SyscallError::Unknown)?;
     let bytes = unsafe {
         core::slice::from_raw_parts(
-            &metadata as *const api::syscall::ViFstatV1 as *const u8,
+            &metadata as *const abi::syscall::ViFstatV1 as *const u8,
             len,
         )
     };
@@ -538,22 +538,20 @@ pub(super) fn rename(
 
     let old_path = read_user_string(caller_id, old_ptr, old_len, MAX_LOG_MSG)?;
     let new_path = read_user_string(caller_id, new_ptr, new_len, MAX_LOG_MSG)?;
-    let vfs_tid = crate::cell::service_registry::lookup(api::syscall::service::VFS)
+    let vfs_tid = crate::cell::service_registry::lookup(abi::syscall::service::VFS)
         .ok_or(SyscallError::InvalidCommand)?;
-    let request = api::ipc::VfsRequest::Rename {
-        old: &old_path,
-        new: &new_path,
-    };
-    let mut request_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    let encoded =
-        api::ipc::encode(&request, &mut request_buf).map_err(|_| SyscallError::InvalidCommand)?;
+    // `VfsRequest::Rename { old, new }`, encoded by hand (no postcard in the
+    // kernel; the bytes are pinned by `rename_wire`'s host test).
+    let mut request_buf = [0u8; abi::kernel_ipc::IPC_BUF_SIZE];
+    let encoded = super::rename_wire::encode_rename(&old_path, &new_path, &mut request_buf)
+        .ok_or(SyscallError::InvalidCommand)?;
     let token = match async_ipc::submit_request(caller_id, vfs_tid, Request::Kernel(encoded)) {
         Ok(token) => token,
         Err(Failure::Busy) => return Err(SyscallError::TryAgain),
         Err(_) => return Err(SyscallError::InvalidCommand),
     };
 
-    let mut response_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+    let mut response_buf = [0u8; abi::kernel_ipc::IPC_BUF_SIZE];
     let (kind, len) = loop {
         match async_ipc::take_or_park_kernel(caller_id, token, &mut response_buf) {
             Ok(Some(terminal)) => break terminal,
@@ -562,14 +560,14 @@ pub(super) fn rename(
         }
     };
     match kind {
-        api::syscall::ipc_status::REPLY => {}
+        abi::syscall::ipc_status::REPLY => {}
         // VFS never took the request: nothing ran, a retry is safe.
-        api::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => return Err(SyscallError::TryAgain),
+        abi::syscall::ipc_status::PRE_DISPATCH_TIMEOUT => return Err(SyscallError::TryAgain),
         // Gone after taking it, or expired: the rename may have happened.
         _ => return Err(SyscallError::Unknown),
     }
-    match api::ipc::decode::<api::ipc::VfsResponse>(&response_buf[..len]) {
-        Ok(api::ipc::VfsResponse::Ok) => Ok(0),
+    match super::rename_wire::decode_reply(&response_buf[..len]) {
+        super::rename_wire::RenameReply::Ok => Ok(0),
         _ => Err(SyscallError::PermissionDenied),
     }
 }
@@ -623,7 +621,7 @@ pub(super) fn query_dir_handles(
     if !may_query_dir_handles(caller_id, cell_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    let len = api::dir_attestation::DIR_ATTESTATION_LEN;
+    let len = abi::dir_attestation::DIR_ATTESTATION_LEN;
     if buf_len < len {
         return Err(SyscallError::BufferTooSmall);
     }
@@ -643,7 +641,7 @@ pub(super) fn open_cap(caller_id: usize, path_ptr: usize, path_len: usize) -> Sy
         guard
             .as_mut()
             .ok_or(SyscallError::FileNotFound)?
-            .open(&path_str, api::fs::OpenMode::Read)
+            .open(&path_str, abi::fs::OpenMode::Read)
             .map_err(|_| SyscallError::FileNotFound)?
     };
     let (cell_id, cell_gen) = if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
@@ -660,7 +658,7 @@ pub(super) fn open_cap(caller_id: usize, path_ptr: usize, path_len: usize) -> Sy
         .get_mut(&(cell_id.0, cell_gen))
         .ok_or(SyscallError::PermissionDenied)?;
     let ticket = auth
-        .allocate_file_slot(file, api::cap::CapPerms::FILE_READ.0)
+        .allocate_file_slot(file, abi::cap::CapPerms::FILE_READ.0)
         .map_err(|_| SyscallError::OutOfMemory)?;
     Ok(ticket as usize)
 }
@@ -690,7 +688,7 @@ pub(super) fn read_cap(
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::READ.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let mut kbuf = alloc::vec::Vec::new();
@@ -723,9 +721,9 @@ pub(super) fn seek_cap(
     whence: usize,
 ) -> SyscallResult {
     let pos = match whence {
-        0 => api::fs::SeekFrom::Start(offset as u64),
-        1 => api::fs::SeekFrom::Current(offset as isize as i64),
-        2 => api::fs::SeekFrom::End(offset as isize as i64),
+        0 => abi::fs::SeekFrom::Start(offset as u64),
+        1 => abi::fs::SeekFrom::Current(offset as isize as i64),
+        2 => abi::fs::SeekFrom::End(offset as isize as i64),
         _ => return Err(SyscallError::InvalidInput),
     };
     let (cell_id, cell_gen) = if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
@@ -742,7 +740,7 @@ pub(super) fn seek_cap(
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::READ.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let seek_result = boxed_file.seek(pos);
@@ -783,7 +781,7 @@ pub(super) fn write_cap(
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::WRITE.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let write_result = boxed_file.write(&bytes);
@@ -815,7 +813,7 @@ pub(super) fn stat_cap(caller_id: usize, cap_id: usize) -> SyscallResult {
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::READ.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::READ.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let result = boxed_file.size();
@@ -846,7 +844,7 @@ pub(super) fn truncate_cap(caller_id: usize, cap_id: usize, len: usize) -> Sysca
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::WRITE.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let result = boxed_file.truncate(len as u64);
@@ -875,7 +873,7 @@ pub(super) fn sync_cap(caller_id: usize, cap_id: usize) -> SyscallResult {
         let auth = auths
             .get_mut(&(cell_id.0, cell_gen))
             .ok_or(SyscallError::PermissionDenied)?;
-        auth.park_file(cap_id as u64, api::cap::CapPerms::WRITE.0)
+        auth.park_file(cap_id as u64, abi::cap::CapPerms::WRITE.0)
             .map_err(|_| SyscallError::PermissionDenied)?
     };
     let result = boxed_file.sync();

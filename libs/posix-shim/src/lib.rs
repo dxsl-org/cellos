@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: MPL-2.0
+//! POSIX shim layer — Tier 1 (ffi-posix) C library support for ViCell cells.
+//!
+//! Provides `malloc`, string ops, file I/O, network sockets, entropy, math,
+//! stdio, and setjmp as `#[no_mangle]` C-ABI symbols.  No picolibc or
+//! toolchain libm required — math is backed by the Rust `libm` crate.
+//!
+//! Activates automatically on supported arches; cells must NOT link `-lm`.
+
+// Only the bare-metal targets get the shim; on any other target the crate
+// is empty.
+#![cfg(all(
+    any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_arch = "wasm32",
+        doc
+    ),
+    any(target_os = "none", target_arch = "wasm32", doc)
+))]
+#![cfg_attr(not(test), no_std)]
+// Required for VaList::next_arg (stdio_fmt) on toolchains where c_variadic
+// is still unstable. The pinned nightly-2026-05-01 already stabilized it and
+// flags this declaration as unused; allow(unused_features) keeps both old and
+// new toolchains compiling clean instead of picking one at the other's expense.
+#![allow(unused_features)]
+#![feature(c_variadic)]
+#![allow(unsafe_code)]
+#![allow(unused_variables)]
+#![allow(non_upper_case_globals)]
+
+// When the `mlibc` feature is active, all C symbols are provided by mlibc's
+// libc.a (via the mlibc-shim crate).  Emitting them here too would cause
+// duplicate-symbol link errors.  Gate every submodule and re-export off.
+#[cfg(not(feature = "mlibc"))]
+pub mod alloc;
+#[cfg(not(feature = "mlibc"))]
+pub mod cxxabi;
+#[cfg(not(feature = "mlibc"))]
+pub mod entropy;
+#[cfg(not(feature = "mlibc"))]
+pub mod math;
+#[cfg(not(feature = "mlibc"))]
+pub mod net;
+#[cfg(not(feature = "mlibc"))]
+pub mod setjmp;
+#[cfg(not(feature = "mlibc"))]
+pub mod stdio;
+#[cfg(not(feature = "mlibc"))]
+pub mod stdio_fmt;
+#[cfg(not(feature = "mlibc"))]
+pub mod strings;
+#[cfg(not(feature = "mlibc"))]
+pub mod sysio;
+#[cfg(not(feature = "mlibc"))]
+pub mod vfs_at;
+
+// Re-export the public API that was previously in the monolithic posix.rs,
+// so existing callers (api::posix::getentropy, api::posix::socket, etc.) still compile
+// through the `api` facade (`pub use posix_shim as posix`).
+#[cfg(not(feature = "mlibc"))]
+pub use entropy::{arc4random_buf, getentropy};
+#[cfg(not(feature = "mlibc"))]
+pub use net::{_close, close, connect, recv, send, sockaddr_in, socket};
+#[cfg(not(feature = "mlibc"))]
+pub use stdio::FILE;
+#[cfg(not(feature = "mlibc"))]
+pub use sysio::{
+    _fstat, _lseek, _mkdir, _open, _putchar, _read, _rename, _rmdir, _stat, _unlink, _write, fstat,
+    lseek, mkdir, open, read, rename, rmdir, stat, unlink, write,
+};
+#[cfg(not(feature = "mlibc"))]
+pub use vfs_at::{install_working_dir, working_dir};

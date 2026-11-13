@@ -126,7 +126,7 @@ impl SharedStateBaseline {
                 VFS_TID,
                 vfs_cell,
                 vfs_generation,
-                api::syscall::service_flags::ALL,
+                abi::syscall::service_flags::ALL,
             ),
             Ok(())
         );
@@ -178,7 +178,7 @@ impl SharedStateBaseline {
                 .any(|&(service, tid, _, flags)| {
                     service == VFS_SERVICE_ID
                         && tid == VFS_TID
-                        && flags == api::syscall::service_flags::ALL
+                        && flags == abi::syscall::service_flags::ALL
                 })
             && crate::cell::service_registry::snapshot()
                 .iter()

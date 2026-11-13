@@ -8,7 +8,7 @@ use api::caller_identity::{
     CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
     CALLER_FLAG_NET_RESOLVE, CALLER_FLAG_VFS_MUTATE,
 };
-use types::kms::{KmsCapabilityReadiness, RelayP256StatusPayload};
+use kms_codec::{KmsCapabilityReadiness, RelayP256StatusPayload};
 
 use super::fixtures::*;
 use super::store::FakePersist;

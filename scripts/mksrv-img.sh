@@ -9,7 +9,7 @@
 # Usage: bash scripts/mksrv-img.sh [OUT_IMG]
 # Default output: build/disk_srv.img
 #
-# Disk layout (matches libs/api/src/abi/disk.rs):
+# Disk layout (matches libs/abi/src/disk.rs):
 #   PART_SRV_BASE_LBA  = 931_072   sectors
 #   PART_SRV_SECTORS   = 131_072   sectors (64 MB)
 #   Full image         = 1_062_144 sectors (~519 MB sparse)

@@ -115,7 +115,7 @@ class RustSide(unittest.TestCase):
         self.assertEqual((status, syms), (1, {"b"}))
 
     def test_macro_template_export_is_reported_under_its_metavariable(self):
-        # libs/api/src/services/posix/math.rs generates sin/cos/... this way.
+        # libs/posix-shim/src/math.rs generates sin/cos/... this way.
         status, syms = run(rust="""
             macro_rules! math1_f64 {
                 ($c:ident, $rust:path) => {

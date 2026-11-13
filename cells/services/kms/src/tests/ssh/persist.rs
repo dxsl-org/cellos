@@ -57,7 +57,7 @@ pub(super) fn cheap_public() -> [u8; 32] {
 pub(super) fn import_cheap(
     leaf: &mut FileLeaf,
     admin: &Actor,
-) -> Result<types::kms::SshKeyStatusPayload, KmsErrorCode> {
+) -> Result<kms_codec::SshKeyStatusPayload, KmsErrorCode> {
     import_blob(leaf, admin, NAME, &cheap_blob())
 }
 
@@ -70,10 +70,7 @@ pub(super) fn leaf_with_two_records(admin: &Actor) -> FileLeaf {
     leaf
 }
 
-pub(super) fn leaf_readiness(
-    leaf: &mut FileLeaf,
-    actor: &Actor,
-) -> types::kms::SshKeyStatusPayload {
+pub(super) fn leaf_readiness(leaf: &mut FileLeaf, actor: &Actor) -> kms_codec::SshKeyStatusPayload {
     status(leaf, actor, b"").unwrap()
 }
 

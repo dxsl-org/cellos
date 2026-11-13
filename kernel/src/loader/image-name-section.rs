@@ -6,7 +6,7 @@
 //! the duplicate-refusing `ElfSections` parser rather than
 //! `ElfLoader::get_section` (first match wins, no duplicate check).
 use super::elf_section::{ElfSections, SHT_NOBITS};
-use api::cell_image::{is_valid_image_name, ImageIdentity, IMAGE_NAME_SECTION};
+use abi::cell_image::{is_valid_image_name, ImageIdentity, IMAGE_NAME_SECTION};
 
 /// The identity recorded for an admitted image. `verified` is true only when
 /// its signature verified under this kernel's anchor: the name is believed
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn verified_image_carries_its_name_under_this_kernels_anchor() {
         let signed = measured_identity(&elf64(b"sshd", 1, 1), [5; 32], true);
-        if crate::signing::anchor_class() == api::cell_image::ANCHOR_UNSIGNED {
+        if crate::signing::anchor_class() == abi::cell_image::ANCHOR_UNSIGNED {
             // No anchor compiled in: nothing can verify, so nothing is named.
             assert!(!signed.is_signed());
         } else {

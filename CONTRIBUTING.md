@@ -67,7 +67,7 @@ For detailed setup help — including a **Common Errors table** — see
 
 ### The 8 Laws (non-negotiable)
 
-1. **Interface is Sacred** — changes to `libs/api/` or `libs/types/` require 2×
+1. **Interface is Sacred** — changes to `libs/abi/` or `libs/types/` require 2×
    confirmation. These define the ABI between kernel and Cells.
 2. **Owned Buffers for Async** — `async fn process(data: Box<[u8]>) -> Box<[u8]>`,
    never `async fn process(data: &mut [u8])`.

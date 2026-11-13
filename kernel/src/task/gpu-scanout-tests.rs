@@ -14,7 +14,7 @@ fn scanout_is_refused_to_everyone_but_the_compositor() {
         Err(SyscallError::PermissionDenied)
     );
     assert!(register(
-        api::syscall::service::COMPOSITOR,
+        abi::syscall::service::COMPOSITOR,
         COMPOSITOR,
         0x6C,
         1

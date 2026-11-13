@@ -23,8 +23,8 @@ use alloc::vec::Vec;
 use api::cell_session::trust::{self as tr, TrustChallengeV1, TrustPromptV1};
 use api::cell_session::{ObjectRefV1 as Ref, PrincipalV1, Status};
 use api::ipc::{ssh_trust, Observation, SaveOutcome};
+use kms_codec::{KmsErrorCode, TrustOutcomePayload};
 use sha2::{Digest, Sha256};
-use types::kms::{KmsErrorCode, TrustOutcomePayload};
 
 use super::{
     base64_encode, blob_names, canonical_host, lookup, owner, parse, Principal, TrustIo, TrustLeaf,

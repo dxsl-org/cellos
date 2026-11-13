@@ -1,6 +1,6 @@
 use crate::sync::Spinlock;
+use abi::input_producer::{EV_ASCII, PRODUCER_FRAME_LEN};
 use alloc::collections::VecDeque;
-use api::services::proto::input::{EV_ASCII, PRODUCER_FRAME_LEN};
 use core::sync::atomic::Ordering;
 
 #[cfg(target_arch = "aarch64")]

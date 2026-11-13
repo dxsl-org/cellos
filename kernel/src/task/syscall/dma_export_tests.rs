@@ -23,7 +23,7 @@ const HOLDER: Incarnation = Incarnation {
     cell: 8,
     generation: 1,
 };
-const XE: usize = api::syscall::service::XE_GPU as usize;
+const XE: usize = abi::syscall::service::XE_GPU as usize;
 
 #[derive(Default)]
 struct Fake {
@@ -66,7 +66,7 @@ impl Fake {
             },
         );
         f.providers.insert(
-            api::syscall::service::XE_GPU,
+            abi::syscall::service::XE_GPU,
             Provider {
                 tid: DRIVER,
                 who: HOLDER,
@@ -439,7 +439,7 @@ fn export_refusals_have_no_effect() {
         (
             BASE,
             0x1000,
-            api::syscall::service::NET as usize,
+            abi::syscall::service::NET as usize,
             0,
             SyscallError::PermissionDenied,
         ),
@@ -466,7 +466,7 @@ fn export_refusals_have_no_effect() {
     );
     // Holder without PcieDriverCap.
     f.providers
-        .get_mut(&api::syscall::service::XE_GPU)
+        .get_mut(&abi::syscall::service::XE_GPU)
         .unwrap()
         .pcie_driver = false;
     assert_eq!(
@@ -623,9 +623,9 @@ fn windows_are_disjoint_aligned_and_reused_only_after_release() {
 
 #[test]
 fn export_services_are_an_explicit_table() {
-    assert_eq!(DMA_EXPORT_SERVICES, [api::syscall::service::XE_GPU]);
-    assert!(holder_service_allowed(api::syscall::service::XE_GPU));
-    assert!(!holder_service_allowed(api::syscall::service::GPU_DRIVER));
+    assert_eq!(DMA_EXPORT_SERVICES, [abi::syscall::service::XE_GPU]);
+    assert!(holder_service_allowed(abi::syscall::service::XE_GPU));
+    assert!(!holder_service_allowed(abi::syscall::service::GPU_DRIVER));
     assert_eq!(
         holder_service_allowed(TEST_EXPORT_SERVICE),
         cfg!(feature = "test-hooks")

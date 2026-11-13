@@ -1,7 +1,7 @@
+use kms_codec::{assemble_relay_csr, canonical_relay_cri, der_ecdsa_signature, RELAY_CSR_MAX_LEN};
 use p256::ecdsa::signature::hazmat::PrehashVerifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
-use types::kms::{assemble_relay_csr, canonical_relay_cri, der_ecdsa_signature, RELAY_CSR_MAX_LEN};
 
 use super::RelaySignError;
 

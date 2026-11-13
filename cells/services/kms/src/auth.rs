@@ -1,5 +1,5 @@
 use api::caller_identity::CallerIdentity;
-use types::kms::{
+use kms_codec::{
     BindingEpoch, BrokerBindingPayload, KmsErrorCode, ServiceNetBindingEpoch,
     ServiceNetBindingPayload,
 };

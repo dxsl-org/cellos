@@ -201,7 +201,7 @@ pub(crate) enum TaskAddressSpace {
 }
 
 // File Handle for Stateful IO
-pub use api::fs::FileHandle;
+pub use abi::fs::FileHandle;
 
 /// The request a service task is currently serving (Task field group).
 pub struct CallerSlot {
@@ -327,14 +327,14 @@ pub struct Task {
     /// threads and kernel-built tasks. Private so the only writer is
     /// [`Task::bind_image`], which refuses a second binding: the record is the
     /// image of this incarnation for as long as the root lives.
-    image: Option<api::cell_image::ImageIdentity>,
+    image: Option<abi::cell_image::ImageIdentity>,
     /// The root was launched by the kernel from a catalogued install path, so
     /// its signed image name is its launch identity (`caller_launch_state`).
     /// False for caller-supplied ELF/Mem bytes, sandbox paths and aliases.
     pub(crate) launch_named: bool,
     /// Canonical context retained for this committed root lifetime.
     pub(crate) child_context: Option<Vec<u8>>,
-    pub(crate) child_stdio: [api::cell_session::ObjectRefV1; 4],
+    pub(crate) child_stdio: [abi::cell_session::ObjectRefV1; 4],
     pub allowed_drivers: Vec<usize>,
 
     // Maps FD -> FileHandle
@@ -430,14 +430,14 @@ pub struct Task {
     pub user_cet: u64,
 
     /// Scheduling priority tier.  Higher value = higher priority.
-    /// See `api::TaskPriority` for the three defined levels.
+    /// See `abi::TaskPriority` for the three defined levels.
     pub priority: u8,
     /// Hart this task last ran on (set at dispatch); RT placement prefers it
     /// (Phase 10 step 7).
     pub last_hart: Option<usize>,
 
     /// Per-Cell syscall allowlist.  Each bit corresponds to a syscall via
-    /// `api::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
+    /// `abi::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
     /// used when the Cell ELF does not embed a `__ViCell_syscalls` section).
     pub syscall_allowlist: u64,
 
@@ -477,7 +477,7 @@ pub struct Task {
     pub pending_msgs: PendingMailbox,
 
     /// Epoch of the cell this task belongs to, attested to services alongside
-    /// `cell_id` (see `api::caller_identity`).
+    /// `cell_id` (see `abi::caller_identity`).
     ///
     /// A service that holds state against a `CellId` — an open handle, a pending
     /// read, a quota ledger row — must not hand that state to a *different* cell
@@ -493,7 +493,7 @@ pub struct Task {
     pub cell_generation: u64,
 
     /// Directory handles this task's spawner named for it, with the spawner's
-    /// attested identity (see [`api::dir_handles`]).
+    /// attested identity (see [`abi::dir_handles`]).
     ///
     /// The kernel is a courier here and nothing more. It does not know what any
     /// of these handles refer to, cannot tell a live one from a revoked one, and
@@ -503,13 +503,13 @@ pub struct Task {
     /// kernel makes about this field is provenance: *this* spawner named *these*
     /// values at spawn.
     ///
-    /// Bounded inline at [`api::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
+    /// Bounded inline at [`abi::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
     /// caller-supplied count never sizes an allocation.
     ///
     /// Set once, under the scheduler lock that creates the task, before it can
     /// be scheduled. It is never updated afterwards: authority fixed at creation
     /// is what makes it auditable.
-    pub inherited_dirs: api::dir_handles::InheritedDirHandles,
+    pub inherited_dirs: abi::dir_handles::InheritedDirHandles,
 
     /// Directory handles this task has named for the next cell it spawns.
     ///
@@ -517,7 +517,7 @@ pub struct Task {
     /// then cleared — including when that spawn fails, so a set can never attach
     /// to a later unrelated child. Empty means "pass nothing on", which is what
     /// every task that never calls `SpawnSetDirs` does.
-    pub staged_dirs: api::dir_handles::DirHandleSet,
+    pub staged_dirs: abi::dir_handles::DirHandleSet,
 
     /// This cell's completion queue, or `None` until something reserves a slot.
     ///
@@ -617,7 +617,7 @@ impl Task {
             image: None,
             launch_named: false,
             child_context: None,
-            child_stdio: [api::cell_session::ObjectRefV1::ZERO; 4],
+            child_stdio: [abi::cell_session::ObjectRefV1::ZERO; 4],
             allowed_drivers,
             open_files: alloc::collections::BTreeMap::new(),
             caller: CallerSlot::new(),
@@ -641,7 +641,7 @@ impl Task {
             pku_key: 0,
             pku_value: 0,
             user_cet: 0,
-            priority: api::TaskPriority::Normal as u8,
+            priority: abi::TaskPriority::Normal as u8,
             last_hart: None,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             sched_stats: SchedStats::default(),
@@ -651,8 +651,8 @@ impl Task {
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
             cell_generation: next_cell_generation(),
-            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
-            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
+            inherited_dirs: abi::dir_handles::InheritedDirHandles::NONE,
+            staged_dirs: abi::dir_handles::DirHandleSet::EMPTY,
             completion: None,
             completion_wait: None,
             completion_rotor: super::completion_wait::INITIAL_ROTOR,
@@ -663,7 +663,7 @@ impl Task {
     /// Record the measured image identity before the task is published.
     /// Returns `false`, changing nothing, when an identity is already bound:
     /// an incarnation is admitted from exactly one image.
-    pub(crate) fn bind_image(&mut self, image: api::cell_image::ImageIdentity) -> bool {
+    pub(crate) fn bind_image(&mut self, image: abi::cell_image::ImageIdentity) -> bool {
         if self.image.is_some() {
             return false;
         }
@@ -672,7 +672,7 @@ impl Task {
     }
 
     /// The image identity bound by [`Self::bind_image`], if any.
-    pub(crate) fn image(&self) -> Option<api::cell_image::ImageIdentity> {
+    pub(crate) fn image(&self) -> Option<abi::cell_image::ImageIdentity> {
         self.image
     }
 

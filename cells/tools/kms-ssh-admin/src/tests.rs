@@ -118,9 +118,9 @@ pub fn status(
     fingerprint: [u8; 32],
 ) -> SshKeyStatusPayload {
     SshKeyStatusPayload {
-        algorithm: types::kms::KmsKeyAlgorithm::SshEd25519,
-        readiness: types::kms::KmsCapabilityReadiness::Ready,
-        provider: types::kms::KmsProviderKind::None,
+        algorithm: kms_codec::KmsKeyAlgorithm::SshEd25519,
+        readiness: kms_codec::KmsCapabilityReadiness::Ready,
+        provider: kms_codec::KmsProviderKind::None,
         posture,
         key_present: 1,
         custody,

@@ -198,8 +198,8 @@ pub(in crate::task) fn snapshot_resume(
     })
 }
 
-pub(super) fn snapshot_process_info(task: &crate::task::tcb::Task) -> api::syscall::ProcessInfo {
-    api::syscall::ProcessInfo {
+pub(super) fn snapshot_process_info(task: &crate::task::tcb::Task) -> abi::syscall::ProcessInfo {
+    abi::syscall::ProcessInfo {
         id: task.id,
         state: encode_task_state(&task.state) as usize,
         name: encode_task_name(&task.name),
@@ -385,7 +385,7 @@ pub(crate) fn session_launch_request(
         (task.cell_id.0, task.cell_generation),
         ceiling,
         profile.child_ceiling,
-        api::TaskPriority::Normal as u8,
+        abi::TaskPriority::Normal as u8,
         None,
         names_child(task.root_tid, route),
     ))
@@ -461,8 +461,8 @@ pub(in crate::task) fn resume_or_repark(
 pub(super) fn snapshot_process_info_v2(
     task: &crate::task::tcb::Task,
     sample_ticks: u64,
-) -> api::syscall::ProcessInfoV2 {
-    api::syscall::ProcessInfoV2 {
+) -> abi::syscall::ProcessInfoV2 {
+    abi::syscall::ProcessInfoV2 {
         id: task.id as u64,
         state: encode_task_state(&task.state),
         reserved0: 0,
@@ -482,9 +482,9 @@ pub(super) fn cell_session_v1(
     result_ptr: usize,
     result_capacity: usize,
 ) -> SyscallResult {
-    const MAX: usize = api::cell_session::MAX_REQUEST_LEN;
-    if !(api::cell_session::HEADER_LEN..=MAX).contains(&request_len)
-        || result_capacity < api::cell_session::HEADER_LEN
+    const MAX: usize = abi::cell_session::MAX_REQUEST_LEN;
+    if !(abi::cell_session::HEADER_LEN..=MAX).contains(&request_len)
+        || result_capacity < abi::cell_session::HEADER_LEN
     {
         return Err(SyscallError::InvalidInput);
     }
@@ -505,23 +505,23 @@ pub(super) fn cell_session_v1(
     let _reply_pin = SessionOutputPin::reserve(caller_id, result_ptr, result_capacity, &view)?;
     view.read_into(request_ptr, &mut request[..request_len])
         .map_err(|_| SyscallError::InvalidInput)?;
-    let header = api::cell_session::RequestHeaderV1::decode(&request[..request_len]);
+    let header = abi::cell_session::RequestHeaderV1::decode(&request[..request_len]);
     let mut result = [0u8; 1536];
     if let Ok(header) = header {
         let required = crate::ipc::cell_session::required_result(
             header.selector,
-            &request[api::cell_session::HEADER_LEN..request_len],
+            &request[abi::cell_session::HEADER_LEN..request_len],
         );
         if result_capacity < required {
-            api::cell_session::ResultHeaderV1 {
+            abi::cell_session::ResultHeaderV1 {
                 selector: header.selector,
-                status: api::cell_session::Status::BufferTooSmall,
+                status: abi::cell_session::Status::BufferTooSmall,
                 total_len: required as u32,
                 request_id: header.request_id,
             }
             .encode(&mut result)
             .map_err(|_| SyscallError::InvalidInput)?;
-            view.write_bytes(result_ptr, &result[..api::cell_session::HEADER_LEN])
+            view.write_bytes(result_ptr, &result[..abi::cell_session::HEADER_LEN])
                 .map_err(|_| SyscallError::InvalidInput)?;
             return Ok(0);
         }
@@ -717,7 +717,7 @@ pub(super) fn query_retirement(
 ) -> SyscallResult {
     // Admitted past the allowlist; the verdict table is the gate: a
     // death subscriber of that root at its retirement, or a supervisor.
-    if out_len != api::retirement::RETIREMENT_RECORD_LEN {
+    if out_len != abi::retirement::RETIREMENT_RECORD_LEN {
         return Err(SyscallError::InvalidInput);
     }
     let supervisor = caller_has_supervisor(caller_id);
@@ -731,9 +731,9 @@ pub(super) fn query_retirement(
         caller_id,
         out_ptr,
         &record.encode(),
-        api::retirement::RETIREMENT_RECORD_LEN,
+        abi::retirement::RETIREMENT_RECORD_LEN,
     )?;
-    Ok(api::retirement::RETIREMENT_RECORD_LEN)
+    Ok(abi::retirement::RETIREMENT_RECORD_LEN)
 }
 
 /// Handler for `Syscall::Yield` (extracted from the dispatcher).
@@ -769,7 +769,7 @@ pub(super) fn spawn_from_path(
         caller_id,
         crate::loader::launch_profile::LaunchRoute::Path,
         profile.child_ceiling,
-        api::TaskPriority::Normal as u8,
+        abi::TaskPriority::Normal as u8,
         #[cfg(feature = "p01-trace")]
         *trace,
     ) {
@@ -827,12 +827,12 @@ pub(super) fn spawn_set_dirs(caller_id: usize, carrier_ptr: usize) -> SyscallRes
         crate::task::dir_inherit::clear_staged(caller_id);
         return Ok(0);
     }
-    let carrier_size = core::mem::size_of::<api::dir_handles::ViSpawnDirHandles>();
+    let carrier_size = core::mem::size_of::<abi::dir_handles::ViSpawnDirHandles>();
     let bytes = read_user_slice(caller_id, carrier_ptr, carrier_size, MAX_USER_BUF)?;
     let carrier = unsafe {
-        core::ptr::read_unaligned(bytes.as_ptr() as *const api::dir_handles::ViSpawnDirHandles)
+        core::ptr::read_unaligned(bytes.as_ptr() as *const abi::dir_handles::ViSpawnDirHandles)
     };
-    let set = api::dir_handles::DirHandleSet::from_carrier(&carrier).map_err(|e| {
+    let set = abi::dir_handles::DirHandleSet::from_carrier(&carrier).map_err(|e| {
         log::warn!(
             "[dirs] tid {} named an invalid directory handle set: {:?}",
             caller_id,
@@ -879,7 +879,7 @@ pub(super) fn spawn_from_elf(
         caller_id,
         crate::loader::launch_profile::LaunchRoute::Elf,
         profile.child_ceiling,
-        api::TaskPriority::Normal as u8,
+        abi::TaskPriority::Normal as u8,
         #[cfg(feature = "p01-trace")]
         *trace,
     ) {
@@ -1046,7 +1046,7 @@ pub(super) fn spawn_from_mem(
         caller_id,
         crate::loader::launch_profile::LaunchRoute::Mem,
         profile.child_ceiling,
-        api::TaskPriority::Normal as u8,
+        abi::TaskPriority::Normal as u8,
         #[cfg(feature = "p01-trace")]
         *trace,
     ) {
@@ -1081,7 +1081,7 @@ pub(super) fn telemetry_snapshot(
     flags: usize,
     reserved: usize,
 ) -> SyscallResult {
-    use api::telemetry::request;
+    use abi::telemetry::request;
     // The dispatch gate already required `observe_tasks` (X). Arguments
     // are refused before anything is sampled.
     if !crate::task::telemetry::request_is_valid(out_ptr, out_len, flags, reserved) {
@@ -1114,7 +1114,7 @@ pub(super) fn telemetry_snapshot(
         let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         match guard.as_ref() {
             Some(allocator) => {
-                crate::task::telemetry::SystemMemory::Present(api::syscall::ViMemInfoV1 {
+                crate::task::telemetry::SystemMemory::Present(abi::syscall::ViMemInfoV1 {
                     total_frames: allocator.total_frames() as u64,
                     used_frames: allocator.used_frames() as u64,
                     free_frames: allocator.free_frames() as u64,

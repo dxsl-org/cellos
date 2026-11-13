@@ -8,13 +8,13 @@
 use crate::ipc::pipe::{self, PipeEnd, PipeHandle};
 use crate::sched::scheduler::{KernelAllocationContext, Scheduler};
 use crate::task::child_context;
-use alloc::vec::Vec;
-use api::cell_session::{
+use abi::cell_session::{
     ChildRefV1 as Child, ObjectRefV1 as Ref, PrincipalV1 as Principal, Reader, RequestHeaderV1,
     ResultHeaderV1, Status, Writer, FRONTEND_SEAL_LEN, GRANT_KIND_INPUT_FRONTEND, HEADER_LEN,
     SLOT_FRONTEND,
 };
-use api::service_binding::ServiceBinding as Binding;
+use abi::service_binding::ServiceBinding as Binding;
+use alloc::vec::Vec;
 use types::{CellId, ViError};
 const ZERO: Ref = Ref {
     id: 0,
@@ -223,9 +223,9 @@ pub(crate) struct State {
 }
 fn receipt_service(kind: u16) -> u16 {
     if kind == 1 || kind == GRANT_KIND_INPUT_FRONTEND {
-        api::syscall::service::INPUT
+        abi::syscall::service::INPUT
     } else {
-        api::syscall::service::VFS
+        abi::syscall::service::VFS
     }
 }
 /// Kind-6 (InputFrontend) receipt seal: exactly the frontend Ref and the
@@ -843,11 +843,11 @@ fn refused(caller: usize, path: &str, error: ViError) -> Status {
 /// malformed.
 fn prepare_route(
     route: u32,
-    r: &mut api::cell_session::Reader<'_>,
+    r: &mut abi::cell_session::Reader<'_>,
 ) -> Result<Option<(usize, usize)>> {
     match route {
-        api::cell_session::PREPARE_ROUTE_PATH => Ok(None),
-        api::cell_session::PREPARE_ROUTE_ELF => Ok(Some((r.u64()? as usize, r.u64()? as usize))),
+        abi::cell_session::PREPARE_ROUTE_PATH => Ok(None),
+        abi::cell_session::PREPARE_ROUTE_ELF => Ok(Some((r.u64()? as usize, r.u64()? as usize))),
         _ => Err(Status::Malformed),
     }
 }
@@ -874,14 +874,14 @@ impl State {
                 }
             }
         }
-        let input = binding(sched, api::syscall::service::INPUT).ok();
-        let vfs = binding(sched, api::syscall::service::VFS).ok();
+        let input = binding(sched, abi::syscall::service::INPUT).ok();
+        let vfs = binding(sched, abi::syscall::service::VFS).ok();
         for i in 0..self.receipts.len() {
             let rr = &self.receipts[i];
             if rr.state > 1 {
                 continue;
             }
-            let current = if receipt_service(rr.kind) == api::syscall::service::INPUT {
+            let current = if receipt_service(rr.kind) == abi::syscall::service::INPUT {
                 input
             } else {
                 vfs
@@ -918,7 +918,7 @@ impl State {
         // restarted issuer cannot leave records pinning the shared caps.
         let prepared = &self.prepared;
         self.receipts.retain(|rr| {
-            let current = if receipt_service(rr.kind) == api::syscall::service::INPUT {
+            let current = if receipt_service(rr.kind) == abi::syscall::service::INPUT {
                 input
             } else {
                 vfs
@@ -1066,8 +1066,8 @@ impl State {
             11..=15 | 18 | 23 | 27 => {
                 let p = &self.prepared[self.preparation(reference)?];
                 let allowed = if selector == 15 {
-                    issuer(sched, actor, api::syscall::service::INPUT).is_ok()
-                        || issuer(sched, actor, api::syscall::service::VFS).is_ok()
+                    issuer(sched, actor, abi::syscall::service::INPUT).is_ok()
+                        || issuer(sched, actor, abi::syscall::service::VFS).is_ok()
                 } else {
                     p.preparer == actor
                 };
@@ -1382,7 +1382,7 @@ impl State {
                 if self.operations[i].owner != actor {
                     // The exact registered input issuer may cut the committed
                     // foreground child's own operation, and nothing else.
-                    let input = issuer(sched, actor, api::syscall::service::INPUT)?;
+                    let input = issuer(sched, actor, abi::syscall::service::INPUT)?;
                     if !self.receipts.iter().any(|rr| {
                         rr.kind == 1
                             && rr.state == 1
@@ -1406,7 +1406,7 @@ impl State {
                 // holder's operation lifetime (read-only).
                 let i = match self.op_member(actor, operation) {
                     Err(Status::WrongOwner)
-                        if issuer(sched, actor, api::syscall::service::INPUT).is_ok() =>
+                        if issuer(sched, actor, abi::syscall::service::INPUT).is_ok() =>
                     {
                         self.op_index(operation)?
                     }
@@ -1554,7 +1554,7 @@ impl State {
                 let reference = r.reference()?;
                 r.finish()?;
                 let e = self.endpoints[self.endpoint_index(reference)?].endpoint;
-                if e.holder != actor && issuer(sched, actor, api::syscall::service::INPUT).is_err()
+                if e.holder != actor && issuer(sched, actor, abi::syscall::service::INPUT).is_err()
                 {
                     return Err(Status::WrongOwner);
                 }
@@ -1596,7 +1596,7 @@ impl State {
             23 => {
                 let reference = r.reference()?;
                 r.finish()?;
-                issuer(sched, actor, api::syscall::service::VFS)?;
+                issuer(sched, actor, abi::syscall::service::VFS)?;
                 let p = &self.prepared[self.preparation(reference)?];
                 if p.state != 0 {
                     return Err(Status::InvalidChild);
@@ -1682,7 +1682,7 @@ impl State {
                 let writers = [r.reference()?, r.reference()?];
                 r.finish()?;
                 let pi = self.preparing(actor, reference)?;
-                if binding(sched, api::syscall::service::INPUT)? != input {
+                if binding(sched, abi::syscall::service::INPUT)? != input {
                     return Err(Status::Revoked);
                 }
                 if self.prepared[pi].parsed.is_none()
@@ -1869,14 +1869,14 @@ impl State {
         let (grant, projection): (&child_context::Grant, &[u8]) = match (kind, slot) {
             (1, 0) => {
                 let intent = p.intent.ok_or(Status::Denied)?;
-                if issuer(sched, actor, api::syscall::service::INPUT)? != intent.issuer {
+                if issuer(sched, actor, abi::syscall::service::INPUT)? != intent.issuer {
                     return Err(Status::Denied);
                 }
                 stdio = parsed.stdio_projection()?;
                 (parsed.grants[0].as_ref().ok_or(Status::Denied)?, &stdio)
             }
             (2, 4) => {
-                issuer(sched, actor, api::syscall::service::VFS)?;
+                issuer(sched, actor, abi::syscall::service::VFS)?;
                 (
                     parsed.grants[4].as_ref().ok_or(Status::Denied)?,
                     &p.context[parsed.cwd.clone()],
@@ -1885,7 +1885,7 @@ impl State {
             (GRANT_KIND_INPUT_FRONTEND, SLOT_FRONTEND) => {
                 // Frontend binding: the input issuer proves the child is prepared
                 // by the frontend holder under an operation the holder owns.
-                issuer(sched, actor, api::syscall::service::INPUT)?;
+                issuer(sched, actor, abi::syscall::service::INPUT)?;
                 let grant = parsed.grants[SLOT_FRONTEND as usize]
                     .as_ref()
                     .ok_or(Status::Denied)?;
@@ -1946,10 +1946,10 @@ impl State {
             return Err(Status::Denied);
         }
         let service = match (kind, slot, seal_len) {
-            (1, 0, 192) => api::syscall::service::INPUT,
-            (2, 4, 128) => api::syscall::service::VFS,
+            (1, 0, 192) => abi::syscall::service::INPUT,
+            (2, 4, 128) => abi::syscall::service::VFS,
             (GRANT_KIND_INPUT_FRONTEND, SLOT_FRONTEND, FRONTEND_SEAL_LEN) => {
-                api::syscall::service::INPUT
+                abi::syscall::service::INPUT
             }
             _ => return Err(Status::Malformed),
         };
@@ -2277,9 +2277,9 @@ impl State {
             let ri = self.receipt_index(named)?;
             let rr = &self.receipts[ri];
             let service = if n == 1 {
-                api::syscall::service::VFS
+                abi::syscall::service::VFS
             } else {
-                api::syscall::service::INPUT
+                abi::syscall::service::INPUT
             };
             if rr.prepared != reference
                 || !rr.bound
@@ -2409,7 +2409,7 @@ impl State {
         r.finish()?;
         let oi = self.op_active(actor, operation)?;
         if self.operations[oi].owner != actor
-            || binding(sched, api::syscall::service::INPUT)? != owner
+            || binding(sched, abi::syscall::service::INPUT)? != owner
         {
             return Err(Status::WrongOwner);
         }
@@ -2527,7 +2527,7 @@ impl State {
             let b = &self.bootstraps[bi];
             (b.controller, b.issuer, b.state)
         };
-        let is_issuer = issuer(sched, actor, api::syscall::service::INPUT).ok() == Some(recorded);
+        let is_issuer = issuer(sched, actor, abi::syscall::service::INPUT).ok() == Some(recorded);
         if actor != controller && !is_issuer {
             return Err(Status::WrongOwner);
         }
@@ -2610,7 +2610,7 @@ impl State {
         let rr = &self.receipts[ri];
         if rr.kind != 1
             || rr.state != 1
-            || issuer(sched, actor, api::syscall::service::INPUT)? != rr.issuer
+            || issuer(sched, actor, abi::syscall::service::INPUT)? != rr.issuer
         {
             return Err(Status::WrongOwner);
         }
@@ -2747,7 +2747,7 @@ fn with_state<T>(sched: &mut Scheduler, f: impl FnOnce(&mut State, &mut Schedule
 /// sequence is minted later, by `retired`, after resource teardown.
 pub(crate) fn retiring(
     sched: &mut Scheduler,
-    owner: api::cell_owner::CellOwner,
+    owner: abi::cell_owner::CellOwner,
     exit_reason: usize,
 ) {
     with_state(sched, |state, sched| {
@@ -2788,7 +2788,7 @@ pub(crate) fn retiring(
 /// Root retirement completed (owner slot empty, quota still registered): mint
 /// the canonical terminal sequence and retire everything charged to the dead
 /// principal so a reused CellId can never be refunded or charged for it.
-pub(crate) fn retired(sched: &mut Scheduler, owner: api::cell_owner::CellOwner) {
+pub(crate) fn retired(sched: &mut Scheduler, owner: abi::cell_owner::CellOwner) {
     with_state(sched, |state, _| {
         for i in 0..state.prepared.len() {
             let p = &state.prepared[i];
@@ -3956,7 +3956,7 @@ pub(crate) mod test_hooks {
         for half in [GRANT_KIND_INPUT_FRONTEND, 0, SLOT_FRONTEND, 0] {
             context.extend_from_slice(&half.to_le_bytes());
         }
-        context.extend_from_slice(&(api::syscall::service::INPUT as u64).to_le_bytes());
+        context.extend_from_slice(&(abi::syscall::service::INPUT as u64).to_le_bytes());
         context.extend_from_slice(&frontend.to_bytes());
         context.extend_from_slice(&0u64.to_le_bytes());
         let parsed = child_context::validate(&context, operation).ok()?;
@@ -4166,10 +4166,10 @@ mod tests {
     fn frontend_receipts_belong_to_input() {
         assert_eq!(
             receipt_service(GRANT_KIND_INPUT_FRONTEND),
-            api::syscall::service::INPUT
+            abi::syscall::service::INPUT
         );
-        assert_eq!(receipt_service(1), api::syscall::service::INPUT);
-        assert_eq!(receipt_service(2), api::syscall::service::VFS);
+        assert_eq!(receipt_service(1), abi::syscall::service::INPUT);
+        assert_eq!(receipt_service(2), abi::syscall::service::VFS);
     }
 
     #[test]
@@ -4182,7 +4182,7 @@ mod tests {
 
         let mut r = Reader::new(&tail);
         assert_eq!(
-            prepare_route(api::cell_session::PREPARE_ROUTE_ELF, &mut r),
+            prepare_route(abi::cell_session::PREPARE_ROUTE_ELF, &mut r),
             Ok(Some((7, 4096)))
         );
         assert_eq!(
@@ -4193,7 +4193,7 @@ mod tests {
 
         let mut r = Reader::new(b"/bin/x");
         assert_eq!(
-            prepare_route(api::cell_session::PREPARE_ROUTE_PATH, &mut r),
+            prepare_route(abi::cell_session::PREPARE_ROUTE_PATH, &mut r),
             Ok(None)
         );
         assert_eq!(
@@ -4214,7 +4214,7 @@ mod tests {
         }
         // An ELF route without both u64 fields cannot be read as a launch.
         assert!(prepare_route(
-            api::cell_session::PREPARE_ROUTE_ELF,
+            abi::cell_session::PREPARE_ROUTE_ELF,
             &mut Reader::new(&[0u8; 12])
         )
         .is_err());

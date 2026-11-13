@@ -66,7 +66,7 @@ impl SlotId {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Completion {
     pub slot: SlotId,
-    /// One public source bit from `api::completion::source`, or zero for
+    /// One public source bit from `abi::completion::source`, or zero for
     /// kernel-only queue self-tests that do not model a public producer.
     pub source: u32,
     /// Operation result. Negative values are reserved for errors; the exact
@@ -216,7 +216,7 @@ impl CompletionQueue {
     /// is the property the whole design rests on.
     #[must_use = "a refused completion means a slot was misused and the waiter will hang"]
     pub fn complete(&self, slot: SlotId, result: isize) -> bool {
-        self.complete_from(slot, api::completion::source::UNSPECIFIED, result)
+        self.complete_from(slot, abi::completion::source::UNSPECIFIED, result)
     }
 
     /// Record a public source and result for the operation holding `slot`.

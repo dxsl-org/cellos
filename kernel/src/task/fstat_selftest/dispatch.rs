@@ -2,7 +2,7 @@ use super::fixture::{
     backend_calls, check, install_failing_file, reset_backend_calls, FAILING_FD, SENTINEL, TASK_A,
     TASK_B,
 };
-use api::syscall::{ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN};
+use abi::syscall::{ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN};
 
 use super::super::syscall::{handle_syscall, Syscall};
 

@@ -245,7 +245,7 @@ impl CapSet {
     /// co-grant `data | (lfs<<1) | (lfs<<2)` (NOT a 1:1 copy) so the VFS service
     /// keeps its P5 range after intersection. The H-ext gate is baked in here so
     /// `hypervisor` can never be held on a CPU lacking H-ext.
-    pub fn from_manifest(m: &api::manifest::CellManifest) -> CapSet {
+    pub fn from_manifest(m: &abi::manifest::CellManifest) -> CapSet {
         let hv = m.has_hypervisor()
             && (crate::cpu_features::has_h_ext()
                 || crate::cpu_features::has_el2()
@@ -392,10 +392,10 @@ impl CapSet {
     }
 
     /// The attested caller-trailer flags for this Cell's network rights
-    /// (`api::caller_identity::CALLER_FLAG_NET_*`). Only these four bits; the
+    /// (`abi::caller_identity::CALLER_FLAG_NET_*`). Only these four bits; the
     /// caller ORs in any other flag it owns.
     pub fn net_caller_flags(&self) -> u32 {
-        use api::caller_identity::{
+        use abi::caller_identity::{
             CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
             CALLER_FLAG_NET_RESOLVE,
         };
@@ -411,21 +411,21 @@ impl CapSet {
     }
 
     /// The attested caller-trailer flag for this Cell's Q right
-    /// (`api::caller_identity::CALLER_FLAG_CONFIG_WRITE`), or 0.
+    /// (`abi::caller_identity::CALLER_FLAG_CONFIG_WRITE`), or 0.
     pub fn config_caller_flags(&self) -> u32 {
         if self.config_write {
-            api::caller_identity::CALLER_FLAG_CONFIG_WRITE
+            abi::caller_identity::CALLER_FLAG_CONFIG_WRITE
         } else {
             0
         }
     }
 
     /// The attested caller-trailer flags for this Cell's KMS SSH rights
-    /// (`api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN` /
+    /// (`abi::caller_identity::CALLER_FLAG_KMS_SSH_SIGN` /
     /// `CALLER_FLAG_KMS_SSH_ADMIN`), or 0. Only these two bits; the caller ORs in
     /// any other flag it owns.
     pub fn kms_caller_flags(&self) -> u32 {
-        use api::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+        use abi::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
         let mut flags = 0;
         if self.kms_ssh_sign {
             flags |= CALLER_FLAG_KMS_SSH_SIGN;
@@ -437,10 +437,10 @@ impl CapSet {
     }
 
     /// This set minus the rights named by a `CapRevoke` mask
-    /// (`api::syscall::cap_mask`): the boolean caps it names, and the MMIO-class
+    /// (`abi::syscall::cap_mask`): the boolean caps it names, and the MMIO-class
     /// and block-region bits in its parameterised fields.
     pub fn without_revoke_mask(self, cap_mask: u32) -> CapSet {
-        use api::syscall::cap_mask as CM;
+        use abi::syscall::cap_mask as CM;
         let keep = |bit: u32| cap_mask & bit == 0;
         CapSet {
             block_io: self.block_io && keep(CM::BLOCK_IO),
@@ -491,7 +491,7 @@ impl CapSet {
 /// reproducing the pre-v2 behaviour byte-for-byte (NOT `max(0xFF, floor)`,
 /// which would wrongly force every such cell to the most-isolated class).
 pub fn granted_protection_class(granted: &CapSet, requested_protection_class: u8) -> u8 {
-    use api::manifest::{
+    use abi::manifest::{
         PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_STANDARD, PROTECTION_CLASS_TRUSTED_CORE,
     };
     let is_trusted = granted.block_io || granted.network || granted.spawn || granted.hypervisor;
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn manifest_maps_i2c_and_spi_to_distinct_mmio_classes() {
-        let i2c = api::manifest::CellManifest::with_all(
+        let i2c = abi::manifest::CellManifest::with_all(
             false,
             false,
             false,
@@ -544,9 +544,9 @@ mod tests {
             false,
             true,
             false,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
-        let spi = api::manifest::CellManifest::with_all(
+        let spi = abi::manifest::CellManifest::with_all(
             false,
             false,
             false,
@@ -559,7 +559,7 @@ mod tests {
             false,
             false,
             true,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
         assert_eq!(
             CapSet::from_manifest(&i2c).mmio_devices,
@@ -665,7 +665,7 @@ mod tests {
     fn manifest_never_requests_network_rights() {
         // Every manifest flag set: still no net right, because the install path —
         // not the manifest — is the request signal.
-        let all = api::manifest::CellManifest::with_all(
+        let all = abi::manifest::CellManifest::with_all(
             true,
             true,
             true,
@@ -678,7 +678,7 @@ mod tests {
             true,
             true,
             true,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
         let caps = CapSet::from_manifest(&all);
         assert!(caps.network, "fixture must be a fully-flagged manifest");
@@ -793,7 +793,7 @@ mod tests {
 
     #[test]
     fn network_rights_map_to_exact_trailer_flags() {
-        use api::caller_identity::{
+        use abi::caller_identity::{
             CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
             CALLER_FLAG_NET_RESOLVE, CALLER_FLAG_NET_RIGHTS_MASK,
         };
@@ -848,7 +848,7 @@ mod tests {
 
     #[test]
     fn manifest_never_requests_observe_mutate_rights() {
-        let all = api::manifest::CellManifest::with_all(
+        let all = abi::manifest::CellManifest::with_all(
             true,
             true,
             true,
@@ -861,7 +861,7 @@ mod tests {
             true,
             true,
             true,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
         assert_eq!(
             observe_mutate(CapSet::from_manifest(&all)),
@@ -969,21 +969,21 @@ mod tests {
         assert_eq!(
             granted_protection_class(
                 &untrusted_caps,
-                api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+                abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
             ),
-            api::manifest::PROTECTION_CLASS_STANDARD
+            abi::manifest::PROTECTION_CLASS_STANDARD
         );
         assert_eq!(
-            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_TRUSTED_CORE),
-            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+            granted_protection_class(&trusted_caps, abi::manifest::PROTECTION_CLASS_TRUSTED_CORE),
+            abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
         );
         assert_eq!(
-            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_UNTRUSTED),
-            api::manifest::PROTECTION_CLASS_UNTRUSTED
+            granted_protection_class(&trusted_caps, abi::manifest::PROTECTION_CLASS_UNTRUSTED),
+            abi::manifest::PROTECTION_CLASS_UNTRUSTED
         );
         assert_eq!(
-            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_LEGACY),
-            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+            granted_protection_class(&trusted_caps, abi::manifest::PROTECTION_CLASS_LEGACY),
+            abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
         );
     }
 
@@ -992,8 +992,8 @@ mod tests {
     /// exactly `CALLER_FLAG_CONFIG_WRITE`.
     #[test]
     fn config_write_is_requested_by_the_shell_path_only() {
-        use api::caller_identity::CALLER_FLAG_CONFIG_WRITE;
-        let all = api::manifest::CellManifest::with_all(
+        use abi::caller_identity::CALLER_FLAG_CONFIG_WRITE;
+        let all = abi::manifest::CellManifest::with_all(
             true,
             true,
             true,
@@ -1006,7 +1006,7 @@ mod tests {
             true,
             true,
             true,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
         assert!(!CapSet::from_manifest(&all).config_write);
         assert!(CapSet::EMPTY.with_path_caps("/bin/cellbox").config_write);
@@ -1055,11 +1055,11 @@ mod tests {
     /// carries both, and each maps to exactly its own trailer flag.
     #[test]
     fn kms_ssh_sign_is_requested_by_the_ssh_path_only() {
-        use api::caller_identity::{
+        use abi::caller_identity::{
             CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN,
             CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_RESOLVE,
         };
-        let all = api::manifest::CellManifest::with_all(
+        let all = abi::manifest::CellManifest::with_all(
             true,
             true,
             true,
@@ -1072,7 +1072,7 @@ mod tests {
             true,
             true,
             true,
-            api::manifest::TIER_LEGACY,
+            abi::manifest::TIER_LEGACY,
         );
         let from_manifest = CapSet::from_manifest(&all);
         assert!(!from_manifest.kms_ssh_sign && !from_manifest.kms_ssh_admin);

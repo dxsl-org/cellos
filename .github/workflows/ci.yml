@@ -130,12 +130,12 @@ jobs:
           python3 scripts/check-kernel-residents.py --negative-control
 
       # The C and Zig syscall numbers are generated from the syscall table
-      # (libs/api/abi/syscalls.toml); a hand edit to either side fails here.
+      # (libs/abi/abi/syscalls.toml); a hand edit to either side fails here.
       - name: Check generated syscall headers
         run: python3 scripts/gen-syscall-headers.py --check
 
       # Law-1 frozen syscall items now live in the syscall table
-      # (libs/api/abi/syscalls.toml) and the split syscall module; these assert
+      # (libs/abi/abi/syscalls.toml) and the split syscall module; these assert
       # the confirmed records on every push, next to the generated-header diff.
       - name: Assert frozen LookupServiceBound and WaitCompletion items
         run: |
@@ -149,14 +149,15 @@ jobs:
           cargo metadata --locked --format-version 1 > /dev/null
           cargo metadata --locked --format-version 1 --manifest-path tests/integration/Cargo.toml > /dev/null
 
-      # libs/api/src/abi/disk.rs is the partition layout; every image/provisioning
+      # libs/abi/src/disk.rs is the partition layout; every image/provisioning
       # tool's literal copy must equal it, and scripts/disk-layout.json is its
       # generated projection.
       - name: Check disk layout literals
         run: python3 scripts/check-disk-layout-literals.py
 
       # Every service opcode, status and error byte lives in one proto module
-      # under libs/api/src/services/proto/ (Phase 12); no copy may come back.
+      # under libs/wire/src/proto/ (Phase 12; kernel-emitted ones in libs/abi);
+      # no copy may come back.
       - name: Check service wire literals
         run: |
           python3 scripts/check-service-wire-literals.py --self-test
@@ -1978,7 +1979,8 @@ jobs:
           cache-on-failure: true
 
       - name: Run host-side unit tests
-        # libs/types, libs/api and libs/text-engine use cfg_attr(not(test), no_std)
+        # libs/types, libs/kms-codec, libs/abi, libs/wire, libs/api (the facade over
+        # them and libs/posix-shim) and libs/text-engine use cfg_attr(not(test), no_std)
         # and define no panic/alloc lang items, so they run on the host without a
         # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
         # cellbox cannot host-test itself (it links ostd, which owns those items).
@@ -1996,6 +1998,8 @@ jobs:
         # (its numbers are host-dependent and are never asserted).
         run: |
           cargo test -p types       --target x86_64-unknown-linux-gnu
+          cargo test -p kms-codec   --target x86_64-unknown-linux-gnu
+          cargo test -p abi -p wire --target x86_64-unknown-linux-gnu
           cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
           cargo test -p ai-proto -p ai-sdk -p hypha-llm-gateway -p hypha-core \

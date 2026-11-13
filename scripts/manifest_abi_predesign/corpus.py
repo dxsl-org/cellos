@@ -18,9 +18,9 @@ def parse_rust_constant(source: str, name: str) -> int:
 
 
 def derive_abi_invariants(root: Path) -> dict:
-    manifest = (root / "libs/api/src/abi/manifest.rs").read_text(encoding="utf-8")
-    flags = (root / "libs/api/src/abi/manifest_flags.rs").read_text(encoding="utf-8")
-    parser = (root / "libs/api/src/abi/manifest_parse.rs").read_text(encoding="utf-8")
+    manifest = (root / "libs/abi/src/manifest.rs").read_text(encoding="utf-8")
+    flags = (root / "libs/abi/src/manifest_flags.rs").read_text(encoding="utf-8")
+    parser = (root / "libs/abi/src/manifest_parse.rs").read_text(encoding="utf-8")
     if "#[repr(C)]" not in manifest or "pub struct CellManifest" not in manifest:
         raise ValueError("manifest record layout source drift")
     fields = ("pub magic: u32", "pub version: u8", "pub tier: u8", "pub flags: u16", "pub cap_args_off: u32", "pub reserved: u32")

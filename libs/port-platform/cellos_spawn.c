@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Kernel ABI opcodes (libs/api/src/abi/syscall.rs). */
+/* Kernel ABI opcodes (libs/abi/src/syscall.rs). */
 #define CELLOS_SYSCALL_SEND 0u
 #define CELLOS_SYSCALL_RECV 1u
 #define CELLOS_SYSCALL_WAIT 8u

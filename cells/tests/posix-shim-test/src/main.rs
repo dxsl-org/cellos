@@ -1,6 +1,6 @@
 //! POSIX shim integration test cell.
 //!
-//! Tests the C ABI shims in `libs/api/src/services/posix.rs`:
+//! Tests the C ABI shims in `libs/posix-shim/src/lib.rs`:
 //!   - open/fstat/close with truthful, failure-atomic descriptor metadata
 //!   - stat and unlink with truthful return values and failure atomicity
 //!   - mkdir and rmdir on /srv with truthful directory lifecycle results

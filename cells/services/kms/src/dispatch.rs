@@ -5,7 +5,7 @@ mod relay;
 mod ssh;
 
 use api::caller_identity::CallerIdentity;
-use types::kms::{
+use kms_codec::{
     BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1, ServiceNetBindingEpoch,
 };
 
@@ -135,10 +135,10 @@ impl KmsService {
     ))]
     pub fn development_silo_boot_probe(&mut self) -> bool {
         let status = self.provider.relay_p256_status();
-        if status.metadata.provider != types::kms::KmsProviderKind::SiloWrapped
+        if status.metadata.provider != kms_codec::KmsProviderKind::SiloWrapped
             || status.metadata.assessment
-                != types::kms::RelayProviderAssessment::DevelopmentReference
-            || status.metadata.readiness != types::kms::KmsCapabilityReadiness::Ready
+                != kms_codec::RelayProviderAssessment::DevelopmentReference
+            || status.metadata.readiness != kms_codec::KmsCapabilityReadiness::Ready
         {
             return false;
         }
@@ -343,7 +343,7 @@ fn boot_lifecycle() -> crate::lifecycle::RelayLifecycle {
 mod ssh_unavailable_tests {
     use super::*;
     use crate::storage::FixtureRelayProvider;
-    use types::kms::{KmsCapabilityReadiness, RelayP256StatusPayload, KMS_PAYLOAD_LEN};
+    use kms_codec::{KmsCapabilityReadiness, RelayP256StatusPayload, KMS_PAYLOAD_LEN};
 
     const SSH_OPCODES: [KmsOpcode; 10] = [
         KmsOpcode::BeginSshKeyImport,

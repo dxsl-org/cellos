@@ -1789,7 +1789,7 @@ fn x86_handoff_fixture() {
     ready::set_current_task_id(0, 90_001);
     ready::set_executing_task_id(0, 90_001);
     ready::begin_outgoing_context_save(0, 90_001);
-    ready::push_on_hart(0, 90_001, api::TaskPriority::Normal as u8);
+    ready::push_on_hart(0, 90_001, abi::TaskPriority::Normal as u8);
     X86_HANDOFF_FIRST_EPOCH.store(request_retirement_switch(0), Ordering::Release);
     capture_retirement_boundary(0);
     ready::set_current_task_id(0, 90_002);

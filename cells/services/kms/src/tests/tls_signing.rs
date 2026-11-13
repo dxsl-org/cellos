@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use types::kms::{
+use kms_codec::{
     KmsCapabilityReadiness, KmsErrorCode, KmsOpcode, RelayP256StatusPayload,
     RelayProviderAssessment, ServiceNetBindingPayload, Tls13ClientCertificateVerifyRequestPayload,
     Tls13ClientCertificateVerifyResponsePayload,
@@ -94,11 +94,8 @@ fn relay_readiness_is_independent_from_c2c_readiness() {
             registry(None, Some(8)),
         )
         .unwrap();
-    let c2c = types::kms::NodeIdentityStatusPayload::decode(c2c.payload().unwrap()).unwrap();
-    assert_eq!(
-        c2c.state,
-        types::kms::NodeIdentityState::ProviderUnavailable
-    );
+    let c2c = kms_codec::NodeIdentityStatusPayload::decode(c2c.payload().unwrap()).unwrap();
+    assert_eq!(c2c.state, kms_codec::NodeIdentityState::ProviderUnavailable);
     assert_eq!(CALLS.load(Ordering::Relaxed), 0);
 
     let relay = service

@@ -6,7 +6,7 @@
 use crate::cell::cspace::{
     register_cell_authority, ControlStatus, Principal, ResourceKind, CELL_AUTHORITIES,
 };
-use api::cap::CapPerms;
+use abi::cap::CapPerms;
 use types::CellId;
 
 pub fn run() {

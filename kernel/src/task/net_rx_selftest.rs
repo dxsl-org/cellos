@@ -18,9 +18,9 @@
 use super::completion::CompletionQueue;
 use super::completion_selftest::{insert, queue, remove};
 use super::waker;
+use abi::completion::RESULT_ABANDONED;
+use abi::syscall::events::NET_RX;
 use alloc::sync::Arc;
-use api::completion::RESULT_ABANDONED;
-use api::syscall::events::NET_RX;
 
 /// Synthetic tids and cells outside anything the boot sequence has assigned.
 const TID_ONE: usize = 9311;

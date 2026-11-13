@@ -3,7 +3,7 @@
 //! Physical input stays in Linux evdev form until service-input translates it.
 //! Only the headless console fallback performs ASCII/ANSI translation.
 
-use api::services::proto::input::{EV_ABS, EV_KEY, EV_REL};
+use abi::input_producer::{EV_ABS, EV_KEY, EV_REL};
 
 use crate::sync::Spinlock;
 
@@ -16,7 +16,7 @@ const STATUS_ERROR: u8 = 0xC0;
 const WAIT_LIMIT: usize = 100_000;
 const POLL_LIMIT: usize = 64;
 
-/// Input-service producer frame fields (`api::services::proto::input`):
+/// Input-service producer frame fields (`abi::input_producer`):
 /// `opcode` is EV_KEY, EV_REL or EV_ABS (guest pixels).
 #[derive(Clone, Copy, Debug)]
 pub struct Ps2Event {

@@ -12,8 +12,8 @@ use super::{
 };
 use crate::sched::scheduler::Scheduler;
 use crate::task::{tcb::Task, SCHEDULER};
+use abi::syscall::ViSyscall;
 use alloc::collections::BTreeMap;
-use api::syscall::ViSyscall;
 use types::{CellId, GrantPerm};
 
 const GRANTEE_TID: usize = 52_001;

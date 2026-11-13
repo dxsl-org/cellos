@@ -50,7 +50,7 @@ fn prepare_completion_wait_receiver() {
     {
         task.state = TaskState::Blocked {
             wait: WaitKind::Completion {
-                source: api::completion::source::NET_RX,
+                source: abi::completion::source::NET_RX,
                 delivery: Delivery::Queue,
             },
             deadline: None,
@@ -277,7 +277,7 @@ fn all_producers_wake_net_rx_completion_wait() -> bool {
                     task.state,
                     TaskState::Blocked {
                         wait: WaitKind::Completion {
-                            source: api::completion::source::NET_RX,
+                            source: abi::completion::source::NET_RX,
                             delivery: Delivery::Queue,
                             ..
                         },
@@ -335,7 +335,7 @@ fn timer_completion_wait_remains_deadline_only() -> bool {
                 super::completion_wait::publish_wait_state_locked(
                     task,
                     RECEIVER,
-                    api::completion::source::TIMER,
+                    abi::completion::source::TIMER,
                     Some(u64::MAX),
                 )
             })
@@ -351,7 +351,7 @@ fn timer_completion_wait_remains_deadline_only() -> bool {
                     task.state,
                     TaskState::Blocked {
                         wait: WaitKind::Completion {
-                            source: api::completion::source::TIMER,
+                            source: abi::completion::source::TIMER,
                             delivery: Delivery::Queue,
                             ..
                         },
@@ -402,7 +402,7 @@ fn completion_wait_mailbox_is_unchanged(depth: usize, ready_before: usize) -> bo
             task.state,
             TaskState::Blocked {
                 wait: WaitKind::Completion {
-                    source: api::completion::source::NET_RX,
+                    source: abi::completion::source::NET_RX,
                     delivery: Delivery::Queue,
                     ..
                 },
@@ -475,7 +475,7 @@ fn completion_wait_publication_arms_existing_handoff() -> bool {
                 super::completion_wait::publish_wait_state_locked(
                     task,
                     RECEIVER,
-                    api::completion::source::NET_RX,
+                    abi::completion::source::NET_RX,
                     None,
                 )
             })
@@ -512,7 +512,7 @@ fn ipc_before_park_returns_raw_zero() -> bool {
         &completions,
         RECEIVER,
         slot,
-        api::completion::source::NET_RX,
+        abi::completion::source::NET_RX,
     ) else {
         let _ = completions.release(slot);
         reset();
@@ -531,12 +531,12 @@ fn ipc_before_park_returns_raw_zero() -> bool {
                 super::completion_wait::publish_wait_state_locked(
                     task,
                     RECEIVER,
-                    api::completion::source::NET_RX,
+                    abi::completion::source::NET_RX,
                     None,
                 )
             })
     };
-    let mut untouched = [0xa5u8; api::completion::COMPLETION_LEN];
+    let mut untouched = [0xa5u8; abi::completion::COMPLETION_LEN];
     let outcome = super::completion_wait::finish_net_rx_wait(
         RECEIVER,
         untouched.as_mut_ptr() as usize,
@@ -561,7 +561,7 @@ fn ipc_before_park_returns_raw_zero() -> bool {
     let ok = posted.is_ok()
         && decision == Some(super::completion_wait::CompletionParkDecision::MailboxPending)
         && outcome == Ok(0)
-        && untouched == [0xa5u8; api::completion::COMPLETION_LEN]
+        && untouched == [0xa5u8; abi::completion::COMPLETION_LEN]
         && completions.reserved() == 0
         && completions.drainable() == 0
         && !super::completion::wakes_pending()
@@ -784,11 +784,11 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             attest_caller: true,
         },
     );
-    let identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let identity = abi::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
     let attested_ok = matches!(delivered, Ok(id) if id == SENDER)
         && recv_buf[..payload.len()] == *payload
         && identity
-            == Some(api::caller_identity::CallerIdentity {
+            == Some(abi::caller_identity::CallerIdentity {
                 flags: 0,
                 cell_id: TEST_CELL,
                 generation: sender_generation,
@@ -827,10 +827,10 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             attest_caller: true,
         },
     );
-    let rename_only_identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let rename_only_identity = abi::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
     let rename_only_ok = matches!(rename_only_delivered, Ok(id) if id == SENDER)
         && rename_only_identity
-            == Some(api::caller_identity::CallerIdentity {
+            == Some(abi::caller_identity::CallerIdentity {
                 flags: 0,
                 cell_id: TEST_CELL,
                 generation: sender_generation,
@@ -870,11 +870,11 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             attest_caller: true,
         },
     );
-    let mutate_identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let mutate_identity = abi::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
     let mutate_ok = matches!(mutate_delivered, Ok(id) if id == SENDER)
         && mutate_identity
-            == Some(api::caller_identity::CallerIdentity {
-                flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+            == Some(abi::caller_identity::CallerIdentity {
+                flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
                 cell_id: TEST_CELL,
                 generation: sender_generation,
                 sender_tid: SENDER as u64,
@@ -912,10 +912,10 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             attest_caller: true,
         },
     );
-    let withheld_identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let withheld_identity = abi::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
     let withheld_ok = matches!(withheld_delivered, Ok(id) if id == SENDER)
         && withheld_identity
-            == Some(api::caller_identity::CallerIdentity {
+            == Some(abi::caller_identity::CallerIdentity {
                 flags: 0,
                 cell_id: TEST_CELL,
                 generation: sender_generation,
@@ -939,9 +939,9 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
 /// level-flag settlement is covered by the host tests in `completion_wait`.
 fn multi_source_wait_reports_each_source_once() -> bool {
     use super::completion_wait as cw;
-    const NET_RX: u32 = api::completion::source::NET_RX;
-    const TIMER: u32 = api::completion::source::TIMER;
-    const IPC: u32 = api::completion::source::IPC;
+    const NET_RX: u32 = abi::completion::source::NET_RX;
+    const TIMER: u32 = abi::completion::source::TIMER;
+    const IPC: u32 = abi::completion::source::IPC;
     let mask = NET_RX | IPC | TIMER;
 
     let syscall_rule = cw::source_is_valid(IPC, None)

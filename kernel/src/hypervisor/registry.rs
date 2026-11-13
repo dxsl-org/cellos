@@ -29,7 +29,7 @@ pub(crate) mod vmm_wire;
 #[cfg(target_arch = "aarch64")]
 use crate::memory::stage2::Stage2Table;
 #[cfg(target_arch = "aarch64")]
-use api::hypervisor::ViVmExit as ApiVmExit;
+use abi::hypervisor::ViVmExit as ApiVmExit;
 #[cfg(target_arch = "aarch64")]
 use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, VgicWindows};
 #[cfg(target_arch = "aarch64")]
@@ -362,7 +362,7 @@ pub fn run_vcpu(
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
-) -> ViResult<api::hypervisor::ViVmExit> {
+) -> ViResult<abi::hypervisor::ViVmExit> {
     #[cfg(target_arch = "aarch64")]
     {
         let hal_exit = {
@@ -550,7 +550,7 @@ pub fn run_vcpu(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        use api::hypervisor::ViVmExit as ApiVmExit;
+        use abi::hypervisor::ViVmExit as ApiVmExit;
         use hal::ViVmExit as HalVmExit;
         let hal_exit = super::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
         // HAL → API conversion (VERSION 2 ABI — the x86 variants are frozen at

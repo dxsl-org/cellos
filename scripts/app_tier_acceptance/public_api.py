@@ -10,6 +10,10 @@ from .checks import GIT, cached_paths, canonical_digest, exact, safe_file
 
 ROOTS = (
     "libs/api/src/lib.rs",
+    "libs/abi/src/lib.rs",
+    "libs/wire/src/lib.rs",
+    "libs/posix-shim/src/lib.rs",
+    "libs/kms-codec/src/lib.rs",
     "libs/ostd/src/lib.rs",
     "libs/types/src/lib.rs",
     "libs/viui/src/lib.rs",
@@ -122,7 +126,7 @@ def validate(root: Path, snapshot: object, revision: str, dirty: bool, abi_versi
         archived = _committed_sources(root, revision, expected)
         if any(archived[path] != (root / path).read_bytes() for path in expected):
             raise ValueError("clean public API artifact is not present at the claimed revision")
-    manifest = (root / "libs/api/src/abi/manifest_flags.rs").read_text(encoding="utf-8")
+    manifest = (root / "libs/abi/src/manifest_flags.rs").read_text(encoding="utf-8")
     if f"pub const MANIFEST_VERSION: u8 = {abi_version};" not in manifest:
         raise ValueError("ABI version is not derived from the public source snapshot")
     return canonical_digest(snapshot)

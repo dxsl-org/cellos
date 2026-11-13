@@ -1,5 +1,5 @@
 use super::*;
-use types::kms::{
+use kms_codec::{
     RelayCsrChunkRequestPayload, RelayCsrChunkResponsePayload, RelayEnrollmentAbortRequestPayload,
     RelayEnrollmentBeginRequestPayload, RelayEnrollmentBeginResponsePayload,
     RelayGenerationCommitRequestPayload, RelayStageProfileRequestPayload,
@@ -153,7 +153,7 @@ fn begin_publishes_bounded_canonical_csr_chunks_in_order() {
     // so the first enrollment allocates the strictly next generation.
     assert_eq!(begin.pending_relay_generation, FIXTURE_RELAY_GENERATION + 1);
     assert_eq!(begin.restart_epoch, service.lifecycle.restart_epoch());
-    assert!(begin.csr_len as usize <= types::kms::RELAY_CSR_MAX_LEN);
+    assert!(begin.csr_len as usize <= kms_codec::RELAY_CSR_MAX_LEN);
     assert_ne!(begin.csr_sha256, [0; 32]);
     // The CRI is embedded verbatim inside the assembled CSR; the outer
     // SEQUENCE uses the canonical minimal long-form length (0x81, one byte).
@@ -255,7 +255,7 @@ fn csr_handle_transfer_is_denied_and_invalidated() {
 
 #[test]
 fn commit_requires_staging_and_exact_digest_then_serves_new_tuple() {
-    use types::kms::RelayGenerationCommitResponsePayload;
+    use kms_codec::RelayGenerationCommitResponsePayload;
     let mut service = KmsService::with_provider_fixture(FixtureRelayProvider::production());
     bind_net(&mut service, 7, 3);
     let (begin, _) = enroll(&mut service);
@@ -335,7 +335,7 @@ fn commit_requires_staging_and_exact_digest_then_serves_new_tuple() {
             net_registry(),
         )
         .unwrap();
-    let metadata = types::kms::RelayP256StatusPayload::decode(status.payload().unwrap()).unwrap();
+    let metadata = kms_codec::RelayP256StatusPayload::decode(status.payload().unwrap()).unwrap();
     assert_eq!(metadata.relay_generation, begin.pending_relay_generation);
     assert_eq!(metadata.active_profile_digest, [0x55; 32]);
 
@@ -373,7 +373,7 @@ fn active_public_key_reads_are_service_net_only() {
         )
         .unwrap();
     assert_eq!(ok.error_code().unwrap(), None);
-    let payload = types::kms::RelayActivePublicKeyPayload::decode(ok.payload().unwrap()).unwrap();
+    let payload = kms_codec::RelayActivePublicKeyPayload::decode(ok.payload().unwrap()).unwrap();
     assert_eq!(payload.spki_sec1[0], 4);
     assert_ne!(payload.spki_sha256, [0; 32]);
 }
