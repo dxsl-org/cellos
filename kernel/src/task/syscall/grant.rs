@@ -176,27 +176,13 @@ pub(super) fn grant_allocated_bytes(size: usize) -> usize {
 /// record therefore refuses, at the common syscall gate, before any table row,
 /// PTE, pin or frame exists. A retired or unknown tid is not a domain here, and
 /// the SAS/Tier-1 paths keep their exact current behaviour.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(super) fn domain_grant_task(tid: usize) -> bool {
     task_domain_space(tid).is_some()
 }
 
 /// Without a private-root backend no task can be a domain.
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 pub(super) fn domain_grant_task(_tid: usize) -> bool {
     false
 }
@@ -259,14 +245,7 @@ pub(super) fn domain_grant_capable(tid: usize) -> bool {
 /// must be able to admit its second cell while the first cell's grant is live.
 /// Lock order is the documented `*_GRANT_TABLE → SCHEDULER`, and the two tables
 /// are not held at the same time.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(crate) fn domain_grant_records_live() -> bool {
     let page_hit = {
         let table = grant_table_lock().lock();
@@ -291,14 +270,7 @@ pub(crate) fn domain_grant_records_live() -> bool {
 /// backend. Compiled only for the configuration where the admission module exists
 /// but the grant backend does not (`native-domains` on an uncovered target); a
 /// build without the feature never calls this.
-#[cfg(all(
-    feature = "native-domains",
-    not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))
-))]
+#[cfg(all(feature = "native-domains", not(cellos_wide)))]
 pub(crate) fn domain_grant_records_live() -> bool {
     false
 }

@@ -309,14 +309,7 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
 
 /// Read-only diagnostic path inspection under KERNEL_ROOT. Stop at blocks/huge
 /// leaves; never interpret leaf physical memory as another table.
-#[cfg(all(
-    feature = "p01-trace",
-    any(
-        target_arch = "x86_64",
-        target_arch = "riscv64",
-        target_arch = "aarch64"
-    )
-))]
+#[cfg(all(feature = "p01-trace", cellos_wide))]
 fn p01_observe_table_path(root: usize, va: usize, failed: bool, allocator: &FrameAllocator) {
     #[cfg(target_arch = "x86_64")]
     const LEVELS: &[usize] = &[39, 30, 21];
@@ -802,11 +795,7 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
 /// Cell's next access fault.
 /// Pages that are not mapped are skipped; a mapped page that cannot be
 /// re-protected is an error, because that page would stay user-reachable.
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     let Some(end) = checked_page_end(base, len) else {
         return Ok(0);
@@ -884,11 +873,7 @@ fn mmio_user_flags() -> Flags {
 
 /// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
 /// Cell's access to the window is revoked.
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 fn mmio_kernel_flags() -> Flags {
     #[cfg(target_arch = "riscv64")]
     let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
@@ -955,11 +940,7 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
         let leaf = leaf as u64;
         (leaf & LEAF_VALID != 0, leaf & LEAF_USER != 0)
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         let _ = vaddr;
         (false, false)
@@ -973,19 +954,11 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
 /// mapping of the frame is unchanged. `Err` means at least one mapped page is
 /// still user-reachable and the caller must not report the revoke as complete.
 pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     {
         clear_mmio_user(base, len)
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         let _ = (base, len);
         Ok(0)
@@ -1397,11 +1370,7 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     Ok(())
 }
 
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingResult<()> {
     Err(PageTableError::NotSupported)
 }

@@ -1162,14 +1162,7 @@ impl Scheduler {
                 crate::p01_measurement::invalidate(1 << 12);
             }
         }
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         let parent_address_space = self
             .tasks
             .get(&parent_id)
@@ -1260,14 +1253,7 @@ impl Scheduler {
         }
         #[cfg(not(target_arch = "x86_64"))]
         let _ = parent_user_cet;
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             task.address_space = parent_address_space;
         }
@@ -1296,14 +1282,7 @@ impl Scheduler {
         }
         task.stack_quota_charge = stack_bytes;
 
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         if let crate::task::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
             if let Err(error) = space.map_existing_task_stacks(&kstack, &ustack) {
                 log::warn!(
@@ -1360,14 +1339,7 @@ impl Scheduler {
                 return Err(ViError::OutOfMemory);
             }
         }
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         if matches!(
             task.address_space,
             crate::task::tcb::TaskAddressSpace::Domain(_)
@@ -2655,14 +2627,7 @@ impl Scheduler {
 
     /// Convert the stable scheduler choice into the RV64-only root plan.  The
     /// plan owns any private-root reference until the raw-switch boundary.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) fn pick_next_domain(
         &mut self,
         hart_id: usize,
@@ -2811,14 +2776,7 @@ impl Scheduler {
         // root that died earlier, so no task is ever selected-attributed
         // without its pin. After this point retirement of the pinned root is
         // legal and drain-safe; the switch plan must proceed.
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         let next_id = next_id.filter(|id| {
             let selected = self
                 .tasks

@@ -109,11 +109,7 @@ fn read_hw_entropy() -> u64 {
         }
         t
     }
-    #[cfg(not(any(
-        target_arch = "x86_64",
-        target_arch = "riscv64",
-        target_arch = "aarch64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         // No hardware timer available; use a fixed diversifier.
         // This means KASLR is purely seed-based (hhdm_offset) on these arches.

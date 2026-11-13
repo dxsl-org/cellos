@@ -1,8 +1,4 @@
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 use cellos_boards::{Architecture, BoardDescriptor, ValidationError};
 
 #[cfg(all(target_arch = "riscv64", feature = "board-pioneer"))]
@@ -55,11 +51,7 @@ pub(crate) fn selected_riscv64_soc() -> &'static hal_soc_riscv::RiscvSocProfile 
     }
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 fn invalid_descriptor(error: ValidationError) -> ! {
     panic!("[board] invalid descriptor: {:?}", error)
 }

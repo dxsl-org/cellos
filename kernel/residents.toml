@@ -34,6 +34,13 @@
 "kernel/src/acpi/tests.rs" = { category = "test", owner = "acpi" }
 "kernel/src/acpi/tests/tables.rs" = { category = "test", owner = "acpi" }
 
+# ---- arch ----
+"kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
+
 # ---- admission ----
 "kernel/src/admission/gate.rs" = { category = "B", owner = "admission" }
 "kernel/src/admission/hostile.rs" = { category = "test", owner = "admission" }

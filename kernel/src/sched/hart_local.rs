@@ -148,57 +148,27 @@ pub struct ViHartLocal {
     /// Private root whose execution pin this hart currently holds. Mirrors
     /// `current_domain_id` in lifetime: set on successful activation, moved out
     /// when the hart plans a transition away.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pinned_domain: execution_pin::HartOwnedSlot,
     /// Outgoing root awaiting release at the switch-completion hook. Staged
     /// under `SCHEDULER`, consumed exactly once per completed transition away.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     staged_domain_release: execution_pin::HartOwnedSlot,
     /// Recoverable user-copy fault guard. Armed by `task::user_copy`
     /// around exactly one guarded byte-copy window and read by the trap
     /// handler through `vi_user_copy_guard_fault`. Hart-owned: only the
     /// executing hart touches its own slot, so plain atomics need no locks.
     /// Zero resume PC means "no landing pad"; the active flag is the gate.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     pub user_copy_guard_active: AtomicUsize,
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     pub user_copy_guard_resume_pc: AtomicUsize,
     /// Inclusive start of the user range covered by the armed guard. The
     /// trap hook rejects faults whose fault address falls outside [start, end).
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     pub user_copy_guard_start: AtomicUsize,
     /// Exclusive end of the guarded user range.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     pub user_copy_guard_end: AtomicUsize,
     /// User thread pointer (TLS base) of the task selected for this hart. Written
     /// by the scheduler under `SCHEDULER` alongside the other incoming-task state
@@ -257,47 +227,17 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         deferred_retirement_fault_cause: AtomicUsize::new(0),
         deferred_retirement_fault_pc: AtomicUsize::new(0),
         deferred_retirement_fault_addr: AtomicUsize::new(0),
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         pinned_domain: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         staged_domain_release: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
-        #[cfg(any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ))]
+        #[cfg(cellos_wide)]
         user_copy_guard_active: AtomicUsize::new(0),
-        #[cfg(any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ))]
+        #[cfg(cellos_wide)]
         user_copy_guard_resume_pc: AtomicUsize::new(0),
-        #[cfg(any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ))]
+        #[cfg(cellos_wide)]
         user_copy_guard_start: AtomicUsize::new(0),
-        #[cfg(any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ))]
+        #[cfg(cellos_wide)]
         user_copy_guard_end: AtomicUsize::new(0),
         current_tls_base: AtomicUsize::new(0),
     };
@@ -673,14 +613,7 @@ pub fn current_tls_base() -> usize {
 }
 
 /// Publish the private root selected while the scheduler state was stable.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 #[inline(always)]
 pub(crate) fn set_current_domain(id: u64, generation: u64) {
@@ -690,14 +623,7 @@ pub(crate) fn set_current_domain(id: u64, generation: u64) {
     hart.current_domain_id.store(id, Ordering::Release);
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 #[inline(always)]
 pub(crate) fn current_domain() -> (u64, u64) {
@@ -712,28 +638,14 @@ pub(crate) fn current_domain() -> (u64, u64) {
 /// carries the documented SAS identity — `space = 0` (see `crate::ipc::futex::FutexKey`)
 /// — and no domain generation. The off-feature build previously failed to compile
 /// here because the caller is ungated.
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 #[inline(always)]
 pub(crate) fn current_domain() -> (u64, u64) {
     (0, 0)
 }
 
 /// Clear a domain only after the incoming safe-root context has completed.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 pub(crate) fn acknowledge_safe_root() {
     let hart = unsafe { current_hart() };
@@ -743,14 +655,7 @@ pub(crate) fn acknowledge_safe_root() {
         .store(generation, Ordering::Release);
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 #[inline(always)]
 pub(crate) fn mark_safe_root_pending() {
@@ -763,14 +668,7 @@ pub(crate) fn mark_safe_root_pending() {
 /// the owning hart, and only inside the interrupt-masked window from plan
 /// construction to the incoming-side completion hook — no other hart can
 /// observe a partially updated slot.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 mod execution_pin {
     use super::current_hart;
@@ -810,27 +708,13 @@ mod execution_pin {
     }
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(unused_imports)]
 pub(crate) use execution_pin::{
     advance as advance_execution_pin, take_staged as take_staged_execution_release,
 };
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 #[inline(always)]
 pub(crate) fn take_safe_root_pending() -> bool {
@@ -842,15 +726,7 @@ pub(crate) fn take_safe_root_pending() -> bool {
 
 /// Remote retirement tests observe this generation after an incoming safe-root
 /// completion; a root remains owned until every relevant hart reports it.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", feature = "test-hooks", cellos_wide))]
 pub(crate) fn domain_ack_generation_for(hart_id: usize) -> u64 {
     HART_LOCALS
         .get(hart_id)

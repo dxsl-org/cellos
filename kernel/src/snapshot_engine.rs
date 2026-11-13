@@ -1407,11 +1407,7 @@ pub fn reserve_scratch_region_at_boot() {
 
 /// The frozen window runs on the region's stack, inside the frames the plan
 /// never saves, or it refuses.
-const SCRATCH_STACK_SUPPORTED: bool = cfg!(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-));
+const SCRATCH_STACK_SUPPORTED: bool = cfg!(cellos_wide);
 
 /// The stack pointer of the running frame, as a virtual address.
 #[cfg(target_arch = "riscv64")]
@@ -1442,11 +1438,7 @@ fn stack_pointer() -> usize {
 
 /// No stack switch exists here, so [`run_on_stack`] cannot stage outside the
 /// in-flight stack; the caller's stack-pointer proof refuses the capture.
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 fn stack_pointer() -> usize {
     0
 }
@@ -1508,11 +1500,7 @@ core::arch::global_asm!(
     "ret",
 );
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 unsafe extern "C" {
     /// Switch to `new_sp` and run `run(arg)` there, then switch back.
     fn __cellos_snapshot_stack_run(new_sp: usize, run: extern "C" fn(*mut u8), arg: *mut u8);
@@ -1552,11 +1540,7 @@ where
         run: Some(f),
         out: &mut out,
     };
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     // SAFETY: the caller guarantees `stack_top` addresses the reserved region's
     // stack; `trampoline` never unwinds.
     unsafe {
@@ -1566,11 +1550,7 @@ where
             &mut job as *mut Job<F, R> as *mut u8,
         );
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         // No switch exists on this target: run the job in place, through the
         // same trampoline.  The stack-pointer proof in `capture_window` then

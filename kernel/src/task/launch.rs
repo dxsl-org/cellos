@@ -411,14 +411,7 @@ pub(crate) fn audit_domain_drain_refusal() {
 /// anything is created, build the private root, recheck the lease, bind. A
 /// denial is final: no domain and no SAS fallback. The caller still rechecks
 /// the returned lease immediately before the task becomes runnable.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 fn admit_and_bind_domain(
     task: &mut super::Task,
     path: &str,
@@ -448,14 +441,7 @@ fn admit_and_bind_domain(
     Ok(lease)
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 fn admit_and_bind_domain(
     task: &mut super::Task,
     _path: &str,
@@ -475,11 +461,7 @@ fn log_domain_admitted(name: &str) {
     let arch_tag = "TTBR0";
     #[cfg(target_arch = "x86_64")]
     let arch_tag = "CR3";
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     let arch_tag = "none";
     log::warn!(
         "[domain] admitted cell '{}' to Tier 2 Paged Domain ({} isolation)",

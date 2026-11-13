@@ -878,11 +878,7 @@ pub(super) fn shutdown(caller_id: usize) -> SyscallResult {
             core::arch::asm!("hlt", options(nomem, nostack));
         }
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     loop {
         unsafe {
             core::arch::asm!("wfi", options(nomem, nostack));
@@ -1107,11 +1103,7 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     fn user_map(base: usize, len: usize) {
         let _ = crate::memory::paging::grant_mmio_user(base, len);
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     fn user_map(_base: usize, _len: usize) {}
     // x86: a PCIe BAR is user-mapped without its MSI-X table/PBA pages
     // (ADR-0031 CP1 §4.3), so a cell cannot retarget its device's

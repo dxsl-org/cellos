@@ -28,6 +28,8 @@ target_os = "none"
 target_pointer_width = "64"
 # Build-script cfgs are off unless their env vars are set; `test` is host-only.
 cfg_false = ["test", "debug_assertions"]
+# `build.rs` emits `cellos_wide` for every 64-bit kernel (posture::wide).
+cfg_true = ["cellos_wide"]
 
 [[crate]]
 name = "kernel"
@@ -2007,7 +2009,7 @@ rationale = "Taken by vi_handle_page_fault for demand paging (exception), by Sta
 review = "kernel/src/memory/frame.rs:575; kernel/src/main.rs:368; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:558; kernel/src/sched/smp.rs:837"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::NEXT_ID @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::NEXT_ID @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::domain_supervisor_registry: register() mints SupervisorRangeId values"
@@ -2018,7 +2020,7 @@ rationale = "Relaxed fetch_add only needs uniqueness, and the id is consumed und
 review = "kernel/src/memory/domain-supervisor-registry.rs:register; kernel/src/memory/address_space.rs:register_private_table_frames"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::ACTIVE @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::ACTIVE @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "boot"
 mutation = "atomic"
 owner = "memory::domain_supervisor_registry: activate() flips it; register() and register_private_table_frames gate on it"
@@ -2029,7 +2031,7 @@ rationale = "Release store / Acquire load of a one-way flag is the right shape; 
 review = "kernel/src/memory/domain-supervisor-registry.rs:activate; kernel/src/memory/domain-supervisor-registry.rs:is_active; kernel/src/main.rs:1103"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "spinlock"
 owner = "memory::domain_supervisor_registry: kmain registers shared kernel ranges; AddressSpaceBuilder::map_shared_supervisor snapshots them; test-hooks builds register/unregister private table frames"
@@ -2040,7 +2042,7 @@ rationale = "Production readers are spawn-path builds (map_shared_supervisor); t
 review = "kernel/src/memory/domain-supervisor-registry.rs:register; kernel/src/memory/address_space.rs:379-386 (copy_kernel_higher_half); kernel/src/memory/address_space.rs:404-414 (skip >= 0x8000_0000_0000); hal/arch/x86/src/x86_64/paging.rs:317-319"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_text_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_text_start @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (start of .text); domain_supervisor_registry::register_static_image reads only the address"
@@ -2051,7 +2053,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_text_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_text_end @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (end of .text); domain_supervisor_registry::register_static_image reads only the address"
@@ -2062,7 +2064,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_readonly_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_readonly_start @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (start of .rodata); domain_supervisor_registry::register_static_image reads only the address"
@@ -2073,7 +2075,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_readonly_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_readonly_end @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (end of .rodata); domain_supervisor_registry::register_static_image reads only the address"
@@ -2084,7 +2086,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_writable_start @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_writable_start @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (start of the writable span before .data); domain_supervisor_registry::register_static_image reads only the address"
@@ -2095,7 +2097,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::domain_supervisor_registry::__domain_writable_end @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::domain_supervisor_registry::__domain_writable_end @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "linker"
 owner = "kernel/linker-x86-64.ld assigns the address (end of the writable span after .bss); domain_supervisor_registry::register_static_image reads only the address"
@@ -2106,7 +2108,7 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
-key = "kernel::memory::deferred_release::DEFERRED @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::DEFERRED @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "spinlock"
 owner = "memory::deferred_release: release paths (address_space unmap/teardown, AsidLease drop) enqueue frames per tag; the hart-0 timer reaper completes or abandons them"
@@ -2117,7 +2119,7 @@ rationale = "reap_deferred_releases runs in vi_timer_tick on hart 0 and defer_fr
 review = "kernel/src/memory/deferred_release.rs:place; kernel/src/memory/deferred_release.rs:reap_deferred_releases; kernel/src/memory/deferred_release.rs:complete; kernel/src/task.rs:1034"
 
 [[global]]
-key = "kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "spinlock"
 owner = "memory::deferred_release: mark_abandoned records tags whose invalidation was given up; tag_invalidation_unconfirmed and tag_abandoned read it"
@@ -2128,7 +2130,7 @@ rationale = "Written from the timer-ISR reaper (note_attempt) and from defer() o
 review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:tag_invalidation_unconfirmed"
 
 [[global]]
-key = "kernel::memory::deferred_release::ABANDONED_SATURATED @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::ABANDONED_SATURATED @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::deferred_release: mark_abandoned sets it when ABANDONED_TAGS is full; tag_invalidation_unconfirmed/tag_abandoned read it"
@@ -2139,7 +2141,7 @@ rationale = "Release store / Acquire load of a one-way fail-closed flag; it is s
 review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:tag_invalidation_unconfirmed"
 
 [[global]]
-key = "kernel::memory::deferred_release::ATTEMPTS_TOTAL @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::ATTEMPTS_TOTAL @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::deferred_release: note_attempt counts reaper attempts; deferred_release_attempts (cfg(feature = \"test-hooks\")) reads it"
@@ -2150,7 +2152,7 @@ rationale = "Only writer is note_attempt, called solely from reap_deferred_relea
 review = "kernel/src/memory/deferred_release.rs:note_attempt; kernel/src/memory/deferred_release.rs:deferred_release_attempts; kernel/src/task.rs:1034"
 
 [[global]]
-key = "kernel::memory::deferred_release::ABANDONED_ENTRIES @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::ABANDONED_ENTRIES @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::deferred_release: mark_abandoned counts abandoned tags; deferred_release_abandoned (cfg(feature = \"test-hooks\")) reads it"
@@ -2161,7 +2163,7 @@ rationale = "Incremented under ABANDONED_TAGS from the timer-ISR reaper and from
 review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:deferred_release_abandoned"
 
 [[global]]
-key = "kernel::memory::deferred_release::ABANDONED_FRAMES @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::ABANDONED_FRAMES @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::deferred_release: note_attempt adds the frames of an abandoned entry; deferred_release_abandoned_frames (cfg(feature = \"test-hooks\")) reads it"
@@ -2172,7 +2174,7 @@ rationale = "Only written by note_attempt in the hart-0 timer-ISR reaper; atomic
 review = "kernel/src/memory/deferred_release.rs:note_attempt; kernel/src/memory/deferred_release.rs:deferred_release_abandoned_frames"
 
 [[global]]
-key = "kernel::memory::deferred_release::LEAKED_STACK_FRAMES @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::deferred_release::LEAKED_STACK_FRAMES @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::deferred_release: note_leaked_stack_frames would count leaked stack frames; leaked_stack_frames reads it"
@@ -2227,7 +2229,7 @@ rationale = "try_reserve_dma uses an AcqRel fetch_update bounded by the limit, s
 review = "kernel/src/memory/cell_quota.rs:try_reserve_dma; kernel/src/memory/cell_quota.rs:record_dma_unmapped; kernel/src/memory/cell_quota.rs:deregister"
 
 [[global]]
-key = "kernel::memory::address_space::NEXT_DOMAIN @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::address_space::NEXT_DOMAIN @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "memory::address_space: AddressSpaceBuilder::new mints DomainId and build mints the generation"
@@ -2238,7 +2240,7 @@ rationale = "Relaxed fetch_add needs only uniqueness; values are stored in the b
 review = "kernel/src/memory/address_space.rs:AddressSpaceBuilder::new; kernel/src/memory/address_space.rs:451"
 
 [[global]]
-key = "kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "spinlock"
 owner = "memory::address_space: quarantine_frames, called only via deferred_release (full queue, abandoned tag, exhausted retries); quarantined_frame_count (test-hooks) reads it"
@@ -2249,7 +2251,7 @@ rationale = "Reached from the hart-0 timer-ISR reaper (note_attempt) and from re
 review = "kernel/src/memory/address_space.rs:quarantine_frames; kernel/src/memory/deferred_release.rs:note_attempt"
 
 [[global]]
-key = "kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "per-cell"
 mutation = "spinlock"
 owner = "memory::address_space: AsidLease::acquire assigns a tag slot per live private root; release_tag_slot frees it"
@@ -2460,7 +2462,7 @@ rationale = "Only its address is taken (addr_of!); the page has no storage use a
 review = "kernel/linker-x86-64.ld (.stack); hal/arch/x86/src/x86_64/ist.rs:guard_pages; hal/arch/x86/src/x86_64/ist.rs:install_guards; hal/arch/x86/src/x86_64/idt/probe_ist.rs (boot-guard-read=pf)"
 
 [[global]]
-key = "kernel::task::user_copy::sas_lease::SAS_WINDOWS @cfg(all (feature = \"native-domains\" , any (target_arch = \"riscv64\" , target_arch = \"aarch64\" , target_arch = \"x86_64\")))"
+key = "kernel::task::user_copy::sas_lease::SAS_WINDOWS @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::task::user_copy::sas_lease commit_sas window generation sequence per hart"

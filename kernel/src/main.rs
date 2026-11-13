@@ -42,6 +42,7 @@ static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::Ato
 // Core kernel modules
 pub mod acpi;
 pub mod admission;
+pub mod arch; // Architecture code; arch/mod.rs selects one module per target
 pub mod audit;
 #[cfg(feature = "bench-counters")]
 pub(crate) mod bench_counters; // Measurement-only counters, raw opcode 504
@@ -102,7 +103,6 @@ pub mod snapshot {
 }
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
-              // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
 use boot::BootInfo;
 #[cfg(target_arch = "aarch64")]
@@ -163,11 +163,7 @@ pub use types::*;
 
 // Embed Init Binary (stripped by build.rs, served from EMBEDDED_OUT_DIR).
 // RV32 Nano (Phase 31) has no init ELF; x86_64 is now included (Phase 04).
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init"));
 
 /// Kernel entry point called from HAL boot code
@@ -998,28 +994,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // RV32 Nano: no FAT32 FS in bring-up.
     // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     fs::init();
 
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     system_config::load_from_vifs1();
 
     // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
     // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
     // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     policy::load_from_vifs1();
 
     // Phase 20: hot-migration state-transfer self-test.
@@ -1084,14 +1068,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // synthetic thread it spawns cannot be raced onto another hart before teardown.
     // Fixtures that drive the live scheduler: never compiled into a release
     // kernel (Spec 15 §3.5; architecture remediation Phase 09).
-    #[cfg(all(
-        not(cellos_posture = "release"),
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(not(cellos_posture = "release"), cellos_wide))]
     {
         if task::thread_cap_selftest::self_test() {
             log_info("thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)");
@@ -1171,11 +1148,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Bring actual secondaries online only after task::init. x86 uses the
     // Limine MP callback and qualifies bidirectional invalidation before tasks.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     crate::sched::smp::start_secondaries();
     // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
     // SGI delivery path is exercised here: a hart that is online but deaf to the
@@ -1196,33 +1169,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     memory::domain_supervisor_registry::activate();
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     memory::domain_supervisor_registry::register_static_image()
         .expect("kernel static ranges must be disjoint");
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     memory::domain_supervisor_registry::register(
         heap_virt,
         heap_virt
@@ -1232,14 +1184,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
     )
     .expect("kernel heap registration must be unique");
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
         // `[bitmap, heap)`: the bitmap, plus any early boot frames the next-fit
         // cursor handed out from the bitmap's range before `reserve_boot_heap`
@@ -1310,11 +1255,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // to the reviewed QuickJS artifact and requires its signed policy row.
     #[cfg(all(
         feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ),
+        cellos_wide,
         not(any(
             feature = "policy-required",
             feature = "production-relay-image",
@@ -1349,26 +1290,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
     #[cfg(all(
         feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ),
+        cellos_wide,
         any(feature = "policy-required", feature = "production-relay-image"),
         not(all(feature = "browser-engine-profile", target_arch = "x86_64"))
     ))]
     {
         log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
     }
-    #[cfg(all(
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ),
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
+    #[cfg(all(cellos_wide, feature = "native-domains", feature = "test-hooks"))]
     if !crate::sched::domain_switch_tests::run_primary() {
         log::error!("native-domain SAS scheduler fixture failed");
     }
@@ -1444,23 +1373,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Phase 10: the timer sweep runs on any hart, so a deadline passes while
     // hart 0 is held. Last of the boot fixtures:
     // it needs the secondaries online and leaves a retiring task behind.
-    #[cfg(all(
-        feature = "test-hooks",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "test-hooks", cellos_wide))]
     crate::sched::off_hart0_timeout_selftest::run_primary();
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     {
         log_info("Spawning Embedded Init...");
 

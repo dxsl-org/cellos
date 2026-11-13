@@ -370,17 +370,9 @@ pub(crate) fn test_shape(hart: usize, priority: u8) -> (usize, usize, usize, usi
 /// hook. Every SMP target needs it: without it the outgoing Context is
 /// stealable by a peer between the SCHEDULER release and the register save.
 /// RISC-V32 is single-hart and retains immediate Ready publication.
-pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool = cfg!(any(
-    target_arch = "riscv64",
-    target_arch = "x86_64",
-    target_arch = "aarch64"
-));
+pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool = cfg!(cellos_wide);
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "x86_64",
-    target_arch = "aarch64"
-))]
+#[cfg(cellos_wide)]
 const _: [(); 1] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 #[cfg(target_arch = "riscv32")]
 const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
@@ -390,11 +382,7 @@ const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// completed on the incoming stack. Other targets retain their existing path.
 pub const CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH: bool = !HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "x86_64",
-    target_arch = "aarch64"
-))]
+#[cfg(cellos_wide)]
 const _: [(); 0] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
 #[cfg(target_arch = "riscv32")]
 const _: [(); 1] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
@@ -405,11 +393,7 @@ const _: [(); 1] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
 /// rather than acquiring a permanent target-specific deferred-requeue state.
 pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool = HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "x86_64",
-    target_arch = "aarch64"
-))]
+#[cfg(cellos_wide)]
 const _: [(); 1] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 #[cfg(target_arch = "riscv32")]
 const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];

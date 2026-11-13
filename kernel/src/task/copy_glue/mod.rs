@@ -14,23 +14,9 @@
 mod scatter;
 
 use super::tcb::Task;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 use super::tcb::TaskAddressSpace;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -41,27 +27,13 @@ use alloc::vec::Vec;
 #[derive(Clone)]
 pub(crate) struct TaskCopyView(TaskCopyRepr);
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[derive(Clone)]
 pub(super) enum TaskCopyRepr {
     Boundary(super::user_copy::CopyView),
     KernelDirect,
 }
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 #[derive(Clone, Copy)]
 pub(super) enum TaskCopyRepr {
     Shared,
@@ -69,14 +41,7 @@ pub(super) enum TaskCopyRepr {
 
 impl TaskCopyView {
     /// Derive the view from a task's address-space binding.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) fn of(task: &Task) -> Self {
         use super::user_copy::CopyView;
         let repr = match &task.address_space {
@@ -90,14 +55,7 @@ impl TaskCopyView {
     }
 
     /// Derive the view from a task's address-space binding.
-    #[cfg(not(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    )))]
+    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
     pub(crate) fn of(_task: &Task) -> Self {
         Self(TaskCopyRepr::Shared)
     }
@@ -105,27 +63,13 @@ impl TaskCopyView {
     /// Return the shared-address-space view directly, without a task lookup.
     /// Used as a safe fallback when the task record is unavailable but the
     /// address-space context is known to be SAS (e.g. kernel-originated copies).
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) fn sas() -> Self {
         use super::user_copy::CopyView;
         Self(TaskCopyRepr::Boundary(CopyView::Sas))
     }
 
-    #[cfg(not(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    )))]
+    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
     pub(crate) fn sas() -> Self {
         Self(TaskCopyRepr::Shared)
     }
@@ -140,14 +84,7 @@ impl TaskCopyView {
             .map(Self::of)
     }
     /// Whether this view uses the shared SAS root rather than a private Domain.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     #[allow(dead_code)]
     pub(crate) fn is_sas(&self) -> bool {
         matches!(
@@ -158,14 +95,7 @@ impl TaskCopyView {
 
     /// Verify a writable destination without moving user bytes.
     pub(crate) fn validate_writable(&self, ptr: usize, len: usize) -> Result<(), ()> {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             match &self.0 {
                 TaskCopyRepr::Boundary(view) => {
@@ -176,14 +106,7 @@ impl TaskCopyView {
                 TaskCopyRepr::KernelDirect => validate_kernel_range(ptr, len, true),
             }
         }
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        )))]
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
         {
             let _ = (ptr, len);
             Ok(())
@@ -204,14 +127,7 @@ impl TaskCopyView {
     /// Read exactly `dst.len()` bytes at `ptr` into `dst`. On failure `dst`
     /// is untouched (the boundary probes before it commits).
     pub(crate) fn read_into(&self, ptr: usize, dst: &mut [u8]) -> Result<(), ()> {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             match &self.0 {
                 TaskCopyRepr::Boundary(view) => {
@@ -230,14 +146,7 @@ impl TaskCopyView {
                 }
             }
         }
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        )))]
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
         {
             if dst.is_empty() {
                 return Ok(());
@@ -251,14 +160,7 @@ impl TaskCopyView {
 
     /// Write all of `bytes` at `ptr`. An empty write is a validated no-op.
     pub(crate) fn write_bytes(&self, ptr: usize, bytes: &[u8]) -> Result<(), ()> {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             match &self.0 {
                 TaskCopyRepr::Boundary(view) => {
@@ -281,14 +183,7 @@ impl TaskCopyView {
                 }
             }
         }
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        )))]
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
         {
             if bytes.is_empty() {
                 return Ok(());
@@ -300,14 +195,7 @@ impl TaskCopyView {
     }
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Result<(), ()> {
     if len == 0 {
         return Ok(());

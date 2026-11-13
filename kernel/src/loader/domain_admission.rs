@@ -100,15 +100,7 @@ pub(crate) struct DomainAdmissionRequest {
 }
 
 impl DomainAdmissionRequest {
-    #[cfg(all(
-        feature = "native-domains",
-        feature = "test-hooks",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", feature = "test-hooks", cellos_wide))]
     pub(crate) const fn fixture() -> Self {
         Self {
             resource_quota_available: true,
@@ -175,12 +167,7 @@ const _: () = assert!(!switch_ordering_qualified());
 /// `task::launch`; the policy and the route must not disagree about coverage
 /// (ADR-0019 §2.4).
 pub(crate) const fn architecture_covered() -> bool {
-    cfg!(feature = "native-domains")
-        && cfg!(any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ))
+    cfg!(feature = "native-domains") && cfg!(cellos_wide)
 }
 
 /// Authority a Tier 2 domain root cannot enforce, and therefore must not hold.
@@ -352,11 +339,7 @@ pub(crate) fn evaluate_domain_admission(
 #[cfg(any(
     all(
         feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        ),
+        cellos_wide,
         not(any(
             feature = "policy-required",
             feature = "production-relay-image",
@@ -411,15 +394,7 @@ pub(crate) fn begin_domain_drain() -> bool {
     drained
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", feature = "test-hooks", cellos_wide))]
 pub(crate) fn policy_is_enabled() -> bool {
     POLICY.load(Ordering::Acquire) == ENABLED
 }
@@ -455,15 +430,7 @@ const ADMISSION_TAG: &str = "X86";
 /// The denial cases are the reason this runs on every architecture that can
 /// carry a private root: `DENY`/`DRAIN`/`PUBLICATION-DENY` are the fleet
 /// posture, asserted on the same code path the fleet profile leaves closed.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", feature = "test-hooks", cellos_wide))]
 pub(crate) fn run_selftest() -> bool {
     let mut all_ok = true;
 
@@ -541,15 +508,7 @@ pub(crate) fn run_selftest() -> bool {
 
 /// Drive the real publication path with a domain-class launch while the policy
 /// is draining and observe that nothing is published.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", feature = "test-hooks", cellos_wide))]
 fn publication_is_refused_while_draining() -> bool {
     use crate::task::{LaunchRoutes, TaskLaunchState};
 

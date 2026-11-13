@@ -142,14 +142,7 @@ pub(crate) mod dma_export;
 static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> =
     Spinlock::ranked(None, crate::sync::rank::PAGE_GRANT_TABLE);
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 fn task_domain_space(
     tid: usize,
 ) -> Option<alloc::sync::Arc<crate::memory::address_space::AddressSpace>> {
@@ -195,23 +188,9 @@ const _: () = {
 /// The `memory::address_space` module exists only behind `native-domains` on a
 /// private-root target, so the helpers below name this alias and every disabled
 /// variant stays compilable without the feature.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 type DomainRoot = alloc::sync::Arc<crate::memory::address_space::AddressSpace>;
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 type DomainRoot = ();
 
 /// Map a domain owner's freshly allocated backing into its own root, RW+NX,
@@ -317,14 +296,7 @@ type DomainRecord = ();
 /// A record the lifecycle cannot drain: it names a private-root endpoint but is
 /// not carried by a managed domain record. Pre-gate residue, or a target where
 /// the lifecycle is not implemented at all.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 fn residual_domain_record(
     owner: usize,
     shared_to: Option<(usize, GrantPerm)>,
@@ -531,14 +503,7 @@ mod serial_port {
     }
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_record_end(
     sched: &crate::sched::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
@@ -609,14 +574,7 @@ fn sas_record_end(
 /// Each loop consumes at least one record. A gap, peer record, stale root, or
 /// overflow fails closed without allocating or consulting page writability as
 /// an ownership signal.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_caller_owned_span(
     sched: &crate::sched::scheduler::Scheduler,
     page_grants: Option<&BTreeMap<usize, PageGrant>>,
@@ -651,14 +609,7 @@ impl SessionOutputPin {
     ) -> Result<Self, SyscallError> {
         // Same gate as `preflight_user_output`: the SAS ownership lease exists
         // only in builds with a domain backend.
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             if !view.is_sas() {
                 return Ok(Self { span: None });
@@ -684,14 +635,7 @@ impl SessionOutputPin {
                 span: Some((ptr, len, caller)),
             })
         }
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        )))]
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
         {
             let _ = caller;
             view.validate_writable(ptr, len)

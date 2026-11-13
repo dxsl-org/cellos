@@ -179,6 +179,12 @@ fn main() {
     let posture = derive_posture(&target_arch);
     println!("cargo:rustc-check-cfg=cfg(cellos_posture, values(\"dev\", \"test\", \"release\"))");
     println!("cargo:rustc-cfg=cellos_posture=\"{posture}\"");
+    // The 64-bit set (`posture::wide`): shared code names this one predicate
+    // instead of `any(target_arch = "riscv64", "aarch64", "x86_64")`.
+    println!("cargo:rustc-check-cfg=cfg(cellos_wide)");
+    if posture::wide(&target_arch) {
+        println!("cargo:rustc-cfg=cellos_wide");
+    }
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");

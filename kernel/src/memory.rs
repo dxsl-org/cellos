@@ -2,35 +2,14 @@
 
 use crate::*;
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub mod address_space;
 pub mod cell_quota;
 /// Bounded deferred release of page-table frames whose tag invalidation was not
 /// confirmed synchronously, plus the reaper that completes them.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub mod deferred_release;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[path = "memory/domain-supervisor-registry.rs"]
 pub(crate) mod domain_supervisor_registry;
 /// x86 nested paging (EPT/NPT) — Tier 3 x86 VMM. x86_64 only.

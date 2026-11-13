@@ -7,26 +7,12 @@ use super::*;
 use super::{authority::*, decode::*, dev::*, fs::*, grant::*, ipc::*, spawn::*, vm::*};
 
 /// The live private root of `tid`, if it is a domain right now.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(super) fn live_domain_space(tid: usize) -> Option<DomainRoot> {
     task_domain_space(tid).filter(|space| space.is_live())
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-)))]
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
 pub(super) fn live_domain_space(_tid: usize) -> Option<DomainRoot> {
     None
 }
@@ -183,14 +169,7 @@ pub(super) fn live_task_binding(task_id: usize) -> Option<(CellId, u64)> {
         .map(|task| (task.cell_id, task.cell_generation))
 }
 
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(super) fn record_end_containing(base: usize, size: usize, ptr: usize) -> Option<usize> {
     let end = base.checked_add(size)?;
     (base <= ptr && ptr < end).then_some(end)
@@ -207,14 +186,7 @@ pub(super) fn preflight_user_output(
     len: usize,
 ) -> Result<(), SyscallError> {
     let view = caller_copy_view(caller_id)?;
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     if view.is_sas() {
         // Lease order: PAGE_GRANT_TABLE → REG_GRANT_TABLE → SCHEDULER. This
         // extends the established grant-table → scheduler order used by
@@ -327,14 +299,7 @@ pub(super) fn write_getrandom_output(
     bytes: &[u8],
 ) -> Result<(), SyscallError> {
     let view = caller_copy_view(caller_id)?;
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     if view.is_sas() {
         // This scoped, no-allocation lease covers every record contributing to
         // a contiguous span. Removal waits for its member lock before it can

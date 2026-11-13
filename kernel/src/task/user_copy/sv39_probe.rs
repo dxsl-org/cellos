@@ -87,11 +87,7 @@ pub(crate) fn sv39_leaf(root_pa: usize, va: usize) -> Option<(usize, usize)> {
         }
         None
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     None
 }
 
@@ -136,11 +132,7 @@ pub(crate) fn current_satp_root() -> Option<usize> {
         }
         Some(cr3 & !0xFFF)
     }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     None
 }
 

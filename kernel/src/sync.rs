@@ -90,14 +90,7 @@ impl<T> Spinlock<T> {
             // here, so service only the lock-free, log-free local mailbox:
             // never schedule, allocate, or log from this ownership window.
             // With nothing owed it is a hart-id read and two loads.
-            #[cfg(all(
-                any(
-                    target_arch = "riscv64",
-                    target_arch = "aarch64",
-                    target_arch = "x86_64"
-                ),
-                not(all(test, not(target_os = "none")))
-            ))]
+            #[cfg(all(cellos_wide, not(all(test, not(target_os = "none")))))]
             match SPIN_HOOK.load(Ordering::Relaxed) {
                 0 => {}
                 // SAFETY: only `install_hart_hooks` stores here, always a `fn(usize)`.

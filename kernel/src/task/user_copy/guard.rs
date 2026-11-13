@@ -191,11 +191,7 @@ unsafe fn guarded_byte_copy(
         out("rax") _,
         options(nostack)
     );
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         let _ = (src, dst, len, resume_slot);
         ret = 1;

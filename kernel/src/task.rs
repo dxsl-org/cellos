@@ -117,14 +117,7 @@ pub mod stack;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 pub mod stack_overflow_probe;
 pub(crate) mod telemetry;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 pub(crate) mod user_copy;
 #[cfg(all(
     feature = "native-domains",
@@ -476,11 +469,7 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
 #[cfg(target_arch = "riscv64")]
 const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 #[no_mangle]
 pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTrapFrame) -> bool {
     #[cfg(feature = "native-domains")]
@@ -517,11 +506,7 @@ pub extern "Rust" fn vi_user_copy_guard_fault(frame: &mut crate::hal::arch::ViTr
     }
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 const _: crate::hal::UserCopyGuardFault = vi_user_copy_guard_fault;
 
 // Global Scheduler Instance
@@ -1056,11 +1041,7 @@ pub extern "Rust" fn vi_timer_tick() {
     // an idle hart parked in WFI takes the IPI's trap and returns to its loop
     // without ever switching, so a switch-boundary hook would never run and the
     // requester would wait for an acknowledgement that could not arrive.
-    #[cfg(any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    ))]
+    #[cfg(cellos_wide)]
     {
         let hart = crate::sched::hart_local::current_hart_id();
         crate::sched::smp::service_tlb_flush(hart);
@@ -1103,14 +1084,7 @@ pub extern "Rust" fn vi_timer_tick() {
     // block the slice. Before the second hart is online there is no remote to
     // survey and an empty queue makes the call a no-op, so it is also safe on the
     // way up.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     if crate::sched::hart_local::current_hart_id() == 0 {
         crate::memory::deferred_release::reap_deferred_releases();
     }
@@ -1207,14 +1181,7 @@ pub extern "C" fn vi_context_switch_complete() {
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         retirement_selftest::observe_heartbeat_boot_completion(hart);
     }
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     {
         let safe_root = crate::sched::hart_local::take_safe_root_pending();
         if switched_to_boot || safe_root {
@@ -1354,11 +1321,7 @@ unsafe fn boot_context_for(hart_id: usize) -> *mut crate::hal::arch::Context {
     unsafe { &raw mut BOOT_CONTEXTS[hart_id] }
 }
 
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 #[inline]
 unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
     &raw mut BOOT_CONTEXT
@@ -1709,27 +1672,13 @@ pub fn yield_cpu() {
     #[cfg(target_arch = "aarch64")]
     let outgoing_daif = crate::hal::arch::save_and_disable_interrupts();
     let hart_id = crate::sched::hart_local::current_hart_id();
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next_domain(hart_id)
     } else {
         None
     };
-    #[cfg(not(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    )))]
+    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next(hart_id)
     } else {
@@ -1774,14 +1723,7 @@ pub fn yield_cpu() {
         }
     }
 
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     if let Some(plan) = switch_info {
         unsafe {
             let final_curr = if plan.outgoing.is_null() {
@@ -1849,14 +1791,7 @@ pub fn yield_cpu() {
             }
         }
     }
-    #[cfg(not(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    )))]
+    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
     if let Some((curr, next)) = switch_info {
         unsafe {
             let final_curr = if curr.is_null() {

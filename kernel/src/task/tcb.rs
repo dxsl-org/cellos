@@ -5,14 +5,7 @@ pub use crate::ipc::pending_mailbox::PendingMsg;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 use alloc::sync::Arc;
 use types::*;
 
@@ -185,14 +178,7 @@ pub fn task_state_name(state: &TaskState) -> &'static str {
 ///
 /// Native domains are deliberately unavailable on every non-RV64 target and
 /// default to SAS until a test-only fixture binds a private root.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 #[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) enum TaskAddressSpace {
@@ -288,24 +274,10 @@ pub struct Task {
     pub state: TaskState,
     pub context: Context,
     /// Immutable scheduler dispatch binding; no loader or syscall may replace it.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) address_space: TaskAddressSpace,
     /// Whether this worker's stacks were dynamically inserted into its domain.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) has_dynamic_stack_mapping: bool,
     pub trap_frame: ViTrapFrame,
     /// Pipe endpoints this task owns. A handle is usable by exactly the task that
@@ -596,23 +568,9 @@ impl Task {
             name: String::from(name),
             state: TaskState::Ready,
             context: Context::default(),
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    target_arch = "aarch64",
-                    target_arch = "x86_64"
-                )
-            ))]
+            #[cfg(all(feature = "native-domains", cellos_wide))]
             address_space: TaskAddressSpace::Sas,
-            #[cfg(all(
-                feature = "native-domains",
-                any(
-                    target_arch = "riscv64",
-                    target_arch = "aarch64",
-                    target_arch = "x86_64"
-                )
-            ))]
+            #[cfg(all(feature = "native-domains", cellos_wide))]
             has_dynamic_stack_mapping: false,
             trap_frame: ViTrapFrame::default(),
             pipe_handles: alloc::collections::BTreeSet::new(),
@@ -682,14 +640,7 @@ impl Task {
         self.image
     }
 
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     #[allow(dead_code)]
     pub(crate) fn bind_address_space(
         &mut self,
@@ -699,22 +650,8 @@ impl Task {
         self.address_space = TaskAddressSpace::Domain(address_space);
     }
 
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
-    #[cfg(all(
-        feature = "test-hooks",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    #[cfg(all(feature = "test-hooks", cellos_wide))]
     pub(crate) fn bind_address_space_for_test(
         &mut self,
         address_space: Arc<crate::memory::address_space::AddressSpace>,
@@ -726,14 +663,7 @@ impl Task {
     /// carry no private root and pass trivially. Must run under `SCHEDULER`
     /// before the task is dequeued or attributed: a Dying root rejects here,
     /// while retirement after a successful pin is legal and drain-safe.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     #[allow(dead_code)]
     pub(crate) fn begin_execution(
         &self,
@@ -864,14 +794,7 @@ impl Drop for Task {
     fn drop(&mut self) {
         #[cfg(feature = "p01-trace")]
         crate::p01_resources::prepare_drop(self);
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         if self.has_dynamic_stack_mapping {
             #[cfg_attr(not(feature = "p01-trace"), allow(unused_mut))]
             if let (TaskAddressSpace::Domain(space), Some(mut kernel_stack), Some(mut user_stack)) = (

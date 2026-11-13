@@ -1077,11 +1077,7 @@ pub fn init() {
     let ecam_base = ECAM_BASE_RISCV;
     #[cfg(target_arch = "aarch64")]
     let ecam_base = ecam_base_aarch64();
-    #[cfg(not(any(
-        target_arch = "x86_64",
-        target_arch = "riscv64",
-        target_arch = "aarch64"
-    )))]
+    #[cfg(not(cellos_wide))]
     let ecam_base = 0usize;
     #[cfg(target_arch = "x86_64")]
     let scan_bus = ecam_bus_range_x86().0;

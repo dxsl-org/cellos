@@ -53,11 +53,7 @@ pub(crate) fn monotonic_ns() -> Option<u64> {
         u64::try_from(u128::from(hal::timer::read_ticks()) * 1_000_000_000u128 / u128::from(freq))
             .ok()
     }
-    #[cfg(not(any(
-        target_arch = "x86_64",
-        target_arch = "riscv64",
-        target_arch = "aarch64"
-    )))]
+    #[cfg(not(cellos_wide))]
     {
         None
     }
@@ -205,14 +201,7 @@ fn rtc_epoch_ns() -> u64 {
     {
         hal::common::rtc::now_epoch_ns()
     }
-    #[cfg(all(
-        not(all(test, not(target_os = "none"))),
-        not(any(
-            target_arch = "x86_64",
-            target_arch = "aarch64",
-            target_arch = "riscv64"
-        ))
-    ))]
+    #[cfg(all(not(all(test, not(target_os = "none"))), not(cellos_wide)))]
     {
         0
     }

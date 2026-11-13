@@ -51,12 +51,17 @@ impl Posture {
     }
 }
 
+/// The 64-bit set every bootable kernel belongs to; `build.rs` emits it as the
+/// `cellos_wide` cfg.
+pub fn wide(arch: &str) -> bool {
+    matches!(arch, "x86_64" | "aarch64" | "riscv64")
+}
+
 /// Derive the posture from `target_arch` and a feature query (`on("test-hooks")`).
 ///
 /// Returns `Err(reason)` for a combination that must not build.
 pub fn derive(target_arch: &str, on: &dyn Fn(&str) -> bool) -> Result<Posture, &'static str> {
-    let wide = matches!(target_arch, "x86_64" | "aarch64" | "riscv64");
-    if wide && !on("native-domains") && !on("compile-only") {
+    if wide(target_arch) && !on("native-domains") && !on("compile-only") {
         return Err(
             "64-bit kernels require native-domains (raw-memcpy user copy otherwise); \
                     use compile-only for a build that never boots",

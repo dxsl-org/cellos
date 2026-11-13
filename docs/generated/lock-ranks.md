@@ -58,10 +58,10 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 51 | `CSPACE_FILES` | `kernel::cell::cap_registry::CSPACE_FILES` (kernel/src/cell/cap_registry.rs) |
 | 52 | `STATE_STASH` | `kernel::cell::state_stash::STASH` (kernel/src/cell/state_stash.rs) |
 | 53 | `FUTEX_WAITERS` | `kernel::ipc::futex::WAITERS` (kernel/src/ipc/futex.rs) |
-| 54 | `QUARANTINED_FRAMES` | `kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")))` (kernel/src/memory/address_space.rs) |
-| 55 | `LIVE_ASIDS` | `kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")))` (kernel/src/memory/address_space.rs) |
-| 56 | `DEFERRED_RELEASE` | `kernel::memory::deferred_release::DEFERRED @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")))` (kernel/src/memory/deferred_release.rs) |
-| 57 | `ABANDONED_TAGS` | `kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")))` (kernel/src/memory/deferred_release.rs) |
+| 54 | `QUARANTINED_FRAMES` | `kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
+| 55 | `LIVE_ASIDS` | `kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
+| 56 | `DEFERRED_RELEASE` | `kernel::memory::deferred_release::DEFERRED @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
+| 57 | `ABANDONED_TAGS` | `kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
 | 58 | `P01_LIFETIMES` | `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
 | 59 | `P01_NONCPU_SNAPSHOTS` | `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
 | 60 | `P01_NONCPU_TOPOLOGY_SNAPSHOTS` | `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
@@ -88,6 +88,6 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 81 | `FB_STATE` | `kernel::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/dev/fb_console.rs) |
 | 82 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
 | 83 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |
-| 84 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , any (target_arch = "riscv64" , target_arch = "aarch64" , target_arch = "x86_64")))` (kernel/src/memory/domain-supervisor-registry.rs) |
+| 84 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
 | 85 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
 | 86 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |

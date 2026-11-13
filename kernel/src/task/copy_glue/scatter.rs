@@ -1,23 +1,9 @@
 //! Scatter write adapter for TaskCopyView.
 
 use super::TaskCopyView;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 use super::{validate_kernel_range, TaskCopyRepr};
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        target_arch = "aarch64",
-        target_arch = "x86_64"
-    )
-))]
+#[cfg(all(feature = "native-domains", cellos_wide))]
 use alloc::vec::Vec;
 
 impl TaskCopyView {
@@ -33,14 +19,7 @@ impl TaskCopyView {
         ranges: &[(usize, usize)],
         payload: &[u8],
     ) -> Result<(), ()> {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        ))]
+        #[cfg(all(feature = "native-domains", cellos_wide))]
         {
             match &self.0 {
                 TaskCopyRepr::Boundary(view) => {
@@ -88,14 +67,7 @@ impl TaskCopyView {
                 }
             }
         }
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )
-        )))]
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
         {
             let mut pos = 0usize;
             for &(ptr, len) in ranges {

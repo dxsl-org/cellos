@@ -1303,11 +1303,7 @@ pub(super) fn get_time(op: usize) -> SyscallResult {
             let t = hal::timer::read_ticks() as usize;
             #[cfg(target_arch = "x86_64")]
             let t = hal::clock::now_ns() as usize;
-            #[cfg(not(any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )))]
+            #[cfg(not(cellos_wide))]
             let t = 0usize;
             Ok(t)
         }
@@ -1326,11 +1322,7 @@ pub(super) fn get_time(op: usize) -> SyscallResult {
             // The x86 clocksource already returns nanoseconds; ÷ 1_000_000 → ms
             #[cfg(target_arch = "x86_64")]
             let ms = (hal::clock::now_ns() / 1_000_000) as usize;
-            #[cfg(not(any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )))]
+            #[cfg(not(cellos_wide))]
             let ms = 0usize;
             Ok(ms)
         }
@@ -1344,11 +1336,7 @@ pub(super) fn get_time(op: usize) -> SyscallResult {
             let ns = hal::rtc::now_epoch_ns() as usize;
             #[cfg(target_arch = "x86_64")]
             let ns = hal::rtc::now_epoch_ns() as usize;
-            #[cfg(not(any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )))]
+            #[cfg(not(cellos_wide))]
             let ns = 0usize;
             Ok(ns)
         }
@@ -1360,11 +1348,7 @@ pub(super) fn get_time(op: usize) -> SyscallResult {
             let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
             #[cfg(target_arch = "x86_64")]
             let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
-            #[cfg(not(any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )))]
+            #[cfg(not(cellos_wide))]
             let s = 0usize;
             Ok(s)
         }
@@ -1376,11 +1360,7 @@ pub(super) fn get_time(op: usize) -> SyscallResult {
             let freq = hal::timer::read_freq() as usize;
             #[cfg(target_arch = "x86_64")]
             let freq = 1_000_000_000usize; // HPET is in nanoseconds (1 GHz)
-            #[cfg(not(any(
-                target_arch = "riscv64",
-                target_arch = "aarch64",
-                target_arch = "x86_64"
-            )))]
+            #[cfg(not(cellos_wide))]
             let freq = 10_000_000usize;
             Ok(freq)
         }

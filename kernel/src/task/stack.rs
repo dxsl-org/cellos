@@ -119,14 +119,7 @@ pub(crate) fn unpublish_user_frames(base: VAddr, pages: usize) {
         let _ = paging::unmap_page(base + i * PAGE_SIZE);
     }
     crate::memory::tlb_shootdown::flush_range(base, pages * PAGE_SIZE);
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            target_arch = "aarch64",
-            target_arch = "x86_64"
-        )
-    ))]
+    #[cfg(all(feature = "native-domains", cellos_wide))]
     crate::task::user_copy::wait_sas_copies_quiescent();
 }
 

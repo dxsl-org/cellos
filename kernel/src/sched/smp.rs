@@ -1111,11 +1111,7 @@ pub fn run_ipi_selftest() {
 }
 
 /// No-op on targets with one CPU.
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 pub fn start_secondaries() {}
 
 // x86 AP bring-up handshake (phase 07b: every MP CPU up to `MAX_HARTS`).

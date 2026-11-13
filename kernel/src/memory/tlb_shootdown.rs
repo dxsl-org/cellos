@@ -237,11 +237,7 @@ fn local_tag_flush(asid: usize) {
 /// names the lowest-numbered hart still silent at the deadline. Callers keep
 /// their fail-stop on that error (`flush_range` panics, tag releases defer
 /// their frames) — nothing here continues past an unconfirmed hart.
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
     use crate::sched::smp;
     let me = crate::sched::hart_local::current_hart_id();
@@ -283,11 +279,7 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
 
 /// Targets without a second hart: the local flush above is the whole contract
 /// and there is no remote to confirm.
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
     Ok(())
 }
@@ -296,11 +288,7 @@ fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
 ///
 /// It advances whether or not the caller's context takes interrupts, which is
 /// what a probe that must not wait needs.
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 #[inline]
 fn counter_now() -> u64 {
     #[cfg(target_arch = "riscv64")]
@@ -317,11 +305,7 @@ fn counter_now() -> u64 {
     }
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 fn issue_remote_tag_flushes() {
     let me = crate::sched::hart_local::current_hart_id();
     for hart in crate::sched::smp::online_harts().filter(|hart| *hart != me) {
@@ -330,19 +314,11 @@ fn issue_remote_tag_flushes() {
 }
 
 /// No second hart: nothing can owe this hart's tag invalidation.
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 fn issue_remote_tag_flushes() {}
 
 /// The first online remote hart that still owes an invalidation, if any.
-#[cfg(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-))]
+#[cfg(cellos_wide)]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     let me = crate::sched::hart_local::current_hart_id();
     crate::sched::smp::online_harts()
@@ -350,11 +326,7 @@ fn remote_tag_flushes_outstanding() -> Option<usize> {
         .find(|hart| crate::sched::smp::tlb_flush_pending(*hart))
 }
 
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 fn remote_tag_flushes_outstanding() -> Option<usize> {
     None
 }
@@ -381,11 +353,7 @@ const fn tag_probe_ticks() -> u64 {
     2_000_000_000
 }
 
-#[cfg(not(any(
-    target_arch = "riscv64",
-    target_arch = "aarch64",
-    target_arch = "x86_64"
-)))]
+#[cfg(not(cellos_wide))]
 const fn tag_probe_ticks() -> u64 {
     0
 }
