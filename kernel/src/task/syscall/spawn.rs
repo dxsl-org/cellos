@@ -66,6 +66,12 @@ pub(super) fn caller_is_trusted_init(caller_id: usize) -> bool {
     caller_id != 0 && TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire) == caller_id
 }
 
+/// True when `tid` is the published trusted init root. The init-death policy
+/// (`cell::init_death`) keys `exit_task` on it; tid zero is never init.
+pub(crate) fn is_trusted_init(tid: usize) -> bool {
+    caller_is_trusted_init(tid)
+}
+
 pub(super) const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
 
 pub(super) fn consumes_staged_spawn_argv(syscall: &Syscall) -> bool {

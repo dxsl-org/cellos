@@ -1,7 +1,8 @@
-//! PSCI client — `CPU_ON` for secondary cores.
+//! PSCI client — `CPU_ON` for secondary cores, `SYSTEM_RESET` for the machine.
 //!
-//! Only the SMC conduit and only `PSCI_VERSION`/`PSCI_CPU_ON` are implemented:
-//! this kernel starts parked secondaries and never suspends a core. The conduit
+//! Only `PSCI_VERSION`, `PSCI_CPU_ON` and `SYSTEM_RESET` are implemented: this
+//! kernel starts parked secondaries, resets the machine when trusted init dies,
+//! and never suspends a core. The conduit
 //! is *declared by firmware* (`/psci/method` in the device tree) and read once
 //! at boot — an SMC on a machine with no EL3 monitor is an undefined
 //! instruction, so nothing here issues a call the tree did not ask for.
@@ -18,6 +19,8 @@ pub const SUCCESS: i64 = 0;
 const FN_VERSION: u64 = 0x8400_0000;
 /// `PSCI_CPU_ON` (SMCCC 64-bit function ID).
 const FN_CPU_ON: u64 = 0xC400_0003;
+/// `SYSTEM_RESET` (SMCCC 32-bit function ID; PSCI 0.2+).
+const FN_SYSTEM_RESET: u64 = 0x8400_0009;
 
 /// Which instruction the firmware expects for PSCI calls.
 ///
@@ -110,6 +113,12 @@ pub fn cpu_on(conduit: Conduit, mpidr: u64, entry: usize, context: u64) -> Resul
         SUCCESS => Ok(()),
         status => Err(status),
     }
+}
+
+/// `SYSTEM_RESET`: cold-reset the whole machine. Returns only when firmware
+/// refused, with its status.
+pub fn system_reset(conduit: Conduit) -> i64 {
+    call(conduit, FN_SYSTEM_RESET, 0, 0, 0)
 }
 
 /// PSCI status name, for the kernel log.

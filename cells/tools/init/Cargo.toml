@@ -48,6 +48,10 @@ development-silo-provider = []
 c2c-broker = []
 # Select the RPi3 platform's fixed storage bootstrap and generated display profile.
 board-rpi3 = []
+# Test hook, never in a shipped image: fault right after "Init: OS ready." so the
+# kernel's init-death policy records `action=reset` and the machine boots again.
+# Only scripts/build-x86_64-init-death-ci.sh enables it (lane `init-death-x86`).
+init-death-fixture = []
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

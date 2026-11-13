@@ -1498,6 +1498,16 @@ impl Scheduler {
             crate::audit::AuditEvent::CellFault,
             &crate::audit::encode_u32x2(fault.cell_id as u32, fault.cause as u32),
         );
+        // Phase 13 init-death record: the faulting pc of init's generation
+        // (root or worker) names the reason when init's root retires below.
+        if let Some(root_tid) = self
+            .tasks
+            .get(&fault.tid)
+            .map(|task| task.root_tid)
+            .filter(|&root_tid| crate::task::syscall::is_trusted_init(root_tid))
+        {
+            crate::cell::init_death::stage_fault(root_tid, fault.pc);
+        }
         // D07 / N03: Unhandled user fault from ANY thread (worker or root) routes to
         // the exact live owner and triggers whole-generation retirement.
         let live_owner = self
@@ -1655,6 +1665,19 @@ impl Scheduler {
             .is_some_and(|task| task.state == TaskState::Retiring)
         {
             return;
+        }
+        // Phase 13: trusted init's root is retiring. Write the `[init-death]`
+        // record and publish reset/halt here, under SCHEDULER; `yield_cpu`
+        // carries the action out once this lock is released.
+        if crate::task::syscall::is_trusted_init(tid) {
+            if let Some(task) = self.tasks.get(&tid) {
+                crate::cell::init_death::record(
+                    tid,
+                    task.cell_id.0,
+                    task.cell_generation,
+                    exit_reason,
+                );
+            }
         }
         #[cfg(feature = "p01-trace")]
         if let Some(task) = self.tasks.get(&tid) {

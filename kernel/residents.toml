@@ -72,6 +72,8 @@
 "kernel/src/cell/cap_registry.rs" = { category = "B", owner = "cell" }
 "kernel/src/cell/cspace.rs" = { category = "B", owner = "cell" }
 "kernel/src/cell/hotswap.rs" = { category = "exception", owner = "cell", target = "Supervisor Cell policy; kernel keeps freeze/resume/kill (Spec 15 §3.2)" }
+"kernel/src/cell/init_death.rs" = { category = "B", owner = "cell" }
+"kernel/src/cell/init_death_tests.rs" = { category = "test", owner = "cell" }
 "kernel/src/cell/metadata.rs" = { category = "B", owner = "cell" }
 "kernel/src/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
 "kernel/src/cell/retirement_verdict.rs" = { category = "B", owner = "cell" }

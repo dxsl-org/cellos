@@ -28,6 +28,19 @@ differently on. Conflating axis 1 (isolation) with the whole is the single bigge
 For a robot, **axes 2–3 (detection + recovery) are what keep it from driving into a wall.**
 A statically-isolated but unrecoverable system still "dies" the moment a control cell crashes.
 
+**Init's own death (Phase 13, Law-1 A5).** Init is the root of the supervisor tree, and
+nothing above it can restart it, so the kernel owns that case. When trusted init's root
+retires, `exit_task` writes one line `[init-death] tid=… cell=… gen=… reason=<exit code |
+fault> pc=<pc | -> action=<reset | halt>` next to the death path's audit record
+(`CellFault`/`CellExit`), and the next `yield_cpu` pass, outside the scheduler lock, acts on
+it. Init's boot-stop paths (platform wait failure, VFS bootstrap failure) exit with
+`abi::retirement::INIT_BOOT_STOP` (`0xB007_5709`): the kernel records and **halts**, so a
+boot that cannot succeed never becomes a reboot loop. Every other init death (a fault, a
+watchdog or heartbeat kill, any other exit code) records and **resets** the machine: ACPI
+reset on x86_64, SBI cold reset on RISC-V, PSCI `SYSTEM_RESET` on AArch64. The record does
+not survive the reset (no persistent store exists). Lane `init-death-x86` proves the reset
+path: a test-hook init faults after "OS ready" and the machine boots a second time.
+
 ---
 
 ## 2. Isolation Strategy Decision (2026-06-05)

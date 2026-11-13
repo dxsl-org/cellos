@@ -1273,6 +1273,22 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture
 
+      # Phase 13 step 4: the kernel's init-death policy. The fixture ISO is the
+      # headless image assembled above with `init` built under the test hook
+      # `init-death-fixture` (fault after "Init: OS ready."); the kernel writes one
+      # `[init-death] … action=reset` record and resets into a second boot. The
+      # runner omits `-no-reboot`, as for power-x86.
+      - name: Init-death policy test (x86_64, fixture init faults after OS ready)
+        env:
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+          VICELL_INIT_DEATH_ISO: ${{ github.workspace }}/build/vicell-x86-init-death.iso
+        run: |
+          bash scripts/build-x86_64-init-death-ci.sh
+          cargo test --manifest-path tests/integration/Cargo.toml \
+            --test init-death-x86 --target x86_64-unknown-linux-gnu -- --nocapture
+
   # Intel C2C gate (ADR-0022, architecture remediation Phase 02). Runs on every
   # push/PR under TCG: the two-node C2C test (positive, and C2C_NEGATIVE=1 which
   # must fail), the x86 Tier-2 domain test and the local service lifecycle target.

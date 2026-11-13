@@ -77,6 +77,39 @@ fn cell_main() {
     if let Err(error) = boot::start_after_platform(start_services) {
         println(error.diagnostic());
     }
+    // `start_services` returns only when boot cannot continue; every other path
+    // ends in the supervisor loop, which never returns.
+    boot_stop()
+}
+
+/// Leave with [`api::retirement::INIT_BOOT_STOP`], never a plain return: the kernel
+/// records this death and halts, where any other init death resets the machine.
+fn boot_stop() -> ! {
+    println("Init: boot cannot continue — exiting with INIT_BOOT_STOP (the kernel halts).");
+    ostd::syscall::sys_exit(api::retirement::INIT_BOOT_STOP)
+}
+
+/// Test hook (`init-death-fixture`, packaged only by
+/// `scripts/build-x86_64-init-death-ci.sh`): fault once boot reports OS ready, so the
+/// lane sees the kernel's `[init-death] … action=reset` record and a second boot.
+/// Safe code (cells are F1 `forbid(unsafe_code)`): unbounded recursion writes each
+/// 1 KiB frame down the user stack until it stores into the unmapped guard pages
+/// below it, a user page fault. Never returns; it is unit-typed only so the
+/// caller's later code stays reachable.
+#[cfg(feature = "init-death-fixture")]
+fn init_death_fixture_fault() {
+    #[allow(unconditional_recursion)]
+    #[inline(never)]
+    fn exhaust_stack(depth: usize) -> usize {
+        let mut frame = [0u8; 1024];
+        // Opaque to the optimizer: the whole frame is written and stays live, and
+        // the use after the call keeps the recursion out of tail position.
+        core::hint::black_box(&mut frame);
+        exhaust_stack(depth + 1) + usize::from(frame[depth % frame.len()])
+    }
+    println("Init: init-death fixture faulting after OS ready.");
+    let _ = exhaust_stack(0);
+    ostd::syscall::sys_exit(usize::MAX)
 }
 
 fn start_services() {
@@ -175,6 +208,8 @@ fn start_services() {
     println("Init: services spawned.");
     println("Init: service registry verified (init registration is publication, not application readiness).");
     println("Init: OS ready.");
+    #[cfg(feature = "init-death-fixture")]
+    init_death_fixture_fault();
     if !launch_order(&mut services, &autoload_order, autoload_offset)
         || !required_services_available(&services)
     {

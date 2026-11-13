@@ -1459,6 +1459,11 @@ pub fn yield_cpu() {
     }
     #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
     let _ = deferred_retired;
+    // Phase 13: a trusted-init death recorded under SCHEDULER (just above, or by a
+    // watchdog/heartbeat kill in an earlier pass) resets or halts here. Every
+    // SCHEDULER guard of this pass is already dropped, and `yield_cpu` cannot be
+    // entered with SCHEDULER held (it takes that lock itself).
+    crate::cell::init_death::act_if_pending();
     retry_retired_dma_cleanup();
     // Exports whose window drain was unacknowledged stay Revoking with their
     // owner range locked; retry each pass (ADR-0033 CP1 §5.3).

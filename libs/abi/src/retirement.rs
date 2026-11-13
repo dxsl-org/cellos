@@ -12,6 +12,18 @@ pub const RETIREMENT_RECORD_LEN: usize = 96;
 /// The only record version this layout writes and accepts.
 pub const RETIREMENT_RECORD_VERSION: u16 = 1;
 
+/// `Exit` code trusted init uses when boot cannot continue (Phase 13 A5).
+///
+/// Init exits with this code, never a plain return, on every boot-stop path
+/// (platform wait failure, VFS bootstrap failure). The kernel's init-death
+/// policy keys on it: init's root retiring with this code records
+/// `[init-death] … action=halt` and halts, so a boot that cannot succeed does
+/// not reset into the same failure forever. Every other init death (any other
+/// exit code, including `0` from the `ostd` startup return and `1` from the
+/// `ostd` panic handler, a fault or a watchdog kill) records `action=reset` and
+/// resets the machine. Ordinary Cells carry no meaning in this value.
+pub const INIT_BOOT_STOP: usize = 0xB007_5709;
+
 /// Verdict for one retired incarnation.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -214,3 +214,4 @@ cells/apps/vove/
 
 # Local benchmark captures (numbers are recorded in docs/CHANGELOG)
 perf-results-*/
+/build/x86-init-death-iso-root/
