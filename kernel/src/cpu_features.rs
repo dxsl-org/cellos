@@ -1,132 +1,27 @@
 //! CPU feature detection — parsed from the firmware-provided device tree.
 //!
 //! Call `detect(dtb)` once at kernel boot before any Cell is spawned.
-//! All other callers use the read-only `has_*()` accessors.
+//! All other callers use the read-only `has_*()` accessors. The probes are
+//! per architecture (`crate::arch::boot::cpu_features`).
 
-#[cfg(target_arch = "x86_64")]
-use core::sync::atomic::AtomicU8;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
+pub(crate) static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 
 /// QEMU virt EL2-host is latched by detect(); Pi's EL1-host monitor becomes
 /// capable only after its HVC init AND boot-time guest smoke succeed.
-static HAS_EL2: AtomicBool = AtomicBool::new(false);
-
-/// x86 hardware-virtualization vendor detected via CPUID (Tier 3 x86 VMM).
-#[cfg(target_arch = "x86_64")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum X86Virt {
-    /// AMD SVM (`CPUID.8000_0001:ECX[2]`) — first backend (QEMU TCG emulates it).
-    Svm,
-    /// Intel VT-x (`CPUID.1:ECX[5]`) — second backend (KVM/real-HW lane only).
-    Vmx,
-}
-
-/// 0 = none, 1 = SVM, 2 = VMX — written once by `detect()`.
-#[cfg(target_arch = "x86_64")]
-static X86_VIRT_KIND: AtomicU8 = AtomicU8::new(0);
+pub(crate) static HAS_EL2: AtomicBool = AtomicBool::new(false);
 
 /// Latched by kmain AFTER root operation is actually entered (EFER.SVME set /
 /// VMXON succeeded).  The HypervisorCap gate keys off THIS, not raw CPUID —
 /// firmware may advertise the feature but lock it off.
-static HAS_X86_VIRT: AtomicBool = AtomicBool::new(false);
+pub(crate) static HAS_X86_VIRT: AtomicBool = AtomicBool::new(false);
 
 /// Probe the device tree for CPU feature flags.
 ///
 /// Must be called once at kernel boot before any Cell is spawned.
-/// No-op (and safe) on non-riscv64 targets.
 pub(crate) fn detect(dtb: usize) {
-    #[cfg(target_arch = "riscv64")]
-    detect_riscv(dtb);
-    #[cfg(not(target_arch = "riscv64"))]
-    let _ = dtb;
-    // Latch EL2 boot status (ARM64 only); no-op on other arches.
-    #[cfg(target_arch = "aarch64")]
-    if hal::aarch64::el2::is_el2() {
-        HAS_EL2.store(true, Ordering::Relaxed);
-    }
-    // Latch the x86 hardware-virt vendor (SVM preferred — the TCG-testable
-    // backend; VMX only when SVM is absent, i.e. genuine Intel).
-    #[cfg(target_arch = "x86_64")]
-    {
-        if hal::svm::supported() {
-            X86_VIRT_KIND.store(1, Ordering::Relaxed);
-        } else if hal::vmx::supported() {
-            X86_VIRT_KIND.store(2, Ordering::Relaxed);
-        }
-    }
-}
-
-/// Is this kernel running under a hypervisor? (`CPUID.1:ECX[31]`)
-///
-/// Nested SVM/VMX is not guaranteed even when the vendor bits are advertised:
-/// `VMXON` under a hypervisor that does not grant nested operation **faults**
-/// (`#GP`) rather than reporting failure, and root operation is an optional
-/// capability. The boot path consults this before attempting it.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn hypervisor_present() -> bool {
-    core::arch::x86_64::__cpuid(1).ecx & (1 << 31) != 0
-}
-
-/// The x86 virt vendor CPUID advertised, if any.  `None` before `detect()`.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn x86_virt_kind() -> Option<X86Virt> {
-    match X86_VIRT_KIND.load(Ordering::Relaxed) {
-        1 => Some(X86Virt::Svm),
-        2 => Some(X86Virt::Vmx),
-        _ => None,
-    }
-}
-
-/// Enter the CPUID-selected backend's x86 root operation on the CURRENT CPU.
-///
-/// Root operation is per-CPU state (`EFER.SVME` + `VM_HSAVE_PA`, or
-/// `CR4.VMXE` + `VMXON`), so every CPU gets its own freshly allocated HSAVE /
-/// VMXON frame. The frame is never freed: root operation lasts until reset, and
-/// it is never mapped into any guest NPT (P02 invariant). The BSP calls this
-/// before [`latch_x86_root_active`]; while [`has_x86_virt`] is set, each AP
-/// calls it before going online, and an AP that is refused stays offline.
-///
-/// `Err` names the refusal for the caller's log line.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn enter_x86_root_on_current_cpu() -> Result<X86Virt, &'static str> {
-    let kind = x86_virt_kind().ok_or("not supported by CPU")?;
-    let frame = {
-        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        guard
-            .as_mut()
-            .expect("Frame allocator not initialized")
-            .allocate_frame()
-    };
-    match kind {
-        X86Virt::Svm => {
-            let pa = frame.ok_or("OOM allocating HSAVE frame")?;
-            // SAFETY: the HSAVE frame is freshly allocated, exclusively owned
-            // by this CPU and never freed (see above).
-            unsafe { hal::svm::enable(pa as u64) }
-                .map_err(|_| "SVM present but firmware-locked")?;
-        }
-        X86Virt::Vmx => {
-            let pa = frame.ok_or("OOM allocating VMXON frame")?;
-            let va = crate::memory::frame::phys_to_virt(pa) as *mut u32;
-            // SAFETY: pa/va name the same freshly allocated, exclusively owned
-            // frame (HHDM mapping), never freed (see above).
-            unsafe { hal::vmx::enter_root(pa as u64, va) }
-                .map_err(|_| "VMX present but unavailable")?;
-        }
-    }
-    Ok(kind)
-}
-
-/// Record that the BSP successfully entered x86 root operation.
-///
-/// Called by kmain after [`enter_x86_root_on_current_cpu`] returned `Ok` —
-/// the HypervisorCap gate reads [`has_x86_virt`]. APs that cannot enter the
-/// same root operation never go online, so the flag holds on every online CPU.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn latch_x86_root_active() {
-    HAS_X86_VIRT.store(true, Ordering::Relaxed);
+    crate::arch::boot::cpu_features::detect(dtb);
 }
 
 /// Returns `true` if this kernel entered x86 root operation (SVM/VMX) at boot.
@@ -141,12 +36,8 @@ pub(crate) fn has_x86_virt() -> bool {
 /// with an HVC/WFI/MMIO/virtual IRQ guest. Firmware that starts Pi at EL1 fails
 /// closed even if the CPU advertises EL2 in its ID registers.
 pub(crate) fn has_el2() -> bool {
-    #[cfg(target_arch = "aarch64")]
-    {
-        use hal::aarch64::backend::{ArmEl2Monitor, El2Monitor};
-        if El2Monitor::PRESENT {
-            return El2Monitor::is_verified();
-        }
+    if let Some(verified) = crate::arch::boot::cpu_features::el2_monitor_verified() {
+        return verified;
     }
     HAS_EL2.load(Ordering::Relaxed)
 }
@@ -156,62 +47,4 @@ pub(crate) fn has_el2() -> bool {
 /// Always `false` on non-riscv64 targets.
 pub(crate) fn has_h_ext() -> bool {
     HAS_H_EXT.load(Ordering::Relaxed)
-}
-
-#[cfg(target_arch = "riscv64")]
-fn detect_riscv(dtb: usize) {
-    if dtb == 0 {
-        return;
-    }
-    // SAFETY: dtb is the FDT pointer handed to the kernel by OpenSBI firmware.
-    // fdt::Fdt::from_ptr verifies the FDT magic number before reading any further.
-    let fdt = match unsafe { fdt::Fdt::from_ptr(dtb as *const u8) } {
-        Ok(f) => f,
-        Err(_) => return,
-    };
-    for cpu in fdt.cpus() {
-        // Prefer the newer property; fall back to the legacy ISA string.
-        //
-        // `riscv,isa-extensions` is a DT stringlist: NUL-separated tokens packed
-        // into one byte blob.  `as_str()` strips the trailing NUL; splitting on
-        // '\0' produces the individual extension names (e.g. "h", "smstateen").
-        let from_ext_list = cpu
-            .property("riscv,isa-extensions")
-            .and_then(|p| p.as_str())
-            .map(|s| s.split('\0').any(|ext| ext == "h"));
-
-        let from_isa_str = cpu
-            .property("riscv,isa")
-            .and_then(|p| p.as_str())
-            .map(isa_string_has_h);
-
-        if from_ext_list.or(from_isa_str).unwrap_or(false) {
-            HAS_H_EXT.store(true, Ordering::Relaxed);
-            return;
-        }
-    }
-}
-
-/// Returns `true` if the `riscv,isa` string encodes the 'h' extension.
-///
-/// Scans past the `rv32`/`rv64` prefix, then iterates the single-letter extension
-/// zone.  Digits and `p` in version suffixes (e.g. `i2p1`) are skipped — NOT
-/// treated as terminators — so `"rv64i2p1mafdch"` correctly detects 'h'.
-/// Stops at `_` (start of the multi-char extension zone).
-#[cfg(target_arch = "riscv64")]
-fn isa_string_has_h(isa: &str) -> bool {
-    let after_prefix = if isa.len() >= 4 {
-        &isa[4..]
-    } else {
-        return false;
-    };
-    for c in after_prefix.chars() {
-        match c {
-            'h' => return true,
-            '_' => return false, // multi-char zone; no more single-letter exts
-            'a'..='z' | '0'..='9' => {} // extension letter or version component
-            _ => return false,
-        }
-    }
-    false
 }

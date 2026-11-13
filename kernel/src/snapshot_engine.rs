@@ -2842,7 +2842,9 @@ pub fn try_restore() -> bool {
             // This MUST happen after frame restore because init_driver() writes
             // device registers that were cleared by hardware reset.
             #[cfg(target_arch = "riscv64")]
-            if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
+            if let Some((context, irqs, irq_count)) =
+                crate::arch::boot::platform::riscv_plic_init_data()
+            {
                 crate::hal::common::plic::init(context, &irqs[..irq_count]);
             } else {
                 log::warn!(

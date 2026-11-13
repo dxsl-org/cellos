@@ -6,6 +6,10 @@
 //! functions are called at fixed points of the neutral tail and keep the
 //! place the aarch64 code had there.
 
+pub mod cpu_features;
+pub mod firmware;
+pub mod platform;
+
 use crate::boot::{
     BootInfoSource, BootStorage, ClockReady, ConsoleReady, IommuReady, IrqReady, PlatformReady,
 };
@@ -37,9 +41,10 @@ pub struct EarlyPlatform {
 /// timer, vectors), boot memory and the kernel page tables.
 pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
     let dtb = crate::boot::effective_dtb(dtb);
+    firmware::note_firmware_tree(dtb);
     crate::cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
-    crate::platform::init(dtb);
+    platform::init(dtb);
     // 0. Initialize UART immediately for early logging
     crate::hal::backend::Board::console_init();
 
@@ -122,7 +127,7 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
         <hal::backend::Board as hal::backend::ArmPlatform>::DTB_POLICY,
         hal::backend::DtbPolicy::Optional
     ) {
-        let (start, end) = crate::boot::fallback_dtb_ram_range();
+        let (start, end) = firmware::fallback_dtb_ram_range();
         log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);
     }
     if crate::hal::backend::Board::CONSOLE_RX_IRQ {

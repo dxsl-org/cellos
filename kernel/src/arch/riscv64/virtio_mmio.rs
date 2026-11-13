@@ -23,7 +23,7 @@ pub(crate) fn slots() -> alloc::vec::IntoIter<VirtioSlot> {
 
 /// Base of the slot whose interrupt is `irq`, if any.
 pub(crate) fn slot_base_for_irq(irq: u32) -> Option<usize> {
-    crate::platform::virtio_mmio_base_for_irq(irq)
+    crate::arch::boot::platform::virtio_mmio_base_for_irq(irq)
 }
 
 /// Run one VirtIO MMIO ACK sequence with SUM set for exactly that scope.

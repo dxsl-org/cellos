@@ -410,7 +410,7 @@ pub(super) extern "C" fn x86_secondary_main(
     // CPU must enter the same root operation (own HSAVE/VMXON frame) before it
     // may go online. A refused AP parks with IF clear and is never published.
     if crate::cpu_features::has_x86_virt() {
-        if let Err(reason) = crate::cpu_features::enter_x86_root_on_current_cpu() {
+        if let Err(reason) = crate::arch::boot::cpu_features::enter_x86_root_on_current_cpu() {
             log::warn!(
                 "[x86-smp] AP {} x86 root operation refused: {}",
                 lapic_id,

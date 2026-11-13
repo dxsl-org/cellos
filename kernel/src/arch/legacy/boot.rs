@@ -2,6 +2,9 @@
 //! `boot`: the 32-bit phases of `kmain` (riscv32 Nano, AArch32, x86_32): bare
 //! physical memory, no heap-time devices, no cells.
 
+pub mod cpu_features;
+pub mod firmware;
+
 use crate::boot::{
     BootInfoSource, BootStorage, ClockReady, ConsoleReady, IommuReady, IrqReady, PlatformReady,
 };

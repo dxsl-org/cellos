@@ -660,7 +660,7 @@ fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocat
             log_info("Limine not found, using QEMU/OpenSBI fallback");
             // aarch64-virt sizes the kernel region from the linker end symbol —
             // EMBEDDED_OVERRIDE images make the binary size unbounded.
-            boot::BootInfoSource::Fallback(boot::fallback_boot_info(dtb))
+            boot::BootInfoSource::Fallback(arch::boot::firmware::fallback_boot_info(dtb))
         }
     };
     // Log physical base — non-default value confirms KASLR is active.

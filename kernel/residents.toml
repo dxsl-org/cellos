@@ -34,6 +34,9 @@
 
 # ---- arch ----
 "kernel/src/arch/aarch64/boot.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/boot/cpu_features.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/boot/firmware.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/boot/platform.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/cpu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
@@ -57,6 +60,8 @@
 "kernel/src/arch/aarch64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/boot.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/boot/cpu_features.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/boot/firmware.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/cpu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
@@ -74,6 +79,9 @@
 "kernel/src/arch/legacy/x86.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/boot.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/boot/cpu_features.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/boot/firmware.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/boot/platform.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
 "kernel/src/arch/riscv64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cpu.rs" = { category = "A", owner = "arch" }
@@ -113,6 +121,8 @@
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/boot.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/boot/cpu_features.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/boot/firmware.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
 "kernel/src/arch/x86_64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/cpu.rs" = { category = "A", owner = "arch" }

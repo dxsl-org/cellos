@@ -168,8 +168,8 @@ pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64)) {
 
 /// The nested-paging format for this CPU (NPT on AMD/SVM, EPT on Intel/VMX).
 fn nested_format() -> NestedFormat {
-    match crate::cpu_features::x86_virt_kind() {
-        Some(crate::cpu_features::X86Virt::Vmx) => NestedFormat::Ept,
+    match crate::arch::boot::cpu_features::x86_virt_kind() {
+        Some(crate::arch::boot::cpu_features::X86Virt::Vmx) => NestedFormat::Ept,
         _ => NestedFormat::Npt,
     }
 }
@@ -261,7 +261,9 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
 
 /// Create a vCPU entering at GPA `entry_pc`; returns the 1-based `vcpu_id`.
 pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
-    if crate::cpu_features::x86_virt_kind() == Some(crate::cpu_features::X86Virt::Vmx) {
+    if crate::arch::boot::cpu_features::x86_virt_kind()
+        == Some(crate::arch::boot::cpu_features::X86Virt::Vmx)
+    {
         let vmcs = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
         let mut guard = VM_REGISTRY.lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;

@@ -16,7 +16,7 @@ enum ExternalIrqRoute {
 
 #[no_mangle]
 pub extern "Rust" fn vi_riscv_plic_context() -> usize {
-    crate::platform::riscv_plic_context_for_current_hart().unwrap_or(usize::MAX)
+    crate::arch::boot::platform::riscv_plic_context_for_current_hart().unwrap_or(usize::MAX)
 }
 
 fn warn_unknown_irq(irq: u32) {

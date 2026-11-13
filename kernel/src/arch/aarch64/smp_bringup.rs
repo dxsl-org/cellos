@@ -5,7 +5,7 @@
 use super::*;
 
 /// AArch64 CPU index ↔ `MPIDR_EL1` affinity, described from the firmware tree
-/// by [`crate::boot::firmware_smp::note`] (flat until then; see [`mpidr`]).
+/// by [`crate::arch::boot::firmware::firmware_smp::note`] (flat until then; see [`mpidr`]).
 pub static CPU_MPIDRS: mpidr::MpidrTable<MAX_HARTS> = mpidr::MpidrTable::new();
 
 /// IPIs each hart has taken through its interrupt controller. The timer tick
@@ -73,7 +73,7 @@ pub(crate) fn usable_psci_conduit() -> Result<hal::aarch64::psci::Conduit, &'sta
     use hal::aarch64::backend::{ArmPlatform, Board, SecondaryStart};
     use hal::aarch64::psci::Conduit;
 
-    let conduit = match crate::boot::firmware_smp::psci_conduit() {
+    let conduit = match crate::arch::boot::firmware::firmware_smp::psci_conduit() {
         Some(declared) => declared,
         None if matches!(
             <Board as ArmPlatform>::SECONDARY_START,
@@ -99,7 +99,7 @@ pub(crate) fn usable_psci_conduit() -> Result<hal::aarch64::psci::Conduit, &'sta
 /// Bounded wait, graceful degradation, never a panic: a core that does not come
 /// online within the deadline leaves the system single-hart with a warning.
 pub(super) fn start_psci_secondaries() {
-    use crate::boot::firmware_smp;
+    use crate::arch::boot::firmware::firmware_smp;
     use crate::task::stack::Stack;
     use crate::task::STACK_PAGES;
 
@@ -292,7 +292,7 @@ pub(super) fn start_psci_secondaries() {
 /// The release word is written by physical address ([`write_release_word`]),
 /// as the kernel image itself is reached by physical address in the entry path.
 pub(super) fn start_spin_table_secondaries() {
-    use crate::boot::firmware_smp;
+    use crate::arch::boot::firmware::firmware_smp;
     use crate::task::stack::Stack;
     use crate::task::STACK_PAGES;
 

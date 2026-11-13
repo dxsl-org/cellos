@@ -6,6 +6,8 @@
 //! remaining functions are called at fixed points of the neutral tail and keep
 //! the place the x86_64 code had there.
 
+pub mod cpu_features;
+pub mod firmware;
 pub mod limine;
 
 use crate::boot::{
@@ -232,7 +234,7 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
     let platform_identity = crate::board::PlatformIdentity {
         acpi_oem: acpi_info.root_oem,
         smbios: smbios_system,
-        hypervisor: crate::cpu_features::hypervisor_present(),
+        hypervisor: crate::arch::boot::cpu_features::hypervisor_present(),
     };
     crate::board::report_identity(&platform_identity);
     // Bind the profile once, before the first `has_driver` gate. The operator
@@ -423,10 +425,12 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         //     still emulating SVM root operation under TCG, so gating SVM on
         //     the hypervisor bit would close the capability on the only lane
         //     that can exercise it (the x86 hypervisor smoke lane).
-        let _under_hypervisor = crate::cpu_features::hypervisor_present();
+        let _under_hypervisor = crate::arch::boot::cpu_features::hypervisor_present();
         // Root operation is per-CPU: the same helper runs on each AP before it
         // goes online (crate::sched::smp::x86_secondary_main).
-        if crate::cpu_features::x86_virt_kind() == Some(crate::cpu_features::X86Virt::Vmx) {
+        if crate::arch::boot::cpu_features::x86_virt_kind()
+            == Some(crate::arch::boot::cpu_features::X86Virt::Vmx)
+        {
             // VMXON faults (#GP) rather than reporting failure when a
             // precondition is unmet; logged first, a fault stays attributable.
             log::info!(
@@ -436,12 +440,16 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
                 hal::vmx::vmxon_revision()
             );
         }
-        match crate::cpu_features::enter_x86_root_on_current_cpu() {
+        match crate::arch::boot::cpu_features::enter_x86_root_on_current_cpu() {
             Ok(kind) => {
-                crate::cpu_features::latch_x86_root_active();
+                crate::arch::boot::cpu_features::latch_x86_root_active();
                 log_info(match kind {
-                    crate::cpu_features::X86Virt::Svm => "x86 virt: root operation active (SVM)",
-                    crate::cpu_features::X86Virt::Vmx => "x86 virt: root operation active (VMX)",
+                    crate::arch::boot::cpu_features::X86Virt::Svm => {
+                        "x86 virt: root operation active (SVM)"
+                    }
+                    crate::arch::boot::cpu_features::X86Virt::Vmx => {
+                        "x86 virt: root operation active (VMX)"
+                    }
                 });
             }
             Err(reason) => {

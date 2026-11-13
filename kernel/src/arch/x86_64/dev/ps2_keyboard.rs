@@ -217,7 +217,7 @@ fn init_absolute_mouse() -> bool {
     #[cfg(target_arch = "x86_64")]
     {
         // Never touch the VMware I/O port on bare metal.
-        if !crate::cpu_features::hypervisor_present() {
+        if !crate::arch::boot::cpu_features::hypervisor_present() {
             return false;
         }
         let version = vm_command(10, !VM_MAGIC);

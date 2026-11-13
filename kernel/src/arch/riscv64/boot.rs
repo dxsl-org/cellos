@@ -6,6 +6,10 @@
 //! IOMMU. The remaining functions are called at fixed points of the neutral
 //! tail and keep the place the riscv64 code had there.
 
+pub mod cpu_features;
+pub mod firmware;
+pub mod platform;
+
 use crate::boot::{
     BootInfoSource, BootStorage, ClockReady, ConsoleReady, IommuReady, IrqReady, PciReady,
     PlatformReady,
@@ -43,7 +47,7 @@ pub(crate) fn early(hartid: usize, dtb: usize) -> EarlyPlatform {
     let dtb = crate::boot::effective_dtb(dtb);
     crate::cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
-    crate::platform::init(dtb);
+    platform::init(dtb);
     // Set runtime PLIC base before the later RV64 PLIC initialization consumes it.
     crate::platform::with(|p| hal::common::plic::set_plic_base(p.plic_base));
     // 0. Initialize UART immediately for early logging
@@ -106,7 +110,7 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
     // 5. Hardware Abstraction Layer (HAL) Initialization
     // Initialize PLIC for RISC-V external IRQs.
     if crate::board::active().has_driver(cellos_boards::DriverId::PlicSifive) {
-        if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
+        if let Some((context, irqs, irq_count)) = platform::riscv_plic_init_data() {
             crate::hal::common::plic::init(context, &irqs[..irq_count]);
         } else {
             log::warn!("[plic] no active RV64 context mapping; external IRQs stay disabled");

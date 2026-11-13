@@ -187,15 +187,15 @@ rationale = "On x86_64 has_el2() takes the non-rpi3 branch and reads a constant-
 review = "kernel/src/cpu_features.rs:detect; kernel/src/cpu_features.rs:has_el2; kernel/src/task/cap.rs:396-399"
 
 [[global]]
-key = "kernel::cpu_features::X86_VIRT_KIND @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::cpu_features::X86_VIRT_KIND @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "kernel::cpu_features::detect (BSP, kmain:153) writes the SVM/VMX vendor from CPUID; read by kmain virt bring-up and hypervisor::svm_registry (create_vcpu, nested_format)"
+owner = "kernel::arch::x86_64::boot::cpu_features::detect (BSP, via cpu_features::detect at the start of arch::boot::early) writes the SVM/VMX vendor from CPUID; read by the early phase's virt bring-up and hypervisor::svm_registry (create_vcpu, nested_format)"
 contexts = ["boot", "normal"]
-seal = "written once in cpu_features::detect at kmain:153, before the IDT exists and before start_secondaries"
+seal = "written once in cpu_features::detect at the start of arch::boot::early, before the IDT exists and before start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "A single Relaxed store of a scalar on the BSP; the kmain reader is the same thread and syscall-path readers on either CPU run after the AP-start happens-before, so Relaxed carries no dependent data. The value reflects the BSP's CPUID only; cpu_feature_policy (AP admission) does not compare SVM/VMX bits."
-review = "kernel/src/cpu_features.rs:detect; kernel/src/main.rs:635; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:nested_format; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64.rs:cpu_feature_policy"
+review = "kernel/src/arch/x86_64/boot/cpu_features.rs:detect; kernel/src/arch/x86_64/boot.rs:early; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:nested_format; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64.rs:cpu_feature_policy"
 
 [[global]]
 key = "kernel::cpu_features::HAS_X86_VIRT"
@@ -231,26 +231,26 @@ rationale = "One call site on the BSP before any other CPU runs, so there is no 
 review = "kernel/src/boot.rs:parse_bootloader_info; kernel/src/main.rs:305-316"
 
 [[global]]
-key = "kernel::boot::FALLBACK_MEMORY_MAP @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::firmware::FALLBACK_MEMORY_MAP @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "immutable"
-owner = "kernel::boot fallback boot description (x86_64); read only through FALLBACK_BOOT_INFO"
+owner = "kernel::arch::x86_64::boot::firmware fallback boot description; read only through FALLBACK_BOOT_INFO"
 contexts = ["boot"]
 seal = "compile-time constant in .rodata; no writer"
 retirement = "never: lives for the whole run"
 rationale = "Plain `static` of a Copy struct with no interior mutability, so it cannot be mutated. Only reachable when parse_bootloader_info fails and kmain calls fallback_boot_info (unreachable under Limine per the boot.rs comment)."
-review = "kernel/src/boot.rs:773-789; kernel/src/boot.rs:757-759; kernel/src/main.rs:308-316"
+review = "kernel/src/arch/x86_64/boot/firmware.rs:FALLBACK_MEMORY_MAP; kernel/src/arch/x86_64/boot/firmware.rs:fallback_boot_info; kernel/src/main.rs:boot_memory"
 
 [[global]]
-key = "kernel::boot::FALLBACK_BOOT_INFO @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::firmware::FALLBACK_BOOT_INFO @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "immutable"
-owner = "kernel::boot::fallback_boot_info returns &FALLBACK_BOOT_INFO to kmain when Limine responses are missing"
+owner = "kernel::arch::x86_64::boot::firmware::fallback_boot_info returns &FALLBACK_BOOT_INFO to kmain's boot_memory when Limine responses are missing"
 contexts = ["boot"]
 seal = "compile-time constant in .rodata; no writer"
 retirement = "never: lives for the whole run"
 rationale = "Plain `static` SimpleBootInfo (slice reference plus integers) without interior mutability; read once by kmain on the BSP in the Limine-failure branch."
-review = "kernel/src/boot.rs:790-795; kernel/src/boot.rs:757-759; kernel/src/main.rs:308-316"
+review = "kernel/src/arch/x86_64/boot/firmware.rs:FALLBACK_BOOT_INFO; kernel/src/arch/x86_64/boot/firmware.rs:fallback_boot_info; kernel/src/main.rs:boot_memory"
 
 [[global]]
 key = "kernel::boot::limine::MEMORY_MAP_REQUEST"
