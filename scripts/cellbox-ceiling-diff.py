@@ -95,7 +95,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("candidate", nargs="?", default=DEFAULT_CANDIDATE)
     parser.add_argument("--baseline-ref", default=DEFAULT_BASELINE_REF)
-    parser.add_argument("--allow-added", action="append", default=["Write", "GetRandom"], help="syscalls added by an approved delta (default: Write, Phase 02 CP2 closure; GetRandom, Phase 09 D79-9 as revised)")
+    parser.add_argument("--allow-added", action="append", default=["Write", "GetRandom", "LookupServiceBound", "SendGather"], help="syscalls added by an approved delta (default: Write, Phase 02 CP2 closure; GetRandom, Phase 09 D79-9 as revised; LookupServiceBound and SendGather, architecture remediation Phase 11 CP2 D5 and its review fix)")
+    parser.add_argument("--allow-removed", action="append", default=["LookupService", "Reply"], help="syscalls retired by an approved delta (default: LookupService and Reply, architecture remediation Phase 11 CP2 D4/D5)")
     parser.add_argument("--baseline-path", default=DEFAULT_BASELINE_PATH)
     parser.add_argument("--baseline-file", help="read the baseline from a file instead of git")
     args = parser.parse_args()
@@ -116,7 +117,7 @@ def main() -> int:
     for name in sorted(cand_syscalls - base_syscalls):
         (problems.append(f"syscall ADDED vs baseline: {name}") if name not in args.allow_added else print(f"note: {name} added vs baseline by an approved delta"))
     for name in sorted(base_syscalls - cand_syscalls):
-        problems.append(f"syscall REMOVED vs baseline: {name}")
+        (problems.append(f"syscall REMOVED vs baseline: {name}") if name not in args.allow_removed else print(f"note: {name} retired vs baseline by an approved delta"))
     for key in sorted(set(cand_manifest) | set(base_manifest)):
         old, new = base_manifest.get(key), cand_manifest.get(key)
         if old != new:
