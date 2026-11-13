@@ -156,13 +156,100 @@ impl CpuContext {
     }
 }
 
-/// Free-function alias kept for backwards compatibility.
+/// A private root the switch programs between the outgoing save and the
+/// incoming load: the root table's physical address and its ASID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Root {
+    base: core::num::NonZeroUsize,
+    asid: usize,
+}
+
+impl Root {
+    /// `base` is the root table's physical address. Zero names no root
+    /// (`None`): the switch's no-write path.
+    pub fn new(base: usize, asid: usize) -> Option<Self> {
+        core::num::NonZeroUsize::new(base).map(|base| Self { base, asid })
+    }
+
+    pub fn base(self) -> usize {
+        self.base.get()
+    }
+
+    pub fn asid(self) -> usize {
+        self.asid
+    }
+}
+
+/// This PE's DAIF as captured by [`IrqSaved::save`], with IRQs masked until
+/// the token is dropped.
+///
+/// [`switch`] carries the token across the switch and returns it when this
+/// activation resumes; the incoming context restores its own DAIF, so the
+/// caller drops the returned token after its post-resume work.
+#[must_use]
+pub struct IrqSaved {
+    daif: usize,
+    _not_send: core::marker::PhantomData<*mut ()>,
+}
+
+impl IrqSaved {
+    /// Capture DAIF and mask IRQs ([`save_and_disable_interrupts`]).
+    #[inline(always)]
+    pub fn save() -> Self {
+        Self {
+            daif: save_and_disable_interrupts(),
+            _not_send: core::marker::PhantomData,
+        }
+    }
+}
+
+impl Drop for IrqSaved {
+    #[inline(always)]
+    fn drop(&mut self) {
+        // SAFETY: captured on this PE by `save`, which `!Send` keeps here.
+        unsafe { restore_sstatus(self.daif) }
+    }
+}
+
+/// One context switch: the outgoing and incoming contexts, the root to program
+/// between them, and the interrupt state captured before selection.
+///
+/// `root: None` writes no `TTBR0_EL1`: after trap entry the kernel root is
+/// live, so this is the SAS-to-SAS path. At EL2 the root must be `None`.
+#[must_use]
+pub struct SwitchPlan {
+    pub out: *mut CpuContext,
+    pub inc: *const CpuContext,
+    pub root: Option<Root>,
+    pub irq: IrqSaved,
+}
+
+/// Run `plan` through `__switch_el1` (or `__switch_el2` at EL2).
+///
+/// Returns this activation's interrupt token when it is resumed.
 ///
 /// # Safety
-/// Both pointers must point to valid, aligned `CpuContext` structs.
-pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
-    // SAFETY: caller's contract; no root transition.
-    unsafe { CpuContext::switch_with_root(old, new, 0, 0) }
+/// Both pointers must point to valid, aligned `CpuContext` structs, `plan.irq`
+/// must have been saved on this PE, and `plan.root` must name a completed root
+/// this PE may run.
+#[inline(always)]
+pub unsafe fn switch(plan: SwitchPlan) -> IrqSaved {
+    let SwitchPlan {
+        out,
+        inc,
+        root,
+        irq,
+    } = plan;
+    let (root_baddr, asid) = root.map_or((0, 0), |root| (root.base(), root.asid()));
+    // SAFETY: the caller's contract.
+    unsafe { CpuContext::switch_with_root(out, inc, root_baddr, asid) };
+    irq
+}
+
+/// Publish the incoming context's kernel stack (TPIDR_EL1) for trap entry.
+#[inline(always)]
+pub fn set_kernel_stack_for(inc: &CpuContext) {
+    super::set_kernel_stack(inc.sp as usize);
 }
 
 extern "C" {

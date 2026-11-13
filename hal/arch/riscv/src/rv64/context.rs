@@ -104,6 +104,115 @@ impl Context {
     }
 }
 
+/// A private root the switch programs between the outgoing save and the
+/// incoming load: the root table's page number and its ASID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Root {
+    base: core::num::NonZeroUsize,
+    asid: usize,
+}
+
+impl Root {
+    /// `base` is the root table's PPN. A zero PPN names no root (`None`): the
+    /// switch's no-write path.
+    pub fn new(base: usize, asid: usize) -> Option<Self> {
+        core::num::NonZeroUsize::new(base).map(|base| Self { base, asid })
+    }
+
+    pub fn base(self) -> usize {
+        self.base.get()
+    }
+
+    pub fn asid(self) -> usize {
+        self.asid
+    }
+}
+
+/// This hart's `sstatus` as captured by [`IrqSaved::save`], with SIE masked
+/// until the token is dropped or handed to [`switch`].
+///
+/// Dropping a live token restores the captured `sstatus`. [`switch`] consumes
+/// the token: `__switch` stores the value in the outgoing `Context` and the
+/// hart that resumes it restores it, so the token it returns is spent.
+#[must_use]
+pub struct IrqSaved {
+    sstatus: Option<usize>,
+    _not_send: core::marker::PhantomData<*mut ()>,
+}
+
+impl IrqSaved {
+    /// Capture `sstatus` and mask SIE ([`save_and_disable_interrupts`]).
+    #[inline(always)]
+    pub fn save() -> Self {
+        Self {
+            sstatus: Some(save_and_disable_interrupts()),
+            _not_send: core::marker::PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    fn spent() -> Self {
+        Self {
+            sstatus: None,
+            _not_send: core::marker::PhantomData,
+        }
+    }
+}
+
+impl Drop for IrqSaved {
+    #[inline(always)]
+    fn drop(&mut self) {
+        if let Some(sstatus) = self.sstatus {
+            // SAFETY: captured on this hart by `save`, which `!Send` keeps here.
+            unsafe { restore_sstatus(sstatus) }
+        }
+    }
+}
+
+/// One context switch: the outgoing and incoming contexts, the root to program
+/// between them, and the interrupt state captured before selection.
+///
+/// `root: None` writes no `satp`: after trap entry the kernel root is live, so
+/// this is the SAS-to-SAS path.
+#[must_use]
+pub struct SwitchPlan {
+    pub out: *mut Context,
+    pub inc: *const Context,
+    pub root: Option<Root>,
+    pub irq: IrqSaved,
+}
+
+/// Run `plan` through `__switch`.
+///
+/// Returns this activation's interrupt token when it is resumed. On RV64 it is
+/// already spent: the resuming `__switch` restored this context's `sstatus`.
+///
+/// # Safety
+/// Both pointers must be valid context slots, `plan.irq` must have been saved
+/// on this hart, and `plan.root` must name a completed root this hart may run.
+#[inline(always)]
+pub unsafe fn switch(plan: SwitchPlan) -> IrqSaved {
+    let SwitchPlan {
+        out,
+        inc,
+        root,
+        irq,
+    } = plan;
+    let outgoing_sstatus = irq.sstatus.expect("switch needs a live interrupt token");
+    core::mem::forget(irq);
+    let (root_ppn, asid) = root.map_or((0, 0), |root| (root.base(), root.asid()));
+    // SAFETY: the caller's contract; the token's `sstatus` moves into `old`.
+    unsafe { Context::switch_with_saved_sstatus(out, inc, outgoing_sstatus, root_ppn, asid) };
+    IrqSaved::spent()
+}
+
+/// Publish the incoming context's kernel stack for trap entry. RV64 traps find
+/// their stack through `sscratch`, so there is nothing to publish.
+#[inline(always)]
+pub fn set_kernel_stack_for(inc: &Context) {
+    super::trap::set_kernel_stack(inc.sp);
+}
+
 pub fn get_gp_tp() -> (usize, usize) {
     let gp: usize;
     let tp: usize;

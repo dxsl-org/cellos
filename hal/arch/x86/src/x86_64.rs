@@ -84,7 +84,10 @@ pub use paging::PAGE_SIZE;
 #[cfg(target_arch = "x86_64")]
 pub mod arch {
     pub use super::context::CpuContext as Context;
-    pub use super::context::{restore_sstatus, save_and_disable_interrupts};
+    pub use super::context::{
+        restore_sstatus, save_and_disable_interrupts, set_kernel_stack_for, switch, IrqSaved, Root,
+        SwitchPlan,
+    };
     pub use super::set_kernel_stack;
     pub use super::trap::{get_gp_tp, ViTrapFrame};
 
@@ -507,7 +510,7 @@ impl Arch for X86_64Arch {
     unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
         // SAFETY: invariant upheld by caller.
         unsafe {
-            context::switch(old, new);
+            context::CpuContext::switch(old, new);
         }
     }
 

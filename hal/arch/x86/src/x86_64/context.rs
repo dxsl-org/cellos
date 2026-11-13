@@ -130,13 +130,118 @@ impl CpuContext {
     }
 }
 
-/// Cooperative context switch.
+/// A private root the switch hands to user entry: the PML4's physical address
+/// and its PCID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Root {
+    base: core::num::NonZeroUsize,
+    asid: usize,
+}
+
+impl Root {
+    /// `base` is the PML4's physical address. Zero names no root (`None`).
+    pub fn new(base: usize, asid: usize) -> Option<Self> {
+        core::num::NonZeroUsize::new(base).map(|base| Self { base, asid })
+    }
+
+    pub fn base(self) -> usize {
+        self.base.get()
+    }
+
+    pub fn asid(self) -> usize {
+        self.asid
+    }
+}
+
+/// This CPU's RFLAGS as captured by [`IrqSaved::save`], with interrupts
+/// disabled until the token is dropped.
+///
+/// RFLAGS is not part of a [`CpuContext`]: [`switch`] carries the token across
+/// the switch and returns it when this activation resumes, possibly on another
+/// CPU, and the caller drops it after its post-resume work.
+///
+/// Both asm blocks are full compiler barriers (no `nomem`, unlike
+/// [`save_and_disable_interrupts`]): no scheduler publication may move out of
+/// the masked window.
+#[must_use]
+pub struct IrqSaved {
+    rflags: usize,
+    _not_send: core::marker::PhantomData<*mut ()>,
+}
+
+impl IrqSaved {
+    /// Capture RFLAGS and disable interrupts.
+    #[inline(always)]
+    pub fn save() -> Self {
+        let rflags: usize = unsafe {
+            let flags;
+            core::arch::asm!("pushfq", "pop {}", "cli", out(reg) flags);
+            flags
+        };
+        Self {
+            rflags,
+            _not_send: core::marker::PhantomData,
+        }
+    }
+}
+
+impl Drop for IrqSaved {
+    #[inline(always)]
+    fn drop(&mut self) {
+        let outgoing_rflags = self.rflags;
+        // SAFETY: captured on this activation by `save`; the flags belong to
+        // the suspended context, so IF is never enabled for an activation that
+        // entered masked.
+        unsafe {
+            core::arch::asm!("push {}", "popfq", in(reg) outgoing_rflags);
+        }
+    }
+}
+
+/// One context switch: the outgoing and incoming contexts, the root to hand to
+/// user entry, and the interrupt state captured before selection.
+///
+/// The switch never writes hardware CR3: it writes the user-entry CR3 scratch
+/// (`gs:[24]`). `root: None` means "inherit the incoming context's saved
+/// `user_cr3`", which equals SAS only because a SAS context saved the SAS CR3
+/// at trap entry; a private-root context resumed with `None` returns to its
+/// own private root.
+#[must_use]
+pub struct SwitchPlan {
+    pub out: *mut CpuContext,
+    pub inc: *const CpuContext,
+    pub root: Option<Root>,
+    pub irq: IrqSaved,
+}
+
+/// Run `plan` through [`switch_with_root`].
+///
+/// Returns this activation's interrupt token when it is resumed.
 ///
 /// # Safety
-/// Both pointers must point to valid, aligned `CpuContext` structs.
-pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
-    // SAFETY: caller guarantees valid, aligned CpuContext pointers.
-    unsafe { switch_with_root(old, new, 0, 0) }
+/// Both pointers must point to valid, aligned `CpuContext` structs, `plan.irq`
+/// must have been saved by this activation, and `plan.root` must name a root
+/// this CPU may run.
+#[inline(always)]
+pub unsafe fn switch(plan: SwitchPlan) -> IrqSaved {
+    let SwitchPlan {
+        out,
+        inc,
+        root,
+        irq,
+    } = plan;
+    let (root_pml4, pcid) = root.map_or((0, 0), |root| (root.base(), root.asid()));
+    // SAFETY: the caller's contract.
+    unsafe { CpuContext::switch_with_root(out, inc, root_pml4, pcid) };
+    irq
+}
+
+/// Publish the incoming context's fixed syscall-entry stack (TSS.rsp0 and
+/// CPU_LOCAL.kernel_rsp). `kernel_trap_sp` is fixed at spawn, unlike the deep
+/// cooperative-switch `sp`.
+#[inline(always)]
+pub fn set_kernel_stack_for(inc: &CpuContext) {
+    super::set_kernel_stack(inc.kernel_trap_sp as usize);
 }
 
 /// Cooperative context switch with a root transition.

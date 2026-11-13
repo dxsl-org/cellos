@@ -116,7 +116,7 @@ impl Arch for AArch64Arch {
     unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
         // SAFETY: invariant upheld by caller.
         unsafe {
-            context::switch(old, new);
+            context::CpuContext::switch(old, new);
         }
     }
 
@@ -230,7 +230,10 @@ impl ViHypervisor for AArch64Hypervisor {
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
     pub use super::context::CpuContext as Context;
-    pub use super::context::{restore_sstatus, save_and_disable_interrupts};
+    pub use super::context::{
+        restore_sstatus, save_and_disable_interrupts, set_kernel_stack_for, switch, IrqSaved, Root,
+        SwitchPlan,
+    };
     pub use hal_arch_trait::ViTrapFrame;
 
     /// Initialise the ARM64 exception vector table.
