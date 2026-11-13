@@ -74,11 +74,11 @@ libs/posix-shim ◄── ffi-posix cells only
 ## Todo List
 
 - [x] CP1
-- [ ] Crate split with facade
-- [ ] Init reduced
-- [ ] Init-death policy
-- [ ] Hot-swap witness or removal
-- [ ] Facade removed
+- [x] Crate split with facade
+- [x] Init reduced
+- [x] Init-death policy
+- [x] Hot-swap witness or removal
+- [x] Facade removed
 - [ ] CP2
 
 ## Success Criteria
@@ -103,4 +103,20 @@ S6 closes here. Phase 14 may already be done if the owner ran S7 earlier.
 
 ## Deviation Log
 
-None.
+- **Surprise (CP1 census):** `api` had 154 dependent crates, not 50; the kernel used the fs/block traits and kernel-emitted frames, not only `Rename`; `abi` needs `serde` (two ABI records derive it). CP1 A2/A3 cover this.
+- **Decision (owner, CP1):** kernel links `abi` + `types` only; boot-stop halts, other init deaths reset; ADR-0029 trust root moves to the init-launched `machine-pin`.
+- **Surprise (step 2):** `libs/boot-config` was a second path from the kernel to `api`; it now uses `abi`. A2 modules in `abi` are named `kernel_ipc`, `supervisor_power`, `input_producer`, `app_envelope` (root names `ipc`/`proto` would collide in the facade glob); `wire` re-exports them at their old paths. `kms-codec` needs no dependency; `types::kms` users import `kms_codec` directly, while `api::kms` stays (Spec 23 STABLE path).
+- **Decision (step 2):** the kernel's `Rename` reply mapping stays as today (every non-`Ok` reply → `PermissionDenied`); the hand codec is pinned to postcard by host tests.
+- **Deviation (step 3):** the pin cell needs a gate answer, not only `Status`: `MachinePinRequest` gained append-only op 3 `Gate` (response kind 4) and op 4 `ConsoleShell { tid }`, byte-pinned. Confirm: init hands the console shell's tid to the pin cell; the pin cell accepts it only from init (its launch argument `init=<tid>`).
+- **Deviation (step 3):** the pin cell declares `VfsMutate`, so VFS's init mutate-flag exception was removed, not renamed. An x86 image without `/bin/machine-pin` (or one that does not answer in ~2 min) is safe mode.
+- **Deviation (step 3):** the fixture launcher is a production catalog row (the RV boot suite needs `vfs-test`/`ai-test` at boot); its Tier-2/rpc/edu/grant-pair edges exist only under `test-hooks`. It tries the kernel path route first, then VFS read + ELF, as init's `sys_spawn_from_path` did.
+- **Surprise (step 3 lanes):** `ocel-browser` and `ocel-quickjs` fail on the pre-phase base too (Ocel opens a first load in Reader mode since `4994602b5`, so no script engine is requested); `machine-pin-x86 q35_unbound_root_port_nic_is_in_the_pci_set` waits for a Platform line changed by `06fc50241`; `check-lanes.py` lacks rows for the tier3 chrome/display scripts. All pre-existing, not fixed here. `shell_case_statement` failed 2/3 once under concurrent builds and passed 3/3 alone and 4/4 on base: flaky under load.
+- **Decision (step 4):** `INIT_BOOT_STOP = 0xB007_5709` (`abi::retirement`). The record and flag are set in `exit_task`; the reset/halt runs from `yield_cpu` after the deferred-retirement match, outside `SCHEDULER`. aarch64 gained PSCI `SYSTEM_RESET` through the declared conduit (`usable_psci_conduit`, halt if none). The fixture faults by stack-guard recursion (init keeps `forbid(unsafe_code)`; F1 signing refuses unsafe in signed cells). The halt path is covered by host tests only.
+- **Decision (step 5):** `serve` authenticates swap envelopes as attested messages from the live supervisor provider and never replies; init adopts a successor only for reason `HOTSWAP_RETIRED` and a live, different registered provider. The config lane builds its own image (the canonical headless profile refuses `/bin/config`) and reads the key back through the existing `/bin/p03-filter` probe. `AppContext` (demos) still accepts the envelopes from any sender.
+- **Decision (step 6):** `ostd` re-exports only `ViError`/`ViResult` and a hidden `declare_manifest` path; posix-shim now links only into the 12 C/mlibc cells that depend on it. Spec 23 maps every old `api` path (§4.2); the app-tier ledger is not re-bound (needs a signed lifecycle event).
+- **Surprise (step 6):** `rustfmt --check` on stdin exits 0 even with a diff, so the "clean at HEAD" check used in Phases 12–13 never refused anything. Step 6 restored the original formatting of 29 files unformatted at HEAD. Phase 12 (already on `main`) reformatted 9 files that were not rustfmt-clean before (vfs `backend_fat`, `block_stream`, `blk_router*`, net `service-runtime`, hypervisor `virtio_input`, silo-guest `main`, `nvme-x86.rs`).
+- **Rebase (CP2):** main gained the native-stateful bench rework; its new code moved from `api::` to `abi`/`wire` (`fix(bench)…`).
+- **Review (CP2):** see [cp2-api-split.md §5](cp2-api-split.md). The AI Law-1 digest needle followed the `ViError` conversion's new path (`types::ViError`).
+- **Surprise (CP2):** aarch64 std-smoke hung 4 of 6 runs on the branch (base 5/5). Root cause (debugger, futex trace): std-smoke's threading witness used `notify_one` on a condvar guarding two conditions; with the kernel's FIFO futex wake, a worker could consume main's wake. The fixture launcher's exit changed the scheduling enough to hit it. Fixed in the test (`notify_all`; C pthread witness `broadcast`); 6/6 after.
+- **Note (CP2):** `init-death-x86` copies `kernel/src/embedded-x86_64`; the committed image predates `/bin/machine-pin`, so the lane needs the image assembled first (as `pr.sh` and CI do).
+
