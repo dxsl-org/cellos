@@ -4,6 +4,10 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::hypervisor::pending_irqs` is now `crate::arch::hypervisor::pending_irqs`).
 
+/// Layer-2 hardware security self-tests (test-hooks only).
+#[cfg(feature = "test-hooks")]
+pub mod layer2_selftest;
+
 pub mod smp;
 
 pub mod tlb;

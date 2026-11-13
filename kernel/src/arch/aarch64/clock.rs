@@ -62,3 +62,14 @@ pub(crate) fn monotonic_ns() -> Option<u64> {
     }
     u64::try_from(u128::from(hal::timer::read_ticks()) * 1_000_000_000u128 / u128::from(freq)).ok()
 }
+
+/// `CNTP_CTL_EL0`, the EL1 physical timer control (Pi monitor diagnostics).
+pub(crate) fn cntp_ctl() -> u64 {
+    // SAFETY: reading CNTP_CTL_EL0 has no side effect.
+    unsafe {
+        let v: u64;
+        core::arch::asm!("mrs {v}, cntp_ctl_el0",
+                         v = out(reg) v, options(nomem, nostack));
+        v
+    }
+}

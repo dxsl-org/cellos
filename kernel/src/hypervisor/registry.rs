@@ -996,12 +996,7 @@ pub fn pi_monitor_smoke() {
                         core::ptr::read_volatile(
                             (soc.mmio.local_controller_base + 0x40) as *const u32,
                         ),
-                        {
-                            let v: u64;
-                            core::arch::asm!("mrs {v}, cntp_ctl_el0",
-                                             v = out(reg) v, options(nomem, nostack));
-                            v
-                        },
+                        crate::arch::clock::cntp_ctl(),
                     )
                 };
                 log::warn!(

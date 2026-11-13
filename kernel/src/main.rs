@@ -58,7 +58,6 @@ pub mod fs; // Filesystem
 pub mod fsapi; // Per-task file descriptors and cwd over BootFS (Spec 15 exception)
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod ipc; // Kernel IPC objects: wire copy, mailboxes, pipes, futex, sessions
-pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod loader;
 pub(crate) mod machine_facts; // Machine facts record for syscall 433 (ADR-0029 §3)
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
@@ -1464,9 +1463,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         #[cfg(feature = "test-hooks")]
         {
             #[cfg(target_arch = "aarch64")]
-            crate::layer2_selftest::run_mte_selftest();
+            crate::arch::layer2_selftest::run_mte_selftest();
             #[cfg(target_arch = "x86_64")]
-            crate::layer2_selftest::run_pku_selftest();
+            crate::arch::layer2_selftest::run_pku_selftest();
             // Tier 3 x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
             // Only meaningful when SVM root operation was entered at boot.
             #[cfg(target_arch = "x86_64")]

@@ -40,6 +40,7 @@
 "kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/layer2_selftest.rs" = { category = "test", owner = "layer2" }
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/power.rs" = { category = "A", owner = "arch" }
@@ -113,6 +114,7 @@
 "kernel/src/arch/x86_64/dev/ps2_keyboard.rs" = { category = "exception", owner = "dev", target = "input Driver Cell (Spec 15 §3.1)" }
 "kernel/src/arch/x86_64/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/x86_64/irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/layer2_selftest.rs" = { category = "test", owner = "layer2" }
 "kernel/src/arch/x86_64/memory/ept.rs" = { category = "A", owner = "memory" }
 "kernel/src/arch/x86_64/memory/ept_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
@@ -221,7 +223,6 @@
 "kernel/src/ipc/pipe.rs" = { category = "A", owner = "ipc" }
 
 # ---- layer2 ----
-"kernel/src/layer2_selftest.rs" = { category = "test", owner = "layer2" }
 
 # ---- loader ----
 "kernel/src/loader.rs" = { category = "C", owner = "loader" }
