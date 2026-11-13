@@ -36,6 +36,8 @@ pub(super) struct Fake {
     /// Provider that is alive but never answers: every call runs out its
     /// bound, `dispatched` saying whether it had taken the request.
     frozen: Option<(usize, bool)>,
+    /// The scheduler clock `now_ticks` reports.
+    now: u64,
     sent: Vec<usize>,
     /// Opcode of every accepted request, in order.
     pub ops: Vec<u16>,
@@ -111,6 +113,9 @@ impl BlockSys for Fake {
             _ => {}
         }
         Call::Replied(buf.len())
+    }
+    fn now_ticks(&mut self) -> u64 {
+        self.now
     }
     fn kernel_read(&mut self, _: u64, _: &mut [u8; SECTOR_SIZE]) -> bool {
         self.kernel_flush()
@@ -278,7 +283,7 @@ fn flush_reaches_only_its_own_device() {
 }
 
 #[test]
-fn a_frozen_provider_costs_one_bound_then_its_device_is_refused_until_replaced() {
+fn a_frozen_provider_costs_one_bound_per_window_and_a_replacement_clears_it() {
     let (mut fake, mut router) = two_disks();
     let (a, b) = (DeviceRef::Device(0), DeviceRef::Device(1));
     // Taken but never answered: the write may have run, so it is never replayed.
@@ -302,7 +307,20 @@ fn a_frozen_provider_costs_one_bound_then_its_device_is_refused_until_replaced()
         BlockOutcome::Completed
     );
 
-    // A replacement provider on the same slot clears the stall.
+    // Within the window the same provider stays refused; after it, one request
+    // probes again, and a driver that answers clears the stall.
+    fake.sent.clear();
+    fake.now += super::STALL_RETRY_TICKS - 1;
+    assert_eq!(router.flush(&mut fake, a), BlockOutcome::NotIssued);
+    assert!(fake.sent.is_empty());
+    fake.now += 1;
+    fake.frozen = None;
+    assert_eq!(router.flush(&mut fake, a), BlockOutcome::Completed);
+    assert_eq!(fake.sent, [7]);
+    fake.frozen = Some((7, true));
+    assert_eq!(router.flush(&mut fake, a), BlockOutcome::Indeterminate);
+
+    // A replacement provider on the same slot clears the stall at once.
     fake.routes[0] = ViBlockRouteV1 {
         generation: 2,
         ..route(1, AHCI, 11, 71)

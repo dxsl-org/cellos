@@ -104,7 +104,13 @@ impl OwnerWatches {
             admission.watched = true;
             return admission;
         }
-        if self.cells.len() >= self.capacity {
+        // Older generations of this CellId leave the table when it is admitted.
+        let retiring = self
+            .cells
+            .iter()
+            .filter(|w| w.owner.cell_id == owner.cell_id)
+            .count();
+        if self.cells.len() - retiring >= self.capacity {
             return admission;
         }
         let Some((root_tid, token)) = sys.watch(owner.cell_id, owner.generation) else {
@@ -227,6 +233,9 @@ mod tests {
             !watches.admit(&caller(6, 1), &mut sys).watched,
             "capacity 1"
         );
+        // A full table still admits a new generation of a watched cell: it retires the old one.
+        let admission = watches.admit(&caller(5, 2), &mut sys);
+        assert!(admission.watched && admission.stale.len() == 1);
         // The kernel's own identity is never a client.
         assert!(!watches.admit(&caller(0, 1), &mut sys).watched);
     }

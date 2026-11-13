@@ -41,6 +41,14 @@ pub static EXACT_RULES: &[PathRule] = &[
         allow_read_all: false,
         allow_write_all: false,
     },
+    // Phase 09's SSH host-trust store directory, retired by Phase 12 (kms now
+    // keeps the store). A disk provisioned before it may still hold the old
+    // store; nobody lists, reads, writes or replaces anything there.
+    PathRule {
+        prefix: "/srv/.cellos-trust",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
     // ADR-0029 §3: the machine fingerprint pin. Only the live `MACHINE_PIN`
     // provider (trusted init) is admitted (`access::machine_pin`).
     PathRule {
@@ -104,6 +112,11 @@ pub static PREFIX_RULES: &[PathRule] = &[
     // failed before reaching the backend.
     PathRule {
         prefix: "/srv/cellos/",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: "/srv/.cellos-trust/",
         allow_read_all: false,
         allow_write_all: false,
     },

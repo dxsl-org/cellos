@@ -74,6 +74,10 @@ impl Handler for Supervisor {
     /// The kernel's power-button relay is the only message without a sender
     /// Cell the supervisor acts on.
     fn on_unattributed(&mut self, sender: usize, payload: &[u8]) {
+        // The kernel's shutdown (watchdog, parent death), as AppContext obeyed it.
+        if sender == KERNEL_SENDER && payload.starts_with(&[MAGIC, KIND_SHUTDOWN]) {
+            ostd::syscall::sys_exit(0);
+        }
         if sender == KERNEL_SENDER
             && payload.starts_with(&[MAGIC, api::services::proto::app_envelope::KIND_MESSAGE])
             && payload.get(HEADER_LEN) == Some(&OP_POWER)

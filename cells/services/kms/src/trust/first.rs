@@ -182,10 +182,12 @@ pub(super) fn challenge(
         return Err(KmsErrorCode::InvalidRequest);
     };
     let digest: [u8; 32] = Sha256::digest(&bytes[..len]).into();
+    // Spent before registering: input may have recorded the challenge even
+    // when its reply was lost, and it refuses a reused ref.
+    table.next = next;
     let Ok(confirmation) = owner::register(&descriptor) else {
         return answer(ssh_trust::UNAVAILABLE);
     };
-    table.next = next;
     table.records.push(Challenge {
         challenge,
         owner: caller,

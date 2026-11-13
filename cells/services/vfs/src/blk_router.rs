@@ -55,6 +55,11 @@ pub enum Call {
 /// frozen one) is cut off. 35 s also stays below the VFS heartbeat.
 pub const BLOCK_REPLY_TICKS: u64 = 3_500;
 
+/// How long a stalled device stays refused before one request may probe it
+/// again: a driver that was only slow (a long admin command, a loaded host)
+/// recovers, while a frozen one costs one bound per window, not per request.
+pub const STALL_RETRY_TICKS: u64 = 6_000;
+
 /// Kernel and IPC operations the router needs.
 pub trait BlockSys {
     /// Route slot `index` (syscall 432); `None` when there is no route there.
@@ -62,6 +67,8 @@ pub trait BlockSys {
     /// One exact-operation exchange with `tid`, bounded by [`BLOCK_REPLY_TICKS`].
     /// The reply lands at the start of `reply`.
     fn call(&mut self, tid: usize, request: &[u8], reply: &mut [u8]) -> Call;
+    /// Scheduler ticks since boot (the stall window's clock).
+    fn now_ticks(&mut self) -> u64;
     fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool;
     fn kernel_write(&mut self, lba: u64, data: &[u8; SECTOR_SIZE]) -> bool;
     fn kernel_flush(&mut self) -> bool;
@@ -105,6 +112,9 @@ impl BlockSys for Syscalls {
             Err(_) => Call::Refused,
         }
     }
+    fn now_ticks(&mut self) -> u64 {
+        sys::sys_get_scheduler_ticks().unwrap_or(0)
+    }
     fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
         sys::sys_blk_read(lba, buf)
     }
@@ -127,6 +137,9 @@ impl BlockSys for Syscalls {
     }
     fn call(&mut self, _tid: usize, _request: &[u8], _reply: &mut [u8]) -> Call {
         Call::Refused
+    }
+    fn now_ticks(&mut self) -> u64 {
+        0
     }
     fn kernel_read(&mut self, _lba: u64, _buf: &mut [u8; SECTOR_SIZE]) -> bool {
         false

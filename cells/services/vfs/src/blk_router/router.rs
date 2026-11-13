@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use api::block_route::{DeviceKey, ViBlockRouteV1};
 
 use super::discovery::device_name;
-use super::{BlockSys, Call, DeviceRef, BLOCK_REPLY_TICKS};
+use super::{BlockSys, Call, DeviceRef, BLOCK_REPLY_TICKS, STALL_RETRY_TICKS};
 
 /// A live provider as named by a route record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,10 +40,11 @@ pub struct Device {
     cached: Option<Provider>,
     /// Provider last reported in the log.
     announced: Option<Provider>,
-    /// Provider tid that let a request run out its bound. Requests are refused
-    /// at once until the route names another provider, so a frozen driver
-    /// costs one bound in total, not one per request or retry.
-    stalled: Option<usize>,
+    /// Provider tid that let a request run out its bound, and when. Requests
+    /// are refused at once until the route names another provider or
+    /// [`STALL_RETRY_TICKS`] pass, so a frozen driver costs one bound per
+    /// window, not one per request or retry.
+    stalled: Option<(usize, u64)>,
 }
 
 impl Device {
@@ -127,14 +128,14 @@ impl Router {
             ));
             return Target::Refused;
         };
-        if let Some(stalled) = device.stalled {
+        if let Some((stalled, since)) = device.stalled {
             match device.lookup(sys) {
-                Some(provider) if provider.tid != stalled => {
-                    device.stalled = None;
-                    device.cached = None;
-                }
+                Some(provider) if provider.tid != stalled => device.cached = None,
+                // The same provider: one probe per window.
+                Some(_) if sys.now_ticks().wrapping_sub(since) >= STALL_RETRY_TICKS => {}
                 _ => return Target::Refused,
             }
+            device.stalled = None;
         }
         if let Some(provider) = device.cached {
             return Target::Provider(i, provider.tid);
@@ -188,8 +189,9 @@ impl Router {
                 Exchange::Missing
             }
             Call::Expired { dispatched } => {
+                let now = sys.now_ticks();
                 let device = &mut self.devices[i];
-                device.stalled = Some(tid);
+                device.stalled = Some((tid, now));
                 sys.log(&format!(
                     "[blk-router] {}: driver tid={tid} did not reply within {BLOCK_REPLY_TICKS} ticks; device stalled",
                     device.name

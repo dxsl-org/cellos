@@ -61,6 +61,8 @@ CONST = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?const\s+([A-Z0-9_]+)\s*:", re.
 LITERALS: list[tuple[str, re.Pattern[str], str]] = [
     ("cells/services/net/src/", re.compile(r"Err\(\s*0x[Ff][B-Fb-f]\s*\)"), "net error byte"),
     ("", re.compile(r"\[\s*0x[Aa][Cc]\s*,\s*0x(?:00|[Ff][0-2Ff])\b"), "App SDK envelope header"),
+    # The same header written byte by byte (`msg[0] = 0xAC;`).
+    ("", re.compile(r"\[\s*0\s*\]\s*=\s*(?:0x[Aa][Cc]|172)\b"), "App SDK envelope magic"),
     ("cells/drivers/", re.compile(r"NicReply::Status\(\s*\d"), "NIC status byte"),
 ]
 
@@ -91,6 +93,7 @@ def self_test() -> int:
         ("cells/drivers/x/src/dispatch.rs", "const OP_TX: u8 = 0;\n"),
         ("cells/services/net/src/handlers.rs", "NetResponse::Err(0xFF)\n"),
         ("kernel/src/acpi/sci.rs", "const REQ: [u8; 4] = [0xAC, 0x00, 0x04, 0x02];\n"),
+        ("kernel/src/task/syscall/authority.rs", "msg[0] = 0xAC;\n"),
         ("cells/drivers/e1000/src/dispatch.rs", "NicReply::Status(1)\n"),
     ]
     missed = [rel for rel, text in cases if not scan_text(rel, text)]

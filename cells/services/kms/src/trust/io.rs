@@ -29,16 +29,26 @@ impl VfsTrustIo {
     }
 }
 
+/// Re-arm kms's heartbeat before each store round trip: one trust commit can
+/// make several bounded VFS calls, longer together than the interval.
+fn keepalive() {
+    #[cfg(target_os = "none")]
+    ostd::service::keepalive(&ostd::service::ServeConfig::with_heartbeat());
+}
+
 impl TrustIo for VfsTrustIo {
     fn observe(&mut self) -> Result<Observation, ()> {
+        keepalive();
         self.client.observe(STORE_PATH).map_err(drop)
     }
 
     fn read(&mut self, max: usize) -> Result<Vec<u8>, ()> {
+        keepalive();
         self.client.read_file_bounded(STORE_PATH, max).map_err(drop)
     }
 
     fn ensure_dir(&mut self) -> Result<(), ()> {
+        keepalive();
         for path in [SRV_CELLOS, STORE_DIR] {
             match self.client.stat(path) {
                 Ok((_, true)) => {}
@@ -51,6 +61,7 @@ impl TrustIo for VfsTrustIo {
     }
 
     fn publish(&mut self, bytes: &[u8], expect: SaveExpect) -> SaveOutcome {
+        keepalive();
         let sha256 = ostd::session::sha256(bytes);
         let Ok(id) = self.client.save_stage(STORE_PATH, bytes, sha256) else {
             return SaveOutcome::NotPublished(save_refusal::REFUSED);

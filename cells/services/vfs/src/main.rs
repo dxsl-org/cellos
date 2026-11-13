@@ -168,10 +168,10 @@ fn vfs_main() {
     );
 }
 
-/// Owners VFS watches at once: every live Cell that holds VFS state. A caller
-/// beyond it is refused, never served unwatched.
+/// Owners VFS watches at once: unbounded, like every live Cell that may hold
+/// VFS state; only a refused kernel watch refuses a caller.
 #[cfg(target_os = "none")]
-const MAX_WATCHED_OWNERS: usize = 256;
+const MAX_WATCHED_OWNERS: usize = usize::MAX;
 
 /// The request loop's own state; the file system lives in `GLOBAL_VFS`.
 #[cfg(target_os = "none")]
@@ -226,13 +226,19 @@ impl ostd::service::Handler for Vfs {
     }
 
     fn on_idle(&mut self) -> ostd::service::Wait {
-        // VFS holds no SetTimer authority (see the allowlist), so the reconcile
-        // cadence counts polling turns instead of wall time; requests reconcile
-        // only the caller's own reservations (`dir_admission::admit`).
-        const IDLE_RECONCILE_EVERY: u32 = 128;
-        if !self.idle_work {
-            return ostd::service::Wait::Block;
+        if self.idle_work {
+            ostd::service::Wait::Poll
+        } else {
+            ostd::service::Wait::Block
         }
+    }
+
+    /// A poll found nothing: count it toward the reconcile cadence. VFS holds no
+    /// SetTimer authority (see the allowlist), so the cadence counts empty polls
+    /// instead of wall time; requests reconcile only the caller's own
+    /// reservations (`dir_admission::admit`).
+    fn on_empty_poll(&mut self) {
+        const IDLE_RECONCILE_EVERY: u32 = 128;
         self.idle_turns = self.idle_turns.wrapping_add(1);
         if self.idle_turns.is_multiple_of(IDLE_RECONCILE_EVERY) {
             if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
@@ -240,6 +246,6 @@ impl ostd::service::Handler for Vfs {
                 self.idle_work = prepared_cwd::idle_work(vfs);
             }
         }
-        ostd::service::Wait::Poll
+        ostd::task::yield_now();
     }
 }
