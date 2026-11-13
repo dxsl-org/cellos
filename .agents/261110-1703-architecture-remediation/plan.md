@@ -39,7 +39,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 11 | [One IPC operation model](phase-11-ipc-model.md) — completed 2026-11-12 ([CP2](cp2-ipc-model.md) confirmed) | S5 | 10 | CP1/CP2 | ✓ |
 | 12 | [Shared service runtime and wire modules](phase-12-service-runtime.md) — completed 2026-11-13 ([CP2](cp2-service-wire.md) confirmed); the S6 handoff for Phase 12 is closed | S6 userspace | 11 | CP1/CP2 | |
 | 13 | [Init reduction, hot-swap decision, `api` split](phase-13-init-hotswap-api.md) — completed 2026-11-13 ([CP1](cp1-api-split.md), [CP2](cp2-api-split.md) confirmed); S6 closes | S6 | 12 | CP1/CP2 | ✓ |
-| 14 | [Kernel `arch/` seam and boot split](phase-14-arch-seam.md) | S7 arch/memory | 09 | — | |
+| 14 | [Kernel `arch/` seam and boot split](phase-14-arch-seam.md) — in progress ([S7 handoff](s7-handoff-approval.md) approved 2026-11-13) | S7 arch/memory | 09 | — | |
 | 15 | [x86-64 Tier-2 parity](phase-15-x86-tier2-parity.md) | S7 | 14 | — | |
 | 16 | [Frame ownership and shootdown contract](phase-16-frame-ownership.md) | S7 | 15 | — | ✓ |
 | 17 | [Quota ownership, Tier-3 charging, shared-root hardening](phase-17-quota-shared-root.md) | S8 hardening | 16 | — | |

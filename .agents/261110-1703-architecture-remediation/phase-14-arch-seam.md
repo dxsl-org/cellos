@@ -1,7 +1,7 @@
 ---
 phase: 14
 title: "Kernel arch seam and boot split"
-status: pending
+status: in-progress
 priority: P2
 effort: "10–14d"
 dependencies: [9]
