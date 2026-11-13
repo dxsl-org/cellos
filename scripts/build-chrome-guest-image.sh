@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build the Tier 3 Chrome guest root: a read-only xz squashfs holding Alpine
-# 3.21 with cage, Chromium, fonts, dbus, eudev, seatd and wlr-randr, plus the guest init
-# (scripts/chrome-guest/init.sh). The hypervisor serves it as its only disk
-# (/dev/vda); stage 1 in the Alpine initramfs mounts it under a tmpfs overlay.
+# 3.21 with cage, Chromium, fonts (DejaVu, and WenQuanYi Zen Hei for CJK), dbus,
+# eudev, seatd and wlr-randr, plus the guest init (scripts/chrome-guest/init.sh).
+# The hypervisor serves it as its only disk (/dev/vda); stage 1 in the Alpine
+# initramfs mounts it under a tmpfs overlay.
 #
 # Pinned: the builder image digest and every package version below. A version
 # the mirror no longer carries fails the build (bump the pin, never float).
@@ -34,6 +35,8 @@ PACKAGES=(
     seatd=0.9.1-r0
     eudev=3.2.14-r5
     font-dejavu=2.37-r5
+    # CJK (Chinese, Japanese kana, Korean Hangul): DejaVu has none, so pages showed boxes.
+    font-wqy-zenhei=0.9.45-r3
     dbus=1.14.10-r4
     mesa-dri-gallium=24.2.8-r0
 )
@@ -66,6 +69,10 @@ unsquashfs -q -n -d /modloop-root /modloop
 mkdir -p /rootfs/lib/modules
 cp -a /modloop-root/modules/. /rootfs/lib/modules/
 rm -rf /rootfs/var/cache/apk/* /rootfs/usr/share/doc /rootfs/usr/share/man
+# Gallium pipe-loader modules (OpenCL/VA back ends for real GPUs, ~90 MB) are never
+# loaded: cage renders with pixman and Chromium runs --disable-gpu. Removing them is
+# what lets the root, CJK font included, fit the fixed 256 MiB /mnt/sd partition.
+rm -rf /rootfs/usr/lib/gallium-pipe
 find /rootfs/usr/lib/chromium/locales -type f ! -name 'en-US.pak' -delete
 mksquashfs /rootfs /out/chrome-guest.sqfs -comp xz -noappend -no-xattrs \
     -all-root -mkfs-time 0 -all-time 0 -quiet

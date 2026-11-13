@@ -15,7 +15,8 @@
 > (`scripts/build-chrome-guest-image.sh`) lives on `/mnt/sd`, which is a fixed 256 MiB
 > partition. Chromium runs with `--no-sandbox`: the VM boundary is its sandbox, and the
 > guest holds no credentials (user data lives in tmpfs and is gone at exit). The guest
-> takes its own DHCP lease and loads real HTTPS pages (guest clock from the host RTC).
+> takes its own DHCP lease and loads real HTTPS pages (guest clock from the host RTC). Fonts:
+> DejaVu, and WenQuanYi Zen Hei for CJK.
 > Chromium's UI appears ~30 s after the taskbar click on a quiet host. Key repeat comes
 > from the host input service only: the launcher sends each host repeat as a release and
 > press, and cage runs with `no-key-repeat.c` preloaded, which tells Chromium not to
