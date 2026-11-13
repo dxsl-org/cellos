@@ -1,30 +1,43 @@
 use alloc::{collections::BTreeMap, string::String};
 use api::ipc::{self, NetRequest, NetResponse};
 use api::services::proto::net::NetError;
-use api::syscall::events::NET_RX;
 use core::sync::atomic::Ordering;
-use ostd::syscall::sys_try_recv_attested;
-#[cfg(not(feature = "ipc-wake-oracle"))]
-use ostd::syscall::sys_wait_completion;
-use ostd::syscall::sys_yield;
-#[cfg(feature = "ipc-wake-oracle")]
-use ostd::syscall::{sys_wait_completion_detailed, WaitCompletionResult};
-use ostd::{io::println, syscall::SyscallResult};
+use ostd::service::Owner;
+use ostd::syscall::SyscallResult;
 use smoltcp::{
-    iface::{Interface, SocketSet, SocketStorage},
+    iface::{Interface, SocketSet},
     time::Instant,
-    wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
+    wire::{EthernetAddress, IpAddress, IpCidr},
+};
+#[cfg(target_os = "none")]
+use {
+    alloc::vec::Vec,
+    net_state::NetState,
+    ostd::io::println,
+    ostd::service::owners::KernelWatch,
+    ostd::service::{serve, Handler, Request, ServeConfig, Wait},
+    ostd::syscall::sys_yield,
+    smoltcp::iface::SocketStorage,
 };
 
-use crate::dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use crate::{
     dns::Resolver,
     handlers,
     handlers::tcp::{readiness, MAX_INTERESTS},
     interface::VirtioNetDevice,
-    socket_table::{SocketOwner, SocketTable, SOCKET_SET_STORAGE},
+    socket_table::{SocketOwner, SocketTable},
     tls::socket::TlsSocketEntry,
 };
+
+#[cfg(target_os = "none")]
+#[path = "net_pump.rs"]
+mod net_pump;
+#[cfg(target_os = "none")]
+#[path = "net_state.rs"]
+mod net_state;
+#[cfg(target_os = "none")]
+#[path = "probe.rs"]
+mod probe;
 
 const IPC_BUF_SIZE: usize = 4096;
 const MAC: EthernetAddress = EthernetAddress([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
@@ -45,16 +58,6 @@ const SMOLTCP_MAINTENANCE_TICKS: u64 = SMOLTCP_MAINTENANCE_INTERVAL_MS * MTIME_T
 const ABORT_DRAIN_TICKS: u64 = 1_000 * MTIME_TICKS_PER_MS;
 /// Aborted sockets finished per loop turn.
 const ABORT_REAP_PER_TURN: usize = 32;
-/// One `[net-loop]` line per this many raw timer ticks (`loop-trace` images).
-///
-/// It used to be ten times shorter (`200 * MTIME_TICKS_PER_MS`), which made the
-/// trace print about once per loop turn — the noise an operator notices first,
-/// and enough UART time to change the thing it was measuring. The tick rate is
-/// per-arch, and `MTIME_TICKS_PER_MS` is only a 10 MHz assumption, so this is a
-/// nominal 2 s: measured on QEMU raspi3b it lands at about one line per four
-/// turns (8962 → 2245 lines over the same 900 s window, same ~8960 turns).
-#[cfg(feature = "loop-trace")]
-const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * MTIME_TICKS_PER_MS;
 // A 10-tick deadline can fire just after 9 complete tick periods when the
 // submission lands immediately before a scheduler tick. The exclusive ceiling
 // therefore has to be the preceding 9 periods, not the 100 ms maintenance budget.
@@ -84,7 +87,11 @@ pub(crate) const fn classify_idle_ipc_wake(wait_return_ticks: u64) -> IdleIpcWak
     }
 }
 /// One-shot log guard for a refused owner death watch.
+#[cfg(target_os = "none")]
 static WATCH_REFUSED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// Owners watched at once: no cap of its own, like the private map this table
+/// replaced. A refused watch only defers reclaim to a net restart.
+const OWNER_WATCH_CAPACITY: usize = usize::MAX;
 
 /// Normalize architecture-specific raw clocks to the NET 10 MHz timebase.
 pub(crate) fn sys_get_time() -> u64 {
@@ -501,27 +508,12 @@ fn dispatch_admitted(
     }
 }
 
-/// A watched owner of the same Cell as `owner` but another generation: the
-/// Cell was relaunched, so the old generation is dead.
-fn stale_generation_of(
-    watched: &BTreeMap<SocketOwner, (usize, u64)>,
-    owner: SocketOwner,
-) -> Option<SocketOwner> {
-    watched
-        .keys()
-        .copied()
-        .find(|candidate| candidate.cell_id == owner.cell_id && *candidate != owner)
-}
-
-/// The watched owner whose root has exactly this TID. A worker-thread TID is
-/// not root death and never matches.
-fn owner_for_root(
-    watched: &BTreeMap<SocketOwner, (usize, u64)>,
-    root_tid: usize,
-) -> Option<SocketOwner> {
-    watched
-        .iter()
-        .find_map(|(&owner, &(root, _))| (root == root_tid).then_some(owner))
+/// The socket owner a watched [`Owner`] names.
+const fn socket_owner(owner: Owner) -> SocketOwner {
+    SocketOwner {
+        cell_id: owner.cell_id,
+        generation: owner.generation,
+    }
 }
 
 /// Everything a dead owner generation holds in the service, without kernel
@@ -571,44 +563,6 @@ fn owner_death_line(owner: SocketOwner, aborted: usize, released: usize) -> Opti
             released
         )
     })
-}
-
-// reason: forwards the same disjoint per-owner state borrows of the service loop
-// as `reclaim_owner_state`; a bundle struct would only re-borrow loop locals.
-#[allow(clippy::too_many_arguments)]
-fn release_owner(
-    owner: SocketOwner,
-    device: &mut VirtioNetDevice,
-    sockets: &mut SocketSet<'_>,
-    table: &mut SocketTable,
-    tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
-    tls_pending: &mut crate::tls_handler::TlsPending,
-    pending_ready: &mut BTreeMap<SocketOwner, PendingReady>,
-    pending_dns: &mut heapless::Vec<PendingDns, DNS_QUERY_LIMIT>,
-    resolver: &Resolver,
-    watched: &mut BTreeMap<SocketOwner, (usize, u64)>,
-) {
-    if device.release_port(owner) {
-        println("[net-bridge] guest port released");
-    }
-    let (aborted, released) = reclaim_owner_state(
-        owner,
-        sockets,
-        table,
-        tls_table,
-        tls_pending,
-        pending_ready,
-        pending_dns,
-        resolver,
-        sys_get_time().saturating_add(ABORT_DRAIN_TICKS),
-    );
-    // The kernel dropped the watch with the death; cancelling is then a no-op.
-    if let Some((_, token)) = watched.remove(&owner) {
-        ostd::syscall::sys_cancel_cell_owner_watch(token);
-    }
-    if let Some(line) = owner_death_line(owner, aborted, released) {
-        println(&line);
-    }
 }
 
 /// Replace the interface's IPv4 address (DHCP and link-local share one slot).
@@ -692,383 +646,132 @@ fn apply_link_local(
 }
 
 #[cfg(target_os = "none")]
-pub(crate) fn run() {
-    println("[net] Network Service v0.1: smoltcp + NIC Driver Cell + DHCP");
+pub(crate) fn run() -> ! {
+    // Allocate slots incrementally: the 290-cap profile cannot hold the
+    // complete socket table on its small cell stack. The socket set borrows
+    // this storage; `serve` never returns, so this frame owns it for the life
+    // of the service and `NetState` needs neither a leak nor a self-reference.
+    let mut socket_storage = Vec::with_capacity(crate::socket_table::SOCKET_SET_STORAGE);
+    socket_storage.resize_with(crate::socket_table::SOCKET_SET_STORAGE, || {
+        SocketStorage::EMPTY
+    });
+    let mut state = NetState::new(&mut socket_storage[..]);
+    let config = ServeConfig {
+        heartbeat_ticks: 500,
+        ..ServeConfig::with_heartbeat()
+    };
+    // Owner watches stay in the handler: admission precedes every effect of a
+    // request, the watch included, so a denied caller leaves no state behind.
+    serve(config, &mut state)
+}
 
-    let mut device = VirtioNetDevice::new();
-
-    // Query the NIC Driver Cell's hardware MAC. A brief yield window allows
-    // a concurrently starting driver cell to publish its endpoint before smoltcp starts.
-    let mut hardware_mac = None;
-    for _ in 0..100 {
-        if let Some(mac) = device.query_driver_mac() {
-            hardware_mac = Some(mac);
-            break;
-        }
-        ostd::syscall::sys_yield();
+/// One turn: [`NetState::pump`], then one attested request, an owner death,
+/// or a park on NET_RX.
+#[cfg(target_os = "none")]
+impl Handler for NetState<'_> {
+    fn on_idle(&mut self) -> Wait {
+        self.pump();
+        Wait::Poll
     }
 
-    let initial_mac = match hardware_mac {
-        Some(mac) => {
-            println(&alloc::format!(
-                "[net] hardware MAC from NIC driver: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                mac[0],
-                mac[1],
-                mac[2],
-                mac[3],
-                mac[4],
-                mac[5]
-            ));
-            EthernetAddress(mac)
+    fn on_request(&mut self, request: Request<'_>) {
+        self.probe.received();
+        let caller = *request.caller();
+        if caller.cell_id == 0 || caller.generation == 0 {
+            self.probe.ipc_miss();
+            return;
         }
-        None => {
-            println("[net] NIC driver MAC unavailable — using fallback MAC 52:54:00:12:34:56");
-            MAC
+        let (buffer, sender) = (request.payload(), request.sender());
+        // Admission precedes every effect of the request, the owner
+        // watch included: a denied caller leaves no state behind.
+        if !admit_request(buffer, sender, caller.flags) {
+            self.probe.ipc_drain(sender);
+            self.ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
+            return;
         }
-    };
-
-    device.set_host_mac(initial_mac.0);
-    let config = crate::stack_entropy::seeded_config(HardwareAddress::Ethernet(initial_mac));
-    let mut iface = Interface::new(config, &mut device, now_instant());
-    iface.update_ip_addrs(|addresses| {
-        let _ = addresses.push(IpCidr::new(IpAddress::v4(0, 0, 0, 0), 0));
-    });
-
-    // Allocate slots incrementally: the 290-cap profile cannot hold the
-    // complete socket table on its small cell stack.
-    let mut socket_storage = alloc::vec::Vec::with_capacity(SOCKET_SET_STORAGE);
-    socket_storage.resize_with(SOCKET_SET_STORAGE, || SocketStorage::EMPTY);
-    let mut sockets = SocketSet::new(&mut socket_storage[..]);
-    let mut table = SocketTable::new();
-    let mut tls_table: BTreeMap<u64, TlsSocketEntry> = BTreeMap::new();
-    let mut tls_pending = crate::tls_handler::TlsPending::default();
-    #[cfg(feature = "qemu-dev-https")]
-    let mut dev_clock = crate::tls::qemu_time::ClockClient::default();
-    let mut pending_ready: BTreeMap<SocketOwner, PendingReady> = BTreeMap::new();
-    let mut pending_dns = heapless::Vec::<PendingDns, DNS_QUERY_LIMIT>::new();
-    // Root TID and death-watch token. Worker TID exit is not root death.
-    let mut watched: BTreeMap<SocketOwner, (usize, u64)> = BTreeMap::new();
-    // One DNS socket serves every `NetRequest::Resolve`; the server starts as
-    // SLIRP's and is replaced by whatever the DHCP lease names.
-    #[allow(unused_mut)]
-    let mut resolver = Resolver::install(&mut sockets);
-
-    let dhcp_handle = add_dhcp_socket(&mut sockets);
-    let mut dhcp_state = DhcpState::Pending;
-    let dhcp_start_ticks = sys_get_time();
-    // RFC 3927 claim, started once DHCP has had its head start; dropped when a
-    // lease arrives, because a lease outranks a link-local address.
-    let mut link_local: Option<crate::link_local::LinkLocal> = None;
-    let mut buffer = [0u8; IPC_BUF_SIZE];
-    let mut last_poll_ticks = sys_get_time();
-    #[allow(unused_mut)]
-    let mut local_ip = [0u8; 4];
-    let mut net_rx_producer_proved = false;
-    let mut pending_net_rx_proof = false;
-    let mut ipc_burst_grace = 0;
-    #[cfg(feature = "ipc-wake-oracle")]
-    let mut idle_ipc_wake_oracle = crate::idle_ipc_wake_oracle::IdleIpcWakeOracle::new();
-
-    println("[net] Starting DHCP...");
-
-    #[cfg(feature = "loop-trace")]
-    let mut trace_turns: u64 = 0;
-    #[cfg(feature = "loop-trace")]
-    let mut trace_recv: u64 = 0;
-    #[cfg(feature = "loop-trace")]
-    let mut trace_last = sys_get_time();
-    let mut mac_synchronized = hardware_mac.is_some();
-
-    loop {
-        ostd::syscall::sys_heartbeat(500);
-        if !mac_synchronized {
-            if let Some(mac) = device.query_driver_mac() {
-                println(&alloc::format!(
-                    "[net] hardware MAC bound from NIC driver: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-                ));
-                iface.set_hardware_addr(HardwareAddress::Ethernet(EthernetAddress(mac)));
-                device.set_host_mac(mac);
-                mac_synchronized = true;
-                if dhcp_state == DhcpState::Pending {
-                    sockets
-                        .get_mut::<smoltcp::socket::dhcpv4::Socket>(dhcp_handle)
-                        .reset();
-                }
-            }
+        // Owner watch is a cleanup optimisation: without it a dead client's
+        // sockets are only reclaimed when the net cell restarts, so a refusal
+        // must never deny live traffic.
+        let admission = self.watches.admit(&caller, &mut KernelWatch);
+        if !admission.watched && !WATCH_REFUSED.swap(true, Ordering::Relaxed) {
+            println("[net] owner death watch unavailable; socket reclaim deferred");
         }
-        // `loop-trace` image: one line every ~2 s with what the turn is spending
-        // its time on. A stopped heartbeat is the signal that the service is
-        // parked inside a driver command rather than looping.
-        #[cfg(feature = "loop-trace")]
-        {
-            trace_turns += 1;
-            let now = sys_get_time();
-            if now.wrapping_sub(trace_last) >= LOOP_TRACE_INTERVAL_TICKS {
-                trace_last = now;
-                println(&alloc::format!(
-                    "[net-loop] turns={} recv={} l2send={} l2recv={} drv_cmd={} drv_to={} rx_q={} guest_q={}",
-                    trace_turns,
-                    trace_recv,
-                    crate::handlers::L2_SEND_REQUESTS.load(Ordering::Relaxed),
-                    crate::handlers::L2_RECV_REQUESTS.load(Ordering::Relaxed),
-                    crate::interface::DRV_COMMANDS.load(Ordering::Relaxed),
-                    crate::interface::DRV_TIMEOUTS.load(Ordering::Relaxed),
-                    device.rx_queue_len(),
-                    device.bridge_queued(),
-                ));
-            }
+        // The caller's Cell was relaunched: its older generations are gone.
+        for stale in admission.stale {
+            self.release_owner(socket_owner(stale));
         }
-        {
-            let drained = device.pump_rx_split();
-            if pending_net_rx_proof {
-                if !net_rx_producer_proved && drained > 0 {
-                    println("[net-rx-producer] irq->completion PASS");
-                    net_rx_producer_proved = true;
-                }
-                pending_net_rx_proof = false;
-            }
-
-            if dhcp_state == DhcpState::Pending {
-                let lease = poll_dhcp(
-                    dhcp_handle,
-                    &mut iface,
-                    &mut sockets,
-                    &mut device,
-                    now_instant(),
-                );
-                dhcp_state = lease.state;
-                if dhcp_state == DhcpState::Acquired {
-                    // The lease has just overwritten the IPv4 slot, claimed
-                    // link-local address included.
-                    link_local = None;
-                    if let Some(IpCidr::Ipv4(cidr)) = iface
-                        .ip_addrs()
-                        .iter()
-                        .find(|address| matches!(address, IpCidr::Ipv4(_)))
-                    {
-                        local_ip.copy_from_slice(cidr.address().as_bytes());
-                        println(&alloc::format!(
-                            "[net] IP address: {}",
-                            dotted_ipv4(local_ip)
-                        ));
-                    }
-                } else if link_local.is_none()
-                    && sys_get_time().wrapping_sub(dhcp_start_ticks) >= 4_000 * MTIME_TICKS_PER_MS
-                {
-                    let HardwareAddress::Ethernet(addr) = iface.hardware_addr();
-                    link_local = Some(crate::link_local::LinkLocal::new(
-                        addr.0,
-                        sys_get_time() / MTIME_TICKS_PER_MS,
-                    ));
-                }
-                // The lease names the resolver to use from here on (option 6);
-                // without it the DNS socket keeps SLIRP's built-in default.
-                if let Some(server) = lease.dns_server {
-                    resolver.set_server(&mut sockets, server);
-                    println(&alloc::format!(
-                        "[net] DNS server: {}",
-                        crate::service_runtime::dotted_ipv4(server)
-                    ));
-                }
-            }
-
-            // The ARP tap is drained every turn so it never holds stale
-            // packets; they feed the claim while one runs.
-            let now_ms = sys_get_time() / MTIME_TICKS_PER_MS;
-            while let Some(packet) = device.take_arp() {
-                if let Some(engine) = link_local.as_mut() {
-                    engine.on_arp(packet, now_ms);
-                }
-            }
-            if let Some(engine) = link_local.as_mut() {
-                engine.poll(now_ms);
-                while let Some(event) = engine.next_event() {
-                    apply_link_local(event, &mut iface, &mut device, &mut local_ip);
-                }
-            }
-
-            let now = sys_get_time();
-            // Poll on every turn, not only on the 100 ms maintenance cadence:
-            // smoltcp advances a handshake one step per poll, and a listener
-            // stuck in SynReceived cannot report ACCEPT. Waiting for the
-            // maintenance tick added up to 100 ms per handshake step.
-            iface.poll(now_instant(), &mut device, &mut sockets);
-            if now.wrapping_sub(last_poll_ticks) >= SMOLTCP_MAINTENANCE_TICKS {
-                last_poll_ticks = now;
-            }
-        }
-        #[cfg(feature = "qemu-dev-https")]
-        dev_clock.poll(&mut iface, &mut sockets, local_ip != [0; 4]);
-        tls_pending.poll(
-            &mut iface,
-            &mut device,
-            &mut sockets,
-            &mut table,
-            &mut tls_table,
+        self.probe.ipc_drain(sender);
+        dispatch_admitted(
+            buffer,
+            sender,
+            socket_owner(Owner::of(&caller)),
+            &mut self.iface,
+            &mut self.device,
+            &mut self.sockets,
+            &mut self.table,
+            &mut self.tls_table,
+            &mut self.tls_pending,
+            &mut self.pending_ready,
+            &mut self.pending_dns,
+            &self.resolver,
+            &self.local_ip,
         );
-        poll_resolves(&resolver, &mut pending_dns, &mut sockets);
-        let graceful_aborted = reap_graceful_closes(&mut table, &mut sockets, sys_get_time());
-        if let Some(line) = graceful_deadline_line(graceful_aborted) {
-            println(&line);
-        }
-        reap_aborted(&mut table, &mut sockets, sys_get_time());
-        drain_ready_waits(&mut pending_ready, &mut sockets, &table);
+        drain_ready_waits(&mut self.pending_ready, &mut self.sockets, &self.table);
+        self.ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
+    }
 
-        buffer.fill(0);
-        let receive_result = sys_try_recv_attested(0, &mut buffer);
-        match receive_result {
-            SyscallResult::Ok(sender) if sender > 0 => {
-                #[cfg(feature = "loop-trace")]
-                {
-                    trace_recv += 1;
-                }
-                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buffer)
-                else {
-                    if let Some(owner) = owner_for_root(&watched, sender) {
-                        release_owner(
-                            owner,
-                            &mut device,
-                            &mut sockets,
-                            &mut table,
-                            &mut tls_table,
-                            &mut tls_pending,
-                            &mut pending_ready,
-                            &mut pending_dns,
-                            &resolver,
-                            &mut watched,
-                        );
-                    }
-                    #[cfg(feature = "ipc-wake-oracle")]
-                    idle_ipc_wake_oracle.record_ipc_miss();
-                    continue;
-                };
-                if identity.cell_id == 0 || identity.generation == 0 {
-                    #[cfg(feature = "ipc-wake-oracle")]
-                    idle_ipc_wake_oracle.record_ipc_miss();
-                    continue;
-                }
-                // Admission precedes every effect of the request, the owner
-                // watch included: a denied caller leaves no state behind.
-                if !admit_request(&buffer, sender, identity.flags) {
-                    #[cfg(feature = "ipc-wake-oracle")]
-                    idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
-                    {
-                        ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
-                    }
-                    continue;
-                }
-                let owner = SocketOwner {
-                    cell_id: identity.cell_id,
-                    generation: identity.generation,
-                };
-                // Owner watch is a cleanup optimisation: without it a dead
-                // client's sockets are only reclaimed when the net cell
-                // restarts, so a refusal must never deny live traffic.
-                if !watched.contains_key(&owner) {
-                    let watch =
-                        ostd::syscall::sys_watch_cell_owner(owner.cell_id, owner.generation);
-                    if let Some((principal, token)) = watch {
-                        while let Some(stale) = stale_generation_of(&watched, owner) {
-                            release_owner(
-                                stale,
-                                &mut device,
-                                &mut sockets,
-                                &mut table,
-                                &mut tls_table,
-                                &mut tls_pending,
-                                &mut pending_ready,
-                                &mut pending_dns,
-                                &resolver,
-                                &mut watched,
-                            );
-                        }
-                        watched.insert(owner, (principal.root_tid as usize, token));
-                    } else if !WATCH_REFUSED.swap(true, Ordering::Relaxed) {
-                        println("[net] owner death watch unavailable; socket reclaim deferred");
-                    }
-                }
-                #[cfg(feature = "ipc-wake-oracle")]
-                idle_ipc_wake_oracle.record_ipc_drain(sys_get_time(), sender);
-                dispatch_admitted(
-                    &buffer,
-                    sender,
-                    owner,
-                    &mut iface,
-                    &mut device,
-                    &mut sockets,
-                    &mut table,
-                    &mut tls_table,
-                    &mut tls_pending,
-                    &mut pending_ready,
-                    &mut pending_dns,
-                    &resolver,
-                    &local_ip,
-                );
-                drain_ready_waits(&mut pending_ready, &mut sockets, &table);
-                {
-                    ipc_burst_grace = IPC_BURST_GRACE_YIELDS;
-                }
-            }
-            _ => {
-                #[cfg(feature = "ipc-wake-oracle")]
-                idle_ipc_wake_oracle.record_ipc_miss();
-                if consume_ipc_burst_grace(&mut ipc_burst_grace) {
-                    // Let the caller run after a reply before parking on NET_RX;
-                    // sequential IPC bursts then avoid one timer quantum per call.
-                    sys_yield();
-                } else {
-                    let now = now_instant();
-                    let wait_ticks = match iface.poll_at(now, &sockets) {
-                        Some(at) if at > now => (at - now)
-                            .total_millis()
-                            .div_ceil(SCHEDULER_TICK_MS)
-                            .clamp(1, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS),
-                        Some(_) => 1,
-                        None => NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
-                    };
-                    #[cfg(feature = "ipc-wake-oracle")]
-                    let wait_started_ticks = sys_get_time();
-                    #[cfg(feature = "ipc-wake-oracle")]
-                    let completion = match sys_wait_completion_detailed(NET_RX, wait_ticks) {
-                        // The proof ceiling assumes the full maintenance
-                        // deadline: a shorter smoltcp deadline returns below it
-                        // with no IPC behind the wake, which would read as PASS.
-                        WaitCompletionResult::NoRecord
-                            if wait_ticks == NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS =>
-                        {
-                            idle_ipc_wake_oracle.arm(
-                                wait_started_ticks,
-                                sys_get_time().wrapping_sub(wait_started_ticks),
-                                SMOLTCP_MAINTENANCE_TICKS,
-                                IDLE_IPC_WAKE_PROOF_CEILING_TICKS,
-                            );
-                            None
-                        }
-                        WaitCompletionResult::NoRecord => {
-                            idle_ipc_wake_oracle.clear();
-                            None
-                        }
-                        WaitCompletionResult::Completion(completion) => {
-                            idle_ipc_wake_oracle.clear();
-                            Some(completion)
-                        }
-                        WaitCompletionResult::ErrorOrInvalid(_) => {
-                            idle_ipc_wake_oracle.clear();
-                            None
-                        }
-                    };
-                    #[cfg(not(feature = "ipc-wake-oracle"))]
-                    let completion = sys_wait_completion(NET_RX, wait_ticks);
-                    if let Some(completion) = completion {
-                        pending_net_rx_proof =
-                            completion.source == NET_RX && completion.result == NET_RX as i64;
-                    }
-                }
-                // A recordless return means queued IPC interrupted the wait early or
-                // the finite maintenance budget elapsed. Either way, retry the loop
-                // without claiming NET_RX producer proof.
-            }
+    /// No valid trailer: a watched owner's root death, or nothing to serve.
+    fn on_unattributed(&mut self, sender: usize, _payload: &[u8]) {
+        self.probe.received();
+        if let Some(owner) = self.watches.take_death(sender) {
+            self.release_owner(socket_owner(owner));
+        }
+        self.probe.ipc_miss();
+    }
+
+    fn on_empty_poll(&mut self) {
+        self.probe.ipc_miss();
+        if consume_ipc_burst_grace(&mut self.ipc_burst_grace) {
+            // Let the caller run after a reply before parking on NET_RX;
+            // sequential IPC bursts then avoid one timer quantum per call.
+            sys_yield();
+        } else {
+            let now = now_instant();
+            let wait_ticks = match self.iface.poll_at(now, &self.sockets) {
+                Some(at) if at > now => (at - now)
+                    .total_millis()
+                    .div_ceil(SCHEDULER_TICK_MS)
+                    .clamp(1, NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS),
+                Some(_) => 1,
+                None => NET_RX_MAINTENANCE_WAIT_SCHEDULER_TICKS,
+            };
+            self.probe.wait_net_rx(wait_ticks);
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+impl NetState<'_> {
+    /// Reclaim everything a dead owner generation holds. Its watch is already
+    /// gone: consumed by the kernel with the death, or cancelled when a newer
+    /// generation was watched.
+    fn release_owner(&mut self, owner: SocketOwner) {
+        if self.device.release_port(owner) {
+            println("[net-bridge] guest port released");
+        }
+        let (aborted, released) = reclaim_owner_state(
+            owner,
+            &mut self.sockets,
+            &mut self.table,
+            &mut self.tls_table,
+            &mut self.tls_pending,
+            &mut self.pending_ready,
+            &mut self.pending_dns,
+            &self.resolver,
+            sys_get_time().saturating_add(ABORT_DRAIN_TICKS),
+        );
+        if let Some(line) = owner_death_line(owner, aborted, released) {
+            println(&line);
         }
     }
 }

@@ -9,7 +9,7 @@ use api::caller_identity::{
     CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN, CALLER_FLAG_NET_RESOLVE,
     CALLER_FLAG_NET_RIGHTS_MASK,
 };
-use smoltcp::{iface::Config, socket::udp};
+use smoltcp::{iface::Config, socket::udp, wire::HardwareAddress};
 
 use crate::socket_state::SocketState;
 use api::services::proto::tls;

@@ -1,15 +1,18 @@
 //! Owner death: what the service does with a dead client generation's sockets,
-//! waits and queries (`reclaim_owner_state`, `reap_aborted`, `owner_for_root`).
+//! waits and queries (`reclaim_owner_state`, `reap_aborted`, the owner watches).
 //! The wire behaviour is read from real smoltcp sockets talking over
 //! `smoltcp::phy::Loopback`; the kernel half (watch grant, `TryRecv` delivery)
-//! is tested in the kernel crate and the `run()` loop itself is bare-metal only.
+//! is tested in the kernel crate and the `serve` loop itself is bare-metal only.
 
 use super::*;
+use alloc::vec::Vec;
+use api::caller_identity::CallerIdentity;
+use ostd::service::owners::{OwnerWatches, WatchSys};
 use smoltcp::{
     iface::{Config, SocketHandle},
     phy::{Loopback, Medium},
     socket::tcp,
-    wire::IpEndpoint,
+    wire::{HardwareAddress, IpEndpoint},
 };
 
 const OWNER: SocketOwner = SocketOwner {
@@ -381,47 +384,129 @@ fn a_graceful_close_in_flight_is_flushed_not_pre_empted_and_only_its_reaper_ends
     assert!(stack.table.owned_cap(OWNER).is_none());
 }
 
+/// Scripted kernel: the root of cell `c` is TID `c * 10`; tokens count up.
+#[derive(Default)]
+struct ScriptedWatch {
+    refuse: bool,
+    cancels: Vec<u64>,
+    next_token: u64,
+}
+
+impl WatchSys for ScriptedWatch {
+    fn watch(&mut self, cell_id: u64, _generation: u64) -> Option<(usize, u64)> {
+        if self.refuse {
+            return None;
+        }
+        self.next_token += 1;
+        Some((cell_id as usize * 10, self.next_token))
+    }
+
+    fn cancel(&mut self, token: u64) {
+        self.cancels.push(token);
+    }
+}
+
+/// The watch table NET keeps, at NET's capacity.
+fn watches() -> (OwnerWatches, ScriptedWatch) {
+    (
+        OwnerWatches::new(OWNER_WATCH_CAPACITY),
+        ScriptedWatch::default(),
+    )
+}
+
+/// NET's watch step for one admitted request from `owner`'s thread
+/// `sender_tid`: whether it is watched, and the generations to release.
+fn admit(
+    watches: &mut OwnerWatches,
+    sys: &mut ScriptedWatch,
+    owner: SocketOwner,
+    sender_tid: u64,
+) -> (bool, Vec<SocketOwner>) {
+    let caller = CallerIdentity {
+        flags: 0,
+        cell_id: owner.cell_id,
+        generation: owner.generation,
+        sender_tid,
+    };
+    let admission = watches.admit(&caller, sys);
+    let stale = admission.stale.into_iter().map(socket_owner).collect();
+    (admission.watched, stale)
+}
+
 #[test]
-fn owner_for_root_matches_the_root_tid_exactly() {
-    let mut watched = BTreeMap::new();
-    watched.insert(OWNER, (100usize, 1u64));
-    watched.insert(OTHER_CELL, (200, 2));
-    assert_eq!(owner_for_root(&watched, 100), Some(OWNER));
-    assert_eq!(owner_for_root(&watched, 200), Some(OTHER_CELL));
+fn a_root_death_names_its_watched_owner_exactly() {
+    let (mut watches, mut sys) = watches();
+    assert_eq!(
+        admit(&mut watches, &mut sys, OWNER, 101),
+        (true, Vec::new())
+    );
+    assert_eq!(
+        admit(&mut watches, &mut sys, OTHER_CELL, 201),
+        (true, Vec::new())
+    );
     // A worker thread of the Cell exiting is not root death.
-    assert_eq!(owner_for_root(&watched, 101), None);
-    assert_eq!(owner_for_root(&watched, 0), None);
-    assert_eq!(owner_for_root(&BTreeMap::new(), 100), None);
+    assert_eq!(watches.take_death(101), None);
+    assert_eq!(watches.take_death(0), None);
+    assert_eq!(watches.take_death(100).map(socket_owner), Some(OWNER));
+    assert_eq!(watches.take_death(200).map(socket_owner), Some(OTHER_CELL));
+    assert_eq!(watches.take_death(100), None, "consumed with the death");
 }
 
 #[test]
 fn a_new_generation_of_a_cell_releases_only_the_old_generation() {
-    let mut watched = BTreeMap::new();
-    watched.insert(OWNER, (100usize, 1u64));
-    watched.insert(OTHER_CELL, (200, 2));
-    assert_eq!(stale_generation_of(&watched, NEXT_GENERATION), Some(OWNER));
+    let (mut watches, mut sys) = watches();
+    admit(&mut watches, &mut sys, OWNER, 101);
+    admit(&mut watches, &mut sys, OTHER_CELL, 201);
     // Never the same generation, never another cell.
-    assert_eq!(stale_generation_of(&watched, OWNER), None);
     assert_eq!(
-        stale_generation_of(
-            &watched,
-            SocketOwner {
-                cell_id: 30,
-                generation: 1
-            }
-        ),
-        None
+        admit(&mut watches, &mut sys, OWNER, 102),
+        (true, Vec::new())
+    );
+    let third = SocketOwner {
+        cell_id: 30,
+        generation: 1,
+    };
+    assert_eq!(
+        admit(&mut watches, &mut sys, third, 301),
+        (true, Vec::new())
+    );
+    let (_, stale) = admit(&mut watches, &mut sys, NEXT_GENERATION, 101);
+    assert_eq!(stale, [OWNER]);
+    assert_eq!(sys.cancels, [1], "the old generation's watch is cancelled");
+    assert_eq!(
+        watches.take_death(100).map(socket_owner),
+        Some(NEXT_GENERATION)
     );
 
     // And through the real state reclaim: the old generation goes, the new stays.
     let mut stack = Stack::new();
     let (old_cap, _) = stack.connecting(OWNER);
     let (new_cap, new_handle) = stack.connecting(NEXT_GENERATION);
-    let stale = stale_generation_of(&watched, NEXT_GENERATION).expect("stale generation");
-    assert_eq!(stack.reclaim(stale, u64::MAX), (1, 0));
+    assert_eq!(stack.reclaim(stale[0], u64::MAX), (1, 0));
     assert!(stack.table.is_aborting(old_cap));
     assert_eq!(stack.table.get(new_cap, NEXT_GENERATION), Some(new_handle));
     assert!(!stack.table.is_aborting(new_cap));
+}
+
+#[test]
+fn a_refused_watch_releases_nothing_and_is_retried_on_the_next_request() {
+    let (mut watches, mut sys) = watches();
+    admit(&mut watches, &mut sys, OWNER, 101);
+    sys.refuse = true;
+    // Refused: unwatched (the request is still served), nothing released.
+    assert_eq!(
+        admit(&mut watches, &mut sys, NEXT_GENERATION, 101),
+        (false, Vec::new())
+    );
+    assert!(watches.watches(Owner {
+        cell_id: OWNER.cell_id,
+        generation: OWNER.generation,
+    }));
+    sys.refuse = false;
+    assert_eq!(
+        admit(&mut watches, &mut sys, NEXT_GENERATION, 101),
+        (true, alloc::vec![OWNER])
+    );
 }
 
 #[test]

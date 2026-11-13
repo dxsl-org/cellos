@@ -83,7 +83,8 @@ pub enum Wait {
     Block,
     /// At most this many ticks, then [`Handler::on_idle`] runs again.
     Ticks(u64),
-    /// Do not wait: take a queued message if there is one, else yield.
+    /// Do not wait: take a queued message if there is one, else run
+    /// [`Handler::on_empty_poll`].
     Poll,
 }
 
@@ -159,6 +160,13 @@ pub trait Handler {
     /// Runs after every receive attempt, message or not (render, pump).
     fn on_turn(&mut self) {}
 
+    /// A [`Wait::Poll`] found nothing queued: park the way the service needs
+    /// (a completion wait on its device), bounded below half the heartbeat.
+    /// Yields by default.
+    fn on_empty_poll(&mut self) {
+        crate::task::yield_now();
+    }
+
     /// Runs before every receive; periodic work goes here. Its answer bounds the
     /// receive that follows.
     fn on_idle(&mut self) -> Wait {
@@ -194,7 +202,7 @@ pub fn serve<H: Handler>(config: ServeConfig, handler: &mut H) -> ! {
                 dispatch(&config, &mut watches, handler, sender, &buf);
             }
             // An empty poll; expiry and refused receives also land here.
-            _ if wait == Wait::Poll => crate::task::yield_now(),
+            _ if wait == Wait::Poll => handler.on_empty_poll(),
             _ => {}
         }
         handler.on_turn();
