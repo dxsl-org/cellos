@@ -20,11 +20,23 @@
 //! and it re-arms after every receive. A handler that runs longer than that must
 //! call [`keepalive`]; otherwise the kernel's heartbeat sweep kills the service,
 //! which is the point: a service that stops turning is restarted by init.
+//!
+//! A hot-swap envelope (`[MAGIC, KIND_SNAPSHOT | KIND_RESTORE, …]`) from the
+//! live `SUPERVISOR` provider is serve's own: it runs [`Handler::on_snapshot`]
+//! or [`Handler::on_restore`] and never replies, since the supervisor posts it
+//! without an operation to answer. The same bytes from anyone else are an
+//! ordinary request.
 
+use alloc::vec::Vec;
 use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use api::ipc::IPC_BUF_SIZE;
+use api::services::proto::app_envelope::{
+    HEADER_LEN as ENVELOPE_HEADER_LEN, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, RESTORE_LEN,
+    SNAPSHOT_LEN,
+};
 
 use super::owners::{KernelWatch, Owner, OwnerWatches};
+use crate::hotswap;
 use crate::ipc::{Incoming, PostError};
 use crate::syscall::{self, SyscallResult};
 
@@ -172,6 +184,22 @@ pub trait Handler {
     fn on_idle(&mut self) -> Wait {
         Wait::Block
     }
+
+    /// The supervisor is swapping this service out: the state its replacement
+    /// restores, stashed by `serve` under the swap's key. `None` carries
+    /// nothing, so the replacement never signals Ready and the swap rolls back.
+    /// Off by default.
+    fn on_snapshot(&mut self) -> Option<Vec<u8>> {
+        None
+    }
+
+    /// This incarnation is the replacement: apply `state`, the bytes the
+    /// previous incarnation's [`Handler::on_snapshot`] returned. `true` makes
+    /// `serve` release the stash and signal Ready (`sys_hotswap_ready`);
+    /// `false` leaves the supervisor to roll back. Off by default.
+    fn on_restore(&mut self, _state: &[u8]) -> bool {
+        false
+    }
 }
 
 /// Re-arm the heartbeat from inside a long handler.
@@ -227,6 +255,13 @@ fn dispatch<H: Handler>(
         }
         return;
     };
+    // A swap envelope only from the live supervisor, and never answered.
+    if let Some(swap) = swap_envelope(payload) {
+        if super::sender_is_live_provider(super::service::SUPERVISOR, sender) {
+            run_swap(handler, swap);
+            return;
+        }
+    }
     // Captured before any hook runs: a nested receive would replace it.
     let incoming = Incoming::current(sender);
     let required = match config.watch {
@@ -259,6 +294,54 @@ fn dispatch<H: Handler>(
     });
 }
 
+/// A supervisor hot-swap envelope, by its `[MAGIC, kind]` prefix.
+#[derive(Debug, PartialEq, Eq)]
+enum Swap {
+    Snapshot(u64),
+    Restore(u64),
+    /// The prefix of one whose swap id does not parse: dropped.
+    Malformed,
+}
+
+fn swap_envelope(payload: &[u8]) -> Option<Swap> {
+    let swap = match payload {
+        [MAGIC, KIND_SNAPSHOT, ..] => payload
+            .get(ENVELOPE_HEADER_LEN..SNAPSHOT_LEN)
+            .and_then(|id| <[u8; 8]>::try_from(id).ok())
+            .map(|id| Swap::Snapshot(u64::from_le_bytes(id))),
+        [MAGIC, KIND_RESTORE, ..] => payload
+            .get(ENVELOPE_HEADER_LEN..RESTORE_LEN)
+            .and_then(hotswap::swap_id_from_restore_key)
+            .map(Swap::Restore),
+        _ => return None,
+    };
+    Some(swap.unwrap_or(Swap::Malformed))
+}
+
+/// Snapshot: stash what the handler returns under the swap's key. Restore:
+/// hand the stashed bytes to the handler, and on success release them and
+/// signal Ready. Any failure leaves the replacement un-Ready, which is the
+/// supervisor's cue to roll back.
+fn run_swap<H: Handler>(handler: &mut H, swap: Swap) {
+    match swap {
+        Swap::Snapshot(swap_id) => {
+            if let Some(state) = handler.on_snapshot() {
+                let _ = hotswap::stash(hotswap::hotswap_key(swap_id), &state);
+            }
+        }
+        Swap::Restore(swap_id) => {
+            let key = hotswap::hotswap_key(swap_id);
+            if let Ok(state) = hotswap::restore(key) {
+                if handler.on_restore(&state) {
+                    hotswap::clear(key);
+                    syscall::sys_hotswap_ready();
+                }
+            }
+        }
+        Swap::Malformed => {}
+    }
+}
+
 /// Ticks the next receive waits; 0 = untimed. A heartbeat caps every wait at
 /// half its interval so the loop re-arms it in time.
 fn receive_ticks(wait: Wait, heartbeat_ticks: u64) -> u64 {
@@ -278,7 +361,62 @@ fn receive_ticks(wait: Wait, heartbeat_ticks: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{receive_ticks, Wait};
+    use super::{receive_ticks, swap_envelope, Swap, Wait};
+    use api::services::proto::app_envelope::{
+        KIND_MESSAGE, KIND_RESTORE, KIND_SNAPSHOT, MAGIC, SNAPSHOT_LEN,
+    };
+
+    fn window(prefix: &[u8]) -> [u8; 128] {
+        let mut payload = [0u8; 128];
+        payload[..prefix.len()].copy_from_slice(prefix);
+        payload
+    }
+
+    #[test]
+    fn swap_envelopes_are_recognised_by_their_prefix() {
+        let mut snapshot = window(&[MAGIC, KIND_SNAPSHOT]);
+        snapshot[2..SNAPSHOT_LEN].copy_from_slice(&0x0102_0304_0506_0708u64.to_le_bytes());
+        assert_eq!(
+            swap_envelope(&snapshot),
+            Some(Swap::Snapshot(0x0102_0304_0506_0708))
+        );
+        let restore = window(&[MAGIC, KIND_RESTORE, b'4', b'2']);
+        assert_eq!(swap_envelope(&restore), Some(Swap::Restore(42)));
+    }
+
+    #[test]
+    fn a_swap_prefix_with_an_unreadable_id_is_still_a_swap_envelope() {
+        // Never handed to `on_request`, so never answered.
+        assert_eq!(
+            swap_envelope(&window(&[MAGIC, KIND_RESTORE])),
+            Some(Swap::Malformed)
+        );
+        assert_eq!(
+            swap_envelope(&window(&[MAGIC, KIND_RESTORE, b'x'])),
+            Some(Swap::Malformed)
+        );
+        assert_eq!(
+            swap_envelope(&[MAGIC, KIND_SNAPSHOT, 1]),
+            Some(Swap::Malformed)
+        );
+        assert_eq!(
+            swap_envelope(&[MAGIC, KIND_RESTORE][..]),
+            Some(Swap::Malformed)
+        );
+    }
+
+    #[test]
+    fn other_payloads_are_requests() {
+        for payload in [
+            &window(&[MAGIC, KIND_MESSAGE])[..],
+            &window(&[0, KIND_SNAPSHOT])[..],
+            &window(&[MAGIC])[..1],
+            &[][..],
+            &window(&[1, 2, 3])[..],
+        ] {
+            assert_eq!(swap_envelope(payload), None);
+        }
+    }
 
     #[test]
     fn a_heartbeat_bounds_every_wait_by_half_its_interval() {

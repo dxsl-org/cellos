@@ -1,12 +1,13 @@
 use alloc::string::String;
 use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use api::retirement::{reason, RetirementState, ViRetirementV1};
+use api::service_binding::ServiceBinding;
 use api::services::proto::supervisor::{OWNER_EXITED_LEN, OWNER_EXITED_NOTICE};
 use api::syscall::service;
 use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
 use ostd::service::provider_tid;
-use ostd::syscall::{sys_query_retirement, SyscallError, SyscallResult};
+use ostd::syscall::{sys_notify_on_exit, sys_query_retirement, SyscallError, SyscallResult};
 
 use crate::pin_gate::SafeConsole;
 use crate::service_table::{self, now_ticks, task_alive, Service};
@@ -18,6 +19,9 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 const VERDICT_WAIT_TICKS: u64 = 200;
 /// Poll backstop for a scheduler-tick clock that never advances.
 const VERDICT_POLL_LIMIT: usize = 5_000_000;
+/// The exit reason the kernel gives an incarnation the supervisor retired after
+/// a committed hot-swap (`KillCell`, `kernel/src/cell/hotswap.rs`).
+const HOTSWAP_EXIT_REASON: u64 = 0xAAAA_AAAA;
 
 /// What init does with a service whose death passed the policy and the budget.
 #[derive(Debug, PartialEq, Eq)]
@@ -131,13 +135,24 @@ pub(crate) fn run(services: &mut [Service], console: Option<SafeConsole>) -> ! {
             ostd::task::yield_now();
             continue;
         };
-        // Exit reasons retain their existing clean/crash restart semantics.
         let Some(index) = services
             .iter()
             .position(|service| service.tid == Some(dead))
         else {
             continue;
         };
+        // A committed hot-swap: the supervisor already published the successor,
+        // so watch it instead of restarting over it.
+        if let Some(successor) = services[index]
+            .spec
+            .service_id
+            .and_then(|id| swap_successor(reason, dead, ostd::service::lookup(id)))
+            .filter(|&successor| task_alive(successor) == Some(true))
+        {
+            adopt(&mut services[index], dead, successor);
+            continue;
+        }
+        // Exit reasons retain their existing clean/crash restart semantics.
         if services[index].spec.path == "/bin/hypervisor" {
             relay_hypervisor_exit(dead);
         }
@@ -239,6 +254,33 @@ fn restart_pending(services: &mut [Service]) -> bool {
         }
     }
     restarted
+}
+
+/// The provider that replaced `dead` in a committed hot-swap: the death carries
+/// the swap reason and the registry names a live, different provider.
+fn swap_successor(reason: u64, dead: usize, live: Option<ServiceBinding>) -> Option<usize> {
+    let binding = live.filter(|binding| reason == HOTSWAP_EXIT_REASON && binding.is_live())?;
+    usize::try_from(binding.tid)
+        .ok()
+        .filter(|&successor| successor != dead)
+}
+
+/// Take over `successor` as the service's incarnation: no restart, no new
+/// registration (the supervisor's commit published it), and its death is
+/// watched from now on. Its crash budget carries over.
+fn adopt(service: &mut Service, dead: usize, successor: usize) {
+    service.tid = Some(successor);
+    service.restart_pending = false;
+    service.ready = matches!(sys_notify_on_exit(successor), SyscallResult::Ok(0));
+    println(&alloc::format!(
+        "Init: {} hot-swapped: adopted tid {successor} (was {dead}){}",
+        service.spec.name,
+        if service.ready {
+            ""
+        } else {
+            ", death unwatched"
+        },
+    ));
 }
 
 fn relay_hypervisor_exit(dead: usize) {
@@ -349,5 +391,42 @@ mod restart_decision_tests {
             decision_line("config", &Decision::NodeRecoveryRequired),
             "Init: config node recovery required: containment unproven, no restart"
         );
+    }
+}
+
+#[cfg(test)]
+mod swap_adoption_tests {
+    use super::{swap_successor, HOTSWAP_EXIT_REASON};
+    use api::service_binding::ServiceBinding;
+
+    const LIVE_41: ServiceBinding = ServiceBinding::new(41, 7, 2);
+
+    #[test]
+    fn a_swap_death_with_a_live_new_provider_is_adopted() {
+        assert_eq!(
+            swap_successor(HOTSWAP_EXIT_REASON, 30, Some(LIVE_41)),
+            Some(41)
+        );
+    }
+
+    #[test]
+    fn any_other_death_is_not_a_swap() {
+        for reason in [0, 1, u64::MAX, HOTSWAP_EXIT_REASON + 1] {
+            assert_eq!(swap_successor(reason, 30, Some(LIVE_41)), None);
+        }
+    }
+
+    #[test]
+    fn a_swap_death_without_a_different_live_provider_restarts() {
+        // Still the dead tid: the commit never published a successor.
+        assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 41, Some(LIVE_41)), None);
+        assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 30, None), None);
+        for unbound in [
+            ServiceBinding::new(0, 7, 2),
+            ServiceBinding::new(41, 0, 2),
+            ServiceBinding::new(41, 7, 0),
+        ] {
+            assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 30, Some(unbound)), None);
+        }
     }
 }

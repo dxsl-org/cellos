@@ -117,10 +117,6 @@ mod config_client;
 pub mod history;
 #[cfg(not(feature = "shell_test"))]
 mod shell;
-// Hot-swap session transfer serialises the history + alias table, both of which
-// only exist in the interactive build.
-#[cfg(not(feature = "shell_test"))]
-mod state_transfer;
 
 #[cfg(feature = "shell_test")]
 mod shell_test;

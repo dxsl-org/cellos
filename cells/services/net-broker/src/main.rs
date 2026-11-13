@@ -29,9 +29,8 @@
 //! 3. All unroutable/exhausted remote calls explicitly return `NotSupported` (no raw fallback).
 //!
 //! ## Hot-swap limitation (OQ5 — unresolved)
-//! In-flight IPC and Noise session re-establish on hot-swap are undefined.
-//! The broker does NOT implement `ViStateTransfer`. A respawn means all cluster
-//! sessions are torn down and must be re-negotiated by peers.
+//! The broker is not a hot-swap target and hands over no state: a respawn tears
+//! down all cluster sessions, and peers must re-negotiate them.
 
 extern crate alloc;
 

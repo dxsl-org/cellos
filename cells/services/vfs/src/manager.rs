@@ -13,7 +13,6 @@ mod owned_state;
 pub(crate) mod read_path_selftest;
 #[cfg(test)]
 mod read_path_tests;
-mod state_transfer;
 #[cfg(test)]
 mod tests;
 

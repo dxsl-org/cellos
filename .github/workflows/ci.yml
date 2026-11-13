@@ -1373,6 +1373,16 @@ jobs:
           cargo test --manifest-path tests/integration/Cargo.toml \
             --target x86_64-unknown-linux-gnu --test local-service-lifecycle-x86
 
+      # Phase 13 step 5: a supervisor-orchestrated hot-swap of `config`. A key
+      # written before the swap reads back after it, config runs under a new tid
+      # and init adopts that tid instead of restarting the service.
+      - name: Config hot-swap (x86_64)
+        timeout-minutes: 20
+        run: |
+          bash scripts/build-x86_64-config-hotswap-ci.sh
+          cargo test --manifest-path tests/integration/Cargo.toml \
+            --target x86_64-unknown-linux-gnu --test config-hotswap-x86 -- --nocapture
+
       - name: Upload C2C gate logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

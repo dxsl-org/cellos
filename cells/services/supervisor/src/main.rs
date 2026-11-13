@@ -104,11 +104,10 @@ fn message(request: &Request<'_>, data: &[u8]) {
             return;
         };
 
-        let service_id = service_id_for_name(req.service_name());
-        if service_id == 0 {
+        let Some(service_id) = service_id_for_name(req.service_name()) else {
             let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_SERVICE_NOT_FOUND));
             return;
-        }
+        };
 
         match hotswap::hotswap(service_id, req.elf_path()) {
             Ok(_new_tid) => {
@@ -197,15 +196,13 @@ fn reply_power(request: Incoming, status: u8) {
     let _ = request.reply(&encode_status(PHASE_POWER, status));
 }
 
-/// Map a well-known ASCII service name to its numeric `service::*` constant.
-fn service_id_for_name(name: &str) -> u16 {
+/// The services a hot-swap may target: those whose provider hands its state
+/// over through `serve`'s swap hooks (config), and the demo lane's target.
+fn service_id_for_name(name: &str) -> Option<u16> {
     match name {
-        "vfs" => service::VFS,
-        "net" => service::NET,
-        "compositor" => service::COMPOSITOR,
-        "input" => service::INPUT,
-        "hotswap-demo" => service::HOTSWAP_DEMO,
-        _ => 0,
+        "config" => Some(service::CONFIG),
+        "hotswap-demo" => Some(service::HOTSWAP_DEMO),
+        _ => None,
     }
 }
 

@@ -29,7 +29,6 @@ pub mod driver;
 pub use abi::fs;
 #[cfg(feature = "hostile-backend-recovery")]
 pub mod hostile_backend_recovery;
-pub mod hotswap;
 pub mod input;
 pub mod ipc;
 pub mod machine_pin;
@@ -39,7 +38,6 @@ pub mod net;
 pub mod net_reply;
 pub mod proto;
 pub mod ring_channel;
-pub mod serde_helpers;
 pub mod session;
 pub mod ssh_completion;
 pub mod vfs_file_handles;

@@ -1,21 +1,32 @@
 # Cellos Hot-Swap Guide
 
-Live-replace a running Cell with a new version without losing session state.
+Live-replace a running service Cell with a new incarnation of the same service
+without losing its state. Proven for `config` only (lane `config-hotswap-x86`);
+no other production service hands over state, so they upgrade by restart.
 
 ---
 
 ## How It Works
 
+The supervisor Cell orchestrates the swap (`cells/services/supervisor/src/hotswap.rs`);
+the kernel only provides the primitives.
+
 ```
-1. Kernel freezes the old Cell (queues incoming IPC, stops scheduling it)
-2. Kernel calls Cell's serialize_state() → owned byte buffer
-3. Kernel loads new ELF from disk via SpawnFromPath
-4. Kernel calls new Cell's deserialize_state(buffer)
-5. Kernel unfreezes (new Cell receives queued messages)
+1. Supervisor pauses the service's registry entry and posts Snapshot
+   [0xAC, 0xF0, swap_id LE] to the old Cell
+2. Old Cell stashes its state in the kernel under hotswap_key(swap_id)
+3. Supervisor freezes the old Cell; SpawnReplacement loads the new ELF and the
+   kernel seals the stash to it
+4. Supervisor posts Restore [0xAC, 0xF1, decimal swap id] to the new Cell; it
+   restores, clears the slot and calls sys_hotswap_ready()
+5. CommitHotswap drains old ingress into the new Cell and publishes its tid;
+   the supervisor KillCells the old Cell (exit reason 0xAAAA_AAAA)
+6. Init sees that reason and a live, different provider for the service id:
+   it watches the new tid instead of restarting the service
 ```
 
-No messages are lost during the swap.  The user session continues from where
-it was before the upgrade.
+Any failure before the commit kills the replacement and resumes the old Cell.
+There is no symbol relinking: the new Cell is a fresh process.
 
 ### Who can read the stashed state (2026-10-31)
 
@@ -78,52 +89,39 @@ A restarted block driver regains only the route of the device it owns
 
 ---
 
-## Implementing `ViStateTransfer`
+## Implementing a swappable service
 
-Every Cell that wants to support hot-swap must implement
-`api::hotswap::ViStateTransfer`:
+A service on `ostd::service::serve` implements the two `Handler` hooks; `serve`
+accepts the Snapshot/Restore envelopes only from the live `SUPERVISOR` provider,
+never replies to them, stashes what `on_snapshot` returns, and after a `true`
+from `on_restore` clears the slot and calls `sys_hotswap_ready()`. The state type
+implements `ostd::hotswap::ViStateTransfer`, whose versioned header
+`encode_transfer`/`decode_transfer` write and check (config: `cells/services/config/src/main.rs`):
 
 ```rust
-use api::hotswap::ViStateTransfer;
-use api::prelude::*;
+use ostd::hotswap::{decode_transfer, encode_transfer, ViStateTransfer};
 
-const SCHEMA_VERSION: u32 = 1; // bump on incompatible changes
-
-struct MyCell {
-    counter: u64,
-    name: alloc::string::String,
+impl ViStateTransfer for Store {
+    const SCHEMA_VERSION: u32 = 1; // bump on incompatible changes
+    fn serialize(&self) -> Result<Box<[u8]>, ViError> { /* … */ }
+    fn deserialize(version: u32, bytes: &[u8]) -> Result<Self, ViError> { /* … */ }
 }
 
-impl ViStateTransfer for MyCell {
-    fn state_size(&self) -> usize {
-        4 + 8 + 2 + self.name.len()   // version + counter + name_len + name
+impl ostd::service::Handler for Service {
+    fn on_request(&mut self, request: ostd::service::Request<'_>) { /* … */ }
+    fn on_snapshot(&mut self) -> Option<Vec<u8>> {
+        encode_transfer(&self.store).ok()
     }
-
-    fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
-        let needed = self.state_size();
-        if buf.len() < needed { return Err(ViError::InvalidArgument); }
-        let mut pos = 0;
-        buf[pos..pos+4].copy_from_slice(&SCHEMA_VERSION.to_le_bytes()); pos += 4;
-        buf[pos..pos+8].copy_from_slice(&self.counter.to_le_bytes());   pos += 8;
-        let nl = self.name.len() as u16;
-        buf[pos..pos+2].copy_from_slice(&nl.to_le_bytes());             pos += 2;
-        buf[pos..pos+self.name.len()].copy_from_slice(self.name.as_bytes());
-        pos += self.name.len();
-        Ok(pos)
-    }
-
-    fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
-        if buf.len() < 14 { return Err(ViError::InvalidInput); }
-        let _version  = u32::from_le_bytes([buf[0],buf[1],buf[2],buf[3]]);
-        self.counter  = u64::from_le_bytes(buf[4..12].try_into().unwrap());
-        let nl        = u16::from_le_bytes([buf[12],buf[13]]) as usize;
-        self.name     = core::str::from_utf8(&buf[14..14+nl])
-                            .map_err(|_| ViError::InvalidInput)?
-                            .into();
-        Ok(())
+    fn on_restore(&mut self, state: &[u8]) -> bool {
+        decode_transfer::<Store>(state).map(|store| self.store = store).is_ok()
     }
 }
 ```
+
+The service's syscall allowlist needs `StateStash`, `StateRestore`,
+`StateStashClear` and `HotSwapReady`, and the supervisor's target map
+(`service_id_for_name`) must name it. An `AppContext` Cell handles
+`AppEvent::Snapshot`/`AppEvent::Restore` itself (`cells/demos/hotswap-demo-v1`/`-v2`).
 
 ---
 
@@ -131,11 +129,11 @@ impl ViStateTransfer for MyCell {
 
 - **Bump `SCHEMA_VERSION`** whenever the binary layout changes (field added,
   removed, or reordered).
-- `deserialize_state` must handle both old and new schema versions gracefully.
-  If the version is unrecognised, return `Err(ViError::InvalidInput)` — the
-  kernel will abort the swap and keep the old Cell running.
+- `deserialize` receives the serializer's version and must handle every
+  version it accepts. An unrecognised one returns `Err(ViError::InvalidInput)`:
+  the replacement never signals Ready and the supervisor keeps the old Cell.
 - Adding new optional fields at the **end** of the payload is safe with a
-  bounds-check on `buf.len()`.  Removing or reordering fields requires a version bump.
+  check of the payload length.  Removing or reordering fields requires a version bump.
 
 ---
 
@@ -143,7 +141,7 @@ impl ViStateTransfer for MyCell {
 
 | State | Survives? | Notes |
 |-------|-----------|-------|
-| In-memory data (counters, KV map, history) | ✅ Yes | Via `serialize_state` |
+| In-memory data (counters, KV map, history) | ✅ Yes | Via `ViStateTransfer` |
 | IPC messages in flight | ✅ Yes | Kernel queues them during freeze |
 | Open file descriptors (POSIX) | ❌ No | POSIX shim re-opens on new Cell startup |
 | Capability handles (`ViFileHandle`) | ⚠️ Partial | VFS cell must re-issue caps to new owner |
@@ -154,19 +152,17 @@ impl ViStateTransfer for MyCell {
 
 ## Triggering a Hot-Swap
 
-The `hotswap` admin tool (`cells/tools/sys-tools/src/bin/hotswap.rs`) is implemented as a Supervisor IPC client:
+The `hotswap` admin tool (`cells/tools/sys-tools/src/bin/hotswap.rs`) asks the
+Supervisor; only that signed program may request a swap, and only `config` and
+`hotswap-demo` are targets. The replacement path needs a boot or reviewed
+catalog row, so config is swapped onto its own `/bin/config`:
 
 ```
-Cellos> hotswap config /bin/config-v2
-[hotswap] freezing cell 'config' (id 3)...
-[hotswap] serialised 142 bytes of state
-[hotswap] loaded /bin/config-v2
-[hotswap] deserialised state into new cell
-[hotswap] unfrozen — 3 queued messages delivered
-[hotswap] done in 12ms
+Cellos > hotswap config /bin/config
+hotswap: success: supervisor swapped service 'config' to /bin/config
 ```
 
-The CLI sends the request to the Supervisor over IPC. The legacy `HotSwap` syscall (id 400) path is retired/reserved and decodes `Unknown`; `HotSwapReady` and `Snapshot` keep the shared bit-32 compatibility bucket.
+The legacy `HotSwap` syscall (id 400) path is retired/reserved and decodes `Unknown`; `HotSwapReady` and `Snapshot` keep the shared bit-32 compatibility bucket.
 
 ---
 
@@ -174,9 +170,8 @@ The CLI sends the request to the Supervisor over IPC. The legacy `HotSwap` sysca
 
 | Cell | State Serialised | Schema Version | Status |
 |------|-----------------|----------------|--------|
-| Config | KV map | v1 | ✅ Verified |
-| Shell | History + aliases | v1 | ✅ Verified |
-| VFS | Open handle table | v1 | ✅ Partial (handle serialization) |
+| Config | KV map | v1 | ✅ `config-hotswap-x86` |
+| hotswap-demo-v1 → v2 | Counter | v1 | Demo, manual `hotswap-smoke` lane |
 
 ---
 
@@ -197,10 +192,11 @@ let cap = table.alloc_with_lease(owner, resource, perms, now + 10_000_000);
 
 | File | Purpose |
 |------|---------|
-| `libs/api/src/hotswap.rs` | `ViStateTransfer` trait definition |
+| `libs/ostd/src/hotswap.rs` | `ViStateTransfer`, stash helpers, transfer header |
+| `libs/ostd/src/service/serve.rs` | Snapshot/Restore routing to `Handler::on_snapshot`/`on_restore` |
+| `cells/services/supervisor/src/hotswap.rs` | Swap orchestration and rollback |
 | `kernel/src/cell/cap_registry.rs` | Capability allocation and lease expiry enforcement |
 | `kernel/src/cell/hotswap.rs` | Live cutover helpers, `HotSwapReady`, and bit-32 compatibility bookkeeping |
-| `cells/services/config/src/main.rs` | Config KV state transfer impl |
-| `cells/services/vfs/src/state_transfer.rs` | VFS handle table state transfer |
-| `cells/apps/shell/src/state_transfer.rs` | Shell history + alias state transfer |
+| `cells/services/config/src/main.rs` | Config KV state transfer |
+| `cells/tools/init/src/supervisor.rs` | Init adopting the swapped-in provider |
 | `cells/tools/sys-tools/src/bin/hotswap.rs` | Supervisor IPC hotswap client |

@@ -2,14 +2,18 @@
 //! Hot-migration state helpers for Cells.
 //!
 //! Provides safe wrappers over the kernel's state-stash primitives (syscalls
-//! 410/411/412) and the [`ViStateTransfer`] opt-in trait for cells that want
-//! to serialize across a live hot-swap or supervisor-triggered respawn.
+//! 410/411/412) and the [`ViStateTransfer`] opt-in trait for cells whose state
+//! survives a supervisor-orchestrated hot-swap.
 //!
 //! # Sequence contract
-//! 1. **Old cell** — receives `AppEvent::Snapshot` → calls `stash(key, bytes)`.
-//! 2. **Kernel** — keeps the bytes until the replacement is live.
-//! 3. **New cell** — calls `restore(key)` on startup → gets bytes, then calls
-//!    `clear(key)` to release the kernel slot.
+//! 1. **Old cell** — receives the supervisor's Snapshot envelope
+//!    (`AppEvent::Snapshot`, or [`Handler::on_snapshot`] under `serve`) →
+//!    stashes its bytes under [`hotswap_key`]`(swap_id)`.
+//! 2. **Kernel** — keeps the bytes, readable only by the replacement.
+//! 3. **New cell** — receives the Restore envelope → `restore(key)`, applies the
+//!    bytes, `clear(key)`, then `sys_hotswap_ready`.
+//!
+//! [`Handler::on_snapshot`]: crate::service::Handler::on_snapshot
 //!
 //! `stash` and `restore` are independent of each other's call site — the kernel
 //! is the rendezvous point. Multiple calls to `stash` under the same key
@@ -21,6 +25,7 @@ use crate::syscall;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 use api::ViError;
 
 // ── Public error type ─────────────────────────────────────────────────────────
@@ -235,51 +240,99 @@ pub trait ViStateTransfer: Sized {
 /// - `[4..8]`  = payload length in bytes (u32, ≤ MAX_STASH_LEN − 8)
 const HEADER_LEN: usize = 8;
 
+/// Serialize `state` behind the versioned 8-byte header: the bytes a stash
+/// entry holds.
+///
+/// # Errors
+/// - `ViError` propagated from `state.serialize()`
+/// - `ViError::InvalidInput` when the payload does not fit the u32 length field
+pub fn encode_transfer<S: ViStateTransfer>(state: &S) -> Result<Vec<u8>, ViError> {
+    let payload = state.serialize()?;
+    let payload_len = u32::try_from(payload.len()).map_err(|_| ViError::InvalidInput)?;
+    let mut packet = Vec::with_capacity(HEADER_LEN + payload.len());
+    packet.extend_from_slice(&S::SCHEMA_VERSION.to_le_bytes());
+    packet.extend_from_slice(&payload_len.to_le_bytes());
+    packet.extend_from_slice(&payload);
+    Ok(packet)
+}
+
+/// Validate the header [`encode_transfer`] wrote and hand the payload to
+/// `S::deserialize` with the serializer's schema version.
+///
+/// # Errors
+/// - `ViError::InvalidInput` when the header is malformed or the length disagrees
+/// - `ViError` propagated from `S::deserialize`
+pub fn decode_transfer<S: ViStateTransfer>(packet: &[u8]) -> Result<S, ViError> {
+    let (header, payload) = packet
+        .split_at_checked(HEADER_LEN)
+        .ok_or(ViError::InvalidInput)?;
+    let version = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+    let declared_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+    if payload.len() != declared_len {
+        return Err(ViError::InvalidInput);
+    }
+    S::deserialize(version, payload)
+}
+
 /// Serialize `state` and store it in the kernel stash under `key`.
 ///
 /// A versioned 8-byte header is prepended so [`restore_transfer`] can detect
 /// schema mismatches. Call this from `AppEvent::Snapshot`.
 ///
 /// # Errors
-/// - `ViError` propagated from `state.serialize()`
-/// - `ViError::ResourceBusy` when the kernel stash is full ([`HotswapError::StashFull`])
+/// - `ViError` propagated from [`encode_transfer`]
+/// - `ViError::WouldBlock` when the kernel stash is full ([`HotswapError::StashFull`])
 pub fn stash_transfer<S: ViStateTransfer>(key: u64, state: &S) -> Result<(), ViError> {
-    let payload = state.serialize()?;
-    let payload_len = payload.len() as u32;
-
-    let mut packet = alloc::vec![0u8; HEADER_LEN + payload.len()];
-    packet[..4].copy_from_slice(&S::SCHEMA_VERSION.to_le_bytes());
-    packet[4..8].copy_from_slice(&payload_len.to_le_bytes());
-    packet[HEADER_LEN..].copy_from_slice(&payload);
-
-    stash(key, &packet).map_err(ViError::from)
+    stash(key, &encode_transfer(state)?).map_err(ViError::from)
 }
 
 /// Retrieve and deserialize state from the kernel stash under `key`.
 ///
-/// Reads the versioned header, validates length, and forwards to
-/// `S::deserialize`. Clears the kernel slot on success so the entry does not
-/// accumulate toward the MAX_ENTRIES cap.
+/// Clears the kernel slot on success so the entry does not accumulate toward
+/// the MAX_ENTRIES cap.
 ///
 /// # Errors
 /// - `ViError::NotFound` when no state is stashed ([`HotswapError::NoState`])
-/// - `ViError::InvalidInput` when the header is malformed or truncated
-/// - `ViError` propagated from `S::deserialize`
+/// - `ViError` propagated from [`decode_transfer`]
 pub fn restore_transfer<S: ViStateTransfer>(key: u64) -> Result<S, ViError> {
     let packet = restore(key).map_err(ViError::from)?;
-    if packet.len() < HEADER_LEN {
-        return Err(ViError::InvalidInput);
-    }
-    let version = u32::from_le_bytes(packet[..4].try_into().map_err(|_| ViError::InvalidInput)?);
-    let declared_len =
-        u32::from_le_bytes(packet[4..8].try_into().map_err(|_| ViError::InvalidInput)?) as usize;
-    let payload = &packet[HEADER_LEN..];
-    if payload.len() != declared_len {
-        return Err(ViError::InvalidInput);
-    }
-    let state = S::deserialize(version, payload)?;
+    let state = decode_transfer(&packet)?;
     // Release the slot only after successful deserialization so a retry can
     // recover if deserialization fails (e.g. the new binary is rolled back).
     clear(key);
     Ok(state)
+}
+
+/// The swap id a restore envelope's 64-byte key field names: the decimal
+/// digits up to the first NUL. `None` for an empty, non-decimal or
+/// overflowing key.
+pub fn swap_id_from_restore_key(key: &[u8]) -> Option<u64> {
+    let digits = key.split(|&byte| byte == 0).next().unwrap_or_default();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.iter().try_fold(0u64, |value, &byte| {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        value.checked_mul(10)?.checked_add(u64::from(byte - b'0'))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    // `encode_transfer`/`decode_transfer` are tested with their consumer's state
+    // type (`cells/services/config`), so no test-only impl of the trait lives here.
+    use super::swap_id_from_restore_key;
+
+    #[test]
+    fn the_restore_key_is_the_decimal_swap_id() {
+        let mut key = [0u8; 64];
+        key[..5].copy_from_slice(b"12345");
+        assert_eq!(swap_id_from_restore_key(&key), Some(12345));
+        assert_eq!(swap_id_from_restore_key(b"0"), Some(0));
+        assert_eq!(swap_id_from_restore_key(&[0u8; 64]), None);
+        assert_eq!(swap_id_from_restore_key(b"12a"), None);
+        assert_eq!(swap_id_from_restore_key(b"18446744073709551616"), None);
+    }
 }

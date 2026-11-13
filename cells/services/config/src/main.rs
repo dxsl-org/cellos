@@ -5,12 +5,13 @@
 extern crate alloc;
 extern crate ostd;
 
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use api::caller_identity::CallerIdentity;
-use api::hotswap::ViStateTransfer;
 use api::ipc::{ConfigRequest, ConfigResponse};
 use api::services::proto::config::ConfigError;
+use ostd::hotswap::ViStateTransfer;
 use ostd::prelude::*;
 
 mod rights;
@@ -25,7 +26,9 @@ api::declare_syscalls![
     Heartbeat,
     LookupServiceBound,
     StateStash,
-    StateRestore
+    StateRestore,
+    StateStashClear,
+    HotSwapReady
 ];
 
 // Singleton storage
@@ -133,89 +136,84 @@ impl ostd::service::Handler for ConfigService {
             let _ = request.reply(reply);
         }
     }
+
+    /// The supervisor swaps this incarnation out: hand over the whole store.
+    fn on_snapshot(&mut self) -> Option<Vec<u8>> {
+        let state = ostd::hotswap::encode_transfer(&self.store).ok();
+        ostd::io::println(match state {
+            Some(_) => "[config] state handed to the hot-swap replacement",
+            None => "[config] snapshot failed: state not handed over",
+        });
+        state
+    }
+
+    /// This incarnation is the replacement: take the previous store whole.
+    fn on_restore(&mut self, state: &[u8]) -> bool {
+        match ostd::hotswap::decode_transfer::<ConfigStore>(state) {
+            Ok(store) => {
+                ostd::io::println(&alloc::format!(
+                    "[config] state restored from the previous incarnation ({} keys)",
+                    store.map.len()
+                ));
+                self.store = store;
+                true
+            }
+            Err(_) => {
+                ostd::io::println("[config] restore refused: unreadable state");
+                false
+            }
+        }
+    }
 }
 
 // ─── Hot-swap state transfer ──────────────────────────────────────────────────
 //
-// Wire format (little-endian):
-//   [count: u32][key_len: u16][key bytes][val_len: u16][val bytes]...
-//
-// Schema version 1 is prepended as a u32 for forward compatibility.
-
-const SCHEMA_VERSION: u32 = 1;
+// The schema version travels in `ostd::hotswap`'s header. Payload (little-endian):
+//   [count: u32] then per entry [key_len: u16][key bytes][val_len: u16][val bytes]
 
 impl ViStateTransfer for ConfigStore {
-    fn state_size(&self) -> usize {
-        // version(4) + count(4) + per-entry overhead(4) + key+val bytes
-        4 + 4
-            + self
-                .map
-                .iter()
-                .map(|(k, v)| 2 + k.len() + 2 + v.len())
-                .sum::<usize>()
+    const SCHEMA_VERSION: u32 = 1;
+
+    fn serialize(&self) -> Result<Box<[u8]>, ViError> {
+        let count = u32::try_from(self.map.len()).map_err(|_| ViError::InvalidInput)?;
+        let mut out = Vec::new();
+        out.extend_from_slice(&count.to_le_bytes());
+        for field in self.map.iter().flat_map(|(key, value)| [key, value]) {
+            let len = u16::try_from(field.len()).map_err(|_| ViError::InvalidInput)?;
+            out.extend_from_slice(&len.to_le_bytes());
+            out.extend_from_slice(field.as_bytes());
+        }
+        Ok(out.into_boxed_slice())
     }
 
-    fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
-        let needed = self.state_size();
-        if buf.len() < needed {
-            return Err(ViError::InvalidArgument);
-        }
-        let mut pos = 0;
-        buf[pos..pos + 4].copy_from_slice(&SCHEMA_VERSION.to_le_bytes());
-        pos += 4;
-        let count = self.map.len() as u32;
-        buf[pos..pos + 4].copy_from_slice(&count.to_le_bytes());
-        pos += 4;
-        for (k, v) in &self.map {
-            let kl = k.len() as u16;
-            let vl = v.len() as u16;
-            buf[pos..pos + 2].copy_from_slice(&kl.to_le_bytes());
-            pos += 2;
-            buf[pos..pos + k.len()].copy_from_slice(k.as_bytes());
-            pos += k.len();
-            buf[pos..pos + 2].copy_from_slice(&vl.to_le_bytes());
-            pos += 2;
-            buf[pos..pos + v.len()].copy_from_slice(v.as_bytes());
-            pos += v.len();
-        }
-        Ok(pos)
-    }
-
-    fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
-        if buf.len() < 8 {
+    fn deserialize(version: u32, bytes: &[u8]) -> Result<Self, ViError> {
+        if version != Self::SCHEMA_VERSION {
             return Err(ViError::InvalidInput);
         }
-        let _version = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
-        let count = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
-        let mut pos = 8usize;
-        self.map.clear();
-        for _ in 0..count {
-            if pos + 2 > buf.len() {
-                return Err(ViError::InvalidInput);
-            }
-            let kl = u16::from_le_bytes([buf[pos], buf[pos + 1]]) as usize;
-            pos += 2;
-            if pos + kl > buf.len() {
-                return Err(ViError::InvalidInput);
-            }
-            let key =
-                core::str::from_utf8(&buf[pos..pos + kl]).map_err(|_| ViError::InvalidInput)?;
-            pos += kl;
-            if pos + 2 > buf.len() {
-                return Err(ViError::InvalidInput);
-            }
-            let vl = u16::from_le_bytes([buf[pos], buf[pos + 1]]) as usize;
-            pos += 2;
-            if pos + vl > buf.len() {
-                return Err(ViError::InvalidInput);
-            }
-            let val =
-                core::str::from_utf8(&buf[pos..pos + vl]).map_err(|_| ViError::InvalidInput)?;
-            pos += vl;
-            self.map.insert(String::from(key), String::from(val));
+        let (count, mut rest) = bytes
+            .split_first_chunk::<4>()
+            .ok_or(ViError::InvalidInput)?;
+        let mut map = BTreeMap::new();
+        for _ in 0..u32::from_le_bytes(*count) {
+            let key = take_str(&mut rest)?;
+            let value = take_str(&mut rest)?;
+            map.insert(String::from(key), String::from(value));
         }
-        Ok(())
+        if !rest.is_empty() {
+            return Err(ViError::InvalidInput);
+        }
+        Ok(Self { map })
     }
+}
+
+/// One `[len: u16][utf-8 bytes]` field off the front of `rest`.
+fn take_str<'b>(rest: &mut &'b [u8]) -> Result<&'b str, ViError> {
+    let (len, tail) = rest.split_first_chunk::<2>().ok_or(ViError::InvalidInput)?;
+    let (field, tail) = tail
+        .split_at_checked(usize::from(u16::from_le_bytes(*len)))
+        .ok_or(ViError::InvalidInput)?;
+    *rest = tail;
+    core::str::from_utf8(field).map_err(|_| ViError::InvalidInput)
 }
 
 #[cfg(test)]
@@ -348,5 +346,59 @@ mod tests {
             api::ipc::decode::<ConfigResponse>(reply),
             Ok(ConfigResponse::Err(code)) if code == ConfigError::Malformed as u8
         ));
+    }
+
+    #[test]
+    fn the_whole_store_survives_a_hot_swap_transfer() {
+        let mut store = ConfigStore::new();
+        store
+            .map
+            .insert(String::from("P13KEY"), String::from("swapped-value"));
+        store.map.insert(String::from("EMPTY"), String::new());
+        store.map.insert(String::from("ünï"), String::from("cödé"));
+        let packet = ostd::hotswap::encode_transfer(&store).expect("encodes");
+        // The transfer header: schema version, then the payload length.
+        let payload_len = (packet.len() - 8) as u32;
+        assert_eq!(&packet[..4], &1u32.to_le_bytes());
+        assert_eq!(&packet[4..8], &payload_len.to_le_bytes());
+        let restored = ostd::hotswap::decode_transfer::<ConfigStore>(&packet).expect("decodes");
+        assert_eq!(snapshot(&restored), snapshot(&store));
+    }
+
+    #[test]
+    fn a_packet_whose_header_disagrees_is_refused() {
+        let packet = ostd::hotswap::encode_transfer(&ConfigStore::new()).expect("encodes");
+        let refused = |bytes: &[u8]| ostd::hotswap::decode_transfer::<ConfigStore>(bytes).is_err();
+        for len in [0, 7, 8, packet.len() - 1] {
+            assert!(
+                refused(&packet[..len]),
+                "a {len}-byte packet must not restore"
+            );
+        }
+        let mut padded = packet.clone();
+        padded.push(0);
+        assert!(refused(&padded));
+        let mut newer = packet;
+        newer[0] = 2;
+        assert!(refused(&newer));
+    }
+
+    #[test]
+    fn a_damaged_transfer_is_refused_whole() {
+        let store = ConfigStore::new();
+        let payload = store.serialize().expect("serializes");
+        assert!(ConfigStore::deserialize(2, &payload).is_err());
+        for len in 0..payload.len() {
+            assert!(
+                ConfigStore::deserialize(1, &payload[..len]).is_err(),
+                "a {len}-byte prefix must not restore"
+            );
+        }
+        let mut trailing = payload.to_vec();
+        trailing.push(0);
+        assert!(ConfigStore::deserialize(1, &trailing).is_err());
+        let mut not_utf8 = payload.to_vec();
+        not_utf8[6] = 0xFF;
+        assert!(ConfigStore::deserialize(1, &not_utf8).is_err());
     }
 }

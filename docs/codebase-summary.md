@@ -59,7 +59,7 @@ Cellos/
 1. **Single Address Space (SAS)** — all Cells share one virtual address space; no TLB flush on IPC
 2. **Cellular isolation** — most Cell crates forbid `unsafe`; exceptions are documented, audited driver/service boundaries where hardware or FFI requires it
 3. **Capability model** — capability entries enforce single ownership, permission bits, optional lease expiry, close, and owner-exit revocation; spawn-time `CapSet` intersection remains the separate monotonic-downgrade boundary
-4. **Hot-swap** — `ViStateTransfer` on shell/config/vfs; 5-step live Cell replacement
+4. **Hot-swap** — supervisor-orchestrated live replacement with state through the kernel stash; proven for `config` only (`config-hotswap-x86`)
 5. **Law 2 (Owned Buffers)** — no `&mut [u8]` across `async` boundaries
 6. **Law 5 (No mod.rs)** — `foo.rs` parallel to `foo/` everywhere
 

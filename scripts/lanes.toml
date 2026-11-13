@@ -60,6 +60,11 @@ tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[lane]]
+path = "scripts/build-x86_64-config-hotswap-ci.sh"
+arch = "x86_64"
+tier = "pr"
+
+[[lane]]
 path = "scripts/build-x86_64-cpp-hosted-ci.sh"
 arch = "x86_64"
 tier = "manual"
@@ -488,6 +493,11 @@ name = "compositor-cursor"
 arch = "default"
 tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+
+[[test]]
+name = "config-hotswap-x86"
+arch = "x86_64"
+tier = "pr"
 
 [[test]]
 name = "console-x86"

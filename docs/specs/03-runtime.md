@@ -25,14 +25,31 @@ Cellos tận dụng triệt để mô hình lập trình bất đồng bộ củ
 * **Bảo vệ**: Kernel sẽ từ chối lệnh `unload` của Cell sở hữu ban đầu cho đến khi tác vụ Async hoàn tất và quyền sở hữu được trả về hoặc giải phóng.
 
 ## 3. Hot-Swap & State Transfer
-Cellos hỗ trợ nâng cấp phần mềm mà không cần ngừng hệ thống (Live Update).
+Một Cell dịch vụ đang chạy có thể được thay bằng một bản mới cùng service id. Việc này do
+**Supervisor Cell** điều phối (`cells/services/supervisor/src/hotswap.rs`); kernel chỉ cung
+cấp các primitive (pause, freeze, `SpawnReplacement`, state stash, `CommitHotswap`, `KillCell`).
 
-* **Protocol**: Các Cell quan trọng phải thực thi Trait `StateTransfer`.
+* **Ai yêu cầu**: chỉ chương trình đã ký `hotswap` (`hotswap <service> <elf>`). Supervisor nhận
+  đúng hai đích: `config` và `hotswap-demo` (Cell demo).
 * **Quy trình**:
-    1. Kernel đóng băng (Pause) các luồng thực thi của `OldCell`.
-    2. Gọi `serialize_state()` để trích xuất dữ liệu trạng thái.
-    3. Nạp `NewCell` và gọi `deserialize_state(blob)`.
-    4. Tráo đổi con trỏ hàm (Symbol Re-linking) và giải phóng `OldCell`.
+    1. Supervisor tạm dừng đăng ký của dịch vụ và gửi envelope Snapshot `[0xAC, 0xF0, swap_id]`
+       tới Cell cũ.
+    2. Cell cũ cất trạng thái vào **state stash của kernel** dưới khóa `hotswap_key(swap_id)`.
+       Một dịch vụ chạy `ostd::service::serve` làm việc này qua `Handler::on_snapshot`; `serve`
+       chỉ nhận envelope hot-swap từ provider `SUPERVISOR` đang sống và không bao giờ trả lời nó.
+    3. Supervisor đóng băng Cell cũ; `SpawnReplacement` nạp ELF mới, kernel niêm phong stash cho
+       đúng bản thay thế đó.
+    4. Envelope Restore `[0xAC, 0xF1, khóa thập phân]` → bản mới đọc stash, áp dụng
+       (`Handler::on_restore`), xóa slot và gọi `HotSwapReady`.
+    5. `CommitHotswap` đóng ingress cũ, chuyển hàng đợi và công bố tid mới; Supervisor `KillCell`
+       Cell cũ (lý do thoát `0xAAAA_AAAA`). Init thấy lý do này cùng một provider mới đang sống,
+       nên theo dõi tid mới thay vì khởi động lại dịch vụ.
+    6. Một bước thất bại trước commit: Supervisor giết bản mới và khôi phục Cell cũ.
+* **Đã chứng minh**: chỉ cho `config`, bằng lane `config-hotswap-x86` (khóa ghi trước swap đọc lại
+  được sau swap, `config` có tid mới, init không khởi động lại nó).
+* **Không có**: tráo đổi con trỏ hàm (symbol re-linking), kernel tự pause/serialize Cell, hay bất
+  kỳ yêu cầu nào buộc các dịch vụ khác (vfs, net, compositor, input…) hỗ trợ hot-swap; chúng được
+  nâng cấp bằng restart.
 
 ## 4. Boot Optimization (Snapshot)
 

@@ -13,6 +13,7 @@ extern crate alloc;
 
 use crate::transfer::{send_restore_event, send_snapshot_event};
 use api::services::proto::supervisor::HotswapError;
+use ostd::hotswap::hotswap_key;
 use ostd::service::namespace_flags;
 use ostd::service::provider_tid;
 use ostd::syscall::{
@@ -36,16 +37,6 @@ fn expired(start: Option<u64>) -> bool {
     }
 }
 
-// ── IPC envelope byte constants (must match kernel hotswap.rs) ───────────────
-
-// ── Hotswap stash key (must match ostd::hotswap::hotswap_key) ────────────────
-
-fn stash_key_for(swap_id: u64) -> u64 {
-    0x00A3_0000_0000_0000_u64 | (swap_id & 0xFFFF_FFFF_FFFF)
-}
-
-// ── Decimal formatter (no std) ────────────────────────────────────────────────
-
 // ── Poll helpers ──────────────────────────────────────────────────────────────
 
 /// Poll until the stash entry for `key` exists, yielding between iterations.
@@ -54,8 +45,8 @@ fn stash_key_for(swap_id: u64) -> u64 {
 /// stored length): the supervisor may see that state exists, never its bytes.
 /// Returns `Err(SnapshotTimeout)` after `WAIT_TICKS` without success.
 ///
-/// A stash miss is tolerated (cell that doesn't implement ViStateTransfer never
-/// stashes anything); the hotswap continues with an empty stash.
+/// A stash miss is tolerated here: a target that hands over no state never
+/// stashes, and its replacement then never signals Ready, so the swap rolls back.
 fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
     let start = sys_get_scheduler_ticks();
     loop {
@@ -117,7 +108,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     let old_tid = provider_tid(service_id).ok_or(HotswapError::ServiceNotFound)?;
 
     let swap_id = next_swap_id();
-    let stash_key = stash_key_for(swap_id);
+    let stash_key = hotswap_key(swap_id);
 
     // ── Step 1a: FREEZE (soft) ────────────────────────────────────────────────
     // The old cell must still run to receive the Snapshot IPC.  We freeze the
@@ -130,8 +121,8 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
         return Err(e);
     }
 
-    // Wait for old cell to stash state.  Timeout is non-fatal — cells that
-    // don't implement ViStateTransfer never stash; we continue with empty stash.
+    // Wait for old cell to stash state. A timeout is not fatal here: a target
+    // without state never stashes, and the restore step decides.
     match wait_for_stash_key(stash_key) {
         Ok(()) | Err(HotswapError::SnapshotTimeout) => {}
         Err(e) => {
