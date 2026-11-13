@@ -72,47 +72,5 @@ pub fn kaslr_cell_base(cell_id: usize) -> VAddr {
 // ─── Architecture-specific entropy read ──────────────────────────────────────
 
 fn read_hw_entropy() -> u64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        // RDTSC returns the current timestamp counter. On QEMU TCG this is a
-        // monotonically increasing instruction count — sufficient for ASLR.
-        let lo: u32;
-        let hi: u32;
-        // SAFETY: RDTSC is an unprivileged instruction on x86_64; it reads the
-        // CPU time-stamp counter and has no memory or control-flow side-effects.
-        unsafe {
-            core::arch::asm!(
-                "rdtsc",
-                out("eax") lo,
-                out("edx") hi,
-                options(nomem, nostack)
-            );
-        }
-        ((hi as u64) << 32) | (lo as u64)
-    }
-    #[cfg(target_arch = "riscv64")]
-    {
-        // SAFETY: `csrr time` reads the mtime-backed TIME CSR (unprivileged read
-        // permitted in S-mode when sstatus.TVM=0, which is always the case here).
-        let t: u64;
-        unsafe {
-            core::arch::asm!("csrr {}, time", out(reg) t, options(nomem, nostack));
-        }
-        t
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        // SAFETY: CNTVCT_EL0 is the virtual count register; accessible from EL1.
-        let t: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, cntvct_el0", out(reg) t, options(nomem, nostack));
-        }
-        t
-    }
-    #[cfg(not(cellos_wide))]
-    {
-        // No hardware timer available; use a fixed diversifier.
-        // This means KASLR is purely seed-based (hhdm_offset) on these arches.
-        0xDEAD_BEEF_CAFE_1234u64
-    }
+    crate::arch::clock::counter()
 }

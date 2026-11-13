@@ -33,6 +33,7 @@
 "kernel/src/acpi/tests/tables.rs" = { category = "test", owner = "acpi" }
 
 # ---- arch ----
+"kernel/src/arch/aarch64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
 "kernel/src/arch/aarch64/dev/mmc/pinmux_bcm.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
@@ -41,12 +42,14 @@
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/riscv32.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
+"kernel/src/arch/riscv64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/riscv64/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/riscv64/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
@@ -71,6 +74,7 @@
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
+"kernel/src/arch/x86_64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/dev/console_select.rs" = { category = "C", owner = "dev" }
 "kernel/src/arch/x86_64/dev/fb_console.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
 "kernel/src/arch/x86_64/dev/fb_font.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }

@@ -1296,74 +1296,17 @@ pub(super) fn mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -> Sysc
 pub(super) fn get_time(op: usize) -> SyscallResult {
     match op {
         // op=0: raw monotonic ticks (arch-specific frequency)
-        0 => {
-            #[cfg(target_arch = "riscv64")]
-            let t = hal::common::timer::read_mtime() as usize;
-            #[cfg(target_arch = "aarch64")]
-            let t = hal::timer::read_ticks() as usize;
-            #[cfg(target_arch = "x86_64")]
-            let t = hal::clock::now_ns() as usize;
-            #[cfg(not(cellos_wide))]
-            let t = 0usize;
-            Ok(t)
-        }
+        0 => Ok(crate::arch::clock::uptime_ticks()),
         // op=1: milliseconds since boot
-        1 => {
-            // 10 MHz mtime on QEMU RV64 → 10_000 ticks/ms
-            #[cfg(target_arch = "riscv64")]
-            let ms = (hal::common::timer::read_mtime() / 10_000) as usize;
-            // Dynamic timer frequency on ARM64 (19.2 MHz on RPi3, 62.5 MHz on QEMU virt)
-            #[cfg(target_arch = "aarch64")]
-            let ms = {
-                let freq = hal::timer::read_freq();
-                let ticks_per_ms = if freq > 0 { freq / 1000 } else { 62_500 };
-                (hal::timer::read_ticks() / ticks_per_ms) as usize
-            };
-            // The x86 clocksource already returns nanoseconds; ÷ 1_000_000 → ms
-            #[cfg(target_arch = "x86_64")]
-            let ms = (hal::clock::now_ns() / 1_000_000) as usize;
-            #[cfg(not(cellos_wide))]
-            let ms = 0usize;
-            Ok(ms)
-        }
+        1 => Ok(crate::arch::clock::uptime_ms()),
         // op=4: scheduler ticks (10 ms preemption slices)
         4 => Ok(crate::task::system_ticks()),
         // op=2: nanoseconds since Unix epoch (wall-clock)
-        2 => {
-            #[cfg(target_arch = "riscv64")]
-            let ns = hal::common::rtc::now_epoch_ns() as usize;
-            #[cfg(target_arch = "aarch64")]
-            let ns = hal::rtc::now_epoch_ns() as usize;
-            #[cfg(target_arch = "x86_64")]
-            let ns = hal::rtc::now_epoch_ns() as usize;
-            #[cfg(not(cellos_wide))]
-            let ns = 0usize;
-            Ok(ns)
-        }
+        2 => Ok(crate::arch::clock::epoch_ns() as usize),
         // op=3: seconds since Unix epoch (wall-clock)
-        3 => {
-            #[cfg(target_arch = "riscv64")]
-            let s = (hal::common::rtc::now_epoch_ns() / 1_000_000_000) as usize;
-            #[cfg(target_arch = "aarch64")]
-            let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
-            #[cfg(target_arch = "x86_64")]
-            let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
-            #[cfg(not(cellos_wide))]
-            let s = 0usize;
-            Ok(s)
-        }
+        3 => Ok((crate::arch::clock::epoch_ns() / 1_000_000_000) as usize),
         // op=5: monotonic tick counter frequency in Hz
-        5 => {
-            #[cfg(target_arch = "riscv64")]
-            let freq = 10_000_000usize;
-            #[cfg(target_arch = "aarch64")]
-            let freq = hal::timer::read_freq() as usize;
-            #[cfg(target_arch = "x86_64")]
-            let freq = 1_000_000_000usize; // HPET is in nanoseconds (1 GHz)
-            #[cfg(not(cellos_wide))]
-            let freq = 10_000_000usize;
-            Ok(freq)
-        }
+        5 => Ok(crate::arch::clock::tick_hz()),
         // Unknown op — return 0 for backward compatibility
         _ => Ok(0),
     }

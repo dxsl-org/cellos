@@ -836,14 +836,7 @@ pub fn init() {
     // Done after scheduler init so vi_timer_tick() sees a valid SCHEDULER.
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        // SAFETY: sets STIE (bit 5 = mask 0x20) in sie from S-mode. Must use the
-        // register form of csrs — csrsi's immediate is only 5 bits (0..=31), so a
-        // 0x20 mask cannot be encoded as an immediate.
-        unsafe {
-            core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize);
-        }
-        let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
-        hal::common::sbi::set_timer(next);
+        crate::arch::clock::start_tick();
         info!("Timer preemption enabled (10 ms timeslice)");
     }
 }

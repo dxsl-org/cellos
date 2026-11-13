@@ -1105,7 +1105,7 @@ pub(super) fn telemetry_snapshot(
         crate::task::telemetry::capture(
             sched,
             epoch,
-            crate::task::telemetry::monotonic_ns(),
+            crate::arch::clock::monotonic_ns(),
             out_len,
             flags & request::TASKS != 0,
         )
@@ -1130,7 +1130,7 @@ pub(super) fn telemetry_snapshot(
             None => crate::task::telemetry::SystemMemory::Unavailable,
         }
     };
-    let bytes = capture.finish(memory, crate::task::telemetry::monotonic_ns());
+    let bytes = capture.finish(memory, crate::arch::clock::monotonic_ns());
     write_user_slice(caller_id, out_ptr, &bytes, MAX_USER_BUF)?;
     Ok(bytes.len())
 }

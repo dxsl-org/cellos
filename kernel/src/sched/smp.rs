@@ -1907,12 +1907,7 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
     // the 10ms preemption slice for this hart.
     #[cfg(target_arch = "riscv64")]
     {
-        // SAFETY: csrs on sie is always legal from S-mode (RISC-V priv spec §4.1.3).
-        unsafe {
-            core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize);
-        }
-        let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
-        hal::common::sbi::set_timer(next);
+        crate::arch::clock::start_tick();
     }
 
     // `ARCH.init()` enables SSIE in `sie`, but it deliberately leaves the

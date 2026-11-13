@@ -136,12 +136,7 @@ impl SdhciController {
     fn controller_timer_ticks() -> u64 {
         #[cfg(target_arch = "aarch64")]
         {
-            let ticks: u64;
-            // SAFETY: CNTPCT_EL0 is a read-only architectural counter available at EL1/EL2.
-            unsafe {
-                core::arch::asm!("mrs {}, cntpct_el0", out(reg) ticks, options(nomem, nostack));
-            }
-            ticks
+            crate::arch::clock::physical_counter()
         }
         #[cfg(not(target_arch = "aarch64"))]
         {
@@ -151,12 +146,7 @@ impl SdhciController {
 
     #[cfg(target_arch = "aarch64")]
     fn controller_timer_frequency() -> u64 {
-        let frequency: u64;
-        // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
-        unsafe {
-            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
-        }
-        frequency
+        crate::arch::clock::counter_frequency()
     }
 
     fn space_controller_write(&self, off: usize) {

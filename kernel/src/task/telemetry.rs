@@ -34,31 +34,6 @@ use crate::sched::hart_local::ready as rl;
 use crate::sched::scheduler::Scheduler;
 use crate::sched::smp::MAX_HARTS;
 
-/// Monotonic nanoseconds on the same clock `GetTime(0)` exposes to cells.
-pub(crate) fn monotonic_ns() -> Option<u64> {
-    #[cfg(target_arch = "x86_64")]
-    {
-        Some(hal::clock::now_ns())
-    }
-    #[cfg(target_arch = "riscv64")]
-    {
-        hal::common::timer::read_mtime().checked_mul(100)
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        let freq = hal::timer::read_freq();
-        if freq == 0 {
-            return None;
-        }
-        u64::try_from(u128::from(hal::timer::read_ticks()) * 1_000_000_000u128 / u128::from(freq))
-            .ok()
-    }
-    #[cfg(not(cellos_wide))]
-    {
-        None
-    }
-}
-
 /// The exited CPU retained for one CellId slot's current generation.
 #[derive(Clone, Copy, Default)]
 struct ExitedCpu {
@@ -175,7 +150,7 @@ fn draw_epoch() -> u64 {
             return value;
         }
     }
-    let boot = rtc_epoch_ns().saturating_sub(monotonic_ns().unwrap_or(0));
+    let boot = rtc_epoch_ns().saturating_sub(crate::arch::clock::monotonic_ns().unwrap_or(0));
     if boot != 0 {
         boot
     } else {
@@ -189,21 +164,9 @@ fn rtc_epoch_ns() -> u64 {
     {
         0
     }
-    #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "x86_64"))]
+    #[cfg(not(all(test, not(target_os = "none"))))]
     {
-        hal::rtc::now_epoch_ns()
-    }
-    #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "aarch64"))]
-    {
-        hal::rtc::now_epoch_ns()
-    }
-    #[cfg(all(not(all(test, not(target_os = "none"))), target_arch = "riscv64"))]
-    {
-        hal::common::rtc::now_epoch_ns()
-    }
-    #[cfg(all(not(all(test, not(target_os = "none"))), not(cellos_wide)))]
-    {
-        0
+        crate::arch::clock::epoch_ns()
     }
 }
 

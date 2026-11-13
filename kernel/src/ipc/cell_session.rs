@@ -3250,7 +3250,7 @@ fn stream_io(
         let wait = if deadline_ns == u64::MAX {
             None
         } else {
-            let now = crate::task::telemetry::monotonic_ns().ok_or(Status::Unsupported)?;
+            let now = crate::arch::clock::monotonic_ns().ok_or(Status::Unsupported)?;
             if now >= deadline_ns {
                 return Err(Status::TimedOut);
             }

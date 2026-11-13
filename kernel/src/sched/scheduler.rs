@@ -2322,7 +2322,7 @@ impl Scheduler {
         let now = crate::task::system_ticks();
         // S6-1 K1: charge before any selection or watchdog decision, so every
         // pass — timer or voluntary — closes the outgoing interval exactly once.
-        self.charge_cpu(hart_id, crate::task::telemetry::monotonic_ns());
+        self.charge_cpu(hart_id, crate::arch::clock::monotonic_ns());
         // The global sweep (timer wakes, heartbeat, async-poll) runs on whichever
         // hart passes first after the tick advances or an event is hinted: it is
         // serialized by SCHEDULER and gated by `last_global_sweep_tick`, so a
