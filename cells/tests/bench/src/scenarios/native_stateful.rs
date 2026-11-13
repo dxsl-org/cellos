@@ -1,329 +1,197 @@
-//! Native Stateful Workload Scenario (Phase 05).
+//! Native stateful workload: 1,000 deterministic increments of the supervised
+//! `hotswap-demo` service, a checkpoint every 100 operations in
+//! `/srv/checkpoint.log`, a v1 -> v2 hotswap at operation 300 with a cached-TID
+//! increment as operation 301, a VFS restart at operation 600, and a failed
+//! hotswap that must leave the live provider intact.
 //!
-//! Executes 1,000 deterministic operations with:
-//! - 999 primary writer increments + 1 cached-TID increment at cutover (op 301)
-//! - Real VFS checkpoints every 100 operations to `/srv/checkpoint.log`
-//! - Hotswap v1 -> v2 at operation 300
-//! - VFS service restart via supervisor bridge at operation 600
-//! - Verification of stale handle refusal after restart
-//! - Full readback and CRC32C verification of all 10 checkpoints
-//! - Failed hotswap test preserving live provider
-//! - Soft latency and error budget reporting
+//! The shell drives it in steps, because only the shell-launched `hotswap` CLI
+//! may ask the supervisor for a swap, and a shell-launched bench reaches `/srv`
+//! only through its cwd handle (run it from `cd /srv`):
+//!   `bench native-stateful prime`   ops 1-300, checkpoints 1-3, cached sender armed
+//!   `hotswap hotswap-demo /bin/hotswap-demo-v2`
+//!   `bench native-stateful restart` op 301 reconciled, ops 302-600, checkpoints
+//!                                   4-6, then VFS killed through the supervisor
+//!                                   (init restarts it; this launch ends with it)
+//!   `bench native-stateful finish`  checkpoints 1-6 survived the restart, ops
+//!                                   601-1000, checkpoints 7-10
+//!   `hotswap hotswap-demo /bin/hotswap-demo-nonexistent` (must fail)
+//!   `bench native-stateful live`    v2 still serves counter 1000
 
 extern crate alloc;
 
 use alloc::format;
-use api::services::hostile_backend_recovery::{encode_kill_request, KILL_STATUS_OK};
-use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-use api::services::proto::supervisor::{
-    HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_STATUS, PHASE_HOTSWAP_DONE, STATUS_OK, STATUS_REPLY_LEN,
-    SVC_NAME_LEN,
+use api::dir_handles::ViDirHandle;
+use api::services::hostile_backend_recovery::{
+    encode_kill_request, parse_kill_response, KILL_STATUS_OK,
 };
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
 use api::syscall::service;
-use cellos_fs::crc32::crc32c;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{
     sys_heartbeat, sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned,
     sys_yield, SyscallResult,
 };
-const CHECKPOINT_PATH: &str = "/srv/checkpoint.log";
+
+use super::native_stateful_log::{self as log, CHECKPOINT_INTERVAL};
+
 const TOTAL_OPS: u32 = 1000;
-const CHECKPOINT_INTERVAL: u32 = 100;
 const WAIT_TICKS: usize = 500;
 const CUTOVER_WINDOW_TICKS: usize = 1_600;
+/// The supervisor answers a kill request once the Cell is gone.
+const KILL_REPLY_TICKS: u64 = 200;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CheckpointRecord {
-    seq: u32,
-    counter: u32,
-    checksum: u32,
-}
-
-impl CheckpointRecord {
-    fn new(seq: u32, counter: u32) -> Self {
-        let mut data = [0u8; 8];
-        data[..4].copy_from_slice(&seq.to_le_bytes());
-        data[4..].copy_from_slice(&counter.to_le_bytes());
-        let checksum = crc32c(&data);
-        Self {
-            seq,
-            counter,
-            checksum,
-        }
-    }
-
-    fn to_bytes(self) -> [u8; 12] {
-        let mut b = [0u8; 12];
-        b[0..4].copy_from_slice(&self.seq.to_le_bytes());
-        b[4..8].copy_from_slice(&self.counter.to_le_bytes());
-        b[8..12].copy_from_slice(&self.checksum.to_le_bytes());
-        b
-    }
-
-    fn from_bytes(b: &[u8]) -> Option<Self> {
-        if b.len() < 12 {
-            return None;
-        }
-        let seq = u32::from_le_bytes(b[0..4].try_into().ok()?);
-        let counter = u32::from_le_bytes(b[4..8].try_into().ok()?);
-        let checksum = u32::from_le_bytes(b[8..12].try_into().ok()?);
-
-        let mut data = [0u8; 8];
-        data[..4].copy_from_slice(&seq.to_le_bytes());
-        data[4..].copy_from_slice(&counter.to_le_bytes());
-        if crc32c(&data) != checksum {
-            return None;
-        }
-        Some(Self {
-            seq,
-            counter,
-            checksum,
-        })
+pub fn run(step: Option<&str>) -> ! {
+    match step {
+        Some("prime") => prime(),
+        Some("restart") => restart(),
+        Some("finish") => finish(),
+        Some("live") => live(),
+        _ => fail("usage: bench native-stateful prime|restart|finish|live"),
     }
 }
 
-pub fn run() {
-    println("[native-stateful] START: 1000-op stateful workload");
-    sys_heartbeat(0);
-    // 1. Service Discovery
-    let Some(mut demo_tid) = provider_tid(service::HOTSWAP_DEMO) else {
-        fail("HOTSWAP_DEMO service is not registered");
-    };
-    let Some(vfs_tid) = provider_tid(service::VFS) else {
-        fail("VFS service is not registered");
-    };
-    let Some(supervisor_tid) = provider_tid(service::SUPERVISOR) else {
-        fail("SUPERVISOR service is not registered");
-    };
-
-    println(&format!("[native-stateful] initial services: demo_tid={demo_tid} vfs_tid={vfs_tid} supervisor_tid={supervisor_tid}"));
-
-    // Ensure clean start for checkpoint log
-    let mut vfs_client = ostd::clients::VfsClient::new();
-    let _ = vfs_client.unlink(CHECKPOINT_PATH);
-
-    let mut current_counter: u32 = 0;
-    let mut checkpoint_seq: u32 = 0;
-    let mut oracle: [Option<CheckpointRecord>; 10] = [None; 10];
-
-    // 2. Operations 1 to 300 (v1)
-    for op in 1..=300 {
-        sys_heartbeat(0);
-        if !inc_demo(demo_tid) {
-            fail(&format!("increment failed at op {op}"));
-        }
-        current_counter += 1;
-
-        if op % CHECKPOINT_INTERVAL == 0 {
-            checkpoint_seq += 1;
-            let record = CheckpointRecord::new(checkpoint_seq, current_counter);
-            oracle[(checkpoint_seq - 1) as usize] = Some(record);
-            append_checkpoint(CHECKPOINT_PATH, &record);
-            println(&format!("[native-stateful] checkpoint {checkpoint_seq} committed: counter={current_counter}"));
-        }
+fn prime() -> ! {
+    let dir = srv_dir();
+    let demo = demo_tid();
+    expect_counter(demo, b"v1:", 0);
+    log::clear(dir);
+    run_ops(demo, dir, 1..=300);
+    expect_counter(demo, b"v1:", 300);
+    if !spawn_cached_sender_probe(demo) {
+        fail("cannot spawn the cached-sender probe for operation 301");
     }
-    assert_eq!(current_counter, 300);
-    assert_eq!(checkpoint_seq, 3);
+    done("primed: v1 counter=300, checkpoints 1-3, cached sender armed")
+}
 
-    // 3. At Operation 300: Hotswap v1 -> v2 with cached-TID witness for Op 301
-    println("[native-stateful] Operation 300 reached: initiating hotswap v1 -> v2");
-    if !spawn_cached_sender_probe(demo_tid) {
-        fail("cannot spawn cached-sender probe for operation 301");
-    }
-
-    sys_heartbeat(0);
-    // Trigger supervisor hotswap to v2
-    if !trigger_hotswap(supervisor_tid, "hotswap-demo", "/bin/hotswap-demo-v2") {
-        fail("supervisor hotswap request to v2 failed");
-    }
-
-    // Wait for replacement demo TID
-    let Some(v2_tid) = wait_for_replacement_demo(demo_tid, WAIT_TICKS) else {
-        fail("replacement demo v2 did not publish a new tid");
-    };
-    println(&format!(
-        "[native-stateful] hotswap v2 published: old_tid={demo_tid} -> new_tid={v2_tid}"
-    ));
-    demo_tid = v2_tid;
-
-    current_counter = 301;
-    let mut readback_301 = None;
+fn restart() -> ! {
+    let dir = srv_dir();
+    let demo = demo_tid();
+    // Operation 301 is the cached sender's increment, drained into v2 at cutover.
+    let mut counter = None;
     for _ in 0..100 {
-        sys_heartbeat(0);
-        readback_301 = read_counter(demo_tid, b"v2:");
-        if readback_301 == Some(301) {
+        counter = read_counter(demo, b"v2:");
+        if counter == Some(301) {
             break;
         }
         sys_yield();
     }
-    if readback_301 != Some(301) {
+    if counter != Some(301) {
         fail(&format!(
-            "cutover counter expected 301, got {readback_301:?}"
+            "op 301 not reconciled into v2: counter {counter:?}"
         ));
     }
-    println("[native-stateful] Op 301 reconciled via cached-TID witness: counter=301");
+    println("[native-stateful] op 301 reconciled via the cached-TID witness");
+    run_ops(demo, dir, 302..=600);
+    expect_log(dir, 6);
 
-    // Operations 302 to 600 (v2)
-    for op in 302..=600 {
-        sys_heartbeat(0);
-        if !inc_demo(demo_tid) {
-            fail(&format!("increment failed at op {op}"));
-        }
-        current_counter += 1;
-
-        if op % CHECKPOINT_INTERVAL == 0 {
-            checkpoint_seq += 1;
-            let record = CheckpointRecord::new(checkpoint_seq, current_counter);
-            oracle[(checkpoint_seq - 1) as usize] = Some(record);
-            append_checkpoint(CHECKPOINT_PATH, &record);
-            println(&format!("[native-stateful] checkpoint {checkpoint_seq} committed: counter={current_counter}"));
-        }
-    }
-    println("[native-stateful] Operation 600 reached: testing VFS restart recovery");
-    let old_vfs_tid = vfs_tid;
-
-    // Send authorized kill request for VFS to supervisor
-    let kill_req = encode_kill_request(service::VFS);
-    if !matches!(sys_send(supervisor_tid, &kill_req), SyscallResult::Ok(_)) {
-        fail("failed to send VFS kill request to supervisor");
-    }
-    let mut kill_resp = [0u8; 2];
-    let received = recv_from(supervisor_tid, &mut kill_resp);
-    if !received || kill_resp[1] != KILL_STATUS_OK {
-        fail(&format!("supervisor rejected or failed VFS kill request: received={received} resp={kill_resp:?}"));
-    }
-    println(&format!(
-        "[native-stateful] VFS kill confirmed by supervisor: killed tid={old_vfs_tid}"
-    ));
-
-    // Wait for init to restart VFS and register new TID
-    let Some(new_vfs_tid) = wait_for_service_restart(service::VFS, old_vfs_tid, WAIT_TICKS) else {
-        fail("VFS was not restarted by init");
+    let Some(supervisor) = provider_tid(service::SUPERVISOR) else {
+        fail("SUPERVISOR service is not registered");
     };
-    println(&format!("[native-stateful] VFS restarted successfully: old_tid={old_vfs_tid} -> new_tid={new_vfs_tid}"));
-    let _ = new_vfs_tid;
+    // This launch ends with the VFS: its cwd handle was prepared by that VFS, and
+    // the kernel ends a shell-launched child whose launch the dead VFS took part
+    // in. The lane checks the restart in init's log and the log in `finish`.
+    println("[native-stateful] killing VFS through the supervisor");
+    let (mut send, mut reply) = ([0u8; 8], [0u8; 8]);
+    let status = ostd::ipc::service_call_bounded(
+        supervisor,
+        &encode_kill_request(service::VFS),
+        &mut send,
+        &mut reply,
+        KILL_REPLY_TICKS,
+    )
+    .ok()
+    .and_then(parse_kill_response);
+    if status != Some(KILL_STATUS_OK) {
+        fail(&format!("supervisor refused the VFS kill: {status:?}"));
+    }
+    ostd::syscall::sys_exit(0)
+}
 
-    // Verify checkpoints 1..=6 are intact in `/srv/checkpoint.log` after VFS restart
-    verify_persisted_checkpoints(CHECKPOINT_PATH, &oracle[..6]);
-    println("[native-stateful] VFS restart recovery verified: checkpoints 1..6 intact");
+fn finish() -> ! {
+    let dir = srv_dir();
+    let demo = demo_tid();
+    expect_log(dir, 6);
+    println("[native-stateful] checkpoints 1-6 intact after the VFS restart");
+    expect_counter(demo, b"v2:", 600);
+    run_ops(demo, dir, 601..=TOTAL_OPS);
+    expect_counter(demo, b"v2:", TOTAL_OPS);
+    expect_log(dir, TOTAL_OPS / CHECKPOINT_INTERVAL);
+    done("1000/1000 ops, 10 checkpoints verified")
+}
 
-    // 5. Operations 601 to 1,000
-    for op in 601..=TOTAL_OPS {
+fn live() -> ! {
+    expect_counter(demo_tid(), b"v2:", TOTAL_OPS);
+    println("[native-stateful] failed hotswap preserved the live provider and its counter");
+    done("ALL CRITERIA PASSED")
+}
+
+fn run_ops(demo: usize, dir: ViDirHandle, ops: core::ops::RangeInclusive<u32>) {
+    for op in ops {
         sys_heartbeat(0);
-        if !inc_demo(demo_tid) {
+        if !inc_demo(demo) {
             fail(&format!("increment failed at op {op}"));
         }
-        current_counter += 1;
-
         if op % CHECKPOINT_INTERVAL == 0 {
-            checkpoint_seq += 1;
-            let record = CheckpointRecord::new(checkpoint_seq, current_counter);
-            oracle[(checkpoint_seq - 1) as usize] = Some(record);
-            append_checkpoint(CHECKPOINT_PATH, &record);
-            println(&format!("[native-stateful] checkpoint {checkpoint_seq} committed: counter={current_counter}"));
+            let seq = op / CHECKPOINT_INTERVAL;
+            if let Err(error) = log::commit(dir, seq) {
+                fail(&format!("checkpoint {seq}: {error}"));
+            }
+            println(&format!(
+                "[native-stateful] checkpoint {seq} committed: counter={op}"
+            ));
         }
     }
-    assert_eq!(current_counter, 1000);
-    assert_eq!(checkpoint_seq, 10);
+}
 
-    // Final counter readback from demo v2
-    let final_counter = read_counter(demo_tid, b"v2:");
-    if final_counter != Some(1000) {
+fn expect_log(dir: ViDirHandle, count: u32) {
+    match log::read(dir) {
+        Some(bytes) if bytes == log::expected(count) => {}
+        Some(bytes) => fail(&format!(
+            "checkpoint log holds {} bytes, not records 1-{count}",
+            bytes.len()
+        )),
+        None => fail("cannot read the checkpoint log"),
+    }
+}
+
+fn expect_counter(demo: usize, prefix: &[u8; 3], expected: u32) {
+    let counter = read_counter(demo, prefix);
+    if counter != Some(expected) {
         fail(&format!(
-            "final counter mismatch: expected 1000, got {final_counter:?}"
+            "demo counter expected {expected} from {}, got {counter:?}",
+            core::str::from_utf8(&prefix[..2]).unwrap_or("?")
         ));
     }
-    println("[native-stateful] final counter verified: 1000");
+}
 
-    // Final readback of all 10 checkpoints
-    verify_persisted_checkpoints(CHECKPOINT_PATH, &oracle[..10]);
-    println("[native-stateful] all 10 checkpoints verified against independent oracle");
+fn srv_dir() -> ViDirHandle {
+    log::srv_dir().unwrap_or_else(|error| fail(error))
+}
 
-    // 6. Test failed hotswap preserves live provider
-    println("[native-stateful] testing failed hotswap preserves live provider");
-    if trigger_hotswap(
-        supervisor_tid,
-        "hotswap-demo",
-        "/bin/hotswap-demo-nonexistent",
-    ) {
-        fail("hotswap to non-existent ELF unexpectedly succeeded");
-    }
-    if read_counter(demo_tid, b"v2:") != Some(1000) {
-        fail("failed hotswap corrupted live provider counter");
-    }
-    println("[native-stateful] failed hotswap preserved live provider and counter");
-
-    // 7. Success Report
-    println(
-        "[native-stateful] Summary: 1000/1000 ops completed, 10 checkpoints verified, 0 errors",
-    );
-    println("[native-stateful] ALL CRITERIA PASSED");
-    ostd::syscall::sys_exit(0);
+fn demo_tid() -> usize {
+    provider_tid(service::HOTSWAP_DEMO)
+        .unwrap_or_else(|| fail("HOTSWAP_DEMO service is not registered"))
 }
 
 fn inc_demo(tid: usize) -> bool {
     let mut resp = [0u8; 2];
     let msg = [MAGIC, KIND_MESSAGE, b'i', b'n', b'c'];
-    if !matches!(sys_send(tid, &msg), SyscallResult::Ok(_)) {
-        return false;
-    }
-    recv_from(tid, &mut resp) && &resp == b"ok"
+    matches!(sys_send(tid, &msg), SyscallResult::Ok(_))
+        && recv_from(tid, &mut resp)
+        && &resp == b"ok"
 }
 
 fn read_counter(tid: usize, expected_prefix: &[u8; 3]) -> Option<u32> {
     let mut response = [0u8; 7];
     let msg = [MAGIC, KIND_MESSAGE, b'g', b'e', b't'];
-    if !matches!(sys_send(tid, &msg), SyscallResult::Ok(_)) {
-        return None;
-    }
-    if !recv_from(tid, &mut response) {
+    if !matches!(sys_send(tid, &msg), SyscallResult::Ok(_)) || !recv_from(tid, &mut response) {
         return None;
     }
     if &response[..3] != expected_prefix {
         return None;
     }
     Some(u32::from_le_bytes(response[3..7].try_into().ok()?))
-}
-
-fn append_checkpoint(path: &str, record: &CheckpointRecord) {
-    let bytes = record.to_bytes();
-    let mut vfs_client = ostd::clients::VfsClient::new();
-    if let Err(error) = vfs_client.append_file(path, &bytes) {
-        fail(&format!(
-            "failed to append checkpoint {} to {}: {:?}",
-            record.seq, path, error
-        ));
-    }
-}
-
-fn verify_persisted_checkpoints(path: &str, expected: &[Option<CheckpointRecord>]) {
-    let mut vfs_client = ostd::clients::VfsClient::new();
-    let data = match vfs_client.read_file(path) {
-        Ok(d) => d,
-        Err(_) => fail(&format!("failed to read checkpoint log {path}")),
-    };
-
-    let count = data.len() / 12;
-    if count != expected.len() {
-        fail(&format!(
-            "checkpoint log record count mismatch: expected {}, got {count}",
-            expected.len()
-        ));
-    }
-
-    for (i, exp_opt) in expected.iter().enumerate() {
-        let chunk = &data[i * 12..(i + 1) * 12];
-        let rec = CheckpointRecord::from_bytes(chunk)
-            .unwrap_or_else(|| fail(&format!("corrupted checkpoint record {i}")));
-        if let Some(exp) = exp_opt {
-            if &rec != exp {
-                fail(&format!(
-                    "checkpoint record {i} mismatch: expected {exp:?}, got {rec:?}"
-                ));
-            }
-        }
-    }
 }
 
 fn spawn_cached_sender_probe(old_tid: usize) -> bool {
@@ -375,53 +243,13 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
     ostd::syscall::sys_exit(0);
 }
 
-fn trigger_hotswap(supervisor_tid: usize, service_name: &str, elf_path: &str) -> bool {
-    let mut req = [0u8; HEADER_LEN + HOTSWAP_REQUEST_LEN];
-    req[..HEADER_LEN].copy_from_slice(&[MAGIC, KIND_MESSAGE]);
-    let off = HEADER_LEN;
-    req[off] = OP_HOTSWAP;
-    let s_bytes = service_name.as_bytes();
-    req[off + 1..off + 1 + s_bytes.len()].copy_from_slice(s_bytes);
-    let p_bytes = elf_path.as_bytes();
-    req[off + 1 + SVC_NAME_LEN..off + 1 + SVC_NAME_LEN + p_bytes.len()].copy_from_slice(p_bytes);
-
-    if !matches!(sys_send(supervisor_tid, &req), SyscallResult::Ok(_)) {
-        return false;
-    }
-    let mut status = [0u8; STATUS_REPLY_LEN];
-    if !recv_from(supervisor_tid, &mut status) {
-        return false;
-    }
-    status == [OP_STATUS, PHASE_HOTSWAP_DONE, STATUS_OK]
-}
-
-fn wait_for_replacement_demo(old_tid: usize, max_ticks: usize) -> Option<usize> {
-    for _ in 0..max_ticks {
-        sys_heartbeat(0);
-        if let Some(new_tid) = provider_tid(service::HOTSWAP_DEMO) {
-            if new_tid != old_tid {
-                return Some(new_tid);
-            }
-        }
-        sys_yield();
-    }
-    None
-}
-
-fn wait_for_service_restart(service_id: u16, old_tid: usize, max_ticks: usize) -> Option<usize> {
-    for _ in 0..max_ticks {
-        sys_heartbeat(0);
-        if let Some(new_tid) = provider_tid(service_id) {
-            if new_tid != old_tid {
-                return Some(new_tid);
-            }
-        }
-        sys_yield();
-    }
-    None
-}
 fn recv_from(expected_sender: usize, buf: &mut [u8]) -> bool {
     matches!(sys_recv(expected_sender, buf), SyscallResult::Ok(sender) if sender == expected_sender)
+}
+
+fn done(message: &str) -> ! {
+    println(&format!("[native-stateful] {message}"));
+    ostd::syscall::sys_exit(0)
 }
 
 fn fail(message: &str) -> ! {

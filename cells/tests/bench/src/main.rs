@@ -485,7 +485,7 @@ fn cell_main() {
         "hotswap-unauthorized" => scenarios::hotswap_supervisor::run_unauthorized_probe(),
         "snapshot-authority" => scenarios::snapshot_authority::run(),
         "init-giveup" => scenarios::init_giveup::run(),
-        "native-stateful" => scenarios::native_stateful::run(),
+        "native-stateful" => scenarios::native_stateful::run(argv.get(1).map(|a| a.as_str())),
         "lab-carrier-transfer" => scenarios::lab_carrier_transfer::run(),
         "base-tray-handoff" => scenarios::base_tray_handoff::run(),
         "stationary-assembly" => scenarios::stationary_assembly::run(),

@@ -39,6 +39,13 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p hotswap-demo-v1 -p hotswap-demo-v2
 
+echo "==> Building the hotswap CLI..."
+# Only the shell-launched /bin/hotswap may ask the supervisor for a swap.
+cargo build --release \
+    --target riscv64gc-unknown-none-elf \
+    -Z build-std=core,alloc \
+    -p app-sys-tools --bin hotswap
+
 echo "==> Building app-bench..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
@@ -50,7 +57,7 @@ source scripts/lib-sign-cells.sh
 echo "==> Signing cells..."
 sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input" \
            "$REL/platform" "$REL/driver-virtio-blk" "$REL/supervisor" \
-           "$REL/hotswap-demo-v1" "$REL/hotswap-demo-v2" "$REL/bench" "$REL/bench-probe"
+           "$REL/hotswap-demo-v1" "$REL/hotswap-demo-v2" "$REL/hotswap" "$REL/bench" "$REL/bench-probe"
 
 echo "==> Assembling kernel_fs.img (native-workload)..."
 mkdir -p "$WORKLOAD_DIR"
@@ -80,6 +87,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/supervisor"        /bin/supervisor \
     "$REL/hotswap-demo-v1"   /bin/hotswap-demo-v1 \
     "$REL/hotswap-demo-v2"   /bin/hotswap-demo-v2 \
+    "$REL/hotswap"           /bin/hotswap \
     "$REL/bench"             /bin/bench \
     "$REL/bench-probe"       /bin/bench-probe \
     "$TMPDIR_KFS/hostname"   /etc/hostname \
