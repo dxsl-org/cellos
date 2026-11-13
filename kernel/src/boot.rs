@@ -16,6 +16,8 @@ pub mod fdt_nops;
 mod firmware_tree_tests;
 
 pub mod limine;
+mod platform_ready;
+pub use platform_ready::*;
 
 /// Select the firmware DTB once so every early-boot consumer sees the same tree.
 ///

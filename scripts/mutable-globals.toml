@@ -143,7 +143,7 @@ active = false
 
 # ---- slice A ----
 [[global]]
-key = "kernel::kmain()::IDLE_COUNT"
+key = "kernel::kmain()::IDLE_COUNT @cfg(not (target_arch = \"x86_64\"))"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::kmain idle loop (boards whose backend sets ArmPlatform::IDLE_PROBES > 0, today the RPi3 only): the BSP kmain thread is the sole writer and reader of this probe counter"
@@ -151,7 +151,7 @@ contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (declared inside kmain's #[cfg(target_arch = \"aarch64\")] IDLE_PROBES block)"
 retirement = "no x86_64 accessor; dead storage on this image"
 rationale = "Its declaration and only accessor sit in kmain's #[cfg(target_arch = \"aarch64\")] `if IDLE_PROBES > 0` block (compiled away unless the board backend asks for idle probes, i.e. the Raspberry Pi 3); the discovery key omits that block-level cfg, so nothing is compiled into the x86_64 image. On rpi3 it is a Relaxed fetch_add diagnostic counter used by one thread and publishes no data."
-review = "kernel/src/main.rs:1660-1675"
+review = "kernel/src/main.rs (unsplit kmain, aarch64 IDLE_PROBES block)"
 
 [[global]]
 key = "kernel::platform::PLATFORM"

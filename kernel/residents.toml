@@ -109,6 +109,7 @@
 "kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/arch/x86_64/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
 "kernel/src/arch/x86_64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/cpu.rs" = { category = "A", owner = "arch" }
@@ -181,6 +182,7 @@
 "kernel/src/boot/fdt_nops.rs" = { category = "A", owner = "boot" }
 "kernel/src/boot/firmware_tree_tests.rs" = { category = "test", owner = "boot" }
 "kernel/src/boot/limine.rs" = { category = "A", owner = "boot" }
+"kernel/src/boot/platform_ready.rs" = { category = "A", owner = "boot" }
 
 # ---- catalog ----
 "kernel/src/catalog.rs" = { category = "B", owner = "catalog" }

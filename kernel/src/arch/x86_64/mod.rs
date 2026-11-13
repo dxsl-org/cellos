@@ -43,9 +43,7 @@ pub mod acpi {
     pub mod sci;
 }
 
-pub mod boot {
-    pub mod limine;
-}
+pub mod boot;
 
 pub mod dev {
     pub mod console_select;

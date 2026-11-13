@@ -103,6 +103,7 @@ pub mod snapshot {
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
 pub extern crate hal; // HAL (Architecture specific)
+#[cfg(not(target_arch = "x86_64"))]
 use boot::BootInfo;
 #[cfg(target_arch = "aarch64")]
 use hal::backend::ArmPlatform as _;
@@ -166,6 +167,619 @@ pub use types::*;
 static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init"));
 
 /// Kernel entry point called from HAL boot code
+///
+/// The architecture phases (`crate::arch::boot::early`, then the heap, then
+/// `crate::arch::boot::platform_init`) bring the platform up; everything after
+/// the [`boot::PlatformReady`] they return is arch-neutral. The `arch::boot`
+/// hooks below run where that architecture's code ran before the split.
+#[cfg(target_arch = "x86_64")]
+#[no_mangle]
+pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
+    // 0–3. Early console, traps, boot memory, frame allocator, paging.
+    let early = arch::boot::early(hartid, dtb);
+
+    // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
+    // 4 MiB = 1024 frames (reduced from 32 MiB / 8192 frames under Phase 01 memory footprint reduction).
+    // Sized to hold kernel structures, scheduler state, IPC buffers, and cell signing scratch.
+    #[cfg(target_pointer_width = "64")]
+    const HEAP_FRAMES: usize = 8_192; // 32 MiB
+    #[cfg(target_pointer_width = "32")]
+    const HEAP_FRAMES: usize = 1_024; // 4 MiB
+    let heap_start = {
+        let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
+        let allocator = allocator_guard
+            .as_mut()
+            .expect("Frame allocator not initialized");
+        // One contiguous reservation: the heap below is initialized over
+        // `HEAP_FRAMES * 4096` bytes starting at this frame, so a scattered
+        // allocation would write over frames this kernel does not own. Refusing
+        // here is the only safe outcome — never a smaller or fragmented heap.
+        // The run is taken in the bitmap's range, right after the bitmap and the
+        // early frames there: the shared `[bitmap, heap)` registration below
+        // depends on that order.
+        memory::frame::reserve_boot_heap(allocator, HEAP_FRAMES).expect(
+            "OOM: no contiguous run for the boot heap in the frame bitmap's range — \
+             refusing to boot with a fragmented heap",
+        )
+    };
+    let heap_size = HEAP_FRAMES * 4096;
+    // On x86_64, phys_to_virt adds HHDM offset (Limine maps RAM at HHDM+phys).
+    // On RISC-V, phys_to_virt returns phys unchanged (identity-mapped before paging).
+    let heap_virt = memory::frame::phys_to_virt(heap_start);
+    unsafe {
+        memory::heap::init_heap(heap_virt, heap_size);
+    }
+    log_info("Heap initialized");
+
+    memory::rt_heap::init();
+    log_info("RT heap initialized");
+
+    // 5–6. Interrupt controllers, log backend and console RX, devices, the
+    // early PCIe scan and DMA isolation.
+    let boot::PlatformReady {
+        console,
+        irq,
+        clock,
+        pci,
+        iommu,
+        storage,
+    } = arch::boot::platform_init(early);
+
+    match storage {
+        boot::BootStorage::VirtioMmio => {
+            // Attempt warm boot from snapshot before any cell initialization.
+            if snapshot::try_restore() {
+                // try_restore() called yield_cpu() and should not return in a successful
+                // warm boot.  If we reach here, fall through to cold boot as a safety net.
+                log::warn!("[boot] snapshot restore returned unexpectedly → cold boot");
+            }
+
+            // Cross-check the on-disk MBR against the compiled-in partition layout
+            // (warn-only — surfaces image/kernel drift at boot instead of as silent
+            // corruption later).
+            crate::loader::disk_layout::verify_mbr();
+
+            // Probe the cell bootstrap table so SpawnFromPath works during init.
+            match crate::loader::early::EarlyLoader::probe() {
+                Ok(()) => arch::boot::puts("[loader] cell bootstrap table loaded\n"),
+                Err(_) => arch::boot::puts(
+                    "[loader] WARN: cell table not found — disk image may lack bootstrap section\n",
+                ),
+            }
+        }
+        // x86_64 serves cells from the ramdisk; RV32 Nano has no disk.
+        boot::BootStorage::None => {}
+    }
+
+    // RV32 Nano: no FAT32 FS in bring-up.
+    // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
+    #[cfg(cellos_wide)]
+    fs::init();
+
+    #[cfg(cellos_wide)]
+    system_config::load_from_vifs1();
+
+    // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
+    // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
+    // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
+    #[cfg(cellos_wide)]
+    policy::load_from_vifs1();
+
+    arch::boot::fixtures_after_policy();
+
+    log_info("Kernel subsystems initialized successfully.");
+
+    // 7. Initialize Scheduler
+    log_info("Initializing scheduler...");
+    task::init();
+    log_info("Scheduler initialized");
+    #[cfg(feature = "test-hooks")]
+    if crate::sched::scheduler::death_subscription_quota_self_test() {
+        log_info("death-subscriber quota self-test PASS");
+    } else {
+        log_info("death-subscriber quota self-test FAIL");
+    }
+    // Must precede every unrelated boot suite (riscv64 getrandom SAS branch).
+    arch::boot::fixtures_after_task_init();
+
+    #[cfg(feature = "test-hooks")]
+    if crate::resource_registry::pcie_bar_window_self_test() {
+        log_info("[selftest] PCIE-BAR-WINDOW: PASS (bounded, aligned, overflow-safe)");
+    } else {
+        log_info("[selftest] PCIE-BAR-WINDOW: FAIL");
+    }
+
+    // The loader corpus exercises real spawn_gated denials and snapshots the
+    // scheduler around every malformed image. Run it after task::init(), while
+    // the scheduler is available but still empty and before secondary harts or
+    // unrelated boot tasks can add noise. Assertions make any failure boot-fatal.
+    #[cfg(feature = "test-hooks")]
+    crate::loader::elf_tests::run_all();
+    arch::boot::fixtures_after_loader_corpus();
+
+    // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
+    // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
+    // synthetic thread it spawns cannot be raced onto another hart before teardown.
+    // Fixtures that drive the live scheduler: never compiled into a release
+    // kernel (Spec 15 §3.5; architecture remediation Phase 09).
+    #[cfg(all(not(cellos_posture = "release"), cellos_wide))]
+    {
+        if task::thread_cap_selftest::self_test() {
+            log_info("thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)");
+        } else {
+            log_info("thread-cap self-test FAIL");
+        }
+        if task::grant_reclaim_selftest::self_test() {
+            log_info("grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)");
+        } else {
+            log_info("grant-reclaim self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::mmio_revoke_selftest::self_test() {
+            log_info("mmio-revoke self-test PASS (class selective, user access removed)");
+        } else {
+            log_info("mmio-revoke self-test FAIL");
+        }
+        if task::thread_quota_selftest::self_test() {
+            log_info("thread-quota self-test PASS (charged, released, enforced)");
+        } else {
+            log_info("thread-quota self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::task_id_selftest::self_test() {
+            log_info("task-id-reuse self-test PASS (monotonic across spawn/exit)");
+        } else {
+            log_info("task-id-reuse self-test FAIL");
+        }
+        match task::thread_user_entry_selftest::self_test() {
+            Some(true) => log_info("thread-user-entry self-test PASS (U-mode entry+arg+exit)"),
+            Some(false) => log_info("thread-user-entry self-test FAIL"),
+            None => log_info("thread-user-entry self-test SKIP (RV64 runtime gate only)"),
+        }
+        if task::completion_selftest::self_test() {
+            log_info("completion-queue self-test PASS (reserve, land, bound, defer)");
+        } else {
+            log_info("completion-queue self-test FAIL");
+        }
+        if task::net_rx_selftest::self_test() {
+            log_info("net-rx-reservation self-test PASS (fill, remember, release)");
+        } else {
+            log_info("net-rx-reservation self-test FAIL");
+        }
+        if task::ipc_pending_selftest::self_test() {
+            log_info("ipc-pending self-test PASS (deferred delivery, bounds, quota)");
+        } else {
+            log_info("ipc-pending self-test FAIL");
+        }
+        task::cap_file_selftest::run();
+        log_info("cap-file self-test PASS (read-only enforcement)");
+        if task::ipc_guardrail_selftest::self_test() {
+            log_info("ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)");
+        } else {
+            log_info("ipc-guardrail self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::vfs_lifecycle_selftest::self_test() {
+            log_info("vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)");
+        } else {
+            log_info("vfs-lifetime self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::stack::stack_probe_self_test() {
+            log_info(
+                "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
+            );
+        } else {
+            log_info("stack-probe self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::stack_sizing_policy_self_test() {
+            log_info("stack-sizing policy self-test PASS (measured=16, unknown=64)");
+        } else {
+            log_info("stack-sizing policy self-test FAIL");
+        }
+    }
+
+    // Bring actual secondaries online only after task::init. x86 uses the
+    // Limine MP callback and qualifies bidirectional invalidation before tasks.
+    #[cfg(cellos_wide)]
+    crate::sched::smp::start_secondaries();
+    arch::boot::fixtures_after_secondaries();
+
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    memory::domain_supervisor_registry::activate();
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    memory::domain_supervisor_registry::register_static_image()
+        .expect("kernel static ranges must be disjoint");
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    memory::domain_supervisor_registry::register(
+        heap_virt,
+        heap_virt
+            .checked_add(heap_size)
+            .expect("kernel heap range overflow"),
+        memory::domain_supervisor_registry::SupervisorRangeKind::KernelHeap,
+        memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+    )
+    .expect("kernel heap registration must be unique");
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
+        // `[bitmap, heap)`: the bitmap, plus any early boot frames the next-fit
+        // cursor handed out from the bitmap's range before `reserve_boot_heap`
+        // placed the heap there. When the bitmap's range is not the first
+        // usable one (UEFI maps: ≥ 1 GiB under VMware, 4 GiB under OVMF), the
+        // early paging frames come from lower ranges and the span is just the
+        // bitmap.
+        let (bm_start, _) = guard.bitmap_range();
+        memory::domain_supervisor_registry::register(
+            bm_start,
+            heap_virt,
+            memory::domain_supervisor_registry::SupervisorRangeKind::StaticWritable,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        )
+        .expect("frame allocator bitmap and early paging registration must succeed");
+    }
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    for (base, end) in arch::boot::supervisor_device_spans() {
+        let _ = memory::domain_supervisor_registry::register(
+            base,
+            end,
+            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
+            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+        );
+    }
+    // Tier 2 admission posture (ADR-0019 §2.3). The backend alone does not
+    // authorize admission. Fleet profiles stay closed unless the explicit x86
+    // browser profile is selected; that profile also narrows every publication
+    // to the reviewed QuickJS artifact and requires its signed policy row.
+    #[cfg(all(
+        feature = "native-domains",
+        cellos_wide,
+        not(any(
+            feature = "policy-required",
+            feature = "production-relay-image",
+            feature = "browser-engine-profile"
+        ))
+    ))]
+    {
+        if crate::loader::domain_admission::enable_for_boot() {
+            log_info("Tier 2 admission: ENABLED (development profile)");
+        } else {
+            // Phase-01: an unqualified raw switch ordering keeps the development
+            // profile closed, and the posture has to be visible — the alternative
+            // is a silently disabled feature that reads as verified.
+            log_info(
+                "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate) \
+                 — domain-class artifacts are denied",
+            );
+        }
+    }
+    #[cfg(all(
+        feature = "native-domains",
+        cellos_wide,
+        any(feature = "policy-required", feature = "production-relay-image")
+    ))]
+    if !arch::boot::browser_engine_admission() {
+        log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
+    }
+    #[cfg(all(cellos_wide, feature = "native-domains", feature = "test-hooks"))]
+    if !crate::sched::domain_switch_tests::run_primary() {
+        log::error!("native-domain SAS scheduler fixture failed");
+    }
+    arch::boot::fixtures_domain();
+
+    // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
+    // P01). The tables are plain kernel-heap memory, so this needs no IOMMU
+    // hardware and runs on every arch whose lane enables hooks.
+    #[cfg(feature = "test-hooks")]
+    crate::dev::iommu_pt::run_selftest();
+
+    // Last-but-one boot fixture: the all-hart park hook (riscv64).
+    arch::boot::fixtures_park();
+
+    // Phase 10: the timer sweep runs on any hart, so a deadline passes while
+    // hart 0 is held. Last of the boot fixtures:
+    // it needs the secondaries online and leaves a retiring task behind.
+    #[cfg(all(feature = "test-hooks", cellos_wide))]
+    crate::sched::off_hart0_timeout_selftest::run_primary();
+
+    // 8. Spawn Embedded Init
+    // RV32 Nano bring-up: no init binary — boot to idle loop.
+    #[cfg(cellos_wide)]
+    {
+        log_info("Spawning Embedded Init...");
+
+        // Power-on self-test of the Ed25519 verify primitive (RFC 8032 TEST 1 +
+        // tamper-negative) before it is trusted to authenticate the signed
+        // operator policy (P5). Cheap (~one verify); a FAIL means the crypto path
+        // is broken and signed policy must not be trusted.
+        if crate::ed25519::self_test() {
+            log_info("ed25519 verify self-test PASS (RFC 8032 + tamper)");
+        } else {
+            log_info("ed25519 verify self-test FAIL — signed policy unsafe");
+        }
+        // Power-on self-test of the signed-policy path: verify + parse a known
+        // dev-signed blob, and confirm a tampered blob is rejected.
+        if crate::policy::self_test() {
+            log_info("policy verify+parse self-test PASS (signed blob + tamper)");
+        } else {
+            log_info("policy verify+parse self-test FAIL");
+        }
+        // Cell binary signing self-test: known-good vector verifies + flipped
+        // payload is rejected. Runs before any spawn_from_path is called.
+        if crate::signing::self_test() {
+            log_info("cell signing self-test PASS");
+        } else {
+            log_info("cell signing self-test FAIL — cell signature gate unsafe");
+        }
+        {
+            let (posture, anchor) = crate::signing::trust_anchor();
+            log::info!(
+                "[signing] cell trust posture={} anchor={:02x?} unsigned={}",
+                posture,
+                anchor,
+                if crate::signing::unsigned_admitted() {
+                    "tier2"
+                } else {
+                    "denied"
+                }
+            );
+        }
+        #[cfg(feature = "test-hooks")]
+        if crate::admission::self_test() {
+            log_info("admission-core self-test PASS (fail-closed A/B floor model)");
+        } else {
+            log_info("admission-core self-test FAIL");
+        }
+        // P-TRUST: privileged path-caps are bounded by the spawn ceiling. Pure
+        // CapSet logic (no scheduler), so it runs here alongside the crypto tests,
+        // before any cap-bearing cell spawns.
+        #[cfg(not(cellos_posture = "release"))]
+        if crate::task::p_trust_selftest::self_test() {
+            log_info("P-TRUST self-test PASS (privileged path-caps ceiling-bounded)");
+        } else {
+            log_info("P-TRUST self-test FAIL");
+        }
+        // Boot ceiling: the per-path table is per-path (not a union) and no boot
+        // cell is over-tightened out of the cap it needs. Runs BEFORE the first
+        // Root spawn below, so a bad row is reported before it breaks a cell.
+        #[cfg(not(cellos_posture = "release"))]
+        if crate::loader::boot_ceiling::self_test() {
+            log_info("boot-ceiling self-test PASS (per-path table, no union collapse)");
+        } else {
+            log_info("boot-ceiling self-test FAIL — a boot cell may lose caps");
+        }
+        // MMIO allowlist: the production table must still authorize its known
+        // windows and must keep denying the DWC2 USB window (USB host authority
+        // awaits policy v3 with a signed byte). Runs on the REAL allowlist.
+        #[cfg(not(cellos_posture = "release"))]
+        if crate::resource_registry::self_test() {
+            log_info("mmio-allowlist self-test PASS (known windows live, DWC2 denied)");
+        } else {
+            log_info("mmio-allowlist self-test FAIL — DWC2 window or allowlist shape changed");
+        }
+        // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
+        // no scheduler — runs alongside the other crypto/trust self-tests.
+        #[cfg(not(cellos_posture = "release"))]
+        if crate::task::manifest_v2_selftest::self_test() {
+            log_info("Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)");
+        } else {
+            log_info("Manifest-v2 self-test FAIL");
+        }
+
+        // Layer-2 hardware security self-tests (MTE on aarch64, PKU on x86_64)
+        // and the x86 VMM smokes. Runs here: after all HW init, before
+        // scheduler + first cell spawn.
+        arch::boot::fixtures_hardware();
+        arch::boot::framebuffer_console(&console);
+
+        // Spawn the Platform Cell before init (PCIe ECAM scanner).
+        // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
+        // that rely on sys_find_pcie_device will simply not find their device.
+        if let Some(pci) = &pci {
+            spawn_platform_cell(pci, &iommu);
+        }
+
+        // `aligned_elf::bytes` borrows an already aligned embedded image and only
+        // materializes an aligned copy when the linker did not provide one. Do not
+        // unconditionally duplicate init on the kernel heap at this boot boundary.
+        #[cfg(feature = "test-hooks")]
+        {
+            log_info("ATOMIC_PUBLICATION_AP-15: arming trusted init");
+            crate::loader::atomic_publication_tests::arm_trusted_success();
+            log_info("ATOMIC_PUBLICATION_AP-15: armed for trusted init");
+        }
+        log_info("Publishing trusted init");
+        #[cfg(feature = "p01-trace")]
+        let init_result = crate::loader::spawn_bootstrap_init(INIT_ELF);
+        #[cfg(not(feature = "p01-trace"))]
+        let init_result = crate::loader::spawn_trusted_init(INIT_ELF);
+        match init_result {
+            Ok(tid) => {
+                #[cfg(feature = "test-hooks")]
+                crate::loader::atomic_publication_tests::finish_trusted_success(tid);
+                log::info!(
+                    "Successfully spawned init with complete root authority (tid={})",
+                    tid
+                );
+                arch::boot::diag_probe(b'V');
+            }
+            Err(_e) => {
+                log_info("Failed to spawn init");
+                // Failure occurs before init reaches any ready queue.
+                arch::boot::diag_probe(b'F');
+                #[cfg(feature = "test-hooks")]
+                panic!("atomic-publication trusted-init success contract did not publish init");
+            }
+        }
+    }
+
+    arch::boot::fixtures_user_mode();
+
+    log_info("Kernel initialization complete. Entering idle loop.");
+
+    // 9. Start multitasking
+    log_info("Starting scheduler...");
+
+    // Quiet the shared console for interactive use. Kernel bring-up is done; the
+    // remaining Info chatter is per-spawn noise ([loader] SpawnFromPath, Spawn:,
+    // ELF LOAD) that floods the UART and buries the shell prompt. WARN/ERROR still
+    // surface real problems. Raise back to Info when debugging the spawn path.
+
+    // Enable interrupts before entering the idle loop.
+    irq.enable(clock);
+
+    // Test images keep kernel Info live.
+    //
+    // The quieting above exists for the interactive console, and production keeps
+    // it. A test image cannot: the witnesses a domain-entry lane reads are emitted
+    // *after* init and the cells are running, which is the point of the lane. On
+    // AArch64 the boot happens to never reach this line with a task pending (the
+    // interrupt enable just above drops straight into the scheduler), so its lane
+    // has always read Info-level witnesses (`S22-AARCH64-DOMAIN-LIVE`,
+    // `DOMAIN-FRAME-RELEASE`). On x86_64 the boot does continue into the idle loop,
+    // so the same class of witnesses (`S22-X86-DOMAIN-LIVE`,
+    // `S22-X86-DOMAIN-TEARDOWN`, `[selftest] DOMAIN-FRAME-RELEASE`) would be
+    // silenced here. `test-hooks` only — no production image is affected.
+    //
+    // It *replaces* the quieting rather than undoing it afterwards: which of the
+    // two statements ran first used to be a race — kmain's tail executes only
+    // after the scheduler hands the boot context back — and a witness emitted
+    // before the quieting landed was dropped, so the same image could lose or keep
+    // a marker between runs.
+    // AArch64 test images are in the same position as x86_64's, and for a
+    // sharper reason: on one CPU the boot happens to never reach this line with a
+    // task pending, so the witnesses were emitted *before* the quieting by luck.
+    // The moment a second hart is online the boot does reach it and the
+    // `S22-AARCH64-DOMAIN-*` witnesses disappear — a lane reading them fails on
+    // an image that is working. Quieting is a console policy for interactive and
+    // production boots; a test image is read by its own lane.
+    // An explicit [logging] is authoritative for the whole cold boot. Only old
+    // images / omitted sections retain this later interactive/test default.
+    if !system_config::logging_explicit() {
+        log::set_max_level(arch::boot::quiet_log_level());
+    }
+
+    arch::boot::idle_probes();
+    loop {
+        crate::task::yield_cpu();
+        crate::hal::ARCH.wait_for_interrupt();
+    }
+}
+
+/// Write `s` as one `[INFO]` line on the early console.
+#[cfg(target_arch = "x86_64")]
+fn log_info(s: &str) {
+    arch::boot::puts("[INFO] ");
+    arch::boot::puts(s);
+    arch::boot::puts("\n");
+}
+
+/// The boot banner. CI greps for the first line.
+#[cfg(target_arch = "x86_64")]
+fn boot_banner() {
+    // Stable banner — CI greps for this exact string.
+    arch::boot::puts("[Cellos] kernel boot v");
+    arch::boot::puts(env!("CARGO_PKG_VERSION"));
+    arch::boot::puts("\n");
+    arch::boot::puts("Kernel started (Hart: 0, DTB: ...)\n");
+}
+
+/// The bootloader's memory description (Limine, else the architecture's
+/// fallback) and the frame allocator built from its usable ranges.
+#[cfg(target_arch = "x86_64")]
+fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocator) {
+    // Parse bootloader information
+    let boot_info = match boot::parse_bootloader_info() {
+        Ok(info) => boot::BootInfoSource::Limine(info),
+        // Limine failed: use fallback (SimpleBootInfo)
+        Err(_) => {
+            log_info("Limine not found, using QEMU/OpenSBI fallback");
+            // aarch64-virt sizes the kernel region from the linker end symbol —
+            // EMBEDDED_OVERRIDE images make the binary size unbounded.
+            boot::BootInfoSource::Fallback(boot::fallback_boot_info(dtb))
+        }
+    };
+    // Log physical base — non-default value confirms KASLR is active.
+    {
+        arch::boot::puts("[boot] kernel_phys_base=0x");
+        let mut base = boot_info.get().kernel_base();
+        let digits = b"0123456789abcdef";
+        let mut hex_buf = [b'0'; 16];
+        for i in (0..16).rev() {
+            hex_buf[i] = digits[base & 0xf];
+            base >>= 4;
+        }
+        if let Ok(s) = core::str::from_utf8(&hex_buf) {
+            arch::boot::puts(s);
+        }
+        arch::boot::puts("\n");
+    }
+
+    // Initialize kernel subsystems
+
+    // 1. Memory Management
+    // Get memory map from Boot Info (Converted to Cellos format)
+    let mmap_entries = boot_info.get().memory_map();
+
+    // Initialize the frame allocator with every usable range in the map.
+    let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    log::info!(
+        "[boot] allocator: {} usable range(s), {} frames ({} MiB)",
+        frame_allocator.managed_ranges().count(),
+        frame_allocator.total_frames(),
+        frame_allocator.total_frames() * 4096 / (1024 * 1024)
+    );
+    for range in frame_allocator.managed_ranges() {
+        log::info!(
+            "[boot]   range {:#x}..{:#x} ({} MiB)",
+            range.start,
+            range.start + range.frames * 4096,
+            range.frames * 4096 / (1024 * 1024)
+        );
+    }
+    (boot_info, frame_allocator)
+}
+
+/// Spawn the Platform Cell (PCIe ECAM scanner) for `pci`. It is the first cell
+/// that can bring up DMA-capable drivers, so it takes the DMA isolation state
+/// the platform phase left (`_iommu`).
+#[cfg(target_arch = "x86_64")]
+fn spawn_platform_cell(pci: &boot::PciReady, _iommu: &boot::IommuReady) {
+    match pci {
+        // RISC-V uses the compile-time GPEX window (0x3000_0000).
+        boot::PciReady::Gpex => match crate::loader::spawn_from_path(
+            "/bin/platform",
+            crate::loader::SpawnRequest::governed_boot(),
+        ) {
+            Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
+            Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
+        },
+        // x86_64 hands the validated runtime ACPI-MCFG base and bus range via argv.
+        boot::PciReady::Ecam {
+            base,
+            bus_start,
+            bus_end,
+        } => {
+            let argv_str = alloc::format!(
+                "--ecam-base={:#x} --bus-start={} --bus-end={}",
+                base,
+                bus_start,
+                bus_end,
+            );
+            match crate::loader::spawn_from_path(
+                "/bin/platform",
+                crate::loader::SpawnRequest::governed_boot().with_argv(argv_str.into_bytes()),
+            ) {
+                Ok(_) => log_info("Platform Cell spawned (x86 PCIe ECAM scanner)"),
+                Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
+            }
+        }
+    }
+}
+
+/// Kernel entry point called from HAL boot code (not yet split into the
+/// `crate::arch::boot` phases on this architecture).
+#[cfg(not(target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
@@ -187,94 +801,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::hal::backend::Board::console_init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
-    #[cfg(target_arch = "x86_64")]
-    {
-        // No profile is bound before ACPI discovery; every catalog profile
-        // shares these facts (const-asserted in hal_soc_x86), so the console
-        // and COM wiring cannot depend on which profile is bound later.
-        let early = &hal_soc_x86::X86_EARLY_FACTS;
-        crate::hal::uart_16550::configure(early.com1.base, early.com1.irq);
-        crate::hal::uart_16550::init();
-        // Register every declared port: the console takes slot 0 and each extra
-        // port must answer a 16550 probe before it is offered, so a declared
-        // port this machine does not have produces a refusal rather than a
-        // cell writing into empty port space.
-        {
-            use crate::hal::uart_16550::{SerialPortSpec, MAX_PORTS};
-            let mut specs = [SerialPortSpec { base: 0, irq: 0 }; MAX_PORTS];
-            let declared = early.serial_ports.len().min(MAX_PORTS);
-            for (slot, port) in early.serial_ports.iter().take(declared).enumerate() {
-                specs[slot] = SerialPortSpec {
-                    base: port.base,
-                    irq: port.irq,
-                };
-            }
-            crate::hal::uart_16550::configure_all(&specs[..declared]);
-        }
-        // Emitted only after `init()`: `putchar` asserts a configured port. The
-        // bound profile is named by `board::bind_x86_profile` after ACPI.
-        crate::hal::uart_16550::puts(
-            "[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT\n",
-        );
-        if crate::hal::uart_16550::poll_input().is_some() {
-            crate::hal::uart_16550::puts("[x86-gate] COM1 polled RX observed\n");
-        }
-        // Register the log backend now, as RV64 does above: the console is
-        // configured and the boot stub installed GS (Spinlock needs it), and
-        // neither the logger nor its console lock allocates. Registering it at
-        // step 6 dropped every `log` record of the boot path before the heap
-        // (allocator ranges, firmware-range rejections, ACPI table findings).
-        crate::dev::uart::init();
-    }
     #[cfg(target_arch = "x86")]
     crate::hal::uart_16550::init();
 
-    // Set HHDM base for LAPIC/IOAPIC MMIO access AND for phys_to_virt.
-    // Limine maps RAM at HHDM_BASE+phys (no identity mapping of physical RAM).
-    // This must be called before FrameAllocator::new_from_map.
-    #[cfg(target_arch = "x86_64")]
-    {
-        let hhdm = crate::boot::limine::get_hhdm_offset().unwrap_or(0);
-        crate::hal::apic::set_hhdm_base(hhdm);
-        crate::memory::frame::set_phys_offset(hhdm as usize);
-        // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
-        // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
-        crate::hal::paging::set_hhdm_offset(hhdm as usize);
-        // Initialise KASLR seed from HHDM entropy + RDTSC.
-        crate::memory::kaslr::init_kaslr(hhdm);
-    }
-
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup
-    // x86_64: LAPIC is deferred until after paging sets up the MMIO mapping
-    // (LAPIC phys 0xFEE00000 isn't in Limine's HHDM for MMIO regions).
-    #[cfg(target_arch = "x86_64")]
-    {
-        // SSE/FXSR first: every IDT entry runs FXSAVE/LDMXCSR, so a fault
-        // taken during gdt/idt init (including the IDT fixture's probes) would
-        // #UD in the entry path and triple-fault without CR4.OSFXSR.
-        crate::hal::init_sse();
-        // Unmap the guard pages around every NMI/#DF/#MC IST stack, and the one
-        // below the BSP boot stack, before the TSS and IST gates are loaded.
-        // The live root is Limine's; the kernel PML4, AP roots and domain roots
-        // later copy its higher-half entries, so they share these cleared PTEs.
-        if let Err(error) = unsafe { crate::hal::x86_64::ist::install_guards() } {
-            panic!("x86: IST/boot-stack guard pages unavailable: {error:?}");
-        }
-        crate::hal::gdt::init();
-        crate::hal::idt::init();
-        crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
-        crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
-        crate::hal::syscall::init();
-        // Opt-in SMEP/SMAP/UMIP profile: a requested protection the CPU
-        // lacks refuses boot rather than running unprotected.
-        assert!(
-            crate::hal::x86_64::protect::init_cpu(),
-            "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU"
-        );
-        crate::hal::x86_64::publish_boot_cpu_policy();
-        // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
-    }
-    #[cfg(not(target_arch = "x86_64"))]
     hal::ARCH.init();
     // Define puts helper — arch-specific character output.
     let puts = |s: &str| {
@@ -291,7 +821,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             {
                 crate::hal::uart_pl011::putchar(c);
             }
-            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+            #[cfg(target_arch = "x86")]
             {
                 crate::hal::uart_16550::putchar(c);
             }
@@ -374,198 +904,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // it local until paging is active because its Spinlock uses exclusive
     // atomics that require Normal memory attributes; RV64 follows the same
     // build-then-publish lifecycle.
-    #[cfg(any(
-        target_arch = "riscv32",
-        target_arch = "x86_64",
-        target_arch = "x86",
-        target_arch = "arm",
-    ))]
+    #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm",))]
     unsafe {
         core::ptr::write(
             &mut *memory::frame::FRAME_ALLOCATOR.lock(),
             Some(frame_allocator),
         );
     }
-    #[cfg(any(
-        target_arch = "riscv32",
-        target_arch = "x86_64",
-        target_arch = "x86",
-        target_arch = "arm",
-    ))]
+    #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm",))]
     log_info("Frame allocator initialized");
-
-    // Limine does not guarantee HHDM mappings for firmware-owned memory. The
-    // ACPI and SMBIOS parsers request a mapping for each RSDP/SDT/SMBIOS range
-    // before dereferencing it. Those ranges must stay inside ACPI
-    // reclaimable/NVS or firmware-reserved memory-map entries. Legacy BIOS
-    // records may live in the bounded windows of `X86_EARLY_FACTS`, which every
-    // catalog profile shares. Some BIOSes, including q35, report other SDTs as
-    // Reserved, so checksums remain the final trust gate.
-    #[cfg(target_arch = "x86_64")]
-    let (acpi_info, smbios_system) = {
-        let rsdp = crate::arch::boot::limine::get_rsdp_ptr().unwrap_or(0);
-        let early = &hal_soc_x86::X86_EARLY_FACTS;
-        let mut map_physical = |physical: usize, length: usize| {
-            let end = physical.checked_add(length)?;
-            if length == 0 {
-                return None;
-            }
-            let legacy_firmware = early.legacy_bios_window.contains(physical, length);
-            let legacy_rsdp =
-                physical == rsdp && early.legacy_rsdp_window.contains(physical, length);
-            let firmware_owned = mmap_entries.iter().any(|entry| {
-                let Some(entry_end) = entry.base.checked_add(entry.length) else {
-                    return false;
-                };
-                matches!(
-                    entry.ty,
-                    crate::boot::MemoryType::Reserved
-                        | crate::boot::MemoryType::AcpiReclaimable
-                        | crate::boot::MemoryType::AcpiNvs
-                ) && physical >= entry.base
-                    && end <= entry_end
-            });
-            if !legacy_firmware && !legacy_rsdp && !firmware_owned {
-                log::warn!(
-                    "[firmware] rejected non-firmware range {:#x}..{:#x}",
-                    physical,
-                    end
-                );
-                return None;
-            }
-            let mut allocator = memory::frame::FRAME_ALLOCATOR.lock();
-            let mut allocate = || {
-                allocator
-                    .as_mut()
-                    .and_then(|frames| frames.allocate_frame())
-            };
-            // SAFETY: the published allocator owns returned frames and the live
-            // Limine page tables are reachable through the configured HHDM.
-            let mapped = unsafe {
-                crate::hal::paging::map_hhdm_firmware_range(physical, length, &mut allocate)
-            };
-            if mapped {
-                Some(crate::memory::frame::phys_to_virt(physical))
-            } else {
-                None
-            }
-        };
-
-        let info = crate::acpi::parse(rsdp, &mut map_physical);
-        log::info!(
-            "[acpi] gates: madt={} hpet={} mcfg={} dmar={} fadt={} spcr={}",
-            info.lapic_base != 0 && info.ioapic_base != 0,
-            info.hpet_base != 0,
-            info.ecam_base != 0,
-            info.dmar_base != 0,
-            info.fadt.is_some(),
-            info.spcr.is_some()
-        );
-        crate::acpi::with_topology(|topo| {
-            log::info!(
-                "[acpi] topology: cpus={} ioapics={} nmis={} mcfg={} drhd={} rmrr={} ir={} x2apic_opt_out={}",
-                topo.cpus.len(),
-                topo.ioapics.len(),
-                topo.lapic_nmis.len(),
-                topo.mcfg.len(),
-                topo.drhds.len(),
-                topo.rmrrs.len(),
-                topo.dmar_intr_remap(),
-                topo.dmar_x2apic_opt_out()
-            )
-        });
-        // Power facts (`\_S5_`, reset register, GPE blocks) need the same
-        // firmware-range mapper; the G1 private lane keeps its own contract.
-        #[cfg(not(feature = "g1-cpu-accounting"))]
-        crate::arch::acpi::sci::init(&info, rsdp, &mut map_physical);
-        // SMBIOS entry points and tables get the same firmware-range admission
-        // as ACPI tables: the legacy BIOS window or firmware-owned memory.
-        let (smbios_32, smbios_64) = crate::arch::boot::limine::get_smbios_entry_points();
-        let smbios = crate::smbios::discover(smbios_32, smbios_64, &mut map_physical);
-        (info, smbios)
-    };
-    #[cfg(target_arch = "x86_64")]
-    let platform_identity = crate::board::PlatformIdentity {
-        acpi_oem: acpi_info.root_oem,
-        smbios: smbios_system,
-        hypervisor: cpu_features::hypervisor_present(),
-    };
-    #[cfg(target_arch = "x86_64")]
-    crate::board::report_identity(&platform_identity);
-    // Bind the profile once, before the first `has_driver` gate. The operator
-    // names it on the Limine command line; detected facts may only reject it.
-    // The facts are kept with the profile for the machine fingerprint (433).
-    #[cfg(target_arch = "x86_64")]
-    {
-        let cmdline =
-            crate::arch::boot::limine::get_executable_cmdline(crate::board::CMDLINE_MAX + 1)
-                .unwrap_or(&[]);
-        match crate::board::choose_x86_profile(cmdline, &platform_identity) {
-            Ok((board, source)) => crate::board::bind_x86_profile(
-                board,
-                crate::board::X86BootFacts {
-                    identity: platform_identity,
-                    source,
-                    dmar_present: acpi_info.dmar_present,
-                },
-            ),
-            Err(error) => panic!("[board] {}", error),
-        }
-        let console_opt = crate::board::console_option(cmdline).unwrap_or(None);
-        let _ = crate::arch::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    let x86_ioapic_base = if crate::board::selected().has_driver(cellos_boards::DriverId::IoApic) {
-        acpi_info.ioapic_base
-    } else {
-        0
-    };
-    #[cfg(target_arch = "x86_64")]
-    let x86_lapic_base = if x86_ioapic_base != 0 {
-        acpi_info.lapic_base
-    } else {
-        0
-    };
-    #[cfg(target_arch = "x86_64")]
-    let x86_hpet_base = if crate::board::selected().has_driver(cellos_boards::DriverId::Hpet) {
-        acpi_info.hpet_base
-    } else {
-        0
-    };
-    #[cfg(target_arch = "x86_64")]
-    let x86_ecam_base = if crate::board::selected().has_driver(cellos_boards::DriverId::PcieEcam) {
-        acpi_info.ecam_base
-    } else {
-        0
-    };
-    #[cfg(target_arch = "x86_64")]
-    let x86_ecam_len = if x86_ecam_base == 0 {
-        0
-    } else {
-        crate::dev::pcie_ecam::ecam_window_size(acpi_info.ecam_bus_start, acpi_info.ecam_bus_end)
-            .expect("validated ACPI MCFG range has a bounded ECAM window")
-    };
-    // The timer gate opens only after `init_timers` finds a clocksource
-    // (phase 02 of plan 261103-2218); HPET is one candidate, not a requirement.
-    #[cfg(target_arch = "x86_64")]
-    let x86_interrupts_ready = x86_lapic_base != 0 && x86_ioapic_base != 0;
-    #[cfg(target_arch = "x86_64")]
-    #[cfg_attr(feature = "g1-cpu-accounting", allow(unused_assignments))]
-    // G1 assigns or panics on every path
-    let mut x86_timer_ready = false;
 
     // 3. Paging (Virtual Memory) Setup
     // x86_64 bring-up: Limine's PML4 already maps RAM via HHDM and the kernel
     // at 0xFFFFFFFF80000000. We skip building + activating our own page tables
     // until the full x86_64 port (Phase 09). init_kernel_paging uses physical
     // addresses as virtual pointers, which would fault under Limine's paging.
-    #[cfg(not(any(
-        target_arch = "riscv32",
-        target_arch = "x86_64",
-        target_arch = "x86",
-        target_arch = "arm",
-    )))]
+    #[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm",)))]
     {
         let mut frame_allocator = frame_allocator;
         log_info("Initializing paging...");
@@ -597,169 +951,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // hardware USER-bit separation for kernel-vs-cell — SUM=1 is safe and intentional.
         #[cfg(target_arch = "riscv64")]
         crate::arch::user_access::boot_open();
-    }
-    #[cfg(target_arch = "x86_64")]
-    {
-        // Set runtime ECAM base from validated ACPI before PCIe scan. Zero
-        // keeps PCIe closed; there is no implicit q35 fallback.
-        crate::dev::pcie_ecam::set_ecam_base_x86(x86_ecam_base as usize);
-        crate::dev::pcie_ecam::set_ecam_bus_range_x86(
-            acpi_info.ecam_bus_start,
-            acpi_info.ecam_bus_end,
-        );
-
-        log_info("Initializing x86_64 paging (kernel PML4)...");
-        let root_table_phys = {
-            let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
-            memory::paging::init_kernel_paging_x86(
-                locked_frame_allocator
-                    .as_mut()
-                    .expect("Frame allocator not initialized"),
-                x86_ioapic_base,
-                x86_hpet_base,
-                x86_lapic_base,
-                x86_ecam_base,
-                x86_ecam_len,
-            )
-            .expect("Failed to initialize x86_64 kernel PML4")
-        };
-        log_info("x86_64 paging initialized");
-        log_info("Activating x86_64 paging (mov cr3)...");
-        // SAFETY: init_kernel_paging_x86 copied higher-half entries from Limine's PML4
-        // (preserving kernel text/data/HHDM) and identity-mapped MMIO, so the kernel
-        // continues executing after this CR3 switch without a triple-fault.
-        unsafe {
-            memory::paging::activate_paging(root_table_phys);
-        }
-        // Immediate configured port-I/O probe after activate_paging. If 'Q'
-        // appears, the CR3 switch returned to kmain with the UART mechanism live.
-        crate::hal::uart_16550::putchar(b'Q');
-        // The G1 private lane keeps its HPET-only contract.
-        #[cfg(feature = "g1-cpu-accounting")]
-        let x86_timer_candidates = x86_interrupts_ready && x86_hpet_base != 0;
-        #[cfg(not(feature = "g1-cpu-accounting"))]
-        let x86_timer_candidates = x86_interrupts_ready;
-        if x86_timer_candidates {
-            crate::hal::apic::set_lapic_phys(x86_lapic_base);
-            crate::hal::apic::set_irq_overrides(
-                &acpi_info.irq_overrides,
-                &acpi_info.irq_override_flags,
-            );
-            register_x86_ioapics();
-            crate::hal::set_hpet_base(x86_hpet_base as usize);
-            #[cfg(not(feature = "g1-cpu-accounting"))]
-            {
-                offer_x86_clock_candidates(&acpi_info);
-                match crate::hal::init_timers() {
-                    Some(setup) => {
-                        x86_timer_ready = true;
-                        log::info!(
-                            "[x86-gate] timer: clock={} clockevent={:?} apic={}",
-                            setup.source.name(),
-                            setup.clockevent,
-                            if setup.x2apic { "x2apic" } else { "xapic" }
-                        );
-                    }
-                    None => log::error!(
-                        "[x86-gate] timer CLOSED: no clocksource (TSC, kvmclock, HPET or PM timer)"
-                    ),
-                }
-            }
-            #[cfg(feature = "g1-cpu-accounting")]
-            {
-                let vendor = core::arch::x86_64::__cpuid(0);
-                assert!(
-                    vendor.ebx == u32::from_le_bytes(*b"Genu")
-                        && vendor.edx == u32::from_le_bytes(*b"ineI")
-                        && vendor.ecx == u32::from_le_bytes(*b"ntel"),
-                    "G1 private lane requires GenuineIntel CPUID"
-                );
-                let calibration = crate::hal::init_timers_observed()
-                    .expect("G1 requires actual HPET/LAPIC timer initialization");
-                let clock = crate::hal::hpet::checked_sample()
-                    .expect("G1 requires a checked shared 64-bit HPET");
-                let initial = calibration
-                    .ticks_per_ms
-                    .checked_mul(10)
-                    .and_then(|count| u32::try_from(count).ok())
-                    .expect("G1 rejects overflowed LAPIC calibration");
-                assert!(
-                    calibration.hpet_used
-                        && initial >= 10_000
-                        && initial == calibration.initial_count
-                        && calibration.lvt & (1 << 16) == 0
-                        && (calibration.lvt >> 17) & 3 == 1,
-                    "G1 rejects LAPIC fallback, stopped or masked timer"
-                );
-                // The G1 lane's boot receipt: emitted raw and allocation-free,
-                // starting its own line, without a log-level tag.
-                struct G1BootWriter;
-                impl core::fmt::Write for G1BootWriter {
-                    fn write_str(&mut self, text: &str) -> core::fmt::Result {
-                        for byte in text.bytes() {
-                            crate::hal::uart_16550::putchar(byte);
-                        }
-                        Ok(())
-                    }
-                }
-                core::fmt::write(&mut G1BootWriter, format_args!(
-                    "\nG1-CLOCK-BOOT raw={} period_fs={} base={} caps={} config={} ticks_per_ms={} initial={} lvt={}\n",
-                    clock.raw_counter, clock.period_fs, clock.base, clock.capabilities,
-                    clock.configuration, calibration.ticks_per_ms,
-                    calibration.initial_count, calibration.lvt,
-                )).expect("G1 boot receipt formatting");
-                x86_timer_ready = true;
-                log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
-            }
-        } else {
-            // Fail-closed decision: it must reach the console.
-            log::error!("[x86-gate] timer CLOSED: validated MADT required");
-            #[cfg(feature = "g1-cpu-accounting")]
-            panic!("G1 private measurement requires validated MADT and HPET");
-        }
-
-        // Tier 3 x86 VMM P01: enter root-of-virtualization on the BSP.
-        // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
-        // Failure is non-fatal — the kernel runs fine without virt; the
-        // HypervisorCap gate simply stays closed (has_x86_virt() == false).
-        // The two backends differ in how a refusal surfaces, and that decides
-        // what may be attempted under a hypervisor:
-        //   * VMXON **faults** (#GP) when the host grants the bits but refuses
-        //     nested operation, so VMX is never attempted under a hypervisor —
-        //     an optional capability must not take the boot down.
-        //   * SVM's enable path only writes EFER.SVME and VM_HSAVE_PA, both
-        //     gated on the CPUID bit, and reports failure instead of faulting.
-        //     QEMU advertises CPUID.1:ECX[31] on every builtin CPU model while
-        //     still emulating SVM root operation under TCG, so gating SVM on
-        //     the hypervisor bit would close the capability on the only lane
-        //     that can exercise it (the x86 hypervisor smoke lane).
-        let _under_hypervisor = cpu_features::hypervisor_present();
-        // Root operation is per-CPU: the same helper runs on each AP before it
-        // goes online (crate::sched::smp::x86_secondary_main).
-        if cpu_features::x86_virt_kind() == Some(cpu_features::X86Virt::Vmx) {
-            // VMXON faults (#GP) rather than reporting failure when a
-            // precondition is unmet; logged first, a fault stays attributable.
-            log::info!(
-                "[kernel] x86 virt: VMX preconditions CPUID={} FEATURE_CONTROL={:#x} VMX_BASIC_revid={:#x}",
-                hal::vmx::supported(),
-                hal::vmx::feature_control(),
-                hal::vmx::vmxon_revision()
-            );
-        }
-        match cpu_features::enter_x86_root_on_current_cpu() {
-            Ok(kind) => {
-                cpu_features::latch_x86_root_active();
-                log_info(match kind {
-                    cpu_features::X86Virt::Svm => "x86 virt: root operation active (SVM)",
-                    cpu_features::X86Virt::Vmx => "x86 virt: root operation active (VMX)",
-                });
-            }
-            Err(reason) => {
-                puts("[INFO] x86 virt: ");
-                puts(reason);
-                puts("; cap closed\n");
-            }
-        }
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
     #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
@@ -875,92 +1066,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     crate::dev::init();
-    // x86_64: load embedded kernel_fs.img into RAM so EarlyLoader can serve ELFs from it.
-    // VirtIO devices on q35 are on PCIe — probed via virtio_pci::init() after ECAM scan.
-    #[cfg(target_arch = "x86_64")]
-    {
-        crate::dev::ramdisk::init_driver();
-        crate::arch::dev::ps2_keyboard::init();
-        // COM1 TX remains available without ACPI. RX IRQ requires the timer
-        // gate (validated MADT plus a clocksource) and an I/O APIC that serves
-        // the UART's GSI, because it is routed through IOAPIC/LAPIC.
-        if !x86_timer_ready {
-            log::warn!("[x86-gate] configured UART IRQ CLOSED: interrupt/timer unavailable");
-        } else if !crate::hal::uart_16550::init_input_irq() {
-            log::warn!("[x86-gate] configured UART IRQ CLOSED: no I/O APIC serves its GSI");
-        }
-        // Initialise the RX buffer that vi_handle_uart_irq() writes into.
-        crate::dev::uart::init_input();
-        // Phase 06: name every declared serial port and whether the machine
-        // actually answered the 16550 probe. The console is slot 0; the extras
-        // are polled, so an absent one is a refusal, never a silent write.
-        {
-            let soc = crate::board::selected_x86_64_soc();
-            for (index, port) in soc.serial_ports.iter().enumerate() {
-                match crate::hal::uart_16550::port_base_at(index) {
-                    Some(base) => log::info!(
-                        "[x86-gate] serial port {} base={:#x} irq={} usable",
-                        index,
-                        base,
-                        port.irq
-                    ),
-                    None => log::warn!(
-                        "[x86-gate] serial port {} base={:#x} irq={} absent (16550 probe failed)",
-                        index,
-                        port.base,
-                        port.irq
-                    ),
-                }
-            }
-            if soc.serial_ports.len() > crate::hal::uart_16550::MAX_PORTS {
-                log::warn!(
-                    "[x86-gate] {} declared serial ports exceed the {} this kernel carries",
-                    soc.serial_ports.len(),
-                    crate::hal::uart_16550::MAX_PORTS
-                );
-            }
-        }
-        log_info("x86_64: ramdisk + UART RX IRQ initialised");
-    }
-
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
     // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
-    // x86_64: the complete validated ACPI MCFG window is identity-mapped;
-    // the early kernel fallback scans its first admitted bus before Platform.
-    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
+    #[cfg(target_arch = "riscv64")]
     {
-        #[cfg(target_arch = "x86_64")]
-        if x86_ecam_base != 0 {
-            // Early first-admitted-bus fallback: seed kernel PCI identity and
-            // activate VT-d before any DMA-capable Driver Cell can run. The
-            // Platform Cell receives the full validated MCFG range via argv
-            // later and performs authoritative multi-bus enumeration.
-            crate::dev::pcie_ecam::init();
-            crate::dev::iommu::init(crate::dev::iommu::DmaIsolationInput {
-                vtd_base: acpi_info.dmar_base,
-                vtd_units: acpi_info.dmar_units,
-                vtd_include_pci_all: acpi_info.dmar_include_pci_all,
-            });
-            crate::dev::iommu::activate_isolation();
-            // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.
-            crate::arch::dev::pcie_msi::init(
-                acpi_info
-                    .fadt
-                    .as_ref()
-                    .is_some_and(|fadt| fadt.iapc_boot_arch & (1 << 3) != 0),
-            );
-        } else {
-            log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
-        }
-        #[cfg(target_arch = "riscv64")]
         crate::dev::iommu::set_deferred_init_pending();
-        // VirtIO PCI block init removed (G2 loader redesign phase 06). x86 block I/O
-        // is served by the NVMe Driver Cell (F4); the kernel drives no block hardware.
         // activate_isolation() is now called inside iommu::try_deferred_init() once the
         // IOMMU device has been registered by the Platform Cell. The call below is a no-op
         // (IOMMU not yet initialized at this point in boot).
-        #[cfg(target_arch = "riscv64")]
         crate::dev::iommu::activate_isolation();
     }
 
@@ -1272,24 +1386,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             );
         }
     }
-    #[cfg(all(feature = "browser-engine-profile", target_arch = "x86_64"))]
-    {
-        if crate::loader::domain_admission::browser_engine_policy_permitted()
-            && crate::loader::domain_admission::enable_for_boot()
-        {
-            log_info("Tier 2 admission: ENABLED (browser engine profile, QuickJS only)");
-        } else {
-            log_info(
-                "Tier 2 admission: DISABLED (browser engine policy or x86 substrate gate) \
-                 — domain-class artifacts are denied",
-            );
-        }
-    }
     #[cfg(all(
         feature = "native-domains",
         cellos_wide,
-        any(feature = "policy-required", feature = "production-relay-image"),
-        not(all(feature = "browser-engine-profile", target_arch = "x86_64"))
+        any(feature = "policy-required", feature = "production-relay-image")
     ))]
     {
         log_info("Tier 2 admission: DISABLED (fleet profile) — domain-class artifacts are denied");
@@ -1464,72 +1564,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         {
             #[cfg(target_arch = "aarch64")]
             crate::arch::layer2_selftest::run_mte_selftest();
-            #[cfg(target_arch = "x86_64")]
-            crate::arch::layer2_selftest::run_pku_selftest();
-            // Tier 3 x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
-            // Only meaningful when SVM root operation was entered at boot.
-            #[cfg(target_arch = "x86_64")]
-            if cpu_features::has_x86_virt() {
-                crate::arch::hypervisor::svm_registry::x86_smoke();
-            } else {
-                log_info("X86-VMM-SMOKE: SKIP (no SVM/VMX root)");
-            }
-        }
-        #[cfg(all(target_arch = "x86_64", feature = "x86-mmio-smoke"))]
-        if cpu_features::has_x86_virt() {
-            crate::arch::hypervisor::svm_registry::x86_mmio_smoke();
-        } else {
-            log_info("X86-MMIO-SMOKE: SKIP (no SVM/VMX root)");
-        }
-        #[cfg(target_arch = "x86_64")]
-        if let Some(fb) = boot_info.framebuffer() {
-            let hhdm = boot_info.hhdm_offset();
-            let phys_addr = if fb.addr >= hhdm && hhdm > 0 {
-                fb.addr - hhdm
-            } else {
-                fb.addr
-            };
-            let width = fb.width as u16;
-            let height = fb.height as u16;
-            let pitch = fb.pitch as usize;
-            let size = pitch.wrapping_mul(height as usize);
-            let pages = size.div_ceil(4096);
-            let owner = types::CellId(0);
-            match crate::memory::paging::map_display_framebuffer_user(phys_addr, pages) {
-                Ok(_) => {
-                    let _ = crate::resource_registry::reserve_display_framebuffer(
-                        owner, phys_addr, size, width, height, pitch,
-                    );
-                    let _ = crate::resource_registry::activate_display_framebuffer(
-                        owner, phys_addr, size, width, height, pitch,
-                    );
-                    log_info("[boot] x86_64 Limine linear framebuffer mapped and registered");
-                    crate::arch::dev::fb_console::init(
-                        fb.addr,
-                        width as usize,
-                        height as usize,
-                        pitch,
-                    );
-                    unsafe {
-                        let ptr = fb.addr as *mut u32;
-                        let stride = pitch / 4;
-                        let total = stride * (height as usize);
-                        // Dark slate background (0xFF1E1E2E)
-                        for i in 0..total {
-                            *ptr.add(i) = 0xFF1E1E2E;
-                        }
-                        // Top banner bar (40px height, Cyan 0xFF00A8E8)
-                        for y in 0..40usize {
-                            for x in 0..(width as usize) {
-                                *ptr.add(y * stride + x) = 0xFF00A8E8;
-                            }
-                        }
-                    }
-                }
-                Err(_) => {
-                    log_info("[boot] failed to map linear framebuffer");
-                }
-            }
         }
 
         // Spawn the Platform Cell before init (PCIe ECAM scanner).
@@ -1544,23 +1578,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         ) {
             Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
             Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
-        }
-
-        #[cfg(target_arch = "x86_64")]
-        if x86_ecam_base != 0 {
-            let argv_str = alloc::format!(
-                "--ecam-base={:#x} --bus-start={} --bus-end={}",
-                x86_ecam_base,
-                acpi_info.ecam_bus_start,
-                acpi_info.ecam_bus_end,
-            );
-            match crate::loader::spawn_from_path(
-                "/bin/platform",
-                crate::loader::SpawnRequest::governed_boot().with_argv(argv_str.into_bytes()),
-            ) {
-                Ok(_) => log_info("Platform Cell spawned (x86 PCIe ECAM scanner)"),
-                Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
-            }
         }
 
         // `aligned_elf::bytes` borrows an already aligned embedded image and only
@@ -1675,15 +1692,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // An explicit [logging] is authoritative for the whole cold boot. Only old
     // images / omitted sections retain this later interactive/test default.
     if !system_config::logging_explicit() {
-        #[cfg(all(
-            feature = "test-hooks",
-            any(target_arch = "x86_64", target_arch = "aarch64")
-        ))]
+        #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
         log::set_max_level(log::LevelFilter::Info);
-        #[cfg(not(all(
-            feature = "test-hooks",
-            any(target_arch = "x86_64", target_arch = "aarch64")
-        )))]
+        #[cfg(not(all(feature = "test-hooks", target_arch = "aarch64")))]
         log::set_max_level(log::LevelFilter::Warn);
     }
 
@@ -1848,68 +1859,5 @@ fn panic(info: &PanicInfo) -> ! {
     // On riscv this is unreachable after system_reset.
     loop {
         crate::arch::cpu::halt();
-    }
-}
-
-/// Map and register every MADT I/O APIC with the HAL routing table.
-///
-/// Runs after the kernel PML4 is active: `init_kernel_paging_x86` identity-maps
-/// the legacy (last-entry) unit, and every other unit is mapped here. APIC
-/// MMIO therefore switches to identity addressing (`set_hhdm_base(0)`).
-#[cfg(target_arch = "x86_64")]
-fn register_x86_ioapics() {
-    crate::hal::apic::set_hhdm_base(0);
-    let (declared, registered) = crate::acpi::with_topology(|topo| {
-        let mut registered = 0;
-        for unit in topo.ioapics.as_slice() {
-            memory::paging::map_mmio_x86(unit.address as usize, 0x1000);
-            if crate::hal::ioapic::add_unit(unit.address, unit.gsi_base) {
-                registered += 1;
-            }
-        }
-        (topo.ioapics.len(), registered)
-    });
-    log::info!(
-        "[x86-gate] ioapics registered={} declared={}",
-        registered,
-        declared
-    );
-}
-
-/// Hand the HAL the clocksource candidates `init_timers` may choose besides
-/// HPET and the TSC:
-/// - the FADT PM timer, when it is a port-I/O block on a non-hardware-reduced
-///   platform;
-/// - one zeroed frame for kvmclock, when KVM advertises it.
-///
-/// The frame is never freed: once registered, the host writes into it until
-/// reset.
-#[cfg(all(target_arch = "x86_64", not(feature = "g1-cpu-accounting")))]
-fn offer_x86_clock_candidates(acpi_info: &crate::acpi::AcpiInfo) {
-    if let Some(fadt) = acpi_info.fadt.filter(|fadt| !fadt.hw_reduced()) {
-        let timer = fadt.pm_timer;
-        match u16::try_from(timer.address) {
-            Ok(port) if timer.space_id == crate::acpi::Gas::SYSTEM_IO && port != 0 => {
-                crate::hal::set_pm_timer(port, if fadt.pm_timer_32bit() { 32 } else { 24 });
-            }
-            _ if timer.is_present() => log::warn!(
-                "[x86-gate] PM timer at space {} address {:#x} not used (port I/O only)",
-                timer.space_id,
-                timer.address
-            ),
-            _ => {}
-        }
-    }
-    if crate::hal::clock::kvmclock::available() {
-        let frame = memory::frame::FRAME_ALLOCATOR
-            .lock()
-            .as_mut()
-            .and_then(|frames| frames.allocate_frame());
-        if let Some(phys) = frame {
-            let virt = memory::frame::phys_to_virt(phys);
-            // SAFETY: a freshly allocated, HHDM-mapped frame owned by this call.
-            unsafe { core::ptr::write_bytes(virt as *mut u8, 0, 4096) };
-            crate::hal::clock::set_pvclock_area(virt, phys as u64);
-        }
     }
 }
