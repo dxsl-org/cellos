@@ -38,12 +38,7 @@ use crate::sched::smp::{CPU_MPIDRS, CPU_TOPOLOGY};
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub fn physical_cpu_index() -> Option<usize> {
-    let mpidr: u64;
-    // SAFETY: `MPIDR_EL1` is readable from EL1 and modifies nothing.
-    unsafe {
-        core::arch::asm!("mrs {}, mpidr_el1", out(reg) mpidr, options(nomem, nostack));
-    }
-    CPU_MPIDRS.cpu_index(mpidr)
+    CPU_MPIDRS.cpu_index(crate::arch::smp::mpidr())
 }
 
 /// Publish `cpu_index -> logical_hart` before `cpu_index` starts executing.
@@ -322,8 +317,7 @@ pub fn install(hart_id: usize) {
 pub unsafe fn current_hart() -> &'static ViHartLocal {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        let tp: usize;
-        core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
+        let tp = crate::arch::smp::read_tp();
         &*(tp as *const ViHartLocal)
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
@@ -343,10 +337,7 @@ pub unsafe fn current_hart() -> &'static ViHartLocal {
 pub fn installed_hart_id() -> Option<usize> {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        let tp: usize;
-        unsafe {
-            core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
-        }
+        let tp = crate::arch::smp::read_tp();
         (tp != 0).then(current_hart_id)
     }
     #[cfg(target_arch = "aarch64")]
@@ -366,10 +357,7 @@ pub fn installed_hart_id() -> Option<usize> {
 pub fn current_hart_id() -> usize {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        let tp: usize;
-        unsafe {
-            core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
-        }
+        let tp = crate::arch::smp::read_tp();
         if tp == 0 {
             return 0;
         }
@@ -392,10 +380,7 @@ pub fn current_hart_id() -> usize {
 pub fn current_cell_id() -> usize {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        let tp: usize;
-        unsafe {
-            core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
-        }
+        let tp = crate::arch::smp::read_tp();
         if tp == 0 {
             return 0;
         }
@@ -816,10 +801,7 @@ pub fn take_deferred_retirement() -> Option<DeferredRetirement> {
 pub fn set_current_cell_id(id: usize) {
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
-        let tp: usize;
-        unsafe {
-            core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
-        }
+        let tp = crate::arch::smp::read_tp();
         if tp == 0 {
             return;
         }
@@ -846,9 +828,8 @@ pub fn set_current_cell_id(id: usize) {
 #[inline(always)]
 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
 pub unsafe fn write_tp(val: usize) {
-    // SAFETY: writing tp CSR is always safe from S-mode; the value is either
-    // a valid HART_LOCALS pointer or 0 (pre-install). Caller ensures context.
-    core::arch::asm!("mv tp, {}", in(reg) val, options(nomem, nostack, preserves_flags));
+    // SAFETY: the caller ensures context (see above).
+    crate::arch::smp::write_tp(val);
 }
 
 /// No-op on non-RISC-V targets (no `tp`-based hart-local addressing).

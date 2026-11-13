@@ -4,6 +4,8 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::arch::dev::pcie_msi` is now `crate::arch::dev::pcie_msi`).
 
+pub mod tlb;
+
 pub mod power;
 
 pub mod cpu;

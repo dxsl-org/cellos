@@ -52,24 +52,7 @@ pub fn init_bare() {}
 /// Bare physical (riscv32/x86/arm): no-op.
 #[inline(always)]
 pub fn tlb_flush_all() {
-    #[cfg(target_arch = "riscv64")]
-    // SAFETY: sfence.vma is a privileged S-mode fence; always safe from S-mode.
-    unsafe {
-        core::arch::asm!("sfence.vma", options(nostack));
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    // SAFETY: tlbi vmalle1is invalidates all EL1 TLB entries broadcast across CPUs.
-    // dsb sy ensures the invalidation completes before subsequent memory accesses.
-    // isb serializes the instruction stream so the next fetch sees the clean TLB.
-    unsafe {
-        core::arch::asm!("tlbi vmalle1is", "dsb sy", "isb", options(nostack, nomem));
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    {
-        hal::domain::flush_all_global();
-    }
+    crate::arch::tlb::flush_all();
 }
 
 // ─── riscv64 + aarch64 paging ────────────────────────────────────────────────

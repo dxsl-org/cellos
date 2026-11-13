@@ -993,11 +993,9 @@ fn start_spin_table_secondaries() {
             );
             return;
         }
-        // SAFETY: SEV only wakes cores parked in WFE; the preceding `dsb sy`
-        // orders the release word before it.
-        unsafe {
-            core::arch::asm!("sev", options(nomem, nostack));
-        }
+        // SEV only wakes cores parked in WFE; the preceding `dsb sy` orders the
+        // release word before it.
+        crate::arch::smp::send_event();
         log::info!("[smp] hart {hart_id} released via spin table at {release_addr:#x}");
 
         let timeout_ticks = (hal::aarch64::timer::counter_frequency_hz() / 2).max(1);
@@ -1852,8 +1850,8 @@ pub extern "C" fn smp_aarch64_secondary_main(hart_id: usize) -> ! {
         HART_ONLINE[hart_id].store(true, Ordering::Release);
     }
     loop {
-        // SAFETY: WFI suspends until the next interrupt; no state changes.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+        // WFI suspends until the next interrupt; no state changes.
+        crate::arch::cpu::halt();
         core::hint::spin_loop();
     }
 }
@@ -1954,11 +1952,9 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
     loop {
         #[cfg(feature = "test-hooks")]
         crate::loader::atomic_publication_tests::observe_schedule_attempt();
-        // SAFETY: wfi suspends until the next interrupt; state is unchanged.
+        // wfi suspends until the next interrupt; state is unchanged.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        unsafe {
-            core::arch::asm!("wfi", options(nomem, nostack))
-        };
+        crate::arch::cpu::halt();
         core::hint::spin_loop();
     }
 }

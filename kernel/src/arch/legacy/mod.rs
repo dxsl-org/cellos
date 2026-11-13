@@ -7,6 +7,7 @@ pub mod cpu;
 pub mod dev;
 pub mod irq;
 pub mod power;
+pub mod tlb;
 
 #[cfg(target_arch = "riscv32")]
 mod riscv32;

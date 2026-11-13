@@ -190,21 +190,7 @@ pub fn tag_invalidation_outstanding() -> Option<usize> {
 /// remote hart is asked to do the same.
 fn local_tag_flush(asid: usize) {
     // Publish PTE stores before requesting an invalidation on another hart.
-    #[cfg(target_arch = "riscv64")]
-    {
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
-        // SAFETY: an S-mode fence orders prior page-table stores.
-        unsafe { core::arch::asm!("fence rw, rw", options(nostack)) };
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
-        // SAFETY: `dsb ishst` orders prior page-table stores before the IPI that
-        // asks a remote hart to invalidate them.
-        unsafe { core::arch::asm!("dsb ishst", options(nostack)) };
-    }
-    #[cfg(target_arch = "x86_64")]
-    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+    crate::arch::tlb::publish_pte_stores();
     #[cfg(feature = "test-hooks")]
     if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
         let mut tags = TEST_FLUSHED_TAGS.lock();
@@ -389,12 +375,7 @@ pub fn flush_range(start: VAddr, size: usize) {
     {
         // Keep the PTE write visible to both the compiler and remote table walkers
         // before the firmware asks those harts to execute SFENCE.VMA.
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
-        // SAFETY: S-mode may order prior page-table stores with `fence`; this
-        // changes no memory and is required before remote invalidation.
-        unsafe {
-            core::arch::asm!("fence rw, rw", options(nostack));
-        }
+        crate::arch::tlb::publish_pte_stores();
 
         for page in (start..end).step_by(PAGE_SIZE) {
             hal::paging::flush_tlb_page(page);

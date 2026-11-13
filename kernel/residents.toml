@@ -43,6 +43,8 @@
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/smp.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/cpu.rs" = { category = "A", owner = "arch" }
@@ -51,6 +53,7 @@
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/power.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/riscv32.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/x86.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
@@ -64,6 +67,7 @@
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/smp.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/task.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/fstat_selftest.rs" = { category = "test", owner = "task" }
@@ -77,6 +81,7 @@
 "kernel/src/arch/riscv64/task/path_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/retirement_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
@@ -114,6 +119,7 @@
 "kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/power.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/x86_64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/user_access.rs" = { category = "A", owner = "arch" }
 
 # ---- admission ----
