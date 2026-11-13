@@ -636,7 +636,7 @@ fn run_race_fixture() -> bool {
 /// Run only the GetRandom SAS ownership fixture and publish its unique terminal.
 #[cfg(feature = "getrandom-sas-test")]
 pub(crate) fn run_getrandom_primary() -> bool {
-    let passed = super::getrandom_sas_tests::run_fixture();
+    let passed = crate::arch::task::getrandom_sas_tests::run_fixture();
     if passed {
         log::info!("S22-RV64-GETRANDOM-SAS: PASS");
     } else {

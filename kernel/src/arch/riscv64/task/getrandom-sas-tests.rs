@@ -3,8 +3,8 @@ mod getrandom_sas_grant_cases;
 #[path = "getrandom-sas-revoke-race.rs"]
 mod getrandom_sas_revoke_race;
 
-use super::{stack::Stack, syscall, tcb::Task, SCHEDULER};
 use crate::memory::paging::{Flags, PAGE_SIZE};
+use crate::task::{stack::Stack, syscall, tcb::Task, SCHEDULER};
 use alloc::{boxed::Box, vec, vec::Vec};
 use types::CellId;
 
@@ -65,7 +65,7 @@ pub(crate) fn run_fixture() -> bool {
     let unowned_ptr = read_only_base + PAGE_SIZE;
     let mut caller = Box::new(Task::new(CALLER, CellId(91_301), "rng-caller", Vec::new()));
     caller.user_stack = Some(caller_stack);
-    caller.segment_mem = Some(super::stack::CellSegments::with_writable_pages(
+    caller.segment_mem = Some(crate::task::stack::CellSegments::with_writable_pages(
         vec![
             (cross_segment_base, cross_segment_base),
             (

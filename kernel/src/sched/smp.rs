@@ -1952,9 +1952,9 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
     }
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    crate::memory::tlb_shootdown_selftest::run_secondary(hart_id);
+    crate::arch::memory::tlb_shootdown_selftest::run_secondary(hart_id);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    crate::cell::provenance_selftest::run_secondary(hart_id);
+    crate::arch::cell::provenance_selftest::run_secondary(hart_id);
 
     // Per-hart scheduler loop.  The timer ISR (vi_timer_tick) calls yield_cpu()
     // which runs pick_next for THIS hart (work-stealing from hart 0 if idle).

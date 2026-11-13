@@ -18,11 +18,11 @@ use alloc::{
 };
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
-use super::iommu::{classify_dma_publication, DmaMapResult, DmaUnmapResult};
-use super::iommu_pt::Sv39IommuPt;
 use super::iommu_riscv_cmd::{
     encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
 };
+use crate::dev::iommu::{classify_dma_publication, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu_pt::Sv39IommuPt;
 use crate::dev::pcie_ecam;
 use crate::sync::Spinlock;
 #[cfg(not(target_arch = "riscv32"))]
@@ -124,7 +124,7 @@ fn alloc_pscid() -> Option<u16> {
 }
 
 /// Return a PSCID to the free-list for reuse on Cell restart.
-pub(super) fn free_pscid(id: u16) {
+pub(crate) fn free_pscid(id: u16) {
     if id != 0 {
         PSCID_FREE_LIST.lock().push(id);
     }
@@ -315,7 +315,7 @@ fn zero_dc_3lvl(l1_virt: usize, bdf: u32) {
 
 /// Probe RISC-V IOMMU hardware, allocate L1 DDT and command queue.
 /// Stays in BARE (passthrough) mode until `activate()` is called.
-pub(super) fn init_hw() {
+pub(crate) fn init_hw() {
     let dev = match pcie_ecam::find_class(CLASS, SUB, PROGIF) {
         Some(d) => d,
         None => {
@@ -402,7 +402,7 @@ pub(super) fn init_hw() {
 /// Creates a per-Cell `Sv39IommuPt` + PSCID on first call. Writes a DDT entry
 /// for `bdf` immediately (even before `activate()`). IODIR.INVAL_DDT and
 /// IOTINVAL.VMA are acknowledged together by IOFENCE.C after each update.
-pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+pub(crate) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
@@ -458,7 +458,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> 
 
 /// Backward-compat: register a DMA range for the kernel domain (tid=0) without a BDF.
 #[allow(dead_code)] // reason: kept for API parity with iommu_x86; no caller wired up yet
-pub(super) fn map_range(phys: u64, size: usize) {
+pub(crate) fn map_range(phys: u64, size: usize) {
     let _ = map_range_for_cell(0, 0, phys, size);
 }
 
@@ -468,7 +468,7 @@ pub(super) fn map_range(phys: u64, size: usize) {
 ///
 /// Returns `true` only after hardware acknowledges every teardown command.
 /// Failure keeps the domain so ownership and pinned frames remain quarantined.
-pub(super) fn unmap_cell(tid: u64) -> bool {
+pub(crate) fn unmap_cell(tid: u64) -> bool {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
@@ -521,7 +521,7 @@ pub(super) fn unmap_cell(tid: u64) -> bool {
 /// One IOFENCE acknowledges the whole batch, mirroring the map path: the leaves
 /// are zeroed before the command is enqueued, and a fence that never drains
 /// leaves the range unlinked but not yet unreachable.
-pub(super) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
+pub(crate) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
 
@@ -570,7 +570,7 @@ pub(super) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmap
 /// Switch DDTP from BARE to 3LVL. Eagerly fills DCs for all registered kernel-domain BDFs.
 ///
 /// After this call, DMA from any unregistered device triggers an IOMMU fault.
-pub(super) fn activate() {
+pub(crate) fn activate() {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let ddt_phys = DDT_PHYS.load(Ordering::Relaxed);
@@ -600,6 +600,6 @@ pub(super) fn activate() {
         return;
     }
 
-    super::iommu::set_active();
+    crate::dev::iommu::set_active();
     log::info!("[iommu] RISC-V IOMMU: DMA isolation ACTIVE (Sv39 first-stage, 3LVL DDT)");
 }

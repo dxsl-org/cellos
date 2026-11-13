@@ -21,7 +21,7 @@ const STORE_ZERO_BELOW_SP: u32 = 0xFE01_3C23; // sd zero,-8(sp)
 /// The upper guard page must raise a U-mode store-page-fault. Test-hooks QEMU
 /// then proves the faulting task is terminated while unrelated cells continue.
 pub fn spawn() -> Result<usize, ViError> {
-    let pages = super::stack_pages_for(NAME);
+    let pages = crate::task::stack_pages_for(NAME);
     let kstack = Stack::new_kernel(pages)?;
     let ustack = Stack::new_user(pages)?;
     let kernel_stack_top = kstack.top;

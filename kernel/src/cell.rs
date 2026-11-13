@@ -7,8 +7,6 @@ pub mod cspace;
 pub mod hotswap;
 pub mod init_death;
 pub mod metadata;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod provenance_selftest;
 pub mod retirement_verdict;
 pub mod service_registry;
 pub mod state_stash;

@@ -1,4 +1,4 @@
-use super::super::tcb::Task;
+use crate::task::tcb::Task;
 use abi::fs::{BoxFuture, FileResult, SeekFrom, ViFile};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -54,7 +54,7 @@ pub(super) fn check(ok: &mut bool, passed: bool, label: &str) {
 }
 
 pub(super) fn install_tasks(ok: &mut bool) -> bool {
-    let mut guard = super::super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let Some(scheduler) = guard.as_mut() else {
         check(ok, false, "scheduler initialized");
         return false;
@@ -90,7 +90,7 @@ pub(super) fn install_tasks(ok: &mut bool) -> bool {
 
 pub(super) fn cleanup(installed: bool) {
     if installed {
-        if let Some(scheduler) = super::super::SCHEDULER.lock().as_mut() {
+        if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
             scheduler.tasks.remove(&TASK_A);
             scheduler.tasks.remove(&TASK_B);
         }
@@ -98,7 +98,7 @@ pub(super) fn cleanup(installed: bool) {
 }
 
 pub(super) fn install_failing_file() {
-    if let Some(scheduler) = super::super::SCHEDULER.lock().as_mut() {
+    if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = scheduler.tasks.get_mut(&TASK_A) {
             #[cfg(feature = "p01-trace")]
             let _semantic = crate::memory::heap::p01_owner::creation(

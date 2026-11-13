@@ -41,7 +41,25 @@
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
+"kernel/src/arch/riscv64/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/riscv64/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/riscv64/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
+"kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/task.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/fstat_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/fstat_selftest/dispatch.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/fstat_selftest/fixture.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/fstat_selftest/metadata.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/getrandom-sas-grant-cases.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/getrandom-sas-race-actions.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/getrandom-sas-revoke-race.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/getrandom-sas-tests.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/path_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/retirement_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
@@ -115,7 +133,6 @@
 "kernel/src/cell/init_death.rs" = { category = "B", owner = "cell" }
 "kernel/src/cell/init_death_tests.rs" = { category = "test", owner = "cell" }
 "kernel/src/cell/metadata.rs" = { category = "B", owner = "cell" }
-"kernel/src/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
 "kernel/src/cell/retirement_verdict.rs" = { category = "B", owner = "cell" }
 "kernel/src/cell/retirement_verdict_tests.rs" = { category = "test", owner = "cell" }
 "kernel/src/cell/service_registry.rs" = { category = "B", owner = "cell" }
@@ -133,9 +150,6 @@
 "kernel/src/dev/input_irq_ack.rs" = { category = "exception", owner = "dev", target = "input Driver Cell acknowledges its own IRQ (Spec 15 §3.1)" }
 "kernel/src/dev/iommu.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/iommu_pt.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
 "kernel/src/dev/irq_wait.rs" = { category = "A", owner = "dev" }
 "kernel/src/dev/mmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/core.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
@@ -247,7 +261,6 @@
 "kernel/src/memory/stage2_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/tlb_shootdown.rs" = { category = "A", owner = "memory" }
-"kernel/src/memory/tlb_shootdown_selftest.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/vma.rs" = { category = "A", owner = "memory" }
 
 # ---- p01 ----
@@ -321,7 +334,6 @@
 "kernel/src/task/completion.rs" = { category = "A", owner = "task" }
 "kernel/src/task/completion_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/completion_wait.rs" = { category = "A", owner = "task" }
-"kernel/src/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/copy_glue/mod.rs" = { category = "A", owner = "task" }
 "kernel/src/task/copy_glue/scatter.rs" = { category = "A", owner = "task" }
 "kernel/src/task/dir_inherit.rs" = { category = "B", owner = "task" }
@@ -329,14 +341,6 @@
 "kernel/src/task/domain-grant-gate.rs" = { category = "B", owner = "task" }
 "kernel/src/task/domain_grant.rs" = { category = "B", owner = "task" }
 "kernel/src/task/elf_prepare.rs" = { category = "B", owner = "task" }
-"kernel/src/task/fstat_selftest.rs" = { category = "test", owner = "task" }
-"kernel/src/task/fstat_selftest/dispatch.rs" = { category = "test", owner = "task" }
-"kernel/src/task/fstat_selftest/fixture.rs" = { category = "test", owner = "task" }
-"kernel/src/task/fstat_selftest/metadata.rs" = { category = "test", owner = "task" }
-"kernel/src/task/getrandom-sas-grant-cases.rs" = { category = "test", owner = "task" }
-"kernel/src/task/getrandom-sas-race-actions.rs" = { category = "test", owner = "task" }
-"kernel/src/task/getrandom-sas-revoke-race.rs" = { category = "test", owner = "task" }
-"kernel/src/task/getrandom-sas-tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/gpu-scanout-tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/gpu-scanout.rs" = { category = "exception", owner = "task", target = "GPU Driver Cell scanout service (Spec 15 §3.1)" }
 "kernel/src/task/grant_gate_selftest.rs" = { category = "test", owner = "task" }
@@ -353,12 +357,9 @@
 "kernel/src/task/mmio_revoke_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/net_rx_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/p_trust_selftest.rs" = { category = "test", owner = "task" }
-"kernel/src/task/path_selftest.rs" = { category = "test", owner = "task" }
-"kernel/src/task/retirement_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/rt_wake_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/stack-reservations.rs" = { category = "A", owner = "task" }
 "kernel/src/task/stack.rs" = { category = "A", owner = "task" }
-"kernel/src/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
 "kernel/src/task/syscall/authority.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/decode.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/dev.rs" = { category = "A", owner = "task" }

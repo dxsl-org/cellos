@@ -16,8 +16,6 @@ pub mod uart;
 // Drivers
 pub mod block;
 pub mod console_drv;
-#[cfg(target_arch = "riscv64")]
-pub mod irq_dispatch;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;
@@ -27,10 +25,6 @@ pub mod input_irq_ack; // Minimal VirtIO input IRQ ACK shim (event routing is in
 pub mod gpio_irq; // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
 pub mod iommu; // IOMMU common API — three-phase DMA isolation
 pub mod iommu_pt; // IOMMU identity-mapping page tables (Sv39 / VT-d SLPT)
-#[cfg(target_arch = "riscv64")]
-pub mod iommu_riscv; // RISC-V IOMMU — 3-level DDT + Sv39 first-stage
-#[cfg(target_arch = "riscv64")]
-mod iommu_riscv_cmd;
 pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
 pub mod virtio_rng; // Kernel entropy source (x86 RDSEED/RDRAND)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.

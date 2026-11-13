@@ -604,7 +604,7 @@ pub(super) fn exit(caller_id: usize, code: usize) -> SyscallResult {
     crate::sched::hart_local::set_current_cell_id(0);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    crate::task::retirement_selftest::observe_exit_deferred_record_commit(exit);
+    crate::arch::task::retirement_selftest::observe_exit_deferred_record_commit(exit);
 
     // `yield_cpu` consumes the fixed record under normal scheduler
     // locking and routes roots through quiescent retirement. A worker

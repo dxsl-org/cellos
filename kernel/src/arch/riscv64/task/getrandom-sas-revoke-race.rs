@@ -1,5 +1,5 @@
-use super::super::{stack::Stack, syscall, SCHEDULER};
 use crate::sched::{hart_local, smp};
+use crate::task::{stack::Stack, syscall, SCHEDULER};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use types::CellId;
@@ -23,7 +23,7 @@ fn retire_worker(worker_tid: usize) -> ! {
     if let Some(scheduler) = SCHEDULER.lock().as_mut() {
         scheduler.exit_task(worker_tid, 0);
     }
-    super::super::yield_cpu();
+    crate::task::yield_cpu();
     loop {
         core::hint::spin_loop();
     }

@@ -57,10 +57,10 @@ pub extern "Rust" fn vi_handle_riscv_external_irq(irq: u32) {
 
     match route {
         ExternalIrqRoute::Uart => {
-            super::uart::vi_handle_uart_irq();
+            crate::dev::uart::vi_handle_uart_irq();
         }
         ExternalIrqRoute::Virtio => {
-            super::virtio_common::vi_handle_virtio_irq(irq);
+            crate::dev::virtio_common::vi_handle_virtio_irq(irq);
         }
         ExternalIrqRoute::Unknown => {
             warn_unknown_irq(irq);

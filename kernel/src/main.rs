@@ -1052,13 +1052,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(feature = "test-hooks")]
     crate::loader::elf_tests::run_all();
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if task::path_selftest::self_test() {
+    if crate::arch::task::path_selftest::self_test() {
         log_info("cwd-path self-test PASS");
     } else {
         log_info("cwd-path self-test FAIL");
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if task::fstat_selftest::self_test() {
+    if crate::arch::task::fstat_selftest::self_test() {
         log_info("fstat self-test PASS");
     } else {
         log_info("fstat self-test FAIL");
@@ -1158,9 +1158,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::sched::smp::run_ipi_selftest();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::memory::tlb_shootdown_selftest::run_primary();
+    crate::arch::memory::tlb_shootdown_selftest::run_primary();
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::cell::provenance_selftest::run_primary();
+    crate::arch::cell::provenance_selftest::run_primary();
     #[cfg(all(
         target_arch = "riscv64",
         feature = "native-domains",
@@ -1307,9 +1307,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         feature = "native-domains",
         feature = "test-hooks"
     ))]
-    task::context_handoff_selftest::run_primary();
+    crate::arch::task::context_handoff_selftest::run_primary();
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    task::retirement_selftest::run_primary();
+    crate::arch::task::retirement_selftest::run_primary();
     #[cfg(all(
         target_arch = "riscv64",
         feature = "native-domains",
@@ -1634,7 +1634,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Deliberately underflow a U-mode test task into the upper guard page. The
     // fault handler must terminate only that task and let boot continue.
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    if task::stack_overflow_probe::spawn().is_err() {
+    if crate::arch::task::stack_overflow_probe::spawn().is_err() {
         log_info("[stack-guard] deliberate overflow probe spawn FAIL");
     }
 

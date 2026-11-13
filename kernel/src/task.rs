@@ -33,8 +33,6 @@ pub(crate) mod domain_grant;
 #[path = "task/domain-grant-gate.rs"]
 pub(crate) mod domain_grant_gate;
 mod elf_prepare;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod fstat_selftest;
 /// Phase-01 containment witness for domain-backed zero-copy grants, and the
 /// phase-03 capability witness on every architecture whose lifecycle is open.
 #[cfg(all(
@@ -93,11 +91,6 @@ pub mod async_ipc;
 pub mod cap_file_selftest;
 #[path = "task/cell-image.rs"]
 mod cell_image;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod context_handoff_selftest;
-#[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
-#[path = "task/getrandom-sas-tests.rs"]
-pub(crate) mod getrandom_sas_tests;
 #[path = "task/gpu-scanout.rs"]
 mod gpu_scanout;
 #[cfg(not(cellos_posture = "release"))]
@@ -107,13 +100,7 @@ pub mod ipc_pending_selftest;
 // Uncalled scenario harness; never compiled into a release kernel.
 #[cfg(not(cellos_posture = "release"))]
 pub mod ipc_test;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod path_selftest;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod retirement_selftest;
 pub mod stack;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod stack_overflow_probe;
 pub(crate) mod telemetry;
 #[cfg(all(feature = "native-domains", cellos_wide))]
 pub(crate) mod user_copy;
@@ -143,7 +130,7 @@ use log::info;
 pub const STACK_PAGES: usize = 64;
 /// Post-reactor floor: twice the largest measured peak, rounded up to 64 KiB.
 const MEASURED_STACK_PAGES: usize = 16;
-const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
+pub(crate) const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
 extern "C" {
     fn __trap_exit();
 }
@@ -455,7 +442,7 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
 ) -> bool {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     {
-        crate::memory::tlb_shootdown_selftest::handle_store_fault(frame)
+        crate::arch::memory::tlb_shootdown_selftest::handle_store_fault(frame)
     }
     #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
     {
@@ -871,7 +858,7 @@ pub fn init() {
 #[no_mangle]
 pub extern "Rust" fn vi_terminate_on_user_trap_fault(cause: usize, pc: usize, fault_addr: usize) {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_fault_task_entry();
+    crate::arch::task::retirement_selftest::observe_fault_task_entry();
     // x86_64 #CP (vector 21) from CPL3. User shadow stacks are never enabled
     // (IA32_U_CET.SH_STK_EN stays 0), so the only CPL3 source is CET-IBT: an
     // opted-in Cell's indirect CALL/JMP reached an instruction that is not
@@ -901,7 +888,7 @@ pub(crate) fn terminate_test_hook_trap_proven_user_fault(
     pc: usize,
     fault_addr: usize,
 ) {
-    retirement_selftest::observe_fault_task_entry();
+    crate::arch::task::retirement_selftest::observe_fault_task_entry();
     terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
 }
 
@@ -1032,7 +1019,7 @@ pub extern "Rust" fn vi_ipi_service() {
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_forced_ssip_trap();
+    crate::arch::task::retirement_selftest::observe_forced_ssip_trap();
 
     // A hart that was asked to invalidate its TLB does so here and publishes the
     // epoch the requester waits on. This is the trap path, not the switch path:
@@ -1154,7 +1141,7 @@ pub extern "C" fn vi_context_switch_complete() {
     // incoming ownership.
     crate::sched::hart_local::ready::complete_outgoing_context_save(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    context_handoff_selftest::observe_outgoing_save_completion(hart);
+    crate::arch::task::context_handoff_selftest::observe_outgoing_save_completion(hart);
     let selected = if pinned != 0 {
         pinned
     } else if switched_to_boot {
@@ -1177,7 +1164,7 @@ pub extern "C" fn vi_context_switch_complete() {
         crate::sched::hart_local::ready::set_current_task_id(hart, 0);
         crate::sched::hart_local::set_current_cell_context(0, 0);
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-        retirement_selftest::observe_heartbeat_boot_completion(hart);
+        crate::arch::task::retirement_selftest::observe_heartbeat_boot_completion(hart);
     }
     #[cfg(all(feature = "native-domains", cellos_wide))]
     {
@@ -1208,7 +1195,7 @@ pub extern "C" fn vi_context_switch_complete() {
         crate::sched::domain_switch_tests::observe_domain_teardown(hart);
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    context_handoff_selftest::observe_origin_ownership_release(hart);
+    crate::arch::task::context_handoff_selftest::observe_origin_ownership_release(hart);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     log::info!(
@@ -1219,13 +1206,13 @@ pub extern "C" fn vi_context_switch_complete() {
     );
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::hold_before_switch_completion(hart);
+    crate::arch::task::retirement_selftest::hold_before_switch_completion(hart);
     #[cfg(not(target_arch = "x86_64"))]
     crate::sched::smp::complete_retirement_switch(hart);
     #[cfg(target_arch = "x86_64")]
     crate::sched::smp::complete_captured_retirement_boundary(hart);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_switch_completion(hart);
+    crate::arch::task::retirement_selftest::observe_switch_completion(hart);
 }
 
 #[cfg(any(
@@ -1283,11 +1270,11 @@ pub fn terminate_current_cell_on_fault(
     crate::sched::hart_local::set_current_cell_id(0);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_fault_deferred_record_commit(fault);
+    crate::arch::task::retirement_selftest::observe_fault_deferred_record_commit(fault);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_fault_kernel_attribution(fault.cell_id);
+    crate::arch::task::retirement_selftest::observe_fault_kernel_attribution(fault.cell_id);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    retirement_selftest::observe_fault_funnel_entry(fault.tid);
+    crate::arch::task::retirement_selftest::observe_fault_funnel_entry(fault.tid);
 
     // Switch to the next ready task.  Does not return to the faulting Cell.
     yield_cpu();
@@ -1395,7 +1382,9 @@ pub fn yield_cpu() {
     let deferred_retired = match crate::sched::hart_local::take_deferred_retirement() {
         Some(crate::sched::hart_local::DeferredRetirement::Fault(fault)) => {
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-            retirement_selftest::observe_fault_scheduler_funnel_attempt(fault.tid);
+            crate::arch::task::retirement_selftest::observe_fault_scheduler_funnel_attempt(
+                fault.tid,
+            );
             let mut guard = SCHEDULER.lock();
             let scheduler = guard
                 .as_mut()
@@ -1415,8 +1404,8 @@ pub fn yield_cpu() {
     };
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     if let Some(tid) = deferred_retired {
-        retirement_selftest::observe_fault_scheduler_retirement(tid);
-        retirement_selftest::hold_after_fault_scheduler_retirement(tid);
+        crate::arch::task::retirement_selftest::observe_fault_scheduler_retirement(tid);
+        crate::arch::task::retirement_selftest::hold_after_fault_scheduler_retirement(tid);
     }
     #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
     let _ = deferred_retired;
@@ -1593,7 +1582,9 @@ pub fn yield_cpu() {
                         retirement.owner.generation,
                         retirement.owner.root_tid,
                     );
-                    retirement_selftest::observe_cell_id_release(retirement.owner);
+                    crate::arch::task::retirement_selftest::observe_cell_id_release(
+                        retirement.owner,
+                    );
                 }
             } else {
                 #[cfg(feature = "p01-trace")]
@@ -1693,7 +1684,7 @@ pub fn yield_cpu() {
     ))]
     if let Some(ref plan) = switch_info {
         if plan.incoming.is_null() {
-            retirement_selftest::observe_heartbeat_terminal_current();
+            crate::arch::task::retirement_selftest::observe_heartbeat_terminal_current();
         }
     }
     #[cfg(all(
@@ -1703,7 +1694,7 @@ pub fn yield_cpu() {
     ))]
     if let Some((_, next)) = switch_info {
         if next.is_null() {
-            retirement_selftest::observe_heartbeat_terminal_current();
+            crate::arch::task::retirement_selftest::observe_heartbeat_terminal_current();
         }
     }
     if switch_info.is_none() {
@@ -1765,7 +1756,7 @@ pub fn yield_cpu() {
             #[cfg(target_arch = "riscv64")]
             {
                 #[cfg(feature = "test-hooks")]
-                retirement_selftest::hold_after_selection_before_switch(hart_id);
+                crate::arch::task::retirement_selftest::hold_after_selection_before_switch(hart_id);
                 let (root_ppn, asid) = plan.root_switch();
                 crate::hal::arch::Context::switch_with_saved_sstatus(
                     final_curr,
@@ -1844,7 +1835,7 @@ pub fn yield_cpu() {
                 tls::install_published_base();
             }
             #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-            retirement_selftest::hold_after_selection_before_switch(hart_id);
+            crate::arch::task::retirement_selftest::hold_after_selection_before_switch(hart_id);
 
             #[cfg(target_arch = "riscv64")]
             crate::hal::arch::Context::switch_with_saved_sstatus(

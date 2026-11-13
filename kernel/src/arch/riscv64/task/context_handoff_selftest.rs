@@ -46,8 +46,8 @@ fn spawn_handoff_task(
     name: &str,
     cell_id: CellId,
 ) -> Result<usize, types::ViError> {
-    let kernel_stack = super::stack::Stack::new_kernel(HANDOFF_KERNEL_STACK_PAGES)?;
-    let user_stack = super::stack::Stack::new_user(1)?;
+    let kernel_stack = crate::task::stack::Stack::new_kernel(HANDOFF_KERNEL_STACK_PAGES)?;
+    let user_stack = crate::task::stack::Stack::new_user(1)?;
     let tid = scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack)?;
     if let Some(task) = scheduler.tasks.get(&tid) {
         let owner = abi::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
@@ -103,7 +103,7 @@ pub fn observe_origin_ownership_release(hart: usize) {
 }
 
 fn report_post_origin_completion(worker_tid: usize) {
-    let worker_state = super::SCHEDULER
+    let worker_state = crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&worker_tid))
@@ -139,7 +139,7 @@ extern "C" fn blocked_worker_entry() -> ! {
         }
     }
 
-    if super::ipc_send(worker_tid, root_tid, CTX_USER_PAGE, 1) != Ok(1)
+    if crate::task::ipc_send(worker_tid, root_tid, CTX_USER_PAGE, 1) != Ok(1)
         || crate::sched::hart_local::ready::outgoing_context_save_task_id_for(origin) != worker_tid
     {
         log::error!(
@@ -165,7 +165,7 @@ extern "C" fn blocked_worker_entry() -> ! {
 
     // This is the task→idle path: no peer is ready on hart 1, so its Context
     // must be saved before the hart-0 queue entry becomes selectable.
-    super::yield_cpu();
+    crate::task::yield_cpu();
 
     let resumed_hart = crate::sched::hart_local::current_hart_id();
     if resumed_hart != 0 {
@@ -198,10 +198,10 @@ extern "C" fn blocked_worker_entry() -> ! {
     }
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: PASS marker=CTX-HANDOFF-03 hart=0");
     PHASE.store(MIGRATED_AFTER_SAVE, Ordering::Release);
-    if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
+    if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(worker_tid, 0);
     }
-    super::yield_cpu();
+    crate::task::yield_cpu();
     loop {
         core::hint::spin_loop();
     }
@@ -232,7 +232,7 @@ pub fn run_primary() {
         frame
     };
     let (root_tid, worker_tid) = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         let Some(scheduler) = guard.as_mut() else {
             log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP scheduler-unavailable");
             return;
@@ -258,7 +258,7 @@ pub fn run_primary() {
         };
         // The worker must block rather than deliver immediately. Hart 0 will
         // call `ipc_recv` below to perform the wake at the controlled point.
-        root.state = super::tcb::TaskState::Running;
+        root.state = crate::task::tcb::TaskState::Running;
         let Some(worker) = scheduler.tasks.get_mut(&worker_tid) else {
             log::error!(
                 "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP worker-lost"
@@ -350,7 +350,7 @@ pub fn run_primary() {
         );
         return;
     }
-    if super::ipc_recv(root_tid, 0, CTX_USER_PAGE + 16, 1) != Ok(worker_tid) {
+    if crate::task::ipc_recv(root_tid, 0, CTX_USER_PAGE + 16, 1) != Ok(worker_tid) {
         log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 wake");
         return;
     }
@@ -367,7 +367,7 @@ pub fn run_primary() {
     // Hart 0 has the wake queued, but eligibility must reject it while hart 1
     // still owns the worker's live stack. No eligible work exists, so this
     // returns without a raw switch and leaves the queue entry intact.
-    super::yield_cpu();
+    crate::task::yield_cpu();
     if crate::sched::hart_local::ready::outgoing_context_save_task_id_for(
         crate::sched::smp::HART_RT,
     ) != worker_tid
@@ -390,14 +390,14 @@ pub fn run_primary() {
     report_post_origin_completion(worker_tid);
 
     // The same queued wake is now eligible and must resume exactly once.
-    super::yield_cpu();
+    crate::task::yield_cpu();
     wait_for(MIGRATED_AFTER_SAVE);
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
     log::info!("S22-RV64-MIGRATION: PASS harts=2");
     // This is the stable UART oracle. `MIGRATED_AFTER_SAVE` is published only
     // after CTX03, and the preceding phase transitions prove CTX00-02.
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: PASS aggregate=CTX00-03");
-    if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
+    if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(root_tid, 0);
     }
     let _ = crate::memory::paging::unmap_page(CTX_USER_PAGE);
@@ -405,5 +405,5 @@ pub fn run_primary() {
     if let Some(alloc) = crate::memory::frame::FRAME_ALLOCATOR.lock().as_mut() {
         alloc.deallocate_frame(test_frame);
     }
-    super::yield_cpu();
+    crate::task::yield_cpu();
 }

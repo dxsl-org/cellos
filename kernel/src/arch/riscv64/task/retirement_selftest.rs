@@ -8,7 +8,7 @@
 //! and root teardown prove switch completion gates Context free, owner release,
 //! and CellId reuse.
 
-use super::syscall::{handle_syscall, Syscall, SyscallError};
+use crate::task::syscall::{handle_syscall, Syscall, SyscallError};
 use abi::syscall::ViSyscall;
 use alloc::vec;
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
@@ -66,7 +66,7 @@ pub fn observe_cell_id_release(owner: abi::cell_owner::CellOwner) {
     }
 
     let owner_slot_released = {
-        let guard = super::SCHEDULER.lock();
+        let guard = crate::task::SCHEDULER.lock();
         guard
             .as_ref()
             .is_some_and(|scheduler| scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)))
@@ -164,7 +164,7 @@ pub fn observe_heartbeat_terminal_current() {
     );
     let mut frame = crate::hal::arch::ViTrapFrame::default();
     frame.regs[17] = ViSyscall::ReadLog as usize;
-    super::syscall::ViCell_syscall_dispatch(&mut frame);
+    crate::task::syscall::ViCell_syscall_dispatch(&mut frame);
     let trap_denied = frame.regs[10] == usize::MAX;
 
     if current_tid == tid
@@ -565,7 +565,7 @@ fn remote_dispatch_denies_retiring_syscalls() -> bool {
     .all(|syscall_id| {
         let mut frame = crate::hal::arch::ViTrapFrame::default();
         frame.regs[17] = syscall_id;
-        super::syscall::ViCell_syscall_dispatch(&mut frame);
+        crate::task::syscall::ViCell_syscall_dispatch(&mut frame);
         frame.regs[10] == usize::MAX
     })
 }
@@ -630,8 +630,8 @@ extern "C" fn remote_worker_entry() -> ! {
 extern "C" fn heartbeat_no_successor_entry() -> ! {
     // Advance the scheduler timebase after this task has entered, making the
     // synthetic deadline deterministic rather than dependent on a timer IRQ.
-    super::tick();
-    super::yield_cpu();
+    crate::task::tick();
+    crate::task::yield_cpu();
     unreachable!("expired heartbeat task must switch to boot, never resume");
 }
 
@@ -651,7 +651,7 @@ fn run_heartbeat_terminal_identity_regression() {
         }
     };
     let tid = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         let Some(scheduler) = guard.as_mut() else {
             log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — scheduler unavailable");
             return;
@@ -689,7 +689,7 @@ fn run_heartbeat_terminal_identity_regression() {
 
     // Boot→task then expired task→boot. The second raw switch must retain the
     // terminal nonzero caller until its incoming boot completion.
-    super::yield_cpu();
+    crate::task::yield_cpu();
 
     if HEARTBEAT_CURRENT_RETAINED.load(Ordering::Acquire)
         && HEARTBEAT_BOOT_COMPLETED.load(Ordering::Acquire)
@@ -704,7 +704,7 @@ fn run_heartbeat_terminal_identity_regression() {
     }
 
     // Reap the terminal root and release its test-only quota registration.
-    super::yield_cpu();
+    crate::task::yield_cpu();
     HEARTBEAT_TERMINAL_TID.store(0, Ordering::Release);
 }
 
@@ -749,7 +749,7 @@ pub fn run_primary() {
         }
     };
     let (root_tid, worker_tid, owner) = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         let Some(scheduler) = guard.as_mut() else {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — scheduler unavailable");
             return;
@@ -763,8 +763,8 @@ pub fn run_primary() {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root task disappeared");
             return;
         };
-        root.state = super::tcb::TaskState::Blocked {
-            wait: super::tcb::WaitKind::Recv {
+        root.state = crate::task::tcb::TaskState::Blocked {
+            wait: crate::task::tcb::WaitKind::Recv {
                 mask: 0,
                 buf_ptr: 0,
                 buf_len: 0,
@@ -778,12 +778,12 @@ pub fn run_primary() {
             return;
         }
 
-        let pages = super::stack_pages_for("smp-retirement-worker");
-        let Ok(kstack) = super::stack::Stack::new_kernel(pages) else {
+        let pages = crate::task::stack_pages_for("smp-retirement-worker");
+        let Ok(kstack) = crate::task::stack::Stack::new_kernel(pages) else {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — worker kernel stack allocation");
             return;
         };
-        let Ok(ustack) = super::stack::Stack::new_user(pages) else {
+        let Ok(ustack) = crate::task::stack::Stack::new_user(pages) else {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — worker user stack allocation");
             return;
         };
@@ -876,17 +876,17 @@ pub fn run_primary() {
         return;
     }
     let selected_reap_blocked = {
-        let guard = super::SCHEDULER.lock();
+        let guard = crate::task::SCHEDULER.lock();
         guard.as_ref().is_some_and(|scheduler| {
             !scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW))
                 && scheduler
                     .tasks
                     .get(&worker_tid)
-                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                    .is_some_and(|task| task.state == crate::task::tcb::TaskState::Retiring)
                 && scheduler
                     .tasks
                     .get(&root_tid)
-                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                    .is_some_and(|task| task.state == crate::task::tcb::TaskState::Retiring)
         })
     };
     if !selected_reap_blocked {
@@ -924,7 +924,7 @@ pub fn run_primary() {
         "[selftest] SMP-FAULT-RETIREMENT: stage=hart0-attribution-observed-attempting-scheduler-guard"
     );
     let owner_retained = {
-        let _guard = super::SCHEDULER.lock();
+        let _guard = crate::task::SCHEDULER.lock();
         FAULT_SCHEDULER_GUARD_HELD.store(true, Ordering::Release);
         log::info!(
             "[selftest] SMP-FAULT-RETIREMENT: stage=hart0-scheduler-guard-acquired-published"
@@ -983,17 +983,17 @@ pub fn run_primary() {
     // The faulted worker remains a dispatch-visible retiring record until the
     // remote context transition has completed. Inspect that exact boundary.
     let selected_window_blocked = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         guard.as_mut().is_some_and(|scheduler| {
             !scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW))
                 && scheduler
                     .tasks
                     .get(&worker_tid)
-                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                    .is_some_and(|task| task.state == crate::task::tcb::TaskState::Retiring)
                 && scheduler
                     .tasks
                     .get(&root_tid)
-                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                    .is_some_and(|task| task.state == crate::task::tcb::TaskState::Retiring)
         })
     };
     if !selected_window_blocked {
@@ -1013,9 +1013,9 @@ pub fn run_primary() {
 
     // Reaping can proceed only after hart 1 has published the raw-switch
     // completion epoch; until then the retiring owner slot must remain occupied.
-    super::yield_cpu();
+    crate::task::yield_cpu();
     wait_for(SWITCHED_AWAY);
-    super::yield_cpu();
+    crate::task::yield_cpu();
 
     let replacement = abi::cell_owner::CellOwner::new(
         CELL_RAW,
@@ -1023,7 +1023,7 @@ pub fn run_primary() {
         owner.root_tid.saturating_add(1),
     );
     let blocked = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         guard.as_mut().is_some_and(|scheduler| {
             !scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW))
                 && !scheduler.publish_live_cell_owner(replacement)
@@ -1037,10 +1037,10 @@ pub fn run_primary() {
     PHASE.store(ALLOW_COMPLETION, Ordering::Release);
     log::info!("[selftest] SMP-RETIREMENT: stage=completion-permitted");
     wait_for(COMPLETED);
-    super::yield_cpu();
+    crate::task::yield_cpu();
 
     let reused = {
-        let mut guard = super::SCHEDULER.lock();
+        let mut guard = crate::task::SCHEDULER.lock();
         guard.as_mut().is_some_and(|scheduler| {
             let member_cleanup_complete = !scheduler.tasks.contains_key(&root_tid)
                 && !scheduler.tasks.contains_key(&worker_tid)

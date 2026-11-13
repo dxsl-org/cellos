@@ -1,6 +1,6 @@
 //! Deterministic boot coverage for canonical task-relative paths and FAT stat.
 
-use super::tcb::Task;
+use crate::task::tcb::Task;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use types::{CellId, ViError};
@@ -62,7 +62,7 @@ fn test_fat_stat(ok: &mut bool) {
 }
 
 fn install_tasks(ok: &mut bool) -> bool {
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let Some(scheduler) = guard.as_mut() else {
         check(ok, false, "scheduler initialized");
         return false;
@@ -97,7 +97,7 @@ fn install_tasks(ok: &mut bool) -> bool {
 }
 
 fn cwd_is(tid: usize, expected: &str) -> bool {
-    super::SCHEDULER
+    crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&tid))
@@ -123,17 +123,20 @@ fn test_task_paths(ok: &mut bool) {
 
     let opened = crate::fsapi::file_open(TASK_A, "./INIT");
     let open_isolated = opened.is_ok()
-        && super::SCHEDULER.lock().as_ref().is_some_and(|scheduler| {
-            let fd = opened.unwrap_or(usize::MAX);
-            scheduler
-                .tasks
-                .get(&TASK_A)
-                .is_some_and(|task| task.open_files.contains_key(&fd))
-                && scheduler
+        && crate::task::SCHEDULER
+            .lock()
+            .as_ref()
+            .is_some_and(|scheduler| {
+                let fd = opened.unwrap_or(usize::MAX);
+                scheduler
                     .tasks
-                    .get(&TASK_B)
-                    .is_some_and(|task| !task.open_files.contains_key(&fd))
-        });
+                    .get(&TASK_A)
+                    .is_some_and(|task| task.open_files.contains_key(&fd))
+                    && scheduler
+                        .tasks
+                        .get(&TASK_B)
+                        .is_some_and(|task| !task.open_files.contains_key(&fd))
+            });
     check(ok, open_isolated, "open caller isolation");
 
     let mut exact = [SENTINEL; 4];
@@ -174,7 +177,7 @@ fn test_task_paths(ok: &mut bool) {
 
 fn cleanup(installed_tasks: bool) {
     if installed_tasks {
-        if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
+        if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
             scheduler.tasks.remove(&TASK_A);
             scheduler.tasks.remove(&TASK_B);
         }

@@ -6,7 +6,7 @@
 //! the checks are proven from a remote hart, not only the publisher's. The
 //! authorities use a generation no real Cell reaches and are retired afterwards.
 
-use super::cspace::{
+use crate::cell::cspace::{
     dispatch_handle_control, register_cell_authority, retire_cell_authority, ControlStatus,
     Principal, ResourceKind, CELL_AUTHORITIES,
 };

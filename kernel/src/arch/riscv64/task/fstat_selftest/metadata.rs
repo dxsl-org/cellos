@@ -46,7 +46,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         return None;
     };
 
-    let positioned = super::super::SCHEDULER
+    let positioned = crate::task::SCHEDULER
         .lock()
         .as_mut()
         .is_some_and(|scheduler| {
@@ -71,7 +71,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         ),
         "regular file truth",
     );
-    let cursor_preserved = super::super::SCHEDULER
+    let cursor_preserved = crate::task::SCHEDULER
         .lock()
         .as_mut()
         .is_some_and(|scheduler| {
@@ -83,7 +83,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         });
     check(ok, cursor_preserved, "regular file cursor preserved");
 
-    let directory_positioned = super::super::SCHEDULER
+    let directory_positioned = crate::task::SCHEDULER
         .lock()
         .as_mut()
         .is_some_and(|scheduler| {
@@ -108,7 +108,7 @@ pub(super) fn test_vifs(ok: &mut bool) -> Option<(usize, usize)> {
         "directory truth",
     );
     let directory_cursor_preserved =
-        super::super::SCHEDULER
+        crate::task::SCHEDULER
             .lock()
             .as_mut()
             .is_some_and(|scheduler| {

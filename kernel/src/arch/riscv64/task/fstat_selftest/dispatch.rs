@@ -4,7 +4,7 @@ use super::fixture::{
 };
 use abi::syscall::{ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_KIND_REGULAR, VI_FSTAT_V1_LEN};
 
-use super::super::syscall::{handle_syscall, Syscall};
+use crate::task::syscall::{handle_syscall, Syscall};
 
 fn dispatch_fstat(fd: usize, output: &mut [u8], out_len: usize) -> bool {
     handle_syscall(

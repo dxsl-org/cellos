@@ -112,7 +112,7 @@ pub fn init(dma: DmaIsolationInput) {
     #[cfg(target_arch = "riscv64")]
     {
         let _ = dma;
-        super::iommu_riscv::init_hw();
+        crate::arch::dev::iommu_riscv::init_hw();
     }
     #[cfg(target_arch = "x86_64")]
     crate::arch::dev::iommu_x86::init_hw(dma);
@@ -175,7 +175,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
         return DmaMapResult::Rejected;
     }
     #[cfg(target_arch = "riscv64")]
-    let mapped = super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
+    let mapped = crate::arch::dev::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
     let mapped = crate::arch::dev::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
@@ -196,7 +196,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
 pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
     #[cfg(target_arch = "riscv64")]
     {
-        super::iommu_riscv::unmap_range_for_cell(tid, iova, size)
+        crate::arch::dev::iommu_riscv::unmap_range_for_cell(tid, iova, size)
     }
     #[cfg(target_arch = "x86_64")]
     {
@@ -222,7 +222,7 @@ pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
 pub fn revoke_dma_for_cell(tid: u64) -> bool {
     #[cfg(target_arch = "riscv64")]
     {
-        super::iommu_riscv::unmap_cell(tid)
+        crate::arch::dev::iommu_riscv::unmap_cell(tid)
     }
     #[cfg(target_arch = "x86_64")]
     {
@@ -244,7 +244,7 @@ pub fn revoke_dma_for_cell(tid: u64) -> bool {
 /// Call after all driver DMA buffers are registered via `map_dma()`.
 pub fn activate_isolation() {
     #[cfg(target_arch = "riscv64")]
-    super::iommu_riscv::activate();
+    crate::arch::dev::iommu_riscv::activate();
     #[cfg(target_arch = "x86_64")]
     crate::arch::dev::iommu_x86::activate();
 }

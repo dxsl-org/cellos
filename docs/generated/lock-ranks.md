@@ -28,7 +28,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 21 | `PAYLOAD_SCRATCH` | `kernel::signing::PAYLOAD_SCRATCH` (kernel/src/signing.rs) |
 | 22 | `NET_RX_RESERVATION` | `kernel::task::waker::net_rx_reservation::RESERVATION` (kernel/src/task/waker/net_rx_reservation.rs) |
 | 23 | `IOMMU_CLEANUP_SERIAL` | `kernel::task::IOMMU_CLEANUP_SERIAL` (kernel/src/task.rs) |
-| 24 | `RISCV_DOMAINS` | `kernel::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
+| 24 | `RISCV_DOMAINS` | `kernel::arch::riscv64::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
 | 25 | `UNITS` | `kernel::arch::x86_64::dev::iommu_x86::UNITS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/iommu_x86.rs) |
 | 26 | `ACPI_TOPOLOGY` | `kernel::acpi::TOPOLOGY` (kernel/src/acpi/mod.rs) |
 | 27 | `FRAME_ALLOCATOR` | `kernel::memory::frame::FRAME_ALLOCATOR` (kernel/src/memory/frame.rs) |
@@ -37,7 +37,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 30 | `ADMISSION_REGISTRY` | `kernel::admission::gate::ADMISSION_REGISTRY` (kernel/src/admission/gate.rs) |
 | 31 | `PENDING_PS2` | `kernel::dev::console_drv::PENDING_PS2 @cfg(any (target_arch = "x86_64" , target_arch = "x86"))` (kernel/src/dev/console_drv.rs) |
 | 32 | `KEYBOARD_ACK` | `kernel::dev::input_irq_ack::KEYBOARD_ACK` (kernel/src/dev/input_irq_ack.rs) |
-| 33 | `PSCID_FREE_LIST` | `kernel::dev::iommu_riscv::PSCID_FREE_LIST @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
+| 33 | `PSCID_FREE_LIST` | `kernel::arch::riscv64::dev::iommu_riscv::PSCID_FREE_LIST @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
 | 34 | `MMC_DEVICE` | `kernel::dev::mmc::MMC_DEVICE` (kernel/src/dev/mmc.rs) |
 | 35 | `VIRTIO_GATE_REFUSED` | `kernel::arch::x86_64::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs) |
 | 36 | `DRIVER_REGISTRY` | `kernel::dev::registry::DRIVER_REGISTRY` (kernel/src/dev/registry.rs) |
@@ -79,7 +79,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 72 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
 | 73 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
 | 74 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
-| 75 | `CQ_TRANSACTION` | `kernel::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
+| 75 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
 | 76 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
 | 77 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
 | 78 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |

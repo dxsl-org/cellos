@@ -1,4 +1,4 @@
-use super::super::{syscall, tcb::TaskState, SCHEDULER};
+use crate::task::{syscall, tcb::TaskState, SCHEDULER};
 
 const RAW_GETRANDOM: usize = 214;
 const RAW_GRANT_REGISTER: usize = 215;
