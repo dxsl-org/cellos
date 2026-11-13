@@ -520,12 +520,12 @@ review = "hal/arch/x86/src/x86_64/pku.rs:init; hal/arch/x86/src/x86_64/pku.rs:in
 key = "hal-x86::x86_64::paging::HHDM_OFFSET @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "hal-x86 paging::set_hhdm_offset (kmain:222, BSP) writes; phys_to_virt_ptr and the PML4 walkers (walk_create, walk_read, ist::install_guards, map_bios_area) read"
+owner = "hal-x86 paging::set_hhdm_offset (kmain:222, BSP) writes; paging::phys_to_virt (every PageTable walker, ist::install_guards) and map_bios_area read"
 contexts = ["boot", "normal", "exception"]
 seal = "Relaxed-stored once at kmain:222, before install_guards and before start_secondaries"
 retirement = "never: lives for the whole run"
-rationale = "A scalar sealed before any other CPU exists, so Relaxed loads on any CPU are ordered by the AP-start edge. The #PF handler reads it (vi_handle_page_fault -> map_page_x86 -> walk_create); the value never changes, so exception-context reads cannot see a stale or torn value."
-review = "hal/arch/x86/src/x86_64/paging.rs:set_hhdm_offset; hal/arch/x86/src/x86_64/paging.rs:phys_to_virt_ptr; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/memory/paging.rs:map_page_x86"
+rationale = "A scalar sealed before any other CPU exists, so Relaxed loads on any CPU are ordered by the AP-start edge. The #PF handler reads it (vi_handle_page_fault -> map_page -> PageTable::map_with); the value never changes, so exception-context reads cannot see a stale or torn value."
+review = "hal/arch/x86/src/x86_64/paging.rs:set_hhdm_offset; hal/arch/x86/src/x86_64/paging.rs:phys_to_virt; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/memory/paging.rs:map_page"
 
 [[global]]
 key = "hal-x86::x86_64::ist::GUARDS_INSTALLED @cfg(target_arch = \"x86_64\")"
@@ -1924,12 +1924,12 @@ review = "kernel/src/memory/pin.rs:grant_leases_live; kernel/src/memory/pin.rs:l
 key = "kernel::memory::paging::KERNEL_ROOT"
 lifetime = "global"
 mutation = "spinlock"
-owner = "memory::paging: the Option is published once by init_kernel_paging_x86; the lock then serialises every kernel page-table edit (map_page_x86/unmap_page_x86/page_protect/Stack mapping)"
+owner = "memory::paging: the Option is published once by init_kernel_paging_x86; the lock then serialises every kernel page-table edit (map_page/unmap_page/page_protect/Stack mapping)"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "Option<PhysAddr> written once in init_kernel_paging_x86 (paging.rs:669) at boot; the guarded page tables are mutated for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "Taken from the #PF demand path (vi_handle_page_fault -> map_page_x86 while holding FRAME_ALLOCATOR, matching the documented FRAME_ALLOCATOR -> KERNEL_ROOT order), from Stack drop/unmap in the yield_cpu funnel reachable from timer/IPI ISRs, and on the BSP during AP bring-up (Stack::new_kernel in smp::start_secondaries); the crate Spinlock masks IRQs so same-hart re-entry cannot occur."
-review = "kernel/src/memory/paging.rs:init_kernel_paging_x86; kernel/src/memory/paging.rs:map_page_x86; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:223; kernel/src/sched/smp.rs:837"
+rationale = "Taken from the #PF demand path (vi_handle_page_fault -> map_page while holding FRAME_ALLOCATOR, matching the documented FRAME_ALLOCATOR -> KERNEL_ROOT order), from Stack drop/unmap in the yield_cpu funnel reachable from timer/IPI ISRs, and on the BSP during AP bring-up (Stack::new_kernel in smp::start_secondaries); the crate Spinlock masks IRQs so same-hart re-entry cannot occur."
+review = "kernel/src/memory/paging.rs:init_kernel_paging_x86; kernel/src/memory/paging.rs:map_page; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:223; kernel/src/sched/smp.rs:837"
 
 [[global]]
 key = "kernel::memory::kaslr::KASLR_SEED"

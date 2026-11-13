@@ -1,14 +1,12 @@
 //! x86_64 4-level page table (PML4->PDPT->PD->PT), 4KB and 2MB pages.
 //!
-//! Two-mode walker:
-//!
-//! **Pre-paging (Limine PML4 active):** `PageTable::map` / `get_or_alloc` treat
-//! physical PTE addresses as virtual via `phys_to_virt` (HHDM offset applied).
-//!
-//! **Kernel-owned PML4:** `walk_create` / `walk_read` are the HHDM-aware helpers
-//! used by `kernel::memory::paging::init_kernel_paging` and `map_page`/`unmap_page`.
-//! They always apply the HHDM offset from `kernel_phys_to_virt` before
-//! dereferencing a PTE physical address.
+//! One walker for every root: `PageTable` (the `PageTableTrait` methods,
+//! `leaf_entry`, `prune_empty`, `find_table`) reads each lower table through
+//! [`phys_to_virt`], the HHDM alias, so it works under Limine's PML4 and the
+//! kernel's alike. The shared kernel root (`kernel::memory::paging`) and the
+//! private roots (`AddressSpace`) differ only in their `TablePolicy`.
+//! `map_bios_area` and `map_hhdm_firmware_range` patch Limine's live higher
+//! half (huge leaves included) outside the trait.
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use hal_paging::{Leaf, PageFlags, PageTableTrait, TablePolicy};
@@ -18,14 +16,14 @@ pub const PAGE_SIZE: usize = 4096;
 
 // ---------------------------------------------------------------------------
 // HHDM offset — stored once at boot by `set_hhdm_offset`.
-// Used by walk_create / walk_read so they can dereference PTE physical
+// Used by the walkers (`phys_to_virt`) so they can dereference PTE physical
 // addresses under Limine's page tables (where phys != virt for RAM).
 // ---------------------------------------------------------------------------
 static HHDM_OFFSET: AtomicUsize = AtomicUsize::new(0);
 
 /// Store the HHDM offset so PML4 walkers can dereference physical addresses.
 ///
-/// Must be called before `walk_create` or `walk_read`.
+/// Must be called before any walker runs.
 /// The value must match the Limine HHDM base (`get_hhdm_offset()`).
 pub fn set_hhdm_offset(offset: usize) {
     HHDM_OFFSET.store(offset, Ordering::Relaxed);
@@ -65,55 +63,11 @@ pub const PTE_NX: u64 = 1 << 63;
 ///
 /// Extracting a physical address with `entry & !0xFFF` is WRONG on x86-64 —
 /// it keeps bit 63 (NX) and bits 62:52 (ignored/available). Any NX-marked
-/// entry (every user RW/RO page, see `pte_flags_user_rw`) then yields a
-/// "physical" address with bit 63 set; adding the HHDM offset wraps it into
-/// a NON-CANONICAL pointer and the next dereference is a #GP (error code 0,
-/// CR2 stale) that masquerades as a #PF at va=0.
+/// entry (every user RW/RO page) then yields a "physical" address with bit 63
+/// set; adding the HHDM offset wraps it into a NON-CANONICAL pointer and the
+/// next dereference is a #GP (error code 0, CR2 stale) that masquerades as a
+/// #PF at va=0.
 pub const PTE_ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
-
-// ---------------------------------------------------------------------------
-// Composed flag sets for common mapping kinds.
-// ---------------------------------------------------------------------------
-
-/// Kernel read/write data mapping (supervisor, no-execute).
-#[inline]
-pub fn pte_flags_kernel_rw() -> u64 {
-    PTE_PRESENT | PTE_WRITABLE | PTE_NX
-}
-/// Kernel code mapping (supervisor, read-only, executable).
-#[inline]
-pub fn pte_flags_kernel_code() -> u64 {
-    PTE_PRESENT
-}
-/// User read/write data (user-accessible, no-execute).
-#[inline]
-pub fn pte_flags_user_rw() -> u64 {
-    PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_NX
-}
-/// User read-only data (user-accessible, no-execute).
-#[inline]
-pub fn pte_flags_user_ro() -> u64 {
-    PTE_PRESENT | PTE_USER | PTE_NX
-}
-/// User executable code (user-accessible, read-only, executable).
-#[inline]
-pub fn pte_flags_user_exec() -> u64 {
-    PTE_PRESENT | PTE_USER
-}
-/// MMIO mapping (supervisor, read/write, cache-disable, no NX).
-#[inline]
-pub fn pte_flags_mmio() -> u64 {
-    PTE_PRESENT | PTE_WRITABLE | PTE_PCD
-}
-/// MMIO leaf flags for ring-3 Driver Cells: user-accessible, cache-disabled,
-/// never executable. Mirrors the riscv/aarch64 `cell_mmio_flags` posture —
-/// exclusivity is enforced by the resource registry + LBI (cells are
-/// `forbid(unsafe_code)`, so only an `MmioRegion` from a granted request can
-/// reach the range), not by per-cell page tables (SAS has none).
-#[inline]
-pub fn pte_flags_mmio_user() -> u64 {
-    PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_PCD | PTE_NX
-}
 
 // ---------------------------------------------------------------------------
 // CR3 / TLB helpers.
@@ -199,126 +153,6 @@ pub fn current_root() -> Option<PhysAddr> {
         asm!("mov {cr3}, cr3", cr3 = out(reg) cr3, options(nostack, nomem));
     }
     Some(cr3 & !0xFFF)
-}
-
-// ---------------------------------------------------------------------------
-// HHDM-aware PML4 walkers.
-// ---------------------------------------------------------------------------
-
-/// Trait for the frame allocator callback used by `walk_create`.
-pub trait FrameAllocatorFn {
-    fn allocate(&mut self) -> Option<usize>;
-}
-
-/// Walk or create the 4-level page table path from `pml4` to the leaf PTE
-/// for `va`, allocating intermediate tables via `allocator` as needed.
-///
-/// Returns a pointer to the leaf L1 PTE (in the PT).
-///
-/// # Safety
-/// - `pml4` must point to a valid, at least partially-initialised PML4 table
-///   accessible via the current virtual address space.
-/// - `allocator` must return 4KB-aligned, zeroed physical frames.
-/// - `set_hhdm_offset` must have been called before this function.
-pub unsafe fn walk_create(
-    pml4: *mut u64,
-    va: usize,
-    allocator: &mut dyn FnMut() -> Option<usize>,
-) -> Option<*mut u64> {
-    // Index at each level: PML4[47:39], PDPT[38:30], PD[29:21], PT[20:12].
-    let i3 = (va >> 39) & 0x1FF;
-    let i2 = (va >> 30) & 0x1FF;
-    let i1 = (va >> 21) & 0x1FF;
-    let i0 = (va >> 12) & 0x1FF;
-
-    // Helper: get-or-create the next level table pointer.
-    // `entry_ptr` is the virtual address of the PTE in the current table.
-    // Returns virtual address of the next-level table.
-    unsafe fn ensure_next(
-        entry_ptr: *mut u64,
-        alloc: &mut dyn FnMut() -> Option<usize>,
-    ) -> Option<*mut u64> {
-        // SAFETY: entry_ptr is within a valid page table frame.
-        let entry = unsafe { core::ptr::read_volatile(entry_ptr) };
-        if entry & PTE_PRESENT != 0 {
-            // Already present: strip flags, apply HHDM offset.
-            let next_phys = (entry & PTE_ADDR_MASK) as usize;
-            Some(phys_to_virt(next_phys) as *mut u64)
-        } else {
-            // Allocate a new zeroed frame.
-            let frame_phys = alloc()?;
-            // SAFETY: frame_phys is a freshly allocated 4KB frame; zero it via HHDM virt ptr.
-            unsafe {
-                core::ptr::write_bytes(phys_to_virt(frame_phys) as *mut u8, 0, PAGE_SIZE);
-            }
-            // Intermediate tables: Present + Writable + User so all mappings can
-            // set tighter per-leaf permissions. User bit is only load-bearing at
-            // the leaf PTE; the CPU checks the ANDed chain, but setting it on
-            // intermediates simplifies the caller (leaf flags override).
-            let new_entry = frame_phys as u64 | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
-            // SAFETY: entry_ptr is the address of a valid PTE slot.
-            unsafe {
-                core::ptr::write_volatile(entry_ptr, new_entry);
-            }
-            Some(phys_to_virt(frame_phys) as *mut u64)
-        }
-    }
-
-    // Walk PML4 → PDPT → PD → PT, creating tables as needed.
-    // SAFETY: pml4 is a valid PML4 pointer (checked by caller).
-    let pdpt_base = unsafe { ensure_next(pml4.add(i3), allocator)? };
-    // SAFETY: pdpt_base points to the start of a valid PDPT frame.
-    let pd_base = unsafe { ensure_next(pdpt_base.add(i2), allocator)? };
-    // SAFETY: pd_base points to the start of a valid PD frame.
-    let pt_base = unsafe { ensure_next(pd_base.add(i1), allocator)? };
-
-    // Return pointer to the leaf PTE within the PT.
-    // SAFETY: pt_base is valid and i0 is in [0, 511].
-    Some(unsafe { pt_base.add(i0) })
-}
-
-/// Walk the 4-level page table path from `pml4` to the leaf PTE for `va`.
-///
-/// Returns `Some(pte_value)` if the page is present, `None` if any level
-/// is absent.
-///
-/// # Safety
-/// - `pml4` must point to a valid PML4 table accessible via the current
-///   virtual address space.
-/// - `set_hhdm_offset` must have been called before this function.
-pub unsafe fn walk_read(pml4: *const u64, va: usize) -> Option<u64> {
-    let i3 = (va >> 39) & 0x1FF;
-    let i2 = (va >> 30) & 0x1FF;
-    let i1 = (va >> 21) & 0x1FF;
-    let i0 = (va >> 12) & 0x1FF;
-
-    // SAFETY: pml4 is a valid PML4 pointer.
-    let e3 = unsafe { core::ptr::read_volatile(pml4.add(i3)) };
-    if e3 & PTE_PRESENT == 0 {
-        return None;
-    }
-    let pdpt = phys_to_virt((e3 & PTE_ADDR_MASK) as usize) as *const u64;
-
-    // SAFETY: pdpt derived from a present PML4 entry.
-    let e2 = unsafe { core::ptr::read_volatile(pdpt.add(i2)) };
-    if e2 & PTE_PRESENT == 0 {
-        return None;
-    }
-    let pd = phys_to_virt((e2 & PTE_ADDR_MASK) as usize) as *const u64;
-
-    // SAFETY: pd derived from a present PDPT entry.
-    let e1 = unsafe { core::ptr::read_volatile(pd.add(i1)) };
-    if e1 & PTE_PRESENT == 0 {
-        return None;
-    }
-    let pt = phys_to_virt((e1 & PTE_ADDR_MASK) as usize) as *const u64;
-
-    // SAFETY: pt derived from a present PD entry.
-    let e0 = unsafe { core::ptr::read_volatile(pt.add(i0)) };
-    if e0 & PTE_PRESENT == 0 {
-        return None;
-    }
-    Some(e0)
 }
 
 // Internal aliases used by PageTableTrait impl below.
