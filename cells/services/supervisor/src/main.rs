@@ -62,7 +62,7 @@ impl Handler for Supervisor {
     fn on_request(&mut self, request: Request<'_>) {
         let payload = request.payload();
         if payload.first() != Some(&MAGIC) {
-            raw_message(request.sender(), payload);
+            raw_message(&request, payload);
             return;
         }
         if payload.get(1) == Some(&KIND_SHUTDOWN) {
@@ -142,10 +142,11 @@ fn message(request: &Request<'_>, data: &[u8]) {
     }
 }
 
-fn raw_message(sender_tid: usize, data: &[u8]) {
+fn raw_message(request: &Request<'_>, data: &[u8]) {
+    let sender_tid = request.sender();
     #[cfg(feature = "hostile-backend-recovery")]
     if data.first() == Some(&KILL_REQUEST_OPCODE) {
-        hostile_backend_recovery::handle(sender_tid, data);
+        hostile_backend_recovery::handle(Some(*request.caller()), sender_tid, data);
         return;
     }
     // Init's owner-exit notice; payload windows are zero-padded, so the frame

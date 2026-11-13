@@ -1,4 +1,5 @@
 use alloc::format;
+use api::caller_identity::CallerIdentity;
 use api::hostile_backend_recovery::{
     encode_kill_response, parse_kill_request, DISCONNECT_LOG_MARKER, KILL_STATUS_INVALID_REQUEST,
     KILL_STATUS_KILL_FAILED, KILL_STATUS_OK, KILL_STATUS_REJECTED_CALLER,
@@ -10,13 +11,14 @@ use ostd::ipc::Incoming;
 use ostd::service::provider_tid;
 use ostd::syscall::sys_kill_cell;
 
-const HYPERVISOR_TASK_NAME: &str = "hypervisor";
-const BENCH_TASK_NAME: &str = "bench";
+/// Signed programs reviewed to request a kill (see `sender_is_program`).
+const HYPERVISOR_PROGRAM: &str = "hypervisor";
+const BENCH_PROGRAM: &str = "bench";
 const HOSTILE_BACKEND_KILL_REASON: u32 = 0x4842_4B52;
 
-pub(crate) fn handle(sender_tid: usize, data: &[u8]) {
-    let is_hypervisor = super::sender_has_exact_name(sender_tid, HYPERVISOR_TASK_NAME);
-    let is_bench = super::sender_has_exact_name(sender_tid, BENCH_TASK_NAME);
+pub(crate) fn handle(caller: Option<CallerIdentity>, sender_tid: usize, data: &[u8]) {
+    let is_hypervisor = super::sender_is_program(caller, sender_tid, HYPERVISOR_PROGRAM);
+    let is_bench = super::sender_is_program(caller, sender_tid, BENCH_PROGRAM);
 
     if !is_hypervisor && !is_bench {
         reply(sender_tid, KILL_STATUS_REJECTED_CALLER);
