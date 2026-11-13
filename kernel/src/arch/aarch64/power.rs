@@ -18,3 +18,14 @@ pub(crate) fn shutdown() -> ! {
         );
     }
 }
+
+/// Leave QEMU (test images): semihosting.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn qemu_exit(success: bool) -> ! {
+    use qemu_exit::QEMUExit;
+    qemu_exit::AArch64::new().exit(if success { 0 } else { 1 });
+}
+
+/// After a kernel panic is printed: nothing (the caller halts this CPU).
+#[cfg(not(all(test, not(target_os = "none"))))]
+pub(crate) fn reset_after_panic() {}

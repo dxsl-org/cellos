@@ -14,10 +14,17 @@ use crate::memory;
 use hal::backend::ArmPlatform as _;
 use hal::Arch;
 
+/// Write one byte to the board's early console; the panic handler writes
+/// through it too.
+#[inline(always)]
+pub(crate) fn putc(c: u8) {
+    crate::hal::backend::Board::early_putc(c);
+}
+
 /// Write `s` to the board's early console.
 pub(crate) fn puts(s: &str) {
     for c in s.bytes() {
-        crate::hal::backend::Board::early_putc(c);
+        putc(c);
     }
 }
 

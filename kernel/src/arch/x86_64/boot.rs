@@ -15,10 +15,17 @@ use crate::boot::{
 use crate::log_info;
 use crate::memory;
 
-/// Write `s` to the early console (the configured 16550, polled).
+/// Write one byte to the early console (the configured 16550, polled); the
+/// panic handler writes through it too.
+#[inline(always)]
+pub(crate) fn putc(c: u8) {
+    crate::hal::uart_16550::putchar(c);
+}
+
+/// Write `s` to the early console.
 pub(crate) fn puts(s: &str) {
     for c in s.bytes() {
-        crate::hal::uart_16550::putchar(c);
+        putc(c);
     }
 }
 

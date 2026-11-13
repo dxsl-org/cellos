@@ -20,3 +20,20 @@ pub(crate) fn shutdown() -> ! {
         );
     }
 }
+
+/// Leave QEMU (test images): the SiFive test device at 0x100000.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn qemu_exit(success: bool) -> ! {
+    use qemu_exit::QEMUExit;
+    // SAFETY: 0x100000 is the SiFive test device address on the QEMU `virt`
+    // machine used by this test-only exit path.
+    unsafe {
+        qemu_exit::RISCV64::new(0x100000).exit(if success { 0 } else { 1 });
+    }
+}
+
+/// After a kernel panic is printed: reboot through SBI SRST.
+#[cfg(not(all(test, not(target_os = "none"))))]
+pub(crate) fn reset_after_panic() {
+    crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
+}

@@ -18,10 +18,16 @@ use hal::Arch;
 #[cfg(feature = "test-hooks")]
 static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
+/// Write one byte to the SBI console; the panic handler writes through it too.
+#[inline(always)]
+pub(crate) fn putc(c: u8) {
+    let _ = crate::hal::sbi::console_putchar(c);
+}
+
 /// Write `s` to the SBI console.
 pub(crate) fn puts(s: &str) {
     for c in s.bytes() {
-        let _ = crate::hal::sbi::console_putchar(c);
+        putc(c);
     }
 }
 

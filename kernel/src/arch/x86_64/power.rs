@@ -39,3 +39,19 @@ pub(crate) fn g1_cutoff() -> ! {
         }
     }
 }
+
+/// Leave QEMU (test images): `isa-debug-exit` at port 0xF4.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn qemu_exit(success: bool) -> ! {
+    use qemu_exit::QEMUExit;
+    // SAFETY: 0xF4 is the QEMU `isa-debug-exit` I/O port wired in the x86
+    // test harness (`-device isa-debug-exit,iobase=0xf4`); writing it exits
+    // QEMU. Constructing the port handle is `unsafe` (arbitrary port I/O).
+    unsafe {
+        qemu_exit::X86::new(0xF4, 0).exit(if success { 0 } else { 1 });
+    }
+}
+
+/// After a kernel panic is printed: nothing (the caller halts this CPU).
+#[cfg(not(all(test, not(target_os = "none"))))]
+pub(crate) fn reset_after_panic() {}

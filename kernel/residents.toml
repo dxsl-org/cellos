@@ -56,6 +56,7 @@
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/vm.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/cpu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
