@@ -289,10 +289,10 @@ fn read_counter(tid: usize, expected_prefix: &[u8; 3]) -> Option<u32> {
 fn append_checkpoint(path: &str, record: &CheckpointRecord) {
     let bytes = record.to_bytes();
     let mut vfs_client = ostd::clients::VfsClient::new();
-    if vfs_client.append_file(path, &bytes).is_err() {
+    if let Err(error) = vfs_client.append_file(path, &bytes) {
         fail(&format!(
-            "failed to append checkpoint {} to {}",
-            record.seq, path
+            "failed to append checkpoint {} to {}: {:?}",
+            record.seq, path, error
         ));
     }
 }

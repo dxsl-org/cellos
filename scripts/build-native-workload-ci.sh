@@ -18,7 +18,7 @@ echo "==> Building base cells..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-cellbox -p service-config \
+    -p app-init -p app-cellbox -p service-config -p service-input \
     -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs..."
@@ -48,7 +48,7 @@ cargo build --release \
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" \
+sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input" \
            "$REL/platform" "$REL/driver-virtio-blk" "$REL/supervisor" \
            "$REL/hotswap-demo-v1" "$REL/hotswap-demo-v2" "$REL/bench" "$REL/bench-probe"
 
@@ -61,12 +61,20 @@ printf 'ViCell-native-workload' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
-"$PYTHON_BIN" tools/mkfat32.py \
+# cellbox creates its serial session through the INPUT service, so without
+# /bin/input the shell exits at once ("authenticated serial session failed:
+# NotFound"). `input` selects /bin/input in services.toml; the generator also
+# requires the artifact, so both the feature and the /bin/input pair are needed.
+# `hotswap-demo` makes init start /bin/hotswap-demo-v1 as the supervised
+# `hotswap-demo` service: the shell refuses `cmd &` for external Cells.
+"$PYTHON_BIN" tools/mkfat32.py --config-features input,hotswap-demo \
+    --config-output-dir "$TMPDIR_KFS/boot-config" \
     "$WORKLOAD_DIR/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
+    "$REL/service-input"     /bin/input \
     "$REL/platform"          /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/supervisor"        /bin/supervisor \
@@ -79,6 +87,10 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
 if [[ ! -f "$WORKLOAD_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
+fi
+if ! grep -Fxq 'path = "/bin/input"' "$TMPDIR_KFS/boot-config/services.toml"; then
+    echo "FAIL: services.toml does not start /bin/input; cellbox needs it for its serial session" >&2
+    exit 1
 fi
 "$PYTHON_BIN" tools/inspect_fat.py "${WORKLOAD_DIR}/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 assert_policy_in_image "$TMPDIR_KFS/fat-layout.txt" || exit 1

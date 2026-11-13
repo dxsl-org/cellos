@@ -2,7 +2,7 @@
 //!
 //! Boot QEMU with cellos-kernel-native-workload and disk_srv.img.
 //! Wait for shell.
-//! Launch hotswap-demo-v1 service: `hotswap-demo-v1 &`
+//! hotswap-demo-v1 runs as init's supervised `hotswap-demo` service.
 //! Launch bench scenario: `bench native-stateful`
 //! Wait for `[native-stateful] ALL CRITERIA PASSED`!
 
@@ -63,8 +63,8 @@ fn riscv64_native_stateful_workload_1000_ops() {
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    // Spawn hotswap-demo-v1 background service
-    qemu.send_line("hotswap-demo-v1 &");
+    // Init starts hotswap-demo-v1 as the supervised `hotswap-demo` service
+    // (packaging feature `hotswap-demo`); the shell refuses `cmd &`.
     qemu.wait_for("[hotswap-demo-v1] ready", 30)
         .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
 
