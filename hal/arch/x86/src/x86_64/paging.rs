@@ -11,7 +11,7 @@
 //! dereferencing a PTE physical address.
 use core::arch::asm;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use hal_paging::{PageFlags, PageTableTrait};
+use hal_paging::{Leaf, PageFlags, PageTableTrait, TablePolicy};
 use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
@@ -31,11 +31,12 @@ pub fn set_hhdm_offset(offset: usize) {
     HHDM_OFFSET.store(offset, Ordering::Relaxed);
 }
 
-/// Convert a physical frame address to a dereferenceable virtual pointer.
+/// The address through which the HAL page-table walkers read a physical
+/// frame: the Limine HHDM alias.
 ///
 /// Precondition: `set_hhdm_offset` has been called with the Limine HHDM base.
 #[inline]
-pub(crate) fn phys_to_virt_ptr(phys: usize) -> usize {
+pub fn phys_to_virt(phys: usize) -> usize {
     phys + HHDM_OFFSET.load(Ordering::Relaxed)
 }
 
@@ -53,6 +54,10 @@ pub const PTE_USER: u64 = 1 << 2;
 pub const PTE_PWT: u64 = 1 << 3;
 /// Cache-disable (uncacheable; use for MMIO).
 pub const PTE_PCD: u64 = 1 << 4;
+/// PAT bit of a 4 KiB leaf (on a huge leaf, bit 7 is `PS` and PAT is bit 12).
+pub const PTE_PAT: u64 = 1 << 7;
+/// Global: the translation survives a CR3 reload (CR4.PGE).
+pub const PTE_GLOBAL: u64 = 1 << 8;
 /// No-execute (requires IA32_EFER.NXE set by bootloader).
 pub const PTE_NX: u64 = 1 << 63;
 
@@ -217,13 +222,13 @@ pub unsafe fn walk_create(
         if entry & PTE_PRESENT != 0 {
             // Already present: strip flags, apply HHDM offset.
             let next_phys = (entry & PTE_ADDR_MASK) as usize;
-            Some(phys_to_virt_ptr(next_phys) as *mut u64)
+            Some(phys_to_virt(next_phys) as *mut u64)
         } else {
             // Allocate a new zeroed frame.
             let frame_phys = alloc()?;
             // SAFETY: frame_phys is a freshly allocated 4KB frame; zero it via HHDM virt ptr.
             unsafe {
-                core::ptr::write_bytes(phys_to_virt_ptr(frame_phys) as *mut u8, 0, PAGE_SIZE);
+                core::ptr::write_bytes(phys_to_virt(frame_phys) as *mut u8, 0, PAGE_SIZE);
             }
             // Intermediate tables: Present + Writable + User so all mappings can
             // set tighter per-leaf permissions. User bit is only load-bearing at
@@ -234,7 +239,7 @@ pub unsafe fn walk_create(
             unsafe {
                 core::ptr::write_volatile(entry_ptr, new_entry);
             }
-            Some(phys_to_virt_ptr(frame_phys) as *mut u64)
+            Some(phys_to_virt(frame_phys) as *mut u64)
         }
     }
 
@@ -271,21 +276,21 @@ pub unsafe fn walk_read(pml4: *const u64, va: usize) -> Option<u64> {
     if e3 & PTE_PRESENT == 0 {
         return None;
     }
-    let pdpt = phys_to_virt_ptr((e3 & PTE_ADDR_MASK) as usize) as *const u64;
+    let pdpt = phys_to_virt((e3 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pdpt derived from a present PML4 entry.
     let e2 = unsafe { core::ptr::read_volatile(pdpt.add(i2)) };
     if e2 & PTE_PRESENT == 0 {
         return None;
     }
-    let pd = phys_to_virt_ptr((e2 & PTE_ADDR_MASK) as usize) as *const u64;
+    let pd = phys_to_virt((e2 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pd derived from a present PDPT entry.
     let e1 = unsafe { core::ptr::read_volatile(pd.add(i1)) };
     if e1 & PTE_PRESENT == 0 {
         return None;
     }
-    let pt = phys_to_virt_ptr((e1 & PTE_ADDR_MASK) as usize) as *const u64;
+    let pt = phys_to_virt((e1 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pt derived from a present PD entry.
     let e0 = unsafe { core::ptr::read_volatile(pt.add(i0)) };
@@ -299,7 +304,41 @@ pub unsafe fn walk_read(pml4: *const u64, va: usize) -> Option<u64> {
 const PTE_P: u64 = PTE_PRESENT;
 const PTE_RW: u64 = PTE_WRITABLE;
 const PTE_US: u64 = PTE_USER;
-const PTE_PS: u64 = 1 << 7; // page-size (huge-page) bit — currently unused
+const PTE_PS: u64 = 1 << 7; // page-size (huge-page) bit on a PDPT/PD entry
+
+/// The bits of a leaf that [`PageTableTrait::protect`] keeps: the frame, the
+/// cache attribute (`PWT`, `PCD`, `PAT`) and `G`.
+const PTE_KEEP_ON_PROTECT: u64 = PTE_ADDR_MASK | PTE_PWT | PTE_PCD | PTE_PAT | PTE_GLOBAL;
+
+/// The access-rights bits a leaf takes from `flags`: always `P`, `RW` for
+/// `WRITE`, `US` for `USER`, `NX` without `EXECUTE`.
+fn leaf_rights(flags: PageFlags) -> u64 {
+    let bits = flags.bits();
+    let mut e = PTE_P;
+    if bits & PageFlags::WRITE != 0 {
+        e |= PTE_RW;
+    }
+    if bits & PageFlags::USER != 0 {
+        e |= PTE_US;
+    }
+    if bits & PageFlags::EXECUTE == 0 {
+        e |= PTE_NX;
+    }
+    e
+}
+
+/// [`leaf_rights`] plus the attributes only a new leaf takes from `flags`:
+/// `G` for `GLOBAL`, `PCD` for `UNCACHED`.
+fn leaf_bits(flags: PageFlags) -> u64 {
+    let mut e = leaf_rights(flags);
+    if flags.bits() & PageFlags::GLOBAL != 0 {
+        e |= PTE_GLOBAL;
+    }
+    if flags.bits() & PageFlags::UNCACHED != 0 {
+        e |= PTE_PCD;
+    }
+    e
+}
 
 #[repr(C, align(4096))]
 pub struct PageTable {
@@ -317,6 +356,64 @@ impl PageTable {
     pub fn copy_kernel_higher_half(&mut self, src: &PageTable) {
         self.entries[256..512].copy_from_slice(&src.entries[256..512]);
     }
+
+    fn entry(&self, index: usize) -> u64 {
+        // SAFETY: `index` is a slot of this table; the hardware walker and
+        // other CPUs read it concurrently, hence the volatile access.
+        unsafe { core::ptr::read_volatile(&self.entries[index]) }
+    }
+
+    fn set_entry(&mut self, index: usize, value: u64) {
+        // SAFETY: as in `entry`; one aligned 64-bit store.
+        unsafe { core::ptr::write_volatile(&mut self.entries[index], value) }
+    }
+
+    /// The table a present, non-huge entry names.
+    fn table_of(entry: u64) -> &'static mut PageTable {
+        // SAFETY: the caller checked that `entry` is a present table pointer;
+        // its frame is reachable through `phys_to_virt`.
+        unsafe { &mut *(phys_to_virt((entry & PTE_ADDR_MASK) as usize) as *mut PageTable) }
+    }
+
+    /// The page table holding the 4 KiB leaf slot of `virt`, or `None` when a
+    /// level above it is absent or a huge leaf.
+    fn leaf_table(&self, virt: VAddr) -> Option<&'static mut PageTable> {
+        let mut entry = self.entry((virt >> 39) & 0x1FF);
+        if entry & PTE_P == 0 {
+            return None;
+        }
+        for shift in [30, 21] {
+            entry = Self::table_of(entry).entry((virt >> shift) & 0x1FF);
+            if entry & PTE_P == 0 || entry & PTE_PS != 0 {
+                return None;
+            }
+        }
+        Some(Self::table_of(entry))
+    }
+
+    /// The entry that maps `virt` and the log2 size it maps: a 4 KiB leaf, or
+    /// any entry with bit 7 set above the PT level. `None` when a level is
+    /// absent.
+    fn walk(&self, virt: VAddr) -> Option<(u64, u32)> {
+        let mut table: &PageTable = self;
+        for level in 0..4u32 {
+            let shift = 39 - 9 * level;
+            let entry = table.entry((virt >> shift) & 0x1FF);
+            if entry & PTE_P == 0 {
+                return None;
+            }
+            if level == 3 || entry & PTE_PS != 0 {
+                return Some((entry, shift));
+            }
+            table = Self::table_of(entry);
+        }
+        None
+    }
+
+    /// Return the hardware leaf entry for `virt` without synthesizing flags.
+    pub fn leaf_entry(&self, virt: VAddr) -> Option<u64> {
+        self.walk(virt).map(|(entry, _)| entry)
+    }
 }
 
 impl PageTable {
@@ -329,7 +426,7 @@ impl PageTable {
         }
         let pdpt_phys = (root_entry & PTE_ADDR_MASK) as PhysAddr;
         // SAFETY: a present non-huge root entry names a live PDPT.
-        let pdpt = unsafe { &mut *(phys_to_virt_ptr(pdpt_phys) as *mut PageTable) };
+        let pdpt = unsafe { &mut *(phys_to_virt(pdpt_phys) as *mut PageTable) };
         let i2 = (virt >> 30) & 0x1FF;
         let pdpt_entry = pdpt.entries[i2];
         if pdpt_entry & PTE_P == 0 {
@@ -344,7 +441,7 @@ impl PageTable {
         }
         let pd_phys = (pdpt_entry & PTE_ADDR_MASK) as PhysAddr;
         // SAFETY: a present non-huge PDPT entry names a live page directory.
-        let pd = unsafe { &mut *(phys_to_virt_ptr(pd_phys) as *mut PageTable) };
+        let pd = unsafe { &mut *(phys_to_virt(pd_phys) as *mut PageTable) };
         let i1 = (virt >> 21) & 0x1FF;
         let pd_entry = pd.entries[i1];
         if pd_entry & PTE_P == 0 {
@@ -363,7 +460,7 @@ impl PageTable {
         }
         let pt_phys = (pd_entry & PTE_ADDR_MASK) as PhysAddr;
         // SAFETY: a present non-huge directory entry names a live page table.
-        let pt = unsafe { &mut *(phys_to_virt_ptr(pt_phys) as *mut PageTable) };
+        let pt = unsafe { &mut *(phys_to_virt(pt_phys) as *mut PageTable) };
         if pt.entries.iter().any(|entry| entry & PTE_P != 0) {
             return;
         }
@@ -394,87 +491,62 @@ impl PageTableTrait for PageTable {
         flags: PageFlags,
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<()> {
+        self.map_with(virt, phys, flags, TablePolicy::FollowLeaf, alloc_fn)
+    }
+    fn map_with(
+        &mut self,
+        virt: VAddr,
+        phys: PhysAddr,
+        flags: PageFlags,
+        tables: TablePolicy,
+        alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
+    ) -> ViResult<()> {
         let i3 = (virt >> 39) & 0x1FF;
         let i2 = (virt >> 30) & 0x1FF;
         let i1 = (virt >> 21) & 0x1FF;
         let i0 = (virt >> 12) & 0x1FF;
         let user = flags.bits() & PageFlags::USER != 0;
-        let pdpt = self.get_or_alloc(i3, user, alloc_fn)?;
-        let pd = pdpt.get_or_alloc(i2, user, alloc_fn)?;
-        let pt = pd.get_or_alloc(i1, user, alloc_fn)?;
-        let mut e = phys as u64 | PTE_P;
-        if flags.bits() & PageFlags::WRITE != 0 {
-            e |= PTE_RW;
-        }
-        if flags.bits() & PageFlags::USER != 0 {
-            e |= PTE_US;
-        }
-        if flags.bits() & PageFlags::EXECUTE == 0 {
-            e |= PTE_NX;
-        }
-        pt.entries[i0] = e;
+        let pdpt = self.get_or_alloc(i3, user, tables, alloc_fn)?;
+        let pd = pdpt.get_or_alloc(i2, user, tables, alloc_fn)?;
+        let pt = pd.get_or_alloc(i1, user, tables, alloc_fn)?;
+        pt.set_entry(i0, phys as u64 | leaf_bits(flags));
         Ok(())
     }
+    fn protect(&mut self, virt: VAddr, flags: PageFlags) -> ViResult<()> {
+        let pt = self.leaf_table(virt).ok_or(ViError::NotFound)?;
+        let i0 = (virt >> 12) & 0x1FF;
+        let old = pt.entry(i0);
+        if old & PTE_P == 0 {
+            return Err(ViError::NotFound);
+        }
+        // `P` is always set: a protect without `VALID` does not unmap here.
+        pt.set_entry(i0, (old & PTE_KEEP_ON_PROTECT) | leaf_rights(flags));
+        Ok(())
+    }
+    /// Clears the 4 KiB leaf slot of `virt`. No TLB invalidation: the caller
+    /// owns it (the shared root's global shootdown, a private root's tag
+    /// invalidation). A local `invlpg` here would only reach the current
+    /// PCID, the kernel root's, never a private root's non-global leaf.
     fn unmap(&mut self, virt: VAddr) -> ViResult<()> {
-        let e0 = self.entries[(virt >> 39) & 0x1FF];
-        if e0 & PTE_P == 0 {
-            return Err(ViError::NotFound);
-        }
-        // SAFETY: e0 is a present PTE; the physical address is valid. Apply HHDM offset
-        // so the pointer is dereferenceable under Limine's page tables.
-        let pdpt: &mut PageTable =
-            unsafe { &mut *(phys_to_virt_ptr((e0 & !0xFFF) as usize) as *mut PageTable) };
-        let e1 = pdpt.entries[(virt >> 30) & 0x1FF];
-        if e1 & PTE_P == 0 {
-            return Err(ViError::NotFound);
-        }
-        // SAFETY: same as above.
-        let pd: &mut PageTable =
-            unsafe { &mut *(phys_to_virt_ptr((e1 & !0xFFF) as usize) as *mut PageTable) };
-        let e2 = pd.entries[(virt >> 21) & 0x1FF];
-        if e2 & PTE_P == 0 {
-            return Err(ViError::NotFound);
-        }
-        // SAFETY: same as above.
-        let pt: &mut PageTable =
-            unsafe { &mut *(phys_to_virt_ptr((e2 & !0xFFF) as usize) as *mut PageTable) };
-        pt.entries[(virt >> 12) & 0x1FF] = 0;
-        // SAFETY: invlpg flushes only the one virtual address from the TLB.
-        unsafe {
-            asm!("invlpg [{v}]", v=in(reg) virt, options(nomem));
-        }
+        let pt = self.leaf_table(virt).ok_or(ViError::NotFound)?;
+        pt.set_entry((virt >> 12) & 0x1FF, 0);
         Ok(())
     }
     fn translate(&self, virt: VAddr) -> Option<PhysAddr> {
-        let e0 = self.entries[(virt >> 39) & 0x1FF];
-        if e0 & PTE_P == 0 {
-            return None;
-        }
-        // SAFETY: e0 present; apply HHDM offset before dereferencing.
-        let pdpt: &PageTable =
-            unsafe { &*(phys_to_virt_ptr((e0 & !0xFFF) as usize) as *const PageTable) };
-        let e1 = pdpt.entries[(virt >> 30) & 0x1FF];
-        if e1 & PTE_P == 0 {
-            return None;
-        }
-        // SAFETY: e1 present.
-        let pd: &PageTable =
-            unsafe { &*(phys_to_virt_ptr((e1 & !0xFFF) as usize) as *const PageTable) };
-        let e2 = pd.entries[(virt >> 21) & 0x1FF];
-        if e2 & PTE_P == 0 {
-            return None;
-        }
-        if e2 & PTE_PS != 0 {
-            return Some(((e2 & !0x1F_FFFF) + (virt & 0x1F_FFFF) as u64) as PhysAddr);
-        }
-        // SAFETY: e2 present and not a huge page.
-        let pt: &PageTable =
-            unsafe { &*(phys_to_virt_ptr((e2 & !0xFFF) as usize) as *const PageTable) };
-        let e3 = pt.entries[(virt >> 12) & 0x1FF];
-        if e3 & PTE_P == 0 {
-            return None;
-        }
-        Some(((e3 & !0xFFF) + (virt & 0xFFF) as u64) as PhysAddr)
+        let (entry, shift) = self.walk(virt)?;
+        let offset = (1u64 << shift) - 1;
+        Some(((entry & PTE_ADDR_MASK & !offset) | (virt as u64 & offset)) as PhysAddr)
+    }
+    fn leaf(&self, virt: VAddr) -> Option<Leaf> {
+        let entry = self.leaf_entry(virt)?;
+        Some(Leaf {
+            pa: (entry & PTE_ADDR_MASK) as PhysAddr,
+            valid: true,
+            read: true,
+            write: entry & PTE_RW != 0,
+            user: entry & PTE_US != 0,
+            exec: entry & PTE_NX == 0,
+        })
     }
     unsafe fn activate(&self) {
         // Physical address of this PageTable struct. Under Limine the struct
@@ -715,24 +787,29 @@ impl PageTable {
         &mut self,
         idx: usize,
         user: bool,
+        tables: TablePolicy,
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<&mut PageTable> {
         // U/S is ANDed across all four levels. A lower-level index says
         // nothing about privilege (QuickJS's low-half VA has PD index 384).
-        // Supervisor leaves remain protected when an ancestor is upgraded.
-        let us_bit = if user { PTE_US } else { 0 };
-        if self.entries[idx] & PTE_P == 0 {
+        // Under `FollowLeaf`, supervisor leaves remain protected when an
+        // ancestor is upgraded; under `UserReachable` every new table is
+        // user-reachable and only the leaf decides.
+        let us_bit = match tables {
+            TablePolicy::FollowLeaf if !user => 0,
+            _ => PTE_US,
+        };
+        let entry = self.entry(idx);
+        if entry & PTE_P == 0 {
             let f = alloc_fn().ok_or(ViError::OutOfMemory)?;
             // SAFETY: f is a freshly allocated 4KB physical frame. Accessed via
             // HHDM virtual address so it is dereferenceable under Limine's PML4.
-            unsafe { core::ptr::write_bytes(phys_to_virt_ptr(f) as *mut u8, 0, PAGE_SIZE) };
-            self.entries[idx] = f as u64 | PTE_P | PTE_RW | us_bit;
-        } else if us_bit != 0 {
-            self.entries[idx] |= us_bit;
+            unsafe { core::ptr::write_bytes(phys_to_virt(f) as *mut u8, 0, PAGE_SIZE) };
+            self.set_entry(idx, f as u64 | PTE_P | PTE_RW | us_bit);
+        } else if tables == TablePolicy::FollowLeaf && us_bit != 0 {
+            self.set_entry(idx, entry | us_bit);
         }
-        let next_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
-        // SAFETY: next_phys is a valid page table frame; HHDM offset makes it accessible.
-        Ok(unsafe { &mut *(phys_to_virt_ptr(next_phys) as *mut PageTable) })
+        Ok(Self::table_of(self.entry(idx)))
     }
 }
 
@@ -788,7 +865,7 @@ mod tests {
                 if level < 3 {
                     // SAFETY: the test owns all aligned intermediate frames.
                     table = unsafe {
-                        &*(phys_to_virt_ptr((entry & PTE_ADDR_MASK) as usize) as *const PageTable)
+                        &*(phys_to_virt((entry & PTE_ADDR_MASK) as usize) as *const PageTable)
                     };
                 }
             }

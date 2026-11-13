@@ -3,10 +3,17 @@
 //! Uses TTBR0_EL1 for identity-mapped kernel + MMIO.  TCR_EL1 configured
 //! for a 39-bit VA space (T0SZ=25) matching QEMU virt physical range.
 
-use hal_paging::{PageFlags, PageTableTrait};
+use hal_paging::{Leaf, PageFlags, PageTableTrait};
 use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
+
+/// The address through which the HAL page-table walkers read a physical
+/// frame: the kernel identity-maps RAM, so the frame's own address.
+#[inline]
+pub fn phys_to_virt(phys: usize) -> usize {
+    phys
+}
 
 const PTE_VALID: u64 = 1 << 0;
 const PTE_TABLE: u64 = 1 << 1;
@@ -380,6 +387,20 @@ impl PageTableTrait for PageTable {
         // AArch64 L3 output address is bits [47:12]; bits [63:52] hold upper
         // attributes (UXN=54, PXN=53, Contiguous=52) that must be stripped.
         Some(((l3_entry & 0x0000_FFFF_FFFF_F000) as PhysAddr) | (virt & 0xFFF))
+    }
+
+    fn leaf(&self, virt: VAddr) -> Option<Leaf> {
+        let leaf = self.leaf_entry(virt)?;
+        let user = leaf & PTE_AP_EL0 != 0;
+        let no_exec = if user { PTE_UXN } else { PTE_PXN };
+        Some(Leaf {
+            pa: (leaf as usize) & 0x0000_ffff_ffff_f000,
+            valid: leaf & PTE_VALID != 0,
+            read: true,
+            write: leaf & PTE_AP_RO == 0,
+            user,
+            exec: leaf & no_exec == 0,
+        })
     }
 
     unsafe fn activate(&self) {

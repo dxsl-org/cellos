@@ -114,7 +114,7 @@ unsafe fn leaf_slot(pml4: *mut u64, va: usize) -> Result<*mut u64, GuardError> {
         if shift != 39 && entry & HUGE != 0 {
             return Err(GuardError::HugeLeaf(va));
         }
-        table = super::paging::phys_to_virt_ptr((entry & super::paging::PTE_ADDR_MASK) as usize)
+        table = super::paging::phys_to_virt((entry & super::paging::PTE_ADDR_MASK) as usize)
             as *mut u64;
     }
     Ok(unsafe { table.add((va >> 12) & 0x1ff) })
@@ -132,7 +132,7 @@ unsafe fn leaf_slot(pml4: *mut u64, va: usize) -> Result<*mut u64, GuardError> {
 /// Kernel mode, interrupts in any state, HHDM offset set, no other CPU running.
 pub unsafe fn install_guards() -> Result<usize, GuardError> {
     let root = (unsafe { super::paging::read_cr3() } & super::paging::PTE_ADDR_MASK) as usize;
-    let pml4 = super::paging::phys_to_virt_ptr(root) as *mut u64;
+    let pml4 = super::paging::phys_to_virt(root) as *mut u64;
     let mut count = 0;
     for va in guard_pages() {
         let slot = unsafe { leaf_slot(pml4, va) }?;

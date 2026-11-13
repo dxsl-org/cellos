@@ -13,11 +13,16 @@ impl PageFlags {
     pub const WRITE: usize = 1 << 2;
     pub const EXECUTE: usize = 1 << 3;
     pub const USER: usize = 1 << 4;
+    /// Global mapping: kept in every translation context.
+    ///
+    /// x86_64 sets `G` (bit 8); RISC-V copies it into the Sv39 `G` bit;
+    /// AArch64 ignores it (its leaves are global unless `NON_GLOBAL`).
     pub const GLOBAL: usize = 1 << 5;
     pub const ACCESSED: usize = 1 << 6;
     pub const DIRTY: usize = 1 << 7;
     /// Device MMIO mapping — use non-cacheable Device-nGnRnE attributes (AArch64 MAIR index 0).
-    /// On RISC-V and x86_64 this flag is ignored (all MMIO uses the same PTE path).
+    /// On RISC-V and x86_64 this flag is ignored; x86_64 MMIO asks for
+    /// [`Self::UNCACHED`] instead.
     pub const DEVICE: usize = 1 << 8;
     /// Address-space-scoped (non-global) mapping: the leaf belongs to the
     /// architectural tag in use, not to every root.
@@ -30,8 +35,9 @@ impl PageFlags {
     /// contract can be satisfied by targeted invalidation alone.
     ///
     /// RISC-V and x86_64 ignore it. Bit 9 is free in both: the x86_64 leaf
-    /// translator composes only `PTE_P`/`PTE_RW`/`PTE_US`/`PTE_NX` and never
-    /// reads any other bit, and on RISC-V the software bitfield is copied
+    /// translator composes only `P`/`RW`/`US`/`NX`/`G`/`PCD` from the bits
+    /// documented for it and never reads any other bit, and on RISC-V the
+    /// software bitfield is copied
     /// verbatim into the Sv39 leaf where bit 9 is `RSW[1]` — reserved for
     /// supervisor software, ignored by the hardware for permission checks and
     /// never consulted by `translate`/`unmap` (which mask the output address).
@@ -43,10 +49,16 @@ impl PageFlags {
     /// Only meaningful together with `EXECUTE`, and only set by the loader for
     /// executable pages of an image whose `GNU_PROPERTY_AARCH64_FEATURE_1_AND`
     /// note declares BTI, on a CPU that implements FEAT_BTI (bit 50 is RES0
-    /// without it). x86_64 ignores it (its leaf translator composes only
-    /// `PTE_P`/`PTE_RW`/`PTE_US`/`PTE_NX`); RISC-V clears it, because bit 10
-    /// of an Sv39 leaf is the low bit of the PPN.
+    /// without it). x86_64 ignores it; RISC-V clears it, because bit 10 of an
+    /// Sv39 leaf is the low bit of the PPN.
     pub const GUARDED: usize = 1 << 10;
+
+    /// Uncached mapping: x86_64 sets `PCD` (cache-disable, bit 4) on the leaf.
+    ///
+    /// The cache attribute of x86_64 MMIO on the shared kernel root. AArch64
+    /// ignores it (device memory is [`Self::DEVICE`]); RISC-V clears it,
+    /// because bit 11 of an Sv39 leaf is a PPN bit.
+    pub const UNCACHED: usize = 1 << 11;
 
     pub const R_W_X: usize = Self::READ | Self::WRITE | Self::EXECUTE;
 
@@ -67,6 +79,45 @@ impl PageFlags {
     // ... add more as needed
 }
 
+/// One leaf translation as the hardware walker sees it, in neutral terms.
+///
+/// `pa` is the leaf's output address. For a 4 KiB leaf it is the frame on
+/// every architecture. For a larger (block/huge) leaf, RISC-V adds the offset
+/// of the walked address inside the leaf, x86_64 reports bits 51:12 of the
+/// entry and AArch64 bits 47:12, as the walkers this type replaced did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Leaf {
+    pub pa: PhysAddr,
+    /// The entry is valid (present).
+    pub valid: bool,
+    /// Loads are permitted. Always true on x86_64 and AArch64.
+    pub read: bool,
+    /// Stores are permitted.
+    pub write: bool,
+    /// User mode may access the page.
+    pub user: bool,
+    /// Instruction fetch is permitted at the privilege the leaf grants
+    /// (AArch64: `UXN` for a user leaf, `PXN` otherwise).
+    pub exec: bool,
+}
+
+/// Which intermediate tables a new mapping makes user-reachable.
+///
+/// Only x86_64 carries a user bit on intermediate entries (U/S is ANDed down
+/// the walk). RISC-V non-leaf entries have none and AArch64 leaves `APTable`
+/// zero, so both treat the two policies alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TablePolicy {
+    /// A new intermediate table is user-reachable only under a `USER` leaf,
+    /// and a `USER` leaf upgrades every existing table on its walk, so a
+    /// supervisor leaf is also refused at the table level. Private roots.
+    FollowLeaf,
+    /// Every new intermediate table is user-reachable and an existing one is
+    /// left as it is: the leaf's own U/S bit is the only privilege check. The
+    /// shared kernel root.
+    UserReachable,
+}
+
 /// Generic Page Table Trait
 pub trait PageTableTrait {
     /// Initialize paging (e.g., allocate root table).
@@ -83,11 +134,42 @@ pub trait PageTableTrait {
         alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
     ) -> ViResult<()>;
 
+    /// [`map`](Self::map) with an explicit intermediate-table policy; `map`
+    /// itself is [`TablePolicy::FollowLeaf`].
+    fn map_with(
+        &mut self,
+        virt: VAddr,
+        phys: PhysAddr,
+        flags: PageFlags,
+        tables: TablePolicy,
+        alloc_fn: &mut dyn FnMut() -> Option<PhysAddr>,
+    ) -> ViResult<()> {
+        // Only x86_64 has a table-level user bit (see `TablePolicy`).
+        let _ = tables;
+        self.map(virt, phys, flags, alloc_fn)
+    }
+
+    /// Rewrite the permissions of the 4 KiB page mapped at `virt`, keeping the
+    /// frame it maps. `Err(NotFound)` when nothing maps `virt`.
+    ///
+    /// The default re-maps the translated frame with `flags`, which replace
+    /// the old flags wholesale: without `VALID` the page is unmapped. x86_64
+    /// keeps the frame and the cache and global bits of the old leaf and
+    /// always sets `P`. Never allocates. No TLB invalidation beyond what
+    /// [`map`](Self::map) does; the caller owns it.
+    fn protect(&mut self, virt: VAddr, flags: PageFlags) -> ViResult<()> {
+        let phys = self.translate(virt).ok_or(ViError::NotFound)? & !0xFFF;
+        self.map(virt, phys, flags, &mut || None)
+    }
+
     /// Unmap a virtual page.
     fn unmap(&mut self, virt: VAddr) -> ViResult<()>;
 
     /// Translate virtual address to physical address.
     fn translate(&self, virt: VAddr) -> Option<PhysAddr>;
+
+    /// The leaf translating `virt`, or `None` when no valid leaf does.
+    fn leaf(&self, virt: VAddr) -> Option<Leaf>;
 
     /// Identity map a region (Virtual = Physical).
     fn identity_map(

@@ -1,8 +1,15 @@
 //! SV39 Paging Implementation for RV64
-use hal_paging::{PageFlags, PageTableTrait};
+use hal_paging::{Leaf, PageFlags, PageTableTrait};
 use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
+
+/// The address through which the HAL page-table walkers read a physical
+/// frame: the kernel identity-maps RAM, so the frame's own address.
+#[inline]
+pub fn phys_to_virt(phys: usize) -> usize {
+    phys
+}
 
 /// Invalidate the TLB entry for a single virtual address (all ASIDs).
 ///
@@ -30,9 +37,11 @@ pub fn flush_tlb_page(virt: VAddr) {
 /// leaf is already address-space-scoped, so it is dropped here rather than
 /// written into a software-reserved bit no other code expects to be set.
 /// `PageFlags::GUARDED` is an AArch64 BTI `GP` request; bit 10 of an Sv39 leaf
-/// is `PPN[0]`, so leaving it set would map the wrong frame.
+/// is `PPN[0]`, so leaving it set would map the wrong frame; the same holds
+/// for `PageFlags::UNCACHED` (an x86_64 `PCD` request) at bit 11.
 fn to_riscv_flags(flags: PageFlags) -> usize {
-    let mut bits = flags.bits() & !(PageFlags::NON_GLOBAL | PageFlags::GUARDED);
+    let mut bits =
+        flags.bits() & !(PageFlags::NON_GLOBAL | PageFlags::GUARDED | PageFlags::UNCACHED);
 
     // Ensure VALID is set if any other bit is set (safeguard)
     if bits != 0 {
@@ -237,6 +246,34 @@ impl PageTableTrait for PageTable {
 
             let next_table_phys = entry.to_phys();
             table = unsafe { &*(next_table_phys as *const PageTable) };
+        }
+        None
+    }
+
+    fn leaf(&self, virt: VAddr) -> Option<Leaf> {
+        let mut table: &PageTable = self;
+        for level in 0..3usize {
+            let index = (virt >> (30 - 9 * level)) & 0x1FF;
+            // SAFETY: `table` is this root or a table a valid non-leaf entry
+            // named, read through `phys_to_virt`.
+            let pte = unsafe { core::ptr::read_volatile(&table.entries[index].0) };
+            if pte & 1 == 0 {
+                return None;
+            }
+            let ppn_base = ((pte >> 10) & ((1usize << 44) - 1)) << 12;
+            if pte & 0b1110 != 0 {
+                let off_mask = (1usize << (12 + 9 * (2 - level))) - 1;
+                return Some(Leaf {
+                    pa: ppn_base | (virt & off_mask),
+                    valid: true,
+                    read: pte & (1 << 1) != 0,
+                    write: pte & (1 << 2) != 0,
+                    exec: pte & (1 << 3) != 0,
+                    user: pte & (1 << 4) != 0,
+                });
+            }
+            // SAFETY: a valid non-leaf entry names the next-level table.
+            table = unsafe { &*(phys_to_virt(ppn_base) as *const PageTable) };
         }
         None
     }
