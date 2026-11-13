@@ -79,16 +79,16 @@ mkdir -p "$TH_DIR"
 rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init"
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+    -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
     -p app-sys-tools
 
 CELL_BINARIES=(
-    "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+    "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/free"
     "$WITNESS"
 )
 CELL_IMAGE_PATHS=(
-    /bin/cellbox /bin/vfs /bin/config /bin/input
+    /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input
     /bin/platform /bin/ls /bin/cat /bin/echo /bin/ps /bin/free
     /bin/cpp-hosted-smoke
 )

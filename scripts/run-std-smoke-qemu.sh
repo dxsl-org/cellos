@@ -35,17 +35,18 @@ esac
 
 # The bootstrap cell set follows the machine's drivers: riscv64/aarch64 boot the
 # generic `virt` machine with virtio-blk, x86_64 the q35 machine with nvme/e1000
-# (the same set the x86 image lanes stage).
+# (the same set the x86 image lanes stage) plus the machine-pin endpoint x86 init
+# requires. Every arch packages the fixture launcher, which spawns /bin/std-smoke.
 case "$ARCH" in
     x86_64)
-        BOOTSTRAP_PKGS=(app-init app-cellbox service-vfs service-config service-platform driver-nvme driver-e1000)
-        BOOTSTRAP_BINS=(app-init cellbox service-vfs service-config platform driver-nvme driver-e1000)
-        FAT_DRIVERS=("_REL_/driver-nvme" /bin/nvme "_REL_/driver-e1000" /bin/e1000)
+        BOOTSTRAP_PKGS=(app-init fixture-launcher app-cellbox service-vfs service-machine-pin service-config service-platform driver-nvme driver-e1000)
+        BOOTSTRAP_BINS=(app-init fixture-launcher cellbox service-vfs service-machine-pin service-config platform driver-nvme driver-e1000)
+        FAT_ARCH_CELLS=("_REL_/service-machine-pin" /bin/machine-pin "_REL_/driver-nvme" /bin/nvme "_REL_/driver-e1000" /bin/e1000)
         ;;
     *)
-        BOOTSTRAP_PKGS=(app-init app-cellbox service-vfs service-config service-platform driver-virtio-blk)
-        BOOTSTRAP_BINS=(app-init cellbox service-vfs service-config platform driver-virtio-blk)
-        FAT_DRIVERS=("_REL_/driver-virtio-blk" /bin/block)
+        BOOTSTRAP_PKGS=(app-init fixture-launcher app-cellbox service-vfs service-config service-platform driver-virtio-blk)
+        BOOTSTRAP_BINS=(app-init fixture-launcher cellbox service-vfs service-config platform driver-virtio-blk)
+        FAT_ARCH_CELLS=("_REL_/driver-virtio-blk" /bin/block)
         ;;
 esac
 TARGET_CELL="targets/${SYSROOT_TARGET}.json"
@@ -129,9 +130,9 @@ BOOTSTRAP_CELLS=()
 for bin in "${BOOTSTRAP_BINS[@]}"; do
     BOOTSTRAP_CELLS+=("$REL/$bin")
 done
-FAT_DRIVER_ARGS=()
-for entry in "${FAT_DRIVERS[@]}"; do
-    FAT_DRIVER_ARGS+=("${entry/_REL_/$REL}")
+FAT_ARCH_ARGS=()
+for entry in "${FAT_ARCH_CELLS[@]}"; do
+    FAT_ARCH_ARGS+=("${entry/_REL_/$REL}")
 done
 for bin in "${BOOTSTRAP_CELLS[@]}"; do
     [[ -s "$bin" ]] || { echo "FAIL: bootstrap cell missing: $bin" >&2; exit 1; }
@@ -156,7 +157,8 @@ printf 'Cellos Tier 1 Rust std runtime verification\n' > "$WORK/readme.txt"
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
     "$REL/platform"          /bin/platform \
-    "${FAT_DRIVER_ARGS[@]}" \
+    "${FAT_ARCH_ARGS[@]}" \
+    "$REL/fixture-launcher"  /bin/fixture-launcher \
     "$STD_SMOKE_BIN"         /bin/std-smoke \
     "$WORK/hostname"         /etc/hostname \
     "$WORK/readme.txt"       /readme.txt \
@@ -164,10 +166,12 @@ printf 'Cellos Tier 1 Rust std runtime verification\n' > "$WORK/readme.txt"
 cp -- "$REL/app-init" "$EMBEDDED/init"
 
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
-if ! grep -a -Fq "LFN 'std-smoke'" "$WORK/fat-layout.txt"; then
-    echo "FAIL: VIFS1 is missing std-smoke" >&2
-    exit 1
-fi
+for required in std-smoke fixture-launcher; do
+    if ! grep -a -Fq "LFN '$required'" "$WORK/fat-layout.txt"; then
+        echo "FAIL: VIFS1 is missing $required" >&2
+        exit 1
+    fi
+done
 
 echo "==> Step 5: Building kernel with embedded test image..."
 # The kernel embeds this lane's test ramdisk, so it is built into its own target

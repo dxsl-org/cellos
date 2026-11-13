@@ -204,14 +204,14 @@ pub const CELLS: &[Cell] = &[
         boot: Some(CapSet {
             block_io: true,             // delegated to /bin/vfs
             network: true,              // delegated to /bin/net, /bin/net-broker
-            spawn: true,                // delegated to /bin/cellbox, /bin/supervisor
-            hypervisor: true,           // delegated to /bin/silo, /bin/hypervisor
-            mmio_devices: ROOT_MMIO,    // delegated through reviewed launch profiles
+            spawn: true, // delegated to /bin/supervisor, /bin/activator, /bin/fixture-launcher
+            hypervisor: true, // delegated to /bin/silo, /bin/hypervisor
+            mmio_devices: ROOT_MMIO, // delegated through reviewed launch profiles
             block_regions: VFS_REGIONS, // delegated to /bin/vfs
-            pcie_driver: true,          // delegated to the block/NIC/GPU/input drivers
-            supervisor: true,           // delegated to /bin/supervisor
-            usb_driver: true,           // delegated to /bin/dwc2-usb
-            serial_port: true,          // delegated to /bin/serial
+            pcie_driver: true, // delegated to the block/NIC/GPU/input drivers
+            supervisor: true, // delegated to /bin/supervisor
+            usb_driver: true, // delegated to /bin/dwc2-usb
+            serial_port: true, // delegated to /bin/serial
             ..LEGACY
         }),
         ..ROW
@@ -329,6 +329,31 @@ pub const CELLS: &[Cell] = &[
         boot: Some(legacy_with(CapSet {
             spawn: true,
             supervisor: true,
+            ..CapSet::EMPTY
+        })),
+        ..ROW
+    },
+    // Phase 13: the endpoints that left init. The ADR-0029 machine-pin cell
+    // (x86) holds no capability: 433 answers only the live `MACHINE_PIN`
+    // provider and the VFS admits only it to the pin store. The Ocel activator
+    // is the lifecycle parent of the demand engines (`activator` launch
+    // profile) and publishes their ids (16, 18) for its own children only.
+    boot_only("/bin/machine-pin"),
+    Cell {
+        path: "/bin/activator",
+        boot: Some(legacy_with(CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        })),
+        ..ROW
+    },
+    // Test images only (packaged by the lanes that use it, selected from the
+    // boot plan by artifact): launches the test fixtures init used to start.
+    // `spawn` without `supervisor` publishes only private ids.
+    Cell {
+        path: "/bin/fixture-launcher",
+        boot: Some(legacy_with(CapSet {
+            spawn: true,
             ..CapSet::EMPTY
         })),
         ..ROW

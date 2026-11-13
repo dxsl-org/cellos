@@ -68,12 +68,12 @@ mkdir -p "$TH_DIR"
 # must never leave a bootable kernel embedding the previous run's cells.
 rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$TH_DIR/POLICY.BIN" "$KERNEL" "$ISO_OUT"
 
-echo "==> Building production cells (init without tier2-entry, shell, vfs, config, input, platform, drivers, sys tools)..."
-# `tier2-entry` is deliberately absent: it exists only in the test-hooks image and
-# would make init launch the domain fixtures at boot.
+echo "==> Building production cells (init, shell, vfs, machine-pin, config, input, platform, drivers, sys tools)..."
+# No `/bin/fixture-launcher`: with `tier2-entry` it would launch the domain
+# fixtures at boot, which exist here only as refusal witnesses.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform
+    -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -83,6 +83,7 @@ cargo build --release --target "$TARGET" -Z build-std=core,alloc -p tier2-smoke 
 CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
+    "$REL/service-machine-pin"
     "$REL/service-config"
     "$REL/service-input"
     "$REL/platform"
@@ -98,6 +99,7 @@ CELL_BINARIES=(
 CELL_IMAGE_PATHS=(
     /bin/cellbox
     /bin/vfs
+    /bin/machine-pin
     /bin/config
     /bin/input
     /bin/platform
@@ -112,7 +114,7 @@ CELL_IMAGE_PATHS=(
 )
 # Entries before this index are the Tier 1 base cells (the ones that must be
 # admitted for the shell to run at all); the rest are the domain-class witnesses.
-BASE_CELL_COUNT=11
+BASE_CELL_COUNT=12
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."
 FAT_CELL_ARGS=()

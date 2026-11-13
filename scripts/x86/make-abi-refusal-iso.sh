@@ -51,7 +51,7 @@ fi
 echo "[abi-refusal] building cells into $BIN_DIR"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release --locked \
     --target "$TARGET" -Z build-std=core,alloc \
-    -p app-init -p service-vfs -p service-input -p service-platform \
+    -p app-init -p service-vfs -p service-machine-pin -p service-input -p service-platform \
     -p driver-serial-x86 -p driver-ahci -p app-sys-tools \
     --features app-init/input
 
@@ -83,7 +83,7 @@ for row in "${FIXTURE_ROWS[@]}"; do
 done
 
 SIGN_TARGETS=()
-for binary in app-init service-vfs service-input platform driver-serial-x86 driver-ahci; do
+for binary in app-init service-vfs service-machine-pin service-input platform driver-serial-x86 driver-ahci; do
     SIGN_TARGETS+=("$BIN_DIR/$binary")
 done
 sign_cells "${SIGN_TARGETS[@]}" "${FIXTURES[@]}"
@@ -132,6 +132,7 @@ bake_policy "$WORK/POLICY.BIN"
 BASE_FILES=(
     "$BIN_DIR/app-init" /bin/init
     "$BIN_DIR/service-vfs" /bin/vfs
+    "$BIN_DIR/service-machine-pin" /bin/machine-pin
     "$BIN_DIR/service-input" /bin/input
     "$BIN_DIR/platform" /bin/platform
     "$BIN_DIR/driver-serial-x86" /bin/serial
@@ -160,7 +161,7 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$WORK/POLICY.BIN" /POLICY.BIN
 
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
-for required in init vfs input platform serial ahci "${FIXTURE_SLOTS[@]}"; do
+for required in init vfs machine-pin input platform serial ahci "${FIXTURE_SLOTS[@]}"; do
     if ! grep -Fq -- "LFN '$required'" "$WORK/fat-layout.txt"; then
         echo "FAIL: kernel_fs.img does not contain /bin/$required" >&2
         exit 1

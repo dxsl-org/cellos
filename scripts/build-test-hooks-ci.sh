@@ -42,11 +42,12 @@ TH_DIR="kernel/src/embedded-test-hooks"
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
 export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include}"
 
-echo "==> Building base cells (init, shell, config)..."
+echo "==> Building base cells (init, fixture launcher, shell, config)..."
+# The fixture launcher (default features) spawns /bin/vfs-test from the boot plan.
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-cellbox -p service-config
+    -p app-init -p fixture-launcher -p app-cellbox -p service-config
 
 echo "==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)..."
 cargo build --release \
@@ -71,7 +72,7 @@ cargo build --release \
     -p service-net -p driver-virtio-net
 
 echo "==> Verifying cell binaries..."
-for bin in app-init cellbox service-vfs service-config vfs-test service-net driver-virtio-net atomic-publication-probe; do
+for bin in app-init fixture-launcher cellbox service-vfs service-config vfs-test service-net driver-virtio-net atomic-publication-probe; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -81,7 +82,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" \
+sign_cells "$REL/app-init" "$REL/fixture-launcher" "$REL/cellbox" "$REL/service-vfs" \
            "$REL/service-config" "$REL/vfs-test" "$REL/service-net" \
            "$REL/driver-virtio-net" "$REL/atomic-publication-probe"
 
@@ -98,6 +99,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
 "$PYTHON_BIN" tools/mkfat32.py \
     "$TH_DIR/kernel_fs.img" \
     "$REL/app-init"         /bin/init \
+    "$REL/fixture-launcher" /bin/fixture-launcher \
     "$REL/cellbox"        /bin/cellbox \
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
@@ -117,6 +119,7 @@ fi
 "$PYTHON_BIN" tools/inspect_fat.py "$TH_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'vfs-test'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'fixture-launcher'" "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'net'" "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'virtio-net'" "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'atomic-probe'" "$TMPDIR_KFS/fat-layout.txt"; then

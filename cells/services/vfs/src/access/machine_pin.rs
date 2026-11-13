@@ -1,8 +1,11 @@
 //! The machine-pin store namespace, `/srv/.cellos-machine/**` (ADR-0029 §3).
 //!
-//! It holds the class-P machine fingerprint pin that trusted init compares on
-//! every boot. Only the live registered `service::MACHINE_PIN` provider may
-//! read, stat, list, create or write anything here; every other Cell is refused,
+//! It holds the class-P machine fingerprint pin that the `machine-pin` Cell
+//! compares on every boot (ADR-0029 §3, Phase 13 amendment: the provider
+//! trusted init launched under that signed identity; the kernel registers
+//! nothing else as `MACHINE_PIN`). Only the live registered
+//! `service::MACHINE_PIN` provider may read, stat, list, create or write
+//! anything here, and a write still needs the mutate flag like any other; every other Cell is refused,
 //! and no caller may remove the namespace or an ancestor of it. The record
 //! carries no authority, and this rule stops in-system Cells only: a raw-disk
 //! or offline attacker is out of scope.
@@ -19,7 +22,7 @@ pub(super) fn is_machine_pin_store_rule(prefix: &str) -> bool {
 }
 
 /// Whether `path` is the namespace root or lies below it.
-pub(super) fn is_machine_pin_namespace_path(path: &str) -> bool {
+fn is_machine_pin_namespace_path(path: &str) -> bool {
     path == MACHINE_PIN_NAMESPACE || path.starts_with(MACHINE_PIN_PREFIX)
 }
 
@@ -208,60 +211,21 @@ mod tests {
         }
     }
 
-    /// Init runs permit-all, so its trailer never carries the mutate flag. The
-    /// exception admits exactly the live provider inside the namespace; every
-    /// other caller and every other path still needs the flag.
+    /// No mutate-flag exception: the live provider without the flag is refused
+    /// every write, even inside its own namespace (Phase 13; the machine-pin
+    /// Cell declares `VfsMutate`). Reads keep needing only the live binding.
     #[test]
-    fn mutate_exception_covers_only_the_live_provider_inside_the_namespace() {
-        const INIT: Caller = Caller {
+    fn the_live_provider_still_needs_the_mutate_flag_to_write() {
+        const UNFLAGGED_PROVIDER: Caller = Caller {
             flags: 0,
             ..PROVIDER
         };
-        const UNFLAGGED: Caller = Caller { flags: 0, ..OTHER };
         let live = live_table();
         for path in INSIDE {
-            assert!(
-                live.is_machine_pin_writer(INIT, path),
-                "{path}: provider exception"
-            );
-            assert!(live.can_write(INIT, path), "{path}: provider write");
-            assert!(
-                !live.is_machine_pin_writer(UNFLAGGED, path),
-                "{path}: other caller"
-            );
-            assert!(
-                !live.can_write(UNFLAGGED, path),
-                "{path}: other caller write"
-            );
-            assert!(!live.can_remove_tree(INIT, path), "{path}: provider remove");
-            assert!(!live.can_remove_dir(INIT, path), "{path}: provider rmdir");
-        }
-        for table in [
-            AccessTable::with_service_lookup(|_| None),
-            AccessTable::with_service_lookup(|id| (id == service::MACHINE_PIN).then_some(71)),
-        ] {
-            assert!(
-                !table.is_machine_pin_writer(INIT, "/srv/.cellos-machine/pin"),
-                "stale provider"
-            );
-            assert!(
-                !table.can_write(INIT, "/srv/.cellos-machine/pin"),
-                "stale provider write"
-            );
-        }
-        for path in [
-            "/srv/notes",
-            "/srv/.cellos-machinex/pin",
-            "/srv/cellos/kms/slot-a",
-            "/data/x",
-            "/srv/./.cellos-machine/pin",
-            "/srv//.cellos-machine/pin",
-        ] {
-            assert!(!live.is_machine_pin_writer(INIT, path), "{path}: outside");
-            assert!(
-                !live.can_write(INIT, path),
-                "{path}: provider without flag outside"
-            );
+            assert!(live.can_read(UNFLAGGED_PROVIDER, path), "{path}: read");
+            assert!(!live.can_write(UNFLAGGED_PROVIDER, path), "{path}: write");
+            assert!(!live.can_remove_tree(PROVIDER, path), "{path}: remove");
+            assert!(!live.can_remove_dir(PROVIDER, path), "{path}: rmdir");
         }
     }
 }

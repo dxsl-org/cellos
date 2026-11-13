@@ -357,7 +357,7 @@ echo "==> Building cells (private target dir)"
 # compositor and does not carry it.
 if [[ -z "$CANDIDATE" ]]; then
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
-        -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+        -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
         -p driver-nvme -p driver-e1000 -p app-sys-tools -p service-net -p app-net-tools \
         -p app-phase04-terminal-driver -p app-phase03-filter -p app-s2tw-probe -p app-top-load -p terminal
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
@@ -372,14 +372,14 @@ else
 fi
 
 CELL_BINARIES=(
-    "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+    "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" "$REL/service-net"
     "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/free"
     "$REL/date" "$REL/env" "$REL/uname" "$REL/kill" "$REL/shutdown" "$REL/hotswap"
     "$REL/curl" "$REL/phase04-terminal-driver" "$REL/phase03-filter" "$REL/s2tw-probe"
 )
 CELL_IMAGE_PATHS=(
-    /bin/cellbox /bin/vfs /bin/config /bin/input
+    /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input
     /bin/platform /bin/nvme /bin/e1000 /bin/net
     /bin/ls /bin/cat /bin/echo /bin/ps /bin/free
     /bin/date /bin/env /bin/uname /bin/kill /bin/shutdown /bin/hotswap
@@ -611,7 +611,7 @@ from pathlib import Path
 w, root = Path(sys.argv[1]), Path(sys.argv[2])
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 rel = w / "cells-target/x86_64-unknown-none/release"
-names = ["app-init","cellbox","service-vfs","service-config","service-input","platform",
+names = ["app-init","cellbox","service-vfs","service-machine-pin","service-config","service-input","platform",
          "driver-nvme","driver-e1000","service-net","ls","cat","echo","ps","free","date","env","uname",
          "kill","shutdown","hotswap","curl","phase04-terminal-driver","phase03-filter","s2tw-probe",
          "top-load"]

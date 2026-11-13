@@ -15,13 +15,19 @@
 //! failure under CI).
 
 use std::path::{Path, PathBuf};
-use vicell_integration_tests::block_09c::{read_ok, shutdown, wait_until, write_ok, BOOT_TIMEOUT, PROMPT};
+use vicell_integration_tests::block_09c::{
+    read_ok, shutdown, wait_until, write_ok, BOOT_TIMEOUT, PROMPT,
+};
 use vicell_integration_tests::block_09c_lanes::fixture;
 use vicell_integration_tests::block_09c_two_disks::{discover, Disks};
 use vicell_integration_tests::fat_disk::FatDisk;
 use vicell_integration_tests::{ci_guard, qemu_binary_x86, x86_iso_path, QemuRunner};
 
-const READY: [&str; 3] = ["[virtio-net] ready", "[virtio-blk] ready", "[virtio-scsi] ready"];
+const READY: [&str; 3] = [
+    "[virtio-net] ready",
+    "[virtio-blk] ready",
+    "[virtio-scsi] ready",
+];
 const DHCP: &str = "[net] DHCP acquired";
 /// The kernel's 418/424 refusal: no cell may own a virtio function whose DMA
 /// would bypass VT-d (the cells' own ACCESS_PLATFORM check is defence in depth).
@@ -61,7 +67,10 @@ fn two_boot_persistence(boot: impl Fn(&FatDisk, &FatDisk) -> QemuRunner, extra: 
     let files = |disks: &Disks| {
         [
             ("/mnt/sd/virtio.txt".to_string(), "P05-PRIMARY"),
-            (format!("{}/virtio.txt", disks.secondary_mount()), "P05-SECONDARY"),
+            (
+                format!("{}/virtio.txt", disks.secondary_mount()),
+                "P05-SECONDARY",
+            ),
         ]
     };
     let mut first = boot(&blk, &scsi);
@@ -140,11 +149,24 @@ fn virtio_pci_refuses_devices_without_access_platform_under_vtd_x86() {
     wait_all(&qemu, &["Init: SAFE MODE", PROMPT], lane);
     let output = qemu.dump();
     for function in refusals {
-        let line = output.lines().find(|l| l.contains(function)).unwrap_or_default();
-        assert!(line.contains(KERNEL_REFUSED), "{function} refused for another reason: {line}");
-        assert_eq!(output.matches(function).count(), 1, "{function}: refusal logged more than once");
+        let line = output
+            .lines()
+            .find(|l| l.contains(function))
+            .unwrap_or_default();
+        assert!(
+            line.contains(KERNEL_REFUSED),
+            "{function} refused for another reason: {line}"
+        );
+        assert_eq!(
+            output.matches(function).count(),
+            1,
+            "{function}: refusal logged more than once"
+        );
     }
-    assert!(!READY.iter().any(|ready| output.contains(ready)), "a cell bound a bypassing device:\n{output}");
+    assert!(
+        !READY.iter().any(|ready| output.contains(ready)),
+        "a cell bound a bypassing device:\n{output}"
+    );
     println!("P05 fail-closed:\n{}", evidence(&output));
 }
 
@@ -170,7 +192,8 @@ impl PinDisk {
     fn new() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let index = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("vicell_p05_pin_{}_{index}.img", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("vicell_p05_pin_{}_{index}.img", std::process::id()));
         let status = std::process::Command::new("python3")
             .arg(repo_root().join("scripts/x86/machine_pin_disk.py"))
             .arg(&path)
@@ -230,23 +253,40 @@ fn kvm_default_vm_acceptance_x86() {
 /// the virtio-scsi disk): the first pins the machine, starts `net`, takes a
 /// DHCP lease and writes one file per disk; the second matches the pin and
 /// reads both files back.
-fn provisioned_two_boot(lane: &str, boot: impl Fn(&PinDisk, &FatDisk) -> QemuRunner, markers: &[&str]) {
+fn provisioned_two_boot(
+    lane: &str,
+    boot: impl Fn(&PinDisk, &FatDisk) -> QemuRunner,
+    markers: &[&str],
+) {
     let (blk, scsi) = (PinDisk::new(), fixture());
-    let common = ["[vfs] FAT32 /mnt/sd volume mounted", "Init: net launched.", DHCP, PROMPT];
+    let common = [
+        "[vfs] FAT32 /mnt/sd volume mounted",
+        "Init: net launched.",
+        DHCP,
+        PROMPT,
+    ];
     let mut first = boot(&blk, &scsi);
-    for set in [&READY[..], markers, &common, &["Init: machine pin: first boot"]] {
+    for set in [&READY[..], markers, &common, &["machine-pin: first boot"]] {
         wait_all(&first, set, lane);
     }
     let secondary = secondary_mount(&first);
     write_ok(&mut first, "/mnt/sd/virtio.txt", "P05-PRIMARY");
-    write_ok(&mut first, &format!("{secondary}/virtio.txt"), "P05-SECONDARY");
+    write_ok(
+        &mut first,
+        &format!("{secondary}/virtio.txt"),
+        "P05-SECONDARY",
+    );
     println!("P05 {lane} boot 1:\n{}", evidence(&shutdown(first)));
 
     let mut second = boot(&blk, &scsi);
-    for set in [&READY[..], markers, &common, &["Init: machine pin: match "]] {
+    for set in [&READY[..], markers, &common, &["machine-pin: match "]] {
         wait_all(&second, set, lane);
     }
     read_ok(&mut second, "/mnt/sd/virtio.txt", "P05-PRIMARY");
-    read_ok(&mut second, &format!("{secondary}/virtio.txt"), "P05-SECONDARY");
+    read_ok(
+        &mut second,
+        &format!("{secondary}/virtio.txt"),
+        "P05-SECONDARY",
+    );
     println!("P05 {lane} boot 2:\n{}", evidence(&shutdown(second)));
 }

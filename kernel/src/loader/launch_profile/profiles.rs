@@ -22,48 +22,86 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
         "/bin/ai" | "/bin/ahci" | "/bin/xhci" | "/bin/bcm-display" | "/bin/block" | "/bin/compositor" | "/bin/config"
         | "/bin/dwc2-usb" | "/bin/e1000" | "/bin/e1000e" | "/bin/igb" | "/bin/fb-console" | "/bin/hypervisor" | "/bin/input"
         | "/bin/kms" | "/bin/net" | "/bin/net-broker" | "/bin/nvme" | "/bin/serial" | "/bin/cellbox"
-        | "/bin/silo" | "/bin/ai-test" | "/bin/silo-test" | "/bin/srv-test" | "/bin/supervisor"
-        | "/bin/vfs" | "/bin/vfs-test" | "/bin/virtio-gpu" | "/bin/virtio-net" | "/bin/virtio-scsi"
+        | "/bin/silo" | "/bin/supervisor"
+        | "/bin/vfs" | "/bin/virtio-gpu" | "/bin/virtio-net" | "/bin/virtio-scsi"
         | "/bin/vmxnet3" | "/bin/pvscsi"
-        | "/bin/std-smoke" | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
-        // Ocel's demand-only Tier 2 JavaScript engines. Init activates the exact
-        // fixed target on a document lease, not through the boot service plan.
-        // The empty boot ceiling grants no engine authority; domain admission
-        // independently decides whether the artifact may run in a private root.
-        | "/bin/ocel-js"
-        | "/bin/ocel-quickjs"
-        // Isolated native PDF rasterizer; no additional capabilities.
-        | "/bin/ocel-pdf"
-        // Phase-02 Tier-2 entry fixtures. Both carry `PROTECTION_CLASS_UNTRUSTED`
-        // manifests and `boot_ceiling` already gives them `CapSet::EMPTY`, so this
-        // row grants init nothing beyond the ability to launch them: the
-        // admission policy is still the only thing that decides whether they may
-        // run as domains, and a production image (which has no such cells and no
-        // qualified switch ordering) refuses them there.
-        | "/bin/tier2-smoke" | "/bin/tier2-exploit" | "/bin/cpp-smoke"
-        // Phase-02 slice B cross-tier exchange: the Tier-2 provider and the Tier-1
-        // driver. Both ceilings are `CapSet::EMPTY` (neither spawns anything), so
-        // this edge grants init nothing but the ability to launch them, and the
-        // admission policy still decides whether the provider may run as a domain.
-        | "/bin/tier2-rpc-provider" | "/bin/tier2-rpc-driver" => Some(LaunchProfile::new(
+        | "/bin/desktop" | "/bin/sshd" | "/bin/chrome" | "/bin/vm-runner" | "/bin/files" | "/bin/terminal"
+        // Phase 13: init's fixed bootstrap rows after the VFS. The machine-pin
+        // cell (x86) and the Ocel activator each keep their own boot ceiling;
+        // the activator alone reaches the demand engines (`activator_profile`).
+        | "/bin/machine-pin" | "/bin/activator"
+        // Test images only: the plan names the fixture launcher when the image
+        // packages it; its own reviewed edges are `fixture_launcher_profile`.
+        | "/bin/fixture-launcher" => Some(LaunchProfile::new(
             boot_ceiling::boot_ceiling(target),
             "init-launch-edge",
             true,
         )),
-        // ADR-0033 CP1 §7 `edu` export lanes (test-hooks images only): init
-        // launches the holder and two clients; each keeps its own boot ceiling.
-        #[cfg(feature = "test-hooks")]
-        "/bin/edu-holder" | "/bin/export-client" => Some(LaunchProfile::new(
-            boot_ceiling::boot_ceiling(target),
-            "init-launch-edge",
-            true,
-        )),
+        // The demand engines are the activator's alone (`activator_profile`);
+        // init reaches them neither on a fixed edge nor through autoload.
+        "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf" => None,
         // Autoload may select applications already reviewed for interactive
         // launch. Reuse their exact ceiling, never init's union of authority;
         // unknown paths still fail closed and lifecycle authority is required.
         _ => reviewed_user_target_ceiling(target)
             .map(|ceiling| LaunchProfile::new(ceiling, "init-autoload-edge", true)),
     }
+}
+
+/// Ocel demand activation (Phase 13): the `activator` Cell starts exactly the
+/// fixed Tier 2 engine targets on a document lease, never through the boot
+/// plan. Each engine keeps its own (empty) boot ceiling; domain admission
+/// independently decides whether the artifact may run in a private root.
+pub(super) fn activator_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf)
+        || !matches!(
+            target,
+            "/bin/ocel-js" | "/bin/ocel-quickjs" | "/bin/ocel-pdf"
+        )
+    {
+        return None;
+    }
+    Some(LaunchProfile::new(
+        boot_ceiling::boot_ceiling(target),
+        "activator-engine-edge",
+        true,
+    ))
+}
+
+/// The test fixture launcher (Phase 13): the fixture edges init held until the
+/// fixtures left it, each with the same child ceiling (`boot_ceiling`) init's
+/// edge granted. The five boot tests are present in ordinary test disks; the
+/// Tier-2, cross-tier, DMA-export and grant-pair fixtures run only on
+/// `test-hooks` kernels, so their edges exist only there.
+pub(super) fn fixture_launcher_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
+    if !matches!(route, LaunchRoute::Path | LaunchRoute::Elf) {
+        return None;
+    }
+    let reviewed = match target {
+        "/bin/silo-test" | "/bin/ai-test" | "/bin/vfs-test" | "/bin/srv-test"
+        | "/bin/std-smoke" => true,
+        // Phase-02 Tier-2 entry and cross-tier fixtures, the ADR-0033 CP1 §7
+        // `edu` export lane, and the phase-03 grant pair (owner on `/bin/silo`,
+        // receiver on `/bin/net-broker`, whose real services those images omit).
+        #[cfg(feature = "test-hooks")]
+        "/bin/tier2-smoke"
+        | "/bin/tier2-exploit"
+        | "/bin/cpp-smoke"
+        | "/bin/tier2-rpc-provider"
+        | "/bin/tier2-rpc-driver"
+        | "/bin/edu-holder"
+        | "/bin/export-client"
+        | "/bin/silo"
+        | "/bin/net-broker" => true,
+        _ => false,
+    };
+    reviewed.then(|| {
+        LaunchProfile::new(
+            boot_ceiling::boot_ceiling(target),
+            "fixture-launcher-edge",
+            true,
+        )
+    })
 }
 
 pub(super) fn cellbox_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {

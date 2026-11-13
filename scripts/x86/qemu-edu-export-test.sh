@@ -2,7 +2,7 @@
 # ADR-0033 CP1 §7 QEMU lanes L1-L5 for client-memory DMA exports
 # (`ExportDmaRange = 437`, `MapDmaExport = 438`, `RevokeDmaExport = 439`).
 #
-# Builds a test-hooks x86_64 image whose init (`edu-export-entry`) launches
+# Builds a test-hooks x86_64 image whose fixture launcher (`edu-export-entry`) launches
 # /bin/edu-holder — a Tier-1 Driver Cell for QEMU's `edu` device, registered as
 # the test-only export holder service 0x7AE0 — and two /bin/export-client
 # instances, then boots it twice on QEMU q35:
@@ -56,21 +56,22 @@ export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none="${BINDGEN_EXTRA_CLANG_ARGS_
 build_image() {
     mkdir -p "$TH_DIR"
     rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init"
-    echo "==> Building init (edu-export-entry) and the lane cells..."
+    echo "==> Building init, the fixture launcher (edu-export-entry) and the lane cells..."
+    cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
     cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-        --features edu-export-entry -p app-init
+        --features edu-export-entry -p fixture-launcher
     cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-        -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+        -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
         -p app-sys-tools -p edu-holder -p export-client
 
     local binaries=(
-        "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+        "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
         "$REL/platform" "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
-        "$REL/edu-holder" "$REL/export-client"
+        "$REL/edu-holder" "$REL/export-client" "$REL/fixture-launcher"
     )
     local paths=(
-        /bin/cellbox /bin/vfs /bin/config /bin/input /bin/platform /bin/ls /bin/cat
-        /bin/echo /bin/ps /bin/edu-holder /bin/export-client
+        /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input /bin/platform /bin/ls /bin/cat
+        /bin/echo /bin/ps /bin/edu-holder /bin/export-client /bin/fixture-launcher
     )
     local fat_args=()
     for index in "${!binaries[@]}"; do

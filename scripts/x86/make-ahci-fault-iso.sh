@@ -6,7 +6,7 @@
 # /bin/ahci and /bin/nvme are built with `--features fault-inject`
 # (cells/drivers/ahci/src/fault_inject.rs, the `F08B-DIE`/`F09C-DIE-ISSUED`
 # hooks in cells/drivers/nvme/src/dispatch.rs). It carries only the cells the
-# witnesses need (init with the canonical `input` feature, vfs, input, cellbox,
+# witnesses need (init with the canonical `input` feature, vfs, machine-pin, input, cellbox,
 # platform, the serial terminal, ahci, nvme, and e1000 as an independent PCI
 # device owner beside the replaced storage driver), dev-key signed like every
 # other lane, plus the signed operator policy the `policy-required` kernel
@@ -52,14 +52,14 @@ fi
 echo "[ahci-fault] building cells into $BIN_DIR"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release --locked \
     --target "$TARGET" -Z build-std=core,alloc \
-    -p app-init -p service-vfs -p service-input -p app-cellbox -p service-platform \
+    -p app-init -p service-vfs -p service-machine-pin -p service-input -p app-cellbox -p service-platform \
     -p driver-serial-x86 -p driver-ahci -p driver-nvme -p driver-e1000 \
     --features app-init/input,driver-ahci/fault-inject,driver-nvme/fault-inject
 
 # shellcheck source=scripts/lib-sign-cells.sh
 source "$REPO_ROOT/scripts/lib-sign-cells.sh"
 SIGN_TARGETS=()
-for binary in app-init service-vfs service-input cellbox platform driver-serial-x86 driver-ahci driver-nvme driver-e1000; do
+for binary in app-init service-vfs service-machine-pin service-input cellbox platform driver-serial-x86 driver-ahci driver-nvme driver-e1000; do
     SIGN_TARGETS+=("$BIN_DIR/$binary")
 done
 sign_cells "${SIGN_TARGETS[@]}"
@@ -78,6 +78,7 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$EMBEDDED/kernel_fs.img" \
     "$BIN_DIR/app-init" /bin/init \
     "$BIN_DIR/service-vfs" /bin/vfs \
+    "$BIN_DIR/service-machine-pin" /bin/machine-pin \
     "$BIN_DIR/service-input" /bin/input \
     "$BIN_DIR/cellbox" /bin/cellbox \
     "$BIN_DIR/platform" /bin/platform \
@@ -88,7 +89,7 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$WORK/POLICY.BIN" /POLICY.BIN
 
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
-for required in init vfs input cellbox platform serial ahci nvme e1000; do
+for required in init vfs machine-pin input cellbox platform serial ahci nvme e1000; do
     if ! grep -Fq -- "LFN '$required'" "$WORK/fat-layout.txt"; then
         echo "FAIL: kernel_fs.img does not contain /bin/$required" >&2
         exit 1

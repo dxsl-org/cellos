@@ -121,3 +121,11 @@ name = "supervisor"
 path = "/bin/supervisor"
 service_id = 11
 restart = "always"
+
+# Test images only: the fixture launcher starts the test fixtures init used to start
+# (Phase 13). The generator selects it only when an image packages /bin/fixture-launcher;
+# it starts its fixtures and exits.
+[[cells]]
+name = "fixture-launcher"
+path = "/bin/fixture-launcher"
+restart = "never"

@@ -1,0 +1,27 @@
+[package]
+name = "fixture-launcher"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[features]
+default = []
+# Phase-02 Tier-2 entry fixtures: /bin/tier2-smoke, /bin/tier2-exploit, /bin/cpp-smoke.
+tier2-entry = []
+# Phase-02 slice B cross-tier exchange: /bin/tier2-rpc-provider (registered as the
+# private fixture id 0x7A01), then /bin/tier2-rpc-driver.
+tier2-rpc-entry = []
+# ADR-0033 CP1 §7 DMA-export lane: /bin/edu-holder (registered as 0x7AE0) and two
+# /bin/export-client instances.
+edu-export-entry = []
+# Phase-03 step-5 Tier-2 grant pair (owner at /bin/silo, receiver at /bin/net-broker),
+# driven through its five receiver generations. Only for an image that packages
+# neither the real /bin/silo nor the real /bin/net-broker.
+tier2-grant-pair = []
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

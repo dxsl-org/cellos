@@ -47,14 +47,17 @@ mkdir -p "$TH_DIR"
 # must never leave a bootable kernel embedding the previous run's cells.
 rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init"
 
-echo "==> Building base cells (init with tier2-entry, shell, vfs, config, platform, drivers)..."
-# `tier2-entry` is init-only: a multi-package `--features` would have to exist on
-# every selected package, so init is built on its own.
+echo "==> Building base cells (init, fixture launcher, shell, vfs, machine-pin, config, platform, drivers)..."
+cargo build --release --target "$TARGET" -Z build-std=core,alloc \
+    -p app-init
+# `tier2-entry`/`tier2-rpc-entry` are fixture-launcher-only: a multi-package
+# `--features` would have to exist on every selected package, so the launcher is
+# built on its own. It schedules the Tier-2 fixtures from the boot order.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     --features tier2-entry,tier2-rpc-entry \
-    -p app-init
+    -p fixture-launcher
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform
+    -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -69,13 +72,15 @@ echo "==> Building the cross-tier exchange cells (tier2-rpc-*), phase-02 slice B
 # The provider carries `PROTECTION_CLASS_UNTRUSTED` (domain-class); the driver is
 # an ordinary Tier-1 Cell. Neither holds a capability: the copied IPC path and the
 # shared `LookupService`/`LookupServiceBound` allowlist bit are all this fixture
-# needs, and `tier2-rpc-entry` in init is what schedules the pair.
+# needs, and `tier2-rpc-entry` in the fixture launcher is what schedules the pair.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p tier2-rpc-provider -p tier2-rpc-driver
 
 CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
+    "$REL/service-machine-pin"
+    "$REL/fixture-launcher"
     "$REL/service-config"
     "$REL/service-input"
     "$REL/platform"
@@ -94,6 +99,8 @@ CELL_BINARIES=(
 CELL_IMAGE_PATHS=(
     /bin/cellbox
     /bin/vfs
+    /bin/machine-pin
+    /bin/fixture-launcher
     /bin/config
     /bin/input
     /bin/platform

@@ -1,11 +1,12 @@
-//! `machine pin [--confirm]`: the console client of init's machine pin (ADR-0029 §3,
-//! the ADR-0028 CLI pattern). The shell holds no pin authority: it asks init over
-//! `service::MACHINE_PIN` with the [`api::services::machine_pin`] frame and prints the
-//! answer. Init honours `Confirm` only in safe mode and only from the console shell it
-//! spawned, identified by the kernel-attested sender tid, so the request is sent from
-//! this task: the builtin runs in process, never as a spawned child.
+//! `machine pin [--confirm]`: the console client of the machine-pin cell (ADR-0029 §3
+//! as amended in Phase 13, the ADR-0028 CLI pattern). The shell holds no pin authority:
+//! it asks the `service::MACHINE_PIN` provider with the [`api::services::machine_pin`]
+//! frame and prints the answer. The cell honours `Confirm` only in safe mode and only
+//! from the console shell init started (init hands it that shell's tid), identified by
+//! the kernel-attested sender tid, so the request is sent from this task: the builtin
+//! runs in process, never as a spawned child.
 //!
-//! Output: init's answers on stdout (a refusal too, so it follows the `current=` line);
+//! Output: the cell's answers on stdout (a refusal too, so it follows the `current=` line);
 //! usage and transport failures on stderr. Exit status: 0 on a status report or a
 //! recorded pin, 1 on a refusal or a failure, 2 on a usage error.
 
@@ -42,7 +43,7 @@ fn parse<S: AsRef<str>>(args: &[S]) -> Option<Invocation> {
     words.next().is_none().then_some(invocation)
 }
 
-/// Why no answer from init can be printed.
+/// Why no answer from the machine-pin cell can be printed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Failure {
     /// No live `MACHINE_PIN` provider.
@@ -56,8 +57,8 @@ enum Failure {
 impl Failure {
     const fn line(self) -> &'static str {
         match self {
-            Self::Unavailable => "machine pin: init endpoint unavailable",
-            Self::NoReply => "machine pin: no reply from init",
+            Self::Unavailable => "machine pin: endpoint unavailable",
+            Self::NoReply => "machine pin: no reply from the machine-pin cell",
             Self::Malformed => "machine pin: malformed reply",
         }
     }
@@ -74,7 +75,7 @@ fn hex(digest: &[u8; 32]) -> String {
     out
 }
 
-/// The pinned digest, or `none` when init has no readable pin (all zero).
+/// The pinned digest, or `none` when the cell has no readable pin (all zero).
 fn pinned_text(pinned: &[u8; 32]) -> String {
     if pinned.iter().all(|byte| *byte == 0) {
         String::from("none")
@@ -123,13 +124,13 @@ pub fn cmd_machine(args: &[String]) -> i32 {
 }
 
 fn run(invocation: Invocation) -> Result<i32, Failure> {
-    let init = ostd::service::provider_tid(api::syscall::service::MACHINE_PIN)
+    let pin = ostd::service::provider_tid(api::syscall::service::MACHINE_PIN)
         .ok_or(Failure::Unavailable)?;
     let MachinePinResponse::Status {
         state,
         current,
         pinned,
-    } = call(init, MachinePinRequest::Status)?
+    } = call(pin, MachinePinRequest::Status)?
     else {
         return Err(Failure::Malformed);
     };
@@ -138,7 +139,7 @@ fn run(invocation: Invocation) -> Result<i32, Failure> {
         return Ok(0);
     }
     crate::executor::shell_println(&current_line(&current));
-    match call(init, MachinePinRequest::Confirm { digest: current })? {
+    match call(pin, MachinePinRequest::Confirm { digest: current })? {
         MachinePinResponse::Recorded { digest } => {
             crate::executor::shell_println(&recorded_line(&digest));
             Ok(0)
@@ -147,16 +148,18 @@ fn run(invocation: Invocation) -> Result<i32, Failure> {
             crate::executor::shell_println(&refused_line(refusal));
             Ok(FAILED_STATUS)
         }
-        MachinePinResponse::Status { .. } => Err(Failure::Malformed),
+        MachinePinResponse::Status { .. } | MachinePinResponse::Gate { .. } => {
+            Err(Failure::Malformed)
+        }
     }
 }
 
-/// One bounded exchange with init from this task. The reply buffer holds any reply the
+/// One bounded exchange with the machine-pin cell from this task. The reply buffer holds any reply the
 /// kernel can return, so a terminal is never retained for want of space; the frame
 /// decoder refuses one longer than a response. An unsettled call is cancelled and its
 /// terminal taken, releasing the slot; a reply that wins the cancel is still used.
-fn call(init: usize, request: MachinePinRequest) -> Result<MachinePinResponse, Failure> {
-    let pending = PendingCall::submit(init, &request.encode()).map_err(|_| Failure::NoReply)?;
+fn call(pin: usize, request: MachinePinRequest) -> Result<MachinePinResponse, Failure> {
+    let pending = PendingCall::submit(pin, &request.encode()).map_err(|_| Failure::NoReply)?;
     let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
     let completion = match pending.wait_and_take(&mut reply, ROUND_TICKS, ROUNDS) {
         Ok(Some(completion)) => completion,
@@ -248,9 +251,12 @@ mod tests {
         );
         assert_eq!(
             Failure::Unavailable.line(),
-            "machine pin: init endpoint unavailable"
+            "machine pin: endpoint unavailable"
         );
-        assert_eq!(Failure::NoReply.line(), "machine pin: no reply from init");
+        assert_eq!(
+            Failure::NoReply.line(),
+            "machine pin: no reply from the machine-pin cell"
+        );
         assert_eq!(Failure::Malformed.line(), "machine pin: malformed reply");
     }
 }

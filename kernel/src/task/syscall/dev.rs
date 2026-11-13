@@ -465,8 +465,12 @@ pub(super) fn query_machine_facts(
     a2: usize,
     a3: usize,
 ) -> SyscallResult {
-    // Admitted past the allowlist; init (SpawnCap) is the reader.
-    if !caller_has_spawn(caller_id) {
+    // Admitted past the allowlist. The only reader is the live `MACHINE_PIN`
+    // provider (ADR-0029 §3, Phase 13 amendment): the Cell trusted init
+    // launched as `machine-pin` and registered (`register_service`).
+    let provider = crate::cell::service_registry::lookup_bound(abi::syscall::service::MACHINE_PIN)
+        .map(|(_, cell_id, generation)| (cell_id, generation));
+    if provider.is_none() || live_cell_identity(caller_id) != provider {
         return Err(SyscallError::PermissionDenied);
     }
     if out_len != abi::machine_facts::MACHINE_FACTS_CAPACITY || a2 != 0 || a3 != 0 {

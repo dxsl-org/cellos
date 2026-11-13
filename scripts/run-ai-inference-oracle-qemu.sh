@@ -8,7 +8,7 @@
 #   * An empty VirtIO-BLK disk is attached so the block driver and VFS come up the
 #     same way they do in a normal image.
 #
-# The oracle cell is spawned by init (`/bin/ai-test`) and prints `[ai-test] PASS`
+# The oracle cell is spawned by the fixture launcher (`/bin/ai-test`) and prints `[ai-test] PASS`
 # only after the service reproduced the reference token ids and embedding.
 #
 # Two architectures run the same oracle, which is what Spec 24 CP-3's gate asks for
@@ -181,7 +181,7 @@ fi
 echo "[ai-oracle] building $ARCH cells"
 env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
     -p app-init -p app-cellbox -p service-vfs -p service-config -p service-platform \
-    -p driver-virtio-blk -p ai-test
+    -p driver-virtio-blk -p ai-test -p fixture-launcher
 env "${AARCH64_CFLAGS[@]}" cargo build --quiet --locked --release --target "$TARGET" "${BUILD_STD[@]}" \
     -p service-ai "${AI_FEATURES[@]}"
 
@@ -195,6 +195,7 @@ CELL_BINARIES=(
     "$REL/driver-virtio-blk"
     "$REL/service-ai"
     "$REL/ai-test"
+    "$REL/fixture-launcher"
 )
 for binary in "${CELL_BINARIES[@]}"; do
     [[ -s "$binary" ]] || {
@@ -223,6 +224,7 @@ echo "[ai-oracle] assembling VIFS1"
     "$REL/driver-virtio-blk"   /bin/block \
     "$REL/service-ai"          /bin/ai \
     "$REL/ai-test"             /bin/ai-test \
+    "$REL/fixture-launcher"    /bin/fixture-launcher \
     "$MODEL"                   "${CELLOS_AI_MODEL_DEST:-/bin/ai-model.gguf}" \
     "$WORK/hostname"           /etc/hostname \
     "$WORK/readme.txt"         /readme.txt \
@@ -233,7 +235,7 @@ cp -- "$REL/app-init" "$EMBEDDED/init"
 # The model may be packed into a subdirectory (CELLOS_AI_MODEL_DEST), where the listing shows it as
 # an LFN entry under its own section rather than as a root entry, so match on the quoted leaf name.
 MODEL_LEAF="$(basename "${CELLOS_AI_MODEL_DEST:-/bin/ai-model.gguf}")"
-for required in "LFN 'ai'" "LFN 'ai-test'" "'$MODEL_LEAF'" "LFN 'vfs'"; do
+for required in "LFN 'ai'" "LFN 'ai-test'" "LFN 'fixture-launcher'" "'$MODEL_LEAF'" "LFN 'vfs'"; do
     grep -a -Fq -- "$required" "$WORK/fat-layout.txt" || {
         echo "FAIL: VIFS1 is missing $required" >&2
         exit 1

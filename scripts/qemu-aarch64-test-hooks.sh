@@ -124,7 +124,7 @@ fi
 # EL2 development-Silo machine witnesses no Tier-2 entry at all, so there it stays
 # a blanket prohibition.
 #
-# The cells are launched from the boot order (init), not typed at the shell: this
+# The cells are launched from the boot order (fixture launcher), not typed at the shell: this
 # image's shell sleeps ~2 s before its first prompt and its own test root exits
 # the VM at ~4.5 s, so a prompt-driven sequence cannot run at all. Containment is
 # therefore read off the boot instead: each deliberate fault must be announced by
@@ -368,8 +368,8 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         "S22-AARCH64-ADMISSION-PUBLICATION-DENY: PASS"
         "S22-AARCH64-ADMISSION-CEILING: PASS"
         # The launch, from the boot order.
-        "Init: tier2-smoke admitted."
-        "Init: tier2-exploit admitted."
+        "fixture-launcher: tier2-smoke admitted."
+        "fixture-launcher: tier2-exploit admitted."
         # The real domain: admitted to a private root, executed to completion,
         # and observed from the kernel side while its own `TTBR0_EL1` was live.
         "[domain] admitted cell 'tier2-smoke' to Tier 2 Paged Domain (TTBR0 isolation)"
@@ -440,15 +440,15 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         #
         # There is no interactive window on this image (its own test root exits the
         # VM long before a shell prompt could be typed at), so the pair is launched
-        # from the boot order by init and takes the grant ids in band: the receiver
-        # asks the owner for them over the pair's own IPC protocol, because they are
-        # kernel-assigned after the owner starts and no command line can carry them.
-        # `app-init` launches the pair on the two reviewed init edges whose services
-        # are not built into this image (`/bin/silo`, `/bin/net-broker`); the
-        # compile-error guards there refuse the feature combinations that would make
-        # init launch the real services at those paths.
-        "Init: tier2-grant-pair owner admitted."
-        "Init: tier2-grant-pair complete."
+        # from the boot order by the fixture launcher and takes the grant ids in band:
+        # the receiver asks the owner for them over the pair's own IPC protocol,
+        # because they are kernel-assigned after the owner starts and no command line
+        # can carry them. `fixture-launcher` (`tier2-grant-pair`) launches the pair at
+        # the two reviewed paths whose real services are not built into this image
+        # (`/bin/silo`, `/bin/net-broker`); the image builder never combines that
+        # feature with an image packaging the real services at those paths.
+        "fixture-launcher: tier2-grant-pair owner admitted."
+        "fixture-launcher: tier2-grant-pair complete."
         "[domain] admitted cell 'silo' to Tier 2 Paged Domain (TTBR0 isolation)"
         "[domain] admitted cell 'net-broker' to Tier 2 Paged Domain (TTBR0 isolation)"
         "S22-AARCH64-GRANT-PAIR-OWNER-BEGIN: public Grant* owner path"

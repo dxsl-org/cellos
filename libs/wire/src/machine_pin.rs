@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Machine pin frame: cellbox ↔ init over `service::MACHINE_PIN` (ADR-0029 §3).
+//! Machine pin frame: cellbox and init ↔ the `machine-pin` cell over
+//! `service::MACHINE_PIN` (ADR-0029 §3, amended in Phase 13).
 //!
 //! Class C record (`docs/abi-boundary-records.md`). Fixed little-endian
 //! frames, identified by magic, version exactly [`FRAME_VERSION`]; unknown
 //! operations, kinds, states and codes, non-zero reserved bytes and non-zero
-//! bytes past the frame are refused before any effect. A request fits init's
+//! bytes past the frame are refused before any effect. A request fits a
 //! 64-byte receive payload; caller identity never comes from the frame but
 //! from the kernel's attested receive trailer.
 //!
 //! Request ([`REQUEST_BYTES`]): 0 magic `MACHPINQ` · 8 version · 9 op (1
-//! Status, 2 Confirm) · 10 reserved [6] · 16 digest [32] (zero for Status).
+//! Status, 2 Confirm, 3 Gate, 4 ConsoleShell) · 10 reserved [6] · 16 argument
+//! [32] (Confirm: digest; ConsoleShell: tid as u64 LE in 16..24, rest zero;
+//! zero for Status and Gate).
 //! Response ([`RESPONSE_BYTES`]): 0 magic `MACHPINR` · 8 version · 9 kind (1
-//! Status, 2 Recorded, 3 Refused) · 10 code ([`PinState`] for Status,
-//! [`Refusal`] for Refused, zero for Recorded) · 11 reserved [5] · 16 digest
-//! [32] (Status: current; Recorded: the new pin; Refused: zero) · 48 digest
-//! [32] (Status: pinned, zero when none; otherwise zero).
+//! Status, 2 Recorded, 3 Refused, 4 Gate) · 10 code ([`PinState`] for Status
+//! and Gate, [`Refusal`] for Refused, zero for Recorded) · 11 safe mode (Gate:
+//! 0 or 1; otherwise zero) · 12 reserved [4] · 16 digest [32] (Status:
+//! current; Recorded: the new pin; otherwise zero) · 48 digest [32] (Status:
+//! pinned, zero when none; otherwise zero).
+//!
+//! Ops 3 and 4 and kind 4 were appended in Phase 13, when the endpoint left
+//! init: init asks `Gate` as a client and tells the cell the console shell's
+//! tid with a one-way `ConsoleShell`, which the cell accepts only from init.
 
 /// Version byte of both frames.
 pub const FRAME_VERSION: u8 = 1;
@@ -25,14 +33,20 @@ pub const RESPONSE_BYTES: usize = 80;
 const REQUEST_MAGIC: &[u8; 8] = b"MACHPINQ";
 const RESPONSE_MAGIC: &[u8; 8] = b"MACHPINR";
 
-/// What init asks or is asked to do.
+/// What the machine-pin cell is asked to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MachinePinRequest {
     /// Report this boot's gate outcome and both digests. Answered in every mode.
     Status,
     /// Re-pin the current facts. Honoured only in safe mode, only from the
-    /// shell init spawned, and only when `digest` is the current one.
+    /// console shell init started, and only when `digest` is the current one.
     Confirm { digest: [u8; 32] },
+    /// Init's question after it launched the cell: this boot's outcome and
+    /// whether it withholds services. Answered in every mode.
+    Gate,
+    /// One-way, from init only: the live console shell init started in safe
+    /// mode, the only sender `Confirm` is honoured from. Never answered.
+    ConsoleShell { tid: u64 },
 }
 
 /// This boot's gate outcome.
@@ -49,7 +63,7 @@ pub enum PinState {
     RecordUnreadable = 4,
     /// The pin store could not be read or written.
     StoreUnavailable = 5,
-    /// The kernel gave no facts, or init could not register the endpoint.
+    /// The kernel gave no facts, or the endpoint was never registered.
     FactsUnavailable = 6,
 }
 
@@ -57,9 +71,9 @@ pub enum PinState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Refusal {
-    /// Init is not in safe mode.
+    /// The boot is not in safe mode.
     NotSafeMode = 1,
-    /// The sender is not the live console shell init spawned.
+    /// The sender is not the live console shell init started.
     NotConsoleShell = 2,
     /// The digest is not the current facts' digest.
     DigestStale = 3,
@@ -67,7 +81,7 @@ pub enum Refusal {
     StoreWriteFailed = 4,
 }
 
-/// Init's answer.
+/// The machine-pin cell's answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MachinePinResponse {
     /// `pinned` is zero when no readable record exists.
@@ -80,6 +94,9 @@ pub enum MachinePinResponse {
     Recorded { digest: [u8; 32] },
     /// Nothing was written.
     Refused(Refusal),
+    /// This boot's outcome and whether init must withhold every non-boot
+    /// service (the answer to [`MachinePinRequest::Gate`]).
+    Gate { state: PinState, safe_mode: bool },
 }
 
 impl PinState {
@@ -159,6 +176,11 @@ impl MachinePinRequest {
                 frame[9] = 2;
                 frame[16..48].copy_from_slice(&digest);
             }
+            Self::Gate => frame[9] = 3,
+            Self::ConsoleShell { tid } => {
+                frame[9] = 4;
+                frame[16..24].copy_from_slice(&tid.to_le_bytes());
+            }
         }
         frame
     }
@@ -174,13 +196,16 @@ impl MachinePinRequest {
             2 => Some(Self::Confirm {
                 digest: digest_at(frame, 16),
             }),
+            3 if zero(&frame[16..48]) => Some(Self::Gate),
+            4 if zero(&frame[24..48]) => Some(Self::ConsoleShell {
+                tid: u64::from_le_bytes(frame[16..24].try_into().ok()?),
+            }),
             _ => None,
         }
     }
 
-    /// Whether `frame` claims to be a request of this protocol (magic only).
-    /// Init uses it to answer a malformed claim instead of treating it as an
-    /// exit record.
+    /// Whether `frame` claims to be a request of this protocol (magic only),
+    /// so a malformed claim is reported rather than silently ignored.
     pub fn is_claimed(frame: &[u8]) -> bool {
         frame.len() >= 8 && &frame[..8] == REQUEST_MAGIC
     }
@@ -211,13 +236,22 @@ impl MachinePinResponse {
                 frame[9] = 3;
                 frame[10] = refusal as u8;
             }
+            Self::Gate { state, safe_mode } => {
+                frame[9] = 4;
+                frame[10] = state as u8;
+                frame[11] = u8::from(safe_mode);
+            }
         }
         frame
     }
 
     /// The response in `frame`; `None` for anything else.
     pub fn decode(frame: &[u8]) -> Option<Self> {
-        if !header_valid(frame, RESPONSE_MAGIC, RESPONSE_BYTES) || !zero(&frame[11..16]) {
+        if !header_valid(frame, RESPONSE_MAGIC, RESPONSE_BYTES) || !zero(&frame[12..16]) {
+            return None;
+        }
+        // Byte 11 is the Gate safe-mode flag and zero in every other kind.
+        if frame[9] != 4 && frame[11] != 0 {
             return None;
         }
         match frame[9] {
@@ -230,6 +264,10 @@ impl MachinePinResponse {
                 digest: digest_at(frame, 16),
             }),
             3 if zero(&frame[16..80]) => Some(Self::Refused(Refusal::decode(frame[10])?)),
+            4 if frame[11] <= 1 && zero(&frame[16..80]) => Some(Self::Gate {
+                state: PinState::decode(frame[10])?,
+                safe_mode: frame[11] == 1,
+            }),
             _ => None,
         }
     }
@@ -245,6 +283,10 @@ mod tests {
         for request in [
             MachinePinRequest::Status,
             MachinePinRequest::Confirm { digest: [7; 32] },
+            MachinePinRequest::Gate,
+            MachinePinRequest::ConsoleShell {
+                tid: 0x0102_0304_0506_0708,
+            },
         ] {
             let frame = request.encode();
             assert_eq!(MachinePinRequest::decode(&frame), Some(request));
@@ -294,6 +336,14 @@ mod tests {
             },
             MachinePinResponse::Recorded { digest: [3; 32] },
             MachinePinResponse::Refused(Refusal::DigestStale),
+            MachinePinResponse::Gate {
+                state: PinState::StoreUnavailable,
+                safe_mode: false,
+            },
+            MachinePinResponse::Gate {
+                state: PinState::Mismatch,
+                safe_mode: true,
+            },
         ] {
             assert_eq!(
                 MachinePinResponse::decode(&response.encode()),
@@ -340,5 +390,61 @@ mod tests {
         bad[50] = 1;
         assert_eq!(MachinePinResponse::decode(&bad), None);
         assert_eq!(MachinePinResponse::decode(&status[..79]), None);
+    }
+
+    /// The Phase 13 frames, pinned byte for byte: changing them breaks init
+    /// and the machine-pin cell at once, so the layout is part of the record.
+    #[test]
+    fn appended_frames_are_byte_pinned() {
+        let mut gate = [0u8; REQUEST_BYTES];
+        gate[..10].copy_from_slice(b"MACHPINQ\x01\x03");
+        assert_eq!(MachinePinRequest::Gate.encode(), gate);
+
+        let mut shell = [0u8; REQUEST_BYTES];
+        shell[..10].copy_from_slice(b"MACHPINQ\x01\x04");
+        shell[16..24].copy_from_slice(&[0x2A, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(MachinePinRequest::ConsoleShell { tid: 42 }.encode(), shell);
+
+        let mut answer = [0u8; RESPONSE_BYTES];
+        answer[..12].copy_from_slice(b"MACHPINR\x01\x04\x03\x01");
+        assert_eq!(
+            MachinePinResponse::Gate {
+                state: PinState::Mismatch,
+                safe_mode: true,
+            }
+            .encode(),
+            answer
+        );
+    }
+
+    #[test]
+    fn malformed_appended_frames_are_refused() {
+        let mut gate = MachinePinRequest::Gate.encode();
+        gate[16] = 1;
+        assert_eq!(MachinePinRequest::decode(&gate), None);
+        let mut shell = MachinePinRequest::ConsoleShell { tid: 7 }.encode();
+        shell[24] = 1;
+        assert_eq!(MachinePinRequest::decode(&shell), None);
+        let mut shell = MachinePinRequest::ConsoleShell { tid: 7 }.encode();
+        shell[9] = 5;
+        assert_eq!(MachinePinRequest::decode(&shell), None);
+
+        let answer = MachinePinResponse::Gate {
+            state: PinState::Match,
+            safe_mode: false,
+        }
+        .encode();
+        let mut bad = answer;
+        bad[11] = 2;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = answer;
+        bad[10] = 0;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = answer;
+        bad[12] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
+        let mut bad = answer;
+        bad[16] = 1;
+        assert_eq!(MachinePinResponse::decode(&bad), None);
     }
 }

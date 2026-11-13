@@ -204,6 +204,8 @@ fn fixed_bootstrap_and_demand_only_registry_ownership_cannot_be_overridden() {
         "/bin/block",
         "/bin/NVME",
         "/bin/ahci",
+        "/bin/machine-pin",
+        "/bin/ACTIVATOR",
         "/bin/ocel-js",
         "/bin/ocel-quickjs",
         "/bin/OCEL-QUICKJS",
@@ -217,7 +219,7 @@ fn fixed_bootstrap_and_demand_only_registry_ownership_cannot_be_overridden() {
             "{path}"
         );
     }
-    for name in ["init", "block", "nvme", "ahci"] {
+    for name in ["init", "block", "nvme", "ahci", "machine-pin", "activator"] {
         assert!(
             cells(&format!("[[cells]]\nname='{name}'\npath='/bin/echo'")).is_err(),
             "{name}"
@@ -226,6 +228,7 @@ fn fixed_bootstrap_and_demand_only_registry_ownership_cannot_be_overridden() {
     for id in [
         service::BLOCK_DRIVER,
         service::OCEL_ACTIVATOR,
+        service::MACHINE_PIN,
         service::OCEL_JS,
         service::OCEL_PDF,
     ] {

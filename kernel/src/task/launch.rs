@@ -186,6 +186,10 @@ pub fn publish_prepared(
     task.pku_value = state.pku_value;
     task.is_critical = state.is_critical;
     task.root_tid = tid;
+    task.spawner = state
+        .caller
+        .as_ref()
+        .map(|caller| (caller.cell_id, caller.generation));
     if let Some(measurement) = state.measurement.as_ref() {
         // A fresh task from `into_task`, so the first binding always lands.
         task.bind_image(measurement.image);

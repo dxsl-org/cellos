@@ -39,7 +39,7 @@ rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init"
 echo "==> Building base cells (init, shell, vfs, config, input, platform, tools)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+    -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
     -p app-sys-tools
 
 echo "==> Building the mlibc witnesses..."
@@ -60,12 +60,12 @@ if ! grep -q ' T mlibc_posix_witness$' <<<"$(nm "$REL/mlibc-posix-x86")"; then
 fi
 
 CELL_BINARIES=(
-    "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+    "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps" "$REL/free"
     "$REL/mlibc-smoke" "$REL/mlibc-posix-x86"
 )
 CELL_IMAGE_PATHS=(
-    /bin/cellbox /bin/vfs /bin/config /bin/input
+    /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input
     /bin/platform /bin/ls /bin/cat /bin/echo /bin/ps /bin/free
     /bin/mlibc-smoke /bin/mlibc-posix-x86
 )

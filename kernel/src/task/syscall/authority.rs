@@ -71,6 +71,24 @@ pub(super) fn live_cell_identity(tid: usize) -> Option<(u64, u64)> {
         .map(|t| (t.cell_id.0, t.cell_generation))
 }
 
+/// A live root task `tid` that the caller's Cell launched (`Task::spawner`),
+/// with its launch identity (`launch_identity_in`) and Cell identity, all read
+/// under one scheduler lock. `None` when `tid` is no such child.
+pub(super) fn launched_child(caller_id: usize, tid: usize) -> Option<(String, u64, u64)> {
+    let guard = crate::task::SCHEDULER.lock();
+    let sched = guard.as_ref()?;
+    let caller = sched.tasks.get(&caller_id)?;
+    let child = sched.tasks.get(&tid)?;
+    if child.root_tid != tid
+        || matches!(child.state, TaskState::Retiring | TaskState::Terminated)
+        || child.spawner != Some((caller.cell_id.0, caller.cell_generation))
+    {
+        return None;
+    }
+    let identity = launch_identity_in(sched, tid)?;
+    Some((identity, child.cell_id.0, child.cell_generation))
+}
+
 #[cfg(feature = "test-hooks")]
 pub(super) fn caller_has_development_silo_registration(caller_id: usize) -> bool {
     // A launch-route token on the root task, not a Cell right (not in CapSet).
@@ -555,14 +573,36 @@ pub(super) fn register_service(
     if service_id == abi::syscall::service::BLOCK_DRIVER {
         return Err(SyscallError::PermissionDenied);
     }
-    // The machine pin endpoint is init's own: only trusted init may
-    // register it, and only naming itself (ADR-0029 §3). The VFS admits
-    // the live provider to the pin store, so a hijacked registration
-    // would hand over pin write access.
+    // The machine pin endpoint (ADR-0029 §3, Phase 13 amendment) is the
+    // provider trusted init launched as `machine-pin`: only trusted init may
+    // register it, and only for its own live child whose signed launch
+    // identity is `machine-pin`. The VFS admits the live provider to the pin
+    // store and 433 answers only it, so a hijacked registration would hand
+    // over the machine facts and pin write access.
     if service_id == abi::syscall::service::MACHINE_PIN
-        && !(tid == caller_id && caller_is_trusted_init(caller_id))
+        && !(caller_is_trusted_init(caller_id)
+            && launched_child(caller_id, tid)
+                .is_some_and(|(identity, _, _)| identity == "machine-pin"))
     {
         return Err(SyscallError::PermissionDenied);
+    }
+    // Ocel demand engines (Phase 13): the `activator` launch identity may
+    // publish exactly `OCEL_JS` and `OCEL_PDF`, and only for a live root it
+    // launched itself. Every other well-known id stays the namespace owners'.
+    if matches!(
+        service_id,
+        abi::syscall::service::OCEL_JS | abi::syscall::service::OCEL_PDF
+    ) && flags == 0
+        && caller_launch_state(caller_id).is_some_and(|(identity, _, _)| identity == "activator")
+    {
+        let Some((_, cell_id, generation)) = launched_child(caller_id, tid) else {
+            return Err(SyscallError::PermissionDenied);
+        };
+        return if crate::cell::service_registry::register(service_id, tid, cell_id, generation) {
+            Ok(0)
+        } else {
+            Err(SyscallError::InvalidInput)
+        };
     }
     // Development Silo readiness is self-published only after artifact,
     // VM, entropy, guest READY, and public-key validation. The dedicated

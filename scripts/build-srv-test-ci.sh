@@ -7,7 +7,8 @@
 # Key difference from build-test-hooks-ci.sh:
 #   - service-vfs is built WITHOUT --features test-hooks (full quota + full
 #     CellosFS backend — no artificial 1.1 KiB limit).
-#   - app-srv-test replaces app-vfs-test in the embedded kernel_fs.img.
+#   - app-srv-test replaces app-vfs-test in the embedded kernel_fs.img; the
+#     fixture launcher (default features) spawns it from the boot plan.
 #
 # Prerequisites (the CI job installs these):
 #   apt: gcc-riscv64-unknown-elf libclang-dev qemu-system-misc
@@ -48,7 +49,7 @@ echo "==> Building base cells (init, shell, config, input, platform, block)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-cellbox -p service-config -p service-input \
+    -p app-init -p fixture-launcher -p app-cellbox -p service-config -p service-input \
     -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs (full — no test-hooks, full quota, CellosFS Native)..."
@@ -64,7 +65,7 @@ cargo build --release \
     -p app-srv-test -p app-posix-shim-test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init cellbox service-vfs service-config service-input srv-test posix-shim-test platform driver-virtio-blk; do
+for bin in app-init fixture-launcher cellbox service-vfs service-config service-input srv-test posix-shim-test platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -74,7 +75,7 @@ done
 source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
-sign_cells "$REL/app-init" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input" \
+sign_cells "$REL/app-init" "$REL/fixture-launcher" "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input" \
            "$REL/srv-test" "$REL/posix-shim-test" "$REL/platform" "$REL/driver-virtio-blk"
 
 echo "==> Assembling kernel_fs.img (srv-test)..."
@@ -100,6 +101,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/platform"       /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/srv-test"       /bin/srv-test \
+    "$REL/fixture-launcher" /bin/fixture-launcher \
     "$REL/posix-shim-test" /bin/posix-shim-test \
     "$TMPDIR_KFS/hostname" /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
@@ -117,8 +119,9 @@ fi
 "$PYTHON_BIN" tools/inspect_fat.py "${SRV_DIR}/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'srv-test'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'fixture-launcher'" "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'posix-shim-test'" "$TMPDIR_KFS/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img does not contain /bin/srv-test and /bin/posix-shim-test" >&2
+    echo "FAIL: kernel_fs.img does not contain /bin/srv-test, /bin/fixture-launcher and /bin/posix-shim-test" >&2
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1
 fi

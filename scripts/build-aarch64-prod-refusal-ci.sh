@@ -81,9 +81,9 @@ mkdir -p "$TH_DIR"
 # must never leave a bootable kernel embedding the previous run's cells.
 rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$KERNEL"
 
-echo "==> Building production cells (init without tier2-entry, shell, vfs, config, input, sys tools)..."
-# `tier2-entry` and `tier2-grant-pair` are deliberately absent: they exist only in
-# the test-hooks image and would make init launch the domain fixtures at boot.
+echo "==> Building production cells (init, shell, vfs, config, input, sys tools)..."
+# No `/bin/fixture-launcher`: it exists only in the test-hooks image, where its
+# `tier2-entry` and `tier2-grant-pair` features launch the domain fixtures at boot.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p app-cellbox -p service-vfs -p service-config -p service-input -p app-sys-tools

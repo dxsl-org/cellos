@@ -1,9 +1,14 @@
-//! Host tests: the gate's decision table, the diff, the safe set and the
-//! confirm rules.
+//! Host tests: the gate's decision table, the diff, the confirm rules, the
+//! endpoint's sender rules and the store's absence rule.
 
-use super::store::{PinRead, PinStore};
-use super::*;
+use crate::diff;
+use crate::gate::*;
+use crate::store::{self, PinRead, PinStore};
+use alloc::string::String;
 use alloc::vec;
+use alloc::vec::Vec;
+use api::machine_facts::{MachineFactsRecord, FLAG_HYPERVISOR, PROFILE_SOURCE_CMDLINE};
+use api::services::machine_pin::{PinState, Refusal};
 use api::machine_facts::{
     FactString, PciFunctionId, ViMachineFactsV1, FLAG_ACPI_OEM, FLAG_DMAR_PRESENT, FLAG_PCI_ECAM,
     FLAG_SMBIOS, FLAG_VTD_ACTIVE, PROFILE_SOURCE_DEFAULT,
@@ -228,41 +233,6 @@ fn duplicate_functions_diff_as_a_multiset() {
 }
 
 #[test]
-fn safe_set_is_input_and_the_cellbox_shell_from_the_shipped_plan() {
-    let plan =
-        cellos_boot_config::parse_cells(include_bytes!("../../../../../config/services.toml"))
-            .unwrap();
-    let autoload =
-        cellos_boot_config::parse_cells(include_bytes!("../../../../../config/autoload.toml"))
-            .unwrap();
-    let autoload_offset = 1 + plan.cells.len();
-    let mut services = vec![Service::bootstrap_vfs()];
-    services.extend(plan.cells.into_iter().map(Service::new));
-    services.extend(autoload.cells.into_iter().map(Service::new));
-    let (service, shell, withheld) = safe_set(&services, autoload_offset);
-    let service = service.expect("input in the plan");
-    let shell = shell.expect("cellbox in autoload");
-    assert_eq!(services[service].spec.name, "input");
-    assert_eq!(
-        (
-            services[shell].spec.name.as_str(),
-            services[shell].spec.args.as_slice()
-        ),
-        ("cellbox", &[String::from("sh")][..])
-    );
-    assert!(shell >= autoload_offset);
-    for name in ["net", "silo"] {
-        assert!(
-            withheld.iter().any(|entry| entry == name),
-            "{name} withheld: {withheld:?}"
-        );
-    }
-    assert!(!withheld
-        .iter()
-        .any(|entry| entry == "input" || entry == "cellbox" || entry == "vfs"));
-}
-
-#[test]
 fn confirm_needs_safe_mode_then_the_shell_then_the_current_digest() {
     let digest = [7; 32];
     assert_eq!(
@@ -388,4 +358,24 @@ fn only_a_complete_listing_without_the_entry_proves_absence() {
         read_pin(&mut unmounted),
         PinRead::Unavailable("/srv not mounted")
     );
+}
+
+#[test]
+fn init_tid_comes_from_the_command_line_and_never_zero() {
+    use crate::endpoint::init_tid;
+    let args = |list: &[&str]| list.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
+    assert_eq!(init_tid(&args(&["init=2"])), Some(2));
+    assert_eq!(init_tid(&args(&["x", "init=17"])), Some(17));
+    for bad in [&[][..], &["init=0"], &["init="], &["init=x"], &["tid=2"]] {
+        assert_eq!(init_tid(&args(bad)), None, "{bad:?}");
+    }
+}
+
+#[test]
+fn only_init_names_the_console_shell() {
+    use crate::endpoint::notice_accepted;
+    assert!(notice_accepted(Some(2), 2, 40));
+    assert!(!notice_accepted(Some(2), 3, 40), "another sender");
+    assert!(!notice_accepted(None, 2, 40), "init unknown");
+    assert!(!notice_accepted(Some(2), 2, 0), "no shell");
 }

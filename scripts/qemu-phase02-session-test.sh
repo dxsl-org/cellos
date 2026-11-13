@@ -129,7 +129,7 @@ echo "==> Building cells (private target dir)"
 if [[ -z "$CANDIDATE" ]]; then
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
         ${CELL_FEATURE_ARGS[@]+"${CELL_FEATURE_ARGS[@]}"} \
-        -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+        -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
         -p driver-nvme -p driver-e1000 -p app-sys-tools \
         -p app-phase02-session-parent -p app-phase02-session-child
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
@@ -147,13 +147,13 @@ else
 fi
 
 CELL_BINARIES=(
-    "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+    "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000"
     "$REL/ls" "$REL/cat" "$REL/echo" "$REL/ps"
     "$REL/phase02-session-parent" "$REL/phase02-session-child"
 )
 CELL_IMAGE_PATHS=(
-    /bin/cellbox /bin/vfs /bin/config /bin/input
+    /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input
     /bin/platform /bin/nvme /bin/e1000
     /bin/ls /bin/cat /bin/echo /bin/ps
     /bin/phase02-session-parent /bin/phase02-session-child
@@ -251,7 +251,7 @@ from pathlib import Path
 w, root = Path(sys.argv[1]), Path(sys.argv[2])
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 rel = w / "cells-target/x86_64-unknown-none/release"
-names = ["app-init","cellbox","service-vfs","service-config","service-input","platform","ls","cat","echo","ps","phase02-session-parent","phase02-session-child"]
+names = ["app-init","cellbox","service-vfs","service-machine-pin","service-config","service-input","platform","ls","cat","echo","ps","phase02-session-parent","phase02-session-child"]
 prov = {
     "status": "private fixture provenance; not acceptance",
     "source_head": subprocess.check_output(["git","rev-parse","HEAD"],cwd=root,text=True).strip(),

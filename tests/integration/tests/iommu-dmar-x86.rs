@@ -157,7 +157,7 @@ fn x86_pc_discovers_the_vtd_base_from_acpi_dmar() {
     require_marker(
         &qemu,
         &disk,
-        "Init: machine pin: first boot",
+        "machine-pin: first boot",
         "the strict profile did not pin its first boot",
     );
 
@@ -330,11 +330,6 @@ fn x86_pc_enables_vtd_interrupt_remapping() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_vtd_ir(&iso, &disk.to_string_lossy());
 
-    require_marker(
-        &qemu,
-        &disk,
-        ACTIVE,
-        "VT-d DMA isolation must be active",
-    );
+    require_marker(&qemu, &disk, ACTIVE, "VT-d DMA isolation must be active");
     let _ = std::fs::remove_file(&disk);
 }

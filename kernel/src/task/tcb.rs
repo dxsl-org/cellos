@@ -332,6 +332,11 @@ pub struct Task {
     /// its signed image name is its launch identity (`caller_launch_state`).
     /// False for caller-supplied ELF/Mem bytes, sandbox paths and aliases.
     pub(crate) launch_named: bool,
+    /// `(cell_id, generation)` of the Cell whose governed launch published this
+    /// root, fixed at publication; `None` for kernel/boot spawns and threads.
+    /// Keys the narrow "a launcher registers its own child" rules
+    /// (`MACHINE_PIN` from trusted init, `OCEL_JS`/`OCEL_PDF` from `activator`).
+    pub(crate) spawner: Option<(u64, u64)>,
     /// Canonical context retained for this committed root lifetime.
     pub(crate) child_context: Option<Vec<u8>>,
     pub(crate) child_stdio: [abi::cell_session::ObjectRefV1; 4],
@@ -616,6 +621,7 @@ impl Task {
             inherited_argv: None,
             image: None,
             launch_named: false,
+            spawner: None,
             child_context: None,
             child_stdio: [abi::cell_session::ObjectRefV1::ZERO; 4],
             allowed_drivers,

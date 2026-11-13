@@ -89,7 +89,7 @@ rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init" "$KERNEL" "$ISO_OUT"
 echo "==> Building base cells (init, shell, vfs, config, platform, drivers, sys tools)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc -p app-init
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform
+    -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p driver-nvme -p driver-e1000 -p app-sys-tools
 
@@ -102,6 +102,7 @@ done
 CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
+    "$REL/service-machine-pin"
     "$REL/service-config"
     "$REL/service-input"
     "$REL/platform"
@@ -115,6 +116,7 @@ CELL_BINARIES=(
 CELL_IMAGE_PATHS=(
     /bin/cellbox
     /bin/vfs
+    /bin/machine-pin
     /bin/config
     /bin/input
     /bin/platform

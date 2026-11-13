@@ -155,6 +155,12 @@ DEV_POLICY = [
     ("/bin/net",         0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/net-broker",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_PEER),
     ("/bin/supervisor",  0, 0, 1, 0, 0, 0,     0, 0, 1),
+    # Phase 13: the endpoints that left init. The machine-pin cell holds nothing
+    # (433 and the pin store are keyed on the live MACHINE_PIN provider); the Ocel
+    # activator and the test fixture launcher are lifecycle parents (spawn only).
+    ("/bin/machine-pin", 0, 0, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/activator",   0, 0, 1, 0, 0, 0,     0, 0, 0),
+    ("/bin/fixture-launcher", 0, 0, 1, 0, 0, 0, 0, 0, 0),
     ("/bin/hypervisor",  0, 0, 0, 1, 0, 0,     0, 0, 0, 0, 0, *NET_L2),
     # Shell holds no ambient lifecycle authority; exact child launch ceilings
     # are reviewed in kernel/src/loader/launch_profile.rs.

@@ -237,7 +237,7 @@ export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none="${BINDGEN_EXTRA_CLANG_ARGS_
 echo "==> Building cells (private target dir)"
 if [[ -z "$CANDIDATE" ]]; then
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
-        -p service-vfs -p service-config -p service-input -p service-platform \
+        -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
         -p driver-nvme -p driver-e1000 -p service-net -p app-sys-tools
     if [[ "$KSSH" != 1 ]]; then
         # Phase 12: kms holds the host-trust store `cellbox ssh` reads; default features.
@@ -278,12 +278,12 @@ if [[ -z "$CANDIDATE" ]]; then
 fi
 
 CELL_BINARIES=(
-    "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
+    "$REL/cellbox" "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" "$REL/service-net"
     "$REL/echo" "$REL/phase04-terminal-driver" "$REL/service-kms"
 )
 CELL_IMAGE_PATHS=(
-    /bin/cellbox /bin/vfs /bin/config /bin/input
+    /bin/cellbox /bin/vfs /bin/machine-pin /bin/config /bin/input
     /bin/platform /bin/nvme /bin/e1000 /bin/net
     /bin/echo /bin/phase04-terminal-driver /bin/kms
 )

@@ -50,7 +50,8 @@ pub static EXACT_RULES: &[PathRule] = &[
         allow_write_all: false,
     },
     // ADR-0029 §3: the machine fingerprint pin. Only the live `MACHINE_PIN`
-    // provider (trusted init) is admitted (`access::machine_pin`).
+    // provider (the Cell trusted init launched as `machine-pin`, Phase 13) is
+    // admitted (`access::machine_pin`).
     PathRule {
         prefix: "/srv/.cellos-machine",
         allow_read_all: false,

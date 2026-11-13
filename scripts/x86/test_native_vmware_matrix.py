@@ -191,7 +191,7 @@ NONCE = "S3LANE-run-cell"
 
 
 def lane_boot_record(index, cpus=2, **override):
-    pin = "Init: machine pin: first boot — recorded 6b80bc658c66" if index == 1 else "Init: machine pin: match 6b80bc658c66"
+    pin = "machine-pin: first boot — recorded 6b80bc658c66" if index == 1 else "machine-pin: match 6b80bc658c66"
     rec = {"boot": index, "errors": [], "prompt_seconds": 4.0, "stopped": True, "rejected": [],
            "markers": ["[ INFO] [x86-gate] board=x86_64-vm soc-profile=x86_64-vm source=cmdline dma_isolation=Optional",
                        f"[ INFO] [x86-smp] topology online={cpus} processor_ids=0;1 qualified=yes",
@@ -242,7 +242,7 @@ class LaneVerdictTests(unittest.TestCase):
             rec["markers"] = [line for line in rec["markers"] if text not in line]
             return rec
         cases = (without("board=x86_64-vm"), without("topology online="), without("block driver registered"),
-                 without("/mnt/sd volume mounted"), without("machine pin: match"),
+                 without("/mnt/sd volume mounted"), without("machine-pin: match"),
                  lane_boot_record(2, markers=lane_boot_record(2)["markers"] + ["Init: SAFE MODE — x"]),
                  lane_boot_record(2, rejected=["kernel panic"]), lane_boot_record(2, stopped=False),
                  lane_boot_record(2, errors=["power-off: x"]))

@@ -1,0 +1,15 @@
+[package]
+name = "service-activator"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+api = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+ocel-service-proto = { path = "../../../libs/ocel-service-proto", version = "0.1.0" }
+ocel-pdf-proto = { path = "../../../libs/ocel-pdf-proto", version = "0.1.0" }
+dom-arena = { path = "../../../libs/dom-arena", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

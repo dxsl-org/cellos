@@ -103,9 +103,10 @@ def build(args):
         inputs_before = source_inputs()
         save(root / "inputs.json", inputs_before)
         run(common + ["-p", "app-init"])
+        run(common + ["-p", "service-machine-pin"])
         run(common + ["-p", "service-vfs", "-p", "app-bench", "--bin", "service-vfs", "--bin", "bench", "--bin", "bench-probe"] + (["--features", "app-bench/g1-cpu-workload"] if args.g1 else []))
         release = root / "target/x86_64-unknown-none/release"
-        artifacts = [release / name for name in ("app-init", "service-vfs", "bench", "bench-probe")]
+        artifacts = [release / name for name in ("app-init", "service-vfs", "service-machine-pin", "bench", "bench-probe")]
         run([sys.executable, "scripts/cellos-sign", "--quiet", "--objcopy", "objcopy", "--sign"] + [str(p) for p in artifacts])
         signed = {p.name: digest(p) for p in artifacts}
         for count in args.counts:
@@ -118,7 +119,7 @@ def build(args):
             (override / "autoload.toml").write_text('version = 1\n\n[[cells]]\nname = "bench"\npath = "/bin/bench"\nargs = ["' + role + '"]\nenabled = true\nrequired = true\nrestart = "never"\n')
             (override / "p01_manifest.bin").write_bytes(b"".join(bytes.fromhex(signed[n]) for n in ("app-init", "bench", "bench-probe")))
             run([sys.executable, "scripts/sign-policy.py", "--out", str(override / "POLICY.BIN")])
-            pairs = [str(release / "service-vfs"), "/bin/vfs", str(release / "bench"), "/bin/bench", str(release / "bench-probe"), "/bin/bench-probe"]
+            pairs = [str(release / "service-vfs"), "/bin/vfs", str(release / "service-machine-pin"), "/bin/machine-pin", str(release / "bench"), "/bin/bench", str(release / "bench-probe"), "/bin/bench-probe"]
             for name, target in (("services.toml", "/etc/cellos/services.toml"), ("autoload.toml", "/etc/cellos/autoload.toml"), ("POLICY.BIN", "/POLICY.BIN")):
                 pairs.extend([str(override / name), target])
             run([sys.executable, "tools/mkfat32.py", str(override / "kernel_fs.img")] + pairs)

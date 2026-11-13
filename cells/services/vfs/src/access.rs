@@ -33,8 +33,7 @@ use guest_disk::live_hypervisor_matches;
 pub(crate) use guest_disk::{contains_guest_disk, is_guest_disk_path, GUEST_DISK_PATH};
 use kms::{contains_kms_namespace, is_canonical_policy_path, is_kms_store_rule, live_kms_matches};
 use machine_pin::{
-    contains_machine_pin_namespace, is_machine_pin_namespace_path, is_machine_pin_store_rule,
-    live_machine_pin_matches,
+    contains_machine_pin_namespace, is_machine_pin_store_rule, live_machine_pin_matches,
 };
 pub use rules::PathRule;
 use srv_owner::{
@@ -89,22 +88,11 @@ impl AccessTable {
     ///
     /// `/srv/cellos/kms` and `/srv/.cellos-machine` are narrower than the broad
     /// `/srv/` prefix: only the live KMS, respectively `MACHINE_PIN`, service
-    /// instance may touch them. The mutate flag is required everywhere except
-    /// for [`Self::is_machine_pin_writer`].
+    /// instance may touch them. The mutate flag is required everywhere, the
+    /// pin store included: the `machine-pin` Cell declares `VfsMutate` and
+    /// holds W on its boot edge (Phase 13), so no caller is exempt.
     pub fn can_write(&self, caller: Caller, path: &str) -> bool {
-        (caller.may_mutate() || self.is_machine_pin_writer(caller, path))
-            && self.decide(caller, path, AccessKind::Write)
-    }
-
-    /// The one write admitted without `CALLER_FLAG_VFS_MUTATE`: a canonical
-    /// path inside `/srv/.cellos-machine` from the live `MACHINE_PIN`
-    /// provider. The kernel accepts that registration only from trusted init
-    /// naming itself, and init runs with a permit-all allowlist, which never
-    /// attests the mutate flag. Every other caller and path is unchanged.
-    pub(crate) fn is_machine_pin_writer(&self, caller: Caller, path: &str) -> bool {
-        is_canonical_policy_path(path)
-            && is_machine_pin_namespace_path(path)
-            && live_machine_pin_matches(caller, self.service_lookup)
+        caller.may_mutate() && self.decide(caller, path, AccessKind::Write)
     }
 
     /// Whether `caller` may write to the guest system disk image.

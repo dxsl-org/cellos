@@ -1,7 +1,8 @@
 //! x86_64 machine fingerprint pinning (ADR-0029 §3, plan 261031-1241 phase 03).
 //!
-//! Init compares the kernel's machine facts (syscall 433) with
-//! `/srv/.cellos-machine/pin` before any configured service starts. Lanes:
+//! The `machine-pin` Cell init launches after the VFS (Phase 13) compares the
+//! kernel's machine facts (syscall 433) with `/srv/.cellos-machine/pin`, and
+//! init withholds every configured service in safe mode. Lanes:
 //!
 //! * `pc_pin_match_change_confirm_sequence` — one disk, four boots of the
 //!   `x86_64-pc` image with VT-d: first boot pins; an unchanged reboot matches
@@ -33,13 +34,13 @@ use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 240;
 const PROMPT: &str = "Cellos >";
-const FIRST_BOOT: &str = "Init: machine pin: first boot";
-const MATCH: &str = "Init: machine pin: match ";
-const MISMATCH: &str = "Init: machine pin: mismatch";
+const FIRST_BOOT: &str = "machine-pin: first boot";
+const MATCH: &str = "machine-pin: match ";
+const MISMATCH: &str = "machine-pin: mismatch";
 const SAFE_MODE: &str = "Init: SAFE MODE";
 const NET_LAUNCHED: &str = "Init: net launched.";
 const E1000_LAUNCHED: &str = "Init: e1000 launched.";
-const E1000_ADDED: &str = "Init: machine pin: pci +8086:100e 02:00:00";
+const E1000_ADDED: &str = "machine-pin: pci +8086:100e 02:00:00";
 const PC_REFUSAL: &str = "[iommu] DMA isolation REQUIRED by board x86_64-pc";
 
 fn repo_root() -> PathBuf {
@@ -53,7 +54,10 @@ fn repo_root() -> PathBuf {
 /// The `x86_64-pc` image (`VICELL_PC_ISO` overrides).
 fn pc_iso() -> String {
     std::env::var("VICELL_PC_ISO").unwrap_or_else(|_| {
-        repo_root().join("build/x86-pc-lane/vicell-x86-pc.iso").to_string_lossy().into_owned()
+        repo_root()
+            .join("build/x86-pc-lane/vicell-x86-pc.iso")
+            .to_string_lossy()
+            .into_owned()
     })
 }
 
@@ -64,7 +68,10 @@ fn q35_iso() -> String {
 
 fn prerequisites_ok(iso: &str) -> bool {
     let iso_ok = PathBuf::from(iso).exists();
-    let qemu_ok = std::process::Command::new(qemu_x86_binary()).arg("--version").output().is_ok();
+    let qemu_ok = std::process::Command::new(qemu_x86_binary())
+        .arg("--version")
+        .output()
+        .is_ok();
     if !iso_ok {
         eprintln!("SKIP machine-pin-x86: x86_64 ISO not built ({iso})");
     }
@@ -86,7 +93,9 @@ impl Disk {
             CTR.fetch_add(1, Ordering::Relaxed)
         ));
         let mut command = std::process::Command::new("python3");
-        command.arg(repo_root().join("scripts/x86/machine_pin_disk.py")).arg(&path);
+        command
+            .arg(repo_root().join("scripts/x86/machine_pin_disk.py"))
+            .arg(&path);
         if corrupt_pin {
             command.arg("--corrupt-pin");
         }
@@ -97,7 +106,10 @@ impl Disk {
 
     /// A plain 64 MiB disk with no partitions, so no `/srv`.
     fn blank() -> Self {
-        let path = std::env::temp_dir().join(format!("vicell_machine_pin_blank_{}.img", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "vicell_machine_pin_blank_{}.img",
+            std::process::id()
+        ));
         let file = std::fs::File::create(&path).expect("create blank disk");
         file.set_len(64 * 1024 * 1024).expect("size blank disk");
         Self(path)
@@ -111,20 +123,30 @@ impl Disk {
 impl Drop for Disk {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
-        let _ = std::fs::remove_file(PathBuf::from(format!("{}.srv-receipt.json", self.0.display())));
+        let _ = std::fs::remove_file(PathBuf::from(format!(
+            "{}.srv-receipt.json",
+            self.0.display()
+        )));
     }
 }
 
 fn require(qemu: &QemuRunner, marker: &str, context: &str) {
     qemu.wait_for(marker, BOOT_TIMEOUT).unwrap_or_else(|error| {
-        panic!("{context}: marker {marker:?} absent: {error}\n--- serial output ---\n{}", qemu.dump())
+        panic!(
+            "{context}: marker {marker:?} absent: {error}\n--- serial output ---\n{}",
+            qemu.dump()
+        )
     });
 }
 
 fn require_after(qemu: &QemuRunner, marker: &str, checkpoint: usize, context: &str) {
-    qemu.wait_for_after(marker, checkpoint, BOOT_TIMEOUT).unwrap_or_else(|error| {
-        panic!("{context}: marker {marker:?} absent: {error}\n--- serial output ---\n{}", qemu.dump())
-    });
+    qemu.wait_for_after(marker, checkpoint, BOOT_TIMEOUT)
+        .unwrap_or_else(|error| {
+            panic!(
+                "{context}: marker {marker:?} absent: {error}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// Run one shell command after the prompt and wait for `marker` in its output.
@@ -136,7 +158,10 @@ fn shell(qemu: &mut QemuRunner, command: &str, marker: &str, context: &str) {
 
 /// The 12 hex digits after `key` on the first line containing `marker`.
 fn digest_after(serial: &str, marker: &str, key: &str) -> String {
-    let line = serial.lines().find(|line| line.contains(marker)).expect("marker line present");
+    let line = serial
+        .lines()
+        .find(|line| line.contains(marker))
+        .expect("marker line present");
     let rest = line.split(key).nth(1).expect("key on marker line");
     let digest: String = rest.chars().take_while(char::is_ascii_hexdigit).collect();
     assert_eq!(digest.len(), 12, "short digest on {line:?}");
@@ -148,11 +173,21 @@ fn digest_after(serial: &str, marker: &str, key: &str) -> String {
 fn settle(qemu: &QemuRunner) -> String {
     std::thread::sleep(std::time::Duration::from_secs(3));
     let serial = qemu.dump();
-    const EVIDENCE: [&str; 8] = [
-        "[x86-gate]", "Intel VT-d:", "[iommu] DMA isolation", "machine pin", "SAFE MODE", "launched.", "OS ready",
+    const EVIDENCE: [&str; 9] = [
+        "[x86-gate]",
+        "Intel VT-d:",
+        "[iommu] DMA isolation",
+        "machine pin",
+        "machine-pin",
+        "SAFE MODE",
+        "launched.",
+        "OS ready",
         ".cellos-machine",
     ];
-    for line in serial.lines().filter(|line| EVIDENCE.iter().any(|key| line.contains(key))) {
+    for line in serial
+        .lines()
+        .filter(|line| EVIDENCE.iter().any(|key| line.contains(key)))
+    {
         eprintln!("[machine-pin] | {}", line.trim_end());
     }
     assert!(!serial.contains("[KERNEL PANIC]"), "kernel panic\n{serial}");
@@ -178,11 +213,29 @@ fn pc_pin_match_change_confirm_sequence() {
         require(&qemu, FIRST_BOOT, "first boot did not record the pin");
         require(&qemu, "Init: OS ready.", "first boot withheld services");
         require(&qemu, PROMPT, "no shell after first boot");
-        shell(&mut qemu, "machine pin", "machine pin: state=first-boot-recorded", "status after first boot");
-        shell(&mut qemu, "cat /srv/.cellos-machine/pin", "cat: /srv/.cellos-machine/pin: Permission denied", "read attempt");
-        shell(&mut qemu, "ls /srv/.cellos-machine", "ls: cannot access '/srv/.cellos-machine'", "list attempt");
+        shell(
+            &mut qemu,
+            "machine pin",
+            "machine pin: state=first-boot-recorded",
+            "status after first boot",
+        );
+        shell(
+            &mut qemu,
+            "cat /srv/.cellos-machine/pin",
+            "cat: /srv/.cellos-machine/pin: Permission denied",
+            "read attempt",
+        );
+        shell(
+            &mut qemu,
+            "ls /srv/.cellos-machine",
+            "ls: cannot access '/srv/.cellos-machine'",
+            "list attempt",
+        );
         let serial = settle(&qemu);
-        assert!(!serial.contains(SAFE_MODE), "first boot entered safe mode\n{serial}");
+        assert!(
+            !serial.contains(SAFE_MODE),
+            "first boot entered safe mode\n{serial}"
+        );
         digest_after(&serial, FIRST_BOOT, "recorded ")
     };
 
@@ -191,43 +244,121 @@ fn pc_pin_match_change_confirm_sequence() {
         let mut qemu = boot(&iso, &disk, true, None);
         require(&qemu, MATCH, "unchanged reboot did not match");
         require(&qemu, PROMPT, "no shell after the matching boot");
-        shell(&mut qemu, "machine pin --confirm", "machine pin: refused NotSafeMode", "confirm outside safe mode");
-        shell(&mut qemu, "rm /srv/.cellos-machine/pin", "rm: cannot remove '/srv/.cellos-machine/pin'", "tamper attempt");
-        shell(&mut qemu, "machine pin", "machine pin: state=match", "status after the matching boot");
+        shell(
+            &mut qemu,
+            "machine pin --confirm",
+            "machine pin: refused NotSafeMode",
+            "confirm outside safe mode",
+        );
+        shell(
+            &mut qemu,
+            "rm /srv/.cellos-machine/pin",
+            "rm: cannot remove '/srv/.cellos-machine/pin'",
+            "tamper attempt",
+        );
+        shell(
+            &mut qemu,
+            "machine pin",
+            "machine pin: state=match",
+            "status after the matching boot",
+        );
         let serial = settle(&qemu);
-        assert_eq!(digest_after(&serial, MATCH, "match "), pinned, "match names another digest");
-        assert!(serial.contains(NET_LAUNCHED), "the network did not start on a match\n{serial}");
-        assert!(!serial.contains(SAFE_MODE), "a match entered safe mode\n{serial}");
+        assert_eq!(
+            digest_after(&serial, MATCH, "match "),
+            pinned,
+            "match names another digest"
+        );
+        assert!(
+            serial.contains(NET_LAUNCHED),
+            "the network did not start on a match\n{serial}"
+        );
+        assert!(
+            !serial.contains(SAFE_MODE),
+            "a match entered safe mode\n{serial}"
+        );
     }
 
     // 3. An added e1000 is a mismatch naming the PCI set: safe mode, no network.
     {
         let mut qemu = boot(&iso, &disk, true, Some("e1000"));
-        require(&qemu, MISMATCH, "the tamper attempt removed the pin, or e1000 was not detected");
-        require(&qemu, E1000_ADDED, "the diff does not name the added PCI function");
+        require(
+            &qemu,
+            MISMATCH,
+            "the tamper attempt removed the pin, or e1000 was not detected",
+        );
+        require(
+            &qemu,
+            E1000_ADDED,
+            "the diff does not name the added PCI function",
+        );
         require(&qemu, SAFE_MODE, "a mismatch did not enter safe mode");
-        require(&qemu, "machine pin --confirm' then reboot", "safe mode banner names the confirm procedure");
+        require(
+            &qemu,
+            "machine pin --confirm' then reboot",
+            "safe mode banner names the confirm procedure",
+        );
         require(&qemu, PROMPT, "no console shell in safe mode");
-        shell(&mut qemu, "machine pin --confirm", "machine pin: recorded ", "console confirm");
-        require(&qemu, "Init: machine pin: re-confirmed", "init did not re-pin");
+        shell(
+            &mut qemu,
+            "machine pin --confirm",
+            "machine pin: recorded ",
+            "console confirm",
+        );
+        require(
+            &qemu,
+            "machine-pin: re-confirmed",
+            "the machine-pin cell did not re-pin",
+        );
         let serial = settle(&qemu);
-        assert!(serial.contains("required services withheld"), "withheld list missing\n{serial}");
-        assert!(!serial.contains(NET_LAUNCHED), "net started in safe mode\n{serial}");
-        assert!(!serial.contains(E1000_LAUNCHED), "the NIC driver started in safe mode\n{serial}");
-        assert!(!serial.contains("Init: OS ready."), "OS ready in safe mode\n{serial}");
+        assert!(
+            serial.contains("required services withheld"),
+            "withheld list missing\n{serial}"
+        );
+        assert!(
+            !serial.contains(NET_LAUNCHED),
+            "net started in safe mode\n{serial}"
+        );
+        assert!(
+            !serial.contains(E1000_LAUNCHED),
+            "the NIC driver started in safe mode\n{serial}"
+        );
+        assert!(
+            !serial.contains("Init: OS ready."),
+            "OS ready in safe mode\n{serial}"
+        );
         assert!(!serial.contains(FIRST_BOOT), "the pin was lost\n{serial}");
-        assert!(!serial.contains("Init: machine pin: pci -"), "only a function was added\n{serial}");
-        assert!(!serial.contains("Init: machine pin: changed "), "only the PCI set changed\n{serial}");
+        assert!(
+            !serial.contains("machine-pin: pci -"),
+            "only a function was added\n{serial}"
+        );
+        assert!(
+            !serial.contains("machine-pin: changed "),
+            "only the PCI set changed\n{serial}"
+        );
     }
 
     // 4. After confirm, the next boot with e1000 matches and starts the network.
     let qemu = boot(&iso, &disk, true, Some("e1000"));
     require(&qemu, MATCH, "the re-confirmed pin did not match");
-    require(&qemu, NET_LAUNCHED, "the network did not start after re-confirmation");
+    require(
+        &qemu,
+        NET_LAUNCHED,
+        "the network did not start after re-confirmation",
+    );
     let serial = settle(&qemu);
-    assert!(!serial.contains(SAFE_MODE), "safe mode after re-confirmation\n{serial}");
-    assert_ne!(digest_after(&serial, MATCH, "match "), pinned, "the pin did not change");
-    assert!(!serial.contains(MISMATCH), "mismatch after re-confirmation\n{serial}");
+    assert!(
+        !serial.contains(SAFE_MODE),
+        "safe mode after re-confirmation\n{serial}"
+    );
+    assert_ne!(
+        digest_after(&serial, MATCH, "match "),
+        pinned,
+        "the pin did not change"
+    );
+    assert!(
+        !serial.contains(MISMATCH),
+        "mismatch after re-confirmation\n{serial}"
+    );
 }
 
 #[test]
@@ -238,12 +369,22 @@ fn pc_corrupt_record_enters_safe_mode() {
     }
     let disk = Disk::new(true);
     let qemu = boot(&iso, &disk, true, None);
-    require(&qemu, "Init: machine pin: record unreadable", "a corrupt record was not refused");
+    require(
+        &qemu,
+        "machine-pin: record unreadable",
+        "a corrupt record was not refused",
+    );
     require(&qemu, SAFE_MODE, "a corrupt record did not enter safe mode");
     require(&qemu, PROMPT, "no console shell in safe mode");
     let serial = settle(&qemu);
-    assert!(!serial.contains(FIRST_BOOT), "a corrupt record was re-pinned automatically\n{serial}");
-    assert!(!serial.contains(NET_LAUNCHED), "net started in safe mode\n{serial}");
+    assert!(
+        !serial.contains(FIRST_BOOT),
+        "a corrupt record was re-pinned automatically\n{serial}"
+    );
+    assert!(
+        !serial.contains(NET_LAUNCHED),
+        "net started in safe mode\n{serial}"
+    );
 }
 
 #[test]
@@ -254,12 +395,27 @@ fn pc_without_iommu_enters_safe_mode() {
     }
     let disk = Disk::new(false);
     let qemu = boot(&iso, &disk, false, None);
-    require(&qemu, PC_REFUSAL, "the strict profile did not refuse untranslated DMA");
-    require(&qemu, "Init: machine pin: store unavailable", "the unreachable store was not named");
-    require(&qemu, SAFE_MODE, "no store under the strict profile did not enter safe mode");
+    require(
+        &qemu,
+        PC_REFUSAL,
+        "the strict profile did not refuse untranslated DMA",
+    );
+    require(
+        &qemu,
+        "machine-pin: store unavailable",
+        "the unreachable store was not named",
+    );
+    require(
+        &qemu,
+        SAFE_MODE,
+        "no store under the strict profile did not enter safe mode",
+    );
     require(&qemu, PROMPT, "no console shell in safe mode");
     let serial = settle(&qemu);
-    assert!(!serial.contains(NET_LAUNCHED), "net started in safe mode\n{serial}");
+    assert!(
+        !serial.contains(NET_LAUNCHED),
+        "net started in safe mode\n{serial}"
+    );
 }
 
 #[test]
@@ -270,11 +426,22 @@ fn q35_without_a_store_warns_and_continues() {
     }
     let disk = Disk::blank();
     let qemu = boot(&iso, &disk, false, None);
-    require(&qemu, "Init: machine pin disabled", "q35 without a store did not warn");
-    require(&qemu, "Init: OS ready.", "q35 without a store did not continue");
+    require(
+        &qemu,
+        "machine-pin: disabled",
+        "q35 without a store did not warn",
+    );
+    require(
+        &qemu,
+        "Init: OS ready.",
+        "q35 without a store did not continue",
+    );
     require(&qemu, PROMPT, "no shell");
     let serial = settle(&qemu);
-    assert!(!serial.contains(SAFE_MODE), "q35 entered safe mode without a store\n{serial}");
+    assert!(
+        !serial.contains(SAFE_MODE),
+        "q35 entered safe mode without a store\n{serial}"
+    );
 }
 
 #[test]
@@ -291,11 +458,22 @@ fn q35_vtd_removal_names_the_dmar_and_vtd_fields() {
         settle(&qemu);
     }
     let qemu = boot(&iso, &disk, false, None);
-    require(&qemu, "Init: machine pin: changed dmar.present: 1 -> 0", "dmar.present not named");
-    require(&qemu, "Init: machine pin: changed vtd.active: 1 -> 0", "vtd.active not named");
+    require(
+        &qemu,
+        "machine-pin: changed dmar.present: 1 -> 0",
+        "dmar.present not named",
+    );
+    require(
+        &qemu,
+        "machine-pin: changed vtd.active: 1 -> 0",
+        "vtd.active not named",
+    );
     require(&qemu, SAFE_MODE, "the VT-d change did not enter safe mode");
     let serial = settle(&qemu);
-    assert!(!serial.contains(NET_LAUNCHED), "net started in safe mode\n{serial}");
+    assert!(
+        !serial.contains(NET_LAUNCHED),
+        "net started in safe mode\n{serial}"
+    );
 }
 
 #[test]
@@ -322,9 +500,19 @@ fn q35_unbound_root_port_nic_is_in_the_pci_set() {
         "the Platform Cell did not name the unbound NIC",
     );
     require(&qemu, MISMATCH, "the root-port NIC did not change the pin");
-    require(&qemu, "Init: machine pin: pci +1022:2000 02:00:00", "the diff does not name the unbound NIC");
+    require(
+        &qemu,
+        "machine-pin: pci +1022:2000 02:00:00",
+        "the diff does not name the unbound NIC",
+    );
     require(&qemu, SAFE_MODE, "a mismatch did not enter safe mode");
     let serial = settle(&qemu);
-    assert!(!serial.contains("Init: machine pin: pci -"), "only a function was added\n{serial}");
-    assert!(!serial.contains("Init: machine pin: changed "), "only the PCI set changed\n{serial}");
+    assert!(
+        !serial.contains("machine-pin: pci -"),
+        "only a function was added\n{serial}"
+    );
+    assert!(
+        !serial.contains("machine-pin: changed "),
+        "only the PCI set changed\n{serial}"
+    );
 }

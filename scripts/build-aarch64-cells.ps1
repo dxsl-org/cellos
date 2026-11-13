@@ -186,12 +186,13 @@ if ($BoardRpi3) {
     cargo build --release -p driver-dwc2-usb --bin driver-dwc2-usb --bin driver-lan9514 --target $target 2>&1 | Select-Object -Last 5
     Assert-CellBuild 'driver-dwc2-usb/driver-lan9514' $LASTEXITCODE
 
-    # Browser stack: desktop shell + native Ocel viewer + its Tier 2 JS engine service.
-    # All three talk to the compositor over ViSurface IPC, so they are board-agnostic
-    # aarch64 cells (no RPi3-specific device model needed).
-    Write-Host "Building desktop + ocel + ocel-js (browser stack)..."
-    cargo build --release -p desktop -p ocel -p ocel-js --target $target 2>&1 | Select-Object -Last 5
-    Assert-CellBuild 'desktop/ocel/ocel-js' $LASTEXITCODE
+    # Browser stack: desktop shell + native Ocel viewer + its Tier 2 JS engine service,
+    # plus the engine activator that starts the engine on demand (OCEL_ACTIVATOR).
+    # The viewer and engine talk to the compositor over ViSurface IPC, so they are
+    # board-agnostic aarch64 cells (no RPi3-specific device model needed).
+    Write-Host "Building desktop + ocel + ocel-js + activator (browser stack)..."
+    cargo build --release -p desktop -p ocel -p ocel-js -p service-activator --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'desktop/ocel/ocel-js/service-activator' $LASTEXITCODE
 }
 if ($AiModel -or $AiCells) {
     # The inference service needs `large-arena` for a checkpoint this side of 8 MiB, and the oracle
@@ -203,6 +204,14 @@ if ($AiModel -or $AiCells) {
     Write-Host "Building ai-test (Spec 24 oracle cell)..."
     cargo build --release -p ai-test --target $target 2>&1 | Select-Object -Last 5
     Assert-CellBuild 'ai-test' $LASTEXITCODE
+
+    if (-not $BoardRpi3) {
+        # Launches /bin/ai-test from the boot plan (init no longer does); RPi3
+        # images never auto-ran the boot test fixtures.
+        Write-Host "Building fixture-launcher..."
+        cargo build --release -p fixture-launcher --target $target 2>&1 | Select-Object -Last 5
+        Assert-CellBuild 'fixture-launcher' $LASTEXITCODE
+    }
 }
 
 Write-Host "Building app-init..."
@@ -271,7 +280,8 @@ if ($BoardRpi3) {
         @{ Bin = "fb-console";          Dst = "/bin/fb-console"  },
         @{ Bin = "desktop";             Dst = "/bin/desktop"     },
         @{ Bin = "ocel";                Dst = "/bin/ocel"        },
-        @{ Bin = "ocel-js";             Dst = "/bin/ocel-js"     }
+        @{ Bin = "ocel-js";             Dst = "/bin/ocel-js"     },
+        @{ Bin = "service-activator";   Dst = "/bin/activator"   }
     )
 }
 if ($StorageTest) {
@@ -282,6 +292,9 @@ if ($AiModel -or $AiCells) {
         @{ Bin = "service-ai"; Dst = "/bin/ai"      },
         @{ Bin = "ai-test";    Dst = "/bin/ai-test" }
     )
+    if (-not $BoardRpi3) {
+        $cells += @(@{ Bin = "fixture-launcher"; Dst = "/bin/fixture-launcher" })
+    }
 }
 
 # Sign cell binaries with Ed25519 dev key (F1/F5 policy check)
@@ -346,7 +359,9 @@ foreach ($c in $cells) {
 }
 
 if ($AiModel -or $AiCells) {
-    foreach ($required in @('service-ai', 'ai-test')) {
+    $aiRequired = @('service-ai', 'ai-test')
+    if (-not $BoardRpi3) { $aiRequired += 'fixture-launcher' }
+    foreach ($required in $aiRequired) {
         if ($required -notin $found) {
             throw "AI lane requested but $required is missing from the image inputs"
         }

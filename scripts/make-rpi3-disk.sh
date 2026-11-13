@@ -57,6 +57,7 @@ CELLS=(
     "desktop"
     "ocel"
     "ocel-js"
+    "service-activator"
     "cellbox"
     "service-compositor"
     "service-vfs"

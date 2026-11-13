@@ -1,13 +1,15 @@
 use alloc::string::String;
+use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use api::retirement::{reason, RetirementState, ViRetirementV1};
 use api::services::proto::supervisor::{OWNER_EXITED_LEN, OWNER_EXITED_NOTICE};
 use api::syscall::service;
 use cellos_boot_config::RestartPolicy;
 use ostd::io::println;
 use ostd::service::provider_tid;
-use ostd::syscall::{sys_query_retirement, SyscallError};
+use ostd::syscall::{sys_query_retirement, SyscallError, SyscallResult};
 
-use crate::service_table::{self, now_ticks, Service};
+use crate::pin_gate::SafeConsole;
+use crate::service_table::{self, now_ticks, task_alive, Service};
 
 const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
@@ -96,39 +98,40 @@ pub(crate) fn await_verdict(dead: usize) -> Result<ViRetirementV1, SyscallError>
     }
 }
 
-/// Supervise `services` forever. `pin` is the machine pin endpoint once the
-/// gate has run; its frames are answered before any other handler sees them.
-pub(crate) fn run(
-    services: &mut [Service],
-    mut pin: Option<&mut crate::machine_pin::Endpoint>,
-) -> ! {
-    let mut activator = crate::activation::Activator::new();
+/// One death record: the dead task and its exit reason. Init answers no
+/// request (Phase 13: the activation and machine-pin endpoints are Cells), so
+/// every other message is dropped. Only the kernel-written ABSENCE of a caller
+/// trailer plus independently observed death makes a record: an ordinary
+/// caller cannot forge an exit.
+fn next_death() -> Option<(usize, u64)> {
+    let mut bytes = [0u8; 64 + CALLER_IDENTITY_LEN];
+    let SyscallResult::Ok(sender) = ostd::syscall::sys_recv_attested(0, &mut bytes) else {
+        return None;
+    };
+    if sender == 0
+        || sender == usize::MAX
+        || CallerIdentity::from_recv_buf(&bytes).is_some()
+        || task_alive(sender) != Some(false)
+    {
+        return None;
+    }
+    Some((sender, u64::from_le_bytes(bytes[..8].try_into().unwrap())))
+}
+
+/// Supervise `services` forever. `console` is the safe-mode console the
+/// machine-pin Cell is told about; it is re-announced after a restart.
+pub(crate) fn run(services: &mut [Service], console: Option<SafeConsole>) -> ! {
     loop {
-        restart_pending(services);
-        let Some(message) = activator.next_message() else {
+        if restart_pending(services) {
+            if let Some(console) = console.as_ref() {
+                console.announce(services);
+            }
+        }
+        let Some((dead, reason)) = next_death() else {
             ostd::task::yield_now();
             continue;
         };
-        if let Some(pin) = pin.as_deref_mut() {
-            if pin.handle(&message, services) {
-                continue;
-            }
-        }
-        if activator.handle(message) {
-            continue;
-        }
-        // Ordinary attested caller messages are never exit notifications.
-        // Even a missing trailer is insufficient without independent liveness
-        // evidence for a watched service/root/provider.
-        if message.identity.is_some()
-            || crate::activation::task_alive(message.sender) != Some(false)
-        {
-            continue;
-        }
-        let dead = message.sender;
         // Exit reasons retain their existing clean/crash restart semantics.
-        let reason = message.reason();
-
         let Some(index) = services
             .iter()
             .position(|service| service.tid == Some(dead))
@@ -202,7 +205,10 @@ pub(crate) fn run(
     }
 }
 
-fn restart_pending(services: &mut [Service]) {
+/// Restart every pending service whose dependencies are available; `true`
+/// when one was restarted.
+fn restart_pending(services: &mut [Service]) -> bool {
+    let mut restarted = false;
     // Choose the first eligible entry afresh after each attempt. A pending
     // provider is unavailable until its exact new instance is ready, so this
     // yields a stable dependency order even for forward TOML references.
@@ -215,6 +221,7 @@ fn restart_pending(services: &mut [Service]) {
         service.restart_pending = false;
         println("Init: service died — restarting...");
         if service_table::spawn(service).is_some() {
+            restarted = true;
             println(if service.spec.path == "/bin/hypervisor" {
                 "Init: hypervisor restarted."
             } else {
@@ -231,6 +238,7 @@ fn restart_pending(services: &mut [Service]) {
             }
         }
     }
+    restarted
 }
 
 fn relay_hypervisor_exit(dead: usize) {

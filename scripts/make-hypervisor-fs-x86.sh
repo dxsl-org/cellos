@@ -62,7 +62,7 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
     "${INIT_FEATURE_ARGS[@]}" \
-    -p app-init -p app-cellbox -p service-config \
+    -p app-init -p app-cellbox -p service-machine-pin -p service-config \
     -p service-platform -p driver-nvme -p driver-e1000 \
     -p service-net -p service-hypervisor \
     "${HOSTILE_PACKAGE_ARGS[@]}"
@@ -71,7 +71,7 @@ RUSTFLAGS="-C relocation-model=pic" cargo build --release \
 source "$(dirname "$0")/lib-sign-cells.sh"
 echo "[make-hv-fs-x86] Signing x86_64 cells..."
 SIGN_TARGETS=()
-for b in app-init service-vfs service-config cellbox platform driver-nvme driver-e1000 service-net hypervisor supervisor; do
+for b in app-init service-vfs service-machine-pin service-config cellbox platform driver-nvme driver-e1000 service-net hypervisor supervisor; do
     if [[ -f "$BIN_DIR/$b" ]]; then
         SIGN_TARGETS+=("$BIN_DIR/$b")
     fi
@@ -99,6 +99,7 @@ add_required_cell() {
 
 add_required_cell app-init /bin/init
 add_required_cell service-vfs /bin/vfs
+add_required_cell service-machine-pin /bin/machine-pin
 add_required_cell service-config /bin/config
 add_required_cell cellbox /bin/cellbox
 add_required_cell platform /bin/platform
@@ -155,7 +156,7 @@ if ! grep -q -- '--- /bin ---' "$POLICY_TMP/fat-layout.txt"; then
     cat "$POLICY_TMP/fat-layout.txt" >&2
     exit 1
 fi
-for required in init platform nvme e1000 net vfs hypervisor; do
+for required in init platform nvme e1000 net vfs machine-pin hypervisor; do
     if ! grep -Fq -- "LFN '$required'" "$POLICY_TMP/fat-layout.txt"; then
         echo "FAIL: kernel_fs.img does not contain /bin/$required" >&2
         cat "$POLICY_TMP/fat-layout.txt" >&2

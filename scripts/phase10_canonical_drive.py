@@ -471,7 +471,8 @@ class Headless:
         names = [r["name"] for r in rows]
         self.boot_ps = names
         always = [c["name"] for c in services if c.get("restart") == "always"] + [c["name"] for c in autoload]
-        early = {"init", "vfs", "nvme", "ahci", "platform"}  # kernel/init block-table cells (not in the toml plan)
+        # kernel/init block-table cells and init's fixed post-VFS machine-pin endpoint (not in the toml plan)
+        early = {"init", "vfs", "machine-pin", "nvme", "ahci", "platform"}
         allowed = set(want) | early
         m.chk("ps-required-running", set(always) | {"init", "vfs"} <= set(names), (always, names))
         m.chk("ps-only-planned-cells", set(names) <= allowed, sorted(set(names) - allowed))

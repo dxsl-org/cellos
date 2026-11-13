@@ -5,8 +5,9 @@
 # What differs from the production build:
 #   - service-vfs is compiled with --features test-hooks  (2 KiB quota)
 #   - app-vfs-test is compiled with --features test-hooks (includes quota test)
-#   - app-init    is compiled normally — vfs-test spawn is unconditional in main.rs
-#   - kernel_fs.img embeds the test-hooks cell binaries + vfs-test
+#   - app-init    is compiled normally; fixture-launcher (default features) spawns
+#     /bin/vfs-test from the boot plan
+#   - kernel_fs.img embeds the test-hooks cell binaries + vfs-test + fixture-launcher
 #   - kernel is built with EMBEDDED_OVERRIDE pointing at the test-hooks image dir
 #
 # Everything builds under its own cargo target directory (target\test-hooks):
@@ -39,10 +40,10 @@ Write-Host "==> Building base cells (no test-hooks)..."
 cargo build --release -p app-cellbox -p service-config 2>&1 | Select-Object -Last 3
 
 # ── Step 2: build test-hooks variants of vfs and vfs-test.
-# init is built without features; vfs-test spawn is unconditional in init/main.rs
-# (silently returns NotFound in production images that do not contain vfs-test).
-Write-Host "==> Building init and test-hooks cells (vfs, vfs-test, atomic-publication-probe)..."
-cargo build --release -p app-init 2>&1 | Select-Object -Last 3
+# init is built without features; /bin/fixture-launcher (default features) spawns
+# vfs-test, and init launches the launcher only because this image packages it.
+Write-Host "==> Building init, fixture-launcher and test-hooks cells (vfs, vfs-test, atomic-publication-probe)..."
+cargo build --release -p app-init -p fixture-launcher 2>&1 | Select-Object -Last 3
 cargo build --release -p service-vfs   --features test-hooks 2>&1 | Select-Object -Last 3
 cargo build --release -p app-vfs-test  --features test-hooks 2>&1 | Select-Object -Last 3
 cargo build --release -p atomic-publication-probe 2>&1 | Select-Object -Last 3
@@ -50,6 +51,7 @@ cargo build --release -p atomic-publication-probe 2>&1 | Select-Object -Last 3
 # Verify all required binaries exist.
 $required = @{
     "app-init"                   = "$rel\app-init"
+    "fixture-launcher"           = "$rel\fixture-launcher"
     "service-vfs (test-hooks)"  = "$rel\service-vfs"
     "app-vfs-test (test-hooks)" = "$rel\vfs-test"
     "atomic-publication-probe" = "$rel\atomic-publication-probe"
@@ -63,9 +65,10 @@ foreach ($kv in $required.GetEnumerator()) {
     }
 }
 
-# The atomic probe is spawned through the normal signature gate, so sign the
-# fresh test-only artifact before placing it in VIFS1.
-python "$root\scripts\cellos-sign" --sign "$rel\atomic-publication-probe" `
+# The atomic probe and the fixture launcher are spawned through the normal
+# signature gate (the launcher's edges are keyed on its signed identity), so sign
+# the fresh test-only artifacts before placing them in VIFS1.
+python "$root\scripts\cellos-sign" --sign "$rel\atomic-publication-probe" "$rel\fixture-launcher" `
     --objcopy riscv-none-elf-objcopy
 
 # ── Step 3: assemble kernel_fs.img from test-hooks binaries.
@@ -84,6 +87,7 @@ python "$tools\mkfat32.py" `
     "$rel\service-vfs"    "/bin/vfs" `
     "$rel\service-config" "/bin/config" `
     "$rel\vfs-test"       "/bin/vfs-test" `
+    "$rel\fixture-launcher" "/bin/fixture-launcher" `
     "$rel\atomic-publication-probe" "/bin/atomic-probe" `
     "$tmpDir\hostname"    "/etc/hostname"
 
@@ -94,7 +98,7 @@ Write-Host "   kernel_fs.img: $([math]::Round((Get-Item "$th_dir\kernel_fs.img")
 
 # The kernel statically embeds init via include_bytes!(EMBEDDED_OUT_DIR/init) separate
 # from kernel_fs.img.  Copy the freshly compiled app-init so the kernel's INIT_ELF
-# static gets the test-hooks init (which includes the /bin/vfs-test spawn).
+# static gets the freshly built init.
 Copy-Item "$rel\app-init" "$th_dir\init" -Force
 Write-Host "   init binary:   $([math]::Round((Get-Item "$th_dir\init").Length / 1KB, 0)) KB"
 

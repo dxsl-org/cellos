@@ -1,16 +1,19 @@
-//! Init's fixed-target activation endpoint. Readiness uses exact operations,
-//! so waiting for a provider never consumes init's requests or death records.
+//! The fixed-target Ocel activation endpoint (`OCEL_ACTIVATOR`), served on
+//! [`ostd::service::serve`]. Readiness uses exact operations, so waiting for a
+//! provider never consumes requests or death records; a nested VFS exchange
+//! defers every other message and the handler replays them after the turn.
 use api::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
 use api::ipc::{VfsRequest, VfsResponse};
 use api::syscall::{service, ProcessInfo};
 use ocel_service_proto::{Engine, Failure, Request, Response, FRAME_BYTES};
-use ostd::ipc::{self, IpcTakeResult, IpcTerminal};
+use ostd::ipc::{self, Incoming, IpcTakeResult, IpcTerminal};
+use ostd::service::{Handler, Wait};
 use ostd::syscall::{self, SyscallResult};
 
-use crate::activation_state::{Effects, Owner, Phase, Principal, Provider, State};
-use crate::service_table::now_ticks;
+use crate::now_ticks;
+use crate::state::{Effects, Owner, Phase, Principal, Provider, State};
 
-pub(crate) const PAYLOAD_BYTES: usize = 64;
+const PAYLOAD_BYTES: usize = 64;
 const MESSAGE_BYTES: usize = PAYLOAD_BYTES + CALLER_IDENTITY_LEN;
 const DEFERRED_MESSAGES: usize = 32;
 const READY_TICKS: u64 = 300;
@@ -22,7 +25,8 @@ const POLL_LIMIT: usize = 100_000;
 pub(crate) struct Message {
     pub sender: usize,
     pub bytes: [u8; MESSAGE_BYTES],
-    pub operation: Option<ipc::IpcOpId>,
+    /// The reply route, captured before any later receive could replace it.
+    pub incoming: Incoming,
     pub identity: Option<CallerIdentity>,
     // A deferred request must attest/watch while its receive context is current.
     watched: Option<Owner>,
@@ -37,18 +41,39 @@ impl Message {
         } else {
             syscall::sys_try_recv_attested(mask, &mut bytes)
         };
-        // Capture before another receive can replace the kernel's request context.
-        let operation = ipc::current();
         match result {
             SyscallResult::Ok(sender) if sender != 0 && sender != usize::MAX => Some(Self {
                 sender,
-                operation,
-                identity: CallerIdentity::from_recv_buf(&bytes),
+                // Capture before another receive can replace the request context.
+                incoming: Incoming::current(sender),
+                identity: CallerIdentity::from_recv_buf(&bytes)
+                    .filter(|identity| identity.sender_tid == sender as u64),
                 bytes,
                 watched: None,
                 watch_prepared: false,
             }),
             _ => None,
+        }
+    }
+
+    /// One message `serve` received: an attested request (`identity`) or a
+    /// trailer-less record such as a kernel death notification (`None`).
+    fn served(
+        sender: usize,
+        incoming: Incoming,
+        identity: Option<CallerIdentity>,
+        payload: &[u8],
+    ) -> Self {
+        let mut bytes = [0u8; MESSAGE_BYTES];
+        let len = payload.len().min(PAYLOAD_BYTES);
+        bytes[..len].copy_from_slice(&payload[..len]);
+        Self {
+            sender,
+            incoming,
+            identity,
+            bytes,
+            watched: None,
+            watch_prepared: false,
         }
     }
 
@@ -61,10 +86,6 @@ impl Message {
                 cell_id: identity.cell_id,
                 generation: identity.generation,
             })
-    }
-
-    pub fn reason(&self) -> u64 {
-        u64::from_le_bytes(self.bytes[..8].try_into().unwrap())
     }
 }
 
@@ -87,9 +108,9 @@ impl Activator {
         }
     }
 
-    pub fn next_message(&mut self) -> Option<Message> {
+    fn next_deferred(&mut self) -> Option<Message> {
         if self.deferred_len == 0 {
-            return Message::receive(0, true);
+            return None;
         }
         let message = self.deferred[0].take();
         self.deferred.copy_within(1..self.deferred_len, 0);
@@ -134,6 +155,7 @@ impl Activator {
         if let Some(request) = Request::decode(&message.bytes[..FRAME_BYTES]) {
             let engine = request.engine();
             let Some(principal) = message.principal() else {
+                ostd::io::println("activator: unattested activation request denied.");
                 self.cancel_provisional(&message);
                 deliver(
                     &message,
@@ -157,6 +179,10 @@ impl Activator {
                 }
             };
             if let Err(failure) = result {
+                ostd::io::println(&alloc::format!(
+                    "activator: {engine:?} request from tid {} refused — {failure:?}",
+                    message.sender
+                ));
                 deliver(&message, Response::Error { engine, failure });
             } else if let Ok(response @ Response::Released { .. }) = result {
                 deliver(&message, response);
@@ -173,7 +199,7 @@ impl Activator {
                 let effects = self.state.owner_dead(message.sender);
                 self.apply(effects);
             }
-            ostd::io::println("Init: demand engine exited — leases revoked, no restart.");
+            ostd::io::println("activator: demand engine exited — leases revoked, no restart.");
             return true;
         }
         if self.state.watches_root(message.sender) {
@@ -322,8 +348,8 @@ impl Activator {
             return Err(Failure::Failed);
         }
         ostd::io::println(match engine {
-            Engine::JavaScript => "Init: demand QuickJS ready (Tier 2).",
-            Engine::Pdf => "Init: demand PDF ready (Tier 2).",
+            Engine::JavaScript => "activator: demand QuickJS ready (Tier 2).",
+            Engine::Pdf => "activator: demand PDF ready (Tier 2).",
         });
         Ok(())
     }
@@ -335,14 +361,14 @@ impl Activator {
                 || task_alive(provider.tid) == Some(false)
             {
                 self.state.terminated(provider);
-                ostd::io::println("Init: unused demand engine stopped.");
+                ostd::io::println("activator: unused demand engine stopped.");
             }
             // Failed termination retains Retiring until authenticated death.
         }
     }
 
     /// Same Stat -> shared Grant -> ReadFileGrant -> SpawnFromElf route as
-    /// ostd::sys_spawn_from_path, with bounded waits and retained init messages.
+    /// ostd::sys_spawn_from_path, with bounded waits and retained messages.
     fn spawn_via_vfs(&mut self, engine: Engine) -> Result<usize, Failure> {
         let vfs = ostd::service::provider_tid(service::VFS).ok_or(Failure::Unavailable)?;
         if self.poisoned_vfs == Some(vfs) {
@@ -422,6 +448,46 @@ impl Activator {
     }
 }
 
+impl Handler for Activator {
+    fn on_request(&mut self, request: ostd::service::Request<'_>) {
+        let message = Message::served(
+            request.sender(),
+            request.incoming(),
+            Some(*request.caller()),
+            request.payload(),
+        );
+        self.handle(message);
+    }
+
+    /// Kernel death records carry no trailer: a demand engine's or a watched
+    /// lease owner's root. `handle` acts only on independently observed death.
+    fn on_unattributed(&mut self, sender: usize, payload: &[u8]) {
+        if sender != 0 {
+            self.handle(Message::served(
+                sender,
+                Incoming::current(sender),
+                None,
+                payload,
+            ));
+        }
+    }
+
+    /// Replay what a nested VFS exchange deferred, in arrival order.
+    fn on_turn(&mut self) {
+        while let Some(message) = self.next_deferred() {
+            self.handle(message);
+        }
+    }
+
+    fn on_idle(&mut self) -> Wait {
+        if self.deferred_len == 0 {
+            Wait::Block
+        } else {
+            Wait::Poll
+        }
+    }
+}
+
 pub(crate) fn service_id(engine: Engine) -> u16 {
     match engine {
         Engine::JavaScript => service::OCEL_JS,
@@ -433,26 +499,10 @@ fn deliver(message: &Message, response: Response) -> bool {
     deliver_frame(message, &response.encode())
 }
 
-/// Reply to `message`: through its IPC operation when it came as one, else a
-/// bounded one-way send to the sender.
-pub(crate) fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
-    if let Some(operation) = message.operation {
-        return ipc::reply(operation, frame).is_ok();
-    }
-    let started = now_ticks();
-    for _ in 0..POLL_LIMIT {
-        if matches!(
-            syscall::sys_try_send(message.sender, frame),
-            SyscallResult::Ok(0)
-        ) {
-            return true;
-        }
-        if now_ticks().wrapping_sub(started) >= LEGACY_TICKS {
-            break;
-        }
-        ostd::task::yield_now();
-    }
-    false
+/// Reply to `message` without parking: through its IPC operation when it
+/// came as one, else posted to the sender's mailbox.
+fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
+    message.incoming.reply(frame).is_ok()
 }
 
 fn readiness(provider: Provider) -> bool {

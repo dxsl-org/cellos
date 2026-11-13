@@ -81,6 +81,14 @@ Drivers:
 - §7 correction: m1n1 is MIT only up to v1.9.9 and GPL-2.0-or-later from v2.0.0. "Permissively licensed m1n1 code" therefore means tag `v1.9.9` or earlier. OpenBSD's ISC `apl*` drivers are the primary permissive reference (ADR-0030 amendment of the same date).
 - Consequence line "realistically M1/M2" is confirmed. Asahi added M3 support in 2026-09; M4 still lacks PCIe/DART/NVMe and is parked.
 
+### Amendment 2026-11-13 — machine pin leaves init (Phase 13)
+
+- **Trust root.** The `MACHINE_PIN` provider is the Cell trusted init launched under the signed launch identity `machine-pin` (`/bin/machine-pin`, x86 only), no longer init itself. The kernel accepts the `MACHINE_PIN` registration only from trusted init, and only for its own live child (the launch publication records the spawning Cell) whose signed image names `machine-pin`. Only init holds a launch edge to `/bin/machine-pin`; the path has a boot row and no reviewed user-target row.
+- **433 gate.** `QueryMachineFacts` answers only the live `MACHINE_PIN` provider: the caller's Cell identity must equal the identity the registry binds to service id 20. `SpawnCap` alone is refused. No ABI number changes.
+- **Store.** The VFS rule is unchanged in shape: only the live provider reads or writes `/srv/.cellos-machine`. Its writes now need the attested mutate flag like every writer; the Cell declares `VfsMutate`, so the old mutate-flag exception for a permit-all init is removed.
+- **Gate and safe mode.** Init launches the Cell right after the VFS, registers it, and asks `MachinePinRequest::Gate` as a client; init answers no request. Init applies safe mode itself and fails closed (safe mode) when the Cell cannot be started or gives no answer, so every x86 image packages `/bin/machine-pin`.
+- **Re-confirmation.** `Confirm` is honoured only from the console shell init started: init sends its tid one way (`MachinePinRequest::ConsoleShell`, accepted only from init, whose tid the Cell receives on its command line) and re-sends it after restarting the shell or the Cell. Ops 3 (`Gate`), 4 (`ConsoleShell`) and response kind 4 were appended to the frame; existing frames are unchanged.
+
 ## Related
 
 - [ADR-0022](0022-intel-x86-64-c2c-only-direction.md): sole x86-64 direction and scheduling.

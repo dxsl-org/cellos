@@ -116,6 +116,9 @@ WORKERS = ("ls", "cat", "echo", "ps", "kill", "shutdown")
 HEADLESS_CELLS = (
     Cell("app-cellbox", "cellbox", (CELLBOX_PATH, ALIAS_PATH)),  # D10-5: one file, two entries
     Cell("service-vfs", "service-vfs", ("/bin/vfs",)),
+    # Phase 13 (ADR-0029): the machine-pin endpoint moved out of init. Init launches
+    # it right after VFS and fails closed without it, so every x86 image ships it.
+    Cell("service-machine-pin", "service-machine-pin", ("/bin/machine-pin",)),
     Cell("service-config", "service-config", ("/bin/config",)),
     Cell("service-input", "service-input", ("/bin/input",)),
     Cell("service-net", "service-net", ("/bin/net",)),

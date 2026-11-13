@@ -149,6 +149,8 @@ members = [
     "cells/services/ocel-js",
     "cells/services/ocel-quickjs",
     "cells/services/ocel-pdf",
+    "cells/services/machine-pin",
+    "cells/services/activator",
 
     # Cells - Tools (system + CLI)
     "cells/tools/init",
@@ -232,6 +234,7 @@ members = [
     "cells/tests/export-client",
     "cells/tests/tier2-grant-owner",
     "cells/tests/tier2-grant-receiver",
+    "cells/tests/fixture-launcher",
     "cells/tests/ai-test",
     "cells/tests/cpp-smoke",
     "cells/tests/tls-test",

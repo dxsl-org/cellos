@@ -63,6 +63,8 @@ pub fn authorize(
 ) -> Option<LaunchProfile> {
     let profile = match caller.name {
         "init" if caller.has_spawn => profiles::init_profile(route, target),
+        "activator" if caller.has_spawn => profiles::activator_profile(route, target),
+        "fixture-launcher" if caller.has_spawn => profiles::fixture_launcher_profile(route, target),
         #[cfg(feature = "phase02-terminal-profile")]
         "phase02-session-parent" | "phase02-session-child" => {
             profiles::phase02_session_profile(caller.name, route, target)

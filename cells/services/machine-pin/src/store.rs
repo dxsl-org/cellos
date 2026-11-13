@@ -1,7 +1,7 @@
 //! The pin store: `/srv/.cellos-machine/pin` on CellosFS `/srv` (P5).
 //!
-//! The VFS admits only the live `MACHINE_PIN` provider (init) to this
-//! namespace. No durability is claimed: a torn write reads back as an
+//! The VFS admits only the live `MACHINE_PIN` provider (this Cell) to this
+//! namespace, and its writes need the mutate flag like any other. No durability is claimed: a torn write reads back as an
 //! unreadable record, which is safe mode, never an automatic re-pin.
 //!
 //! The VFS answers the same IO error for an absent path and for a failed

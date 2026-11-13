@@ -198,7 +198,7 @@ SHUTDOWN_TIMEOUT = 30.0
 TYPE_DELAY = 0.005
 REJECT = ("kernel panic", "panicked at", "[fault] cell", "tier 2 admission: enabled")
 MARKER_KEYS = ("[x86-gate] board=", "[acpi] gates:", "[x86-smp] topology", "[driver_cell]",
-               "[vfs] FAT32", "Init: machine pin", "SAFE MODE", "[e1000]", "[e1000e]", "[igb]",
+               "[vfs] FAT32", "machine-pin:", "SAFE MODE", "[e1000]", "[e1000e]", "[igb]",
                "[vmxnet3]", "[virtio-net]", "[net]", "[net-bridge]", "[pcie]", "[platform]",
                "Ethernet", "class 2:0:0", "[ahci]", "[nvme]", "[pvscsi]", "[acpi] power",
                "[power]", "System shutting down", "shutdown:", "panic", "[fault]")
@@ -586,7 +586,7 @@ def boot_expectations(spec, index, rec):
     if spec["cpus"] > 1 and not seen(f"[x86-smp] topology online={spec['cpus']} "):
         errors.append(f"topology online={spec['cpus']} not reported")
     if spec["storage"]:
-        pin = "Init: machine pin: first boot" if index == 1 else "Init: machine pin: match"
+        pin = "machine-pin: first boot" if index == 1 else "machine-pin: match"
         for text in ("[driver_cell] block driver registered: tid=", "[vfs] FAT32 /mnt/sd volume mounted", pin):
             if not seen(text):
                 errors.append("missing marker: " + text)

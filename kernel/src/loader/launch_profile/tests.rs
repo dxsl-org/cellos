@@ -20,19 +20,118 @@ fn shell_edge(route: LaunchRoute, target: &str) -> LaunchProfile {
         .expect("cellbox launch edge must exist")
 }
 
+/// Phase 13: the demand engines are the activator's edges, not init's. Each
+/// edge keeps the engine's empty ceiling and needs lifecycle authority.
 #[test]
-fn pdf_engine_edge_cannot_grant_authority_or_boot_without_spawn() {
-    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
-        let profile = authorize(caller("init", true, false), route, "/bin/ocel-pdf")
-            .expect("init may launch the isolated PDF engine");
-        assert_eq!(profile.child_ceiling, LEGACY);
-        assert!(profile.requires_lifecycle_authority);
-        assert!(authorize(caller("init", false, false), route, "/bin/ocel-pdf").is_none());
-        assert!(authorize(caller("ocel", false, false), route, "/bin/ocel-pdf").is_none());
-        assert!(authorize(caller("ocel-pdf", true, false), route, "/bin/vfs").is_none());
+fn engine_edges_belong_to_the_activator_alone() {
+    for engine in ["/bin/ocel-js", "/bin/ocel-quickjs", "/bin/ocel-pdf"] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+            let profile = authorize(caller("activator", true, false), route, engine)
+                .expect("the activator launches the demand engines");
+            assert_eq!(profile.child_ceiling, LEGACY, "{engine}");
+            assert!(profile.requires_lifecycle_authority);
+            assert!(authorize(caller("activator", false, false), route, engine).is_none());
+            assert!(
+                authorize(caller("init", true, false), route, engine).is_none(),
+                "{engine}"
+            );
+            assert!(authorize(caller("ocel", false, false), route, engine).is_none());
+        }
+        for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
+            assert!(authorize(caller("activator", true, false), route, engine).is_none());
+        }
     }
-    for route in [LaunchRoute::Mem, LaunchRoute::Pinned] {
-        assert!(authorize(caller("init", true, false), route, "/bin/ocel-pdf").is_none());
+    for other in ["/bin/vfs", "/bin/cellbox", "/bin/ocel", "/bin/activator"] {
+        assert!(
+            authorize(caller("activator", true, false), LaunchRoute::Path, other).is_none(),
+            "{other}"
+        );
+    }
+    assert!(authorize(
+        caller("ocel-pdf", true, false),
+        LaunchRoute::Path,
+        "/bin/vfs"
+    )
+    .is_none());
+}
+
+/// Phase 13: init's fixed rows after the VFS, each on its own boot ceiling.
+#[test]
+fn init_launches_the_cells_that_left_it_on_their_boot_rows() {
+    let spawn = CapSet {
+        spawn: true,
+        ..LEGACY
+    };
+    for (target, ceiling) in [
+        ("/bin/machine-pin", LEGACY),
+        ("/bin/activator", spawn),
+        ("/bin/fixture-launcher", spawn),
+    ] {
+        for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+            let profile =
+                authorize(caller("init", true, false), route, target).expect("init edge exists");
+            assert_eq!(profile.child_ceiling, ceiling, "{target}");
+            assert!(profile.requires_lifecycle_authority);
+        }
+        // No other launcher reaches them: no reviewed user-target row.
+        for name in ["cellbox", "desktop", "activator", "fixture-launcher"] {
+            assert!(
+                authorize(caller(name, true, false), LaunchRoute::Path, target).is_none(),
+                "{name} -> {target}"
+            );
+        }
+    }
+}
+
+/// Phase 13: the fixture launcher holds the fixture edges init held, with the
+/// same ceilings; the Tier-2, export and grant-pair edges only under test-hooks.
+#[test]
+fn fixture_launcher_holds_the_former_init_fixture_edges() {
+    let launcher = |target| {
+        authorize(
+            caller("fixture-launcher", true, false),
+            LaunchRoute::Path,
+            target,
+        )
+    };
+    for target in [
+        "/bin/silo-test",
+        "/bin/ai-test",
+        "/bin/vfs-test",
+        "/bin/srv-test",
+        "/bin/std-smoke",
+    ] {
+        let profile = launcher(target).expect("boot test edge");
+        assert_eq!(profile.child_ceiling, boot_ceiling::boot_ceiling(target));
+        assert!(authorize(
+            caller("fixture-launcher", false, false),
+            LaunchRoute::Path,
+            target
+        )
+        .is_none());
+    }
+    for target in [
+        "/bin/tier2-smoke",
+        "/bin/tier2-exploit",
+        "/bin/cpp-smoke",
+        "/bin/tier2-rpc-provider",
+        "/bin/tier2-rpc-driver",
+        "/bin/edu-holder",
+        "/bin/export-client",
+        "/bin/silo",
+        "/bin/net-broker",
+    ] {
+        #[cfg(feature = "test-hooks")]
+        assert_eq!(
+            launcher(target).map(|profile| profile.child_ceiling),
+            Some(boot_ceiling::boot_ceiling(target)),
+            "{target}"
+        );
+        #[cfg(not(feature = "test-hooks"))]
+        assert!(launcher(target).is_none(), "{target}");
+    }
+    for target in ["/bin/vfs", "/bin/cellbox", "/bin/ocel-pdf", "/bin/curl"] {
+        assert!(launcher(target).is_none(), "{target}");
     }
 }
 

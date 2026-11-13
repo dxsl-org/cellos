@@ -1,7 +1,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::block_route::{ViBlockRouteV1, MAX_BLOCK_ROUTES};
-use api::syscall::service;
+use api::syscall::{service, ProcessInfo};
 use cellos_boot_config::{CellSpec, Registration, RestartPolicy};
 use ostd::syscall::{self, SyscallError, SyscallResult};
 
@@ -55,11 +55,48 @@ impl Service {
         })
     }
 
+    /// The ADR-0029 machine-pin Cell (x86), a fixed row launched right after
+    /// the VFS and registered by init as `MACHINE_PIN`. Its command line names
+    /// init, the only sender whose `ConsoleShell` notice it accepts.
+    pub(crate) fn machine_pin(init_tid: usize) -> Self {
+        Self::new(CellSpec {
+            name: String::from("machine-pin"),
+            path: String::from("/bin/machine-pin"),
+            args: alloc::vec![alloc::format!("init={init_tid}")],
+            enabled: true,
+            required: false,
+            restart: RestartPolicy::Always,
+            service_id: Some(service::MACHINE_PIN),
+            registration: Registration::Init,
+            after: Vec::new(),
+            ready_timeout_ticks: 500,
+        })
+    }
+
+    /// The Ocel engine activator, a fixed row launched after the gate and
+    /// registered by init as `OCEL_ACTIVATOR`. Optional: an image without
+    /// Ocel engines does not package it, and Ocel then reports the engine as
+    /// unavailable.
+    pub(crate) fn activator() -> Self {
+        Self::new(CellSpec {
+            name: String::from("activator"),
+            path: String::from("/bin/activator"),
+            args: Vec::new(),
+            enabled: true,
+            required: false,
+            restart: RestartPolicy::Always,
+            service_id: Some(service::OCEL_ACTIVATOR),
+            registration: Registration::Init,
+            after: Vec::new(),
+            ready_timeout_ticks: 500,
+        })
+    }
+
     pub(crate) fn available(&self) -> bool {
         self.spec.enabled
             && self.ready
             && self.tid.is_some_and(|tid| {
-                crate::activation::task_alive(tid) == Some(true)
+                task_alive(tid) == Some(true)
                     && match self.readiness {
                         Readiness::Spec => self
                             .spec
@@ -138,7 +175,7 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
     };
     service.ready = watched
         && registered
-        && crate::activation::task_alive(tid) == Some(true)
+        && task_alive(tid) == Some(true)
         && (service.spec.path != "/bin/vfs"
             || crate::configuration::wait_for_vfs(tid, service.spec.ready_timeout_ticks));
     // A one-shot application may complete before this check. Successful admission
@@ -148,6 +185,34 @@ pub(crate) fn spawn(service: &mut Service) -> Option<usize> {
         Some(tid)
     } else {
         None
+    }
+}
+
+/// Absence from a truncated process table is NOT proof of death. Most images
+/// fit the stack buffer; larger tables grow only for a liveness query, with a
+/// hard bound and fail-closed uncertainty.
+pub(crate) fn task_alive(tid: usize) -> Option<bool> {
+    let mut stack = [ProcessInfo::default(); 64];
+    let count = syscall::sys_get_procs(&mut stack).ok()?;
+    if let Some(row) = stack.iter().take(count).find(|row| row.id == tid) {
+        return Some(row.state != 3);
+    }
+    if count < stack.len() {
+        return Some(false);
+    }
+    let mut rows = alloc::vec![ProcessInfo::default(); 128];
+    loop {
+        let count = syscall::sys_get_procs(&mut rows).ok()?;
+        if let Some(row) = rows.iter().take(count).find(|row| row.id == tid) {
+            return Some(row.state != 3);
+        }
+        if count < rows.len() {
+            return Some(false);
+        }
+        if rows.len() >= 8192 {
+            return None;
+        }
+        rows.resize(rows.len() * 2, ProcessInfo::default());
     }
 }
 
@@ -163,7 +228,7 @@ pub(crate) fn wait_for_exact_registration(id: u16, expected_tid: usize, timeout:
         match ostd::service::provider_tid(id) {
             Some(tid) => return tid == expected_tid,
             None if now_ticks().wrapping_sub(started) >= timeout
-                || crate::activation::task_alive(expected_tid) == Some(false) =>
+                || task_alive(expected_tid) == Some(false) =>
             {
                 return false
             }
@@ -199,9 +264,7 @@ fn wait_for_block_route(tid: usize, timeout: u64) -> bool {
         if routes_name(&block_routes(), tid) {
             return true;
         }
-        if now_ticks().wrapping_sub(started) >= timeout
-            || crate::activation::task_alive(tid) == Some(false)
-        {
+        if now_ticks().wrapping_sub(started) >= timeout || task_alive(tid) == Some(false) {
             return false;
         }
         ostd::task::yield_now();

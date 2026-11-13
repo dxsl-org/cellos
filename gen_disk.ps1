@@ -126,7 +126,7 @@ Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
 Build-Cargo -What "robot-demo + robot-dashboard" -Packages @('robot-demo', 'robot-dashboard')
-Build-Cargo -What "fb-console + desktop + Ocel viewer" -Packages @('fb-console', 'desktop', 'ocel')
+Build-Cargo -What "fb-console + desktop + Ocel viewer + engine activator" -Packages @('fb-console', 'desktop', 'ocel', 'service-activator')
 if ($env:CELLOS_NO_OCEL_QUICKJS -ne "1") {
     Build-Cargo -What "Ocel optional QuickJS engine" -Packages @('ocel-quickjs')
 }
@@ -145,6 +145,8 @@ Build-Cargo -What "wx-test"  -Packages @('wx-test')    # W^X violation test cell
 # so it is the only place the "a sealed cell cannot use a path" guarantee can be
 # demonstrated on a running system rather than argued from the table's contents.
 Build-Cargo -What "vfs-test" -Packages @('app-vfs-test')
+# Launches /bin/vfs-test and /bin/ai-test from the boot plan (init no longer does).
+Build-Cargo -What "fixture-launcher" -Packages @('fixture-launcher')
 # Built here for the same reason posix-shim-test is: the signing section below
 # only Test-Path's these, so without a build step they are silently absent from
 # the disk and tests/integration/tests/hotswap-smoke.rs fails with
@@ -288,6 +290,7 @@ Add-CellToSign "$rel_dir/robot-dashboard"
 Add-CellToSign "$rel_dir/fb-console"
 Add-CellToSign "$rel_dir/desktop"
 Add-CellToSign "$rel_dir/ocel"
+Add-RequiredCellToSign "$rel_dir/service-activator" "service-activator"
 if ($env:CELLOS_NO_OCEL_QUICKJS -ne "1") { Add-CellToSign "$rel_dir/ocel-quickjs" }
 if ($env:CELLOS_NO_OCEL_PDF -ne "1") { Add-CellToSign "$rel_dir/ocel-pdf" }
 Add-CellToSign "$rel_dir/hypha-llm-gateway"
@@ -303,6 +306,7 @@ Add-CellToSign "$rel_dir/http-smoke"
 Add-CellToSign "$rel_dir/cfi-test"
 Add-CellToSign "$rel_dir/wx-test"
 Add-CellToSign "$rel_dir/vfs-test"
+Add-RequiredCellToSign "$rel_dir/fixture-launcher" "fixture-launcher"
 Add-RequiredCellToSign "$rel_dir/backend-supervisor" "backend-supervisor"
 Add-RequiredCellToSign "$rel_dir/backend-worker" "backend-worker"
 Add-RequiredCellToSign "$rel_dir/hotswap-demo-v1" "hotswap-demo-v1"
@@ -383,6 +387,7 @@ $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI s
 $desktop_bin   = "$rel_dir/desktop"
 $ocel_bin      = "$rel_dir/ocel"
 $ocel_quickjs_bin = "$rel_dir/ocel-quickjs"
+$activator_bin = "$rel_dir/service-activator" # Ocel engine activation (OCEL_ACTIVATOR)
 $robot_demo_bin = "$rel_dir/robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir/robot-dashboard"  # G1 ViUI v2 dashboard demo
 $hypha_llm_bin = "$rel_dir/hypha-llm-gateway" # Hypha P0 — LLM network gateway
@@ -405,6 +410,7 @@ $http_smoke_bin = "$rel_dir/http-smoke"      # ostd::http + ostd::json e2e gate 
 $cfi_test_bin   = "$rel_dir/cfi-test"        # Layer-2 CFI violation test (shell: `cfi-test`)
 $wx_test_bin    = "$rel_dir/wx-test"         # W^X violation test (shell: `wx-test`)
 $vfs_test_bin   = "$rel_dir/vfs-test"        # directory-capability pioneer (shell: `vfs-test`)
+$fixture_launcher_bin = "$rel_dir/fixture-launcher" # launches the boot test fixtures init used to start
 $hotswap_demo_v1_bin = "$rel_dir/hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir/hotswap-demo-v2"  # M4.1 hotswap demo cell v2
 $backend_supervisor_bin = "$rel_dir/backend-supervisor"  # B0 actor/supervisor witness (shell: `backend-supervisor`)
@@ -624,10 +630,13 @@ if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bin" }
 if (Test-Path $desktop_bin)     { $table_args += "/bin/desktop=$desktop_bin" }
 if (Test-Path $ocel_bin)        { $table_args += "/bin/ocel=$ocel_bin" }
+# The engine activator ships with the viewer, engines or not: a static-viewer image
+# still answers "engine unavailable" through it.
+if (Test-Path $ocel_bin)        { $table_args += "/bin/activator=$activator_bin" }
 if ((Test-Path "$rel_dir/ocel-pdf") -and ($env:CELLOS_NO_OCEL_PDF -ne "1")) {
     $table_args += "/bin/ocel-pdf=$rel_dir/ocel-pdf"
 }
-# Optional engines are activated by init only on demand. An image without
+# Optional engines are activated by /bin/activator only on demand. An image without
 # QuickJS is a static viewer, not a statement-matcher fallback.
 if ((Test-Path $ocel_quickjs_bin) -and ($env:CELLOS_NO_OCEL_QUICKJS -ne "1")) {
     $table_args += "/bin/ocel-quickjs=$ocel_quickjs_bin"
@@ -658,6 +667,7 @@ if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin
 if (Test-Path $cfi_test_bin)   { $table_args += "/bin/cfi-test=$cfi_test_bin" }
 if (Test-Path $wx_test_bin)    { $table_args += "/bin/wx-test=$wx_test_bin" }
 if (Test-Path $vfs_test_bin)   { $table_args += "/bin/vfs-test=$vfs_test_bin" }
+$table_args += "/bin/fixture-launcher=$fixture_launcher_bin"
 if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 if (Test-Path $tier2_smoke_bin)   { $table_args += "/bin/tier2-smoke=$tier2_smoke_bin" }

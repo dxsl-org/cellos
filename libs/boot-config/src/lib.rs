@@ -278,13 +278,25 @@ fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
         {
             return Err(invalid(cell, "path (expected /bin/<basename>)"));
         }
-        const FIXED_NAMES: &[&str] = &["init", "vfs", "block", "nvme", "ahci"];
+        // Init's fixed rows (Phase 13 adds the machine-pin Cell and the Ocel
+        // activator after the VFS) are never configured entries.
+        const FIXED_NAMES: &[&str] = &[
+            "init",
+            "vfs",
+            "block",
+            "nvme",
+            "ahci",
+            "machine-pin",
+            "activator",
+        ];
         const FIXED_PATHS: &[&str] = &[
             "/bin/init",
             "/bin/vfs",
             "/bin/block",
             "/bin/nvme",
             "/bin/ahci",
+            "/bin/machine-pin",
+            "/bin/activator",
             "/bin/ocel-js",
             "/bin/ocel-quickjs",
             "/bin/ocel-pdf",
@@ -301,6 +313,7 @@ fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
                     service::VFS
                         | service::BLOCK_DRIVER
                         | service::OCEL_ACTIVATOR
+                        | service::MACHINE_PIN
                         | service::OCEL_JS
                         | service::OCEL_PDF
                 )

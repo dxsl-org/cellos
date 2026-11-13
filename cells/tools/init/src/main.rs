@@ -1,5 +1,10 @@
 // Test builds only: a hosted `cargo test` gets std and libtest's entry, so init's
-// boot barriers, block-driver wait and activation decisions run as host unit tests.
+// boot barriers, block-driver wait, restart policy and safe set run as host unit tests.
+//
+// Init answers no service request (Phase 13): the Ocel activation endpoint is the
+// `activator` Cell, the ADR-0029 machine pin is the `machine-pin` Cell, and the test
+// fixtures are the `fixture-launcher` Cell. Init launches, registers and supervises;
+// its receive loop handles only kernel death records.
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 #![forbid(unsafe_code)]
@@ -41,27 +46,23 @@ api::declare_syscalls![
     Wait,
     GetTime,
     SetTimer,
+    // Services are read from the VFS into a Grant and spawned from those bytes.
     GrantAlloc,
-    // Demand activation uses the existing grant-backed VFS spawn route and
-    // kernel-attested root lifetime endpoints, never caller-provided identity.
     GrantShare,
     GrantFree,
     SpawnFromElf,
-    ForceExit,
     NotifyOnExit,
     RegisterService,
-    // The boot-order grant-pair launcher publishes each generation's command line
-    // (`StateStash`). It and the x86 bootstrap Platform lifetime barrier sample
-    // the existing process table (`GetProcs`).
+    // Every launch publishes the entry's structured command line (`StateStash`).
+    // Liveness checks and the x86 bootstrap Platform lifetime barrier sample the
+    // process table (`GetProcs`).
     StateStash,
     GetProcs,
 ];
 
-mod activation;
-mod activation_state;
 mod boot;
 mod configuration;
-mod machine_pin;
+mod pin_gate;
 mod service_table;
 mod supervisor;
 
@@ -79,11 +80,14 @@ fn cell_main() {
 }
 
 fn start_services() {
+    // Found before any spawn, while init and the kernel-spawned Platform are the
+    // only named tasks; the machine-pin Cell learns it from its command line.
+    let init_tid = own_tid();
     // Supervised block drivers go after every configured entry: launch and
     // autoload orders index the table from 1. Each early `supervisor::run`
     // below appends them first so a driver death is still watched.
     let mut block_drivers = boot::start_block_drivers();
-    let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 1 + block_drivers.len());
+    let mut services = Vec::with_capacity(cellos_boot_config::MAX_CELLS + 3 + block_drivers.len());
     services.push(service_table::Service::bootstrap_vfs());
     match service_table::spawn(&mut services[0]) {
         Some(_) => {}
@@ -129,36 +133,44 @@ fn start_services() {
             .into_iter()
             .map(service_table::Service::new),
     );
+    let autoload_end = services.len();
     services.append(&mut block_drivers);
+    // Phase 13 fixed rows after the VFS: the machine-pin Cell (x86) and the
+    // Ocel activator, launched in that order before any configured service.
+    let pin_index = cfg!(target_arch = "x86_64").then(|| {
+        services.push(service_table::Service::machine_pin(init_tid));
+        services.len() - 1
+    });
+    services.push(service_table::Service::activator());
+    let activator_index = services.len() - 1;
 
     // ADR-0029 §3: the machine pin gates every configured service. The VFS and
     // the boot-critical block drivers above are already running and stay so.
-    let init_tid = own_tid();
-    let mut pin = machine_pin::gate(init_tid);
-    if pin.safe_mode() {
-        pin.enter_safe_mode(&mut services, autoload_offset);
-        supervisor::run(&mut services, Some(&mut pin));
+    let decision = pin_gate::gate(&mut services, pin_index);
+    if decision.safe_mode {
+        let console = pin_gate::enter_safe_mode(
+            &mut services,
+            autoload_offset,
+            autoload_end,
+            &decision,
+            pin_index,
+        );
+        supervisor::run(&mut services, console);
+    }
+
+    // Optional: images without Ocel engines do not package the activator.
+    match service_table::spawn(&mut services[activator_index]) {
+        Some(_) => println("Init: activator launched."),
+        None => println("Init: activator unavailable — Ocel engines cannot be activated."),
     }
 
     if !launch_order(&mut services, &service_order, 1) {
         println("Init: required service failed — autoload and OS ready blocked.");
-        supervisor::run(&mut services, Some(&mut pin));
+        supervisor::run(&mut services, None);
     }
-
-    if !matches!(
-        ostd::syscall::sys_register_service(api::syscall::service::OCEL_ACTIVATOR, init_tid, 0),
-        ostd::syscall::SyscallResult::Ok(0)
-    ) {
-        println("Init: Ocel activator registration failed — autoload blocked.");
-        supervisor::run(&mut services, Some(&mut pin));
-    }
-
-    // Test fixtures retain their reviewed boot lanes. Production optional cells,
-    // including shell and hypervisor autostart, come exclusively from the plan.
-    boot::spawn_test_fixtures();
     if !required_services_available(&services[..autoload_offset]) {
         println("Init: required service lost before autoload — OS ready blocked.");
-        supervisor::run(&mut services, Some(&mut pin));
+        supervisor::run(&mut services, None);
     }
     println("Init: services spawned.");
     println("Init: service registry verified (init registration is publication, not application readiness).");
@@ -167,10 +179,10 @@ fn start_services() {
         || !required_services_available(&services)
     {
         println("Init: required cell unavailable — remaining autoload blocked.");
-        supervisor::run(&mut services, Some(&mut pin));
+        supervisor::run(&mut services, None);
     }
     println("Init: supervising services (auto-restart on crash)...");
-    supervisor::run(&mut services, Some(&mut pin))
+    supervisor::run(&mut services, None)
 }
 
 /// Init's own tid, found by name in the process table; 2 when the table

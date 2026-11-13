@@ -285,10 +285,10 @@ export BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none="${BINDGEN_EXTRA_CLANG_ARGS_
 
 echo "==> Building cells (private target dir)"
 # Binaries signed by an earlier run in this private dir are removed so each run signs fresh builds.
-rm -f "$REL"/{app-init,cellbox,terminal,service-vfs,service-config,service-input,platform,service-compositor,fb-console,desktop,files,ls,cat,echo,phase03-filter}
+rm -f "$REL"/{app-init,cellbox,terminal,service-vfs,service-machine-pin,service-config,service-input,platform,service-compositor,fb-console,desktop,files,ls,cat,echo,phase03-filter}
 if [[ -z "$CANDIDATE" ]]; then
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
-        -p app-cellbox -p service-vfs -p service-config -p service-input -p service-platform \
+        -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform \
         -p service-compositor -p desktop -p files -p fb-console -p terminal -p app-sys-tools -p app-phase03-filter
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
         -p app-init --features input,ui
@@ -300,13 +300,13 @@ fi
 
 # Plain cells are signed without the fixture variable; only cellbox and terminal need it.
 PLAIN_BINARIES=(
-    "$REL/service-vfs" "$REL/service-config" "$REL/service-input" "$REL/platform"
+    "$REL/service-vfs" "$REL/service-machine-pin" "$REL/service-config" "$REL/service-input" "$REL/platform"
     "$REL/service-compositor" "$REL/fb-console" "$REL/desktop" "$REL/files"
     "$REL/ls" "$REL/cat" "$REL/echo" "$REL/phase03-filter"
 )
 GUARDED_BINARIES=( "$REL/cellbox" "$REL/terminal" )
 CELL_IMAGE_PATHS=(
-    /bin/vfs /bin/config /bin/input /bin/platform
+    /bin/vfs /bin/machine-pin /bin/config /bin/input /bin/platform
     /bin/compositor /bin/fb-console /bin/desktop /bin/files
     /bin/ls /bin/cat /bin/echo /bin/p03-filter
     /bin/cellbox /bin/terminal
@@ -475,7 +475,7 @@ from pathlib import Path
 w, root, launch, accel, features = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 rel = w / "cells-target/x86_64-unknown-none/release"
-names = ["app-init", "cellbox", "terminal", "service-vfs", "service-config", "service-input", "platform",
+names = ["app-init", "cellbox", "terminal", "service-vfs", "service-machine-pin", "service-config", "service-input", "platform",
          "service-compositor", "fb-console", "desktop", "files", "ls", "cat", "echo", "phase03-filter"]
 prov = {
     "status": "private fixture provenance; not acceptance",

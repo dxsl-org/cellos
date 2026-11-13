@@ -164,7 +164,8 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "app-net-tools" -p app-net-tools
     build_cells "app-sys-tools" -p app-sys-tools
     build_cells "robot-demo + robot-dashboard" -p robot-demo -p robot-dashboard
-    build_cells "fb-console + desktop + Ocel viewer" -p fb-console -p desktop -p ocel
+    build_cells "fb-console + desktop + Ocel viewer + engine activator" -p fb-console -p desktop -p ocel \
+        -p service-activator
     if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
         build_cells "Ocel optional QuickJS engine" -p ocel-quickjs
     fi
@@ -180,6 +181,8 @@ if [[ $BUILD_CELLS -eq 1 ]]; then
     build_cells "cfi-test" -p cfi-test
     build_cells "wx-test" -p wx-test
     build_cells "vfs-test" -p app-vfs-test
+    # Launches /bin/vfs-test and /bin/ai-test from the boot plan (init no longer does).
+    build_cells "fixture-launcher" -p fixture-launcher
     build_cells "hotswap demos" -p hotswap-demo-v1 -p hotswap-demo-v2
     build_cells "posix-shim-test" -p app-posix-shim-test
     build_cells "tier2 test cells" -p tier2-smoke -p tier2-exploit
@@ -261,7 +264,7 @@ assert_absent_marker "$REL/tier2-smoke" "Grant registration denied fail-closed (
 # Required artifacts: gen_disk.ps1's Add-RequiredCellToSign list.
 for required in app-init cellbox service-vfs service-config service-kms supervisor \
                 bench viui-demo backend-supervisor backend-worker hotswap-demo-v1 \
-                hotswap-demo-v2 free hotswap; do
+                hotswap-demo-v2 free hotswap service-activator fixture-launcher; do
     if [[ ! -f "$REL/$required" ]]; then
         echo "FAIL: required artifact missing: $REL/$required — refusing to sign a partial image." >&2
         exit 1
@@ -284,10 +287,10 @@ for cell in app-init cellbox platform service-vfs service-config service-net ser
             service-net-broker service-compositor supervisor driver-nvme driver-e1000 \
             driver-virtio-net driver-virtio-blk driver-virtio-gpu service-ai service-httpd \
             ai-test service-input bench bench-probe capacity-probe heavy-probe curl wget nc mqtt ping app-sys-tools \
-            robot-demo robot-dashboard fb-console desktop ocel hypha-llm-gateway \
+            robot-demo robot-dashboard fb-console desktop ocel service-activator hypha-llm-gateway \
             hypha-core hypha-tool-fs hypha-tool-sys hypha-tool-spawn input-test \
             window-policy-probe viui-demo app-https-demo http-smoke cfi-test wx-test \
-            vfs-test backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 \
+            vfs-test fixture-launcher backend-supervisor backend-worker hotswap-demo-v1 hotswap-demo-v2 \
             recovery-authority recovery-worker recovery-client ls cat \
             echo ps kill shutdown free hotswap posix-shim-test tier2-smoke tier2-exploit tetris \
             tetris-c tetris-lua doom lua micropython; do
@@ -347,8 +350,8 @@ add_kfs "$REL/ocel" "/bin/ocel"
 if [[ "${CELLOS_NO_OCEL_PDF:-0}" != "1" ]]; then
     add_kfs "$REL/ocel-pdf" "/bin/ocel-pdf"
 fi
-# Optional Tier 2 engines are disk-resident, never boot-resident. Init activates
-# only the requested engine, using its kernel-loader route before the VFS route.
+# Optional Tier 2 engines are disk-resident, never boot-resident. /bin/activator
+# activates only the requested engine, using its kernel-loader route before the VFS route.
 if [[ "${CELLOS_NO_OCEL_QUICKJS:-0}" != "1" ]]; then
     add_kfs "$REL/ocel-quickjs"     "/bin/ocel-quickjs"
 fi
@@ -434,6 +437,9 @@ add_row "$REL/service-compositor"     "/bin/compositor"
 add_row "$REL/fb-console"             "/bin/fb-console"
 add_row "$REL/desktop"                "/bin/desktop"
 add_row "$REL/ocel"                   "/bin/ocel"
+# The Ocel engine activator ships with the viewer, engines or not: a static-viewer
+# image (no QuickJS, no PDF) still answers "engine unavailable" through it.
+add_row "$REL/service-activator"      "/bin/activator"
 if [[ "${CELLOS_NO_OCEL_PDF:-0}" != "1" ]]; then
     add_row "$REL/ocel-pdf" "/bin/ocel-pdf"
 fi
@@ -468,6 +474,7 @@ add_row "$REL/http-smoke"             "/bin/http-smoke"
 add_row "$REL/cfi-test"               "/bin/cfi-test"
 add_row "$REL/wx-test"                "/bin/wx-test"
 add_row "$REL/vfs-test"               "/bin/vfs-test"
+add_row "$REL/fixture-launcher"       "/bin/fixture-launcher"
 add_row "$REL/hotswap-demo-v1"        "/bin/hotswap-demo-v1"
 add_row "$REL/hotswap-demo-v2"        "/bin/hotswap-demo-v2"
 # The recovery witness cells are VIFS1-only: the P2 table is capped at 64 rows and
@@ -651,6 +658,8 @@ PY
 }
 verify_row "/bin/vfs"        "$REL/service-vfs"
 verify_row "/bin/vfs-test"   "$REL/vfs-test"
+verify_row "/bin/fixture-launcher" "$REL/fixture-launcher"
+verify_row "/bin/activator"  "$REL/service-activator"
 verify_row "/bin/tier2-smoke" "$REL/tier2-smoke"
 verify_row "/bin/tier2-exploit" "$REL/tier2-exploit"
 verify_row "/bin/posix-shim-test" "$REL/posix-shim-test"

@@ -16,7 +16,7 @@ pub(crate) fn wait_for_vfs(tid: usize, timeout: u64) -> bool {
     let mut recv = [0u8; 512];
     for _ in 0..10_000 {
         if ostd::service::provider_tid(api::syscall::service::VFS) != Some(tid)
-            || crate::activation::task_alive(tid) == Some(false)
+            || crate::service_table::task_alive(tid) == Some(false)
         {
             return false;
         }

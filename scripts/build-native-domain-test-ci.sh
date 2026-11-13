@@ -93,6 +93,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
     "$REL/vfs-test"         /bin/vfs-test \
+    "$REL/fixture-launcher" /bin/fixture-launcher \
     "$REL/service-net"      /bin/net \
     "$REL/driver-virtio-net" /bin/virtio-net \
     "$REL/atomic-publication-probe" /bin/atomic-probe \
@@ -113,7 +114,7 @@ grep -Fxq 'path = "/bin/input"' "$TMPDIR_KFS/boot-config/services.toml" || {
 # well-formed image whose destination paths went astray, and then the boot fails
 # as a confusing "cell not found".
 "$PYTHON_BIN" tools/inspect_fat.py "$DOMAIN_EMBED/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
-for required in "LFN 'vfs-test'" "LFN 'atomic-probe'" "LFN 'input'" "LFN 'tier2-smoke'" "LFN 'tier2-exploit'"; do
+for required in "LFN 'vfs-test'" "LFN 'fixture-launcher'" "LFN 'atomic-probe'" "LFN 'input'" "LFN 'tier2-smoke'" "LFN 'tier2-exploit'"; do
     if ! grep -q -- "$required" "$TMPDIR_KFS/fat-layout.txt"; then
         echo "FAIL: grant-pair kernel_fs.img lacks $required" >&2
         cat "$TMPDIR_KFS/fat-layout.txt" >&2

@@ -1111,11 +1111,12 @@ fn register_service_refuses_the_retired_block_driver_id() {
     });
 }
 
-/// ADR-0029 §3: `QueryMachineFacts` (433) is admitted past the allowlist,
-/// gated on SpawnCap, validates its arguments before computing anything,
-/// and reports "no facts" while no x86 profile is bound.
+/// ADR-0029 §3 (Phase 13 amendment): `QueryMachineFacts` (433) is admitted
+/// past the allowlist, answers only the live `MACHINE_PIN` provider (SpawnCap
+/// alone is refused), validates its arguments before computing anything, and
+/// reports "no facts" while no x86 profile is bound.
 #[test]
-fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
+fn query_machine_facts_is_gated_on_the_machine_pin_provider_with_typed_errors() {
     use abi::machine_facts::MACHINE_FACTS_CAPACITY as CAP;
     let syscall = map_syscall(ViSyscall::QueryMachineFacts as usize, 0x5000, CAP, 0, 0)
         .expect("QueryMachineFacts must decode");
@@ -1151,18 +1152,27 @@ fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
         spawn: true,
         ..CapSet::EMPTY
     };
-    for caps in [CapSet::EMPTY, spawn] {
+    for (caps, provider) in [
+        (CapSet::EMPTY, false),
+        (spawn, false),
+        (CapSet::EMPTY, true),
+    ] {
         with_scheduler_task_caps(0, caps, |tid| {
             assert_eq!(
                 check_allowlist(ViSyscall::QueryMachineFacts as usize, tid),
                 Ok(())
             );
-            if caps == CapSet::EMPTY {
+            let pin = abi::syscall::service::MACHINE_PIN;
+            if !provider {
                 let denied = query(tid, CAP, 0, 0);
                 assert_eq!(denied, Err(SyscallError::PermissionDenied));
                 assert_eq!(super::encode_ipc_result(denied), usize::MAX);
                 return;
             }
+            let (cell, generation) = super::live_cell_identity(tid).expect("live task");
+            assert!(crate::cell::service_registry::register(
+                pin, tid, cell, generation
+            ));
             for (out_len, a2, a3) in [
                 (CAP - 1, 0, 0),
                 (CAP + 1, 0, 0),
@@ -1181,6 +1191,8 @@ fn query_machine_facts_is_gated_on_spawn_with_typed_errors() {
             let missing = query(tid, CAP, 0, 0);
             assert_eq!(missing, Err(SyscallError::FileNotFound));
             assert_eq!(super::encode_ipc_result(missing), usize::MAX - 2);
+            crate::cell::service_registry::clear_tid(tid);
+            assert_eq!(query(tid, CAP, 0, 0), Err(SyscallError::PermissionDenied));
         });
     }
 }
@@ -1383,19 +1395,66 @@ fn system_power_checks_action_and_arguments_behind_the_gate() {
     });
 }
 
-/// ADR-0029 §3 (CP1 Q9): only trusted init, naming itself, may register
-/// `MACHINE_PIN`; a SpawnCap holder that is not init is refused.
-#[test]
-fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
-    use abi::syscall::service::MACHINE_PIN;
-    let spawn = CapSet {
+/// A scheduler with trusted init (tid 1, which other tests latch) and named
+/// roots at tids >= 120: `(tid, signed program, launched by init's Cell)`.
+/// Returns init's Cell identity; restores the previous scheduler afterwards.
+fn with_launched_children<F>(children: &[(usize, Option<&str>, bool)], f: F)
+where
+    F: FnOnce((u64, u64)),
+{
+    use abi::cell_image::{ImageIdentity, ANCHOR_DEV};
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let mut previous = SCHEDULER.lock();
+    let saved = previous.take();
+    let mut scheduler = Scheduler::new();
+    let mut init = Task::new(1, CellId(7), "init", alloc::vec::Vec::new());
+    CapSet {
         spawn: true,
-        ..CapSet::EMPTY
-    };
-    with_scheduler_task_caps(0, spawn, |tid| {
-        let register = |tid, target| {
+        ..CapSet::LEGACY_OBSERVE_MUTATE
+    }
+    .apply_to(&mut init);
+    let init_identity = (init.cell_id.0, init.cell_generation);
+    scheduler.tasks.insert(1, alloc::boxed::Box::new(init));
+    for &(tid, program, by_init) in children {
+        let mut task = Task::new(tid, CellId(tid as u64), "child", alloc::vec::Vec::new());
+        if let Some(program) = program {
+            let signed = ImageIdentity::signed([tid as u8; 32], ANCHOR_DEV, program.as_bytes())
+                .expect("valid image");
+            assert!(task.bind_image(signed));
+            task.launch_named = true;
+        }
+        task.spawner = by_init.then_some(init_identity);
+        scheduler.tasks.insert(tid, alloc::boxed::Box::new(task));
+    }
+    *previous = Some(scheduler);
+    drop(previous);
+    super::publish_trusted_init(1);
+
+    f(init_identity);
+
+    let mut restore = SCHEDULER.lock();
+    *restore = saved;
+}
+
+/// ADR-0029 §3 (Phase 13 amendment): only trusted init may register
+/// `MACHINE_PIN`, and only for its own live child signed as `machine-pin`.
+#[test]
+fn register_service_admits_machine_pin_only_for_inits_machine_pin_child() {
+    use abi::syscall::service::MACHINE_PIN;
+    let children = [
+        (120usize, Some("machine-pin"), true),
+        (121, Some("machine-pin"), false), // not launched by init
+        (122, Some("cellbox"), true),      // another program
+        (123, None, true),                 // unsigned bytes
+    ];
+    with_launched_children(&children, |_| {
+        assert!(
+            super::caller_is_trusted_init(1),
+            "tid 1 is the latched init"
+        );
+        let register = |caller, target| {
             super::handle_syscall(
-                tid,
+                caller,
                 Syscall::RegisterService {
                     service_id: MACHINE_PIN,
                     tid: target,
@@ -1403,32 +1462,100 @@ fn register_service_admits_machine_pin_only_from_trusted_init_itself() {
                 },
             )
         };
-        if super::TRUSTED_INIT_TID.load(core::sync::atomic::Ordering::Acquire) != tid {
+        for target in [1usize, 0, 121, 122, 123, 199] {
             assert_eq!(
-                register(tid, tid),
+                register(1, target),
                 Err(SyscallError::PermissionDenied),
-                "not init"
+                "target {target}"
             );
-            assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), None);
         }
-        super::publish_trusted_init(tid);
-        assert!(super::caller_is_trusted_init(tid));
         assert_eq!(
-            register(tid, tid + 1),
+            register(122, 120),
             Err(SyscallError::PermissionDenied),
-            "not itself"
+            "not init"
         );
-        assert_eq!(
-            register(tid, 0),
-            Err(SyscallError::PermissionDenied),
-            "not itself"
-        );
-        assert_eq!(register(tid, tid), Ok(0));
+        assert_eq!(crate::cell::service_registry::lookup(MACHINE_PIN), None);
+        assert_eq!(register(1, 120), Ok(0));
         assert_eq!(
             crate::cell::service_registry::lookup(MACHINE_PIN),
-            Some(tid)
+            Some(120)
         );
-        crate::cell::service_registry::clear_tid(tid);
+        crate::cell::service_registry::clear_tid(120);
+    });
+}
+
+/// Phase 13: the `activator` identity publishes exactly `OCEL_JS` and
+/// `OCEL_PDF`, and only for a live root it launched itself.
+#[test]
+fn register_service_admits_engine_ids_only_from_the_activator_for_its_child() {
+    use abi::syscall::service::{MACHINE_PIN, OCEL_JS, OCEL_PDF, VFS};
+    let children = [
+        (130usize, Some("activator"), true),
+        (131, Some("ocel-quickjs"), false),
+        (132, Some("ocel-pdf"), false),
+        (133, Some("ocel-pdf"), false), // launched by someone else
+        (134, Some("cellbox"), true),   // a non-activator spawner
+    ];
+    with_launched_children(&children, |_| {
+        {
+            let mut guard = SCHEDULER.lock();
+            let sched = guard.as_mut().expect("scheduler");
+            let activator = sched.tasks.get_mut(&130).expect("activator");
+            CapSet {
+                spawn: true,
+                ..CapSet::LEGACY_OBSERVE_MUTATE
+            }
+            .apply_to(activator);
+            let identity = (activator.cell_id.0, activator.cell_generation);
+            for tid in [131usize, 132] {
+                sched.tasks.get_mut(&tid).expect("engine").spawner = Some(identity);
+            }
+            // A second Cell whose program is not `activator` but that also
+            // launched an engine.
+            let other = sched.tasks.get_mut(&134).expect("other");
+            CapSet {
+                spawn: true,
+                ..CapSet::LEGACY_OBSERVE_MUTATE
+            }
+            .apply_to(other);
+            let other_identity = (other.cell_id.0, other.cell_generation);
+            sched.tasks.get_mut(&133).expect("engine").spawner = Some(other_identity);
+        }
+        let register = |caller, service_id, target| {
+            super::handle_syscall(
+                caller,
+                Syscall::RegisterService {
+                    service_id,
+                    tid: target,
+                    flags: 0,
+                },
+            )
+        };
+        assert_eq!(
+            register(130, OCEL_JS, 133),
+            Err(SyscallError::PermissionDenied)
+        );
+        assert_eq!(
+            register(130, OCEL_JS, 120),
+            Err(SyscallError::PermissionDenied)
+        );
+        assert_eq!(
+            register(134, OCEL_PDF, 133),
+            Err(SyscallError::PermissionDenied)
+        );
+        for id in [VFS, MACHINE_PIN] {
+            assert_eq!(
+                register(130, id, 131),
+                Err(SyscallError::PermissionDenied),
+                "{id}"
+            );
+        }
+        assert_eq!(register(130, OCEL_JS, 131), Ok(0));
+        assert_eq!(register(130, OCEL_PDF, 132), Ok(0));
+        assert_eq!(crate::cell::service_registry::lookup(OCEL_JS), Some(131));
+        assert_eq!(crate::cell::service_registry::lookup(OCEL_PDF), Some(132));
+        crate::cell::service_registry::clear_tid(131);
+        crate::cell::service_registry::clear_tid(132);
     });
 }
 
