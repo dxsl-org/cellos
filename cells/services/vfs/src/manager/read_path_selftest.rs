@@ -25,9 +25,9 @@ pub fn run() {
     let mut vfs = VfsManager::new();
     let _ = vfs.dirs.on_contact(CELL);
     vfs.dirs.mark_attested(CELL);
-    assert!(vfs.mkdir("/tmp/s72"));
+    assert!(vfs.mkdir("/tmp/s72").is_ok());
     for i in 0..ENTRIES {
-        assert!(vfs.write(&format!("/tmp/s72/{}", name(i)), b""));
+        assert!(vfs.write(&format!("/tmp/s72/{}", name(i)), b"").is_ok());
     }
     let dir = vfs.dirs.open_root(CELL, "/tmp/s72").expect("dir");
 
@@ -48,7 +48,7 @@ pub fn run() {
     assert_eq!(seen, expected);
     ostd::io::println("[vfs-dir-page] multi-page-listing-complete-only-on-last PASS");
 
-    assert!(vfs.write("/tmp/s72/created-after-open", b""));
+    assert!(vfs.write("/tmp/s72/created-after-open", b"").is_ok());
     let pages = walk(&mut vfs, dir);
     assert!(pages
         .iter()
@@ -74,7 +74,7 @@ pub fn run() {
         }
     };
     assert_eq!(state(&mut vfs), (0, false));
-    assert!(vfs.write(&format!("/tmp/s72/{first}"), b"new"));
+    assert!(vfs.write(&format!("/tmp/s72/{first}"), b"new").is_ok());
     assert_eq!(state(&mut vfs), (3, true));
     ostd::io::println("[vfs-dir-page] write-sets-file-modified PASS");
 }

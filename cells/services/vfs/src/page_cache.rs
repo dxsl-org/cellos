@@ -4,13 +4,15 @@
 //! Cache budget is derived from the cell's heap; see `MAX_CACHE_BYTES`.
 
 use alloc::collections::{BTreeMap, VecDeque};
+use types::block_wire::BlockOutcome;
 
 /// Raw partition-relative sector I/O beneath the cache.
 pub trait SectorDevice {
     /// Read `sector`; `false` when the device returned no data.
     fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool;
-    /// Write `sector`; `true` only when the device reported the write completed.
-    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool;
+    /// Write `sector`: `Completed` only when the device reported the write
+    /// completed; `Indeterminate` when the medium may hold it.
+    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> BlockOutcome;
 }
 
 /// Sector cache budget: a quarter of the cell's heap.
@@ -95,13 +97,14 @@ impl PageCache {
         dev: &mut impl SectorDevice,
         sector: u64,
         data: &[u8; 512],
-    ) -> bool {
-        if !dev.write_raw_sector(sector, data) {
+    ) -> BlockOutcome {
+        let outcome = dev.write_raw_sector(sector, data);
+        if outcome.is_completed() {
+            self.insert(sector, data);
+        } else {
             self.evict(sector);
-            return false;
         }
-        self.insert(sector, data);
-        true
+        outcome
     }
 
     fn evict(&mut self, sector: u64) {
@@ -149,6 +152,7 @@ impl PageCache {
 mod tests {
     use super::{PageCache, SectorDevice};
     use alloc::collections::BTreeMap;
+    use types::block_wire::BlockOutcome;
 
     /// In-memory medium whose writes can be made to fail.
     #[derive(Default)]
@@ -164,14 +168,14 @@ mod tests {
             *buf = self.sectors.get(&sector).copied().unwrap_or([0; 512]);
             true
         }
-        fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
+        fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> BlockOutcome {
             if self.fail_writes {
                 // The device may have applied the write before failing to report it.
                 self.sectors.insert(sector, [0xEE; 512]);
-                return false;
+                return BlockOutcome::Indeterminate;
             }
             self.sectors.insert(sector, *data);
-            true
+            BlockOutcome::Completed
         }
     }
 
@@ -179,12 +183,15 @@ mod tests {
     fn failed_write_evicts_the_resident_sector() {
         let mut cache = PageCache::new();
         let mut medium = Medium::default();
-        assert!(cache.write_sector(&mut medium, 7, &[1; 512]));
-        assert!(cache.write_sector(&mut medium, 8, &[2; 512]));
+        assert!(cache.write_sector(&mut medium, 7, &[1; 512]).is_completed());
+        assert!(cache.write_sector(&mut medium, 8, &[2; 512]).is_completed());
         assert_eq!(cache.total_bytes, 1024);
 
         medium.fail_writes = true;
-        assert!(!cache.write_sector(&mut medium, 7, &[3; 512]));
+        assert_eq!(
+            cache.write_sector(&mut medium, 7, &[3; 512]),
+            BlockOutcome::Indeterminate
+        );
         assert!(!cache.entries.contains_key(&7));
         assert!(!cache.lru_order.contains(&7));
         assert_eq!(cache.total_bytes, 512);
@@ -209,7 +216,7 @@ mod tests {
             fail_writes: true,
             ..Medium::default()
         };
-        assert!(!cache.write_sector(&mut medium, 3, &[9; 512]));
+        assert!(!cache.write_sector(&mut medium, 3, &[9; 512]).is_completed());
         assert!(cache.entries.is_empty());
         assert!(cache.lru_order.is_empty());
         assert_eq!(cache.total_bytes, 0);

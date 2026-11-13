@@ -103,14 +103,14 @@ fn current(
     algorithm: &str,
     key: &[u8],
 ) -> Option<(Observation, Vec<u8>, u8)> {
-    match vfs.observe(STORE_PATH)? {
+    match vfs.observe(STORE_PATH).ok().flatten()? {
         Observation::Absent => Some((Observation::Absent, Vec::new(), ssh_trust::UNKNOWN)),
         observation @ Observation::Present {
             size,
             regular: true,
             ..
         } => {
-            let bytes = vfs.read_to_vec(STORE_PATH);
+            let bytes = vfs.read_to_vec(STORE_PATH).ok()?;
             if bytes.len() as u64 != size {
                 return None;
             }
@@ -296,8 +296,8 @@ fn persist(vfs: &mut VfsManager, r: &Challenge) -> u8 {
             return ssh_trust::UNAVAILABLE;
         }
         match vfs.stat(TRUST_DIR) {
-            Some((_, true)) => {}
-            None if vfs.mkdir(TRUST_DIR) => {}
+            Ok(Some((_, true))) => {}
+            Ok(None) if vfs.mkdir(TRUST_DIR).is_ok() => {}
             _ => return ssh_trust::UNAVAILABLE,
         }
         let Some(expect) = observation.expect() else {

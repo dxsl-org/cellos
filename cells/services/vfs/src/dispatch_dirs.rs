@@ -154,7 +154,7 @@ fn open_root<'a>(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsRespons
     // A handle to something that is not a directory would resolve names against
     // a file, which no backend defines.
     match vfs.stat(checked) {
-        Some((_, true)) => {}
+        Ok(Some((_, true))) => {}
         _ => return VfsResponse::Err(VfsError::Io as u8),
     }
     match vfs.dirs.open_root(caller, checked) {
@@ -180,7 +180,7 @@ fn open_dir<'a>(
         return VfsResponse::Err(VfsError::Io as u8);
     }
     match vfs.stat(&path) {
-        Some((_, true)) => {}
+        Ok(Some((_, true))) => {}
         _ if vfs.is_mount_ancestor(&path) => {}
         _ => return VfsResponse::Err(VfsError::Io as u8),
     }
@@ -206,13 +206,17 @@ fn read_at<'a>(
     }
     // Absent and empty must not look alike: an empty reply for a missing file
     // would make a caller act on data that does not exist.
-    if !matches!(vfs.stat(&path), Some((_, false))) {
+    if !matches!(vfs.stat(&path), Ok(Some((_, false)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let data = vfs.read_to_vec(&path);
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    // A read that failed part way is an error, never the bytes before it.
+    let Ok(data) = data else {
+        return VfsResponse::Err(VfsError::Io as u8);
+    };
     let n = data.len().min(MAX_INLINE_PAYLOAD);
     resp_buf[..n].copy_from_slice(&data[..n]);
     VfsResponse::Data(&resp_buf[..n])

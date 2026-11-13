@@ -21,6 +21,7 @@ use api::vfs_file_handles::ViVfsFileHandle;
 use ostd::syscall::sys_grant_copy_from_slice;
 
 use crate::caller::Caller;
+use crate::fs_error::FsError;
 use crate::manager::VfsManager;
 
 /// Largest `ReadGrant` transfer: the one page `ostd::fs` allocates per call.
@@ -53,7 +54,7 @@ pub(crate) fn read_grant<'a>(
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    let Some((file_len, false)) = vfs.stat(&path) else {
+    let Ok(Some((file_len, false))) = vfs.stat(&path) else {
         return VfsResponse::Err(VfsError::Io as u8);
     };
     let file_len = usize::try_from(file_len).unwrap_or(usize::MAX);
@@ -66,11 +67,18 @@ pub(crate) fn read_grant<'a>(
         return VfsResponse::GrantDone { bytes: 0 };
     }
     let mut buf = vec![0u8; n];
-    let mut read = vfs.read_at(&path, offset, &mut buf);
+    let mut read = match vfs.read_at(&path, offset, &mut buf) {
+        Ok(read) => read,
+        Err(FsError::Unsupported) => 0,
+        // A device failure is an error, never a short grant.
+        Err(_) => return VfsResponse::Err(VfsError::Io as u8),
+    };
     if read == 0 {
         // A backend without ranged reads returns nothing; the whole-file copy
         // keeps it correct instead of silently answering zero bytes.
-        let data = vfs.read_to_vec(&path);
+        let Ok(data) = vfs.read_to_vec(&path) else {
+            return VfsResponse::Err(VfsError::Io as u8);
+        };
         if let Some(tail) = data.get(start..) {
             read = n.min(tail.len());
             buf[..read].copy_from_slice(&tail[..read]);
@@ -99,13 +107,17 @@ pub(crate) fn read_file_grant<'a>(
     if !vfs.access.can_read(caller, path) {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
-    if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
+    if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, false)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let data = vfs.read_to_vec(path);
     if !vfs.healthy(path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    // A read that failed part way is an error, never the bytes before it.
+    let Ok(data) = data else {
+        return VfsResponse::Err(VfsError::Io as u8);
+    };
     // The adapter also caps the copy at the kernel-registered grant length.
     match sys_grant_copy_from_slice(grant, &data[..data.len().min(max)]) {
         Some(bytes) => VfsResponse::GrantDone { bytes },

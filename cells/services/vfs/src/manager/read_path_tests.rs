@@ -22,6 +22,7 @@ use crate::caller::Caller;
 use crate::dirs::MAX_HANDLES_PER_CELL;
 use crate::dispatch_dirs::MAX_INLINE_PAYLOAD;
 use crate::file_handles::MAX_FILE_HANDLES_PER_CALLER;
+use crate::fs_error::FsError;
 use crate::manager::VfsManager;
 
 const READER: Caller = Caller::principal(CellId(61), 1);
@@ -797,38 +798,43 @@ impl FsBackend for NoPaging {
     fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
         None
     }
-    fn list(&self, _: &str, _: &mut [u8]) -> usize {
-        0
+    fn list(&self, _: &str, _: &mut [u8]) -> Result<usize, FsError> {
+        Ok(0)
     }
-    fn list_page(&self, _: &str, _: u32, _: &mut [u8]) -> Option<crate::backend::ListPage> {
-        None
+    fn list_page(
+        &self,
+        _: &str,
+        _: u32,
+        _: &mut [u8],
+    ) -> Result<crate::backend::ListPage, FsError> {
+        Err(FsError::Unsupported)
     }
-    fn stat(&self, _: &str) -> Option<(u64, bool)> {
-        Some((0, true))
+    fn stat(&self, _: &str) -> Result<Option<(u64, bool)>, FsError> {
+        Ok(Some((0, true)))
     }
-    fn file_size(&self, _: &str) -> u64 {
-        0
+    fn file_size(&self, _: &str) -> Result<u64, FsError> {
+        Err(FsError::IsADirectory)
     }
-    fn read_to_vec(&self, _: &str) -> Vec<u8> {
-        Vec::new()
+    fn read_to_vec(&self, _: &str) -> Result<Vec<u8>, FsError> {
+        Err(FsError::IsADirectory)
     }
-    fn write(&mut self, _: &str, _: &[u8]) -> bool {
-        false
+    fn write(&mut self, _: &str, _: &[u8]) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn append(&mut self, _: &str, _: &[u8]) -> bool {
-        false
+    fn append(&mut self, _: &str, _: &[u8]) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn mkdir(&mut self, _: &str) -> bool {
-        false
+    fn mkdir(&mut self, _: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn rmdir(&mut self, _: &str) -> bool {
-        false
+    fn rmdir(&mut self, _: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn unlink(&mut self, _: &str) -> bool {
-        false
+    fn unlink(&mut self, _: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn rmdir_recursive(&mut self, _: &str) -> bool {
-        false
+    fn rmdir_recursive(&mut self, _: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
 }
 
@@ -855,7 +861,7 @@ fn page_all(
     let mut out = alloc::vec![0u8; out_len];
     let (mut found, mut pages, mut cursor) = (Vec::new(), 0, 0);
     loop {
-        let page = backend.list_page(path, cursor, &mut out)?;
+        let page = backend.list_page(path, cursor, &mut out).ok()?;
         pages += 1;
         for entry in entries(&out[..page.written]) {
             let entry = entry.expect("well-formed");
@@ -921,10 +927,11 @@ impl fatfs::Seek for MemDisk {
     }
 }
 
-#[test]
-fn fat_paging_covers_every_entry_and_an_iteration_error_is_never_a_short_listing() {
+/// A formatted in-memory FAT volume whose device reads `reads_left` gates.
+fn mem_fat(
+    reads_left: &Arc<AtomicI64>,
+) -> fatfs::FileSystem<MemDisk, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter> {
     use fatfs::Seek;
-    let reads_left = Arc::new(AtomicI64::new(-1));
     let mut disk = MemDisk {
         data: alloc::vec![0; 4 << 20],
         pos: 0,
@@ -932,7 +939,45 @@ fn fat_paging_covers_every_entry_and_an_iteration_error_is_never_a_short_listing
     };
     fatfs::format_volume(&mut disk, fatfs::FormatVolumeOptions::new()).expect("format");
     disk.seek(fatfs::SeekFrom::Start(0)).expect("rewind");
-    let fs = fatfs::FileSystem::new(disk, fatfs::FsOptions::new()).expect("mount");
+    fatfs::FileSystem::new(disk, fatfs::FsOptions::new()).expect("mount")
+}
+
+/// The whole-file read `FatBackend::read_to_vec` serves: a device failure part
+/// way through the file is `Io`, never the bytes read before it (it used to be
+/// a short, successful read).
+#[test]
+fn fat_whole_file_read_failing_mid_file_is_io_not_a_short_read() {
+    use crate::backend_fat::read_to_end;
+    use fatfs::Write;
+    let reads_left = Arc::new(AtomicI64::new(-1));
+    let fs = mem_fat(&reads_left);
+    let content: Vec<u8> = (0..64 * 1024).map(|i| (i % 251) as u8).collect();
+    fs.root_dir()
+        .create_file("big.bin")
+        .expect("create")
+        .write_all(&content)
+        .expect("write");
+
+    // A healthy read returns every byte; count the device reads it takes.
+    let mut file = fs.root_dir().open_file("big.bin").expect("open");
+    const BUDGET: i64 = 1 << 40;
+    reads_left.store(BUDGET, Ordering::SeqCst);
+    assert_eq!(read_to_end(&mut file).as_deref(), Ok(&content[..]));
+    let reads = BUDGET - reads_left.load(Ordering::SeqCst);
+    assert!(reads >= 2, "{reads} device reads");
+
+    // The device fails after half of them: some bytes were read, and the
+    // answer is still an error.
+    let mut file = fs.root_dir().open_file("big.bin").expect("open");
+    reads_left.store(reads / 2, Ordering::SeqCst);
+    assert_eq!(read_to_end(&mut file), Err(FsError::Io));
+    reads_left.store(-1, Ordering::SeqCst);
+}
+
+#[test]
+fn fat_paging_covers_every_entry_and_an_iteration_error_is_never_a_short_listing() {
+    let reads_left = Arc::new(AtomicI64::new(-1));
+    let fs = mem_fat(&reads_left);
     let big = fs.root_dir().create_dir("big").expect("dir");
     // Long names: each takes several LFN slots on disk.
     let mut expected: Vec<String> = (0..150)
@@ -982,19 +1027,19 @@ fn fat_paging_covers_every_entry_and_an_iteration_error_is_never_a_short_listing
     reads_left.store(40, Ordering::SeqCst);
     assert_eq!(
         crate::backend_fat::page_dir(&big, 0, &mut out, &|_| false),
-        None
+        Err(FsError::Io)
     );
     reads_left.store(-1, Ordering::SeqCst);
     // Past the end is stale.
     let total = u32::try_from(found.len()).unwrap();
     assert_eq!(
         crate::backend_fat::page_dir(&big, total + 1, &mut out, &|_| false),
-        None
+        Err(FsError::InvalidPath)
     );
     assert_eq!(
         crate::backend_fat::page_dir(&big, total, &mut out, &|_| false)
             .map(|p| (p.written, p.next)),
-        Some((0, None))
+        Ok((0, None))
     );
 }
 
@@ -1036,14 +1081,14 @@ fn cellosfs(prefix: &'static str) -> crate::backend_cellosfs::CellosFsBackend<Bl
 #[test]
 fn small_buffers_page_ramfs_and_cellosfs_without_losing_entries() {
     let mut ram = crate::backend_ramfs::RamFsBackend::new();
-    assert!(ram.mkdir("/tmp/d"));
+    assert!(ram.mkdir("/tmp/d").is_ok());
     let mut srv = cellosfs("/srv");
     let wanted = ["a", "bb", "ccc", "dddd", "eeeee", "ffffff"];
     for name in wanted {
-        assert!(ram.write(&format!("/tmp/d/{name}"), b"x"));
-        assert!(srv.write(&format!("/srv/{name}"), b"x"));
+        assert!(ram.write(&format!("/tmp/d/{name}"), b"x").is_ok());
+        assert!(srv.write(&format!("/srv/{name}"), b"x").is_ok());
     }
-    assert!(srv.mkdir("/srv/sub"));
+    assert!(srv.mkdir("/srv/sub").is_ok());
     for (backend, path, dirs) in [
         (&ram as &dyn FsBackend, "/tmp/d", 0),
         (&srv as &dyn FsBackend, "/srv", 1),
@@ -1068,12 +1113,12 @@ fn small_buffers_page_ramfs_and_cellosfs_without_losing_entries() {
         );
         assert_eq!(
             backend.list_page(&format!("{path}/a"), 0, &mut [0; 64]),
-            None,
+            Err(FsError::NotADirectory),
             "a file is not listable"
         );
         assert_eq!(
             backend.list_page(&format!("{path}/missing"), 0, &mut [0; 64]),
-            None
+            Err(FsError::NotFound)
         );
     }
 }
@@ -1139,7 +1184,7 @@ fn rename_marks_both_parents_and_an_open_srv_file_cannot_be_renamed_under_its_re
     // the path, the writer's own included.
     let writer_two = open_root(&mut vfs, WRITER, "/srv/two");
     let writer_file = open_file(&mut vfs, WRITER, writer_two, "f");
-    assert!(vfs.write_at("/srv/two/f", 0, b"F"));
+    assert!(vfs.write_at("/srv/two/f", 0, b"F").is_ok());
     assert_eq!(
         state(&mut vfs, READER, file),
         Reply::State {
@@ -1191,12 +1236,12 @@ fn recursive_removal_clears_a_native_data_tree_but_never_srv() {
         );
     }
     ok(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/data/t"));
-    assert_eq!(vfs.stat("/data/t"), None);
-    assert_eq!(vfs.stat("/data/t/sub/f"), None);
+    assert_eq!(vfs.stat("/data/t"), Ok(None));
+    assert_eq!(vfs.stat("/data/t/sub/f"), Ok(None));
     // `/srv` keys are removed one at a time under their namespace reservation.
     assert_eq!(
         call(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/srv/t")),
         Reply::Err(VfsError::Denied as u8)
     );
-    assert_eq!(vfs.stat("/srv/t/sub/f"), Some((1, false)));
+    assert_eq!(vfs.stat("/srv/t/sub/f"), Ok(Some((1, false))));
 }

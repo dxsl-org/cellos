@@ -11,10 +11,10 @@
 //! disk of boards where no Driver Cell registers a route (kernel-resident MMC).
 
 mod discovery;
-mod requests;
-mod router;
 #[cfg(test)]
 mod read_run_tests;
+mod requests;
+mod router;
 #[cfg(test)]
 mod tests;
 
@@ -24,7 +24,7 @@ use self::router::Router;
 use api::block_route::ViBlockRouteV1;
 use ostd::prelude::Mutex;
 #[cfg(target_os = "none")]
-use ostd::syscall::{self as sys, SyscallResult};
+use ostd::syscall as sys;
 use types::block_wire::{BlockOutcome, SECTOR_SIZE};
 
 /// Which block path a request takes.
@@ -36,14 +36,32 @@ pub enum DeviceRef {
     Kernel,
 }
 
+/// How one bounded request/reply exchange with a provider ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Call {
+    /// Nothing was accepted: the provider refused or was already gone.
+    Refused,
+    /// The provider died after accepting; the request may have run.
+    PeerGone,
+    /// [`BLOCK_REPLY_TICKS`] ran out. `dispatched`: the provider had taken the
+    /// request, so it may have run.
+    Expired { dispatched: bool },
+    /// The provider replied with this many bytes.
+    Replied(usize),
+}
+
+/// How long one block request may take, in scheduler ticks: the drivers' own
+/// 30 s device budget plus 5 s, so only a driver that overran its deadline (a
+/// frozen one) is cut off. 35 s also stays below the VFS heartbeat.
+pub const BLOCK_REPLY_TICKS: u64 = 3_500;
+
 /// Kernel and IPC operations the router needs.
 pub trait BlockSys {
     /// Route slot `index` (syscall 432); `None` when there is no route there.
     fn lookup_route(&mut self, index: u32) -> Option<ViBlockRouteV1>;
-    /// `true` when the kernel accepted the message for `tid`.
-    fn send(&mut self, tid: usize, msg: &[u8]) -> bool;
-    /// `true` when a message from `tid` arrived in `buf`.
-    fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool;
+    /// One exact-operation exchange with `tid`, bounded by [`BLOCK_REPLY_TICKS`].
+    /// The reply lands at the start of `reply`.
+    fn call(&mut self, tid: usize, request: &[u8], reply: &mut [u8]) -> Call;
     fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool;
     fn kernel_write(&mut self, lba: u64, data: &[u8; SECTOR_SIZE]) -> bool;
     fn kernel_flush(&mut self) -> bool;
@@ -74,12 +92,18 @@ impl BlockSys for Syscalls {
             }
         }
     }
-    fn send(&mut self, tid: usize, msg: &[u8]) -> bool {
-        ostd::ipc::post(tid, msg).is_ok()
-    }
-    fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool {
-        // Masked to `tid`, so no other cell's message is taken for the reply.
-        matches!(sys::sys_recv(tid, buf), SyscallResult::Ok(from) if from == tid)
+    fn call(&mut self, tid: usize, request: &[u8], reply: &mut [u8]) -> Call {
+        use ostd::ipc::IpcError;
+        // An exact operation: a late reply can never answer a later request,
+        // and a frozen provider costs one bound, not the whole service.
+        crate::liveness::keepalive();
+        match ostd::ipc::call_bytes(tid, request, reply, BLOCK_REPLY_TICKS) {
+            Ok(bytes) => Call::Replied(bytes.len()),
+            Err(IpcError::PreDispatchTimeout) => Call::Expired { dispatched: false },
+            Err(IpcError::Indeterminate) => Call::Expired { dispatched: true },
+            Err(IpcError::PeerGone) => Call::PeerGone,
+            Err(_) => Call::Refused,
+        }
     }
     fn kernel_read(&mut self, lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
         sys::sys_blk_read(lba, buf)
@@ -101,11 +125,8 @@ impl BlockSys for Syscalls {
     fn lookup_route(&mut self, _index: u32) -> Option<ViBlockRouteV1> {
         None
     }
-    fn send(&mut self, _tid: usize, _msg: &[u8]) -> bool {
-        false
-    }
-    fn recv(&mut self, _tid: usize, _buf: &mut [u8]) -> bool {
-        false
+    fn call(&mut self, _tid: usize, _request: &[u8], _reply: &mut [u8]) -> Call {
+        Call::Refused
     }
     fn kernel_read(&mut self, _lba: u64, _buf: &mut [u8; SECTOR_SIZE]) -> bool {
         false

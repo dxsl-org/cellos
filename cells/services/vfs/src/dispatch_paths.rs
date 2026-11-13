@@ -32,8 +32,8 @@ pub(crate) fn handle_path_request(
                 return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             match vfs.stat(p) {
-                Some((size, is_dir)) => VfsResponse::Stat { size, is_dir },
-                None => VfsResponse::Err(VfsError::Io as u8),
+                Ok(Some((size, is_dir))) => VfsResponse::Stat { size, is_dir },
+                Ok(None) | Err(_) => VfsResponse::Err(VfsError::Io as u8),
             }
         }
 
@@ -58,7 +58,7 @@ pub(crate) fn handle_path_request(
             if !vfs.quota.can_charge(caller.cell, append_len) {
                 return Some(VfsResponse::Err(VfsError::Quota as u8));
             }
-            if vfs.append(path, content) {
+            if vfs.append(path, content).is_ok() {
                 let _ = vfs.quota.charge(caller.cell, append_len);
                 vfs.quota.record_writer(path, caller.cell);
                 VfsResponse::Ok
@@ -87,7 +87,7 @@ pub(crate) fn handle_path_request(
                 return Some(VfsResponse::Err(VfsError::Denied as u8));
             }
             let files = crate::subtree::files_under(vfs, p, 32);
-            if vfs.rmdir_recursive(p) {
+            if vfs.rmdir_recursive(p).is_ok() {
                 for (path, size) in files {
                     vfs.quota.release_path(&path, size);
                 }

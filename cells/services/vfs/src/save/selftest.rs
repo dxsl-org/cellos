@@ -140,8 +140,8 @@ fn commit(vfs: &mut VfsManager, id: u32, expect: SaveExpect) -> Option<SaveOutco
 }
 
 fn contents(vfs: &mut VfsManager, path: &str) -> Vec<u8> {
-    let mut out = alloc::vec![0; vfs.file_size(path) as usize];
-    let read = vfs.read_at(path, 0, &mut out);
+    let mut out = alloc::vec![0; vfs.file_size(path).unwrap_or(0) as usize];
+    let read = vfs.read_at(path, 0, &mut out).unwrap_or(0);
     out.truncate(read);
     out
 }
@@ -233,7 +233,7 @@ fn checks() -> [bool; 4] {
             },
         ) && commit(&mut vfs, id, SaveExpect::Absent)
             == Some(SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED))
-    }) && vfs.stat("/srv/s8test/new").is_none();
+    }) && vfs.stat("/srv/s8test/new") == Ok(None);
 
     // A backend without conditional publication refuses before staging.
     let refused = matches!(
@@ -244,7 +244,7 @@ fn checks() -> [bool; 4] {
             &mut [0; IPC_BUF_SIZE]
         ),
         VfsResponse::Err(code) if code == VfsError::Unsupported as u8
-    ) && vfs.stat("/tmp/s8").is_none();
+    ) && vfs.stat("/tmp/s8") == Ok(None);
     [replaced, conflict, tampered, refused]
 }
 

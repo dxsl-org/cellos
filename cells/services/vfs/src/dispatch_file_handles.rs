@@ -6,6 +6,7 @@ use api::vfs_file_handles::ViVfsFileHandle;
 use crate::caller::Caller;
 use crate::dispatch_dirs::{resolve, MAX_INLINE_PAYLOAD};
 use crate::file_handles::FileHandleError;
+use crate::fs_error::FsError;
 use crate::manager::VfsManager;
 
 pub fn open_file<'a>(
@@ -25,8 +26,8 @@ pub fn open_file<'a>(
         return VfsResponse::Err(VfsError::Denied as u8);
     }
     match vfs.stat(&path) {
-        Some((_, false)) => {}
-        Some((_, true)) | None => return VfsResponse::Err(VfsError::Io as u8),
+        Ok(Some((_, false))) => {}
+        Ok(Some((_, true)) | None) | Err(_) => return VfsResponse::Err(VfsError::Io as u8),
     }
     let lease = if path == "/srv" || path.starts_with("/srv/") {
         let Ok(k) = crate::namespace::NamespaceKey::parse(&path) else {
@@ -65,7 +66,7 @@ pub fn read_file<'a>(
     // file-sized allocation per chunk. At 103 KB that was invisible; at 1.18 MB it drove a cell
     // read from the AI inference service into a multi-minute stall (`read_at` is the ranged
     // backend operation the whole time).
-    let Some((size, is_dir)) = vfs.stat(&path) else {
+    let Ok(Some((size, is_dir))) = vfs.stat(&path) else {
         let _ = vfs.files.finish_sync_read(caller, file);
         return VfsResponse::Err(VfsError::Io as u8);
     };
@@ -92,11 +93,20 @@ pub fn read_file<'a>(
         .unwrap_or(MAX_INLINE_PAYLOAD)
         .min(MAX_INLINE_PAYLOAD)
         .min(size - start);
-    let mut read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
+    let read = vfs.read_at(&path, offset, &mut resp_buf[..n]);
     if !vfs.healthy(&path) {
         let _ = vfs.files.finish_sync_read(caller, file);
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    let mut read = match read {
+        Ok(read) => read,
+        Err(FsError::Unsupported) => 0,
+        // A device failure is an error, never a short chunk.
+        Err(_) => {
+            let _ = vfs.files.finish_sync_read(caller, file);
+            return VfsResponse::Err(VfsError::Io as u8);
+        }
+    };
     if read == 0 && n > 0 {
         // A backend that does not implement ranged reads returns nothing. Falling back to the
         // whole-file copy keeps such a backend correct (at its old cost) instead of silently
@@ -107,6 +117,10 @@ pub fn read_file<'a>(
             let _ = vfs.files.finish_sync_read(caller, file);
             return VfsResponse::Err(VfsError::Io as u8);
         }
+        let Ok(data) = data else {
+            let _ = vfs.files.finish_sync_read(caller, file);
+            return VfsResponse::Err(VfsError::Io as u8);
+        };
         if offset < data.len() as u64 {
             let start = offset as usize;
             let take = n.min(data.len() - start);
@@ -132,7 +146,7 @@ pub fn file_state<'a>(vfs: &VfsManager, caller: Caller, file: ViVfsFileHandle) -
         return VfsResponse::Err(VfsError::Io as u8);
     }
     match vfs.stat(path) {
-        Some((size, false)) => VfsResponse::FileState { size, modified },
+        Ok(Some((size, false))) => VfsResponse::FileState { size, modified },
         _ => VfsResponse::Err(VfsError::Io as u8),
     }
 }

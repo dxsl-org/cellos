@@ -1,6 +1,6 @@
 //! Enumerating a directory tree's files before it is deleted.
 //!
-//! `FsBackend::rmdir_recursive` returns only a bool, so the bytes it frees have to
+//! `FsBackend::rmdir_recursive` reports only success or failure, so the bytes it frees have to
 //! be measured while the tree still exists. Quota must also be released *per
 //! file*, because two files in one tree can have been charged to two different
 //! cells — so the walk yields paths and sizes, not a single total.
@@ -27,13 +27,14 @@ fn collect(vfs: &VfsManager, path: &str, depth: u8, out: &mut Vec<(String, u64)>
         return;
     }
     let mut scratch = [0u8; 512];
-    let n = vfs.list_dir(path, &mut scratch);
+    // An unreadable level is under-reported, the safe direction (see above).
+    let n = vfs.list_dir(path, &mut scratch).unwrap_or(0);
     let listing = core::str::from_utf8(&scratch[..n]).unwrap_or("");
     let base = path.trim_end_matches('/');
     for line in listing.split('\n') {
         if let Some(name) = line.strip_prefix("f:") {
             let child = join(base, name);
-            let size = vfs.file_size(&child);
+            let size = vfs.file_size(&child).unwrap_or(0);
             out.push((child, size));
         } else if let Some(name) = line.strip_prefix("d:") {
             collect(vfs, &join(base, name), depth - 1, out);

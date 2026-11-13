@@ -118,17 +118,17 @@ fn runtime_service_config_reads_the_persistent_file() {
     let mut vfs = VfsManager::new();
     let mut disk = RamFsBackend::new();
     for directory in ["/mnt", "/mnt/sd", "/mnt/sd/etc", "/mnt/sd/etc/cellos"] {
-        assert!(disk.mkdir(directory));
+        assert!(disk.mkdir(directory).is_ok());
     }
     let content = b"version = 1\n[[cells]]\nname = 'worker'\n";
     assert!(disk.seed_test_file("/mnt/sd/etc/cellos/services.toml", content));
     let index = vfs.mounts.add_backend(alloc::boxed::Box::new(disk));
     vfs.mounts.mount("/mnt/sd", index);
     let path = "/etc/cellos/services.toml";
-    assert_eq!(vfs.stat(path), Some((content.len() as u64, false)));
-    assert_eq!(vfs.read_to_vec(path), content);
+    assert_eq!(vfs.stat(path), Ok(Some((content.len() as u64, false))));
+    assert_eq!(vfs.read_to_vec(path).as_deref(), Ok(&content[..]));
     let mut chunk = [0u8; 7];
-    assert_eq!(vfs.read_at(path, 3, &mut chunk), 7);
+    assert_eq!(vfs.read_at(path, 3, &mut chunk), Ok(7));
     assert_eq!(&chunk, &content[3..10]);
 }
 
@@ -139,11 +139,11 @@ fn empty_runtime_config_is_not_replaced_with_image_defaults() {
     let mut vfs = VfsManager::new();
     let mut disk = RamFsBackend::new();
     for directory in ["/mnt", "/mnt/sd", "/mnt/sd/etc", "/mnt/sd/etc/cellos"] {
-        assert!(disk.mkdir(directory));
+        assert!(disk.mkdir(directory).is_ok());
     }
     assert!(disk.seed_test_file("/mnt/sd/etc/cellos/autoload.toml", b""));
     let index = vfs.mounts.add_backend(alloc::boxed::Box::new(disk));
     vfs.mounts.mount("/mnt/sd", index);
-    assert_eq!(vfs.stat("/etc/cellos/autoload.toml"), Some((0, false)));
-    assert_eq!(vfs.read_to_vec("/etc/cellos/autoload.toml"), b"");
+    assert_eq!(vfs.stat("/etc/cellos/autoload.toml"), Ok(Some((0, false))));
+    assert_eq!(vfs.read_to_vec("/etc/cellos/autoload.toml"), Ok(Vec::new()));
 }

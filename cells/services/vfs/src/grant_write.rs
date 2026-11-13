@@ -39,7 +39,7 @@ pub(crate) fn write<'a>(
     if crate::access::is_guest_disk_path(&path) || !vfs.access.can_write(caller, &path) {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
-    let Some((file_len, false)) = vfs.stat(&path) else {
+    let Ok(Some((file_len, false))) = vfs.stat(&path) else {
         return VfsResponse::Err(VfsError::Io as u8);
     };
     let Ok(file_len) = usize::try_from(file_len) else {
@@ -72,6 +72,9 @@ pub(crate) fn write<'a>(
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    let Ok(old) = old else {
+        return VfsResponse::Err(VfsError::Io as u8);
+    };
     if old.len() != file_len {
         return VfsResponse::Err(VfsError::Io as u8);
     }
@@ -85,7 +88,7 @@ pub(crate) fn write<'a>(
         return VfsResponse::Err(VfsError::Io as u8);
     }
 
-    if !vfs.write(&path, &committed) {
+    if vfs.write(&path, &committed).is_err() {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     // Observed native sync is functional completion, not crash-preserving

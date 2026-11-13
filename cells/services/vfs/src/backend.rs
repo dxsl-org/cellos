@@ -13,6 +13,8 @@
 use alloc::vec::Vec;
 use api::ipc::vfs_dir_page::{push_entry, EntryKind};
 
+use crate::fs_error::FsError;
+
 /// Cursors a backend hands out stay below this bound. The bits above it belong
 /// to the layers that union several sources into one listing:
 /// `BinOverlay` uses bit 30 and `VfsManager` bit 31.
@@ -31,36 +33,40 @@ pub struct ListPage {
 /// Page an ordered entry sequence: skip `start` entries, then pack whole
 /// entries into `out` until one does not fit.
 ///
-/// `None` (never a short page) when iteration fails, a name is not a valid
-/// directory component, `start` lies past the end (a stale cursor), or the
-/// sequence outgrows [`BACKEND_CURSOR_LIMIT`].
+/// An error (never a short page) when iteration fails (the entry's own error),
+/// a name is not a valid directory component or `start` lies past the end (a
+/// stale cursor) — both `InvalidPath` — or the sequence outgrows
+/// [`BACKEND_CURSOR_LIMIT`] (`Unsupported`).
 pub(crate) fn fill_page<N: AsRef<[u8]>>(
-    entries: impl Iterator<Item = Result<(EntryKind, N), ()>>,
+    entries: impl Iterator<Item = Result<(EntryKind, N), FsError>>,
     start: u32,
     out: &mut [u8],
-) -> Option<ListPage> {
+) -> Result<ListPage, FsError> {
     let mut index = 0u32;
     let mut written = 0;
     for entry in entries {
-        let (kind, name) = entry.ok()?;
+        let (kind, name) = entry?;
         if index >= start {
             match push_entry(out, written, kind, name.as_ref()) {
                 Ok(Some(end)) => written = end,
                 Ok(None) => {
-                    return Some(ListPage {
+                    return Ok(ListPage {
                         written,
                         next: Some(index),
                     })
                 }
-                Err(_) => return None,
+                Err(_) => return Err(FsError::InvalidPath),
             }
         }
         index += 1;
         if index >= BACKEND_CURSOR_LIMIT {
-            return None;
+            return Err(FsError::Unsupported);
         }
     }
-    (index >= start).then_some(ListPage {
+    if index < start {
+        return Err(FsError::InvalidPath);
+    }
+    Ok(ListPage {
         written,
         next: None,
     })
@@ -86,67 +92,70 @@ pub trait FsBackend: Send {
     fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)>;
 
     /// List directory entries as `d:name\n` / `f:name\n` lines into `out`.
-    /// Returns bytes written; 0 when the path is missing or not a directory.
-    fn list(&self, path: &str, out: &mut [u8]) -> usize;
+    /// Returns bytes written (0 for an empty directory); an error when the
+    /// path is missing, not a directory, or the listing could not be read.
+    fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError>;
 
     /// Page the entries of directory `path` into `out`, starting at entry
     /// index `start` (see [`fill_page`]). Entry order is the backend's own and
     /// must be stable while the directory is unchanged.
     ///
-    /// `None` when `path` is missing or not a directory, iteration failed, a
+    /// An error when `path` is missing or not a directory, iteration failed, a
     /// name is not a valid component, or `start` is stale. Never a silent stop.
-    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage>;
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Result<ListPage, FsError>;
 
-    /// `(size, is_dir)`, or `None` when the path does not exist.
-    fn stat(&self, path: &str) -> Option<(u64, bool)>;
+    /// `Ok(Some((size, is_dir)))`, `Ok(None)` when the path does not exist, an
+    /// error when existence could not be determined.
+    fn stat(&self, path: &str) -> Result<Option<(u64, bool)>, FsError>;
 
-    /// File size for quota accounting. 0 when absent (callers charge net delta).
-    fn file_size(&self, path: &str) -> u64;
+    /// File size for quota accounting. `NotFound` when absent (callers charge
+    /// net delta and treat that as 0).
+    fn file_size(&self, path: &str) -> Result<u64, FsError>;
 
-    /// Whole-file copy for the async-read handle table. Empty when absent.
-    fn read_to_vec(&self, path: &str) -> Vec<u8>;
+    /// Whole-file copy for the async-read handle table. A device failure part
+    /// way through is an error, never the bytes read so far.
+    fn read_to_vec(&self, path: &str) -> Result<Vec<u8>, FsError>;
 
     /// Create-or-truncate write. Authorization is the dispatcher's job
     /// (AccessTable); backends may still enforce structural rules.
-    fn write(&mut self, path: &str, content: &[u8]) -> bool;
-    /// Positional bounded read. Backends that do not support it return 0.
-    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+    fn write(&mut self, path: &str, content: &[u8]) -> Result<(), FsError>;
+    /// Positional bounded read: bytes read, 0 at or past end of file.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
         let _ = (path, offset, buf);
-        0
+        Err(FsError::Unsupported)
     }
 
-    /// Positional bounded write. Backends that do not support it return false.
-    fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
+    /// Positional bounded write.
+    fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> Result<(), FsError> {
         let _ = (path, offset, content);
-        false
+        Err(FsError::Unsupported)
     }
 
     /// Flush dirty pages for a path to the block device.
-    fn sync(&mut self, path: &str) -> bool {
+    fn sync(&mut self, path: &str) -> Result<(), FsError> {
         let _ = path;
-        false
+        Err(FsError::Unsupported)
     }
 
-    fn append(&mut self, path: &str, content: &[u8]) -> bool;
+    fn append(&mut self, path: &str, content: &[u8]) -> Result<(), FsError>;
     /// mkdir -p semantics on FAT; single-level create on RamFS.
-    fn mkdir(&mut self, path: &str) -> bool;
+    fn mkdir(&mut self, path: &str) -> Result<(), FsError>;
 
     /// Remove an EMPTY directory (POSIX ENOTDIR/ENOTEMPTY semantics).
-    fn rmdir(&mut self, path: &str) -> bool;
+    fn rmdir(&mut self, path: &str) -> Result<(), FsError>;
 
     /// Remove a regular FILE (directories are rejected).
-    fn unlink(&mut self, path: &str) -> bool;
+    fn unlink(&mut self, path: &str) -> Result<(), FsError>;
 
-    /// Recursive delete (`rm -r`). Backends that do not support it return false.
-    fn rmdir_recursive(&mut self, path: &str) -> bool;
+    /// Recursive delete (`rm -r`).
+    fn rmdir_recursive(&mut self, path: &str) -> Result<(), FsError>;
 
     /// Atomic no-replace rename from `old` to `new`.
     ///
-    /// Backends that do not support it return false; the `/srv` backend
-    /// (CellosFS Native) implements it.
-    fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+    /// Only the `/srv` backend (CellosFS Native) implements it.
+    fn rename_no_replace(&mut self, old: &str, new: &str) -> Result<(), FsError> {
         let _ = (old, new);
-        false
+        Err(FsError::Unsupported)
     }
 
     // ── D03 conditional save. Defaults: unsupported (FAT32, bootfs, RamFS). ──
@@ -158,23 +167,24 @@ pub trait FsBackend: Send {
         None
     }
 
-    /// Exact identity of `path`; `None` on error or when unsupported.
-    fn observe(&self, path: &str) -> Option<api::ipc::Observation> {
+    /// Exact identity of `path` (absence is `Observation::Absent`); `Ok(None)`
+    /// when the backend can name no identity for it.
+    fn observe(&self, path: &str) -> Result<Option<api::ipc::Observation>, FsError> {
         let _ = path;
-        None
+        Err(FsError::Unsupported)
     }
 
     /// Create the empty staging object exclusively. Not synced: staged bytes
     /// become persistent only with the commit's sync.
-    fn stage_create(&mut self, stage: &str) -> bool {
+    fn stage_create(&mut self, stage: &str) -> Result<(), FsError> {
         let _ = stage;
-        false
+        Err(FsError::Unsupported)
     }
 
     /// Positional write into a staging object, not synced.
-    fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> bool {
+    fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> Result<(), FsError> {
         let _ = (stage, offset, bytes);
-        false
+        Err(FsError::Unsupported)
     }
 
     /// Atomically check that `stage` is still `sealed` and `dst` still matches

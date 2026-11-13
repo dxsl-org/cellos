@@ -5,6 +5,7 @@ use alloc::string::String;
 
 use api::ipc::{Observation, SaveExpect, SaveOutcome};
 
+use crate::fs_error::FsError;
 use crate::manager::VfsManager;
 
 impl VfsManager {
@@ -14,27 +15,32 @@ impl VfsManager {
         self.mounts.backend(dst)?.stage_path(id)
     }
 
-    pub fn observe(&self, path: &str) -> Option<Observation> {
-        self.mounts.backend(path)?.observe(path)
+    pub fn observe(&self, path: &str) -> Result<Option<Observation>, FsError> {
+        self.mounts
+            .backend(path)
+            .ok_or(FsError::Unavailable)?
+            .observe(path)
     }
 
-    pub fn stage_create(&mut self, stage: &str) -> bool {
+    pub fn stage_create(&mut self, stage: &str) -> Result<(), FsError> {
         self.mounts
             .backend_mut(stage)
-            .is_some_and(|b| b.stage_create(stage))
+            .map_or(Err(FsError::Unavailable), |b| b.stage_create(stage))
     }
 
-    pub fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> bool {
+    pub fn stage_write(&mut self, stage: &str, offset: u64, bytes: &[u8]) -> Result<(), FsError> {
         self.mounts
             .backend_mut(stage)
-            .is_some_and(|b| b.stage_write(stage, offset, bytes))
+            .map_or(Err(FsError::Unavailable), |b| {
+                b.stage_write(stage, offset, bytes)
+            })
     }
 
     /// Remove an unpublished staging object (synced like any unlink).
-    pub fn stage_remove(&mut self, stage: &str) -> bool {
+    pub fn stage_remove(&mut self, stage: &str) -> Result<(), FsError> {
         self.mounts
             .backend_mut(stage)
-            .is_some_and(|b| b.unlink(stage))
+            .map_or(Err(FsError::Unavailable), |b| b.unlink(stage))
     }
 
     pub fn publish_if(

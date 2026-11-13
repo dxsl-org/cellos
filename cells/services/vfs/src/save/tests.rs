@@ -147,15 +147,15 @@ fn commit(vfs: &mut VfsManager, caller: Caller, id: u32, expect: SaveExpect) -> 
 }
 
 fn contents(vfs: &mut VfsManager, path: &str) -> Vec<u8> {
-    let size = vfs.file_size(path) as usize;
+    let size = vfs.file_size(path).unwrap() as usize;
     let mut out = alloc::vec![0; size];
-    assert_eq!(vfs.read_at(path, 0, &mut out), size);
+    assert_eq!(vfs.read_at(path, 0, &mut out), Ok(size));
     out
 }
 
 fn staging_entries(vfs: &mut VfsManager) -> usize {
     let mut out = [0u8; 512];
-    let written = vfs.list_dir("/srv/.cbx-save", &mut out);
+    let written = vfs.list_dir("/srv/.cbx-save", &mut out).unwrap();
     out[..written].iter().filter(|&&b| b == b'\n').count()
 }
 #[test]
@@ -308,7 +308,7 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
         commit(&mut vfs, ALICE, id, SaveExpect::Absent),
         Reply::Outcome(SaveOutcome::NotPublished(save_refusal::NOT_SEALED))
     );
-    assert_eq!(vfs.stat("/srv/u"), None);
+    assert_eq!(vfs.stat("/srv/u"), Ok(None));
     // Digest of different bytes than storage holds.
     let Reply::Id(id) = call(&mut vfs, ALICE, &VfsRequest::SaveBegin { dst: "/srv/u" }) else {
         panic!()
@@ -385,7 +385,7 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
         commit(&mut vfs, ALICE, id, SaveExpect::Absent),
         Reply::Outcome(SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED))
     );
-    assert_eq!(vfs.stat("/srv/u"), None);
+    assert_eq!(vfs.stat("/srv/u"), Ok(None));
 }
 
 #[test]
@@ -399,7 +399,7 @@ fn backends_without_conditional_publication_refuse_before_staging() {
         call(&mut vfs, ALICE, &VfsRequest::SaveBegin { dst: "/tmp/x" }),
         Reply::Err(VfsError::Unsupported as u8)
     );
-    assert_eq!(vfs.stat("/tmp/x"), None);
+    assert_eq!(vfs.stat("/tmp/x"), Ok(None));
 }
 
 #[test]
@@ -443,7 +443,7 @@ fn transactions_are_bounded_per_caller_and_a_successor_generation_inherits_none(
 fn mount_removes_stages_a_previous_boot_left() {
     let (mut vfs, disk) = manager();
     let _ = staged(&mut vfs, ALICE, "/srv/left", b"orphan");
-    assert_eq!(vfs.sync("/srv/left"), true);
+    assert_eq!(vfs.sync("/srv/left"), Ok(()));
     let mut fs = cellos_fs::CellosFs::open(disk.clone()).unwrap();
     crate::backend_cellosfs::clear_staging(&mut fs).unwrap();
     assert!(fs.list_dir("/.cbx-save").unwrap().is_empty());

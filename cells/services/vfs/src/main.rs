@@ -37,8 +37,11 @@ mod dispatch_grants;
 mod dispatch_paths;
 mod fat_extent_map;
 mod file_handles;
+mod fs_error;
 mod grant_read;
 mod grant_write;
+#[cfg(target_os = "none")]
+mod liveness;
 mod manager;
 mod mount;
 mod namespace;
@@ -158,8 +161,10 @@ fn vfs_main() {
     // reconcile only the caller's own reservations (`dir_admission::admit`).
     const IDLE_RECONCILE_EVERY: u32 = 128;
     let mut idle_turns: u32 = 0;
+    liveness::arm();
 
     loop {
+        liveness::keepalive();
         // The kernel writes caller identity in the receive-buffer trailer.
         // A sender TID is reply routing only, never a Cell principal.
         //
@@ -169,10 +174,11 @@ fn vfs_main() {
         // change arrives as a request or an owner-death notification, and the loop
         // parks in the blocking receive instead of yield-spinning. `idle_work` is
         // recomputed wherever the loop changes VFS state.
+        // The parked receive wakes at half the heartbeat interval to re-arm it.
         let received = if idle_work {
             ostd::syscall::sys_try_recv_attested(0, &mut buf)
         } else {
-            ostd::syscall::sys_recv_attested(0, &mut buf)
+            ostd::syscall::sys_recv_attested_timeout(0, &mut buf, liveness::VFS_HEARTBEAT_TICKS / 2)
         };
         match received {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {

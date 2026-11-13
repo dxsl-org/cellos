@@ -178,7 +178,9 @@ fn nvme_fat32_mount_x86() {
 #[test]
 fn nvme_driver_restart_resets_and_serves_again_x86() {
     let Ok(iso) = std::env::var("VICELL_AHCI_FAULT_ISO") else {
-        eprintln!("SKIP nvme_driver_restart_resets_and_serves_again_x86: VICELL_AHCI_FAULT_ISO unset");
+        eprintln!(
+            "SKIP nvme_driver_restart_resets_and_serves_again_x86: VICELL_AHCI_FAULT_ISO unset"
+        );
         return;
     };
     let python = python_binary().expect("Python 3 formats the FAT32 fixture");
@@ -233,7 +235,9 @@ fn nvme_driver_restart_resets_and_serves_again_x86() {
         })
         .collect();
     println!("08C NVMe witness: {evidence:#?}");
-    if let Some(report) = vicell_integration_tests::bench_milestones::retire_report("nvme", "tcg", after) {
+    if let Some(report) =
+        vicell_integration_tests::bench_milestones::retire_report("nvme", "tcg", after)
+    {
         println!("P08-RETIRE-LATENCY {report}");
     }
 }
@@ -321,4 +325,79 @@ fn nvme_09c_ten_replacement_cycles_x86() {
     if let Some(iso) = fault_iso() {
         block_09c_cycles::repeated_cycles(Lane::Nvme, &iso);
     }
+}
+
+/// Phase 12 (CP1 §4.2): a block driver that is alive but never answers must not
+/// hang VFS. The fault-injection `/bin/nvme` freezes on a write carrying
+/// `F12-FREEZE`: VFS gives that request up within its bound, refuses the
+/// stalled device at once afterwards, keeps serving everything else, and keeps
+/// its heartbeat, so the kernel never kills it. Before Phase 12 the receive on
+/// the driver had no bound and VFS hung with it. Needs `VICELL_AHCI_FAULT_ISO`.
+#[test]
+fn a_frozen_block_driver_does_not_hang_vfs_x86() {
+    let Some(iso) = fault_iso() else {
+        return;
+    };
+    let python = python_binary().expect("Python 3 formats the FAT32 fixture");
+    let disk = FatDisk::new(python).expect("mkfat32_inplace.py formats the fixture");
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso, &disk.arg());
+    for marker in ["[vfs] FAT32 /mnt/sd volume mounted", "Cellos >"] {
+        qemu.wait_for(marker, BOOT_TIMEOUT)
+            .unwrap_or_else(|e| panic!("boot marker {marker:?}: {e}\n{}", qemu.dump()));
+    }
+    let run = |qemu: &mut QemuRunner, command: &str, expect: &str, timeout: u64| {
+        let checkpoint = qemu.output_checkpoint();
+        qemu.send_line(command);
+        qemu.wait_for_after(expect, checkpoint, timeout)
+            .unwrap_or_else(|e| panic!("{command:?}: {e}\n{}", qemu.dump()));
+        qemu.wait_for_after("Cellos >", checkpoint, timeout)
+            .unwrap_or_else(|e| panic!("{command:?} prompt: {e}\n{}", qemu.dump()));
+    };
+
+    run(
+        &mut qemu,
+        "vwrite /tmp/alive.txt F12-ALIVE",
+        "Cellos >",
+        CMD_TIMEOUT,
+    );
+    let frozen = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/freeze.txt F12-FREEZE");
+    qemu.wait_for_after("[nvme] fault-inject: driver frozen", frozen, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("freeze marker: {e}\n{}", qemu.dump()));
+    qemu.wait_for_after("Cellos >", frozen, 60)
+        .unwrap_or_else(|e| panic!("shell after the frozen write: {e}\n{}", qemu.dump()));
+    // VFS answers again once the frozen request ran out its 3 500-tick (35 s)
+    // bound; before Phase 12 it waited on the driver forever.
+    run(&mut qemu, "vcat /tmp/alive.txt", "F12-ALIVE", 60);
+    let stalled = qemu.dump();
+    assert!(
+        stalled[frozen..].contains("did not reply within 3500 ticks; device stalled"),
+        "VFS did not report the stalled device:\n{}",
+        &stalled[frozen..]
+    );
+    // The stalled disk is refused at once; memory-backed paths keep working.
+    run(
+        &mut qemu,
+        "vwrite /mnt/sd/after.txt F12-AFTER",
+        "Cellos >",
+        CMD_TIMEOUT,
+    );
+    run(
+        &mut qemu,
+        "vwrite /tmp/later.txt F12-LATER",
+        "Cellos >",
+        CMD_TIMEOUT,
+    );
+    run(&mut qemu, "vcat /tmp/later.txt", "F12-LATER", CMD_TIMEOUT);
+
+    // Past one heartbeat interval (60 s) after the freeze, VFS is still the same
+    // live task: no heartbeat kill and no restart.
+    std::thread::sleep(std::time::Duration::from_secs(70));
+    run(&mut qemu, "vcat /tmp/alive.txt", "F12-ALIVE", CMD_TIMEOUT);
+    let output = qemu.dump();
+    let after = output.get(frozen..).unwrap_or_default();
+    assert!(
+        !after.contains("missed liveness deadline") && !after.contains("Init: service restarted"),
+        "VFS was killed or restarted after the freeze:\n{after}"
+    );
 }

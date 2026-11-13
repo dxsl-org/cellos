@@ -74,7 +74,8 @@ pub(crate) fn write_file<'a>(
     if !vfs.healthy(path) {
         return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
-    let old_size = vfs.file_size(path);
+    // Absent (or unreadable) is 0: quota never refunds bytes it cannot see.
+    let old_size = vfs.file_size(path).unwrap_or(0);
     if !vfs.healthy(path) {
         return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
@@ -88,7 +89,7 @@ pub(crate) fn write_file<'a>(
     if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
         return api::ipc::VfsResponse::Err(VfsError::Quota as u8);
     }
-    if vfs.write(path, content) {
+    if vfs.write(path, content).is_ok() {
         // Release the old contents to whoever was charged for them, then charge
         // the new contents to this caller.
         vfs.quota.release_path(path, old_size);
@@ -134,11 +135,11 @@ pub(crate) fn unlink_file<'a>(
     if !vfs.healthy(path) {
         return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
-    let file_size = vfs.file_size(path);
+    let file_size = vfs.file_size(path).unwrap_or(0);
     if !vfs.healthy(path) {
         return api::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
-    if vfs.unlink(path) {
+    if vfs.unlink(path).is_ok() {
         vfs.quota.release_path(path, file_size);
         api::ipc::VfsResponse::Ok
     } else {

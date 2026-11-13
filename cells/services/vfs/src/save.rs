@@ -104,9 +104,11 @@ fn observe(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResponse<'sta
     if !vfs.healthy(path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    // Unsupported was answered above, so the error's own byte is today's `Io`.
     match vfs.observe(path) {
-        Some(observation) => VfsResponse::Observed(observation),
-        None => VfsResponse::Err(VfsError::Io as u8),
+        Ok(Some(observation)) => VfsResponse::Observed(observation),
+        Ok(None) => VfsResponse::Err(VfsError::Io as u8),
+        Err(error) => VfsResponse::Err(error.wire()),
     }
 }
 
@@ -122,7 +124,7 @@ fn begin(vfs: &mut VfsManager, caller: Caller, dst: &str) -> VfsResponse<'static
         return VfsResponse::Err(VfsError::Unsupported as u8);
     };
     if !vfs.healthy(dst)
-        || !parent_of(dst).is_some_and(|parent| matches!(vfs.stat(parent), Some((_, true))))
+        || !parent_of(dst).is_some_and(|parent| matches!(vfs.stat(parent), Ok(Some((_, true)))))
     {
         return VfsResponse::Err(VfsError::Io as u8);
     }
@@ -153,8 +155,9 @@ fn begin(vfs: &mut VfsManager, caller: Caller, dst: &str) -> VfsResponse<'static
     let Some(next) = id.checked_add(1) else {
         return VfsResponse::Err(VfsError::Handle as u8);
     };
-    if !vfs.stage_create(&stage) {
-        return VfsResponse::Err(VfsError::Io as u8);
+    // Unsupported was answered above, so the error's own byte is today's `Io`.
+    if let Err(error) = vfs.stage_create(&stage) {
+        return VfsResponse::Err(error.wire());
     }
     vfs.saves.next = next;
     vfs.saves.slots.push(Slot {
@@ -198,7 +201,7 @@ fn chunk(
     {
         return VfsResponse::Err(VfsError::Quota as u8);
     }
-    if !vfs.stage_write(&stage, offset, bytes) {
+    if vfs.stage_write(&stage, offset, bytes).is_err() {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     if let Some(slot) = vfs.saves.owned(caller, id) {
@@ -243,19 +246,19 @@ fn sealed_identity(
     let mut offset = 0u64;
     while offset < len {
         let want = (len - offset).min(buf.len() as u64) as usize;
-        if vfs.read_at(stage, offset, &mut buf[..want]) != want {
+        if vfs.read_at(stage, offset, &mut buf[..want]) != Ok(want) {
             return None;
         }
         digest.update(&buf[..want]);
         offset += want as u64;
     }
     let identity = match vfs.observe(stage) {
-        Some(Observation::Present {
+        Ok(Some(Observation::Present {
             inode,
             generation,
             size,
             regular: true,
-        }) if size == len => (inode, generation),
+        })) if size == len => (inode, generation),
         _ => return None,
     };
     (digest.finalize().as_slice() == sha256).then_some(identity)
@@ -276,15 +279,13 @@ pub(crate) fn publish_owned(
     let (Some(next), Some(stage)) = (id.checked_add(1), vfs.stage_path(dst, id)) else {
         return refused;
     };
-    if !vfs.healthy(dst) || !vfs.stage_create(&stage) {
+    if !vfs.healthy(dst) || vfs.stage_create(&stage).is_err() {
         return refused;
     }
     vfs.saves.next = next;
     let outcome = stage_and_publish(vfs, &stage, dst, bytes, expect);
     if outcome.published().is_none()
-        && vfs
-            .observe(&stage)
-            .is_some_and(|o| o != Observation::Absent)
+        && matches!(vfs.observe(&stage), Ok(Some(o)) if o != Observation::Absent)
     {
         let _ = vfs.stage_remove(&stage);
     }
@@ -300,7 +301,7 @@ fn stage_and_publish(
 ) -> SaveOutcome {
     let refused = SaveOutcome::NotPublished(save_refusal::REFUSED);
     for (n, chunk) in bytes.chunks(4096).enumerate() {
-        if !vfs.stage_write(stage, (n * 4096) as u64, chunk) {
+        if vfs.stage_write(stage, (n * 4096) as u64, chunk).is_err() {
             return refused;
         }
     }
@@ -362,7 +363,7 @@ fn commit(
         // Same net-delta rule as `paths::write_file`.
         let old_size = match expect {
             api::ipc::SaveExpect::Absent => 0,
-            api::ipc::SaveExpect::Present { .. } => vfs.file_size(&dst),
+            api::ipc::SaveExpect::Present { .. } => vfs.file_size(&dst).unwrap_or(0),
         };
         let refund = if vfs.quota.writer_of(&dst) == Some(caller.cell) {
             old_size
@@ -400,9 +401,7 @@ fn abort(vfs: &mut VfsManager, caller: Caller, id: u32) -> VfsResponse<'static> 
     // A committed stage is the destination now. After an indeterminate commit
     // the stage is either gone (published) or still a stage; never the target.
     if !slot.outcome.is_some_and(|o| o.published().is_some())
-        && vfs
-            .observe(&slot.stage)
-            .is_some_and(|o| o != Observation::Absent)
+        && matches!(vfs.observe(&slot.stage), Ok(Some(o)) if o != Observation::Absent)
     {
         let _ = vfs.stage_remove(&slot.stage);
     }

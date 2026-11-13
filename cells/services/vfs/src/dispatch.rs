@@ -96,13 +96,16 @@ pub fn handle_request<'a>(
             if !vfs.healthy(p) {
                 return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
-            if !matches!(vfs.stat(p), Some((_, true))) {
+            if !matches!(vfs.stat(p), Ok(Some((_, true)))) {
                 return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
-            let n = vfs.list_dir(p, resp_buf);
+            let listed = vfs.list_dir(p, resp_buf);
             if !vfs.healthy(p) {
                 return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
+            let Ok(n) = listed else {
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+            };
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
         api::ipc::VfsRequest::ReadAsync { path } => {
@@ -117,7 +120,7 @@ pub fn handle_request<'a>(
             if !caller.may_own_state() {
                 return api::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
-            if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, false))) {
+            if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, false)))) {
                 return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             let lease = if path.starts_with("/srv") {
@@ -135,6 +138,10 @@ pub fn handle_request<'a>(
             if !vfs.healthy(path) {
                 return api::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
+            // A read that failed part way is an error, never a short handle.
+            let Ok(data) = data else {
+                return api::ipc::VfsResponse::Err(VfsError::Io as u8);
+            };
             let handle = vfs.pending.insert(caller, path, data, lease);
             api::ipc::VfsResponse::PendingHandle(handle)
         }

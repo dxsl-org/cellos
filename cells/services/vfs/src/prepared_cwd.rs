@@ -348,7 +348,7 @@ impl PreparedCwd {
         if !vfs.access.can_read(owner, path) {
             return Err(Status::Denied);
         }
-        if !vfs.healthy(path) || !matches!(vfs.stat(path), Some((_, true))) {
+        if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, true)))) {
             return Err(Status::Io);
         }
         if self.reservations.values().any(|r| r.prepared == prepared)

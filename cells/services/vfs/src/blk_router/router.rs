@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use api::block_route::{DeviceKey, ViBlockRouteV1};
 
 use super::discovery::device_name;
-use super::{BlockSys, DeviceRef};
+use super::{BlockSys, Call, DeviceRef, BLOCK_REPLY_TICKS};
 
 /// A live provider as named by a route record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +40,10 @@ pub struct Device {
     cached: Option<Provider>,
     /// Provider last reported in the log.
     announced: Option<Provider>,
+    /// Provider tid that let a request run out its bound. Requests are refused
+    /// at once until the route names another provider, so a frozen driver
+    /// costs one bound in total, not one per request or retry.
+    stalled: Option<usize>,
 }
 
 impl Device {
@@ -63,12 +67,13 @@ pub(super) enum Target {
     Refused,
 }
 
-/// One request/reply exchange: send refused (nothing reached the provider),
-/// sent but no reply from a provider that is still the route's, or replied.
+/// One request/reply exchange: refused (nothing reached the provider), the
+/// provider died after accepting, the bound ran out, or replied with a length.
 pub(super) enum Exchange {
     Refused,
     Missing,
-    Replied,
+    Stalled { dispatched: bool },
+    Replied(usize),
 }
 
 pub struct Router {
@@ -96,6 +101,7 @@ impl Router {
             name: device_name(key),
             cached: provider,
             announced: provider,
+            stalled: None,
         });
         DeviceRef::Device((self.devices.len() - 1) as u8)
     }
@@ -121,6 +127,15 @@ impl Router {
             ));
             return Target::Refused;
         };
+        if let Some(stalled) = device.stalled {
+            match device.lookup(sys) {
+                Some(provider) if provider.tid != stalled => {
+                    device.stalled = None;
+                    device.cached = None;
+                }
+                _ => return Target::Refused,
+            }
+        }
         if let Some(provider) = device.cached {
             return Target::Provider(i, provider.tid);
         }
@@ -151,10 +166,9 @@ impl Router {
         }
     }
 
-    /// A receive masked to the provider completes both for a reply and for the
-    /// provider's death (the kernel then writes the exit reason into the buffer).
-    /// Death clears the route's provider before any receiver runs, so a message
-    /// counts as a reply only if a fresh 432 still names `tid`.
+    /// One bounded exchange with device `i`'s provider `tid`. A refusal or a
+    /// death drops the cached provider so the next request re-resolves the
+    /// route; an expired bound stalls the device instead (see `Device::stalled`).
     pub(super) fn exchange(
         &mut self,
         sys: &mut impl BlockSys,
@@ -163,16 +177,25 @@ impl Router {
         req: &[u8],
         reply: &mut [u8],
     ) -> Exchange {
-        if !sys.send(tid, req) {
-            self.forget(i, tid);
-            return Exchange::Refused;
+        match sys.call(tid, req, reply) {
+            Call::Replied(len) => Exchange::Replied(len),
+            Call::Refused => {
+                self.forget(i, tid);
+                Exchange::Refused
+            }
+            Call::PeerGone => {
+                self.forget(i, tid);
+                Exchange::Missing
+            }
+            Call::Expired { dispatched } => {
+                let device = &mut self.devices[i];
+                device.stalled = Some(tid);
+                sys.log(&format!(
+                    "[blk-router] {}: driver tid={tid} did not reply within {BLOCK_REPLY_TICKS} ticks; device stalled",
+                    device.name
+                ));
+                Exchange::Stalled { dispatched }
+            }
         }
-        let replied =
-            sys.recv(tid, reply) && self.devices[i].lookup(sys).is_some_and(|p| p.tid == tid);
-        if !replied {
-            self.forget(i, tid);
-            return Exchange::Missing;
-        }
-        Exchange::Replied
     }
 }

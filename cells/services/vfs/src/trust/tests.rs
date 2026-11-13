@@ -74,8 +74,8 @@ fn manager() -> VfsManager {
 
 /// Seed the store the way the provisioner does: straight into the backend.
 fn seed(vfs: &mut VfsManager, text: &str) {
-    assert!(vfs.mkdir("/srv/.cellos-trust"));
-    assert!(vfs.write(STORE_PATH, text.as_bytes()));
+    assert!(vfs.mkdir("/srv/.cellos-trust").is_ok());
+    assert!(vfs.write(STORE_PATH, text.as_bytes()).is_ok());
 }
 
 fn call(vfs: &mut VfsManager, caller: Caller, req: &VfsRequest<'_>) -> String {
@@ -392,7 +392,8 @@ fn commit(vfs: &mut VfsManager, caller: Caller, challenge: Ref) -> String {
 
 fn stored(vfs: &VfsManager) -> Option<String> {
     vfs.stat(STORE_PATH)
-        .map(|_| String::from_utf8(vfs.read_to_vec(STORE_PATH)).unwrap())
+        .unwrap()
+        .map(|_| String::from_utf8(vfs.read_to_vec(STORE_PATH).unwrap()).unwrap())
 }
 
 fn interactive(host: &str, port: u16, key: u8) -> String {

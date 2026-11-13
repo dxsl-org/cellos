@@ -28,6 +28,7 @@ use crate::backend_ramfs::RamFsBackend;
 use crate::caller::Caller;
 use crate::dirs::DirTable;
 use crate::file_handles::FileHandleTable;
+use crate::fs_error::FsError;
 use crate::mount::MountTable;
 use crate::namespace::NamespaceLedger;
 use crate::pending::PendingTable;
@@ -107,17 +108,20 @@ impl VfsManager {
         self.mounts.backend(path)?.get_file_ptr(path)
     }
 
-    pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
+    /// The backend's listing of `path` merged with the mount-table entries.
+    /// A path the backend does not hold as a directory lists only those; a
+    /// device failure fails the listing rather than shortening it.
+    pub fn list_dir(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
         if !self.healthy(path) {
-            return 0;
+            return Err(FsError::Unavailable);
         }
-        let mut pos = self
-            .mounts
-            .backend(path)
-            .map(|b| b.list(path, out))
-            .unwrap_or(0);
+        let mut pos = match self.mounts.backend(path).map(|b| b.list(path, out)) {
+            Some(Ok(n)) => n,
+            Some(Err(error @ (FsError::Io | FsError::Indeterminate))) => return Err(error),
+            Some(Err(_)) | None => 0,
+        };
         if !self.healthy(path) {
-            return 0;
+            return Err(FsError::Unavailable);
         }
 
         let cap = out.len().min(480);
@@ -163,7 +167,7 @@ impl VfsManager {
         };
         for name in configured {
             let full_path = alloc::format!("{}/{}", path.trim_end_matches('/'), name);
-            let Some((_, directory)) = self.stat(&full_path) else {
+            let Ok(Some((_, directory))) = self.stat(&full_path) else {
                 continue;
             };
             if out[..pos]
@@ -183,30 +187,32 @@ impl VfsManager {
             out[pos] = b'\n';
             pos += 1;
         }
-        pos
+        Ok(pos)
     }
 
-    pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
+    /// `Ok(None)` when nothing exists at `path`. Directories the mount table
+    /// supplies exist even when their backend failed to answer.
+    pub fn stat(&self, path: &str) -> Result<Option<(u64, bool)>, FsError> {
         if !self.healthy(path) {
-            return None;
+            return Err(FsError::Unavailable);
         }
         if let Some((backend, source)) = self.config_source(path) {
             return backend.stat(source);
         }
-        let result = self.mounts.backend(path).and_then(|b| b.stat(path));
+        let result = self.mounts.backend(path).map_or(Ok(None), |b| b.stat(path));
         if !self.healthy(path) {
-            return None;
+            return Err(FsError::Unavailable);
         }
-        if result.is_some() {
-            return result;
+        if let Ok(Some(hit)) = result {
+            return Ok(Some(hit));
         }
         if self.mounts.is_mount_ancestor(path) {
-            return Some((0, true));
+            return Ok(Some((0, true)));
         }
         if matches!(path, "/etc" | "/etc/cellos") {
-            return Some((0, true));
+            return Ok(Some((0, true)));
         }
-        None
+        result
     }
 
     pub fn is_mount_ancestor(&self, path: &str) -> bool {
@@ -217,135 +223,132 @@ impl VfsManager {
         self.mounts.is_mount_point(path)
     }
 
-    pub fn file_size(&self, path: &str) -> u64 {
+    pub fn file_size(&self, path: &str) -> Result<u64, FsError> {
         if let Some((backend, source)) = self.config_source(path) {
             return backend.file_size(source);
         }
         self.mounts
             .backend(path)
-            .map(|b| b.file_size(path))
-            .unwrap_or(0)
+            .ok_or(FsError::Unavailable)?
+            .file_size(path)
     }
 
-    pub fn read_to_vec(&self, path: &str) -> Vec<u8> {
+    pub fn read_to_vec(&self, path: &str) -> Result<Vec<u8>, FsError> {
         if let Some((backend, source)) = self.config_source(path) {
             return backend.read_to_vec(source);
         }
         self.mounts
             .backend(path)
-            .map(|b| b.read_to_vec(path))
-            .unwrap_or_default()
+            .ok_or(FsError::Unavailable)?
+            .read_to_vec(path)
     }
 
-    pub fn write(&mut self, path: &str, content: &[u8]) -> bool {
+    pub fn write(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
         let created = self.would_create(path);
-        let ok = self
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.write(path, content))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.write(path, content));
         self.mark_content(path, created);
-        ok
+        result
     }
 
-    pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+    pub fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
         if let Some((backend, source)) = self.config_source(path) {
             return backend.read_at(source, offset, buf);
         }
         self.mounts
             .backend(path)
-            .map(|b| b.read_at(path, offset, buf))
-            .unwrap_or(0)
+            .ok_or(FsError::Unavailable)?
+            .read_at(path, offset, buf)
     }
 
-    pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> bool {
-        let ok = self
+    pub fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> Result<(), FsError> {
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.write_at(path, offset, content))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| {
+                b.write_at(path, offset, content)
+            });
         self.mark_content(path, false);
-        ok
+        result
     }
 
-    pub fn sync(&mut self, path: &str) -> bool {
+    pub fn sync(&mut self, path: &str) -> Result<(), FsError> {
         self.mounts
             .backend_mut(path)
-            .map(|b| b.sync(path))
-            .unwrap_or(false)
+            .map_or(Err(FsError::Unavailable), |b| b.sync(path))
     }
 
-    pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
+    pub fn append(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
         let created = self.would_create(path);
-        let ok = self
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.append(path, content))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.append(path, content));
         self.mark_content(path, created);
-        ok
+        result
     }
 
-    pub fn mkdir(&mut self, path: &str) -> bool {
+    pub fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
         let created = self.first_created_dir(path);
-        let ok = self
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.mkdir(path))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.mkdir(path));
         if let Some(created) = created {
             self.mark_binding(&created);
         }
-        ok
+        result
     }
 
-    pub fn rmdir(&mut self, path: &str) -> bool {
-        let ok = self
+    pub fn rmdir(&mut self, path: &str) -> Result<(), FsError> {
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.rmdir(path))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.rmdir(path));
         self.mark_tree(path);
-        ok
+        result
     }
 
-    pub fn unlink(&mut self, path: &str) -> bool {
-        let ok = self
+    pub fn unlink(&mut self, path: &str) -> Result<(), FsError> {
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.unlink(path))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.unlink(path));
         self.mark_binding(path);
-        ok
+        result
     }
 
-    pub fn rmdir_recursive(&mut self, path: &str) -> bool {
-        let ok = self
+    pub fn rmdir_recursive(&mut self, path: &str) -> Result<(), FsError> {
+        let result = self
             .mounts
             .backend_mut(path)
-            .map(|b| b.rmdir_recursive(path))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.rmdir_recursive(path));
         self.mark_tree(path);
-        ok
+        result
     }
 
-    pub fn rename_no_replace(&mut self, old: &str, new: &str) -> bool {
+    /// `Unsupported` across two backends: no backend renames between mounts.
+    pub fn rename_no_replace(&mut self, old: &str, new: &str) -> Result<(), FsError> {
         let (Some(old_backend), Some(new_backend)) =
             (self.mounts.backend(old), self.mounts.backend(new))
         else {
-            return false;
+            return Err(FsError::Unavailable);
         };
-        if !core::ptr::eq(old_backend, new_backend) || !self.healthy(old) || !self.healthy(new) {
-            return false;
+        if !core::ptr::eq(old_backend, new_backend) {
+            return Err(FsError::Unsupported);
         }
-        let ok = self
+        if !self.healthy(old) || !self.healthy(new) {
+            return Err(FsError::Unavailable);
+        }
+        let result = self
             .mounts
             .backend_mut(old)
-            .map(|b| b.rename_no_replace(old, new))
-            .unwrap_or(false);
+            .map_or(Err(FsError::Unavailable), |b| b.rename_no_replace(old, new));
         self.mark_binding(old);
         self.mark_binding(new);
-        ok
+        result
     }
 
     /// A runtime file under `/mnt/sd/etc/cellos` overrides its public
@@ -365,7 +368,7 @@ impl VfsManager {
         if let Some(backend) = self.mounts.backend(persistent) {
             // Presence, not nonempty content, selects an override. Invalid or
             // empty runtime files must be diagnosed rather than silently ignored.
-            if backend.stat(persistent).is_some() {
+            if matches!(backend.stat(persistent), Ok(Some(_))) {
                 return Some((backend, persistent));
             }
         }

@@ -41,17 +41,18 @@ impl VfsManager {
     /// Whether writing `path` would add an entry to a directory that a handle
     /// currently names. Stats only when such a handle exists.
     pub(super) fn would_create(&self, path: &str) -> bool {
-        parent_of(path).is_some_and(|parent| self.dirs.watches(parent)) && self.stat(path).is_none()
+        parent_of(path).is_some_and(|parent| self.dirs.watches(parent))
+            && !matches!(self.stat(path), Ok(Some(_)))
     }
 
     /// The outermost directory `mkdir path` would create, if it creates any.
     pub(super) fn first_created_dir(&self, path: &str) -> Option<String> {
-        if self.stat(path).is_some() {
+        if matches!(self.stat(path), Ok(Some(_))) {
             return None;
         }
         let mut top = path;
         while let Some(parent) = parent_of(top) {
-            if self.stat(parent).is_some() {
+            if matches!(self.stat(parent), Ok(Some(_))) {
                 break;
             }
             top = parent;

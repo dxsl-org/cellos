@@ -23,8 +23,12 @@ impl Router {
     ) -> BlockOutcome {
         let mut reply = [0u8; 1];
         match self.exchange(sys, i, tid, req, &mut reply) {
-            Exchange::Refused => BlockOutcome::NotIssued,
-            Exchange::Replied => BlockOutcome::from_byte(reply[0]),
+            Exchange::Refused | Exchange::Stalled { dispatched: false } => BlockOutcome::NotIssued,
+            // An empty reply is no status: the request may have run.
+            Exchange::Replied(0) => BlockOutcome::Indeterminate,
+            Exchange::Replied(_) => BlockOutcome::from_byte(reply[0]),
+            // Taken but never answered within the bound: it may yet run.
+            Exchange::Stalled { dispatched: true } => BlockOutcome::Indeterminate,
             // The provider may have issued the command before it died; a write
             // read as success would make the write-through page cache believe a
             // sector reached the device.
@@ -57,7 +61,7 @@ impl Router {
                 let mut reply = [0u8; 1 + SECTOR_SIZE];
                 if !matches!(
                     self.exchange(sys, i, tid, &req, &mut reply),
-                    Exchange::Replied
+                    Exchange::Replied(len) if len == reply.len()
                 ) || !BlockOutcome::from_byte(reply[0]).is_completed()
                 {
                     return false;
@@ -85,13 +89,16 @@ impl Router {
             match self.target(sys, dev) {
                 Target::Refused => false,
                 Target::Provider(i, tid) => self.read_run(sys, i, tid, first, chunk),
-                Target::Kernel => chunk.chunks_exact_mut(SECTOR_SIZE).enumerate().all(
-                    |(n, sector)| {
-                        let sector: &mut [u8; SECTOR_SIZE] =
-                            sector.try_into().expect("whole sector");
-                        sys.kernel_read(first + n as u64, sector)
-                    },
-                ),
+                Target::Kernel => {
+                    chunk
+                        .chunks_exact_mut(SECTOR_SIZE)
+                        .enumerate()
+                        .all(|(n, sector)| {
+                            let sector: &mut [u8; SECTOR_SIZE] =
+                                sector.try_into().expect("whole sector");
+                            sys.kernel_read(first + n as u64, sector)
+                        })
+                }
             }
         })
     }
@@ -111,9 +118,10 @@ impl Router {
         };
         let mut reply = [0u8; MAX_REPLY_SIZE];
         let reply = &mut reply[..request.reply_len()];
+        let expected = reply.len();
         if !matches!(
             self.exchange(sys, i, tid, &request.encode(), reply),
-            Exchange::Replied
+            Exchange::Replied(len) if len == expected
         ) || !BlockOutcome::from_byte(reply[0]).is_completed()
         {
             return false;

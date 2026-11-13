@@ -15,6 +15,40 @@ use types::block_wire::{BlockOutcome, MAX_RUN_SECTORS};
 
 const SECTOR_SIZE: u64 = 512;
 
+/// Why a [`CachedBlockStream`] operation failed, as fatfs carries it back to
+/// the FAT backend inside `fatfs::Error::Io`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StreamError {
+    /// The device failed, the request lay outside the partition, or nothing
+    /// was issued.
+    Io,
+    /// A write or flush may have reached the medium; it is not replayed.
+    Indeterminate,
+}
+
+impl StreamError {
+    /// The failure of a write or flush that did not complete.
+    pub(crate) fn of(outcome: BlockOutcome) -> Result<(), Self> {
+        match outcome {
+            BlockOutcome::Completed => Ok(()),
+            BlockOutcome::NotIssued => Err(Self::Io),
+            BlockOutcome::Indeterminate => Err(Self::Indeterminate),
+        }
+    }
+}
+
+impl fatfs::IoError for StreamError {
+    fn is_interrupted(&self) -> bool {
+        false
+    }
+    fn new_unexpected_eof_error() -> Self {
+        Self::Io
+    }
+    fn new_write_zero_error() -> Self {
+        Self::Io
+    }
+}
+
 /// Attempts per raw sector operation before the block path is called failed.
 const RAW_IO_ATTEMPTS: usize = 3;
 
@@ -192,18 +226,17 @@ impl SectorDevice for BlockStream {
     /// Retried only while the driver proves the write was never issued. An
     /// `Indeterminate` write is not replayed: the device may already hold it
     /// (or part of it), and a replay is a second, unrequested medium write.
-    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
+    fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> BlockOutcome {
         let Some(lba) = self.abs_lba(sector) else {
-            return false;
+            return BlockOutcome::NotIssued;
         };
         for _ in 0..RAW_IO_ATTEMPTS {
             match blk_write(self.dev, lba, data) {
-                BlockOutcome::Completed => return true,
                 BlockOutcome::NotIssued => continue,
-                BlockOutcome::Indeterminate => return false,
+                outcome => return outcome,
             }
         }
-        false
+        BlockOutcome::NotIssued
     }
 }
 
@@ -264,43 +297,53 @@ impl CachedBlockStream {
     /// window, refilling it with the requested sectors rounded up to whole
     /// [`RUN_SECTORS`] runs, instead of one device round trip per 512 bytes. The data
     /// bypasses the sector cache, which stays for metadata (FAT, directories).
-    fn read_bulk(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
+    fn read_bulk(&mut self, buf: &mut [u8]) -> Result<usize, StreamError> {
         let pos = self.inner.pos;
         if self.ahead.hit(pos).is_none() {
             let wanted = (buf.len() as u64).div_ceil(SECTOR_SIZE);
             self.fill_ahead(pos / SECTOR_SIZE, wanted.next_multiple_of(RUN_SECTORS))?;
         }
-        let window = self.ahead.hit(pos).ok_or(())?;
+        let window = self.ahead.hit(pos).ok_or(StreamError::Io)?;
         let n = window.len().min(buf.len());
         buf[..n].copy_from_slice(&window[..n]);
         self.inner.pos += n as u64;
         Ok(n)
     }
 
-    fn fill_ahead(&mut self, sector: u64, count: u64) -> Result<(), ()> {
+    fn fill_ahead(&mut self, sector: u64, count: u64) -> Result<(), StreamError> {
         self.ahead.data.clear();
-        let count = count.min(self.inner.sectors.checked_sub(sector).ok_or(())?);
-        let lba = self.inner.abs_lba(sector).ok_or(())?;
+        let count = count.min(
+            self.inner
+                .sectors
+                .checked_sub(sector)
+                .ok_or(StreamError::Io)?,
+        );
+        let lba = self.inner.abs_lba(sector).ok_or(StreamError::Io)?;
         // The last sector of the window is inside the partition by `count`.
-        self.inner.abs_lba(sector + count - 1).ok_or(())?;
+        self.inner
+            .abs_lba(sector + count - 1)
+            .ok_or(StreamError::Io)?;
         let mut data = core::mem::take(&mut self.ahead.data);
         data.resize(count as usize * SECTOR_SIZE as usize, 0);
         for _ in 0..RAW_IO_ATTEMPTS {
             if blk_read_sectors(self.inner.dev, lba, count as u32, &mut data) {
-                self.ahead = ReadAhead { first: sector, data };
+                self.ahead = ReadAhead {
+                    first: sector,
+                    data,
+                };
                 return Ok(());
             }
         }
-        Err(())
+        Err(StreamError::Io)
     }
 }
 
 impl fatfs::IoBase for CachedBlockStream {
-    type Error = ();
+    type Error = StreamError;
 }
 
 impl fatfs::Read for CachedBlockStream {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, StreamError> {
         if buf.is_empty() {
             return Ok(0);
         }
@@ -312,11 +355,11 @@ impl fatfs::Read for CachedBlockStream {
         if self.last.as_ref().map(|(s, _)| *s) != Some(sector) {
             let mut sec = [0u8; 512];
             if !self.cache.read_sector(&mut self.inner, sector, &mut sec) {
-                return Err(());
+                return Err(StreamError::Io);
             }
             self.last = Some((sector, sec));
         }
-        let (_, sec) = self.last.as_ref().ok_or(())?;
+        let (_, sec) = self.last.as_ref().ok_or(StreamError::Io)?;
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
         buf[..n].copy_from_slice(&sec[off..off + n]);
         self.inner.pos += n as u64;
@@ -325,7 +368,7 @@ impl fatfs::Read for CachedBlockStream {
 }
 
 impl fatfs::Write for CachedBlockStream {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, ()> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, StreamError> {
         // Any write may change sectors the read-ahead window or `last` holds.
         self.ahead.data.clear();
         self.last = None;
@@ -339,19 +382,15 @@ impl fatfs::Write for CachedBlockStream {
                 // Full-sector write: no read-before-write needed.
                 let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !self.cache.write_sector(&mut self.inner, sector, &full) {
-                    return Err(());
-                }
+                StreamError::of(self.cache.write_sector(&mut self.inner, sector, &full))?;
             } else {
                 // Partial sector: read-modify-write through cache.
                 let mut sec = [0u8; 512];
                 if !self.cache.read_sector(&mut self.inner, sector, &mut sec) {
-                    return Err(());
+                    return Err(StreamError::Io);
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !self.cache.write_sector(&mut self.inner, sector, &sec) {
-                    return Err(());
-                }
+                StreamError::of(self.cache.write_sector(&mut self.inner, sector, &sec))?;
             }
 
             written += chunk;
@@ -360,27 +399,24 @@ impl fatfs::Write for CachedBlockStream {
         Ok(written)
     }
 
-    fn flush(&mut self) -> Result<(), ()> {
-        if blk_flush(self.inner.dev).is_completed() {
-            Ok(())
-        } else {
-            Err(())
-        }
+    fn flush(&mut self) -> Result<(), StreamError> {
+        StreamError::of(blk_flush(self.inner.dev))
     }
 }
 
 impl fatfs::Seek for CachedBlockStream {
-    fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
-        self.inner.seek(pos)
+    fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, StreamError> {
+        self.inner.seek(pos).map_err(|()| StreamError::Io)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::BlockStream;
+    use super::{BlockStream, StreamError};
     use crate::blk_router::DeviceRef;
     use crate::page_cache::SectorDevice;
     use api::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
+    use types::block_wire::BlockOutcome;
 
     #[test]
     fn sectors_past_the_partition_never_reach_the_device() {
@@ -398,7 +434,20 @@ mod tests {
         assert_eq!(bs.abs_lba(PART_FAT32_SECTORS), None);
         let mut buf = [0u8; 512];
         assert!(!bs.read_raw_sector(PART_FAT32_SECTORS, &mut buf));
-        assert!(!bs.write_raw_sector(u64::MAX, &buf));
+        assert_eq!(bs.write_raw_sector(u64::MAX, &buf), BlockOutcome::NotIssued);
+    }
+
+    #[test]
+    fn only_an_indeterminate_outcome_is_an_indeterminate_stream_error() {
+        assert_eq!(StreamError::of(BlockOutcome::Completed), Ok(()));
+        assert_eq!(
+            StreamError::of(BlockOutcome::NotIssued),
+            Err(StreamError::Io)
+        );
+        assert_eq!(
+            StreamError::of(BlockOutcome::Indeterminate),
+            Err(StreamError::Indeterminate)
+        );
     }
 
     #[test]

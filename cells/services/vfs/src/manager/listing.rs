@@ -32,8 +32,8 @@ impl VfsManager {
         let backend = self.mounts.backend(path)?;
         let extras = self.listing_extras(path, backend);
         let (mut written, extra_start) = if cursor & EXTRA_PHASE == 0 {
-            let page = if matches!(backend.stat(path), Some((_, true))) {
-                backend.list_page(path, cursor, out)?
+            let page = if matches!(backend.stat(path), Ok(Some((_, true)))) {
+                backend.list_page(path, cursor, out).ok()?
             } else if cursor == 0 && self.is_synthetic_dir(path) {
                 ListPage {
                     written: 0,
@@ -93,7 +93,7 @@ impl VfsManager {
             extras.push(Extra {
                 name,
                 kind,
-                in_backend: backend.stat(&child).is_some(),
+                in_backend: matches!(backend.stat(&child), Ok(Some(_))),
             });
         }
         let configured: &[&'static str] = match path {
@@ -113,7 +113,7 @@ impl VfsManager {
                 continue;
             }
             let child = join_component(path, name);
-            let Some((_, directory)) = self.stat(&child) else {
+            let Ok(Some((_, directory))) = self.stat(&child) else {
                 continue;
             };
             let kind = if directory {
@@ -124,7 +124,7 @@ impl VfsManager {
             extras.push(Extra {
                 name,
                 kind,
-                in_backend: backend.stat(&child).is_some(),
+                in_backend: matches!(backend.stat(&child), Ok(Some(_))),
             });
         }
         extras

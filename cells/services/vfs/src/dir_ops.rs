@@ -33,7 +33,7 @@ pub(crate) fn mkdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
     let Ok(_reservation) = reserve_srv(vfs, path) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
-    if vfs.mkdir(path) {
+    if vfs.mkdir(path).is_ok() {
         VfsResponse::Ok
     } else {
         VfsResponse::Err(VfsError::Io as u8)
@@ -51,7 +51,7 @@ pub(crate) fn rmdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
     let Ok(_reservation) = reserve_srv(vfs, path) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
-    if vfs.rmdir(path) {
+    if vfs.rmdir(path).is_ok() {
         VfsResponse::Ok
     } else {
         VfsResponse::Err(VfsError::Io as u8)
@@ -84,14 +84,14 @@ pub(crate) fn rename(
     }
     if old_key == new_key {
         return match vfs.stat(old) {
-            Some((_, false)) => VfsResponse::Ok,
+            Ok(Some((_, false))) => VfsResponse::Ok,
             _ => VfsResponse::Err(VfsError::Io as u8),
         };
     }
     let Ok(reservation) = vfs.ledger.reserve_two(&old_key, &new_key) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
-    let ok = vfs.rename_no_replace(old, new);
+    let ok = vfs.rename_no_replace(old, new).is_ok();
     drop(reservation);
     if !ok {
         return VfsResponse::Err(VfsError::Io as u8);

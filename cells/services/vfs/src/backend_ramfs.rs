@@ -11,6 +11,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::backend::{fill_page, FsBackend, ListPage};
+use crate::fs_error::FsError;
 use api::ipc::vfs_dir_page::EntryKind;
 #[cfg(feature = "c2c-oracle-k1-fixture")]
 const ORACLE_CLUSTER_KEY: &[u8; 32] =
@@ -76,7 +77,7 @@ impl RamFsBackend {
 
     #[cfg(test)]
     pub(crate) fn seed_test_file(&mut self, path: &str, content: &[u8]) -> bool {
-        self.write_node(path, content)
+        self.write_node(path, content).is_ok()
     }
 
     fn find_node(&self, path: &str) -> Option<&RamFile> {
@@ -120,37 +121,48 @@ impl RamFsBackend {
         Some((parent, name))
     }
 
-    fn get_file_data(&self, path: &str) -> Option<&[u8]> {
-        let n = self.find_node(path)?;
+    fn get_file_data(&self, path: &str) -> Result<&[u8], FsError> {
+        let n = self.find_node(path).ok_or(FsError::NotFound)?;
         if n.is_dir {
-            return None;
+            return Err(FsError::IsADirectory);
         }
-        Some(&n.data)
+        Ok(&n.data)
     }
 
-    /// Create or overwrite a regular file. Returns false if the parent does
-    /// not exist or `path` names an existing directory.
-    fn write_node(&mut self, path: &str, content: &[u8]) -> bool {
-        let (parent_path, name) = match Self::split_parent_name(path) {
-            Some(pn) => pn,
-            None => return false,
-        };
-        let parent = match self.find_node_mut(&parent_path) {
-            Some(p) if p.is_dir => p,
-            _ => return false,
-        };
+    /// The directory that holds `path`'s last component, and that component.
+    fn parent_mut(&mut self, path: &str) -> Result<(&mut RamFile, String), FsError> {
+        let (parent_path, name) = Self::split_parent_name(path).ok_or(FsError::InvalidPath)?;
+        let parent = self.find_node_mut(&parent_path).ok_or(FsError::NotFound)?;
+        if !parent.is_dir {
+            return Err(FsError::NotADirectory);
+        }
+        Ok((parent, name))
+    }
+
+    /// Create or overwrite a regular file. Fails if the parent does not exist
+    /// or `path` names an existing directory.
+    fn write_node(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
+        let (parent, name) = self.parent_mut(path)?;
         match parent.children.get_mut(&name) {
-            Some(existing) if existing.is_dir => false,
+            Some(existing) if existing.is_dir => Err(FsError::IsADirectory),
             Some(existing) => {
                 existing.data = Vec::from(content);
-                true
+                Ok(())
             }
             None => {
                 parent
                     .children
                     .insert(name, Box::new(RamFile::new_file(content)));
-                true
+                Ok(())
             }
+        }
+    }
+
+    fn dir_node(&self, path: &str) -> Result<&RamFile, FsError> {
+        match self.find_node(path) {
+            Some(n) if n.is_dir => Ok(n),
+            Some(_) => Err(FsError::NotADirectory),
+            None => Err(FsError::NotFound),
         }
     }
 
@@ -180,11 +192,8 @@ impl FsBackend for RamFsBackend {
         Some((n.data.as_ptr() as usize, n.data.len()))
     }
 
-    fn list(&self, path: &str, out: &mut [u8]) -> usize {
-        let node = match self.find_node(path) {
-            Some(n) if n.is_dir => n,
-            _ => return 0,
-        };
+    fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
+        let node = self.dir_node(path)?;
         // Historical 480-byte cap (pre-MountTable dispatch staged through a
         // 480-byte temp buffer) — kept so reply sizes stay bit-identical.
         let cap = out.len().min(480);
@@ -201,11 +210,11 @@ impl FsBackend for RamFsBackend {
             out[pos + 2 + name_b.len()] = b'\n';
             pos += entry_len;
         }
-        pos
+        Ok(pos)
     }
 
-    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
-        let node = self.find_node(path).filter(|node| node.is_dir)?;
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Result<ListPage, FsError> {
+        let node = self.dir_node(path)?;
         let entries = node.children.iter().map(|(name, child)| {
             let kind = if child.is_dir {
                 EntryKind::Dir
@@ -217,130 +226,108 @@ impl FsBackend for RamFsBackend {
         fill_page(entries, start, out)
     }
 
-    fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        self.find_node(path)
-            .map(|n| (n.data.len() as u64, n.is_dir))
+    fn stat(&self, path: &str) -> Result<Option<(u64, bool)>, FsError> {
+        Ok(self
+            .find_node(path)
+            .map(|n| (n.data.len() as u64, n.is_dir)))
     }
 
-    fn file_size(&self, path: &str) -> u64 {
-        self.get_file_data(path)
-            .map(|d| d.len() as u64)
-            .unwrap_or(0)
+    fn file_size(&self, path: &str) -> Result<u64, FsError> {
+        self.get_file_data(path).map(|d| d.len() as u64)
     }
 
-    fn read_to_vec(&self, path: &str) -> Vec<u8> {
-        self.get_file_data(path)
-            .map(|d| d.to_vec())
-            .unwrap_or_default()
+    fn read_to_vec(&self, path: &str) -> Result<Vec<u8>, FsError> {
+        self.get_file_data(path).map(|d| d.to_vec())
     }
 
     /// Positional read out of the in-memory node.
     ///
     /// Required: the handle-read path (`ReadFileHandle`) is ranged, and a backend that leaves this
-    /// at the trait default hands every caller zero bytes — silently truncating every file the
-    /// shell writes under `/tmp` and reads back.
-    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
-        let Some(data) = self.get_file_data(path) else {
-            return 0;
-        };
-        let start = match usize::try_from(offset) {
-            Ok(start) => start,
-            Err(_) => return 0,
+    /// at the trait default hands every caller an error — failing every file the shell writes
+    /// under `/tmp` and reads back.
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
+        let data = self.get_file_data(path)?;
+        let Ok(start) = usize::try_from(offset) else {
+            return Ok(0);
         };
         if start >= data.len() {
-            return 0;
+            return Ok(0);
         }
         let n = buf.len().min(data.len() - start);
         buf[..n].copy_from_slice(&data[start..start + n]);
-        n
+        Ok(n)
     }
 
-    fn write(&mut self, path: &str, content: &[u8]) -> bool {
+    fn write(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
         // Embedded catalog is immutable; only the volatile scratch space accepts writes.
         if !path.starts_with("/tmp/") {
-            return false;
+            return Err(FsError::Unsupported);
         }
         self.write_node(path, content)
     }
 
-    fn append(&mut self, path: &str, content: &[u8]) -> bool {
+    fn append(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
         if !path.starts_with("/tmp/") {
-            return false;
+            return Err(FsError::Unsupported);
         }
-        let mut data = self
-            .get_file_data(path)
-            .map(|d| d.to_vec())
-            .unwrap_or_default();
+        let mut data = match self.get_file_data(path) {
+            Ok(d) => d.to_vec(),
+            Err(FsError::NotFound) => Vec::new(),
+            Err(error) => return Err(error),
+        };
         data.extend_from_slice(content);
         self.write_node(path, &data)
     }
 
-    fn mkdir(&mut self, path: &str) -> bool {
-        if let Some((parent_path, name)) = Self::split_parent_name(path) {
-            if let Some(parent) = self.find_node_mut(&parent_path) {
-                if parent.is_dir && !parent.children.contains_key(&name) {
-                    parent.children.insert(name, Box::new(RamFile::new_dir()));
-                    return true;
-                }
-            }
+    fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+        let (parent, name) = self.parent_mut(path)?;
+        if parent.children.contains_key(&name) {
+            return Err(FsError::AlreadyExists);
         }
-        false
+        parent.children.insert(name, Box::new(RamFile::new_dir()));
+        Ok(())
     }
 
-    fn rmdir(&mut self, path: &str) -> bool {
-        if let Some((parent_path, name)) = Self::split_parent_name(path) {
-            if let Some(parent) = self.find_node_mut(&parent_path) {
-                let removable = parent
-                    .children
-                    .get(&name)
-                    .map(|c| c.is_dir && c.children.is_empty())
-                    .unwrap_or(false);
-                if removable {
-                    parent.children.remove(&name);
-                    return true;
-                }
+    fn rmdir(&mut self, path: &str) -> Result<(), FsError> {
+        let (parent, name) = self.parent_mut(path)?;
+        match parent.children.get(&name) {
+            None => Err(FsError::NotFound),
+            Some(c) if !c.is_dir => Err(FsError::NotADirectory),
+            Some(c) if !c.children.is_empty() => Err(FsError::DirectoryNotEmpty),
+            Some(_) => {
+                parent.children.remove(&name);
+                Ok(())
             }
         }
-        false
     }
 
-    fn unlink(&mut self, path: &str) -> bool {
+    fn unlink(&mut self, path: &str) -> Result<(), FsError> {
         if Self::is_oracle_fixture_path(path) {
-            return false;
+            return Err(FsError::Unsupported);
         }
-        if let Some((parent_path, name)) = Self::split_parent_name(path) {
-            if let Some(parent) = self.find_node_mut(&parent_path) {
-                let removable = parent
-                    .children
-                    .get(&name)
-                    .map(|c| !c.is_dir)
-                    .unwrap_or(false);
-                if removable {
-                    parent.children.remove(&name);
-                    return true;
-                }
+        let (parent, name) = self.parent_mut(path)?;
+        match parent.children.get(&name) {
+            None => Err(FsError::NotFound),
+            Some(c) if c.is_dir => Err(FsError::IsADirectory),
+            Some(_) => {
+                parent.children.remove(&name);
+                Ok(())
             }
         }
-        false
     }
 
-    fn rmdir_recursive(&mut self, path: &str) -> bool {
+    fn rmdir_recursive(&mut self, path: &str) -> Result<(), FsError> {
         if Self::is_oracle_fixture_path(path) {
-            return false;
+            return Err(FsError::Unsupported);
         }
-        if let Some((parent_path, name)) = Self::split_parent_name(path) {
-            if let Some(parent) = self.find_node_mut(&parent_path) {
-                if parent
-                    .children
-                    .get(&name)
-                    .map(|c| c.is_dir)
-                    .unwrap_or(false)
-                {
-                    parent.children.remove(&name);
-                    return true;
-                }
+        let (parent, name) = self.parent_mut(path)?;
+        match parent.children.get(&name) {
+            None => Err(FsError::NotFound),
+            Some(c) if !c.is_dir => Err(FsError::NotADirectory),
+            Some(_) => {
+                parent.children.remove(&name);
+                Ok(())
             }
         }
-        false
     }
 }

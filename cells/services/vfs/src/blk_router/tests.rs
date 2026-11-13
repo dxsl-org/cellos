@@ -1,11 +1,13 @@
 use super::discovery::discover;
 use super::router::Router;
-use super::{BlockSys, DeviceRef};
+use super::{BlockSys, Call, DeviceRef};
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::block_route::{ViBlockRouteV1, FLAG_PROVIDER_LIVE};
-use types::block_wire::{BlockOutcome, ReadRunRequest, OP_READ, OP_READ_RUN, OP_WRITE, SECTOR_SIZE};
+use types::block_wire::{
+    BlockOutcome, ReadRunRequest, OP_READ, OP_READ_RUN, OP_WRITE, SECTOR_SIZE,
+};
 
 pub(super) const AHCI: u64 = 0xFA; // 00:1f.2
 pub(super) const NVME: u64 = 0x300; // 03:00.0
@@ -31,7 +33,9 @@ pub(super) struct Fake {
     pub media: BTreeMap<usize, BTreeMap<u64, [u8; SECTOR_SIZE]>>,
     /// Provider that exits right after accepting its next request.
     dies_after_send: Option<usize>,
-    pending: Option<(usize, Vec<u8>)>,
+    /// Provider that is alive but never answers: every call runs out its
+    /// bound, `dispatched` saying whether it had taken the request.
+    frozen: Option<(usize, bool)>,
     sent: Vec<usize>,
     /// Opcode of every accepted request, in order.
     pub ops: Vec<u16>,
@@ -65,27 +69,20 @@ impl BlockSys for Fake {
     fn lookup_route(&mut self, index: u32) -> Option<ViBlockRouteV1> {
         self.routes.get(index as usize).copied()
     }
-    fn send(&mut self, tid: usize, msg: &[u8]) -> bool {
+    fn call(&mut self, tid: usize, req: &[u8], buf: &mut [u8]) -> Call {
         if !self.live(tid) {
-            return false;
+            return Call::Refused;
         }
         self.sent.push(tid);
-        self.ops.push(u16::from_le_bytes([msg[0], msg[1]]));
-        self.pending = Some((tid, msg.to_vec()));
+        self.ops.push(u16::from_le_bytes([req[0], req[1]]));
+        if let Some((_, dispatched)) = self.frozen.filter(|&(frozen, _)| frozen == tid) {
+            return Call::Expired { dispatched };
+        }
         if self.dies_after_send == Some(tid) {
             self.kill(tid);
+            return Call::PeerGone;
         }
-        true
-    }
-    fn recv(&mut self, tid: usize, buf: &mut [u8]) -> bool {
-        let Some((to, req)) = self.pending.take() else {
-            return false;
-        };
-        assert_eq!(to, tid);
         buf.fill(0);
-        if !self.live(tid) {
-            return true; // death notification: exit reason 0, no data
-        }
         let op = u16::from_le_bytes([req[0], req[1]]);
         let lba = req
             .get(2..10)
@@ -97,7 +94,7 @@ impl BlockSys for Fake {
             }
             OP_WRITE => drop(medium.insert(lba, req[10..].try_into().unwrap())),
             OP_READ_RUN => {
-                let request = ReadRunRequest::decode(&req).expect("well-formed request");
+                let request = ReadRunRequest::decode(req).expect("well-formed request");
                 assert_eq!(buf.len(), request.reply_len(), "reply buffer fits the run");
                 let outcome = self.read_run_outcome.unwrap_or(BlockOutcome::Completed);
                 buf[0] = outcome.to_byte();
@@ -113,7 +110,7 @@ impl BlockSys for Fake {
             }
             _ => {}
         }
-        true
+        Call::Replied(buf.len())
     }
     fn kernel_read(&mut self, _: u64, _: &mut [u8; SECTOR_SIZE]) -> bool {
         self.kernel_flush()
@@ -278,4 +275,51 @@ fn flush_reaches_only_its_own_device() {
         BlockOutcome::Completed
     );
     assert_eq!(fake.sent, [7, 9]);
+}
+
+#[test]
+fn a_frozen_provider_costs_one_bound_then_its_device_is_refused_until_replaced() {
+    let (mut fake, mut router) = two_disks();
+    let (a, b) = (DeviceRef::Device(0), DeviceRef::Device(1));
+    // Taken but never answered: the write may have run, so it is never replayed.
+    fake.frozen = Some((7, true));
+    assert_eq!(
+        router.write(&mut fake, a, 4, &[1; SECTOR_SIZE]),
+        BlockOutcome::Indeterminate
+    );
+    assert!(
+        fake.logged("pci-00-1f-2: driver tid=7 did not reply within 3500 ticks; device stalled")
+    );
+
+    // Stalled: refused at once, nothing else reaches the frozen driver.
+    fake.sent.clear();
+    assert!(!router.read(&mut fake, a, 4, &mut [0; SECTOR_SIZE]));
+    assert_eq!(router.flush(&mut fake, a), BlockOutcome::NotIssued);
+    assert!(fake.sent.is_empty());
+    // The other device keeps serving.
+    assert_eq!(
+        router.write(&mut fake, b, 4, &[2; SECTOR_SIZE]),
+        BlockOutcome::Completed
+    );
+
+    // A replacement provider on the same slot clears the stall.
+    fake.routes[0] = ViBlockRouteV1 {
+        generation: 2,
+        ..route(1, AHCI, 11, 71)
+    };
+    assert_eq!(
+        router.write(&mut fake, a, 4, &[3; SECTOR_SIZE]),
+        BlockOutcome::Completed
+    );
+    assert_eq!(fake.media[&11][&4], [3; SECTOR_SIZE]);
+}
+
+#[test]
+fn a_request_the_frozen_provider_never_took_was_not_issued() {
+    let (mut fake, mut router) = two_disks();
+    fake.frozen = Some((9, false));
+    assert_eq!(
+        router.write(&mut fake, DeviceRef::Device(1), 4, &[1; SECTOR_SIZE]),
+        BlockOutcome::NotIssued
+    );
 }

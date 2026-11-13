@@ -8,6 +8,7 @@ use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::caller::Caller;
 use crate::dispatch_dirs::MAX_INLINE_PAYLOAD;
+use crate::fs_error::FsError;
 use crate::manager::VfsManager;
 
 pub(crate) fn read_handle_grant<'a>(
@@ -28,19 +29,24 @@ pub(crate) fn read_handle_grant<'a>(
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    if !matches!(vfs.stat(&path), Some((_, false))) {
+    if !matches!(vfs.stat(&path), Ok(Some((_, false)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let max_read = size.min(api::ipc::VFS_GRANT_CHUNK);
     match ostd::grant::with_shared_bytes_mut(grant, |buf| {
         let n = max_read.min(buf.len());
         if n == 0 {
-            0
+            Ok(0)
         } else {
-            vfs.read_at(&path, offset, &mut buf[..n])
+            // A backend without ranged reads moves nothing, as it always has;
+            // a device failure is an error, never a short grant.
+            match vfs.read_at(&path, offset, &mut buf[..n]) {
+                Err(FsError::Unsupported) => Ok(0),
+                read => read,
+            }
         }
     }) {
-        Some(bytes) if vfs.healthy(&path) => {
+        Some(Ok(bytes)) if vfs.healthy(&path) => {
             if bytes < max_read && crate::access::is_guest_disk_path(&path) {
                 ostd::io::println(&alloc::format!(
                     "[vfs] guest_disk short read: path={} offset={} got={} want={}",
@@ -81,7 +87,7 @@ pub(crate) fn write_handle_grant<'a>(
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let file_len = match vfs.stat(&path) {
-        Some((len, false)) => len,
+        Ok(Some((len, false))) => len,
         _ => return VfsResponse::Err(VfsError::Io as u8),
     };
     let end = match offset.checked_add(bytes as u64) {
@@ -116,7 +122,7 @@ pub(crate) fn write_handle_grant<'a>(
     }
 
     let written = ostd::grant::with_shared_bytes(grant, |buf| {
-        buf.len() >= bytes && vfs.write_at(&path, offset, &buf[..bytes])
+        buf.len() >= bytes && vfs.write_at(&path, offset, &buf[..bytes]).is_ok()
     });
     if written != Some(true) {
         return VfsResponse::Err(VfsError::Io as u8);
@@ -141,7 +147,7 @@ pub(crate) fn sync_handle<'a>(
     if !vfs.access.can_write(caller, &path) {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
-    if vfs.sync(&path) {
+    if vfs.sync(&path).is_ok() {
         VfsResponse::Ok
     } else {
         VfsResponse::Err(VfsError::Io as u8)
@@ -153,8 +159,8 @@ pub(crate) fn stat_path<'a>(vfs: &VfsManager, caller: Caller, path: &str) -> Vfs
         return VfsResponse::Err(VfsError::Denied as u8);
     }
     match vfs.stat(path) {
-        Some((size, is_dir)) => VfsResponse::Stat { size, is_dir },
-        None => VfsResponse::Err(VfsError::Io as u8),
+        Ok(Some((size, is_dir))) => VfsResponse::Stat { size, is_dir },
+        Ok(None) | Err(_) => VfsResponse::Err(VfsError::Io as u8),
     }
 }
 
@@ -173,13 +179,16 @@ pub(crate) fn list_at<'a>(
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    if !matches!(vfs.stat(&path), Some((_, true))) {
+    if !matches!(vfs.stat(&path), Ok(Some((_, true)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    let n = vfs.list_dir(&path, &mut resp_buf[..MAX_INLINE_PAYLOAD]);
+    let listed = vfs.list_dir(&path, &mut resp_buf[..MAX_INLINE_PAYLOAD]);
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
+    let Ok(n) = listed else {
+        return VfsResponse::Err(VfsError::Io as u8);
+    };
     VfsResponse::Data(&resp_buf[..n])
 }
 
@@ -202,7 +211,7 @@ pub(crate) fn list_at_page<'a>(
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    if !matches!(vfs.stat(&path), Some((_, true))) {
+    if !matches!(vfs.stat(&path), Ok(Some((_, true)))) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     let Some(page) = vfs.list_page(&path, cursor, &mut resp_buf[..MAX_INLINE_PAYLOAD]) else {
@@ -249,45 +258,50 @@ mod health_tests {
         fn get_file_ptr(&self, _: &str) -> Option<(usize, usize)> {
             None
         }
-        fn list(&self, _: &str, _: &mut [u8]) -> usize {
+        fn list(&self, _: &str, _: &mut [u8]) -> Result<usize, FsError> {
             self.0.store(true, Ordering::SeqCst);
-            0
+            Err(FsError::Io)
         }
-        fn list_page(&self, _: &str, _: u32, _: &mut [u8]) -> Option<crate::backend::ListPage> {
+        fn list_page(
+            &self,
+            _: &str,
+            _: u32,
+            _: &mut [u8],
+        ) -> Result<crate::backend::ListPage, FsError> {
             self.0.store(true, Ordering::SeqCst);
-            None
+            Err(FsError::Io)
         }
-        fn stat(&self, path: &str) -> Option<(u64, bool)> {
-            Some((8, path == "/data"))
+        fn stat(&self, path: &str) -> Result<Option<(u64, bool)>, FsError> {
+            Ok(Some((8, path == "/data")))
         }
-        fn file_size(&self, _: &str) -> u64 {
-            8
+        fn file_size(&self, _: &str) -> Result<u64, FsError> {
+            Ok(8)
         }
-        fn read_to_vec(&self, _: &str) -> Vec<u8> {
+        fn read_to_vec(&self, _: &str) -> Result<Vec<u8>, FsError> {
             self.0.store(true, Ordering::SeqCst);
-            Vec::new()
+            Err(FsError::Io)
         }
-        fn read_at(&self, _: &str, _: u64, _: &mut [u8]) -> usize {
+        fn read_at(&self, _: &str, _: u64, _: &mut [u8]) -> Result<usize, FsError> {
             self.0.store(true, Ordering::SeqCst);
-            0
+            Err(FsError::Io)
         }
-        fn write(&mut self, _: &str, _: &[u8]) -> bool {
-            false
+        fn write(&mut self, _: &str, _: &[u8]) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
-        fn append(&mut self, _: &str, _: &[u8]) -> bool {
-            false
+        fn append(&mut self, _: &str, _: &[u8]) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
-        fn mkdir(&mut self, _: &str) -> bool {
-            false
+        fn mkdir(&mut self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
-        fn rmdir(&mut self, _: &str) -> bool {
-            false
+        fn rmdir(&mut self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
-        fn unlink(&mut self, _: &str) -> bool {
-            false
+        fn unlink(&mut self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
-        fn rmdir_recursive(&mut self, _: &str) -> bool {
-            false
+        fn rmdir_recursive(&mut self, _: &str) -> Result<(), FsError> {
+            Err(FsError::Unsupported)
         }
     }
     #[test]

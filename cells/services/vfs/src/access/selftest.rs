@@ -91,7 +91,7 @@ fn guest_disk_security_boundary_is_fail_closed() {
     use alloc::boxed::Box;
     let stub_idx = vfs.mounts.add_backend(Box::new(GuestDiskStub(1024)));
     vfs.mounts.mount("/mnt/sd/guest_disk.img", stub_idx);
-    assert_eq!(vfs.stat("/mnt/sd/guest_disk.img"), Some((1024, false)));
+    assert_eq!(vfs.stat("/mnt/sd/guest_disk.img"), Ok(Some((1024, false))));
 
     let over_req = VfsRequest::WriteHandleGrant {
         file,

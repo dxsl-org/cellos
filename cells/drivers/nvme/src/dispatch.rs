@@ -150,10 +150,21 @@ pub fn handle(
     }
     // Fault-injection witnesses only. `F08B-DIE` kills this cell before
     // the write is issued, with its controller still enabled;
-    // `F09C-DIE-ISSUED` kills it right after the write's doorbell.
+    // `F09C-DIE-ISSUED` kills it right after the write's doorbell;
+    // `F12-FREEZE` keeps it alive but never answers or serves again (a hung
+    // driver, Phase 12: VFS must bound the request, not hang with it).
     #[cfg(feature = "fault-inject")]
     {
         let payload = &data[10..10 + SECTOR_SIZE];
+        if payload.windows(10).any(|window| window == b"F12-FREEZE") {
+            let _ = ostd::io::print_fmt(format_args!(
+                "[nvme] fault-inject: driver frozen at lba={}\n",
+                sector
+            ));
+            loop {
+                let _ = ostd::syscall::sys_set_timer(100_000);
+            }
+        }
         if payload.windows(8).any(|window| window == b"F08B-DIE") {
             let _ = ostd::io::print_fmt(format_args!(
                 "[nvme] fault-inject: driver exiting at lba={}\n",

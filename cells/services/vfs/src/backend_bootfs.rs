@@ -7,12 +7,13 @@
 //! syscalls (Open/Read/ReadDir/Close), which resolve against VIFS1 —
 //! see `kernel/src/task.rs::file_open` and `kernel/src/fs.rs`.
 //!
-//! Strictly read-only: every mutating op returns false before any syscall.
+//! Strictly read-only: every mutating op fails `Unsupported` before any syscall.
 //! `get_file_ptr` returns `None` (no syscalls) so the fast-IPC handler —
 //! which runs with interrupts disabled in the CALLER's context — never
 //! blocks inside this backend; readers fall back to the ReadAsync copy path.
 
 use crate::backend::{fill_page, FsBackend, ListPage};
+use crate::fs_error::FsError;
 use alloc::string::String;
 use alloc::vec::Vec;
 use api::ipc::vfs_dir_page::EntryKind;
@@ -90,17 +91,21 @@ fn open(path: &str) -> Option<Fd> {
     sys_open(path).ok().map(Fd)
 }
 
-/// Look up one entry of `parent` by name via ReadDir. `(size, is_dir)`.
-fn dir_lookup(parent: &str, name: &str) -> Option<(u64, bool)> {
-    let fd = open(parent)?;
-    while let Ok(Some(e)) = sys_readdir(fd.0) {
+/// Look up one entry of `parent` by name via ReadDir. `(size, is_dir)`;
+/// `None` when `parent` or the entry does not exist. A ReadDir failure is an
+/// error, not the end of the directory.
+fn dir_lookup(parent: &str, name: &str) -> Result<Option<(u64, bool)>, FsError> {
+    let Some(fd) = open(parent) else {
+        return Ok(None);
+    };
+    while let Some(e) = sys_readdir(fd.0).map_err(|_| FsError::Io)? {
         let len = e.name.iter().position(|&b| b == 0).unwrap_or(e.name.len());
         if &e.name[..len] == name.as_bytes() {
             let is_dir = matches!(e.file_type, types::FileType::Directory);
-            return Some((e.size, is_dir));
+            return Ok(Some((e.size, is_dir)));
         }
     }
-    None
+    Ok(None)
 }
 
 /// One VIFS1 entry name, kept in its fixed-size record.
@@ -114,12 +119,12 @@ impl AsRef<[u8]> for BootName {
 
 /// Entries of an open VIFS1 directory in ReadDir order. A ReadDir failure is
 /// yielded as an error, not taken as the end of the directory.
-fn dir_entries(fd: &Fd) -> impl Iterator<Item = Result<(EntryKind, BootName), ()>> + '_ {
+fn dir_entries(fd: &Fd) -> impl Iterator<Item = Result<(EntryKind, BootName), FsError>> + '_ {
     core::iter::from_fn(move || loop {
         let entry = match sys_readdir(fd.0) {
             Ok(Some(entry)) => entry,
             Ok(None) => return None,
-            Err(_) => return Some(Err(())),
+            Err(_) => return Some(Err(FsError::Io)),
         };
         let len = entry
             .name
@@ -140,13 +145,35 @@ fn dir_entries(fd: &Fd) -> impl Iterator<Item = Result<(EntryKind, BootName), ()
 }
 
 impl BootFsProxy {
-    /// Every entry name of directory `path`; `None` when it cannot be read whole.
-    pub(crate) fn names(&self, path: &str) -> Option<Vec<BootName>> {
-        let fd = open(path)?;
+    /// `(size, is_dir)` of `path`, `None` when it does not exist.
+    fn lookup(&self, path: &str) -> Result<Option<(u64, bool)>, FsError> {
+        // Mount roots ("/bin") are directories by definition; children are
+        // resolved through the parent's directory entries (file_fstat is a
+        // kernel stub, and DirEntry already carries size + type).
+        let trimmed = path.trim_end_matches('/');
+        let Some(slash) = trimmed.rfind('/') else {
+            return Ok(None);
+        };
+        let name = &trimmed[slash + 1..];
+        if name.is_empty() {
+            return Ok(Some((0, true)));
+        }
+        let parent = if slash == 0 { "/" } else { &trimmed[..slash] };
+        Ok(match dir_lookup(parent, name)? {
+            Some(hit) => Some(hit),
+            // The mount prefix itself may not appear in its parent's listing
+            // (e.g. stat "/bin" when VIFS1 only lists from "/") — probe by open.
+            None if open(trimmed).is_some() => Some((0, true)),
+            None => None,
+        })
+    }
+
+    /// Every entry name of directory `path`; an error when it cannot be read whole.
+    pub(crate) fn names(&self, path: &str) -> Result<Vec<BootName>, FsError> {
+        let fd = open(path).ok_or(FsError::NotFound)?;
         dir_entries(&fd)
             .map(|entry| entry.map(|(_, name)| name))
-            .collect::<Result<_, _>>()
-            .ok()
+            .collect()
     }
 }
 
@@ -155,13 +182,10 @@ impl FsBackend for BootFsProxy {
         None // no stable user-visible pointer; callers use the ReadAsync copy path
     }
 
-    fn list(&self, path: &str, out: &mut [u8]) -> usize {
-        let fd = match open(path) {
-            Some(f) => f,
-            None => return 0,
-        };
+    fn list(&self, path: &str, out: &mut [u8]) -> Result<usize, FsError> {
+        let fd = open(path).ok_or(FsError::NotFound)?;
         let mut pos = 0;
-        while let Ok(Some(e)) = sys_readdir(fd.0) {
+        while let Some(e) = sys_readdir(fd.0).map_err(|_| FsError::Io)? {
             let len = e.name.iter().position(|&b| b == 0).unwrap_or(e.name.len());
             if len == 0 {
                 continue;
@@ -184,36 +208,20 @@ impl FsBackend for BootFsProxy {
             out[pos + 2 + len] = b'\n';
             pos += entry_len;
         }
-        pos
+        Ok(pos)
     }
 
-    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Option<ListPage> {
-        let fd = open(path)?;
+    fn list_page(&self, path: &str, start: u32, out: &mut [u8]) -> Result<ListPage, FsError> {
+        let fd = open(path).ok_or(FsError::NotFound)?;
         fill_page(dir_entries(&fd), start, out)
     }
 
-    fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        // Mount roots ("/bin") are directories by definition; children are
-        // resolved through the parent's directory entries (file_fstat is a
-        // kernel stub, and DirEntry already carries size + type).
-        let trimmed = path.trim_end_matches('/');
-        let slash = trimmed.rfind('/')?;
-        let name = &trimmed[slash + 1..];
-        if name.is_empty() {
-            return Some((0, true));
-        }
-        let parent = if slash == 0 { "/" } else { &trimmed[..slash] };
-        match dir_lookup(parent, name) {
-            Some(hit) => Some(hit),
-            // The mount prefix itself may not appear in its parent's listing
-            // (e.g. stat "/bin" when VIFS1 only lists from "/") — probe by open.
-            None if open(trimmed).is_some() => Some((0, true)),
-            None => None,
-        }
+    fn stat(&self, path: &str) -> Result<Option<(u64, bool)>, FsError> {
+        self.lookup(path)
     }
 
-    fn file_size(&self, path: &str) -> u64 {
-        self.stat(path).map(|(s, _)| s).unwrap_or(0)
+    fn file_size(&self, path: &str) -> Result<u64, FsError> {
+        self.lookup(path)?.map(|(s, _)| s).ok_or(FsError::NotFound)
     }
 
     /// File reads go through the SYNCHRONOUS cap path (OpenCap/ReadCap), NOT
@@ -223,97 +231,99 @@ impl FsBackend for BootFsProxy {
     /// stop running immediately after the syscall; a busy read loop here kept
     /// executing, the sweep clobbered a live trap frame, and the VFS cell died
     /// with a zeroed-frame fault (scause=0).
-    fn read_to_vec(&self, path: &str) -> Vec<u8> {
+    ///
+    /// A `ReadCap` failure fails the whole read; end of file is `Ok(0)`.
+    fn read_to_vec(&self, path: &str) -> Result<Vec<u8>, FsError> {
         // FAT16 stores 8.3 names uppercase; OpenCap matches the raw path string
         // (unlike the loader's read_file_from_vifs1, which uppercases first).
         let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
-        let cap = match sys_open_cap(&upper) {
-            Ok(c) => c,
-            Err(_) => return Vec::new(),
-        };
-        let size = self.file_size(path) as usize;
-        let mut result = Vec::with_capacity(size);
-        // Read the stat'ed size straight into `result` in 64 KiB `ReadCap`s: VFS
-        // serves one request at a time, and 512-byte reads made a multi-MiB ELF
-        // (`ReadFileGrant` for init's spawns) outlast the caller's kernel deadline
-        // under TCG while every other VFS caller timed out behind it. Each call's
-        // kernel bounce buffer stays at the chunk size, not the file size.
-        const CHUNK: usize = 64 * 1024;
-        let mut filled = 0;
-        while filled < size {
-            let want = (size - filled).min(CHUNK);
-            result.resize(filled + want, 0);
-            match sys_read_cap(cap, &mut result[filled..]) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => filled += n,
-            }
-        }
-        result.truncate(filled);
-        // Past the stat'ed size (or with no size), keep reading to end of file.
-        if filled == size {
-            let mut buf = [0u8; 512];
-            loop {
-                match sys_read_cap(cap, &mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => result.extend_from_slice(&buf[..n]),
-                    Err(_) => break,
-                }
-            }
-        }
+        let cap = sys_open_cap(&upper).map_err(|_| FsError::NotFound)?;
+        let result = self
+            .lookup(path)
+            .and_then(|hit| read_cap_to_end(cap, hit.map_or(0, |(s, _)| s) as usize));
         sys_close_cap(cap);
         result
     }
-
     /// Positional read that reuses the retained capability.
     ///
     /// Sequential chunked reads (the shape every file copy, model load, and shell redirect uses)
     /// cost one `ReadCap` per chunk: the capability is already positioned, so no seek happens. A
     /// caller that jumps re-seeks the retained capability, which is correct for any offset and only
     /// pays the FAT walk when it moves backwards.
-    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> usize {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
         let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
-        let Some(cap) = self.cursor_for(&upper) else {
-            return 0;
-        };
+        let cap = self.cursor_for(&upper).ok_or(FsError::NotFound)?;
 
         let mut slot = self.cursor.borrow_mut();
-        let Some(cursor) = slot.as_mut() else {
-            return 0;
-        };
+        let cursor = slot.as_mut().ok_or(FsError::NotFound)?;
         if cursor.offset != offset {
             match sys_seek_cap(cap, offset as i64, 0) {
                 Ok(_) => cursor.offset = offset,
                 Err(_) => {
                     cursor.offset = 0;
-                    return 0;
+                    return Err(FsError::Io);
                 }
             }
         }
         match sys_read_cap(cap, buf) {
             Ok(n) => {
                 cursor.offset = cursor.offset.saturating_add(n as u64);
-                n
+                Ok(n)
             }
-            Err(_) => 0,
+            Err(_) => Err(FsError::Io),
         }
     }
 
-    fn write(&mut self, _path: &str, _content: &[u8]) -> bool {
-        false
+    fn write(&mut self, _path: &str, _content: &[u8]) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn append(&mut self, _path: &str, _content: &[u8]) -> bool {
-        false
+    fn append(&mut self, _path: &str, _content: &[u8]) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn mkdir(&mut self, _path: &str) -> bool {
-        false
+    fn mkdir(&mut self, _path: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn rmdir(&mut self, _path: &str) -> bool {
-        false
+    fn rmdir(&mut self, _path: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn unlink(&mut self, _path: &str) -> bool {
-        false
+    fn unlink(&mut self, _path: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
-    fn rmdir_recursive(&mut self, _path: &str) -> bool {
-        false
+    fn rmdir_recursive(&mut self, _path: &str) -> Result<(), FsError> {
+        Err(FsError::Unsupported)
     }
+}
+
+/// Read `cap` to end of file: the stat'ed `size` straight into the result in
+/// 64 KiB `ReadCap`s, then on to the end past it. VFS serves one request at a
+/// time, and 512-byte reads made a multi-MiB ELF (`ReadFileGrant` for init's
+/// spawns) outlast the caller's kernel deadline under TCG while every other
+/// VFS caller timed out behind it. Each call's kernel bounce buffer stays at
+/// the chunk size, not the file size.
+fn read_cap_to_end(cap: u64, size: usize) -> Result<Vec<u8>, FsError> {
+    const CHUNK: usize = 64 * 1024;
+    let mut result = Vec::with_capacity(size);
+    let mut filled = 0;
+    while filled < size {
+        let want = (size - filled).min(CHUNK);
+        result.resize(filled + want, 0);
+        match sys_read_cap(cap, &mut result[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(_) => return Err(FsError::Io),
+        }
+    }
+    result.truncate(filled);
+    // Past the stat'ed size (or with no size), keep reading to end of file.
+    if filled == size {
+        let mut buf = [0u8; 512];
+        loop {
+            match sys_read_cap(cap, &mut buf) {
+                Ok(0) => break,
+                Ok(n) => result.extend_from_slice(&buf[..n]),
+                Err(_) => return Err(FsError::Io),
+            }
+        }
+    }
+    Ok(result)
 }

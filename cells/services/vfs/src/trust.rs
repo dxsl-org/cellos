@@ -89,17 +89,15 @@ pub fn handle(
     {
         return Some(VfsResponse::Err(VfsError::Malformed as u8));
     }
+    // Only a store known to be absent makes a host unknown; one that could
+    // not be read is unavailable.
     let code = match vfs.stat(STORE_PATH) {
-        None => ssh_trust::UNKNOWN,
-        Some((_, true)) => ssh_trust::UNAVAILABLE,
-        Some((size, false)) => {
-            let bytes = vfs.read_to_vec(STORE_PATH);
-            if bytes.len() as u64 != size {
-                ssh_trust::UNAVAILABLE
-            } else {
-                lookup(&bytes, host, port, algorithm, key)
-            }
-        }
+        Ok(None) => ssh_trust::UNKNOWN,
+        Ok(Some((_, true))) | Err(_) => ssh_trust::UNAVAILABLE,
+        Ok(Some((size, false))) => match vfs.read_to_vec(STORE_PATH) {
+            Ok(bytes) if bytes.len() as u64 == size => lookup(&bytes, host, port, algorithm, key),
+            _ => ssh_trust::UNAVAILABLE,
+        },
     };
     Some(VfsResponse::Trust(code))
 }
