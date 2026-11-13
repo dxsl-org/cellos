@@ -101,8 +101,8 @@ fn owner_watch_reaps_file_handles() {
         .files
         .insert(CELL_B, "/tmp/watched", dir.0)
         .expect("file");
-    vfs.install_owner_watch(CELL_B, 8101, 1);
-    assert!(vfs.handle_unattributed_owner_death(8101));
+    vfs.note_watched_owner(CELL_B);
+    assert!(vfs.owner_died(CELL_B.cell.0, CELL_B.generation));
     assert!(!vfs.files.contains(file));
     ostd::io::println("[vfs-file-handle] owner-watch-filehandle-cleanup PASS");
 }

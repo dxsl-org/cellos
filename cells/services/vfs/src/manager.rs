@@ -18,14 +18,13 @@ mod state_transfer;
 mod tests;
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
 use crate::access::AccessTable;
 use crate::backend::FsBackend;
 use crate::backend_bootfs::BootFsProxy;
 use crate::backend_ramfs::RamFsBackend;
-use crate::caller::Caller;
 use crate::dirs::DirTable;
 use crate::file_handles::FileHandleTable;
 use crate::fs_error::FsError;
@@ -33,12 +32,6 @@ use crate::mount::MountTable;
 use crate::namespace::NamespaceLedger;
 use crate::pending::PendingTable;
 use crate::quota::QuotaTracker;
-#[derive(Clone, Copy)]
-pub(crate) struct WatchedOwner {
-    pub principal: Caller,
-    pub root_tid: usize,
-    pub token: u64,
-}
 pub struct VfsManager {
     pub(crate) mounts: MountTable,
     /// Boot-image configuration fallback; runtime files may override only
@@ -56,8 +49,8 @@ pub struct VfsManager {
     pub(crate) saves: crate::save::SaveTable,
     /// S9-4c first-trust challenges (`trust::first`).
     pub(crate) trust_challenges: crate::trust::Challenges,
-    watched_owners: BTreeMap<(u64, u64), WatchedOwner>,
-    cancelled_owner_watch_tokens: Vec<u64>,
+    /// `(cell_id, generation)` of the owners whose death `serve` watches.
+    watched_owners: BTreeSet<(u64, u64)>,
 }
 
 impl VfsManager {
@@ -90,8 +83,7 @@ impl VfsManager {
             ledger: NamespaceLedger::new(),
             saves: crate::save::SaveTable::new(),
             trust_challenges: crate::trust::Challenges::new(),
-            watched_owners: BTreeMap::new(),
-            cancelled_owner_watch_tokens: Vec::new(),
+            watched_owners: BTreeSet::new(),
         }
     }
 

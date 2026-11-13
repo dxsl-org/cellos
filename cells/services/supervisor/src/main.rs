@@ -25,8 +25,10 @@ mod sender_identity;
 mod snapshot;
 mod transfer;
 
+use api::caller_identity::CallerIdentity;
 #[cfg(feature = "hostile-backend-recovery")]
 use api::hostile_backend_recovery::KILL_REQUEST_OPCODE;
+use api::services::proto::app_envelope::{HEADER_LEN, KIND_SHUTDOWN, MAGIC};
 use api::services::proto::supervisor::{
     KERNEL_SENDER, OP_HOTSWAP, OP_POWER, OP_SNAPSHOT, OWNER_EXITED_LEN, OWNER_EXITED_NOTICE,
     OWNER_EXITED_RELAY, PHASE_HOTSWAP_DONE, PHASE_HOTSWAP_ERROR, PHASE_POWER, PHASE_REFUSED,
@@ -34,9 +36,8 @@ use api::services::proto::supervisor::{
     STATUS_UNAVAILABLE,
 };
 use api::syscall::service;
-use ostd::app::{AppContext, AppEvent};
 use ostd::ipc::Incoming;
-use ostd::service::provider_tid;
+use ostd::service::{provider_tid, Handler, Request, ServeConfig};
 use ostd::syscall::sys_resolve_cell_image;
 use protocol::{encode_status, parse_power_request, HotswapRequest, SnapshotRequest};
 
@@ -52,107 +53,121 @@ const SHUTDOWN_PROGRAM: &str = "shutdown";
 /// is unavailable until a `SnapshotTarget` owner is added.
 const SNAPSHOT_PROGRAMS: &[&str] = &[];
 
-fn handler(ctx: &mut AppContext, event: AppEvent) {
-    match event {
-        AppEvent::Init => {
-            // Service registration is handled by init after it spawns us.
-            // SupervisorCap is granted by the kernel loader (path-based, see
-            // kernel/src/loader.rs) — no self-grant needed here.
-            ctx.attest_callers();
+/// The supervisor's requests: App SDK envelope messages from the reviewed
+/// tools, raw frames from init (the owner-exit notice) and, in hostile-backend
+/// images, the kill request.
+struct Supervisor;
+
+impl Handler for Supervisor {
+    fn on_request(&mut self, request: Request<'_>) {
+        let payload = request.payload();
+        if payload.first() != Some(&MAGIC) {
+            raw_message(request.sender(), payload);
+            return;
         }
-
-        AppEvent::Message { sender_tid, data } => {
-            let data: &[u8] = data.as_ref();
-            if data.is_empty() {
-                return;
-            }
-            // Captured before the swap flow receives anything else; replies never
-            // park on a requester that does not receive them.
-            let request = Incoming::current(sender_tid);
-
-            if data[0] == OP_HOTSWAP {
-                if !sender_is_program(ctx, sender_tid, HOTSWAP_PROGRAM) {
-                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
-                    return;
-                }
-                let Some(req) = HotswapRequest::parse(data) else {
-                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
-                    return;
-                };
-
-                let service_id = service_id_for_name(req.service_name());
-                if service_id == 0 {
-                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_SERVICE_NOT_FOUND));
-                    return;
-                }
-
-                match hotswap::hotswap(service_id, req.elf_path()) {
-                    Ok(new_tid) => {
-                        let _ = request.reply(&encode_status(PHASE_HOTSWAP_DONE, STATUS_OK));
-                        let _ = new_tid;
-                    }
-                    Err(e) => {
-                        let _ = request.reply(&encode_status(PHASE_HOTSWAP_ERROR, e as u8));
-                    }
-                }
-                return;
-            }
-
-            if data[0] == OP_SNAPSHOT {
-                if !SNAPSHOT_PROGRAMS
-                    .iter()
-                    .any(|program| sender_is_program(ctx, sender_tid, program))
-                {
-                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
-                    return;
-                }
-                if SnapshotRequest::parse(data).is_none() {
-                    let _ = request.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
-                    return;
-                }
-                let _ = request.reply(&snapshot::run());
-                return;
-            }
-
-            if data[0] == OP_POWER {
-                handle_power(ctx, request, data);
-            }
-        }
-
-        #[cfg(feature = "hostile-backend-recovery")]
-        AppEvent::RawMessage { sender_tid, data } if data.first() == Some(&KILL_REQUEST_OPCODE) => {
-            hostile_backend_recovery::handle(sender_tid, &data);
-        }
-
-        AppEvent::RawMessage { sender_tid, data }
-            if sender_tid == 1
-                && data.len() == OWNER_EXITED_LEN
-                && data[0] == OWNER_EXITED_NOTICE =>
-        {
-            if let Some(compositor) = provider_tid(service::COMPOSITOR) {
-                let mut relay = [0u8; OWNER_EXITED_LEN];
-                relay[0] = OWNER_EXITED_RELAY;
-                relay[1..].copy_from_slice(&data[1..]);
-                let _ = ostd::ipc::post(compositor, &relay);
-            }
-        }
-
-        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {
+        if payload.get(1) == Some(&KIND_SHUTDOWN) {
             ostd::syscall::sys_exit(0);
         }
-        _ => {}
+        message(&request, &payload[HEADER_LEN..]);
+    }
+
+    /// The kernel's power-button relay is the only message without a sender
+    /// Cell the supervisor acts on.
+    fn on_unattributed(&mut self, sender: usize, payload: &[u8]) {
+        if sender == KERNEL_SENDER
+            && payload.starts_with(&[MAGIC, api::services::proto::app_envelope::KIND_MESSAGE])
+            && payload.get(HEADER_LEN) == Some(&OP_POWER)
+        {
+            handle_power(None, Incoming::current(sender), &payload[HEADER_LEN..]);
+        }
+    }
+}
+
+fn message(request: &Request<'_>, data: &[u8]) {
+    let sender_tid = request.sender();
+    let caller = Some(*request.caller());
+    // Captured by `serve` before the swap flow receives anything else; replies
+    // never park on a requester that does not receive them.
+    let reply = request.incoming();
+
+    if data[0] == OP_HOTSWAP {
+        if !sender_is_program(caller, sender_tid, HOTSWAP_PROGRAM) {
+            let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
+            return;
+        }
+        let Some(req) = HotswapRequest::parse(data) else {
+            let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
+            return;
+        };
+
+        let service_id = service_id_for_name(req.service_name());
+        if service_id == 0 {
+            let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_SERVICE_NOT_FOUND));
+            return;
+        }
+
+        match hotswap::hotswap(service_id, req.elf_path()) {
+            Ok(_new_tid) => {
+                let _ = reply.reply(&encode_status(PHASE_HOTSWAP_DONE, STATUS_OK));
+            }
+            Err(e) => {
+                let _ = reply.reply(&encode_status(PHASE_HOTSWAP_ERROR, e as u8));
+            }
+        }
+        return;
+    }
+
+    if data[0] == OP_SNAPSHOT {
+        if !SNAPSHOT_PROGRAMS
+            .iter()
+            .any(|program| sender_is_program(caller, sender_tid, program))
+        {
+            let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_REJECTED_CALLER));
+            return;
+        }
+        if SnapshotRequest::parse(data).is_none() {
+            let _ = reply.reply(&encode_status(PHASE_REFUSED, STATUS_INVALID_REQUEST));
+            return;
+        }
+        let _ = reply.reply(&snapshot::run());
+        return;
+    }
+
+    if data[0] == OP_POWER {
+        handle_power(caller, reply, data);
+    }
+}
+
+fn raw_message(sender_tid: usize, data: &[u8]) {
+    #[cfg(feature = "hostile-backend-recovery")]
+    if data.first() == Some(&KILL_REQUEST_OPCODE) {
+        hostile_backend_recovery::handle(sender_tid, data);
+        return;
+    }
+    // Init's owner-exit notice; payload windows are zero-padded, so the frame
+    // is the prefix and the rest must be padding.
+    if sender_tid == 1
+        && data[0] == OWNER_EXITED_NOTICE
+        && data[OWNER_EXITED_LEN..].iter().all(|&byte| byte == 0)
+    {
+        if let Some(compositor) = provider_tid(service::COMPOSITOR) {
+            let mut relay = [0u8; OWNER_EXITED_LEN];
+            relay[0] = OWNER_EXITED_RELAY;
+            relay[1..].copy_from_slice(&data[1..OWNER_EXITED_LEN]);
+            let _ = ostd::ipc::post(compositor, &relay);
+        }
     }
 }
 
 /// `OP_POWER` from the `/bin/shutdown` worker (reboot or poweroff) or from the
 /// kernel's power-button relay (poweroff only). Only a refused operator
 /// request gets a reply; success resets or powers off the machine.
-fn handle_power(ctx: &AppContext, request: Incoming, data: &[u8]) {
+fn handle_power(caller: Option<CallerIdentity>, request: Incoming, data: &[u8]) {
     use ostd::syscall::SystemPowerAction;
     let sender_tid = request.sender();
     let origin = if sender_tid == KERNEL_SENDER {
         power::Origin::PowerButton
-    } else if sender_is_program(ctx, sender_tid, SHUTDOWN_PROGRAM) {
+    } else if sender_is_program(caller, sender_tid, SHUTDOWN_PROGRAM) {
         power::Origin::Operator
     } else {
         reply_power(request, STATUS_REJECTED_CALLER);
@@ -191,11 +206,17 @@ fn service_id_for_name(name: &str) -> u16 {
 
 /// Whether the kernel attested the sender of the current message and its Cell
 /// runs the signed program `program` from its reviewed install (441).
-fn sender_is_program(ctx: &AppContext, sender_tid: usize, program: &str) -> bool {
-    sender_identity::caller_runs_program(ctx.caller(), sender_tid, program, sys_resolve_cell_image)
+fn sender_is_program(caller: Option<CallerIdentity>, sender_tid: usize, program: &str) -> bool {
+    sender_identity::caller_runs_program(caller, sender_tid, program, sys_resolve_cell_image)
 }
 
-ostd::run_app!(handler);
+ostd::cell_main!(supervisor_main);
+
+fn supervisor_main() {
+    // Service registration is handled by init after it spawns us; SupervisorCap
+    // is granted by the kernel loader (path-based, see kernel/src/loader.rs).
+    ostd::service::serve(ServeConfig::with_heartbeat(), &mut Supervisor);
+}
 
 // Supervisor Cell capabilities:
 // - spawn = true  → SpawnCap (for sys_spawn_from_path + sys_register_service)

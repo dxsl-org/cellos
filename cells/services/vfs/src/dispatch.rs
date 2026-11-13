@@ -22,7 +22,7 @@ use crate::manager::VfsManager;
 /// callers encode before reusing the buffer.
 pub fn handle_request<'a>(
     vfs: &mut VfsManager,
-    buf: &[u8; api::ipc::IPC_BUF_SIZE],
+    buf: &[u8],
     caller: Option<Caller>,
     resp_buf: &'a mut [u8; api::ipc::IPC_BUF_SIZE],
 ) -> api::ipc::VfsResponse<'a> {

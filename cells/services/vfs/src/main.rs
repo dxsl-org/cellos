@@ -145,7 +145,7 @@ fn vfs_main() {
     // VirtIO disk (which logs its own success/fallback status).
     let vfs = VfsManager::new();
     // Whether the idle reconcile cadence still has kernel state to poll; see the loop.
-    let mut idle_work = prepared_cwd::idle_work(&vfs);
+    let idle_work = prepared_cwd::idle_work(&vfs);
     #[cfg(feature = "test-hooks")]
     {
         file_handles::selftest::run();
@@ -154,112 +154,93 @@ fn vfs_main() {
         save::selftest::run();
     }
     *GLOBAL_VFS.lock() = Some(vfs);
-    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    // Full reconciliation runs once per this many idle turns. VFS holds no SetTimer
-    // authority (deliberately withheld, see the allowlist; GetTime is only the trust-call
-    // budget), so the cadence counts idle receive attempts instead of wall time; requests
-    // reconcile only the caller's own reservations (`dir_admission::admit`).
-    const IDLE_RECONCILE_EVERY: u32 = 128;
-    let mut idle_turns: u32 = 0;
     liveness::arm();
+    let config = ostd::service::ServeConfig {
+        heartbeat_ticks: liveness::VFS_HEARTBEAT_TICKS,
+        ..ostd::service::ServeConfig::with_heartbeat()
+    }
+    .watching(ostd::service::WatchPolicy::Every, MAX_WATCHED_OWNERS);
+    ostd::service::serve(
+        config,
+        &mut Vfs {
+            idle_work,
+            idle_turns: 0,
+        },
+    );
+}
 
-    loop {
-        liveness::keepalive();
-        // The kernel writes caller identity in the receive-buffer trailer.
-        // A sender TID is reply routing only, never a Cell principal.
-        //
-        // Only bounded preparations can change without a message (they expire, commit
-        // or end in the kernel), so the nonblocking receive and its reconcile cadence run
-        // only while `prepared_cwd::idle_work` says one is unsettled. Otherwise every
-        // change arrives as a request or an owner-death notification, and the loop
-        // parks in the blocking receive instead of yield-spinning. `idle_work` is
-        // recomputed wherever the loop changes VFS state.
-        // The parked receive wakes at half the heartbeat interval to re-arm it.
-        let received = if idle_work {
-            ostd::syscall::sys_try_recv_attested(0, &mut buf)
-        } else {
-            ostd::syscall::sys_recv_attested_timeout(0, &mut buf, liveness::VFS_HEARTBEAT_TICKS / 2)
+/// Owners VFS watches at once: every live Cell that holds VFS state. A caller
+/// beyond it is refused, never served unwatched.
+#[cfg(target_os = "none")]
+const MAX_WATCHED_OWNERS: usize = 256;
+
+/// The request loop's own state; the file system lives in `GLOBAL_VFS`.
+#[cfg(target_os = "none")]
+struct Vfs {
+    /// Whether bounded preparations are still unsettled in the kernel. They can
+    /// change without a message (they expire, commit or end), so only then does
+    /// the loop poll and reconcile; otherwise every change arrives as a request
+    /// or an owner death and the loop parks. Recomputed wherever state changes.
+    idle_work: bool,
+    idle_turns: u32,
+}
+
+#[cfg(target_os = "none")]
+impl ostd::service::Handler for Vfs {
+    fn on_request(&mut self, request: ostd::service::Request<'_>) {
+        let caller = caller::Caller::from_attested(*request.caller());
+        let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
+        let encoded_len = {
+            let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+            let mut guard = GLOBAL_VFS.lock();
+            let vfs = guard
+                .as_mut()
+                .expect("VFS initialized before serving requests");
+            vfs.note_watched_owner(caller);
+            let response =
+                dispatch::handle_request(vfs, request.payload(), Some(caller), &mut resp_buf);
+            self.idle_work = prepared_cwd::idle_work(vfs);
+            api::ipc::encode(&response, &mut encoded)
+                .map(|bytes| bytes.len())
+                .unwrap_or(0)
         };
-        match received {
-            ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                let operation = ostd::ipc::current();
-                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
-                else {
-                    let cancellations = GLOBAL_VFS
-                        .lock()
-                        .as_mut()
-                        .map(|vfs| {
-                            let _ = vfs.handle_unattributed_owner_death(sender);
-                            prepared_cwd::reconcile(vfs);
-                            idle_work = prepared_cwd::idle_work(vfs);
-                            vfs.take_owner_watch_cancellations()
-                        })
-                        .unwrap_or_default();
-                    for token in cancellations {
-                        ostd::syscall::sys_cancel_cell_owner_watch(token);
-                    }
-                    buf = [0u8; api::ipc::IPC_BUF_SIZE];
-                    continue;
-                };
-                let caller = caller::Caller::from_attested(identity);
-                // The atomic kernel operation verifies this exact receive context
-                // and registers root death before VFS can persist any state.
-                let Some((owner, token)) =
-                    ostd::syscall::sys_watch_cell_owner(caller.cell.0, caller.generation)
-                else {
-                    let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
-                    let denied = api::ipc::VfsResponse::Err(
-                        api::services::proto::vfs::VfsError::Denied as u8,
-                    );
-                    let len = api::ipc::encode(&denied, &mut encoded)
-                        .map(|bytes| bytes.len())
-                        .unwrap_or(0);
-                    if let Some(operation) = operation {
-                        let _ = ostd::ipc::reply(operation, &encoded[..len]);
-                    } else {
-                        let _ = ostd::ipc::post(sender, &encoded[..len]);
-                    }
-                    buf = [0u8; api::ipc::IPC_BUF_SIZE];
-                    continue;
-                };
-                let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
-                let (encoded_len, cancellations) = {
-                    let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-                    let mut guard = GLOBAL_VFS.lock();
-                    let vfs = guard
-                        .as_mut()
-                        .expect("VFS initialized before serving requests");
-                    vfs.install_owner_watch(caller, owner.root_tid as usize, token);
-                    let response = dispatch::handle_request(vfs, &buf, Some(caller), &mut resp_buf);
-                    let len = api::ipc::encode(&response, &mut encoded)
-                        .map(|bytes| bytes.len())
-                        .unwrap_or(0);
-                    idle_work = prepared_cwd::idle_work(vfs);
-                    (len, vfs.take_owner_watch_cancellations())
-                };
-                for cancelled in cancellations {
-                    ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
-                }
-                // `GLOBAL_VFS` is unlocked before replying to the caller.
-                if let Some(operation) = operation {
-                    let _ = ostd::ipc::reply(operation, &encoded[..encoded_len]);
-                } else {
-                    let _ = ostd::ipc::post(sender, &encoded[..encoded_len]);
-                }
-                buf = [0u8; api::ipc::IPC_BUF_SIZE];
-            }
-            _ => {
-                if idle_work {
-                    idle_turns = idle_turns.wrapping_add(1);
-                    if idle_turns.is_multiple_of(IDLE_RECONCILE_EVERY) {
-                        if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
-                            prepared_cwd::reconcile(vfs);
-                            idle_work = prepared_cwd::idle_work(vfs);
-                        }
-                    }
-                }
-                ostd::task::yield_now();
+        // `GLOBAL_VFS` is unlocked before replying to the caller.
+        let _ = request.reply(&encoded[..encoded_len]);
+    }
+
+    /// No owner watch, no durable state: the request is refused.
+    fn on_unwatched(&mut self, request: ostd::service::Request<'_>) {
+        let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
+        let denied = api::ipc::VfsResponse::Err(api::services::proto::vfs::VfsError::Denied as u8);
+        let len = api::ipc::encode(&denied, &mut encoded)
+            .map(|bytes| bytes.len())
+            .unwrap_or(0);
+        let _ = request.reply(&encoded[..len]);
+    }
+
+    fn on_owner_death(&mut self, owner: ostd::service::Owner) {
+        if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
+            let _ = vfs.owner_died(owner.cell_id, owner.generation);
+            prepared_cwd::reconcile(vfs);
+            self.idle_work = prepared_cwd::idle_work(vfs);
+        }
+    }
+
+    fn on_idle(&mut self) -> ostd::service::Wait {
+        // VFS holds no SetTimer authority (see the allowlist), so the reconcile
+        // cadence counts polling turns instead of wall time; requests reconcile
+        // only the caller's own reservations (`dir_admission::admit`).
+        const IDLE_RECONCILE_EVERY: u32 = 128;
+        if !self.idle_work {
+            return ostd::service::Wait::Block;
+        }
+        self.idle_turns = self.idle_turns.wrapping_add(1);
+        if self.idle_turns.is_multiple_of(IDLE_RECONCILE_EVERY) {
+            if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
+                prepared_cwd::reconcile(vfs);
+                self.idle_work = prepared_cwd::idle_work(vfs);
             }
         }
+        ostd::service::Wait::Poll
     }
 }

@@ -15,6 +15,9 @@
 
 extern crate alloc;
 
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+
 mod appearance;
 mod cursor_sprite;
 mod cursor_state;
@@ -35,9 +38,8 @@ use api::services::proto::input::INPUT_EVENT_OPCODE;
 use framebuffer::ScreenFb;
 use input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
 use ostd::io::println;
-use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_recv_attested, SyscallResult,
-};
+use ostd::service::{serve, Handler, Owner, Request, ServeConfig, Wait, WatchPolicy};
+use ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor};
 use render::render_frame;
 use surface_table::SurfaceTable;
 use z_order::ZOrder;
@@ -60,25 +62,6 @@ fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
     buf
 }
 
-/// The kernel half of [`owner_watch::WatchSys`]: valid only inside the receive
-/// turn of the message being served (the kernel binds the grant to it).
-#[cfg(not(test))]
-#[cfg(target_os = "none")]
-struct KernelWatch;
-
-#[cfg(not(test))]
-#[cfg(target_os = "none")]
-impl owner_watch::WatchSys for KernelWatch {
-    fn watch(&mut self, cell_id: u64, generation: u64) -> Option<(usize, u64)> {
-        ostd::syscall::sys_watch_cell_owner(cell_id, generation)
-            .map(|(owner, token)| (owner.root_tid as usize, token))
-    }
-
-    fn cancel(&mut self, token: u64) {
-        ostd::syscall::sys_cancel_cell_owner_watch(token);
-    }
-}
-
 #[cfg(target_os = "none")]
 ostd::declare_custom_heap!(10 * 1024 * 1024);
 
@@ -89,18 +72,20 @@ pub fn main() {
     init_custom_heap();
     println("[compositor] Compositor v0.2: software blending, VirtIO GPU, input routing");
     let (w, h) = framebuffer::default_screen_size();
-    let mut fb = ScreenFb::new(w, h);
-    let mut table = SurfaceTable::new();
-    let mut frames = crate::surface_table::FrameRegistry::new();
-    let mut z_order = ZOrder::new();
-    let mut input = InputState::new();
-    let mut appearance = appearance::Appearance::new();
-    // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
-    // Consumed (taken) on each render_frame call.
-    let mut pending_dirty: Option<Rect> = None;
+    let mut compositor = Compositor {
+        fb: ScreenFb::new(w, h),
+        table: SurfaceTable::new(),
+        frames: crate::surface_table::FrameRegistry::new(),
+        z_order: ZOrder::new(),
+        input: InputState::new(),
+        appearance: appearance::Appearance::new(),
+        pending_dirty: None,
+        last_res_check_ms: 0,
+        owners: BTreeMap::new(),
+    };
 
     // Register as input focus so keyboard + mouse events flow to us.
-    connect_to_input(&mut input);
+    connect_to_input(&mut compositor.input);
 
     // Attempt to upload the hardware cursor sprite (64×64 BGRA8888).
     // The 16×16 software sprite is placed in the top-left; the rest is transparent.
@@ -110,7 +95,7 @@ pub fn main() {
         let (hot_x, hot_y) = cursor_sprite::hotspot();
         let sprite = build_hw_cursor_sprite();
         let ok = sys_gpu_cursor(0, sprite.as_ptr(), 0, 0, hot_x as u32, hot_y as u32).is_ok();
-        input.hw_cursor = ok;
+        compositor.input.hw_cursor = ok;
         if ok {
             println("[compositor] hardware cursor active");
         } else {
@@ -118,144 +103,164 @@ pub fn main() {
         }
     }
 
-    // The kernel writes the 32-byte caller identity at the END of this buffer;
-    // the 512-byte request window at its start is never overwritten.
-    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    let mut watches = owner_watch::OwnerWatches::new();
+    let config = ServeConfig::with_heartbeat().watching(
+        WatchPolicy::OnRequest(|payload| owner_watch::creates_owned_state(payload[0])),
+        owner_watch::MAX_WATCHED_CELLS,
+    );
+    serve(config, &mut compositor);
+}
+
+/// The compositor's state between receives, served by [`serve`].
+#[cfg(not(test))]
+#[cfg(target_os = "none")]
+struct Compositor {
+    fb: ScreenFb,
+    table: SurfaceTable,
+    frames: surface_table::FrameRegistry,
+    z_order: ZOrder,
+    input: InputState,
+    appearance: appearance::Appearance,
+    // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
+    // Consumed (taken) on each render_frame call.
+    pending_dirty: Option<Rect>,
     // Resolution hotplug: check every 5 s; reconstruct ScreenFb on change.
-    let mut last_res_check_ms: u64 = 0;
+    last_res_check_ms: u64,
+    /// Surfaces and views are keyed by the creating **thread** tid, while a death
+    /// names the Cell incarnation: the threads that created state for each owner.
+    owners: BTreeMap<Owner, Vec<usize>>,
+}
 
-    loop {
-        // The receive syscall only writes the payload; clear its reusable tail so
-        // fixed-frame decoders never inspect bytes from an earlier sender and a
-        // death record (which carries no trailer) reads as unattributed.
-        buf.fill(0);
-
-        match sys_recv_attested(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender > 0 => {
-                match owner_watch::classify(&buf, sender, &mut watches) {
-                    // Unattributed and not a watched cell's death (e.g. a
-                    // zero-trailer leftover of a client that was already reclaimed).
-                    owner_watch::Incoming::Drop => {}
-                    owner_watch::Incoming::OwnerDeath(dead) => {
-                        let removed = owner_watch::reclaim(
-                            &dead,
-                            &mut input,
-                            &mut table,
-                            &mut frames,
-                            &mut z_order,
-                            &mut pending_dirty,
-                        );
-                        if let Some(line) = owner_watch::death_line(&dead, removed) {
-                            println(&line);
-                        }
-                    }
-                    owner_watch::Incoming::Serve(identity) => {
-                        if let Some(request) = buf.first_chunk::<512>() {
-                            if input.input_tid != 0
-                                && sender == input.input_tid
-                                && request[0] == INPUT_EVENT_OPCODE
-                            {
-                                // On MouseMove, update_cursor sets pending_dirty = union(old, new)
-                                // so the frame is repainted at the interval tick.
-                                handle_input_event(
-                                    request,
-                                    &mut input,
-                                    ScreenBounds {
-                                        width: fb.width,
-                                        height: fb.height,
-                                        maximum: window_decoration::maximized_content(
-                                            fb.width, fb.height,
-                                        ),
-                                        now_ms: sys_get_time(),
-                                    },
-                                    &mut table,
-                                    &mut frames,
-                                    &mut z_order,
-                                    &mut pending_dirty,
-                                );
-                            } else {
-                                // Watch the cell before dispatch: the kernel grants the
-                                // watch only while this message is the one being served.
-                                if owner_watch::creates_owned_state(request[0]) {
-                                    let admission =
-                                        watches.admit(&identity, sender, &mut KernelWatch);
-                                    for stale in &admission.stale {
-                                        let removed = owner_watch::reclaim(
-                                            stale,
-                                            &mut input,
-                                            &mut table,
-                                            &mut frames,
-                                            &mut z_order,
-                                            &mut pending_dirty,
-                                        );
-                                        if let Some(line) = owner_watch::death_line(stale, removed)
-                                        {
-                                            println(&line);
-                                        }
-                                    }
-                                    if admission.unavailable {
-                                        println(
-                                            "[compositor] owner death watch unavailable; window reclaim deferred",
-                                        );
-                                    }
-                                }
-                                message_handler::handle_message(
-                                    request,
-                                    sender,
-                                    message_handler::MessageContext::new(
-                                        fb.width,
-                                        fb.height,
-                                        &mut input,
-                                        &mut table,
-                                        &mut frames,
-                                        &mut z_order,
-                                        &mut pending_dirty,
-                                        &mut appearance,
-                                    ),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            _ => ostd::task::yield_now(),
+#[cfg(not(test))]
+#[cfg(target_os = "none")]
+impl Compositor {
+    /// Remember that `tid` creates state on behalf of `owner`, so its death
+    /// reclaims it. Mirrors what `serve` can watch: never the kernel's own
+    /// identity, at most [`owner_watch::MAX_WATCHED_CELLS`] owners and
+    /// [`owner_watch::MAX_TIDS_PER_CELL`] tids each; beyond that the state is
+    /// served but not reclaimed on death.
+    fn record_creator(&mut self, owner: Owner, tid: usize) {
+        if owner.cell_id == 0 || owner.generation == 0 {
+            return;
         }
+        if !self.owners.contains_key(&owner) && self.owners.len() >= owner_watch::MAX_WATCHED_CELLS
+        {
+            return;
+        }
+        let tids = self.owners.entry(owner).or_default();
+        if !tids.contains(&tid) && tids.len() < owner_watch::MAX_TIDS_PER_CELL {
+            tids.push(tid);
+        }
+    }
+}
 
-        if let Some(stale) = input.take_stale() {
-            pending_dirty = Some(pending_dirty.map_or(stale, |dirty| dirty.union(&stale)));
+#[cfg(not(test))]
+#[cfg(target_os = "none")]
+impl Handler for Compositor {
+    fn on_request(&mut self, request: Request<'_>) {
+        let sender = request.sender();
+        let Some(buf) = request.payload().first_chunk::<512>() else {
+            return;
+        };
+        if self.input.input_tid != 0
+            && sender == self.input.input_tid
+            && buf[0] == INPUT_EVENT_OPCODE
+        {
+            // On MouseMove, update_cursor sets pending_dirty = union(old, new)
+            // so the frame is repainted at the interval tick.
+            handle_input_event(
+                buf,
+                &mut self.input,
+                ScreenBounds {
+                    width: self.fb.width,
+                    height: self.fb.height,
+                    maximum: window_decoration::maximized_content(self.fb.width, self.fb.height),
+                    now_ms: sys_get_time(),
+                },
+                &mut self.table,
+                &mut self.frames,
+                &mut self.z_order,
+                &mut self.pending_dirty,
+            );
+            return;
+        }
+        // `serve` already watched the owner: the kernel grants the watch only
+        // while this message is the one being served.
+        if owner_watch::creates_owned_state(buf[0]) && request.owner_watched() {
+            self.record_creator(request.owner(), sender);
+        }
+        message_handler::handle_message(
+            buf,
+            sender,
+            message_handler::MessageContext::new(
+                self.fb.width,
+                self.fb.height,
+                &mut self.input,
+                &mut self.table,
+                &mut self.frames,
+                &mut self.z_order,
+                &mut self.pending_dirty,
+                &mut self.appearance,
+            ),
+        );
+    }
+
+    fn on_owner_death(&mut self, owner: Owner) {
+        let dead = owner_watch::Released {
+            cell_id: owner.cell_id,
+            generation: owner.generation,
+            tids: self.owners.remove(&owner).unwrap_or_default(),
+        };
+        let removed = owner_watch::reclaim(
+            &dead,
+            &mut self.input,
+            &mut self.table,
+            &mut self.frames,
+            &mut self.z_order,
+            &mut self.pending_dirty,
+        );
+        if let Some(line) = owner_watch::death_line(&dead, removed) {
+            println(&line);
+        }
+    }
+
+    fn on_turn(&mut self) {
+        if let Some(stale) = self.input.take_stale() {
+            self.pending_dirty = Some(
+                self.pending_dirty
+                    .map_or(stale, |dirty| dirty.union(&stale)),
+            );
         }
         // Damage-driven: render when a surface reports damage or cursor/compositor dirty.
-        if table.has_damage() || pending_dirty.is_some() {
+        if self.table.has_damage() || self.pending_dirty.is_some() {
             let _ = render_frame(
-                &mut fb,
-                &mut table,
-                &frames,
-                &z_order,
-                pending_dirty.take(),
+                &mut self.fb,
+                &mut self.table,
+                &self.frames,
+                &self.z_order,
+                self.pending_dirty.take(),
                 &render::ChromeState {
-                    selected: input.selected_cap(),
-                    menu_button: input.menu_button_hover(),
-                    menu: input.open_menu(),
-                    drag: input.drag_feedback(),
-                    palette: appearance.palette(),
+                    selected: self.input.selected_cap(),
+                    menu_button: self.input.menu_button_hover(),
+                    menu: self.input.open_menu(),
+                    drag: self.input.drag_feedback(),
+                    palette: self.appearance.palette(),
                 },
-                input.mouse_x,
-                input.mouse_y,
+                self.input.mouse_x,
+                self.input.mouse_y,
             );
         }
 
         // Display hotplug: poll GPU resolution every 5 s; if it changed, rebuild ScreenFb
         // and mark the full screen dirty so all surfaces are re-blended at the new size.
         let now_ms = sys_get_time();
-        if now_ms.wrapping_sub(last_res_check_ms) >= 5_000 {
-            last_res_check_ms = now_ms;
+        if now_ms.wrapping_sub(self.last_res_check_ms) >= 5_000 {
+            self.last_res_check_ms = now_ms;
             let (new_w, new_h) = sys_get_resolution();
-            if new_w != fb.width || new_h != fb.height {
+            if new_w != self.fb.width || new_h != self.fb.height {
                 println("[compositor] resolution changed — rebuilding framebuffer");
-                fb = ScreenFb::new(new_w, new_h);
+                self.fb = ScreenFb::new(new_w, new_h);
                 // Repaint entire screen so all surfaces are composited at the new size.
-                pending_dirty = Some(Rect {
+                self.pending_dirty = Some(Rect {
                     x: 0,
                     y: 0,
                     w: new_w,
@@ -263,5 +268,11 @@ pub fn main() {
                 });
             }
         }
+    }
+
+    /// Wake at least every 5 s (500 ticks of 10 ms) so the resolution check in
+    /// [`Self::on_turn`] also runs while no client is talking.
+    fn on_idle(&mut self) -> Wait {
+        Wait::Ticks(500)
     }
 }

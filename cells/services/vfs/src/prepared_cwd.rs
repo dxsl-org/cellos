@@ -1526,7 +1526,7 @@ mod tests {
             .insert(1, reservation(RECEIPT, 1, true));
         assert!(idle_work(&vfs));
         // A watched child's exit arrives as an owner-death notification.
-        vfs.install_owner_watch(CHILD, 9001, 1);
+        vfs.note_watched_owner(CHILD);
         assert!(!idle_work(&vfs));
         // The last pass could not prove the child running.
         vfs.dirs
@@ -1555,7 +1555,7 @@ mod tests {
         let mut vfs = VfsManager::new();
         vfs.dirs.on_contact(PARENT);
         log(&mut vfs);
-        vfs.install_owner_watch(PARENT, 9000, 1);
+        vfs.note_watched_owner(PARENT);
         vfs.dirs
             .prepared
             .reservations
@@ -1582,7 +1582,7 @@ mod tests {
         assert!(!idle_work(&vfs));
         // The owner died: the kernel cancels its Operations, so the child is ending and
         // no message will report it. Poll until its terminal state is observed.
-        assert!(vfs.handle_unattributed_owner_death(9000));
+        assert!(vfs.owner_died(PARENT.cell.0, PARENT.generation));
         assert!(!vfs.watches_owner(PARENT));
         assert!(
             idle_work(&vfs),
@@ -1625,7 +1625,7 @@ mod tests {
             idle_work(&vfs),
             "an unreferenced dead log is still removable"
         );
-        vfs.install_owner_watch(CHILD, 9001, 1);
+        vfs.note_watched_owner(CHILD);
         vfs.dirs
             .prepared
             .reservations

@@ -23,8 +23,10 @@ use api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
 
 pub use api::syscall::service;
 
+pub mod owners;
 pub mod serve;
-pub use serve::{keepalive, serve, Handler, Request, ServeConfig, Wait};
+pub use owners::Owner;
+pub use serve::{keepalive, serve, Handler, Request, ServeConfig, Wait, WatchPolicy};
 
 /// Resolve the live provider **binding** of a well-known service
 /// (`LookupServiceBound`): which Cell incarnation serves it, not only where to
