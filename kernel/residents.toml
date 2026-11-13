@@ -72,6 +72,7 @@
 "kernel/src/arch/legacy/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/x86.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
 "kernel/src/arch/riscv64/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cpu.rs" = { category = "A", owner = "arch" }

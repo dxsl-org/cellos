@@ -36,9 +36,6 @@ extern crate alloc;
 #[cfg(not(all(test, not(target_os = "none"))))]
 use core::panic::PanicInfo;
 
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
-
 // Core kernel modules
 pub mod acpi;
 pub mod admission;
@@ -103,7 +100,7 @@ pub mod snapshot {
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
 pub extern crate hal; // HAL (Architecture specific)
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(not(cellos_wide))]
 use boot::BootInfo;
 #[cfg(target_arch = "aarch64")]
 use hal::backend::ArmPlatform as _;
@@ -172,7 +169,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 /// `crate::arch::boot::platform_init`) bring the platform up; everything after
 /// the [`boot::PlatformReady`] they return is arch-neutral. The `arch::boot`
 /// hooks below run where that architecture's code ran before the split.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0–3. Early console, traps, boot memory, frame allocator, paging.
@@ -667,7 +664,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 }
 
 /// Write `s` as one `[INFO]` line on the early console.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 fn log_info(s: &str) {
     arch::boot::puts("[INFO] ");
     arch::boot::puts(s);
@@ -675,7 +672,7 @@ fn log_info(s: &str) {
 }
 
 /// The boot banner. CI greps for the first line.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 fn boot_banner() {
     // Stable banner — CI greps for this exact string.
     arch::boot::puts("[Cellos] kernel boot v");
@@ -686,7 +683,7 @@ fn boot_banner() {
 
 /// The bootloader's memory description (Limine, else the architecture's
 /// fallback) and the frame allocator built from its usable ranges.
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocator) {
     // Parse bootloader information
     let boot_info = match boot::parse_bootloader_info() {
@@ -743,7 +740,7 @@ fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocat
 /// Spawn the Platform Cell (PCIe ECAM scanner) for `pci`. It is the first cell
 /// that can bring up DMA-capable drivers, so it takes the DMA isolation state
 /// the platform phase left (`_iommu`).
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 fn spawn_platform_cell(pci: &boot::PciReady, _iommu: &boot::IommuReady) {
     match pci {
         // RISC-V uses the compile-time GPEX window (0x3000_0000).
@@ -779,23 +776,15 @@ fn spawn_platform_cell(pci: &boot::PciReady, _iommu: &boot::IommuReady) {
 
 /// Kernel entry point called from HAL boot code (not yet split into the
 /// `crate::arch::boot` phases on this architecture).
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[cfg(not(cellos_wide))]
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
-    #[cfg(target_arch = "riscv64")]
-    crate::sched::smp::set_boot_physical_hart(hartid);
     #[cfg(not(target_arch = "riscv64"))]
     let _hartid = hartid;
     let dtb = boot::effective_dtb(dtb);
     cpu_features::detect(dtb);
-    // Parse DTB for MMIO bases before any driver or paging init.
-    #[cfg(target_arch = "riscv64")]
-    crate::platform::init(dtb);
-    // Set runtime PLIC base before the later RV64 PLIC initialization consumes it.
-    #[cfg(target_arch = "riscv64")]
-    crate::platform::with(|p| hal::common::plic::set_plic_base(p.plic_base));
     // 0. Initialize UART immediately for early logging
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+    #[cfg(target_arch = "riscv32")]
     crate::dev::uart::init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
@@ -807,7 +796,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Define puts helper — arch-specific character output.
     let puts = |s: &str| {
         for c in s.bytes() {
-            #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+            #[cfg(target_arch = "riscv32")]
             {
                 let _ = crate::hal::sbi::console_putchar(c);
             }
@@ -834,12 +823,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     puts(env!("CARGO_PKG_VERSION"));
     puts("\n");
     puts("Kernel started (Hart: 0, DTB: ...)\n");
-    #[cfg(target_arch = "riscv64")]
-    if cpu_features::has_h_ext() {
-        puts("[cpu] H-extension: detected\n");
-    } else {
-        puts("[cpu] H-extension: not present\n");
-    }
 
     // Parse bootloader information
     let boot_info_result = boot::parse_bootloader_info();
@@ -909,41 +892,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Frame allocator initialized");
 
     // 3. Paging (Virtual Memory) Setup
-    // x86_64 bring-up: Limine's PML4 already maps RAM via HHDM and the kernel
-    // at 0xFFFFFFFF80000000. We skip building + activating our own page tables
-    // until the full x86_64 port (Phase 09). init_kernel_paging uses physical
-    // addresses as virtual pointers, which would fault under Limine's paging.
-    #[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm",)))]
-    {
-        let mut frame_allocator = frame_allocator;
-        log_info("Initializing paging...");
-        let root_table_phys =
-            memory::paging::init_kernel_paging(&mut frame_allocator, mmap_entries)
-                .expect("Failed to initialize paging");
-        log_info("Paging initialized");
-        log_info("Activating paging...");
-        unsafe {
-            memory::paging::activate_paging(root_table_phys);
-        }
-        *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
-        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-        TEST_SAFE_ROOT.store(root_table_phys, core::sync::atomic::Ordering::Release);
-        unsafe {
-            core::ptr::write(
-                &mut *memory::frame::FRAME_ALLOCATOR.lock(),
-                Some(frame_allocator),
-            );
-        }
-        log_info("Paging activated");
-        log_info("Frame allocator initialized");
-        // Set sstatus.SUM=1 so S-mode (kernel) can access USER-mapped pages throughout
-        // the kernel lifetime. VirtIO/peripheral MMIO is mapped USER=1 for Driver Cells
-        // (U-mode). Without SUM=1 the kernel's tech-debt VirtIO drivers fault at early-boot
-        // MMIO init. In Cellos's SAS+LBI model security comes from Rust type safety, not
-        // hardware USER-bit separation for kernel-vs-cell — SUM=1 is safe and intentional.
-        #[cfg(target_arch = "riscv64")]
-        crate::arch::user_access::boot_open();
-    }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
     #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
     {
@@ -987,18 +935,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     memory::rt_heap::init();
     log_info("RT heap initialized");
 
-    // 5. Hardware Abstraction Layer (HAL) Initialization
-    // GDT/IDT/SYSCALL already done at step 1. Initialize PLIC for RISC-V external IRQs.
-    #[cfg(target_arch = "riscv64")]
-    if crate::board::active().has_driver(cellos_boards::DriverId::PlicSifive) {
-        if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
-            crate::hal::common::plic::init(context, &irqs[..irq_count]);
-        } else {
-            log::warn!("[plic] no active RV64 context mapping; external IRQs stay disabled");
-        }
-    } else {
-        log::info!("[plic] disabled by active board descriptor");
-    }
     log_info("HAL initialized (PLIC enabled)");
 
     // 6. Logger & Drivers & FS
@@ -1013,48 +949,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // A no-op unless the build is `snapshot-qualified`; a build without a
     // workspace refuses every capture.
     boot::reserve_snapshot_scratch();
-    #[cfg(target_arch = "riscv64")]
-    crate::dev::uart::init_input();
-    // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).
-    // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
-    #[cfg(target_arch = "riscv64")]
-    crate::dev::init();
-    // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
-    // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
-    // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
-    #[cfg(target_arch = "riscv64")]
-    {
-        crate::dev::iommu::set_deferred_init_pending();
-        // activate_isolation() is now called inside iommu::try_deferred_init() once the
-        // IOMMU device has been registered by the Platform Cell. The call below is a no-op
-        // (IOMMU not yet initialized at this point in boot).
-        crate::dev::iommu::activate_isolation();
-    }
-
-    // Attempt warm boot from snapshot before any cell initialization.
-    // RV32 Nano / x86_64 skip: no VirtIO block in bring-up.
-    #[cfg(target_arch = "riscv64")]
-    if snapshot::try_restore() {
-        // try_restore() called yield_cpu() and should not return in a successful
-        // warm boot.  If we reach here, fall through to cold boot as a safety net.
-        log::warn!("[boot] snapshot restore returned unexpectedly → cold boot");
-    }
-
-    // Cross-check the on-disk MBR against the compiled-in partition layout
-    // (warn-only — surfaces image/kernel drift at boot instead of as silent
-    // corruption later).
-    #[cfg(target_arch = "riscv64")]
-    crate::loader::disk_layout::verify_mbr();
-
-    // Probe the cell bootstrap table so SpawnFromPath works during init.
-    // RV32 Nano / x86_64 bring-up: no disk.
-    #[cfg(target_arch = "riscv64")]
-    match crate::loader::early::EarlyLoader::probe() {
-        Ok(()) => puts("[loader] cell bootstrap table loaded\n"),
-        Err(_) => {
-            puts("[loader] WARN: cell table not found — disk image may lack bootstrap section\n")
-        }
-    }
 
     // RV32 Nano: no FAT32 FS in bring-up.
     // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
@@ -1070,10 +964,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(cellos_wide)]
     policy::load_from_vifs1();
 
-    // Phase 20: hot-migration state-transfer self-test.
-    #[cfg(target_arch = "riscv64")]
-    crate::cell::state_stash::self_test();
-
     log_info("Kernel subsystems initialized successfully.");
 
     // 7. Initialize Scheduler
@@ -1085,20 +975,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("death-subscriber quota self-test PASS");
     } else {
         log_info("death-subscriber quota self-test FAIL");
-    }
-    // This test-only branch must precede every unrelated boot suite: its
-    // terminal is the sole evidence for opcode 214's SAS ownership path.
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "getrandom-sas-test"
-    ))]
-    {
-        crate::sched::smp::start_secondaries();
-        // Erase the diverging return type so the generic boot path remains
-        // typechecked without a feature-specific unreachable-code warning.
-        let exit = |success| -> () { crate::qemu_exit(success) };
-        exit(task::user_copy_tests::run_getrandom_primary());
     }
 
     #[cfg(feature = "test-hooks")]
@@ -1114,18 +990,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // unrelated boot tasks can add noise. Assertions make any failure boot-fatal.
     #[cfg(feature = "test-hooks")]
     crate::loader::elf_tests::run_all();
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if crate::arch::task::path_selftest::self_test() {
-        log_info("cwd-path self-test PASS");
-    } else {
-        log_info("cwd-path self-test FAIL");
-    }
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if crate::arch::task::fstat_selftest::self_test() {
-        log_info("fstat self-test PASS");
-    } else {
-        log_info("fstat self-test FAIL");
-    }
 
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
@@ -1215,19 +1079,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(cellos_wide)]
     crate::sched::smp::start_secondaries();
 
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::arch::memory::tlb_shootdown_selftest::run_primary();
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::arch::cell::provenance_selftest::run_primary();
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    crate::memory::address_space::address_space_tests::run_primary();
-
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
     #[cfg(all(feature = "native-domains", cellos_wide))]
     memory::domain_supervisor_registry::activate();
     #[cfg(all(feature = "native-domains", cellos_wide))]
@@ -1259,45 +1110,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         )
         .expect("frame allocator bitmap and early paging registration must succeed");
-    }
-    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
-    {
-        let (clint_base, plic_base, plic_size, uart_region, rtc_region) =
-            crate::platform::with(|p| {
-                (
-                    p.clint_base,
-                    p.plic_base,
-                    p.plic_size,
-                    p.uart_base & !0xFFFF,
-                    p.rtc_base & !0xFFF,
-                )
-            });
-        let _ = memory::domain_supervisor_registry::register(
-            clint_base,
-            clint_base + 0x10000,
-            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-        );
-        let _ = memory::domain_supervisor_registry::register(
-            plic_base,
-            plic_base + plic_size,
-            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-        );
-        if uart_region != 0 {
-            let _ = memory::domain_supervisor_registry::register(
-                uart_region,
-                uart_region + 0x1000,
-                memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-                memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-            );
-        }
-        let _ = memory::domain_supervisor_registry::register(
-            rtc_region,
-            rtc_region + 0x1000,
-            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-        );
     }
     // Tier 2 admission posture (ADR-0019 §2.3). The backend alone does not
     // authorize admission. Fleet profiles stay closed unless the explicit x86
@@ -1337,52 +1149,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     if !crate::sched::domain_switch_tests::run_primary() {
         log::error!("native-domain SAS scheduler fixture failed");
     }
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    crate::arch::task::context_handoff_selftest::run_primary();
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    crate::arch::task::retirement_selftest::run_primary();
-    #[cfg(all(
-        target_arch = "riscv64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    {
-        task::user_copy_tests::run_primary();
-        task::ipc_wire_selftest::run_primary(crate::sched::smp::online_hart_count());
-        crate::loader::domain_admission::run_selftest();
-        crate::ipc::futex::run_selftest();
-        task::domain_grant::run_selftest();
-        task::grant_gate_selftest::run_primary();
-        task::rt_wake_selftest::self_test();
-    }
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
     // P01). The tables are plain kernel-heap memory, so this needs no IOMMU
     // hardware and runs on every arch whose lane enables hooks.
     #[cfg(feature = "test-hooks")]
     crate::dev::iommu_pt::run_selftest();
-
-    // Phase 07 step 3: the all-hart park hook, driven on the real harts of this
-    // boot. The fixture requests, verifies and releases a park through the same
-    // protocol and the same trap-path hook the capture preflight uses, and emits
-    // `S22-RV64-PARK: PASS harts=<n>` (or `FAIL`) itself — the native-domain lane
-    // requires that terminal, so a fixture that stops running, or a call site that
-    // stops being reached, turns the lane red instead of silently disappearing.
-    // Placed with the other boot fixtures: after every fixture that needs the
-    // second hart (the park is a bounded stop, not a background stall) and before
-    // init exists, so it has the machine to itself.
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-    if !crate::sched::quiesce::lane::run_primary() {
-        // The fixture's own marker is the verdict: either `S22-RV64-PARK: FAIL`
-        // (a step of the witness did not hold) or `S22-RV64-PARK: UNAVAILABLE`
-        // (the readiness gate found the second hart not taking traps before any
-        // request was made, so this boot could not witness the hook at all).
-        log::error!("park-hook fixture did not witness the park hook; see its marker");
-    }
 
     // Phase 10: the timer sweep runs on any hart, so a deadline passes while
     // hart 0 is held. Last of the boot fixtures:
@@ -1480,20 +1252,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         #[cfg(feature = "test-hooks")]
         {}
 
-        // Spawn the Platform Cell before init (PCIe ECAM scanner).
-        // RISC-V uses the compile-time GPEX window (0x3000_0000).
-        // x86_64 hands the validated runtime ACPI-MCFG base and bus range via argv.
-        // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
-        // that rely on sys_find_pcie_device will simply not find their device.
-        #[cfg(target_arch = "riscv64")]
-        match crate::loader::spawn_from_path(
-            "/bin/platform",
-            crate::loader::SpawnRequest::governed_boot(),
-        ) {
-            Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
-            Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
-        }
-
         // `aligned_elf::bytes` borrows an already aligned embedded image and only
         // materializes an aligned copy when the linker did not provide one. Do not
         // unconditionally duplicate init on the kernel heap at this boot boundary.
@@ -1523,41 +1281,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 panic!("atomic-publication trusted-init success contract did not publish init");
             }
         }
-    }
-
-    // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
-    // RISC-V only — task writes RISC-V machine code directly.
-    // Expected serial output: "Hi from U-mode!\n" followed by task exit.
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    match task::user_hello::spawn() {
-        Ok(tid) => {
-            puts("[task] spawning user_hello at ");
-            // Print tid as decimal (max 20 digits for usize)
-            let mut buf = [0u8; 20];
-            let mut n = tid;
-            let mut i = 20usize;
-            if n == 0 {
-                i -= 1;
-                buf[i] = b'0';
-            } else {
-                while n > 0 {
-                    i -= 1;
-                    buf[i] = b'0' + (n % 10) as u8;
-                    n /= 10;
-                }
-            }
-            let _ = core::str::from_utf8(&buf[i..]).map(puts);
-            puts("\n");
-            let _ = tid; // suppress unused warning
-        }
-        Err(_) => log_info("[task] user_hello spawn failed"),
-    }
-
-    // Deliberately underflow a U-mode test task into the upper guard page. The
-    // fault handler must terminate only that task and let boot continue.
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    if crate::arch::task::stack_overflow_probe::spawn().is_err() {
-        log_info("[stack-guard] deliberate overflow probe spawn FAIL");
     }
 
     log_info("Kernel initialization complete. Entering idle loop.");
@@ -1607,75 +1330,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     loop {
         crate::task::yield_cpu();
         crate::hal::ARCH.wait_for_interrupt();
-    }
-}
-
-/// Emit an allocation-free RV64 fault snapshot before the panic path.
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-#[no_mangle]
-pub extern "C" fn vi_rv64_kernel_fault_snapshot(satp: usize, stval: usize) {
-    fn put_hex(value: usize) {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        for shift in (0..16).rev().map(|n| n * 4) {
-            let _ = crate::hal::sbi::console_putchar(HEX[(value >> shift) & 0xf]);
-        }
-    }
-
-    fn put_label(label: &[u8], value: usize) {
-        for byte in label {
-            let _ = crate::hal::sbi::console_putchar(*byte);
-        }
-        put_hex(value);
-    }
-
-    unsafe fn read_pte(table_phys: usize, index: usize) -> usize {
-        (table_phys as *const usize).add(index).read_volatile()
-    }
-
-    fn next_table(entry: usize) -> usize {
-        ((entry >> 10) & 0x003f_ffff_ffff_ffff) << 12
-    }
-
-    for byte in b"\n[selftest] RV64-FAULT satp=0x" {
-        let _ = crate::hal::sbi::console_putchar(*byte);
-    }
-    put_hex(satp);
-    for byte in b" stval=0x" {
-        let _ = crate::hal::sbi::console_putchar(*byte);
-    }
-    put_hex(stval);
-
-    let kernel_root = TEST_SAFE_ROOT.load(core::sync::atomic::Ordering::Acquire);
-    if kernel_root != 0 {
-        let kernel_satp = (8usize << 60) | (kernel_root >> 12);
-        // SAFETY: this test-only panic snapshot switches to the known-safe
-        // shared root so it can inspect private page-table memory by physical VA.
-        unsafe {
-            core::arch::asm!(
-                "csrw satp, {satp}",
-                "sfence.vma zero, zero",
-                satp = in(reg) kernel_satp,
-                options(nostack)
-            );
-        }
-        let root_phys = (satp & ((1usize << 44) - 1)) << 12;
-        let vpn2 = (stval >> 30) & 0x1ff;
-        let vpn1 = (stval >> 21) & 0x1ff;
-        let vpn0 = (stval >> 12) & 0x1ff;
-        let pte2 = unsafe { read_pte(root_phys, vpn2) };
-        let pte1 = if pte2 & 1 != 0 {
-            unsafe { read_pte(next_table(pte2), vpn1) }
-        } else {
-            0
-        };
-        let pte0 = if pte1 & 1 != 0 {
-            unsafe { read_pte(next_table(pte1), vpn0) }
-        } else {
-            0
-        };
-        put_label(b" pte2=0x", pte2);
-        put_label(b" pte1=0x", pte1);
-        put_label(b" pte0=0x", pte0);
     }
 }
 

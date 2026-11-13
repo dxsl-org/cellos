@@ -428,7 +428,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `hal-x86::x86_64::idt::probe_timer::COUNT @cfg(target_arch = "x86_64" & feature = "x86-idt-cpl3-test")` | `hal/arch/x86/src/x86_64/idt/probe_timer.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `hal-x86::x86_64::idt::probe_timer::STATE @cfg(target_arch = "x86_64" & feature = "x86-idt-cpl3-test")` | `hal/arch/x86/src/x86_64/idt/probe_timer.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::INIT_ELF @cfg(cellos_wide)` | `kernel/src/main.rs` | static | `&[u8]` | syntactically immutable |
-| `kernel::TEST_SAFE_ROOT @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/main.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::TEST_STATE_LOCK @cfg(test)` | `kernel/src/main.rs` | static | `sync::Spinlock<()>` | cfg inactive in this profile |
 | `kernel::arch::aarch64::boot::idle_probes()::IDLE_COUNT @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/boot.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::aarch64::cpu::global_asm!#1 @cfg(target_arch = "aarch64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/aarch64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
@@ -436,6 +435,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::arch::aarch64::vm::NEXT_VMID @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/vm.rs` | static | `core::sync::atomic::AtomicU16` | cfg inactive in this profile |
 | `kernel::arch::aarch64::vm::VM_REGISTRY @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/vm.rs` | static | `Spinlock<Option<BTreeMap<(usize,usize),Vm>>>` | cfg inactive in this profile |
 | `kernel::arch::legacy::dev::ps2_keyboard::STATE @cfg(not (cellos_wide) & target_arch = "x86")` | `kernel/src/arch/x86_64/dev/ps2_keyboard.rs` | static | `Spinlock<Ps2State>` | cfg inactive in this profile |
+| `kernel::arch::riscv64::boot::TEST_SAFE_ROOT @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/boot.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::FILE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU64` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::PHASE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::arch::riscv64::cell::provenance_selftest::ROOT @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/cell/provenance_selftest.rs` | static | `AtomicU64` | cfg inactive in this profile |
