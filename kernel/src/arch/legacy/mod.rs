@@ -13,6 +13,7 @@ pub mod power;
 pub mod sdhci;
 pub mod tlb;
 pub mod virtio_mmio;
+pub mod vm;
 
 #[cfg(target_arch = "riscv32")]
 mod riscv32;

@@ -54,6 +54,7 @@
 "kernel/src/arch/aarch64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/virtio_mmio.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/clock.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/cpu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
@@ -67,6 +68,7 @@
 "kernel/src/arch/legacy/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/virtio_mmio.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/x86.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
@@ -100,9 +102,11 @@
 "kernel/src/arch/riscv64/task/path_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/retirement_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/task/thread_user_entry_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/virtio_mmio.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
@@ -149,6 +153,7 @@
 "kernel/src/arch/x86_64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/virtio_mmio.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/vm.rs" = { category = "A", owner = "arch" }
 
 # ---- admission ----
 "kernel/src/admission/gate.rs" = { category = "B", owner = "admission" }

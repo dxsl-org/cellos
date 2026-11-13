@@ -5,7 +5,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 
 | rank | name | static(s) |
 |---:|---|---|
-| 1 | `VM_REGISTRY` | `kernel::hypervisor::registry::VM_REGISTRY @cfg(target_arch = "aarch64")` (kernel/src/hypervisor/registry.rs, cfg inactive here) |
+| 1 | `VM_REGISTRY` | `kernel::arch::aarch64::vm::VM_REGISTRY @cfg(target_arch = "aarch64")` (kernel/src/arch/aarch64/vm.rs, cfg inactive here) |
 | 2 | `SVM_VM_REGISTRY` | `kernel::arch::x86_64::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/hypervisor/svm_registry.rs) |
 | 3 | `CONSOLE_DRV` | `kernel::dev::console_drv::CONSOLE` (kernel/src/dev/console_drv.rs) |
 | 4 | `PENDING_ASCII` | `kernel::dev::console_drv::PENDING_ASCII` (kernel/src/dev/console_drv.rs) |

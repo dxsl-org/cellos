@@ -30,6 +30,8 @@ pub mod sdhci;
 
 pub mod hart_local;
 
+pub mod vm;
+
 pub mod cell {
     #[cfg(feature = "test-hooks")]
     pub mod provenance_selftest;
