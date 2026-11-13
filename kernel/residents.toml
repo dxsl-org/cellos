@@ -50,6 +50,7 @@
 "kernel/src/arch/aarch64/resource_registry.rs" = { category = "D", owner = "resource_registry" }
 "kernel/src/arch/aarch64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/smp.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/smp_bringup.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/aarch64/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/virtio_mmio.rs" = { category = "A", owner = "arch" }
@@ -85,6 +86,7 @@
 "kernel/src/arch/riscv64/sched/ready_test_dispatch.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/riscv64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/smp.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/smp_bringup.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/riscv64/task.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/fstat_selftest.rs" = { category = "test", owner = "task" }

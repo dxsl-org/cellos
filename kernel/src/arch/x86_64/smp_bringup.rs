@@ -703,3 +703,23 @@ pub(super) fn x86_handoff_fixture() {
     drop(stack);
     log::info!("S22-X86-CONTEXT-HANDOFF: PASS raw_switch=true save_guard=true steal_after_save=true late_retirement_deferred=true");
 }
+
+// The HAL owns one GS record, GDT/TSS and IST set per logical CPU.
+const _: () = assert!(MAX_HARTS <= hal::x86_64::syscall::MAX_CPUS);
+
+pub(super) static RETIRE_SWITCH_INFLIGHT: [AtomicUsize; MAX_HARTS] =
+    [const { AtomicUsize::new(0) }; MAX_HARTS];
+
+/// Capture before scheduler selection: a later request may concern the incoming
+/// task and must wait for that task's next switch-away.
+pub fn capture_retirement_boundary(hart: usize) {
+    RETIRE_SWITCH_INFLIGHT[hart].store(
+        RETIRE_SWITCH_REQUEST[hart].load(Ordering::Acquire),
+        Ordering::Release,
+    );
+}
+
+pub fn complete_captured_retirement_boundary(hart: usize) {
+    let epoch = RETIRE_SWITCH_INFLIGHT[hart].swap(0, Ordering::AcqRel);
+    RETIRE_SWITCH_COMPLETE[hart].fetch_max(epoch, Ordering::Release);
+}

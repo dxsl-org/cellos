@@ -1574,7 +1574,7 @@ rationale = "Owner-CPU-only writers, both with IF masked (ISR; switch completion
 review = "kernel/src/sched/smp.rs:complete_retirement_switch; kernel/src/sched/smp.rs:complete_captured_retirement_boundary; kernel/src/task.rs:vi_context_switch_complete; kernel/src/task.rs:vi_ipi_service"
 
 [[global]]
-key = "kernel::sched::smp::RETIRE_SWITCH_INFLIGHT @cfg(target_arch = \"x86_64\")"
+key = "kernel::sched::smp::x86::RETIRE_SWITCH_INFLIGHT @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cpu"
 mutation = "atomic"
 owner = "kernel::sched::smp (x86_64): CPU N captures the request epoch before selection and consumes it on the incoming side of its switch"
@@ -1582,7 +1582,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "swapped to 0 at each completed switch"
 rationale = "Written only by the owning CPU in yield_cpu after cli and swapped in vi_context_switch_complete on the same CPU, so no cross-CPU writer exists; atomics just provide static storage. task.rs:yield_cpu is reached from the x86 timer ISR (hal/arch/x86/src/x86_64/idt/dispatch.rs:x86_64_idt_dispatch Route::Timer -> task.rs:vi_timer_tick), the IPI ISR (task.rs:vi_ipi_service), the user-fault path (vi_terminate_on_user_trap_fault) and the AP idle loop (smp.rs:x86_secondary_main, only after X86_BOOT_COMPLETE)."
-review = "kernel/src/sched/smp.rs:capture_retirement_boundary; kernel/src/sched/smp.rs:complete_captured_retirement_boundary; kernel/src/task.rs:yield_cpu"
+review = "kernel/src/arch/x86_64/smp_bringup.rs:capture_retirement_boundary; kernel/src/arch/x86_64/smp_bringup.rs:complete_captured_retirement_boundary; kernel/src/task.rs:yield_cpu"
 
 [[global]]
 key = "kernel::sched::smp::x86::X86_READY @cfg(target_arch = \"x86_64\")"
