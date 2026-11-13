@@ -110,13 +110,10 @@ pub fn signal_net_rx() {
     }
 
     // Pend a software interrupt on the current hart so vi_timer_tick fires immediately.
-    // SAFETY: csrsi sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
     // SIE is currently cleared by the hardware trap entry, so this is queued and
     // fires once the ISR returns and sret restores sstatus.SIE.
     #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrsi sip, 0x2", options(nomem, nostack))
-    };
+    crate::arch::irq::pend_local_ssip();
 }
 
 /// Check whether event `mask` has any pending bits.  Returns the matching fired bits,

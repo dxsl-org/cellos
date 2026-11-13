@@ -1646,21 +1646,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // surface real problems. Raise back to Info when debugging the spawn path.
 
     // Enable interrupts before entering the idle loop.
-    // RISC-V: set SPP=1 and SIE=1 in sstatus (0x102).
-    // AArch64: clear DAIF.I bit to unmask IRQs.
-    // x86_64: STI via ARCH.enable_interrupts().
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    unsafe {
-        // SAFETY: csrs sstatus SPP|SIE from S-mode — standard interrupt enable.
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x102usize);
-    }
-    #[cfg(target_arch = "aarch64")]
-    unsafe {
-        core::arch::asm!("msr daifclr, #2", options(nomem, nostack));
-    }
-    // x86_64, x86_32, AArch32: use the Arch trait's enable_interrupts().
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86", target_arch = "arm"))]
-    crate::hal::ARCH.enable_interrupts();
+    crate::arch::irq::enable();
 
     // Test images keep kernel Info live.
     //

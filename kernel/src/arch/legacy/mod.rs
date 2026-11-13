@@ -3,6 +3,7 @@
 
 #[cfg(target_arch = "x86")]
 pub mod dev;
+pub mod irq;
 
 #[cfg(target_arch = "riscv32")]
 mod riscv32;

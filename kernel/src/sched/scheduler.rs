@@ -967,9 +967,8 @@ impl Scheduler {
         crate::sched::smp::request_preemption(target_hart);
         #[cfg(target_arch = "riscv64")]
         if target_hart == hart_id {
-            // SAFETY: csrsi on sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
             // The interrupt fires after sret restores sstatus.SIE.
-            unsafe { core::arch::asm!("csrsi sip, 0x2") };
+            crate::arch::irq::raise_local_resched();
         } else {
             // Cross-hart IPI: SSIP fires on the target hart's next interrupt check.
             if let Some((mask, base)) = crate::sched::smp::logical_sbi_target(target_hart) {
