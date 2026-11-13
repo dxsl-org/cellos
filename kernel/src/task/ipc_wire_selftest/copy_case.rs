@@ -33,7 +33,22 @@ pub(super) fn run_copy_case(
             };
         }
     }
+    // The receiver is a synthetic endpoint (`Task::new`: zeroed Context, no
+    // kernel stack). The Recv wake below queues it on this hart; an idle peer
+    // hart would steal it and switch onto sp=0. Reserve it against stealing
+    // across the wake, then drop the queue entry before releasing.
+    let hart = crate::sched::hart_local::current_hart_id();
+    if !crate::sched::hart_local::ready::reserve_test_dispatch_on_hart(hart, RECEIVER_TID) {
+        log::error!("S22-RV64-IPC-COPY: FAIL dispatch-reservation busy");
+        cleanup_task(SENDER_TID, SENDER_CELL);
+        cleanup_task(RECEIVER_TID, RECEIVER_CELL);
+        return false;
+    }
     let send_res = crate::task::ipc_send(SENDER_TID, RECEIVER_TID, SENDER_VA, COPY_LEN);
+    if let Some(_sched) = crate::task::SCHEDULER.lock().as_mut() {
+        crate::sched::hart_local::ready::remove_from_all(RECEIVER_TID);
+    }
+    crate::sched::hart_local::ready::release_test_dispatch_on_hart(hart, RECEIVER_TID);
     let recv_res = crate::task::ipc_recv(RECEIVER_TID, 0, RECEIVER_VA, COPY_LEN);
     let payload_ok = read_page(receiver_space, RECEIVER_VA, 0x5a, COPY_LEN);
     let sender_ready = crate::task::SCHEDULER.lock().as_ref().is_some_and(|sched| {
