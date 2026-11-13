@@ -17,7 +17,9 @@ static void *worker(void *arg) {
         return (void *)0;
     }
     waiting += 1;
-    if (pthread_cond_signal(&ready) != 0) {
+    /* `ready` carries two predicates (main: waiting == 2; workers: released),
+     * so a signal could wake a worker parked ahead of main and strand main. */
+    if (pthread_cond_broadcast(&ready) != 0) {
         (void)pthread_mutex_unlock(&mutex);
         return (void *)0;
     }

@@ -156,7 +156,10 @@ fn cell_main() {
     // (matches cells/tests/c-pthread/src/witness.c + thread::scope + thread_local! destructor)
     println!("[std-smoke] Starting Threading & Sync witness (Mutex, Condvar, Scope, TLS)...");
 
-    // Witness A: Arc<Mutex<(waiting, total, released)>> + Condvar
+    // Witness A: Arc<Mutex<(waiting, total, released)>> + Condvar. One condvar
+    // carries two predicates (main waits for `waiting == 2`, workers for
+    // `released`), so every notify is `notify_all`: a `notify_one` may wake a
+    // worker parked ahead of main, which re-parks and leaves main asleep forever.
     let sync_state = std::sync::Arc::new((
         std::sync::Mutex::new((0u32, 0u32, false)),
         std::sync::Condvar::new(),
@@ -168,7 +171,7 @@ fn cell_main() {
         let (lock, cvar) = &*s1;
         let mut st = lock.lock().unwrap();
         st.0 += 1;
-        cvar.notify_one();
+        cvar.notify_all();
         while !st.2 {
             st = cvar.wait(st).unwrap();
         }
@@ -180,7 +183,7 @@ fn cell_main() {
         let (lock, cvar) = &*s2;
         let mut st = lock.lock().unwrap();
         st.0 += 1;
-        cvar.notify_one();
+        cvar.notify_all();
         while !st.2 {
             st = cvar.wait(st).unwrap();
         }
