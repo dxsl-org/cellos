@@ -15,8 +15,8 @@ mount -t devtmpfs devtmpfs /dev || fail mount-devtmpfs
 mdev -s
 
 # Linux owns each transport as soon as the virtio-mmio platform driver matches
-# it, even when the block/net function drivers are modules. Unbind the two
-# dedicated transports before mapping their shared register page.
+# it, even when the block/net function drivers are modules. Unbind all four
+# transports (block, net, GPU, input) before mapping the shared register page.
 : > /tmp/virtio-bindings
 isolated=0
 driver=/sys/bus/platform/drivers/virtio-mmio
@@ -28,7 +28,7 @@ for device in "$driver"/virtio-mmio.*; do
     printf '%s' "$name" > "$driver/unbind" || fail "unbind:$name"
     isolated=$((isolated + 1))
 done
-[ "$isolated" -eq 2 ] || fail "expected-two-transports-isolated:$isolated"
+[ "$isolated" -eq 4 ] || fail "expected-four-transports-isolated:$isolated"
 echo "[VIRTIO_HOSTILE] TRANSPORTS_ISOLATED"
 
 /bin/virtio-hostile-mmio || fail helper-exit

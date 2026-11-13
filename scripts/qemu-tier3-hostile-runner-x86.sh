@@ -73,7 +73,11 @@ if [[ ! -f "$ISO" || "$BUILD_HOSTILE_ISO" == 1 ]]; then
     RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
         EMBEDDED_OVERRIDE="$EVIDENCE_FS" \
         cargo build --release -p cellos-kernel --target x86_64-unknown-none
-    X86_ISO_ROOT="$WORK_DIR/iso-root" bash scripts/x86/make-iso-ci.sh "$ISO"
+    # A kernel embedding the evidence image, not the default one: pass it
+    # explicitly so the default-kernel rollout check does not apply.
+    cp target/x86_64-unknown-none/release/cellos-kernel "$WORK_DIR/cellos-kernel"
+    X86_KERNEL="$WORK_DIR/cellos-kernel" X86_ISO_ROOT="$WORK_DIR/iso-root" \
+        bash scripts/x86/make-iso-ci.sh "$ISO"
 fi
 [[ -f "$ISO" ]] || { echo "BLOCKED_ENVIRONMENT: hostile ISO not found: $ISO" >&2; exit 1; }
 
@@ -236,7 +240,7 @@ for row in "${X86_VIRTIO_HOSTILE_CORPUS[@]}"; do
 done
 tr -d '\000\r' < "$RAW" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/^USER: \[guest-uart\] //' -e 's/^USER: //' > "$LOG"
 grep -Eqi "$fatal_pattern" "$LOG" && fail_live "fatal condition in normalized log"
-grep -axFq 'USER: [hv-x86] persistent disk: /mnt/sd/guest_disk.img' "$RAW" \
+grep -aEq '^USER: \[hv-x86\] persistent disk: /mnt/sd/guest_disk\.img \(size=[0-9]+' "$RAW" \
     || fail_live "persistent production backend was absent"
 grep -aEq '^\[( INFO| WARN)\] \[vtd\] Intel VT-d: DMA isolation ACTIVE( .*)?$' "$RAW" \
     || fail_live "VT-d isolation was not active"
