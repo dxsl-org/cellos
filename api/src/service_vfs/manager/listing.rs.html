@@ -26,14 +26,14 @@
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl </span>VfsManager {
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// One page of directory `path`, starting at `cursor`. `None` for anything
-<a href=#29 id=29 data-nosnippet>29</a>    /// the wire reports as `ERR_IO`: not a listable directory, a backend
+<a href=#29 id=29 data-nosnippet>29</a>    /// the wire reports as `VfsError::Io`: not a listable directory, a backend
 <a href=#30 id=30 data-nosnippet>30</a>    /// iteration error, an invalid name, or a stale cursor.
 <a href=#31 id=31 data-nosnippet>31</a>    </span><span class="kw">pub fn </span>list_page(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str, cursor: u32, out: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;ListPage&gt; {
 <a href=#32 id=32 data-nosnippet>32</a>        <span class="kw">let </span>backend = <span class="self">self</span>.mounts.backend(path)<span class="question-mark">?</span>;
 <a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">let </span>extras = <span class="self">self</span>.listing_extras(path, backend);
 <a href=#34 id=34 data-nosnippet>34</a>        <span class="kw">let </span>(<span class="kw-2">mut </span>written, extra_start) = <span class="kw">if </span>cursor &amp; EXTRA_PHASE == <span class="number">0 </span>{
-<a href=#35 id=35 data-nosnippet>35</a>            <span class="kw">let </span>page = <span class="kw">if </span><span class="macro">matches!</span>(backend.stat(path), <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>))) {
-<a href=#36 id=36 data-nosnippet>36</a>                backend.list_page(path, cursor, out)<span class="question-mark">?
+<a href=#35 id=35 data-nosnippet>35</a>            <span class="kw">let </span>page = <span class="kw">if </span><span class="macro">matches!</span>(backend.stat(path), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)))) {
+<a href=#36 id=36 data-nosnippet>36</a>                backend.list_page(path, cursor, out).ok()<span class="question-mark">?
 <a href=#37 id=37 data-nosnippet>37</a>            </span>} <span class="kw">else if </span>cursor == <span class="number">0 </span>&amp;&amp; <span class="self">self</span>.is_synthetic_dir(path) {
 <a href=#38 id=38 data-nosnippet>38</a>                ListPage {
 <a href=#39 id=39 data-nosnippet>39</a>                    written: <span class="number">0</span>,
@@ -93,7 +93,7 @@
 <a href=#93 id=93 data-nosnippet>93</a>            extras.push(Extra {
 <a href=#94 id=94 data-nosnippet>94</a>                name,
 <a href=#95 id=95 data-nosnippet>95</a>                kind,
-<a href=#96 id=96 data-nosnippet>96</a>                in_backend: backend.stat(<span class="kw-2">&amp;</span>child).is_some(),
+<a href=#96 id=96 data-nosnippet>96</a>                in_backend: <span class="macro">matches!</span>(backend.stat(<span class="kw-2">&amp;</span>child), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="kw">_</span>))),
 <a href=#97 id=97 data-nosnippet>97</a>            });
 <a href=#98 id=98 data-nosnippet>98</a>        }
 <a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>configured: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] = <span class="kw">match </span>path {
@@ -113,7 +113,7 @@
 <a href=#113 id=113 data-nosnippet>113</a>                <span class="kw">continue</span>;
 <a href=#114 id=114 data-nosnippet>114</a>            }
 <a href=#115 id=115 data-nosnippet>115</a>            <span class="kw">let </span>child = join_component(path, name);
-<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, directory)) = <span class="self">self</span>.stat(<span class="kw-2">&amp;</span>child) <span class="kw">else </span>{
+<a href=#116 id=116 data-nosnippet>116</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, directory))) = <span class="self">self</span>.stat(<span class="kw-2">&amp;</span>child) <span class="kw">else </span>{
 <a href=#117 id=117 data-nosnippet>117</a>                <span class="kw">continue</span>;
 <a href=#118 id=118 data-nosnippet>118</a>            };
 <a href=#119 id=119 data-nosnippet>119</a>            <span class="kw">let </span>kind = <span class="kw">if </span>directory {
@@ -124,7 +124,7 @@
 <a href=#124 id=124 data-nosnippet>124</a>            extras.push(Extra {
 <a href=#125 id=125 data-nosnippet>125</a>                name,
 <a href=#126 id=126 data-nosnippet>126</a>                kind,
-<a href=#127 id=127 data-nosnippet>127</a>                in_backend: backend.stat(<span class="kw-2">&amp;</span>child).is_some(),
+<a href=#127 id=127 data-nosnippet>127</a>                in_backend: <span class="macro">matches!</span>(backend.stat(<span class="kw-2">&amp;</span>child), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(<span class="kw">_</span>))),
 <a href=#128 id=128 data-nosnippet>128</a>            });
 <a href=#129 id=129 data-nosnippet>129</a>        }
 <a href=#130 id=130 data-nosnippet>130</a>        extras

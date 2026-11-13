@@ -14,8 +14,8 @@ MSI is not accepted: per-queue vectors need MSI-X.</p>
     &amp;mut self,
     parks: u32,
     polls: u32,
-    ready: impl FnMut() -&gt; ViResult&lt;bool&gt;,
-) -&gt; ViResult&lt;bool&gt;</h4></section></summary><div class="docblock"><p>Wait (bounded) until <code>ready</code> holds: a short spin, then up to <code>parks</code>
+    ready: impl FnMut() -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;bool&gt;,
+) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;bool&gt;</h4></section></summary><div class="docblock"><p>Wait (bounded) until <code>ready</code> holds: a short spin, then up to <code>parks</code>
 interrupt parks with MSI-X, or <code>polls</code> spins when polled. The device is
 re-read after every return. <code>Ok(false)</code> means the budget ran out.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.park" class="method"><a class="src rightside" href="../../src/driver_vmxnet3/irq.rs.html#149-175">Source</a><h4 class="code-header">fn <a href="#method.park" class="fn">park</a>(&amp;mut self) -&gt; bool</h4></section></summary><div class="docblock"><p>Park on this task’s MSI-X lines for at most <a href="constant.PARK_TICKS.html" title="constant driver_vmxnet3::irq::PARK_TICKS"><code>PARK_TICKS</code></a>. <code>false</code>

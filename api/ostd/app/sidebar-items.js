@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["APP_MSG_MAGIC"],"enum":["AppEvent","ShutdownReason"],"struct":["AppContext"]};
+window.SIDEBAR_ITEMS = {"enum":["AppEvent","ShutdownReason"],"struct":["AppContext"]};

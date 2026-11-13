@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAC_LEN","MIN_FRAME","OP_GETMAC","OP_RX","OP_TX","RX_HEADER_LEN","TX_HEADER_LEN"],"enum":["NicStatus"]};

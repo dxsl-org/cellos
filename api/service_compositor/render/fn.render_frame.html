@@ -3,11 +3,11 @@
     table: &amp;mut <a class="struct" href="../surface_table/storage/struct.SurfaceTable.html" title="struct service_compositor::surface_table::storage::SurfaceTable">SurfaceTable</a>,
     frames: &amp;<a class="struct" href="../surface_table/frame/struct.FrameRegistry.html" title="struct service_compositor::surface_table::frame::FrameRegistry">FrameRegistry</a>,
     z_order: &amp;<a class="struct" href="../z_order/struct.ZOrder.html" title="struct service_compositor::z_order::ZOrder">ZOrder</a>,
-    extra_dirty: Option&lt;Rect&gt;,
+    extra_dirty: Option&lt;<a class="struct" href="../../api/services/display/struct.Rect.html" title="struct api::services::display::Rect">Rect</a>&gt;,
     chrome: &amp;<a class="struct" href="struct.ChromeState.html" title="struct service_compositor::render::ChromeState">ChromeState</a>,
     cursor_x: i32,
     cursor_y: i32,
-) -&gt; Option&lt;Rect&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Repaint every surface intersecting the dirty region in stack order. A
+) -&gt; Option&lt;<a class="struct" href="../../api/services/display/struct.Rect.html" title="struct api::services::display::Rect">Rect</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Repaint every surface intersecting the dirty region in stack order. A
 window’s shadow and frame (or a floating panel’s shadow) go down first,
 then its content clipped to its rounded shape, so the next surface up
 covers all of it. Windows behind another tab of their stack are skipped:

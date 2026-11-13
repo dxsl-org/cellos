@@ -348,7 +348,7 @@
 <a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">if </span>!vfs.access.can_read(owner, path) {
 <a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::Denied);
 <a href=#350 id=350 data-nosnippet>350</a>        }
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">if </span>!vfs.healthy(path) || !<span class="macro">matches!</span>(vfs.stat(path), <span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>))) {
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">if </span>!vfs.healthy(path) || !<span class="macro">matches!</span>(vfs.stat(path), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)))) {
 <a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::Io);
 <a href=#353 id=353 data-nosnippet>353</a>        }
 <a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">if </span><span class="self">self</span>.reservations.values().any(|r| r.prepared == prepared)
@@ -1526,7 +1526,7 @@
 <a href=#1526 id=1526 data-nosnippet>1526</a>            .insert(<span class="number">1</span>, reservation(RECEIPT, <span class="number">1</span>, <span class="bool-val">true</span>));
 <a href=#1527 id=1527 data-nosnippet>1527</a>        <span class="macro">assert!</span>(idle_work(<span class="kw-2">&amp;</span>vfs));
 <a href=#1528 id=1528 data-nosnippet>1528</a>        <span class="comment">// A watched child's exit arrives as an owner-death notification.
-<a href=#1529 id=1529 data-nosnippet>1529</a>        </span>vfs.install_owner_watch(CHILD, <span class="number">9001</span>, <span class="number">1</span>);
+<a href=#1529 id=1529 data-nosnippet>1529</a>        </span>vfs.note_watched_owner(CHILD);
 <a href=#1530 id=1530 data-nosnippet>1530</a>        <span class="macro">assert!</span>(!idle_work(<span class="kw-2">&amp;</span>vfs));
 <a href=#1531 id=1531 data-nosnippet>1531</a>        <span class="comment">// The last pass could not prove the child running.
 <a href=#1532 id=1532 data-nosnippet>1532</a>        </span>vfs.dirs
@@ -1555,7 +1555,7 @@
 <a href=#1555 id=1555 data-nosnippet>1555</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>vfs = VfsManager::new();
 <a href=#1556 id=1556 data-nosnippet>1556</a>        vfs.dirs.on_contact(PARENT);
 <a href=#1557 id=1557 data-nosnippet>1557</a>        log(<span class="kw-2">&amp;mut </span>vfs);
-<a href=#1558 id=1558 data-nosnippet>1558</a>        vfs.install_owner_watch(PARENT, <span class="number">9000</span>, <span class="number">1</span>);
+<a href=#1558 id=1558 data-nosnippet>1558</a>        vfs.note_watched_owner(PARENT);
 <a href=#1559 id=1559 data-nosnippet>1559</a>        vfs.dirs
 <a href=#1560 id=1560 data-nosnippet>1560</a>            .prepared
 <a href=#1561 id=1561 data-nosnippet>1561</a>            .reservations
@@ -1582,7 +1582,7 @@
 <a href=#1582 id=1582 data-nosnippet>1582</a>        <span class="macro">assert!</span>(!idle_work(<span class="kw-2">&amp;</span>vfs));
 <a href=#1583 id=1583 data-nosnippet>1583</a>        <span class="comment">// The owner died: the kernel cancels its Operations, so the child is ending and
 <a href=#1584 id=1584 data-nosnippet>1584</a>        // no message will report it. Poll until its terminal state is observed.
-<a href=#1585 id=1585 data-nosnippet>1585</a>        </span><span class="macro">assert!</span>(vfs.handle_unattributed_owner_death(<span class="number">9000</span>));
+<a href=#1585 id=1585 data-nosnippet>1585</a>        </span><span class="macro">assert!</span>(vfs.owner_died(PARENT.cell.<span class="number">0</span>, PARENT.generation));
 <a href=#1586 id=1586 data-nosnippet>1586</a>        <span class="macro">assert!</span>(!vfs.watches_owner(PARENT));
 <a href=#1587 id=1587 data-nosnippet>1587</a>        <span class="macro">assert!</span>(
 <a href=#1588 id=1588 data-nosnippet>1588</a>            idle_work(<span class="kw-2">&amp;</span>vfs),
@@ -1625,7 +1625,7 @@
 <a href=#1625 id=1625 data-nosnippet>1625</a>            idle_work(<span class="kw-2">&amp;</span>vfs),
 <a href=#1626 id=1626 data-nosnippet>1626</a>            <span class="string">"an unreferenced dead log is still removable"
 <a href=#1627 id=1627 data-nosnippet>1627</a>        </span>);
-<a href=#1628 id=1628 data-nosnippet>1628</a>        vfs.install_owner_watch(CHILD, <span class="number">9001</span>, <span class="number">1</span>);
+<a href=#1628 id=1628 data-nosnippet>1628</a>        vfs.note_watched_owner(CHILD);
 <a href=#1629 id=1629 data-nosnippet>1629</a>        vfs.dirs
 <a href=#1630 id=1630 data-nosnippet>1630</a>            .prepared
 <a href=#1631 id=1631 data-nosnippet>1631</a>            .reservations

@@ -2,7 +2,7 @@
     host: &amp;mut S,
     sink: &amp;mut <a class="struct" href="../sink/struct.ByteSink.html" title="struct terminal::sink::ByteSink">ByteSink</a>,
     grid: &amp;mut <a class="struct" href="../grid/struct.TerminalGrid.html" title="struct terminal::grid::TerminalGrid">TerminalGrid</a>,
-) -&gt; Result&lt;bool, Status&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Read both streams (bounded) into the grid. <code>Ok(true)</code> if any byte arrived.</p>
+) -&gt; Result&lt;bool, <a class="enum" href="../../api/abi/cell_session/enum.Status.html" title="enum api::abi::cell_session::Status">Status</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Read both streams (bounded) into the grid. <code>Ok(true)</code> if any byte arrived.</p>
 <p>stdout is drained first, then stderr. The Terminal starts the shell in merged mode
 (<code>SHELL_ENV</code>), so the shell writes every diagnostic to its stdout ring and relays its
 own and its children’s output to this Cell’s stdout writer; the stderr ring stays

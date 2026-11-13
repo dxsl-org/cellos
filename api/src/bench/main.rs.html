@@ -485,7 +485,7 @@
 <a href=#485 id=485 data-nosnippet>485</a>        <span class="string">"hotswap-unauthorized" </span>=&gt; scenarios::hotswap_supervisor::run_unauthorized_probe(),
 <a href=#486 id=486 data-nosnippet>486</a>        <span class="string">"snapshot-authority" </span>=&gt; scenarios::snapshot_authority::run(),
 <a href=#487 id=487 data-nosnippet>487</a>        <span class="string">"init-giveup" </span>=&gt; scenarios::init_giveup::run(),
-<a href=#488 id=488 data-nosnippet>488</a>        <span class="string">"native-stateful" </span>=&gt; scenarios::native_stateful::run(),
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="string">"native-stateful" </span>=&gt; scenarios::native_stateful::run(argv.get(<span class="number">1</span>).map(|a| a.as_str())),
 <a href=#489 id=489 data-nosnippet>489</a>        <span class="string">"lab-carrier-transfer" </span>=&gt; scenarios::lab_carrier_transfer::run(),
 <a href=#490 id=490 data-nosnippet>490</a>        <span class="string">"base-tray-handoff" </span>=&gt; scenarios::base_tray_handoff::run(),
 <a href=#491 id=491 data-nosnippet>491</a>        <span class="string">"stationary-assembly" </span>=&gt; scenarios::stationary_assembly::run(),

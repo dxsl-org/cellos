@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Wait","WatchPolicy"],"fn":["keepalive","serve"],"struct":["Request","ServeConfig"],"trait":["Handler"]};

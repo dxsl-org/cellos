@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["ensure_dir_chain","file_key","map_file","page_dir","probe_exfat","remove_tree","split_last"],"struct":["FatBackend"],"type":["DataDir","DataFile","DataFs"]};
+window.SIDEBAR_ITEMS = {"fn":["dir_error","ensure_dir_chain","fat_error","file_error","file_key","map_file","open_dir_allow_root","page_dir","probe_exfat","read_to_end","remove_tree","split_last"],"struct":["FatBackend"],"type":["DataDir","DataFile","DataFs"]};

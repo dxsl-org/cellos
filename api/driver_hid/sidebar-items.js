@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DEVICE_EVENT_LEN","EV_ABS","EV_DEVICE","EV_KEY","EV_REL"],"enum":["EvdevEvent","HidKind"],"fn":["decode_boot_report","encode_device_event"],"mod":["decode","keymap","leds","report"],"struct":["BootState","HidDecoder","HidDeviceId"]};
+window.SIDEBAR_ITEMS = {"constant":["DEVICE_EVENT_LEN"],"enum":["EvdevEvent","HidKind"],"fn":["decode_boot_report","encode_device_event"],"mod":["decode","keymap","leds","report"],"struct":["BootState","HidDecoder","HidDeviceId"]};

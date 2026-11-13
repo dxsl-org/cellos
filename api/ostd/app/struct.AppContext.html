@@ -32,7 +32,7 @@ after the handler did other IPC; any other <code>tid</code> goes through
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p><code>IO</code> when the reply could not be delivered.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.send_msg" class="method"><a class="src rightside" href="../../src/ostd/app.rs.html#335-344">Source</a><h4 class="code-header">pub fn <a href="#method.send_msg" class="fn">send_msg</a>(&amp;self, tid: usize, payload: &amp;[u8]) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Queue an App SDK envelope message for <code>tid</code>, without parking.</p>
-<p>Prepends <code>[APP_MSG_MAGIC, 0x00]</code> so the receiver’s <code>AppContext</code> decodes it
+<p>Prepends <code>[MAGIC, KIND_MESSAGE]</code> so the receiver’s <code>AppContext</code> decodes it
 as <a href="enum.AppEvent.html#variant.Message" title="variant ostd::app::AppEvent::Message"><code>AppEvent::Message</code></a>.</p>
 <h5 id="errors-1"><a class="doc-anchor" href="#errors-1">§</a>Errors</h5>
 <p><code>InvalidArgument</code> when the payload does not fit, <code>IO</code> when <code>tid</code> is gone

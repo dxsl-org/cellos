@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["dir_entries","dir_lookup","open"],"struct":["BootFsProxy","BootName","Fd","ReadCursor"]};
+window.SIDEBAR_ITEMS = {"fn":["dir_entries","dir_lookup","open","read_cap_to_end"],"struct":["BootFsProxy","BootName","Fd","ReadCursor"]};

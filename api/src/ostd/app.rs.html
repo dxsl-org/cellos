@@ -8,13 +8,13 @@
 <a href=#8 id=8 data-nosnippet>8</a>//!
 <a href=#9 id=9 data-nosnippet>9</a>//! # Message envelope
 <a href=#10 id=10 data-nosnippet>10</a>//!
-<a href=#11 id=11 data-nosnippet>11</a>//! Messages sent through [`AppContext::send_msg`] carry a 2-byte header:
-<a href=#12 id=12 data-nosnippet>12</a>//! - byte 0: [`APP_MSG_MAGIC`] (0xAC) — namespace guard, prevents raw-protocol collisions
-<a href=#13 id=13 data-nosnippet>13</a>//! - byte 1: event type discriminant (0x00 = Message, 0xFF = Shutdown,
-<a href=#14 id=14 data-nosnippet>14</a>//!   0xF0 = Snapshot, 0xF1 = Restore, 0xF2 = CapRevoked)
-<a href=#15 id=15 data-nosnippet>15</a>//! - bytes 2..: payload (caller-defined)
+<a href=#11 id=11 data-nosnippet>11</a>//! Messages sent through [`AppContext::send_msg`] carry the envelope header
+<a href=#12 id=12 data-nosnippet>12</a>//! defined by [`api::services::proto::app_envelope`]: the magic byte (a
+<a href=#13 id=13 data-nosnippet>13</a>//! namespace guard against raw-protocol collisions), then the event kind
+<a href=#14 id=14 data-nosnippet>14</a>//! (message, shutdown, snapshot, restore, capability revocation), then the
+<a href=#15 id=15 data-nosnippet>15</a>//! caller-defined payload.
 <a href=#16 id=16 data-nosnippet>16</a>//!
-<a href=#17 id=17 data-nosnippet>17</a>//! Messages that do not start with `APP_MSG_MAGIC` are delivered as raw
+<a href=#17 id=17 data-nosnippet>17</a>//! Messages that do not start with the magic byte are delivered as raw
 <a href=#18 id=18 data-nosnippet>18</a>//! [`AppEvent::RawMessage`] so legacy IPC senders remain compatible.
 <a href=#19 id=19 data-nosnippet>19</a>//!
 <a href=#20 id=20 data-nosnippet>20</a>//! # Example
@@ -34,11 +34,11 @@
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>crate::{syscall, ViError, ViResult};
 <a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#37 id=37 data-nosnippet>37</a>
-<a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Magic byte prefixing every App SDK envelope.
-<a href=#39 id=39 data-nosnippet>39</a>///
-<a href=#40 id=40 data-nosnippet>40</a>/// Prevents collisions between typed AppContext messages and raw `sys_send` clients.
-<a href=#41 id=41 data-nosnippet>41</a></span><span class="kw">pub const </span>APP_MSG_MAGIC: u8 = <span class="number">0xAC</span>;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>api::services::proto::app_envelope::{
+<a href=#38 id=38 data-nosnippet>38</a>    CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, KIND_MESSAGE, KIND_RESTORE, KIND_SHUTDOWN,
+<a href=#39 id=39 data-nosnippet>39</a>    KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SHUTDOWN_PARENT_DIED, SHUTDOWN_WATCHDOG,
+<a href=#40 id=40 data-nosnippet>40</a>    SNAPSHOT_LEN,
+<a href=#41 id=41 data-nosnippet>41</a>};
 <a href=#42 id=42 data-nosnippet>42</a>
 <a href=#43 id=43 data-nosnippet>43</a><span class="kw">const </span>RECV_BUF_SIZE: usize = <span class="number">4096</span>;
 <a href=#44 id=44 data-nosnippet>44</a>
@@ -326,7 +326,7 @@
 <a href=#326 id=326 data-nosnippet>326</a>
 <a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// Queue an App SDK envelope message for `tid`, without parking.
 <a href=#328 id=328 data-nosnippet>328</a>    ///
-<a href=#329 id=329 data-nosnippet>329</a>    /// Prepends `[APP_MSG_MAGIC, 0x00]` so the receiver's `AppContext` decodes it
+<a href=#329 id=329 data-nosnippet>329</a>    /// Prepends `[MAGIC, KIND_MESSAGE]` so the receiver's `AppContext` decodes it
 <a href=#330 id=330 data-nosnippet>330</a>    /// as [`AppEvent::Message`].
 <a href=#331 id=331 data-nosnippet>331</a>    ///
 <a href=#332 id=332 data-nosnippet>332</a>    /// # Errors
@@ -334,13 +334,13 @@
 <a href=#334 id=334 data-nosnippet>334</a>    /// or its mailbox is full.
 <a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">pub fn </span>send_msg(<span class="kw-2">&amp;</span><span class="self">self</span>, tid: usize, payload: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;()&gt; {
 <a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; RECV_BUF_SIZE];
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">if </span>payload.len() + <span class="number">2 </span>&gt; RECV_BUF_SIZE {
+<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">if </span>payload.len() + HEADER_LEN &gt; RECV_BUF_SIZE {
 <a href=#338 id=338 data-nosnippet>338</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidArgument);
 <a href=#339 id=339 data-nosnippet>339</a>        }
-<a href=#340 id=340 data-nosnippet>340</a>        buf[<span class="number">0</span>] = APP_MSG_MAGIC;
-<a href=#341 id=341 data-nosnippet>341</a>        buf[<span class="number">1</span>] = <span class="number">0x00</span>;
-<a href=#342 id=342 data-nosnippet>342</a>        buf[<span class="number">2</span>..<span class="number">2 </span>+ payload.len()].copy_from_slice(payload);
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">crate</span>::ipc::post(tid, <span class="kw-2">&amp;</span>buf[..<span class="number">2 </span>+ payload.len()]).map_err(|<span class="kw">_</span>| ViError::IO)
+<a href=#340 id=340 data-nosnippet>340</a>        buf[<span class="number">0</span>] = MAGIC;
+<a href=#341 id=341 data-nosnippet>341</a>        buf[<span class="number">1</span>] = KIND_MESSAGE;
+<a href=#342 id=342 data-nosnippet>342</a>        buf[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">crate</span>::ipc::post(tid, <span class="kw-2">&amp;</span>buf[..HEADER_LEN + payload.len()]).map_err(|<span class="kw">_</span>| ViError::IO)
 <a href=#344 id=344 data-nosnippet>344</a>    }
 <a href=#345 id=345 data-nosnippet>345</a>
 <a href=#346 id=346 data-nosnippet>346</a>    <span class="doccomment">/// Resolve the live provider tid of a well-known service.
@@ -409,11 +409,11 @@
 <a href=#409 id=409 data-nosnippet>409</a>    /// Owning the data eliminates the lifetime coupling between the event and the
 <a href=#410 id=410 data-nosnippet>410</a>    /// receive buffer, so the caller can pass `&amp;mut self` to the handler freely.
 <a href=#411 id=411 data-nosnippet>411</a>    </span><span class="kw">fn </span>parse_event_owned(sender_tid: usize, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; AppEvent {
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">if </span>buf.len() &gt;= <span class="number">2 </span>&amp;&amp; buf[<span class="number">0</span>] == APP_MSG_MAGIC {
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">if </span>buf.len() &gt;= HEADER_LEN &amp;&amp; buf[<span class="number">0</span>] == MAGIC {
 <a href=#413 id=413 data-nosnippet>413</a>            <span class="kw">match </span>buf[<span class="number">1</span>] {
-<a href=#414 id=414 data-nosnippet>414</a>                <span class="number">0xFF </span>=&gt; {
+<a href=#414 id=414 data-nosnippet>414</a>                KIND_SHUTDOWN =&gt; {
 <a href=#415 id=415 data-nosnippet>415</a>                    <span class="comment">// Structured shutdown: byte 2 carries the reason (if present).
-<a href=#416 id=416 data-nosnippet>416</a>                    </span><span class="kw">if </span>buf.len() &gt;= <span class="number">3 </span>{
+<a href=#416 id=416 data-nosnippet>416</a>                    </span><span class="kw">if </span>buf.len() &gt; HEADER_LEN {
 <a href=#417 id=417 data-nosnippet>417</a>                        <span class="kw">let </span>reason = <span class="self">Self</span>::parse_shutdown_reason(buf);
 <a href=#418 id=418 data-nosnippet>418</a>                        AppEvent::ShutdownWith { reason }
 <a href=#419 id=419 data-nosnippet>419</a>                    } <span class="kw">else </span>{
@@ -421,32 +421,32 @@
 <a href=#421 id=421 data-nosnippet>421</a>                    }
 <a href=#422 id=422 data-nosnippet>422</a>                }
 <a href=#423 id=423 data-nosnippet>423</a>                <span class="comment">// Hot-swap Step 2: kernel asks this (old) cell to serialize state.
-<a href=#424 id=424 data-nosnippet>424</a>                // Envelope: [0xAC, 0xF0, swap_id_le8 (8 bytes)]
-<a href=#425 id=425 data-nosnippet>425</a>                </span><span class="number">0xF0 </span><span class="kw">if </span>buf.len() &gt;= <span class="number">10 </span>=&gt; {
+<a href=#424 id=424 data-nosnippet>424</a>                // Envelope: [MAGIC, KIND_SNAPSHOT, swap_id_le8 (8 bytes)]
+<a href=#425 id=425 data-nosnippet>425</a>                </span>KIND_SNAPSHOT <span class="kw">if </span>buf.len() &gt;= SNAPSHOT_LEN =&gt; {
 <a href=#426 id=426 data-nosnippet>426</a>                    <span class="kw">let </span><span class="kw-2">mut </span>id_bytes = [<span class="number">0u8</span>; <span class="number">8</span>];
-<a href=#427 id=427 data-nosnippet>427</a>                    id_bytes.copy_from_slice(<span class="kw-2">&amp;</span>buf[<span class="number">2</span>..<span class="number">10</span>]);
+<a href=#427 id=427 data-nosnippet>427</a>                    id_bytes.copy_from_slice(<span class="kw-2">&amp;</span>buf[HEADER_LEN..SNAPSHOT_LEN]);
 <a href=#428 id=428 data-nosnippet>428</a>                    <span class="kw">let </span>swap_id = u64::from_le_bytes(id_bytes);
 <a href=#429 id=429 data-nosnippet>429</a>                    AppEvent::Snapshot { swap_id }
 <a href=#430 id=430 data-nosnippet>430</a>                }
 <a href=#431 id=431 data-nosnippet>431</a>                <span class="comment">// Hot-swap Step 4: kernel asks this (new) cell to restore state.
-<a href=#432 id=432 data-nosnippet>432</a>                // Envelope: [0xAC, 0xF1, key (64 bytes)]
-<a href=#433 id=433 data-nosnippet>433</a>                </span><span class="number">0xF1 </span><span class="kw">if </span>buf.len() &gt;= <span class="number">66 </span>=&gt; {
-<a href=#434 id=434 data-nosnippet>434</a>                    <span class="kw">let </span><span class="kw-2">mut </span>key = [<span class="number">0u8</span>; <span class="number">64</span>];
-<a href=#435 id=435 data-nosnippet>435</a>                    key.copy_from_slice(<span class="kw-2">&amp;</span>buf[<span class="number">2</span>..<span class="number">66</span>]);
+<a href=#432 id=432 data-nosnippet>432</a>                // Envelope: [MAGIC, KIND_RESTORE, key (64 bytes)]
+<a href=#433 id=433 data-nosnippet>433</a>                </span>KIND_RESTORE <span class="kw">if </span>buf.len() &gt;= RESTORE_LEN =&gt; {
+<a href=#434 id=434 data-nosnippet>434</a>                    <span class="kw">let </span><span class="kw-2">mut </span>key = [<span class="number">0u8</span>; RESTORE_KEY_LEN];
+<a href=#435 id=435 data-nosnippet>435</a>                    key.copy_from_slice(<span class="kw-2">&amp;</span>buf[HEADER_LEN..RESTORE_LEN]);
 <a href=#436 id=436 data-nosnippet>436</a>                    AppEvent::Restore { key }
 <a href=#437 id=437 data-nosnippet>437</a>                }
 <a href=#438 id=438 data-nosnippet>438</a>                <span class="comment">// Runtime capability revocation.
-<a href=#439 id=439 data-nosnippet>439</a>                // Envelope: [0xAC, 0xF2, mask_le4 (4 bytes)]
-<a href=#440 id=440 data-nosnippet>440</a>                </span><span class="number">0xF2 </span><span class="kw">if </span>buf.len() &gt;= <span class="number">6 </span>=&gt; {
+<a href=#439 id=439 data-nosnippet>439</a>                // Envelope: [MAGIC, KIND_CAP_REVOKED, mask_le4 (4 bytes)]
+<a href=#440 id=440 data-nosnippet>440</a>                </span>KIND_CAP_REVOKED <span class="kw">if </span>buf.len() &gt;= CAP_REVOKED_LEN =&gt; {
 <a href=#441 id=441 data-nosnippet>441</a>                    <span class="kw">let </span><span class="kw-2">mut </span>mask_bytes = [<span class="number">0u8</span>; <span class="number">4</span>];
-<a href=#442 id=442 data-nosnippet>442</a>                    mask_bytes.copy_from_slice(<span class="kw-2">&amp;</span>buf[<span class="number">2</span>..<span class="number">6</span>]);
+<a href=#442 id=442 data-nosnippet>442</a>                    mask_bytes.copy_from_slice(<span class="kw-2">&amp;</span>buf[HEADER_LEN..CAP_REVOKED_LEN]);
 <a href=#443 id=443 data-nosnippet>443</a>                    AppEvent::CapRevoked {
 <a href=#444 id=444 data-nosnippet>444</a>                        mask: u32::from_le_bytes(mask_bytes),
 <a href=#445 id=445 data-nosnippet>445</a>                    }
 <a href=#446 id=446 data-nosnippet>446</a>                }
 <a href=#447 id=447 data-nosnippet>447</a>                <span class="kw">_ </span>=&gt; AppEvent::Message {
 <a href=#448 id=448 data-nosnippet>448</a>                    sender_tid,
-<a href=#449 id=449 data-nosnippet>449</a>                    data: buf[<span class="number">2</span>..].to_vec(),
+<a href=#449 id=449 data-nosnippet>449</a>                    data: buf[HEADER_LEN..].to_vec(),
 <a href=#450 id=450 data-nosnippet>450</a>                },
 <a href=#451 id=451 data-nosnippet>451</a>            }
 <a href=#452 id=452 data-nosnippet>452</a>        } <span class="kw">else if </span>buf.len() &gt;= <span class="number">2 </span>&amp;&amp; buf[<span class="number">0</span>] == api::input::INPUT_EVENT_OPCODE {
@@ -465,13 +465,13 @@
 <a href=#465 id=465 data-nosnippet>465</a>        }
 <a href=#466 id=466 data-nosnippet>466</a>    }
 <a href=#467 id=467 data-nosnippet>467</a>
-<a href=#468 id=468 data-nosnippet>468</a>    <span class="doccomment">/// Decode shutdown reason byte from a `[0xAC, 0xFF, reason]` envelope.
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="doccomment">/// Decode shutdown reason byte from a `[MAGIC, KIND_SHUTDOWN, reason]` envelope.
 <a href=#469 id=469 data-nosnippet>469</a>    ///
 <a href=#470 id=470 data-nosnippet>470</a>    /// Missing or unknown reason bytes default to [`ShutdownReason::Requested`].
 <a href=#471 id=471 data-nosnippet>471</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>parse_shutdown_reason(buf: <span class="kw-2">&amp;</span>[u8]) -&gt; ShutdownReason {
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">match </span>buf.get(<span class="number">2</span>) {
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="prelude-val">Some</span>(<span class="number">1</span>) =&gt; ShutdownReason::Watchdog,
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="prelude-val">Some</span>(<span class="number">2</span>) =&gt; ShutdownReason::ParentDied,
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">match </span>buf.get(HEADER_LEN).copied() {
+<a href=#473 id=473 data-nosnippet>473</a>            <span class="prelude-val">Some</span>(SHUTDOWN_WATCHDOG) =&gt; ShutdownReason::Watchdog,
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="prelude-val">Some</span>(SHUTDOWN_PARENT_DIED) =&gt; ShutdownReason::ParentDied,
 <a href=#475 id=475 data-nosnippet>475</a>            <span class="kw">_ </span>=&gt; ShutdownReason::Requested,
 <a href=#476 id=476 data-nosnippet>476</a>        }
 <a href=#477 id=477 data-nosnippet>477</a>    }
@@ -485,13 +485,13 @@
 <a href=#485 id=485 data-nosnippet>485</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#486 id=486 data-nosnippet>486</a>
 <a href=#487 id=487 data-nosnippet>487</a>    <span class="doccomment">/// The wire contract the kernel's `send_cap_revoked_event` produces:
-<a href=#488 id=488 data-nosnippet>488</a>    /// `[0xAC, 0xF2, mask_le4]` (spec/17 §3).
+<a href=#488 id=488 data-nosnippet>488</a>    /// `[MAGIC, KIND_CAP_REVOKED, mask_le4]` (spec/17 §3).
 <a href=#489 id=489 data-nosnippet>489</a>    </span><span class="attr">#[test]
 <a href=#490 id=490 data-nosnippet>490</a>    </span><span class="kw">fn </span>cap_revoked_envelope_decodes_to_the_revoked_mask() {
-<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">6</span>];
-<a href=#492 id=492 data-nosnippet>492</a>        buf[<span class="number">0</span>] = APP_MSG_MAGIC;
-<a href=#493 id=493 data-nosnippet>493</a>        buf[<span class="number">1</span>] = <span class="number">0xF2</span>;
-<a href=#494 id=494 data-nosnippet>494</a>        buf[<span class="number">2</span>..<span class="number">6</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x0000_0504u32</span>.to_le_bytes());
+<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; CAP_REVOKED_LEN];
+<a href=#492 id=492 data-nosnippet>492</a>        buf[<span class="number">0</span>] = MAGIC;
+<a href=#493 id=493 data-nosnippet>493</a>        buf[<span class="number">1</span>] = KIND_CAP_REVOKED;
+<a href=#494 id=494 data-nosnippet>494</a>        buf[HEADER_LEN..].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0x0000_0504u32</span>.to_le_bytes());
 <a href=#495 id=495 data-nosnippet>495</a>
 <a href=#496 id=496 data-nosnippet>496</a>        <span class="kw">match </span>AppContext::parse_event_owned(<span class="number">7</span>, <span class="kw-2">&amp;</span>buf) {
 <a href=#497 id=497 data-nosnippet>497</a>            AppEvent::CapRevoked { mask } =&gt; <span class="macro">assert_eq!</span>(mask, <span class="number">0x0000_0504</span>),
@@ -499,11 +499,11 @@
 <a href=#499 id=499 data-nosnippet>499</a>        }
 <a href=#500 id=500 data-nosnippet>500</a>    }
 <a href=#501 id=501 data-nosnippet>501</a>
-<a href=#502 id=502 data-nosnippet>502</a>    <span class="doccomment">/// A truncated `0xF2` envelope is not an event: it falls through to a
+<a href=#502 id=502 data-nosnippet>502</a>    <span class="doccomment">/// A truncated `KIND_CAP_REVOKED` envelope is not an event: it falls through to a
 <a href=#503 id=503 data-nosnippet>503</a>    /// Message rather than reporting a mask it never received.
 <a href=#504 id=504 data-nosnippet>504</a>    </span><span class="attr">#[test]
 <a href=#505 id=505 data-nosnippet>505</a>    </span><span class="kw">fn </span>truncated_cap_revoked_envelope_is_not_decoded() {
-<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">let </span>buf = [APP_MSG_MAGIC, <span class="number">0xF2</span>, <span class="number">0x04</span>];
+<a href=#506 id=506 data-nosnippet>506</a>        <span class="kw">let </span>buf = [MAGIC, KIND_CAP_REVOKED, <span class="number">0x04</span>];
 <a href=#507 id=507 data-nosnippet>507</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
 <a href=#508 id=508 data-nosnippet>508</a>            AppContext::parse_event_owned(<span class="number">7</span>, <span class="kw-2">&amp;</span>buf),
 <a href=#509 id=509 data-nosnippet>509</a>            AppEvent::Message { .. }

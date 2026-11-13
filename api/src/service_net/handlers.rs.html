@@ -9,24 +9,24 @@
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::collections::{BTreeMap, BTreeSet};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::ipc::{<span class="self">self</span>, NetRequest, NetResponse, IPC_BUF_SIZE};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::ipc::{post, reply_to};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::sync::Mutex;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>smoltcp::{
-<a href=#15 id=15 data-nosnippet>15</a>    iface::{Interface, SocketHandle, SocketSet},
-<a href=#16 id=16 data-nosnippet>16</a>    socket::tcp <span class="kw">as </span>smoltcp_tcp,
-<a href=#17 id=17 data-nosnippet>17</a>    wire::IpAddress,
-<a href=#18 id=18 data-nosnippet>18</a>};
-<a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>crate::{
-<a href=#21 id=21 data-nosnippet>21</a>    bridge_ports::PortError,
-<a href=#22 id=22 data-nosnippet>22</a>    dns::Resolver,
-<a href=#23 id=23 data-nosnippet>23</a>    interface::VirtioNetDevice,
-<a href=#24 id=24 data-nosnippet>24</a>    service_runtime::now_instant,
-<a href=#25 id=25 data-nosnippet>25</a>    socket_state::SocketState,
-<a href=#26 id=26 data-nosnippet>26</a>    socket_table::{SocketOwner, SocketTable},
-<a href=#27 id=27 data-nosnippet>27</a>    tls::socket::TlsSocketEntry,
-<a href=#28 id=28 data-nosnippet>28</a>    tls_handler::{handle_tls_raw, TlsPending},
-<a href=#29 id=29 data-nosnippet>29</a>    tls_wire::TLS_CLOSE_OP,
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::services::proto::{net::NetError, tls};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::ipc::{post, reply_to};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>ostd::sync::Mutex;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>smoltcp::{
+<a href=#16 id=16 data-nosnippet>16</a>    iface::{Interface, SocketHandle, SocketSet},
+<a href=#17 id=17 data-nosnippet>17</a>    socket::tcp <span class="kw">as </span>smoltcp_tcp,
+<a href=#18 id=18 data-nosnippet>18</a>    wire::IpAddress,
+<a href=#19 id=19 data-nosnippet>19</a>};
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>crate::{
+<a href=#22 id=22 data-nosnippet>22</a>    bridge_ports::PortError,
+<a href=#23 id=23 data-nosnippet>23</a>    dns::Resolver,
+<a href=#24 id=24 data-nosnippet>24</a>    interface::VirtioNetDevice,
+<a href=#25 id=25 data-nosnippet>25</a>    service_runtime::now_instant,
+<a href=#26 id=26 data-nosnippet>26</a>    socket_state::SocketState,
+<a href=#27 id=27 data-nosnippet>27</a>    socket_table::{SocketOwner, SocketTable},
+<a href=#28 id=28 data-nosnippet>28</a>    tls::socket::TlsSocketEntry,
+<a href=#29 id=29 data-nosnippet>29</a>    tls_handler::{handle_tls_raw, TlsPending},
 <a href=#30 id=30 data-nosnippet>30</a>};
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// L2 bridge requests handled, by direction (`loop-trace` images).
@@ -128,14 +128,14 @@
 <a href=#128 id=128 data-nosnippet>128</a>        };
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(cap) = cap {
 <a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">if </span>table.is_owner(cap, owner) &amp;&amp; tls_pending.contains_cap(cap) {
-<a href=#131 id=131 data-nosnippet>131</a>                send_typed(sender, NetResponse::Err(<span class="number">0xFF</span>));
+<a href=#131 id=131 data-nosnippet>131</a>                send_typed(sender, NetResponse::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#132 id=132 data-nosnippet>132</a>                <span class="kw">return</span>;
 <a href=#133 id=133 data-nosnippet>133</a>            }
 <a href=#134 id=134 data-nosnippet>134</a>            <span class="kw">if </span>table.is_owner(cap, owner)
 <a href=#135 id=135 data-nosnippet>135</a>                &amp;&amp; tls_table.contains_key(<span class="kw-2">&amp;</span>cap)
 <a href=#136 id=136 data-nosnippet>136</a>                &amp;&amp; !<span class="macro">matches!</span>(req, NetRequest::TcpClose { .. })
 <a href=#137 id=137 data-nosnippet>137</a>            {
-<a href=#138 id=138 data-nosnippet>138</a>                send_typed(sender, NetResponse::Err(<span class="number">0xFF</span>));
+<a href=#138 id=138 data-nosnippet>138</a>                send_typed(sender, NetResponse::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#139 id=139 data-nosnippet>139</a>                <span class="kw">return</span>;
 <a href=#140 id=140 data-nosnippet>140</a>            }
 <a href=#141 id=141 data-nosnippet>141</a>        }
@@ -148,7 +148,7 @@
 <a href=#148 id=148 data-nosnippet>148</a>            );
 <a href=#149 id=149 data-nosnippet>149</a>            iface.poll(now_instant(), device, sockets);
 <a href=#150 id=150 data-nosnippet>150</a>        }
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) <span class="kw">if </span>buf.first().copied().unwrap_or(<span class="number">0</span>) &gt;= TLS_CLOSE_OP =&gt; {
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) <span class="kw">if </span>buf.first().copied().unwrap_or(<span class="number">0</span>) &gt;= tls::CLOSE =&gt; {
 <a href=#152 id=152 data-nosnippet>152</a>            iface.poll(now_instant(), device, sockets);
 <a href=#153 id=153 data-nosnippet>153</a>            handle_tls_raw(
 <a href=#154 id=154 data-nosnippet>154</a>                buf,
@@ -208,17 +208,17 @@
 <a href=#208 id=208 data-nosnippet>208</a>                set.insert(sender);
 <a href=#209 id=209 data-nosnippet>209</a>                send_typed(sender, R::Ok);
 <a href=#210 id=210 data-nosnippet>210</a>            } <span class="kw">else </span>{
-<a href=#211 id=211 data-nosnippet>211</a>                send_typed(sender, R::Err(<span class="number">0xFF</span>));
+<a href=#211 id=211 data-nosnippet>211</a>                send_typed(sender, R::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#212 id=212 data-nosnippet>212</a>            }
 <a href=#213 id=213 data-nosnippet>213</a>        }
 <a href=#214 id=214 data-nosnippet>214</a>        NetRequest::MulticastLeave { cap_id: <span class="kw">_</span>, group } =&gt; {
 <a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">let </span><span class="kw-2">mut </span>members = MULTICAST_MEMBERS.lock();
 <a href=#216 id=216 data-nosnippet>216</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(set) = members.get_mut(<span class="kw-2">&amp;</span>group) <span class="kw">else </span>{
-<a href=#217 id=217 data-nosnippet>217</a>                send_typed(sender, R::Err(<span class="number">0xFF</span>));
+<a href=#217 id=217 data-nosnippet>217</a>                send_typed(sender, R::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#218 id=218 data-nosnippet>218</a>                <span class="kw">return</span>;
 <a href=#219 id=219 data-nosnippet>219</a>            };
 <a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">if </span>!set.remove(<span class="kw-2">&amp;</span>sender) {
-<a href=#221 id=221 data-nosnippet>221</a>                send_typed(sender, R::Err(<span class="number">0xFF</span>));
+<a href=#221 id=221 data-nosnippet>221</a>                send_typed(sender, R::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#222 id=222 data-nosnippet>222</a>                <span class="kw">return</span>;
 <a href=#223 id=223 data-nosnippet>223</a>            }
 <a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">let </span>is_last = set.is_empty();
@@ -235,13 +235,13 @@
 <a href=#235 id=235 data-nosnippet>235</a>            </span><span class="kw">let </span>answer = <span class="kw">crate</span>::dns::static_lookup(hostname, resolver.server());
 <a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">match </span>answer {
 <a href=#237 id=237 data-nosnippet>237</a>                <span class="prelude-val">Some</span>(addr) =&gt; send_typed(sender, R::Addr(addr)),
-<a href=#238 id=238 data-nosnippet>238</a>                <span class="prelude-val">None </span>=&gt; send_typed(sender, R::Err(<span class="number">0xFF</span>)),
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="prelude-val">None </span>=&gt; send_typed(sender, R::Err(NetError::Failure <span class="kw">as </span>u8)),
 <a href=#239 id=239 data-nosnippet>239</a>            }
 <a href=#240 id=240 data-nosnippet>240</a>        }
 <a href=#241 id=241 data-nosnippet>241</a>        NetRequest::L2Send { data } =&gt; {
 <a href=#242 id=242 data-nosnippet>242</a>            L2_SEND_REQUESTS.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
 <a href=#243 id=243 data-nosnippet>243</a>            <span class="kw">if </span>data.len() &lt; <span class="number">14 </span>|| data.len() &gt; <span class="number">1514 </span>{
-<a href=#244 id=244 data-nosnippet>244</a>                send_typed(sender, R::Err(<span class="number">0xFF</span>));
+<a href=#244 id=244 data-nosnippet>244</a>                send_typed(sender, R::Err(NetError::Failure <span class="kw">as </span>u8));
 <a href=#245 id=245 data-nosnippet>245</a>                <span class="kw">return</span>;
 <a href=#246 id=246 data-nosnippet>246</a>            }
 <a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = device.admit_port_tx(owner, data) {
@@ -250,66 +250,73 @@
 <a href=#250 id=250 data-nosnippet>250</a>                <span class="kw">return</span>;
 <a href=#251 id=251 data-nosnippet>251</a>            }
 <a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(accepted) = device.send_l2(data, sender) {
-<a href=#253 id=253 data-nosnippet>253</a>                send_typed(sender, <span class="kw">if </span>accepted { R::Ok } <span class="kw">else </span>{ R::Err(<span class="number">0xFF</span>) });
-<a href=#254 id=254 data-nosnippet>254</a>            }
-<a href=#255 id=255 data-nosnippet>255</a>        }
-<a href=#256 id=256 data-nosnippet>256</a>        NetRequest::L2Recv { guest_mac } =&gt; {
-<a href=#257 id=257 data-nosnippet>257</a>            L2_RECV_REQUESTS.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = device.open_port(owner, guest_mac) {
-<a href=#259 id=259 data-nosnippet>259</a>                report_port_refusal(<span class="string">"L2Recv port"</span>, error);
-<a href=#260 id=260 data-nosnippet>260</a>                send_typed(sender, R::Err(port_error_code(error)));
-<a href=#261 id=261 data-nosnippet>261</a>                <span class="kw">return</span>;
-<a href=#262 id=262 data-nosnippet>262</a>            }
-<a href=#263 id=263 data-nosnippet>263</a>            <span class="comment">// Captured before the driver commands below, which are IPC of their own.
-<a href=#264 id=264 data-nosnippet>264</a>            </span><span class="kw">let </span>operation = ostd::ipc::current();
-<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">static </span>FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
-<a href=#266 id=266 data-nosnippet>266</a>                core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">if </span>!FIRST_GUEST_POLL.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
-<a href=#268 id=268 data-nosnippet>268</a>                ostd::io::println(<span class="string">"[net-bridge] first guest L2Recv — guest port open"</span>);
+<a href=#253 id=253 data-nosnippet>253</a>                send_typed(
+<a href=#254 id=254 data-nosnippet>254</a>                    sender,
+<a href=#255 id=255 data-nosnippet>255</a>                    <span class="kw">if </span>accepted {
+<a href=#256 id=256 data-nosnippet>256</a>                        R::Ok
+<a href=#257 id=257 data-nosnippet>257</a>                    } <span class="kw">else </span>{
+<a href=#258 id=258 data-nosnippet>258</a>                        R::Err(NetError::Failure <span class="kw">as </span>u8)
+<a href=#259 id=259 data-nosnippet>259</a>                    },
+<a href=#260 id=260 data-nosnippet>260</a>                );
+<a href=#261 id=261 data-nosnippet>261</a>            }
+<a href=#262 id=262 data-nosnippet>262</a>        }
+<a href=#263 id=263 data-nosnippet>263</a>        NetRequest::L2Recv { guest_mac } =&gt; {
+<a href=#264 id=264 data-nosnippet>264</a>            L2_RECV_REQUESTS.fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed);
+<a href=#265 id=265 data-nosnippet>265</a>            <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = device.open_port(owner, guest_mac) {
+<a href=#266 id=266 data-nosnippet>266</a>                report_port_refusal(<span class="string">"L2Recv port"</span>, error);
+<a href=#267 id=267 data-nosnippet>267</a>                send_typed(sender, R::Err(port_error_code(error)));
+<a href=#268 id=268 data-nosnippet>268</a>                <span class="kw">return</span>;
 <a href=#269 id=269 data-nosnippet>269</a>            }
-<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">let _ </span>= device.pump_rx_split();
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">let </span>frame = device.pop_port_rx(owner);
-<a href=#272 id=272 data-nosnippet>272</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = <span class="kw-2">&amp;</span>frame {
-<a href=#273 id=273 data-nosnippet>273</a>                <span class="kw">static </span>FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
-<a href=#274 id=274 data-nosnippet>274</a>                    core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">if </span>!FIRST_GUEST_RX.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
-<a href=#276 id=276 data-nosnippet>276</a>                    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#277 id=277 data-nosnippet>277</a>                        <span class="string">"[net-bridge] first guest RX len={}"</span>,
-<a href=#278 id=278 data-nosnippet>278</a>                        frame.len()
-<a href=#279 id=279 data-nosnippet>279</a>                    ));
-<a href=#280 id=280 data-nosnippet>280</a>                }
-<a href=#281 id=281 data-nosnippet>281</a>            }
-<a href=#282 id=282 data-nosnippet>282</a>            <span class="kw">let </span>response = <span class="kw">match </span><span class="kw-2">&amp;</span>frame {
-<a href=#283 id=283 data-nosnippet>283</a>                <span class="prelude-val">Some</span>(frame) =&gt; R::Data(frame),
-<a href=#284 id=284 data-nosnippet>284</a>                <span class="prelude-val">None </span>=&gt; R::Ok,
-<a href=#285 id=285 data-nosnippet>285</a>            };
-<a href=#286 id=286 data-nosnippet>286</a>            <span class="kw">let </span><span class="kw-2">mut </span>rb = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#287 id=287 data-nosnippet>287</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>rb) {
-<a href=#288 id=288 data-nosnippet>288</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(operation) = operation {
-<a href=#289 id=289 data-nosnippet>289</a>                    <span class="kw">let _ </span>= ostd::ipc::reply(operation, s);
-<a href=#290 id=290 data-nosnippet>290</a>                } <span class="kw">else </span>{
-<a href=#291 id=291 data-nosnippet>291</a>                    <span class="kw">let _ </span>= post(sender, s);
-<a href=#292 id=292 data-nosnippet>292</a>                }
-<a href=#293 id=293 data-nosnippet>293</a>            }
-<a href=#294 id=294 data-nosnippet>294</a>        }
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">_ </span>=&gt; {}
-<a href=#296 id=296 data-nosnippet>296</a>    }
-<a href=#297 id=297 data-nosnippet>297</a>}
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a><span class="kw">fn </span>port_error_code(error: PortError) -&gt; u8 {
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">match </span>error {
-<a href=#301 id=301 data-nosnippet>301</a>        PortError::NotStation =&gt; <span class="number">0xFF</span>,
-<a href=#302 id=302 data-nosnippet>302</a>        PortError::AddressInUse =&gt; ipc::NET_ERR_ADDR_IN_USE,
-<a href=#303 id=303 data-nosnippet>303</a>        PortError::Full =&gt; <span class="number">0xFD</span>,
-<a href=#304 id=304 data-nosnippet>304</a>    }
-<a href=#305 id=305 data-nosnippet>305</a>}
-<a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a><span class="doccomment">/// Once per service lifetime: a refused port or frame is an operator question
-<a href=#308 id=308 data-nosnippet>308</a>/// ("why has this guest no network?") whose answer must not need a trace image.
-<a href=#309 id=309 data-nosnippet>309</a></span><span class="kw">fn </span>report_port_refusal(what: <span class="kw-2">&amp;</span>str, error: PortError) {
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">static </span>REPORTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">if </span>!REPORTED.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
-<a href=#312 id=312 data-nosnippet>312</a>        ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[net-bridge] {what} refused: {error:?}"</span>));
-<a href=#313 id=313 data-nosnippet>313</a>    }
-<a href=#314 id=314 data-nosnippet>314</a>}
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="comment">// Captured before the driver commands below, which are IPC of their own.
+<a href=#271 id=271 data-nosnippet>271</a>            </span><span class="kw">let </span>operation = ostd::ipc::current();
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="kw">static </span>FIRST_GUEST_POLL: core::sync::atomic::AtomicBool =
+<a href=#273 id=273 data-nosnippet>273</a>                core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#274 id=274 data-nosnippet>274</a>            <span class="kw">if </span>!FIRST_GUEST_POLL.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
+<a href=#275 id=275 data-nosnippet>275</a>                ostd::io::println(<span class="string">"[net-bridge] first guest L2Recv — guest port open"</span>);
+<a href=#276 id=276 data-nosnippet>276</a>            }
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">let _ </span>= device.pump_rx_split();
+<a href=#278 id=278 data-nosnippet>278</a>            <span class="kw">let </span>frame = device.pop_port_rx(owner);
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = <span class="kw-2">&amp;</span>frame {
+<a href=#280 id=280 data-nosnippet>280</a>                <span class="kw">static </span>FIRST_GUEST_RX: core::sync::atomic::AtomicBool =
+<a href=#281 id=281 data-nosnippet>281</a>                    core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#282 id=282 data-nosnippet>282</a>                <span class="kw">if </span>!FIRST_GUEST_RX.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
+<a href=#283 id=283 data-nosnippet>283</a>                    ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#284 id=284 data-nosnippet>284</a>                        <span class="string">"[net-bridge] first guest RX len={}"</span>,
+<a href=#285 id=285 data-nosnippet>285</a>                        frame.len()
+<a href=#286 id=286 data-nosnippet>286</a>                    ));
+<a href=#287 id=287 data-nosnippet>287</a>                }
+<a href=#288 id=288 data-nosnippet>288</a>            }
+<a href=#289 id=289 data-nosnippet>289</a>            <span class="kw">let </span>response = <span class="kw">match </span><span class="kw-2">&amp;</span>frame {
+<a href=#290 id=290 data-nosnippet>290</a>                <span class="prelude-val">Some</span>(frame) =&gt; R::Data(frame),
+<a href=#291 id=291 data-nosnippet>291</a>                <span class="prelude-val">None </span>=&gt; R::Ok,
+<a href=#292 id=292 data-nosnippet>292</a>            };
+<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">let </span><span class="kw-2">mut </span>rb = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#294 id=294 data-nosnippet>294</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>rb) {
+<a href=#295 id=295 data-nosnippet>295</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(operation) = operation {
+<a href=#296 id=296 data-nosnippet>296</a>                    <span class="kw">let _ </span>= ostd::ipc::reply(operation, s);
+<a href=#297 id=297 data-nosnippet>297</a>                } <span class="kw">else </span>{
+<a href=#298 id=298 data-nosnippet>298</a>                    <span class="kw">let _ </span>= post(sender, s);
+<a href=#299 id=299 data-nosnippet>299</a>                }
+<a href=#300 id=300 data-nosnippet>300</a>            }
+<a href=#301 id=301 data-nosnippet>301</a>        }
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="kw">_ </span>=&gt; {}
+<a href=#303 id=303 data-nosnippet>303</a>    }
+<a href=#304 id=304 data-nosnippet>304</a>}
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a><span class="kw">fn </span>port_error_code(error: PortError) -&gt; u8 {
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">match </span>error {
+<a href=#308 id=308 data-nosnippet>308</a>        PortError::NotStation =&gt; NetError::Failure <span class="kw">as </span>u8,
+<a href=#309 id=309 data-nosnippet>309</a>        PortError::AddressInUse =&gt; NetError::AddrInUse <span class="kw">as </span>u8,
+<a href=#310 id=310 data-nosnippet>310</a>        PortError::Full =&gt; NetError::Busy <span class="kw">as </span>u8,
+<a href=#311 id=311 data-nosnippet>311</a>    }
+<a href=#312 id=312 data-nosnippet>312</a>}
+<a href=#313 id=313 data-nosnippet>313</a>
+<a href=#314 id=314 data-nosnippet>314</a><span class="doccomment">/// Once per service lifetime: a refused port or frame is an operator question
+<a href=#315 id=315 data-nosnippet>315</a>/// ("why has this guest no network?") whose answer must not need a trace image.
+<a href=#316 id=316 data-nosnippet>316</a></span><span class="kw">fn </span>report_port_refusal(what: <span class="kw-2">&amp;</span>str, error: PortError) {
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">static </span>REPORTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">if </span>!REPORTED.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
+<a href=#319 id=319 data-nosnippet>319</a>        ostd::io::println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"[net-bridge] {what} refused: {error:?}"</span>));
+<a href=#320 id=320 data-nosnippet>320</a>    }
+<a href=#321 id=321 data-nosnippet>321</a>}
 </code></pre></div></section></main></body></html>

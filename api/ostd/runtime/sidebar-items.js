@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["app_syscall_set","service_syscall_set"],"struct":["CellRuntime"]};
+window.SIDEBAR_ITEMS = {"fn":["app_syscall_set"],"struct":["CellRuntime"]};

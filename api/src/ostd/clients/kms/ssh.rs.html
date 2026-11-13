@@ -272,7 +272,7 @@
 <a href=#272 id=272 data-nosnippet>272</a>    }
 <a href=#273 id=273 data-nosnippet>273</a>
 <a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Every canonical chunk of `data` under `begin`, each ack verified.
-<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">fn </span>send_chunks(
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>send_chunks(
 <a href=#276 id=276 data-nosnippet>276</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#277 id=277 data-nosnippet>277</a>        begin: <span class="kw-2">&amp;</span>SshTransferBeginResponsePayload,
 <a href=#278 id=278 data-nosnippet>278</a>        data: <span class="kw-2">&amp;</span>[u8],
@@ -295,7 +295,7 @@
 <a href=#295 id=295 data-nosnippet>295</a>        <span class="prelude-val">Ok</span>(())
 <a href=#296 id=296 data-nosnippet>296</a>    }
 <a href=#297 id=297 data-nosnippet>297</a>
-<a href=#298 id=298 data-nosnippet>298</a>    <span class="doccomment">/// One transfer chunk (ops 16 and 23). Chunk bytes may be a passphrase, so every
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="doccomment">/// One transfer chunk (ops 16, 23 and 26). Chunk bytes may be a passphrase, so every
 <a href=#299 id=299 data-nosnippet>299</a>    /// local copy of them is wiped before this returns.
 <a href=#300 id=300 data-nosnippet>300</a>    </span><span class="kw">fn </span>chunk(
 <a href=#301 id=301 data-nosnippet>301</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
@@ -326,8 +326,8 @@
 <a href=#326 id=326 data-nosnippet>326</a>        <span class="prelude-val">Ok</span>(ack)
 <a href=#327 id=327 data-nosnippet>327</a>    }
 <a href=#328 id=328 data-nosnippet>328</a>
-<a href=#329 id=329 data-nosnippet>329</a>    <span class="doccomment">/// Abort of an import (18) or an unlock (24): empty success.
-<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">fn </span>abort(<span class="kw-2">&amp;</span><span class="self">self</span>, opcode: KmsOpcode, handle: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), KmsClientError&gt; {
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="doccomment">/// Abort of an import (18), an unlock (24) or a trust query (29): empty success.
+<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>abort(<span class="kw-2">&amp;</span><span class="self">self</span>, opcode: KmsOpcode, handle: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), KmsClientError&gt; {
 <a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">if </span>handle == <span class="number">0 </span>{
 <a href=#332 id=332 data-nosnippet>332</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(KmsClientError::InvalidPayload);
 <a href=#333 id=333 data-nosnippet>333</a>        }

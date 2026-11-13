@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DROP_REPORT_EVERY","INPUT_EVENT_OPCODE","POINTER_STASH"],"struct":["Dispatcher"]};
+window.SIDEBAR_ITEMS = {"constant":["DROP_REPORT_EVERY","POINTER_STASH"],"struct":["Dispatcher"]};

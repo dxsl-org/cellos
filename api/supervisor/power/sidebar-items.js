@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["KEEP_MAX","POWER_BUTTON_MESSAGE","PROCESS_TABLE_ROWS","SETTLE_POLL_TICKS","SETTLE_TICKS","STATE_TERMINATED"],"enum":["Origin"],"fn":["action_name","settle","shut_down","storage_stack"]};
+window.SIDEBAR_ITEMS = {"constant":["KEEP_MAX","PROCESS_TABLE_ROWS","SETTLE_POLL_TICKS","SETTLE_TICKS","STATE_TERMINATED"],"enum":["Origin"],"fn":["action_name","settle","shut_down","storage_stack"]};

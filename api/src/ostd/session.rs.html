@@ -539,9 +539,9 @@
 <a href=#539 id=539 data-nosnippet>539</a>    })
 <a href=#540 id=540 data-nosnippet>540</a>}
 <a href=#541 id=541 data-nosnippet>541</a>
-<a href=#542 id=542 data-nosnippet>542</a><span class="doccomment">/// VFS → input: register one first-trust descriptor (`InputOp::RegisterTrustChallenge`);
+<a href=#542 id=542 data-nosnippet>542</a><span class="doccomment">/// KMS → input: register one first-trust descriptor (`InputOp::RegisterTrustChallenge`);
 <a href=#543 id=543 data-nosnippet>543</a>/// returns the input-issued confirmation Ref the confirming client presents to
-<a href=#544 id=544 data-nosnippet>544</a>/// `BeginTrustConfirmation`. Input admits only the live registered VFS task. The request
+<a href=#544 id=544 data-nosnippet>544</a>/// `BeginTrustConfirmation`. Input admits only the live registered KMS task. The request
 <a href=#545 id=545 data-nosnippet>545</a>/// lane is the single-use challenge Ref; it is kept only while the outcome is
 <a href=#546 id=546 data-nosnippet>546</a>/// indeterminate (retry the identical descriptor to resolve it).
 <a href=#547 id=547 data-nosnippet>547</a></span><span class="kw">pub fn </span>register_trust_challenge(
@@ -571,7 +571,7 @@
 <a href=#571 id=571 data-nosnippet>571</a>    ObjectRefV1::from_bytes(<span class="kw-2">&amp;</span>reply[HEADER_LEN..h.total_len <span class="kw">as </span>usize])
 <a href=#572 id=572 data-nosnippet>572</a>}
 <a href=#573 id=573 data-nosnippet>573</a>
-<a href=#574 id=574 data-nosnippet>574</a><span class="doccomment">/// VFS → input: the decision of `confirmation` (`InputOp::CollectTrustDecision`), answered
+<a href=#574 id=574 data-nosnippet>574</a><span class="doccomment">/// KMS → input: the decision of `confirmation` (`InputOp::CollectTrustDecision`), answered
 <a href=#575 id=575 data-nosnippet>575</a>/// only to the registering principal. `DECISION_PENDING` is not consumed; a final decision
 <a href=#576 id=576 data-nosnippet>576</a>/// is returned once (a later collect is `Stale`), and its lane (the confirmation Ref) is
 <a href=#577 id=577 data-nosnippet>577</a>/// then retired. Compare every binding, including `descriptor_sha256` against

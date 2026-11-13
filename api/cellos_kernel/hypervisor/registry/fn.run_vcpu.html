@@ -3,6 +3,6 @@
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
-) -&gt; <a class="type" href="../../type.ViResult.html" title="type cellos_kernel::ViResult">ViResult</a>&lt;ViVmExit&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>World-switch into the vCPU and return the exit, converted to the API ABI.
+) -&gt; <a class="type" href="../../type.ViResult.html" title="type cellos_kernel::ViResult">ViResult</a>&lt;<a class="enum" href="../../../api/abi/hypervisor/enum.ViVmExit.html" title="enum api::abi::hypervisor::ViVmExit">ViVmExit</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>World-switch into the vCPU and return the exit, converted to the API ABI.
 The syscall layer copies it to the cell; this never touches cell memory.</p>
 </div></details></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["RAW_IO_ATTEMPTS","RUN_SECTORS","SECTOR_SIZE"],"struct":["BlockStream","CachedBlockStream","ReadAhead"]};
+window.SIDEBAR_ITEMS = {"constant":["RAW_IO_ATTEMPTS","RUN_SECTORS","SECTOR_SIZE"],"enum":["StreamError"],"struct":["BlockStream","CachedBlockStream","ReadAhead"]};

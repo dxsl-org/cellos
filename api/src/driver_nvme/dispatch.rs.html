@@ -150,27 +150,38 @@
 <a href=#150 id=150 data-nosnippet>150</a>    }
 <a href=#151 id=151 data-nosnippet>151</a>    <span class="comment">// Fault-injection witnesses only. `F08B-DIE` kills this cell before
 <a href=#152 id=152 data-nosnippet>152</a>    // the write is issued, with its controller still enabled;
-<a href=#153 id=153 data-nosnippet>153</a>    // `F09C-DIE-ISSUED` kills it right after the write's doorbell.
-<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="attr">#[cfg(feature = <span class="string">"fault-inject"</span>)]
-<a href=#155 id=155 data-nosnippet>155</a>    </span>{
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">let </span>payload = <span class="kw-2">&amp;</span>data[<span class="number">10</span>..<span class="number">10 </span>+ SECTOR_SIZE];
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">if </span>payload.windows(<span class="number">8</span>).any(|window| window == <span class="string">b"F08B-DIE"</span>) {
-<a href=#158 id=158 data-nosnippet>158</a>            <span class="kw">let _ </span>= ostd::io::print_fmt(<span class="macro">format_args!</span>(
-<a href=#159 id=159 data-nosnippet>159</a>                <span class="string">"[nvme] fault-inject: driver exiting at lba={}\n"</span>,
-<a href=#160 id=160 data-nosnippet>160</a>                sector
-<a href=#161 id=161 data-nosnippet>161</a>            ));
-<a href=#162 id=162 data-nosnippet>162</a>            ostd::syscall::sys_exit(<span class="number">70</span>);
-<a href=#163 id=163 data-nosnippet>163</a>        }
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">if </span>payload
-<a href=#165 id=165 data-nosnippet>165</a>            .windows(<span class="number">15</span>)
-<a href=#166 id=166 data-nosnippet>166</a>            .any(|window| window == <span class="string">b"F09C-DIE-ISSUED"</span>)
-<a href=#167 id=167 data-nosnippet>167</a>        {
-<a href=#168 id=168 data-nosnippet>168</a>            ctrl.exit_after_next_doorbell();
-<a href=#169 id=169 data-nosnippet>169</a>        }
-<a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">match </span>ctrl.write_sector(sector, iova) {
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="prelude-val">Ok</span>(()) =&gt; status(out, BlockOutcome::Completed),
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="prelude-val">Err</span>(failure) =&gt; failed(bounce, failure, out),
-<a href=#174 id=174 data-nosnippet>174</a>    }
-<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#153 id=153 data-nosnippet>153</a>    // `F09C-DIE-ISSUED` kills it right after the write's doorbell;
+<a href=#154 id=154 data-nosnippet>154</a>    // `F12-FREEZE` keeps it alive but never answers or serves again (a hung
+<a href=#155 id=155 data-nosnippet>155</a>    // driver, Phase 12: VFS must bound the request, not hang with it).
+<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="attr">#[cfg(feature = <span class="string">"fault-inject"</span>)]
+<a href=#157 id=157 data-nosnippet>157</a>    </span>{
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">let </span>payload = <span class="kw-2">&amp;</span>data[<span class="number">10</span>..<span class="number">10 </span>+ SECTOR_SIZE];
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">if </span>payload.windows(<span class="number">10</span>).any(|window| window == <span class="string">b"F12-FREEZE"</span>) {
+<a href=#160 id=160 data-nosnippet>160</a>            <span class="kw">let _ </span>= ostd::io::print_fmt(<span class="macro">format_args!</span>(
+<a href=#161 id=161 data-nosnippet>161</a>                <span class="string">"[nvme] fault-inject: driver frozen at lba={}\n"</span>,
+<a href=#162 id=162 data-nosnippet>162</a>                sector
+<a href=#163 id=163 data-nosnippet>163</a>            ));
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">loop </span>{
+<a href=#165 id=165 data-nosnippet>165</a>                <span class="kw">let _ </span>= ostd::syscall::sys_set_timer(<span class="number">100_000</span>);
+<a href=#166 id=166 data-nosnippet>166</a>            }
+<a href=#167 id=167 data-nosnippet>167</a>        }
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="kw">if </span>payload.windows(<span class="number">8</span>).any(|window| window == <span class="string">b"F08B-DIE"</span>) {
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">let _ </span>= ostd::io::print_fmt(<span class="macro">format_args!</span>(
+<a href=#170 id=170 data-nosnippet>170</a>                <span class="string">"[nvme] fault-inject: driver exiting at lba={}\n"</span>,
+<a href=#171 id=171 data-nosnippet>171</a>                sector
+<a href=#172 id=172 data-nosnippet>172</a>            ));
+<a href=#173 id=173 data-nosnippet>173</a>            ostd::syscall::sys_exit(<span class="number">70</span>);
+<a href=#174 id=174 data-nosnippet>174</a>        }
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span>payload
+<a href=#176 id=176 data-nosnippet>176</a>            .windows(<span class="number">15</span>)
+<a href=#177 id=177 data-nosnippet>177</a>            .any(|window| window == <span class="string">b"F09C-DIE-ISSUED"</span>)
+<a href=#178 id=178 data-nosnippet>178</a>        {
+<a href=#179 id=179 data-nosnippet>179</a>            ctrl.exit_after_next_doorbell();
+<a href=#180 id=180 data-nosnippet>180</a>        }
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="kw">match </span>ctrl.write_sector(sector, iova) {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="prelude-val">Ok</span>(()) =&gt; status(out, BlockOutcome::Completed),
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="prelude-val">Err</span>(failure) =&gt; failed(bounce, failure, out),
+<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#186 id=186 data-nosnippet>186</a>}
 </code></pre></div></section></main></body></html>
