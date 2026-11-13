@@ -1,7 +1,7 @@
 ---
 phase: 12
 title: "Shared service runtime and wire modules"
-status: in-progress
+status: completed
 priority: P1
 effort: "9–13d"
 dependencies: [11]
@@ -80,14 +80,14 @@ libs/api/src/services/proto/<service>.rs  ◄─ server, ostd client, tools, ker
 - [x] Remaining services migrated
 - [x] Trust store moved
 - [x] Net refactor
-- [ ] CP2
+- [x] CP2
 
 ## Success Criteria
 
-- [ ] Byte tests: every opcode and error value equals its pre-phase literal.
-- [ ] x86 fixture: with the block driver frozen (not killed), VFS returns `Indeterminate` within the bound and keeps serving in-memory requests; init's watchdog sees VFS heartbeats — fails before this phase.
-- [ ] Grep finds no service opcode literal outside `libs/api/src/services/proto/`.
-- [ ] Cell builds for x86_64 and riscv64; service host tests pass; x86 boot lane and `x86-c2c` pass.
+- [x] Byte tests: every opcode and error value equals its pre-phase literal.
+- [x] x86 fixture: with the block driver frozen (not killed), VFS returns `Indeterminate` within the bound and keeps serving in-memory requests; init's watchdog sees VFS heartbeats — fails before this phase.
+- [x] Grep finds no service opcode literal outside `libs/api/src/services/proto/`.
+- [x] Cell builds for x86_64 and riscv64; service host tests pass; x86 boot lane and `x86-c2c` pass.
 
 ## Risk Assessment
 

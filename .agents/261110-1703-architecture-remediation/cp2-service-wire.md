@@ -1,6 +1,6 @@
 # CP2 — shared service runtime and wire modules (Phase 12)
 
-**Date:** 2026-11-13 · **CP1:** [cp1-service-wire.md](cp1-service-wire.md) (owner confirmation 1, 2026-11-13) · **Law 1:** confirmation 2 requested · **Branch:** `p12-service-runtime` (9 commits, rebased on `17bd2db19`)
+**Date:** 2026-11-13 · **CP1:** [cp1-service-wire.md](cp1-service-wire.md) (owner confirmation 1, 2026-11-13) · **Law 1:** confirmation 2 given 2026-11-13 · **Branch:** `p12-service-runtime` (9 commits, rebased on `17bd2db19`)
 
 ## 1. Delta as implemented
 
@@ -84,6 +84,8 @@ Independent review (`haily-reviewer`, read-only, on the 7 step commits): PASS_WI
 - `nvme_09c_nic_owner_survives_replacement_x86` failed once in the 12-test sequence (fault marker not seen in 20 s) and passed alone.
 - Desktop ISO lane not run (`build/cellos-x86_64.iso` not built); Tier 3 display covers the compositor.
 
-## 7. Owner decision
+## 7. Owner decision — 2026-11-13
 
-Pending: confirmation 2 of W1–W5 as implemented (with the W2 deviation), and whether the upgraded-disk trust store gets a one-time migration (review High) or stays reseed-only.
+- **Confirmation 2 given:** W1–W5 as implemented, including the W2 deviation (expiry is an error, never `Ok(0)`).
+- **Upgraded disks:** no migration (CP1 §8 stands). The provisioner seeds `/srv/cellos/kms/ssh_known_hosts`; the old `/srv/.cellos-trust` stays denied to every caller. Accepted residual risk: on a disk provisioned before Phase 12, every host reads `UNKNOWN` until it is trusted again.
+- **Integration:** fast-forward `main` to the branch.
