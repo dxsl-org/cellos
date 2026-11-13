@@ -382,10 +382,7 @@ pub(crate) fn capture(sample: usize) -> [crate::p01_resources::Metric; 16] {
                 row[0] = root as u64;
             }
         }
-        let cr3: u64;
-        unsafe {
-            core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack, preserves_flags));
-        }
+        let cr3 = crate::arch::page_probe::root_register() as u64;
         if !snapshot.roots[..roots]
             .iter()
             .any(|row| row[0] == cr3 & ADDRESS_MASK)

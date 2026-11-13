@@ -4,6 +4,8 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::arch::dev::pcie_msi` is now `crate::arch::dev::pcie_msi`).
 
+pub mod page_probe;
+
 pub mod acpi {
     // The G1 private lane does not call `sci::init` (its x86 contract is pinned),
     // so the discovery half of these modules is unused there.

@@ -42,7 +42,7 @@ mod range;
 #[path = "sas-lease.rs"]
 mod sas_lease;
 mod scatter;
-mod sv39_probe;
+pub(crate) mod sv39_probe;
 
 pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 #[allow(unused_imports)]
@@ -71,4 +71,3 @@ pub(crate) use scatter::copy_to_user_scatter;
     target_arch = "riscv64"
 ))]
 pub(crate) use sv39_probe::stage_domain_for_test;
-pub(crate) use sv39_probe::{current_satp_root, sv39_leaf};

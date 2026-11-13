@@ -204,7 +204,7 @@ pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Resu
         return Err(());
     }
     let end = ptr.checked_add(len).ok_or(())?;
-    if let Some(root_pa) = super::user_copy::current_satp_root() {
+    if let Some(root_pa) = crate::arch::page_probe::current_root() {
         const SV39_VALID: usize = 1 << 0;
         const SV39_READ: usize = 1 << 1;
         const SV39_WRITE: usize = 1 << 2;
@@ -212,7 +212,7 @@ pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Resu
         let need = if write { SV39_WRITE } else { SV39_READ };
         let mut page = ptr & !(PAGE_SIZE - 1);
         while page < end {
-            let (bits, _) = super::user_copy::sv39_leaf(root_pa, page).ok_or(())?;
+            let (bits, _) = crate::arch::page_probe::leaf(root_pa, page).ok_or(())?;
             if bits & (SV39_VALID | need) != SV39_VALID | need {
                 return Err(());
             }

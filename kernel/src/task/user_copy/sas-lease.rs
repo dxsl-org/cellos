@@ -29,7 +29,7 @@
 
 use super::guard::commit_guarded;
 use super::range::{CopyError, Direction};
-use super::sv39_probe::{current_satp_root, sas_span_live, sv39_leaf};
+use super::sv39_probe::sas_span_live;
 use crate::sched::smp::MAX_HARTS;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
@@ -113,9 +113,9 @@ fn leased_body(
     let window = SAS_WINDOWS
         .open(crate::sched::hart_local::current_hart_id())
         .ok_or(CopyError::InvalidAddress)?;
-    let root_pa = current_satp_root().ok_or(CopyError::InvalidAddress)?;
+    let root_pa = crate::arch::page_probe::current_root().ok_or(CopyError::InvalidAddress)?;
     sas_span_live(user_ptr, len, direction, |page| {
-        sv39_leaf(root_pa, page).map(|(bits, _)| bits)
+        crate::arch::page_probe::leaf(root_pa, page).map(|(bits, _)| bits)
     })?;
     let (src, dst) = if direction == Direction::FromUser {
         (user_ptr as *const u8, other)

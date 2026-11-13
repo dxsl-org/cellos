@@ -4,9 +4,7 @@
 use super::guard::commit_guarded;
 use super::range::{CopyError, CopyView, Direction, UserReadSlice, UserWriteSlice};
 use super::sas_lease::commit_sas;
-use super::sv39_probe::{
-    probe_sas, stage_domain, sv39_leaf, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE,
-};
+use super::sv39_probe::{probe_sas, stage_domain, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE};
 use crate::memory::address_space::{AddressSpace, CopyReader};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::PAGE_SIZE;
@@ -123,7 +121,7 @@ impl PinnedCopy<'_> {
     /// that pin with zero heap allocation.
     pub(crate) fn commit(self, other: *mut u8) -> Result<(), CopyError> {
         let root_pa = self.arc.root_ppn() << 12;
-        if super::sv39_probe::current_satp_root() == Some(root_pa) {
+        if crate::arch::page_probe::current_root() == Some(root_pa) {
             let (src, dst) = if self.direction == Direction::FromUser {
                 (self.user_ptr as *const u8, other)
             } else {
@@ -143,7 +141,7 @@ impl PinnedCopy<'_> {
             let lo = page.max(self.user_ptr);
             let hi = (page + PAGE_SIZE).min(end);
             let chunk = hi - lo;
-            let Some((bits, pa)) = sv39_leaf(root_pa, page) else {
+            let Some((bits, pa)) = crate::arch::page_probe::leaf(root_pa, page) else {
                 return Err(CopyError::InvalidAddress);
             };
             if bits & (SV39_VALID | SV39_USER | need_pte) != SV39_VALID | SV39_USER | need_pte {

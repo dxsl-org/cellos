@@ -38,6 +38,7 @@
 "kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
@@ -47,6 +48,7 @@
 "kernel/src/arch/riscv64/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
 "kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/task.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/context_handoff_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/fstat_selftest.rs" = { category = "test", owner = "task" }
@@ -90,6 +92,7 @@
 "kernel/src/arch/x86_64/memory/ept.rs" = { category = "A", owner = "memory" }
 "kernel/src/arch/x86_64/memory/ept_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
 
 # ---- admission ----

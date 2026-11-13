@@ -1428,8 +1428,7 @@ pub(crate) struct TranslationProbe {
 pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
     #[cfg(target_arch = "riscv64")]
     {
-        let satp: usize;
-        unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
+        let satp = crate::arch::page_probe::root_register();
         let root_phys = (satp & ((1 << 44) - 1)) << 12;
         let root = (root_phys != 0).then(|| unsafe { &*(root_phys as *const hal::PageTable) })?;
         let pte = root.leaf_entry(vaddr)? as u64;
@@ -1440,8 +1439,7 @@ pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
     }
     #[cfg(target_arch = "aarch64")]
     {
-        let ttbr0: usize;
-        unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
+        let ttbr0 = crate::arch::page_probe::root_register();
         let root = unsafe { &*((ttbr0 & !0xFFF) as *const hal::PageTable) };
         let pte = root.leaf_entry(vaddr)?;
         return Some(TranslationProbe {
@@ -1487,9 +1485,7 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 
     #[cfg(target_arch = "riscv64")]
     {
-        // SAFETY: `satp` CSR holds the page-table root PPN.
-        let satp: usize;
-        unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
+        let satp = crate::arch::page_probe::root_register();
         let root_ppn = satp & ((1 << 44) - 1);
         let root_phys = root_ppn << 12;
         if root_phys == 0 {
@@ -1501,9 +1497,7 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
     }
     #[cfg(target_arch = "aarch64")]
     {
-        // SAFETY: TTBR0_EL1 holds the root page table physical address.
-        let ttbr0: usize;
-        unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
+        let ttbr0 = crate::arch::page_probe::root_register();
         let root_phys = ttbr0 & !0xFFF;
         if root_phys == 0 {
             return None;
