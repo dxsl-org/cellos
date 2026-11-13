@@ -64,4 +64,24 @@ if grep -RInE '^[[:space:]]*(unsafe[[:space:]]+)?extern "Rust"' \
     fail 'HAL architecture code must import kernel hooks from hal-arch-trait kernel_abi'
 fi
 
+# Phase 14 ratchet: architecture code moves into kernel/src/arch/. These
+# ceilings only go down; lower them in the commit that moves code.
+arch_cfg_max=1837
+arch_asm_max=124
+
+count_outside_arch() {
+    { grep -RIn --include='*.rs' -E "$1" kernel/src || true; } |
+        { grep -v '^kernel/src/arch/' || true; } | wc -l
+}
+
+arch_cfg=$(count_outside_arch 'target_arch')
+if (( arch_cfg > arch_cfg_max )); then
+    fail "target_arch lines outside kernel/src/arch/: $arch_cfg (ceiling $arch_cfg_max)"
+fi
+
+arch_asm=$(count_outside_arch '\b(global_|naked_)?asm!')
+if (( arch_asm > arch_asm_max )); then
+    fail "asm! sites outside kernel/src/arch/: $arch_asm (ceiling $arch_asm_max)"
+fi
+
 printf 'PASS: HAL/SoC/board boundaries are intact\n'
