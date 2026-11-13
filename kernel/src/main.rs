@@ -4,9 +4,6 @@
 #![cfg_attr(not(all(test, not(target_os = "none"))), no_std)]
 #![cfg_attr(not(all(test, not(target_os = "none"))), no_main)]
 #![cfg_attr(not(all(test, not(target_os = "none"))), feature(alloc_error_handler))]
-// Phase 14 A/B: a `CELLOS_SWITCH_AB=legacy` build boots the old switch path and
-// leaves the new one's items unused.
-#![cfg_attr(cellos_switch_legacy, allow(dead_code, unused_imports))]
 
 #[cfg(all(feature = "board-vf2", feature = "board-pioneer"))]
 compile_error!(

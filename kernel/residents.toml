@@ -122,7 +122,6 @@
 "kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
-"kernel/src/arch/switch_ab_old.rs" = { category = "A", owner = "task" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/board.rs" = { category = "C", owner = "board" }

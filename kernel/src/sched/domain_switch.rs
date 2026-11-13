@@ -217,14 +217,6 @@ impl RootDecision {
         }
     }
 
-    /// The pre-`SwitchPlan` entry: the root side effects with the tuple the
-    /// old switch call took. Built only for the Phase 14 A/B fixture.
-    #[cfg(cellos_switch_legacy)]
-    pub(crate) fn root_switch(self) -> (usize, usize) {
-        self.commit()
-            .map_or((0, 0), |root| (root.base(), root.asid()))
-    }
-
     /// What a switch for `task` would program on a hart whose published domain
     /// is `current`, with none of the decision's side effects: no execution
     /// pin, no published identity.

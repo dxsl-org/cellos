@@ -1326,15 +1326,6 @@ fn note_task_dispatch(hart_id: usize) {
     }
 }
 
-/// Phase 14 A/B: the pre-`SwitchPlan` switch path, built only with
-/// `CELLOS_SWITCH_AB=legacy` (test posture). Deleted once the A/B fixture shows
-/// identical markers.
-#[cfg(cellos_switch_legacy)]
-#[path = "arch/switch_ab_old.rs"]
-mod switch_ab_old;
-#[cfg(cellos_switch_legacy)]
-pub use switch_ab_old::yield_cpu;
-
 /// The selection a non-native-domain kernel switches to: every switch is SAS to
 /// SAS, so it carries no root.
 #[cfg(not(all(feature = "native-domains", cellos_wide)))]
@@ -1365,7 +1356,6 @@ impl SasSwitch {
 }
 
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
-#[cfg(not(cellos_switch_legacy))]
 pub fn yield_cpu() {
     #[cfg(target_arch = "x86_64")]
     if !crate::sched::smp::x86_scheduler_ready() {
