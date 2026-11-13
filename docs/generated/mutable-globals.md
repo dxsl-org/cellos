@@ -430,6 +430,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::INIT_ELF @cfg(cellos_wide)` | `kernel/src/main.rs` | static | `&[u8]` | syntactically immutable |
 | `kernel::TEST_SAFE_ROOT @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/main.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::TEST_STATE_LOCK @cfg(test)` | `kernel/src/main.rs` | static | `sync::Spinlock<()>` | cfg inactive in this profile |
+| `kernel::arch::aarch64::boot::idle_probes()::IDLE_COUNT @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/boot.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::aarch64::cpu::global_asm!#1 @cfg(target_arch = "aarch64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/aarch64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::arch::aarch64::layer2_selftest::run_mte_selftest()::MTE_BUF @cfg(target_arch = "aarch64" & feature = "test-hooks" & all (target_arch = "aarch64" , feature = "test-hooks"))` | `kernel/src/arch/aarch64/layer2_selftest.rs` | static mut | `[u8;32]` | cfg inactive in this profile |
 | `kernel::arch::aarch64::vm::NEXT_VMID @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/vm.rs` | static | `core::sync::atomic::AtomicU16` | cfg inactive in this profile |
@@ -533,7 +534,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::dev::ramdisk::DISK_IMAGE @cfg(target_arch = "riscv32")` | `kernel/src/dev/ramdisk.rs` | static | `&[u8]` | cfg inactive in this profile |
 | `kernel::dev::virtio_rng::TEST_ENTROPY_ENABLED @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/dev/virtio_rng.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::dev::virtio_rng::TEST_ENTROPY_REQUESTS @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/dev/virtio_rng.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
-| `kernel::kmain()::IDLE_COUNT @cfg(not (target_arch = "x86_64"))` | `kernel/src/main.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::loader::atomic_publication_tests::cases::SUCCESS_PARTS @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/cases.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::loader::atomic_publication_tests::harness::AP13_BARRIER @cfg(feature = "test-hooks" & target_arch = "riscv64")` | `kernel/src/loader/atomic_publication_tests/harness.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::loader::atomic_publication_tests::harness::AP13_REMOTE_ACK @cfg(feature = "test-hooks" & target_arch = "riscv64")` | `kernel/src/loader/atomic_publication_tests/harness.rs` | static | `AtomicU8` | cfg inactive in this profile |

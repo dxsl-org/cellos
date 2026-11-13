@@ -15,6 +15,16 @@ pub(crate) fn idle() {
     unsafe { core::arch::asm!("wfi") };
 }
 
+/// The raw `CurrentEL` register (the exception level is bits 3:2).
+pub(crate) fn current_el() -> u64 {
+    let current_el: u64;
+    unsafe {
+        core::arch::asm!("mrs {el}, CurrentEL", el = out(reg) current_el,
+                         options(nomem, nostack));
+    }
+    current_el
+}
+
 /// The stack pointer of the running frame, as a virtual address.
 #[cfg(any(feature = "snapshot-qualified", test))]
 pub(crate) fn stack_pointer() -> usize {

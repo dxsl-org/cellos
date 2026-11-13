@@ -107,11 +107,3 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
 pub fn reap_vms_for_task(dead_tid: usize) {
     crate::arch::vm::reap_vms_for_task(dead_tid)
 }
-
-/// Pi's EL1-host capability gate: an actual monitor round-trip must run guest
-/// HVC, WFI, MMIO and software-injected virtual IRQ before any VM is admitted.
-/// Called only when the board has an EL2 monitor (`El2Monitor::PRESENT`).
-#[cfg(target_arch = "aarch64")]
-pub fn pi_monitor_smoke() {
-    crate::arch::vm::pi_monitor_smoke()
-}

@@ -8,6 +8,8 @@
 #[cfg(feature = "test-hooks")]
 pub mod layer2_selftest;
 
+pub mod boot;
+
 pub mod smp;
 
 pub mod tlb;

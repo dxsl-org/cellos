@@ -103,7 +103,7 @@ pub mod snapshot {
 pub mod system_config; // Bounded cold-boot settings, loaded after embedded FS mount
 pub mod task; // Renamed from 'process'
 pub extern crate hal; // HAL (Architecture specific)
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 use boot::BootInfo;
 #[cfg(target_arch = "aarch64")]
 use hal::backend::ArmPlatform as _;
@@ -172,7 +172,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 /// `crate::arch::boot::platform_init`) bring the platform up; everything after
 /// the [`boot::PlatformReady`] they return is arch-neutral. The `arch::boot`
 /// hooks below run where that architecture's code ran before the split.
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0–3. Early console, traps, boot memory, frame allocator, paging.
@@ -667,7 +667,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 }
 
 /// Write `s` as one `[INFO]` line on the early console.
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn log_info(s: &str) {
     arch::boot::puts("[INFO] ");
     arch::boot::puts(s);
@@ -675,7 +675,7 @@ fn log_info(s: &str) {
 }
 
 /// The boot banner. CI greps for the first line.
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn boot_banner() {
     // Stable banner — CI greps for this exact string.
     arch::boot::puts("[Cellos] kernel boot v");
@@ -686,7 +686,7 @@ fn boot_banner() {
 
 /// The bootloader's memory description (Limine, else the architecture's
 /// fallback) and the frame allocator built from its usable ranges.
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocator) {
     // Parse bootloader information
     let boot_info = match boot::parse_bootloader_info() {
@@ -743,7 +743,7 @@ fn boot_memory(dtb: usize) -> (boot::BootInfoSource, memory::frame::FrameAllocat
 /// Spawn the Platform Cell (PCIe ECAM scanner) for `pci`. It is the first cell
 /// that can bring up DMA-capable drivers, so it takes the DMA isolation state
 /// the platform phase left (`_iommu`).
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 fn spawn_platform_cell(pci: &boot::PciReady, _iommu: &boot::IommuReady) {
     match pci {
         // RISC-V uses the compile-time GPEX window (0x3000_0000).
@@ -779,7 +779,7 @@ fn spawn_platform_cell(pci: &boot::PciReady, _iommu: &boot::IommuReady) {
 
 /// Kernel entry point called from HAL boot code (not yet split into the
 /// `crate::arch::boot` phases on this architecture).
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
@@ -789,7 +789,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let dtb = boot::effective_dtb(dtb);
     cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     crate::platform::init(dtb);
     // Set runtime PLIC base before the later RV64 PLIC initialization consumes it.
     #[cfg(target_arch = "riscv64")]
@@ -797,8 +797,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0. Initialize UART immediately for early logging
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     crate::dev::uart::init();
-    #[cfg(target_arch = "aarch64")]
-    crate::hal::backend::Board::console_init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "x86")]
@@ -812,10 +810,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
             {
                 let _ = crate::hal::sbi::console_putchar(c);
-            }
-            #[cfg(target_arch = "aarch64")]
-            {
-                crate::hal::backend::Board::early_putc(c);
             }
             #[cfg(target_arch = "arm")]
             {
@@ -932,8 +926,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::paging::activate_paging(root_table_phys);
         }
         *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
-        #[cfg(target_arch = "aarch64")]
-        crate::hal::domain::record_kernel_ttbr0(root_table_phys);
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         TEST_SAFE_ROOT.store(root_table_phys, core::sync::atomic::Ordering::Release);
         unsafe {
@@ -1013,31 +1005,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Registers the log backend on AArch64/ARM; RV64 and x86_64 registered it
     // at entry, so the call is a no-op there.
     crate::dev::uart::init();
-    #[cfg(target_arch = "aarch64")]
-    {
-        use hal::backend::{ArmEl2Monitor, El2Monitor};
-        if El2Monitor::PRESENT {
-            let current_el: u64;
-            unsafe {
-                core::arch::asm!("mrs {el}, CurrentEL", el = out(reg) current_el,
-                                 options(nomem, nostack));
-            }
-            log::info!(
-                "[pi-monitor] entry EL={} host EL={} HVC ready={}",
-                El2Monitor::entry_el(),
-                current_el >> 2,
-                El2Monitor::is_ready()
-            );
-            let (booted_el2, hvc_result, op0_seen) = El2Monitor::probe_status();
-            log::info!(
-                "[pi-monitor] probe booted_el2={} hvc_result=0x{:x} op0_seen={}",
-                booted_el2,
-                hvc_result,
-                op0_seen
-            );
-            crate::hypervisor::registry::pi_monitor_smoke();
-        }
-    }
 
     // Phase 07: reserve the warm-snapshot capture's scratch workspace from the
     // frame allocator — the capture stages its own stack and buffers there, so
@@ -1046,25 +1013,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // A no-op unless the build is `snapshot-qualified`; a build without a
     // workspace refuses every capture.
     boot::reserve_snapshot_scratch();
-    #[cfg(target_arch = "aarch64")]
-    if matches!(
-        <hal::backend::Board as hal::backend::ArmPlatform>::DTB_POLICY,
-        hal::backend::DtbPolicy::Optional
-    ) {
-        let (start, end) = boot::fallback_dtb_ram_range();
-        log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);
-    }
     #[cfg(target_arch = "riscv64")]
     crate::dev::uart::init_input();
-    #[cfg(target_arch = "aarch64")]
-    if crate::hal::backend::Board::CONSOLE_RX_IRQ {
-        // IRQ delivery must start only after the heap-backed queue exists.
-        crate::dev::uart::init_input();
-        crate::hal::backend::Board::console_enable_rx_irq();
-    }
     // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).
     // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     crate::dev::init();
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
@@ -1080,7 +1033,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Attempt warm boot from snapshot before any cell initialization.
     // RV32 Nano / x86_64 skip: no VirtIO block in bring-up.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     if snapshot::try_restore() {
         // try_restore() called yield_cpu() and should not return in a successful
         // warm boot.  If we reach here, fall through to cold boot as a safety net.
@@ -1090,12 +1043,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Cross-check the on-disk MBR against the compiled-in partition layout
     // (warn-only — surfaces image/kernel drift at boot instead of as silent
     // corruption later).
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     crate::loader::disk_layout::verify_mbr();
 
     // Probe the cell bootstrap table so SpawnFromPath works during init.
     // RV32 Nano / x86_64 bring-up: no disk.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     match crate::loader::early::EarlyLoader::probe() {
         Ok(()) => puts("[loader] cell bootstrap table loaded\n"),
         Err(_) => {
@@ -1118,7 +1071,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     policy::load_from_vifs1();
 
     // Phase 20: hot-migration state-transfer self-test.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     crate::cell::state_stash::self_test();
 
     log_info("Kernel subsystems initialized successfully.");
@@ -1261,11 +1214,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Limine MP callback and qualifies bidirectional invalidation before tasks.
     #[cfg(cellos_wide)]
     crate::sched::smp::start_secondaries();
-    // AArch64 has no equivalent of the RV64 shootdown fixture at boot, so the
-    // SGI delivery path is exercised here: a hart that is online but deaf to the
-    // kernel's cross-hart IPI would otherwise look perfectly healthy.
-    #[cfg(all(target_arch = "aarch64", not(cellos_posture = "release")))]
-    crate::sched::smp::run_ipi_selftest();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::arch::memory::tlb_shootdown_selftest::run_primary();
@@ -1311,15 +1259,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
         )
         .expect("frame allocator bitmap and early paging registration must succeed");
-    }
-    #[cfg(all(feature = "native-domains", target_arch = "aarch64"))]
-    for span in <hal::backend::Board as hal::backend::ArmResources>::SUPERVISOR_DEVICE_MMIO {
-        let _ = memory::domain_supervisor_registry::register(
-            span.base,
-            span.end,
-            memory::domain_supervisor_registry::SupervisorRangeKind::DeviceMmio,
-            memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
-        );
     }
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
     {
@@ -1419,28 +1358,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         task::domain_grant::run_selftest();
         task::grant_gate_selftest::run_primary();
         task::rt_wake_selftest::self_test();
-    }
-
-    // Phase 03 domain grant lifecycle on AArch64 test images. The same
-    // kernel-side fixtures the RV64 lane runs drive the production
-    // `handle_syscall` entry points with real `TaskAddressSpace::Domain` tasks:
-    // rights, transactional publish, revoke and the deferred outcome. They are
-    // not the two-cell public handoff, which stays RV64-only (`grant-pair`,
-    // `cells/tests/tier2-grant-*`).
-    //
-    // Skipped at EL2 for the same reason `enable_for_boot` refuses there: the
-    // EL2 switch has no root argument, so the machine cannot enter a private
-    // root and the fixture would report against a root it cannot run.
-    #[cfg(all(
-        target_arch = "aarch64",
-        feature = "native-domains",
-        feature = "test-hooks"
-    ))]
-    if crate::hal::aarch64::el2::is_el2() {
-        log::info!("[grant] AArch64 EL2 (development-Silo machine): domain grant fixtures skipped");
-    } else {
-        task::domain_grant::run_selftest();
-        task::grant_gate_selftest::run_primary();
     }
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
@@ -1561,10 +1478,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // MTE (aarch64) and PKU (x86_64) — each prints PASS or SKIP.
         // Runs here: after all HW init, before scheduler + first cell spawn.
         #[cfg(feature = "test-hooks")]
-        {
-            #[cfg(target_arch = "aarch64")]
-            crate::arch::layer2_selftest::run_mte_selftest();
-        }
+        {}
 
         // Spawn the Platform Cell before init (PCIe ECAM scanner).
         // RISC-V uses the compile-time GPEX window (0x3000_0000).
@@ -1602,14 +1516,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     "Successfully spawned init with complete root authority (tid={})",
                     tid
                 );
-                #[cfg(target_arch = "aarch64")]
-                crate::hal::backend::Board::diag_probe(b'V');
             }
             Err(_e) => {
                 log_info("Failed to spawn init");
-                // Failure occurs before init reaches any ready queue.
-                #[cfg(target_arch = "aarch64")]
-                crate::hal::backend::Board::diag_probe(b'F');
                 #[cfg(feature = "test-hooks")]
                 panic!("atomic-publication trusted-init success contract did not publish init");
             }
@@ -1692,42 +1601,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // An explicit [logging] is authoritative for the whole cold boot. Only old
     // images / omitted sections retain this later interactive/test default.
     if !system_config::logging_explicit() {
-        #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
-        log::set_max_level(log::LevelFilter::Info);
-        #[cfg(not(all(feature = "test-hooks", target_arch = "aarch64")))]
         log::set_max_level(log::LevelFilter::Warn);
     }
 
-    // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.
-    // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).
-    // Q absent → IRQ fired immediately after daifclr (expected); check if H/G appear.
-    #[cfg(target_arch = "aarch64")]
-    crate::hal::backend::Board::diag_probe(b'Q');
-
-    // Board IRQ-state snapshot immediately after enabling IRQs (RPi3: the
-    // "K<src_bit8><pend_bit1><src_nibble>" probe; a no-op elsewhere).
-    #[cfg(target_arch = "aarch64")]
-    crate::hal::backend::Board::irq_snapshot_probe();
-
-    // Probe 'L': fires once per idle loop iteration, for the board's first
-    // `IDLE_PROBES` iterations only (RPi3: 4) to avoid flood.
-    // If 'L' never appears after 'K', the code never reaches the idle loop.
-    #[cfg(target_arch = "aarch64")]
-    if <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES != 0 {
-        static IDLE_COUNT: core::sync::atomic::AtomicUsize =
-            core::sync::atomic::AtomicUsize::new(0);
-        loop {
-            let n = IDLE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            // reason: `IDLE_PROBES` is a per-board const; on boards with no idle
-            // probe it is 0, and this whole block is then dead.
-            #[allow(clippy::absurd_extreme_comparisons)]
-            if n < <hal::backend::Board as hal::backend::ArmPlatform>::IDLE_PROBES {
-                crate::hal::backend::Board::diag_probe(b'L');
-            }
-            crate::task::yield_cpu();
-            crate::hal::ARCH.wait_for_interrupt();
-        }
-    }
     loop {
         crate::task::yield_cpu();
         crate::hal::ARCH.wait_for_interrupt();
