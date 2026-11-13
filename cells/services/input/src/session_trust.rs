@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Owner-run first-trust confirmation: SessionV1 selectors 29–31 (D79-11, D79-13).
 //!
-//! VFS registers an immutable descriptor (29). The descriptor's target, as the live
+//! KMS (the host-trust store's owner) registers an immutable descriptor (29). The descriptor's target, as the live
 //! committed foreground child with its exact lease and epoch, begins the confirmation
 //! (30) on a session whose frontend submits framed events (a sel-25 frontend; Serial
 //! sessions, including the physical UART, are byte streams and answer `Unsupported`).
@@ -11,7 +11,7 @@
 //! Enter accepts; any other line, Escape, Ctrl-C, any paste or any byte without key/text
 //! provenance (SubmitRaw) rejects; the deadline expires it; frontend loss, end of input,
 //! foreground restoration and session close cancel it. Every release wipes the capture
-//! line, paste staging and the serial decoder. Only the registering VFS principal
+//! line, paste staging and the serial decoder. Only the registering KMS principal
 //! collects the decision (31), final exactly once.
 //!
 //! Input has no output path of its own, so the prompt is drawn by the session
@@ -28,7 +28,7 @@
 //!
 //! Restoration, close, frontend loss, end of input and a failed write to the controller's
 //! ring end the quarantine at once (and cancel an undecided capture; a recorded decision
-//! is kept, whether or not VFS already collected it). The kernel flushes the controller's
+//! is kept, whether or not KMS already collected it). The kernel flushes the controller's
 //! ring when it restores the controller (RestoreSessionInput), so restore and close drop
 //! unsent notices; the controller ends its prompt on restoration itself.
 //!
@@ -170,8 +170,8 @@ fn key_item(payload: &[u8]) -> Typed<'static> {
 }
 
 impl Sessions {
-    /// Sel 29/31 admission. 29: the attested sender is the live registered VFS task
-    /// (as VFS checks live KMS). 31: the principal that registered the challenge.
+    /// Sel 29/31 admission. 29: the attested sender is the live registered KMS task, the
+    /// host-trust store's owner. 31: the principal that registered the challenge.
     pub(super) fn admit_trust(
         &self,
         selector: u16,
@@ -180,7 +180,7 @@ impl Sessions {
         sender: usize,
     ) -> Result<(), Status> {
         if selector == 29 {
-            return if provider_tid(api::syscall::service::VFS).is_some_and(|tid| tid == sender) {
+            return if provider_tid(api::syscall::service::KMS).is_some_and(|tid| tid == sender) {
                 Ok(())
             } else {
                 Err(Status::Denied)
@@ -237,7 +237,7 @@ impl Sessions {
             return Err(Status::Denied);
         }
         // Uncollected records hold memory until collected or released after their deadline
-        // (also those of a dead VFS incarnation, which nobody can collect any more); a target
+        // (also those of a dead KMS incarnation, which nobody can collect any more); a target
         // has at most one confirmation that can still be decided.
         if self.challenges.len() >= tr::MAX_TOTAL
             || self.challenges.iter().filter(|c| c.registrar == p).count() >= tr::MAX_PER_REGISTRAR

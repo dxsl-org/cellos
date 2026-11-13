@@ -52,7 +52,6 @@ mod prepared_cwd;
 mod quota;
 mod save;
 mod subtree;
-mod trust;
 
 use manager::VfsManager;
 use ostd::io::println;
@@ -102,11 +101,11 @@ api::declare_syscalls![
     // is the difference between a chunked read costing O(file) and O(file^2).
     SeekCap,
     CloseCap,
-    // First-trust confirmation (S9-4b): VFS calls service-input over the authenticated
-    // SessionV1 transport (`ostd::session::register_trust_challenge` /
-    // `collect_trust_decision`): the issuer binding (LookupServiceBound), the bounded IPC exchange (IpcSubmit/IpcTake/IpcWait/IpcCancel
-    // share Send/Recv's bits), its scheduler-tick budget and the monotonic challenge
-    // deadline (GetTime). CellSessionV1 has no allowlist bit; it is listed for the record.
+    // Prepared-cwd commits (`prepared_cwd`): the own service binding (LookupServiceBound)
+    // and the kernel SessionV1 requests (`ostd::session::kernel_request`; CellSessionV1 has
+    // no allowlist bit, it is listed for the record). The bounded exact-operation block
+    // exchange (`blk_router`: IpcSubmit/IpcTake/IpcWait/IpcCancel share Send/Recv's bits)
+    // and its scheduler-tick budget and the grant-hold clock (GetTime).
     LookupServiceBound,
     IpcSubmit,
     IpcTake,

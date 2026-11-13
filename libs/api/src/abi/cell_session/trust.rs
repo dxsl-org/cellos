@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //! SessionV1 first-trust confirmation records (selectors 29–31; D79-11, D79-13).
 //!
-//! VFS registers one immutable host-trust descriptor with the input owner
-//! (`RegisterTrustChallenge`, admitted only from the live registered VFS service).
+//! KMS (the host-trust store's owner) registers one immutable host-trust descriptor
+//! with the input owner (`RegisterTrustChallenge`, admitted only from the live
+//! registered KMS service).
 //! The attested foreground child of the descriptor's `target` principal begins the
 //! owner-run confirmation with its exact session, lease and epoch
 //! (`BeginTrustConfirmation`). From then on input itself captures that session's
 //! typed/raw/paste input (it never reaches the child) and asks the session controller
 //! to render a fixed prompt built only from the descriptor (`TrustPrompt` /
 //! `TrustPromptEnd` control events, see `api::services::session::event_kind`). Only the
-//! registering VFS principal collects the decision (`CollectTrustDecision`).
+//! registering KMS principal collects the decision (`CollectTrustDecision`).
 //!
 //! Every record here is a request or result *body* (the 24-byte header is separate).
 //! Decoders require the exact length; text fields are length-prefixed (`u16`) graphic
@@ -113,7 +114,7 @@ impl<'a> TrustPromptV1<'a> {
     }
 }
 
-/// Selector 29 request (the canonical descriptor bytes): `challenge:Ref` (VFS-issued,
+/// Selector 29 request (the canonical descriptor bytes): `challenge:Ref` (KMS-issued,
 /// nonzero), `target:Principal` (the client Cell that will confirm), `expiry_ns:u64`,
 /// then [`TrustPromptV1`]. Result: `confirmation:Ref` (input-issued, unique).
 /// `CollectTrustDecision` returns the SHA-256 of exactly these bytes.

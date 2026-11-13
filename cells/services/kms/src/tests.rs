@@ -13,6 +13,7 @@ mod root_sequence;
 mod ssh;
 mod storage;
 mod tls_signing;
+pub(crate) mod trust;
 
 fn caller(cell_id: u64, generation: u64, sender_tid: usize) -> CallerIdentity {
     CallerIdentity {

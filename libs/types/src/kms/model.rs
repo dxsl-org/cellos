@@ -74,6 +74,17 @@ wire_enum!(
         SshUnlockChunk = 23,
         /// Destroy the staged unlock secret without signing.
         AbortSshUnlock = 24,
+        /// Open one staged SSH host-trust query (outbound-connect callers): declare
+        /// its kind, port, field lengths and the SHA-256 of `host || algorithm || key`.
+        BeginTrustQuery = 25,
+        /// Deliver one strictly ordered chunk of the staged trust query.
+        TrustQueryChunk = 26,
+        /// Verify count and SHA-256, then answer the lookup or issue the challenge.
+        CommitTrustQuery = 27,
+        /// Complete (or poll) the caller's own first-trust challenge.
+        CommitTrustChallenge = 28,
+        /// Destroy the staged trust query.
+        AbortTrustQuery = 29,
     }
 );
 wire_enum!(
@@ -222,6 +233,19 @@ wire_enum!(
         SshUnlockFailed = 37,
         /// Unlock failure limit reached; refused before any KDF work.
         SshUnlockLocked = 38,
+        /// Trust query handle is stale, foreign, consumed, or unknown.
+        TrustHandleInvalid = 39,
+        /// Trust query chunk index, length, total, or commit state is out of order.
+        TrustOrderInvalid = 40,
+    }
+);
+wire_enum!(
+    /// What a staged SSH host-trust query asks (`BeginTrustQuery`).
+    pub enum KmsTrustQueryKind: u8 {
+        /// Compare the host, port, algorithm and key with the store.
+        Lookup = 1,
+        /// Issue a first-trust challenge for a host and port the store does not hold.
+        Challenge = 2,
     }
 );
 

@@ -17,7 +17,19 @@ api::declare_syscalls![
     Heartbeat,
     Log,
     LookupServiceBound,
-    VfsMutate
+    VfsMutate,
+    // SSH host-trust first-trust confirmation: KMS calls service-input over the
+    // authenticated SessionV1 transport (`ostd::session::register_trust_challenge` /
+    // `collect_trust_decision`): the issuer binding (LookupServiceBound), the bounded IPC
+    // exchange (IpcSubmit/IpcTake/IpcWait/IpcCancel share Send/Recv's bits), its
+    // scheduler-tick budget and the monotonic challenge deadline (GetTime). CellSessionV1
+    // has no allowlist bit; it is listed for the record.
+    IpcSubmit,
+    IpcTake,
+    IpcWait,
+    IpcCancel,
+    GetTime,
+    CellSessionV1
 ];
 
 ostd::cell_main!(cell_main);

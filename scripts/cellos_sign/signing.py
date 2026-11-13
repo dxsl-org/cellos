@@ -62,13 +62,13 @@ class QualifiedRoute:
 # assembler, is a reviewed source change of this table.
 X86_CANONICAL_ROOT = "kernel/src/embedded-x86_64"
 X86_CANDIDATE_RECIPE = "scripts/assemble-x86-image.py"
-X86_CANDIDATE_RECIPE_SHA256 = "5592002e54a7b1826936f9a429e5a35431b40f086b7fab82dc7c95aa9a2e1076"
+X86_CANDIDATE_RECIPE_SHA256 = "3590f9c916b5d555c742a8fcbb89d0292ab6c0027cb5ebd3fd62f05daf4d7e7e"
 _X86_HEADLESS_SIGNED = frozenset({
     "cellbox", "service-vfs", "service-config", "service-input", "service-net", "platform",
     "driver-nvme", "driver-e1000", "driver-igb", "driver-e1000e", "driver-ahci", "driver-xhci",
     "driver-vmxnet3", "driver-igc", "driver-r8169", "driver-bcm57xx", "driver-ixgbe", "driver-i40e", "driver-virtio-blk", "driver-virtio-net", "driver-virtio-scsi",
     "driver-pvscsi", "driver-serial-x86", "ls", "cat", "echo", "ps", "kill", "shutdown", "app-init",
-    "supervisor",
+    "supervisor", "service-kms",
 })
 _X86_DESKTOP_SIGNED = _X86_HEADLESS_SIGNED | frozenset({
     "service-compositor", "fb-console", "desktop", "files", "terminal", "chrome", "ocel",

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Host tests of the owner-run first-trust confirmation (selectors 29–31) through the
 //! real dispatch: a GUI session whose controller (the shell) runs a committed foreground
-//! child (the ssh client), the live VFS registering and collecting, and the frontend
+//! child (the ssh client), the live KMS registering and collecting, and the frontend
 //! holder typing. The kernel is the in-process model of `session_tests.rs`.
 use super::*;
 use api::cell_session::trust::{
@@ -9,11 +9,11 @@ use api::cell_session::trust::{
 };
 use api::services::session::{event_kind, key_code, modifiers};
 
-const VFS: Principal = Principal {
+const KMS: Principal = Principal {
     cell_id: 40,
     generation: 1,
 };
-const VFS_TID: usize = 50;
+const KMS_TID: usize = 50;
 const SSH: Principal = Principal {
     cell_id: 30,
     generation: 1,
@@ -98,7 +98,7 @@ struct Trust {
 impl Trust {
     fn new() -> Self {
         let mut h = Harness::new();
-        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::VFS, VFS_TID)));
+        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
         let a = h.attach();
         Self::foreground(h, a)
     }
@@ -106,7 +106,7 @@ impl Trust {
     /// it is the physical UART session, a byte stream without key/paste provenance.
     fn serial() -> Self {
         let mut h = Harness::new();
-        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::VFS, VFS_TID)));
+        fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
         let mut create = [0; 40];
         let mut w = Writer::new(&mut create);
         w.reference(S_OP).unwrap();
@@ -171,8 +171,8 @@ impl Trust {
     }
     fn register(&mut self, n: u64, target: Principal) -> (Status, Vec<u8>) {
         self.h.call_as(
-            VFS,
-            VFS_TID,
+            KMS,
+            KMS_TID,
             challenge(n),
             29,
             &descriptor(challenge(n), target, now_ns() + 30 * SECOND),
@@ -221,7 +221,7 @@ impl Trust {
         )
     }
     fn collect(&mut self, confirmation: Ref) -> (Status, Option<TrustDecisionV1>) {
-        self.collect_as(VFS, VFS_TID, confirmation)
+        self.collect_as(KMS, KMS_TID, confirmation)
     }
     /// The frontend holder types `frames` (one SubmitEvents batch; holders send epoch 0).
     fn submit(&mut self, frames: &[Vec<u8>]) -> Status {
@@ -346,29 +346,29 @@ fn end(accepted: bool) -> (u16, Vec<u8>) {
 }
 
 #[test]
-fn only_the_live_vfs_task_registers_within_the_sixty_second_window() {
+fn only_the_live_kms_task_registers_within_the_sixty_second_window() {
     let mut t = Trust::new();
     let body = descriptor(challenge(1), SSH, now_ns() + 10 * SECOND);
-    // Another Cell, and the VFS principal from a task that is not the registered VFS, are refused.
+    // Another Cell, and the KMS principal from a task that is not the registered KMS, are refused.
     assert_eq!(
         t.h.call_as(OTHER, TID, challenge(1), 29, &body).0,
         Status::Denied
     );
     assert_eq!(
-        t.h.call_as(VFS, TID, challenge(1), 29, &body).0,
+        t.h.call_as(KMS, TID, challenge(1), 29, &body).0,
         Status::Denied
     );
     fake::SERVICES.with(|s| s.borrow_mut().clear());
     assert_eq!(
-        t.h.call_as(VFS, VFS_TID, challenge(1), 29, &body).0,
+        t.h.call_as(KMS, KMS_TID, challenge(1), 29, &body).0,
         Status::Denied
     );
-    fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::VFS, VFS_TID)));
+    fake::SERVICES.with(|s| s.borrow_mut().push((api::syscall::service::KMS, KMS_TID)));
     // The deadline must lie in (now, now + 60 s].
     assert_eq!(
         t.h.call_as(
-            VFS,
-            VFS_TID,
+            KMS,
+            KMS_TID,
             challenge(2),
             29,
             &descriptor(challenge(2), SSH, now_ns())
@@ -378,8 +378,8 @@ fn only_the_live_vfs_task_registers_within_the_sixty_second_window() {
     );
     assert_eq!(
         t.h.call_as(
-            VFS,
-            VFS_TID,
+            KMS,
+            KMS_TID,
             challenge(3),
             29,
             &descriptor(challenge(3), SSH, now_ns() + 61 * SECOND)
@@ -388,14 +388,14 @@ fn only_the_live_vfs_task_registers_within_the_sixty_second_window() {
         Status::Malformed
     );
     assert!(t.h.sessions.challenges.is_empty());
-    let (status, confirmation) = t.h.call_as(VFS, VFS_TID, challenge(1), 29, &body);
+    let (status, confirmation) = t.h.call_as(KMS, KMS_TID, challenge(1), 29, &body);
     assert_eq!(status, Status::Ok);
     assert!(!Ref::from_bytes(&confirmation).unwrap().is_zero());
     // A challenge Ref is single-use: a changed descriptor cannot rebind it.
     assert_eq!(
         t.h.call_as(
-            VFS,
-            VFS_TID,
+            KMS,
+            KMS_TID,
             challenge(1),
             29,
             &descriptor(challenge(1), SSH, now_ns() + 11 * SECOND)
@@ -489,7 +489,7 @@ fn typed_yes_enter_accepts_once_with_exact_bindings_and_never_reaches_the_child(
     );
     assert_eq!(t.submit(&[enter()]), Status::Ok);
     let decision = t.collect(confirmation).1.unwrap();
-    // Every binding VFS compares: the SHA-256 is over its exact registered descriptor bytes.
+    // Every binding KMS compares: the SHA-256 is over its exact registered descriptor bytes.
     assert_eq!(
         decision,
         TrustDecisionV1 {
@@ -799,25 +799,25 @@ fn bounds_and_collection_are_bound_to_the_registering_principal() {
         Status::QuotaExceeded
     );
     // Collection belongs to the registering principal only: another Cell, or a restarted
-    // VFS (new generation), is refused.
-    let vfs2 = Principal {
-        cell_id: VFS.cell_id,
+    // KMS (new generation), is refused.
+    let kms2 = Principal {
+        cell_id: KMS.cell_id,
         generation: 2,
     };
     assert_eq!(t.collect_as(OTHER, TID, first).0, Status::Denied);
-    assert_eq!(t.collect_as(vfs2, VFS_TID, first).0, Status::Denied);
-    // 32 system-wide: seven more VFS incarnations fill the table.
+    assert_eq!(t.collect_as(kms2, KMS_TID, first).0, Status::Denied);
+    // 32 system-wide: seven more KMS incarnations fill the table.
     for generation in 2..=8u64 {
-        let vfs = Principal {
-            cell_id: VFS.cell_id,
+        let kms = Principal {
+            cell_id: KMS.cell_id,
             generation,
         };
         for n in 0..4 {
             let id = generation * 10 + n;
             let status =
                 t.h.call_as(
-                    vfs,
-                    VFS_TID,
+                    kms,
+                    KMS_TID,
                     challenge(id),
                     29,
                     &descriptor(
@@ -834,14 +834,14 @@ fn bounds_and_collection_are_bound_to_the_registering_principal() {
         }
     }
     assert_eq!(t.h.sessions.challenges.len(), tr::MAX_TOTAL);
-    let vfs9 = Principal {
-        cell_id: VFS.cell_id,
+    let kms9 = Principal {
+        cell_id: KMS.cell_id,
         generation: 9,
     };
     assert_eq!(
         t.h.call_as(
-            vfs9,
-            VFS_TID,
+            kms9,
+            KMS_TID,
             challenge(999),
             29,
             &descriptor(challenge(999), OTHER, now_ns() + 30 * SECOND)
@@ -858,8 +858,8 @@ fn bounds_and_collection_are_bound_to_the_registering_principal() {
     );
     assert_eq!(
         t.h.call_as(
-            vfs9,
-            VFS_TID,
+            kms9,
+            KMS_TID,
             challenge(999),
             29,
             &descriptor(challenge(999), SSH, now_ns() + 30 * SECOND)
@@ -1041,7 +1041,7 @@ fn a_lost_controller_ring_releases_the_quarantine_at_once() {
         Some(tr::DECISION_REJECT)
     );
 
-    // Decided and already collected by VFS (the record is gone): still released.
+    // Decided and already collected by KMS (the record is gone): still released.
     let mut t = Trust::new();
     let confirmation = t.confirmation(1);
     t.begin_armed(confirmation);

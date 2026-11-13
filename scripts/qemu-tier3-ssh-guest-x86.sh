@@ -375,6 +375,10 @@ if [[ "$STAGE" == pipe ]]; then
         -p service-kms --features ssh-dev-custody
     env -u CELLOS_PRODUCTION CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
         -p app-kms-ssh-admin
+else
+    # Phase 12: kms holds the host-trust store `cellbox ssh` reads; default features.
+    CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
+        -p service-kms
 fi
 DRIVER_FEATURES=guest
 [[ "$STAGE" != diag ]] || DRIVER_FEATURES=guest-diag
@@ -387,16 +391,16 @@ CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --
 CELL_BINARIES=(
     "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" "$REL/service-net"
-    "$REL/echo" "$REL/phase04-terminal-driver" "$REL/hypervisor"
+    "$REL/echo" "$REL/phase04-terminal-driver" "$REL/hypervisor" "$REL/service-kms"
 )
 CELL_IMAGE_PATHS=(
     /bin/cellbox /bin/vfs /bin/config /bin/input
     /bin/platform /bin/nvme /bin/e1000 /bin/net
-    /bin/echo /bin/phase04-terminal-driver /bin/hypervisor
+    /bin/echo /bin/phase04-terminal-driver /bin/hypervisor /bin/kms
 )
 if [[ "$STAGE" == pipe ]]; then
-    CELL_BINARIES+=("$REL/service-kms" "$REL/kms-ssh-admin")
-    CELL_IMAGE_PATHS+=(/bin/kms /bin/kms-ssh-admin)
+    CELL_BINARIES+=("$REL/kms-ssh-admin")
+    CELL_IMAGE_PATHS+=(/bin/kms-ssh-admin)
 fi
 
 echo "==> Signing with the private key (private-fixture lane)"

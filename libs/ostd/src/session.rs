@@ -539,9 +539,9 @@ pub fn service_call(
     })
 }
 
-/// VFS → input: register one first-trust descriptor (`InputOp::RegisterTrustChallenge`);
+/// KMS → input: register one first-trust descriptor (`InputOp::RegisterTrustChallenge`);
 /// returns the input-issued confirmation Ref the confirming client presents to
-/// `BeginTrustConfirmation`. Input admits only the live registered VFS task. The request
+/// `BeginTrustConfirmation`. Input admits only the live registered KMS task. The request
 /// lane is the single-use challenge Ref; it is kept only while the outcome is
 /// indeterminate (retry the identical descriptor to resolve it).
 pub fn register_trust_challenge(
@@ -571,7 +571,7 @@ pub fn register_trust_challenge(
     ObjectRefV1::from_bytes(&reply[HEADER_LEN..h.total_len as usize])
 }
 
-/// VFS → input: the decision of `confirmation` (`InputOp::CollectTrustDecision`), answered
+/// KMS → input: the decision of `confirmation` (`InputOp::CollectTrustDecision`), answered
 /// only to the registering principal. `DECISION_PENDING` is not consumed; a final decision
 /// is returned once (a later collect is `Stale`), and its lane (the confirmation Ref) is
 /// then retired. Compare every binding, including `descriptor_sha256` against

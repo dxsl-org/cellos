@@ -358,8 +358,8 @@ fn noncanonical_envelopes_dropped() {
     let attested = login.identity();
     let reg = registry(None, Some(8));
     assert!(service.handle(&valid, login.tid, attested, reg).is_some());
-    // Opcode 25, nonzero flags/reserved/tail, version 2: no reply at all.
-    for (at, value) in [(1usize, 25u8), (2, 1), (10, 1), (15, 1), (127, 1), (0, 2)] {
+    // Opcode 30, nonzero flags/reserved/tail, version 2: no reply at all.
+    for (at, value) in [(1usize, 30u8), (2, 1), (10, 1), (15, 1), (127, 1), (0, 2)] {
         let mut frame = valid;
         frame[at] = value;
         assert!(

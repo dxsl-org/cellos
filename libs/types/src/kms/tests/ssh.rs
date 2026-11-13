@@ -341,7 +341,8 @@ fn ssh_opcode_and_error_values_are_append_only_and_round_trip() {
         assert_eq!(opcode as u8, value);
         assert_eq!(KmsOpcode::try_from(value), Ok(opcode));
     }
-    assert_eq!(KmsOpcode::try_from(25), Err(25));
+    // 25-29 are the trust-store opcodes (`tests::trust`).
+    assert_eq!(KmsOpcode::try_from(30), Err(30));
     assert_eq!(KmsOpcode::try_from(0), Err(0));
 
     for (code, value) in [
@@ -367,7 +368,8 @@ fn ssh_opcode_and_error_values_are_append_only_and_round_trip() {
         let decoded = KmsResponseV1::from_bytes(&frame).unwrap();
         assert_eq!(decoded.error_code().unwrap(), Some(code));
     }
-    assert_eq!(KmsErrorCode::try_from(39), Err(39));
+    // 39-40 are the trust-store errors (`tests::trust`).
+    assert_eq!(KmsErrorCode::try_from(41), Err(41));
     // A decoder without these codes refuses them fail-closed; here the next
     // unassigned value is refused the same way, at frame decode.
     let mut unknown = KmsResponseV1::error(
@@ -376,10 +378,10 @@ fn ssh_opcode_and_error_values_are_append_only_and_round_trip() {
         KmsErrorCode::SshKeyExists,
     )
     .to_bytes();
-    unknown[8] = 39;
+    unknown[8] = 41;
     assert_eq!(
         KmsResponseV1::from_bytes(&unknown),
-        Err(KmsWireError::UnknownErrorCode(39))
+        Err(KmsWireError::UnknownErrorCode(41))
     );
 }
 
@@ -705,10 +707,10 @@ fn ssh_opcodes_reject_noncanonical_envelopes_without_a_typed_reply() {
             Err(KmsWireError::UnsupportedVersion(2))
         );
         let mut bytes = request;
-        bytes[1] = 25;
+        bytes[1] = 30;
         assert_eq!(
             KmsRequestV1::from_bytes(&bytes),
-            Err(KmsWireError::UnknownOpcode(25))
+            Err(KmsWireError::UnknownOpcode(30))
         );
         let mut bytes = request;
         bytes[8] = 113;

@@ -245,22 +245,19 @@ pub enum VfsRequest<'a> {
     SaveQuery { id: u32 },
     /// Forget the transaction, removing any unpublished staged bytes.
     SaveAbort { id: u32 },
-    /// Phase 09 (abi-vfs-telemetry §4, read-only part): look up the configured SSH
-    /// host identifier and port in the protected host-trust store and compare the
-    /// complete public key. Answered with [`VfsResponse::Trust`]. Needs the caller's
-    /// attested outbound-connect right; never reveals store contents.
+    // ── Tombstones (Phase 12 CP1 W3). The SSH host-trust store moved to KMS
+    // (`types::kms::KmsOpcode::BeginTrustQuery` … `AbortTrustQuery`). These three keep
+    // their discriminants (0x28–0x2a) and their field layout so `MkdirAt` stays 0x2b and an
+    // old client's frame still decodes; the service answers `Err(Unsupported)`. Never
+    // reuse or remove them.
+    /// Tombstone (was the Phase 09 host-trust lookup).
     TrustLookup {
         host: &'a str,
         port: u16,
         algorithm: &'a str,
         key: &'a [u8],
     },
-    /// Phase 09 S9-4c first trust: for a host and port that [`Self::TrustLookup`] reports
-    /// Unknown, the service registers a 60-second challenge with the input owner bound to
-    /// the caller, the exact key and the store's current state, and answers
-    /// [`VfsResponse::TrustChallenged`] (or [`VfsResponse::Trust`] with the refusal). The
-    /// caller then runs `BeginTrustConfirmation` with `confirmation` on `session` at
-    /// `epoch`, its own terminal session. Needs the attested outbound-connect right.
+    /// Tombstone (was the Phase 09 S9-4c first-trust challenge).
     TrustChallenge {
         host: &'a str,
         port: u16,
@@ -269,11 +266,7 @@ pub enum VfsRequest<'a> {
         session: ObjectRefV1,
         epoch: u64,
     },
-    /// Phase 09 S9-4c: complete the caller's own `challenge`. Answered with
-    /// [`VfsResponse::Trust`]: `PENDING` while undecided; after an accepted confirmation
-    /// the store is updated and the answer is `KNOWN_EXACT` (or `MISMATCH` when another
-    /// writer stored a different key first); `REFUSED`, `EXPIRED`, `DENIED` or
-    /// `UNAVAILABLE` otherwise. Any final answer ends the challenge.
+    /// Tombstone (was the Phase 09 S9-4c first-trust commit).
     TrustCommit { challenge: ObjectRefV1 },
 
     // ── Handle-addressed directory lifecycle. Appended; never reorder. ────────
@@ -347,7 +340,8 @@ impl Observation {
     }
 }
 
-/// `VfsResponse::Trust` values (abi-vfs-telemetry §4 lookup outcomes).
+/// SSH host-trust outcomes (abi-vfs-telemetry §4): the outcome byte of the KMS trust
+/// replies (`types::kms::TrustOutcomePayload`).
 pub mod ssh_trust {
     /// The store holds this host and port with exactly this algorithm and key.
     pub const KNOWN_EXACT: u8 = 0;
@@ -359,12 +353,12 @@ pub mod ssh_trust {
     pub const DENIED: u8 = 3;
     /// The store cannot be read or is malformed.
     pub const UNAVAILABLE: u8 = 4;
-    /// `TrustCommit`: the user refused (or the confirmation was cancelled, or its
+    /// First-trust commit: the user refused (or the confirmation was cancelled, or its
     /// owner-attested bindings did not match the challenge). Nothing was stored.
     pub const REFUSED: u8 = 5;
-    /// `TrustCommit`: the challenge's 60 seconds passed. Nothing was stored.
+    /// First-trust commit: the challenge's 60 seconds passed. Nothing was stored.
     pub const EXPIRED: u8 = 6;
-    /// `TrustCommit`: not decided yet; ask again.
+    /// First-trust commit: not decided yet; ask again.
     pub const PENDING: u8 = 7;
 }
 
@@ -467,7 +461,7 @@ impl VfsRequest<'_> {
             | Self::SaveCommit { .. }
             | Self::SaveQuery { .. }
             | Self::SaveAbort { .. }
-            // Names a host, never a path; the store location is the service's own.
+            // Tombstones: answered Unsupported before any path is resolved.
             | Self::TrustLookup { .. }
             | Self::TrustChallenge { .. }
             | Self::TrustCommit { .. } => false,
@@ -523,9 +517,8 @@ impl VfsRequest<'_> {
             | Self::FileHandleState { .. }
             | Self::Observe { .. }
             | Self::SaveQuery { .. }
+            // Tombstones: answered Unsupported, never mutate.
             | Self::TrustLookup { .. }
-            // The store is written on the service's own authority after an
-            // owner-attested confirmation, never with the caller's.
             | Self::TrustChallenge { .. }
             | Self::TrustCommit { .. } => false,
         }
@@ -578,14 +571,6 @@ pub enum VfsResponse<'a> {
     SaveId(u32),
     /// `SaveCommit` / `SaveQuery` reply.
     SaveOutcome(SaveOutcome),
-    /// `TrustLookup` reply: one of [`ssh_trust`].
-    Trust(u8),
-    /// `TrustChallenge` reply: the input-issued confirmation to begin, and the
-    /// service-issued challenge to commit.
-    TrustChallenged {
-        confirmation: ObjectRefV1,
-        challenge: ObjectRefV1,
-    },
 }
 
 /// Packed entry format and flag bits of [`VfsResponse::DirPage`].
@@ -1186,27 +1171,20 @@ mod session_wire_tests {
     }
 
     #[test]
-    fn trust_lookup_appends_after_save_abort() {
+    fn trust_tombstones_keep_their_bytes_and_mkdir_at_stays_0x2b() {
+        use crate::dir_handles::ViDirHandle;
         let mut out = [0; 64];
-        let req = VfsRequest::TrustLookup {
+        let r = |id, generation| ObjectRefV1 { id, generation };
+        let lookup = VfsRequest::TrustLookup {
             host: "h",
             port: 22,
             algorithm: "a",
             key: b"k",
         };
-        assert_eq!(encode(&req, &mut out).unwrap(), b"\x28\x01h\x16\x01a\x01k");
         assert_eq!(
-            encode(&VfsResponse::Trust(ssh_trust::MISMATCH), &mut out).unwrap(),
-            b"\x10\x02"
+            encode(&lookup, &mut out).unwrap(),
+            b"\x28\x01h\x16\x01a\x01k"
         );
-        // Read-only and host-addressed: neither mutation authority nor a path.
-        assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
-    }
-
-    #[test]
-    fn first_trust_variants_append_after_trust_lookup() {
-        let mut out = [0; 64];
-        let r = |id, generation| ObjectRefV1 { id, generation };
         let challenge = VfsRequest::TrustChallenge {
             host: "h",
             port: 22,
@@ -1221,28 +1199,35 @@ mod session_wire_tests {
         );
         let commit = VfsRequest::TrustCommit { challenge: r(1, 2) };
         assert_eq!(encode(&commit, &mut out).unwrap(), b"\x2a\x01\x02");
-        let reply = VfsResponse::TrustChallenged {
-            confirmation: r(3, 1),
-            challenge: r(1, 2),
+        let mkdir = VfsRequest::MkdirAt {
+            dir: ViDirHandle(5),
+            name: "a",
         };
-        assert_eq!(encode(&reply, &mut out).unwrap(), b"\x11\x03\x01\x01\x02");
-        // Earlier indices keep their bytes; the commit answers are new `Trust` codes.
+        assert_eq!(encode(&mkdir, &mut out).unwrap(), b"\x2b\x05\x01a");
+        // An old client's frame still decodes to its tombstone.
+        let mut frame = [0; 64];
+        let n = encode(&commit, &mut frame).unwrap().len();
+        assert!(matches!(
+            decode::<VfsRequest>(&frame[..n]),
+            Ok(VfsRequest::TrustCommit { .. })
+        ));
+        // Neither path-addressed nor mutating: the service refuses them up front.
+        for req in [lookup, challenge, commit] {
+            assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
+        }
+        // The two trust replies were the last response variants: `SaveOutcome` is last now.
         assert_eq!(
-            encode(&VfsResponse::Trust(ssh_trust::PENDING), &mut out).unwrap(),
-            b"\x10\x07"
+            encode(&VfsResponse::SaveOutcome(SaveOutcome::Conflict), &mut out).unwrap(),
+            b"\x0f\x01"
         );
         assert_eq!(
             (ssh_trust::REFUSED, ssh_trust::EXPIRED, ssh_trust::PENDING),
             (5, 6, 7)
         );
-        // Host-addressed, and the caller's mutation authority is never what writes the store.
-        for req in [challenge, commit] {
-            assert!(!req.requires_mutation_authority() && !req.is_path_addressed());
-        }
     }
 
     #[test]
-    fn handle_addressed_dir_lifecycle_appends_after_trust_commit() {
+    fn handle_addressed_dir_lifecycle_appends_after_the_trust_tombstones() {
         use crate::dir_handles::ViDirHandle;
         let mut out = [0; 32];
         let mkdir = VfsRequest::MkdirAt {

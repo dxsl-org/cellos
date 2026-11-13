@@ -264,65 +264,6 @@ fn sealed_identity(
     (digest.finalize().as_slice() == sha256).then_some(identity)
 }
 
-/// Publish `bytes` at a service-owned `dst` (the SSH host-trust store) through the same
-/// staging, read-back seal and conditional publication (`publish_if` against `expect`)
-/// as a caller's save. It runs on the service's own authority: no caller access rule or
-/// quota applies, the destination's own bounds do. Unpublished staging is removed.
-pub(crate) fn publish_owned(
-    vfs: &mut VfsManager,
-    dst: &str,
-    bytes: &[u8],
-    expect: api::ipc::SaveExpect,
-) -> SaveOutcome {
-    let refused = SaveOutcome::NotPublished(save_refusal::REFUSED);
-    let id = vfs.saves.next;
-    let (Some(next), Some(stage)) = (id.checked_add(1), vfs.stage_path(dst, id)) else {
-        return refused;
-    };
-    if !vfs.healthy(dst) || vfs.stage_create(&stage).is_err() {
-        return refused;
-    }
-    vfs.saves.next = next;
-    let outcome = stage_and_publish(vfs, &stage, dst, bytes, expect);
-    if outcome.published().is_none()
-        && matches!(vfs.observe(&stage), Ok(Some(o)) if o != Observation::Absent)
-    {
-        let _ = vfs.stage_remove(&stage);
-    }
-    outcome
-}
-
-fn stage_and_publish(
-    vfs: &mut VfsManager,
-    stage: &str,
-    dst: &str,
-    bytes: &[u8],
-    expect: api::ipc::SaveExpect,
-) -> SaveOutcome {
-    let refused = SaveOutcome::NotPublished(save_refusal::REFUSED);
-    for (n, chunk) in bytes.chunks(4096).enumerate() {
-        if vfs.stage_write(stage, (n * 4096) as u64, chunk).is_err() {
-            return refused;
-        }
-    }
-    let sha256: [u8; 32] = Sha256::digest(bytes).into();
-    let Some(sealed) = sealed_identity(vfs, stage, bytes.len() as u64, &sha256) else {
-        return refused;
-    };
-    let _lease = if dst.starts_with("/srv/") {
-        let Ok(key) = crate::namespace::NamespaceKey::parse(dst) else {
-            return refused;
-        };
-        let Ok(lease) = vfs.ledger.acquire_transient(&key) else {
-            return refused;
-        };
-        Some(lease)
-    } else {
-        None
-    };
-    vfs.publish_if(stage, sealed, dst, expect)
-}
-
 fn commit(
     vfs: &mut VfsManager,
     caller: Caller,

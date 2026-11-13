@@ -27,6 +27,8 @@ pub struct KmsService {
     pub(super) lifecycle: crate::lifecycle::RelayLifecycle,
     #[cfg(feature = "ssh-dev-custody")]
     pub(crate) ssh: crate::ssh::SshLeaf<crate::ssh::Persister>,
+    /// SSH host trust (opcodes 25-29); not a custody leaf, so never feature-gated.
+    pub(crate) trust: crate::trust::TrustLeaf,
     #[cfg(test)]
     protected_lifecycle: Option<crate::lifecycle::ProtectedRelayState>,
 }
@@ -54,6 +56,7 @@ impl KmsService {
             last_tls_request_id: 0,
             #[cfg(feature = "ssh-dev-custody")]
             ssh: crate::ssh::new_leaf(),
+            trust: crate::trust::TrustLeaf::new(),
             #[cfg(test)]
             protected_lifecycle: None,
         }
@@ -232,6 +235,14 @@ impl KmsService {
             | KmsOpcode::BeginSshUnlock
             | KmsOpcode::SshUnlockChunk
             | KmsOpcode::AbortSshUnlock => ssh_leaf_unavailable(sender, caller),
+            KmsOpcode::BeginTrustQuery
+            | KmsOpcode::TrustQueryChunk
+            | KmsOpcode::CommitTrustQuery
+            | KmsOpcode::CommitTrustChallenge
+            | KmsOpcode::AbortTrustQuery => {
+                self.trust
+                    .handle(opcode, request.payload().unwrap_or(&[]), sender, caller)
+            }
         };
         Some(match result {
             Ok(payload) => {
@@ -478,9 +489,9 @@ mod ssh_unavailable_tests {
             .unwrap()
             .to_bytes();
         assert!(service.handle(&valid, 7, attested, NO_SERVICES).is_some());
-        // Opcode 25 is not defined, a nonzero flags/reserved word or tail byte
+        // Opcode 30 is not defined, a nonzero flags/reserved word or tail byte
         // is noncanonical, and version 2 is unsupported: all are dropped.
-        for (at, value) in [(1, 25u8), (2, 1), (10, 1), (15, 1), (127, 1), (0, 2)] {
+        for (at, value) in [(1, 30u8), (2, 1), (10, 1), (15, 1), (127, 1), (0, 2)] {
             let mut frame = valid;
             frame[at] = value;
             assert!(

@@ -8,3 +8,4 @@ mod enrollment;
 mod frame;
 mod payload;
 mod ssh;
+mod trust;

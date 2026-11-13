@@ -5,10 +5,10 @@
 //! that kernel-resolved path edge carries the outbound client rights, so the shell
 //! itself never holds network authority. The child entry below runs in that Cell.
 //!
-//! Host trust comes from the VFS store (S9-3). An unknown key is offered for first trust
-//! (S9-4c): VFS registers a challenge with the input owner, which itself prompts on this
+//! Host trust comes from the KMS store (S9-3). An unknown key is offered for first trust
+//! (S9-4c): KMS registers a challenge with the input owner, which itself prompts on this
 //! session and captures the answer; this client only begins the confirmation and polls
-//! VFS for the stored result, never reading the answer. Nothing beyond KEX is sent before
+//! KMS for the stored result, never reading the answer. Nothing beyond KEX is sent before
 //! the key is trusted.
 use alloc::format;
 use alloc::string::String;
@@ -43,7 +43,20 @@ pub fn trust_added(host: &str, port: u16) -> String {
     format!("Host '{host}' ({port}) added to the trust store (synced, not crash-proof).")
 }
 
-/// What a `TrustCommit` (or `TrustChallenge` refusal) code means for the session.
+/// What a host-trust lookup answer (`None`: the store could not be asked) means.
+pub fn lookup_answer(code: Option<u8>) -> vissh::session::Trust {
+    use api::ipc::ssh_trust;
+    use vissh::session::Trust;
+    match code {
+        Some(ssh_trust::KNOWN_EXACT) => Trust::KnownExact,
+        Some(ssh_trust::UNKNOWN) => Trust::Unknown,
+        Some(ssh_trust::MISMATCH) => Trust::Mismatch,
+        Some(ssh_trust::DENIED) => Trust::Denied,
+        _ => Trust::Unavailable,
+    }
+}
+
+/// What a `CommitTrustChallenge` (or challenge refusal) code means for the session.
 pub fn commit_trust(code: u8) -> vissh::session::Trust {
     use api::ipc::ssh_trust;
     use vissh::session::Trust;
@@ -466,7 +479,6 @@ mod child {
     use ostd::child_context::{ChildContext, GrantSlot};
     use ostd::clients::kms::{validate_ssh_key_name, validate_ssh_username};
     use ostd::clients::net::{NetClient, SocketId};
-    use ostd::clients::vfs::VfsClient;
     use ostd::ViError;
     use terminal_sdk::input::EventKind;
     use terminal_sdk::raw_input::RawInput;
@@ -549,9 +561,9 @@ mod child {
     }
 
     /// How long the client waits for the owner-run confirmation: the challenge's
-    /// 60 seconds plus a margin for the owner and VFS to report its end.
+    /// 60 seconds plus a margin for the owner and KMS to report its end.
     const CONFIRM_MS: u64 = 65_000;
-    /// Pause between `TrustCommit` polls (scheduler ticks).
+    /// Pause between `CommitTrustChallenge` polls (scheduler ticks).
     const CONFIRM_POLL_TICKS: usize = 10;
 
     struct NetTransport<'d> {
@@ -662,15 +674,11 @@ mod child {
         })
     }
 
-    /// The VFS trust store's answer for `key` of `host:port`.
+    /// The KMS trust store's answer for `key` of `host:port`.
     fn lookup_trust(host: &str, port: u16, key: &HostKey) -> Trust {
-        match VfsClient::new().trust_lookup(host, port, key.algorithm, &key.blob()) {
-            Ok(api::ipc::ssh_trust::KNOWN_EXACT) => Trust::KnownExact,
-            Ok(api::ipc::ssh_trust::UNKNOWN) => Trust::Unknown,
-            Ok(api::ipc::ssh_trust::MISMATCH) => Trust::Mismatch,
-            Ok(api::ipc::ssh_trust::DENIED) => Trust::Denied,
-            _ => Trust::Unavailable,
-        }
+        let code = KmsClient::connect()
+            .and_then(|kms| kms.trust_lookup(host, port, key.algorithm, &key.blob()));
+        lookup_answer(code.ok())
     }
 
     /// Phase budgets (§4.2): trust runs on the connect deadline, then auth, request (channel
@@ -715,7 +723,7 @@ mod child {
         true
     }
 
-    /// The local terminal side: trust through the VFS, the password under the input
+    /// The local terminal side: trust through KMS, the password under the input
     /// owner's echo-off lease, then raw (PTY) or canonical (exec) input.
     struct Term<'s, 'd> {
         session: &'s mut TerminalSession,
@@ -944,13 +952,15 @@ mod child {
             }
         }
 
-        /// Challenge (VFS), begin (input owner, on this session at its current epoch), then
-        /// poll VFS for the stored outcome while the owner holds the terminal. Returns the
+        /// Challenge (KMS), begin (input owner, on this session at its current epoch), then
+        /// poll KMS for the stored outcome while the owner holds the terminal. Returns the
         /// answer and whether this confirmation stored the key.
         fn confirm(&mut self, key: &HostKey) -> (Trust, bool) {
             let (session, epoch) = (self.session.reference().raw(), self.session.epoch());
-            let mut vfs = VfsClient::new();
-            let challenge = match vfs.trust_challenge(
+            let Ok(kms) = KmsClient::connect() else {
+                return (Trust::Unavailable, false);
+            };
+            let challenge = match kms.trust_challenge(
                 &self.host,
                 self.port,
                 key.algorithm,
@@ -974,7 +984,7 @@ mod child {
             };
             let give_up = now_ms().saturating_add(CONFIRM_MS);
             loop {
-                match vfs.trust_commit(challenge) {
+                match kms.trust_commit(challenge) {
                     Ok(api::ipc::ssh_trust::PENDING) if now_ms() < give_up => {
                         let _ = ostd::syscall::sys_set_timer(CONFIRM_POLL_TICKS);
                     }
@@ -992,9 +1002,9 @@ mod child {
             lookup_trust(&self.host, self.port, key)
         }
 
-        /// First trust (S9-4c): VFS registers a challenge for this exact key and session;
+        /// First trust (S9-4c): KMS registers a challenge for this exact key and session;
         /// the input owner prompts and captures the answer itself (this client reads no
-        /// input meanwhile) and VFS stores an accepted key. Only a stored key continues.
+        /// input meanwhile) and KMS stores an accepted key. Only a stored key continues.
         fn confirm_unknown(&mut self, key: &HostKey) -> Trust {
             let started = now_ms();
             let (trust, stored) = self.confirm(key);
@@ -1083,7 +1093,7 @@ mod child {
         }
     }
 
-    /// The local side of a pipeline stage (publickey exec): host trust through the VFS, then
+    /// The local side of a pipeline stage (publickey exec): host trust through KMS, then
     /// the stage's own stdin, stdout and stderr streams, byte for byte. There is no terminal:
     /// nothing is prompted, an unknown host key is refused (`host_key_no_frontend`) and a
     /// wrapped identity was refused by the preflight (`unlock_needs_terminal`).

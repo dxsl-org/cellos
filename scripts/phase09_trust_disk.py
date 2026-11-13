@@ -5,9 +5,9 @@ Usage: phase09_trust_disk.py DISK_IMG CONFIG_DIR HOST_KEY_PUB PORT [REKEY_PORT]
 
 Writes a sparse private disk laid out like `api::abi::disk`:
   P1 FAT32 (/mnt/sd)  the lane's own /etc/cellos (P1 is the config override volume).
-  P5 CellosFS (/srv)  /.cellos-trust/ssh_known_hosts, seeded offline by
-                      tools/cellos-fs-provision --seed, in store format v1
-                      (cells/services/vfs/src/trust.rs):
+  P5 CellosFS (/srv)  /cellos/kms/ssh_known_hosts (the KMS-owned store), seeded
+                      offline by tools/cellos-fs-provision --seed, in store format v1
+                      (cells/services/kms/src/trust.rs):
     10.0.2.2 PORT  the fixture's real key   -> KnownExact for `ssh ... 10.0.2.2`
     host     PORT  a different key          -> Mismatch for `ssh ... host`
     10.0.2.2 REKEY_PORT  the same real key (the S9-6 `RekeyLimit 64K` server), if given
@@ -64,8 +64,8 @@ def main() -> int:
         str(disk), str(FAT_SECTORS), str(FAT_BASE_LBA))
     with tempfile.TemporaryDirectory() as tmp:
         srv = Path(tmp) / "srv"
-        (srv / ".cellos-trust").mkdir(parents=True)
-        (srv / ".cellos-trust/ssh_known_hosts").write_text(store)
+        (srv / "cellos/kms").mkdir(parents=True)
+        (srv / "cellos/kms/ssh_known_hosts").write_text(store)
         tool = ROOT / "tools/cellos-fs-provision"
         host = subprocess.run(["rustc", "-vV"], check=True, capture_output=True, text=True).stdout
         triple = next(l.split(": ", 1)[1] for l in host.splitlines() if l.startswith("host: "))

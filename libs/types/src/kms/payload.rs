@@ -6,6 +6,7 @@ mod rotate;
 mod service_net;
 mod ssh;
 mod tls;
+mod trust;
 
 pub use binding::{AcquireNodeIdentityPayload, BrokerBindingPayload, NodeIdentityStatusPayload};
 pub use enroll::{
@@ -26,6 +27,11 @@ pub use ssh::{
 };
 pub use tls::{
     Tls13ClientCertificateVerifyRequestPayload, Tls13ClientCertificateVerifyResponsePayload,
+};
+pub use trust::{
+    TrustChallengeCommitRequestPayload, TrustOutcomePayload, TrustQueryBeginRequestPayload,
+    KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX, KMS_TRUST_OUTCOME_MAX,
+    KMS_TRUST_OUTCOME_UNKNOWN, KMS_TRUST_QUERY_MAX,
 };
 
 fn read_32(bytes: &[u8], at: usize) -> [u8; 32] {

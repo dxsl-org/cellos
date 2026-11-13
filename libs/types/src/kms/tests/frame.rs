@@ -75,7 +75,12 @@ fn opcode_values_are_append_only() {
     assert_eq!(KmsOpcode::BeginSshUnlock as u8, 22);
     assert_eq!(KmsOpcode::SshUnlockChunk as u8, 23);
     assert_eq!(KmsOpcode::AbortSshUnlock as u8, 24);
-    assert_eq!(KmsOpcode::try_from(25), Err(25));
+    assert_eq!(KmsOpcode::BeginTrustQuery as u8, 25);
+    assert_eq!(KmsOpcode::TrustQueryChunk as u8, 26);
+    assert_eq!(KmsOpcode::CommitTrustQuery as u8, 27);
+    assert_eq!(KmsOpcode::CommitTrustChallenge as u8, 28);
+    assert_eq!(KmsOpcode::AbortTrustQuery as u8, 29);
+    assert_eq!(KmsOpcode::try_from(30), Err(30));
 
     assert_eq!(KmsKeyAlgorithm::C2cX25519 as u8, 1);
     assert_eq!(KmsKeyAlgorithm::RelayP256Sha256 as u8, 2);
@@ -120,7 +125,9 @@ fn opcode_values_are_append_only() {
     assert_eq!(KmsErrorCode::SshUnlockRequired as u16, 36);
     assert_eq!(KmsErrorCode::SshUnlockFailed as u16, 37);
     assert_eq!(KmsErrorCode::SshUnlockLocked as u16, 38);
-    assert_eq!(KmsErrorCode::try_from(39), Err(39));
+    assert_eq!(KmsErrorCode::TrustHandleInvalid as u16, 39);
+    assert_eq!(KmsErrorCode::TrustOrderInvalid as u16, 40);
+    assert_eq!(KmsErrorCode::try_from(41), Err(41));
 }
 
 #[test]

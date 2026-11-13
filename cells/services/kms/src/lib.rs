@@ -92,6 +92,7 @@ mod reply;
 #[cfg(feature = "ssh-dev-custody")]
 mod ssh;
 mod storage;
+mod trust;
 
 pub use auth::{BrokerBinding, ServiceNetBinding, ServiceRegistrySnapshot};
 pub use dispatch::KmsService;

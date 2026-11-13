@@ -123,6 +123,9 @@ HEADLESS_CELLS = (
     # S2 phase 06 (grant 2026-11-05): `/bin/shutdown` and the ACPI power button
     # ask the supervisor, so every x86 image runs it.
     Cell("supervisor", "supervisor", ("/bin/supervisor",)),
+    # Phase 12 (owner decision 2026-11-13): kms holds the SSH host-trust store that
+    # `/bin/cellbox-ssh` reads, so every image that ships the alias runs it.
+    Cell("service-kms", "service-kms", ("/bin/kms",)),
     Cell("driver-nvme", "driver-nvme", ("/bin/nvme",)),
     Cell("driver-e1000", "driver-e1000", ("/bin/e1000",)),
     Cell("driver-igb", "driver-igb", ("/bin/igb",)),

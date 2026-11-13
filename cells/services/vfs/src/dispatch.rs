@@ -78,8 +78,15 @@ pub fn handle_request<'a>(
         }
     }
 
-    if let Some(resp) = crate::trust::handle(vfs, caller, &req) {
-        return resp;
+    // Phase 12 (CP1 W3): the SSH host-trust store moved to KMS. The three trust variants
+    // stay as tombstones so every later request keeps its byte; they are unsupported.
+    if matches!(
+        req,
+        api::ipc::VfsRequest::TrustLookup { .. }
+            | api::ipc::VfsRequest::TrustChallenge { .. }
+            | api::ipc::VfsRequest::TrustCommit { .. }
+    ) {
+        return api::ipc::VfsResponse::Err(VfsError::Unsupported as u8);
     }
     if let Some(resp) = crate::save::handle(vfs, caller, &req) {
         return resp;
@@ -260,5 +267,61 @@ fn machine_pin_write(vfs: &VfsManager, caller: Caller, req: &api::ipc::VfsReques
             vfs.access.is_machine_pin_writer(caller, path)
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use api::caller_identity::CALLER_FLAG_NET_CONNECT;
+    use api::cell_session::ObjectRefV1;
+    use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+    use api::services::proto::vfs::VfsError;
+    use types::CellId;
+
+    use crate::caller::Caller;
+    use crate::manager::VfsManager;
+
+    /// Phase 12 W3: the host-trust store lives in KMS; the tombstones answer Unsupported
+    /// (byte 6) to every caller, including one holding the outbound-connect right.
+    #[test]
+    fn trust_tombstones_answer_unsupported() {
+        let caller = Caller {
+            flags: CALLER_FLAG_NET_CONNECT,
+            ..Caller::principal(CellId(91), 1)
+        };
+        let mut vfs = VfsManager::new();
+        let _ = vfs.dirs.on_contact(caller);
+        vfs.dirs.mark_attested(caller);
+        let session = ObjectRefV1 {
+            id: 41,
+            generation: 3,
+        };
+        for req in [
+            VfsRequest::TrustLookup {
+                host: "h",
+                port: 22,
+                algorithm: "ssh-ed25519",
+                key: b"k",
+            },
+            VfsRequest::TrustChallenge {
+                host: "h",
+                port: 22,
+                algorithm: "ssh-ed25519",
+                key: b"k",
+                session,
+                epoch: 4,
+            },
+            VfsRequest::TrustCommit { challenge: session },
+        ] {
+            let mut request = [0u8; IPC_BUF_SIZE];
+            api::ipc::encode(&req, &mut request).expect("request fits");
+            let mut resp_buf = [0u8; IPC_BUF_SIZE];
+            let resp = super::handle_request(&mut vfs, &request, Some(caller), &mut resp_buf);
+            assert!(
+                matches!(resp, VfsResponse::Err(code) if code == VfsError::Unsupported as u8),
+                "{req:?}: {resp:?}"
+            );
+        }
+        assert_eq!(VfsError::Unsupported as u8, 6);
     }
 }

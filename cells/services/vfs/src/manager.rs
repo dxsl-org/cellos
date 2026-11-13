@@ -47,8 +47,6 @@ pub struct VfsManager {
     pub ledger: NamespaceLedger,
     /// D03 conditional-save transactions.
     pub(crate) saves: crate::save::SaveTable,
-    /// S9-4c first-trust challenges (`trust::first`).
-    pub(crate) trust_challenges: crate::trust::Challenges,
     /// `(cell_id, generation)` of the owners whose death `serve` watches.
     watched_owners: BTreeSet<(u64, u64)>,
 }
@@ -82,7 +80,6 @@ impl VfsManager {
             dirs: DirTable::new(),
             ledger: NamespaceLedger::new(),
             saves: crate::save::SaveTable::new(),
-            trust_challenges: crate::trust::Challenges::new(),
             watched_owners: BTreeSet::new(),
         }
     }

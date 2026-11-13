@@ -238,6 +238,11 @@ if [[ -z "$CANDIDATE" ]]; then
     CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
         -p service-vfs -p service-config -p service-input -p service-platform \
         -p driver-nvme -p driver-e1000 -p service-net -p app-sys-tools
+    if [[ "$KSSH" != 1 ]]; then
+        # Phase 12: kms holds the host-trust store `cellbox ssh` reads; default features.
+        CARGO_TARGET_DIR="$CELLS_TARGET_DIR" cargo build --release --locked --offline --target "$TARGET" -Z build-std=core,alloc \
+            -p service-kms
+    fi
     if [[ "$KSSH" == 1 ]]; then
         # K5/K7 build notes: service-kms and the admin cell are built in their own invocations so
         # the ssh-dev-custody feature is not unified into other packages; the booted `[kms]`
@@ -274,16 +279,16 @@ fi
 CELL_BINARIES=(
     "$REL/cellbox" "$REL/service-vfs" "$REL/service-config" "$REL/service-input"
     "$REL/platform" "$REL/driver-nvme" "$REL/driver-e1000" "$REL/service-net"
-    "$REL/echo" "$REL/phase04-terminal-driver"
+    "$REL/echo" "$REL/phase04-terminal-driver" "$REL/service-kms"
 )
 CELL_IMAGE_PATHS=(
     /bin/cellbox /bin/vfs /bin/config /bin/input
     /bin/platform /bin/nvme /bin/e1000 /bin/net
-    /bin/echo /bin/phase04-terminal-driver
+    /bin/echo /bin/phase04-terminal-driver /bin/kms
 )
 if [[ "$KSSH" == 1 ]]; then
-    CELL_BINARIES+=("$REL/service-kms" "$REL/kms-ssh-admin")
-    CELL_IMAGE_PATHS+=(/bin/kms /bin/kms-ssh-admin)
+    CELL_BINARIES+=("$REL/kms-ssh-admin")
+    CELL_IMAGE_PATHS+=(/bin/kms-ssh-admin)
 fi
 if [[ -n "$CANDIDATE" ]]; then
     echo "==> Importing the shared cells from the candidate (headless profile)"

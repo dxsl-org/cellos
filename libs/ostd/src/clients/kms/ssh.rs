@@ -272,7 +272,7 @@ impl KmsClient {
     }
 
     /// Every canonical chunk of `data` under `begin`, each ack verified.
-    fn send_chunks(
+    pub(super) fn send_chunks(
         &self,
         begin: &SshTransferBeginResponsePayload,
         data: &[u8],
@@ -295,7 +295,7 @@ impl KmsClient {
         Ok(())
     }
 
-    /// One transfer chunk (ops 16 and 23). Chunk bytes may be a passphrase, so every
+    /// One transfer chunk (ops 16, 23 and 26). Chunk bytes may be a passphrase, so every
     /// local copy of them is wiped before this returns.
     fn chunk(
         &self,
@@ -326,8 +326,8 @@ impl KmsClient {
         Ok(ack)
     }
 
-    /// Abort of an import (18) or an unlock (24): empty success.
-    fn abort(&self, opcode: KmsOpcode, handle: u64) -> Result<(), KmsClientError> {
+    /// Abort of an import (18), an unlock (24) or a trust query (29): empty success.
+    pub(super) fn abort(&self, opcode: KmsOpcode, handle: u64) -> Result<(), KmsClientError> {
         if handle == 0 {
             return Err(KmsClientError::InvalidPayload);
         }

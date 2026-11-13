@@ -147,7 +147,7 @@ wire_enum!(InputOp {
     RegisterFrontend = 23, BindFrontendChild = 24, CreateForFrontend = 25,
     QueryFrontend = 26, ReleaseFrontend = 27, ReattachFrontend = 28,
     // First-trust confirmation selectors (D79-11/D79-13); records in `trust`.
-    // RegisterTrustChallenge: live registered VFS only. Body `trust::TrustChallengeV1`
+    // RegisterTrustChallenge: live registered KMS only. Body `trust::TrustChallengeV1`
     // (challenge:Ref, target:Principal, expiry_ns:u64, port:u16, u16-prefixed host
     // 1..=253 / algorithm 1..=64 / fingerprint 1..=64 graphic ASCII); result
     // confirmation:Ref. Lane (fence operation) = the challenge Ref.

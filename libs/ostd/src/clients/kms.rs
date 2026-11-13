@@ -3,8 +3,10 @@
 mod relay;
 mod relay_enroll;
 mod ssh;
+mod trust;
 
 pub use ssh::{SSH_FRAME_TICKS, SSH_SIGN_TICKS};
+pub use trust::TRUST_COMMIT_TICKS;
 /// The K2 SSH custody types and bounds a caller needs, so `cellbox` and the admin cell
 /// depend on `ostd` alone (no extra `types` edge).
 pub use types::kms::{

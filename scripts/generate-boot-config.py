@@ -48,7 +48,10 @@ def selected(path, features):
         return "input" in features
     if path in ("/bin/compositor", "/bin/fb-console"):
         return "ui" in features
-    if path in ("/bin/kms", "/bin/desktop", "/bin/virtio-gpu"):
+    # kms holds the SSH host-trust store (Phase 12), not only the desktop's keys.
+    if path == "/bin/kms":
+        return not board
+    if path in ("/bin/desktop", "/bin/virtio-gpu"):
         return "ui" in features and not board
     if path == "/bin/bcm-display":
         return "ui" in features and board

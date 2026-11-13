@@ -115,14 +115,14 @@ impl SshImportBeginRequestPayload {
     }
 }
 
-/// `BeginSshKeyImport` and `BeginSshUnlock` response: the one-shot transfer
-/// handle and the canonical chunk plan.
+/// `BeginSshKeyImport`, `BeginSshUnlock` and `BeginTrustQuery` response: the
+/// one-shot transfer handle and the canonical chunk plan.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SshTransferBeginResponsePayload {
     /// Nonzero, bound to the opening principal; not a secret.
     pub handle: u64,
-    /// Import: blob length. Unlock: secret length.
+    /// Import: blob length. Unlock: secret length. Trust: query length.
     pub total_len: u32,
     /// `ceil(total_len / 96)`.
     pub chunk_count: u32,
@@ -170,7 +170,8 @@ impl SshTransferBeginResponsePayload {
     }
 }
 
-/// `ImportSshKeyChunk` and `SshUnlockChunk` request: one ordered chunk.
+/// `ImportSshKeyChunk`, `SshUnlockChunk` and `TrustQueryChunk` request: one
+/// ordered chunk.
 ///
 /// Canonical chunking: every chunk but the last carries exactly 96 bytes, so
 /// one blob has exactly one valid chunk sequence. That rule is checked by the
@@ -222,7 +223,8 @@ impl SshChunkRequestPayload {
     }
 }
 
-/// `ImportSshKeyChunk` and `SshUnlockChunk` response: running transfer state.
+/// `ImportSshKeyChunk`, `SshUnlockChunk` and `TrustQueryChunk` response: running
+/// transfer state.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SshChunkAckPayload {
@@ -267,7 +269,8 @@ impl SshChunkAckPayload {
     }
 }
 
-/// `CommitSshKeyImport` request: echoes what Begin recorded and what arrived.
+/// `CommitSshKeyImport` and `CommitTrustQuery` request: echoes what Begin
+/// recorded and what arrived.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SshImportCommitRequestPayload {
@@ -304,7 +307,8 @@ impl SshImportCommitRequestPayload {
     }
 }
 
-/// `AbortSshKeyImport` and `AbortSshUnlock` request: destroy the named transfer.
+/// `AbortSshKeyImport`, `AbortSshUnlock` and `AbortTrustQuery` request: destroy
+/// the named transfer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SshAbortRequestPayload {

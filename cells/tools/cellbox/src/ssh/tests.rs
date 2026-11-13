@@ -189,6 +189,24 @@ fn completion_records_carry_dispatch_uncertainty_and_exact_remote_outcomes() {
 }
 
 #[test]
+fn kms_lookup_answers_map_to_session_trust() {
+    use super::lookup_answer;
+    use api::ipc::ssh_trust;
+    for (code, trust) in [
+        (Some(ssh_trust::KNOWN_EXACT), Trust::KnownExact),
+        (Some(ssh_trust::UNKNOWN), Trust::Unknown),
+        (Some(ssh_trust::MISMATCH), Trust::Mismatch),
+        (Some(ssh_trust::DENIED), Trust::Denied),
+        (Some(ssh_trust::UNAVAILABLE), Trust::Unavailable),
+        // A first-trust-only code, or a store KMS could not be asked about.
+        (Some(ssh_trust::PENDING), Trust::Unavailable),
+        (None, Trust::Unavailable),
+    ] {
+        assert_eq!(lookup_answer(code), trust, "code {code:?}");
+    }
+}
+
+#[test]
 fn first_trust_answers_map_to_session_outcomes_and_messages() {
     use super::{commit_trust, trust_added, NO_FRONTEND};
     use api::ipc::ssh_trust;

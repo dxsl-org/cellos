@@ -10,7 +10,6 @@ mod stream;
 use crate::service::VfsRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
-use api::cell_session::ObjectRefV1;
 use api::dir_handles::ViDirHandle;
 use api::ipc::{
     Observation, SaveExpect, SaveOutcome, VfsRequest, VfsResponse, IPC_BUF_SIZE, VFS_SAVE_CHUNK,
@@ -289,85 +288,6 @@ impl VfsClient {
 
     pub fn save_abort(&mut self, id: u32) -> ViResult<()> {
         self.call_ok(&VfsRequest::SaveAbort { id })
-    }
-
-    /// Phase 09 host-trust lookup: one of `api::ipc::ssh_trust` for the configured
-    /// `host`/`port` and the complete SSH key blob `key`.
-    pub fn trust_lookup(
-        &mut self,
-        host: &str,
-        port: u16,
-        algorithm: &str,
-        key: &[u8],
-    ) -> ViResult<u8> {
-        let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let req = VfsRequest::TrustLookup {
-            host,
-            port,
-            algorithm,
-            key,
-        };
-        match self
-            .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
-            .into_result()?
-        {
-            VfsResponse::Trust(code) => Ok(code),
-            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
-            _ => Err(ViError::IO),
-        }
-    }
-
-    /// Phase 09 S9-4c: ask for a first-trust challenge for a host and port the store does
-    /// not hold. `Ok(Ok((confirmation, challenge)))` to begin and commit; `Ok(Err(code))`
-    /// with an `api::ipc::ssh_trust` refusal (`KNOWN_EXACT`/`MISMATCH` need no prompt).
-    /// `session`/`epoch` are the caller's own terminal session the confirmation runs on.
-    pub fn trust_challenge(
-        &mut self,
-        host: &str,
-        port: u16,
-        algorithm: &str,
-        key: &[u8],
-        session: ObjectRefV1,
-        epoch: u64,
-    ) -> ViResult<Result<(ObjectRefV1, ObjectRefV1), u8>> {
-        let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        let req = VfsRequest::TrustChallenge {
-            host,
-            port,
-            algorithm,
-            key,
-            session,
-            epoch,
-        };
-        match self
-            .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)
-            .into_result()?
-        {
-            VfsResponse::TrustChallenged {
-                confirmation,
-                challenge,
-            } => Ok(Ok((confirmation, challenge))),
-            VfsResponse::Trust(code) => Ok(Err(code)),
-            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
-            _ => Err(ViError::IO),
-        }
-    }
-
-    /// Phase 09 S9-4c: complete the caller's own challenge; one of `api::ipc::ssh_trust`
-    /// (`PENDING` until the confirmation is decided).
-    pub fn trust_commit(&mut self, challenge: ObjectRefV1) -> ViResult<u8> {
-        let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self
-            .svc
-            .call::<VfsRequest, VfsResponse>(&VfsRequest::TrustCommit { challenge }, &mut resp_buf)
-            .into_result()?
-        {
-            VfsResponse::Trust(code) => Ok(code),
-            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
-            _ => Err(ViError::IO),
-        }
     }
 
     fn save_outcome(&mut self, req: &VfsRequest<'_>) -> ViResult<SaveOutcome> {
