@@ -1,7 +1,5 @@
 pub mod core;
 pub mod emmc;
-#[cfg(target_arch = "aarch64")]
-mod pinmux_bcm;
 pub mod regs;
 pub mod sd;
 pub mod sdhci;
@@ -141,7 +139,7 @@ pub fn init_driver() {
         <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SDHCI
             .and_then(|sdhci| sdhci.pinmux_gpio_base)
     {
-        pinmux_bcm::apply(gpio_base, crate::board::active().wiring);
+        crate::arch::dev::mmc::pinmux_bcm::apply(gpio_base, crate::board::active().wiring);
     }
 
     // Try eMMC first, then SD card.

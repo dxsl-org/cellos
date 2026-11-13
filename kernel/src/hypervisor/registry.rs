@@ -18,7 +18,7 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use types::{ViError, ViResult};
 
 #[cfg(target_arch = "aarch64")]
-use super::pending_irqs::PendingIrqs;
+use crate::arch::hypervisor::pending_irqs::PendingIrqs;
 
 /// Byte images of the records the hypervisor syscalls copy to the cell.
 #[path = "vmm_wire.rs"]

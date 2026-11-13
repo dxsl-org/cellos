@@ -33,6 +33,10 @@
 "kernel/src/acpi/tests/tables.rs" = { category = "test", owner = "acpi" }
 
 # ---- arch ----
+"kernel/src/arch/aarch64/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
+"kernel/src/arch/aarch64/dev/mmc/pinmux_bcm.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
+"kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
@@ -122,7 +126,6 @@
 
 # ---- dev ----
 "kernel/src/dev.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
 "kernel/src/dev/block.rs" = { category = "exception", owner = "dev", target = "deleted once snapshot restore, verify_mbr and EarlyLoader read through a block route" }
 "kernel/src/dev/console_drv.rs" = { category = "C", owner = "dev" }
 "kernel/src/dev/driver_cell.rs" = { category = "D", owner = "dev" }
@@ -137,7 +140,6 @@
 "kernel/src/dev/mmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/core.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/emmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
-"kernel/src/dev/mmc/pinmux_bcm.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/regs.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/sd.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/sdhci.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
@@ -162,9 +164,7 @@
 
 # ---- hypervisor ----
 "kernel/src/hypervisor.rs" = { category = "A", owner = "hypervisor" }
-"kernel/src/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/hypervisor/registry.rs" = { category = "A", owner = "hypervisor" }
-"kernel/src/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/hypervisor/vmm_wire.rs" = { category = "A", owner = "hypervisor" }
 
 # ---- ipc ----

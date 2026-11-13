@@ -15,7 +15,7 @@ fn set_function(gpio_base: usize, pin: u32, function: u32) {
     unsafe { core::ptr::write_volatile(register, updated) };
 }
 
-pub(super) fn apply(gpio_base: usize, wiring: cellos_boards::WiringLayout) {
+pub(crate) fn apply(gpio_base: usize, wiring: cellos_boards::WiringLayout) {
     if wiring.pinmux_groups.contains(&"i2c1-gpio2-3-alt0") {
         for pin in 2..=3 {
             set_function(gpio_base, pin, GPIO_ALT0);
