@@ -19,35 +19,18 @@ const SELECTED_RISCV64_BOARD: &BoardDescriptor =
     &cellos_boards::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
 
 #[cfg(target_arch = "riscv64")]
-/// Returns the descriptor selected by the compatibility board feature.
-pub(crate) const fn selected_riscv64_board() -> &'static BoardDescriptor {
+/// Returns the descriptor the compatibility board feature compiled in, for
+/// const boot data; everything else reads [`active`].
+pub(crate) const fn compiled() -> &'static BoardDescriptor {
     SELECTED_RISCV64_BOARD
 }
 
 #[cfg(target_arch = "riscv64")]
 /// Returns the validated descriptor before early boot consumes MMIO or RAM ranges.
-pub(crate) fn selected() -> &'static BoardDescriptor {
+pub(crate) fn active() -> &'static BoardDescriptor {
     match SELECTED_RISCV64_BOARD.validate_for(Architecture::Riscv64) {
         Ok(()) => SELECTED_RISCV64_BOARD,
         Err(error) => invalid_descriptor(error),
-    }
-}
-
-#[cfg(target_arch = "riscv64")]
-pub(crate) fn active() -> &'static BoardDescriptor {
-    selected()
-}
-
-#[cfg(target_arch = "riscv64")]
-/// Returns the SoC policy paired with the selected RISC-V board descriptor.
-pub(crate) fn selected_riscv64_soc() -> &'static hal_soc_riscv::RiscvSocProfile {
-    use cellos_boards::SocId;
-
-    match selected().soc {
-        SocId::GenericRiscvVirt => &hal_soc_riscv::GENERIC_VIRT,
-        SocId::Jh7110 => &hal_soc_riscv::JH7110,
-        SocId::Sg2042 => &hal_soc_riscv::SG2042,
-        _ => panic!("[board] RISC-V descriptor has incompatible SoC identity"),
     }
 }
 
@@ -126,22 +109,16 @@ pub(crate) fn x86_machine_inputs() -> Option<(&'static BoardDescriptor, X86BootF
 /// Before binding. Code that runs before ACPI discovery reads
 /// `hal_soc_x86::X86_EARLY_FACTS` instead.
 #[cfg(target_arch = "x86_64")]
-pub(crate) fn selected() -> &'static BoardDescriptor {
+pub(crate) fn active() -> &'static BoardDescriptor {
     match BOUND_X86_PROFILE.get() {
         Some(board) => board,
         None => panic!("[board] x86 profile read before boot bound one"),
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-/// Returns the validated x86 platform profile paired with the bound board.
-pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PlatformProfile {
-    x86_soc_profile(selected())
-}
-
 /// The platform profile an x86 catalog descriptor pairs with.
 #[cfg(target_arch = "x86_64")]
-fn x86_soc_profile(board: &BoardDescriptor) -> &'static hal_soc_x86::X86PlatformProfile {
+pub(crate) fn x86_soc_profile(board: &BoardDescriptor) -> &'static hal_soc_x86::X86PlatformProfile {
     use cellos_boards::SocId;
 
     let profile = match board.soc {
@@ -481,8 +458,9 @@ compile_error!(
 );
 
 #[cfg(target_arch = "aarch64")]
-/// Returns the compiled-in AArch64 descriptor used by const fallback boot data.
-pub(crate) const fn default_aarch64_board() -> &'static BoardDescriptor {
+/// Returns the compiled-in AArch64 descriptor, for const fallback boot data;
+/// everything else reads [`active`].
+pub(crate) const fn compiled() -> &'static BoardDescriptor {
     AARCH64_BOARD
 }
 

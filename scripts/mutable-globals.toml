@@ -355,12 +355,12 @@ review = "kernel/src/boot/limine.rs:get_executable_cmdline; kernel/src/boot/limi
 key = "kernel::board::BOUND_X86_PROFILE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "board::bind_x86_profile stores the bound catalog descriptor once after ACPI discovery; board::selected / selected_x86_64_soc read it for every later has_driver, IOMMU and serial decision"
+owner = "board::bind_x86_profile stores the bound catalog descriptor once after ACPI discovery; board::active / arch::x86_64::board::soc read it for every later has_driver, IOMMU and serial decision"
 contexts = ["boot", "normal", "irq"]
 seal = "compare_exchange from null in bind_x86_profile, called once from kmain on the BSP before start_secondaries; a second bind panics"
 retirement = "never: lives for the whole run"
 rationale = "Write-once AtomicPtr holding only &'static catalog descriptors (AcqRel store, Acquire loads), published before APs and cells start; a read before binding panics instead of guessing a profile."
-review = "kernel/src/board.rs:ProfileCell; kernel/src/board.rs:bind_x86_profile; kernel/src/board.rs:selected; kernel/src/main.rs:kmain"
+review = "kernel/src/board.rs:ProfileCell; kernel/src/board.rs:bind_x86_profile; kernel/src/board.rs:active; kernel/src/arch/x86_64/board.rs:soc; kernel/src/arch/x86_64/boot.rs:early"
 
 [[global]]
 key = "kernel::board::X86_MACHINE_FACTS @cfg(target_arch = \"x86_64\")"

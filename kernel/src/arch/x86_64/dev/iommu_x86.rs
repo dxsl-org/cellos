@@ -73,7 +73,7 @@ pub fn init_hw(dma: DmaIsolationInput) {
                 }
             }
         });
-    } else if crate::board::selected().soc == cellos_boards::SocId::QemuX86Q35 {
+    } else if crate::board::active().soc == cellos_boards::SocId::QemuX86Q35 {
         log::warn!(
             "[vtd] no ACPI DMAR unit; using the board-declared q35 register base {:#x} (fallback)",
             VTD_BASE

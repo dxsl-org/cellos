@@ -22,7 +22,7 @@ pub fn map_inactive(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult 
         // Present but not enforcing yet: fail closed (unchanged).
         DmaMapResult::Rejected
     } else {
-        let board = crate::board::selected();
+        let board = crate::board::active();
         match dma_without_remapper(board.dma_isolation) {
             DmaWithoutRemapper::Refuse => {
                 log::error!(

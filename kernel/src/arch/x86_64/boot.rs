@@ -257,7 +257,7 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         let _ = crate::arch::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
     }
 
-    let x86_ioapic_base = if crate::board::selected().has_driver(cellos_boards::DriverId::IoApic) {
+    let x86_ioapic_base = if crate::board::active().has_driver(cellos_boards::DriverId::IoApic) {
         acpi_info.ioapic_base
     } else {
         0
@@ -267,12 +267,12 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
     } else {
         0
     };
-    let x86_hpet_base = if crate::board::selected().has_driver(cellos_boards::DriverId::Hpet) {
+    let x86_hpet_base = if crate::board::active().has_driver(cellos_boards::DriverId::Hpet) {
         acpi_info.hpet_base
     } else {
         0
     };
-    let x86_ecam_base = if crate::board::selected().has_driver(cellos_boards::DriverId::PcieEcam) {
+    let x86_ecam_base = if crate::board::active().has_driver(cellos_boards::DriverId::PcieEcam) {
         acpi_info.ecam_base
     } else {
         0
@@ -511,7 +511,7 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
         // actually answered the 16550 probe. The console is slot 0; the extras
         // are polled, so an absent one is a refusal, never a silent write.
         {
-            let soc = crate::board::selected_x86_64_soc();
+            let soc = crate::arch::board::soc();
             for (index, port) in soc.serial_ports.iter().enumerate() {
                 match crate::hal::uart_16550::port_base_at(index) {
                     Some(base) => log::info!(

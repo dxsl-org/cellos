@@ -82,7 +82,7 @@ impl PlatformInfo {
 /// boot CPU before `uart::init`, interrupts, SMP, and `init_kernel_paging`.
 /// Safe with `dtb_ptr == 0`.
 pub fn init(sbi_dtb: usize) {
-    let profile = crate::board::selected_riscv64_soc();
+    let profile = crate::arch::board::soc();
     let info = apply_riscv_soc_access_policy(from_dtb(sbi_dtb, profile), profile);
 
     log::info!(
@@ -108,7 +108,7 @@ pub fn riscv_plic_init_data() -> Option<(usize, [u32; RISCV_PLIC_IRQ_CAPACITY], 
 pub fn riscv_plic_context_for_current_hart() -> Option<usize> {
     let logical_hart = crate::sched::hart_local::current_hart_id();
     let physical_hart = crate::sched::smp::logical_to_physical(logical_hart)?;
-    crate::board::selected_riscv64_soc().plic_context_for_physical_hart(physical_hart)
+    crate::arch::board::soc().plic_context_for_physical_hart(physical_hart)
 }
 
 pub fn virtio_mmio_base_for_irq(irq: u32) -> Option<usize> {
@@ -155,7 +155,7 @@ fn virtio_mmio_entries_for_profile(
 }
 
 fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
-    let board = crate::board::selected();
+    let board = crate::board::active();
     if dtb_ptr == 0 {
         if board.boot.requires_firmware_dtb {
             panic!("[platform] selected board requires a firmware DTB");

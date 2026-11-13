@@ -11,8 +11,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hal::aarch64::backend::{ArmPlatform, Board, DtbPolicy};
 
-// AArch64: the board backend's descriptor (`board::default_aarch64_board`).
-const AARCH64_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_aarch64_board();
+// AArch64: the board backend's descriptor (`board::compiled`).
+const AARCH64_BOARD: &cellos_boards::BoardDescriptor = crate::board::compiled();
 
 // Raspberry Pi (`DtbPolicy::Conservative` / `Required`): kernel at 0x80000,
 // RAM below the peripheral aperture. VideoCore firmware loads kernel8.img at

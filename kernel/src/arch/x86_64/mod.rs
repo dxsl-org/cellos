@@ -43,6 +43,8 @@ pub mod acpi {
     pub mod sci;
 }
 
+pub mod board;
+
 pub mod boot;
 
 pub mod dev {

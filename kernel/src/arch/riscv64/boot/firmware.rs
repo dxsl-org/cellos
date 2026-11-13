@@ -9,8 +9,7 @@ use crate::boot::{
 
 // RISC-V fallback RAM comes from the one selected board descriptor. Firmware
 // DTB/Limine data remains authoritative whenever it is available.
-const SELECTED_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
-    crate::board::selected_riscv64_board();
+const SELECTED_RISCV64_BOARD: &cellos_boards::BoardDescriptor = crate::board::compiled();
 
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
     fallback_memory_entry(SELECTED_RISCV64_BOARD, 0),
@@ -35,7 +34,7 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
         static __kernel_end: u8;
     }
     #[cfg(not(feature = "board-vf2"))]
-    let _board = crate::board::selected();
+    let _board = crate::board::active();
 
     if dtb != 0 {
         // SAFETY: firmware supplies a mapped FDT pointer; the parser validates its header.

@@ -4,6 +4,8 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::dev::iommu_riscv` is now `crate::arch::dev::iommu_riscv`).
 
+pub mod board;
+
 pub mod boot;
 
 pub mod smp;

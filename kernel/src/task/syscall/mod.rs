@@ -466,7 +466,7 @@ mod serial_port {
     /// profile does not declare it. Off x86 there is no port profile to consult.
     #[cfg(target_arch = "x86_64")]
     pub(super) fn declared(index: u32) -> Option<(u16, u8)> {
-        crate::board::selected_x86_64_soc()
+        crate::arch::board::soc()
             .serial_port(index as usize)
             .map(|port| (port.base, port.irq))
     }

@@ -78,6 +78,7 @@
 "kernel/src/arch/legacy/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/x86.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/board.rs" = { category = "C", owner = "board" }
 "kernel/src/arch/riscv64/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/boot/cpu_features.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/boot/firmware.rs" = { category = "A", owner = "arch" }
@@ -120,6 +121,7 @@
 "kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/arch/x86_64/board.rs" = { category = "C", owner = "board" }
 "kernel/src/arch/x86_64/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/boot/cpu_features.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/boot/firmware.rs" = { category = "A", owner = "arch" }
