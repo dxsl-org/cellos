@@ -10,3 +10,4 @@ The owner approved S6b **staged**:
 - **Init death:** bounded fault record, then platform reset.
 - **Commits:** one per step; the x86 boot lane after every init step. Nothing is pushed.
 - **Ends** when Phase 13 closes (S6 closes with it).
+**CP1 confirmed 2026-11-13** ([cp1-api-split.md §8](cp1-api-split.md)). Steps 2–7 are open under the [request](s6b-handoff-request.md) §3 file set.

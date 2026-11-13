@@ -1,7 +1,7 @@
 ---
 phase: 13
 title: "Init reduction, hot-swap decision, api split"
-status: pending
+status: in-progress
 priority: P2
 effort: "8–11d"
 dependencies: [12]
@@ -73,7 +73,7 @@ libs/posix-shim ◄── ffi-posix cells only
 
 ## Todo List
 
-- [ ] CP1
+- [x] CP1
 - [ ] Crate split with facade
 - [ ] Init reduced
 - [ ] Init-death policy

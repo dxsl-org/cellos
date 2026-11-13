@@ -122,3 +122,12 @@ Path-keyed tooling moves with the files in the same commit:
 2. **A2/A3:** move the kernel-facing contracts into `abi` and hand-encode `Rename`, so the kernel links neither `wire` nor postcard (recommended). The alternative is to let the kernel depend on `abi` + `wire`, which still keeps posix and kms out.
 3. **Init death:** halt (not reset) on init's own boot-stop exit, to avoid reboot loops.
 4. **ADR-0029 amendment:** the machine-pin trust root becomes "the provider trusted init launched as `machine-pin`".
+
+## 8. Owner confirmation 1 — 2026-11-13
+
+The owner confirmed A1–A6 as the Law-1 delta of Phase 13.
+
+- **Kernel:** links only `abi` (+ `types`); kernel-facing contracts move to `abi` and `Rename` is hand-encoded, pinned by a byte test.
+- **Init death:** the boot-stop exit records and halts; every other init death records and resets.
+- **ADR-0029:** amended; the machine-pin trust root is the provider trusted init launched as `machine-pin`.
+- **Next:** steps 2–7 open, in the §5 order, under the request §3 file set.
