@@ -48,16 +48,6 @@ pub const fn dma_without_remapper(required: DmaIsolation) -> DmaWithoutRemapper 
     }
 }
 
-/// Set once when a machine without a remapper is allowed identity DMA, so the
-/// condition appears in the boot log without repeating on every buffer.
-///
-/// Only the x86_64 arm reaches the identity-DMA branch, so every other target
-/// would otherwise carry a dead static — and `-D warnings` turns that into a
-/// build failure for the whole lane (e.g. `scripts/build-aarch64-test-hooks-ci.sh`).
-/// Same idiom as `dma_without_remapper` above.
-#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
-static IDENTITY_DMA_LOGGED: AtomicBool = AtomicBool::new(false);
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DmaMapResult {
     Mapped(u64),
@@ -109,15 +99,7 @@ static IOMMU_DEFERRED: AtomicBool = AtomicBool::new(false);
 /// Must be called after `pcie_ecam::init()` and before any DMA allocation.
 /// Does NOT enable enforcement yet — hardware stays in passthrough mode.
 pub fn init(dma: DmaIsolationInput) {
-    #[cfg(target_arch = "riscv64")]
-    {
-        let _ = dma;
-        crate::arch::dev::iommu_riscv::init_hw();
-    }
-    #[cfg(target_arch = "x86_64")]
-    crate::arch::dev::iommu_x86::init_hw(dma);
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    let _ = dma;
+    crate::arch::iommu::init(dma);
 }
 
 /// Register a DMA physical range or authorize identity DMA when x86 has no
@@ -139,51 +121,9 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
         return DmaMapResult::Rejected;
     }
     if !is_active() {
-        #[cfg(target_arch = "x86_64")]
-        return if crate::arch::dev::iommu_x86::is_present() {
-            // Present but not enforcing yet: fail closed (unchanged).
-            DmaMapResult::Rejected
-        } else {
-            let board = crate::board::selected();
-            match dma_without_remapper(board.dma_isolation) {
-                DmaWithoutRemapper::Refuse => {
-                    log::error!(
-                        "[iommu] DMA isolation REQUIRED by board {} but no remapper was \
-                         discovered — refusing untranslated DMA (tid={} bdf={:#x} \
-                         phys={:#x} size={})",
-                        board.slug,
-                        tid,
-                        bdf,
-                        phys,
-                        size
-                    );
-                    DmaMapResult::Rejected
-                }
-                DmaWithoutRemapper::Identity => {
-                    if !IDENTITY_DMA_LOGGED.swap(true, Ordering::Relaxed) {
-                        log::warn!(
-                            "[iommu] board {} declares no DMA remapper; DMA is untranslated \
-                             (identity addressing)",
-                            board.slug
-                        );
-                    }
-                    DmaMapResult::Mapped(phys)
-                }
-            }
-        };
-        #[cfg(not(target_arch = "x86_64"))]
-        return DmaMapResult::Rejected;
+        return crate::arch::iommu::map_inactive(tid, bdf, phys, size);
     }
-    #[cfg(target_arch = "riscv64")]
-    let mapped = crate::arch::dev::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
-    #[cfg(target_arch = "x86_64")]
-    let mapped = crate::arch::dev::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    let mapped = {
-        let _ = (tid, bdf, phys, size);
-        DmaMapResult::Rejected
-    };
-    mapped
+    crate::arch::iommu::map_range_for_cell(tid, bdf, phys, size)
 }
 
 /// Tear down `[iova, iova+size)` from Cell `tid`'s DMA domain.
@@ -194,19 +134,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
 /// drops the requester entries and the domain itself.
 #[inline]
 pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    #[cfg(target_arch = "riscv64")]
-    {
-        crate::arch::dev::iommu_riscv::unmap_range_for_cell(tid, iova, size)
-    }
-    #[cfg(target_arch = "x86_64")]
-    {
-        crate::arch::dev::iommu_x86::unmap_range_for_cell(tid, iova, size)
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
-        let _ = (tid, iova, size);
-        DmaUnmapResult::NothingMapped
-    }
+    crate::arch::iommu::unmap_range_for_cell(tid, iova, size)
 }
 
 /// Tear down `tid`'s whole DMA domain: clear its requester entries, zero its
@@ -220,19 +148,7 @@ pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
 /// Returns `true` only when hardware acknowledged teardown. Callers must keep
 /// pinned frames quarantined when it returns `false`.
 pub fn revoke_dma_for_cell(tid: u64) -> bool {
-    #[cfg(target_arch = "riscv64")]
-    {
-        crate::arch::dev::iommu_riscv::unmap_cell(tid)
-    }
-    #[cfg(target_arch = "x86_64")]
-    {
-        crate::arch::dev::iommu_x86::unmap_cell_domain(tid)
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-    {
-        let _ = tid;
-        true
-    }
+    crate::arch::iommu::revoke_cell(tid)
 }
 
 /// Phase 3: switch IOMMU from passthrough to page-table enforcement.
@@ -243,10 +159,7 @@ pub fn revoke_dma_for_cell(tid: u64) -> bool {
 ///
 /// Call after all driver DMA buffers are registered via `map_dma()`.
 pub fn activate_isolation() {
-    #[cfg(target_arch = "riscv64")]
-    crate::arch::dev::iommu_riscv::activate();
-    #[cfg(target_arch = "x86_64")]
-    crate::arch::dev::iommu_x86::activate();
+    crate::arch::iommu::activate();
 }
 
 /// Returns `true` once `activate_isolation()` has completed successfully.

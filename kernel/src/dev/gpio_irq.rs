@@ -14,15 +14,8 @@
 //! entry when the cell exits.  A new cell that re-opens GPIO after a restart
 //! becomes the new owner transparently.
 
-/// GPIO MMIO base — the board backend's GPIO controller (PL061 on QEMU ARM
-/// virt, the BCM GPIO block on Raspberry Pi). Must match the allowlist entry in
-/// resource_registry.rs for the current target.
-#[cfg(target_arch = "aarch64")]
-const GPIO_MMIO_BASE: usize =
-    <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::GPIO_MMIO_BASE;
-
-#[cfg(not(target_arch = "aarch64"))]
-const GPIO_MMIO_BASE: usize = 0;
+/// GPIO MMIO base of the board backend (`crate::arch::gpio_irq`).
+const GPIO_MMIO_BASE: usize = crate::arch::gpio_irq::GPIO_MMIO_BASE;
 
 /// IPC opcode sent to the GPIO owner cell on interrupt.
 /// Chosen to not collide with kernel raw event opcodes 0 (EV_KEY) / 1 (EV_REL) / 2 (EV_ABS).
@@ -49,19 +42,8 @@ pub extern "Rust" fn vi_gpio_notify_irq() {
     let _ = crate::task::ipc_post_nonblock(0, tid, &msg);
 }
 
-#[cfg(target_arch = "aarch64")]
-const _: crate::hal::GpioNotifyIrq = vi_gpio_notify_irq;
-
 /// Signal USB DWC2 hardware interrupt to the driver cell waiting on USB_IRQ.
 #[no_mangle]
 pub extern "Rust" fn vi_signal_usb_irq() {
-    #[cfg(target_arch = "aarch64")]
-    if let Some(usb_irq) =
-        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::USB_ONE_SHOT_IRQ
-    {
-        crate::dev::irq_wait::signal_irq(usb_irq as u8);
-    }
+    crate::arch::gpio_irq::signal_usb_irq();
 }
-
-#[cfg(target_arch = "aarch64")]
-const _: crate::hal::UsbSignalIrq = vi_signal_usb_irq;

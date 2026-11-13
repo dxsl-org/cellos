@@ -24,6 +24,14 @@ pub mod user_access;
 
 pub mod page_probe;
 
+pub mod iommu;
+
+pub mod virtio_mmio;
+
+pub mod gpio_irq;
+
+pub mod sdhci;
+
 pub mod dev {
     pub(crate) mod bcm_pinmux;
     pub mod mmc {

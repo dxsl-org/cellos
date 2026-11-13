@@ -11,38 +11,15 @@ use sd::SdBlock;
 use sdhci::SdhciAccessPolicy;
 use types::{ViError, ViResult};
 
+/// The board's SDHCI controller and its access policy (`crate::arch::sdhci`).
 #[derive(Clone, Copy)]
-struct SdhciConfig {
-    base: usize,
-    policy: SdhciAccessPolicy,
+pub(crate) struct SdhciConfig {
+    pub(crate) base: usize,
+    pub(crate) policy: SdhciAccessPolicy,
 }
 
 fn selected_sdhci_config() -> Option<SdhciConfig> {
-    #[cfg(target_arch = "aarch64")]
-    if let Some(sdhci) =
-        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SDHCI
-    {
-        return Some(SdhciConfig {
-            base: sdhci.base,
-            policy: SdhciAccessPolicy {
-                word_access_only: sdhci.word_access_only,
-                minimum_write_spacing_us: sdhci.minimum_write_spacing_us,
-            },
-        });
-    }
-    #[cfg(all(target_arch = "riscv64", feature = "board-vf2"))]
-    {
-        let soc = hal_soc_riscv::JH7110.sdhci.expect("JH7110 SDHCI profile");
-        return Some(SdhciConfig {
-            base: soc.base,
-            policy: SdhciAccessPolicy {
-                word_access_only: soc.word_access_only,
-                minimum_write_spacing_us: soc.minimum_write_spacing_us,
-            },
-        });
-    }
-    #[allow(unreachable_code)]
-    None
+    crate::arch::sdhci::selected_config()
 }
 
 // ---------------------------------------------------------------------------
@@ -134,13 +111,7 @@ pub fn init_driver() {
         return;
     };
 
-    #[cfg(target_arch = "aarch64")]
-    if let Some(gpio_base) =
-        <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::SDHCI
-            .and_then(|sdhci| sdhci.pinmux_gpio_base)
-    {
-        crate::arch::dev::mmc::pinmux_bcm::apply(gpio_base, crate::board::active().wiring);
-    }
+    crate::arch::sdhci::apply_pinmux();
 
     // Try eMMC first, then SD card.
     // SAFETY: config.base is the SoC-profile MMIO address for the selected board.

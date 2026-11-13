@@ -162,7 +162,7 @@ contexts = ["none"]
 seal = "no x86_64 accessor; dead storage on this image (BootOnce::initialize is cfg(any(test, riscv64, aarch64)) and platform::init is an empty fn on x86_64)"
 retirement = "no x86_64 accessor; dead storage on this image"
 rationale = "BootOnce writes the value then Release-stores `initialized`, and get() Acquire-loads it, which is correct write-once publication on the arches that use it. On x86_64 nothing initializes it and every platform::with caller is cfg(target_arch = \"riscv64\"), so the storage is never touched; a future x86 reader would panic in with()."
-review = "kernel/src/platform.rs:126-131; kernel/src/platform.rs:230-238; kernel/src/platform/boot_once.rs:BootOnce::initialize; kernel/src/dev/virtio_common.rs:48-50; kernel/src/memory/paging.rs:179-182"
+review = "kernel/src/platform.rs:126-131; kernel/src/platform.rs:230-238; kernel/src/platform/boot_once.rs:BootOnce::initialize; kernel/src/arch/riscv64/virtio_mmio.rs:slots; kernel/src/memory/paging.rs:179-182"
 
 [[global]]
 key = "kernel::cpu_features::HAS_H_EXT"
@@ -914,7 +914,7 @@ rationale = "The cached byte is the entire state, so Relaxed load/store publishe
 review = "kernel/src/dev/virtio_rng.rs:x86_rng::features; kernel/src/dev/virtio_rng.rs:get_random; kernel/src/task/syscall/mod.rs:8939; kernel/src/task/telemetry.rs:draw_epoch"
 
 [[global]]
-key = "kernel::dev::pcie_ecam::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::x86::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
 owner = "dev::pcie_ecam; stored once by kmain from validated ACPI MCFG (set_ecam_base_x86); read by pcie_ecam::init, register_device, enable_bus_master and quiesce_function via ecam_base_x86/ecam_window"
@@ -922,10 +922,10 @@ contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block before init_kernel_paging_x86) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "Single Relaxed store on the BSP before APs or any cell exist; start_secondaries and task dispatch give later readers happens-before, so Relaxed is sufficient. Readers include quiesce_function in teardown_dma_authority, reached from the yield_cpu retirement funnel, which can run in the timer/IPI ISR; the read is lock-free."
-review = "kernel/src/dev/pcie_ecam.rs:set_ecam_base_x86; kernel/src/dev/pcie_ecam.rs:ecam_window; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:535; kernel/src/task.rs:teardown_dma_authority"
+review = "kernel/src/arch/x86_64/dev/pcie_ecam.rs:set_ecam_base_x86; kernel/src/dev/pcie_ecam.rs:ecam_window; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:535; kernel/src/task.rs:teardown_dma_authority"
 
 [[global]]
-key = "kernel::dev::pcie_ecam::X86_ECAM_BUS_START @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::x86::X86_ECAM_BUS_START @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
 owner = "dev::pcie_ecam; first/last admitted ECAM bus (start) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
@@ -933,10 +933,10 @@ contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "The bus pair is two independent Relaxed stores, which would be tearable only against a concurrent reader; the sole store happens on the BSP before APs or cells exist, and start_secondaries/task dispatch order it before every reader, including quiesce_function on the retirement funnel that can run in the timer/IPI ISR."
-review = "kernel/src/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
+review = "kernel/src/arch/x86_64/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/arch/x86_64/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
 
 [[global]]
-key = "kernel::dev::pcie_ecam::X86_ECAM_BUS_END @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::pcie_ecam::x86::X86_ECAM_BUS_END @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
 owner = "dev::pcie_ecam; first/last admitted ECAM bus (end) stored with its sibling by set_ecam_bus_range_x86 from ACPI MCFG; read via ecam_bus_range_x86 by init, register_device, enable_bus_master, quiesce_function"
@@ -944,7 +944,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "written once in kmain (main.rs x86_64 block) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "The bus pair is two independent Relaxed stores, which would be tearable only against a concurrent reader; the sole store happens on the BSP before APs or cells exist, and start_secondaries/task dispatch order it before every reader, including quiesce_function on the retirement funnel that can run in the timer/IPI ISR."
-review = "kernel/src/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
+review = "kernel/src/arch/x86_64/dev/pcie_ecam.rs:set_ecam_bus_range_x86; kernel/src/arch/x86_64/dev/pcie_ecam.rs:ecam_bus_range_x86; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:536"
 
 [[global]]
 key = "kernel::dev::pcie_ecam::PCI_DEVICES"
@@ -1034,15 +1034,15 @@ retirement = "never: lives for the whole run"
 rationale = "Spinlock protecting cursor position and character rendering to screen"
 review = "kernel/src/arch/x86_64/dev/fb_console.rs"
 [[global]]
-key = "kernel::dev::iommu::IDENTITY_DMA_LOGGED"
+key = "kernel::arch::x86_64::iommu::IDENTITY_DMA_LOGGED @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "once"
-owner = "dev::iommu; log-once latch set by map_dma_for_cell when a board without a remapper is allowed identity DMA"
+owner = "arch::x86_64::iommu; log-once latch set by map_inactive (dev::iommu::map_dma_for_cell) when a board without a remapper is allowed identity DMA"
 contexts = ["normal"]
 seal = "set on the first identity-DMA grant; never cleared"
 retirement = "never: lives for the whole run"
 rationale = "swap(true, Relaxed) only deduplicates a warning and publishes no data; the sole caller is the GrantDma syscall path, never an ISR."
-review = "kernel/src/dev/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
+review = "kernel/src/arch/x86_64/iommu.rs:map_inactive; kernel/src/dev/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
 
 [[global]]
 key = "kernel::dev::iommu::IOMMU_ISOLATED"

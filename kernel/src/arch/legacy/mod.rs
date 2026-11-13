@@ -5,9 +5,13 @@ pub mod clock;
 pub mod cpu;
 #[cfg(target_arch = "x86")]
 pub mod dev;
+pub mod gpio_irq;
+pub mod iommu;
 pub mod irq;
 pub mod power;
+pub mod sdhci;
 pub mod tlb;
+pub mod virtio_mmio;
 
 #[cfg(target_arch = "riscv32")]
 mod riscv32;

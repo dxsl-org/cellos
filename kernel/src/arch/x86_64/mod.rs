@@ -22,6 +22,14 @@ pub mod user_access;
 
 pub mod page_probe;
 
+pub mod iommu;
+
+pub mod virtio_mmio;
+
+pub mod gpio_irq;
+
+pub mod sdhci;
+
 pub mod acpi {
     // The G1 private lane does not call `sci::init` (its x86 contract is pinned),
     // so the discovery half of these modules is unused there.

@@ -20,6 +20,14 @@ pub mod user_access;
 
 pub mod page_probe;
 
+pub mod iommu;
+
+pub mod virtio_mmio;
+
+pub mod gpio_irq;
+
+pub mod sdhci;
+
 pub mod cell {
     #[cfg(feature = "test-hooks")]
     pub mod provenance_selftest;

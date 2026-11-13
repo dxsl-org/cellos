@@ -28,26 +28,12 @@ fn alloc_page() -> (usize, u64) {
 /// Physical address of a kernel-heap pointer (HHDM on x86_64, identity elsewhere).
 #[inline]
 pub(crate) fn virt_to_phys(virt: usize) -> u64 {
-    #[cfg(target_arch = "x86_64")]
-    {
-        (virt - crate::memory::frame::phys_to_virt(0)) as u64
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        virt as u64
-    }
+    crate::arch::iommu::virt_to_phys(virt)
 }
 
 #[inline]
 pub(super) fn phys_to_virt_inner(phys: u64) -> usize {
-    #[cfg(target_arch = "x86_64")]
-    {
-        phys as usize + crate::memory::frame::phys_to_virt(0)
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        phys as usize
-    }
+    crate::arch::iommu::phys_to_virt(phys)
 }
 
 // ── RISC-V Sv39 second-stage page table ──────────────────────────────────────
@@ -234,13 +220,7 @@ impl VtdSlpt {
 
     /// Write `[virt, virt + len)` back to memory for a non-snooping unit.
     fn sync(&self, virt: usize, len: usize) {
-        #[cfg(target_arch = "x86_64")]
-        if !self.coherent {
-            crate::arch::dev::iommu_x86::cache::flush(virt, len);
-        }
-        // VT-d exists only on x86_64; elsewhere the table is a host-side probe.
-        #[cfg(not(target_arch = "x86_64"))]
-        let _ = (virt, len, self.coherent);
+        crate::arch::iommu::sync_table(virt, len, self.coherent);
     }
 
     /// Add an identity mapping (IOVA == PA) for [phys, phys+size). Idempotent.

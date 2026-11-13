@@ -12,9 +12,6 @@
 //! RISC-V: reads DTB-confirmed slots from `platform::PLATFORM`.
 //! PCIe-only arches expose no VirtIO-MMIO slots.
 
-extern crate alloc;
-use alloc::vec::Vec;
-
 /// A VirtIO MMIO slot with base address and IRQ.
 pub struct VirtioSlot {
     pub base: usize,
@@ -23,39 +20,7 @@ pub struct VirtioSlot {
 
 /// Iterator over all VirtIO MMIO slots for the current platform.
 pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
-    #[cfg(target_arch = "aarch64")]
-    {
-        use hal::aarch64::backend::{ArmResources, Board};
-        let slots: Vec<VirtioSlot> = match <Board as ArmResources>::VIRTIO_MMIO {
-            Some(layout) => (0..layout.count)
-                .map(|i| VirtioSlot {
-                    base: layout.slot_base(i).expect("bounded VirtIO slot"),
-                    irq: layout.spi(i).expect("bounded VirtIO IRQ"),
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-        slots.into_iter()
-    }
-    #[cfg(target_arch = "riscv64")]
-    {
-        let slots: Vec<VirtioSlot> = crate::platform::with(|p| {
-            p.virtio_mmio
-                .iter()
-                .filter_map(|e| {
-                    e.as_ref().map(|e| VirtioSlot {
-                        base: e.base,
-                        irq: e.irq,
-                    })
-                })
-                .collect()
-        });
-        slots.into_iter()
-    }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
-    {
-        Vec::new().into_iter()
-    }
+    crate::arch::virtio_mmio::slots()
 }
 
 /// Size of one VirtIO MMIO transport's register block.
@@ -140,27 +105,7 @@ pub(crate) fn probe_slot(base: usize) -> SlotProbe {
 /// SUM was already set, raises it only for `ack`, and restores the prior state
 /// immediately afterwards. Other architectures execute `ack` unchanged.
 pub(crate) fn with_riscv_sum_for_virtio_ack<T>(ack: impl FnOnce() -> T) -> T {
-    #[cfg(target_arch = "riscv64")]
-    {
-        // This helper is used only for short-lived VirtIO MMIO ACK sequences. It
-        // records the prior SUM bit, sets only SUM for the duration of `ack`, and
-        // restores the exact prior SUM state before returning. It does not widen trap
-        // entry globally or alter SSIE/SEIE/STIE.
-        const SUM_MASK: usize = 1usize << 18;
-        let sstatus = crate::arch::user_access::virtio_ack_status();
-        if sstatus & SUM_MASK == 0 {
-            crate::arch::user_access::sum_mask_set();
-        }
-        let result = ack();
-        if sstatus & SUM_MASK == 0 {
-            crate::arch::user_access::sum_mask_clear();
-        }
-        result
-    }
-    #[cfg(not(target_arch = "riscv64"))]
-    {
-        ack()
-    }
+    crate::arch::virtio_mmio::with_ack_access(ack)
 }
 
 /// Read VirtIO `InterruptStatus` and ACK the exact bits it reports.
@@ -189,21 +134,7 @@ pub(crate) fn ack_virtio_interrupt_status(mmio_base: usize) -> u32 {
 /// before they can enter `sys_wait_irq`. Leaving those level-triggered
 /// interrupts asserted starves the Cell before registration completes.
 fn ack_unclaimed(irq: u32) -> bool {
-    #[cfg(target_arch = "aarch64")]
-    let base = <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::VIRTIO_MMIO
-        .and_then(|layout| {
-            irq.checked_sub(layout.first_spi)
-                .and_then(|index| layout.slot_base(index as usize))
-        });
-    #[cfg(target_arch = "riscv64")]
-    let base = crate::platform::virtio_mmio_base_for_irq(irq);
-    // x86_64 routes VirtIO through PCI MSI-X, not a fixed MMIO IRQ window, so
-    // there is no slot base to derive and nothing to acknowledge here.
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
-    let base: Option<usize> = {
-        let _ = irq;
-        None
-    };
+    let base = crate::arch::virtio_mmio::slot_base_for_irq(irq);
 
     let Some(base) = base else {
         return false;
@@ -251,9 +182,6 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
         irq
     );
 }
-
-#[cfg(target_arch = "aarch64")]
-const _: crate::hal::HandleVirtioIrq = vi_handle_virtio_irq;
 
 #[cfg(test)]
 mod tests {
