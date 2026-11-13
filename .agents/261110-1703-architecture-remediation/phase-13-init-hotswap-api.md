@@ -1,7 +1,7 @@
 ---
 phase: 13
 title: "Init reduction, hot-swap decision, api split"
-status: in-progress
+status: completed
 priority: P2
 effort: "8–11d"
 dependencies: [12]
@@ -79,7 +79,7 @@ libs/posix-shim ◄── ffi-posix cells only
 - [x] Init-death policy
 - [x] Hot-swap witness or removal
 - [x] Facade removed
-- [ ] CP2
+- [x] CP2
 
 ## Success Criteria
 

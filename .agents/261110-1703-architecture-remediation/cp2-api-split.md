@@ -76,4 +76,4 @@ Independent review (`haily-reviewer`, read-only, on steps 2–6 + the rebase fix
 
 ## 7. Owner decision
 
-Pending.
+Confirmed 2026-11-13: A1–A6 as implemented (Law-1 confirmation 2). Phase 12's formatting-only hunks stay as they are.
