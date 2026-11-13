@@ -806,10 +806,28 @@ pub(crate) fn run_root_switch_witness() -> bool {
         ctx_scratch.daif = saved_daif as u64;
     }
 
-    // Boot context -> scratch stack (no root write), then the whole chain runs
+    // PLAN and RESUME-ROOT built Activate plans that were never switched to:
+    // `root_switch` published that domain's identity and advanced the hart's
+    // execution pin, but no root was programmed. The switch routine runs the
+    // incoming-side completion itself, so the first raw switch below would read
+    // that stale identity over the kernel root. Leave the domain the way the
+    // scheduler does: a safe-root plan, acknowledged by the completion hook on
+    // the scratch stack. The kernel root is already live, so the write is a no-op.
+    let (handoff_root, handoff_asid) =
+        match SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), None) {
+            Some(plan) => plan.root_switch(),
+            None => (0, 0),
+        };
+
+    // Boot context -> scratch stack (kernel root), then the whole chain runs
     // with its SAS side on memory no private root maps.
     unsafe {
-        crate::hal::arch::Context::switch_with_root(CTX_FIXTURE.0.get(), CTX_SCRATCH.0.get(), 0, 0);
+        crate::hal::arch::Context::switch_with_root(
+            CTX_FIXTURE.0.get(),
+            CTX_SCRATCH.0.get(),
+            handoff_root,
+            handoff_asid,
+        );
     }
 
     // The switch routine already ran the incoming-side completion
