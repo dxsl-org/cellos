@@ -73,7 +73,7 @@ sched: plan = SwitchPlan { out, in, root, asid, irq } ; arch::switch(plan)
 
 ## Todo List
 
-- [ ] Ratchet guard
+- [x] Ratchet guard
 - [ ] Code moved into `arch/`
 - [ ] `kmain` split
 - [ ] `SwitchPlan`
@@ -102,4 +102,10 @@ Phase 15 ports Tier-2 grants to x86 using the neutral copy/probe interface.
 
 ## Deviation Log
 
-None.
+- **Decision (step 1, 2026-11-13):** census in [research/p14-census.md](research/p14-census.md). Ratchet added to `scripts/check-hal-boundaries.sh` at 1 837 `target_arch` lines / 124 `asm!` sites outside `kernel/src/arch/`.
+- **Surprise (step 1):** 32-bit targets do not build today (riscv32 17 errors, arm 13, x86-32 stops in `libs/abi` on the `ViVmExit` size assert). "Build-check only" for `arch/legacy` is therefore not available without an ABI change; the code is quarantined unbuilt, as before. Not fixed here.
+- **Decision (step 1):** the 486 lines of `any(riscv64, aarch64, x86_64)` exist only to exclude 32-bit; `build.rs` emits `cellos_wide` (same set as `posture.rs`) and they collapse to it. Counted toward the ratchet.
+- **Decision (step 1):** `asm!` sites outside the nine function sets get `arch::{tlb, cpu, pio}`; hypervisor-owned asm moves with its module.
+- **Surprise (step 1):** the kernel already has `sched::domain_switch::SwitchPlan`; the HAL type needs another name or the old one is renamed. Body B of `yield_cpu` lacks the dispatch marker, and only builds for 32-bit/compile-only; x86 does not write CR3 in the switch (root reaches user entry through `gs:[24]`).
+- **Decision (step 1):** `kmain` splits in two arch phases (`early()` → heap → `platform_init()`); `PlatformReady.iommu` is optional (aarch64 starts VirtIO DMA with no IOMMU).
+- **Note (step 1):** RV64 `--harts 2` and AArch64 test-hooks lanes were red at Phase 10 base; baselines are taken before step 4.
