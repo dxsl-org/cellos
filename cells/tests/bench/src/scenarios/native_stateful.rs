@@ -198,7 +198,7 @@ fn spawn_cached_sender_probe(old_tid: usize) -> bool {
     let role = format!("native-stateful-cached-inc:{old_tid}");
     sys_set_spawn_args(&role);
     matches!(
-        sys_spawn_pinned("/bin/bench-probe", api::task::TaskPriority::Normal as u8, 0),
+        sys_spawn_pinned("/bin/bench-probe", abi::task::TaskPriority::Normal as u8, 0),
         SyscallResult::Ok(_)
     )
 }

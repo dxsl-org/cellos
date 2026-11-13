@@ -7,9 +7,9 @@
 //! record list either way.
 
 use alloc::vec::Vec;
-use api::dir_handles::ViDirHandle;
-use api::ipc::IPC_BUF_SIZE;
-use api::services::ipc::{VfsRequest, VfsResponse};
+use abi::dir_handles::ViDirHandle;
+use wire::ipc::IPC_BUF_SIZE;
+use wire::ipc::{VfsRequest, VfsResponse};
 use cellos_fs::crc32::crc32c;
 use ostd::service::ServiceRef;
 
@@ -49,7 +49,7 @@ pub fn srv_dir() -> Result<ViDirHandle, &'static str> {
 /// One VFS exchange; `None` when the call itself fails.
 fn call<R>(request: &VfsRequest<'_>, answer: impl FnOnce(VfsResponse<'_>) -> R) -> Option<R> {
     let mut reply = [0u8; IPC_BUF_SIZE];
-    let mut vfs = ServiceRef::<{ api::syscall::service::VFS }>::new();
+    let mut vfs = ServiceRef::<{ abi::syscall::service::VFS }>::new();
     vfs.call::<VfsRequest, VfsResponse>(request, &mut reply)
         .into_result()
         .ok()
