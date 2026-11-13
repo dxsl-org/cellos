@@ -2,15 +2,16 @@
 //!
 //! Architecture dispatch:
 //!   riscv64, aarch64   — SV39 / AArch64 page tables via HAL `PageTable`
-//!   x86_64             — 4-level PML4, dedicated path (own walker + HHDM-aware)
+//!   x86_64             — 4-level PML4 via HAL `PageTable`, read through the HHDM
 //!   riscv32, x86, arm  — bare physical (no page tables); stubs return NotSupported
 
 use crate::memory::frame::FrameAllocator;
 use crate::*;
 
-// HAL PageTable / PageFlags used by riscv64 + aarch64.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-use hal::{PageFlags, PageTable, PageTableTrait};
+use hal::PageFlags;
+#[cfg(cellos_wide)]
+use hal::{PageTable, PageTableTrait};
 
 /// Page size (4KB)
 pub const PAGE_SIZE: usize = 4096;
@@ -43,6 +44,43 @@ pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> =
 /// Phase-31 uses identity-mapped physical memory with no page tables.
 /// Call in place of `init_kernel_paging` + `activate_paging` on riscv32.
 pub fn init_bare() {}
+
+/// The kernel's alias of the page-table root whose frame is `root_phys`: the
+/// HHDM on x86_64, the identity map on riscv64 and aarch64.
+///
+/// # Safety
+/// `root_phys` names a live root table. Edits of the kernel root are made
+/// under `KERNEL_ROOT`'s lock.
+#[cfg(cellos_wide)]
+pub(crate) unsafe fn table_at(root_phys: PhysAddr) -> &'static mut PageTable {
+    // SAFETY: the caller's contract; `phys_to_virt` is the kernel's alias.
+    unsafe { &mut *(crate::memory::frame::phys_to_virt(root_phys) as *mut PageTable) }
+}
+
+/// Intermediate tables of the shared kernel root are user-reachable: in a
+/// shared address space the leaf's U/S bit is the only privilege check.
+#[cfg(target_arch = "x86_64")]
+pub(crate) const SAS_TABLES: hal::TablePolicy = hal::TablePolicy::UserReachable;
+
+/// x86_64 kernel MMIO: supervisor, read/write, uncached, executable (`P|RW|PCD`
+/// — the boot identity map never set NX on it).
+#[cfg(target_arch = "x86_64")]
+pub(crate) const MMIO_KERNEL_X86: Flags =
+    Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::UNCACHED);
+
+/// x86_64 MMIO granted to a ring-3 Driver Cell: user, read/write, uncached,
+/// never executable (`P|RW|US|PCD|NX`). Mirrors the riscv/aarch64
+/// `cell_mmio_flags` posture — exclusivity is enforced by the resource
+/// registry + LBI (cells are `forbid(unsafe_code)`, so only an `MmioRegion`
+/// from a granted request can reach the range), not by per-cell page tables
+/// (SAS has none).
+#[cfg(target_arch = "x86_64")]
+pub(crate) const MMIO_USER_X86: Flags =
+    Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::UNCACHED);
+
+/// x86_64 user read/write data (`P|RW|US|NX`): framebuffers and user stacks.
+#[cfg(target_arch = "x86_64")]
+pub(crate) const USER_RW_X86: Flags = Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER);
 
 /// Flush all TLB entries. Call after unmapping PTEs to prevent stale entries.
 ///
@@ -287,8 +325,8 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
 
 // ─── riscv64 + aarch64 + x86_64: map_page / unmap_page ──────────────────────
 //
-// On riscv64/aarch64 these delegate to PageTable::map / ::unmap.
-// On x86_64 they use the HHDM-aware walk_create / walk_read walkers.
+// Every arch edits the kernel root through the HAL `PageTable` trait; the
+// x86_64 legs (below) add the shared root's table policy and shootdowns.
 
 /// Read-only diagnostic path inspection under KERNEL_ROOT. Stop at blocks/huge
 /// leaves; never interpret leaf physical memory as another table.
@@ -402,8 +440,9 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 //   3. Identity-map validated ACPI MMIO (VA = PA) for timer/APIC access.
 //   4. Store root in KERNEL_ROOT and return phys address.
 //
-// The walk_create / walk_read helpers (in hal/arch/x86/src/x86_64/paging.rs)
-// always use phys_to_virt_ptr() so intermediate tables are dereferenceable
+// Every edit goes through the HAL `PageTable` trait on the HHDM alias of the
+// root (`table_at`), with `SAS_TABLES` for the intermediate tables; the HAL
+// walkers read every lower table through its `phys_to_virt`, so they work
 // before and after the CR3 switch.
 
 /// Build the kernel's own PML4 for x86_64.
@@ -438,7 +477,7 @@ pub fn init_kernel_paging_x86(
     ecam_len: usize,
 ) -> PagingResult<PhysAddr> {
     use crate::memory::frame::phys_to_virt;
-    use hal::paging::{pte_flags_mmio, read_cr3, walk_create, walk_read, PTE_PRESENT};
+    use hal::paging::read_cr3;
 
     // 1. Allocate and zero a new PML4 frame.
     let pml4_phys = allocator
@@ -451,7 +490,8 @@ pub fn init_kernel_paging_x86(
         core::ptr::write_bytes(phys_to_virt(pml4_phys) as *mut u8, 0, PAGE_SIZE);
     }
 
-    let pml4_virt = phys_to_virt(pml4_phys) as *mut u64;
+    // SAFETY: the zeroed frame is ours until KERNEL_ROOT publishes it below.
+    let pml4 = unsafe { table_at(pml4_phys) };
 
     // 2. Copy higher-half PML4 entries [256..512] from Limine's active PML4.
     //    These entries cover 0xFFFF_8000_0000_0000..0xFFFF_FFFF_FFFF_FFFF and include:
@@ -461,15 +501,9 @@ pub fn init_kernel_paging_x86(
     {
         // SAFETY: read_cr3() returns the physical address of the live Limine PML4.
         let limine_cr3 = unsafe { read_cr3() } as usize;
-        let limine_pml4 = phys_to_virt(limine_cr3) as *const u64;
-        // SAFETY: limine_pml4 points to a valid 512-entry PML4 (4096 bytes).
-        // We only read entries [256..512] from it.
-        unsafe {
-            for i in 256usize..512 {
-                let entry = core::ptr::read_volatile(limine_pml4.add(i));
-                core::ptr::write_volatile(pml4_virt.add(i), entry);
-            }
-        }
+        // SAFETY: the live Limine PML4, a 512-entry table read through the HHDM.
+        let limine_pml4 = unsafe { &*(phys_to_virt(limine_cr3) as *const PageTable) };
+        pml4.copy_kernel_higher_half(limine_pml4);
     }
 
     // 3. Identity-map MMIO regions so the CPU can reach them at VA == PA after
@@ -512,26 +546,17 @@ pub fn init_kernel_paging_x86(
                 crate::p01_retained::physical_table_created(frame, pml4_phys, va);
                 Some(frame)
             };
-            // SAFETY: pml4_virt points to our new PML4 (writable via HHDM).
-            // walk_create allocates intermediate tables via alloc_fn.
-            let pte_ptr = unsafe { walk_create(pml4_virt, va, &mut alloc_fn) }
-                .ok_or(PageTableError::OutOfMemory)?;
-            // SAFETY: pte_ptr is the leaf PTE slot returned by walk_create; safe to write.
-            unsafe {
-                core::ptr::write_volatile(pte_ptr, va as u64 | pte_flags_mmio());
-            }
+            pml4.map_with(va, va, MMIO_KERNEL_X86, SAS_TABLES, &mut alloc_fn)
+                .map_err(|_| PageTableError::OutOfMemory)?;
             va += PAGE_SIZE;
         }
     }
 
     // Sanity: verify the IOAPIC PTE was written correctly.
     // Uses the runtime ioapic_base parsed from validated ACPI.
-    // SAFETY: pml4_virt is our valid new PML4.
     if ioapic_base_usize != 0 {
         debug_assert!(
-            unsafe { walk_read(pml4_virt as *const u64, ioapic_base_usize) }
-                .map(|e| e & PTE_PRESENT != 0)
-                .unwrap_or(false),
+            pml4.leaf_entry(ioapic_base_usize).is_some(),
             "IOAPIC identity-map sanity check failed"
         );
     }
@@ -587,59 +612,37 @@ fn emit_pcid_decision() {
     );
 }
 
-/// Map a 4KB page (x86_64).
-///
-/// `flags` must be raw x86_64 PTE flags (use `pte_flags_*` helpers from
-/// `hal::paging`).  The function inserts the PTE into KERNEL_ROOT's PML4 and
-/// invalidates that page on every online CPU (`tlb_shootdown::flush_page`).
+/// Map one 4 KiB page of the shared kernel root (x86_64) without invalidating
+/// `vaddr`: the caller owns it and must invalidate every page it mapped this
+/// way (one `flush_range` over the batch, or `flush_page`) before anything may
+/// rely on the new leaves. A failed walk still invalidates before it recycles
+/// the detached tables.
 #[cfg(target_arch = "x86_64")]
-pub fn map_page_x86(
+fn map_page_unflushed(
     allocator: &mut FrameAllocator,
     vaddr: VAddr,
     paddr: PhysAddr,
-    flags: u64,
+    flags: Flags,
 ) -> PagingResult<()> {
-    map_page_x86_unflushed(allocator, vaddr, paddr, flags)?;
-    crate::memory::tlb_shootdown::flush_page(vaddr);
-    Ok(())
-}
-
-/// [`map_page_x86`] without the final invalidation of `vaddr`: the caller owns
-/// it and must invalidate every page it mapped this way (one `flush_range`
-/// over the batch) before anything may rely on the new leaves. A failed walk
-/// still invalidates before it recycles the detached tables, as in
-/// `map_page_x86`.
-#[cfg(target_arch = "x86_64")]
-fn map_page_x86_unflushed(
-    allocator: &mut FrameAllocator,
-    vaddr: VAddr,
-    paddr: PhysAddr,
-    flags: u64,
-) -> PagingResult<()> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::walk_create;
-
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
     #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
-    let pml4_virt = phys_to_virt(root_phys) as *mut u64;
+    // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
+    let table = unsafe { table_at(root_phys) };
 
-    let pte_ptr = {
+    let result = {
         let mut alloc_fn = || {
             let frame = allocator.allocate_frame()?;
             #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
             Some(frame)
         };
-        // SAFETY: pml4_virt is the kernel's active PML4 (stored at boot).
-        unsafe { walk_create(pml4_virt, vaddr, &mut alloc_fn) }
+        table.map_with(vaddr, paddr, flags, SAS_TABLES, &mut alloc_fn)
     };
     #[cfg(feature = "p01-trace")]
-    p01_observe_table_path(root_phys, vaddr, pte_ptr.is_none(), allocator);
-    let Some(pte_ptr) = pte_ptr else {
-        // SAFETY: `hal::PageTable` is the architecture's 4096-byte PML4 layout.
-        let table = unsafe { &mut *(pml4_virt as *mut hal::PageTable) };
+    p01_observe_table_path(root_phys, vaddr, result.is_err(), allocator);
+    if result.is_err() {
         // A failed walk may have published intermediate tables. Detach them
         // first, invalidate every CPU's page-walk caches, and only then recycle
         // their frames. Four-level x86 has at most three non-root tables here.
@@ -659,10 +662,6 @@ fn map_page_x86_unflushed(
             }
         }
         return Err(PageTableError::OutOfMemory);
-    };
-    // SAFETY: pte_ptr is the leaf PTE address; writing it installs the mapping.
-    unsafe {
-        core::ptr::write_volatile(pte_ptr, paddr as u64 | flags);
     }
     Ok(())
 }
@@ -676,7 +675,7 @@ fn map_page_x86_unflushed(
 /// Panics on OOM or if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
 pub fn map_mmio_x86(phys: usize, size: usize) {
-    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio());
+    map_mmio_x86_flags(phys, size, MMIO_KERNEL_X86);
 }
 
 /// Identity-map a MMIO region with USER access (x86_64).
@@ -690,7 +689,7 @@ pub fn map_mmio_x86(phys: usize, size: usize) {
 /// the U/S bit.
 #[cfg(target_arch = "x86_64")]
 pub fn map_mmio_user_x86(phys: usize, size: usize) {
-    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio_user());
+    map_mmio_x86_flags(phys, size, MMIO_USER_X86);
 }
 
 /// Page-aligned identity window `[start, end)` covering `[phys, phys + size)`.
@@ -708,7 +707,7 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
 /// `RequestMmio` returns) only once every CPU confirmed; an unconfirmed CPU
 /// is the same fail-stop panic in `flush_range` as before.
 #[cfg(target_arch = "x86_64")]
-fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
+fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) {
     let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
     let allocator = fa
         .as_mut()
@@ -717,7 +716,7 @@ fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     let mut va = start;
     while va < end {
         // Errors are logged but not fatal; a broken mapping will fault on first use.
-        if let Err(e) = map_page_x86_unflushed(allocator, va, va, flags) {
+        if let Err(e) = map_page_unflushed(allocator, va, va, flags) {
             log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
         }
         va += PAGE_SIZE;
@@ -727,38 +726,20 @@ fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     }
 }
 
-/// Unmap a 4KB page (x86_64).
-///
-/// Clears the leaf PTE and flushes the TLB entry. Returns Ok(()) even if the
-/// page was already unmapped (idempotent — safe for guard-page creation).
+/// Unmap a page of the shared kernel root (x86_64): clears the leaf and
+/// invalidates it on every online CPU (`tlb_shootdown::flush_page`). Returns
+/// Ok(()) even if the page was already unmapped (idempotent — safe for
+/// guard-page creation); only a present leaf is cleared and shot down.
 #[cfg(target_arch = "x86_64")]
-pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{walk_create, walk_read, PTE_PRESENT};
-
+pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
     let root_lock = KERNEL_ROOT.lock();
-    let root_phys = match *root_lock {
-        Some(p) => p,
-        None => return Ok(()), // paging not yet active — no TLB entry to clear
+    let Some(root_phys) = *root_lock else {
+        return Ok(()); // paging not yet active — no TLB entry to clear
     };
-    let pml4_virt_const = phys_to_virt(root_phys) as *const u64;
-    // SAFETY: pml4_virt_const is the kernel's active PML4.
-    let existing = unsafe { walk_read(pml4_virt_const, vaddr) };
-    if let Some(pte) = existing {
-        if pte & PTE_PRESENT != 0 {
-            // Walk again for a mutable pointer to the leaf PTE.
-            let pml4_virt_mut = phys_to_virt(root_phys) as *mut u64;
-            // SAFETY: walk_create on an existing path never allocates new frames;
-            // alloc_fn is only called for absent intermediate tables (none here).
-            let mut noop_alloc = || None::<usize>;
-            if let Some(pte_ptr) = unsafe { walk_create(pml4_virt_mut, vaddr, &mut noop_alloc) } {
-                // SAFETY: pte_ptr is the leaf PTE slot; clearing it unmaps the page.
-                unsafe {
-                    core::ptr::write_volatile(pte_ptr, 0u64);
-                }
-                crate::memory::tlb_shootdown::flush_page(vaddr);
-            }
-        }
+    // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
+    let table = unsafe { table_at(root_phys) };
+    if table.leaf_entry(vaddr).is_some() && table.unmap(vaddr).is_ok() {
+        crate::memory::tlb_shootdown::flush_page(vaddr);
     }
     Ok(())
 }
@@ -857,7 +838,7 @@ fn mmio_user_flags() -> Flags {
 /// Boot MMIO mapping flags with `USER` removed — what the kernel keeps after a
 /// Cell's access to the window is revoked.
 #[cfg(cellos_wide)]
-fn mmio_kernel_flags() -> Flags {
+pub(crate) fn mmio_kernel_flags() -> Flags {
     #[cfg(target_arch = "riscv64")]
     let bits = Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY;
     #[cfg(target_arch = "aarch64")]
@@ -881,47 +862,17 @@ fn checked_page_end(base: usize, len: usize) -> Option<usize> {
 /// permission bits a revoked Cell would hit rather than a kernel-side flag.
 #[cfg(feature = "test-hooks")]
 pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(cellos_wide)]
     {
-        use crate::memory::frame::phys_to_virt;
-        use hal::paging::{walk_read, PTE_PRESENT, PTE_USER};
         let Some(root_phys) = *KERNEL_ROOT.lock() else {
             return (false, false);
         };
-        let pml4 = phys_to_virt(root_phys) as *const u64;
         // SAFETY: the live kernel root table, walked read-only.
-        let Some(pte) = (unsafe { walk_read(pml4, vaddr) }) else {
+        let root = unsafe { table_at(root_phys) };
+        let Some(leaf) = root.leaf(vaddr) else {
             return (false, false);
         };
-        (
-            pte & PTE_PRESENT != 0,
-            pte & (PTE_PRESENT | PTE_USER) == (PTE_PRESENT | PTE_USER),
-        )
-    }
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-    {
-        use hal::PageTable;
-        // The bits `hal` programs from `Flags::USER`: RISC-V leaf U = bit 4,
-        // AArch64 leaf AP_EL0 = bit 6. Both keep V/VALID = bit 0. `leaf_entry`
-        // returns the architecture's raw leaf word — `usize` on RV64, `u64` on
-        // AArch64 — so compare in `u64` and let one body serve both.
-        const LEAF_VALID: u64 = 1 << 0;
-        #[cfg(target_arch = "riscv64")]
-        const LEAF_USER: u64 = 1 << 4;
-        #[cfg(target_arch = "aarch64")]
-        const LEAF_USER: u64 = 1 << 6;
-
-        let Some(root_phys) = *KERNEL_ROOT.lock() else {
-            return (false, false);
-        };
-        // SAFETY: KERNEL_ROOT holds the live root table's physical address,
-        // identity-mapped on both arches; the walk only reads.
-        let root = unsafe { &mut *(root_phys as *mut PageTable) };
-        let Some(leaf) = root.leaf_entry(vaddr) else {
-            return (false, false);
-        };
-        let leaf = leaf as u64;
-        (leaf & LEAF_VALID != 0, leaf & LEAF_USER != 0)
+        (leaf.valid, leaf.valid && leaf.user)
     }
     #[cfg(not(cellos_wide))]
     {
@@ -948,21 +899,14 @@ pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     }
 }
 
-// ─── Generic map_page / unmap_page wrappers (called from kernel code) ────────
-//
-// These forward to the correct arch implementation. x86_64 versions take raw
-// u64 PTE flags; callers that need the generic Flags type should use the
-// riscv64/aarch64 versions above or convert flags themselves.
-//
-// For x86_64, map_page and unmap_page delegate to map_page_x86 /
-// unmap_page_x86 using kernel-RW flags by default.  Callers needing
-// user/exec/mmio flags must call map_page_x86 directly.
+// ─── x86_64 map_page / map_page_deferred ─────────────────────────────────────
 
-/// Map a page: generic entry point.
+/// Map a 4 KiB page of the shared kernel root (x86_64) and invalidate it on
+/// every online CPU (`tlb_shootdown::flush_page`).
 ///
-/// On riscv64/aarch64: uses the HAL-generic Flags parameter.
-/// On x86_64: converts generic Flags to x86_64 PTE bits.
-/// On bare-physical arches: returns NotSupported.
+/// The HAL translates `flags` for a new leaf and for `protect_page` alike, so
+/// a page cannot mean one thing when created and another when re-protected.
+/// Uncached (MMIO) mappings pass `Flags::UNCACHED`.
 #[cfg(target_arch = "x86_64")]
 pub fn map_page(
     allocator: &mut FrameAllocator,
@@ -970,12 +914,9 @@ pub fn map_page(
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    // Cache-disable (PCD/MMIO) has no generic PageFlags equivalent; callers
-    // needing MMIO mappings must use map_page_x86 with pte_flags_mmio().
-    // The Flags→PTE translation is shared with `protect_page` so a page cannot
-    // mean one thing when created and another when re-protected.
-    let pte_flags = super::page_protect::pte_bits_from_flags(flags);
-    map_page_x86(allocator, vaddr, paddr, pte_flags)
+    map_page_unflushed(allocator, vaddr, paddr, flags)?;
+    crate::memory::tlb_shootdown::flush_page(vaddr);
+    Ok(())
 }
 
 /// [`map_page`] for one page of a batch whose invalidation the caller issues
@@ -989,7 +930,7 @@ pub fn map_page(
 ///   from the first leaf through `flush_deferred_maps`, which must cover every
 ///   page mapped this way and must complete before the spawn that maps them
 ///   returns or relocates through them. A failed walk still invalidates before
-///   it recycles detached tables, as in `map_page_x86`.
+///   it recycles detached tables, as in `map_page`.
 /// - riscv64/aarch64: exactly [`map_page`], which issues no invalidation for a
 ///   new leaf on those arches, so batching changes nothing there.
 ///
@@ -1005,8 +946,7 @@ pub(crate) fn map_page_deferred(
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    let pte_flags = super::page_protect::pte_bits_from_flags(flags);
-    map_page_x86_unflushed(allocator, vaddr, paddr, pte_flags)
+    map_page_unflushed(allocator, vaddr, paddr, flags)
 }
 
 /// See the x86_64 [`map_page_deferred`].
@@ -1035,15 +975,6 @@ pub(crate) fn flush_deferred_maps(start: VAddr, end: VAddr) {
 /// See the x86_64 [`flush_deferred_maps`].
 #[cfg(not(target_arch = "x86_64"))]
 pub(crate) fn flush_deferred_maps(_start: VAddr, _end: VAddr) {}
-
-/// Unmap a page: generic entry point.
-///
-/// On x86_64 delegates to unmap_page_x86 (idempotent).
-/// On bare-physical arches: returns NotSupported.
-#[cfg(target_arch = "x86_64")]
-pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
-    unmap_page_x86(vaddr)
-}
 
 /// Intermediate page-table frames detached from the active root.
 pub struct ReclaimedPageTables {
@@ -1082,7 +1013,7 @@ impl ReclaimedPageTables {
 }
 
 /// Detach empty intermediate tables after their final leaf was unmapped.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(cellos_wide)]
 pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
     let mut reclaimed = ReclaimedPageTables::new();
     let root = KERNEL_ROOT.lock();
@@ -1090,22 +1021,7 @@ pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
     let _physical_write = crate::p01_retained::physical_write();
     if let Some(root_phys) = *root {
         // SAFETY: KERNEL_ROOT names the live architecture page-table root.
-        let table = unsafe { &mut *(root_phys as *mut PageTable) };
-        table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
-    }
-    reclaimed
-}
-
-#[cfg(target_arch = "x86_64")]
-pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
-    let mut reclaimed = ReclaimedPageTables::new();
-    let root = KERNEL_ROOT.lock();
-    #[cfg(feature = "p01-trace")]
-    let _physical_write = crate::p01_retained::physical_write();
-    if let Some(root_phys) = *root {
-        let root_virt = crate::memory::frame::phys_to_virt(root_phys);
-        // SAFETY: the HHDM alias names the live PML4 root.
-        let table = unsafe { &mut *(root_virt as *mut hal::PageTable) };
+        let table = unsafe { table_at(root_phys) };
         table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
     }
     reclaimed
@@ -1126,10 +1042,9 @@ pub fn prune_empty_tables(_vaddr: VAddr) -> ReclaimedPageTables {
 /// orphan, which is what a leaked table looks like.
 #[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
 pub fn classify_table_frame(frame: PhysAddr) -> alloc::string::String {
+    use alloc::format;
     use alloc::string::String;
-    const PRESENT: u64 = 1;
-    const HUGE: u64 = 1 << 7;
-    const ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+    use hal::paging::TableLevel;
 
     let Some(root) = *KERNEL_ROOT.lock() else {
         return String::from("no-root");
@@ -1139,45 +1054,15 @@ pub fn classify_table_frame(frame: PhysAddr) -> alloc::string::String {
     }
     // SAFETY: the kernel root and every table it names through present,
     // non-huge entries are live kernel page tables.
-    let entry = |table: PhysAddr, index: usize| unsafe {
-        core::ptr::read_volatile(
-            (crate::memory::frame::phys_to_virt(table) as *const u64).add(index),
-        )
-    };
-    use alloc::format;
-    for i3 in 0..512usize {
-        let level3 = entry(root, i3);
-        if level3 & PRESENT == 0 || level3 & HUGE != 0 {
-            continue;
+    let table = unsafe { table_at(root) };
+    match table.find_table(frame) {
+        Some((TableLevel::Pdpt, base)) => {
+            format!("PDPT for VA 0x{:X}-0x{:X}", base, base + (1 << 39))
         }
-        let pdpt = (level3 & ADDR_MASK) as PhysAddr;
-        if pdpt == frame {
-            return format!("PDPT for VA 0x{:X}-0x{:X}", i3 << 39, (i3 + 1) << 39);
-        }
-        for i2 in 0..512usize {
-            let level2 = entry(pdpt, i2);
-            if level2 & PRESENT == 0 || level2 & HUGE != 0 {
-                continue;
-            }
-            let pd = (level2 & ADDR_MASK) as PhysAddr;
-            let window = (i3 << 39) | (i2 << 30);
-            if pd == frame {
-                return format!("PD for VA 0x{:X}-0x{:X}", window, window + (1 << 30));
-            }
-            for i1 in 0..512usize {
-                let level1 = entry(pd, i1);
-                if level1 & PRESENT == 0 || level1 & HUGE != 0 {
-                    continue;
-                }
-                let pt = (level1 & ADDR_MASK) as PhysAddr;
-                if pt == frame {
-                    let base = window | (i1 << 21);
-                    return format!("PT for VA 0x{:X}-0x{:X}", base, base + (1 << 21));
-                }
-            }
-        }
+        Some((TableLevel::Pd, base)) => format!("PD for VA 0x{:X}-0x{:X}", base, base + (1 << 30)),
+        Some((TableLevel::Pt, base)) => format!("PT for VA 0x{:X}-0x{:X}", base, base + (1 << 21)),
+        None => String::from("not-a-live-table"),
     }
-    String::from("not-a-live-table")
 }
 
 // ─── remap_range_user ────────────────────────────────────────────────────────
@@ -1299,9 +1184,6 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
 
 #[cfg(target_arch = "x86_64")]
 pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResult<()> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{pte_flags_user_rw, walk_read, PTE_PRESENT};
-
     if pages == 0 || start & (PAGE_SIZE - 1) != 0 {
         return Err(PageTableError::InvalidAddress);
     }
@@ -1318,8 +1200,9 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
             None => return Err(PageTableError::NotSupported),
         }
     };
-
-    let pml4_virt_const = phys_to_virt(root_phys) as *const u64;
+    // SAFETY: the kernel's live PML4, walked read-only; FRAME_ALLOCATOR is
+    // held, so no table frame on the walk can be recycled under it.
+    let root = unsafe { table_at(root_phys) };
 
     for index in 0..pages {
         let address = start
@@ -1329,21 +1212,18 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
                     .ok_or(PageTableError::InvalidAddress)?,
             )
             .ok_or(PageTableError::InvalidAddress)?;
-        if let Some(pte) = unsafe { walk_read(pml4_virt_const, address) } {
-            if pte & PTE_PRESENT != 0 {
-                return Err(PageTableError::InvalidAddress);
-            }
+        if root.leaf_entry(address).is_some() {
+            return Err(PageTableError::InvalidAddress);
         }
     }
 
-    let flags = pte_flags_user_rw();
     for index in 0..pages {
         let address = start + index * PAGE_SIZE;
-        let result = map_page_x86(allocator, address, address, flags);
+        let result = map_page(allocator, address, address, USER_RW_X86);
         if result.is_err() {
             for rollback in 0..index {
                 let rollback_addr = start + rollback * PAGE_SIZE;
-                let _ = unmap_page_x86(rollback_addr);
+                let _ = unmap_page(rollback_addr);
             }
             tlb_flush_all();
             return Err(PageTableError::OutOfMemory);
@@ -1360,13 +1240,12 @@ pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingRe
 
 #[cfg(target_arch = "x86_64")]
 pub fn remap_range_user(start: PhysAddr, pages: usize) {
-    use hal::paging::pte_flags_user_rw;
     let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
     if let Some(allocator) = frame_guard.as_mut() {
         for i in 0..pages {
             let addr = start + (i * PAGE_SIZE);
             // Map VA == PA (identity) with user-rw flags.
-            let _ = map_page_x86(allocator, addr, addr, pte_flags_user_rw());
+            let _ = map_page(allocator, addr, addr, USER_RW_X86);
         }
     }
 }
@@ -1436,12 +1315,12 @@ pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
 
 #[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
 pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
+    use hal::paging::PTE_ADDR_MASK;
 
     let root_phys = (*KERNEL_ROOT.lock())?;
-    let pte = unsafe { walk_read(phys_to_virt(root_phys) as *const u64, vaddr) }?;
-    (pte & PTE_PRESENT != 0).then_some(TranslationProbe {
+    // SAFETY: the kernel's live PML4, walked read-only.
+    let pte = unsafe { table_at(root_phys) }.leaf_entry(vaddr)?;
+    Some(TranslationProbe {
         phys: ((pte & PTE_ADDR_MASK) as usize) | (vaddr & 0xFFF),
         pte,
     })
@@ -1494,20 +1373,11 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 
 #[cfg(target_arch = "x86_64")]
 pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
     let root_guard = KERNEL_ROOT.lock();
     let root_phys = (*root_guard)?;
-    let pml4 = phys_to_virt(root_phys) as *const u64;
-    // SAFETY: pml4 is the kernel's active PML4.
-    let pte = unsafe { walk_read(pml4, vaddr) }?;
-    if pte & PTE_PRESENT == 0 {
-        return None;
-    }
-    // PTE_ADDR_MASK, NOT !0xFFF: user pages carry PTE_NX (bit 63) — keeping it
-    // made the "physical" address non-canonical after the HHDM offset, and the
-    // ELF loader's shared-page path (already_ours) then wrote through a #GP.
-    Some(((pte & PTE_ADDR_MASK) as usize) | (vaddr & 0xFFF))
+    // SAFETY: the kernel's live PML4, read under its lock. The HAL extracts
+    // the frame with PTE_ADDR_MASK, never `!0xFFF`, which would keep NX.
+    unsafe { table_at(root_phys) }.translate(vaddr)
 }
 
 /// Bare-physical identity translation.
@@ -1593,7 +1463,7 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
 
     // Try to find the faulting VA in the current task's VMA list.
     // We identify the current task via the scheduler's running-task pointer.
-    let result: Option<(PhysAddr, u64)> = {
+    let result: Option<(PhysAddr, Flags)> = {
         let mut sched = SCHEDULER.lock();
         if let Some(s) = sched.as_mut() {
             // `current_task_mut()` returns the task currently marked Running
@@ -1612,7 +1482,7 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
     };
 
     match result {
-        Some((paddr, pte_flags)) => {
+        Some((paddr, flags)) => {
             // Install the mapping on demand. For ELF-backed segments the ELF loader
             // (Phase 04) sets pa_start to the physical frame it copied the segment
             // into; we just wire it up here. For demand-allocated regions (Stack/Heap)
@@ -1633,7 +1503,7 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             } else {
                 paddr
             };
-            let _ = map_page_x86(alloc, va & !0xFFF, effective_pa & !0xFFF, pte_flags);
+            let _ = map_page(alloc, va & !0xFFF, effective_pa & !0xFFF, flags);
         }
         None => {
             fault_kill_cell(va, error_code, rip, cs, "no VMA covers this address");

@@ -535,9 +535,19 @@ pub(super) fn x86_shootdown_fixture_secondary() {
 #[cfg(feature = "test-hooks")]
 pub(super) fn x86_shootdown_fixture_primary() {
     use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
-    use crate::memory::paging::{KERNEL_ROOT, PAGE_SIZE};
-    use hal::paging::{walk_create, walk_read, PTE_NX, PTE_PRESENT, PTE_WRITABLE};
-    let flags = PTE_PRESENT | PTE_WRITABLE | PTE_NX | (1 << 8);
+    use crate::memory::paging::{table_at, Flags, KERNEL_ROOT, PAGE_SIZE, SAS_TABLES};
+    use hal::PageTableTrait;
+    // A global leaf: the shootdown must reach translations a CR3 reload keeps.
+    let flags = Flags::from_bits(Flags::VALID | Flags::READ | Flags::WRITE | Flags::GLOBAL);
+    // Re-point the probe leaf in place under the held KERNEL_ROOT lock; the
+    // fixture issues the invalidation itself.
+    let repoint = |root: Option<usize>, frame: usize| {
+        // SAFETY: the kernel root, edited under its lock (held by the caller).
+        let table = unsafe { table_at(root.expect("fixture root")) };
+        table
+            .map_with(X86_PROBE_VA, frame, flags, SAS_TABLES, &mut || None)
+            .expect("fixture leaf");
+    };
     let (old, new) = {
         let mut allocator = FRAME_ALLOCATOR.lock();
         let allocator = allocator.as_mut().expect("fixture frame allocator");
@@ -550,28 +560,21 @@ pub(super) fn x86_shootdown_fixture_primary() {
             core::ptr::write_volatile(phys_to_virt(new) as *mut usize, 0x2468);
         }
         let root = KERNEL_ROOT.lock();
-        let root_pointer = phys_to_virt(root.expect("fixture root")) as *const u64;
+        // SAFETY: the kernel root, walked read-only under its lock.
+        let table = unsafe { table_at(root.expect("fixture root")) };
         assert!(
-            unsafe { walk_read(root_pointer, X86_PROBE_VA) }
-                .is_none_or(|pte| pte & PTE_PRESENT == 0),
+            table.leaf_entry(X86_PROBE_VA).is_none(),
             "shootdown fixture VA already mapped"
         );
         drop(root);
-        crate::memory::paging::map_page_x86(allocator, X86_PROBE_VA, old, flags)
-            .expect("fixture map");
+        crate::memory::paging::map_page(allocator, X86_PROBE_VA, old, flags).expect("fixture map");
         (old, new)
     };
     X86_PROBE_STAGE.store(1, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 2);
     {
         let root = KERNEL_ROOT.lock();
-        let root_pointer = phys_to_virt(root.expect("fixture root")) as *mut u64;
-        let mut no_allocate = || None;
-        let leaf = unsafe { walk_create(root_pointer, X86_PROBE_VA, &mut no_allocate) }
-            .expect("fixture leaf");
-        unsafe {
-            core::ptr::write_volatile(leaf, new as u64 | flags);
-        }
+        repoint(*root, new);
         X86_PROBE_STAGE.store(3, Ordering::Release);
         x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 4);
         crate::memory::tlb_shootdown::flush_range(X86_PROBE_VA, PAGE_SIZE);
@@ -583,13 +586,7 @@ pub(super) fn x86_shootdown_fixture_primary() {
     // and never contends. `flush_range` panics if the AP stays silent.
     {
         let root = KERNEL_ROOT.lock();
-        let root_pointer = phys_to_virt(root.expect("fixture root")) as *mut u64;
-        let mut no_allocate = || None;
-        let leaf = unsafe { walk_create(root_pointer, X86_PROBE_VA, &mut no_allocate) }
-            .expect("fixture leaf");
-        unsafe {
-            core::ptr::write_volatile(leaf, old as u64 | flags);
-        }
+        repoint(*root, old);
     }
     X86_PROBE_STAGE.store(6, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 7);
@@ -597,7 +594,7 @@ pub(super) fn x86_shootdown_fixture_primary() {
     X86_PROBE_STAGE.store(8, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 9);
     assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
-    crate::memory::paging::unmap_page_x86(X86_PROBE_VA).expect("fixture unmap");
+    crate::memory::paging::unmap_page(X86_PROBE_VA).expect("fixture unmap");
     let mut allocator = FRAME_ALLOCATOR.lock();
     let allocator = allocator.as_mut().expect("fixture frame allocator");
     allocator.deallocate_frame(old);

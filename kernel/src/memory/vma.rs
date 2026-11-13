@@ -34,9 +34,7 @@ pub enum VmaKind {
 /// of the first page of the backing region (for ELF-backed segments; for
 /// demand-allocated regions `pa_start` is 0 until allocated).
 ///
-/// `flags` stores raw architecture PTE flags to install on demand-mapping.
-/// On x86_64 these are the `PTE_*` constants from `hal::paging`; on RISC-V
-/// they are the `PageFlags` bitmask.
+/// `flags` are the page-table flags to install on demand-mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VmaRegion {
     /// Inclusive start of the virtual range (page-aligned).
@@ -45,8 +43,8 @@ pub struct VmaRegion {
     pub va_end: VAddr,
     /// Physical base of the backing memory (0 for demand-allocated regions).
     pub pa_start: PhysAddr,
-    /// Architecture-specific PTE flags for the on-demand mapping.
-    pub flags: u64,
+    /// Page-table flags for the on-demand mapping.
+    pub flags: crate::memory::paging::Flags,
     /// Semantic kind of this region.
     pub kind: VmaKind,
 }

@@ -67,6 +67,9 @@ pub mod hypervisor {
 pub mod memory {
     /// x86 nested paging (EPT/NPT) — Tier 3 x86 VMM.
     pub mod ept;
+    /// The shared kernel root's entries through the HAL trait.
+    #[cfg(test)]
+    mod paging_tests;
 }
 
 pub mod task {

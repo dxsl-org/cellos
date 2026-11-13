@@ -435,6 +435,50 @@ impl PageTable {
     pub fn leaf_entry(&self, virt: VAddr) -> Option<u64> {
         self.walk(virt).map(|(entry, _)| entry)
     }
+
+    /// The first intermediate table under this root whose frame is `frame`,
+    /// with the first virtual address it covers. Slots are visited in index
+    /// order, PML4 then PDPT then PD; absent entries and huge leaves are
+    /// skipped. A diagnostic for leaked page-table frames.
+    pub fn find_table(&self, frame: PhysAddr) -> Option<(TableLevel, VAddr)> {
+        let is_table = |entry: u64| entry & PTE_P != 0 && entry & PTE_PS == 0;
+        for i3 in 0..512usize {
+            let level3 = self.entry(i3);
+            if !is_table(level3) {
+                continue;
+            }
+            if (level3 & PTE_ADDR_MASK) as PhysAddr == frame {
+                return Some((TableLevel::Pdpt, i3 << 39));
+            }
+            let pdpt = Self::table_of(level3);
+            for i2 in 0..512usize {
+                let level2 = pdpt.entry(i2);
+                if !is_table(level2) {
+                    continue;
+                }
+                let window = (i3 << 39) | (i2 << 30);
+                if (level2 & PTE_ADDR_MASK) as PhysAddr == frame {
+                    return Some((TableLevel::Pd, window));
+                }
+                let pd = Self::table_of(level2);
+                for i1 in 0..512usize {
+                    let level1 = pd.entry(i1);
+                    if is_table(level1) && (level1 & PTE_ADDR_MASK) as PhysAddr == frame {
+                        return Some((TableLevel::Pt, window | (i1 << 21)));
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+/// The level of an intermediate table under a PML4.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableLevel {
+    Pdpt,
+    Pd,
+    Pt,
 }
 
 impl PageTable {

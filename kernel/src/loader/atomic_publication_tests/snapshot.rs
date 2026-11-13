@@ -21,7 +21,13 @@ pub(super) struct TaskSnapshot {
     critical: bool,
     replacement: Option<usize>,
     dirs: (u64, u64, usize),
-    mappings: alloc::vec::Vec<(usize, usize, usize, u64, crate::memory::vma::VmaKind)>,
+    mappings: alloc::vec::Vec<(
+        usize,
+        usize,
+        usize,
+        crate::memory::paging::Flags,
+        crate::memory::vma::VmaKind,
+    )>,
 }
 
 #[derive(Debug, PartialEq)]

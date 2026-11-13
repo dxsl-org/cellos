@@ -44,88 +44,43 @@ use types::VAddr;
 ///
 /// `new_flags` REPLACES the old flags wholesale — it is not OR-ed in. Pass the
 /// complete desired set (including `VALID` / `USER` / `ACCESSED` / `DIRTY`),
-/// because a missing `VALID` bit unmaps the page rather than restricting it.
+/// because a missing `VALID` bit unmaps the page rather than restricting it
+/// (riscv64, aarch64; x86_64 always keeps the page present, and keeps the
+/// frame's cache and global bits).
 ///
 /// # Errors
 /// - `PageTableError::InvalidAddress` — `vaddr` is not currently mapped.
 /// - `PageTableError::NotSupported` — paging is inactive, or the target is a
 ///   bare-physical arch (riscv32 / x86_32 / arm32) with no page tables.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
-    use hal::{PageTable, PageTableTrait};
-
-    let page_va = vaddr & !(PAGE_SIZE - 1);
-    let root_lock = KERNEL_ROOT.lock();
-    let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
-    // SAFETY: KERNEL_ROOT holds the physical address of the live root table,
-    // which is identity-mapped on both of these arches, and the lock we hold
-    // gives us exclusive access to it for the duration of this function.
-    let root_table = unsafe { &mut *(root_phys as *mut PageTable) };
-
-    // Reading the frame back from the table is what makes this a permission
-    // change rather than a remap: the caller has no say in the target frame.
-    let phys = root_table
-        .translate(page_va)
-        .ok_or(PageTableError::InvalidAddress)?
-        & !(PAGE_SIZE - 1);
-
-    // Every intermediate table on this path already exists (the page is mapped),
-    // so `map` never invokes the allocator; a None-returning closure documents
-    // that and turns any surprise walk into OutOfMemory instead of a silent alloc.
-    let mut no_alloc = || None;
-    root_table
-        .map(page_va, phys, new_flags, &mut no_alloc)
-        .map_err(|_| PageTableError::OutOfMemory)?;
-
-    crate::memory::tlb_shootdown::flush_page(page_va);
-    Ok(())
-}
-
-/// x86_64 leg: rewrite the leaf PTE's flag bits, preserving the frame address
-/// and the cache-attribute bits (PWT/PCD) already recorded for the page.
-#[cfg(target_arch = "x86_64")]
+#[cfg(cellos_wide)]
 pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
     let page_va = vaddr & !(PAGE_SIZE - 1);
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
-    rewrite_leaf_x86(root_phys, page_va, new_flags)?;
+    rewrite_leaf(root_phys, page_va, new_flags)?;
     crate::memory::tlb_shootdown::flush_page(page_va);
     Ok(())
 }
 
 /// The leaf rewrite of [`protect_page`] without its invalidation. The caller
 /// holds `KERNEL_ROOT` (whose value is `root_phys`) and owns the flush.
-#[cfg(target_arch = "x86_64")]
-fn rewrite_leaf_x86(
-    root_phys: types::PhysAddr,
-    page_va: VAddr,
-    new_flags: Flags,
-) -> PagingResult<()> {
-    use crate::memory::frame::phys_to_virt;
-    use hal::paging::{walk_create, walk_read, PTE_ADDR_MASK, PTE_PCD, PTE_PRESENT, PTE_PWT};
+///
+/// Reading the frame back from the table is what makes this a permission
+/// change rather than a remap: the caller has no say in the target frame.
+#[cfg(cellos_wide)]
+fn rewrite_leaf(root_phys: types::PhysAddr, page_va: VAddr, new_flags: Flags) -> PagingResult<()> {
+    use hal::PageTableTrait;
 
-    // SAFETY: root_phys is the kernel's live PML4; phys_to_virt maps it into the
-    // HHDM window, which is readable/writable from Ring 0 for the whole boot.
-    let existing = unsafe { walk_read(phys_to_virt(root_phys) as *const u64, page_va) }
-        .ok_or(PageTableError::InvalidAddress)?;
-    if existing & PTE_PRESENT == 0 {
-        return Err(PageTableError::InvalidAddress);
-    }
-
-    let cache_bits = existing & (PTE_PWT | PTE_PCD);
-    let new_pte = (existing & PTE_ADDR_MASK) | cache_bits | pte_bits_from_flags(new_flags);
-
-    let mut no_alloc = || None::<usize>;
-    // SAFETY: the same PML4, re-walked for a mutable leaf pointer. The page is
-    // present, so no intermediate table is missing and `no_alloc` is never called.
-    let pte_ptr =
-        unsafe { walk_create(phys_to_virt(root_phys) as *mut u64, page_va, &mut no_alloc) }
-            .ok_or(PageTableError::InvalidAddress)?;
-    // SAFETY: pte_ptr is the leaf PTE slot for page_va, obtained from the walker.
-    unsafe {
-        core::ptr::write_volatile(pte_ptr, new_pte);
-    }
-    Ok(())
+    // SAFETY: root_phys is the live kernel root and the caller holds its lock.
+    let table = unsafe { crate::memory::paging::table_at(root_phys) };
+    table
+        .protect(page_va, new_flags)
+        .map_err(|error| match error {
+            types::ViError::NotFound => PageTableError::InvalidAddress,
+            // Every table on the path exists; an allocation request is a surprise
+            // walk, reported as it always was.
+            _ => PageTableError::OutOfMemory,
+        })
 }
 
 /// Rewrite the permission bits of every page in `pages`, in order, as one batch
@@ -158,7 +113,7 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
     let root_phys = (*root_lock).ok_or((first, PageTableError::NotSupported))?;
     let result = write_then_flush(
         pages,
-        |page_va, flags| rewrite_leaf_x86(root_phys, page_va, flags),
+        |page_va, flags| rewrite_leaf(root_phys, page_va, flags),
         crate::memory::tlb_shootdown::flush_range,
     );
     drop(root_lock);
@@ -218,28 +173,6 @@ fn contiguous_runs(pages: impl Iterator<Item = VAddr>) -> impl Iterator<Item = (
         }
         Some((start, size))
     })
-}
-
-/// Translate generic `PageFlags` into x86_64 leaf-PTE bits.
-///
-/// `EXECUTE` is inverted into the NX bit: absence of EXECUTE means NX is SET.
-/// Shared with `paging::map_page` so a page created and a page re-protected
-/// cannot disagree about what a given `Flags` value means.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn pte_bits_from_flags(flags: Flags) -> u64 {
-    use hal::paging::{PTE_NX, PTE_PRESENT, PTE_USER, PTE_WRITABLE};
-    let bits = flags.bits();
-    let mut pte = PTE_PRESENT;
-    if bits & hal::PageFlags::WRITE != 0 {
-        pte |= PTE_WRITABLE;
-    }
-    if bits & hal::PageFlags::USER != 0 {
-        pte |= PTE_USER;
-    }
-    if bits & hal::PageFlags::EXECUTE == 0 {
-        pte |= PTE_NX;
-    }
-    pte
 }
 
 /// Bare-physical arches have no PTEs to protect; the caller must treat W^X as

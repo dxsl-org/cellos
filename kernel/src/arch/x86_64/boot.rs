@@ -91,8 +91,8 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         let hhdm = crate::boot::limine::get_hhdm_offset().unwrap_or(0);
         crate::hal::apic::set_hhdm_base(hhdm);
         crate::memory::frame::set_phys_offset(hhdm as usize);
-        // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
-        // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
+        // Propagate the HHDM offset to the HAL page-table walkers so they can
+        // dereference physical PTE addresses via HHDM virtual pointers.
         crate::hal::paging::set_hhdm_offset(hhdm as usize);
         // Initialise KASLR seed from HHDM entropy + RDTSC.
         crate::memory::kaslr::init_kaslr(hhdm);
