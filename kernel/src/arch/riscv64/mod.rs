@@ -28,6 +28,8 @@ pub mod gpio_irq;
 
 pub mod sdhci;
 
+pub mod hart_local;
+
 pub mod cell {
     #[cfg(feature = "test-hooks")]
     pub mod provenance_selftest;

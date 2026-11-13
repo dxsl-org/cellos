@@ -23,18 +23,9 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 /// Slot value meaning "no mapping published".
 pub const UNMAPPED: usize = usize::MAX;
 
-/// Exclusive bound on the physical ids [`CPU_TOPOLOGY`] can map.
-///
-/// x86_64: the xAPIC ID space. A LAPIC ID above 255 needs interrupt remapping
-/// for IOAPIC/MSI destinations (plan 261103-2218 phase 12), so such a CPU is
-/// refused by bring-up and by `hal::x86_64::apic::register_cpu` alike.
-#[cfg(target_arch = "x86_64")]
-pub const PHYSICAL_ID_LIMIT: usize = 256;
-/// RISC-V keeps its boot-hart swap, which only covers hart ids below
-/// `MAX_HARTS`; AArch64 keeps the CPU-index table it had, sized the same, so a
-/// CPU index at or above `MAX_HARTS` stays unmapped (it resolves to slot 0).
-#[cfg(not(target_arch = "x86_64"))]
-pub const PHYSICAL_ID_LIMIT: usize = super::MAX_HARTS;
+/// Exclusive bound on the physical ids [`CPU_TOPOLOGY`] can map
+/// (`crate::arch::hart_local::PHYSICAL_ID_LIMIT`).
+pub const PHYSICAL_ID_LIMIT: usize = crate::arch::hart_local::PHYSICAL_ID_LIMIT;
 
 /// The kernel's one logical ↔ physical map, filled at boot (see module docs).
 pub static CPU_TOPOLOGY: CpuTopology<{ super::MAX_HARTS }, PHYSICAL_ID_LIMIT> = CpuTopology::new();

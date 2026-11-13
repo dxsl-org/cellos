@@ -32,6 +32,8 @@ pub mod gpio_irq;
 
 pub mod sdhci;
 
+pub mod hart_local;
+
 pub mod dev {
     pub(crate) mod bcm_pinmux;
     pub mod mmc {

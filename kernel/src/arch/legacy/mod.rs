@@ -6,6 +6,7 @@ pub mod cpu;
 #[cfg(target_arch = "x86")]
 pub mod dev;
 pub mod gpio_irq;
+pub mod hart_local;
 pub mod iommu;
 pub mod irq;
 pub mod power;

@@ -38,6 +38,7 @@
 "kernel/src/arch/aarch64/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
 "kernel/src/arch/aarch64/dev/mmc/pinmux_bcm.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/arch/aarch64/gpio_irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/iommu.rs" = { category = "A", owner = "arch" }
@@ -56,6 +57,7 @@
 "kernel/src/arch/legacy/cpu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/gpio_irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/iommu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
@@ -73,12 +75,14 @@
 "kernel/src/arch/riscv64/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/riscv64/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
 "kernel/src/arch/riscv64/gpio_irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/iommu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/sched/ready_test_dispatch.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/riscv64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/smp.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/task.rs" = { category = "test", owner = "task" }
@@ -127,6 +131,7 @@
 "kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/x86_64/dev/ps2_keyboard.rs" = { category = "exception", owner = "dev", target = "input Driver Cell (Spec 15 §3.1)" }
 "kernel/src/arch/x86_64/gpio_irq.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/arch/x86_64/iommu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/irq.rs" = { category = "A", owner = "arch" }

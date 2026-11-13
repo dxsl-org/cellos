@@ -141,7 +141,7 @@ fn send_ipi(hart_id: usize) {
         // AArch64: the board's interrupt controller raises the IPI (a GIC SGI),
         // addressed by CPU index or by affinity, whichever it uses.
         #[cfg(target_arch = "aarch64")]
-        if let Some(cpu) = crate::sched::hart_local::physical_cpu_for(hart_id) {
+        if let Some(cpu) = crate::arch::hart_local::physical_cpu_for(hart_id) {
             if let Some(mpidr) = CPU_MPIDRS.mpidr(cpu) {
                 <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::send_ipi(
                     cpu as u32, mpidr,
@@ -740,7 +740,7 @@ fn start_psci_secondaries() {
     // Logical hart N runs CPU index N (the N-th `/cpus` node), so the boot core
     // has to *be* CPU 0 for the mapping to hold; anything else is reported
     // rather than half-applied.
-    let boot_cpu = crate::sched::hart_local::physical_cpu_index();
+    let boot_cpu = crate::arch::hart_local::physical_cpu_index();
     if boot_cpu != Some(0) {
         log::warn!(
             "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
@@ -802,7 +802,7 @@ fn start_psci_secondaries() {
             break;
         };
         // The core is still off: this mapping has to exist before it reads it.
-        if !crate::sched::hart_local::publish_physical_cpu(hart_id, hart_id) {
+        if !crate::arch::hart_local::publish_physical_cpu(hart_id, hart_id) {
             log::warn!(
                 "[smp] hart {} conflicts with the published topology — not started",
                 hart_id
@@ -917,7 +917,7 @@ fn start_spin_table_secondaries() {
     }
     // Release addresses are indexed by `/cpus` node order, with the boot core
     // as node 0, exactly as the logical hart equals the CPU index.
-    let boot_cpu = crate::sched::hart_local::physical_cpu_index();
+    let boot_cpu = crate::arch::hart_local::physical_cpu_index();
     if boot_cpu != Some(0) {
         log::warn!(
             "[smp] boot core reports CPU index {:?} (expected 0) — keeping Cellos single-hart",
@@ -950,7 +950,7 @@ fn start_spin_table_secondaries() {
             }
         };
 
-        if !crate::sched::hart_local::publish_physical_cpu(hart_id, hart_id) {
+        if !crate::arch::hart_local::publish_physical_cpu(hart_id, hart_id) {
             log::warn!("[smp] hart {hart_id} conflicts with the published topology — not started");
             continue;
         }

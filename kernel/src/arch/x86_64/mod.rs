@@ -30,6 +30,8 @@ pub mod gpio_irq;
 
 pub mod sdhci;
 
+pub mod hart_local;
+
 pub mod acpi {
     // The G1 private lane does not call `sci::init` (its x86 contract is pinned),
     // so the discovery half of these modules is unused there.

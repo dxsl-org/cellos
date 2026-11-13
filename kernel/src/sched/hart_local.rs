@@ -30,58 +30,6 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
-#[cfg(target_arch = "aarch64")]
-use crate::sched::smp::{CPU_MPIDRS, CPU_TOPOLOGY};
-
-/// The CPU index this hart is running on: its `MPIDR_EL1` affinity looked up
-/// in [`CPU_MPIDRS`]. `None` for a core the firmware tree does not describe.
-#[cfg(target_arch = "aarch64")]
-#[inline(always)]
-pub fn physical_cpu_index() -> Option<usize> {
-    CPU_MPIDRS.cpu_index(crate::arch::smp::mpidr())
-}
-
-/// Publish `cpu_index -> logical_hart` before `cpu_index` starts executing.
-///
-/// `false` when the pair conflicts with one already published (or an index is
-/// out of range); the map is then unchanged. Re-publishing the same pair, as a
-/// started hart's `install()` does, is accepted.
-#[cfg(target_arch = "aarch64")]
-pub fn publish_physical_cpu(cpu_index: usize, logical_hart: usize) -> bool {
-    CPU_TOPOLOGY.publish(logical_hart, cpu_index)
-}
-
-/// The CPU index a logical hart runs on, if it was published.
-#[cfg(target_arch = "aarch64")]
-pub fn physical_cpu_for(logical_hart: usize) -> Option<usize> {
-    CPU_TOPOLOGY.physical(logical_hart)
-}
-
-/// Slot owned by the calling CPU on targets without a `tp` register.
-#[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-#[inline(always)]
-fn owned_slot_index() -> usize {
-    #[cfg(target_arch = "aarch64")]
-    {
-        physical_cpu_index()
-            .and_then(|cpu| CPU_TOPOLOGY.logical(cpu))
-            .unwrap_or(0)
-    }
-    #[cfg(all(target_arch = "x86_64", not(all(test, not(target_os = "none")))))]
-    {
-        hal::syscall::current_cpu_id()
-    }
-    // Hosted unit fixtures do not install a privileged kernel GS base.
-    #[cfg(all(target_arch = "x86_64", test, not(target_os = "none")))]
-    {
-        0
-    }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-    {
-        0
-    }
-}
-
 /// Per-hart local state.
 ///
 /// LAYOUT IS ABI — the trap.S reads `kernel_tp_for_cells` by hardcoded offset
@@ -294,16 +242,7 @@ pub fn install(hart_id: usize) {
     // cells receive `kernel_tp_for_cells` (not this pointer) on context switch.
     unsafe { write_tp(hl_addr) };
 
-    // A refused pair (or a core the firmware tree does not describe) leaves
-    // this CPU resolving to slot 0, as an unpublished one always did; the boot
-    // path that started it already reported the conflict.
-    #[cfg(target_arch = "aarch64")]
-    if let Some(cpu) = physical_cpu_index() {
-        let _ = publish_physical_cpu(cpu, hart_id);
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    crate::hal::trap::init_for_hart(hart_id);
+    crate::arch::hart_local::install_tail(hart_id);
 }
 
 /// Return a reference to the calling hart's `ViHartLocal`.
@@ -315,15 +254,7 @@ pub fn install(hart_id: usize) {
 /// On RISC-V: `tp` must point to a valid `ViHartLocal` (guaranteed after `install()`).
 #[inline(always)]
 pub unsafe fn current_hart() -> &'static ViHartLocal {
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    {
-        let tp = crate::arch::smp::read_tp();
-        &*(tp as *const ViHartLocal)
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    {
-        &HART_LOCALS[owned_slot_index()]
-    }
+    crate::arch::hart_local::current_hart()
 }
 
 /// Return the calling hart's id.
@@ -335,42 +266,11 @@ pub unsafe fn current_hart() -> &'static ViHartLocal {
 /// topology does not describe has no slot. The lock-rank check keeps its
 /// per-hart held set only for installed harts.
 pub fn installed_hart_id() -> Option<usize> {
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    {
-        let tp = crate::arch::smp::read_tp();
-        (tp != 0).then(current_hart_id)
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        physical_cpu_index().and_then(|cpu| CPU_TOPOLOGY.logical(cpu))
-    }
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "riscv32",
-        target_arch = "aarch64"
-    )))]
-    {
-        Some(owned_slot_index())
-    }
+    crate::arch::hart_local::installed_hart_id()
 }
 
 pub fn current_hart_id() -> usize {
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    {
-        let tp = crate::arch::smp::read_tp();
-        if tp == 0 {
-            return 0;
-        }
-        unsafe {
-            (*(tp as *const ViHartLocal))
-                .hart_id
-                .load(Ordering::Relaxed)
-        }
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    {
-        owned_slot_index()
-    }
+    crate::arch::hart_local::current_hart_id()
 }
 
 /// Cell ID currently running on this hart (0 = kernel, no quota).
@@ -378,24 +278,7 @@ pub fn current_hart_id() -> usize {
 /// Uses the calling CPU's owned HartLocal slot.
 #[inline(always)]
 pub fn current_cell_id() -> usize {
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    {
-        let tp = crate::arch::smp::read_tp();
-        if tp == 0 {
-            return 0;
-        }
-        unsafe {
-            (*(tp as *const ViHartLocal))
-                .current_cell_id
-                .load(Ordering::Relaxed)
-        }
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    {
-        HART_LOCALS[owned_slot_index()]
-            .current_cell_id
-            .load(Ordering::Relaxed)
-    }
+    crate::arch::hart_local::current_cell_id()
 }
 
 /// Provenance required to place a fault in the recoverable scheduler funnel.
@@ -799,24 +682,7 @@ pub fn take_deferred_retirement() -> Option<DeferredRetirement> {
 /// Update the cell-id attribution for the calling hart.
 #[inline(always)]
 pub fn set_current_cell_id(id: usize) {
-    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-    {
-        let tp = crate::arch::smp::read_tp();
-        if tp == 0 {
-            return;
-        }
-        unsafe {
-            (*(tp as *const ViHartLocal))
-                .current_cell_id
-                .store(id, Ordering::Relaxed)
-        };
-    }
-    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    {
-        HART_LOCALS[owned_slot_index()]
-            .current_cell_id
-            .store(id, Ordering::Relaxed);
-    }
+    crate::arch::hart_local::set_current_cell_id(id)
 }
 
 /// Write the `tp` register.
@@ -826,15 +692,7 @@ pub fn set_current_cell_id(id: usize) {
 /// (or 0 for the pre-install sentinel).  Must run with interrupts disabled or
 /// from boot context where no concurrent trap can misread a partial write.
 #[inline(always)]
-#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
 pub unsafe fn write_tp(val: usize) {
     // SAFETY: the caller ensures context (see above).
-    crate::arch::smp::write_tp(val);
+    crate::arch::hart_local::write_tp(val);
 }
-
-/// No-op on non-RISC-V targets (no `tp`-based hart-local addressing).
-///
-/// # Safety
-/// No preconditions on these targets — `_val` is unused and no state is written.
-#[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-pub unsafe fn write_tp(_val: usize) {}
