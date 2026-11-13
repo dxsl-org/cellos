@@ -52,16 +52,15 @@ pub fn handle(
 ) -> usize {
     if let Some(request) = ReadRunRequest::decode(data) {
         let capacity = ctrl.capacity_sectors();
-        return block_wire::serve_read_run(&request, capacity, out, |lba, sector| {
-            ctrl.read_sector(lba, io_buf.iova())?;
-            // SAFETY: read_sector completed; the DMA payload is now stable in
-            // the CPU mapping retained by io_buf, which covers one page.
+        // One READ DMA EXT for the whole run: at most 3584 bytes, inside the
+        // one-page io_buf.
+        return block_wire::serve_read_run(&request, capacity, out, |lba, run| {
+            ctrl.read_sectors(lba, request.count, io_buf.iova())?;
+            // SAFETY: read_sectors completed; the DMA payload is now stable in
+            // the CPU mapping retained by io_buf, which covers one page and so
+            // the whole run.
             unsafe {
-                core::ptr::copy_nonoverlapping(
-                    io_buf.inner().virt(),
-                    sector.as_mut_ptr(),
-                    SECTOR_SIZE,
-                );
+                core::ptr::copy_nonoverlapping(io_buf.inner().virt(), run.as_mut_ptr(), run.len());
             }
             Ok(())
         });
@@ -71,10 +70,10 @@ pub fn handle(
     };
 
     match op {
-        DrvOp::Read => match ctrl.read_sector(sector, io_buf.iova()) {
+        DrvOp::Read => match ctrl.read_sectors(sector, 1, io_buf.iova()) {
             Ok(()) => {
                 out[0] = BlockOutcome::Completed.to_byte();
-                // SAFETY: read_sector completed; the DMA payload is now stable in
+                // SAFETY: read_sectors completed; the DMA payload is now stable in
                 // the CPU mapping retained by io_buf, which covers one page.
                 unsafe {
                     core::ptr::copy_nonoverlapping(

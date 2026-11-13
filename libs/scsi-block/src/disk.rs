@@ -94,6 +94,23 @@ impl<E: ScsiExecutor> ScsiDisk<E> {
         complete(expected, moved)
     }
 
+    /// [`ScsiDisk::read`] for a request that may exceed
+    /// [`ScsiDisk::max_transfer_blocks`]: one READ(16) per limit, in order.
+    ///
+    /// # Errors
+    /// As [`ScsiDisk::read`], from the first command that fails; earlier parts
+    /// of `buf` are then filled, later ones unspecified.
+    pub fn read_split(&mut self, lba: u64, buf: &mut [u8]) -> Result<(), ScsiError<E::Error>> {
+        let block_size = self.capacity.block_size as usize;
+        // max_blocks >= 1 is guaranteed by probe.
+        let mut next = lba;
+        for part in buf.chunks_mut(self.max_blocks as usize * block_size) {
+            self.read(next, part)?;
+            next += (part.len() / block_size) as u64;
+        }
+        Ok(())
+    }
+
     /// Writes `buf` (`buf.len() / block_size()` blocks) starting at `lba`.
     /// An empty `buf` issues no command. Data may sit in the device's
     /// volatile cache until [`ScsiDisk::flush`].

@@ -85,16 +85,16 @@ impl ReadRunRequest {
     }
 }
 
-/// Serve an `OP_READ_RUN` one sector at a time with `read_one`, for a driver
-/// whose device path moves a sector per command. Writes the reply into `out`
+/// Serve an `OP_READ_RUN` with `read_run`, which fills the whole run (`count`
+/// sectors from the first) in one device command. Writes the reply into `out`
 /// (at least [`MAX_REPLY_SIZE`] bytes) and returns its length: the outcome byte
-/// plus the sectors when every read completed, else the first failure's outcome
-/// alone. A run past `sectors` (the device size) is `NotIssued` before any read.
+/// plus the sectors when the read completed, else its outcome alone. A run past
+/// `sectors` (the device size) is `NotIssued` before any read.
 pub fn serve_read_run(
     request: &ReadRunRequest,
     sectors: u64,
     out: &mut [u8],
-    mut read_one: impl FnMut(u64, &mut [u8; SECTOR_SIZE]) -> Result<(), BlockOutcome>,
+    read_run: impl FnOnce(u64, &mut [u8]) -> Result<(), BlockOutcome>,
 ) -> usize {
     let in_range = request
         .sector
@@ -105,15 +105,16 @@ pub fn serve_read_run(
         out[0] = BlockOutcome::NotIssued.to_byte();
         return 1;
     }
-    for (k, sector) in out[1..len].chunks_exact_mut(SECTOR_SIZE).enumerate() {
-        let sector: &mut [u8; SECTOR_SIZE] = sector.try_into().expect("whole sector");
-        if let Err(outcome) = read_one(request.sector + k as u64, sector) {
+    match read_run(request.sector, &mut out[1..len]) {
+        Ok(()) => {
+            out[0] = BlockOutcome::Completed.to_byte();
+            len
+        }
+        Err(outcome) => {
             out[0] = outcome.to_byte();
-            return 1;
+            1
         }
     }
-    out[0] = BlockOutcome::Completed.to_byte();
-    len
 }
 
 /// Result of one block request, as seen by the client.
@@ -159,7 +160,9 @@ impl BlockOutcome {
 
 #[cfg(test)]
 mod tests {
-    use super::{serve_read_run, BlockOutcome, ReadRunRequest, MAX_REPLY_SIZE, MAX_RUN_SECTORS, OP_READ};
+    use super::{
+        serve_read_run, BlockOutcome, ReadRunRequest, MAX_REPLY_SIZE, MAX_RUN_SECTORS, OP_READ,
+    };
 
     #[test]
     fn read_run_requests_round_trip_and_bad_frames_are_refused() {
@@ -186,26 +189,34 @@ mod tests {
     }
 
     #[test]
-    fn a_served_run_is_all_sectors_or_the_first_failure_alone() {
-        let request = ReadRunRequest { sector: 10, count: 3 };
+    fn a_served_run_is_all_sectors_or_the_failure_alone() {
+        let request = ReadRunRequest {
+            sector: 10,
+            count: 3,
+        };
         let mut out = [0u8; MAX_REPLY_SIZE];
-        let len = serve_read_run(&request, 13, &mut out, |lba, sector| {
-            sector.fill(lba as u8);
+        let len = serve_read_run(&request, 13, &mut out, |lba, run| {
+            assert_eq!((lba, run.len()), (10, 3 * 512));
+            run.fill(7);
             Ok(())
         });
         assert_eq!(len, 1 + 3 * 512);
         assert_eq!(out[0], BlockOutcome::Completed.to_byte());
-        assert!(out[1 + 2 * 512..len].iter().all(|&b| b == 12));
+        assert!(out[1..len].iter().all(|&b| b == 7));
 
         let mut reads = 0;
         let len = serve_read_run(&request, 12, &mut out, |_, _| {
             reads += 1;
             Ok(())
         });
-        assert_eq!((len, out[0], reads), (1, BlockOutcome::NotIssued.to_byte(), 0), "past the end");
+        assert_eq!(
+            (len, out[0], reads),
+            (1, BlockOutcome::NotIssued.to_byte(), 0),
+            "past the end"
+        );
 
-        let len = serve_read_run(&request, 13, &mut out, |lba, _| {
-            if lba == 11 { Err(BlockOutcome::Indeterminate) } else { Ok(()) }
+        let len = serve_read_run(&request, 13, &mut out, |_, _| {
+            Err(BlockOutcome::Indeterminate)
         });
         assert_eq!((len, out[0]), (1, BlockOutcome::Indeterminate.to_byte()));
     }

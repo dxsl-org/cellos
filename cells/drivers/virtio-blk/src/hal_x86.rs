@@ -31,9 +31,12 @@ use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 /// its slots stay claimed), so six slots leave two spare.
 const BOUNCE_SLOTS: usize = 6;
 
-/// Bytes per bounce slot; larger buffers are a caller contract violation
-/// (dispatch issues single 512-byte sectors).
+/// Bytes per bounce slot; larger buffers are a caller contract violation.
+/// Dispatch's largest buffer is a whole `OP_READ_RUN`, checked below.
 const SLOT_BYTES: usize = PAGE_SIZE;
+const _: () = assert!(
+    types::block_wire::MAX_RUN_SECTORS as usize * types::block_wire::SECTOR_SIZE <= SLOT_BYTES
+);
 
 /// BDF every allocation is authorised for; stored by [`prepare`].
 static BDF: AtomicU32 = AtomicU32::new(0);

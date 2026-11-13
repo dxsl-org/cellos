@@ -42,9 +42,11 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
 /// completed read, else 1.
 pub fn handle(dev: &mut BlkDevice, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> usize {
     if let Some(request) = ReadRunRequest::decode(data) {
-        // The device refuses a sector past its capacity itself.
-        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, sector| {
-            dev.read_sector(lba, sector)
+        // One virtio request for the whole run (at most 3584 bytes, inside one
+        // bounce page on either transport); the device refuses a sector past
+        // its capacity itself.
+        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, run| {
+            dev.read_sectors(lba, run)
         });
     }
     let Some((op, sector)) = parse_op(data) else {
@@ -54,7 +56,7 @@ pub fn handle(dev: &mut BlkDevice, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> u
     match op {
         DrvOp::Read => {
             let mut sec = [0u8; SECTOR_SIZE];
-            match dev.read_sector(sector, &mut sec) {
+            match dev.read_sectors(sector, &mut sec) {
                 Ok(()) => {
                     out[0] = BlockOutcome::Completed.to_byte();
                     out[1..block_wire::REPLY_SIZE].copy_from_slice(&sec);

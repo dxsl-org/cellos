@@ -40,6 +40,25 @@ fn read_issues_read_16_and_fills_buffer() {
 }
 
 #[test]
+fn read_split_issues_one_read_16_per_transfer_limit() {
+    // 10 blocks against the 8-block limit: blocks 90..98, then 98..100.
+    let payload: Vec<u8> = (0..10 * BS).map(|i| (i / BS) as u8).collect();
+    let mut disk = disk([
+        Reply::data(&payload[..8 * BS]),
+        Reply::data(&payload[8 * BS..]),
+    ]);
+    let mut buf = vec![0u8; 10 * BS];
+    disk.read_split(90, &mut buf).unwrap();
+    assert_eq!(buf, payload);
+    let calls = disk.into_executor().calls;
+    let reads: Vec<_> = calls[calls.len() - 2..]
+        .iter()
+        .map(|c| c.cdb.clone())
+        .collect();
+    assert_eq!(reads, [cdb::read_16(90, 8), cdb::read_16(98, 2)]);
+}
+
+#[test]
 fn write_issues_write_16_with_data() {
     let mut disk = disk([Reply::good()]);
     let buf = vec![0xA5u8; 8 * BS];

@@ -27,7 +27,7 @@ use core::sync::atomic::{fence, Ordering};
 use ostd::dma::DmaBuf;
 use ostd::io::print_fmt;
 use ostd::mmio::MmioRegion;
-use types::block_wire::BlockOutcome;
+use types::block_wire::{BlockOutcome, MAX_RUN_SECTORS};
 use types::{ViError, ViResult};
 
 // ── Generic host control (ABAR offsets) ───────────────────────────────────────
@@ -418,19 +418,27 @@ impl AhciController {
 
     // ── Data path (phase 02b) ─────────────────────────────────────────────────
 
-    /// Read one 512-byte sector at the given 48-bit LBA into `iova`.
+    /// Read `count` consecutive 512-byte sectors from the given 48-bit LBA
+    /// into `iova` with one READ DMA EXT.
     ///
     /// `iova` must be the device-visible address of an authorized DMA buffer
-    /// (one PRDT entry covers that single page).
-    pub fn read_sector(&mut self, lba: u64, iova: u64) -> Result<(), BlockOutcome> {
+    /// of at least `count * 512` bytes (one PRDT entry covers it).
+    pub fn read_sectors(&mut self, lba: u64, count: u16, iova: u64) -> Result<(), BlockOutcome> {
         self.ensure_live()?;
-        self.issue_dma(ATA_CMD_READ_DMA_EXT, lba, iova, false, "READ DMA EXT")
+        self.issue_dma(
+            ATA_CMD_READ_DMA_EXT,
+            lba,
+            count,
+            iova,
+            false,
+            "READ DMA EXT",
+        )
     }
 
     /// Write one 512-byte sector at the given 48-bit LBA from `iova`.
     pub fn write_sector(&mut self, lba: u64, iova: u64) -> Result<(), BlockOutcome> {
         self.ensure_live()?;
-        self.issue_dma(ATA_CMD_WRITE_DMA_EXT, lba, iova, true, "WRITE DMA EXT")
+        self.issue_dma(ATA_CMD_WRITE_DMA_EXT, lba, 1, iova, true, "WRITE DMA EXT")
     }
 
     /// Drain the device's write cache (FLUSH CACHE EXT, non-data).
@@ -452,12 +460,13 @@ impl AhciController {
         self.issue_and_wait(p, 0, "FLUSH CACHE EXT")
     }
 
-    /// Program command slot 0 for a one-sector READ/WRITE DMA EXT and poll it to
-    /// completion.
+    /// Program command slot 0 for a READ/WRITE DMA EXT of `count` sectors
+    /// (`1..=MAX_RUN_SECTORS`, one PRDT entry) and poll it to completion.
     fn issue_dma(
         &mut self,
         cmd: u8,
         lba: u64,
+        count: u16,
         iova: u64,
         write: bool,
         what: &str,
@@ -468,10 +477,14 @@ impl AhciController {
         // Reject a transfer beyond the IDENTIFY-reported capacity instead of
         // letting the device answer with an opaque ABRT and no address.
         let capacity = self.capacity_sectors();
-        if lba >= capacity {
+        if !(1..=MAX_RUN_SECTORS).contains(&count)
+            || lba
+                .checked_add(u64::from(count))
+                .is_none_or(|end| end > capacity)
+        {
             let _ = print_fmt(format_args!(
-                "[ahci] port={} tag={} {} rejected: LBA {} >= capacity {} sectors\n",
-                self.port, tag, what, lba, capacity
+                "[ahci] port={} tag={} {} rejected: {} sectors at LBA {} past capacity {} sectors\n",
+                self.port, tag, what, count, lba, capacity
             ));
             return Err(BlockOutcome::NotIssued);
         }
@@ -506,12 +519,13 @@ impl AhciController {
         dma_write_u8(&self.cmd_table, 9, ((lba >> 32) & 0xFF) as u8);
         dma_write_u8(&self.cmd_table, 10, ((lba >> 40) & 0xFF) as u8);
         dma_write_u8(&self.cmd_table, 11, 0); // features exp
-        dma_write_u8(&self.cmd_table, 12, 1); // sector count low: one sector
-        dma_write_u8(&self.cmd_table, 13, 0); // sector count high
+        let [count_low, count_high] = count.to_le_bytes();
+        dma_write_u8(&self.cmd_table, 12, count_low); // sector count low
+        dma_write_u8(&self.cmd_table, 13, count_high); // sector count high
         dma_write_u32(&self.cmd_table, 128, iova as u32);
         dma_write_u32(&self.cmd_table, 132, (iova >> 32) as u32);
         dma_write_u32(&self.cmd_table, 136, 0); // reserved
-        dma_write_u32(&self.cmd_table, 140, SECTOR_BYTES - 1); // DBC = byte count - 1
+        dma_write_u32(&self.cmd_table, 140, u32::from(count) * SECTOR_BYTES - 1); // DBC = byte count - 1
 
         self.issue_and_wait(p, tag, what)
     }

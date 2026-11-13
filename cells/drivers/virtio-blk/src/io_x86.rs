@@ -78,8 +78,9 @@ impl BlkDevice {
         Ok(())
     }
 
-    /// Read one 512-byte sector.
-    pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
+    /// Read `buf.len() / 512` consecutive sectors into `buf` in one request;
+    /// `buf` is a whole number of sectors, at most one page (the bounce size).
+    pub fn read_sectors(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
         self.usable()?;
         let mut req = BlkReq::default();
         let mut resp = BlkResp::default();
@@ -102,7 +103,7 @@ impl BlkDevice {
         self.usable()?;
         let mut req = BlkReq::default();
         let mut resp = BlkResp::default();
-        // SAFETY: as in `read_sector`.
+        // SAFETY: as in `read_sectors`.
         let token = unsafe {
             self.blk
                 .write_blocks_nb(sector as usize, &mut req, buf, &mut resp)

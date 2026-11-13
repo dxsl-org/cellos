@@ -58,9 +58,10 @@ fn status(out: &mut [u8; REPLY_SIZE], outcome: BlockOutcome) -> usize {
 /// completed read, else 1.
 pub fn handle(disk: &mut Disk, data: &[u8], out: &mut [u8; REPLY_SIZE]) -> usize {
     if let Some(request) = ReadRunRequest::decode(data) {
-        // The device refuses a block past its capacity itself.
-        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, sector| {
-            disk.read(lba, sector).map_err(|error| outcome(&error))
+        // One READ(16) for the run unless the device's transfer limit is
+        // smaller; the device refuses a block past its capacity itself.
+        return block_wire::serve_read_run(&request, u64::MAX, out, |lba, run| {
+            disk.read_split(lba, run).map_err(|error| outcome(&error))
         });
     }
     let Some((op, sector)) = parse_op(data) else {

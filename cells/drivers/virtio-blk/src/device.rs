@@ -64,8 +64,9 @@ impl BlkDevice {
 
 #[cfg(not(target_arch = "x86_64"))]
 impl BlkDevice {
-    /// Read one 512-byte sector.
-    pub fn read_sector(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
+    /// Read `buf.len() / 512` consecutive sectors into `buf` in one request;
+    /// `buf` is a whole number of sectors, at most one page (the bounce size).
+    pub fn read_sectors(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
         outcome(self.blk.read_blocks(sector as usize, buf))
     }
 
