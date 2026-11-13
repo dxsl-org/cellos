@@ -162,3 +162,7 @@ Mỗi FS Cell được bao bọc bởi cơ chế an toàn của Kernel:
 
 * **Isolation**: Nếu một FS backend bị panic, chỉ các App đang truy cập phân vùng đó bị ảnh hưởng.
 * **Recovery**: Kernel thực hiện reload FS Cell. Nhờ SAS, các cấu trúc dữ liệu trong Page Cache vẫn có thể được giữ lại để Cell mới tái sử dụng (Warm Reboot).
+* **Bounded block driver (Phase 12, 2026-11-13)**: mỗi request tới block Driver Cell là một exact operation có hạn `BLOCK_REPLY_TICKS = 3_500` (35 s = budget 30 s của driver + 5 s). Driver đã nhận mà không trả lời → `Indeterminate` (write không bao giờ replay); chưa nhận → `NotIssued`. Sau một lần hết hạn, device bị đánh dấu *stalled* và mọi request tới nó bị từ chối ngay cho đến khi route trỏ sang provider khác, nên một driver bị treo chỉ tốn đúng một hạn. Witness: `a_frozen_block_driver_does_not_hang_vfs_x86` (`tests/integration/tests/nvme-x86.rs`, fault hook `F12-FREEZE`).
+* **Heartbeat**: VFS chạy trên `ostd::service::serve` với heartbeat 60 s (`liveness::VFS_HEARTBEAT_TICKS`), re-arm mỗi vòng và trước mỗi block request; VFS treo thật (lock cycle, chờ vô hạn) bị kernel kill và init restart.
+* **Typed backend errors**: mọi method của `FsBackend` trả `Result<_, FsError>`; lỗi thiết bị giữa chừng một FAT read là `FsError::Io`, không còn là short read trông như thành công. Wire byte không đổi (`Unsupported` → 6, còn lại → 1).
+* **Trust store**: SSH known-hosts không còn nằm trong VFS; kms giữ nó tại `/srv/cellos/kms/ssh_known_hosts`. `VfsRequest::Trust*` là tombstone trả `Err(6)` (Spec 17 §9, 2026-11-13).

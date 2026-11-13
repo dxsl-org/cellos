@@ -408,6 +408,26 @@ the reason the value is safe against existing owners.
   - **D6:** `ProcessInfo.state` keeps 0/1/2/3; 3 means Terminated or Retiring.
   - **Unchanged:** frames, byte-0 registry, envelopes, attested tails, buffer sizes, the
     `IpcSubmit`…`IpcReply` operation ABI and `IPC_STATUS`.
+- 2026-11-13 — **Service wire modules and one service loop (architecture remediation Phase 12;
+  Law-1 confirmation 1 at CP1: `.agents/261110-1703-architecture-remediation/cp1-service-wire.md`;
+  confirmation 2 is `…/cp2-service-wire.md`).**
+  - **W1 owners:** every service opcode, status and error byte lives in one module under
+    `libs/api/src/services/proto/` (`app_envelope`, `supervisor`, `net`, `tls`, `nic`, `vfs`,
+    `config`, `input`, `compositor`), pinned to its previous byte by `proto_tests.rs`.
+    `scripts/check-service-wire-literals.py` (CI) refuses copies. The byte-0 collisions listed
+    there (net `0xFF` failure/EOF, `0x10` screen size/input event, `TLS_CLOSE` = the next
+    `NetRequest` index, …) are documented, not moved; `NetRequest` stays below `0x15`.
+  - **W2 `Recv` (1):** `a3` bits 8–31 carry a timeout in ticks (0 = untimed); bit 0 stays
+    `RECV_ATTEST_CALLER`; bits 1–7 stay ignored. Expiry is the generic error sentinel. No new
+    number or allowlist bit.
+  - **W3 VFS:** `VfsRequest::{TrustLookup, TrustChallenge, TrustCommit}` (`0x28`–`0x2a`) are
+    tombstones answered `Err(6)`; `VfsResponse::{Trust, TrustChallenged}` are gone.
+  - **W4 kms:** `KmsOpcode` 25–29 (staged trust query) and `KmsErrorCode` 39–40 are appended.
+  - **W5:** the input trust prompt (`CellSession` selector 29) is accepted from the live kms
+    provider instead of VFS.
+  - **Services:** config, kms, ai, supervisor, compositor, VFS and net run on
+    `ostd::service::serve` (attested receive, owner watches, heartbeat). ai answers only attested
+    callers. Unchanged: every frame, buffer size and the operation ABI.
 
 ---
 
@@ -582,9 +602,15 @@ invisible to every existing parser.
   the generation too, so a successor cell under a recycled id does not inherit its
   predecessor's state. `generation == 0` means "not attested on this path"; refuse
   to record durable state for it.
-- `TryRecv`, `RecvTimeout`, and `RecvScatter` do **not** attest. `RecvTimeout`
-  already uses the fourth argument for its deadline, and `RecvScatter` has no
-  single buffer tail to write. A service that authorizes must receive with `Recv`.
+- `Recv` and `TryRecv` attest; `RecvTimeout` and `RecvScatter` do **not**.
+  `RecvTimeout` already uses the fourth argument for its deadline, and
+  `RecvScatter` has no single buffer tail to write. A service that authorizes and
+  needs a deadline passes the timeout in `Recv`'s `a3` bits 8–31
+  (`api::caller_identity::recv_flags`, Phase 12 W2): the trailer rule holds, and
+  expiry is the generic error sentinel, never sender 0.
+- **The trailer must name the sender.** `ostd::service::serve` accepts a trailer
+  only when its `sender_tid` equals the returned sender; a death record (sender =
+  the dead root tid) carries none.
 
 ### 11.4 Direct (non-`ecall`) service calls
 

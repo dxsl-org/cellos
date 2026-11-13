@@ -144,6 +144,13 @@ Ordered by ROI for never-die. Items are independent of the (dropped) SATP decisi
       stale at 100ns — no cell calls it yet, so defined cleanly). Verified: no boot regression;
       positive timeout-fires path is unexercised until a cell uses RecvTimeout (follow-up test).
 
+- [x] **One service loop with built-in liveness** — DONE 2026-11-13 (architecture remediation
+      Phase 12). `ostd::service::serve` arms the heartbeat for every service on it (config, kms,
+      ai, supervisor, compositor, VFS: 60 s; net: 5 s), re-arms it each turn and never waits longer
+      than half the interval, using the timed attested `Recv` (Spec 17 §11.3). Owner-death watches
+      (`ostd::service::owners`) are implemented once instead of per service. Input, net-broker and
+      silo keep their own loops (owner decision, CP1 §8).
+
 ### 4.3 — Recovery: Supervisor Tree (P0, highest ROI)
 Erlang/OTP-style "let it crash + restart".
 - [x] **Supervisor MVP — init auto-restarts the shell** — DONE 2026-06-06 (commit 8113503c).

@@ -74,12 +74,12 @@ libs/api/src/services/proto/<service>.rs  ◄─ server, ostd client, tools, ker
 ## Todo List
 
 - [x] CP1
-- [ ] Proto modules, literals gone
-- [ ] `serve` + first three services
-- [ ] VFS liveness and block path
-- [ ] Remaining services migrated
-- [ ] Trust store moved
-- [ ] Net refactor
+- [x] Proto modules, literals gone
+- [x] `serve` + first three services
+- [x] VFS liveness and block path
+- [x] Remaining services migrated
+- [x] Trust store moved
+- [x] Net refactor
 - [ ] CP2
 
 ## Success Criteria
@@ -104,4 +104,30 @@ Phase 13 moves hot-swap envelopes onto `serve` or removes them.
 
 ## Deviation Log
 
-None.
+- **Decision (owner, S6 approval):** multi-sector block requests are done by plan `261112-1035` (`OP_READ_RUN`) and dropped here; input, net-broker and silo stay hand-rolled (CP1 §8).
+- **Surprise (step 2):** `lua` did not compile since Phase 11 (`CallOutcome` from `ServiceRef::call`); it is excluded from the workspace clippy runs, so only its CI host test would have caught it. Fixed in its own commit (`1c1ca38ae`).
+- **Decision (step 2):** the literal gate (`scripts/check-service-wire-literals.py`) forbids the proto-owned *names* plus three literal shapes. `OP_SNAPSHOT`/`OP_STATUS` are not in the name list: other wires (silo, net-broker bench oracle) own the same names with different meanings. Test-local synthetic bytes and non-IPC formats stay.
+- **Decision (step 2):** `DESTROY_SURFACE` replies are a status (0 destroyed, 1 refused), not the boolean `REPLY_TRUE/FALSE`; `proto::compositor` names them `DESTROY_OK/DESTROY_REFUSED`.
+- **Decision (step 3, W2):** a timed `Recv` reports expiry as the generic error sentinel, never `Ok(0)`, so a timeout cannot be read as a message from the kernel (sender 0). Allowed under the `Recv` bit; no new bit.
+- **Decision (step 3):** `serve` landed with what config, kms and ai need (attested receive, heartbeat, idle ticks, unattributed messages). Owner-watch policy and deferred replies arrive with the services that use them (steps 5, 7).
+- **Decision (step 3):** ai sessions are keyed by the attested `(cell_id, generation)`, not the sender tid, so a client's threads share their sessions.
+- **Re-pin (step 3):** `check-multi-source-wait-law1-digests.sh` counted 4 allowlist exports in `runtime.rs`; `service_entry!` was deleted, so 3.
+- **Surprise (lanes after step 3):** `hypha-local-ai` fails with `DENY launch edge: caller=hypha-core … target=/bin/llm-gateway`. Loader and catalog files are unchanged on this branch; logged as pre-existing, not fixed here.
+- **Decision (step 4):** the VFS heartbeat is armed only once the request loop starts (`liveness::arm`); mount and discovery run unarmed, each block request bounded. Block requests re-arm it before each exchange.
+- **Decision (step 4):** a stalled device stays refused until its route names another provider; there is no timed retry. A driver that overruns its own 30 s budget is broken; the restart path (new provider) clears the stall.
+- **Surprise (step 4, `FsError`):** an unreadable `/srv` trust store now answers `ssh_trust::UNAVAILABLE` where it answered `UNKNOWN` (the stat error is now distinguishable). The trust store moves to kms in step 6.
+- **Left (step 4):** CellosFS folds an indeterminate write into its own `IoError`, so `/srv` reports `Io`, not `Indeterminate`; separating them needs a `libs/cellos-fs` change, out of this phase.
+- **Evidence (step 4):** the frozen-driver witness `a_frozen_block_driver_does_not_hang_vfs_x86` fails on `e676d0ca9` with only the fault hook and test added (VFS stops answering: `vcat /tmp/alive.txt` → `cannot read`) and passes on the branch. `nvme_09c_nic_owner_survives_replacement_x86` failed once inside the 12-test sequence (fault marker not seen in 20 s) and passed alone; logged as a flake.
+- **Decision (step 5):** owner watches moved into `ostd::service::owners` and `serve` (`WatchPolicy::{Off, OnRequest, Every}`); services keep only what they reclaim. VFS keeps a set of watched `(cell, generation)` keys for reconcile; the compositor keeps its per-owner creator tids.
+- **Surprise (step 5):** under `AppContext` the supervisor's owner-exit relay never fired: it required `data.len() == 9`, but the payload is always the whole zero-padded window. On `serve` the frame is the 9-byte prefix followed by zero padding, so init's notice now reaches the compositor.
+- **Surprise (step 5):** `supervisor --features hostile-backend-recovery` does not compile on `main` (`sender_has_exact_name` no longer exists). Pre-existing and feature-gated; not fixed here.
+- **Decision (step 5):** the supervisor's power settle keeps dropping other messages instead of deferring them (CP1 §3 said "defers"): every sender except the storage stack is frozen and the machine powers off when the window ends, so a deferred message would never be served.
+- **Decision (owner, step 6):** the canonical x86 images did not ship `/bin/kms` (headless: never; boot config: only with `ui`), so moving the trust store would have left `cellbox ssh` without a trust provider. The owner chose to ship kms in every non-board image: `service-kms` joins the headless profile (desktop inherits it), `generate-boot-config.py` selects `/bin/kms` whenever not a board, the phase 09 and Tier 3 ssh lanes add it in every mode, and the assembler's signing pin (`X86_CANDIDATE_RECIPE_SHA256`) and signed-binary set follow.
+- **Decision (step 6):** kms trust queries are staged like the SSH key import (Begin/Chunk/Commit, 96-byte chunks); admission needs an attested caller with the outbound-connect right. Staged queries: 4 open, 1 per cell, 10 s expiry. `save_owned`/`stage_and_publish` were deleted from VFS (only the trust store used them).
+- **Left (step 6):** the VFS allowlist is unchanged (`prepared_cwd`, `blk_router` and `grant_read` still use its entries). kms has no `SetTimer`, so the input session re-query retries without a delay, as VFS did. Not checked: whether VFS's per-cell quota lets kms grow the store to its 1 MiB limit.
+- **Decision (step 7):** net watches owners inside its handler (`WatchPolicy::Off` + `ostd::service::owners`) so admission still precedes the watch; serve gained `on_empty_poll` for net's NET_RX park. `NetState<'s>` borrows the socket storage from `run()`'s frame, which never returns. Deferred replies keep `ipc::current()` (serve does no receive before `on_request`).
+- **Evidence (step 7):** RV64 guest `wget` of a 96 KiB body, 7 timed runs after a warm-up, two boots each: median 1853 ms before (`2e9779814`) and 1853 ms after (`144e794e6`); RV network subset 7/7 after.
+- **Surprise (step 7):** `service-net --features qemu-dev-https` alone does not build at HEAD (two TLS flavours); checked with `--no-default-features --features qemu-dev-https,verified-tls`.
+- **Review (CP2):** independent review PASS_WITH_RISK; 3 medium and 4 low findings fixed (`fix(services): review findings…`), see [cp2-service-wire.md §5](cp2-service-wire.md). The stall latch gained a 60 s probe window (`STALL_RETRY_TICKS`), so a slow driver recovers.
+- **Surprise (CP2 lanes):** the phase 09 ssh lane's ceiling gate (`cellbox-ceiling-diff.py`) failed on Phase 11's approved deltas (`LookupServiceBound`, `SendGather` added; `LookupService`, `Reply` retired) since Phase 11; the gate now lists them.
+
