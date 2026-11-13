@@ -33,7 +33,7 @@ pub(crate) fn set_base(task: &mut Task, base: usize) {
     #[cfg(target_arch = "riscv64")]
     write_frame_tp(task, base);
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-    write_user_thread_pointer(base);
+    crate::arch::user_access::write_user_thread_pointer(base);
 }
 
 /// Install the selected task's base before it returns to user mode.
@@ -44,7 +44,9 @@ pub(crate) fn set_base(task: &mut Task, base: usize) {
 /// value in the task trap frame instead.
 pub(crate) fn install_published_base() {
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-    write_user_thread_pointer(crate::sched::hart_local::current_tls_base());
+    crate::arch::user_access::write_user_thread_pointer(
+        crate::sched::hart_local::current_tls_base(),
+    );
 }
 
 /// Reinstall a switched-back task's base after its raw context switch returns.
@@ -86,32 +88,5 @@ fn write_frame_tp(task: &Task, base: usize) {
     // thread pointer slot; `__trap_exit` loads it with `ld x4, 4*8(sp)`.
     unsafe {
         (*frame).regs[4] = base;
-    }
-}
-
-/// Write the architecture's user thread pointer register (aarch64/x86_64).
-#[cfg(target_arch = "aarch64")]
-fn write_user_thread_pointer(base: usize) {
-    // SAFETY: TPIDR_EL0 is the EL0-visible thread pointer; writing it from EL1 is
-    // always permitted and touches no kernel state (the kernel uses TPIDR_EL1).
-    unsafe {
-        core::arch::asm!("msr tpidr_el0, {0}", in(reg) base, options(nomem, nostack));
-    }
-}
-
-#[cfg(target_arch = "x86_64")]
-fn write_user_thread_pointer(base: usize) {
-    const IA32_FS_BASE: u32 = 0xC000_0100;
-    // SAFETY: WRMSR of IA32_FS_BASE from ring 0 is always permitted; it sets the
-    // user-mode FS segment base and leaves the kernel's GS-based per-CPU state
-    // (GS_BASE/KERNEL_GS_BASE) untouched.
-    unsafe {
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") IA32_FS_BASE,
-            in("eax") base as u32,
-            in("edx") (base >> 32) as u32,
-            options(nomem, nostack)
-        );
     }
 }

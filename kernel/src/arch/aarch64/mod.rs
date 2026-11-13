@@ -4,6 +4,8 @@
 //! The submodules mirror the kernel module each file came from
 //! (`crate::hypervisor::pending_irqs` is now `crate::arch::hypervisor::pending_irqs`).
 
+pub mod user_access;
+
 pub mod page_probe;
 
 pub mod dev {

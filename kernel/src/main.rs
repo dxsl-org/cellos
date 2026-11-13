@@ -597,10 +597,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // MMIO init. In Cellos's SAS+LBI model security comes from Rust type safety, not
         // hardware USER-bit separation for kernel-vs-cell — SUM=1 is safe and intentional.
         #[cfg(target_arch = "riscv64")]
-        // SAFETY: csrs modifies sstatus.SUM (bit 18). Safe to set for kernel S-mode code.
-        unsafe {
-            core::arch::asm!("csrs sstatus, {sum}", sum = in(reg) 0x40000_usize, options(nostack));
-        }
+        crate::arch::user_access::boot_open();
     }
     #[cfg(target_arch = "x86_64")]
     {

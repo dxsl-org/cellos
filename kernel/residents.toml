@@ -39,8 +39,10 @@
 "kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/riscv32.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/cell/provenance_selftest.rs" = { category = "test", owner = "cell" }
 "kernel/src/arch/riscv64/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
@@ -62,6 +64,7 @@
 "kernel/src/arch/riscv64/task/path_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/retirement_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/arch/riscv64/task/stack_overflow_probe.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
@@ -94,6 +97,7 @@
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
+"kernel/src/arch/x86_64/user_access.rs" = { category = "A", owner = "arch" }
 
 # ---- admission ----
 "kernel/src/admission/gate.rs" = { category = "B", owner = "admission" }

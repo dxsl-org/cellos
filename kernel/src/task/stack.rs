@@ -35,15 +35,12 @@ struct SumAccessGuard {
 ))]
 impl SumAccessGuard {
     fn enter() -> Self {
+        // Test hooks run in supervisor mode. SUM is changed only for mapped
+        // stack sampling and restored by Drop before this scope exits.
         const SUM_MASK: usize = 1usize << 18;
-        let status: usize;
-        // SAFETY: test hooks run in supervisor mode. SUM is changed only for
-        // mapped stack sampling and restored by Drop before this scope exits.
-        unsafe {
-            core::arch::asm!("csrr {status}, sstatus", status = out(reg) status, options(nostack));
-            if status & SUM_MASK == 0 {
-                core::arch::asm!("csrs sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
-            }
+        let status = crate::arch::user_access::stack_sample_status();
+        if status & SUM_MASK == 0 {
+            crate::arch::user_access::sum_mask_set();
         }
         Self {
             restore: status & SUM_MASK == 0,
@@ -58,12 +55,9 @@ impl SumAccessGuard {
 impl Drop for SumAccessGuard {
     fn drop(&mut self) {
         if self.restore {
-            const SUM_MASK: usize = 1usize << 18;
-            // SAFETY: this reverses the matching supervisor CSR change made by
-            // `enter`; the guard is not shared across harts or task switches.
-            unsafe {
-                core::arch::asm!("csrc sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
-            }
+            // This reverses the matching supervisor CSR change made by `enter`;
+            // the guard is not shared across harts or task switches.
+            crate::arch::user_access::sum_mask_clear();
         }
     }
 }

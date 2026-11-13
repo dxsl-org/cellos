@@ -30,7 +30,7 @@ pub(super) fn commit_guarded(
     let slot = core::ptr::addr_of!(hart.user_copy_guard_resume_pc) as *mut usize;
     // SAFETY: the guard window is armed around the call; see
     // guarded_byte_copy for the register/trap contract.
-    let failed = unsafe { guarded_byte_copy(src, dst, len, slot) };
+    let failed = unsafe { crate::arch::user_access::guarded_byte_copy(src, dst, len, slot) };
     drop(window);
     if failed == 0 {
         Ok(())
@@ -55,14 +55,7 @@ impl GuardWindow {
         hart.user_copy_guard_resume_pc.store(0, Ordering::Relaxed);
         let saved_sstatus = crate::hal::arch::save_and_disable_interrupts();
         #[cfg(target_arch = "riscv64")]
-        unsafe {
-            let sum_bit: usize = 1 << 18;
-            core::arch::asm!(
-                "csrs sstatus, {sum}",
-                sum = in(reg) sum_bit,
-                options(nomem, nostack),
-            );
-        }
+        crate::arch::user_access::guard_open();
         hart.user_copy_guard_active.store(1, Ordering::Release);
         Self { saved_sstatus }
     }
@@ -76,127 +69,6 @@ impl Drop for GuardWindow {
         // allocation, or callback ran while interrupts were masked.
         unsafe { crate::hal::arch::restore_sstatus(self.saved_sstatus) };
     }
-}
-
-/// Byte-copy loop with a trap-recoverable error landing pad (local label `3`).
-/// Direction-neutral: reading `src` and writing `dst` byte-by-byte covers both
-/// copy directions through the boundary; the caller picks which side points
-/// at user memory and publishes the matching guard range.
-///
-/// Register contract: the block touches ONLY caller-saved registers and never
-/// changes `sp` or `ra`. When the trap hook recovers a guard fault it rewrites
-/// `sepc` to label `3`; the trap epilogue then restores the fault-time register
-/// image, which is exactly the state label `3` expects — it sets the return
-/// value, clears the resume slot, and returns through the untouched `ra`.
-///
-/// # Safety
-/// The guard window must be armed around the call, `resume_slot` must point at
-/// this hart's `user_copy_guard_resume_pc`, and both ranges must be resolved
-/// or recoverable per the module docs.
-#[inline(never)]
-unsafe fn guarded_byte_copy(
-    src: *const u8,
-    dst: *mut u8,
-    len: usize,
-    resume_slot: *mut usize,
-) -> usize {
-    let ret;
-    // SAFETY: see the function contract above.
-    #[cfg(target_arch = "riscv64")]
-    core::arch::asm!(
-        "la   {tmp}, 3f",
-        "sd   {tmp}, 0({slot})",
-        "li   {idx}, 0",
-        "2:",
-        "bgeu {idx}, {cnt}, 1f",
-        "add  {sa}, {sptr}, {idx}",
-        "lbu  {byte}, 0({sa})",
-        "add  {da}, {dptr}, {idx}",
-        "sb   {byte}, 0({da})",
-        "addi {idx}, {idx}, 1",
-        "j    2b",
-        "1:",
-        "li   {out}, 0",
-        "j    4f",
-        "3:",
-        "li   {out}, 1",
-        "4:",
-        "sd   zero, 0({slot})",
-        sptr = in(reg) src,
-        dptr = in(reg) dst,
-        cnt = in(reg) len,
-        slot = in(reg) resume_slot,
-        tmp = out(reg) _,
-        idx = out(reg) _,
-        sa = out(reg) _,
-        da = out(reg) _,
-        byte = out(reg) _,
-        out = out(reg) ret,
-        options(nostack)
-    );
-    #[cfg(target_arch = "aarch64")]
-    core::arch::asm!(
-        "adr  {tmp}, 3f",
-        "str  {tmp}, [{slot}]",
-        "mov  {idx}, #0",
-        "2:",
-        "cmp  {idx}, {cnt}",
-        "b.ge 1f",
-        "ldrb {byte:w}, [{sptr}, {idx}]",
-        "strb {byte:w}, [{dptr}, {idx}]",
-        "add  {idx}, {idx}, #1",
-        "b    2b",
-        "1:",
-        "mov  {out:w}, #0",
-        "b    4f",
-        "3:",
-        "mov  {out:w}, #1",
-        "4:",
-        "str  xzr, [{slot}]",
-        sptr = in(reg) src,
-        dptr = in(reg) dst,
-        cnt = in(reg) len,
-        slot = in(reg) resume_slot,
-        tmp = out(reg) _,
-        idx = out(reg) _,
-        byte = out(reg) _,
-        out = out(reg) ret,
-        options(nostack)
-    );
-    #[cfg(target_arch = "x86_64")]
-    core::arch::asm!(
-        "lea  rax, [rip + 4f]",
-        "mov  [{slot}], rax",
-        "xor  {idx}, {idx}",
-        "2:",
-        "cmp  {idx}, {cnt}",
-        "jae  3f",
-        "mov  al, byte ptr [{sptr} + {idx}]",
-        "mov  byte ptr [{dptr} + {idx}], al",
-        "inc  {idx}",
-        "jmp  2b",
-        "3:",
-        "xor  {out:e}, {out:e}",
-        "jmp  5f",
-        "4:",
-        "mov  {out:e}, 1",
-        "5:",
-        "mov  qword ptr [{slot}], 0",
-        sptr = in(reg) src,
-        dptr = in(reg) dst,
-        cnt = in(reg) len,
-        slot = in(reg) resume_slot,
-        idx = out(reg) _,
-        out = out(reg) ret,
-        out("rax") _,
-        options(nostack)
-    );
-    #[cfg(not(cellos_wide))]
-    {
-        let _ = (src, dst, len, resume_slot);
-        ret = 1;
-    }
-    ret
 }
 
 /// Defense-in-depth: a hart switching tasks must never carry an armed guard
@@ -228,7 +100,14 @@ pub(crate) fn forced_guard_fault_recovers_for_test(hole_pa: usize) -> bool {
     let slot = core::ptr::addr_of!(hart.user_copy_guard_resume_pc) as *mut usize;
     // SAFETY: the window is armed around the call; the load faults on purpose
     // and recovery resumes at the landing pad without writing `sink`.
-    let failed = unsafe { guarded_byte_copy(hole_va as *const u8, sink.as_mut_ptr(), 8, slot) };
+    let failed = unsafe {
+        crate::arch::user_access::guarded_byte_copy(
+            hole_va as *const u8,
+            sink.as_mut_ptr(),
+            8,
+            slot,
+        )
+    };
     drop(window);
     failed == 1 && hart.user_copy_guard_resume_pc.load(Ordering::Acquire) == 0
 }

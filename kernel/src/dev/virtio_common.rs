@@ -142,24 +142,18 @@ pub(crate) fn probe_slot(base: usize) -> SlotProbe {
 pub(crate) fn with_riscv_sum_for_virtio_ack<T>(ack: impl FnOnce() -> T) -> T {
     #[cfg(target_arch = "riscv64")]
     {
-        const SUM_MASK: usize = 1usize << 18;
-        let sstatus: usize;
-        // SAFETY: this helper is used only for short-lived VirtIO MMIO ACK sequences.
-        // `csrr/csrs/csrc sstatus` are privileged RV64 supervisor CSR operations; the
-        // code records the prior SUM bit, sets only SUM for the duration of `ack`, and
+        // This helper is used only for short-lived VirtIO MMIO ACK sequences. It
+        // records the prior SUM bit, sets only SUM for the duration of `ack`, and
         // restores the exact prior SUM state before returning. It does not widen trap
         // entry globally or alter SSIE/SEIE/STIE.
-        unsafe {
-            core::arch::asm!("csrr {value}, sstatus", value = out(reg) sstatus, options(nostack));
-            if sstatus & SUM_MASK == 0 {
-                core::arch::asm!("csrs sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
-            }
+        const SUM_MASK: usize = 1usize << 18;
+        let sstatus = crate::arch::user_access::virtio_ack_status();
+        if sstatus & SUM_MASK == 0 {
+            crate::arch::user_access::sum_mask_set();
         }
         let result = ack();
-        unsafe {
-            if sstatus & SUM_MASK == 0 {
-                core::arch::asm!("csrc sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
-            }
+        if sstatus & SUM_MASK == 0 {
+            crate::arch::user_access::sum_mask_clear();
         }
         result
     }

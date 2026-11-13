@@ -1887,12 +1887,8 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
         // startup; it maps this entry code, stack, and all kernel globals.
         unsafe {
             crate::memory::paging::activate_paging(root);
-            core::arch::asm!(
-                "csrs sstatus, {sum}",
-                sum = in(reg) 0x40000usize,
-                options(nostack)
-            );
         }
+        crate::arch::user_access::secondary_open();
     }
     // Install the trap vector (each hart has its own stvec CSR).
     // `hal::ARCH.init()` sets stvec + enables SSIE.

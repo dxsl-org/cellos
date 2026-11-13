@@ -1804,27 +1804,12 @@ use abi::syscall::ViSyscall;
 
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 fn with_test_sum<T>(operation: impl FnOnce() -> T) -> T {
-    let saved_sstatus: usize;
-    unsafe {
-        // SAFETY: test-only dispatch must reproduce the real trap entry's SUM state.
-        core::arch::asm!(
-            "csrr {saved_sstatus}, sstatus",
-            "csrs sstatus, {sum}",
-            saved_sstatus = out(reg) saved_sstatus,
-            sum = in(reg) 0x40000_usize,
-            options(nostack)
-        );
-    }
+    // Test-only dispatch must reproduce the real trap entry's SUM state.
+    let saved_sstatus = crate::arch::user_access::test_open_saved();
     let result = operation();
     if saved_sstatus & 0x40000 == 0 {
-        unsafe {
-            // SAFETY: restore exactly the caller hart's prior SUM bit.
-            core::arch::asm!(
-                "csrc sstatus, {sum}",
-                sum = in(reg) 0x40000_usize,
-                options(nostack)
-            );
-        }
+        // Restore exactly the caller hart's prior SUM bit.
+        crate::arch::user_access::test_close();
     }
     result
 }
@@ -2017,13 +2002,11 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         return;
     }
 
-    // SAFETY: csrs/csrc sstatus SUM (bit 18) enables S-mode access to user pages
+    // sstatus.SUM (bit 18) enables S-mode access to user pages
     // for the duration of handle_syscall. Disabled immediately after to prevent
     // inadvertent user-page reads on subsequent kernel faults.
     #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
-    }
+    crate::arch::user_access::syscall_open();
 
     let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_errors = has_typed_errors(&syscall);
@@ -2033,9 +2016,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     let result = dispatch_admitted(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
-    }
+    crate::arch::user_access::syscall_close();
 
     frame.regs[10] = if pcie_function {
         encode_pcie_function_result(result)
@@ -2093,19 +2074,15 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
         return;
     }
 
-    // SAFETY: csrs/csrc sstatus SUM (bit 18) — same bit position on RV32 and RV64
-    // per the RISC-V Privileged Spec §4.1.1. Disabled after handle_syscall.
-    unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
-    }
+    // sstatus.SUM (bit 18) — same bit position on RV32 and RV64 per the RISC-V
+    // Privileged Spec §4.1.1. Disabled after handle_syscall.
+    crate::arch::user_access::syscall_open();
 
     let supports_typed_oom = supports_typed_oom(&syscall);
     let typed_errors = has_typed_errors(&syscall);
     let result = dispatch_admitted(caller_id, syscall);
 
-    unsafe {
-        core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
-    }
+    crate::arch::user_access::syscall_close();
 
     frame.regs[10] = if typed_errors {
         encode_ipc_result(result) as u32
