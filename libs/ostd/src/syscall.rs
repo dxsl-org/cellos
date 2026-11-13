@@ -2815,7 +2815,8 @@ pub fn sys_lookup_block_route(
     }
 }
 
-/// Read the machine facts record (syscall 433). Requires SpawnCap.
+/// Read the machine facts record (syscall 433). Answers only the live
+/// `MACHINE_PIN` provider.
 ///
 /// The record is decoded and fully validated before it is returned; the
 /// returned value keeps the exact bytes the kernel wrote.
@@ -2825,7 +2826,7 @@ pub fn sys_lookup_block_route(
 ///   more than `MACHINE_FACTS_PCI_MAX` PCI functions).
 /// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a
 ///   valid V1 record.
-/// - `PermissionDenied`: the caller holds no SpawnCap.
+/// - `PermissionDenied`: the caller is not the live `MACHINE_PIN` provider.
 pub fn sys_query_machine_facts() -> Result<abi::machine_facts::MachineFactsRecord, SyscallError> {
     use abi::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
     let mut out = alloc::vec![0u8; MACHINE_FACTS_CAPACITY];

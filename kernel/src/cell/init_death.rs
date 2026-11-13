@@ -184,13 +184,17 @@ fn reset() {
         log::error!("[init-death] SBI cold reset refused; halting");
     }
     #[cfg(target_arch = "aarch64")]
-    {
-        // The conduit `SYSTEM_OFF` (`dev.rs`) uses: HVC, QEMU virt's default.
-        let status = hal::aarch64::psci::system_reset(hal::aarch64::psci::Conduit::Hvc);
-        log::error!(
-            "[init-death] PSCI SYSTEM_RESET refused: {}; halting",
-            hal::aarch64::psci::status_name(status)
-        );
+    match crate::sched::smp::usable_psci_conduit() {
+        // The conduit the firmware declares, under the same usability check
+        // the secondary-core start applies (`sched/smp.rs`).
+        Ok(conduit) => {
+            let status = hal::aarch64::psci::system_reset(conduit);
+            log::error!(
+                "[init-death] PSCI SYSTEM_RESET refused: {}; halting",
+                hal::aarch64::psci::status_name(status)
+            );
+        }
+        Err(why) => log::error!("[init-death] no usable PSCI conduit ({why}); halting"),
     }
     #[cfg(not(any(
         target_arch = "x86_64",

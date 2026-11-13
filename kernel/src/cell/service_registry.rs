@@ -241,13 +241,38 @@ pub fn grants_owner_watch(cell_id: u64, generation: u64) -> bool {
     })
 }
 
+/// Whether the hot-swap path may never pause, freeze or republish
+/// `service_id`'s provider.
+///
+/// `MACHINE_PIN` is registered only by trusted init for its own `machine-pin`
+/// child (`RegisterService`, ADR-0029 §3); the VFS admits the live provider to
+/// the pin store and 433 answers only it. A swap would publish a
+/// supervisor-spawned successor that init then adopts, so a `SupervisorCap`
+/// holder could hand itself the machine facts and pin write access.
+pub fn swap_refused(service_id: u16) -> bool {
+    service_id == abi::syscall::service::MACHINE_PIN
+}
+
+/// Whether `tid` is the active or paused provider of a service the hot-swap
+/// path refuses ([`swap_refused`]).
+pub fn is_swap_refused_tid(tid: usize) -> bool {
+    REGISTRY
+        .lock()
+        .iter()
+        .any(|(&service_id, entry)| swap_refused(service_id) && entry.tid == tid)
+}
+
 /// Hide a service from new lookups while its current provider remains runnable.
 ///
 /// The compare-and-pause contract prevents a stale supervisor request from
 /// pausing a replacement that another recovery path already registered.
 /// Pausing preserves the recorded identity and flags verbatim: it is a
-/// visibility change, not a re-registration.
+/// visibility change, not a re-registration. A [`swap_refused`] id is never
+/// paused.
 pub fn pause(service_id: u16, expected_tid: usize) -> bool {
+    if swap_refused(service_id) {
+        return false;
+    }
     match REGISTRY.lock().get_mut(&service_id) {
         Some(entry) if entry.tid == expected_tid => {
             entry.paused = true;
@@ -262,7 +287,8 @@ pub fn pause(service_id: u16, expected_tid: usize) -> bool {
 /// The hot-swap barrier calls this while holding `SCHEDULER`, preserving the
 /// global `SCHEDULER -> service registry` lock order. `cell_id`/`generation` are
 /// the replacement's live identity, read from the scheduler by that caller. The
-/// replacement inherits the row's flags.
+/// replacement inherits the row's flags. A [`swap_refused`] id is never
+/// republished.
 pub(crate) fn commit_paused(
     service_id: u16,
     old_tid: usize,
@@ -270,7 +296,7 @@ pub(crate) fn commit_paused(
     cell_id: u64,
     generation: u64,
 ) -> bool {
-    if new_tid == 0 {
+    if new_tid == 0 || swap_refused(service_id) {
         return false;
     }
     match REGISTRY.lock().get_mut(&service_id) {
@@ -409,6 +435,30 @@ mod tests {
         assert_eq!(lookup(TEST_SERVICE), Some(42));
         // The replacement's identity is the one that was committed, not the source's.
         assert_eq!(lookup_bound(TEST_SERVICE), Some((42, CELL, GEN + 1)));
+    }
+
+    /// Review finding (Phase 13): a `SupervisorCap` holder must not hot-swap
+    /// the machine-pin provider — no pause, no republish, and its tid is
+    /// recognised for the freeze and replacement-spawn refusals.
+    #[test]
+    fn machine_pin_is_never_paused_or_republished() {
+        const PIN: u16 = abi::syscall::service::MACHINE_PIN;
+        const PROVIDER: usize = 9_101;
+        const SUCCESSOR: usize = 9_102;
+        assert!(swap_refused(PIN));
+        assert!(!swap_refused(abi::syscall::service::CONFIG));
+        register(PIN, PROVIDER, CELL, GEN);
+        assert!(is_swap_refused_tid(PROVIDER));
+        assert!(!is_swap_refused_tid(SUCCESSOR));
+
+        assert!(!pause(PIN, PROVIDER));
+        assert!(!is_paused_tid(PROVIDER));
+        assert_eq!(lookup_bound(PIN), Some((PROVIDER, CELL, GEN)));
+        assert!(!commit_paused(PIN, PROVIDER, SUCCESSOR, CELL + 1, GEN));
+        assert_eq!(lookup_bound(PIN), Some((PROVIDER, CELL, GEN)));
+
+        clear_tid(PROVIDER);
+        assert!(!is_swap_refused_tid(PROVIDER));
     }
 
     #[test]

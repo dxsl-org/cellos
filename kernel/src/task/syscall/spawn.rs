@@ -1273,6 +1273,10 @@ pub(super) fn spawn_replacement(
     if old_tid == 0 || path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
         return Err(SyscallError::InvalidInput);
     }
+    // The machine-pin provider is never swapped (`swap_refused`).
+    if crate::cell::service_registry::is_swap_refused_tid(old_tid) {
+        return Err(SyscallError::PermissionDenied);
+    }
     let path_str = read_user_string(
         caller_id,
         path_ptr,

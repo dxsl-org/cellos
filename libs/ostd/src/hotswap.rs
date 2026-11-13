@@ -39,8 +39,8 @@ pub enum HotswapError {
     /// Restore returned 0 bytes — no state is stashed under this key.
     /// The cell may be starting cold (not after a hot-swap) or the key is wrong.
     NoState,
-    /// The restored byte count does not match the allocation (should not happen;
-    /// indicates a kernel or ABI bug).
+    /// The entry changed length between [`restore`]'s length probe and its
+    /// read (its owner overwrote it meanwhile).
     SizeMismatch,
 }
 
@@ -88,39 +88,34 @@ pub fn stash(key: u64, data: &[u8]) -> Result<(), HotswapError> {
 /// The stash entry remains in place after `restore`; call [`clear`] to release
 /// the kernel slot once the state has been successfully applied.
 ///
-/// # Two-step ABI note
-/// The kernel does not provide a "query size" syscall, so this function uses a
-/// conservative 1 MB buffer (the per-slot maximum) to avoid a two-round-trip
-/// approach. The returned `Box<[u8]>` is exactly the byte count the kernel wrote,
-/// not padded to the allocation size.
+/// # Sizing
+/// The buffer is sized to what the stash holds: an empty-buffer restore is the
+/// kernel's length probe, so any entry [`stash`] could write (up to the
+/// kernel's 1 MiB per-slot limit) is read whole, in one allocation of exactly
+/// its length.
 ///
 /// # Errors
 /// Returns [`HotswapError::NoState`] when nothing is stashed under `key` (cold
-/// start, wrong key, or the entry was already cleared).
+/// start, wrong key, or the entry was already cleared), and
+/// [`HotswapError::SizeMismatch`] when the entry changed length between the
+/// probe and the read.
 ///
 /// # Panics
 /// Never (OOM panics are handled by the cell allocator, not here).
 pub fn restore(key: u64) -> Result<Box<[u8]>, HotswapError> {
-    // Use a stack buffer first to avoid heap fragmentation and allocation pressure.
-    // Typical migration state (counter, small structs) is tens to hundreds of bytes.
-    let mut stack_buf = [0u8; 4096];
-    let n = syscall::sys_state_restore(key, &mut stack_buf);
-    if n == 0 {
+    let len = syscall::sys_state_restore(key, &mut []);
+    if len == 0 {
         return Err(HotswapError::NoState);
     }
-    if n < stack_buf.len() {
-        return Ok(Box::from(&stack_buf[..n]));
+    let mut buf = alloc::vec![0u8; len];
+    match syscall::sys_state_restore(key, &mut buf) {
+        0 => Err(HotswapError::NoState),
+        // A read that filled the buffer is whole only if the entry did not grow.
+        n if n == len && syscall::sys_state_restore(key, &mut []) == len => {
+            Ok(buf.into_boxed_slice())
+        }
+        _ => Err(HotswapError::SizeMismatch),
     }
-    // If the payload filled the entire stack buffer, dynamically allocate
-    // only as much as needed up to 64 KiB.
-    const MAX: usize = 64 * 1024;
-    let mut big_buf = alloc::vec![0u8; MAX];
-    let n2 = syscall::sys_state_restore(key, &mut big_buf);
-    if n2 == 0 {
-        return Err(HotswapError::NoState);
-    }
-    big_buf.truncate(n2);
-    Ok(big_buf.into_boxed_slice())
 }
 
 // ── clear() ───────────────────────────────────────────────────────────────────

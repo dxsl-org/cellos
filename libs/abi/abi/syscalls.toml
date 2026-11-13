@@ -1594,13 +1594,19 @@ the registered PCI functions; the call has no other effect. Errors:
 `usize::MAX - 2` (`FileNotFound`) no facts — not x86, no profile bound
 yet, or more than `MACHINE_FACTS_PCI_MAX` PCI functions; `usize::MAX - 3`
 (`InvalidInput`) wrong `out_len`, non-zero a2/a3 or an unwritable
-`out_ptr`; `usize::MAX` the caller holds no SpawnCap.
+`out_ptr`; `usize::MAX` the caller is not the live `MACHINE_PIN` provider.
+
+Caller: only the live `MACHINE_PIN` provider (ADR-0029 §3, Phase 13
+amendment) — the Cell trusted init launched as `machine-pin` and
+registered, matched by its live `(cell_id, generation)` against the
+registry row; no capability (SpawnCap included) admits any other caller.
+The row is never hot-swapped, so the provider stays init's child.
 
 Allowlist: none (the `u64` allowlist is full); always permitted past the
 allowlist like [`Self::LookupBlockRoute`], gated at dispatch.
 '''
 bit_note = '''
-QueryMachineFacts: dispatch admits only SpawnCap holders.
+QueryMachineFacts: dispatch admits only the live `MACHINE_PIN` provider.
 '''
 
 [[syscall]]

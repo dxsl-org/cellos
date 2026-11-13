@@ -53,6 +53,7 @@ use ostd::service::ServeConfig;
 ostd::cell_main!(extern "C" cell_main);
 
 fn cell_main() {
+    activation::stop_orphaned_engines();
     let mut activator = activation::Activator::new();
     ostd::service::serve(ServeConfig::with_heartbeat(), &mut activator)
 }

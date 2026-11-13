@@ -662,6 +662,43 @@ pub fn start_secondaries() {
     }
 }
 
+/// The PSCI conduit the kernel may call, or why none is usable.
+///
+/// The firmware tree's declared conduit when there is one; otherwise, on a
+/// board that starts its cores through PSCI, what the architecture allows —
+/// with EL3 the conduit is EL3 firmware's (`smc`); without EL3 an `smc` is
+/// undefined and the only conduit that can exist is the hypervisor's (`hvc`).
+/// A board that starts its cores another way (spin table, single hart) and
+/// whose tree declares no PSCI has none. A conduit that cannot work is
+/// refused, never attempted: an `hvc` from EL2 would target EL3, which by
+/// construction has no PSCI here, and traps as undefined. An SMC is answered
+/// by EL3 firmware from either exception level; an HVC from EL1 traps to EL2,
+/// where the PSCI implementation lives.
+///
+/// The secondary-core start and the init-death reset both call PSCI through
+/// this one answer.
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn usable_psci_conduit() -> Result<hal::aarch64::psci::Conduit, &'static str> {
+    use hal::aarch64::backend::{ArmPlatform, Board, SecondaryStart};
+    use hal::aarch64::psci::Conduit;
+
+    let conduit = match crate::boot::firmware_smp::psci_conduit() {
+        Some(declared) => declared,
+        None if matches!(
+            <Board as ArmPlatform>::SECONDARY_START,
+            SecondaryStart::Psci
+        ) =>
+        {
+            hal::aarch64::psci::inferred_conduit()
+        }
+        None => return Err("the board has no PSCI and no firmware tree declares it"),
+    };
+    if conduit == Conduit::Hvc && hal::aarch64::el2::is_el2() {
+        return Err("the kernel runs at EL2 and its conduit is HVC, which would target EL3");
+    }
+    Ok(conduit)
+}
+
 /// AArch64 starts a core through firmware (`PSCI_CPU_ON` over the conduit the
 /// device tree declares). Everything the new core needs — its stack, the boot
 /// core's live translation regime, the hardening bits in `SCTLR_EL1` — travels
@@ -677,43 +714,24 @@ fn start_psci_secondaries() {
     use crate::task::STACK_PAGES;
 
     let at_el2 = hal::aarch64::el2::is_el2();
-    // Which instruction carries a PSCI call: the firmware tree's answer when
-    // there is one, otherwise what the architecture allows — with EL3 the
-    // conduit is EL3 firmware's (`smc`); without EL3 an `smc` is undefined and
-    // the only conduit that can exist is the hypervisor's (`hvc`).
-    let conduit = match firmware_smp::psci_conduit() {
-        Some(declared) => declared,
-        None => {
-            let inferred = hal::aarch64::psci::inferred_conduit();
-            log::info!(
-                "[smp] no firmware tree declares PSCI; EL3 {} — inferring conduit {:?}",
-                if hal::aarch64::psci::el3_implemented() {
-                    "implemented"
-                } else {
-                    "absent"
-                },
-                inferred
-            );
-            inferred
+    if firmware_smp::psci_conduit().is_none() {
+        log::info!(
+            "[smp] no firmware tree declares PSCI; EL3 {} — inferring conduit {:?}",
+            if hal::aarch64::psci::el3_implemented() {
+                "implemented"
+            } else {
+                "absent"
+            },
+            hal::aarch64::psci::inferred_conduit()
+        );
+    }
+    let conduit = match usable_psci_conduit() {
+        Ok(conduit) => conduit,
+        Err(why) => {
+            log::warn!("[smp] {why} — keeping Cellos single-hart");
+            return;
         }
     };
-    // A conduit that cannot work is reported, never attempted: `smc` without EL3
-    // and `hvc` from EL2 both trap as undefined instructions.
-    let usable = match (conduit, at_el2) {
-        // EL3 firmware answers an SMC from either exception level.
-        (hal::aarch64::psci::Conduit::Smc, _) => true,
-        // An HVC from EL1 traps to EL2, where the PSCI implementation lives; an
-        // HVC from EL2 would target EL3, which by construction has no PSCI here.
-        (hal::aarch64::psci::Conduit::Hvc, false) => true,
-        (hal::aarch64::psci::Conduit::Hvc, true) => false,
-    };
-    if !usable {
-        log::warn!(
-            "[smp] the kernel runs at EL2 and its conduit is HVC, which would target EL3 — \
-             keeping Cellos single-hart"
-        );
-        return;
-    }
     log::info!(
         "[smp] PSCI conduit {:?}, kernel at {}",
         conduit,

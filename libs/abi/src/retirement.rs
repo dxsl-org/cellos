@@ -24,6 +24,15 @@ pub const RETIREMENT_RECORD_VERSION: u16 = 1;
 /// resets the machine. Ordinary Cells carry no meaning in this value.
 pub const INIT_BOOT_STOP: usize = 0xB007_5709;
 
+/// Exit reason of an incarnation the supervisor retired after a committed
+/// hot-swap (`KillCell` → `kernel/src/cell/hotswap.rs` `exit_task_internal`).
+///
+/// The kernel records it on the old provider's death; trusted init keys swap
+/// adoption on it (a death with this reason whose registry row names a live,
+/// different provider is a swap, not a crash). A `u32` because `KillCell`
+/// carries a 32-bit exit code.
+pub const HOTSWAP_RETIRED: u32 = 0xAAAA_AAAA;
+
 /// Verdict for one retired incarnation.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

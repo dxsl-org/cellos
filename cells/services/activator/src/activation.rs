@@ -495,14 +495,62 @@ pub(crate) fn service_id(engine: Engine) -> u16 {
     }
 }
 
+/// The engine providers a previous activator generation left behind: each
+/// demand-engine id (`OCEL_JS`, `OCEL_PDF`) whose registry row names a
+/// provider not proven dead. Their leases and owner watches died with that
+/// activator, so nothing would ever stop them. The row itself is liveness
+/// evidence (the kernel clears a dead provider's rows), so only a liveness
+/// answer of "dead" spares one.
+fn orphaned_engines(
+    lookup: impl Fn(u16) -> Option<usize>,
+    alive: impl Fn(usize) -> Option<bool>,
+) -> impl Iterator<Item = (Engine, usize)> {
+    [Engine::JavaScript, Engine::Pdf]
+        .into_iter()
+        .filter_map(move |engine| Some((engine, lookup(service_id(engine))?)))
+        .filter(move |&(_, tid)| tid != 0 && alive(tid) != Some(false))
+}
+
+/// Stop every engine a previous activator generation left registered, before
+/// this one serves: a fresh activator owns no lease on them and would start
+/// its own. `ForceExit` is this Cell's own authority (`SpawnCap`, and an Ocel
+/// engine holds neither block I/O nor network rights).
+pub(crate) fn stop_orphaned_engines() {
+    for (engine, tid) in orphaned_engines(ostd::service::provider_tid, task_alive) {
+        let stopped = matches!(syscall::sys_force_exit(tid), SyscallResult::Ok(0));
+        ostd::io::println(&alloc::format!(
+            "activator: orphaned {engine:?} engine tid {tid} {}",
+            if stopped {
+                "stopped."
+            } else {
+                "could not be stopped."
+            }
+        ));
+    }
+}
+
 fn deliver(message: &Message, response: Response) -> bool {
     deliver_frame(message, &response.encode())
 }
 
 /// Reply to `message` without parking: through its IPC operation when it
-/// came as one, else posted to the sender's mailbox.
+/// came as one, else posted to the sender's mailbox. A raw-send client whose
+/// mailbox is full gets a bounded retry (`LEGACY_TICKS`); a refused operation
+/// is final.
 fn deliver_frame(message: &Message, frame: &[u8]) -> bool {
-    message.incoming.reply(frame).is_ok()
+    let started = now_ticks();
+    for _ in 0..POLL_LIMIT {
+        match message.incoming.reply(frame) {
+            Ok(()) => return true,
+            Err(ipc::PostError::ReplyRefused) => return false,
+            Err(ipc::PostError::Undeliverable) => {}
+        }
+        if now_ticks().wrapping_sub(started) >= LEGACY_TICKS {
+            break;
+        }
+        ostd::task::yield_now();
+    }
+    false
 }
 
 fn readiness(provider: Provider) -> bool {
@@ -577,5 +625,51 @@ pub(crate) fn task_alive(tid: usize) -> Option<bool> {
             return None;
         }
         rows.resize(rows.len() * 2, ProcessInfo::default());
+    }
+}
+
+#[cfg(test)]
+mod orphan_tests {
+    use super::{orphaned_engines, Engine};
+    use abi::syscall::service;
+    use std::vec::Vec;
+
+    fn orphans(
+        rows: &[(u16, usize)],
+        alive: impl Fn(usize) -> Option<bool>,
+    ) -> Vec<(Engine, usize)> {
+        let lookup = |id| rows.iter().find(|row| row.0 == id).map(|row| row.1);
+        orphaned_engines(lookup, alive).collect()
+    }
+
+    /// Review finding (Phase 13): a restarted activator stops the engines its
+    /// previous generation registered, and only those two ids.
+    #[test]
+    fn a_registered_engine_not_proven_dead_is_an_orphan() {
+        let rows = [
+            (service::OCEL_JS, 40),
+            (service::OCEL_PDF, 41),
+            (service::OCEL_ACTIVATOR, 42),
+        ];
+        assert_eq!(
+            orphans(&rows, |_| Some(true)),
+            [(Engine::JavaScript, 40), (Engine::Pdf, 41)]
+        );
+        // An unknown liveness answer does not spare a registered provider.
+        assert_eq!(
+            orphans(&rows, |tid| (tid != 40).then_some(true)),
+            [(Engine::JavaScript, 40), (Engine::Pdf, 41)]
+        );
+    }
+
+    #[test]
+    fn no_row_or_a_dead_provider_is_left_alone() {
+        assert!(orphans(&[], |_| Some(true)).is_empty());
+        assert_eq!(
+            orphans(&[(service::OCEL_JS, 40), (service::OCEL_PDF, 41)], |tid| {
+                Some(tid != 40)
+            }),
+            [(Engine::Pdf, 41)]
+        );
     }
 }

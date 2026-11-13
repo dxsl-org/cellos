@@ -104,7 +104,9 @@ check_pattern "$SDK" "pub struct TokenStream" "TokenStream"
 check_pattern "$SDK" "pub fn request_id(&self)" "TokenStream::request_id"
 check_pattern "$SDK" "pub fn text(&self)" "TokenStream::text"
 check_pattern "$SDK" "pub enum AiClientError" "AiClientError"
-check_pattern "$SDK" "impl From<AiClientError> for crate::types::ViError" "the ViError conversion"
+# Re-pinned 2026-11-13 (architecture remediation Phase 13, CP1 A1): the same
+# conversion, now named through the `types` crate instead of the deleted `api` facade.
+check_pattern "$SDK" "impl From<AiClientError> for types::ViError" "the ViError conversion"
 check_pattern "$SDK_TRANSPORT" "fn round_trip<'r>(" "AiTransport::round_trip"
 check_pattern "$SDK_OSTD" "impl AiTransport for OstdTransport" "the bare-metal transport"
 

@@ -492,8 +492,8 @@ fn rollback_mailbox_appends(
 /// authorize Cell-wide cleanup for a worker target.
 pub(crate) fn exit_task_internal(tid: usize, _cell_id: CellId) {
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-        // 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
-        sched.exit_task(tid, 0xAAAA_AAAAusize);
+        // The hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
+        sched.exit_task(tid, abi::retirement::HOTSWAP_RETIRED as usize);
     }
 
     crate::audit::log_event(

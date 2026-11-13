@@ -127,3 +127,15 @@ fn undefined_reason_bit_is_refused() {
     };
     assert!(ViRetirementV1::decode(&all.encode()).is_ok());
 }
+
+/// The exit reasons init's policy keys on are ABI: pin their bytes so a drift
+/// in either is a deliberate change, never an accident.
+#[test]
+fn exit_reason_sentinels_are_byte_pinned() {
+    assert_eq!(HOTSWAP_RETIRED.to_le_bytes(), [0xAA, 0xAA, 0xAA, 0xAA]);
+    assert_eq!(
+        (INIT_BOOT_STOP as u64).to_le_bytes(),
+        [0x09, 0x57, 0x07, 0xB0, 0, 0, 0, 0]
+    );
+    assert_ne!(HOTSWAP_RETIRED as usize, INIT_BOOT_STOP);
+}

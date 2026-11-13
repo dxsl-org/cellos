@@ -1,5 +1,5 @@
 use abi::caller_identity::{CallerIdentity, CALLER_IDENTITY_LEN};
-use abi::retirement::{reason, RetirementState, ViRetirementV1};
+use abi::retirement::{reason, RetirementState, ViRetirementV1, HOTSWAP_RETIRED};
 use abi::service_binding::ServiceBinding;
 use abi::syscall::service;
 use alloc::string::String;
@@ -19,9 +19,10 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 const VERDICT_WAIT_TICKS: u64 = 200;
 /// Poll backstop for a scheduler-tick clock that never advances.
 const VERDICT_POLL_LIMIT: usize = 5_000_000;
-/// The exit reason the kernel gives an incarnation the supervisor retired after
-/// a committed hot-swap (`KillCell`, `kernel/src/cell/hotswap.rs`).
-const HOTSWAP_EXIT_REASON: u64 = 0xAAAA_AAAA;
+/// The exit reason init gives a swap successor that died before init could
+/// watch it: its real reason went to no one, and an unexplained death is a
+/// failure for the restart policy.
+const UNWATCHED_DEATH_REASON: u64 = u64::MAX;
 
 /// What init does with a service whose death passed the policy and the budget.
 #[derive(Debug, PartialEq, Eq)]
@@ -131,7 +132,7 @@ pub(crate) fn run(services: &mut [Service], console: Option<SafeConsole>) -> ! {
                 console.announce(services);
             }
         }
-        let Some((dead, reason)) = next_death() else {
+        let Some((mut dead, mut reason)) = next_death() else {
             ostd::task::yield_now();
             continue;
         };
@@ -146,11 +147,16 @@ pub(crate) fn run(services: &mut [Service], console: Option<SafeConsole>) -> ! {
         if let Some(successor) = services[index]
             .spec
             .service_id
-            .and_then(|id| swap_successor(reason, dead, ostd::service::lookup(id)))
+            .and_then(|id| swap_successor(id, reason, dead, ostd::service::lookup(id)))
             .filter(|&successor| task_alive(successor) == Some(true))
         {
-            adopt(&mut services[index], dead, successor);
-            continue;
+            if adopt(&mut services[index], dead, successor) {
+                continue;
+            }
+            // The successor died before init could watch it, so no death
+            // record will come for it: its death is handled here, per policy.
+            dead = successor;
+            reason = UNWATCHED_DEATH_REASON;
         }
         // Exit reasons retain their existing clean/crash restart semantics.
         if services[index].spec.path == "/bin/hypervisor" {
@@ -256,31 +262,70 @@ fn restart_pending(services: &mut [Service]) -> bool {
     restarted
 }
 
-/// The provider that replaced `dead` in a committed hot-swap: the death carries
-/// the swap reason and the registry names a live, different provider.
-fn swap_successor(reason: u64, dead: usize, live: Option<ServiceBinding>) -> Option<usize> {
-    let binding = live.filter(|binding| reason == HOTSWAP_EXIT_REASON && binding.is_live())?;
+/// The provider that replaced `dead` in a committed hot-swap of `service_id`:
+/// the death carries the swap reason and the registry names a live, different
+/// provider. The machine-pin row never has one: init alone registers that
+/// provider (the kernel refuses to swap it), so a different live provider
+/// there is never init's to adopt.
+fn swap_successor(
+    service_id: u16,
+    reason: u64,
+    dead: usize,
+    live: Option<ServiceBinding>,
+) -> Option<usize> {
+    if service_id == service::MACHINE_PIN || reason != u64::from(HOTSWAP_RETIRED) {
+        return None;
+    }
+    let binding = live.filter(ServiceBinding::is_live)?;
     usize::try_from(binding.tid)
         .ok()
         .filter(|&successor| successor != dead)
 }
 
+/// What became of an adopted successor's death watch.
+#[derive(Debug, PartialEq, Eq)]
+enum Watch {
+    /// `NotifyOnExit` armed: its death arrives as a record.
+    Armed,
+    /// Not armed, but the successor still runs (or its liveness is unknown).
+    Unwatched,
+    /// Not armed because the successor is already dead.
+    Dead,
+}
+
+/// Classify a `NotifyOnExit` answer, re-checking liveness only when it failed.
+fn watch_outcome(armed: bool, alive: impl FnOnce() -> Option<bool>) -> Watch {
+    if armed {
+        Watch::Armed
+    } else if alive() == Some(false) {
+        Watch::Dead
+    } else {
+        Watch::Unwatched
+    }
+}
+
 /// Take over `successor` as the service's incarnation: no restart, no new
 /// registration (the supervisor's commit published it), and its death is
-/// watched from now on. Its crash budget carries over.
-fn adopt(service: &mut Service, dead: usize, successor: usize) {
+/// watched from now on. Its crash budget carries over. `false` when the
+/// successor died before its watch was armed: the caller handles that death.
+fn adopt(service: &mut Service, dead: usize, successor: usize) -> bool {
+    let watch = watch_outcome(
+        matches!(sys_notify_on_exit(successor), SyscallResult::Ok(0)),
+        || task_alive(successor),
+    );
     service.tid = Some(successor);
     service.restart_pending = false;
-    service.ready = matches!(sys_notify_on_exit(successor), SyscallResult::Ok(0));
+    service.ready = watch == Watch::Armed;
     println(&alloc::format!(
         "Init: {} hot-swapped: adopted tid {successor} (was {dead}){}",
         service.spec.name,
-        if service.ready {
-            ""
-        } else {
-            ", death unwatched"
+        match watch {
+            Watch::Armed => "",
+            Watch::Unwatched => ", death unwatched",
+            Watch::Dead => ", already dead",
         },
     ));
+    watch != Watch::Dead
 }
 
 fn relay_hypervisor_exit(dead: usize) {
@@ -396,37 +441,74 @@ mod restart_decision_tests {
 
 #[cfg(test)]
 mod swap_adoption_tests {
-    use super::{swap_successor, HOTSWAP_EXIT_REASON};
+    use super::{swap_successor, watch_outcome, Watch};
+    use abi::retirement::HOTSWAP_RETIRED;
     use abi::service_binding::ServiceBinding;
+    use abi::syscall::service;
 
     const LIVE_41: ServiceBinding = ServiceBinding::new(41, 7, 2);
+    const SWAPPED: u64 = HOTSWAP_RETIRED as u64;
 
     #[test]
     fn a_swap_death_with_a_live_new_provider_is_adopted() {
         assert_eq!(
-            swap_successor(HOTSWAP_EXIT_REASON, 30, Some(LIVE_41)),
+            swap_successor(service::CONFIG, SWAPPED, 30, Some(LIVE_41)),
             Some(41)
         );
     }
 
     #[test]
     fn any_other_death_is_not_a_swap() {
-        for reason in [0, 1, u64::MAX, HOTSWAP_EXIT_REASON + 1] {
-            assert_eq!(swap_successor(reason, 30, Some(LIVE_41)), None);
+        for reason in [0, 1, u64::MAX, SWAPPED + 1] {
+            assert_eq!(
+                swap_successor(service::CONFIG, reason, 30, Some(LIVE_41)),
+                None
+            );
         }
     }
 
     #[test]
     fn a_swap_death_without_a_different_live_provider_restarts() {
         // Still the dead tid: the commit never published a successor.
-        assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 41, Some(LIVE_41)), None);
-        assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 30, None), None);
+        assert_eq!(
+            swap_successor(service::CONFIG, SWAPPED, 41, Some(LIVE_41)),
+            None
+        );
+        assert_eq!(swap_successor(service::CONFIG, SWAPPED, 30, None), None);
         for unbound in [
             ServiceBinding::new(0, 7, 2),
             ServiceBinding::new(41, 0, 2),
             ServiceBinding::new(41, 7, 0),
         ] {
-            assert_eq!(swap_successor(HOTSWAP_EXIT_REASON, 30, Some(unbound)), None);
+            assert_eq!(
+                swap_successor(service::CONFIG, SWAPPED, 30, Some(unbound)),
+                None
+            );
         }
+    }
+
+    /// Review finding (Phase 13): init alone registers the machine-pin
+    /// provider, so it never adopts a different live provider of that row,
+    /// even on a death carrying the swap reason.
+    #[test]
+    fn the_machine_pin_row_is_never_adopted() {
+        assert_eq!(
+            swap_successor(service::MACHINE_PIN, SWAPPED, 30, Some(LIVE_41)),
+            None
+        );
+    }
+
+    /// Review finding (Phase 13): a failed watch re-checks liveness; only a
+    /// dead successor is handed back as a death, and a successful watch never
+    /// asks.
+    #[test]
+    fn a_failed_watch_on_a_dead_successor_is_a_death() {
+        assert_eq!(
+            watch_outcome(true, || unreachable!("armed watch re-checked")),
+            Watch::Armed
+        );
+        assert_eq!(watch_outcome(false, || Some(false)), Watch::Dead);
+        assert_eq!(watch_outcome(false, || Some(true)), Watch::Unwatched);
+        assert_eq!(watch_outcome(false, || None), Watch::Unwatched);
     }
 }

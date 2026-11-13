@@ -3,7 +3,7 @@
 //! Kernel mechanisms replaced by SupervisorCap syscalls:
 //!   set_task_frozen(tid)   → sys_freeze_cell(tid)
 //!   unfreeze_task(tid)     → sys_resume_cell(tid)
-//!   exit_task_internal(..) → sys_kill_cell(tid, 0xAAAA_AAAA)
+//!   exit_task_internal(..) → sys_kill_cell(tid, abi::retirement::HOTSWAP_RETIRED)
 //!
 //! Polling replaced by yield-and-retry loops using sys_yield() + sys_state_restore()
 //! and sys_query_hotswap_ready(), each bounded by `WAIT_TICKS` scheduler ticks
@@ -172,7 +172,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
 
     // Terminate the old cell (it is Frozen at this point — KillCell bypasses the
     // Frozen kill-guard in the kernel, same as exit_task_internal in hotswap.rs).
-    sys_kill_cell(old_tid, 0xAAAA_AAAA_u32).ok();
+    sys_kill_cell(old_tid, abi::retirement::HOTSWAP_RETIRED).ok();
 
     // Clean up stash slot.
     sys_state_stash_clear(stash_key);

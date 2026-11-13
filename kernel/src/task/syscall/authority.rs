@@ -905,6 +905,10 @@ pub(super) fn freeze_cell(caller_id: usize, target_tid: usize) -> SyscallResult 
     if target_tid == 0 || target_tid == caller_id {
         return Err(SyscallError::InvalidInput);
     }
+    // The machine-pin provider is never swapped (`swap_refused`).
+    if crate::cell::service_registry::is_swap_refused_tid(target_tid) {
+        return Err(SyscallError::PermissionDenied);
+    }
     // swap_id u64::MAX = admin freeze (not a hotswap sequence).
     crate::cell::hotswap::freeze_task_with_ceiling(target_tid, u64::MAX)
         .map(|_| 0)
@@ -928,6 +932,9 @@ pub(super) fn pause_service(
     }
     if expected_tid == 0 {
         return Err(SyscallError::InvalidInput);
+    }
+    if crate::cell::service_registry::swap_refused(service_id) {
+        return Err(SyscallError::PermissionDenied);
     }
     if !crate::cell::service_registry::pause(service_id, expected_tid) {
         return Err(SyscallError::TryAgain);
@@ -961,6 +968,9 @@ pub(super) fn resume_cell(
     }
     if source_tid == target_tid || service_id > u16::MAX as usize {
         return Err(SyscallError::InvalidInput);
+    }
+    if crate::cell::service_registry::swap_refused(service_id as u16) {
+        return Err(SyscallError::PermissionDenied);
     }
     crate::cell::hotswap::commit_hotswap_barrier(source_tid, target_tid, service_id as u16)
         .map(|()| 0)

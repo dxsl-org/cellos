@@ -197,7 +197,10 @@ impl ViStateTransfer for ConfigStore {
         for _ in 0..u32::from_le_bytes(*count) {
             let key = take_str(&mut rest)?;
             let value = take_str(&mut rest)?;
-            map.insert(String::from(key), String::from(value));
+            // `serialize` writes each key once: a repeat is not this layout.
+            if map.insert(String::from(key), String::from(value)).is_some() {
+                return Err(ViError::InvalidInput);
+            }
         }
         if !rest.is_empty() {
             return Err(ViError::InvalidInput);
@@ -400,5 +403,32 @@ mod tests {
         let mut not_utf8 = payload.to_vec();
         not_utf8[6] = 0xFF;
         assert!(ConfigStore::deserialize(1, &not_utf8).is_err());
+    }
+
+    /// Review finding (Phase 13): a payload naming one key twice is not what
+    /// `serialize` writes, so it is refused rather than last-one-wins.
+    #[test]
+    fn a_transfer_repeating_a_key_is_refused() {
+        let mut payload = 2u32.to_le_bytes().to_vec();
+        for value in ["a", "b"] {
+            for field in ["KEY", value] {
+                payload.extend_from_slice(&(field.len() as u16).to_le_bytes());
+                payload.extend_from_slice(field.as_bytes());
+            }
+        }
+        assert_eq!(
+            ConfigStore::deserialize(1, &payload).err(),
+            Some(ViError::InvalidInput)
+        );
+        // The same layout with distinct keys restores both.
+        let distinct = payload
+            .iter()
+            .rposition(|&byte| byte == b'K')
+            .expect("second key");
+        payload[distinct] = b'J';
+        assert_eq!(
+            ConfigStore::deserialize(1, &payload).map(|store| store.map.len()),
+            Ok(2)
+        );
     }
 }
