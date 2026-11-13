@@ -19,7 +19,7 @@ use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU8, Ordering};
 use abi::supervisor_power::{KERNEL_SENDER, POWER_BUTTON_REQUEST};
 
 use super::power::{self, inb, inw, io_port, outb, outw};
-use super::AcpiInfo;
+use crate::acpi::AcpiInfo;
 
 /// No SCI: no FADT, hardware-reduced ACPI, no I/O PM1 event block, ACPI mode
 /// refused, or no I/O APIC serves the SCI.
@@ -118,7 +118,7 @@ pub fn init(
 }
 
 /// `SCI_EN` set, by the `SMI_CMD` handover when firmware left it clear.
-fn enable_acpi_mode(fadt: &super::FadtInfo) -> bool {
+fn enable_acpi_mode(fadt: &crate::acpi::FadtInfo) -> bool {
     let Some(control) = io_port(&fadt.pm1a_cnt) else {
         return false;
     };

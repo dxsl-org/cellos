@@ -18,12 +18,6 @@ pub mod uart;
 mod bcm_pinmux;
 pub mod block;
 pub mod console_drv;
-#[cfg(target_arch = "x86_64")]
-pub mod console_select;
-#[cfg(target_arch = "x86_64")]
-pub mod fb_console;
-#[cfg(target_arch = "x86_64")]
-pub mod fb_font;
 #[cfg(target_arch = "riscv64")]
 pub mod irq_dispatch;
 pub mod mmc;
@@ -39,11 +33,7 @@ pub mod iommu_pt; // IOMMU identity-mapping page tables (Sv39 / VT-d SLPT)
 pub mod iommu_riscv; // RISC-V IOMMU — 3-level DDT + Sv39 first-stage
 #[cfg(target_arch = "riscv64")]
 mod iommu_riscv_cmd;
-#[cfg(target_arch = "x86_64")]
-pub mod iommu_x86; // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
-#[cfg(target_arch = "x86_64")]
-pub mod pcie_msi; // PCIe function record (434) and MSI/MSI-X allocation (435)
 pub mod virtio_rng; // Kernel entropy source (x86 RDSEED/RDRAND)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.
@@ -51,8 +41,6 @@ pub mod irq_wait; // IRQ wait/pending tables for Driver Cell sys_wait_irq
                   // blk_nvme and nic_e1000 have been migrated to Driver Cells:
                   //   cells/drivers/nvme/   ← NVMe PCIe block driver
                   //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
-#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-pub mod ps2_keyboard;
 
 /// Initialize drivers subsystem
 ///

@@ -16,8 +16,8 @@ use crate::sync::Spinlock;
 use alloc::vec::Vec;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
-use super::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
-use super::iommu_pt::VtdSlpt;
+use crate::dev::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu_pt::VtdSlpt;
 use context::{
     canonical_bdf, clear_ctx_slot, context_entry, context_slot, read_ctx_slot, write_ctx_entry,
 };
@@ -431,7 +431,7 @@ pub fn activate() {
         any_active |= u.activate_translation();
     }
     if any_active {
-        super::iommu::set_active();
+        crate::dev::iommu::set_active();
     }
     // Remappable-format MSIs are only meaningful once a unit decodes them.
     ir::set_ir_active(remap::activate(&mut units));

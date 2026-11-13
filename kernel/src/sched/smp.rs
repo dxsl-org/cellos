@@ -1292,7 +1292,7 @@ impl core::fmt::Display for X86OnlineApicIds {
 /// `MAX_HARTS` for it (phase 07b decision D2).
 #[cfg(target_arch = "x86_64")]
 pub fn start_secondaries() {
-    use crate::boot::limine;
+    use crate::arch::boot::limine;
     let bsp_id = hal::x86_64::apic::current_id();
     #[cfg(feature = "test-hooks")]
     x86_handoff_fixture();
@@ -1432,7 +1432,7 @@ pub fn start_secondaries() {
 /// started or refuses root operation; the caller then stops bring-up.
 #[cfg(target_arch = "x86_64")]
 fn x86_start_ap(
-    info: *mut crate::boot::limine::LimineMpInfo,
+    info: *mut crate::arch::boot::limine::LimineMpInfo,
     logical: usize,
     ap_id: u32,
     kernel_cr3: usize,

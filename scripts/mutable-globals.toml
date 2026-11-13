@@ -195,7 +195,7 @@ contexts = ["boot", "normal"]
 seal = "written once in cpu_features::detect at kmain:153, before the IDT exists and before start_secondaries"
 retirement = "never: lives for the whole run"
 rationale = "A single Relaxed store of a scalar on the BSP; the kmain reader is the same thread and syscall-path readers on either CPU run after the AP-start happens-before, so Relaxed carries no dependent data. The value reflects the BSP's CPUID only; cpu_feature_policy (AP admission) does not compare SVM/VMX bits."
-review = "kernel/src/cpu_features.rs:detect; kernel/src/main.rs:635; kernel/src/hypervisor/svm_registry.rs:nested_format; kernel/src/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64.rs:cpu_feature_policy"
+review = "kernel/src/cpu_features.rs:detect; kernel/src/main.rs:635; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:nested_format; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64.rs:cpu_feature_policy"
 
 [[global]]
 key = "kernel::cpu_features::HAS_X86_VIRT"
@@ -297,7 +297,7 @@ rationale = "Bootloader-written before entry and read once by parse_bootloader_i
 review = "kernel/src/boot/limine.rs:get_kernel_address; kernel/src/boot.rs:119"
 
 [[global]]
-key = "kernel::boot::limine::MP_REQUEST @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::limine::MP_REQUEST @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "static-mut"
 owner = "Limine bootloader writes `response`; kernel::boot::limine::get_mp_response reads it from sched::smp::start_secondaries on the BSP"
@@ -319,7 +319,7 @@ rationale = "Bootloader-written before entry and read once at kmain:152 on the B
 review = "kernel/src/boot/limine.rs:get_dtb_ptr; kernel/src/boot.rs:effective_dtb; kernel/src/main.rs:152-153"
 
 [[global]]
-key = "kernel::boot::limine::RSDP_REQUEST @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::limine::RSDP_REQUEST @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "static-mut"
 owner = "Limine bootloader writes `response`; kernel::boot::limine::get_rsdp_ptr reads it for ACPI parsing at kmain:390"
@@ -330,7 +330,7 @@ rationale = "Bootloader-written before entry and read once by the BSP during ACP
 review = "kernel/src/boot/limine.rs:get_rsdp_ptr; kernel/src/main.rs:390"
 
 [[global]]
-key = "kernel::boot::limine::SMBIOS_REQUEST @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::limine::SMBIOS_REQUEST @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "static-mut"
 owner = "Limine bootloader writes `response`; kernel::boot::limine::get_smbios_entry_points reads it for the boot identity after ACPI parsing in kmain"
@@ -341,7 +341,7 @@ rationale = "Bootloader-written before entry and read once by the BSP with read_
 review = "kernel/src/boot/limine.rs:get_smbios_entry_points; kernel/src/main.rs:kmain"
 
 [[global]]
-key = "kernel::boot::limine::EXECUTABLE_FILE_REQUEST @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::boot::limine::EXECUTABLE_FILE_REQUEST @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "static-mut"
 owner = "Limine bootloader writes `response`; kernel::boot::limine::get_executable_cmdline reads it once to bind the x86 profile in kmain"
@@ -793,7 +793,7 @@ review = "hal/arch/x86/src/lib.rs:10-13; hal/arch/x86/src/x86_32.rs:12"
 
 # ---- slice B ----
 [[global]]
-key = "kernel::dev::ps2_keyboard::STATE @cfg(any (target_arch = \"x86_64\" , target_arch = \"x86\"))"
+key = "kernel::arch::x86_64::dev::ps2_keyboard::STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
 owner = "dev::ps2_keyboard owns the PS/2 controller decode state; mutated by ps2_keyboard::init (boot) and poll/poll_event, which are reached only from console_drv::viConsole::poll (hart-0 timer tick and file_read fd 0)"
@@ -801,7 +801,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "none: init() programs the controller on the BSP (main.rs x86_64 block) before start_secondaries; decode/event state is mutated on every poll for the whole run"
 retirement = "never: lives for the whole run; not tied to any cell (input-cell death only switches console_drv to the ASCII fallback path)"
 rationale = "Spinlock::lock masks interrupts on the local CPU, so the hart-0 timer ISR (vi_timer_tick -> CONSOLE.lock().poll()) cannot self-deadlock against a file_read(fd 0) holder; every runtime accessor runs nested inside console_drv::CONSOLE (order CONSOLE -> ps2 STATE), and port I/O under the lock is bounded (POLL_LIMIT, 64 events per tick). No NMI/exception path touches it."
-review = "kernel/src/dev/ps2_keyboard.rs:init; kernel/src/dev/ps2_keyboard.rs:poll_event; kernel/src/dev/ps2_keyboard.rs:poll; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/fsapi.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
+review = "kernel/src/arch/x86_64/dev/ps2_keyboard.rs:init; kernel/src/arch/x86_64/dev/ps2_keyboard.rs:poll_event; kernel/src/arch/x86_64/dev/ps2_keyboard.rs:poll; kernel/src/dev/console_drv.rs:viConsole::poll; kernel/src/task.rs:vi_timer_tick; kernel/src/fsapi.rs:file_read; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
 key = "kernel::dev::irq_wait::IRQ_WAITERS"
@@ -969,7 +969,7 @@ rationale = "Monotonic false->true flag with Release store / Acquire load and no
 review = "kernel/src/dev/pcie_ecam.rs:mark_platform_registered; kernel/src/dev/pcie_ecam.rs:is_platform_registered; kernel/src/task/syscall/mod.rs:8030; kernel/src/task/syscall/mod.rs:8047"
 
 [[global]]
-key = "kernel::dev::iommu_x86::PRIMARY_BASE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::iommu_x86::PRIMARY_BASE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
 owner = "dev::iommu_x86; set once by init_hw from ACPI DMAR or q35 fallback"
@@ -977,10 +977,10 @@ contexts = ["boot", "normal"]
 seal = "written once in iommu_x86::init_hw at boot on the BSP"
 retirement = "never: lives for the whole run"
 rationale = "Relaxed store at boot before AP start-up and cell dispatch"
-review = "kernel/src/dev/iommu_x86.rs"
+review = "kernel/src/arch/x86_64/dev/iommu_x86.rs"
 
 [[global]]
-key = "kernel::dev::iommu_x86::UNITS @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::iommu_x86::UNITS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
 owner = "dev::iommu_x86; multi-unit registry for up to 16 VT-d DRHD units"
@@ -988,10 +988,10 @@ contexts = ["boot", "normal", "irq"]
 seal = "units added at boot during init_hw; unit state mutated per domain/cell"
 retirement = "never: units live for the whole run"
 rationale = "IRQ-safe spinlock protecting multi-unit hardware list and per-unit domains"
-review = "kernel/src/dev/iommu_x86.rs"
+review = "kernel/src/arch/x86_64/dev/iommu_x86.rs"
 
 [[global]]
-key = "kernel::dev::iommu_x86::ir::IR_ACTIVE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::iommu_x86::ir::IR_ACTIVE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "dev::iommu_x86::ir; set true when interrupt remapping is activated"
@@ -999,10 +999,10 @@ contexts = ["boot", "normal", "irq"]
 seal = "set once at boot during activate"
 retirement = "never: lives for the whole run"
 rationale = "Atomic flag indicating hardware interrupt remapping status"
-review = "kernel/src/dev/iommu_x86/ir.rs"
+review = "kernel/src/arch/x86_64/dev/iommu_x86/ir.rs"
 
 [[global]]
-key = "kernel::dev::fb_console::FB_ACTIVE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::fb_console::FB_ACTIVE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "dev::fb_console; set true when framebuffer console is active"
@@ -1010,10 +1010,10 @@ contexts = ["boot", "normal"]
 seal = "none: can be disabled at handover"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool flag gating writes to framebuffer console"
-review = "kernel/src/dev/fb_console.rs"
+review = "kernel/src/arch/x86_64/dev/fb_console.rs"
 
 [[global]]
-key = "kernel::dev::fb_console::FB_HANDED_OVER @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::fb_console::FB_HANDED_OVER @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "dev::fb_console; set true when userspace display server takes over"
@@ -1021,10 +1021,10 @@ contexts = ["normal"]
 seal = "none: set on first compositor handover"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool preventing kernel console output after userspace takeover"
-review = "kernel/src/dev/fb_console.rs"
+review = "kernel/src/arch/x86_64/dev/fb_console.rs"
 
 [[global]]
-key = "kernel::dev::fb_console::FB_STATE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
 owner = "dev::fb_console; linear framebuffer dimensions, buffer pointer, cursor state"
@@ -1032,7 +1032,7 @@ contexts = ["boot", "normal"]
 seal = "none: updated on each text write"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protecting cursor position and character rendering to screen"
-review = "kernel/src/dev/fb_console.rs"
+review = "kernel/src/arch/x86_64/dev/fb_console.rs"
 [[global]]
 key = "kernel::dev::iommu::IDENTITY_DMA_LOGGED"
 lifetime = "global"
@@ -1053,7 +1053,7 @@ contexts = ["boot", "normal"]
 seal = "set at most once by iommu_x86::activate, called from kmain (main.rs:864) on the BSP before start_secondaries; the deferred activation path is riscv64-only"
 retirement = "never: isolation is never deactivated"
 rationale = "On x86_64 the only store is at boot before APs/cells, so Relaxed loads in the GrantDma path are ordered by AP start-up and dispatch; the flag gates use of VT-d state that is itself boot-sealed. A Relaxed flag set from a syscall (the riscv64 try_deferred_init path) would be a publication finding, but that store is unreachable here."
-review = "kernel/src/dev/iommu.rs:set_active; kernel/src/dev/iommu.rs:is_active; kernel/src/dev/iommu.rs:try_deferred_init; kernel/src/dev/iommu_x86.rs:activate; kernel/src/main.rs:864"
+review = "kernel/src/dev/iommu.rs:set_active; kernel/src/dev/iommu.rs:is_active; kernel/src/dev/iommu.rs:try_deferred_init; kernel/src/arch/x86_64/dev/iommu_x86.rs:activate; kernel/src/main.rs:864"
 
 [[global]]
 key = "kernel::dev::iommu::IOMMU_DEFERRED"
@@ -1210,7 +1210,7 @@ rationale = "registry::init is called only from dev::init, which kmain runs unde
 review = "kernel/src/dev/registry.rs:init; kernel/src/dev/registry.rs:resolve; kernel/src/dev/registry.rs:register_driver; kernel/src/dev.rs:init; kernel/src/main.rs:797"
 
 [[global]]
-key = "kernel::hypervisor::svm_registry::NEXT_ASID @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::hypervisor::svm_registry::NEXT_ASID @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "hypervisor::svm_registry; boot-wide SVM ASID allocator advanced by create_vcpu (SVM branch) under VM_REGISTRY; never reused"
@@ -1218,10 +1218,10 @@ contexts = ["boot", "normal"]
 seal = "none: advanced on every SVM vCPU creation for the whole run"
 retirement = "never: ASIDs are deliberately not reused after reap_vms_for_task"
 rationale = "fetch_update(Relaxed) issues ASIDs only in 1..=max_asid (CPUID 8000_000A.EBX - 1) and never wraps; the ASID is reserved before any VMCB/host/bitmap frame is allocated, so exhaustion refuses create_vcpu without leaking (CP1 p02-debt-semantic #7). Allocation runs from the hypervisor CreateVcpu syscall and the test-hooks boot smoke, never an ISR."
-review = "kernel/src/hypervisor/svm_registry.rs:next_asid; kernel/src/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; test asid_reservation_is_bounded_and_never_wraps"
+review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:next_asid; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; test asid_reservation_is_bounded_and_never_wraps"
 
 [[global]]
-key = "kernel::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cell"
 mutation = "spinlock"
 owner = "hypervisor::svm_registry; (owner tid, vm id) -> SvmVm map created by create_vm and used by create_vcpu/run_vcpu_hal/memory/irq ops from hypervisor::registry syscalls; reaped by reap_vms_for_task"
@@ -1229,7 +1229,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "none: VMs are created and reaped for the whole run (map allocated by the first create_vm)"
 retirement = "reap_vms_for_task(tid) from task.rs:reap_retired_task_resources (yield_cpu retirement funnel) removes the dead owner's VMs under the lock and drops them (frees VMCB/NPT/guest RAM) outside it"
 rationale = "IRQ-masking spinlock with order VM_REGISTRY -> FRAME_ALLOCATOR; the reaper can run in the timer/IPI ISR via yield_cpu and cannot self-deadlock. Finding: run_vcpu_hal holds this global lock across the whole VMRUN world switch, serializing every VM on every hart and making a retirement on another hart spin until the guest exits (bounded because the VMCB intercepts physical INTR with V_INTR_MASKING)."
-review = "kernel/src/hypervisor/svm_registry.rs:create_vm; kernel/src/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/hypervisor/svm_registry.rs:reap_vms_for_task; kernel/src/task.rs:reap_retired_task_resources; hal/arch/x86/src/x86_64/vmcb.rs:init"
+review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vm; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:reap_vms_for_task; kernel/src/task.rs:reap_retired_task_resources; hal/arch/x86/src/x86_64/vmcb.rs:init"
 
 # ---- slice C ----
 [[global]]
@@ -1329,7 +1329,7 @@ contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: taken for the whole run"
 retirement = "never: lives for the whole run (guards no data)"
 rationale = "Callers are the CapRevoke(PCIE_DRIVER) syscall and yield_cpu's reap/retry (timer ISR, user-fault path, AP idle loop). The lock masks IF and is held across pcie_ecam::quiesce_function, iommu::revoke_dma_for_cell (bounded invalidation wait), resource_registry/frame release and logging: a long IF-off section (latency, not correctness). Lock order under it, verified 2026-11-01: IOMMU_CLEANUP_SERIAL -> BDF_OWNERS, then x86 VTD_DOMAINS -> VTD_CONTEXTS (riscv64 RISCV_DOMAINS -> CQ_TRANSACTION), then the pin registry and FRAME_ALLOCATOR. It is acquired only in teardown_dma_authority and no path takes any of those locks and then this one, so there is no inversion."
-review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/dev/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/dev/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540"
+review = "kernel/src/task.rs:522,1834-1867 (sole acquisition); kernel/src/resource_registry.rs:807-818; kernel/src/arch/x86_64/dev/iommu_x86.rs:map_range_for_cell (context before VTD_DOMAINS, not nested); kernel/src/dev/iommu_riscv.rs:411-445,475-503; kernel/src/task/syscall/mod.rs:1531-1540"
 
 [[global]]
 key = "kernel::task::TICKS"
@@ -1841,7 +1841,7 @@ contexts = ["boot", "normal", "irq"]
 seal = "Active is installed once (x86_64: main.rs:1486-1489 at boot) and never cleared; Pending only transiently inside the display syscall"
 retirement = "never: release_for deliberately keeps Active metadata until reboot (restart is fail-stop for display)"
 rationale = "Read from the x86_64 timer ISR on hart 0 via vi_timer_tick -> console_drv CONSOLE.poll -> ps2_keyboard::poll_absolute_mouse -> display_framebuffer_resolution; the crate Spinlock masks IRQs so a normal-context holder cannot be interrupted into a same-hart deadlock."
-review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/src/resource_registry.rs:display_framebuffer_resolution; kernel/src/dev/ps2_keyboard.rs:poll_absolute_mouse; kernel/src/task.rs:1062; kernel/src/main.rs:1486"
+review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/src/resource_registry.rs:display_framebuffer_resolution; kernel/src/arch/x86_64/dev/ps2_keyboard.rs:poll_absolute_mouse; kernel/src/task.rs:1062; kernel/src/main.rs:1486"
 
 [[global]]
 key = "kernel::resource_registry::PCIE_BARS"
@@ -2517,7 +2517,7 @@ rationale = "AtomicBool flag tells hart-0 scheduler to run wake sweep early with
 review = "kernel/src/dev/irq_wait.rs:MSI_WAKE"
 
 [[global]]
-key = "kernel::dev::pcie_msi::STATE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::dev::pcie_msi MSI vector allocator state"
@@ -2525,10 +2525,10 @@ contexts = ["boot", "normal"]
 seal = "none: vectors allocated and freed as PCIe devices bind/unbind"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protects MSI vector pool and allocation records across driver cells"
-review = "kernel/src/dev/pcie_msi.rs:STATE"
+review = "kernel/src/arch/x86_64/dev/pcie_msi.rs:STATE"
 
 [[global]]
-key = "kernel::dev::pcie_msi::READY @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::pcie_msi::READY @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::dev::pcie_msi readiness flag"
@@ -2536,10 +2536,10 @@ contexts = ["boot", "normal"]
 seal = "set once during x86 MSI subsystem initialization"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool published when MSI handler and allocator are ready for device configuration"
-review = "kernel/src/dev/pcie_msi.rs:READY"
+review = "kernel/src/arch/x86_64/dev/pcie_msi.rs:READY"
 
 [[global]]
-key = "kernel::dev::pcie_msi::FIRMWARE_FORBIDS_MSI @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::pcie_msi::FIRMWARE_FORBIDS_MSI @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::dev::pcie_msi ACPI FADT MSI-forbidden flag"
@@ -2547,10 +2547,10 @@ contexts = ["boot", "normal"]
 seal = "written during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool records firmware policy forbidding MSI allocation on platform"
-review = "kernel/src/dev/pcie_msi.rs:FIRMWARE_FORBIDS_MSI"
+review = "kernel/src/arch/x86_64/dev/pcie_msi.rs:FIRMWARE_FORBIDS_MSI"
 
 [[global]]
-key = "kernel::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
 owner = "kernel::dev::pcie_msi::virtio_gate refused devices list"
@@ -2558,7 +2558,7 @@ contexts = ["boot", "normal"]
 seal = "none: tracks BDFs that bypass IOMMU or fail gate check"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protects list of VirtIO devices refused MSI allocation due to missing IOMMU platform"
-review = "kernel/src/dev/pcie_msi/virtio_gate.rs:REFUSED"
+review = "kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs:REFUSED"
 
 [[global]]
 key = "kernel::loader::va_alloc::SLOTS"
@@ -2594,7 +2594,7 @@ rationale = "Spinlock protects cached ACPI topology information queried by NUMA 
 review = "kernel/src/acpi/mod.rs:TOPOLOGY"
 
 [[global]]
-key = "kernel::acpi::sci::STATE @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::acpi::sci ACPI System Control Interrupt enable state"
@@ -2602,10 +2602,10 @@ contexts = ["boot", "normal"]
 seal = "none: transitions between OFF, QUIET, and ARMED"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU8 tracks SCI state machine during ACPI mode transition and power management"
-review = "kernel/src/acpi/sci.rs:STATE"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:STATE"
 
 [[global]]
-key = "kernel::acpi::sci::PM1A_STATUS @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::PM1A_STATUS @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::acpi::sci PM1a status register I/O port address"
@@ -2613,10 +2613,10 @@ contexts = ["boot", "normal"]
 seal = "written once during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU16 stores PM1a event status port for power button and sleep event queries"
-review = "kernel/src/acpi/sci.rs:PM1A_STATUS"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:PM1A_STATUS"
 
 [[global]]
-key = "kernel::acpi::sci::PM1B_STATUS @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::PM1B_STATUS @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::acpi::sci PM1b status register I/O port address"
@@ -2624,10 +2624,10 @@ contexts = ["boot", "normal"]
 seal = "written once during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU16 stores optional PM1b event status port"
-review = "kernel/src/acpi/sci.rs:PM1B_STATUS"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:PM1B_STATUS"
 
 [[global]]
-key = "kernel::acpi::sci::PM1_ENABLE_OFFSET @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::PM1_ENABLE_OFFSET @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::acpi::sci PM1 enable register port offset"
@@ -2635,10 +2635,10 @@ contexts = ["boot", "normal"]
 seal = "written once during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU16 stores byte offset from status to enable register in PM1 block"
-review = "kernel/src/acpi/sci.rs:PM1_ENABLE_OFFSET"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:PM1_ENABLE_OFFSET"
 
 [[global]]
-key = "kernel::acpi::sci::SCI_GSI @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::SCI_GSI @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::acpi::sci SCI interrupt GSI number"
@@ -2646,10 +2646,10 @@ contexts = ["boot", "normal"]
 seal = "written once during ACPI FADT parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU32 stores GSI associated with ACPI SCI IRQ"
-review = "kernel/src/acpi/sci.rs:SCI_GSI"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:SCI_GSI"
 
 [[global]]
-key = "kernel::acpi::sci::SCI_FLAGS @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::SCI_FLAGS @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "atomic"
 owner = "kernel::acpi::sci SCI interrupt polarity/trigger flags"
@@ -2657,10 +2657,10 @@ contexts = ["boot", "normal"]
 seal = "written once during ACPI MADT interrupt override parse on BSP"
 retirement = "never: lives for the whole run"
 rationale = "AtomicU16 stores MPS INTI flags for SCI line configuration"
-review = "kernel/src/acpi/sci.rs:SCI_FLAGS"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:SCI_FLAGS"
 
 [[global]]
-key = "kernel::acpi::sci::PENDING @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::PENDING @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::acpi::sci SCI power event pending indicator"
@@ -2668,10 +2668,10 @@ contexts = ["normal"]
 seal = "none: set when power button event detected, cleared after dispatch"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool tracks pending power button event to relay to supervisor cell"
-review = "kernel/src/acpi/sci.rs:PENDING"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:PENDING"
 
 [[global]]
-key = "kernel::acpi::sci::RELAY_BLOCKED_LOGGED @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::sci::RELAY_BLOCKED_LOGGED @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
 owner = "kernel::acpi::sci warning rate limiter flag"
@@ -2679,10 +2679,10 @@ contexts = ["normal"]
 seal = "none: set once when SCI event relay is blocked"
 retirement = "never: lives for the whole run"
 rationale = "AtomicBool suppresses duplicate log messages when power button event cannot be delivered"
-review = "kernel/src/acpi/sci.rs:RELAY_BLOCKED_LOGGED"
+review = "kernel/src/arch/x86_64/acpi/sci.rs:RELAY_BLOCKED_LOGGED"
 
 [[global]]
-key = "kernel::acpi::power::FACTS @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::acpi::power::FACTS @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "spinlock"
 owner = "kernel::acpi::power ACPI reset and sleep power facts cache"
@@ -2690,7 +2690,7 @@ contexts = ["boot", "normal"]
 seal = "populated once on BSP during FADT parse"
 retirement = "never: lives for the whole run"
 rationale = "Spinlock protects parsed ACPI power registers and S5 sleep packages for system reset/shutdown"
-review = "kernel/src/acpi/power.rs:FACTS"
+review = "kernel/src/arch/x86_64/acpi/power.rs:FACTS"
 
 [[global]]
 key = "hal-x86::x86_64::msi::HANDLER @cfg(target_arch = \"x86_64\")"
@@ -2756,7 +2756,7 @@ contexts = ["boot"]
 seal = "written by route_gsi on the BSP during boot (UART RX IRQ, ACPI SCI) before APs start; re-read once by iommu_x86::remap::activate"
 retirement = "never: lives for the whole run"
 rationale = "Fixed array of packed AtomicU64 route records (MAX_ROUTES = 64); Release store after the slot is chosen, Acquire loads by readers. All writers and readers run on the BSP during boot, so slot claiming needs no CAS."
-review = "hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; hal/arch/x86/src/x86_64/ioapic.rs:reprogram; kernel/src/dev/iommu_x86/remap.rs:activate"
+review = "hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; hal/arch/x86/src/x86_64/ioapic.rs:reprogram; kernel/src/arch/x86_64/dev/iommu_x86/remap.rs:activate"
 
 [[global]]
 key = "hal-x86::x86_64::ioapic::REMAPPER @cfg(target_arch = \"x86_64\")"
@@ -2767,7 +2767,7 @@ contexts = ["boot", "normal"]
 seal = "set at most once on the BSP by iommu_x86::remap::activate before APs start"
 retirement = "never: lives for the whole run"
 rationale = "AtomicUsize holding a fn(&Route) -> Option<u64> address (0 = compatibility format); Release store / Acquire load publish the function before use, mirroring msi::HANDLER"
-review = "hal/arch/x86/src/x86_64/ioapic.rs:set_remapper; hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; kernel/src/dev/iommu_x86/remap.rs:activate"
+review = "hal/arch/x86/src/x86_64/ioapic.rs:set_remapper; hal/arch/x86/src/x86_64/ioapic.rs:route_gsi; kernel/src/arch/x86_64/dev/iommu_x86/remap.rs:activate"
 
 [[global]]
 key = "hal-x86::x86_64::invept::CAPS @cfg(target_arch = \"x86_64\")"

@@ -115,7 +115,7 @@ pub fn init(dma: DmaIsolationInput) {
         super::iommu_riscv::init_hw();
     }
     #[cfg(target_arch = "x86_64")]
-    super::iommu_x86::init_hw(dma);
+    crate::arch::dev::iommu_x86::init_hw(dma);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     let _ = dma;
 }
@@ -140,7 +140,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
     }
     if !is_active() {
         #[cfg(target_arch = "x86_64")]
-        return if super::iommu_x86::is_present() {
+        return if crate::arch::dev::iommu_x86::is_present() {
             // Present but not enforcing yet: fail closed (unchanged).
             DmaMapResult::Rejected
         } else {
@@ -177,7 +177,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
     #[cfg(target_arch = "riscv64")]
     let mapped = super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
-    let mapped = super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
+    let mapped = crate::arch::dev::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     let mapped = {
         let _ = (tid, bdf, phys, size);
@@ -200,7 +200,7 @@ pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::iommu_x86::unmap_range_for_cell(tid, iova, size)
+        crate::arch::dev::iommu_x86::unmap_range_for_cell(tid, iova, size)
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
@@ -226,7 +226,7 @@ pub fn revoke_dma_for_cell(tid: u64) -> bool {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::iommu_x86::unmap_cell_domain(tid)
+        crate::arch::dev::iommu_x86::unmap_cell_domain(tid)
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
     {
@@ -246,7 +246,7 @@ pub fn activate_isolation() {
     #[cfg(target_arch = "riscv64")]
     super::iommu_riscv::activate();
     #[cfg(target_arch = "x86_64")]
-    super::iommu_x86::activate();
+    crate::arch::dev::iommu_x86::activate();
 }
 
 /// Returns `true` once `activate_isolation()` has completed successfully.
@@ -257,7 +257,7 @@ pub fn is_active() -> bool {
 
 /// Mark DMA isolation as active. Called by arch backends on successful activation.
 #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
-pub(super) fn set_active() {
+pub(crate) fn set_active() {
     IOMMU_ISOLATED.store(true, Ordering::Relaxed);
 }
 

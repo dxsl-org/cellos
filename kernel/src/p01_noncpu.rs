@@ -270,12 +270,12 @@ pub(crate) fn capture(sample: usize, metrics: &[crate::p01_resources::Metric; 16
     #[cfg(target_arch = "x86_64")]
     {
         let mut error = 0;
-        crate::hypervisor::svm_registry::p01_visit_roots(|pa, holder, object| {
+        crate::arch::hypervisor::svm_registry::p01_visit_roots(|pa, holder, object| {
             if let Err(reason) = snapshot.reference(pa, 1, holder, object, 0) {
                 error |= reason;
             }
         });
-        crate::dev::iommu_x86::p01_visit_roots(|pa, role, holder, object, parent| {
+        crate::arch::dev::iommu_x86::p01_visit_roots(|pa, role, holder, object, parent| {
             if let Err(reason) = snapshot.reference(pa, role, holder, object, parent) {
                 error |= reason;
             }

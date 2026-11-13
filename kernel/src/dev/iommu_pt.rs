@@ -27,7 +27,7 @@ fn alloc_page() -> (usize, u64) {
 
 /// Physical address of a kernel-heap pointer (HHDM on x86_64, identity elsewhere).
 #[inline]
-pub(super) fn virt_to_phys(virt: usize) -> u64 {
+pub(crate) fn virt_to_phys(virt: usize) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
         (virt - crate::memory::frame::phys_to_virt(0)) as u64
@@ -236,7 +236,7 @@ impl VtdSlpt {
     fn sync(&self, virt: usize, len: usize) {
         #[cfg(target_arch = "x86_64")]
         if !self.coherent {
-            super::iommu_x86::cache::flush(virt, len);
+            crate::arch::dev::iommu_x86::cache::flush(virt, len);
         }
         // VT-d exists only on x86_64; elsewhere the table is a host-side probe.
         #[cfg(not(target_arch = "x86_64"))]

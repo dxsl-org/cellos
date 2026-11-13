@@ -1,6 +1,6 @@
-use super::stack::Stack;
-use super::tcb::TaskState;
-use super::tcb::WaitKind;
+use crate::task::stack::Stack;
+use crate::task::tcb::TaskState;
+use crate::task::tcb::WaitKind;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use types::CellId;
 
@@ -34,16 +34,16 @@ fn map_user_code() -> (usize, usize, usize, usize) {
     (code, code + a_offset, code + b_offset, b_return_offset)
 }
 
-pub(super) fn run() -> ! {
+pub(crate) fn run() -> ! {
     crate::hal::idt::require_cpl3_pku();
     let (code, a_entry, b_entry, b_return_offset) = map_user_code();
-    let pages = super::stack_pages_for("x86-idt-cpl3");
+    let pages = crate::task::stack_pages_for("x86-idt-cpl3");
     let b_kstack = Stack::new_kernel(pages).unwrap_or_else(|_| fail());
     let b_ustack = Stack::new_user(pages).unwrap_or_else(|_| fail());
     let a_kstack = Stack::new_kernel(pages).unwrap_or_else(|_| fail());
     let a_ustack = Stack::new_user(pages).unwrap_or_else(|_| fail());
 
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
     if !scheduler.tasks.is_empty() || crate::sched::hart_local::ready::total_ready_count() != 0 {
         fail();
@@ -57,7 +57,7 @@ pub(super) fn run() -> ! {
             b_ustack,
             |task| {
                 task.pku_value = crate::hal::idt::CPL3_PKRU_B;
-                super::prime_user_mode_entry(task, b_entry, 0);
+                crate::task::prime_user_mode_entry(task, b_entry, 0);
             },
         )
         .unwrap_or_else(|_| fail());
@@ -70,7 +70,7 @@ pub(super) fn run() -> ! {
             a_ustack,
             |task| {
                 task.pku_value = crate::hal::idt::CPL3_PKRU_A;
-                super::prime_user_mode_entry(task, a_entry, 0);
+                crate::task::prime_user_mode_entry(task, a_entry, 0);
             },
         )
         .unwrap_or_else(|_| fail());
@@ -80,15 +80,15 @@ pub(super) fn run() -> ! {
 
     crate::hal::idt::arm_cpl3_probe(code, b_return_offset);
     crate::sched::smp::x86_idt_fixture_uniprocessor_ready();
-    super::yield_cpu();
+    crate::task::yield_cpu();
     fail()
 }
 
 fn park_current(expected: usize) {
-    if expected == 0 || super::current_task_id() != expected {
+    if expected == 0 || crate::task::current_task_id() != expected {
         fail();
     }
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
     let task = scheduler.tasks.get_mut(&expected).unwrap_or_else(|| fail());
     task.state = TaskState::Blocked {
@@ -100,16 +100,16 @@ fn park_current(expected: usize) {
 #[no_mangle]
 pub extern "Rust" fn vi_x86_idt_cpl3_park_b() {
     park_current(B_TID.load(Ordering::Acquire));
-    super::yield_cpu();
+    crate::task::yield_cpu();
 }
 
 #[no_mangle]
 pub extern "Rust" fn vi_x86_idt_cpl3_wake_b() {
     let b_tid = B_TID.load(Ordering::Acquire);
-    if super::current_task_id() != A_TID.load(Ordering::Acquire) {
+    if crate::task::current_task_id() != A_TID.load(Ordering::Acquire) {
         fail();
     }
-    let mut guard = super::SCHEDULER.lock();
+    let mut guard = crate::task::SCHEDULER.lock();
     let scheduler = guard.as_mut().unwrap_or_else(|| fail());
     let task = scheduler.tasks.get_mut(&b_tid).unwrap_or_else(|| fail());
     if !matches!(
@@ -130,7 +130,7 @@ pub extern "Rust" fn vi_x86_idt_cpl3_switch_to_a() {
     let b_tid = B_TID.load(Ordering::Acquire);
     park_current(b_tid);
     let a_tid = A_TID.load(Ordering::Acquire);
-    let ready = super::SCHEDULER
+    let ready = crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|scheduler| scheduler.tasks.get(&a_tid))
@@ -138,5 +138,5 @@ pub extern "Rust" fn vi_x86_idt_cpl3_switch_to_a() {
     if !ready {
         fail();
     }
-    super::yield_cpu();
+    crate::task::yield_cpu();
 }

@@ -1,5 +1,5 @@
 //! x86 SVM VM store + run loop (Tier 3 P03) — the x86 twin of the aarch64
-//! branch in [`super::registry`].
+//! branch in [`crate::hypervisor::registry`].
 //!
 //! The kernel owns all frame allocation (VMCB + IOPM/MSRPM + guest RAM + NPT);
 //! the HAL ([`hal::x86_64::svm_vcpu::SvmVcpu`]) owns the world-switch and exit
@@ -14,7 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
+use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
 use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
@@ -751,7 +751,7 @@ fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut abi::hypervisor::
     let interrupts_were_enabled = interrupts_enabled();
     for _ in 0..1024 {
         // `owner` owns this single-vCPU VM; a failed run keeps the last exit.
-        if let Ok(next) = super::registry::run_vcpu(owner, vm_id, 1, 0) {
+        if let Ok(next) = crate::hypervisor::registry::run_vcpu(owner, vm_id, 1, 0) {
             *exit = next;
         }
         if !matches!(exit, abi::hypervisor::ViVmExit::Preempted) {

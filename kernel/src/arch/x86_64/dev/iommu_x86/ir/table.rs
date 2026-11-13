@@ -46,7 +46,7 @@ impl IrTable {
         }
         // The zeroed (not-present) entries must reach memory too.
         sync_for(ecap, virt, bytes);
-        let phys = super::super::super::iommu_pt::virt_to_phys(virt);
+        let phys = crate::dev::iommu_pt::virt_to_phys(virt);
         Self {
             virt,
             phys,

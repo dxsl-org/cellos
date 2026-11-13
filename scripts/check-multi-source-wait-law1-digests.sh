@@ -45,7 +45,7 @@ K_SCHED="kernel/src/sched/scheduler.rs"
 K_SYSCALL="$(mktemp)"
 trap 'rm -f "$K_SYSCALL"' EXIT
 cat kernel/src/task/syscall/*.rs > "$K_SYSCALL"
-K_MSI="kernel/src/dev/pcie_msi.rs"
+K_MSI="kernel/src/arch/x86_64/dev/pcie_msi.rs"
 
 failures=0
 # require_row <name> <number> <bit|none> <item description>

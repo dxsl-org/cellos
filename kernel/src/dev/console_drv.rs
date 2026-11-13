@@ -158,7 +158,7 @@ impl viConsole {
         if input_tid != 0 {
             // Bound work per tick even when the device continuously reports.
             for _ in 0..64 {
-                let Some(event) = crate::dev::ps2_keyboard::poll_event() else {
+                let Some(event) = crate::arch::dev::ps2_keyboard::poll_event() else {
                     break;
                 };
                 if !relay_evdev_to_input(input_tid, event.opcode, event.code, event.value) {
@@ -169,7 +169,7 @@ impl viConsole {
             }
         } else {
             while self.buffer.len() < Self::MAX_BUFFERED {
-                let Some(c) = crate::dev::ps2_keyboard::poll() else {
+                let Some(c) = crate::arch::dev::ps2_keyboard::poll() else {
                     break;
                 };
                 route_byte!(c, false);
@@ -229,7 +229,7 @@ static PENDING_ASCII: Spinlock<Option<u8>> =
 
 /// One failed typed delivery, including releases and individual motion axes.
 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-static PENDING_PS2: Spinlock<Option<crate::dev::ps2_keyboard::Ps2Event>> =
+static PENDING_PS2: Spinlock<Option<crate::arch::dev::ps2_keyboard::Ps2Event>> =
     Spinlock::ranked(None, crate::sync::rank::PENDING_PS2);
 
 /// Relay a UART byte to the input service as one EV_ASCII press event.

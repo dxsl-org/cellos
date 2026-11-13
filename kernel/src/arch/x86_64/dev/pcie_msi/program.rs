@@ -42,7 +42,7 @@ fn enable_function(cfg: &Config, extra: u16) -> Option<()> {
 /// `None` when no message can reach the BSP, so the caller fails the block
 /// rather than hand out vectors that never fire.
 fn msi_message(bdf: u32, first: u8, count: usize) -> Option<(u64, u32)> {
-    use crate::dev::iommu_x86::{ir, remap_msi, MsiRemap};
+    use crate::arch::dev::iommu_x86::{ir, remap_msi, MsiRemap};
     if !ir::is_ir_active() {
         return hal::x86_64::msi::bsp_message(first);
     }

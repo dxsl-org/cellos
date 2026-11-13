@@ -12,8 +12,8 @@
 //! - [`record`] runs once on the BSP inside the x86 ACPI init block, before
 //!   any reader; the facts never change afterwards.
 
-use super::records::Gas;
-use super::FadtInfo;
+use crate::acpi::FadtInfo;
+use crate::acpi::Gas;
 use crate::sync::Spinlock;
 
 /// Outcome of the static `\_S5_` scan.
@@ -522,7 +522,7 @@ pub fn discover(
     rsdp_phys: usize,
     map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
 ) -> PowerFacts {
-    let mut s5 = super::with_table(fadt.dsdt, map_physical, |dsdt| {
+    let mut s5 = crate::acpi::with_table(fadt.dsdt, map_physical, |dsdt| {
         if dsdt.starts_with(b"DSDT") {
             scan_definition_block(dsdt)
         } else {
@@ -534,7 +534,7 @@ pub fn discover(
         S5::Absent
     });
     let mut gpe = [GpeBlock::default(); 2];
-    super::for_each_listed_table(rsdp_phys, map_physical, |table| {
+    crate::acpi::for_each_listed_table(rsdp_phys, map_physical, |table| {
         match &table[..4] {
             b"SSDT" => s5 = s5.merge(scan_definition_block(table)),
             b"FACP" => gpe = gpe_blocks(table),

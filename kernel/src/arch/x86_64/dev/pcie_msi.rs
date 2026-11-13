@@ -80,7 +80,7 @@ pub fn init(firmware_forbids_msi: bool) {
         hal::x86_64::msi::VECTOR_FIRST,
         hal::x86_64::msi::VECTOR_LAST,
         firmware_forbids_msi as u8,
-        crate::dev::iommu_x86::ir::is_ir_active() as u8
+        crate::arch::dev::iommu_x86::ir::is_ir_active() as u8
     );
 }
 

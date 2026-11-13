@@ -75,8 +75,6 @@ pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
 /// Per-task user thread pointer (TLS base) — ADR-0018 §2.1 primitive.
 pub(crate) mod tls;
-#[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
-mod x86_idt_cpl3;
 pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
 pub mod launch;
 pub use launch::{
@@ -845,7 +843,7 @@ pub fn init() {
     }
     drop(sched_guard);
     #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
-    x86_idt_cpl3::run();
+    crate::arch::task::x86_idt_cpl3::run();
 
     // Enable S-mode timer interrupt and arm the first preemption tick.
     // Done after scheduler init so vi_timer_tick() sees a valid SCHEDULER.
@@ -1118,7 +1116,7 @@ pub extern "Rust" fn vi_timer_tick() {
     if crate::sched::hart_local::current_hart_id() == 0 {
         crate::dev::console_drv::CONSOLE.lock().poll();
         // ACPI power button: same hart, same no-lock point as the byte relay.
-        crate::acpi::sci::relay_pending();
+        crate::arch::acpi::sci::relay_pending();
     }
     #[cfg(not(target_arch = "x86_64"))]
     crate::dev::console_drv::CONSOLE.lock().poll();
@@ -1950,7 +1948,7 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     // Every owned function is quiescent (MSI off, MSI-X masked), so none can
     // fire into a vector handed to the next owner.
     #[cfg(target_arch = "x86_64")]
-    crate::dev::pcie_msi::release_for(tid);
+    crate::arch::dev::pcie_msi::release_for(tid);
     if !crate::dev::iommu::revoke_dma_for_cell(tid as u64) {
         return false;
     }

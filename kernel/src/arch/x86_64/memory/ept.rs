@@ -1,6 +1,6 @@
 //! x86 nested-paging (Intel EPT / AMD NPT) builder for the ViCell hypervisor.
 //!
-//! The x86 analog of [`super::stage2`] (ARM64 Stage-2). One 4-level tree per
+//! The x86 analog of [`crate::memory::stage2`] (ARM64 Stage-2). One 4-level tree per
 //! guest: PML4 → PDPT → PD → PT, 4 KiB frames throughout (no large pages in the
 //! MVP). Guest physical address (GPA) base is **0** — x86 Linux/PVH expects low
 //! RAM starting at 0, unlike ARM's IPA 0x4000_0000.
@@ -23,8 +23,8 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use super::frame::{allocate_guest_ram, phys_to_virt, FRAME_ALLOCATOR};
-use super::paging::PAGE_SIZE;
+use crate::memory::frame::{allocate_guest_ram, phys_to_virt, FRAME_ALLOCATOR};
+use crate::memory::paging::PAGE_SIZE;
 
 /// Which nested-paging format this tree encodes, selected at VM-create time
 /// from the CPU vendor latched in `cpu_features`.

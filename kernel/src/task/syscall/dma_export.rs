@@ -886,7 +886,7 @@ impl Platform for KernelPlatform {
     fn translating(&self, bdf: u32) -> bool {
         #[cfg(target_arch = "x86_64")]
         {
-            crate::dev::iommu_x86::bdf_translating(bdf)
+            crate::arch::dev::iommu_x86::bdf_translating(bdf)
         }
         #[cfg(not(target_arch = "x86_64"))]
         {
@@ -913,7 +913,7 @@ impl Platform for KernelPlatform {
         #[cfg(target_arch = "x86_64")]
         {
             use crate::dev::iommu::DmaMapResult;
-            match crate::dev::iommu_x86::map_window_for_cell(
+            match crate::arch::dev::iommu_x86::map_window_for_cell(
                 w.holder_tid as u64,
                 w.bdf,
                 w.iova,
@@ -936,7 +936,7 @@ impl Platform for KernelPlatform {
     fn unmap_window(&mut self, holder_tid: usize, iova: u64, len: usize) -> bool {
         #[cfg(target_arch = "x86_64")]
         {
-            crate::dev::iommu_x86::unmap_window_for_cell(holder_tid as u64, iova, len)
+            crate::arch::dev::iommu_x86::unmap_window_for_cell(holder_tid as u64, iova, len)
         }
         #[cfg(not(target_arch = "x86_64"))]
         {

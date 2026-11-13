@@ -404,7 +404,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Reserved, so checksums remain the final trust gate.
     #[cfg(target_arch = "x86_64")]
     let (acpi_info, smbios_system) = {
-        let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
+        let rsdp = crate::arch::boot::limine::get_rsdp_ptr().unwrap_or(0);
         let early = &hal_soc_x86::X86_EARLY_FACTS;
         let mut map_physical = |physical: usize, length: usize| {
             let end = physical.checked_add(length)?;
@@ -478,10 +478,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Power facts (`\_S5_`, reset register, GPE blocks) need the same
         // firmware-range mapper; the G1 private lane keeps its own contract.
         #[cfg(not(feature = "g1-cpu-accounting"))]
-        crate::acpi::sci::init(&info, rsdp, &mut map_physical);
+        crate::arch::acpi::sci::init(&info, rsdp, &mut map_physical);
         // SMBIOS entry points and tables get the same firmware-range admission
         // as ACPI tables: the legacy BIOS window or firmware-owned memory.
-        let (smbios_32, smbios_64) = crate::boot::limine::get_smbios_entry_points();
+        let (smbios_32, smbios_64) = crate::arch::boot::limine::get_smbios_entry_points();
         let smbios = crate::smbios::discover(smbios_32, smbios_64, &mut map_physical);
         (info, smbios)
     };
@@ -498,8 +498,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // The facts are kept with the profile for the machine fingerprint (433).
     #[cfg(target_arch = "x86_64")]
     {
-        let cmdline = crate::boot::limine::get_executable_cmdline(crate::board::CMDLINE_MAX + 1)
-            .unwrap_or(&[]);
+        let cmdline =
+            crate::arch::boot::limine::get_executable_cmdline(crate::board::CMDLINE_MAX + 1)
+                .unwrap_or(&[]);
         match crate::board::choose_x86_profile(cmdline, &platform_identity) {
             Ok((board, source)) => crate::board::bind_x86_profile(
                 board,
@@ -512,7 +513,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             Err(error) => panic!("[board] {}", error),
         }
         let console_opt = crate::board::console_option(cmdline).unwrap_or(None);
-        let _ = crate::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
+        let _ = crate::arch::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -883,7 +884,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         crate::dev::ramdisk::init_driver();
-        crate::dev::ps2_keyboard::init();
+        crate::arch::dev::ps2_keyboard::init();
         // COM1 TX remains available without ACPI. RX IRQ requires the timer
         // gate (validated MADT plus a clocksource) and an I/O APIC that serves
         // the UART's GSI, because it is routed through IOAPIC/LAPIC.
@@ -947,7 +948,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             });
             crate::dev::iommu::activate_isolation();
             // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.
-            crate::dev::pcie_msi::init(
+            crate::arch::dev::pcie_msi::init(
                 acpi_info
                     .fadt
                     .as_ref()
@@ -1473,14 +1474,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             // Only meaningful when SVM root operation was entered at boot.
             #[cfg(target_arch = "x86_64")]
             if cpu_features::has_x86_virt() {
-                crate::hypervisor::svm_registry::x86_smoke();
+                crate::arch::hypervisor::svm_registry::x86_smoke();
             } else {
                 log_info("X86-VMM-SMOKE: SKIP (no SVM/VMX root)");
             }
         }
         #[cfg(all(target_arch = "x86_64", feature = "x86-mmio-smoke"))]
         if cpu_features::has_x86_virt() {
-            crate::hypervisor::svm_registry::x86_mmio_smoke();
+            crate::arch::hypervisor::svm_registry::x86_mmio_smoke();
         } else {
             log_info("X86-MMIO-SMOKE: SKIP (no SVM/VMX root)");
         }
@@ -1507,7 +1508,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                         owner, phys_addr, size, width, height, pitch,
                     );
                     log_info("[boot] x86_64 Limine linear framebuffer mapped and registered");
-                    crate::dev::fb_console::init(fb.addr, width as usize, height as usize, pitch);
+                    crate::arch::dev::fb_console::init(
+                        fb.addr,
+                        width as usize,
+                        height as usize,
+                        pitch,
+                    );
                     unsafe {
                         let ptr = fb.addr as *mut u32;
                         let stride = pitch / 4;

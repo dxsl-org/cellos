@@ -240,7 +240,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::create_vm(owner, guest_pages)
+        crate::arch::hypervisor::svm_registry::create_vm(owner, guest_pages)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -287,7 +287,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::create_vcpu(owner, vm_id, entry_pc)
+        crate::arch::hypervisor::svm_registry::create_vcpu(owner, vm_id, entry_pc)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -319,7 +319,7 @@ pub fn map_guest_memory(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable)
+        crate::arch::hypervisor::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -346,7 +346,7 @@ pub fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::guest_window(owner, vm_id)
+        crate::arch::hypervisor::svm_registry::guest_window(owner, vm_id)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -552,7 +552,7 @@ pub fn run_vcpu(
     {
         use abi::hypervisor::ViVmExit as ApiVmExit;
         use hal::ViVmExit as HalVmExit;
-        let hal_exit = super::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
+        let hal_exit = crate::arch::hypervisor::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
         // HAL → API conversion (VERSION 2 ABI — the x86 variants are frozen at
         // discriminants 8-11). `reg` is not decoded for PortIn (guest `IN`
         // always targets (E)AX) → 0.
@@ -639,7 +639,7 @@ pub fn vcpu_regs(
         if mode > 1 {
             return Err(ViError::InvalidArgument);
         }
-        super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, regs, mode == 1)
+        crate::arch::hypervisor::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, regs, mode == 1)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -684,7 +684,7 @@ pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src: &[u8]) -> V
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::write_guest_memory(owner, vm_id, gpa, src)
+        crate::arch::hypervisor::svm_registry::write_guest_memory(owner, vm_id, gpa, src)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -729,7 +729,7 @@ pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst: &mut [u8]) -
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst)
+        crate::arch::hypervisor::svm_registry::read_guest_memory(owner, vm_id, gpa, dst)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -756,7 +756,7 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
     #[cfg(target_arch = "x86_64")]
     {
         // `intid` is reinterpreted as an x86 interrupt vector (8259 line remap).
-        super::svm_registry::inject_irq(owner, vm_id, vcpu_id, intid)?;
+        crate::arch::hypervisor::svm_registry::inject_irq(owner, vm_id, vcpu_id, intid)?;
         Ok(0)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
@@ -797,7 +797,7 @@ pub fn reap_vms_for_task(dead_tid: usize) {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        super::svm_registry::reap_vms_for_task(dead_tid);
+        crate::arch::hypervisor::svm_registry::reap_vms_for_task(dead_tid);
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {

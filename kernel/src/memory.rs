@@ -12,9 +12,6 @@ pub mod deferred_release;
 #[cfg(all(feature = "native-domains", cellos_wide))]
 #[path = "memory/domain-supervisor-registry.rs"]
 pub(crate) mod domain_supervisor_registry;
-/// x86 nested paging (EPT/NPT) — Tier 3 x86 VMM. x86_64 only.
-#[cfg(target_arch = "x86_64")]
-pub mod ept;
 pub mod frame;
 pub mod heap;
 pub mod kaslr;

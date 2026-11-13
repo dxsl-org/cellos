@@ -113,9 +113,9 @@ impl InvQueue {
         }
         let queue = Self {
             virt,
-            phys: super::super::iommu_pt::virt_to_phys(virt),
+            phys: crate::dev::iommu_pt::virt_to_phys(virt),
             status_virt,
-            status_phys: super::super::iommu_pt::virt_to_phys(status_virt),
+            status_phys: crate::dev::iommu_pt::virt_to_phys(status_virt),
             tail: 0,
             seq: 0,
         };

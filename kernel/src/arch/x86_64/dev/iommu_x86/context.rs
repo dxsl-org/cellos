@@ -1,6 +1,6 @@
 //! VT-d root and context table encoding (Intel VT-d spec §9.3).
 
-use super::super::iommu_pt::virt_to_phys;
+use crate::dev::iommu_pt::virt_to_phys;
 use alloc::alloc::{alloc_zeroed, Layout};
 use core::sync::atomic::{fence, Ordering};
 

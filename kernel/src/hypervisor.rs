@@ -9,10 +9,5 @@
 pub mod pending_irqs;
 pub mod registry;
 
-/// x86 SVM VM store + run loop (Tier 3 P03), the x86 twin of the aarch64
-/// branch in [`registry`].
-#[cfg(target_arch = "x86_64")]
-pub mod svm_registry;
-
 #[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
 pub mod smoke_guest;

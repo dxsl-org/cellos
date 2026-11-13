@@ -262,7 +262,7 @@ fn a_root_table_failing_its_checksum_yields_no_oem() {
 
 // ── Phase 06: static `\_S5_` scan and power-fact discovery ─────────────────
 
-use super::power::{discover, scan_definition_block, GpeBlock, S5};
+use crate::arch::acpi::power::{discover, scan_definition_block, GpeBlock, S5};
 
 /// The q35 DSDT QEMU 8.2.2 builds for `-machine q35,hpet=on -m 256M`
 /// (captured with QMP `pmemsave`; OEM `BOCHS `/`BXPC`, 8390 bytes).

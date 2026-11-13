@@ -177,7 +177,7 @@ pub(crate) fn act_if_pending() {
 #[cfg(not(test))]
 fn reset() {
     #[cfg(target_arch = "x86_64")]
-    crate::acpi::power::reboot();
+    crate::arch::acpi::power::reboot();
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
         crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);

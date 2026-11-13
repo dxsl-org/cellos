@@ -6,11 +6,11 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | rank | name | static(s) |
 |---:|---|---|
 | 1 | `VM_REGISTRY` | `kernel::hypervisor::registry::VM_REGISTRY @cfg(target_arch = "aarch64")` (kernel/src/hypervisor/registry.rs, cfg inactive here) |
-| 2 | `SVM_VM_REGISTRY` | `kernel::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = "x86_64")` (kernel/src/hypervisor/svm_registry.rs) |
+| 2 | `SVM_VM_REGISTRY` | `kernel::arch::x86_64::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/hypervisor/svm_registry.rs) |
 | 3 | `CONSOLE_DRV` | `kernel::dev::console_drv::CONSOLE` (kernel/src/dev/console_drv.rs) |
 | 4 | `PENDING_ASCII` | `kernel::dev::console_drv::PENDING_ASCII` (kernel/src/dev/console_drv.rs) |
 | 5 | `PCI_DEVICES` | `kernel::dev::pcie_ecam::PCI_DEVICES` (kernel/src/dev/pcie_ecam.rs) |
-| 6 | `PS2_STATE` | `kernel::dev::ps2_keyboard::STATE @cfg(any (target_arch = "x86_64" , target_arch = "x86"))` (kernel/src/dev/ps2_keyboard.rs) |
+| 6 | `PS2_STATE` | `kernel::arch::legacy::dev::ps2_keyboard::STATE @cfg(not (cellos_wide) & target_arch = "x86")` (kernel/src/arch/legacy/../x86_64/dev/ps2_keyboard.rs, cfg inactive here); `kernel::arch::x86_64::dev::ps2_keyboard::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/ps2_keyboard.rs) |
 | 7 | `UART_SERIAL` | `kernel::dev::uart::SERIAL` (kernel/src/dev/uart.rs) |
 | 8 | `VIFS1` | `kernel::fs::VIFS1` (kernel/src/fs.rs) |
 | 9 | `TEST_STATE_LOCK` | `kernel::TEST_STATE_LOCK @cfg(test)` (kernel/src/main.rs, cfg inactive here) |
@@ -29,7 +29,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 22 | `NET_RX_RESERVATION` | `kernel::task::waker::net_rx_reservation::RESERVATION` (kernel/src/task/waker/net_rx_reservation.rs) |
 | 23 | `IOMMU_CLEANUP_SERIAL` | `kernel::task::IOMMU_CLEANUP_SERIAL` (kernel/src/task.rs) |
 | 24 | `RISCV_DOMAINS` | `kernel::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
-| 25 | `UNITS` | `kernel::dev::iommu_x86::UNITS @cfg(target_arch = "x86_64")` (kernel/src/dev/iommu_x86.rs) |
+| 25 | `UNITS` | `kernel::arch::x86_64::dev::iommu_x86::UNITS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/iommu_x86.rs) |
 | 26 | `ACPI_TOPOLOGY` | `kernel::acpi::TOPOLOGY` (kernel/src/acpi/mod.rs) |
 | 27 | `FRAME_ALLOCATOR` | `kernel::memory::frame::FRAME_ALLOCATOR` (kernel/src/memory/frame.rs) |
 | 28 | `UART_CONSOLE` | `kernel::dev::uart::CONSOLE` (kernel/src/dev/uart.rs) |
@@ -39,13 +39,13 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 32 | `KEYBOARD_ACK` | `kernel::dev::input_irq_ack::KEYBOARD_ACK` (kernel/src/dev/input_irq_ack.rs) |
 | 33 | `PSCID_FREE_LIST` | `kernel::dev::iommu_riscv::PSCID_FREE_LIST @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
 | 34 | `MMC_DEVICE` | `kernel::dev::mmc::MMC_DEVICE` (kernel/src/dev/mmc.rs) |
-| 35 | `VIRTIO_GATE_REFUSED` | `kernel::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = "x86_64")` (kernel/src/dev/pcie_msi/virtio_gate.rs) |
+| 35 | `VIRTIO_GATE_REFUSED` | `kernel::arch::x86_64::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs) |
 | 36 | `DRIVER_REGISTRY` | `kernel::dev::registry::DRIVER_REGISTRY` (kernel/src/dev/registry.rs) |
 | 37 | `UART_RX_BUFFER` | `kernel::dev::uart::RX_BUFFER` (kernel/src/dev/uart.rs) |
 | 38 | `GOVERNED_PENDING` | `kernel::loader::atomic_publication_tests::success::GOVERNED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
 | 39 | `TRUSTED_PENDING` | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
 | 40 | `CELL_TABLE` | `kernel::loader::early::CELL_TABLE` (kernel/src/loader/early.rs) |
-| 41 | `ACPI_POWER_FACTS` | `kernel::acpi::power::FACTS @cfg(target_arch = "x86_64")` (kernel/src/acpi/power.rs) |
+| 41 | `ACPI_POWER_FACTS` | `kernel::arch::x86_64::acpi::power::FACTS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/acpi/power.rs) |
 | 42 | `X86_MACHINE_FACTS` | `kernel::board::X86_MACHINE_FACTS @cfg(target_arch = "x86_64")` (kernel/src/board.rs) |
 | 43 | `ACCOUNTING` | `kernel::sched::cpu_accounting::ACCOUNTING @cfg(feature = "g1-cpu-accounting")` (kernel/src/sched/cpu_accounting.rs, cfg inactive here) |
 | 44 | `AUDIT_WRITE` | `kernel::audit::WRITE` (kernel/src/audit.rs) |
@@ -80,12 +80,12 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 73 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
 | 74 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
 | 75 | `CQ_TRANSACTION` | `kernel::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/dev/iommu_riscv.rs, cfg inactive here) |
-| 76 | `PCIE_MSI_STATE` | `kernel::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/dev/pcie_msi.rs) |
+| 76 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
 | 77 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
 | 78 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
 | 79 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
 | 80 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
-| 81 | `FB_STATE` | `kernel::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/dev/fb_console.rs) |
+| 81 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
 | 82 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
 | 83 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |
 | 84 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |

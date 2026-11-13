@@ -1,6 +1,6 @@
 //! Per-Cell VT-d domain and Domain ID (DID) allocator.
 
-use super::super::iommu_pt::VtdSlpt;
+use crate::dev::iommu_pt::VtdSlpt;
 use alloc::collections::BTreeSet;
 
 /// DID capacity for the widest `GCAP.ND` encoding (16-bit DIDs).

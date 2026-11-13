@@ -26,9 +26,7 @@
 "kernel/src/acpi/madt.rs" = { category = "C", owner = "acpi" }
 "kernel/src/acpi/mcfg.rs" = { category = "exception", owner = "acpi", target = "Platform Cell with PCIe ECAM enumeration (Spec 15 §3.3)" }
 "kernel/src/acpi/mod.rs" = { category = "C", owner = "acpi" }
-"kernel/src/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/acpi/records.rs" = { category = "C", owner = "acpi" }
-"kernel/src/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/acpi/sdt.rs" = { category = "C", owner = "acpi" }
 "kernel/src/acpi/spcr.rs" = { category = "exception", owner = "acpi", target = "Platform Cell (Spec 15 §3.3)" }
 "kernel/src/acpi/tests.rs" = { category = "test", owner = "acpi" }
@@ -36,10 +34,41 @@
 
 # ---- arch ----
 "kernel/src/arch/aarch64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/dev.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
+"kernel/src/arch/x86_64/boot/limine.rs" = { category = "A", owner = "boot" }
+"kernel/src/arch/x86_64/dev/console_select.rs" = { category = "C", owner = "dev" }
+"kernel/src/arch/x86_64/dev/fb_console.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
+"kernel/src/arch/x86_64/dev/fb_font.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
+"kernel/src/arch/x86_64/dev/iommu_x86.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/cache.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/context.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/domain.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/gcmd.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/invalidate.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/ir.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/ir/table.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/qi.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/remap.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/rmrr.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/iommu_x86/unit.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/config.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/layout.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/program.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/record.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/vectors.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/ps2_keyboard.rs" = { category = "exception", owner = "dev", target = "input Driver Cell (Spec 15 §3.1)" }
+"kernel/src/arch/x86_64/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
+"kernel/src/arch/x86_64/memory/ept.rs" = { category = "A", owner = "memory" }
+"kernel/src/arch/x86_64/memory/ept_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }
 
 # ---- admission ----
 "kernel/src/admission/gate.rs" = { category = "B", owner = "admission" }
@@ -96,28 +125,13 @@
 "kernel/src/dev/bcm_pinmux.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc with the board pinmux (Spec 15 §3.1)" }
 "kernel/src/dev/block.rs" = { category = "exception", owner = "dev", target = "deleted once snapshot restore, verify_mbr and EarlyLoader read through a block route" }
 "kernel/src/dev/console_drv.rs" = { category = "C", owner = "dev" }
-"kernel/src/dev/console_select.rs" = { category = "C", owner = "dev" }
 "kernel/src/dev/driver_cell.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/fb_console.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
-"kernel/src/dev/fb_font.rs" = { category = "exception", owner = "dev", target = "GPU Cell + compositor (Spec 15 §3.1)" }
 "kernel/src/dev/gpio_irq.rs" = { category = "A", owner = "dev" }
 "kernel/src/dev/input_irq_ack.rs" = { category = "exception", owner = "dev", target = "input Driver Cell acknowledges its own IRQ (Spec 15 §3.1)" }
 "kernel/src/dev/iommu.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/iommu_pt.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/iommu_riscv.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/iommu_riscv_cmd.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/cache.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/context.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/domain.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/gcmd.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/invalidate.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/ir.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/ir/table.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/qi.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/remap.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/rmrr.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/iommu_x86/unit.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/irq_dispatch.rs" = { category = "A", owner = "dev" }
 "kernel/src/dev/irq_wait.rs" = { category = "A", owner = "dev" }
 "kernel/src/dev/mmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
@@ -128,14 +142,6 @@
 "kernel/src/dev/mmc/sd.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/sdhci.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/pcie_ecam.rs" = { category = "exception", owner = "dev", target = "Platform Cell (Spec 15 §3.1 remaining exceptions)" }
-"kernel/src/dev/pcie_msi.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/config.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/layout.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/program.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/record.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/vectors.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/pcie_msi/virtio_gate.rs" = { category = "D", owner = "dev" }
-"kernel/src/dev/ps2_keyboard.rs" = { category = "exception", owner = "dev", target = "input Driver Cell (Spec 15 §3.1)" }
 "kernel/src/dev/ramdisk.rs" = { category = "C", owner = "dev" }
 "kernel/src/dev/registry.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/uart.rs" = { category = "C", owner = "dev" }
@@ -159,7 +165,6 @@
 "kernel/src/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/hypervisor/registry.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
-"kernel/src/hypervisor/svm_registry.rs" = { category = "A", owner = "hypervisor" }
 "kernel/src/hypervisor/vmm_wire.rs" = { category = "A", owner = "hypervisor" }
 
 # ---- ipc ----
@@ -229,8 +234,6 @@
 "kernel/src/memory/cell_quota.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/deferred_release.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/domain-supervisor-registry.rs" = { category = "A", owner = "memory" }
-"kernel/src/memory/ept.rs" = { category = "A", owner = "memory" }
-"kernel/src/memory/ept_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/frame.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/heap.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/heap/p01_owner.rs" = { category = "test", owner = "memory" }
@@ -394,4 +397,3 @@
 "kernel/src/task/vfs_lifecycle_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/waker.rs" = { category = "A", owner = "task" }
 "kernel/src/task/waker/net_rx_reservation.rs" = { category = "A", owner = "task" }
-"kernel/src/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }

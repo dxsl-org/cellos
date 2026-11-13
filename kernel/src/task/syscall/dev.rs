@@ -160,8 +160,10 @@ pub(super) fn pcie_usable_by(caller_id: usize, bdf: u32) -> bool {
 }
 
 #[cfg(target_arch = "x86_64")]
-pub(super) fn pcie_function_error(error: crate::dev::pcie_msi::PcieFunctionError) -> SyscallError {
-    use crate::dev::pcie_msi::PcieFunctionError as E;
+pub(super) fn pcie_function_error(
+    error: crate::arch::dev::pcie_msi::PcieFunctionError,
+) -> SyscallError {
+    use crate::arch::dev::pcie_msi::PcieFunctionError as E;
     match error {
         E::InvalidInput => SyscallError::InvalidInput,
         E::PermissionDenied => SyscallError::PermissionDenied,
@@ -180,7 +182,7 @@ pub(super) fn alloc_pcie_irq(
     mode: usize,
 ) -> SyscallResult {
     let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
-    crate::dev::pcie_msi::allocate(caller_id, bdf, want, mode)
+    crate::arch::dev::pcie_msi::allocate(caller_id, bdf, want, mode)
         .map(|irq| irq.pack())
         .map_err(pcie_function_error)
 }
@@ -207,14 +209,14 @@ pub(super) fn system_power(caller_id: usize, action: usize) -> SyscallResult {
                 "[kernel] SystemPower: reboot requested by tid {}",
                 caller_id
             );
-            crate::acpi::power::reboot()
+            crate::arch::acpi::power::reboot()
         }
         sp::ACTION_POWEROFF => {
             log::warn!(
                 "[kernel] SystemPower: poweroff requested by tid {}",
                 caller_id
             );
-            crate::acpi::power::poweroff();
+            crate::arch::acpi::power::poweroff();
             Err(SyscallError::NotSupported)
         }
         _ => Err(SyscallError::InvalidInput),
@@ -351,7 +353,7 @@ pub(super) fn query_pcie_function(
     bdf: usize,
 ) -> Result<[u8; abi::pcie_function::PCIE_FUNCTION_RECORD_LEN], SyscallError> {
     let bdf = u32::try_from(bdf).map_err(|_| SyscallError::InvalidInput)?;
-    crate::dev::pcie_msi::query(caller_id, bdf)
+    crate::arch::dev::pcie_msi::query(caller_id, bdf)
         .map(|record| record.encode())
         .map_err(pcie_function_error)
 }
@@ -403,7 +405,7 @@ pub(super) fn offer_pcie_device(
     // happen under a live owner's mapping.
     #[cfg(target_arch = "x86_64")]
     if crate::resource_registry::owner_of_bdf(bdf).is_none()
-        && crate::dev::pcie_msi::dma_bypasses_iommu(&dev)
+        && crate::arch::dev::pcie_msi::dma_bypasses_iommu(&dev)
     {
         return Ok(0);
     }
@@ -764,7 +766,7 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
     // x86 IRQ numbers are MSI vectors from 435; a cell waits only on its
     // own, so it can neither steal nor drain another driver's interrupts.
     #[cfg(target_arch = "x86_64")]
-    if !crate::dev::pcie_msi::irq_owned_by(irq, caller_id) {
+    if !crate::arch::dev::pcie_msi::irq_owned_by(irq, caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
     // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
@@ -1066,7 +1068,7 @@ pub(super) fn register_display_framebuffer(
             pitch,
         ) {
             #[cfg(target_arch = "x86_64")]
-            crate::dev::fb_console::handover();
+            crate::arch::dev::fb_console::handover();
             Ok(0)
         } else {
             // This cannot be recovered safely: pages are firmware-owned
@@ -1110,7 +1112,7 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     // interrupts by rewriting table entries.
     #[cfg(target_arch = "x86_64")]
     fn user_map_pcie_bar(base: usize, len: usize) {
-        for (start, size) in crate::dev::pcie_msi::user_ranges(base, len) {
+        for (start, size) in crate::arch::dev::pcie_msi::user_ranges(base, len) {
             crate::memory::paging::map_mmio_user_x86(start, size);
         }
     }
