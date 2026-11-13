@@ -2624,18 +2624,18 @@ impl Scheduler {
         self.pick_next_local(hart_id, now)
     }
 
-    /// Convert the stable scheduler choice into the RV64-only root plan.  The
-    /// plan owns any private-root reference until the raw-switch boundary.
+    /// Convert the stable scheduler choice into the root decision.  The
+    /// decision owns any private-root reference until the raw-switch boundary.
     #[cfg(all(feature = "native-domains", cellos_wide))]
     pub(crate) fn pick_next_domain(
         &mut self,
         hart_id: usize,
-    ) -> Option<crate::sched::domain_switch::SwitchPlan> {
+    ) -> Option<crate::sched::domain_switch::RootDecision> {
         let (outgoing, incoming) = self.pick_next(hart_id)?;
         let incoming_task = (!incoming.is_null())
             .then(|| crate::sched::hart_local::ready::current_task_id_for(hart_id))
             .and_then(|id| self.tasks.get(&id));
-        crate::sched::domain_switch::SwitchPlan::new(outgoing, incoming, incoming_task)
+        crate::sched::domain_switch::RootDecision::new(outgoing, incoming, incoming_task)
     }
 
     /// Per-hart task selection: watchdog on current task, then pop from local queue

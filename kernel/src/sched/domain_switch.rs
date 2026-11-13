@@ -1,6 +1,7 @@
-//! Scheduler-owned root transition plan. Compiled for every architecture that
-//! can carry a private root; the tuple encoding is arch-specific and lives in
-//! [`root_tuple`].
+//! Scheduler-owned root decision. Compiled for every architecture that can
+//! carry a private root; the root encoding is the architecture's
+//! (`crate::arch::sched::root_for_table`).
+use crate::arch::sched::{IrqSaved, Root, SwitchPlan};
 use crate::hal::arch::Context;
 use crate::memory::address_space::AddressSpace;
 use crate::sched::hart_local;
@@ -39,41 +40,28 @@ impl DomainRef {
 
 /// A root decision made under `SCHEDULER`, carried to the raw-switch boundary.
 /// No assembly code is allowed to rediscover task or root ownership.
-pub(crate) struct SwitchPlan {
+///
+/// The decision's root side effects (publishing the domain identity, staging
+/// the safe-root acknowledge) run only in [`RootDecision::switch`], on the way
+/// into the switch that programs the root: nothing can record a domain it did
+/// not program. Fixtures inspect a decision through [`RootDecision::preview`].
+pub(crate) struct RootDecision {
     pub outgoing: *mut Context,
     pub incoming: *const Context,
     transition: DomainTransition,
 }
 
-/// The root tuple the switch routine programs for `space` on this architecture.
-///
-/// RV64 takes a page number; the others take the byte address the tables start
-/// at. The encoding lives here so a plan, the assembly boundary, and the
-/// fixtures cannot disagree about it.
-pub(crate) fn root_tuple(space: &AddressSpace) -> (usize, usize) {
-    #[cfg(target_arch = "riscv64")]
-    {
-        (space.root_ppn(), space.asid())
-    }
-    #[cfg(not(target_arch = "riscv64"))]
-    {
-        (space.root_ppn() << 12, space.asid())
-    }
+/// The root the switch programs for `space`.
+pub(crate) fn root_of(space: &AddressSpace) -> Option<Root> {
+    crate::arch::sched::root_for_table(space.root_ppn() << 12, space.asid())
 }
 
-/// The kernel root in the same encoding, ASID 0 (untagged).
-fn kernel_root_tuple() -> (usize, usize) {
+/// The kernel root, ASID 0 (untagged).
+fn kernel_root() -> Option<Root> {
     let root = crate::memory::paging::KERNEL_ROOT
         .lock()
         .expect("native domain requires SAS root");
-    #[cfg(target_arch = "riscv64")]
-    {
-        (root >> 12, 0)
-    }
-    #[cfg(not(target_arch = "riscv64"))]
-    {
-        (root, 0)
-    }
+    crate::arch::sched::root_for_table(root, 0)
 }
 
 #[derive(Clone)]
@@ -84,33 +72,57 @@ enum DomainTransition {
     ToSafeRoot,
 }
 
-impl SwitchPlan {
+impl DomainTransition {
+    /// The transition from the hart's published domain `current` to `domain`.
+    fn classify(current: (u64, u64), domain: Option<DomainRef>) -> Self {
+        match domain {
+            Some(domain) if current == domain.tuple() => Self::SameDomain(domain),
+            Some(domain) => Self::Activate(domain),
+            None if current.0 == 0 => Self::SasToSas,
+            None => Self::ToSafeRoot,
+        }
+    }
+}
+
+impl RootDecision {
     pub(crate) fn new(
         outgoing: *mut Context,
         incoming: *const Context,
         task: Option<&Task>,
     ) -> Option<Self> {
+        // Test posture: a Context the scheduler never primed (no kernel stack,
+        // sp 0) must not reach the switch, which would load sp = 0 and surface
+        // two faults later as a misleading kernel-stack overflow.
+        #[cfg(feature = "test-hooks")]
+        if !incoming.is_null() {
+            // SAFETY: a non-null incoming pointer names the selected task's
+            // Context, stable under `SCHEDULER`.
+            let sp = unsafe { (*incoming).sp };
+            assert!(
+                sp != 0 && task.is_none_or(|task| task.kernel_stack.is_some()),
+                "[sched] dispatch of an unprimed Context: tid={} hart={} sp={:#x} kernel_stack={}",
+                task.map_or(0, |task| task.id),
+                hart_local::current_hart_id(),
+                sp,
+                task.is_some_and(|task| task.kernel_stack.is_some()),
+            );
+        }
         // No liveness gate here: the execution pin was already acquired in
         // pick_next_local's filter, before the task was dequeued or attributed,
         // so a plan that reaches this point MUST proceed — returning `None`
         // would strand a selected task. A retirement flipping the pinned root
         // Dying after acquisition is legal and drain-safe.
-        let transition = match task.and_then(DomainRef::from_task) {
-            Some(domain) if hart_local::current_domain() == domain.tuple() => {
-                DomainTransition::SameDomain(domain)
-            }
-            Some(domain) => {
+        let domain = task.and_then(DomainRef::from_task);
+        let transition = DomainTransition::classify(hart_local::current_domain(), domain);
+        match &transition {
+            DomainTransition::Activate(domain) => {
                 hart_local::advance_execution_pin(Some(Arc::clone(&domain.0)));
-                DomainTransition::Activate(domain)
             }
-            None if hart_local::current_domain().0 == 0 => DomainTransition::SasToSas,
-            None => {
-                // Leaving the pinned private root: hand its release to the
-                // safe-root completion hook alongside outgoing attribution.
-                hart_local::advance_execution_pin(None);
-                DomainTransition::ToSafeRoot
-            }
-        };
+            // Leaving the pinned private root: hand its release to the
+            // safe-root completion hook alongside outgoing attribution.
+            DomainTransition::ToSafeRoot => hart_local::advance_execution_pin(None),
+            DomainTransition::SasToSas | DomainTransition::SameDomain(_) => {}
+        }
         Some(Self {
             outgoing,
             incoming,
@@ -118,21 +130,22 @@ impl SwitchPlan {
         })
     }
 
-    /// Return the root switch that assembly must issue after saving `outgoing`.
-    /// A zero PPN is the explicit no-write path, and it now means exactly one
-    /// thing: SAS to SAS, where the kernel root is already live.
+    /// Run the root side effects and return the root the switch must program
+    /// after saving `outgoing`. `None` is the explicit no-write path, and it
+    /// means exactly one thing: SAS to SAS, where the kernel root is already
+    /// live.
     ///
-    /// Consumes the plan so its root reference is released before the raw
+    /// Consumes the decision so its root reference is released before the raw
     /// switch. The outgoing task's stack frame never unwinds when that task has
-    /// exited, so a plan still alive across the switch would leak one reference
-    /// to the incoming root and keep that domain (its tables and ledger) alive
-    /// forever. The hart's execution pin, not the plan, keeps the programmed
-    /// root alive past this point.
-    pub(crate) fn root_switch(self) -> (usize, usize) {
+    /// exited, so a decision still alive across the switch would leak one
+    /// reference to the incoming root and keep that domain (its tables and
+    /// ledger) alive forever. The hart's execution pin, not the decision, keeps
+    /// the programmed root alive past this point.
+    fn commit(self) -> Option<Root> {
         match self.transition {
             DomainTransition::Activate(domain) => {
                 let (id, generation) = domain.tuple();
-                let root = root_tuple(&domain.0);
+                let root = root_of(&domain.0);
                 // The execution pin was acquired at selection time under
                 // scheduler-stable state; programming the dead root's SATP here
                 // is exactly what begin_execution's recheck prevents.
@@ -156,16 +169,132 @@ impl SwitchPlan {
                 crate::hal::domain::observe_switch_activation();
                 #[cfg(feature = "bench-counters")]
                 crate::bench_counters::root_programming();
-                root_tuple(&domain.0)
+                root_of(&domain.0)
             }
             DomainTransition::ToSafeRoot => {
                 hart_local::mark_safe_root_pending();
                 crate::hal::domain::observe_switch_activation();
                 #[cfg(feature = "bench-counters")]
                 crate::bench_counters::root_programming();
-                kernel_root_tuple()
+                kernel_root()
             }
-            DomainTransition::SasToSas => (0, 0),
+            DomainTransition::SasToSas => None,
+        }
+    }
+
+    /// Switch from `out` to `inc` (the selection's contexts, with the hart's
+    /// boot context in place of a null one), programming this decision's root
+    /// between the outgoing save and the incoming load.
+    ///
+    /// Returns this activation's interrupt token once it resumes.
+    ///
+    /// # Safety
+    /// `out` and `inc` must be valid context slots for this hart, and `irq`
+    /// must be the token captured before selection on this hart.
+    pub(crate) unsafe fn switch(
+        self,
+        out: *mut Context,
+        inc: *const Context,
+        irq: IrqSaved,
+    ) -> IrqSaved {
+        let root = self.commit();
+        #[cfg(feature = "test-hooks")]
+        rootless::note(root.is_none());
+        // The root is programmed *inside* the switch, after the outgoing
+        // context is saved and before the incoming stack is adopted.
+        // Programming it here instead would leave the incoming root live while
+        // the outgoing context is still being saved on a stack the new root
+        // does not map.
+        // SAFETY: the caller's contract; the root comes from a decision made
+        // under `SCHEDULER` with the execution pin held.
+        unsafe {
+            crate::arch::sched::switch(SwitchPlan {
+                out,
+                inc,
+                root,
+                irq,
+            })
+        }
+    }
+
+    /// The pre-`SwitchPlan` entry: the root side effects with the tuple the
+    /// old switch call took. Built only for the Phase 14 A/B fixture.
+    #[cfg(cellos_switch_legacy)]
+    pub(crate) fn root_switch(self) -> (usize, usize) {
+        self.commit()
+            .map_or((0, 0), |root| (root.base(), root.asid()))
+    }
+
+    /// What a switch for `task` would program on a hart whose published domain
+    /// is `current`, with none of the decision's side effects: no execution
+    /// pin, no published identity.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn preview(current: (u64, u64), task: Option<&Task>) -> Preview {
+        let transition = DomainTransition::classify(current, task.and_then(DomainRef::from_task));
+        match transition {
+            DomainTransition::Activate(domain) => Preview {
+                root: root_of(&domain.0),
+                publishes: Some(domain.tuple()),
+            },
+            DomainTransition::SameDomain(domain) => Preview {
+                root: root_of(&domain.0),
+                publishes: None,
+            },
+            DomainTransition::ToSafeRoot => Preview {
+                root: kernel_root(),
+                publishes: None,
+            },
+            DomainTransition::SasToSas => Preview {
+                root: None,
+                publishes: None,
+            },
         }
     }
 }
+
+/// A side-effect-free view of a root decision ([`RootDecision::preview`]).
+#[cfg(feature = "test-hooks")]
+pub(crate) struct Preview {
+    /// The root the switch would program; `None` is the no-write path.
+    pub root: Option<Root>,
+    /// The domain identity the switch would publish (Activate only).
+    pub publishes: Option<(u64, u64)>,
+}
+
+/// Test posture: a switch that programmed no root must leave no domain
+/// recorded on its hart. [`RootDecision::switch`] notes a rootless switch; the
+/// incoming-side completion hook checks it.
+#[cfg(feature = "test-hooks")]
+mod rootless {
+    use crate::sched::hart_local;
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    static PENDING: [AtomicBool; crate::sched::smp::MAX_HARTS] =
+        [const { AtomicBool::new(false) }; crate::sched::smp::MAX_HARTS];
+
+    pub(super) fn note(rootless: bool) {
+        if let Some(slot) = PENDING.get(hart_local::current_hart_id()) {
+            slot.store(rootless, Ordering::Release);
+        }
+    }
+
+    /// Called by `vi_context_switch_complete` before the safe-root acknowledge.
+    pub(crate) fn check_completion(hart: usize) {
+        if PENDING
+            .get(hart)
+            .is_some_and(|slot| slot.swap(false, Ordering::AcqRel))
+        {
+            let (id, generation) = hart_local::current_domain();
+            assert!(
+                id == 0,
+                "[sched] hart {} completed a switch that programmed no root with domain ({}, {}) recorded",
+                hart,
+                id,
+                generation,
+            );
+        }
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) use rootless::check_completion as check_rootless_completion;

@@ -137,9 +137,9 @@ pub fn flush_all() {
 
 /// Records a scheduler-proven root programming for test fixtures.
 ///
-/// Called from `SwitchPlan::root_switch` for every transition that programs
-/// `TTBR0_EL1` — activation, same-domain resume, and the safe-root handoff —
-/// so the counter names plans, not instructions; the instruction itself is
+/// Called from the kernel's `RootDecision::switch` for every transition that
+/// programs `TTBR0_EL1` — activation, same-domain resume, and the safe-root
+/// handoff — so the counter names decisions, not instructions; the instruction itself is
 /// issued by the switch routine itself, between the outgoing save and the incoming load.
 #[inline]
 pub fn observe_switch_activation() {

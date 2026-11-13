@@ -185,6 +185,22 @@ fn main() {
     if posture::wide(&target_arch) {
         println!("cargo:rustc-cfg=cellos_wide");
     }
+    // Phase 14 A/B: `CELLOS_SWITCH_AB=legacy` builds the pre-`SwitchPlan`
+    // context-switch path (`kernel/src/arch/switch_ab_old.rs`) so the A/B
+    // fixture can boot it beside the new one. Test posture only.
+    println!("cargo:rustc-check-cfg=cfg(cellos_switch_legacy)");
+    println!("cargo:rerun-if-env-changed=CELLOS_SWITCH_AB");
+    match std::env::var("CELLOS_SWITCH_AB").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("") => {}
+        Ok("legacy") => {
+            assert!(
+                posture != "release",
+                "CELLOS_SWITCH_AB=legacy is refused in release posture"
+            );
+            println!("cargo:rustc-cfg=cellos_switch_legacy");
+        }
+        _ => panic!("CELLOS_SWITCH_AB must be unset, empty or \"legacy\""),
+    }
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");

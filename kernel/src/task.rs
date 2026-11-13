@@ -1161,6 +1161,10 @@ pub extern "C" fn vi_context_switch_complete() {
     }
     #[cfg(all(feature = "native-domains", cellos_wide))]
     {
+        // Test posture: a switch that programmed no root left no domain
+        // recorded. Checked before the safe-root acknowledge, which clears it.
+        #[cfg(feature = "test-hooks")]
+        crate::sched::domain_switch::check_rootless_completion(hart);
         let safe_root = crate::sched::hart_local::take_safe_root_pending();
         if switched_to_boot || safe_root {
             crate::sched::hart_local::acknowledge_safe_root();
@@ -1291,8 +1295,8 @@ pub(crate) fn terminate_current_cell_on_user_trap_fault(
 
 /// The boot/idle context slot a switch from `hart_id` saves into.
 ///
-/// AArch64 and x86_64 own one idle context per logical CPU.
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+/// Every 64-bit architecture owns one idle context per logical CPU.
+#[cfg(cellos_wide)]
 #[inline]
 unsafe fn boot_context_for(hart_id: usize) -> *mut crate::hal::arch::Context {
     // SAFETY: `hart_id < MAX_HARTS` — it comes from `current_hart_id()`.
@@ -1309,8 +1313,8 @@ unsafe fn boot_context_for(_hart_id: usize) -> *mut crate::hal::arch::Context {
 ///
 /// A secondary that only takes interrupts and never runs a task is
 /// indistinguishable from one that schedules; this is the line that tells them
-/// apart, and it is bounded so a long boot cannot flood the console.
-#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
+/// apart, and it is bounded so a long boot cannot flood the console. Reported
+/// where `arch::sched::REPORTS_DISPATCH` is set.
 fn note_task_dispatch(hart_id: usize) {
     use core::sync::atomic::{AtomicU8, Ordering};
     static REPORTED: [AtomicU8; crate::sched::smp::MAX_HARTS] =
@@ -1322,32 +1326,148 @@ fn note_task_dispatch(hart_id: usize) {
     }
 }
 
+/// Phase 14 A/B: the pre-`SwitchPlan` switch path, built only with
+/// `CELLOS_SWITCH_AB=legacy` (test posture). Deleted once the A/B fixture shows
+/// identical markers.
+#[cfg(cellos_switch_legacy)]
+#[path = "arch/switch_ab_old.rs"]
+mod switch_ab_old;
+#[cfg(cellos_switch_legacy)]
+pub use switch_ab_old::yield_cpu;
+
+/// The selection a non-native-domain kernel switches to: every switch is SAS to
+/// SAS, so it carries no root.
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
+struct SasSwitch {
+    outgoing: *mut crate::hal::arch::Context,
+    incoming: *const crate::hal::arch::Context,
+}
+
+#[cfg(not(all(feature = "native-domains", cellos_wide)))]
+impl SasSwitch {
+    /// Same contract as `RootDecision::switch`, with no root.
+    unsafe fn switch(
+        self,
+        out: *mut crate::hal::arch::Context,
+        inc: *const crate::hal::arch::Context,
+        irq: crate::arch::sched::IrqSaved,
+    ) -> crate::arch::sched::IrqSaved {
+        // SAFETY: the caller's contract.
+        unsafe {
+            crate::arch::sched::switch(crate::arch::sched::SwitchPlan {
+                out,
+                inc,
+                root: None,
+                irq,
+            })
+        }
+    }
+}
+
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
+#[cfg(not(cellos_switch_legacy))]
 pub fn yield_cpu() {
     #[cfg(target_arch = "x86_64")]
     if !crate::sched::smp::x86_scheduler_ready() {
         return;
     }
-    // RV64 cooperative yields can enter with SIE set (not only from trap
-    // context). Capture and clear it before any scheduler lock or publication;
-    // masking only at `__switch` leaves current/selected scheduler state interruptible.
-    #[cfg(target_arch = "riscv64")]
-    let outgoing_sstatus = crate::hal::arch::save_and_disable_interrupts();
+    // Where the architecture masks at entry (`MASK_AT_ENTRY`), capture and mask
+    // before any scheduler lock or publication. RV64 cooperative yields can
+    // enter with SIE set, and masking only at `__switch` leaves current/selected
+    // scheduler state interruptible; on x86_64 a LAPIC tick inside the lock
+    // would re-enter `yield_cpu` and deadlock on the same spinlock.
+    let entry_irq = crate::arch::sched::MASK_AT_ENTRY.then(crate::arch::sched::IrqSaved::save);
 
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_schedule_attempt();
 
-    // x86_64: disable interrupts for the entire scheduler critical section.
-    // Without this, the LAPIC timer fires mid-lock and causes a nested
-    // yield_cpu call that deadlocks on the same spinlock (IRQ-in-lock deadlock).
-    // RISC-V/AArch64 automatically clear the interrupt-enable bit on trap entry,
-    // so they don't have this problem when called from vi_timer_tick.
-    #[cfg(target_arch = "x86_64")]
-    let outgoing_rflags: usize = unsafe {
-        let flags;
-        core::arch::asm!("pushfq", "pop {}", "cli", out(reg) flags);
-        flags
+    drain_before_selection();
+
+    // AArch64 (`MASK_AT_ENTRY == false`) reaches this point from the boot idle
+    // loop with IRQs unmasked, and the SCHEDULER guard restores that state when
+    // it drops. Mask from selection through the raw switch: a timer IRQ in that
+    // window would re-enter the scheduler after this hart published its
+    // selected and outgoing-save identities but before the switch, and save the
+    // IRQ activation into the selected task's Context. The incoming Context
+    // restores its own interrupt state; this activation restores the captured
+    // state when it resumes, at the end of `yield_cpu`.
+    let irq = entry_irq.unwrap_or_else(crate::arch::sched::IrqSaved::save);
+    let hart_id = crate::sched::hart_local::current_hart_id();
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    let selection = if let Some(sched) = SCHEDULER.lock().as_mut() {
+        sched.pick_next_domain(hart_id)
+    } else {
+        None
     };
+    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
+    let selection = if let Some(sched) = SCHEDULER.lock().as_mut() {
+        sched
+            .pick_next(hart_id)
+            .map(|(outgoing, incoming)| SasSwitch { outgoing, incoming })
+    } else {
+        None
+    };
+    // The scheduler lock is now released but the terminal Context is still
+    // executing. Exercise the real trap admission boundary in this exact
+    // pre-switch interval; the regression proves a heartbeat victim cannot
+    // become caller 0 before boot owns the incoming Context.
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if let Some(selection) = &selection {
+        if selection.incoming.is_null() {
+            crate::arch::task::retirement_selftest::observe_heartbeat_terminal_current();
+        }
+    }
+    let irq = match selection {
+        None => {
+            // Selection is normally published only with a concrete switch
+            // tuple. Clear defensively on the no-switch/abort path so a stale
+            // pin cannot retain a retired Context indefinitely. No incoming
+            // Context restores the interrupt state here: the token below keeps
+            // the caller's exact state instead of unconditionally enabling.
+            crate::sched::hart_local::ready::abort_selected_switch(hart_id);
+            irq
+        }
+        Some(selection) => unsafe {
+            let out = if selection.outgoing.is_null() {
+                boot_context_for(hart_id)
+            } else {
+                selection.outgoing
+            };
+            let inc = if selection.incoming.is_null() {
+                boot_context_for(hart_id) as *const crate::hal::arch::Context
+            } else {
+                selection.incoming
+            };
+            if !selection.incoming.is_null() {
+                #[cfg(feature = "bench-counters")]
+                crate::bench_counters::context_switch();
+                if crate::arch::sched::REPORTS_DISPATCH {
+                    note_task_dispatch(hart_id);
+                }
+                crate::arch::sched::set_kernel_stack_for(&*selection.incoming);
+                tls::install_published_base();
+            }
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            crate::arch::task::retirement_selftest::hold_after_selection_before_switch(hart_id);
+            selection.switch(out, inc, irq)
+        },
+    };
+
+    // The incoming task is now the running one. Install its user thread pointer
+    // (aarch64/x86_64; riscv64 carries it in the trap frame) from the hart-local
+    // value the scheduler published, so this stays lock-free.
+    tls::apply_on_resume();
+    // This activation may resume on another CPU. Its captured interrupt state
+    // belongs to the suspended context, not the selecting CPU; never enable
+    // interrupts inside an activation that originally entered masked. (RV64's
+    // token is spent: `__switch` already restored this context's `sstatus`.)
+    drop(irq);
+}
+
+/// The scheduler pass before selection: retirement funnel, housekeeping
+/// drains and wake delivery. Runs with the interrupt state `yield_cpu` set up.
+#[inline(always)]
+fn drain_before_selection() {
     #[cfg(target_arch = "x86_64")]
     crate::sched::smp::capture_retirement_boundary(crate::sched::hart_local::current_hart_id());
     #[cfg(feature = "g1-cpu-accounting")]
@@ -1642,223 +1762,6 @@ pub fn yield_cpu() {
     crate::p01_measurement::safe_point();
     #[cfg(feature = "g1-cpu-accounting")]
     crate::sched::cpu_accounting::safe_point();
-
-    // AArch64 reaches this point from the boot idle loop with IRQs unmasked,
-    // and the SCHEDULER guard restores that state when it drops. Mask from
-    // selection through the raw switch: a timer IRQ in that window would
-    // re-enter the scheduler after this hart published its selected and
-    // outgoing-save identities but before the switch, and save the IRQ
-    // activation into the selected task's Context. The incoming Context
-    // restores its own DAIF; this activation restores the captured state when
-    // it resumes, at the end of `yield_cpu`.
-    #[cfg(target_arch = "aarch64")]
-    let outgoing_daif = crate::hal::arch::save_and_disable_interrupts();
-    let hart_id = crate::sched::hart_local::current_hart_id();
-    #[cfg(all(feature = "native-domains", cellos_wide))]
-    let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
-        sched.pick_next_domain(hart_id)
-    } else {
-        None
-    };
-    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
-    let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
-        sched.pick_next(hart_id)
-    } else {
-        None
-    };
-    // The scheduler lock is now released but the terminal Context is still
-    // executing. Exercise the real trap admission boundary in this exact
-    // pre-switch interval; the regression proves a heartbeat victim cannot
-    // become caller 0 before boot owns the incoming Context.
-    #[cfg(all(
-        feature = "test-hooks",
-        target_arch = "riscv64",
-        feature = "native-domains"
-    ))]
-    if let Some(ref plan) = switch_info {
-        if plan.incoming.is_null() {
-            crate::arch::task::retirement_selftest::observe_heartbeat_terminal_current();
-        }
-    }
-    #[cfg(all(
-        feature = "test-hooks",
-        target_arch = "riscv64",
-        not(feature = "native-domains")
-    ))]
-    if let Some((_, next)) = switch_info {
-        if next.is_null() {
-            crate::arch::task::retirement_selftest::observe_heartbeat_terminal_current();
-        }
-    }
-    if switch_info.is_none() {
-        // Selection is normally published only with a concrete switch tuple.
-        // Clear defensively on the no-switch/abort path so a stale pin cannot
-        // retain a retired Context indefinitely.
-        crate::sched::hart_local::ready::abort_selected_switch(hart_id);
-    }
-    #[cfg(target_arch = "riscv64")]
-    if switch_info.is_none() {
-        // No incoming Context will restore status for us. Preserve the caller's
-        // exact SIE state instead of unconditionally enabling interrupts.
-        unsafe {
-            crate::hal::arch::restore_sstatus(outgoing_sstatus);
-        }
-    }
-
-    #[cfg(all(feature = "native-domains", cellos_wide))]
-    if let Some(plan) = switch_info {
-        unsafe {
-            let final_curr = if plan.outgoing.is_null() {
-                #[cfg(target_arch = "riscv64")]
-                {
-                    &raw mut BOOT_CONTEXTS[hart_id]
-                }
-                #[cfg(not(target_arch = "riscv64"))]
-                {
-                    boot_context_for(hart_id)
-                }
-            } else {
-                plan.outgoing
-            };
-            let final_next = if plan.incoming.is_null() {
-                #[cfg(target_arch = "riscv64")]
-                {
-                    &raw const BOOT_CONTEXTS[hart_id]
-                }
-                #[cfg(not(target_arch = "riscv64"))]
-                {
-                    boot_context_for(hart_id) as *const crate::hal::arch::Context
-                }
-            } else {
-                plan.incoming
-            };
-            if !plan.incoming.is_null() {
-                #[cfg(feature = "bench-counters")]
-                crate::bench_counters::context_switch();
-                #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
-                note_task_dispatch(hart_id);
-                #[cfg(target_arch = "riscv64")]
-                crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
-                #[cfg(target_arch = "aarch64")]
-                crate::hal::arch::set_kernel_stack((&*plan.incoming).sp as usize);
-                #[cfg(target_arch = "x86_64")]
-                crate::hal::arch::set_kernel_stack((&*plan.incoming).kernel_trap_sp as usize);
-                #[cfg(not(target_arch = "riscv64"))]
-                tls::install_published_base();
-            }
-            #[cfg(target_arch = "riscv64")]
-            {
-                #[cfg(feature = "test-hooks")]
-                crate::arch::task::retirement_selftest::hold_after_selection_before_switch(hart_id);
-                let (root_ppn, asid) = plan.root_switch();
-                crate::hal::arch::Context::switch_with_saved_sstatus(
-                    final_curr,
-                    final_next,
-                    outgoing_sstatus,
-                    root_ppn,
-                    asid,
-                );
-            }
-            #[cfg(not(target_arch = "riscv64"))]
-            {
-                let (root_addr, asid) = plan.root_switch();
-                // The root is programmed *inside* the switch, after the outgoing
-                // context is saved and before the incoming stack is adopted.
-                // Programming it here instead would leave the incoming root live
-                // while the outgoing context is still being saved on a stack the
-                // new root does not map.
-                crate::hal::arch::Context::switch_with_root(
-                    final_curr, final_next, root_addr, asid,
-                );
-            }
-        }
-    }
-    #[cfg(not(all(feature = "native-domains", cellos_wide)))]
-    if let Some((curr, next)) = switch_info {
-        unsafe {
-            let final_curr = if curr.is_null() {
-                #[cfg(target_arch = "riscv64")]
-                {
-                    &raw mut BOOT_CONTEXTS[hart_id]
-                }
-                #[cfg(not(target_arch = "riscv64"))]
-                {
-                    boot_context_for(hart_id)
-                }
-            } else {
-                curr
-            };
-
-            let final_next = if next.is_null() {
-                #[cfg(target_arch = "riscv64")]
-                {
-                    &raw const BOOT_CONTEXTS[hart_id]
-                }
-                #[cfg(not(target_arch = "riscv64"))]
-                {
-                    boot_context_for(hart_id) as *const crate::hal::arch::Context
-                }
-            } else {
-                next
-            };
-            if !next.is_null() {
-                #[cfg(feature = "bench-counters")]
-                crate::bench_counters::context_switch();
-                // Set TSS.rsp0 and CPU_LOCAL.kernel_rsp for the incoming task.
-                // The physical GS_BASE/KERNEL_GS_BASE pair is kernel context
-                // state and must remain untouched across this raw switch.
-                // kernel_trap_sp is fixed at spawn, unlike the deep yield RSP.
-                let next_ref = &*next;
-                // aarch64 context stores sp as u64 (register-width field);
-                // riscv64 already uses usize — keep it cast-free so clippy's
-                // same-type-cast lint stays quiet on that target.
-                #[cfg(target_arch = "aarch64")]
-                crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
-                #[cfg(not(any(
-                    target_arch = "x86_64",
-                    target_arch = "aarch64",
-                    target_arch = "riscv32"
-                )))]
-                crate::hal::arch::set_kernel_stack(next_ref.sp);
-                #[cfg(target_arch = "riscv32")]
-                crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
-                #[cfg(target_arch = "x86_64")]
-                crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
-                #[cfg(not(target_arch = "riscv64"))]
-                tls::install_published_base();
-            }
-            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-            crate::arch::task::retirement_selftest::hold_after_selection_before_switch(hart_id);
-
-            #[cfg(target_arch = "riscv64")]
-            crate::hal::arch::Context::switch_with_saved_sstatus(
-                final_curr,
-                final_next,
-                outgoing_sstatus,
-                0,
-                0,
-            );
-            #[cfg(not(target_arch = "riscv64"))]
-            crate::hal::arch::Context::switch(final_curr, final_next);
-        }
-    }
-
-    // The incoming task is now the running one. Install its user thread pointer
-    // (aarch64/x86_64; riscv64 carries it in the trap frame) from the hart-local
-    // value the scheduler published, so this stays lock-free.
-    tls::apply_on_resume();
-    // This activation may resume on another CPU. Its captured flags belong to
-    // the suspended context, not the selecting CPU; never enable IF inside an
-    // IRQ activation that originally entered masked.
-    #[cfg(target_arch = "x86_64")]
-    unsafe {
-        core::arch::asm!("push {}", "popfq", in(reg) outgoing_rflags);
-    }
-    // Same rule for DAIF: restore this activation's own pre-selection state.
-    #[cfg(target_arch = "aarch64")]
-    unsafe {
-        crate::hal::arch::restore_sstatus(outgoing_daif);
-    }
 }
 
 /// Wake a parked task with a syscall result, if it is still parked.

@@ -38,6 +38,8 @@ pub mod hart_local;
 
 pub mod vm;
 
+pub mod sched;
+
 pub mod dev {
     pub(crate) mod bcm_pinmux;
     pub mod mmc {

@@ -1,7 +1,7 @@
 //! Native-domain scheduler fixtures, shared by every architecture that can carry
 //! a private root. They deliberately construct no user mapping.
 use crate::memory::address_space::AddressSpaceBuilder;
-use crate::sched::domain_switch::{root_tuple, SwitchPlan};
+use crate::sched::domain_switch::{root_of, RootDecision};
 use crate::sched::hart_local;
 use crate::task::tcb::{Task, TaskAddressSpace};
 use alloc::vec::Vec;
@@ -37,8 +37,11 @@ fn observed_harts() -> usize {
 }
 
 /// Runs only with QEMU test hooks: SAS dispatch must not program a root or
-/// flush, and a private root must produce a non-SAS plan before it can reach
+/// flush, and a private root must produce a non-SAS root before it can reach
 /// assembly.
+///
+/// The fixtures inspect decisions through `RootDecision::preview`, which pins
+/// nothing and publishes no identity: only a real switch records a domain.
 pub(crate) fn run_primary() -> bool {
     use crate::memory::domain_supervisor_registry::{
         contains_shared_kind, shared_snapshot, SupervisorRangeKind,
@@ -59,13 +62,12 @@ pub(crate) fn run_primary() -> bool {
     }
     let sas_task = Task::new(91_001, CellId(91_001), "domain-sas", Vec::new());
     crate::hal::domain::reset_switch_counters();
-    let Some(sas_plan) = SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&sas_task))
-    else {
-        return false;
-    };
     // The no-write path means exactly one thing: SAS to SAS, where the kernel
-    // root is already live. It is the zero tuple, not a "small" root.
-    if sas_plan.root_switch() != (0, 0) {
+    // root is already live. It is no root at all, not a "small" root.
+    if RootDecision::preview(hart_local::current_domain(), Some(&sas_task))
+        .root
+        .is_some()
+    {
         log::error!("S22-{}-SAS-FASTPATH: FAIL root-programmed", ARCH_TAG);
         return false;
     }
@@ -105,16 +107,10 @@ pub(crate) fn run_primary() -> bool {
     };
     let mut domain_task = Task::new(91_002, CellId(91_002), "domain-plan", Vec::new());
     domain_task.bind_address_space_for_test(address_space);
-    let (root, asid) =
-        match SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&domain_task)) {
-            Some(plan) => plan.root_switch(),
-            None => {
-                log::error!("S22-{}-PLAN: FAIL plan-rejected", ARCH_TAG);
-                return false;
-            }
-        };
+    let plan = RootDecision::preview(hart_local::current_domain(), Some(&domain_task));
+    let (root, asid) = plan.root.map_or((0, 0), |root| (root.base(), root.asid()));
     let (roots, flushes) = crate::hal::domain::switch_counters();
-    let (domain_id, domain_generation) = hart_local::current_domain();
+    let (domain_id, domain_generation) = plan.publishes.unwrap_or((0, 0));
     // The switch routine programs the root register from this pair, and the
     // encoding has one definition: it must name THIS root and THIS tag, or the
     // Cell would resume under a different address space than the plan selected.
@@ -166,18 +162,13 @@ pub(crate) fn run_primary() -> bool {
 
     // Re-derivation for the trap-root discipline: a domain re-selected while it
     // is still the hart's current domain must program its root again, because
-    // trap entry installs the kernel root. Collapsing this plan to the no-write
-    // path would resume the Cell under the kernel root, so the fixture asserts
-    // the write happens, that it names THIS domain, and that the published
-    // domain identity is left alone.
-    let mut resume_ok = false;
-    if let Some(resume_plan) =
-        SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&domain_task))
-    {
-        let resume_root = resume_plan.root_switch();
-        resume_ok = resume_root == (root, asid)
-            && hart_local::current_domain() == (domain_id, domain_generation);
-    }
+    // trap entry installs the kernel root. Collapsing this to the no-write path
+    // would resume the Cell under the kernel root, so the fixture asserts the
+    // write happens, that it names THIS domain, and that the published domain
+    // identity is left alone.
+    let resume = RootDecision::preview((domain_id, domain_generation), Some(&domain_task));
+    let resume_ok = resume.root.map(|root| (root.base(), root.asid())) == Some((root, asid))
+        && resume.publishes.is_none();
     if resume_ok {
         log::info!(
             "S22-{}-RESUME-ROOT: PASS harts={}",
@@ -533,8 +524,8 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
 
 /// Regression for the pin→plan window: `retire()` is a bare atomic store that
 /// takes no lock, so it can land between the execution pin (pick_next_local
-/// filter) and `SwitchPlan::new`. A successfully pinned task must still derive
-/// Activate and program ITS root — never the KERNEL_ROOT safe-root tuple.
+/// filter) and `RootDecision::new`. A successfully pinned task must still derive
+/// Activate and program ITS root — never the KERNEL_ROOT safe root.
 pub(crate) fn run_pinned_retire_regression() -> bool {
     let kernel_stack = match crate::task::stack::Stack::new_kernel(2) {
         Ok(stack) => stack,
@@ -579,16 +570,14 @@ pub(crate) fn run_pinned_retire_regression() -> bool {
     }
     let mut pinned_task = Task::new(91_003, CellId(91_003), "domain-pin-dying", Vec::new());
     pinned_task.bind_address_space_for_test(alloc::sync::Arc::clone(&address_space));
-    let Some(plan) = SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&pinned_task))
-    else {
-        log::error!("S22-{}-PIN-DYING: FAIL plan-rejected-after-pin", ARCH_TAG);
-        return false;
-    };
-    let (root, asid) = plan.root_switch();
-    let expected = root_tuple(&address_space);
+    let root = RootDecision::preview(hart_local::current_domain(), Some(&pinned_task)).root;
+    let expected = root_of(&address_space);
+    // The fixture holds the pin itself, not through a switch: release it the
+    // way the completion hook would on the hart's next transition.
+    let _ = address_space.set_current_hart(hart, false);
     // The safe-root diversion this regression guards against surfaces as the
-    // kernel tuple (kernel root, asid 0); a private root has asid != 0.
-    if (root, asid) == expected && asid != 0 {
+    // kernel root (asid 0); a private root has asid != 0.
+    if root == expected && expected.is_some_and(|root| root.asid() != 0) {
         log::info!(
             "S22-{}-PIN-DYING: PASS harts={}",
             ARCH_TAG,
@@ -597,12 +586,10 @@ pub(crate) fn run_pinned_retire_regression() -> bool {
         true
     } else {
         log::error!(
-            "S22-{}-PIN-DYING: FAIL root=({:#x},{:#x}) expected=({:#x},{:#x})",
+            "S22-{}-PIN-DYING: FAIL root={:?} expected={:?}",
             ARCH_TAG,
             root,
-            asid,
-            expected.0,
-            expected.1
+            expected
         );
         false
     }
@@ -738,7 +725,7 @@ pub(crate) fn run_root_switch_witness() -> bool {
             );
         }
         SCRATCH_RESUMED.store(true, Ordering::Release);
-        // Stage a safe-root completion the way `SwitchPlan::root_switch` does for a
+        // Stage a safe-root completion the way a `RootDecision` switch does for a
         // transition to the kernel root, so the incoming-side completion below has
         // real work to do.
         hart_local::mark_safe_root_pending();
@@ -806,28 +793,12 @@ pub(crate) fn run_root_switch_witness() -> bool {
         ctx_scratch.daif = saved_daif as u64;
     }
 
-    // PLAN and RESUME-ROOT built Activate plans that were never switched to:
-    // `root_switch` published that domain's identity and advanced the hart's
-    // execution pin, but no root was programmed. The switch routine runs the
-    // incoming-side completion itself, so the first raw switch below would read
-    // that stale identity over the kernel root. Leave the domain the way the
-    // scheduler does: a safe-root plan, acknowledged by the completion hook on
-    // the scratch stack. The kernel root is already live, so the write is a no-op.
-    let (handoff_root, handoff_asid) =
-        match SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), None) {
-            Some(plan) => plan.root_switch(),
-            None => (0, 0),
-        };
-
-    // Boot context -> scratch stack (kernel root), then the whole chain runs
-    // with its SAS side on memory no private root maps.
+    // Boot context -> scratch stack (no root write), then the whole chain runs
+    // with its SAS side on memory no private root maps. PLAN and RESUME-ROOT
+    // only previewed their decisions, so no domain identity is published here
+    // for the completion hook to read over the kernel root.
     unsafe {
-        crate::hal::arch::Context::switch_with_root(
-            CTX_FIXTURE.0.get(),
-            CTX_SCRATCH.0.get(),
-            handoff_root,
-            handoff_asid,
-        );
+        crate::hal::arch::Context::switch_with_root(CTX_FIXTURE.0.get(), CTX_SCRATCH.0.get(), 0, 0);
     }
 
     // The switch routine already ran the incoming-side completion

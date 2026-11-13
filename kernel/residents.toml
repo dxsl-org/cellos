@@ -52,6 +52,7 @@
 "kernel/src/arch/aarch64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/power.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/resource_registry.rs" = { category = "D", owner = "resource_registry" }
+"kernel/src/arch/aarch64/sched.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/smp.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/smp_bringup.rs" = { category = "A", owner = "sched" }
@@ -72,6 +73,7 @@
 "kernel/src/arch/legacy/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/power.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/riscv32.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/legacy/sched.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/tlb.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/virtio_mmio.rs" = { category = "A", owner = "arch" }
@@ -97,6 +99,7 @@
 "kernel/src/arch/riscv64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/riscv64/sched.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/sched/ready_test_dispatch.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/riscv64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/smp.rs" = { category = "A", owner = "arch" }
@@ -119,6 +122,7 @@
 "kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/switch_ab_old.rs" = { category = "A", owner = "task" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/board.rs" = { category = "C", owner = "board" }
@@ -163,6 +167,7 @@
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/power.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/x86_64/sched.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/sdhci.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/smp_bringup.rs" = { category = "A", owner = "sched" }
 "kernel/src/arch/x86_64/task/x86_idt_cpl3.rs" = { category = "test", owner = "task" }

@@ -36,6 +36,8 @@ pub mod hart_local;
 
 pub mod vm;
 
+pub mod sched;
+
 pub mod cell {
     #[cfg(feature = "test-hooks")]
     pub mod provenance_selftest;

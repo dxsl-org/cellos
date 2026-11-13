@@ -1354,7 +1354,7 @@ rationale = "No lock: soundness rests on hart_id=current_hart_id() and yield_cpu
 review = "kernel/src/task.rs:boot_context_for; kernel/src/task.rs:yield_cpu; kernel/src/arch/x86_64/smp_bringup.rs:x86_secondary_main"
 
 [[global]]
-key = "kernel::task::note_task_dispatch()::REPORTED @cfg(any (target_arch = \"aarch64\" , target_arch = \"x86_64\"))"
+key = "kernel::task::note_task_dispatch()::REPORTED"
 lifetime = "per-cpu"
 mutation = "atomic"
 owner = "kernel::task::note_task_dispatch: one-shot per-hart 'dispatched a task' log latch"

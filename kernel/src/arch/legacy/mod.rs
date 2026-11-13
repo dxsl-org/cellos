@@ -11,6 +11,7 @@ pub mod hart_local;
 pub mod iommu;
 pub mod irq;
 pub mod power;
+pub mod sched;
 pub mod sdhci;
 pub mod tlb;
 pub mod virtio_mmio;
