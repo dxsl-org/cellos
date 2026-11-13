@@ -52,6 +52,31 @@ const ATTR_NORMAL: u64 = 1 << 2;
 /// be set for Device memory (it has no shareable concept — leave SH=0b00).
 const ATTR_DEVICE: u64 = 0;
 
+/// The leaf translating `va` under the root table whose frame is `root`.
+///
+/// # Safety
+/// `root` is the physical address of a live root table, and every table it
+/// names is readable through [`phys_to_virt`].
+pub unsafe fn leaf(root: PhysAddr, va: VAddr) -> Option<Leaf> {
+    // SAFETY: the caller's contract.
+    unsafe { &*(phys_to_virt(root) as *const PageTable) }.leaf(va)
+}
+
+/// Physical root of the translation in use on this PE: `TTBR0_EL1` without
+/// its ASID and CnP bits.
+pub fn current_root() -> Option<PhysAddr> {
+    let ttbr0: usize;
+    // SAFETY: reading TTBR0_EL1 at EL1 has no side effect.
+    unsafe {
+        core::arch::asm!(
+            "mrs {ttbr0}, ttbr0_el1",
+            ttbr0 = out(reg) ttbr0,
+            options(nostack, nomem)
+        );
+    }
+    Some(ttbr0 & 0x0000_ffff_ffff_f000)
+}
+
 fn phys_to_pte_addr(phys: PhysAddr) -> u64 {
     ((phys as u64) >> 12) << 12
 }

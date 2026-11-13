@@ -29,6 +29,34 @@ pub fn flush_tlb_page(virt: VAddr) {
     }
 }
 
+/// The leaf translating `va` under the root table whose frame is `root`.
+///
+/// # Safety
+/// `root` is the physical address of a live root table, and every table it
+/// names is readable through [`phys_to_virt`].
+pub unsafe fn leaf(root: PhysAddr, va: VAddr) -> Option<Leaf> {
+    // SAFETY: the caller's contract.
+    unsafe { &*(phys_to_virt(root) as *const PageTable) }.leaf(va)
+}
+
+/// Physical root of the translation in use on this hart, or `None` when
+/// `satp` is not in Sv39 mode.
+pub fn current_root() -> Option<PhysAddr> {
+    let satp: usize;
+    // SAFETY: reading `satp` has no side effect.
+    unsafe {
+        core::arch::asm!(
+            "csrr {satp}, satp",
+            satp = out(reg) satp,
+            options(nostack, nomem)
+        );
+    }
+    if (satp >> 60) != 8 {
+        return None;
+    }
+    Some((satp & ((1usize << 44) - 1)) << 12)
+}
+
 /// Helper to map Generic Flags to RISC-V Flags
 ///
 /// The generic namespace maps onto the Sv39 leaf bit-for-bit, so bits this

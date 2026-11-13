@@ -180,6 +180,27 @@ pub fn flush_tlb_page(va: usize) {
     }
 }
 
+/// The leaf translating `va` under the root table whose frame is `root`.
+///
+/// # Safety
+/// `root` is the physical address of a live root table, and every table it
+/// names is readable through [`phys_to_virt`].
+pub unsafe fn leaf(root: PhysAddr, va: VAddr) -> Option<Leaf> {
+    // SAFETY: the caller's contract.
+    unsafe { &*(phys_to_virt(root) as *const PageTable) }.leaf(va)
+}
+
+/// Physical root of the translation in use on this CPU: `CR3` without its
+/// low twelve (tag or cache-control) bits.
+pub fn current_root() -> Option<PhysAddr> {
+    let cr3: usize;
+    // SAFETY: reading CR3 has no side effect.
+    unsafe {
+        asm!("mov {cr3}, cr3", cr3 = out(reg) cr3, options(nostack, nomem));
+    }
+    Some(cr3 & !0xFFF)
+}
+
 // ---------------------------------------------------------------------------
 // HHDM-aware PML4 walkers.
 // ---------------------------------------------------------------------------

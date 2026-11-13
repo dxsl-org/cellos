@@ -1,4 +1,4 @@
-//! Ledger + live-Sv39-PTE validation for probed user ranges. Both the
+//! Ledger + live-leaf validation for probed user ranges. Both the
 //! private-root (Domain) and shared-root (Sas) probe passes live here; no
 //! byte ever moves in this module.
 
@@ -6,14 +6,20 @@ use super::copy::PinnedCopy;
 use super::range::{CopyError, Direction};
 use crate::memory::address_space::AddressSpace;
 use crate::memory::paging::{Flags, PAGE_SIZE};
+use hal::Leaf;
 
-pub(crate) const SV39_VALID: usize = 1 << 0;
-pub(crate) const SV39_READ: usize = 1 << 1;
-pub(crate) const SV39_WRITE: usize = 1 << 2;
-pub(crate) const SV39_USER: usize = 1 << 4;
+/// Whether `leaf` is a valid user leaf with the right `direction` needs.
+pub(super) fn user_leaf_allows(leaf: &Leaf, direction: Direction) -> bool {
+    let right = if direction == Direction::ToUser {
+        leaf.write
+    } else {
+        leaf.read
+    };
+    leaf.valid && leaf.user && right
+}
 
 /// Probe every page of `[ptr, ptr+len)` against BOTH the mapping ledger and
-/// the live Sv39 PTEs of the private root under an acquired reader pin.
+/// the live leaves of the private root under an acquired reader pin.
 /// Zero heap allocations: pages are validated and committed directly from `(ptr, len)`.
 pub(super) fn stage_domain<'a>(
     arc: &'a AddressSpace,
@@ -34,15 +40,10 @@ pub(super) fn stage_domain<'a>(
     } else {
         Flags::READ
     };
-    let need_pte = if direction == Direction::ToUser {
-        SV39_WRITE
-    } else {
-        SV39_READ
-    };
 
     // 2. Validate every page under the held pin.
     let mut page = ptr & !(PAGE_SIZE - 1);
-    let satp_is_domain = crate::arch::page_probe::current_root() == Some(root_pa);
+    let root_is_domain = crate::hal::paging::current_root() == Some(root_pa);
     while page < end {
         let (ledger_flags, ledger_pa) =
             arc.page_proof_for(page).ok_or(CopyError::InvalidAddress)?;
@@ -50,13 +51,15 @@ pub(super) fn stage_domain<'a>(
         if ledger_flags.bits() & (Flags::USER | need_flag) != Flags::USER | need_flag {
             return Err(CopyError::InvalidAddress);
         }
-        if !satp_is_domain {
-            let (pte_bits, pte_pa) =
-                crate::arch::page_probe::leaf(root_pa, page).ok_or(CopyError::InvalidAddress)?;
-            if pte_bits & (SV39_VALID | SV39_USER | need_pte) != SV39_VALID | SV39_USER | need_pte {
+        if !root_is_domain {
+            // SAFETY: the reader pin keeps the private root and its tables
+            // live for the whole walk.
+            let leaf = unsafe { crate::hal::paging::leaf(root_pa, page) }
+                .ok_or(CopyError::InvalidAddress)?;
+            if !user_leaf_allows(&leaf, direction) {
                 return Err(CopyError::InvalidAddress);
             }
-            if pte_pa != ledger_pa {
+            if leaf.pa != ledger_pa {
                 return Err(CopyError::InvalidAddress);
             }
         }
@@ -87,33 +90,29 @@ pub(super) fn stage_domain<'a>(
 /// re-validates every page inside its leased window (`sas_lease`), which is
 /// what keeps a racing release from receiving bytes after the frame is freed.
 pub(super) fn probe_sas(ptr: usize, len: usize, direction: Direction) -> Result<(), CopyError> {
-    let Some(root_pa) = crate::arch::page_probe::current_root() else {
+    let Some(root_pa) = crate::hal::paging::current_root() else {
         return Err(CopyError::InvalidAddress);
     };
     sas_span_live(ptr, len, direction, |page| {
-        crate::arch::page_probe::leaf(root_pa, page).map(|(bits, _)| bits)
+        // SAFETY: the live root of this hart; its tables outlive the probe.
+        unsafe { crate::hal::paging::leaf(root_pa, page) }
     })
 }
 
-/// Require every page of `[ptr, ptr+len)` to resolve VALID | USER plus the
-/// direction's R/W right. `leaf` returns the PTE bits for one page VA. A
+/// Require every page of `[ptr, ptr+len)` to resolve to a valid user leaf
+/// with the direction's R/W right. `leaf` returns the leaf for one page VA. A
 /// retired page (unmapped, or re-mapped kernel-only) fails here.
 pub(super) fn sas_span_live(
     ptr: usize,
     len: usize,
     direction: Direction,
-    leaf: impl Fn(usize) -> Option<usize>,
+    leaf: impl Fn(usize) -> Option<Leaf>,
 ) -> Result<(), CopyError> {
     let end = ptr.checked_add(len).ok_or(CopyError::InvalidAddress)?;
-    let need = if direction == Direction::ToUser {
-        SV39_VALID | SV39_WRITE | SV39_USER
-    } else {
-        SV39_VALID | SV39_READ | SV39_USER
-    };
     let mut page = ptr & !(PAGE_SIZE - 1);
     while page < end {
-        let bits = leaf(page).ok_or(CopyError::InvalidAddress)?;
-        if bits & need != need {
+        let leaf = leaf(page).ok_or(CopyError::InvalidAddress)?;
+        if !user_leaf_allows(&leaf, direction) {
             return Err(CopyError::InvalidAddress);
         }
         page += PAGE_SIZE;

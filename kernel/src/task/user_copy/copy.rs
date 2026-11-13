@@ -2,9 +2,9 @@
 //! body, and the pinned Domain commit. The Sas commit lives in `sas_lease`.
 
 use super::guard::commit_guarded;
+use super::page_probe::{probe_sas, stage_domain, user_leaf_allows};
 use super::range::{CopyError, CopyView, Direction, UserReadSlice, UserWriteSlice};
 use super::sas_lease::commit_sas;
-use super::sv39_probe::{probe_sas, stage_domain, SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE};
 use crate::memory::address_space::{AddressSpace, CopyReader};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::PAGE_SIZE;
@@ -121,7 +121,7 @@ impl PinnedCopy<'_> {
     /// that pin with zero heap allocation.
     pub(crate) fn commit(self, other: *mut u8) -> Result<(), CopyError> {
         let root_pa = self.arc.root_ppn() << 12;
-        if crate::arch::page_probe::current_root() == Some(root_pa) {
+        if crate::hal::paging::current_root() == Some(root_pa) {
             let (src, dst) = if self.direction == Direction::FromUser {
                 (self.user_ptr as *const u8, other)
             } else {
@@ -129,11 +129,6 @@ impl PinnedCopy<'_> {
             };
             return commit_guarded(src, dst, self.len, self.user_ptr, self.user_ptr + self.len);
         }
-        let need_pte = if self.direction == Direction::ToUser {
-            SV39_WRITE
-        } else {
-            SV39_READ
-        };
         let end = self.user_ptr + self.len;
         let mut page = self.user_ptr & !(PAGE_SIZE - 1);
         let mut result = Ok(());
@@ -141,14 +136,16 @@ impl PinnedCopy<'_> {
             let lo = page.max(self.user_ptr);
             let hi = (page + PAGE_SIZE).min(end);
             let chunk = hi - lo;
-            let Some((bits, pa)) = crate::arch::page_probe::leaf(root_pa, page) else {
+            // SAFETY: the reader pin keeps the private root and its tables
+            // live until this commit returns.
+            let Some(leaf) = (unsafe { crate::hal::paging::leaf(root_pa, page) }) else {
                 return Err(CopyError::InvalidAddress);
             };
-            if bits & (SV39_VALID | SV39_USER | need_pte) != SV39_VALID | SV39_USER | need_pte {
+            if !user_leaf_allows(&leaf, self.direction) {
                 return Err(CopyError::InvalidAddress);
             }
             let offset = lo - page;
-            let alias = phys_to_virt(pa + offset);
+            let alias = phys_to_virt(leaf.pa + offset);
             let (src, dst): (*const u8, *mut u8) = if self.direction == Direction::FromUser {
                 (alias as *const u8, other.wrapping_add(lo - self.user_ptr))
             } else {

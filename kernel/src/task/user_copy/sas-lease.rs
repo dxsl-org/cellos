@@ -28,8 +28,8 @@
 //! release-side wait is bounded under any caller lock and takes no lock itself.
 
 use super::guard::commit_guarded;
+use super::page_probe::sas_span_live;
 use super::range::{CopyError, Direction};
-use super::sv39_probe::sas_span_live;
 use crate::sched::smp::MAX_HARTS;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
@@ -113,9 +113,10 @@ fn leased_body(
     let window = SAS_WINDOWS
         .open(crate::sched::hart_local::current_hart_id())
         .ok_or(CopyError::InvalidAddress)?;
-    let root_pa = crate::arch::page_probe::current_root().ok_or(CopyError::InvalidAddress)?;
+    let root_pa = crate::hal::paging::current_root().ok_or(CopyError::InvalidAddress)?;
     sas_span_live(user_ptr, len, direction, |page| {
-        crate::arch::page_probe::leaf(root_pa, page).map(|(bits, _)| bits)
+        // SAFETY: the live root of this hart; its tables outlive the window.
+        unsafe { crate::hal::paging::leaf(root_pa, page) }
     })?;
     let (src, dst) = if direction == Direction::FromUser {
         (user_ptr as *const u8, other)

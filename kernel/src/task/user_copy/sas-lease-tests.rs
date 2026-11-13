@@ -3,14 +3,24 @@
 //! validated the page is still copying.
 
 use super::*;
-use crate::task::user_copy::sv39_probe::{SV39_READ, SV39_USER, SV39_VALID, SV39_WRITE};
 use alloc::sync::Arc;
 use core::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
 
-const USER_RW: usize = SV39_VALID | SV39_READ | SV39_WRITE | SV39_USER;
-const KERNEL_RWX: usize = SV39_VALID | SV39_READ | SV39_WRITE;
+const USER_RW: hal::Leaf = hal::Leaf {
+    pa: 0,
+    valid: true,
+    read: true,
+    write: true,
+    user: true,
+    exec: false,
+};
+const KERNEL_RWX: hal::Leaf = hal::Leaf {
+    user: false,
+    exec: true,
+    ..USER_RW
+};
 
 #[test]
 fn retired_page_fails_in_window_revalidation() {
@@ -67,14 +77,15 @@ fn release_waits_for_an_open_window() {
 fn no_commit_write_lands_after_release() {
     for _ in 0..200 {
         let seqs = Arc::new(WindowSeqs::<2>::new());
-        let pte = Arc::new(AtomicUsize::new(USER_RW));
+        // The leaf: USER_RW while live, KERNEL_RWX once retired.
+        let user = Arc::new(AtomicBool::new(true));
         let started = Arc::new(AtomicBool::new(false));
         let freed = Arc::new(AtomicBool::new(false));
         let late_write = Arc::new(AtomicBool::new(false));
         let commit = {
-            let (seqs, pte, started, freed, late_write) = (
+            let (seqs, user, started, freed, late_write) = (
                 Arc::clone(&seqs),
-                Arc::clone(&pte),
+                Arc::clone(&user),
                 Arc::clone(&started),
                 Arc::clone(&freed),
                 Arc::clone(&late_write),
@@ -82,7 +93,13 @@ fn no_commit_write_lands_after_release() {
             thread::spawn(move || loop {
                 let window = seqs.open(0).expect("hart 0");
                 started.store(true, Ordering::SeqCst);
-                let leaf = |_page: usize| Some(pte.load(Ordering::Relaxed));
+                let leaf = |_page: usize| {
+                    Some(if user.load(Ordering::Relaxed) {
+                        USER_RW
+                    } else {
+                        KERNEL_RWX
+                    })
+                };
                 if sas_span_live(0x8000, 16, Direction::ToUser, leaf).is_err() {
                     return;
                 }
@@ -100,7 +117,7 @@ fn no_commit_write_lands_after_release() {
         while !started.load(Ordering::SeqCst) {
             core::hint::spin_loop();
         }
-        pte.store(KERNEL_RWX, Ordering::Relaxed);
+        user.store(false, Ordering::Relaxed);
         seqs.wait_quiescent();
         freed.store(true, Ordering::SeqCst);
         commit.join().expect("commit");

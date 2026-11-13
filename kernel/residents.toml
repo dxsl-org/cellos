@@ -470,11 +470,11 @@
 "kernel/src/task/user_copy/copy.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy/guard.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy/mod.rs" = { category = "A", owner = "task" }
+"kernel/src/task/user_copy/page_probe.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy/range.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy/sas-lease-tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/user_copy/sas-lease.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy/scatter.rs" = { category = "A", owner = "task" }
-"kernel/src/task/user_copy/sv39_probe.rs" = { category = "A", owner = "task" }
 "kernel/src/task/user_copy_tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/user_hello.rs" = { category = "test", owner = "task" }
 "kernel/src/task/user_out.rs" = { category = "A", owner = "task" }

@@ -32,17 +32,17 @@
 //! defense-in-depth backstop for that invariant).
 //!
 //! Layout: [`range`] owns the validated slice/view vocabulary,
-//! [`sv39_probe`] owns ledger + live-PTE validation, [`copy`] orchestrates
+//! [`page_probe`] owns ledger + live-leaf validation, [`copy`] orchestrates
 //! the two-pass transaction, and [`guard`] arms the per-hart recoverable
 //! fault window around every byte movement.
 
 mod copy;
 mod guard;
+pub(crate) mod page_probe;
 mod range;
 #[path = "sas-lease.rs"]
 mod sas_lease;
 mod scatter;
-pub(crate) mod sv39_probe;
 
 pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 #[allow(unused_imports)]
@@ -62,12 +62,12 @@ pub(crate) use guard::forced_guard_fault_recovers_for_test;
     feature = "test-hooks",
     target_arch = "riscv64"
 ))]
-pub(crate) use range::CopyError;
-pub(crate) use range::{CopyView, UserReadSlice, UserWriteSlice};
-pub(crate) use scatter::copy_to_user_scatter;
+pub(crate) use page_probe::stage_domain_for_test;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
     target_arch = "riscv64"
 ))]
-pub(crate) use sv39_probe::stage_domain_for_test;
+pub(crate) use range::CopyError;
+pub(crate) use range::{CopyView, UserReadSlice, UserWriteSlice};
+pub(crate) use scatter::copy_to_user_scatter;

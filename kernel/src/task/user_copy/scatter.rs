@@ -1,8 +1,8 @@
 //! Multi-destination scatter transaction orchestration.
 
+use super::page_probe::{probe_sas, stage_domain};
 use super::range::{CopyError, CopyView, Direction, UserWriteSlice};
 use super::sas_lease::commit_sas;
-use super::sv39_probe::{probe_sas, stage_domain};
 use alloc::vec::Vec;
 
 /// Checked copy from kernel buffers into multiple user destinations.
