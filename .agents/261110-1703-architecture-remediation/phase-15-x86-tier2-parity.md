@@ -1,7 +1,7 @@
 ---
 phase: 15
 title: "x86-64 Tier-2 parity"
-status: pending
+status: in-progress
 priority: P1
 effort: "7–10d"
 dependencies: [14]
