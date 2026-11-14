@@ -122,7 +122,7 @@ impl ElfLoader {
     ) -> ViResult<alloc::vec::Vec<LoadedPage>> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
         // Record each mapped page so the cell's segment frames can be reclaimed
-        // when it dies (see task::stack::CellSegments) — otherwise they leak — and
+        // when it dies (see memory::cell_segments::CellSegments) — otherwise they leak — and
         // so the post-relocation W^X pass knows each page's target permissions.
         //
         // Reserve the whole bound before mapping anything: pushing grows through
@@ -398,8 +398,9 @@ impl ElfLoader {
     /// rejected ELF leaves its already-mapped pages resident, which both leaks
     /// the frames and poisons the VA-collision guard for the next spawn at the
     /// same base. The batch frees them only after one shared flush covering
-    /// the leaves and the detached tables confirms (census P10: the tables'
-    /// remote paging-structure caches are covered too, not only this hart's).
+    /// the leaves and the detached tables confirms. A detached table makes
+    /// that flush global (census P10: every hart's cached walks through the
+    /// table are dropped, not only this hart's and not only the leaf).
     pub(crate) fn unwind(mapped: &[LoadedPage], batch: &mut crate::memory::frame_run::Batch) {
         use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
         for page in mapped {
@@ -407,7 +408,7 @@ impl ElfLoader {
             batch.invalidate(page.va);
         }
         for page in mapped {
-            crate::memory::paging::prune_empty_tables(page.va).retire_into(batch, page.va);
+            crate::memory::paging::prune_empty_tables(page.va).retire_into(batch);
             batch.retire(FrameRun::unpublished(
                 page.frame,
                 1,

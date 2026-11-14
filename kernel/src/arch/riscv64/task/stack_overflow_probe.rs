@@ -1,8 +1,9 @@
 #![cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 //! U-mode proof that a downward stack overflow traps without stopping boot.
 
+use crate::memory::cell_segments::CellSegments;
 use crate::memory::paging::{self, Flags};
-use crate::task::stack::{CellSegments, Stack};
+use crate::task::stack::Stack;
 use crate::task::{SCHEDULER, TRAP_FRAME_SIZE};
 use types::{CellId, VAddr, ViError};
 

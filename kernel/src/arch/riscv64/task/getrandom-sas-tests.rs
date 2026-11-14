@@ -72,18 +72,20 @@ pub(crate) fn run_fixture() -> bool {
     let unowned_ptr = read_only_base + PAGE_SIZE;
     let mut caller = Box::new(Task::new(CALLER, CellId(91_301), "rng-caller", Vec::new()));
     caller.user_stack = Some(caller_stack);
-    caller.segment_mem = Some(crate::task::stack::CellSegments::with_writable_pages(
-        vec![
-            (cross_segment_base, cross_segment_base),
-            (
-                cross_segment_base + PAGE_SIZE,
-                cross_segment_base + PAGE_SIZE,
-            ),
-            (read_only_base, read_only_base),
-        ],
-        vec![cross_segment_base, cross_segment_base + PAGE_SIZE],
-        0,
-    ));
+    caller.segment_mem = Some(
+        crate::memory::cell_segments::CellSegments::with_writable_pages(
+            vec![
+                (cross_segment_base, cross_segment_base),
+                (
+                    cross_segment_base + PAGE_SIZE,
+                    cross_segment_base + PAGE_SIZE,
+                ),
+                (read_only_base, read_only_base),
+            ],
+            vec![cross_segment_base, cross_segment_base + PAGE_SIZE],
+            0,
+        ),
+    );
     let caller_generation = caller.cell_generation;
     let mut sibling = Box::new(Task::new(
         SIBLING,

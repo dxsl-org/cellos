@@ -14,7 +14,7 @@ pub(crate) fn observe_schedule_attempt() {
     harness::observe_schedule_attempt();
 }
 
-pub(crate) fn observe_unpublished_segments(segments: &crate::task::stack::CellSegments) {
+pub(crate) fn observe_unpublished_segments(segments: &crate::memory::cell_segments::CellSegments) {
     probe::observe_unpublished(segments);
 }
 

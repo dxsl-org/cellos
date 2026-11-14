@@ -330,6 +330,7 @@
 "kernel/src/memory/address_space.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/address_space_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/cell_quota.rs" = { category = "A", owner = "memory" }
+"kernel/src/memory/cell_segments.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/deferred_release.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/domain-supervisor-registry.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/frame.rs" = { category = "A", owner = "memory" }

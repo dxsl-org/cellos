@@ -665,7 +665,7 @@ fn map_page_unflushed(
         let mut reclaimed = ReclaimedPageTables::new();
         table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
         drop(root_lock);
-        reclaimed.retire_into(batch, vaddr);
+        reclaimed.retire_into(batch);
         return Err(PageTableError::OutOfMemory);
     }
     if replaced {
@@ -991,13 +991,17 @@ impl ReclaimedPageTables {
         self.len == 0
     }
 
-    /// Hand the detached tables to `batch`, which frees them only after the
-    /// flush of `vaddr` (the address whose walk they served) confirms.
-    pub fn retire_into(self, batch: &mut Batch, vaddr: VAddr) {
+    /// Hand the detached tables to `batch`, which frees them only after a
+    /// **global** flush confirms (census P10). A per-address flush is not
+    /// enough for a detached table: RV64 `SFENCE.VMA` with an address orders
+    /// only the leaf entry for it, not the non-leaf entries a walk cached. x86
+    /// flushes everything for a shared invalidation anyway, and the batch
+    /// issues one flush per operation however many tables it detaches.
+    pub fn retire_into(self, batch: &mut Batch) {
         if self.len == 0 {
             return;
         }
-        batch.invalidate(vaddr);
+        batch.invalidate_all();
         for frame in self.frames[..self.len].iter().copied() {
             batch.retire(crate::memory::frame_run::FrameRun::unpublished(
                 frame,

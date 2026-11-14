@@ -1229,7 +1229,7 @@ impl AddressSpace {
 pub fn create_cell_domain(
     kstack: &crate::task::stack::Stack,
     ustack: &crate::task::stack::Stack,
-    segments: &crate::task::stack::CellSegments,
+    segments: &crate::memory::cell_segments::CellSegments,
     #[cfg(feature = "p01-trace")] owner: crate::p01_measurement::Owner,
 ) -> Result<Arc<AddressSpace>, AddressSpaceError> {
     let mut builder = AddressSpaceBuilder::new();

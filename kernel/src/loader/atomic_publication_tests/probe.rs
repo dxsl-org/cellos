@@ -18,7 +18,7 @@ pub(super) fn arm_ap02() {
 
 /// Snapshot unpublished segment translations while their rollback owner remains
 /// live.
-pub(super) fn observe_unpublished(segments: &crate::task::stack::CellSegments) {
+pub(super) fn observe_unpublished(segments: &crate::memory::cell_segments::CellSegments) {
     observe_pages(segments.unpublished_pages().iter().copied());
 }
 

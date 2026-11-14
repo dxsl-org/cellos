@@ -5,6 +5,8 @@ use crate::*;
 #[cfg(all(feature = "native-domains", cellos_wide))]
 pub mod address_space;
 pub mod cell_quota;
+/// A cell image's segment frames and VA slot, released as one operation.
+pub mod cell_segments;
 /// Bounded deferred release of page-table frames whose tag invalidation was not
 /// confirmed synchronously, plus the reaper that completes them.
 #[cfg(all(feature = "native-domains", cellos_wide))]

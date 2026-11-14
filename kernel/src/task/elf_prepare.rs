@@ -11,7 +11,7 @@ pub struct PreparedElfTask {
     allowed_drivers: Vec<usize>,
     kstack: super::stack::Stack,
     ustack: super::stack::Stack,
-    segments: super::stack::CellSegments,
+    segments: crate::memory::cell_segments::CellSegments,
     entry: usize,
     load_base: usize,
     /// Entry stack pointer: the Cell initial stack block (CP1 AX-2) on 64-bit
@@ -74,7 +74,7 @@ impl PreparationVa {
         let slot = self.0.get();
         if slot != 0
             && batch.hold_va(crate::memory::frame_run::VaHold {
-                release: super::stack::release_cell_va,
+                release: crate::memory::cell_segments::release_cell_va,
                 start: slot,
                 end: slot,
             })
@@ -220,9 +220,12 @@ pub fn prepare_elf_task(
         crate::memory::heap::p01_owner::adopt_vec(&mapped_pages);
         crate::memory::heap::p01_owner::adopt_vec(&writable_pages);
     }
-    let segments =
-        super::stack::CellSegments::with_writable_pages(mapped_pages, writable_pages, slot_base)
-            .with_guarded_code(cfi.guarded_code);
+    let segments = crate::memory::cell_segments::CellSegments::with_writable_pages(
+        mapped_pages,
+        writable_pages,
+        slot_base,
+    )
+    .with_guarded_code(cfi.guarded_code);
     // Constructor is infallible: the segment owner now exclusively owns both
     // frame reclamation and PIE release, including every later failure edge.
     mapping_rollback.0 = None;

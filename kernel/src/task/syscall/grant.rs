@@ -1320,7 +1320,7 @@ fn prune_unpublished_tables(
     const PAGE_SIZE: usize = 4096;
     for i in 0..n_pages {
         let f = base + i * PAGE_SIZE;
-        crate::memory::paging::prune_empty_tables(f).retire_into(batch, f);
+        crate::memory::paging::prune_empty_tables(f).retire_into(batch);
     }
 }
 

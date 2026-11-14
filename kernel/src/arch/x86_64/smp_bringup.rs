@@ -680,9 +680,10 @@ pub(super) fn x86_silent_cpu_fixture_secondary() {
 
 #[cfg(feature = "test-hooks")]
 pub(super) fn x86_silent_cpu_fixture_primary() {
+    use crate::memory::cell_segments::CellSegments;
     use crate::memory::frame_run::{Batch, FlushOutcome, UnconfirmedCause, PENDING};
     use crate::memory::paging::{Flags, PAGE_SIZE};
-    use crate::task::stack::{CellSegments, Stack};
+    use crate::task::stack::Stack;
     fn fail(why: &str) -> ! {
         panic!("S22-X86-QUARANTINE-SILENT-CPU: FAIL {why}")
     }
