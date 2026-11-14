@@ -1,8 +1,10 @@
-//! Domain grant deferred-revoke witness (Phase 15).
+//! Domain grant negatives with fault-injection controls, and the deferred
+//! revoke witness (Phase 15).
 //!
 //! The body is architecture-neutral — it drives the production `handle_syscall`
-//! entry points with real `TaskAddressSpace::Domain` tasks — and is wired into
-//! the x86_64 boot fixtures, the lane that ports the RV64/AArch64 grant suite.
+//! entry points and the domain copy commit with real `TaskAddressSpace::Domain`
+//! tasks — and is wired into the x86_64 boot fixtures, the lane that ports the
+//! RV64/AArch64 grant suite.
 //!
 //! **Deferred revoke** (`{ARCH_TAG}-GRANT-DEFERRED`): while the tag
 //! acknowledgement is withheld, `GrantFree` must fail closed — the record stays
@@ -10,6 +12,14 @@
 //! local tag invalidation (INVPCID type 1, or a CR3 reload without PCID, on x86)
 //! has run. Once the acknowledgement resumes, the owner's exit hands the row to
 //! the deferred sweep, which completes the revoke and frees the frames.
+//!
+//! **Negatives** (`{ARCH_TAG}-GRANT-NEG-<CASE>`): revoke while mapped, receiver
+//! death, stale grant id, cross-domain forgery and fault during copy. Each runs
+//! as built and must report `PASS`; then its CONTROL disables exactly the one
+//! check the case guards ([`GuardedCheck`]) and the same assertions must catch
+//! the violation: `{ARCH_TAG}-GRANT-CONTROL-<CASE>: CAUGHT (<what failed>)`. A
+//! control that still passes reports `MISSED`, and the terminal
+//! `{ARCH_TAG}-GRANT-NEG` fails.
 //!
 //! The withheld window is bracketed by `[grant-neg] withhold-ack window OPEN` /
 //! `CLOSED`: the tag invalidations it reports unconfirmed are its purpose, and
@@ -22,9 +32,11 @@
 //! acknowledgements.
 
 use super::domain_grant::{gate_hold, ARCH_TAG};
+use super::fixture_controls::{GuardedCheck, DISABLED};
 use super::syscall::{handle_syscall, Syscall, SyscallError};
 use super::tcb::TaskAddressSpace;
 use super::thread_cap_selftest::{insert, mk_task, remove};
+use super::user_copy::{stage_domain_for_test, CopyError};
 use crate::memory::address_space::{AddressSpace, AddressSpaceBuilder, MappingKind};
 use crate::memory::deferred_release;
 use crate::memory::paging::{Flags, PAGE_SIZE};
@@ -37,22 +49,88 @@ use types::GrantPerm;
 // return.
 const OWNER_TID: usize = 9801;
 const RECEIVER_TID: usize = 9802;
+const THIRD_TID: usize = 9803;
+const SUCCESSOR_TID: usize = 9804;
 const OWNER_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 30) as u64;
 const RECEIVER_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 31) as u64;
+const THIRD_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 32) as u64;
+const SUCCESSOR_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 33) as u64;
 
 /// Private-root VAs for each task's own page, above every lane machine's RAM
 /// (grant pages are published at VA = PA) and below `hal::paging::USER_LIMIT`.
 const OWNER_VA: usize = 0x30_1000_0000;
 const RECEIVER_VA: usize = 0x30_1400_0000;
+const THIRD_VA: usize = 0x30_1800_0000;
+const SUCCESSOR_VA: usize = 0x30_1c00_0000;
+/// The copy fixture's own private page.
+const COPY_VA: usize = 0x30_2000_0000;
 
 const GRANT_SIZE: usize = PAGE_SIZE;
+const SENTINEL: u8 = 0xA5;
 /// How long the release half waits for the reaper once the acknowledgement
 /// resumes. Generous: it bounds a fixture, not a syscall.
 const RELEASE_BUDGET_NS: u64 = 2_000_000_000;
 
-/// The domain tasks the fixture runs against.
+/// The domain tasks every case runs against.
 struct Fixture {
+    owner: Arc<AddressSpace>,
     receiver: Arc<AddressSpace>,
+    third: Arc<AddressSpace>,
+    successor: Arc<AddressSpace>,
+}
+
+/// A case's verdict: `Err` names the first property that did not hold.
+type Verdict = Result<(), &'static str>;
+
+/// One negative: its marker, the check its CONTROL disables, and its body.
+struct Case {
+    name: &'static str,
+    check: GuardedCheck,
+    run: fn(&Fixture) -> Verdict,
+}
+
+const CASES: [Case; 5] = [
+    Case {
+        name: "REVOKE-MAPPED",
+        check: GuardedCheck::RevokeDrainsReceiver,
+        run: revoke_while_mapped,
+    },
+    Case {
+        name: "RECEIVER-DEATH",
+        check: GuardedCheck::DeathDrainsReceiver,
+        run: receiver_death,
+    },
+    Case {
+        name: "STALE-ID",
+        check: GuardedCheck::SliceNeedsLive,
+        run: stale_grant_id,
+    },
+    Case {
+        name: "FORGERY",
+        check: GuardedCheck::SliceNeedsGrantee,
+        run: cross_domain_forgery,
+    },
+    Case {
+        name: "COPY-FAULT",
+        check: GuardedCheck::CommitRewalksPages,
+        run: fault_during_copy,
+    },
+];
+
+/// Disables one check for the lifetime of the value (one CONTROL run).
+struct Control(GuardedCheck);
+
+impl Control {
+    fn disable(check: GuardedCheck) -> Self {
+        DISABLED.fetch_or(check.bit(), Ordering::AcqRel);
+        Self(check)
+    }
+}
+
+impl Drop for Control {
+    fn drop(&mut self) {
+        DISABLED.fetch_and(!self.0.bit(), Ordering::AcqRel);
+    }
 }
 
 /// Withholds every tag acknowledgement for the lifetime of the value, with the
@@ -236,28 +314,199 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
     seen
 }
 
-/// Run the deferred revoke, then leave the scheduler and grant tables as they
-/// were found and report the longest gate hold of the boot's grant fixtures.
+/// Drop a receiver mapping a CONTROL run left behind in a synthetic root, so
+/// the next case can publish at the same address. The root never runs on any
+/// CPU, so the stale PTE was never reachable; this restores bookkeeping only.
+/// `unmap_grant_page` confirms the tag and releases the address itself.
+fn scrub(space: &AddressSpace, va: usize) {
+    let _ = space.unmap_grant_page(va);
+}
+
+/// Complete a revoke the withheld window left `Revoking`, retrying `GrantFree`
+/// while the reaper confirms the tag.
+fn finish_deferred_free(grant_id: usize) -> bool {
+    within_release_budget(|| grant_free(OWNER_TID, grant_id).is_ok())
+}
+
+// ── Negatives ────────────────────────────────────────────────────────────────
+
+/// Revoke while mapped: `GrantFree` of a grant a live receiver has mapped must
+/// remove the receiver PTE before the frames leave the record.
+fn revoke_while_mapped(fx: &Fixture) -> Verdict {
+    let base = shared_grant(RECEIVER_TID, &fx.receiver, GrantPerm::ReadWrite).ok_or("setup")?;
+    let freed = grant_free(OWNER_TID, base).is_ok();
+    let receiver_gone = !maps(&fx.receiver, base);
+    if !receiver_gone {
+        scrub(&fx.receiver, base);
+    }
+    if !freed {
+        return Err("free-refused");
+    }
+    if !receiver_gone {
+        return Err("receiver-mapping-survived-revoke");
+    }
+    if grant_slice(RECEIVER_TID, base).is_some() {
+        return Err("freed-id-resolved");
+    }
+    Ok(())
+}
+
+/// Receiver death: the dying receiver's PTE is drained, and the owner keeps a
+/// live, re-shareable grant.
+fn receiver_death(fx: &Fixture) -> Verdict {
+    let base = shared_grant(RECEIVER_TID, &fx.receiver, GrantPerm::ReadWrite).ok_or("setup")?;
+    super::syscall::reap_grants_for_task(RECEIVER_TID);
+    let receiver_gone = !maps(&fx.receiver, base);
+    let owner_kept = grant_slice(OWNER_TID, base) == Some(base) && maps(&fx.owner, base);
+    // A re-share to a successor drains whatever the death left behind.
+    let reshared = grant_share(OWNER_TID, base, SUCCESSOR_TID, GrantPerm::ReadOnly)
+        && grant_slice(SUCCESSOR_TID, base) == Some(base);
+    let freed = grant_free(OWNER_TID, base).is_ok();
+    if !receiver_gone {
+        return Err("dead-receiver-mapping-survived");
+    }
+    if !owner_kept {
+        return Err("owner-lost-grant");
+    }
+    if !reshared {
+        return Err("reshare-refused");
+    }
+    if !freed || maps(&fx.successor, base) {
+        return Err("teardown");
+    }
+    Ok(())
+}
+
+/// Stale grant id: a record whose revoke is still pending (`Revoking`) is
+/// stale for every caller — the owner's own slice, the receiver's slice and a
+/// new share all refuse it.
+fn stale_grant_id(fx: &Fixture) -> Verdict {
+    let base = shared_grant(RECEIVER_TID, &fx.receiver, GrantPerm::ReadOnly).ok_or("setup")?;
+    let (deferred, owner_refused, receiver_refused, share_refused) = {
+        let _window = WithheldAck::open();
+        let deferred = grant_free(OWNER_TID, base).is_err();
+        (
+            deferred,
+            grant_slice(OWNER_TID, base).is_none(),
+            grant_slice(RECEIVER_TID, base).is_none(),
+            !grant_share(OWNER_TID, base, RECEIVER_TID, GrantPerm::ReadWrite),
+        )
+    };
+    let freed = finish_deferred_free(base);
+    if !deferred {
+        return Err("free-not-deferred");
+    }
+    if !owner_refused {
+        return Err("owner-resolved-revoking-record");
+    }
+    if !receiver_refused {
+        return Err("receiver-resolved-revoking-record");
+    }
+    if !share_refused {
+        return Err("revoking-record-reshared");
+    }
+    if !freed || maps(&fx.receiver, base) {
+        return Err("deferred-free-incomplete");
+    }
+    Ok(())
+}
+
+/// Cross-domain forgery: a third domain that the grant was never shared to
+/// cannot resolve it, and gains no mapping.
+fn cross_domain_forgery(fx: &Fixture) -> Verdict {
+    let base = shared_grant(RECEIVER_TID, &fx.receiver, GrantPerm::ReadOnly).ok_or("setup")?;
+    let refused = grant_slice(THIRD_TID, base).is_none();
+    let unmapped = !maps(&fx.third, base);
+    let freed = grant_free(OWNER_TID, base).is_ok();
+    if !refused || !unmapped {
+        return Err("third-domain-resolved-grant");
+    }
+    if !freed || maps(&fx.third, base) || maps(&fx.receiver, base) {
+        return Err("teardown");
+    }
+    Ok(())
+}
+
+/// Fault during copy: a page revoked between the probe and the commit of a
+/// domain copy fails the commit with the recoverable error, and no byte moves.
+fn fault_during_copy(_fx: &Fixture) -> Verdict {
+    let space = space(COPY_VA).ok_or("setup")?;
+    let staged = stage_domain_for_test(&space, COPY_VA, 64, false).map_err(|_| "stage")?;
+    space
+        .force_unmap_without_drain_for_test(COPY_VA)
+        .map_err(|_| "injection")?;
+    let mut dst = [SENTINEL; 64];
+    let result = staged.commit(dst.as_mut_ptr());
+    if result != Err(CopyError::InvalidAddress) {
+        return Err("commit-accepted-revoked-page");
+    }
+    if dst.iter().any(|&byte| byte != SENTINEL) {
+        return Err("bytes-moved");
+    }
+    Ok(())
+}
+
+/// Run one case as built and as its CONTROL; `true` when both behaved.
+fn run_case(fx: &Fixture, case: &Case) -> bool {
+    let built = (case.run)(fx);
+    match built {
+        Ok(()) => log::info!("{ARCH_TAG}-GRANT-NEG-{}: PASS", case.name),
+        Err(why) => log::error!("{ARCH_TAG}-GRANT-NEG-{}: FAIL {why}", case.name),
+    }
+    let control = {
+        let _disabled = Control::disable(case.check);
+        (case.run)(fx)
+    };
+    match control {
+        Err(why) => {
+            log::info!(
+                "{ARCH_TAG}-GRANT-CONTROL-{}: CAUGHT ({:?} disabled: {why})",
+                case.name,
+                case.check
+            );
+        }
+        Ok(()) => {
+            log::error!(
+                "{ARCH_TAG}-GRANT-CONTROL-{}: MISSED ({:?} disabled, the case still passed)",
+                case.name,
+                case.check
+            );
+        }
+    }
+    built.is_ok() && control.is_err()
+}
+
+/// Run the deferred revoke and every negative with its CONTROL, leave the
+/// scheduler and grant tables as they were found, and report the longest gate
+/// hold of the boot's grant fixtures.
 pub(crate) fn run_primary() {
-    let (Some(owner), Some(receiver)) = (space(OWNER_VA), space(RECEIVER_VA)) else {
-        log::error!("{ARCH_TAG}-GRANT-DEFERRED: FAIL fixture-setup");
+    let (Some(owner), Some(receiver), Some(third), Some(successor)) = (
+        space(OWNER_VA),
+        space(RECEIVER_VA),
+        space(THIRD_VA),
+        space(SUCCESSOR_VA),
+    ) else {
+        log::error!("{ARCH_TAG}-GRANT-NEG: FAIL fixture-setup");
         return;
     };
     for (tid, cell, root) in [
         (OWNER_TID, OWNER_CELL, &owner),
         (RECEIVER_TID, RECEIVER_CELL, &receiver),
+        (THIRD_TID, THIRD_CELL, &third),
+        (SUCCESSOR_TID, SUCCESSOR_CELL, &successor),
     ] {
         let mut task = mk_task(tid, cell);
         task.address_space = TaskAddressSpace::Domain(Arc::clone(root));
         insert(task);
     }
-    let fx = Fixture { receiver };
+    let fx = Fixture {
+        owner,
+        receiver,
+        third,
+        successor,
+    };
 
     let deferred = deferred_revoke(&fx);
-    super::syscall::reclaim_owned_grants(OWNER_TID);
-    for tid in [OWNER_TID, RECEIVER_TID] {
-        remove(tid);
-    }
     if deferred.all() {
         log::info!("{ARCH_TAG}-GRANT-DEFERRED: PASS");
     } else {
@@ -272,6 +521,20 @@ pub(crate) fn run_primary() {
             deferred.swept,
             deferred.released
         );
+    }
+    let mut ok = deferred.all();
+    for case in &CASES {
+        ok &= run_case(&fx, case);
+    }
+
+    super::syscall::reclaim_owned_grants(OWNER_TID);
+    for tid in [OWNER_TID, RECEIVER_TID, THIRD_TID, SUCCESSOR_TID] {
+        remove(tid);
+    }
+    if ok {
+        log::info!("{ARCH_TAG}-GRANT-NEG: PASS");
+    } else {
+        log::error!("{ARCH_TAG}-GRANT-NEG: FAIL");
     }
     log::info!(
         "[grant] gate-held max publish={}us drain={}us cpus={}",

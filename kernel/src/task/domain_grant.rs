@@ -333,7 +333,17 @@ impl DomainGrant {
         if self.lifecycle.begin_revoke() == DomainGrantState::Revoked {
             return Ok(());
         }
-        self.drain_receiver()?;
+        // Test-hooks CONTROL (`GuardedCheck::RevokeDrainsReceiver`): the
+        // revoke-while-mapped fixture must catch a revoke that skips this.
+        #[cfg(feature = "test-hooks")]
+        let drain = !super::fixture_controls::disabled(
+            super::fixture_controls::GuardedCheck::RevokeDrainsReceiver,
+        );
+        #[cfg(not(feature = "test-hooks"))]
+        let drain = true;
+        if drain {
+            self.drain_receiver()?;
+        }
         self.drain_owner()?;
         self.lifecycle.finish_revoke();
         Ok(())

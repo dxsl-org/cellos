@@ -809,7 +809,15 @@ fn domain_grant_slice_row(
         // mapping made here could not be revoked from the SAS side.
         return Ok(usize::MAX);
     };
-    if !record.owner_is_live() || record.state() != super::domain_grant::DomainGrantState::Live {
+    let live = record.state() == super::domain_grant::DomainGrantState::Live;
+    // Test-hooks CONTROL (`GuardedCheck::SliceNeedsLive`): the stale-grant-id
+    // fixture must catch a slice that resolves a record no longer `Live`.
+    #[cfg(feature = "test-hooks")]
+    let live = live
+        || crate::task::fixture_controls::disabled(
+            crate::task::fixture_controls::GuardedCheck::SliceNeedsLive,
+        );
+    if !record.owner_is_live() || !live {
         return Ok(usize::MAX);
     }
     // The owner resolves its own backing without a second mapping: the owner
@@ -826,7 +834,15 @@ fn domain_grant_slice_row(
     let Some((shared_tid, perm)) = shared_to else {
         return Ok(usize::MAX);
     };
-    if shared_tid != caller_id {
+    let grantee = shared_tid == caller_id;
+    // Test-hooks CONTROL (`GuardedCheck::SliceNeedsGrantee`): the forgery
+    // fixture must catch a slice resolved for a domain the grant never named.
+    #[cfg(feature = "test-hooks")]
+    let grantee = grantee
+        || crate::task::fixture_controls::disabled(
+            crate::task::fixture_controls::GuardedCheck::SliceNeedsGrantee,
+        );
+    if !grantee {
         return Ok(usize::MAX);
     }
     let Some(rights) = super::domain_grant::rights_for(perm) else {

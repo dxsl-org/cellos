@@ -13,7 +13,12 @@
 #   * teardown with frames released and nothing quarantined;
 #   * shell recovery after the fault: the image's shell is interactive, so a
 #     command typed *after* the containment line must be answered with a new
-#     prompt.
+#     prompt;
+#   * the Phase-15 domain grant fixtures: the kernel lifecycle and capability
+#     fixtures (`S22-X86-GRANT-REVOKE`, `-GATE`), the deferred revoke
+#     (`-DEFERRED`), and the five negatives with their fault-injection controls
+#     (`-NEG-<case>: PASS`, `-CONTROL-<case>: CAUGHT`); a control that reports
+#     `MISSED` fails the lane.
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -274,6 +279,17 @@ REQUIRED_MARKERS=(
     "grant lifecycle fixture:::S22-X86-GRANT-REVOKE: PASS"
     "grant capability gate:::S22-X86-GRANT-GATE: PASS"
     "grant deferred revoke:::S22-X86-GRANT-DEFERRED: PASS"
+    "negative revoke while mapped:::S22-X86-GRANT-NEG-REVOKE-MAPPED: PASS"
+    "negative receiver death:::S22-X86-GRANT-NEG-RECEIVER-DEATH: PASS"
+    "negative stale grant id:::S22-X86-GRANT-NEG-STALE-ID: PASS"
+    "negative cross-domain forgery:::S22-X86-GRANT-NEG-FORGERY: PASS"
+    "negative fault during copy:::S22-X86-GRANT-NEG-COPY-FAULT: PASS"
+    "control revoke while mapped:::S22-X86-GRANT-CONTROL-REVOKE-MAPPED: CAUGHT"
+    "control receiver death:::S22-X86-GRANT-CONTROL-RECEIVER-DEATH: CAUGHT"
+    "control stale grant id:::S22-X86-GRANT-CONTROL-STALE-ID: CAUGHT"
+    "control cross-domain forgery:::S22-X86-GRANT-CONTROL-FORGERY: CAUGHT"
+    "control fault during copy:::S22-X86-GRANT-CONTROL-COPY-FAULT: CAUGHT"
+    "grant negatives:::S22-X86-GRANT-NEG: PASS"
     "grant gate-held measurement:::[grant] gate-held max publish="
     "interactive shell:::Cellos > "
 )
@@ -316,6 +332,16 @@ fi
 
 bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"
 
+# --- Grant fixture negatives -------------------------------------------------
+# No x86 fixture may report FAIL, and no control may report MISSED: a control
+# whose case still passed with its check disabled proves nothing about that
+# check.
+if grep -aqE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG"; then
+    echo "FAIL: an x86 fixture reported a failure or a control missed its violation:" >&2
+    grep -aE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG" >&2
+    exit 1
+fi
+
 # --- Cross-tier exchange negatives -------------------------------------------
 # The fixture's own failure marker must be absent, and no leg may report that a
 # refusal was accepted: those are exactly the outcomes the exchange exists to rule
@@ -337,4 +363,5 @@ done
 echo "PCID decision: $DECISION"
 echo "Domain live:   $LIVE"
 grep -a "S22-X86-DOMAIN-TEARDOWN\|\[selftest\] DOMAIN-FRAME-RELEASE\|\[domain\] admitted cell" "$LOG" || true
+grep -a "S22-X86-GRANT-CONTROL-\|\[grant\] gate-held max" "$LOG" || true
 echo "PASS: x86_64 Tier-2 domain-entry lane ($LABEL) — every marker present"

@@ -138,12 +138,22 @@ impl PinnedCopy<'_> {
             let chunk = hi - lo;
             // SAFETY: the reader pin keeps the private root and its tables
             // live until this commit returns.
-            let Some(leaf) = (unsafe { crate::hal::paging::leaf(root_pa, page) }) else {
+            let leaf = unsafe { crate::hal::paging::leaf(root_pa, page) }
+                .filter(|leaf| user_leaf_allows(leaf, self.direction));
+            let Some(leaf) = leaf else {
+                // Test-hooks CONTROL (`GuardedCheck::CommitRewalksPages`): the
+                // page is skipped instead of refused, so the commit reports a
+                // copy that never happened; the fault-during-copy fixture must
+                // catch that.
+                #[cfg(feature = "test-hooks")]
+                if crate::task::fixture_controls::disabled(
+                    crate::task::fixture_controls::GuardedCheck::CommitRewalksPages,
+                ) {
+                    page += PAGE_SIZE;
+                    continue;
+                }
                 return Err(CopyError::InvalidAddress);
             };
-            if !user_leaf_allows(&leaf, self.direction) {
-                return Err(CopyError::InvalidAddress);
-            }
             let offset = lo - page;
             let alias = phys_to_virt(leaf.pa + offset);
             let (src, dst): (*const u8, *mut u8) = if self.direction == Direction::FromUser {

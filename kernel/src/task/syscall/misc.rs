@@ -61,6 +61,14 @@ pub(super) fn new_domain_record(
 /// Drop the receiver half of a record left unshared by receiver death.
 #[cfg(cellos_domain_grants)]
 pub(super) fn drain_domain_receiver(record: &DomainRecord) {
+    // Test-hooks CONTROL (`GuardedCheck::DeathDrainsReceiver`): the
+    // receiver-death fixture must catch a death that skips this drain.
+    #[cfg(feature = "test-hooks")]
+    if crate::task::fixture_controls::disabled(
+        crate::task::fixture_controls::GuardedCheck::DeathDrainsReceiver,
+    ) {
+        return;
+    }
     if record.drain_receiver().is_err() {
         log::warn!(
             "[grant] receiver exit: domain receiver PTE invalidation unacknowledged; record keeps \

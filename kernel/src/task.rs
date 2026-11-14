@@ -18,6 +18,10 @@ pub(crate) mod domain_grant;
 #[path = "task/domain-grant-gate.rs"]
 pub(crate) mod domain_grant_gate;
 mod elf_prepare;
+/// Test-hooks switches that disable one guarded grant/copy check for a
+/// negative fixture's CONTROL run; production kernels have none.
+#[cfg(all(feature = "test-hooks", feature = "native-domains", cellos_wide))]
+pub(crate) mod fixture_controls;
 /// Phase-01 containment witness for domain-backed zero-copy grants, and the
 /// phase-03 capability witness on every architecture whose lifecycle is open.
 #[cfg(all(cellos_domain_grants, feature = "test-hooks"))]

@@ -425,9 +425,11 @@
 "kernel/src/task/domain-grant-gate.rs" = { category = "B", owner = "task" }
 "kernel/src/task/domain_grant.rs" = { category = "B", owner = "task" }
 "kernel/src/task/elf_prepare.rs" = { category = "B", owner = "task" }
+"kernel/src/task/fixture_controls.rs" = { category = "test", owner = "task" }
 "kernel/src/task/gpu-scanout-tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/gpu-scanout.rs" = { category = "exception", owner = "task", target = "GPU Driver Cell scanout service (Spec 15 §3.1)" }
 "kernel/src/task/grant_gate_selftest.rs" = { category = "test", owner = "task" }
+"kernel/src/task/grant_negative_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/grant_reclaim_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/ipc_guardrail_selftest.rs" = { category = "test", owner = "task" }
 "kernel/src/task/ipc_pending_selftest.rs" = { category = "test", owner = "task" }

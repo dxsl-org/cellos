@@ -125,7 +125,7 @@ pub(super) fn sas_span_live(
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "x86_64")
 ))]
 pub(crate) fn stage_domain_for_test<'a>(
     arc: &'a AddressSpace,

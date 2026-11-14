@@ -48,9 +48,10 @@ pub(crate) use copy::{copy_from_user, copy_to_user, probe_writable};
 #[allow(unused_imports)]
 pub(crate) use guard::clear_guard_for_context_switch;
 pub(crate) use sas_lease::wait_sas_copies_quiescent;
-// These three exist for the RV64 fault-injection fixtures (`task::user_copy_tests`),
-// so they carry that fixture's cfg: importing them elsewhere would fail on
-// AArch64/x86_64, where the fixtures do not exist.
+// These three exist for the fault-injection fixtures (`task::user_copy_tests`
+// on RV64; the staged-copy pair also for `task::grant_negative_selftest` on
+// x86_64), so they carry those fixtures' cfg: importing them elsewhere would
+// fail where no fixture uses them.
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
@@ -60,13 +61,13 @@ pub(crate) use guard::forced_guard_fault_recovers_for_test;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "x86_64")
 ))]
 pub(crate) use page_probe::stage_domain_for_test;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",
-    target_arch = "riscv64"
+    any(target_arch = "riscv64", target_arch = "x86_64")
 ))]
 pub(crate) use range::CopyError;
 pub(crate) use range::{CopyView, UserReadSlice, UserWriteSlice};
