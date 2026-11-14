@@ -1,7 +1,7 @@
 ---
 phase: 14
 title: "Kernel arch seam and boot split"
-status: in-progress
+status: completed
 priority: P2
 effort: "10–14d"
 dependencies: [9]
@@ -74,7 +74,7 @@ sched: plan = SwitchPlan { out, in, root, asid, irq } ; arch::switch(plan)
 ## Todo List
 
 - [x] Ratchet guard
-- [ ] Code moved into `arch/`
+- [x] Code moved into `arch/`
 - [x] `kmain` split
 - [x] `SwitchPlan`
 - [x] Single page-table path
@@ -84,7 +84,7 @@ sched: plan = SwitchPlan { out, in, root, asid, irq } ; arch::switch(plan)
 
 - [x] `target_arch` occurrences outside `kernel/src/arch/` reduced by at least half from the recorded baseline, and the guard fails when one is added.
 - [x] No `asm!` outside `kernel/src/arch/` and `hal/`.
-- [ ] x86 1/2/4-CPU domain lanes, RV64 `--harts 2`, AArch64 `virt-vhe` 2-CPU lane pass; context-switch A/B fixture shows identical markers before the old path is deleted.
+- [x] x86 1/2/4-CPU domain lanes, RV64 `--harts 2`, AArch64 `virt-vhe` 2-CPU lane pass; context-switch A/B fixture shows identical markers before the old path is deleted.
 - [x] Kernel builds for all three 64-bit targets with no `cfg_attr(not(target_arch…), allow(dead_code))` added.
 
 ## Risk Assessment
@@ -154,3 +154,4 @@ Phase 15 ports Tier-2 grants to x86 using the neutral copy/probe interface.
 - **Note (step 6, outside the file set, not changed):** `docs/specs/00-context.md` (tree lists `hal/traits/{timer,interrupt}`), `docs/specs/05-application.md` (the `ViHypervisor` design sketch) and `docs/code-standards.md` (`default = ["riscv64"]` example) still describe the old HAL. `docs/code-metrics.generated.md` is stale since the step 2–5 moves (`generate-code-metrics.py --check` fails: kernel nLOC 67 266 → 66 939, core 57 214 → 62 906 as `dev/**` modules moved under `arch/`); `check-lanes.py` (two Tier-3 x86 scripts) and `mutable-globals --check` (four `init_death` statics) failed before step 6 too.
 - **Deviation (review fixes, independent review of `817e77c6c9..6429e632c0`):** five LOW findings fixed in one commit. (1) `IommuReady::VtdActive` claimed VT-d whenever MCFG was valid, even with no DMAR: `iommu::init` now returns a `Probed` token that `iommu::activate_isolation(probed)` consumes, returning an `Isolation` (`Remapper::{Translating, Inactive, NotFound}`, from `is_active()` and a new per-arch `arch::iommu::is_present()`); `IommuReady::Activated { isolation }` replaces `VtdActive`, so only a real activation can build it; the module and Spec 04 docs say what the type records, not a guarantee of translation. `try_deferred_init` reads the result instead of re-loading `IOMMU_ISOLATED` (same atomic); riscv64 `platform_init` drops its documented no-op `activate_isolation()` call (nothing probed, `BAR0 == 0`). (2) aarch64 `IrqSaved` SAFETY/doc use the x86 wording: the DAIF belongs to the suspended context, which may resume on another PE. (3) `paging::table_at` returns a raw `*mut PageTable` and each caller states its access: `&*` for the read-only walks (`mapping_state`, `classify_table_frame`, the framebuffer pre-check, `translation_probe`, `virt_to_phys`, the shootdown fixture's check), `&mut *` for edits (boot PML4 before publication, `KERNEL_ROOT` under its lock). A separate `&PageTable` accessor was tried and dropped: riscv64/aarch64 without `test-hooks` have no read-only caller, so it is dead code there, and narrowing its cfg would add a `target_arch` line outside `arch/`. HAL `table_of` returns `&PageTable` for `walk`/`find_table`/`leaf_table`'s upper levels; `table_of_mut` serves `get_or_alloc` and `leaf_table`, which now takes `&mut self` (only `protect`/`unmap` call it). (4) `copy_kernel_higher_half` copies slot by slot through `entry`/`set_entry` (volatile load and store), as the pre-step-5 kernel loop did; it also serves `address_space.rs`. (5) `get_or_alloc` puts a `compiler_fence(Release)` between zeroing a new table and publishing it.
 - **Deviation (review fixes, follow-up):** the same two defects outside the findings, fixed as a separate commit: rv64 `IrqSaved` SAFETY/doc now say the `sstatus` belongs to the suspended context (as x86_64 and aarch64), and the x86 HAL's `map_hhdm_firmware_range::table_for` puts a `compiler_fence(Release)` between zeroing a new table and publishing it, as `get_or_alloc` does.
+- **Close (2026-11-14):** checkpoint run and review in [reports/phase-14-evidence.md](reports/phase-14-evidence.md); no regression.
