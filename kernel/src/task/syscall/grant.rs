@@ -1769,6 +1769,18 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
     }
 
     if let Some(frame) = crate::memory::frame::allocate_frame() {
+        // A free frame keeps whatever its last owner wrote, and `ShmMap`
+        // publishes it USER RW: zero it before the handle exists (owner
+        // decision F9), as `alloc_grant_pages` does for a grant.
+        // SAFETY: the frame was just allocated and nothing maps it USER yet;
+        // `phys_to_virt` is the kernel RW alias every free frame keeps.
+        unsafe {
+            core::ptr::write_bytes(
+                crate::memory::frame::phys_to_virt(frame) as *mut u8,
+                0,
+                page_size,
+            );
+        }
         shm_register(frame, owner, bytes, None, 0x3);
         return Ok(frame);
     }
