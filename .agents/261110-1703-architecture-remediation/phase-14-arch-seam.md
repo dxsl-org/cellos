@@ -82,10 +82,10 @@ sched: plan = SwitchPlan { out, in, root, asid, irq } ; arch::switch(plan)
 
 ## Success Criteria
 
-- [ ] `target_arch` occurrences outside `kernel/src/arch/` reduced by at least half from the recorded baseline, and the guard fails when one is added.
+- [x] `target_arch` occurrences outside `kernel/src/arch/` reduced by at least half from the recorded baseline, and the guard fails when one is added.
 - [x] No `asm!` outside `kernel/src/arch/` and `hal/`.
 - [ ] x86 1/2/4-CPU domain lanes, RV64 `--harts 2`, AArch64 `virt-vhe` 2-CPU lane pass; context-switch A/B fixture shows identical markers before the old path is deleted.
-- [ ] Kernel builds for all three 64-bit targets with no `cfg_attr(not(target_arch…), allow(dead_code))` added.
+- [x] Kernel builds for all three 64-bit targets with no `cfg_attr(not(target_arch…), allow(dead_code))` added.
 
 ## Risk Assessment
 
