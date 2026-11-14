@@ -2096,6 +2096,17 @@ rationale = "Only addr_of! is taken (register_static_image, main.rs:1112, after 
 review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.rs:register_static_image; kernel/src/snapshot_engine.rs:kernel_image"
 
 [[global]]
+key = "kernel::memory::frame_run::PENDING"
+lifetime = "global"
+mutation = "spinlock"
+owner = "memory::frame_run: release paths quarantine runs whose invalidation is unconfirmed or whose holder is still live; the hart-0 timer reaper frees confirmed entries; event holders end theirs with release_event"
+contexts = ["normal", "irq", "exception"]
+seal = "none: entries queue and drain for the whole run; the counters are atomics read by the allocator cap"
+retirement = "reap() removes an entry once every requested hart epoch is published and frees its runs outside the lock; release_event() returns event holds to their owner; nothing is ever abandoned"
+rationale = "Pushed from teardown paths in syscalls, the yield_cpu funnel and the #PF funnel, and drained by the hart-0 timer ISR; the crate Spinlock masks IRQs so an ISR cannot deadlock a same-hart holder, the Vec grows with try_reserve under the lock, and frames are normalised and freed only after the entry left the lock."
+review = "kernel/src/memory/frame_run.rs:Pending::push; kernel/src/memory/frame_run.rs:Pending::reap; kernel/src/memory/frame_run.rs:Pending::release_event"
+
+[[global]]
 key = "kernel::memory::deferred_release::DEFERRED @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "global"
 mutation = "spinlock"

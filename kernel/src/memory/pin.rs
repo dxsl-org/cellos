@@ -252,8 +252,9 @@ impl PartialEq<(usize, usize)> for ReleasedRange {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ReleaseKey {
+/// What ends a pin hold; also the key of a `frame_run::Reason::Pinned` hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReleaseKey {
     None,
     Owner(usize),
     /// A VideoCore mailbox request may complete after its cell dies. It has no

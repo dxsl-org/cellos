@@ -13,6 +13,9 @@ pub mod deferred_release;
 #[path = "memory/domain-supervisor-registry.rs"]
 pub(crate) mod domain_supervisor_registry;
 pub mod frame;
+/// One owner type for runs of physical frames and the release contract they
+/// follow: unpublish, flush once per operation, normalise, free — or quarantine.
+pub mod frame_run;
 pub mod heap;
 pub mod kaslr;
 /// Permission changes on already-mapped pages (`protect_page` / `protect_range`).
