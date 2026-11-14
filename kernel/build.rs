@@ -69,7 +69,8 @@ fn main() {
         "riscv32" => ("kernel/linker-riscv32.ld", "kernel/linker-riscv32.ld"),
         "arm" => ("kernel/linker-aarch32.ld", "kernel/linker-aarch32.ld"),
         "x86" => ("kernel/linker-x86-32.ld", "kernel/linker-x86-32.ld"),
-        _ => ("kernel/linker.ld", "kernel/linker.ld"),
+        "riscv64" => ("kernel/linker.ld", "kernel/linker.ld"),
+        other => panic!("no kernel linker script for target_arch {other:?}"),
     };
     if target_os == "none" {
         println!("cargo:rustc-link-arg=-T{ld_script}");

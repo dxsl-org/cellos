@@ -21,7 +21,7 @@ hal-arm = { path = "../arch/arm", version = "0.1.0", optional = true }
 hal-x86 = { path = "../arch/x86", version = "0.1.0", optional = true }
 
 [features]
-default = ["riscv64"]
+default = ["x86_64"]
 riscv64 = ["dep:hal-riscv"]
 riscv32 = ["dep:hal-riscv"]
 aarch64 = ["dep:hal-arm"]

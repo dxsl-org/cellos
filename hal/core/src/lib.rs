@@ -21,9 +21,10 @@ pub use traits::*; // Khớp với cấu trúc hal/traits của mày
 // 2. Bộ điều phối kiến trúc (The Facade)
 
 // Hỗ trợ RV64 (Jarvis)
-// Guard with target_arch too: hal-core's default feature is riscv64 so a
-// workspace build for AArch64 still sees feature=riscv64, but hal_riscv::common
-// and ::rv64 don't exist for non-RISC-V targets.
+// Guard with target_arch too: a `--workspace` build unifies hal-core's default
+// feature (x86_64) with the kernel's arch feature, so one target can see
+// another arch's feature, and hal_riscv::common and ::rv64 don't exist for
+// non-RISC-V targets.
 #[cfg(all(feature = "riscv64", target_arch = "riscv64"))]
 pub use hal_riscv::common;
 #[cfg(all(feature = "riscv64", target_arch = "riscv64"))]
