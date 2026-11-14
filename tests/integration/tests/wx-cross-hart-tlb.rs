@@ -1,4 +1,5 @@
-//! RV64 W^X shootdown proof: two harts, physical-byte oracle, negative control.
+//! RV64 W^X shootdown proof: two harts, physical-byte oracle, negative control,
+//! and the IPI epoch fallback when every RFENCE fails.
 
 use std::path::PathBuf;
 use vicell_integration_tests::{ci_guard, qemu_binary, skip_notice, QemuRunner};
@@ -50,6 +51,16 @@ fn rv64_rfence_blocks_the_remote_stale_write() {
             .unwrap_or_else(|error| {
                 panic!(
                     "RFENCE physical-byte oracle iteration {iteration} failed: {error}\n{}",
+                    qemu.dump()
+                )
+            });
+
+        // Phase 16: with every RFENCE failing, the IPI epoch fallback alone
+        // must put the lowering in force on hart 1.
+        qemu.wait_for("[selftest] TLB-SHOOTDOWN-RFENCE-FALLBACK: PASS", BOOT_TIMEOUT)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "RFENCE-failure fallback iteration {iteration} failed: {error}\n{}",
                     qemu.dump()
                 )
             });

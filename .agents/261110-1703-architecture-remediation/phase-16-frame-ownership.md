@@ -71,9 +71,9 @@ FrameRun::drop ─► unpublish PTEs (all roots that map it)
 
 ## Todo List
 
-- [ ] Protocol table and design
-- [ ] `FrameRun` + host tests
-- [ ] No-panic shootdown, batching
+- [x] Protocol table and design
+- [x] `FrameRun` + host tests
+- [x] No-panic shootdown, batching
 - [ ] Owners migrated
 - [ ] `Region` record
 - [ ] Specs updated
@@ -81,7 +81,7 @@ FrameRun::drop ─► unpublish PTEs (all roots that map it)
 ## Success Criteria
 
 - [ ] x86 fixture: with one CPU held with interrupts masked past the wait bound, a cell teardown completes, frames are reported quarantined and later freed — the kernel does not panic (panics before this phase).
-- [ ] Host tests cover each `FrameRun` transition; holding the allocator lock across a flush does not compile.
+- [x] Host tests cover each `FrameRun` transition; holding the allocator lock across a flush does not compile.
 - [ ] Raw `PhysAddr` free calls outside `memory/frame*.rs` reduced to zero (grep).
 - [ ] Checkpoint: full `pr`-tier suite on three arches; x86 4-CPU stress and domain grant suites; hypervisor smoke lane; review recorded.
 
@@ -131,3 +131,4 @@ Phase 17 attaches quota ownership to `FrameRun` and hardens the shared root.
   - A failed alias restore (`normalise` → `false`, out of page-table frames) never frees the run. The run waits under a new reason, `Reason::AliasUnrestored` (reaper-ended, zero epochs). The reaper retries it on a later pass, never in the same one, and logs on powers of two. The restore path completes its batch without waiting, because the reaper runs in the timer ISR.
   - The W^X comment in `loader/wx.rs` is corrected. The `revoke_mmio_for` doc comment was already fixed in the MMIO commit.
 - **Decision (step 3, row 4, fixture):** the x86 test-hooks fixture `S22-X86-QUARANTINE-SILENT-CPU` runs right after the shootdown fixture whenever 2+ CPUs are online. The RT CPU clears IF and spins on `X86_PROBE_STAGE` alone (stages 10–13 continue the shootdown fixture's), with no lock and no log, bounded by eight probe bounds of TSC. The BSP builds a user stack, a kernel stack, a three-page cell image at a fixture VA, and a two-page grant run. It retires them into one `Batch` through the new test-hooks helpers `Stack::retire_into`, `CellSegments::retire_into` and `test_retire_grant_pages_into` (the drops now share their bodies). It then asserts the following. The flush is `Unconfirmed{Timeout}` on the RT CPU after at most three bounds. Every data page is quarantined and none is freed or handed out again. The control: 40 reaper passes (one reissue) while the CPU is still silent free nothing. After the CPU is released, the reaper frees every page. The window is bracketed by `[frame-run] silent-cpu window OPEN/CLOSED`. The lane awk excuses only the fixture's own `… held (fixture)` line inside it, and both brackets must balance. The CONTROL and PASS markers are required at 2+ CPUs. No new global: the fixture reuses `X86_PROBE_STAGE`. `tag_probe_ticks` is `pub(crate)` on x86 for the fixture's timing assertion.
+- **Decision (step 3, row 4, RV64 seam):** the test-hooks `TEST_FAIL_RFENCE` seam in `arch/riscv64/tlb.rs` makes every remote RFENCE report `SBI_ERR_FAILED` without sending it. A third round of the RV64 shootdown self-test arms the seam while it lowers `TEST_VA`. `protect_page` must succeed through the IPI epoch fallback, the RFENCE failure counter must move, and hart 1's next store must fault without changing the physical byte (`[selftest] TLB-SHOOTDOWN-RFENCE-FALLBACK: PASS`). `wx-cross-hart-tlb` now requires that marker. The regenerated `docs/generated/mutable-globals.md` also picks up the cap commit's host-test `thread_local!` row, which that commit missed.

@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 500 | 203 | 198 | 1 | 8 | 291 |
+| kernel | yes | 502 | 203 | 198 | 1 | 8 | 293 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 119 | 69 | 69 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -308,7 +308,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (412)
+## Other declarations (414)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -514,6 +514,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::arch::riscv64::tlb::RFENCE_FAILURES @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/tlb.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::riscv64::tlb::RFENCE_LAST_ERROR @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/tlb.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
 | `kernel::arch::riscv64::tlb::RFENCE_REPORTED @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/tlb.rs` | static | `core::sync::atomic::AtomicUsize` | cfg inactive in this profile |
+| `kernel::arch::riscv64::tlb::TEST_FAIL_RFENCE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/tlb.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::riscv64::tlb::TEST_SKIP_REMOTE_RFENCE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/tlb.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::x86_64::cpu::global_asm!#1 @cfg(target_arch = "x86_64" & any (feature = "snapshot-qualified" , test))` | `kernel/src/arch/x86_64/cpu.rs` | global_asm | `` | cfg inactive in this profile |
 | `kernel::arch::x86_64::dev::fb_font::FONT_8X16 @cfg(target_arch = "x86_64")` | `kernel/src/arch/x86_64/dev/fb_font.rs` | static | `[[u8;16];95]` | syntactically immutable |
@@ -556,6 +557,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::memory::cell_quota::P01_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `crate::p01_resources::Source` | cfg inactive in this profile |
 | `kernel::memory::cell_quota::P01_SUBJECTS @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `[BoundQuota;9]` | cfg inactive in this profile |
 | `kernel::memory::frame::held_by_thread::thread_local!#1 @cfg(test)` | `kernel/src/memory/frame.rs` | item macro | `` | cfg inactive in this profile |
+| `kernel::memory::frame::quarantine_by_thread::thread_local!#1 @cfg(test)` | `kernel/src/memory/frame.rs` | item macro | `` | cfg inactive in this profile |
 | `kernel::memory::frame_run::TEST_SILENT_CPU_FIXTURE @cfg(feature = "test-hooks")` | `kernel/src/memory/frame_run.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::memory::frame_run::tests::thread_local!#1 @cfg(test)` | `kernel/src/memory/frame_run_tests.rs` | item macro | `` | cfg inactive in this profile |
 | `kernel::memory::heap::P01_EPOCH @cfg(feature = "p01-trace")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |

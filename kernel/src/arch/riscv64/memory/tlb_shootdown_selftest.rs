@@ -3,6 +3,8 @@
 //! Compiled only with `test-hooks`: hart 1 primes a writable translation, hart
 //! 0 lowers it, then hart 1 either faults without changing the physical byte or
 //! proves the negative control can still write when RFENCE is deliberately skipped.
+//! A third round makes every RFENCE fail (`TEST_FAIL_RFENCE`): the lowering
+//! must still be in force on hart 1, through the IPI epoch fallback alone.
 
 use crate::memory::paging::{self, Flags};
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
@@ -24,6 +26,10 @@ const NEGATIVE_PRIMED: u8 = 6;
 const NEGATIVE_LOWERED: u8 = 7;
 const NEGATIVE_DONE: u8 = 8;
 const FAILED: u8 = 9;
+const FALLBACK_ARMED: u8 = 10;
+const FALLBACK_PRIMED: u8 = 11;
+const FALLBACK_LOWERED: u8 = 12;
+const FALLBACK_DONE: u8 = 13;
 
 static PHASE: AtomicU8 = AtomicU8::new(IDLE);
 static TEST_FRAME: AtomicUsize = AtomicUsize::new(0);
@@ -104,6 +110,7 @@ fn fail(frame: usize, reason: &str) {
     log::error!("[selftest] TLB-SHOOTDOWN: FAIL — {}", reason);
     set_phase(FAILED);
     crate::arch::tlb::set_test_skip_remote_rfence(false);
+    crate::arch::tlb::set_test_fail_rfence(false);
     unmap_and_release(frame);
 }
 
@@ -216,9 +223,59 @@ pub fn run_primary() {
         return;
     }
 
-    unmap_and_release(frame);
     log::info!(
         "[selftest] TLB-SHOOTDOWN: PASS (hart 1, RFENCE + physical oracle + negative control)"
+    );
+
+    // Round three: every RFENCE fails. The lowering must still reach hart 1,
+    // through the IPI epoch fallback, before `protect_page` reports it.
+    if paging::protect_page(TEST_VA, writable_flags()).is_err() {
+        fail(frame, "fallback writable remap failed");
+        return;
+    }
+    // SAFETY: the frame is still exclusively owned by this test.
+    unsafe { core::ptr::write_volatile(frame as *mut usize, 0) };
+    STORE_FAULTED.store(false, Ordering::Release);
+    set_phase(FALLBACK_ARMED);
+    if !wait_for(FALLBACK_PRIMED) {
+        fail(frame, "fallback prime timed out");
+        return;
+    }
+    let failures = crate::arch::tlb::rfence_failures();
+    crate::arch::tlb::set_test_fail_rfence(true);
+    let lowered = paging::protect_page(TEST_VA, readonly_flags());
+    crate::arch::tlb::set_test_fail_rfence(false);
+    let failed_rfences = crate::arch::tlb::rfence_failures() - failures;
+    if lowered.is_err() || failed_rfences == 0 {
+        log::error!(
+            "[selftest] fallback lowered={:?} failed_rfences={}",
+            lowered,
+            failed_rfences
+        );
+        fail(frame, "RFENCE failure did not take the epoch fallback");
+        return;
+    }
+    EXPECT_STORE_FAULT.store(true, Ordering::Release);
+    set_phase(FALLBACK_LOWERED);
+    let fallback_done = wait_for(FALLBACK_DONE);
+    let store_faulted = STORE_FAULTED.load(Ordering::Acquire);
+    let observed = frame_value();
+    if !fallback_done || !store_faulted || observed != MAGIC_PRIME {
+        log::error!(
+            "[selftest] fallback done={} faulted={} value={:#x} phase={}",
+            fallback_done,
+            store_faulted,
+            observed,
+            PHASE.load(Ordering::Acquire)
+        );
+        fail(frame, "store after the epoch fallback did not fault");
+        return;
+    }
+
+    unmap_and_release(frame);
+    log::info!(
+        "[selftest] TLB-SHOOTDOWN-RFENCE-FALLBACK: PASS (hart 1, {} RFENCE failure(s), epoch fallback confirmed, physical oracle)",
+        failed_rfences
     );
 }
 
@@ -249,6 +306,20 @@ pub fn run_secondary(hart_id: usize) {
     // SAFETY: the negative control deliberately retains this hart's stale entry.
     unsafe { store_test_value(MAGIC_WRITE) };
     set_phase(NEGATIVE_DONE);
+
+    if !wait_for(FALLBACK_ARMED) {
+        return;
+    }
+    // SAFETY: hart 0 remapped TEST_VA writable before publishing FALLBACK_ARMED.
+    unsafe { store_test_value(MAGIC_PRIME) };
+    set_phase(FALLBACK_PRIMED);
+    if !wait_for(FALLBACK_LOWERED) {
+        return;
+    }
+    // SAFETY: this must trap after the epoch fallback; the exact test-only
+    // handler skips it.
+    unsafe { store_test_value(MAGIC_WRITE) };
+    set_phase(FALLBACK_DONE);
 }
 
 /// Consume only the expected probe store fault and resume after its `sd` instruction.

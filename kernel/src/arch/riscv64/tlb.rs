@@ -29,6 +29,25 @@ pub(crate) fn set_test_skip_remote_rfence(enabled: bool) {
     TEST_SKIP_REMOTE_RFENCE.store(enabled, core::sync::atomic::Ordering::Release);
 }
 
+/// Test-only seam (census §8.2 step 8): every remote RFENCE reports
+/// `SBI_ERR_FAILED` without being sent, so a shared flush must take the IPI
+/// epoch fallback — the path a firmware refusal takes.
+#[cfg(feature = "test-hooks")]
+static TEST_FAIL_RFENCE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Arm or disarm [`TEST_FAIL_RFENCE`] around one known self-test operation.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn set_test_fail_rfence(enabled: bool) {
+    TEST_FAIL_RFENCE.store(enabled, core::sync::atomic::Ordering::Release);
+}
+
+/// RFENCE errors counted so far, for the self-test.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn rfence_failures() -> usize {
+    RFENCE_FAILURES.load(core::sync::atomic::Ordering::Acquire)
+}
+
 /// RFENCE errors seen by shared flushes; each fell back to the IPI epoch path.
 /// Logged by [`report_rfence_failures`] outside any lock.
 static RFENCE_FAILURES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
@@ -85,6 +104,13 @@ pub(crate) fn shared_flush_local(
 }
 
 fn remote_sfence(mask: usize, base: usize, start: types::VAddr, size: usize) -> Result<(), usize> {
+    /// SBI `SBI_ERR_FAILED` (-1).
+    #[cfg(feature = "test-hooks")]
+    const SBI_ERR_FAILED: usize = usize::MAX;
+    #[cfg(feature = "test-hooks")]
+    if TEST_FAIL_RFENCE.load(core::sync::atomic::Ordering::Acquire) {
+        return Err(SBI_ERR_FAILED);
+    }
     hal::sbi::sbi_remote_sfence_vma(mask, base, start, size)
 }
 
