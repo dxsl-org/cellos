@@ -639,6 +639,9 @@ pub unsafe fn map_hhdm_firmware_range(
         let table = frame.checked_add(hhdm)? as *mut u64;
         // SAFETY: allocator returned an exclusively owned 4 KiB frame.
         unsafe { core::ptr::write_bytes(table as *mut u8, 0, PAGE_SIZE) };
+        // The zeroing is a plain store: keep it ahead of the volatile store
+        // that publishes the table to the walker and other CPUs.
+        core::sync::atomic::compiler_fence(Ordering::Release);
         // SAFETY: installing a present writable page-table pointer is atomic.
         unsafe {
             core::ptr::write_volatile(entry, frame as u64 | PTE_PRESENT | PTE_WRITABLE);

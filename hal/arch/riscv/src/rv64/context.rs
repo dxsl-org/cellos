@@ -128,7 +128,7 @@ impl Root {
     }
 }
 
-/// This hart's `sstatus` as captured by [`IrqSaved::save`], with SIE masked
+/// The `sstatus` of the activation that called [`IrqSaved::save`], with SIE masked
 /// until the token is dropped or handed to [`switch`].
 ///
 /// Dropping a live token restores the captured `sstatus`. [`switch`] consumes
@@ -163,7 +163,9 @@ impl Drop for IrqSaved {
     #[inline(always)]
     fn drop(&mut self) {
         if let Some(sstatus) = self.sstatus {
-            // SAFETY: captured on this hart by `save`, which `!Send` keeps here.
+            // SAFETY: captured on this activation by `save`; the `sstatus`
+            // belongs to the suspended context, so SIE is never enabled for an
+            // activation that entered masked.
             unsafe { restore_sstatus(sstatus) }
         }
     }
