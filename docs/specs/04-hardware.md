@@ -4,15 +4,30 @@
 
 ---
 
-## 1. Multi-Architecture Strategy (The "Trait" Contract)
-Cellos không phụ thuộc vào một kiến trúc CPU cụ thể. Mọi tương tác phần cứng được trừu tượng hóa qua crate `hal-core`.
+## 1. Multi-Architecture Strategy (The `arch/` Seam)
+Cellos runs on x86_64, aarch64 and riscv64. Architecture differences live in two places: the HAL crates (`hal/arch/{x86,arm,riscv}`, re-exported by `hal-core` under one feature per arch; `x86_64` is the default) and the kernel's `kernel/src/arch/`. Shared kernel code names no architecture.
 
-### Trait-Based Abstraction
-| Trait | Vai trò | Đặc điểm đa kiến trúc |
+Anchor: impl kernel/src/boot/platform_ready.rs::PlatformReady · impl kernel/src/board.rs::active · impl hal/arch/x86/src/x86_64/context.rs::SwitchPlan · impl hal/arch/x86/src/x86_64/paging.rs::leaf
+
+### Kernel seam
+| Piece | Where | Contract |
 | :--- | :--- | :--- |
-| **`Arch`** | Quản lý Context, Paging | Tự thích nghi bit-width (usize) và chuẩn phân trang (Sv32/39/48). |
-| **`Interrupt`** | Đăng ký và điều phối ngắt | Hỗ trợ PLIC (RISC-V), GIC (ARM) hoặc APIC (x86). |
-| **`Timer`** | Quản lý thời gian thực | Cung cấp độ phân giải cao cho Scheduler. |
+| **Arch selection** | `kernel/src/arch/mod.rs` | One `#[cfg(target_arch)]` per arch on `mod <arch>` and `pub use <arch>::*`. `build.rs` emits `cellos_wide` for the three 64-bit arches; the 32-bit code (riscv32, arm, x86) sits in `arch/legacy` under `not(cellos_wide)` and does not build. |
+| **Function sets** | `kernel/src/arch/<arch>/` | Each arch exports the same sets with the same signatures: `boot`, `irq`, `clock`, `power`, `cpu`, `tlb`, `user_access`, `page_probe`, `iommu`, `hart_local`, `virtio_mmio`, `gpio_irq`, `sdhci`, `vm`, `sched`, `smp_bringup`. Single-arch modules (ACPI, VT-d, the aarch64/riscv64 `smp` fixtures, …) sit in their arch directory. Shared code calls `crate::arch::<set>::<fn>()`. A set function exists as a no-op only where the arch had no code there. |
+| **Boot** | `arch::boot::early` → heap → `arch::boot::platform_init` | `platform_init` returns a typed `PlatformReady { console, irq, clock, pci, iommu, storage }`; `kmain` runs the arch-neutral tail on it. `iommu: IommuReady` is required (`VtdActive`, `Deferred` or `Absent { reason }`), so the DMA-isolation decision exists before any DMA-capable Cell starts. Interrupts are enabled only through `IrqReady::enable(ClockReady)`. |
+| **Context switch** | `hal::arch::{SwitchPlan, switch, IrqSaved}` | One `switch(plan) -> IrqSaved` per arch. `SwitchPlan { out, inc, root: Option<Root>, irq }`; `IrqSaved` is `#[must_use]`, `!Send` and restores the interrupt state on drop. The kernel's `sched::domain_switch::RootDecision` chooses the root and runs its side effects; `arch::sched` holds the per-arch constants. |
+| **Page tables** | `hal_paging::PageTableTrait` | One path on every arch, including the x86 shared kernel root. `hal::paging::{leaf, current_root, phys_to_virt}` serve the copy and probe paths; the kernel keeps only the raw root-register read (`arch::page_probe`). |
+| **Board** | `kernel/src/board.rs` | One `board::active() -> &'static BoardDescriptor` (riscv64, aarch64: the validated compiled-in descriptor; x86_64: the profile bound at boot, which panics before binding). `board::compiled()` is the `const` form for riscv64 and aarch64; the SoC policy is `arch::{riscv64,x86_64}::board::soc()`; aarch64 reads `hal::aarch64::backend::Board`. |
+| **Ratchet** | `scripts/check-hal-boundaries.sh` | Caps `target_arch` lines and `asm!` sites in `kernel/src` outside `kernel/src/arch/` (`arch_cfg_max`, `arch_asm_max`; `asm!` is 0). A new one fails CI; the caps only go down. |
+
+### HAL traits
+| Trait | Role |
+| :--- | :--- |
+| **`Arch`** (`hal-arch-trait`) | `init`, interrupt enable/disable/wait/query on the `ARCH` static; `Context` type. |
+| **`PageTableTrait`** (`hal-paging`) | Map, unmap, protect, translate and table walks for every root. |
+| **`ViUart`, `ViMmcHost`, `ViGpio`, `Framebuffer`, …** | Device-class traits for board-agnostic drivers. |
+
+The HAL has no generic timer or interrupt-controller trait: tick sources and controllers are per-arch HAL code reached through `arch::{clock, irq}` (aarch64 boards: `hal::aarch64::backend::Board`). `hal-hypervisor` carries only `ViVmExit`; each VMM calls its arch's vCPU code directly.
 
 ## 2. Platform HAL vs. Device Driver Cells
 * **Platform HAL**: Được biên dịch **cùng** Nano Kernel. Chịu trách nhiệm khởi tạo CPU, RAM và các thành phần cốt lõi.
@@ -76,13 +91,13 @@ the prevention layer.
 | Stage | CPU arch | Dev/test | Real board |
 |-------|----------|----------|-----------|
 | G1 | ARM64 + RV64 | QEMU ARM virt (**QEMU-first**) | RPi 4 (BCM2711) → VisionFive2 (JH7110) |
-| G1 sub-track | RV32 | QEMU RV32 | SiFive E21 / CHERIoT-Nano |
+| G1 sub-track (parked) | RV32 | none: the 32-bit code sits in `kernel/src/arch/legacy` and does not build | SiFive E21 / CHERIoT-Nano |
 | G2 | RV64 | Milk-V Pioneer (X60, now) | Alibaba C930 (2026) |
 | G2 | x86_64 | QEMU x86_64 | x86 PC (when G2 starts) |
 | G3 | ARM64 | Radxa ROCK 5 / OrangePi 5+ (RK3588) | — |
 | G3 | RV64 | — | X390-class hardware — blocked until purchasable silicon, board docs, and software stack exist |
 
-**QEMU-first rule:** HAL traits (`ViGpio`, `ViUart`, …) must be **board-agnostic** from v1. Adding a new real-board implementation must require zero kernel changes — only a new `impl ViGpio for Bcm2711Gpio {}`.
+**QEMU-first rule:** device-class HAL traits (`ViGpio`, `ViUart`, …) stay **board-agnostic**. A new board is a `boards/` descriptor plus its HAL code (on aarch64 a `hal::aarch64::backend::Board` type behind a `board-*` feature); in the kernel it touches only `kernel/src/board.rs` (descriptor selection behind `board::active()`) and `kernel/src/arch/<arch>/`. Shared kernel code does not change.
 
 ### G1 peripheral driver priority (cells/drivers/)
 
@@ -127,7 +142,7 @@ records the prerequisites for the x86_64 PC/server lane
 > Prerequisite before any of the above is scheduled: an `x86_64-pc` board
 > descriptor plus a published HCL, and an exact Intel/AMD board pair. On x86 the
 > only working log and input path is a 16550-compatible UART at COM1 (`0x3F8`,
-> IRQ 4) — `hal/soc/x86/src/lib.rs`, `kernel/src/main.rs:157` — so treat it as a
+> IRQ 4) — `hal/soc/x86/src/lib.rs`, `kernel/src/arch/x86_64/boot.rs` (`early`) — so treat it as a
 > must-have HCL row, including BMC serial-over-LAN on servers. Boards whose
 > firmware offers no way to disable Secure Boot are **not compatible**: there is
 > no signed/measured x86 boot path today and code-signing/secure-boot belongs to

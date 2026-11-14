@@ -6,10 +6,10 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 434 |
-| Sections with an anchor | 19 |
-| Ratified/Accepted sections | 294 |
-| …of those, anchored | 18 |
+| Sections scanned | 435 |
+| Sections with an anchor | 20 |
+| Ratified/Accepted sections | 295 |
+| …of those, anchored | 19 |
 | Anchor violations | 0 |
 | Coverage gaps (ratified, unanchored) | 276 |
 | Status-prose hits | 80 |
@@ -20,6 +20,10 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Spec | Section | Anchor | State |
 |---|---|---|---|
+| `docs/specs/04-hardware.md` | 1. Multi-Architecture Strategy (The `arch/` Seam) | `impl kernel/src/boot/platform_ready.rs::PlatformReady` | OK |
+| `docs/specs/04-hardware.md` | 1. Multi-Architecture Strategy (The `arch/` Seam) | `impl kernel/src/board.rs::active` | OK |
+| `docs/specs/04-hardware.md` | 1. Multi-Architecture Strategy (The `arch/` Seam) | `impl hal/arch/x86/src/x86_64/context.rs::SwitchPlan` | OK |
+| `docs/specs/04-hardware.md` | 1. Multi-Architecture Strategy (The `arch/` Seam) | `impl hal/arch/x86/src/x86_64/paging.rs::leaf` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 1. Context | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 2. Decision — three layers, in delivery order | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer A — Software W^X after relocation (all arches) | `impl kernel/src/loader/wx.rs::enforce` | OK |
@@ -100,27 +104,27 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/03-runtime.md:148` — 4.4 Ràng buộc triển khai
 - `docs/specs/03-runtime.md:160` — 4.5 Prerequisites trước khi bật
 - `docs/specs/03-runtime.md:174` — 5. Tooling: `ostd` & `cargo-Cellos`
-- `docs/specs/04-hardware.md:7` — 1. Multi-Architecture Strategy (The "Trait" Contract)
-- `docs/specs/04-hardware.md:10` — Trait-Based Abstraction
-- `docs/specs/04-hardware.md:17` — 2. Platform HAL vs. Device Driver Cells
-- `docs/specs/04-hardware.md:21` — C Driver Integration via Tier 1 `ffi-posix` runtime profile
-- `docs/specs/04-hardware.md:26` — 3. Interrupt Model: "Async Waker Dispatch"
-- `docs/specs/04-hardware.md:31` — 4. Resource Registry (MMIO Isolation)
-- `docs/specs/04-hardware.md:36` — 5. SMP & Real-Time Affinity
-- `docs/specs/04-hardware.md:62` — 6. Hang detection
-- `docs/specs/04-hardware.md:70` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
-- `docs/specs/04-hardware.md:74` — Target platforms
-- `docs/specs/04-hardware.md:87` — G1 peripheral driver priority (cells/drivers/)
-- `docs/specs/04-hardware.md:99` — G2 server driver priority (strict order — each prerequisite for next)
-- `docs/specs/04-hardware.md:111` — x86_64 PC class driver priority (planned — no physical qualification)
-- `docs/specs/04-hardware.md:139` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
-- `docs/specs/04-hardware.md:141` — PCIe ECAM host controller
-- `docs/specs/04-hardware.md:154` — RISC-V IOMMU (non-optional before NIC)
-- `docs/specs/04-hardware.md:164` — 9. G3: NPU Driver Path
-- `docs/specs/04-hardware.md:169` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
-- `docs/specs/04-hardware.md:175` — Level B — Kernel NPU scheduler (G3)
-- `docs/specs/04-hardware.md:183` — Level B+ — SiFive X390 VCIX (second impl)
-- `docs/specs/04-hardware.md:191` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
+- `docs/specs/04-hardware.md:12` — Kernel seam
+- `docs/specs/04-hardware.md:23` — HAL traits
+- `docs/specs/04-hardware.md:32` — 2. Platform HAL vs. Device Driver Cells
+- `docs/specs/04-hardware.md:36` — C Driver Integration via Tier 1 `ffi-posix` runtime profile
+- `docs/specs/04-hardware.md:41` — 3. Interrupt Model: "Async Waker Dispatch"
+- `docs/specs/04-hardware.md:46` — 4. Resource Registry (MMIO Isolation)
+- `docs/specs/04-hardware.md:51` — 5. SMP & Real-Time Affinity
+- `docs/specs/04-hardware.md:77` — 6. Hang detection
+- `docs/specs/04-hardware.md:85` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
+- `docs/specs/04-hardware.md:89` — Target platforms
+- `docs/specs/04-hardware.md:102` — G1 peripheral driver priority (cells/drivers/)
+- `docs/specs/04-hardware.md:114` — G2 server driver priority (strict order — each prerequisite for next)
+- `docs/specs/04-hardware.md:126` — x86_64 PC class driver priority (planned — no physical qualification)
+- `docs/specs/04-hardware.md:154` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
+- `docs/specs/04-hardware.md:156` — PCIe ECAM host controller
+- `docs/specs/04-hardware.md:169` — RISC-V IOMMU (non-optional before NIC)
+- `docs/specs/04-hardware.md:179` — 9. G3: NPU Driver Path
+- `docs/specs/04-hardware.md:184` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
+- `docs/specs/04-hardware.md:190` — Level B — Kernel NPU scheduler (G3)
+- `docs/specs/04-hardware.md:198` — Level B+ — SiFive X390 VCIX (second impl)
+- `docs/specs/04-hardware.md:206` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
 - `docs/specs/05-application.md:7` — 1. Application tier taxonomy
 - `docs/specs/05-application.md:35` — 2. Tier 1: Trusted SAS Cells
 - `docs/specs/05-application.md:46` — 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services
@@ -351,7 +355,7 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for safety, not hardware MMU
 - `docs/specs/00-context.md:196` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
 - `docs/specs/00-context.md:198` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
-- `docs/specs/04-hardware.md:109` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
+- `docs/specs/04-hardware.md:124` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
 - `docs/specs/05-application.md:152` — `✅` in: | Strings | `memcpy/memmove/memset/strlen/strcpy/strcmp` | ✅ Done |

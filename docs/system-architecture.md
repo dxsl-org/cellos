@@ -161,10 +161,12 @@ boot contract, and a generic workspace build does not qualify the architecture.
 The shared AArch64 core (`hal/arch/arm`, arch-generic `kernel/src`) reaches
 board behaviour only through one statically dispatched type,
 `hal::aarch64::backend::Board` ([ADR-0029](decisions/0029-platform-image-families-and-runtime-detection.md) §6).
-The `board-rpi*` features are read only in `hal/arch/arm/src/aarch64/backend/mod.rs`,
-which selects `QemuVirt`, `Bcm2837` (Raspberry Pi 3) or `Bcm2711` (Raspberry Pi 4); Group 1
-boards keep compile-time selection, now of a backend type rather than of
-scattered branches. The backend is zero-sized and reads the existing `hal/soc`
+In the HAL the `board-*` features are read only in `hal/arch/arm/src/aarch64/backend/mod.rs`,
+which selects `QemuVirt`, `Aarch64Vm`, `Bcm2837` (Raspberry Pi 3), `Bcm2711` (Raspberry Pi 4)
+or `AppleT8103`; the kernel reads them only in `kernel/build.rs` (the Pi linker script),
+the conflicting-feature guards and `kernel/src/board.rs` (`board-aarch64-vm` names its
+descriptor). Group 1 boards keep compile-time selection, now of a backend type rather than
+of scattered branches. The backend is zero-sized and reads the existing `hal/soc`
 profiles. Its traits cover:
 
 - console and early diagnostics (`ArmPlatform`);
@@ -176,7 +178,7 @@ profiles. Its traits cover:
 
 The MMIO authority tables stay kernel-side, selected by `ArmResources::SOC`
 and pinned by compile-time equality assertions; the AArch64 board descriptor is
-selected the same way. The `AArch64Vcpu` size and extension offset are asserted
+selected the same way and read, as on every arch, through `board::active()`. The `AArch64Vcpu` size and extension offset are asserted
 per build. Group 2/3 boards would add a backend against these traits; the IOMMU
 trait is a shape-only hook with no implementation.
 
