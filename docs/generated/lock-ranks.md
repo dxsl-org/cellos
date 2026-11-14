@@ -14,74 +14,74 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 7 | `UART_SERIAL` | `kernel::dev::uart::SERIAL` (kernel/src/dev/uart.rs) |
 | 8 | `VIFS1` | `kernel::fs::VIFS1` (kernel/src/fs.rs) |
 | 9 | `TEST_STATE_LOCK` | `kernel::TEST_STATE_LOCK @cfg(test)` (kernel/src/main.rs, cfg inactive here) |
-| 10 | `PAGE_GRANT_TABLE` | `kernel::task::syscall::PAGE_GRANT_TABLE` (kernel/src/task/syscall/mod.rs) |
-| 11 | `REG_GRANT_TABLE` | `kernel::task::syscall::REG_GRANT_TABLE` (kernel/src/task/syscall/mod.rs) |
-| 12 | `SCHEDULER` | `kernel::task::SCHEDULER` (kernel/src/task.rs) |
-| 13 | `DEATH_SUBSCRIBERS` | `kernel::sched::scheduler::DEATH_SUBSCRIBERS` (kernel/src/sched/scheduler.rs) |
-| 14 | `SWAP_CEILINGS` | `kernel::cell::hotswap::SWAP_CEILINGS` (kernel/src/cell/hotswap.rs) |
-| 15 | `ROLE_PUBLICATION` | `kernel::dev::driver_cell::ROLE_PUBLICATION` (kernel/src/dev/driver_cell.rs) |
-| 16 | `OWNERS` | `kernel::cell::service_registry::OWNERS` (kernel/src/cell/service_registry.rs) |
-| 17 | `SERVICE_REGISTRY` | `kernel::cell::service_registry::REGISTRY` (kernel/src/cell/service_registry.rs) |
-| 18 | `CELL_AUTHORITIES` | `kernel::cell::cspace::CELL_AUTHORITIES` (kernel/src/cell/cspace.rs) |
-| 19 | `MEASUREMENT_LOG` | `kernel::measurement_log::LOG` (kernel/src/measurement_log.rs) |
-| 20 | `RT_HEAP` | `kernel::memory::rt_heap::RT_HEAP` (kernel/src/memory/rt_heap.rs) |
-| 21 | `PAYLOAD_SCRATCH` | `kernel::signing::PAYLOAD_SCRATCH` (kernel/src/signing.rs) |
-| 22 | `NET_RX_RESERVATION` | `kernel::task::waker::net_rx_reservation::RESERVATION` (kernel/src/task/waker/net_rx_reservation.rs) |
-| 23 | `IOMMU_CLEANUP_SERIAL` | `kernel::task::IOMMU_CLEANUP_SERIAL` (kernel/src/task.rs) |
-| 24 | `RISCV_DOMAINS` | `kernel::arch::riscv64::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
-| 25 | `UNITS` | `kernel::arch::x86_64::dev::iommu_x86::UNITS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/iommu_x86.rs) |
-| 26 | `ACPI_TOPOLOGY` | `kernel::acpi::TOPOLOGY` (kernel/src/acpi/mod.rs) |
-| 27 | `FRAME_ALLOCATOR` | `kernel::memory::frame::FRAME_ALLOCATOR` (kernel/src/memory/frame.rs) |
-| 28 | `UART_CONSOLE` | `kernel::dev::uart::CONSOLE` (kernel/src/dev/uart.rs) |
-| 29 | `KERNEL_ROOT` | `kernel::memory::paging::KERNEL_ROOT` (kernel/src/memory/paging.rs) |
-| 30 | `ADMISSION_REGISTRY` | `kernel::admission::gate::ADMISSION_REGISTRY` (kernel/src/admission/gate.rs) |
-| 31 | `PENDING_PS2` | `kernel::dev::console_drv::PENDING_PS2 @cfg(any (target_arch = "x86_64" , target_arch = "x86"))` (kernel/src/dev/console_drv.rs) |
-| 32 | `KEYBOARD_ACK` | `kernel::dev::input_irq_ack::KEYBOARD_ACK` (kernel/src/dev/input_irq_ack.rs) |
-| 33 | `PSCID_FREE_LIST` | `kernel::arch::riscv64::dev::iommu_riscv::PSCID_FREE_LIST @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
-| 34 | `MMC_DEVICE` | `kernel::dev::mmc::MMC_DEVICE` (kernel/src/dev/mmc.rs) |
-| 35 | `VIRTIO_GATE_REFUSED` | `kernel::arch::x86_64::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs) |
-| 36 | `DRIVER_REGISTRY` | `kernel::dev::registry::DRIVER_REGISTRY` (kernel/src/dev/registry.rs) |
-| 37 | `UART_RX_BUFFER` | `kernel::dev::uart::RX_BUFFER` (kernel/src/dev/uart.rs) |
-| 38 | `GOVERNED_PENDING` | `kernel::loader::atomic_publication_tests::success::GOVERNED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
-| 39 | `TRUSTED_PENDING` | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
-| 40 | `CELL_TABLE` | `kernel::loader::early::CELL_TABLE` (kernel/src/loader/early.rs) |
-| 41 | `ACPI_POWER_FACTS` | `kernel::arch::x86_64::acpi::power::FACTS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/acpi/power.rs) |
-| 42 | `X86_MACHINE_FACTS` | `kernel::board::X86_MACHINE_FACTS @cfg(target_arch = "x86_64")` (kernel/src/board.rs) |
-| 43 | `ACCOUNTING` | `kernel::sched::cpu_accounting::ACCOUNTING @cfg(feature = "g1-cpu-accounting")` (kernel/src/sched/cpu_accounting.rs, cfg inactive here) |
-| 44 | `AUDIT_WRITE` | `kernel::audit::WRITE` (kernel/src/audit.rs) |
-| 45 | `NEXT_PIPE_ID` | `kernel::ipc::pipe::NEXT_PIPE_ID` (kernel/src/ipc/pipe.rs) |
-| 46 | `NEXT_FREEZE_NONCE` | `kernel::cell::hotswap::NEXT_FREEZE_NONCE` (kernel/src/cell/hotswap.rs) |
-| 47 | `PIPES` | `kernel::ipc::pipe::PIPES` (kernel/src/ipc/pipe.rs) |
-| 48 | `NIC_DRIVER_STATE` | `kernel::dev::driver_cell::NIC_DRIVER_STATE` (kernel/src/dev/driver_cell.rs) |
-| 49 | `RETIREMENT_VERDICTS` | `kernel::cell::retirement_verdict::TABLE` (kernel/src/cell/retirement_verdict.rs) |
-| 50 | `BLOCK_ROUTES` | `kernel::dev::driver_cell::BLOCK_ROUTES` (kernel/src/dev/driver_cell.rs) |
-| 51 | `CSPACE_FILES` | `kernel::cell::cap_registry::CSPACE_FILES` (kernel/src/cell/cap_registry.rs) |
-| 52 | `STATE_STASH` | `kernel::cell::state_stash::STASH` (kernel/src/cell/state_stash.rs) |
-| 53 | `FUTEX_WAITERS` | `kernel::ipc::futex::WAITERS` (kernel/src/ipc/futex.rs) |
-| 54 | `QUARANTINED_FRAMES` | `kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
-| 55 | `LIVE_ASIDS` | `kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
-| 56 | `DEFERRED_RELEASE` | `kernel::memory::deferred_release::DEFERRED @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
-| 57 | `ABANDONED_TAGS` | `kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
-| 58 | `P01_LIFETIMES` | `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
-| 59 | `P01_NONCPU_SNAPSHOTS` | `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
-| 60 | `P01_NONCPU_TOPOLOGY_SNAPSHOTS` | `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
-| 61 | `P01_NONCPU_TOPOLOGY_TEST_SNAPSHOT` | `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
-| 62 | `P01_TOPOLOGY_SNAPSHOTS` | `kernel::p01_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_topology.rs, cfg inactive here) |
-| 63 | `P01_VTD_SNAPSHOTS` | `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
-| 64 | `P01_VTD_TEST_SNAPSHOT` | `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
-| 65 | `POLICY` | `kernel::policy::POLICY` (kernel/src/policy.rs) |
-| 66 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
-| 67 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
-| 68 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
-| 69 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
-| 70 | `SHM_HANDLES` | `kernel::task::syscall::SHM_HANDLES` (kernel/src/task/syscall/mod.rs) |
-| 71 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
-| 72 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
-| 73 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
-| 74 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
-| 75 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
-| 76 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
-| 77 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
+| 10 | `IOMMU_CLEANUP_SERIAL` | `kernel::task::IOMMU_CLEANUP_SERIAL` (kernel/src/task.rs) |
+| 11 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
+| 12 | `PAGE_GRANT_TABLE` | `kernel::task::syscall::PAGE_GRANT_TABLE` (kernel/src/task/syscall/mod.rs) |
+| 13 | `REG_GRANT_TABLE` | `kernel::task::syscall::REG_GRANT_TABLE` (kernel/src/task/syscall/mod.rs) |
+| 14 | `SCHEDULER` | `kernel::task::SCHEDULER` (kernel/src/task.rs) |
+| 15 | `DEATH_SUBSCRIBERS` | `kernel::sched::scheduler::DEATH_SUBSCRIBERS` (kernel/src/sched/scheduler.rs) |
+| 16 | `SWAP_CEILINGS` | `kernel::cell::hotswap::SWAP_CEILINGS` (kernel/src/cell/hotswap.rs) |
+| 17 | `ROLE_PUBLICATION` | `kernel::dev::driver_cell::ROLE_PUBLICATION` (kernel/src/dev/driver_cell.rs) |
+| 18 | `OWNERS` | `kernel::cell::service_registry::OWNERS` (kernel/src/cell/service_registry.rs) |
+| 19 | `SERVICE_REGISTRY` | `kernel::cell::service_registry::REGISTRY` (kernel/src/cell/service_registry.rs) |
+| 20 | `CELL_AUTHORITIES` | `kernel::cell::cspace::CELL_AUTHORITIES` (kernel/src/cell/cspace.rs) |
+| 21 | `MEASUREMENT_LOG` | `kernel::measurement_log::LOG` (kernel/src/measurement_log.rs) |
+| 22 | `RT_HEAP` | `kernel::memory::rt_heap::RT_HEAP` (kernel/src/memory/rt_heap.rs) |
+| 23 | `PAYLOAD_SCRATCH` | `kernel::signing::PAYLOAD_SCRATCH` (kernel/src/signing.rs) |
+| 24 | `NET_RX_RESERVATION` | `kernel::task::waker::net_rx_reservation::RESERVATION` (kernel/src/task/waker/net_rx_reservation.rs) |
+| 25 | `RISCV_DOMAINS` | `kernel::arch::riscv64::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
+| 26 | `UNITS` | `kernel::arch::x86_64::dev::iommu_x86::UNITS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/iommu_x86.rs) |
+| 27 | `ACPI_TOPOLOGY` | `kernel::acpi::TOPOLOGY` (kernel/src/acpi/mod.rs) |
+| 28 | `FRAME_ALLOCATOR` | `kernel::memory::frame::FRAME_ALLOCATOR` (kernel/src/memory/frame.rs) |
+| 29 | `UART_CONSOLE` | `kernel::dev::uart::CONSOLE` (kernel/src/dev/uart.rs) |
+| 30 | `KERNEL_ROOT` | `kernel::memory::paging::KERNEL_ROOT` (kernel/src/memory/paging.rs) |
+| 31 | `ADMISSION_REGISTRY` | `kernel::admission::gate::ADMISSION_REGISTRY` (kernel/src/admission/gate.rs) |
+| 32 | `PENDING_PS2` | `kernel::dev::console_drv::PENDING_PS2 @cfg(any (target_arch = "x86_64" , target_arch = "x86"))` (kernel/src/dev/console_drv.rs) |
+| 33 | `KEYBOARD_ACK` | `kernel::dev::input_irq_ack::KEYBOARD_ACK` (kernel/src/dev/input_irq_ack.rs) |
+| 34 | `PSCID_FREE_LIST` | `kernel::arch::riscv64::dev::iommu_riscv::PSCID_FREE_LIST @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
+| 35 | `MMC_DEVICE` | `kernel::dev::mmc::MMC_DEVICE` (kernel/src/dev/mmc.rs) |
+| 36 | `VIRTIO_GATE_REFUSED` | `kernel::arch::x86_64::dev::pcie_msi::virtio_gate::REFUSED @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi/virtio_gate.rs) |
+| 37 | `DRIVER_REGISTRY` | `kernel::dev::registry::DRIVER_REGISTRY` (kernel/src/dev/registry.rs) |
+| 38 | `UART_RX_BUFFER` | `kernel::dev::uart::RX_BUFFER` (kernel/src/dev/uart.rs) |
+| 39 | `GOVERNED_PENDING` | `kernel::loader::atomic_publication_tests::success::GOVERNED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
+| 40 | `TRUSTED_PENDING` | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/success.rs, cfg inactive here) |
+| 41 | `CELL_TABLE` | `kernel::loader::early::CELL_TABLE` (kernel/src/loader/early.rs) |
+| 42 | `ACPI_POWER_FACTS` | `kernel::arch::x86_64::acpi::power::FACTS @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/acpi/power.rs) |
+| 43 | `X86_MACHINE_FACTS` | `kernel::board::X86_MACHINE_FACTS @cfg(target_arch = "x86_64")` (kernel/src/board.rs) |
+| 44 | `ACCOUNTING` | `kernel::sched::cpu_accounting::ACCOUNTING @cfg(feature = "g1-cpu-accounting")` (kernel/src/sched/cpu_accounting.rs, cfg inactive here) |
+| 45 | `AUDIT_WRITE` | `kernel::audit::WRITE` (kernel/src/audit.rs) |
+| 46 | `NEXT_PIPE_ID` | `kernel::ipc::pipe::NEXT_PIPE_ID` (kernel/src/ipc/pipe.rs) |
+| 47 | `NEXT_FREEZE_NONCE` | `kernel::cell::hotswap::NEXT_FREEZE_NONCE` (kernel/src/cell/hotswap.rs) |
+| 48 | `PIPES` | `kernel::ipc::pipe::PIPES` (kernel/src/ipc/pipe.rs) |
+| 49 | `NIC_DRIVER_STATE` | `kernel::dev::driver_cell::NIC_DRIVER_STATE` (kernel/src/dev/driver_cell.rs) |
+| 50 | `RETIREMENT_VERDICTS` | `kernel::cell::retirement_verdict::TABLE` (kernel/src/cell/retirement_verdict.rs) |
+| 51 | `BLOCK_ROUTES` | `kernel::dev::driver_cell::BLOCK_ROUTES` (kernel/src/dev/driver_cell.rs) |
+| 52 | `CSPACE_FILES` | `kernel::cell::cap_registry::CSPACE_FILES` (kernel/src/cell/cap_registry.rs) |
+| 53 | `STATE_STASH` | `kernel::cell::state_stash::STASH` (kernel/src/cell/state_stash.rs) |
+| 54 | `FUTEX_WAITERS` | `kernel::ipc::futex::WAITERS` (kernel/src/ipc/futex.rs) |
+| 55 | `QUARANTINED_FRAMES` | `kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
+| 56 | `LIVE_ASIDS` | `kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
+| 57 | `DEFERRED_RELEASE` | `kernel::memory::deferred_release::DEFERRED @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
+| 58 | `ABANDONED_TAGS` | `kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
+| 59 | `P01_LIFETIMES` | `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
+| 60 | `P01_NONCPU_SNAPSHOTS` | `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
+| 61 | `P01_NONCPU_TOPOLOGY_SNAPSHOTS` | `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
+| 62 | `P01_NONCPU_TOPOLOGY_TEST_SNAPSHOT` | `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
+| 63 | `P01_TOPOLOGY_SNAPSHOTS` | `kernel::p01_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_topology.rs, cfg inactive here) |
+| 64 | `P01_VTD_SNAPSHOTS` | `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
+| 65 | `P01_VTD_TEST_SNAPSHOT` | `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
+| 66 | `POLICY` | `kernel::policy::POLICY` (kernel/src/policy.rs) |
+| 67 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
+| 68 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
+| 69 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
+| 70 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
+| 71 | `SHM_HANDLES` | `kernel::task::syscall::SHM_HANDLES` (kernel/src/task/syscall/mod.rs) |
+| 72 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
+| 73 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
+| 74 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
+| 75 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
+| 76 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
+| 77 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
 | 78 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
 | 79 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
 | 80 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |

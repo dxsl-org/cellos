@@ -23,10 +23,17 @@
 //!
 //! # Locks
 //!
-//! `EXPORTS` is taken first, never under another lock: `IOMMU_CLEANUP_SERIAL →
-//! EXPORTS` (holder hook) and `EXPORTS → grant table → SCHEDULER → pin
-//! REGISTRY` / `EXPORTS → VT-d UNITS`. Every lease transition happens under it,
-//! so 437/438/439, owner death and holder death are serialized.
+//! `EXPORTS` is taken under no lock but `IOMMU_CLEANUP_SERIAL` (holder hook):
+//! `IOMMU_CLEANUP_SERIAL → EXPORTS → grant table → SCHEDULER → pin REGISTRY` /
+//! `EXPORTS → VT-d UNITS`. The rank table lists them in that order
+//! (`sync/rank.rs`: `IOMMU_CLEANUP_SERIAL`, `DMA_EXPORTS`, `PAGE_GRANT_TABLE`,
+//! `REG_GRANT_TABLE`, `SCHEDULER`, …), which closes the inversion the census
+//! found (F7: `DMA_EXPORTS` used to rank after the grant tables it takes).
+//! Every lease transition happens under it, so 437/438/439, owner death and
+//! holder death are serialized. No frame is freed under it: an export's
+//! released owner frames ride out in the [`KernelPlatform`] and are freed once
+//! `EXPORTS` is dropped (`FRAME_ALLOCATOR`/`KERNEL_ROOT` used to be taken under
+//! it).
 
 use super::super::SCHEDULER;
 use super::SyscallError;
@@ -109,8 +116,8 @@ pub(crate) trait Platform {
     /// (an owned SAS Grant always is) and lock it under `export_id`. No effect
     /// on refusal.
     fn lock_owned_range(&mut self, req: &RangeLock) -> Result<(), SyscallError>;
-    /// Drop the range lock of `export_id` and free the frames nothing else
-    /// protects; returns pages freed.
+    /// Drop the range lock of `export_id` and release the frames nothing else
+    /// protects (freed after `EXPORTS` is dropped); returns their pages.
     fn unlock_range(&mut self, export_id: u64) -> usize;
     /// `tid` holds `PcieDriverCap`.
     fn has_pcie_driver(&self, tid: usize) -> bool;
@@ -242,6 +249,19 @@ pub(crate) struct ExportTable {
 
 static EXPORTS: Spinlock<ExportTable> =
     Spinlock::ranked(ExportTable::new(), crate::sync::rank::DMA_EXPORTS);
+
+// The documented order (module docs, census F7): the holder hook takes
+// `EXPORTS` under `IOMMU_CLEANUP_SERIAL`, and every lease transition takes the
+// grant tables and `SCHEDULER` under `EXPORTS`.
+const _: () = {
+    use crate::sync::rank::{
+        DMA_EXPORTS, IOMMU_CLEANUP_SERIAL, PAGE_GRANT_TABLE, REG_GRANT_TABLE, SCHEDULER,
+    };
+    assert!(IOMMU_CLEANUP_SERIAL.0 < DMA_EXPORTS.0);
+    assert!(DMA_EXPORTS.0 < PAGE_GRANT_TABLE.0);
+    assert!(DMA_EXPORTS.0 < REG_GRANT_TABLE.0);
+    assert!(DMA_EXPORTS.0 < SCHEDULER.0);
+};
 /// Next export id; boot-wide, never reused. An id taken by an export whose
 /// range proof then fails is skipped, never reissued.
 static NEXT_EXPORT_ID: AtomicU64 = AtomicU64::new(1);
@@ -313,9 +333,9 @@ impl ExportTable {
         if let Some(m) = lease.mapping.take() {
             self.retire_mapping(platform, lease.holder, m, lease.len);
         }
-        let freed = platform.unlock_range(id);
+        let released = platform.unlock_range(id);
         log::warn!(
-            "[export] drop id={id} ({why}): owner range {:#x}+{} unlocked, {freed} quarantined page(s) freed",
+            "[export] drop id={id} ({why}): owner range {:#x}+{} unlocked, {released} quarantined page(s) released",
             lease.base,
             lease.len
         );
@@ -673,6 +693,15 @@ impl ExportTable {
 }
 
 /// 437 entry.
+/// Run `f` under `EXPORTS`, then free the owner frames it released only once
+/// the lock is dropped (census F7).
+fn with_exports<R>(f: impl FnOnce(&mut ExportTable, &mut KernelPlatform) -> R) -> R {
+    let mut platform = KernelPlatform::new();
+    let result = f(&mut EXPORTS.lock(), &mut platform);
+    platform.free_released();
+    result
+}
+
 pub(crate) fn export(
     caller: usize,
     va: usize,
@@ -680,26 +709,21 @@ pub(crate) fn export(
     service: usize,
     flags: usize,
 ) -> Result<usize, SyscallError> {
-    let mut platform = KernelPlatform;
-    EXPORTS
-        .lock()
-        .export(&mut platform, caller, va, len, service, flags)
-        .map(|id| id as usize)
+    with_exports(|exports, platform| {
+        exports
+            .export(platform, caller, va, len, service, flags)
+            .map(|id| id as usize)
+    })
 }
 
 /// 438 entry. `out_ptr`/`out_len` are validated by the caller before this.
 pub(crate) fn map(caller: usize, id: usize, bdf: usize) -> Result<ViDmaExportV1, SyscallError> {
-    let mut platform = KernelPlatform;
-    EXPORTS.lock().map(&mut platform, caller, id as u64, bdf)
+    with_exports(|exports, platform| exports.map(platform, caller, id as u64, bdf))
 }
 
 /// 439 entry.
 pub(crate) fn revoke(caller: usize, id: usize) -> Result<usize, SyscallError> {
-    let mut platform = KernelPlatform;
-    EXPORTS
-        .lock()
-        .revoke_by(&mut platform, caller, id as u64)
-        .map(|()| 0)
+    with_exports(|exports, platform| exports.revoke_by(platform, caller, id as u64).map(|()| 0))
 }
 
 /// First retirement step for `tid` (CP1 §6): revoke every lease it owns before
@@ -708,7 +732,7 @@ pub(crate) fn reap_owner(tid: usize) {
     if LEASES.load(Ordering::Relaxed) == 0 {
         return;
     }
-    EXPORTS.lock().owner_died(&mut KernelPlatform, tid);
+    with_exports(|exports, platform| exports.owner_died(platform, tid));
 }
 
 /// Holder hook: `tid`'s VT-d domain was torn down and acknowledged.
@@ -716,9 +740,7 @@ pub(crate) fn reap_owner(tid: usize) {
 /// Always takes `EXPORTS`: the leases a dying holder affects were created by
 /// other tasks, so no program order makes a lock-free zero check exact here.
 pub(crate) fn holder_domain_revoked(tid: usize) {
-    EXPORTS
-        .lock()
-        .holder_domain_revoked(&mut KernelPlatform, tid);
+    with_exports(|exports, platform| exports.holder_domain_revoked(platform, tid));
 }
 
 /// Scheduler pass: retry unacknowledged revokes (CP1 §5.3 deferred retry).
@@ -726,7 +748,7 @@ pub(crate) fn retry_pending() {
     if REVOKING.load(Ordering::Relaxed) == 0 {
         return;
     }
-    EXPORTS.lock().retry(&mut KernelPlatform);
+    with_exports(|exports, platform| exports.retry(platform));
 }
 
 /// Prove `req.base..+len` lies inside one live Grant `req.tid` owns, under the
@@ -812,7 +834,28 @@ fn lock_exported_range(req: &RangeLock) -> Result<(), SyscallError> {
 }
 
 /// The production [`Platform`]: scheduler, grant tables, pin registry, VT-d.
-pub(crate) struct KernelPlatform;
+/// The production [`Platform`]. It carries the owner frames an unlock
+/// released out from under `EXPORTS`, for [`Self::free_released`] once the
+/// lock is dropped.
+pub(crate) struct KernelPlatform {
+    released: Vec<crate::memory::pin::ReleasedRange>,
+}
+
+impl KernelPlatform {
+    const fn new() -> Self {
+        Self {
+            released: Vec::new(),
+        }
+    }
+
+    /// Resume the release of every run an unlock handed back: unpublish,
+    /// flush, free. Runs with `EXPORTS` released.
+    fn free_released(self) {
+        for range in self.released {
+            super::free_released_range(range);
+        }
+    }
+}
 
 impl Platform for KernelPlatform {
     fn binding(&self, tid: usize) -> Option<Incarnation> {
@@ -864,12 +907,17 @@ impl Platform for KernelPlatform {
     }
 
     fn unlock_range(&mut self, export_id: u64) -> usize {
-        let mut freed = 0;
+        let mut released = 0;
         for range in crate::memory::pin::unlock_dma_export(export_id) {
-            freed += range.pages();
-            super::free_released_range(range);
+            released += range.pages();
+            if self.released.try_reserve(1).is_ok() {
+                self.released.push(range);
+            } else {
+                crate::memory::frame_run::PENDING
+                    .leak(range.run, "no heap to defer an export's release");
+            }
         }
-        freed
+        released
     }
 
     fn has_pcie_driver(&self, tid: usize) -> bool {
