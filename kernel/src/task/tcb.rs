@@ -807,11 +807,10 @@ impl Drop for Task {
                     // still resolve these stack addresses and walk into the
                     // backing frames. The unmap retained the tables it owns; the
                     // backing is this Task's, and the one thing it must not do is
-                    // hand it to the allocator now. Leaking it here is the loud,
-                    // counted half of the fail-closed contract: the frames are
-                    // never reused, and the log says which teardown did it.
+                    // hand it to the allocator now. The runs are quarantined
+                    // behind the tag (counted, logged) and the reaper frees them
+                    // only once a later epoch confirms it.
                     let pages = kernel_stack.pages + user_stack.pages;
-                    crate::memory::deferred_release::note_leaked_stack_frames(pages);
                     #[cfg(feature = "p01-trace")]
                     {
                         let owner = crate::p01_resources::owner(self);
@@ -833,12 +832,14 @@ impl Drop for Task {
                         crate::p01_resources::finish(user_stack.p01_obligation.take(), 5);
                     }
                     log::error!(
-                        "[aspace] task stack teardown deferred ({:?}): {} frame(s) withheld from the allocator until the tag's invalidation is confirmed",
+                        "[aspace] task stack teardown deferred ({:?}): {} frame(s) quarantined until the tag's invalidation is confirmed",
                         error,
                         pages
                     );
-                    core::mem::forget(kernel_stack);
-                    core::mem::forget(user_stack);
+                    crate::task::stack::Stack::retire_behind_tag(
+                        space.asid(),
+                        [kernel_stack, user_stack],
+                    );
                 }
             }
         }

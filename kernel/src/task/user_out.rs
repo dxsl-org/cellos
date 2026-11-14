@@ -92,12 +92,7 @@ mod tests {
     }
 
     fn fake_stack() -> Stack {
-        Stack {
-            base: 0x8000,
-            pages: 2,
-            guard_pages: 2,
-            top: 0xc000,
-        }
+        Stack::for_tests(0x8000, 2, 2, 0xc000)
     }
 
     #[test]

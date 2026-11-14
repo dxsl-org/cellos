@@ -66,32 +66,48 @@ impl Drop for SumAccessGuard {
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
-/// Hand the `total_pages` frames of a stack run at `base` to `batch`: unmap
-/// each (recording the shared-root invalidation), then retire the run, which
-/// the batch frees only once that invalidation is confirmed — restoring each
-/// frame to the boot identity mapping (kernel RWX) first.
+/// The kernel alias a stack run's frames need back before they are free.
 ///
-/// Invariant this upholds: every frame on the allocator's free list is
-/// identity-mapped kernel-RWX. The cell loader zeroes a freshly allocated frame
-/// through its identity address, so a frame released while unmapped (as the guard
-/// frame is) store-faults for its next owner, and one released carrying USER flags
-/// hands that owner the wrong permissions. The run's `KernelAlias::Removed`
-/// makes the batch normalise the PTE whatever state the frame was left in.
+/// Every frame on the allocator's free list must be reachable kernel-RWX at
+/// `phys_to_virt`: the cell loader zeroes a freshly allocated frame there. Where
+/// that is the identity map (RV64, AArch64) the stack's remap and its unmapped
+/// guards removed it, so the run restores the identity leaf before free. x86_64
+/// reaches RAM through the HHDM, which a stack never touches: its VA == PA
+/// mapping is a lower-half alias of its own, removed on retirement and never
+/// restored (census F3), and the tables it needed are pruned instead.
+fn stack_alias(base: VAddr) -> KernelAlias {
+    if crate::memory::frame::phys_to_virt(base) == base {
+        KernelAlias::Removed
+    } else {
+        KernelAlias::Intact
+    }
+}
+
+/// Hand a stack run to `batch`: unmap each page (recording the shared-root
+/// invalidation), detach the tables only the run needed where no alias is
+/// restored (x86_64), and retire the run, which the batch frees only once that
+/// invalidation is confirmed — restoring its kernel alias first where the run
+/// says so.
 ///
 /// `reserved`: the run is in `STACK_RESERVATIONS`, which keeps its VAs from the
 /// loader until the frames are free (removed in the same allocator hold).
 /// Takes only `KERNEL_ROOT` (a leaf); the caller may hold `FRAME_ALLOCATOR`.
-fn retire_frames(batch: &mut Batch, base: VAddr, total_pages: usize, reserved: bool) {
+fn retire_run(batch: &mut Batch, mut run: FrameRun, reserved: bool) {
+    let (base, total_pages) = (run.base(), run.pages());
     for i in 0..total_pages {
         let _ = paging::unmap_page(batch, base + i * PAGE_SIZE);
     }
-    let run = FrameRun::unpublished(
-        base,
-        total_pages,
-        RunOwner::Kernel,
-        RunKind::Leaf,
-        KernelAlias::Removed,
-    );
+    if run.alias() == KernelAlias::Intact {
+        for i in 0..total_pages {
+            let page = base + i * PAGE_SIZE;
+            paging::prune_empty_tables(page).retire_into(batch, page);
+        }
+    }
+    // Every leaf of the run is gone from the kernel root. A run in any other
+    // state than `Mapped` cannot reach here; the batch would leak it (counted),
+    // never free it.
+    let unpublished = run.unpublish();
+    debug_assert!(unpublished.is_ok(), "stack run retired twice");
     batch.retire(if reserved {
         run.with_va_hold(VaHold {
             release: release_stack_reservation,
@@ -147,6 +163,9 @@ pub struct Stack {
     pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
+    /// The frames, guards included; `None` only once retired (or for a host
+    /// test's stack, which owns no frames).
+    run: Option<FrameRun>,
     #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
     /// Test-only lifetime registration for a kernel stack selected by a
@@ -261,6 +280,15 @@ impl Stack {
         })?;
 
         let base_addr = base_frame; // Identity Map
+                                    // Owned from here: every failure below retires it into `batch`, and a
+                                    // run dropped un-retired is leaked (counted), never freed.
+        let run = FrameRun::mapped(
+            base_frame,
+            total_pages,
+            RunOwner::Kernel,
+            RunKind::Leaf,
+            stack_alias(base_frame),
+        );
 
         // 2. Map Pages
         // Bottom guard frames are left unmapped; usable frames begin after them.
@@ -295,7 +323,7 @@ impl Stack {
                 // The run is not yet owned by a Stack, so nothing will drop it —
                 // release it here or the frames are lost until reboot.
                 error!("Stack alloc failed: cannot map page 0x{:X}", addr);
-                retire_frames(batch, base_addr, total_pages, false);
+                retire_run(batch, run, false);
                 return Err(ViError::OutOfMemory);
             }
         }
@@ -322,7 +350,7 @@ impl Stack {
                     "Stack alloc refused: guard frame 0x{:X} still mapped (unmap_ok={})",
                     guard_addr, unmap_ok
                 );
-                retire_frames(batch, base_addr, total_pages, false);
+                retire_run(batch, run, false);
                 return Err(ViError::NotSupported);
             }
         }
@@ -336,7 +364,7 @@ impl Stack {
         // held since before the unmap, also excludes the ELF loader until then.
         if let Err(error) = STACK_RESERVATIONS.insert(base_addr, top) {
             error!("Stack alloc refused: run 0x{:X} not recorded", base_addr);
-            retire_frames(batch, base_addr, total_pages, false);
+            retire_run(batch, run, false);
             return Err(error);
         }
 
@@ -357,7 +385,7 @@ impl Stack {
                 ) {
                     Ok(id) => Some(id),
                     Err(()) => {
-                        retire_frames(batch, base_addr, total_pages, true);
+                        retire_run(batch, run, true);
                         return Err(ViError::NotSupported);
                     }
                 }
@@ -376,6 +404,7 @@ impl Stack {
             pages,
             guard_pages,
             top,
+            run: Some(run),
             #[cfg(feature = "p01-trace")]
             p01_obligation: None,
             #[cfg(all(
@@ -498,27 +527,73 @@ impl Stack {
         }
         trace!("Dropping Stack at 0x{:X}", self.base);
 
-        let total_pages = self.pages + self.guard_pages;
-        unpublish_user_frames(batch, self.base, total_pages);
-        retire_frames(batch, self.base, total_pages, true);
+        let Some(run) = self.run.take() else {
+            return;
+        };
+        unpublish_user_frames(batch, run.base(), run.pages());
+        retire_run(batch, run, true);
     }
 
     /// Tear this stack down as part of a larger operation: its run joins
     /// `batch`, whose one shared flush covers every owner retired into it,
     /// and is freed — or quarantined, reservation included — when the batch
-    /// finishes.
+    /// finishes. A p01 obligation the stack still holds is dropped unfinished.
+    #[cfg(any(feature = "test-hooks", all(feature = "native-domains", cellos_wide)))]
+    fn retire_without_drop(self, batch: &mut Batch) {
+        let mut stack = core::mem::ManuallyDrop::new(self);
+        stack.retire_run_into(batch);
+    }
+
+    /// [`Self::retire_without_drop`] for the x86 silent-CPU fixture.
     #[cfg(feature = "test-hooks")]
     // reason: only the x86 silent-CPU fixture retires owners into a shared batch.
     #[allow(dead_code)]
     pub(crate) fn retire_into(self, batch: &mut Batch) {
-        let mut stack = core::mem::ManuallyDrop::new(self);
-        stack.retire_run_into(batch);
-        // Every other field is plain data; a p01 obligation would be lost.
         #[cfg(feature = "p01-trace")]
         debug_assert!(
-            stack.p01_obligation.is_none(),
+            self.p01_obligation.is_none(),
             "a stack with a p01 obligation is retired only by its drop"
         );
+        self.retire_without_drop(batch);
+    }
+
+    /// Tear a thread's stacks down after their unmap from a domain root could
+    /// not confirm private tag `asid`: a remote hart may still resolve the
+    /// stale private entry, so the runs are quarantined behind that tag (and a
+    /// fresh epoch from every remote) whatever the shared flush says, and the
+    /// reaper frees them — reservations with them — once it is confirmed.
+    /// Before this phase they were forgotten and never reused (census F5).
+    ///
+    /// The caller settles any p01 obligation first; one still held is dropped
+    /// unfinished, as the old `mem::forget` did.
+    #[cfg(all(feature = "native-domains", cellos_wide))]
+    pub(crate) fn retire_behind_tag(asid: usize, stacks: [Stack; 2]) {
+        let mut batch = Batch::new();
+        for stack in stacks {
+            stack.retire_without_drop(&mut batch);
+        }
+        batch.await_tag(asid);
+        let _ = batch.complete();
+    }
+
+    /// A stack descriptor that owns no frames, for host tests of range checks.
+    #[cfg(test)]
+    pub(crate) fn for_tests(base: VAddr, pages: usize, guard_pages: usize, top: VAddr) -> Self {
+        Self {
+            base,
+            pages,
+            guard_pages,
+            top,
+            run: None,
+            #[cfg(feature = "p01-trace")]
+            p01_obligation: None,
+            #[cfg(all(
+                feature = "native-domains",
+                feature = "test-hooks",
+                target_arch = "riscv64"
+            ))]
+            supervisor_registration: None,
+        }
     }
 }
 

@@ -92,7 +92,6 @@ static ABANDONED_SATURATED: AtomicBool = AtomicBool::new(false);
 static ATTEMPTS_TOTAL: AtomicUsize = AtomicUsize::new(0);
 static ABANDONED_ENTRIES: AtomicUsize = AtomicUsize::new(0);
 static ABANDONED_FRAMES: AtomicUsize = AtomicUsize::new(0);
-static LEAKED_STACK_FRAMES: AtomicUsize = AtomicUsize::new(0);
 
 /// Retain `frames` until `asid`'s invalidation is confirmed.
 ///
@@ -489,13 +488,6 @@ fn mark_abandoned(asid: usize) {
     ABANDONED_ENTRIES.fetch_add(1, Ordering::AcqRel);
 }
 
-/// Record stack backing that a fail-closed task teardown could not retain. Those
-/// frames are never returned to the allocator either, so they are counted with
-/// the quarantine even though no `OwnedFrame` can be handed over.
-pub fn note_leaked_stack_frames(pages: usize) {
-    LEAKED_STACK_FRAMES.fetch_add(pages, Ordering::AcqRel);
-}
-
 /// Test-hooks view of the queue: entries still waiting on an acknowledgement.
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
@@ -580,14 +572,4 @@ pub(crate) fn deferred_release_abandoned() -> usize {
 )]
 pub(crate) fn deferred_release_abandoned_frames() -> usize {
     ABANDONED_FRAMES.load(Ordering::Acquire)
-}
-
-/// Test-hooks view: stack frames a fail-closed teardown had to leak.
-#[cfg(feature = "test-hooks")]
-#[cfg_attr(
-    not(target_arch = "riscv64"),
-    allow(dead_code) // reason: the fixture that asserts on it is RV64-only today
-)]
-pub(crate) fn leaked_stack_frames() -> usize {
-    LEAKED_STACK_FRAMES.load(Ordering::Acquire)
 }

@@ -349,7 +349,7 @@ fn probe(
     // retain more than the attempt already did, nor push the pool above baseline.
     let frames = accounted && after_sweep >= before_sweep && after_sweep <= baseline;
     log::info!(
-        "[grant-gate] frame accounting: baseline={} before_sweep={} after_sweep={} deficit={} owned_delta={} backings={} queued_tables={} deferred={} reg_deferred={} quarantined={} leaked_stacks={}",
+        "[grant-gate] frame accounting: baseline={} before_sweep={} after_sweep={} deficit={} owned_delta={} backings={} queued_tables={} deferred={} reg_deferred={} quarantined={} run_quarantined={} run_leaked={}",
         baseline,
         before_sweep,
         after_sweep,
@@ -360,7 +360,8 @@ fn probe(
         retire.deferred,
         reg_deferred,
         crate::memory::address_space::quarantined_frame_count(),
-        crate::memory::deferred_release::leaked_stack_frames()
+        crate::memory::frame_run::PENDING.quarantined_pages(),
+        crate::memory::frame_run::PENDING.counters().leaked()
     );
     if !frames {
         // The terms above may not add up because of a frame withheld by an owner

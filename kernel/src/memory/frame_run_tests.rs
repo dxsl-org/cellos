@@ -549,3 +549,58 @@ fn a_wrapping_range_widens_the_batch_to_everything() {
     // Nothing to flush on the host: drop the batch empty.
     batch.all = false;
 }
+
+/// Row 5: a stack unmapped from a domain root whose tag probe failed is
+/// quarantined behind that tag even when the shared flush confirmed, and freed
+/// only once every remote has served an epoch asked for after it.
+#[test]
+fn a_run_behind_an_unconfirmed_tag_waits_for_a_fresh_epoch() {
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+    let mut run = fake.run(4, KernelAlias::Intact);
+    run.unpublish().unwrap();
+    // Both remotes served everything asked so far: the shared flush confirmed.
+    fake.request();
+    fake.answer(1);
+    fake.answer(2);
+
+    let epochs = tag_epochs(11, FlushOutcome::Confirmed, &mut fake);
+    assert_eq!(fake.reissued_tags, [Some(11)], "the tag is flushed again");
+    quarantine_behind_tag(run, 11, &epochs, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    assert_eq!(fake.used(), 4, "never freed on the shared outcome");
+    assert!(quarantine.tag_pending(11));
+    assert_eq!(quarantine.counters().quarantined_for(0), 4);
+
+    fake.answer(1);
+    assert_eq!(quarantine.reap(&mut fake), 0, "hart 2 has not answered");
+    fake.answer(2);
+    assert_eq!(quarantine.reap(&mut fake), 4);
+    assert_eq!(fake.used(), 0);
+    assert!(!quarantine.tag_pending(11));
+
+    // An unconfirmed shared flush's epochs are waited for as well.
+    let mut run = fake.run(1, KernelAlias::Intact);
+    run.unpublish().unwrap();
+    let shared = fake.unconfirmed();
+    fake.online = vec![1];
+    let epochs = tag_epochs(12, shared, &mut fake);
+    quarantine_behind_tag(run, 12, &epochs, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    fake.answer(1);
+    assert_eq!(
+        quarantine.reap(&mut fake),
+        0,
+        "the shared request to hart 2 is owed"
+    );
+    fake.answer(2);
+    assert_eq!(quarantine.reap(&mut fake), 1);
+
+    // A run still mapped is refused and handed back, never freed.
+    let mapped = fake.run(1, KernelAlias::Intact);
+    let refused = quarantine_behind_tag(mapped, 13, &epochs, &quarantine).unwrap_err();
+    assert_eq!(refused.state(), RunState::Mapped);
+    quarantine.leak(refused, "test");
+}

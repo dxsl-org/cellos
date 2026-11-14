@@ -360,7 +360,7 @@ pub(crate) fn run_primary() {
         let quiet = quarantined_frame_count() == 0
             && queue::deferred_release_abandoned() == 0
             && queue::deferred_release_abandoned_frames() == 0
-            && queue::leaked_stack_frames() == 0;
+            && crate::memory::frame_run::PENDING.counters().leaked() == 0;
         deferred_detail = (
             retained,
             depth_after,

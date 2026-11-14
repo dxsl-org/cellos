@@ -521,6 +521,42 @@ pub(crate) fn settle(
     }
 }
 
+/// The epochs a run behind private tag `asid` waits for: the tag flushed again
+/// locally and every online remote asked again — each serves its epoch with a
+/// full flush, which drops that tag's entries too — merged with what the
+/// operation's own shared flush is still waiting on.
+pub(crate) fn tag_epochs(asid: usize, outcome: FlushOutcome, backend: &mut impl Backend) -> Epochs {
+    let asked = backend.reissue(Some(asid));
+    match outcome {
+        FlushOutcome::Confirmed => asked,
+        FlushOutcome::Unconfirmed { epochs, .. } => max_epochs(&asked, &epochs),
+    }
+}
+
+/// Quarantine an unpublished run behind private tag `asid`, whose bounded
+/// probe did not confirm, until `epochs` are published (see [`tag_epochs`]).
+/// The run is never freed here, whatever the shared flush said: a remote hart
+/// may still resolve the private root's stale entry. A tag no reason can carry
+/// (wider than 16 bits) waits as a shared invalidation, on the same epochs.
+/// A run that is not `Unpublished` is refused and handed back, never freed.
+pub(crate) fn quarantine_behind_tag(
+    mut run: FrameRun,
+    asid: usize,
+    epochs: &Epochs,
+    pending: &Pending,
+) -> Result<(), FrameRun> {
+    let reason = u16::try_from(asid).map_or(Reason::SharedUnconfirmed, |asid| {
+        Reason::TagUnconfirmed { asid }
+    });
+    match run.quarantine(reason) {
+        Ok(()) => {
+            pending.push(run, epochs);
+            Ok(())
+        }
+        Err(_) => Err(run),
+    }
+}
+
 /// Counters for logs and fixtures; every page count is in 4 KiB frames.
 pub struct Counters {
     /// Pages currently quarantined, every reason.
@@ -884,6 +920,8 @@ pub struct Batch {
     all: bool,
     runs: Vec<FrameRun>,
     drain_user_copies: bool,
+    /// A private tag every run also waits for ([`Self::await_tag`]).
+    tag: Option<usize>,
 }
 
 impl Batch {
@@ -893,7 +931,18 @@ impl Batch {
             all: false,
             runs: Vec::new(),
             drain_user_copies: false,
+            tag: None,
         }
+    }
+
+    /// Every run retired into this batch also waits for private tag `asid`,
+    /// whose bounded probe did not confirm after the caller unmapped the frames
+    /// from that domain root. The runs are then quarantined as
+    /// [`Reason::TagUnconfirmed`] whatever the shared flush says, and the
+    /// reaper frees them once every remote hart has published an epoch asked
+    /// for after this flush.
+    pub fn await_tag(&mut self, asid: usize) {
+        self.tag = Some(asid);
     }
 
     /// Nothing to flush and nothing to free.
@@ -1028,9 +1077,19 @@ impl Batch {
             crate::task::user_copy::wait_sas_copies_quiescent();
         }
         let mut backend = KernelBackend;
+        let behind_tag = self
+            .tag
+            .take()
+            .map(|asid| (asid, tag_epochs(asid, outcome, &mut backend)));
         let mut quarantined = 0;
         for run in self.runs.drain(..) {
             let pages = run.pages();
+            if let Some((asid, epochs)) = &behind_tag {
+                if let Err(run) = quarantine_behind_tag(run, *asid, epochs, &PENDING) {
+                    PENDING.leak(run, "batch run not unpublished");
+                }
+                continue;
+            }
             match settle(run, outcome, &mut backend, &PENDING) {
                 Ok(0) if !outcome.is_confirmed() => quarantined += pages,
                 Ok(_) => {}
