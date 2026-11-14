@@ -66,23 +66,6 @@ impl Drop for SumAccessGuard {
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
-/// The kernel alias a stack run's frames need back before they are free.
-///
-/// Every frame on the allocator's free list must be reachable kernel-RWX at
-/// `phys_to_virt`: the cell loader zeroes a freshly allocated frame there. Where
-/// that is the identity map (RV64, AArch64) the stack's remap and its unmapped
-/// guards removed it, so the run restores the identity leaf before free. x86_64
-/// reaches RAM through the HHDM, which a stack never touches: its VA == PA
-/// mapping is a lower-half alias of its own, removed on retirement and never
-/// restored (census F3), and the tables it needed are pruned instead.
-fn stack_alias(base: VAddr) -> KernelAlias {
-    if crate::memory::frame::phys_to_virt(base) == base {
-        KernelAlias::Removed
-    } else {
-        KernelAlias::Intact
-    }
-}
-
 /// Hand a stack run to `batch`: unmap each page (recording the shared-root
 /// invalidation), detach the tables only the run needed where no alias is
 /// restored (x86_64), and retire the run, which the batch frees only once that
@@ -287,7 +270,7 @@ impl Stack {
             total_pages,
             RunOwner::Kernel,
             RunKind::Leaf,
-            stack_alias(base_frame),
+            KernelAlias::of_identity_remap(base_frame),
         );
 
         // 2. Map Pages

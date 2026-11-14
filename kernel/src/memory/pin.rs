@@ -25,10 +25,20 @@
 //! acknowledgement stay withheld for the life of the boot, which leaks memory
 //! but cannot corrupt another cell.
 //!
+//! The withheld frames are a `FrameRun` held as `Quarantined(Pinned(key))` in
+//! the frame-run quarantine (`memory::frame_run::PENDING`), still mapped: the
+//! holder may still dereference them, so the hold is taken before anything is
+//! unpublished (census F15). This registry decides *which* key protects a range
+//! and when that key ends; the pending list keeps the frames and counts them
+//! against the 1/64 quarantine cap. A released run comes back `Mapped`, and the
+//! caller resumes its release (unpublish, flush, free) outside every lock here.
+//!
 //! # Lock order
 //!
-//! `REGISTRY` is a **leaf**: no other lock is acquired while it is held, and it
-//! is never held across `FRAME_ALLOCATOR`, `KERNEL_ROOT` or `SCHEDULER`. The
+//! `REGISTRY` is a **leaf** except for the frame-run quarantine's own lock,
+//! which ranks after it: holds are installed, re-keyed and ended in the same
+//! transaction that finds their protector. It is never held across
+//! `FRAME_ALLOCATOR`, `KERNEL_ROOT` or `SCHEDULER`, and nothing logs under it. The
 //! grant teardown path therefore runs
 //!
 //! ```text
@@ -42,6 +52,7 @@
 //! Neither is ever acquired while `SCHEDULER` is held — the watchdog defers its
 //! reap list precisely so `yield_cpu` can drain it after dropping `SCHEDULER`.
 
+use crate::memory::frame_run::{FrameRun, KernelAlias, Reason, RunKind, RunOwner, PENDING};
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -61,10 +72,12 @@ const MAX_PINNED_REGIONS: usize = 128;
 /// (two rings plus 16 TX and 16 RX buffers).
 const MAX_PINS_PER_TASK: usize = 48;
 
-/// Frame ranges the quarantine can hold at one time. Entries are only created
-/// by the reaper, one per grant a dying cell had pinned, so the bound is the
-/// number of grants that can be in flight across all dead cells at once.
-const MAX_QUARANTINED_REGIONS: usize = 64;
+/// p01-trace provenance slots for withheld runs (one per grant a dying cell had
+/// pinned); the runs themselves live in the frame-run quarantine, unbounded.
+#[cfg(feature = "p01-trace")]
+const P01_HOLD_SLOTS: usize = 64;
+/// No epoch: an event hold ends on its event, never on a flush.
+const NO_EPOCHS: crate::memory::frame_run::Epochs = [0; crate::sched::smp::MAX_HARTS];
 pub(crate) const MAX_VFS_LEASES: usize = 32;
 /// `GrantSlice` leases (`LEASE` flag) tracked at one time across all holders.
 ///
@@ -213,34 +226,45 @@ struct DmaExportLock {
     holder_cell: u64,
 }
 
-/// Frames the reaper declined to return to the allocator, awaiting an
-/// acknowledgement from `owner`.
+/// p01-trace provenance of one withheld run, kept beside the run (which lives
+/// in the frame-run quarantine) until its key ends.
+#[cfg(feature = "p01-trace")]
 #[derive(Clone, Copy)]
-struct FrameHold {
+struct P01Hold {
     base: usize,
     /// Zero marks a free slot.
     pages: usize,
-    release: ReleaseKey,
-    #[cfg(feature = "p01-trace")]
     p01_obligation: Option<crate::p01_resources::Obligation>,
-    #[cfg(feature = "p01-trace")]
     p01_range: Option<crate::p01_retained::Token>,
 }
 
-/// Internal custody handoff. Private provenance survives removal from REGISTRY
-/// and is retired by the caller only after actual allocator release.
-#[derive(Debug, Clone, Copy)]
+/// Withheld frames whose key ended: the run is `Mapped` again, and the caller
+/// resumes its release (unpublish, flush, free) outside `REGISTRY`. Dropping
+/// one unreleased leaks the frames (counted), never frees them. Private
+/// provenance survives removal from REGISTRY and is retired by the caller only
+/// after actual allocator release.
+#[derive(Debug)]
 pub struct ReleasedRange {
-    pub base: usize,
-    pub pages: usize,
+    pub run: FrameRun,
     #[cfg(feature = "p01-trace")]
     pub(crate) p01_range: Option<crate::p01_retained::Token>,
     #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
 }
+
+impl ReleasedRange {
+    pub fn base(&self) -> usize {
+        self.run.base()
+    }
+
+    pub fn pages(&self) -> usize {
+        self.run.pages()
+    }
+}
+
 impl PartialEq for ReleasedRange {
     fn eq(&self, other: &Self) -> bool {
-        self.base == other.base && self.pages == other.pages
+        (self.base(), self.pages()) == (other.base(), other.pages())
     }
 }
 impl Eq for ReleasedRange {}
@@ -248,14 +272,13 @@ impl Eq for ReleasedRange {}
 // Existing source selftests compare physical custody, not private provenance.
 impl PartialEq<(usize, usize)> for ReleasedRange {
     fn eq(&self, other: &(usize, usize)) -> bool {
-        (self.base, self.pages) == *other
+        (self.base(), self.pages()) == *other
     }
 }
 
 /// What ends a pin hold; also the key of a `frame_run::Reason::Pinned` hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReleaseKey {
-    None,
     Owner(usize),
     /// A VideoCore mailbox request may complete after its cell dies. It has no
     /// IOMMU completion acknowledgement, so its frames are boot-lifetime.
@@ -311,13 +334,11 @@ const EMPTY_CACHE_SYNC: CacheSyncEntry = CacheSyncEntry {
     quarantined: false,
 };
 
-const EMPTY_HOLD: FrameHold = FrameHold {
+#[cfg(feature = "p01-trace")]
+const EMPTY_P01_HOLD: P01Hold = P01Hold {
     base: 0,
     pages: 0,
-    release: ReleaseKey::None,
-    #[cfg(feature = "p01-trace")]
     p01_obligation: None,
-    #[cfg(feature = "p01-trace")]
     p01_range: None,
 };
 
@@ -351,7 +372,8 @@ struct Registry {
     /// Export range locks keyed by export id; bounded by the lease table in
     /// `task::dma_export`, which is the only writer.
     dma_exports: BTreeMap<u64, DmaExportLock>,
-    quarantine: [FrameHold; MAX_QUARANTINED_REGIONS],
+    #[cfg(feature = "p01-trace")]
+    p01_holds: [P01Hold; P01_HOLD_SLOTS],
 }
 
 /// One lock covers both tables: they are only ever consulted together, and a
@@ -364,7 +386,8 @@ static REGISTRY: Spinlock<Registry> = Spinlock::ranked(
         vfs_leases: [EMPTY_VFS_LEASE; MAX_VFS_LEASES],
         grant_leases: [EMPTY_GRANT_LEASE; MAX_GRANT_LEASES],
         dma_exports: BTreeMap::new(),
-        quarantine: [EMPTY_HOLD; MAX_QUARANTINED_REGIONS],
+        #[cfg(feature = "p01-trace")]
+        p01_holds: [EMPTY_P01_HOLD; P01_HOLD_SLOTS],
     },
     crate::sync::rank::PIN_REGISTRY,
 );
@@ -379,9 +402,8 @@ static LIVE_GRANT_LEASES: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "p01-trace")]
 pub(crate) fn p01_static_bytes() -> usize {
-    // FrameHold was already eight-byte aligned; the added field has the same
-    // alignment, so no additional per-entry padding is introduced on x86_64.
-    MAX_QUARANTINED_REGIONS
+    // The provenance slots beside the frame-run quarantine's runs.
+    P01_HOLD_SLOTS
         * (core::mem::size_of::<Option<crate::p01_resources::Obligation>>()
             + core::mem::size_of::<Option<crate::p01_retained::Token>>())
 }
@@ -403,24 +425,7 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
             .grant_leases
             .iter()
             .any(|e| e.pages != 0 && (e.grant_owner == tid || e.holder_tid == tid))
-        || registry.quarantine.iter().any(|e| {
-            e.pages != 0
-                && match e.release {
-                    ReleaseKey::Owner(owner) => owner == tid,
-                    ReleaseKey::VfsLease {
-                        holder_tid,
-                        grant_owner,
-                        ..
-                    } => holder_tid == tid || grant_owner == tid,
-                    ReleaseKey::GrantLease {
-                        holder_tid,
-                        grant_owner,
-                        ..
-                    } => holder_tid == tid || grant_owner == tid,
-                    ReleaseKey::DmaExport { owner, .. } => owner == tid,
-                    _ => false,
-                }
-        });
+        || held_pages(|key| key_names_any(key, &[tid])) > 0;
     if pending {
         crate::p01_resources::unknown(owner, 3);
         crate::p01_resources::unknown(owner, 5);
@@ -521,6 +526,10 @@ fn same_grant_lease(
         && entry.grant_id == grant_id
 }
 
+/// Withhold `pages` frames at `base`, still mapped, under `release`: a run in
+/// the frame-run quarantine as `Quarantined(Pinned(release))`. `false` when no
+/// entry could be recorded (no heap): the frames are then leaked (counted),
+/// never freed, and the caller logs it once `REGISTRY` is released.
 fn hold_quarantined_frames(
     reg: &mut Registry,
     base: usize,
@@ -545,7 +554,6 @@ fn hold_quarantined_frames(
             .iter()
             .find(|entry| entry.pages != 0 && overlaps((base, pages), (entry.base, entry.pages)))
             .and_then(|entry| crate::p01_resources::owner_for_tid(entry.owner)),
-        _ => None,
     };
     #[cfg(feature = "p01-trace")]
     let p01_obligation = p01_owner
@@ -561,53 +569,133 @@ fn hold_quarantined_frames(
             crate::p01_retained::Reason::PinWithheld
         },
     );
-    match reg.quarantine.iter_mut().find(|entry| entry.pages == 0) {
+    if !hold_run(grant_run(base, pages), release) {
+        #[cfg(feature = "p01-trace")]
+        {
+            // Observe Full before frames lose their only structured release key.
+            crate::p01_retained::mark(p01_range, crate::p01_retained::Reason::PinFull);
+            crate::p01_resources::finish(p01_obligation, 5);
+            if let Some(owner) = p01_owner {
+                crate::p01_resources::retained(owner, 3);
+            }
+        }
+        return false;
+    }
+    #[cfg(feature = "p01-trace")]
+    match reg.p01_holds.iter_mut().find(|entry| entry.pages == 0) {
         Some(slot) => {
-            *slot = FrameHold {
+            *slot = P01Hold {
                 base,
                 pages,
-                release,
-                #[cfg(feature = "p01-trace")]
                 p01_obligation,
-                #[cfg(feature = "p01-trace")]
                 p01_range,
-            };
-            true
-        }
-        None => {
-            #[cfg(feature = "p01-trace")]
-            {
-                // Observe Full before frames lose their only structured release key.
-                crate::p01_retained::mark(p01_range, crate::p01_retained::Reason::PinFull);
-                crate::p01_resources::finish(p01_obligation, 5);
-                if let Some(owner) = p01_owner {
-                    crate::p01_resources::retained(owner, 3);
-                }
             }
+        }
+        // The frames are held; only their provenance is lost.
+        None => crate::p01_retained::fault(),
+    }
+    #[cfg(not(feature = "p01-trace"))]
+    let _ = reg;
+    true
+}
+
+/// A withheld grant range as one run, still mapped (its holder may still use
+/// it). The alias is the one the grant release normalises.
+fn grant_run(base: usize, pages: usize) -> FrameRun {
+    FrameRun::mapped(
+        base,
+        pages,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        KernelAlias::of_identity_remap(base),
+    )
+}
+
+/// Hold a `Mapped` run under `key` in the frame-run quarantine. `false` when it
+/// could not be recorded: it is leaked (counted, never freed).
+fn hold_run(mut run: FrameRun, key: ReleaseKey) -> bool {
+    // A `Mapped` run takes any event hold; anything else is leaked below.
+    let _ = run.hold(Reason::Pinned(key));
+    match PENDING.try_push(run, &NO_EPOCHS) {
+        Ok(()) => true,
+        Err((run, _)) => {
+            PENDING.forget_unlogged(run);
             false
         }
     }
 }
 
-fn release_quarantined_frames<F>(reg: &mut Registry, mut matches: F) -> Vec<ReleasedRange>
+/// End every hold whose key `matches` selects and hand its run back.
+fn release_quarantined_frames<F>(reg: &mut Registry, matches: F) -> Vec<ReleasedRange>
 where
-    F: FnMut(ReleaseKey) -> bool,
+    F: Fn(ReleaseKey) -> bool,
 {
-    let mut released = Vec::new();
-    for hold in reg.quarantine.iter_mut() {
-        if hold.pages != 0 && matches(hold.release) {
-            released.push(ReleasedRange {
-                base: hold.base,
-                pages: hold.pages,
-                #[cfg(feature = "p01-trace")]
-                p01_range: hold.p01_range,
-                #[cfg(feature = "p01-trace")]
-                p01_obligation: hold.p01_obligation,
-            });
-            *hold = EMPTY_HOLD;
+    PENDING
+        .release_event(|reason| matches!(reason, Reason::Pinned(key) if matches(*key)))
+        .into_iter()
+        .map(|run| released_range(reg, run))
+        .collect()
+}
+
+/// A released run with its p01 provenance, which leaves `REGISTRY` with it.
+fn released_range(reg: &mut Registry, run: FrameRun) -> ReleasedRange {
+    #[cfg(feature = "p01-trace")]
+    let hold = reg
+        .p01_holds
+        .iter_mut()
+        .find(|entry| entry.pages != 0 && entry.base == run.base() && entry.pages == run.pages())
+        .map(|entry| core::mem::replace(entry, EMPTY_P01_HOLD))
+        .unwrap_or(EMPTY_P01_HOLD);
+    #[cfg(not(feature = "p01-trace"))]
+    let _ = reg;
+    ReleasedRange {
+        run,
+        #[cfg(feature = "p01-trace")]
+        p01_range: hold.p01_range,
+        #[cfg(feature = "p01-trace")]
+        p01_obligation: hold.p01_obligation,
+    }
+}
+
+/// Re-key a run whose key just ended to the next live protector of its frames,
+/// or hand it back when nothing protects them any more.
+fn rekey_or_release(reg: &mut Registry, run: FrameRun, released: &mut Vec<ReleasedRange>) {
+    match live_protector_key(reg, (run.base(), run.pages())) {
+        // A run that cannot be recorded is leaked (counted), never freed.
+        Some(key) => {
+            let _ = hold_run(run, key);
+        }
+        None => {
+            let range = released_range(reg, run);
+            released.push(range);
         }
     }
-    released
+}
+
+/// Pages held under the keys `matches` selects.
+fn held_pages(matches: impl Fn(&ReleaseKey) -> bool) -> usize {
+    PENDING.event_pages(|reason| matches!(reason, Reason::Pinned(key) if matches(key)))
+}
+
+/// Does `key` name one of `tids`: an owner-wide acknowledgement by one of them,
+/// a VFS or `GrantSlice` lease one granted or held, or an export one owns?
+/// Boot-lifetime cache-sync holds carry no task.
+fn key_names_any(key: &ReleaseKey, tids: &[usize]) -> bool {
+    match *key {
+        ReleaseKey::Owner(owner) => tids.contains(&owner),
+        ReleaseKey::VfsLease {
+            holder_tid,
+            grant_owner,
+            ..
+        } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
+        ReleaseKey::GrantLease {
+            holder_tid,
+            grant_owner,
+            ..
+        } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
+        ReleaseKey::DmaExport { owner, .. } => tids.contains(&owner),
+        ReleaseKey::CacheSyncBootLifetime => false,
+    }
 }
 
 /// Record `[base, base + len)` as participating in an in-flight operation owned
@@ -1323,38 +1411,22 @@ fn clear_grant_leases(reg: &mut Registry, matches: impl Fn(&GrantLeaseEntry) -> 
 /// [`live_protector_key`]; only frames nothing protects any more are returned
 /// for the caller to free outside `REGISTRY`.
 fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> {
-    let mut released = Vec::new();
-    for i in 0..MAX_QUARANTINED_REGIONS {
-        let hold = reg.quarantine[i];
-        let ReleaseKey::GrantLease {
-            holder_tid,
-            grant_owner,
-            grant_id,
-        } = hold.release
-        else {
-            continue;
-        };
-        if hold.pages == 0
-            || reg
-                .grant_leases
+    let orphaned = {
+        let leases = &reg.grant_leases;
+        PENDING.release_event(|reason| match *reason {
+            Reason::Pinned(ReleaseKey::GrantLease {
+                holder_tid,
+                grant_owner,
+                grant_id,
+            }) => !leases
                 .iter()
-                .any(|e| same_grant_lease(e, holder_tid, grant_owner, grant_id))
-        {
-            continue;
-        }
-        if let Some(key) = live_protector_key(reg, (hold.base, hold.pages)) {
-            reg.quarantine[i].release = key;
-            continue;
-        }
-        released.push(ReleasedRange {
-            base: hold.base,
-            pages: hold.pages,
-            #[cfg(feature = "p01-trace")]
-            p01_range: hold.p01_range,
-            #[cfg(feature = "p01-trace")]
-            p01_obligation: hold.p01_obligation,
-        });
-        reg.quarantine[i] = EMPTY_HOLD;
+                .any(|e| same_grant_lease(e, holder_tid, grant_owner, grant_id)),
+            _ => false,
+        })
+    };
+    let mut released = Vec::new();
+    for run in orphaned {
+        rekey_or_release(reg, run, &mut released);
     }
     released
 }
@@ -1456,27 +1528,12 @@ pub(crate) fn lock_dma_export(
 pub(crate) fn unlock_dma_export(export_id: u64) -> Vec<ReleasedRange> {
     let mut reg = REGISTRY.lock();
     reg.dma_exports.remove(&export_id);
+    let ended = PENDING.release_event(|reason| {
+        matches!(reason, Reason::Pinned(ReleaseKey::DmaExport { export_id: id, .. }) if *id == export_id)
+    });
     let mut released = Vec::new();
-    for i in 0..MAX_QUARANTINED_REGIONS {
-        let hold = reg.quarantine[i];
-        if hold.pages == 0
-            || !matches!(hold.release, ReleaseKey::DmaExport { export_id: id, .. } if id == export_id)
-        {
-            continue;
-        }
-        if let Some(key) = live_protector_key(&mut reg, (hold.base, hold.pages)) {
-            reg.quarantine[i].release = key;
-            continue;
-        }
-        released.push(ReleasedRange {
-            base: hold.base,
-            pages: hold.pages,
-            #[cfg(feature = "p01-trace")]
-            p01_range: hold.p01_range,
-            #[cfg(feature = "p01-trace")]
-            p01_obligation: hold.p01_obligation,
-        });
-        reg.quarantine[i] = EMPTY_HOLD;
+    for run in ended {
+        rekey_or_release(&mut reg, run, &mut released);
     }
     released
 }
@@ -1484,21 +1541,12 @@ pub(crate) fn unlock_dma_export(export_id: u64) -> Vec<ReleasedRange> {
 /// Pages withheld under export `export_id`'s release key.
 #[cfg(test)]
 pub(crate) fn dma_export_quarantined_pages(export_id: u64) -> usize {
-    let reg = REGISTRY.lock();
-    reg.quarantine
-        .iter()
-        .filter(|q| {
-            q.pages != 0
-                && matches!(q.release, ReleaseKey::DmaExport { export_id: id, .. } if id == export_id)
-        })
-        .map(|q| q.pages)
-        .sum()
+    held_pages(|key| matches!(key, ReleaseKey::DmaExport { export_id: id, .. } if *id == export_id))
 }
 
-/// Pages currently withheld from the frame allocator.
+/// Pages currently withheld from the frame allocator under a pin key.
 pub fn quarantined_pages() -> usize {
-    let reg = REGISTRY.lock();
-    reg.quarantine.iter().map(|q| q.pages).sum()
+    held_pages(|_| true)
 }
 
 /// VFS leases on grants owned by `grant_owner` that its death pending-revoked
@@ -1516,29 +1564,7 @@ pub fn vfs_leases_pending_for_owner(grant_owner: usize) -> usize {
 /// or held.
 /// Boot-lifetime cache-sync holds carry no task and are never attributed.
 pub fn quarantined_pages_attributed(tids: &[usize]) -> usize {
-    let reg = REGISTRY.lock();
-    reg.quarantine
-        .iter()
-        .filter(|q| {
-            q.pages != 0
-                && match q.release {
-                    ReleaseKey::Owner(owner) => tids.contains(&owner),
-                    ReleaseKey::VfsLease {
-                        holder_tid,
-                        grant_owner,
-                        ..
-                    } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
-                    ReleaseKey::GrantLease {
-                        holder_tid,
-                        grant_owner,
-                        ..
-                    } => tids.contains(&holder_tid) || tids.contains(&grant_owner),
-                    ReleaseKey::DmaExport { owner, .. } => tids.contains(&owner),
-                    ReleaseKey::None | ReleaseKey::CacheSyncBootLifetime => false,
-                }
-        })
-        .map(|q| q.pages)
-        .sum()
+    held_pages(|key| key_names_any(key, tids))
 }
 
 #[cfg(test)]

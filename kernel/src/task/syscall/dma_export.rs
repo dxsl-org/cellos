@@ -866,7 +866,7 @@ impl Platform for KernelPlatform {
     fn unlock_range(&mut self, export_id: u64) -> usize {
         let mut freed = 0;
         for range in crate::memory::pin::unlock_dma_export(export_id) {
-            freed += range.pages;
+            freed += range.pages();
             super::free_released_range(range);
         }
         freed

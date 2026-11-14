@@ -295,7 +295,7 @@ fn owner_death_quarantines_leased_rows_until_the_lease_ends() {
         assert!(held.quarantined && held.pending_revoke);
         // The holder's release hands exactly those frames back for freeing.
         let mut released = pin::release_grant_holder_leases(HOLDER_TID);
-        released.sort_by_key(|range| range.base);
+        released.sort_by_key(|range| range.base());
         assert_eq!(released, alloc::vec![(PAGE_BASE, 1), (REG_BASE, 1)]);
         assert_eq!(pin::quarantined_pages(), before);
     });

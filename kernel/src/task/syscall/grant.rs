@@ -86,10 +86,15 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// `unpublish_user_frames` has unmapped the page, flushed every hart and
 /// drained in-flight Sas copies, so a copy that probed the USER page cannot
 /// land in the frame through the fault-free kernel mapping after it is freed.
-/// Returns the number of frames released: each was mapped USER in the shared
-/// root with no borrower record, which the retirement verdict reports.
-/// Lock order: SHM_HANDLES (released); KERNEL_ROOT alone (unpublish); then
-/// FRAME_ALLOCATOR → KERNEL_ROOT.
+/// A frame an in-flight operation still holds (a pin, a lease, an export) is
+/// withheld first, still mapped, exactly as a reclaimed grant is. On x86_64,
+/// where the frame has no identity alias, the kernel-root tables `ShmMap`
+/// created for its USER mapping are pruned in the same batch.
+/// Returns the number of frames taken from the dead incarnation: each was
+/// mapped USER in the shared root with no borrower record, which the
+/// retirement verdict reports.
+/// Lock order: SHM_HANDLES (released); pin REGISTRY (released); KERNEL_ROOT
+/// alone (unpublish, prune); then FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner};
     let (frames, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
@@ -109,20 +114,23 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     // normalised and freed, or quarantined if a hart does not confirm.
     let mut batch = Batch::new();
     for &frame in &frames {
-        let alias = if crate::memory::paging::virt_to_phys(frame) != Some(frame) {
-            // The identity VA no longer maps this frame; only stale TLB
-            // entries for it can remain.
-            batch.invalidate(frame);
-            KernelAlias::Intact
+        if withhold_or_free(frame, 1) {
+            continue;
+        }
+        // An identity VA that no longer maps this frame leaves only stale TLB
+        // entries for it: nothing to unpublish, nothing to restore.
+        let mapped_here = crate::memory::paging::virt_to_phys(frame) == Some(frame);
+        let alias = if mapped_here {
+            KernelAlias::of_identity_remap(frame)
         } else {
-            crate::task::stack::unpublish_user_frames(&mut batch, frame, 1);
-            if crate::memory::frame::phys_to_virt(frame) == frame {
-                KernelAlias::Removed
-            } else {
-                KernelAlias::Intact
-            }
+            KernelAlias::Intact
         };
-        batch.retire(FrameRun::unpublished(frame, 1, owner, RunKind::Leaf, alias));
+        batch.invalidate(frame);
+        retire_published_run_into(
+            &mut batch,
+            FrameRun::mapped(frame, 1, owner, RunKind::Leaf, alias),
+            mapped_here,
+        );
     }
     let _ = batch.complete();
     frames.len()
@@ -331,21 +339,42 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize,
 /// (map_page → KERNEL_ROOT). Mirrors `Stack::drop`. Must NOT be called while
 /// already holding FRAME_ALLOCATOR.
 pub(super) fn free_grant_pages(base: usize, n_pages: usize) {
-    free_grant_pages_inner(
-        base,
-        n_pages,
+    free_grant_run(
+        grant_run(base, n_pages),
         #[cfg(feature = "p01-trace")]
         None,
     );
 }
 
+/// Resume the release of withheld frames whose key ended: the run comes back
+/// `Mapped` from the frame-run quarantine and takes [`free_grant_pages`]'s path.
 pub(super) fn free_released_range(range: crate::memory::pin::ReleasedRange) {
-    free_grant_pages_inner(
-        range.base,
-        range.pages,
+    let crate::memory::pin::ReleasedRange {
+        run,
         #[cfg(feature = "p01-trace")]
-        Some(range),
+        p01_range,
+        #[cfg(feature = "p01-trace")]
+        p01_obligation,
+    } = range;
+    free_grant_run(
+        run,
+        #[cfg(feature = "p01-trace")]
+        Some((p01_range, p01_obligation)),
     );
+}
+
+/// A reclaimed grant's frames as one run, still mapped: USER in the shared root
+/// (and, on RV64/AArch64, over the kernel's identity alias, which the release
+/// restores).
+pub(super) fn grant_run(base: usize, n_pages: usize) -> crate::memory::frame_run::FrameRun {
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    FrameRun::mapped(
+        base,
+        n_pages,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        KernelAlias::of_identity_remap(base),
+    )
 }
 
 /// Refuse an owner-initiated teardown of `[base, base + size)` while an
@@ -813,7 +842,7 @@ pub(crate) fn leaked_pages() -> usize {
 /// Must run with neither FRAME_ALLOCATOR nor SCHEDULER held.
 pub(crate) fn release_acked_frames(tid: usize) {
     for range in crate::memory::pin::acknowledge(tid) {
-        let (base, pages) = (range.base, range.pages);
+        let (base, pages) = (range.base(), range.pages());
         log::info!(
             "[grant] task {tid} acknowledged: releasing {pages} quarantined page(s) at {base:#x}"
         );
@@ -825,7 +854,7 @@ pub(crate) fn release_acked_frames(tid: usize) {
 /// `LEASE` leases. Runs at holder death, outside every grant/scheduler lock.
 pub(crate) fn release_vfs_holder_leases(tid: usize) {
     for range in crate::memory::pin::release_vfs_holder_leases(tid) {
-        let (base, pages) = (range.base, range.pages);
+        let (base, pages) = (range.base(), range.pages());
         log::info!(
             "[grant] VFS holder {tid} died: releasing {pages} quarantined page(s) at {base:#x}"
         );
@@ -1231,7 +1260,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         // identity-address zeroing), then free. x86_64 has no identity alias
         // to restore, so a restore there would add a kernel-RWX lower-half
         // mapping (R3): its pages are left unmapped and the tables they needed
-        // are pruned, as in `free_grant_pages_inner`. Those pages were briefly
+        // are pruned, as in `free_grant_pages`. Those pages were briefly
         // USER, so a Sas copy may have probed them: unpublish (unmap, flush,
         // drain copies) first on every target.
         crate::task::stack::unpublish_user_frames(&mut batch, paddr, mapped);
@@ -1324,13 +1353,20 @@ fn prune_unpublished_tables(
     }
 }
 
-pub(super) fn free_grant_pages_inner(
-    base: usize,
-    n_pages: usize,
-    #[cfg(feature = "p01-trace")] range: Option<crate::memory::pin::ReleasedRange>,
+#[cfg(feature = "p01-trace")]
+type P01Release = (
+    Option<crate::p01_retained::Token>,
+    Option<crate::p01_resources::Obligation>,
+);
+
+fn free_grant_run(
+    run: crate::memory::frame_run::FrameRun,
+    #[cfg(feature = "p01-trace")] range: Option<P01Release>,
 ) {
     #[cfg(feature = "p01-trace")]
     const PAGE_SIZE: usize = 4096;
+    #[cfg(feature = "p01-trace")]
+    let (base, n_pages) = (run.base(), run.pages());
     #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
     #[cfg(feature = "p01-trace")]
@@ -1342,14 +1378,14 @@ pub(super) fn free_grant_pages_inner(
     // then the alias restore and the free — or the quarantine of the run if a
     // hart does not confirm.
     let mut batch = crate::memory::frame_run::Batch::new();
-    retire_grant_pages_into(&mut batch, base, n_pages);
+    retire_grant_run_into(&mut batch, run);
     #[allow(unused_variables)] // reason: only the p01-trace witness reads it
     let flushed = batch.complete();
     #[cfg(feature = "p01-trace")]
-    if let Some(range) = range {
+    if let Some((p01_range, p01_obligation)) = range {
         if allocated && flushed.is_confirmed() {
-            crate::p01_retained::retire(range.p01_range);
-            crate::p01_resources::finish(range.p01_obligation, 1);
+            crate::p01_retained::retire(p01_range);
+            crate::p01_resources::finish(p01_obligation, 1);
         } else {
             crate::p01_retained::fault();
         }
@@ -1358,18 +1394,18 @@ pub(super) fn free_grant_pages_inner(
 
 /// [`free_grant_pages`] up to its flush: unpublish the run, detach the tables
 /// its USER mapping needed (x86_64), and retire it into `batch`.
-fn retire_grant_pages_into(
+fn retire_grant_run_into(
     batch: &mut crate::memory::frame_run::Batch,
-    base: usize,
-    n_pages: usize,
+    run: crate::memory::frame_run::FrameRun,
 ) {
     const PAGE_SIZE: usize = 4096;
+    let (base, n_pages) = (run.base(), run.pages());
 
     // Restore the kernel alias only where it is the identity map (RV64,
-    // AArch64). x86_64 reaches RAM through the HHDM and never had an identity
-    // alias for this frame, so a restore there would add a new kernel-RWX
-    // mapping to the lower half (the rule `release_shm_for` already follows).
-    let identity_alias = crate::memory::frame::phys_to_virt(base) == base;
+    // AArch64): the run's alias says which. x86_64 reaches RAM through the
+    // HHDM and never had an identity alias for this frame, so a restore there
+    // would add a new kernel-RWX mapping to the lower half.
+    let identity_alias = run.alias() != crate::memory::frame_run::KernelAlias::Intact;
     // A domain owner's backing is never published in the kernel root: it is
     // zeroed through `phys_to_virt` and mapped only in private roots, whose tags
     // the revoke has already confirmed. Without an identity alias such a run has
@@ -1381,13 +1417,32 @@ fn retire_grant_pages_into(
     let published = identity_alias
         || (0..n_pages)
             .any(|i| crate::memory::paging::virt_to_phys(base + i * PAGE_SIZE).is_some());
+    retire_published_run_into(batch, run, published);
+}
+
+/// Unpublish a grant or SHM run that is `published` in the shared root (its
+/// USER leaves unmapped, invalidated, copy windows drained; on x86_64 the
+/// tables those leaves needed detached), then retire it into `batch`, which
+/// frees it — alias restored where the run says so — once the flush confirms.
+fn retire_published_run_into(
+    batch: &mut crate::memory::frame_run::Batch,
+    mut run: crate::memory::frame_run::FrameRun,
+    published: bool,
+) {
+    use crate::memory::frame_run::KernelAlias;
+    let (base, n_pages) = (run.base(), run.pages());
     if published {
         crate::task::stack::unpublish_user_frames(batch, base, n_pages);
+        if run.alias() == KernelAlias::Intact {
+            prune_unpublished_tables(batch, base, n_pages);
+        }
     }
-    if !identity_alias && published {
-        prune_unpublished_tables(batch, base, n_pages);
-    }
-    retire_grant_run(batch, base, n_pages, identity_alias);
+    // Every leaf of the run is gone from the shared root (or never existed).
+    // A run in any other state than `Mapped` cannot reach here; the batch
+    // would leak it (counted), never free it.
+    let unpublished = run.unpublish();
+    debug_assert!(unpublished.is_ok(), "grant run released twice");
+    batch.retire(run);
 }
 
 /// Test-hooks: a grant run exactly as `GrantAlloc` builds it.
@@ -1408,7 +1463,7 @@ pub(crate) fn test_retire_grant_pages_into(
     base: usize,
     n_pages: usize,
 ) {
-    retire_grant_pages_into(batch, base, n_pages);
+    retire_grant_run_into(batch, grant_run(base, n_pages));
 }
 
 /// Exercise registered-grant teardown without decoder or scheduler pre-locks.
@@ -1514,7 +1569,7 @@ pub(super) fn free_released_grant_lease_frames(
     released: Vec<crate::memory::pin::ReleasedRange>,
 ) {
     for range in released {
-        let (base, pages) = (range.base, range.pages);
+        let (base, pages) = (range.base(), range.pages());
         log::info!(
             "[grant] GrantSlice lease holder {holder} released {pages} quarantined page(s) at \
              {base:#x}"

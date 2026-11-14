@@ -458,3 +458,33 @@ fn an_owners_lease_on_its_own_grant_does_not_block_reaper_transfer() {
     assert!(grant_lease_holder_of_owner(base, PAGE_SIZE, 951).is_none());
     assert!(release_grant_holder_leases(951).is_empty());
 }
+
+/// Phase 16 row 7: a withheld range is a `Quarantined(Pinned)` run in the
+/// frame-run quarantine, still mapped and counted against the cap, and it
+/// comes back `Mapped` (never freed here) when its key ends.
+#[test]
+fn a_withheld_range_is_a_pinned_run_until_its_key_ends() {
+    use crate::memory::frame_run::{Reason, RunState, PENDING};
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let base = arena(60);
+    let owner = 960;
+    let pinned = Reason::Pinned(ReleaseKey::Owner(owner)).index();
+    let before = PENDING.counters().quarantined_for(pinned);
+
+    assert!(withhold_frames(base, 3, owner));
+    assert_eq!(PENDING.counters().quarantined_for(pinned), before + 3);
+    assert_eq!(quarantined_pages_attributed(&[owner]), 3);
+
+    let mut released = acknowledge(owner);
+    assert_eq!(released, alloc::vec![(base, 3)]);
+    let range = released.pop().expect("one run");
+    assert_eq!(
+        range.run.state(),
+        RunState::Mapped,
+        "the caller unpublishes it"
+    );
+    assert_eq!(PENDING.counters().quarantined_for(pinned), before);
+    assert_eq!(quarantined_pages_attributed(&[owner]), 0);
+    // Host test: the frames are synthetic, so the run is not released.
+    PENDING.forget_unlogged(range.run);
+}

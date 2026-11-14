@@ -117,8 +117,8 @@ impl Platform for Fake {
     fn unlock_range(&mut self, export_id: u64) -> usize {
         let mut pages = 0;
         for r in crate::memory::pin::unlock_dma_export(export_id) {
-            pages += r.pages;
-            self.released.push((r.base, r.pages));
+            pages += r.pages();
+            self.released.push((r.base(), r.pages()));
         }
         pages
     }

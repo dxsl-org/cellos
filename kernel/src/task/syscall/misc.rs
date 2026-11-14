@@ -150,9 +150,12 @@ pub(super) fn drain_domain_receiver(_record: &DomainRecord) {}
 /// the transaction, the reaper must free these frames rather than install an
 /// orphaned release key; if the transfer wins, that exact release owns it.
 ///
-/// Returns `true` when the frames must not be freed. A full quarantine also
-/// returns `true`: leaking the frames is the only safe answer left, and the
-/// leak is counted in [`leaked_pages`].
+/// Withheld frames stay mapped (the holder may still use them) as a
+/// `Quarantined(Pinned)` run in the frame-run quarantine until the key's event.
+///
+/// Returns `true` when the frames must not be freed. A hold that could not be
+/// recorded (no heap) also returns `true`: leaking the frames is the only safe
+/// answer left, and the leak is counted in [`leaked_pages`].
 pub(super) fn withhold_or_free(base: usize, pages: usize) -> bool {
     match crate::memory::pin::withhold_pinned_frames(base, pages) {
         crate::memory::pin::FrameTransfer::Free => false,
@@ -160,7 +163,7 @@ pub(super) fn withhold_or_free(base: usize, pages: usize) -> bool {
         crate::memory::pin::FrameTransfer::Full => {
             LEAKED_PAGES.fetch_add(pages, core::sync::atomic::Ordering::Relaxed);
             log::error!(
-                "[grant] quarantine full: leaking {pages} page(s) at {base:#x} protected by a live pin"
+                "[grant] withheld run not recorded (no heap): leaking {pages} page(s) at {base:#x} protected by a live pin"
             );
             true
         }

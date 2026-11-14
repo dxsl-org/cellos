@@ -62,30 +62,30 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 55 | `LIVE_ASIDS` | `kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/address_space.rs) |
 | 56 | `DEFERRED_RELEASE` | `kernel::memory::deferred_release::DEFERRED @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
 | 57 | `ABANDONED_TAGS` | `kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/deferred_release.rs) |
-| 58 | `FRAME_RUN_PENDING` |  |
-| 59 | `P01_LIFETIMES` | `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
-| 60 | `P01_NONCPU_SNAPSHOTS` | `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
-| 61 | `P01_NONCPU_TOPOLOGY_SNAPSHOTS` | `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
-| 62 | `P01_NONCPU_TOPOLOGY_TEST_SNAPSHOT` | `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
-| 63 | `P01_TOPOLOGY_SNAPSHOTS` | `kernel::p01_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_topology.rs, cfg inactive here) |
-| 64 | `P01_VTD_SNAPSHOTS` | `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
-| 65 | `P01_VTD_TEST_SNAPSHOT` | `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
-| 66 | `POLICY` | `kernel::policy::POLICY` (kernel/src/policy.rs) |
-| 67 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
-| 68 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
-| 69 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
-| 70 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
-| 71 | `SHM_HANDLES` | `kernel::task::syscall::SHM_HANDLES` (kernel/src/task/syscall/mod.rs) |
-| 72 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
-| 73 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
-| 74 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
-| 75 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
-| 76 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
-| 77 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
-| 78 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
-| 79 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
-| 80 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
-| 81 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
+| 58 | `P01_LIFETIMES` | `kernel::p01_noncpu::LIFETIMES @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
+| 59 | `P01_NONCPU_SNAPSHOTS` | `kernel::p01_noncpu::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu.rs, cfg inactive here) |
+| 60 | `P01_NONCPU_TOPOLOGY_SNAPSHOTS` | `kernel::p01_noncpu_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
+| 61 | `P01_NONCPU_TOPOLOGY_TEST_SNAPSHOT` | `kernel::p01_noncpu_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_noncpu_topology.rs, cfg inactive here) |
+| 62 | `P01_TOPOLOGY_SNAPSHOTS` | `kernel::p01_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_topology.rs, cfg inactive here) |
+| 63 | `P01_VTD_SNAPSHOTS` | `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
+| 64 | `P01_VTD_TEST_SNAPSHOT` | `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
+| 65 | `POLICY` | `kernel::policy::POLICY` (kernel/src/policy.rs) |
+| 66 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
+| 67 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
+| 68 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
+| 69 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
+| 70 | `SHM_HANDLES` | `kernel::task::syscall::SHM_HANDLES` (kernel/src/task/syscall/mod.rs) |
+| 71 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
+| 72 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
+| 73 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
+| 74 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
+| 75 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
+| 76 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
+| 77 | `DMA_EXPORTS` | `kernel::task::syscall::dma_export::EXPORTS` (kernel/src/task/syscall/dma_export.rs) |
+| 78 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
+| 79 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
+| 80 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
+| 81 | `FRAME_RUN_PENDING` |  |
 | 82 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
 | 83 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
 | 84 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |

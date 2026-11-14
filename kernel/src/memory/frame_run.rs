@@ -80,6 +80,22 @@ pub enum KernelAlias {
     User,
 }
 
+impl KernelAlias {
+    /// The alias of frames whose identity VA (VA == PA) another mapping took
+    /// over — a stack, a grant, an SHM page. Where the kernel reaches RAM
+    /// through that identity VA (RV64, AArch64), the run must restore it
+    /// before free: `Removed`. Where it reaches RAM through the HHDM (x86_64),
+    /// the identity VA was never the kernel's alias: `Intact`, and no
+    /// lower-half kernel-RWX alias is ever added (census F3).
+    pub fn of_identity_remap(base: PhysAddr) -> Self {
+        if crate::memory::frame::phys_to_virt(base) == base {
+            KernelAlias::Removed
+        } else {
+            KernelAlias::Intact
+        }
+    }
+}
+
 /// Why a run is held back from the allocator.
 ///
 /// The invalidation reasons (and [`Reason::AliasUnrestored`]) wait on per-hart
@@ -386,9 +402,6 @@ impl FrameRun {
 
     /// `Quarantined(event) → Mapped` once the event the hold waited on happened;
     /// the run then takes the normal release path.
-    // reason: the pin, DMA-export and domain-grant owners adopt event holds in
-    // their own Phase 16 migrations; host tests cover the transition today.
-    #[cfg_attr(not(test), allow(dead_code))]
     fn end_hold(&mut self) -> Result<(), StateError> {
         match self.state {
             RunState::Quarantined(reason) if !reason.waits_for_epochs() => {
@@ -671,10 +684,23 @@ impl Pending {
     /// `try_reserve`: teardown must not panic on heap, so a run that cannot be
     /// recorded is leaked (counted), never freed.
     pub(crate) fn push(&self, run: FrameRun, epochs: &Epochs) {
+        if let Err((run, why)) = self.try_push(run, epochs) {
+            self.leak(run, why);
+        }
+    }
+
+    /// [`Self::push`] for a caller that holds a lock the console ranks below
+    /// (the pin registry): a run that cannot be recorded is handed back, for
+    /// the caller to [`Self::forget_unlogged`] and log once its locks are
+    /// released. Never frees it.
+    pub(crate) fn try_push(
+        &self,
+        run: FrameRun,
+        epochs: &Epochs,
+    ) -> Result<(), (FrameRun, &'static str)> {
         let RunState::Quarantined(reason) = run.state else {
             // Only quarantined runs belong here; anything else keeps its frames.
-            self.leak(run, "not quarantined");
-            return;
+            return Err((run, "not quarantined"));
         };
         let pages = run.pages();
         let mut entries = self.entries.lock();
@@ -706,9 +732,20 @@ impl Pending {
             }
         };
         drop(entries);
-        if let Some(run) = rejected {
-            self.leak(run, "no heap for the pending entry");
+        match rejected {
+            Some(run) => Err((run, "no heap for the pending entry")),
+            None => Ok(()),
         }
+    }
+
+    /// Leak `run` (counted, never reused) without logging: the caller holds a
+    /// lock the console ranks below and logs the loss after releasing it.
+    /// Returns the pages leaked.
+    pub(crate) fn forget_unlogged(&self, run: FrameRun) -> usize {
+        let pages = run.pages();
+        self.counters.leaked.fetch_add(pages, Ordering::AcqRel);
+        core::mem::forget(run);
+        pages
     }
 
     pub(crate) fn leak(&self, run: FrameRun, why: &str) {
@@ -855,8 +892,6 @@ impl Pending {
     /// End every event hold `matches` selects: those runs return to `Mapped`
     /// and to the caller, who resumes their release. Invalidation entries are
     /// never released here — only a published epoch ends them.
-    // reason: see `FrameRun::end_hold`.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn release_event(&self, matches: impl Fn(&Reason) -> bool) -> Vec<FrameRun> {
         let mut released = Vec::new();
         let mut entries = self.entries.lock();
@@ -876,6 +911,16 @@ impl Pending {
             }
         }
         released
+    }
+
+    /// Pages held under the event keys `matches` selects.
+    pub(crate) fn event_pages(&self, matches: impl Fn(&Reason) -> bool) -> usize {
+        self.entries
+            .lock()
+            .iter()
+            .filter(|entry| !entry.reason.waits_for_epochs() && matches(&entry.reason))
+            .map(|entry| entry.pages)
+            .sum()
     }
 
     /// Is a run quarantined under `asid`'s tag invalidation?
