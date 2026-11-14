@@ -37,13 +37,15 @@ requires the fixture's pre-request record plus an independent silent-remote line
 from the same boot before accepting it, and any silence *after* a request is a hard
 failure.
 
-`grant-pair` drives the phase-03 step-5 Tier-2 grant pair: it background-spawns
-the owner cell, reads the owner's `S22-RV64-GRANT-PAIR-HANDOFF` line, then spawns
-one receiver generation per property (ReadWrite + GrantFree, ReadOnly write,
-same-recipient ReadWrite→ReadOnly downgrade, GrantUnregister, owner exit),
-classifying each deliberate receiver store fault against the exact grant address
-the owner handed over. It is the only case that writes to the guest console; the
-others boot unattended.
+`grant-pair` asserts the phase-03 step-5 Tier-2 grant pair, which the image's
+fixture launcher (`tier2-grant-pair`) starts from the boot order: the owner on
+`/bin/silo`, then one receiver generation on `/bin/net-broker` per property
+(ReadWrite + GrantFree, ReadOnly write, same-recipient ReadWrite→ReadOnly
+downgrade, GrantUnregister, owner exit). The case reads the owner's
+`S22-RV64-GRANT-PAIR-HANDOFF` line and classifies each deliberate receiver store
+fault against the exact grant address the owner handed over. Every case boots
+unattended; because the pair runs in every boot of this image, every case
+classifies the pair's faults the same way.
 
 Each requested case gets a separate fresh QEMU log directory. `migration`
 requires two harts; it asserts the domain-switch terminal from the cross-hart
@@ -223,10 +225,23 @@ assert_runtime_hart_count() {
         exit 1
     fi
 }
-# Fault addresses the interactive grant-pair case expects: one deliberate store
-# per receiver property, each classified to the exact grant address the owner
-# handed over. Populated by run_grant_pair_interactive.
+# Fault addresses of the grant pair's receivers: one deliberate store per
+# receiver property, each classified to the exact grant address the owner handed
+# over. Read from each boot's own handoff line (`grant_pair_fault_addrs`).
 GRANT_PAIR_FAULT_ADDRS=""
+
+# The four grant addresses a boot's owner handed over, as `0x…` words; empty
+# when the boot never printed its handoff line.
+grant_pair_fault_addrs() {
+    local handoff id
+    handoff="$(grep -aoE 'S22-RV64-GRANT-PAIR-HANDOFF id1=[0-9]+ id2=[0-9]+ id3=[0-9]+ id4=[0-9]+' "$1" | tail -n 1 || true)"
+    [[ -n "$handoff" ]] || return 0
+    local addrs=()
+    for id in id1 id2 id3 id4; do
+        addrs+=("$(printf '0x%x' "$(printf '%s' "$handoff" | sed -n "s/.*$id=\([0-9]\+\).*/\1/p")")")
+    done
+    printf '%s %s %s %s' "${addrs[@]}"
+}
 
 # SWITCH logs one line per genuine Activate transition (domain_switch.rs
 # root_switch), so multi-stage fixtures emit it several times per boot; its
@@ -241,7 +256,7 @@ terminal_min_for() {
 }
 
 # Poll a growing raw QEMU log for an extended-regex pattern, bailing out if the
-# emulator dies first. Used only by the interactive grant-pair case.
+# emulator dies first. Used only by the grant-pair case.
 wait_for_log_pattern() {
     local file="$1" pattern="$2" secs="$3" pid="$4"
     local ticks=$(( secs * 4 ))
@@ -259,13 +274,12 @@ wait_for_log_pattern() {
     return 1
 }
 
-# Interactive launcher for the phase-03 step-5 grant pair. Unlike every other
-# case this one drives the guest console (same reviewed FIFO pattern as
-# scripts/qemu-c-spawn.sh): it waits for the shell prompt, spawns the owner on
-# its reviewed launch edge, drives one receiver generation per property over the
-# public Grant* lifecycle, and classifies every receiver fault from the kernel's
-# own fault line. Both cells therefore traverse the production SpawnFromPath
-# edge as real Tier-2 private-root domains.
+# Boot-order runner for the phase-03 step-5 grant pair. The image's fixture
+# launcher starts the owner on `/bin/silo` and then one receiver generation per
+# property on `/bin/net-broker`, each launched only after the previous one has
+# terminated; this case only watches. Both cells traverse the production
+# SpawnFromPath edge as real Tier-2 private-root domains, and every receiver
+# fault is classified from the kernel's own fault line.
 #
 # Phase protocol. The owner allocates, proves its own mapping, publishes the
 # handoff, then serves one receiver generation at a time. Each generation asks
@@ -274,6 +288,8 @@ wait_for_log_pattern() {
 #   rw         -> ReadWrite mapping works, owner GrantFree revokes, the revoked id
 #                 no longer resolves, and a store to the old address faults;
 #   ro         -> ReadOnly mapping is readable and a store to it faults;
+#   downgrade  -> a same-recipient ReadWrite→ReadOnly re-share keeps the address
+#                 readable and its store faults;
 #   unregister -> owner GrantUnregister revokes and a store to the old address
 #                 faults;
 #   exit       -> owner exit revokes and a store to the old address faults.
@@ -281,15 +297,13 @@ wait_for_log_pattern() {
 # The phase address is what makes each fault attributable: every deliberate store
 # lands on the exact grant base the owner handed over, so the classifier below
 # cannot be satisfied by an unrelated cell fault.
-run_grant_pair_interactive() {
-    local fifo="$case_dir/stdin"
+run_grant_pair_boot() {
     local window="${GRANT_PAIR_WINDOW:-300}"
     local step="${GRANT_PAIR_STEP_TIMEOUT:-60}"
-    local qemu_pid handoff id1 id2 id3 id4 a1 a2 a3 a4
+    local qemu_pid a1 a2 a3 a4
 
     grant_pair_abort() {
         # Keep stderr: the FAIL line below is the only diagnosis a reader gets.
-        exec 3>&- || true
         kill "$qemu_pid" 2>/dev/null || true
         wait "$qemu_pid" 2>/dev/null || true
         echo "FAIL: $1 for case=grant-pair; see $raw_log" >&2
@@ -321,50 +335,28 @@ run_grant_pair_interactive() {
         grant_pair_abort "missing $3 (no classified store fault at $1)"
     }
 
-    mkfifo "$fifo"
     qemu_status=0
-    timeout "$window" "$QEMU" "${qemu_args[@]}" < "$fifo" > "$raw_log" 2>&1 &
+    timeout "$window" "$QEMU" "${qemu_args[@]}" < /dev/null > "$raw_log" 2>&1 &
     qemu_pid=$!
-    # Open read+write so the fifo open never blocks (a write-only open waits for
-    # a reader, and would hang forever if the emulator died before opening it).
-    # The shell never reads fd 3, so the guest still receives every command.
-    exec 3<> "$fifo"
 
-    wait_for_log_pattern "$raw_log" 'Cellos >' 115 "$qemu_pid" \
-        || grant_pair_abort "guest shell prompt never appeared"
-    sleep 1
-
-    # Owner: allocate, prove the owner mapping, publish the handoff, then serve.
-    # It must outlive the shell's foreground child, so it is backgrounded: the
-    # shell otherwise blocks in sys_wait for `/bin/tier2-smoke` and never reads
-    # the receiver's command line.
-    printf 'tier2-smoke &\n' >&3
+    wait_for_log_pattern "$raw_log" 'fixture-launcher: tier2-grant-pair owner admitted\.' 115 "$qemu_pid" \
+        || grant_pair_abort "the fixture launcher never admitted the pair's owner"
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-MAPPED: OK' 'owner self-mapping'
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-REG-MAPPED: OK' 'owner registered mapping'
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-SHARE-FOREIGN: DENY' 'non-private-root share denial'
     wait_marker 'S22-RV64-GRANT-PAIR-HANDOFF ' 'owner handoff line'
 
-    handoff="$(grep -aoE 'S22-RV64-GRANT-PAIR-HANDOFF id1=[0-9]+ id2=[0-9]+ id3=[0-9]+ id4=[0-9]+' "$raw_log" | tail -n 1 || true)"
-    id1="$(printf '%s' "$handoff" | sed -n 's/.*id1=\([0-9]\+\).*/\1/p')"
-    id2="$(printf '%s' "$handoff" | sed -n 's/.*id2=\([0-9]\+\).*/\1/p')"
-    id3="$(printf '%s' "$handoff" | sed -n 's/.*id3=\([0-9]\+\).*/\1/p')"
-    id4="$(printf '%s' "$handoff" | sed -n 's/.*id4=\([0-9]\+\).*/\1/p')"
-    if [[ -z "$id1" || -z "$id2" || -z "$id3" || -z "$id4" \
-        || "$id1" == 0 || "$id2" == 0 || "$id3" == 0 || "$id4" == 0 ]]; then
-        grant_pair_abort "unparsable handoff line: '$handoff'"
+    GRANT_PAIR_FAULT_ADDRS="$(grant_pair_fault_addrs "$raw_log")"
+    read -r a1 a2 a3 a4 <<< "$GRANT_PAIR_FAULT_ADDRS"
+    if [[ -z "$a4" || "$a1" == 0x0 || "$a2" == 0x0 || "$a3" == 0x0 || "$a4" == 0x0 ]]; then
+        grant_pair_abort "unparsable handoff line"
     fi
-    a1="$(printf '0x%x' "$id1")"
-    a2="$(printf '0x%x' "$id2")"
-    a3="$(printf '0x%x' "$id3")"
-    a4="$(printf '0x%x' "$id4")"
     # Phase 1 revokes id1; phases 2 and 4 both fault at id2; phase 3 downgrades
     # id4 (the store after the ReadOnly re-share faults there); phase 5 faults at
     # id3 once the owner's exit has revoked it.
-    GRANT_PAIR_FAULT_ADDRS="$a1 $a2 $a3 $a4"
 
     # Phase 1: ReadWrite works, GrantFree revokes, reused frames stay private,
     # the revoked address faults.
-    printf 'tier2-exploit rw %s %s %s %s\n' "$id1" "$id2" "$id3" "$id4" >&3
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-SLICE-UNKNOWN: DENY' 'unknown-id slice denial'
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-SHARE-WO: DENY' 'write-only share denial'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-RW: OK' 'ReadWrite receiver slice'
@@ -374,7 +366,6 @@ run_grant_pair_interactive() {
     wait_fault "$a1" 1 'store fault at the freed grant address'
 
     # Phase 2: a ReadOnly mapping's write must fault.
-    printf 'tier2-exploit ro %s %s %s %s\n' "$id1" "$id2" "$id3" "$id4" >&3
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-SLICE-RO: OK' 'ReadOnly receiver slice'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED' 'read-only write announcement'
     wait_fault "$a2" 1 'store fault on the read-only grant page'
@@ -384,7 +375,6 @@ run_grant_pair_interactive() {
     # accepted; the address must still read the byte the writable half wrote (so
     # the page was replaced, not dropped); and the store to it must then fault,
     # which is the only witness that the old writable PTE is gone.
-    printf 'tier2-exploit downgrade %s %s %s %s\n' "$id1" "$id2" "$id3" "$id4" >&3
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK' 'ReadWrite mapping before the downgrade'
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK' 'same-recipient ReadOnly re-share'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK \(read 0xa5\)' \
@@ -394,7 +384,6 @@ run_grant_pair_interactive() {
     wait_fault "$a4" 1 'store fault at the downgraded grant address'
 
     # Phase 4: GrantUnregister revokes the persistent buffer.
-    printf 'tier2-exploit unregister %s %s %s %s\n' "$id1" "$id2" "$id3" "$id4" >&3
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-UNREGISTER: OK' 'owner GrantUnregister'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED' 'unregister fault announcement'
     wait_fault "$a2" 2 'second store fault at the unregistered grant address'
@@ -403,24 +392,22 @@ run_grant_pair_interactive() {
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER: PASS' 'owner terminal'
 
     # Phase 5: the owner's exit must revoke the receiver mapping.
-    printf 'tier2-exploit exit %s %s %s %s\n' "$id1" "$id2" "$id3" "$id4" >&3
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-EXIT: OK' 'owner exit'
-    wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-SLICE-RW: OK' 'exit-phase receiver slice'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED' 'exit fault announcement'
     wait_fault "$a3" 1 'store fault at the address the owner exit revoked'
+    wait_marker 'fixture-launcher: tier2-grant-pair complete\.' 'the launcher reporting the pair complete'
 
-    exec 3>&-
     sleep 1
     kill "$qemu_pid" 2>/dev/null || true
     wait "$qemu_pid" 2>/dev/null || true
     # The guest is killed deliberately once every marker is observed, so its
     # exit status carries no signal for this case.
     qemu_status=0
-    printf 'S22-RV64-GRANT-PAIR-HANDOFF-OBSERVED id1=%s id2=%s id3=%s id4=%s faults=%s:%s:%s:%s\n' \
-        "$id1" "$id2" "$id3" "$id4" \
+    printf 'S22-RV64-GRANT-PAIR-HANDOFF-OBSERVED %s faults=%s:%s:%s:%s\n' \
+        "$GRANT_PAIR_FAULT_ADDRS" \
         "$(fault_count "$a1")" "$(fault_count "$a2")" "$(fault_count "$a3")" "$(fault_count "$a4")"
 }
- 
+
 # ── grant-revoke: the deferred-ack outcome, in invariant form ────────────────
 #
 # The boot fixture (`kernel/src/task/domain_grant.rs`) asserts *first-attempt*
@@ -610,6 +597,7 @@ assert_grant_revoke_outcome() {
 }
 
  for case_id in "${REQUESTED_CASES[@]}"; do
+    GRANT_PAIR_FAULT_ADDRS=""
     marker="$(marker_for "$case_id")"
     terminal_pattern="$(terminal_pattern_for "$case_id")"
 
@@ -646,7 +634,7 @@ assert_grant_revoke_outcome() {
         cp "$ASSERT_LOG" "$normalized_log"
         echo "[qemu-native-domain-test] assertion audit: replaying $ASSERT_LOG (no QEMU boot)"
     elif [[ "$case_id" == "grant-pair" ]]; then
-        run_grant_pair_interactive
+        run_grant_pair_boot
     else
         # A boot whose invalidation is unacknowledged keeps its frames in the
         # deferred queue until the reaper's bounded retry budget is spent, so the
@@ -690,6 +678,9 @@ assert_grant_revoke_outcome() {
         echo "FAIL: native-domain failure terminal for case=$case_id: $(tr '\n' ' ' <<< "$unexpected"); see $normalized_log" >&2
         exit 1
     fi
+    # The grant pair runs in every boot of this image, so every case classifies
+    # its receiver faults from that boot's own handoff line.
+    [[ -n "$GRANT_PAIR_FAULT_ADDRS" ]] || GRANT_PAIR_FAULT_ADDRS="$(grant_pair_fault_addrs "$normalized_log")"
     while IFS= read -r fault_line; do
         [[ -z "$fault_line" ]] && continue
         # Two injected canaries are expected, and each is identified by its
@@ -713,7 +704,7 @@ assert_grant_revoke_outcome() {
         # The grant pair's receivers end in a deliberate store to the exact grant
         # address the owner handed over, so each of those faults is classified by
         # its address rather than by a cell id (the tid differs per phase).
-        if [[ "$case_id" == "grant-pair" && -n "$GRANT_PAIR_FAULT_ADDRS" ]]; then
+        if [[ -n "$GRANT_PAIR_FAULT_ADDRS" ]]; then
             for grant_addr in $GRANT_PAIR_FAULT_ADDRS; do
                 if [[ "$fault_line" =~ ^\[ERROR\]\ \[fault\]\ Cell\ [0-9]+\ \(task\ [0-9]+\ generation\ [0-9]+\)\ terminated:\ cause=0xf\ pc=0x[0-9a-f]+\ addr=$grant_addr$ ]]; then
                     classified=1
@@ -781,8 +772,8 @@ assert_grant_revoke_outcome() {
     # a non-private-root peer, a WriteOnly domain pair, and an unknown grant id.
     if [[ "$case_id" == "grant-pair" ]]; then
         grant_pair_required=(
-            "[domain] admitted cell 'tier2-smoke'"
-            "[domain] admitted cell 'tier2-exploit'"
+            "[domain] admitted cell 'silo'"
+            "[domain] admitted cell 'net-broker'"
             'S22-RV64-GRANT-PAIR-OWNER-ALLOC: OK id='
             'S22-RV64-GRANT-PAIR-OWNER-REGISTER: OK id='
             'S22-RV64-GRANT-PAIR-OWNER-MAPPED: OK'

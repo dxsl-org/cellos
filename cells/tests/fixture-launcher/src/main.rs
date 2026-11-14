@@ -172,12 +172,13 @@ fn cell_main() {
 
 /// The phase-03 Tier-2 grant pair, from the boot order.
 ///
-/// The AArch64 test image has no interactive window: the shell's first prompt
-/// arrives long after the image's own test root exits the VM, so the pair cannot
-/// be typed at a shell the way the RV64 lane drives it. Both cells run on the
-/// reviewed `/bin/silo` and `/bin/net-broker` paths, whose real services that
-/// image does not build. Every marker the pair emits is namespaced
-/// `S22-<arch>-GRANT-PAIR-*`.
+/// No lane can type the pair at a guest shell: the shell refuses to background
+/// an external cell inside a serial session, and the AArch64 test image has no
+/// interactive window at all. The AArch64 test-hooks, RV64 native-domain and
+/// x86_64 domain-test images therefore launch it from the boot order. Both
+/// cells run on the reviewed `/bin/silo` and `/bin/net-broker` paths, whose
+/// real services those images do not build. Every marker the pair emits is
+/// namespaced `S22-<arch>-GRANT-PAIR-*`.
 #[cfg(feature = "tier2-grant-pair")]
 mod grant_pair {
     use super::spawn_with;

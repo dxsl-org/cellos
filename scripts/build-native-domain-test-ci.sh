@@ -3,16 +3,17 @@
 # through test hooks. Production build outputs and feature tuples are untouched.
 #
 # The lane also packs the phase-03 step-5 Tier-2 grant pair (owner + receiver)
-# into a THROWAWAY VIFS1 image and installs the two cells on the two *reviewed*
-# Tier-2 launch paths the kernel already admits. A brand-new `/bin/<name>` would
-# need a kernel-side launch-edge row (`kernel/src/loader/launch_profile/targets.rs`)
-# and a boot-ceiling row; this ticket owns only `cells/tests/**` and the lane
-# scripts, so it reuses the reviewed rows and keeps the substitution confined to
-# this lane's fresh image. The real `/bin/tier2-smoke` and `/bin/tier2-exploit`
-# binaries in the shared `kernel/src/embedded-test-hooks` image and in the disk
-# images are left untouched — only this throwaway image maps the grant-pair cells
-# onto those paths, and every marker they emit is namespaced
-# `S22-RV64-GRANT-PAIR-*` so a reader can never mistake them for the tier2 cells.
+# into a THROWAWAY VIFS1 image, on the two reviewed launch paths whose real
+# services this image does not build — `/bin/silo` (owner) and
+# `/bin/net-broker` (receiver) — and a fixture launcher built with
+# `tier2-grant-pair`, which launches the pair from the boot order. That is the
+# AArch64 test-hooks arrangement (Phase 15): the guest shell refuses to
+# background an external cell inside a serial session, so the pair can no
+# longer be typed at it. A brand-new `/bin/<name>` would need a kernel-side
+# launch-edge row and a boot-ceiling row, so the reviewed rows are reused and the
+# substitution stays confined to this lane's fresh image: the shared
+# `kernel/src/embedded-test-hooks` image and its launcher are left untouched,
+# and every marker the pair emits is namespaced `S22-RV64-GRANT-PAIR-*`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,17 +57,30 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p tier2-grant-owner -p tier2-grant-receiver -p service-input
 
+# The pair's launcher gets its own target directory so the shared test-hooks
+# image's default-feature launcher is never overwritten. `tier2-grant-pair` is a
+# launcher-only feature, so the launcher is built on its own.
+LAUNCHER_TARGET="target/native-domain-launcher"
+echo "==> Building the fixture launcher with tier2-grant-pair..."
+CARGO_TARGET_DIR="$LAUNCHER_TARGET" \
+cargo build --release \
+    --target riscv64gc-unknown-none-elf \
+    -Z build-std=core,alloc \
+    --features tier2-grant-pair \
+    -p fixture-launcher
+
 OWNER_ELF="$REL/tier2-grant-owner"
 RECEIVER_ELF="$REL/tier2-grant-receiver"
 INPUT_ELF="$REL/service-input"
-for elf in "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF"; do
+LAUNCHER_ELF="$LAUNCHER_TARGET/riscv64gc-unknown-none-elf/release/fixture-launcher"
+for elf in "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF" "$LAUNCHER_ELF"; do
     [[ -f "$elf" ]] || { echo "FAIL: native-domain image cell missing: $elf" >&2; exit 1; }
 done
 
 # shellcheck source=scripts/lib-sign-cells.sh
 source scripts/lib-sign-cells.sh
-echo "==> Signing the Tier-2 grant pair cells and service-input..."
-sign_cells "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF"
+echo "==> Signing the Tier-2 grant pair cells, its launcher and service-input..."
+sign_cells "$OWNER_ELF" "$RECEIVER_ELF" "$INPUT_ELF" "$LAUNCHER_ELF"
 
 echo "==> Assembling the throwaway grant-pair VIFS1 image..."
 rm -rf "$DOMAIN_TARGET"
@@ -82,9 +96,10 @@ source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
 # Same cell set as the shared test-hooks image, plus /bin/input and the grant
-# pair installed on the two reviewed Tier-2 launch paths this lane's shell edge
-# admits. `input` selects /bin/input in services.toml; the generator also
-# requires the artifact, so both the feature and the pair are needed.
+# pair on the two reviewed launch paths the fixture launcher's edges admit, with
+# the pair launcher in place of the shared one. `input` selects /bin/input in
+# services.toml (cellbox's serial session needs it); the generator also requires
+# the artifact.
 "$PYTHON_BIN" tools/mkfat32.py --config-features input \
     --config-output-dir "$TMPDIR_KFS/boot-config" \
     "$DOMAIN_EMBED/kernel_fs.img" \
@@ -93,13 +108,13 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
     "$REL/vfs-test"         /bin/vfs-test \
-    "$REL/fixture-launcher" /bin/fixture-launcher \
+    "$LAUNCHER_ELF"         /bin/fixture-launcher \
     "$REL/service-net"      /bin/net \
     "$REL/driver-virtio-net" /bin/virtio-net \
     "$REL/atomic-publication-probe" /bin/atomic-probe \
     "$INPUT_ELF"            /bin/input \
-    "$OWNER_ELF"            /bin/tier2-smoke \
-    "$RECEIVER_ELF"         /bin/tier2-exploit \
+    "$OWNER_ELF"            /bin/silo \
+    "$RECEIVER_ELF"         /bin/net-broker \
     "$TMPDIR_KFS/hostname"  /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
@@ -114,7 +129,7 @@ grep -Fxq 'path = "/bin/input"' "$TMPDIR_KFS/boot-config/services.toml" || {
 # well-formed image whose destination paths went astray, and then the boot fails
 # as a confusing "cell not found".
 "$PYTHON_BIN" tools/inspect_fat.py "$DOMAIN_EMBED/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
-for required in "LFN 'vfs-test'" "LFN 'fixture-launcher'" "LFN 'atomic-probe'" "LFN 'input'" "LFN 'tier2-smoke'" "LFN 'tier2-exploit'"; do
+for required in "LFN 'vfs-test'" "LFN 'fixture-launcher'" "LFN 'atomic-probe'" "LFN 'input'" "LFN 'silo'" "LFN 'net-broker'"; do
     if ! grep -q -- "$required" "$TMPDIR_KFS/fat-layout.txt"; then
         echo "FAIL: grant-pair kernel_fs.img lacks $required" >&2
         cat "$TMPDIR_KFS/fat-layout.txt" >&2
