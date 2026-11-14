@@ -36,9 +36,9 @@ static RFENCE_LAST_ERROR: core::sync::atomic::AtomicUsize = core::sync::atomic::
 static RFENCE_REPORTED: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 /// The local half of a shared-root flush (`tlb_shootdown::flush_ranges`):
-/// `sfence.vma` per page (or all), then SBI RFENCE per range. An RFENCE error,
-/// or a full invalidation, leaves the remote harts to the IPI epoch path, which
-/// each serves with a full local flush.
+/// `sfence.vma` per page (or all), then SBI RFENCE per range (or one over the
+/// whole address space). Only an RFENCE error leaves the remote harts to the
+/// IPI epoch path, which each serves with a full local flush.
 pub(crate) fn shared_flush_local(
     ranges: &[(types::VAddr, usize)],
     all: bool,
@@ -63,14 +63,15 @@ pub(crate) fn shared_flush_local(
     if TEST_SKIP_REMOTE_RFENCE.load(core::sync::atomic::Ordering::Acquire) {
         return RemoteWork::None;
     }
-    if all {
-        return RemoteWork::EpochPath {
-            rfence_failed: false,
-        };
-    }
-    let failed = ranges
-        .iter()
-        .find_map(|&(start, size)| remote_sfence(mask, base, start, size).err());
+    // A full invalidation is one RFENCE over the whole address space (SBI:
+    // `size == usize::MAX` flushes everything), not a skipped RFENCE.
+    let failed = if all {
+        remote_sfence(mask, base, 0, usize::MAX).err()
+    } else {
+        ranges
+            .iter()
+            .find_map(|&(start, size)| remote_sfence(mask, base, start, size).err())
+    };
     match failed {
         None => RemoteWork::None,
         Some(error) => {

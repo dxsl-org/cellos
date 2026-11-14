@@ -504,22 +504,20 @@ fn shared_flush(ranges: &[(VAddr, usize)], all: bool, wait: bool) -> FlushOutcom
 }
 
 /// Every online remote hart's full flush: one bounded probe when `wait`,
-/// otherwise only the requests (`Unconfirmed` whenever one was sent).
+/// otherwise only the requests (`Unconfirmed { NotAwaited }` whenever one was
+/// sent: nobody waited, so no hart is known to be silent).
 fn remote_full_flush(wait: bool, rfence_failed: bool) -> FlushOutcome {
-    let cause = |hart| {
-        if rfence_failed {
-            UnconfirmedCause::RfenceFailed { hart }
-        } else {
-            UnconfirmedCause::Timeout { hart }
-        }
-    };
     if wait {
         let mut epochs = [0; crate::sched::smp::MAX_HARTS];
         return match await_remote_invalidation(tag_probe_ticks(), &mut epochs) {
             Ok(()) => FlushOutcome::Confirmed,
             Err(FlushAckError::Timeout { hart, .. }) => FlushOutcome::Unconfirmed {
                 epochs,
-                cause: cause(hart),
+                cause: if rfence_failed {
+                    UnconfirmedCause::RfenceFailed { hart }
+                } else {
+                    UnconfirmedCause::Timeout { hart }
+                },
             },
         };
     }
@@ -528,7 +526,7 @@ fn remote_full_flush(wait: bool, rfence_failed: bool) -> FlushOutcome {
         None => FlushOutcome::Confirmed,
         Some(hart) => FlushOutcome::Unconfirmed {
             epochs,
-            cause: cause(hart),
+            cause: UnconfirmedCause::NotAwaited { hart: Some(hart) },
         },
     }
 }

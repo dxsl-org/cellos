@@ -26,6 +26,8 @@ struct Fake {
     reissues: usize,
     reissued_tags: Vec<Option<usize>>,
     normalised: Vec<PhysAddr>,
+    /// The alias restore runs out of page-table frames.
+    alias_fails: bool,
 }
 
 impl Fake {
@@ -38,6 +40,7 @@ impl Fake {
             reissues: 0,
             reissued_tags: Vec::new(),
             normalised: Vec::new(),
+            alias_fails: false,
         }
     }
 
@@ -88,8 +91,12 @@ impl Backend for Fake {
         self.request()
     }
 
-    fn normalise(&mut self, run: &FrameRun) {
+    fn normalise(&mut self, run: &FrameRun) -> bool {
+        if self.alias_fails {
+            return false;
+        }
         self.normalised.push(run.base());
+        true
     }
 
     fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {
@@ -158,6 +165,43 @@ fn removed_or_user_alias_is_normalised_before_free() {
     assert!(settle(removed, FlushOutcome::Confirmed, &mut fake, &quarantine).is_ok());
     assert_eq!(fake.normalised, [user_base, removed_base]);
     assert_eq!(fake.used(), 0);
+}
+
+/// Review fix: a confirmed run whose alias cannot be restored is never freed;
+/// it waits as `AliasUnrestored`, and a later reap frees it once the restore
+/// succeeds — never within the reap pass that failed.
+#[test]
+fn an_unrestored_alias_is_quarantined_and_retried_by_the_reaper() {
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+    let mut run = fake.run(2, KernelAlias::Removed);
+    run.unpublish().unwrap();
+    fake.alias_fails = true;
+    assert_eq!(
+        settle(run, FlushOutcome::Confirmed, &mut fake, &quarantine).map_err(|_| ()),
+        Ok(0)
+    );
+    assert_eq!(fake.used(), 2, "nothing freed without its alias");
+    assert_eq!(quarantine.quarantined_pages(), 2);
+    assert_eq!(
+        quarantine
+            .counters()
+            .quarantined_for(Reason::AliasUnrestored.index()),
+        2
+    );
+
+    // Still failing: kept, and one pass tries it once.
+    assert_eq!(quarantine.reap(&mut fake), 0);
+    assert_eq!(fake.used(), 2);
+    assert_eq!(quarantine.quarantined_pages(), 2);
+    assert_eq!(quarantine.entries(), 1);
+
+    fake.alias_fails = false;
+    assert_eq!(quarantine.reap(&mut fake), 2);
+    assert_eq!(fake.used(), 0);
+    assert_eq!(fake.normalised.len(), 1);
+    assert_eq!(quarantine.quarantined_pages(), 0);
+    assert_eq!(quarantine.entries(), 0);
 }
 
 #[test]
@@ -491,4 +535,17 @@ fn cap_is_one_sixty_fourth_of_managed_frames() {
     quarantine.note_refused(1024);
     quarantine.note_refused(1024);
     assert_eq!(quarantine.counters().refused(), 2);
+}
+
+/// Review fix: a range that wraps the address space is never treated as
+/// covered by an earlier one; the batch widens to a full invalidation.
+#[test]
+fn a_wrapping_range_widens_the_batch_to_everything() {
+    let mut batch = Batch::new();
+    batch.invalidate_range(0x1000, 0x1000);
+    batch.invalidate_range(0x1000, usize::MAX & !(PAGE_SIZE - 1));
+    assert!(batch.all);
+    assert!(batch.ranges.is_empty());
+    // Nothing to flush on the host: drop the batch empty.
+    batch.all = false;
 }

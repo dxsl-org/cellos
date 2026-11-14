@@ -82,9 +82,9 @@ pub enum KernelAlias {
 
 /// Why a run is held back from the allocator.
 ///
-/// The three invalidation reasons wait on per-hart epochs, which the pending
-/// entry holding the run records once for all of its runs (an epoch set is
-/// `MAX_HARTS` words: too large to copy into every run).
+/// The invalidation reasons (and [`Reason::AliasUnrestored`]) wait on per-hart
+/// epochs, which the pending entry holding the run records once for all of its
+/// runs (an epoch set is `MAX_HARTS` words: too large to copy into every run).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Reason {
     /// A private root's tag invalidation was not acknowledged.
@@ -102,10 +102,13 @@ pub enum Reason {
     DomainRevoking,
     /// The VM that maps the frames may still run.
     VmLive,
+    /// The invalidation is confirmed, but the kernel alias the free frame
+    /// needs could not be restored (no page-table frame); the reaper retries.
+    AliasUnrestored,
 }
 
 /// Number of [`Reason`] variants, for the per-reason counters.
-pub const REASONS: usize = 7;
+pub const REASONS: usize = 8;
 
 impl Reason {
     /// Stable index into the per-reason counters.
@@ -118,6 +121,7 @@ impl Reason {
             Reason::IotlbUnacked { .. } => 4,
             Reason::DomainRevoking => 5,
             Reason::VmLive => 6,
+            Reason::AliasUnrestored => 7,
         }
     }
 
@@ -131,15 +135,20 @@ impl Reason {
             Reason::IotlbUnacked { .. } => "iotlb-unacked",
             Reason::DomainRevoking => "domain-revoking",
             Reason::VmLive => "vm-live",
+            Reason::AliasUnrestored => "alias-unrestored",
         }
     }
 
-    /// An invalidation reason, ended only by published epochs; the others are
-    /// event keys, ended only by [`Pending::release_event`].
+    /// A reason the reaper ends: invalidations by their published epochs, an
+    /// unrestored alias by its next successful restore. The others are event
+    /// keys, ended only by [`Pending::release_event`].
     pub const fn waits_for_epochs(&self) -> bool {
         matches!(
             self,
-            Reason::TagUnconfirmed { .. } | Reason::SharedUnconfirmed | Reason::RfenceFailed
+            Reason::TagUnconfirmed { .. }
+                | Reason::SharedUnconfirmed
+                | Reason::RfenceFailed
+                | Reason::AliasUnrestored
         )
     }
 
@@ -173,6 +182,10 @@ pub enum UnconfirmedCause {
     /// The SBI RFENCE call failed and the IPI epoch fallback did not confirm
     /// before the probe bound.
     RfenceFailed { hart: usize },
+    /// Nobody waited: the flushing hart holds the frame allocator, so the
+    /// requests went out (to `hart`, if any remote was asked) and the reaper
+    /// confirms them later.
+    NotAwaited { hart: Option<usize> },
 }
 
 /// The result of one bounded invalidation.
@@ -216,7 +229,7 @@ impl FlushOutcome {
         match self {
             FlushOutcome::Confirmed => None,
             FlushOutcome::Unconfirmed {
-                cause: UnconfirmedCause::Timeout { .. },
+                cause: UnconfirmedCause::Timeout { .. } | UnconfirmedCause::NotAwaited { .. },
                 ..
             } => Some(Reason::SharedUnconfirmed),
             FlushOutcome::Unconfirmed {
@@ -396,19 +409,30 @@ impl FrameRun {
     }
 
     /// `Unpublished | Quarantined(epochs) → Free`: normalise, free, release the
-    /// VA hold. Only callers that proved the invalidation reach this.
+    /// VA hold. Only callers that proved the invalidation reach this. A run
+    /// whose alias cannot be restored is not freed: it keeps its state (still
+    /// freeable) and the `Err` carries it, for the caller to quarantine as
+    /// [`Reason::AliasUnrestored`].
     fn free(&mut self, backend: &mut impl Backend) -> Result<(), StateError> {
-        match self.state {
-            RunState::Unpublished => {}
-            RunState::Quarantined(reason) if reason.waits_for_epochs() => {}
-            state => return Err(StateError { state }),
+        if !self.freeable() {
+            return Err(StateError { state: self.state });
         }
-        if self.alias != KernelAlias::Intact {
-            backend.normalise(self);
+        if self.alias != KernelAlias::Intact && !backend.normalise(self) {
+            return Err(StateError { state: self.state });
         }
         backend.free(self.base, self.pages(), self.va_hold.take());
         self.state = RunState::Free;
         Ok(())
+    }
+
+    /// May [`Self::free`] run (unpublished, or quarantined on a reason the
+    /// reaper ends)?
+    fn freeable(&self) -> bool {
+        match self.state {
+            RunState::Unpublished => true,
+            RunState::Quarantined(reason) => reason.waits_for_epochs(),
+            RunState::Mapped | RunState::Free => false,
+        }
     }
 }
 
@@ -438,7 +462,8 @@ pub(crate) trait Backend {
     /// any) and return the epochs requested.
     fn reissue(&mut self, asid: Option<usize>) -> Epochs;
     /// Restore the frames' kernel alias before free (`KernelAlias` ≠ `Intact`).
-    fn normalise(&mut self, run: &FrameRun);
+    /// `false`: not restored (no page-table frame); the run must not be freed.
+    fn normalise(&mut self, run: &FrameRun) -> bool;
     /// Return `pages` frames at `base` to the allocator, then release `hold`
     /// in the same allocator hold: no allocation can take the frames back
     /// between the two, so a new owner's reservation of the same range is
@@ -472,6 +497,14 @@ pub(crate) fn settle(
             let pages = run.pages();
             match run.free(backend) {
                 Ok(()) => Ok(pages),
+                // The alias could not be restored: the reaper retries it.
+                Err(_) if run.freeable() => match run.quarantine(Reason::AliasUnrestored) {
+                    Ok(()) => {
+                        pending.push(run, &[0; MAX_HARTS]);
+                        Ok(0)
+                    }
+                    Err(_) => Err(run),
+                },
                 Err(_) => Err(run),
             }
         }
@@ -658,11 +691,13 @@ impl Pending {
     /// One reaper pass: step **every** entry once. An entry whose epochs are all
     /// published is removed and its runs normalised and freed outside the lock;
     /// the others count an attempt and are reissued every [`REISSUE_EVERY`].
-    /// Event-keyed entries are left to [`Self::release_event`]. Never waits on a
-    /// hart. Returns the pages freed.
+    /// A run whose alias cannot be restored stays quarantined and is retried on
+    /// the next pass (never within this one). Event-keyed entries are left to
+    /// [`Self::release_event`]. Never waits on a hart. Returns the pages freed.
     pub(crate) fn reap(&self, backend: &mut impl Backend) -> usize {
         let mut freed = 0;
         let mut index = 0;
+        let mut retry = Vec::new();
         loop {
             let mut escalate = None;
             let ready = {
@@ -698,19 +733,43 @@ impl Pending {
                 );
             }
             if let Some(entry) = ready {
-                freed += self.complete(entry, backend);
+                let (pages, kept) = self.complete(entry, backend);
+                freed += pages;
+                if let Some(kept) = kept {
+                    if retry.try_reserve(1).is_ok() {
+                        retry.push(kept);
+                    } else {
+                        for run in kept.runs {
+                            self.leak(run, "no heap to keep an unrestored run");
+                        }
+                    }
+                }
             }
+        }
+        // Back on the list only now, so this pass cannot retry them forever.
+        for entry in retry {
+            self.reinsert(entry);
         }
         freed
     }
 
-    fn complete(&self, entry: Entry, backend: &mut impl Backend) -> usize {
+    /// Free an entry's runs. Returns the pages freed and, when some run's alias
+    /// could not be restored, the entry holding the runs still quarantined
+    /// (its counters already removed; [`Self::reinsert`] restores them).
+    fn complete(&self, mut entry: Entry, backend: &mut impl Backend) -> (usize, Option<Entry>) {
         self.counters.sub(&entry.reason, entry.pages);
         let mut freed = 0;
-        for mut run in entry.runs {
+        let mut kept = Vec::new();
+        let mut kept_pages = 0;
+        for mut run in core::mem::take(&mut entry.runs) {
             let pages = run.pages();
             match run.free(backend) {
                 Ok(()) => freed += pages,
+                Err(_) if run.freeable() && kept.try_reserve(1).is_ok() => {
+                    kept_pages += pages;
+                    kept.push(run);
+                }
+                Err(_) if run.freeable() => self.leak(run, "no heap to keep an unrestored run"),
                 // A run of another state cannot be in an epoch entry; keep it.
                 Err(_) => self.leak(run, "pending run in an unexpected state"),
             }
@@ -718,13 +777,43 @@ impl Pending {
         self.counters
             .released_after_retry
             .fetch_add(freed, Ordering::AcqRel);
-        log::info!(
-            "[frame-run] released {} quarantined pages ({}) after {} attempts",
-            freed,
-            entry.reason.name(),
-            entry.attempts
-        );
-        freed
+        if freed > 0 {
+            log::info!(
+                "[frame-run] released {} quarantined pages ({}) after {} attempts",
+                freed,
+                entry.reason.name(),
+                entry.attempts
+            );
+        }
+        if kept.is_empty() {
+            return (freed, None);
+        }
+        // Rate-limited: a sustained shortage logs on powers of two.
+        if entry.attempts == 0 || entry.attempts.is_power_of_two() {
+            log::error!(
+                "[frame-run] {} pages ({}) not freed: their kernel alias could not be restored; they stay quarantined",
+                kept_pages,
+                entry.reason.name()
+            );
+        }
+        entry.runs = kept;
+        entry.pages = kept_pages;
+        entry.attempts += 1;
+        (freed, Some(entry))
+    }
+
+    /// Put back an entry [`Self::complete`] kept, counters included.
+    fn reinsert(&self, entry: Entry) {
+        let mut entries = self.entries.lock();
+        if entries.try_reserve(1).is_ok() {
+            self.counters.add(&entry.reason, entry.pages);
+            entries.push(entry);
+            return;
+        }
+        drop(entries);
+        for run in entry.runs {
+            self.leak(run, "no heap to keep an unrestored run");
+        }
     }
 
     /// End every event hold `matches` selects: those runs return to `Mapped`
@@ -818,18 +907,28 @@ impl Batch {
     }
 
     /// The translations of `[start, start + size)` changed in the shared root.
-    /// Adjacent ranges merge; with no heap for a new range the batch widens to
-    /// a full invalidation rather than drop one.
+    /// Adjacent ranges merge; with no heap for a new range, or a range that
+    /// wraps the address space, the batch widens to a full invalidation rather
+    /// than drop one.
     pub fn invalidate_range(&mut self, start: VAddr, size: usize) {
         if size == 0 || self.all {
             return;
         }
+        let Some(end) = start.checked_add(size) else {
+            self.invalidate_all();
+            return;
+        };
         if let Some(last) = self.ranges.last_mut() {
             if last.0.checked_add(last.1) == Some(start) {
                 last.1 += size;
                 return;
             }
-            if last.0 <= start && start.checked_add(size) <= last.0.checked_add(last.1) {
+            if last.0 <= start
+                && last
+                    .0
+                    .checked_add(last.1)
+                    .is_some_and(|last_end| end <= last_end)
+            {
                 return;
             }
         }
@@ -864,6 +963,20 @@ impl Batch {
         }
     }
 
+    /// Keep `hold` reserved until the last run retired so far is freed (an
+    /// owner whose VA must outlive its frames' invalidation, census risk 2).
+    /// `false` when there is no such run, or it already holds a range: the
+    /// caller keeps the VA and releases it itself.
+    pub fn hold_va(&mut self, hold: VaHold) -> bool {
+        match self.runs.last_mut() {
+            Some(run) if run.va_hold.is_none() => {
+                run.va_hold = Some(hold);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Flush once, wait for the copy windows, then free every run or
     /// quarantine it. Returns the flush outcome; an unconfirmed one is logged.
     pub fn finish(mut self, cap: &mut FlushCap) -> FlushOutcome {
@@ -877,8 +990,7 @@ impl Batch {
     }
 
     /// [`Self::finish`] with this hart's cap, or — when it holds the frame
-    /// allocator and so may not wait — the local flush plus remote requests
-    /// with no wait, quarantining the runs until the reaper confirms them.
+    /// allocator and so may not wait — [`Self::complete_without_wait`].
     pub fn complete(self) -> FlushOutcome {
         match FlushCap::take() {
             Some(mut cap) => self.finish(&mut cap),
@@ -886,11 +998,23 @@ impl Batch {
         }
     }
 
-    fn complete_without_wait(mut self) -> FlushOutcome {
-        let outcome = if self.all || !self.ranges.is_empty() {
+    /// The local flush plus the remote requests, without waiting for any
+    /// answer, for a hart that may not wait (it holds the frame allocator, or
+    /// runs the timer reaper). Nothing is freed here — a free takes the frame
+    /// allocator — so every run is quarantined behind the epochs asked for
+    /// (none on a single hart: the next reap frees it) and the reaper frees it.
+    pub(crate) fn complete_without_wait(mut self) -> FlushOutcome {
+        let flushed = if self.all || !self.ranges.is_empty() {
             crate::memory::tlb_shootdown::flush_ranges_without_wait(&self.ranges, self.all)
         } else {
             FlushOutcome::Confirmed
+        };
+        let outcome = match flushed {
+            FlushOutcome::Confirmed if !self.runs.is_empty() => FlushOutcome::Unconfirmed {
+                epochs: [0; MAX_HARTS],
+                cause: UnconfirmedCause::NotAwaited { hart: None },
+            },
+            outcome => outcome,
         };
         self.settle(outcome);
         outcome
@@ -935,7 +1059,9 @@ impl Drop for Batch {
 }
 
 /// Log an unconfirmed shared flush once per operation. The lane gates count
-/// these lines; a fixture that holds a CPU on purpose brackets its own.
+/// these lines; a fixture that holds a CPU on purpose brackets its own. A
+/// flush nobody waited for is not a silent hart: it logs its own line (and
+/// only when it quarantined something).
 fn log_unconfirmed(cause: UnconfirmedCause, quarantined: usize) {
     let (hart, what) = match cause {
         UnconfirmedCause::Timeout { hart } => (hart, "silent through the probe"),
@@ -943,6 +1069,15 @@ fn log_unconfirmed(cause: UnconfirmedCause, quarantined: usize) {
             hart,
             "silent through the epoch fallback after an RFENCE error",
         ),
+        UnconfirmedCause::NotAwaited { .. } => {
+            if quarantined > 0 {
+                log::warn!(
+                    "[frame-run] shared flush not awaited (this hart holds the frame allocator): {} pages wait for the reaper",
+                    quarantined
+                );
+            }
+            return;
+        }
     };
     #[cfg(feature = "test-hooks")]
     if TEST_SILENT_CPU_FIXTURE.load(Ordering::Acquire) {
@@ -996,9 +1131,13 @@ impl Backend for KernelBackend {
     /// identity-mapped there on RV64/AArch64, because the loader zeroes a fresh
     /// frame through `phys_to_virt`. The run is unpublished and its
     /// invalidation confirmed, so each leaf is new and needs no shared flush;
-    /// the local flush drops any invalid entry this hart may still cache.
-    fn normalise(&mut self, run: &FrameRun) {
+    /// the local flush drops any invalid entry this hart may still cache. A
+    /// page restored by an earlier, partly failed attempt is skipped. Never
+    /// waits: the hart-0 timer reaper runs this.
+    fn normalise(&mut self, run: &FrameRun) -> bool {
         use crate::memory::paging::Flags;
+        // `frame::with` below would self-deadlock on a hart that holds it.
+        debug_assert!(!crate::memory::frame::held_here());
         let kernel_rwx = Flags::from_bits(
             Flags::VALID
                 | Flags::READ
@@ -1010,22 +1149,33 @@ impl Backend for KernelBackend {
         let (base, pages) = (run.base(), run.pages());
         let restored = crate::memory::frame::with(|allocator| {
             let mut batch = Batch::new();
+            let mut restored = true;
             for page in 0..pages {
                 let frame = base + page * PAGE_SIZE;
-                let _ = crate::memory::paging::map_page(
-                    allocator, &mut batch, frame, frame, kernel_rwx,
-                );
+                if crate::memory::paging::virt_to_phys(frame) == Some(frame) {
+                    continue;
+                }
+                if crate::memory::paging::map_page(allocator, &mut batch, frame, frame, kernel_rwx)
+                    .is_err()
+                {
+                    restored = false;
+                    break;
+                }
             }
-            batch
+            (batch, restored)
         });
         // No allocator, nothing restored (and no paging to flush yet).
-        if let Some(batch) = restored {
-            drop(batch);
-            crate::memory::paging::tlb_flush_all();
-        }
+        let Some((batch, restored)) = restored else {
+            return true;
+        };
+        let _ = batch.complete_without_wait();
+        crate::memory::paging::tlb_flush_all();
+        restored
     }
 
     fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {
+        // `frame::with` below would self-deadlock on a hart that holds it.
+        debug_assert!(!crate::memory::frame::held_here());
         let _ = crate::memory::frame::with(|allocator| {
             for page in 0..pages {
                 allocator.deallocate_frame(base + page * PAGE_SIZE);

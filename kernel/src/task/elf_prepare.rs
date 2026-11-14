@@ -63,23 +63,48 @@ fn collect_reserved<T>(iter: impl ExactSizeIterator<Item = T>) -> Result<Vec<T>,
 }
 
 /// Own the image's VA slot before any subsequent fallible preparation step.
-struct PreparationVa(usize);
+/// An unwind hands the slot to its last retired run instead
+/// ([`Self::hold_in`]), so a VA a remote hart may still translate is not
+/// handed out again before the unwind's flush confirms (census risk 2).
+struct PreparationVa(core::cell::Cell<usize>);
+impl PreparationVa {
+    /// Keep the slot reserved until the runs `batch` retired are free; the
+    /// guard no longer releases it then.
+    fn hold_in(&self, batch: &mut crate::memory::frame_run::Batch) {
+        let slot = self.0.get();
+        if slot != 0
+            && batch.hold_va(crate::memory::frame_run::VaHold {
+                release: super::stack::release_cell_va,
+                start: slot,
+                end: slot,
+            })
+        {
+            self.0.set(0);
+        }
+    }
+}
 impl Drop for PreparationVa {
     fn drop(&mut self) {
-        if self.0 != 0 {
-            crate::loader::va_alloc::free_cell_va(self.0);
+        let slot = self.0.get();
+        if slot != 0 {
+            crate::loader::va_alloc::free_cell_va(slot);
         }
     }
 }
 
 /// LoadedPage is metadata, so bridge its mappings into CellSegments ownership
-/// without another allocation. This guard must be declared after the page Vec.
-struct PreparationMappings<'a>(Option<&'a [crate::loader::elf::LoadedPage]>);
+/// without another allocation. This guard must be declared after the page Vec
+/// and the VA guard.
+struct PreparationMappings<'a>(
+    Option<&'a [crate::loader::elf::LoadedPage]>,
+    &'a PreparationVa,
+);
 impl Drop for PreparationMappings<'_> {
     fn drop(&mut self) {
         if let Some(pages) = self.0.take() {
             let mut batch = crate::memory::frame_run::Batch::new();
             crate::loader::ElfLoader::unwind(pages, &mut batch);
+            self.1.hold_in(&mut batch);
             let _ = batch.complete();
         }
     }
@@ -123,7 +148,7 @@ pub fn prepare_elf_task(
         }
         (0, slot)
     };
-    let mut va_rollback = PreparationVa(slot_base);
+    let va_rollback = PreparationVa(core::cell::Cell::new(slot_base));
     crate::loader::atomic_checkpoint("AP-01")?;
 
     let mut load_batch = crate::memory::frame_run::Batch::new();
@@ -137,11 +162,15 @@ pub fn prepare_elf_task(
             cfi.guarded_code,
         )
     });
+    // A failed load unwound its pages into the batch: they hold the slot.
+    if !matches!(loaded, Some(Ok(_))) {
+        va_rollback.hold_in(&mut load_batch);
+    }
     // One shared flush for the whole image (or for its unwind), after the frame
     // allocator is released and before anything relocates through it.
     let flushed = load_batch.complete();
     let seg_pages = loaded.ok_or(ViError::OutOfMemory)??;
-    let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
+    let mut mapping_rollback = PreparationMappings(Some(&seg_pages), &va_rollback);
     if !flushed.is_confirmed() {
         log::error!("ELF: image mapping invalidation unconfirmed — refusing the spawn");
         return Err(ViError::OutOfMemory);
@@ -197,7 +226,7 @@ pub fn prepare_elf_task(
     // Constructor is infallible: the segment owner now exclusively owns both
     // frame reclamation and PIE release, including every later failure edge.
     mapping_rollback.0 = None;
-    va_rollback.0 = 0;
+    va_rollback.0.set(0);
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_unpublished_segments(&segments);
     crate::loader::atomic_checkpoint("AP-02")?;

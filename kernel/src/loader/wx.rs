@@ -181,10 +181,12 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
     }
 
     // One batch (phase 07b R1): `protect_pages` writes every leaf, then flushes
-    // each contiguous run once, and returns only after every online CPU
-    // acknowledged — on the error path too. So the lowering is in force on
-    // every CPU before step 4 registers the task, and before a failed spawn's
-    // teardown frees a frame; riscv64/aarch64 keep the per-page pass.
+    // each contiguous run once — on the error path too — and returns `Ok` only
+    // when every online CPU acknowledged. An unconfirmed CPU is the
+    // `InvalidationUnconfirmed` error, which refuses the spawn below, and the
+    // failed spawn's teardown quarantines its frames until that CPU answers.
+    // So the lowering is in force on every CPU before step 4 registers the
+    // task; riscv64/aarch64 keep the per-page pass.
     let lowered = pages
         .iter()
         .filter(|(_, flags)| flags.bits() & Flags::WRITE == 0)

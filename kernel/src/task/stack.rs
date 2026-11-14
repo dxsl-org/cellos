@@ -721,7 +721,7 @@ impl CellSegments {
 }
 
 /// [`VaHold`] release for a cell image's VA slot.
-fn release_cell_va(slot: VAddr, _end: VAddr) {
+pub(crate) fn release_cell_va(slot: VAddr, _end: VAddr) {
     crate::loader::va_alloc::free_cell_va(slot);
 }
 
