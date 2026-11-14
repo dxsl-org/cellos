@@ -390,6 +390,7 @@ REQUIRED_MARKERS=(
     "grant lifecycle fixture:::S22-X86-GRANT-REVOKE: PASS"
     "grant capability gate:::S22-X86-GRANT-GATE: PASS"
     "grant deferred revoke:::S22-X86-GRANT-DEFERRED: PASS"
+    "grant unbound owner:::S22-X86-GRANT-UNBOUND-OWNER: PASS"
     "negative revoke while mapped:::S22-X86-GRANT-NEG-REVOKE-MAPPED: PASS"
     "negative receiver death:::S22-X86-GRANT-NEG-RECEIVER-DEATH: PASS"
     "negative stale grant id:::S22-X86-GRANT-NEG-STALE-ID: PASS"

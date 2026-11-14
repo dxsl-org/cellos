@@ -13,6 +13,11 @@
 //! has run. Once the acknowledgement resumes, the owner's exit hands the row to
 //! the deferred sweep, which completes the revoke and frees the frames.
 //!
+//! **Unbound owner** (`{ARCH_TAG}-GRANT-UNBOUND-OWNER`): a `GrantAlloc` whose
+//! caller loses its live binding after its own root mapped the backing leaves
+//! no owner mapping behind and frees the frames only after the owner's tag is
+//! confirmed.
+//!
 //! **Negatives** (`{ARCH_TAG}-GRANT-NEG-<CASE>`): revoke while mapped, receiver
 //! death, stale grant id, cross-domain forgery, and fault during copy with its
 //! permission twin (a leaf downgraded during the copy). Each runs as built and
@@ -331,6 +336,59 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
     seen
 }
 
+/// `GrantAlloc` whose caller loses its live binding after its own root mapped
+/// the new backing (Phase 16 9b). The pages must leave the owner's root before
+/// a frame is freed; before the fix the frames were freed with the owner's
+/// mapping still in place. The frames come back once the owner's tag is
+/// confirmed, so the allocator's deficit is only the tables the root still owns.
+fn unbound_owner(fx: &Fixture) -> bool {
+    use crate::task::tcb::TaskState;
+    let grant_leaves = |space: &AddressSpace| {
+        space
+            .ledger()
+            .into_iter()
+            .filter(|entry| entry.kind == MappingKind::Grant)
+            .count()
+    };
+    let free_frames = || crate::memory::frame::stats().map_or(0, |frames| frames.free_frames);
+    let set_state = |state: TaskState| {
+        super::SCHEDULER.lock().as_mut().and_then(|sched| {
+            sched
+                .tasks
+                .get_mut(&OWNER_TID)
+                .map(|task| core::mem::replace(&mut task.state, state))
+        })
+    };
+    let leaves_before = grant_leaves(&fx.owner);
+    let owned_before = fx.owner.owned_frame_count();
+    let leaked_before = crate::memory::frame_run::PENDING.counters().leaked();
+    let free_before = free_frames();
+    let Some(state) = set_state(TaskState::Retiring) else {
+        log::error!("{ARCH_TAG}-GRANT-UNBOUND-OWNER: FAIL setup");
+        return false;
+    };
+    let refused = handle_syscall(OWNER_TID, Syscall::GrantAlloc { size: GRANT_SIZE })
+        == Err(SyscallError::PermissionDenied);
+    set_state(state);
+    let unmapped = grant_leaves(&fx.owner) == leaves_before;
+    let released = within_release_budget(|| {
+        crate::memory::frame_run::reap();
+        free_before.saturating_sub(free_frames())
+            == fx.owner.owned_frame_count().saturating_sub(owned_before)
+    });
+    let not_leaked = crate::memory::frame_run::PENDING.counters().leaked() == leaked_before;
+    let ok = refused && unmapped && released && not_leaked;
+    if ok {
+        log::info!("{ARCH_TAG}-GRANT-UNBOUND-OWNER: PASS");
+    } else {
+        log::error!(
+            "{ARCH_TAG}-GRANT-UNBOUND-OWNER: FAIL refused={refused} unmapped={unmapped} \
+             released={released} not_leaked={not_leaked}"
+        );
+    }
+    ok
+}
+
 /// Drop a receiver mapping a CONTROL run left behind in a synthetic root, so
 /// the next case can publish at the same address. The root never runs on any
 /// CPU, so the stale PTE was never reachable; this restores bookkeeping only.
@@ -621,6 +679,7 @@ pub(crate) fn run_primary() {
     for case in &CASES {
         ok &= run_case(&fx, case);
     }
+    ok &= unbound_owner(&fx);
 
     super::syscall::reclaim_owned_grants(OWNER_TID);
     for tid in [OWNER_TID, RECEIVER_TID, THIRD_TID, SUCCESSOR_TID] {

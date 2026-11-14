@@ -2151,18 +2151,30 @@ fn alloc_owned_grant(
 
 /// Release a new grant whose caller lost its live binding before the row was
 /// recorded.
+///
+/// A domain owner's pages are already mapped in its own private root, so they
+/// are unmapped there and the owner's tag confirmed before the frames are
+/// freed; an unconfirmed tag quarantines them behind it
+/// ([`release_owner_mapped_backing`]). A SAS owner's frames take the grant
+/// release (unpublish, flush, free).
 fn release_unbound_grant(
+    owner_space: &Option<DomainRoot>,
     paddr: usize,
     n_pages: usize,
     backing: Option<crate::memory::frame_run::FrameRun>,
 ) {
-    match backing {
-        Some(run) => free_grant_run(
-            run,
-            #[cfg(feature = "p01-trace")]
-            None,
-        ),
-        None => free_grant_pages(paddr, n_pages),
+    match (owner_space, backing) {
+        #[cfg(cellos_domain_grants)]
+        (Some(space), Some(run)) => {
+            let pages = run.pages();
+            release_owner_mapped_backing(space, run, pages);
+        }
+        // No other shape holds a backing run: only a domain owner's
+        // allocation makes one.
+        (_, Some(run)) => {
+            crate::memory::frame_run::PENDING.leak(run, "unbound grant backing without its root")
+        }
+        (_, None) => free_grant_pages(paddr, n_pages),
     }
 }
 
@@ -2206,7 +2218,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
         Some(binding) => binding,
         None => {
             drop(table);
-            release_unbound_grant(paddr, n_pages, backing);
+            release_unbound_grant(&owner_space, paddr, n_pages, backing);
             return Err(SyscallError::PermissionDenied);
         }
     };
@@ -2541,7 +2553,7 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
         Some(binding) => binding,
         None => {
             drop(table);
-            release_unbound_grant(paddr, n_pages, backing);
+            release_unbound_grant(&owner_space, paddr, n_pages, backing);
             return Err(SyscallError::PermissionDenied);
         }
     };
