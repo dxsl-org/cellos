@@ -311,14 +311,15 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
             && !grant_share(OWNER_TID, base, RECEIVER_TID, GrantPerm::ReadWrite);
         seen.receiver_unmapped = !maps(&fx.receiver, base);
         // The owner exits while the acknowledgement is still missing: its row
-        // loses its owner and waits for the deferred sweep, frames retained.
+        // loses its owner and waits for the housekeeping sweep, frames retained.
         super::syscall::reclaim_owned_grants(OWNER_TID);
         seen.retained &= domain_row_for_test(base) == Some((0, DomainGrantState::Revoking));
     }
-    // Acknowledgement resumes: the next exit's sweep completes the revoke, and
-    // the row (with the frames it held) is gone.
+    // Acknowledgement resumes: the housekeeping sweep completes the revoke, and
+    // the row (with the frames its record held) is gone. The fixture drives the
+    // sweep itself; a scheduler pass on another CPU may win the row first.
     seen.swept = within_release_budget(|| {
-        super::syscall::reap_grants_for_task(OWNER_TID);
+        super::syscall::sweep_deferred_domain_grants();
         domain_row_for_test(base).is_none()
     });
     // The receiver root's detached tables leave the queue at the reaper's next

@@ -312,13 +312,14 @@ pub enum ReleaseKey {
 }
 /// Result of the reaper's single-transaction pin-to-quarantine transfer.
 ///
-/// `Free` means no live pin protected the range at the transfer linearization
-/// point, so the reaper may return the frames to the allocator. `Full` means a
-/// live pin did protect them but the bounded quarantine has no slot; callers
-/// must leak rather than free in that case.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// `Free` hands the run back: no live pin protected the range at the transfer
+/// linearization point, so the reaper releases it itself. `Withheld` means the
+/// run is held, still mapped, under the protector's key. `Full` means a live
+/// pin did protect it but no hold could be recorded (no heap): the run is
+/// leaked (counted), never freed.
+#[derive(Debug)]
 pub(crate) enum FrameTransfer {
-    Free,
+    Free(FrameRun),
     Withheld,
     Full,
 }
@@ -534,17 +535,16 @@ fn same_grant_lease(
         && entry.grant_id == grant_id
 }
 
-/// Withhold `pages` frames at `base`, still mapped, under `release`: a run in
-/// the frame-run quarantine as `Quarantined(Pinned(release))`. `false` when no
-/// entry could be recorded (no heap): the frames are then leaked (counted),
-/// never freed, and the caller logs it once `REGISTRY` is released.
-fn hold_quarantined_frames(
-    reg: &mut Registry,
-    base: usize,
-    pages: usize,
-    release: ReleaseKey,
-) -> bool {
+/// Withhold `run`, still mapped, under `release`: a run in the frame-run
+/// quarantine as `Quarantined(Pinned(release))`. `false` when no entry could be
+/// recorded (no heap): the frames are then leaked (counted), never freed, and
+/// the caller logs it once `REGISTRY` is released.
+fn hold_quarantined_frames(reg: &mut Registry, run: FrameRun, release: ReleaseKey) -> bool {
+    let pages = run.pages();
+    #[cfg(feature = "p01-trace")]
+    let base = run.base();
     if pages == 0 {
+        PENDING.forget_unlogged(run);
         return false;
     }
     #[cfg(feature = "p01-trace")]
@@ -577,7 +577,7 @@ fn hold_quarantined_frames(
             crate::p01_retained::Reason::PinWithheld
         },
     );
-    if !hold_run(grant_run(base, pages), release) {
+    if !hold_run(run, release) {
         #[cfg(feature = "p01-trace")]
         {
             // Observe Full before frames lose their only structured release key.
@@ -608,7 +608,7 @@ fn hold_quarantined_frames(
 }
 
 /// A withheld grant range as one run, still mapped (its holder may still use
-/// it). The alias is the one the grant release normalises.
+/// it). The alias is the one a SAS grant release normalises.
 fn grant_run(base: usize, pages: usize) -> FrameRun {
     FrameRun::mapped(
         base,
@@ -617,6 +617,21 @@ fn grant_run(base: usize, pages: usize) -> FrameRun {
         RunKind::Leaf,
         KernelAlias::of_identity_remap(base),
     )
+}
+
+/// Test view of [`withhold_pinned_run`] over a synthetic arena range: the
+/// outcome's name. A run handed back is forgotten, not dropped: the arena was
+/// never the allocator's, so there is nothing to free and nothing leaked.
+#[cfg(test)]
+pub(crate) fn test_withhold(base: usize, pages: usize) -> &'static str {
+    match withhold_pinned_run(grant_run(base, pages)) {
+        FrameTransfer::Free(run) => {
+            core::mem::forget(run);
+            "free"
+        }
+        FrameTransfer::Withheld => "withheld",
+        FrameTransfer::Full => "full",
+    }
 }
 
 /// Hold a `Mapped` run under `key` in the frame-run quarantine. `false` when it
@@ -1003,7 +1018,7 @@ pub fn quarantine_task(tid: usize) -> usize {
 /// direction.
 pub fn withhold_frames(base: usize, pages: usize, owner: usize) -> bool {
     let mut reg = REGISTRY.lock();
-    hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::Owner(owner))
+    hold_quarantined_frames(&mut reg, grant_run(base, pages), ReleaseKey::Owner(owner))
 }
 
 /// Take custody of `pages` VFS-lease frames that the reaper declined to free.
@@ -1028,8 +1043,7 @@ pub fn withhold_vfs_frames(
     }
     hold_quarantined_frames(
         &mut reg,
-        base,
-        pages,
+        grant_run(base, pages),
         ReleaseKey::VfsLease {
             holder_tid,
             grant_owner,
@@ -1043,19 +1057,22 @@ pub fn withhold_vfs_frames(
 /// Lookup and custody transfer share the `REGISTRY` transaction. In
 /// particular, a VFS holder that completes its exact lease first removes that
 /// lease before this function can install its release key, and the reaper then
-/// receives [`FrameTransfer::Free`]. If this function wins, that same exact
-/// release key owns the quarantine entry until the holder releases it.
+/// receives [`FrameTransfer::Free`] with its run back. If this function wins,
+/// that same exact release key owns the quarantine entry until the holder
+/// releases it.
 ///
 /// A `GrantSlice` lease is consulted first: it is the only protector whose
 /// release re-checks for a remaining protector before freeing (see
 /// [`release_orphaned_grant_lease_holds`]), so preferring it never hands the
 /// frames to a key that could free them under a live lease holder.
-pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer {
-    let Some(len) = pages.checked_mul(PAGE_SIZE) else {
-        return FrameTransfer::Free;
-    };
-    let Some(probe) = span(base, len) else {
-        return FrameTransfer::Free;
+///
+/// The run keeps its owner's kernel alias through the hold: a domain backing
+/// that never lost its identity alias comes back from the quarantine with
+/// nothing to restore.
+pub(crate) fn withhold_pinned_run(run: FrameRun) -> FrameTransfer {
+    let (base, pages) = (run.base(), run.pages());
+    let Some(probe) = pages.checked_mul(PAGE_SIZE).and_then(|len| span(base, len)) else {
+        return FrameTransfer::Free(run);
     };
     let mut reg = REGISTRY.lock();
 
@@ -1070,7 +1087,7 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
             grant_owner: entry.grant_owner,
             grant_id: entry.grant_id,
         };
-        return if hold_quarantined_frames(&mut reg, base, pages, release) {
+        return if hold_quarantined_frames(&mut reg, run, release) {
             FrameTransfer::Withheld
         } else {
             FrameTransfer::Full
@@ -1089,7 +1106,7 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
             holder_cell: entry.holder_cell,
             export_id,
         };
-        return if hold_quarantined_frames(&mut reg, base, pages, release) {
+        return if hold_quarantined_frames(&mut reg, run, release) {
             FrameTransfer::Withheld
         } else {
             FrameTransfer::Full
@@ -1102,7 +1119,7 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
     {
         let owner = entry.owner;
-        return if hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::Owner(owner)) {
+        return if hold_quarantined_frames(&mut reg, run, ReleaseKey::Owner(owner)) {
             FrameTransfer::Withheld
         } else {
             FrameTransfer::Full
@@ -1123,8 +1140,7 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
             crate::p01_resources::finish(token, 5);
             crate::p01_resources::retained(owner, 3);
         }
-        return if hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::CacheSyncBootLifetime)
-        {
+        return if hold_quarantined_frames(&mut reg, run, ReleaseKey::CacheSyncBootLifetime) {
             FrameTransfer::Withheld
         } else {
             FrameTransfer::Full
@@ -1136,14 +1152,14 @@ pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer
         .iter()
         .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
     else {
-        return FrameTransfer::Free;
+        return FrameTransfer::Free(run);
     };
     let release = ReleaseKey::VfsLease {
         holder_tid: entry.holder_tid,
         grant_owner: entry.grant_owner,
         request_generation: entry.request_generation,
     };
-    if hold_quarantined_frames(&mut reg, base, pages, release) {
+    if hold_quarantined_frames(&mut reg, run, release) {
         FrameTransfer::Withheld
     } else {
         FrameTransfer::Full
@@ -1440,7 +1456,7 @@ fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> 
 }
 
 /// The release key of a live protector overlapping `probe`, marking it
-/// quarantined, in [`withhold_pinned_frames`] precedence.
+/// quarantined, in [`withhold_pinned_run`] precedence.
 fn live_protector_key(reg: &mut Registry, probe: (usize, usize)) -> Option<ReleaseKey> {
     if let Some(e) = reg
         .grant_leases

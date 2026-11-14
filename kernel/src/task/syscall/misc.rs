@@ -94,11 +94,12 @@ pub(super) fn release_if_row_taken<G>(
 }
 
 /// Build the lifecycle record for a domain owner that has just published its
-/// own mapping. Absent — `None` — wherever the lifecycle does not exist.
+/// own mapping of `backing`; the record owns the run from here on. Absent —
+/// `None` — wherever the lifecycle does not exist.
 #[cfg(cellos_domain_grants)]
 pub(super) fn new_domain_record(
     space: &DomainRoot,
-    base: usize,
+    backing: crate::memory::frame_run::FrameRun,
     size: usize,
 ) -> Option<DomainRecord> {
     #[cfg(feature = "p01-trace")]
@@ -107,16 +108,20 @@ pub(super) fn new_domain_record(
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
     Some(Arc::new(crate::task::domain_grant::DomainGrant::new(
-        space, base, size,
+        space, backing, size,
     )))
 }
 
+/// No domain owner gets a backing run where the lifecycle does not exist, so
+/// this never receives one; if it did, the frames are kept (leaked, counted),
+/// never freed.
 #[cfg(not(cellos_domain_grants))]
 pub(super) fn new_domain_record(
     _space: &DomainRoot,
-    _base: usize,
+    backing: crate::memory::frame_run::FrameRun,
     _size: usize,
 ) -> Option<DomainRecord> {
+    crate::memory::frame_run::PENDING.leak(backing, "no domain lifecycle on this target");
     None
 }
 
@@ -142,8 +147,8 @@ pub(super) fn drain_domain_receiver(record: &DomainRecord) {
 #[cfg(not(cellos_domain_grants))]
 pub(super) fn drain_domain_receiver(_record: &DomainRecord) {}
 
-/// Whether the reaper must withhold `pages` frames at `base` instead of freeing
-/// them, because an in-flight operation still holds part of the region.
+/// Withhold `run` instead of letting the reaper release it, while an in-flight
+/// operation still holds part of its range.
 ///
 /// Pin lookup and the quarantine transfer are one registry transaction. This
 /// is essential for VFS leases: if the holder completes the exact lease before
@@ -151,21 +156,25 @@ pub(super) fn drain_domain_receiver(_record: &DomainRecord) {}
 /// orphaned release key; if the transfer wins, that exact release owns it.
 ///
 /// Withheld frames stay mapped (the holder may still use them) as a
-/// `Quarantined(Pinned)` run in the frame-run quarantine until the key's event.
+/// `Quarantined(Pinned)` run in the frame-run quarantine until the key's event,
+/// with the kernel alias their owner gave the run.
 ///
-/// Returns `true` when the frames must not be freed. A hold that could not be
-/// recorded (no heap) also returns `true`: leaking the frames is the only safe
-/// answer left, and the leak is counted in [`leaked_pages`].
-pub(super) fn withhold_or_free(base: usize, pages: usize) -> bool {
-    match crate::memory::pin::withhold_pinned_frames(base, pages) {
-        crate::memory::pin::FrameTransfer::Free => false,
-        crate::memory::pin::FrameTransfer::Withheld => true,
+/// Returns the run when nothing protects it: the caller releases it. A hold
+/// that could not be recorded (no heap) returns `None` too: leaking the frames
+/// is the only safe answer left, and the leak is counted in [`leaked_pages`].
+pub(super) fn withhold_if_pinned(
+    run: crate::memory::frame_run::FrameRun,
+) -> Option<crate::memory::frame_run::FrameRun> {
+    let (base, pages) = (run.base(), run.pages());
+    match crate::memory::pin::withhold_pinned_run(run) {
+        crate::memory::pin::FrameTransfer::Free(run) => Some(run),
+        crate::memory::pin::FrameTransfer::Withheld => None,
         crate::memory::pin::FrameTransfer::Full => {
             LEAKED_PAGES.fetch_add(pages, core::sync::atomic::Ordering::Relaxed);
             log::error!(
                 "[grant] withheld run not recorded (no heap): leaking {pages} page(s) at {base:#x} protected by a live pin"
             );
-            true
+            None
         }
     }
 }

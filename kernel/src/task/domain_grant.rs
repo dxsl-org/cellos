@@ -3,10 +3,11 @@
 //! One kernel-owned record per grant carries the owner root, the receiver root
 //! (`Arc<AddressSpace>`, retained while the receiver PTE is published), the
 //! exact owner/receiver identity and virtual range, the rights copied into the
-//! receiver PTE, and a `Live → Revoking → Revoked` state. The record never
-//! transfers frame ownership: revocation removes the receiver PTE, performs the
-//! synchronous CPU shootdown, removes the owner PTE, and only then may the
-//! frames leave the grant table.
+//! receiver PTE, and a `Live → Revoking → Revoked` state. The record owns the
+//! backing as one `FrameRun` and gives it up only once `Revoked`
+//! ([`DomainGrant::take_backing`]): revocation removes the receiver PTE,
+//! performs the synchronous CPU shootdown, removes the owner PTE, and only then
+//! may the frames leave the grant table.
 //!
 //! A grant that cannot observe safe-root quiescence (the receiver root still
 //! current on a hart, or the remote-fence transport unacknowledged) stays
@@ -28,6 +29,7 @@
 pub(crate) use super::domain_grant_gate::DomainGrantState;
 use super::domain_grant_gate::GrantLifecycle;
 use crate::memory::address_space::{AddressSpace, AddressSpaceError};
+use crate::memory::frame_run::FrameRun;
 use crate::memory::paging::{Flags, PAGE_SIZE};
 use crate::sched::domain_switch::DomainRef;
 use crate::sync::Spinlock;
@@ -114,19 +116,36 @@ pub(crate) struct DomainGrant {
     owner_drained: AtomicBool,
     receiver: Spinlock<Option<DomainReceiver>>,
     lifecycle: GrantLifecycle,
+    /// The frames behind the grant, `Mapped` (in the owner's root, and in the
+    /// receiver's while shared) until the revoke completes. A record dropped
+    /// still holding them leaks them (counted), never frees them.
+    backing: Spinlock<Option<FrameRun>>,
 }
 
 impl DomainGrant {
-    /// Record an owner mapping this grant's allocation just published.
-    pub(crate) fn new(owner: &Arc<AddressSpace>, base: PhysAddr, size: usize) -> Self {
+    /// Record an owner mapping of `backing` this grant's allocation just
+    /// published; the record owns the run from here on.
+    pub(crate) fn new(owner: &Arc<AddressSpace>, backing: FrameRun, size: usize) -> Self {
         Self {
             owner: DomainRef::from_address_space(owner),
-            owner_base: base,
+            owner_base: backing.base(),
             owner_size: size,
             owner_drained: AtomicBool::new(false),
             receiver: Spinlock::new(None),
             lifecycle: GrantLifecycle::new(),
+            backing: Spinlock::new(Some(backing)),
         }
+    }
+
+    /// Give up the backing once the record is `Revoked`: both private roots'
+    /// leaves are removed and their tags confirmed, so the caller may release
+    /// the run. `None` before that, and on every call after the first: the
+    /// revoker whose row take won is the only one that frees the frames.
+    pub(crate) fn take_backing(&self) -> Option<FrameRun> {
+        if self.lifecycle.state() != DomainGrantState::Revoked {
+            return None;
+        }
+        self.backing.lock().take()
     }
 
     /// The owner root must still accept new scheduling work for a grant to be

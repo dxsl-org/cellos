@@ -112,7 +112,7 @@ fn cache_sync_quarantine_cannot_be_released_by_owner_acknowledgement() {
     let before = quarantined_pages();
     let token = begin_cache_sync(base + 32, 64, owner).expect("cache token");
     assert_eq!(quarantine_task(owner), 1);
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(test_withhold(base, 1), "withheld");
     assert!(acknowledge(owner).is_empty());
     assert_eq!(quarantined_pages(), before + 1);
     assert!(holder_of(base, PAGE_SIZE).is_some());
@@ -130,7 +130,7 @@ fn cache_sync_acknowledgement_before_reap_does_not_drop_the_hold() {
     let _token = begin_cache_sync(base, PAGE_SIZE, owner).expect("cache token");
     assert!(acknowledge(owner).is_empty());
     assert_eq!(quarantine_task(owner), 1);
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(test_withhold(base, 1), "withheld");
     assert!(acknowledge(owner).is_empty());
     assert!(holder_of(base, PAGE_SIZE).is_some());
 }
@@ -245,7 +245,7 @@ fn owner_death_pending_revokes_until_the_matching_vfs_release() {
     assert!(mark_vfs_lease_pending_revoke(302, 913, 9));
     assert!(vfs_lease_pending_revoke(302, 913, 9));
     let before = quarantined_pages();
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(test_withhold(base, 1), "withheld");
     assert_eq!(quarantined_pages(), before + 1);
     let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
     assert!(held.quarantined && held.pending_revoke);
@@ -271,7 +271,7 @@ fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
     assert!(!withhold_vfs_frames(base, 1, 306, 918, 3));
     assert_eq!(quarantined_pages(), before);
 
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Free);
+    assert_eq!(test_withhold(base, 1), "free");
     assert_eq!(quarantined_pages(), before);
     assert!(holder_of(base, PAGE_SIZE).is_none());
 }
@@ -324,7 +324,7 @@ fn retirement_attribution_counts_only_named_tasks() {
     assert_eq!(vfs_leases_pending_for_owner(930), 0);
 
     for base in [pinned, leased, foreign] {
-        assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+        assert_eq!(test_withhold(base, 1), "withheld");
     }
     assert_eq!(quarantined_pages_attributed(&[930, 931]), 2);
     assert_eq!(
@@ -381,7 +381,7 @@ fn owner_death_quarantines_grant_lease_frames_until_the_holder_releases() {
     let before = quarantined_pages();
     assert_eq!(lease_grant(base, PAGE_SIZE, 943, 343, base), Ok(()));
     assert!(grant_lease_holder_of_owner(base, PAGE_SIZE, 943).is_some());
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(test_withhold(base, 1), "withheld");
     assert_eq!(quarantined_pages(), before + 1);
     let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
     assert!(held.quarantined && held.pending_revoke);
@@ -403,7 +403,7 @@ fn quarantined_grant_frames_pass_to_the_next_live_protector() {
     assert_eq!(lease_grant(base, PAGE_SIZE, 945, 345, base), Ok(()));
     assert_eq!(lease_grant(base, PAGE_SIZE, 945, 346, base), Ok(()));
     assert_eq!(pin(base, PAGE_SIZE, 947), Ok(()));
-    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
+    assert_eq!(test_withhold(base, 1), "withheld");
     // Each release re-keys the hold while any protector remains.
     assert!(release_grant_holder_leases(345).is_empty());
     assert!(release_grant_holder_leases(346).is_empty());
@@ -487,4 +487,29 @@ fn a_withheld_range_is_a_pinned_run_until_its_key_ends() {
     assert_eq!(quarantined_pages_attributed(&[owner]), 0);
     // Host test: the frames are synthetic, so the run is not released.
     PENDING.forget_unlogged(range.run);
+}
+
+/// Phase 16 row 9: the reaper withholds its owner's own run, not a rebuilt
+/// one, so a run comes back from the hold with the kernel alias its owner gave
+/// it. A domain backing (`Intact`: its identity alias was never removed) must
+/// not come back as a SAS grant whose alias the release restores, and a SAS
+/// grant must not lose the restore.
+#[test]
+fn a_withheld_run_keeps_its_owners_alias() {
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner, PENDING};
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let owner = 961;
+    for (slot, alias) in [(61, KernelAlias::Intact), (62, KernelAlias::Removed)] {
+        let base = arena(slot);
+        assert_eq!(pin(base, PAGE_SIZE, owner), Ok(()));
+        assert_eq!(quarantine_task(owner), 1);
+        let run = FrameRun::mapped(base, 1, RunOwner::Kernel, RunKind::Leaf, alias);
+        assert!(matches!(withhold_pinned_run(run), FrameTransfer::Withheld));
+        let mut released = acknowledge(owner);
+        assert_eq!(released, alloc::vec![(base, 1)]);
+        let range = released.pop().expect("one run");
+        assert_eq!(range.run.alias(), alias);
+        // Host test: the frames are synthetic, so the run is not released.
+        PENDING.forget_unlogged(range.run);
+    }
 }

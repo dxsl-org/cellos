@@ -258,10 +258,7 @@ fn owner_death_with_ack_frees_frames_normally() {
         "window cleared before any frame release"
     );
     // The grant reaper then finds no protector and frees the frames itself.
-    assert_eq!(
-        crate::memory::pin::withhold_pinned_frames(BASE, 1),
-        crate::memory::pin::FrameTransfer::Free
-    );
+    assert_eq!(crate::memory::pin::test_withhold(BASE, 1), "free");
 }
 
 #[test]
@@ -278,10 +275,7 @@ fn owner_death_without_ack_quarantines_until_retry() {
     assert_eq!(t.state(id).map(|s| s.0), Some(LeaseState::Revoking));
     assert!(locked(BASE), "unacknowledged: range stays locked");
     // Grant reaper: frames withheld under the export's key, never freed.
-    assert_eq!(
-        crate::memory::pin::withhold_pinned_frames(BASE, 2),
-        crate::memory::pin::FrameTransfer::Withheld
-    );
+    assert_eq!(crate::memory::pin::test_withhold(BASE, 2), "withheld");
     assert_eq!(crate::memory::pin::dma_export_quarantined_pages(id), 2);
     // A retry that is still unacknowledged releases nothing.
     t.retry(&mut f);

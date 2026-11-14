@@ -188,44 +188,71 @@ type DomainRoot = alloc::sync::Arc<crate::memory::address_space::AddressSpace>;
 type DomainRoot = ();
 
 /// Map a domain owner's freshly allocated backing into its own root, RW+NX,
-/// undoing every page already mapped if one fails.
+/// and hand the run back for the row's lifecycle record to own.
 ///
 /// The frames stay supervisor-only in the SAS/global root: this path never
 /// publishes USER access there, so a SAS cell cannot reach a domain owner's
-/// backing even if the grant later collapses.
+/// backing even if the grant later collapses. If one page fails, every page
+/// already mapped is undone and the run is released behind the owner's tag
+/// ([`release_owner_mapped_backing`]); nothing is handed back.
 #[cfg(cellos_domain_grants)]
 fn map_domain_owner_pages(
     space: &DomainRoot,
-    base: usize,
-    n_pages: usize,
-) -> Result<(), crate::memory::address_space::AddressSpaceError> {
+    backing: crate::memory::frame_run::FrameRun,
+) -> Result<crate::memory::frame_run::FrameRun, crate::memory::address_space::AddressSpaceError> {
     const PAGE_SIZE: usize = 4096;
     let rights = crate::memory::paging::Flags::from_bits(
         crate::memory::paging::Flags::READ | crate::memory::paging::Flags::WRITE,
     );
-    let mut mapped = 0usize;
-    for index in 0..n_pages {
+    let base = backing.base();
+    for index in 0..backing.pages() {
         let va = base + index * PAGE_SIZE;
         match space.map_grant_page(va, va, rights) {
             Ok(()) => {
                 // The owner's own hart writes this PTE and then uses the
                 // pointer, so it must invalidate the page locally first.
                 crate::hal::paging::flush_tlb_page(va);
-                mapped += 1;
             }
             Err(error) => {
-                for undo in 0..mapped {
-                    let _ = space.unmap_grant_page(base + undo * PAGE_SIZE);
-                }
-                // The unmaps above queued this tag's invalidation if it could not
-                // be confirmed; the deferred-release reaper completes it, so the
-                // rollback only re-probes once instead of waiting a budget.
-                let _ = crate::memory::tlb_shootdown::confirm_tag_invalidation(space.asid());
+                release_owner_mapped_backing(space, backing, index);
                 return Err(error);
             }
         }
     }
-    Ok(())
+    Ok(backing)
+}
+
+/// Take a domain owner's backing back after its first `mapped` pages were
+/// published in the owner's own root, and release it.
+///
+/// The pages are unmapped from that root first. A remote hart may still
+/// resolve the owner root's stale entries until the owner's tag is confirmed,
+/// so the frames are freed only after one bounded probe confirms it; an
+/// unconfirmed probe quarantines the run behind the tag (`Batch::await_tag`)
+/// for the reaper, never frees it (census F8). The probe runs once: an undo
+/// whose own probe failed already left its tag pending, and a second blocking
+/// wait would buy nothing. The frames never lost the kernel's own alias, so
+/// nothing is restored.
+#[cfg(cellos_domain_grants)]
+fn release_owner_mapped_backing(
+    space: &DomainRoot,
+    mut backing: crate::memory::frame_run::FrameRun,
+    mapped: usize,
+) {
+    const PAGE_SIZE: usize = 4096;
+    let base = backing.base();
+    for undo in 0..mapped {
+        let _ = space.unmap_grant_page(base + undo * PAGE_SIZE);
+    }
+    // The owner root's leaves are gone; the shared root never had one.
+    let unpublished = backing.unpublish();
+    debug_assert!(unpublished.is_ok(), "domain backing released twice");
+    let mut batch = crate::memory::frame_run::Batch::new();
+    batch.retire(backing);
+    if mapped > 0 && crate::memory::tlb_shootdown::confirm_tag_invalidation(space.asid()).is_err() {
+        batch.await_tag(space.asid());
+    }
+    let _ = batch.complete();
 }
 
 /// Allocate `n_pages` contiguous frames, zero them through the kernel's own
@@ -235,10 +262,13 @@ fn map_domain_owner_pages(
 /// (the phase-01 leak). The kernel already reaches every usable frame
 /// supervisor-only — the RV64/AArch64 identity map, the x86_64 HHDM — so
 /// zeroing needs no remap at all; the caller then maps the owner's own private
-/// root over the returned base.
+/// root over the returned run. That alias is never removed, so the run is
+/// `KernelAlias::Intact`: its release has nothing to unpublish or restore in
+/// the kernel root (census §7.8).
 #[cfg(cellos_domain_grants)]
-fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
+fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::frame_run::FrameRun> {
     use crate::memory::frame::phys_to_virt;
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
     const PAGE_SIZE: usize = 4096;
     let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
     // SAFETY: `phys_to_virt` names the kernel's supervisor alias of RAM (the
@@ -248,7 +278,13 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
     unsafe {
         core::ptr::write_bytes(phys_to_virt(paddr) as *mut u8, 0, n_pages * PAGE_SIZE);
     }
-    Some(paddr)
+    Some(FrameRun::mapped(
+        paddr,
+        n_pages,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        KernelAlias::Intact,
+    ))
 }
 
 /// The lifecycle record behind a table row, where this target can hold one.
@@ -286,27 +322,17 @@ static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> =
 // ── Grant Reaper ──────────────────────────────────────────────────────────────
 
 /// Complete one owner-reclaimed domain row: revoke, then either release the
-/// frames or leave an ownerless `Revoking` row for [`sweep_deferred_domain_grants`].
+/// record's backing or leave an ownerless `Revoking` row for the housekeeping
+/// pass ([`sweep_deferred_domain_grants`]).
 ///
 /// An unacknowledged invalidation never frees a frame. The row loses its owner
 /// so no caller can free it out from under the retry.
 #[cfg(cellos_domain_grants)]
-fn release_deferred_domain_row(
-    key: usize,
-    record: DomainRecord,
-    base: usize,
-    size: usize,
-    registered: bool,
-) {
-    let pages = grant_pages_for_size(size);
+fn release_deferred_domain_row(key: usize, record: DomainRecord, base: usize, registered: bool) {
     if revoke_domain_record(&record, base, "task-exit") {
         // Only the revoker whose removal takes the row frees its frames: a
         // concurrent `GrantFree` or sweep may have completed the same record.
-        let release = || {
-            if !withhold_or_free(base, pages) {
-                free_grant_pages(base, pages);
-            }
-        };
+        let release = || release_domain_backing(&record, true);
         if registered {
             release_if_row_taken(
                 reg_grant_table_lock(),
@@ -350,6 +376,8 @@ fn release_deferred_domain_row(
             grant.shared_to = None;
         }
     }
+    // The housekeeping pass retries the revoke until the tags confirm.
+    crate::task::note_housekeeping();
 }
 
 #[cfg(not(cellos_domain_grants))]
@@ -357,7 +385,6 @@ fn release_deferred_domain_row(
     _key: usize,
     _record: DomainRecord,
     _base: usize,
-    _size: usize,
     _registered: bool,
 ) {
 }

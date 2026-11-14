@@ -30,6 +30,19 @@ pub(super) fn revoke_domain_record(_record: &DomainRecord, _id: usize, _kind: &s
     false
 }
 
+/// [`revoke_domain_record`] for the housekeeping retry of an ownerless row,
+/// which runs on every pass while the row waits. Its deferral was logged when
+/// the row lost its owner, so a retry that defers again logs nothing.
+#[cfg(cellos_domain_grants)]
+pub(super) fn retry_domain_revoke(record: &DomainRecord) -> bool {
+    record.revoke().is_ok()
+}
+
+#[cfg(not(cellos_domain_grants))]
+pub(super) fn retry_domain_revoke(_record: &DomainRecord) -> bool {
+    false
+}
+
 /// Returns `true` if the calling task satisfies the given capability check.
 ///
 /// Lock-ordering: acquires SCHEDULER, drops before returning.

@@ -1,7 +1,7 @@
 use super::{
-    check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, map_syscall,
+    check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, grant_run, map_syscall,
     page_grant_authorizes_dma, reg_grant_authorizes_dma, staged_spawn_argv_cleanup,
-    supports_typed_oom, syscall_to_vi, withhold_or_free, PageGrant, RegGrant, Syscall,
+    supports_typed_oom, syscall_to_vi, withhold_if_pinned, PageGrant, RegGrant, Syscall,
     SyscallError,
 };
 use crate::sched::scheduler::Scheduler;
@@ -1947,7 +1947,10 @@ fn vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
     ));
     assert!(crate::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION).is_empty());
 
-    assert!(!withhold_or_free(BASE, 1));
+    // Nothing protects the range any more: the run comes back for the reaper
+    // to free. The arena is synthetic, so it is forgotten, not freed.
+    let run = withhold_if_pinned(grant_run(BASE, 1)).expect("no live protector");
+    core::mem::forget(run);
     assert_eq!(crate::memory::pin::quarantined_pages(), before);
     assert!(crate::memory::pin::holder_of(BASE, 4096).is_none());
 }

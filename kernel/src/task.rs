@@ -1722,6 +1722,13 @@ fn drain_before_selection() {
             crate::task::syscall::release_vfs_holder_leases(tid);
         }
 
+        // Domain rows whose owner died while their revoke was unacknowledged:
+        // retried every pass until their tags confirm, not only on another
+        // task's exit (census F5). A row still waiting re-arms the pass.
+        if crate::task::syscall::sweep_deferred_domain_grants() {
+            note_housekeeping();
+        }
+
         if SCHEDULER
             .lock()
             .as_ref()
