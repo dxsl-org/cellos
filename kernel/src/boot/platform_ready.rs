@@ -3,10 +3,11 @@
 //!
 //! `kmain` runs `crate::arch::boot::early` (console, traps, boot memory,
 //! paging), then the heap, then `crate::arch::boot::platform_init`, which
-//! returns a [`PlatformReady`]. Everything after it is arch-neutral. The order
-//! the architecture phases enforce is written into these types: a
-//! `PlatformReady` cannot exist without an [`IommuReady`], so DMA isolation is
-//! in its boot state before the tail can spawn the first DMA-capable cell.
+//! returns a [`PlatformReady`]. Everything after it is arch-neutral. A
+//! `PlatformReady` cannot exist without an [`IommuReady`], which names the DMA
+//! isolation path the platform phase took before the tail can spawn the first
+//! DMA-capable cell: an activation (whose result says whether a remapper
+//! translates), a deferred activation, or none.
 
 use super::{BootInfo, LimineBootInfo, SimpleBootInfo};
 
@@ -72,11 +73,17 @@ pub enum PciReady {
     },
 }
 
-/// DMA isolation when the platform phase returns.
+/// The DMA isolation path the platform phase took. It records what ran, not a
+/// guarantee that DMA is translated: only [`Self::Activated`] follows an
+/// activation, and it carries that activation's result.
 pub enum IommuReady {
-    /// `iommu::init` (VT-d from ACPI DMAR) and `activate_isolation` ran before
-    /// any DMA-capable driver (x86_64).
-    VtdActive,
+    /// `iommu::init` (VT-d from ACPI DMAR) and `iommu::activate_isolation` ran
+    /// before any DMA-capable driver (x86_64). Only an activation makes an
+    /// [`Isolation`](crate::dev::iommu::Isolation); it says whether a remapper
+    /// was found and translates, or DMA follows the no-remapper contract.
+    Activated {
+        isolation: crate::dev::iommu::Isolation,
+    },
     /// Activation waits for the Platform Cell to register the IOMMU device
     /// (`iommu::try_deferred_init`, riscv64).
     Deferred,

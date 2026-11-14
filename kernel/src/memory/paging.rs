@@ -48,13 +48,12 @@ pub fn init_bare() {}
 /// The kernel's alias of the page-table root whose frame is `root_phys`: the
 /// HHDM on x86_64, the identity map on riscv64 and aarch64.
 ///
-/// # Safety
-/// `root_phys` names a live root table. Edits of the kernel root are made
-/// under `KERNEL_ROOT`'s lock.
+/// A raw pointer, so each caller states its access: `&*` for a read-only walk
+/// of a live root, `&mut *` only for the root's sole editor (the kernel root
+/// under `KERNEL_ROOT`'s lock, or a root no other CPU can reach yet).
 #[cfg(cellos_wide)]
-pub(crate) unsafe fn table_at(root_phys: PhysAddr) -> &'static mut PageTable {
-    // SAFETY: the caller's contract; `phys_to_virt` is the kernel's alias.
-    unsafe { &mut *(crate::memory::frame::phys_to_virt(root_phys) as *mut PageTable) }
+pub(crate) fn table_at(root_phys: PhysAddr) -> *mut PageTable {
+    crate::memory::frame::phys_to_virt(root_phys) as *mut PageTable
 }
 
 /// Intermediate tables of the shared kernel root are user-reachable: in a
@@ -491,7 +490,7 @@ pub fn init_kernel_paging_x86(
     }
 
     // SAFETY: the zeroed frame is ours until KERNEL_ROOT publishes it below.
-    let pml4 = unsafe { table_at(pml4_phys) };
+    let pml4 = unsafe { &mut *table_at(pml4_phys) };
 
     // 2. Copy higher-half PML4 entries [256..512] from Limine's active PML4.
     //    These entries cover 0xFFFF_8000_0000_0000..0xFFFF_FFFF_FFFF_FFFF and include:
@@ -629,7 +628,7 @@ fn map_page_unflushed(
     #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
-    let table = unsafe { table_at(root_phys) };
+    let table = unsafe { &mut *table_at(root_phys) };
 
     let result = {
         let mut alloc_fn = || {
@@ -737,7 +736,7 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
         return Ok(()); // paging not yet active — no TLB entry to clear
     };
     // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
-    let table = unsafe { table_at(root_phys) };
+    let table = unsafe { &mut *table_at(root_phys) };
     if table.leaf_entry(vaddr).is_some() && table.unmap(vaddr).is_ok() {
         crate::memory::tlb_shootdown::flush_page(vaddr);
     }
@@ -868,7 +867,7 @@ pub fn mapping_state(vaddr: VAddr) -> (bool, bool) {
             return (false, false);
         };
         // SAFETY: the live kernel root table, walked read-only.
-        let root = unsafe { table_at(root_phys) };
+        let root = unsafe { &*table_at(root_phys) };
         let Some(leaf) = root.leaf(vaddr) else {
             return (false, false);
         };
@@ -1020,8 +1019,9 @@ pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
     #[cfg(feature = "p01-trace")]
     let _physical_write = crate::p01_retained::physical_write();
     if let Some(root_phys) = *root {
-        // SAFETY: KERNEL_ROOT names the live architecture page-table root.
-        let table = unsafe { table_at(root_phys) };
+        // SAFETY: KERNEL_ROOT names the live architecture page-table root and
+        // we hold its lock.
+        let table = unsafe { &mut *table_at(root_phys) };
         table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
     }
     reclaimed
@@ -1054,7 +1054,7 @@ pub fn classify_table_frame(frame: PhysAddr) -> alloc::string::String {
     }
     // SAFETY: the kernel root and every table it names through present,
     // non-huge entries are live kernel page tables.
-    let table = unsafe { table_at(root) };
+    let table = unsafe { &*table_at(root) };
     match table.find_table(frame) {
         Some((TableLevel::Pdpt, base)) => {
             format!("PDPT for VA 0x{:X}-0x{:X}", base, base + (1 << 39))
@@ -1202,7 +1202,7 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     };
     // SAFETY: the kernel's live PML4, walked read-only; FRAME_ALLOCATOR is
     // held, so no table frame on the walk can be recycled under it.
-    let root = unsafe { table_at(root_phys) };
+    let root = unsafe { &*table_at(root_phys) };
 
     for index in 0..pages {
         let address = start
@@ -1319,7 +1319,7 @@ pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
 
     let root_phys = (*KERNEL_ROOT.lock())?;
     // SAFETY: the kernel's live PML4, walked read-only.
-    let pte = unsafe { table_at(root_phys) }.leaf_entry(vaddr)?;
+    let pte = unsafe { &*table_at(root_phys) }.leaf_entry(vaddr)?;
     Some(TranslationProbe {
         phys: ((pte & PTE_ADDR_MASK) as usize) | (vaddr & 0xFFF),
         pte,
@@ -1377,7 +1377,7 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
     let root_phys = (*root_guard)?;
     // SAFETY: the kernel's live PML4, read under its lock. The HAL extracts
     // the frame with PTE_ADDR_MASK, never `!0xFFF`, which would keep NX.
-    unsafe { table_at(root_phys) }.translate(vaddr)
+    unsafe { &*table_at(root_phys) }.translate(vaddr)
 }
 
 /// Bare-physical identity translation.

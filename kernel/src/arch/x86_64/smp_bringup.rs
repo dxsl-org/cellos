@@ -543,7 +543,7 @@ pub(super) fn x86_shootdown_fixture_primary() {
     // fixture issues the invalidation itself.
     let repoint = |root: Option<usize>, frame: usize| {
         // SAFETY: the kernel root, edited under its lock (held by the caller).
-        let table = unsafe { table_at(root.expect("fixture root")) };
+        let table = unsafe { &mut *table_at(root.expect("fixture root")) };
         table
             .map_with(X86_PROBE_VA, frame, flags, SAS_TABLES, &mut || None)
             .expect("fixture leaf");
@@ -561,7 +561,7 @@ pub(super) fn x86_shootdown_fixture_primary() {
         }
         let root = KERNEL_ROOT.lock();
         // SAFETY: the kernel root, walked read-only under its lock.
-        let table = unsafe { table_at(root.expect("fixture root")) };
+        let table = unsafe { &*table_at(root.expect("fixture root")) };
         assert!(
             table.leaf_entry(X86_PROBE_VA).is_none(),
             "shootdown fixture VA already mapped"

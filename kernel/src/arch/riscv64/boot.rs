@@ -135,10 +135,9 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
     crate::dev::init();
 
     crate::dev::iommu::set_deferred_init_pending();
-    // activate_isolation() is now called inside iommu::try_deferred_init() once the
-    // IOMMU device has been registered by the Platform Cell. The call below is a no-op
-    // (IOMMU not yet initialized at this point in boot).
-    crate::dev::iommu::activate_isolation();
+    // activate_isolation() runs inside iommu::try_deferred_init(), after init()
+    // probes the IOMMU device the Platform Cell registered. Nothing is probed
+    // here, so there is nothing to activate yet.
 
     PlatformReady {
         console: ConsoleReady { boot_info },

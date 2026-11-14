@@ -4,8 +4,10 @@
 //! Phase 2 `map_dma()`          — drivers register each DMA buffer's physical range.
 //! Phase 3 `activate_isolation()` — switch from passthrough to enforced page-table mode.
 //!
-//! Call order in `main.rs`:
-//!   `iommu::init(firmware)` → driver DMA allocs (call `map_dma()`) → `iommu::activate_isolation()`
+//! Call order in the arch boot (x86_64) and `try_deferred_init` (riscv64),
+//! enforced by tokens: `init` returns a [`Probed`] that `activate_isolation`
+//! consumes, and its [`Isolation`] result is what `IommuReady` carries:
+//!   `iommu::init(firmware)` → driver DMA allocs (call `map_dma()`) → `iommu::activate_isolation(probed)`
 
 use cellos_boards::DmaIsolation;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -98,8 +100,16 @@ static IOMMU_DEFERRED: AtomicBool = AtomicBool::new(false);
 ///
 /// Must be called after `pcie_ecam::init()` and before any DMA allocation.
 /// Does NOT enable enforcement yet — hardware stays in passthrough mode.
-pub fn init(dma: DmaIsolationInput) {
+/// [`activate_isolation`] takes the returned token, so it runs after a probe.
+pub fn init(dma: DmaIsolationInput) -> Probed {
     crate::arch::iommu::init(dma);
+    Probed { _private: () }
+}
+
+/// [`init`] ran. Only `init` makes one; [`activate_isolation`] consumes it.
+#[must_use]
+pub struct Probed {
+    _private: (),
 }
 
 /// Register a DMA physical range or authorize identity DMA when x86 has no
@@ -151,15 +161,51 @@ pub fn revoke_dma_for_cell(tid: u64) -> bool {
     crate::arch::iommu::revoke_cell(tid)
 }
 
+/// What [`activate_isolation`] found. Only that function makes one, so a holder
+/// knows [`init`] and the activation ran, and whether a remapper translates DMA.
+#[must_use]
+pub struct Isolation {
+    remapper: Remapper,
+}
+
+impl Isolation {
+    /// The remapper the activation found, and whether it translates.
+    pub fn remapper(&self) -> Remapper {
+        self.remapper
+    }
+}
+
+/// The DMA remapper [`activate_isolation`] found.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Remapper {
+    /// Found and translating: DMA goes through the per-Cell domains.
+    Translating,
+    /// Found, but translation did not come up: DMA requests fail closed.
+    Inactive,
+    /// None found: DMA follows the architecture's no-remapper contract
+    /// (x86_64: untranslated or refused, as the board declares).
+    NotFound,
+}
+
 /// Phase 3: switch IOMMU from passthrough to page-table enforcement.
 ///
 /// On RISC-V: writes DDTP with MODE=1LVL + pre-built Sv39 DDT → faults any
 ///   IOVA not in a registered DMA range.
 /// On x86_64: fills VT-d context entries with TT=TRANSLATED+SLPT, enables TE.
 ///
-/// Call after all driver DMA buffers are registered via `map_dma()`.
-pub fn activate_isolation() {
+/// Call after all driver DMA buffers are registered via `map_dma()`, with the
+/// token of the [`init`] that probed the hardware.
+pub fn activate_isolation(probed: Probed) -> Isolation {
+    let Probed { _private: () } = probed;
     crate::arch::iommu::activate();
+    let remapper = if is_active() {
+        Remapper::Translating
+    } else if crate::arch::iommu::is_present() {
+        Remapper::Inactive
+    } else {
+        Remapper::NotFound
+    };
+    Isolation { remapper }
 }
 
 /// Returns `true` once `activate_isolation()` has completed successfully.
@@ -202,13 +248,11 @@ pub fn try_deferred_init() {
     // init() calls arch init_hw() which calls find_class() — succeeds only once
     // the IOMMU device has been registered in PCI_DEVICES. The deferred path is
     // RISC-V only, whose remapper is not discovered from ACPI DMAR.
-    init(DmaIsolationInput::default());
+    let probed = init(DmaIsolationInput::default());
 
     // If init_hw() found the IOMMU hardware (BAR0 != 0), activate isolation.
     // activate() is a no-op when init_hw() returned early (device not found yet).
-    activate_isolation();
-
-    if IOMMU_ISOLATED.load(Ordering::Relaxed) {
+    if activate_isolation(probed).remapper() == Remapper::Translating {
         IOMMU_DEFERRED.store(false, Ordering::Relaxed);
         log::info!("[iommu] deferred init complete — DMA isolation active");
     }

@@ -72,7 +72,7 @@ fn rewrite_leaf(root_phys: types::PhysAddr, page_va: VAddr, new_flags: Flags) ->
     use hal::PageTableTrait;
 
     // SAFETY: root_phys is the live kernel root and the caller holds its lock.
-    let table = unsafe { crate::memory::paging::table_at(root_phys) };
+    let table = unsafe { &mut *crate::memory::paging::table_at(root_phys) };
     table
         .protect(page_va, new_flags)
         .map_err(|error| match error {

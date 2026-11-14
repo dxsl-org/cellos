@@ -548,12 +548,12 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
         // Platform Cell receives the full validated MCFG range via argv
         // later and performs authoritative multi-bus enumeration.
         crate::dev::pcie_ecam::init();
-        crate::dev::iommu::init(crate::dev::iommu::DmaIsolationInput {
+        let probed = crate::dev::iommu::init(crate::dev::iommu::DmaIsolationInput {
             vtd_base: acpi_info.dmar_base,
             vtd_units: acpi_info.dmar_units,
             vtd_include_pci_all: acpi_info.dmar_include_pci_all,
         });
-        crate::dev::iommu::activate_isolation();
+        let isolation = crate::dev::iommu::activate_isolation(probed);
         // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.
         crate::arch::dev::pcie_msi::init(
             acpi_info
@@ -561,7 +561,7 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
                 .as_ref()
                 .is_some_and(|fadt| fadt.iapc_boot_arch & (1 << 3) != 0),
         );
-        IommuReady::VtdActive
+        IommuReady::Activated { isolation }
     } else {
         log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
         IommuReady::Absent {

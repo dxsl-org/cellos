@@ -565,6 +565,11 @@ pub(crate) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmap
     }
 }
 
+/// `init_hw` found the IOMMU and set up its DDT and command queue.
+pub(crate) fn is_present() -> bool {
+    BAR0.load(Ordering::Relaxed) != 0
+}
+
 // ── Phase 3: activate enforcement ────────────────────────────────────────────
 
 /// Switch DDTP from BARE to 3LVL. Eagerly fills DCs for all registered kernel-domain BDFs.

@@ -180,12 +180,13 @@ impl Root {
     }
 }
 
-/// This PE's DAIF as captured by [`IrqSaved::save`], with IRQs masked until
-/// the token is dropped.
+/// The DAIF of the activation that called [`IrqSaved::save`], with IRQs masked
+/// until the token is dropped.
 ///
 /// [`switch`] carries the token across the switch and returns it when this
-/// activation resumes; the incoming context restores its own DAIF, so the
-/// caller drops the returned token after its post-resume work.
+/// activation resumes, possibly on another PE; the incoming context restores
+/// its own DAIF, so the caller drops the returned token after its post-resume
+/// work.
 #[must_use]
 pub struct IrqSaved {
     daif: usize,
@@ -206,7 +207,9 @@ impl IrqSaved {
 impl Drop for IrqSaved {
     #[inline(always)]
     fn drop(&mut self) {
-        // SAFETY: captured on this PE by `save`, which `!Send` keeps here.
+        // SAFETY: captured on this activation by `save`; the DAIF belongs to
+        // the suspended context, so IRQs are never unmasked for an activation
+        // that entered masked.
         unsafe { restore_sstatus(self.daif) }
     }
 }

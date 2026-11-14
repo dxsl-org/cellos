@@ -208,8 +208,12 @@ impl PageTable {
     pub const fn empty() -> Self {
         Self::zero()
     }
+    /// Copy PML4 slots 256..512 of `src`, one volatile load and store per
+    /// entry: `src` may be a live root the hardware walker reads.
     pub fn copy_kernel_higher_half(&mut self, src: &PageTable) {
-        self.entries[256..512].copy_from_slice(&src.entries[256..512]);
+        for index in 256..512 {
+            self.set_entry(index, src.entry(index));
+        }
     }
 
     fn entry(&self, index: usize) -> u64 {
@@ -223,16 +227,23 @@ impl PageTable {
         unsafe { core::ptr::write_volatile(&mut self.entries[index], value) }
     }
 
-    /// The table a present, non-huge entry names.
-    fn table_of(entry: u64) -> &'static mut PageTable {
+    /// The table a present, non-huge entry names, for a read-only walk.
+    fn table_of(entry: u64) -> &'static PageTable {
         // SAFETY: the caller checked that `entry` is a present table pointer;
-        // its frame is reachable through `phys_to_virt`.
+        // its frame is reachable through `phys_to_virt`. Reads are volatile.
+        unsafe { &*(phys_to_virt((entry & PTE_ADDR_MASK) as usize) as *const PageTable) }
+    }
+
+    /// [`Self::table_of`] for an edit, reached through `&mut` of its root.
+    fn table_of_mut(entry: u64) -> &'static mut PageTable {
+        // SAFETY: as in `table_of`; the caller holds the root mutably (the
+        // kernel root under `KERNEL_ROOT`'s lock), so it is the only editor.
         unsafe { &mut *(phys_to_virt((entry & PTE_ADDR_MASK) as usize) as *mut PageTable) }
     }
 
     /// The page table holding the 4 KiB leaf slot of `virt`, or `None` when a
     /// level above it is absent or a huge leaf.
-    fn leaf_table(&self, virt: VAddr) -> Option<&'static mut PageTable> {
+    fn leaf_table(&mut self, virt: VAddr) -> Option<&mut PageTable> {
         let mut entry = self.entry((virt >> 39) & 0x1FF);
         if entry & PTE_P == 0 {
             return None;
@@ -243,7 +254,7 @@ impl PageTable {
                 return None;
             }
         }
-        Some(Self::table_of(entry))
+        Some(Self::table_of_mut(entry))
     }
 
     /// The entry that maps `virt` and the log2 size it maps: a 4 KiB leaf, or
@@ -704,11 +715,14 @@ impl PageTable {
             // SAFETY: f is a freshly allocated 4KB physical frame. Accessed via
             // HHDM virtual address so it is dereferenceable under Limine's PML4.
             unsafe { core::ptr::write_bytes(phys_to_virt(f) as *mut u8, 0, PAGE_SIZE) };
+            // The zeroing is a plain store: keep it ahead of the volatile
+            // store that publishes the table to the walker and other CPUs.
+            core::sync::atomic::compiler_fence(Ordering::Release);
             self.set_entry(idx, f as u64 | PTE_P | PTE_RW | us_bit);
         } else if tables == TablePolicy::FollowLeaf && us_bit != 0 {
             self.set_entry(idx, entry | us_bit);
         }
-        Ok(Self::table_of(self.entry(idx)))
+        Ok(Self::table_of_mut(self.entry(idx)))
     }
 }
 

@@ -37,6 +37,11 @@ pub fn revoke_cell(tid: u64) -> bool {
 /// Phase 3 of [`crate::dev::iommu::activate_isolation`].
 pub fn activate() {}
 
+/// Whether [`init`] found a remapper: never, here.
+pub fn is_present() -> bool {
+    false
+}
+
 /// Physical address of a kernel-heap pointer (identity).
 #[inline]
 pub(crate) fn virt_to_phys(virt: usize) -> u64 {

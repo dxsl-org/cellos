@@ -71,6 +71,11 @@ pub fn activate() {
     crate::arch::dev::iommu_x86::activate();
 }
 
+/// Whether [`init`] found a VT-d unit (from ACPI DMAR, or the q35 fallback).
+pub fn is_present() -> bool {
+    crate::arch::dev::iommu_x86::is_present()
+}
+
 /// Physical address of a kernel-heap pointer (HHDM).
 #[inline]
 pub(crate) fn virt_to_phys(virt: usize) -> u64 {

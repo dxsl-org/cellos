@@ -36,6 +36,11 @@ pub fn activate() {
     crate::arch::dev::iommu_riscv::activate();
 }
 
+/// Whether [`init`] found and set up the RISC-V IOMMU.
+pub fn is_present() -> bool {
+    crate::arch::dev::iommu_riscv::is_present()
+}
+
 /// Physical address of a kernel-heap pointer (identity).
 #[inline]
 pub(crate) fn virt_to_phys(virt: usize) -> u64 {
