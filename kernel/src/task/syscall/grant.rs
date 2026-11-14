@@ -1329,6 +1329,40 @@ pub(super) fn free_grant_pages_inner(
     n_pages: usize,
     #[cfg(feature = "p01-trace")] range: Option<crate::memory::pin::ReleasedRange>,
 ) {
+    #[cfg(feature = "p01-trace")]
+    const PAGE_SIZE: usize = 4096;
+    #[cfg(feature = "p01-trace")]
+    let _range_write = crate::p01_retained::release_write();
+    #[cfg(feature = "p01-trace")]
+    let allocated = crate::memory::frame::with(|alloc| {
+        (0..n_pages).all(|i| alloc.p01_allocated(base + i * PAGE_SIZE))
+    })
+    .unwrap_or(false);
+    // One batch: one shared invalidation for the run, copy windows drained,
+    // then the alias restore and the free — or the quarantine of the run if a
+    // hart does not confirm.
+    let mut batch = crate::memory::frame_run::Batch::new();
+    retire_grant_pages_into(&mut batch, base, n_pages);
+    #[allow(unused_variables)] // reason: only the p01-trace witness reads it
+    let flushed = batch.complete();
+    #[cfg(feature = "p01-trace")]
+    if let Some(range) = range {
+        if allocated && flushed.is_confirmed() {
+            crate::p01_retained::retire(range.p01_range);
+            crate::p01_resources::finish(range.p01_obligation, 1);
+        } else {
+            crate::p01_retained::fault();
+        }
+    }
+}
+
+/// [`free_grant_pages`] up to its flush: unpublish the run, detach the tables
+/// its USER mapping needed (x86_64), and retire it into `batch`.
+fn retire_grant_pages_into(
+    batch: &mut crate::memory::frame_run::Batch,
+    base: usize,
+    n_pages: usize,
+) {
     const PAGE_SIZE: usize = 4096;
 
     // Restore the kernel alias only where it is the identity map (RV64,
@@ -1347,35 +1381,34 @@ pub(super) fn free_grant_pages_inner(
     let published = identity_alias
         || (0..n_pages)
             .any(|i| crate::memory::paging::virt_to_phys(base + i * PAGE_SIZE).is_some());
-    // One batch: one shared invalidation for the run, copy windows drained,
-    // then the alias restore and the free — or the quarantine of the run if a
-    // hart does not confirm.
-    let mut batch = crate::memory::frame_run::Batch::new();
     if published {
-        crate::task::stack::unpublish_user_frames(&mut batch, base, n_pages);
+        crate::task::stack::unpublish_user_frames(batch, base, n_pages);
     }
     if !identity_alias && published {
-        prune_unpublished_tables(&mut batch, base, n_pages);
+        prune_unpublished_tables(batch, base, n_pages);
     }
-    #[cfg(feature = "p01-trace")]
-    let _range_write = crate::p01_retained::release_write();
-    #[cfg(feature = "p01-trace")]
-    let allocated = crate::memory::frame::with(|alloc| {
-        (0..n_pages).all(|i| alloc.p01_allocated(base + i * PAGE_SIZE))
-    })
-    .unwrap_or(false);
-    retire_grant_run(&mut batch, base, n_pages, identity_alias);
-    #[allow(unused_variables)] // reason: only the p01-trace witness reads it
-    let flushed = batch.complete();
-    #[cfg(feature = "p01-trace")]
-    if let Some(range) = range {
-        if allocated && flushed.is_confirmed() {
-            crate::p01_retained::retire(range.p01_range);
-            crate::p01_resources::finish(range.p01_obligation, 1);
-        } else {
-            crate::p01_retained::fault();
-        }
-    }
+    retire_grant_run(batch, base, n_pages, identity_alias);
+}
+
+/// Test-hooks: a grant run exactly as `GrantAlloc` builds it.
+#[cfg(feature = "test-hooks")]
+// reason: only the x86 silent-CPU fixture uses it.
+#[allow(dead_code)]
+pub(crate) fn test_alloc_grant_pages(n_pages: usize) -> Option<usize> {
+    alloc_grant_pages(n_pages)
+}
+
+/// Test-hooks: [`free_grant_pages`] into the caller's `batch`, so one
+/// operation retires a grant run together with other owners.
+#[cfg(feature = "test-hooks")]
+// reason: only the x86 silent-CPU fixture uses it.
+#[allow(dead_code)]
+pub(crate) fn test_retire_grant_pages_into(
+    batch: &mut crate::memory::frame_run::Batch,
+    base: usize,
+    n_pages: usize,
+) {
+    retire_grant_pages_into(batch, base, n_pages);
 }
 
 /// Exercise registered-grant teardown without decoder or scheduler pre-locks.

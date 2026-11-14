@@ -21,7 +21,12 @@
 #     case's exact reason; a control that reports `FAIL` or `MISSED` fails the
 #     lane), and the two-cell public pair (`S22-X86-GRANT-PAIR-*`) with its five
 #     deliberate receiver faults, each classified to the grant address the owner
-#     handed over and to its page-fault kind.
+#     handed over and to its page-fault kind;
+#   * at 2+ CPUs, the Phase-16 silent-CPU quarantine fixture
+#     (`S22-X86-QUARANTINE-SILENT-CPU`): one teardown under a CPU held with
+#     interrupts masked completes after one probe bound with every frame
+#     quarantined, the reaper frees nothing while the CPU stays silent
+#     (`CONTROL`), and frees everything once it answers (`PASS`).
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -443,31 +448,46 @@ if (( X86_CPUS >= 2 )); then
         "raw-context ownership and retirement:::S22-X86-CONTEXT-HANDOFF: PASS"
         "actual remote translation invalidation:::S22-X86-REMOTE-SHOOTDOWN: PASS harts=$X86_CPUS "
         "invalidation answered under a masked uncontended lock:::S22-X86-MASKED-SHOOTDOWN: PASS harts=$X86_CPUS "
+        "reaper frees nothing while a CPU is silent:::S22-X86-QUARANTINE-SILENT-CPU: CONTROL silent=1 "
+        "teardown quarantines under a silent CPU, frees after:::S22-X86-QUARANTINE-SILENT-CPU: PASS harts=$X86_CPUS "
+        "silent-CPU window opened:::[frame-run] silent-cpu window OPEN"
+        "silent-CPU window closed:::[frame-run] silent-cpu window CLOSED"
     )
 fi
 
 # --- Shootdown fail-stop -----------------------------------------------------
 # Every unconfirmed tag or shared-mapping invalidation is logged (`[tlb] tag …
-# invalidation unconfirmed`, test-hooks) or panics (`[x86-smp] shared mapping
-# invalidation unconfirmed`); either is a lane failure, never a retry.
+# invalidation unconfirmed`, `[frame-run] shared invalidation unconfirmed`,
+# `[tlb] shared invalidation unconfirmed`); each is a lane failure, never a
+# retry.
 #
-# One exception, bracketed by the kernel itself: the grant deferred-revoke
-# fixture withholds every tag acknowledgement between `[grant-neg]
-# withhold-ack window OPEN` and `… CLOSED`, and the forced failures inside that
-# window are its purpose. Only those are excused — each names itself
-# (`[tlb] tag N invalidation unconfirmed: withheld (test)`) — so a real silent
-# hart inside the window still fails the lane, as does any line outside it. The
-# brackets must balance and close.
-WINDOW_OPEN=$(grep -ac "\[grant-neg\] withhold-ack window OPEN" "$LOG" || true)
-WINDOW_CLOSED=$(grep -ac "\[grant-neg\] withhold-ack window CLOSED" "$LOG" || true)
-if [[ "$WINDOW_OPEN" -ne "$WINDOW_CLOSED" ]]; then
-    echo "FAIL: withhold-ack windows do not balance (OPEN=$WINDOW_OPEN CLOSED=$WINDOW_CLOSED)" >&2
-    exit 1
-fi
+# Two exceptions, each bracketed by the kernel itself, and each excusing only
+# the lines that name themselves, so a real silent hart inside a window still
+# fails the lane, as does any line outside one. The brackets must balance.
+# - The grant deferred-revoke fixture withholds every tag acknowledgement
+#   between `[grant-neg] withhold-ack window OPEN` and `… CLOSED`; its forced
+#   failures read `[tlb] tag N invalidation unconfirmed: withheld (test)`.
+# - The silent-CPU quarantine fixture (2+ CPUs) holds the RT CPU with
+#   interrupts masked between `[frame-run] silent-cpu window OPEN` and
+#   `… CLOSED`; its one teardown reads `[frame-run] shared invalidation
+#   unconfirmed: hart N silent through the probe; M pages quarantined: held
+#   (fixture)`.
+for bracket in "\[grant-neg\] withhold-ack window" "\[frame-run\] silent-cpu window"; do
+    OPENED=$(grep -ac "$bracket OPEN" "$LOG" || true)
+    CLOSED=$(grep -ac "$bracket CLOSED" "$LOG" || true)
+    if [[ "$OPENED" -ne "$CLOSED" ]]; then
+        echo "FAIL: '$bracket' windows do not balance (OPEN=$OPENED CLOSED=$CLOSED)" >&2
+        exit 1
+    fi
+done
 UNCONFIRMED=$(awk '
-    /\[grant-neg\] withhold-ack window OPEN/ { inside = 1; next }
-    /\[grant-neg\] withhold-ack window CLOSED/ { inside = 0; next }
-    /invalidation unconfirmed/ && (!inside || !/\[tlb\] tag [0-9]+ invalidation unconfirmed: withheld \(test\)$/) { print }
+    /\[grant-neg\] withhold-ack window OPEN/ { withheld = 1; next }
+    /\[grant-neg\] withhold-ack window CLOSED/ { withheld = 0; next }
+    /\[frame-run\] silent-cpu window OPEN/ { held = 1; next }
+    /\[frame-run\] silent-cpu window CLOSED/ { held = 0; next }
+    withheld && /\[tlb\] tag [0-9]+ invalidation unconfirmed: withheld \(test\)$/ { next }
+    held && /\[frame-run\] shared invalidation unconfirmed: hart [0-9]+ silent through the probe; [0-9]+ pages quarantined: held \(fixture\)$/ { next }
+    /invalidation unconfirmed/ { print }
 ' "$LOG")
 if [[ -n "$UNCONFIRMED" ]]; then
     echo "FAIL: an invalidation went unconfirmed:" >&2

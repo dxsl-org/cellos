@@ -397,7 +397,7 @@ fn tag_probe_ticks() -> u64 {
 }
 
 #[cfg(target_arch = "x86_64")]
-const fn tag_probe_ticks() -> u64 {
+pub(crate) const fn tag_probe_ticks() -> u64 {
     // TSC ticks; exceeding this quarantines the flushed frames, so it stays
     // generous for slow (emulated) peers rather than tracking a nominal clock
     // rate.

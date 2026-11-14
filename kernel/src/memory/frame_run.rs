@@ -1105,7 +1105,7 @@ static TEST_SILENT_CPU_FIXTURE: core::sync::atomic::AtomicBool =
 
 /// Arm or disarm [`TEST_SILENT_CPU_FIXTURE`].
 #[cfg(feature = "test-hooks")]
-// reason: the x86 silent-CPU fixture arms it from the next commit.
+// reason: only the x86 silent-CPU fixture (`smp_bringup.rs`) arms it.
 #[allow(dead_code)]
 pub(crate) fn set_test_silent_cpu_fixture(armed: bool) {
     TEST_SILENT_CPU_FIXTURE.store(armed, Ordering::Release);

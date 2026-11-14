@@ -483,8 +483,10 @@ pub fn stack_probe_self_test() -> bool {
     stack.test_hook_watermark_bytes() == probe_bytes
 }
 
-impl Drop for Stack {
-    fn drop(&mut self) {
+impl Stack {
+    /// The teardown up to its flush: unregister, unpublish every page, and
+    /// retire the run (still holding its reservation) into `batch`.
+    fn retire_run_into(&mut self, batch: &mut Batch) {
         #[cfg(all(
             feature = "native-domains",
             feature = "test-hooks",
@@ -497,15 +499,38 @@ impl Drop for Stack {
         trace!("Dropping Stack at 0x{:X}", self.base);
 
         let total_pages = self.pages + self.guard_pages;
+        unpublish_user_frames(batch, self.base, total_pages);
+        retire_frames(batch, self.base, total_pages, true);
+    }
 
+    /// Tear this stack down as part of a larger operation: its run joins
+    /// `batch`, whose one shared flush covers every owner retired into it,
+    /// and is freed — or quarantined, reservation included — when the batch
+    /// finishes.
+    #[cfg(feature = "test-hooks")]
+    // reason: only the x86 silent-CPU fixture retires owners into a shared batch.
+    #[allow(dead_code)]
+    pub(crate) fn retire_into(self, batch: &mut Batch) {
+        let mut stack = core::mem::ManuallyDrop::new(self);
+        stack.retire_run_into(batch);
+        // Every other field is plain data; a p01 obligation would be lost.
+        #[cfg(feature = "p01-trace")]
+        debug_assert!(
+            stack.p01_obligation.is_none(),
+            "a stack with a p01 obligation is retired only by its drop"
+        );
+    }
+}
+
+impl Drop for Stack {
+    fn drop(&mut self) {
         // One batch for the whole run: one shared invalidation, not one per
         // page. A sibling thread's Sas copy may still target this user stack,
         // so the batch drains copy windows after the flush and before the free.
         // An unconfirmed flush quarantines the run (and keeps its reservation)
         // until every hart acknowledges.
         let mut batch = Batch::new();
-        unpublish_user_frames(&mut batch, self.base, total_pages);
-        retire_frames(&mut batch, self.base, total_pages, true);
+        self.retire_run_into(&mut batch);
         #[allow(unused_variables)] // reason: only the p01-trace ledger reads it
         let flushed = batch.complete();
         #[cfg(feature = "p01-trace")]
@@ -519,7 +544,7 @@ impl Drop for Stack {
                 crate::p01_retained::begin(
                     owner,
                     self.base,
-                    total_pages,
+                    self.pages + self.guard_pages,
                     crate::p01_retained::Reason::TaskStackForget,
                 );
             }
@@ -691,10 +716,44 @@ impl CellSegments {
         }
     }
 
+    /// The teardown up to its flush: unmap, detach every emptied table and
+    /// retire the backing (the last run holding the VA slot) into `batch`.
+    fn teardown_into(&self, batch: &mut Batch) {
+        self.unmap_into(batch);
+        for &(vaddr, _frame) in &self.pages {
+            paging::prune_empty_tables(vaddr).retire_into(batch, vaddr);
+        }
+        self.retire_backing_into(batch);
+    }
+
+    /// Tear this image down as part of a larger operation: its frames, tables
+    /// and VA slot join `batch`, whose one shared flush covers every owner
+    /// retired into it, and are freed — or quarantined — when it finishes.
+    #[cfg(feature = "test-hooks")]
+    // reason: only the x86 silent-CPU fixture retires owners into a shared batch.
+    #[allow(dead_code)]
+    pub(crate) fn retire_into(self, batch: &mut Batch) {
+        let mut segments = core::mem::ManuallyDrop::new(self);
+        segments.teardown_into(batch);
+        #[cfg(feature = "p01-trace")]
+        debug_assert!(
+            segments.p01_obligation.is_none(),
+            "an image with a p01 obligation is retired only by its drop"
+        );
+        // The batch owns the frames and the slot now; only the metadata is
+        // dropped here. An image with no frames releases its slot itself, as
+        // the drop does.
+        let pages = core::mem::take(&mut segments.pages);
+        drop(core::mem::take(&mut segments.writable_pages));
+        if pages.is_empty() && segments.va_slot != 0 {
+            crate::loader::va_alloc::free_cell_va(segments.va_slot);
+        }
+    }
+
     /// Hand every backing frame to `batch` as runs of physically adjacent
     /// frames (the loader allocates them in order), the last one holding the
     /// VA slot until the frames are free.
-    fn retire_into(&self, batch: &mut Batch) {
+    fn retire_backing_into(&self, batch: &mut Batch) {
         let mut runs = self.pages.iter().map(|&(_, frame)| frame).peekable();
         while let Some(base) = runs.next() {
             let mut pages = 1;
@@ -731,11 +790,7 @@ impl Drop for CellSegments {
         // before either backing or page-table frames return to the allocator.
         // An unconfirmed flush quarantines them, and the VA slot with them.
         let mut batch = Batch::new();
-        self.unmap_into(&mut batch);
-        for &(vaddr, _frame) in &self.pages {
-            paging::prune_empty_tables(vaddr).retire_into(&mut batch, vaddr);
-        }
-        self.retire_into(&mut batch);
+        self.teardown_into(&mut batch);
         #[allow(unused_variables)] // reason: only the p01-trace ledger reads it
         let flushed = batch.complete();
         #[cfg(feature = "p01-trace")]

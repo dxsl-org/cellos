@@ -279,6 +279,7 @@ pub fn start_secondaries() {
     #[cfg(feature = "test-hooks")]
     if online > 1 {
         x86_shootdown_fixture_primary();
+        x86_silent_cpu_fixture_primary();
     }
     X86_BOOT_COMPLETE.store(true, Ordering::Release);
     if let Some(ack_ns) = broadcast_ns {
@@ -452,11 +453,12 @@ pub(super) extern "C" fn x86_secondary_main(
     // the BSP at most four bounded waits, plus the closing broadcast and
     // shootdown fixture, so five budgets per hart slot bound this wait.
     x86_bounded_wait_steps(X86_WAIT_STEPS.saturating_mul(5 * MAX_HARTS), || {
-        // The shootdown fixture pairs the BSP with the RT hart only; any other
-        // AP just answers its IPIs from here.
+        // The shootdown and silent-CPU fixtures pair the BSP with the RT hart
+        // only; any other AP just answers its IPIs from here.
         #[cfg(feature = "test-hooks")]
         if logical == HART_RT {
             x86_shootdown_fixture_secondary();
+            x86_silent_cpu_fixture_secondary();
         }
         X86_BOOT_COMPLETE.load(Ordering::Acquire)
     });
@@ -619,6 +621,230 @@ pub(super) fn x86_shootdown_fixture_primary() {
     log::info!(
         "S22-X86-MASKED-SHOOTDOWN: PASS harts={} irq_masked_uncontended_lock=true after=4951",
         harts
+    );
+}
+
+// Silent-CPU quarantine fixture (Phase 16, census §8.2). The RT CPU clears IF
+// and spins on `X86_PROBE_STAGE` alone — no lock, no log, so it answers no
+// invalidation — while the BSP tears down a user stack, a kernel stack, a cell
+// image and a grant run as ONE operation. The teardown must return after one
+// probe bound with every frame quarantined, none freed and none handed out
+// again; reaping while the CPU stays silent must free nothing (the control);
+// once the CPU takes interrupts again the reaper must free everything. Before
+// Phase 16 the same teardown panicked (`shared mapping invalidation
+// unconfirmed`). The stages continue the shootdown fixture's (which ends at 9).
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_ARMED: usize = 10;
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_HELD: usize = 11;
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_RELEASED: usize = 12;
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_DONE: usize = 13;
+/// The image's pages sit in the probe VA's 2 MiB, past the probe page.
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_SEGMENT_VA: usize = X86_PROBE_VA + 0x10_0000;
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_SEGMENT_PAGES: usize = 3;
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_GRANT_PAGES: usize = 2;
+/// Reaper passes the control runs while the CPU is still silent: past one
+/// reissue of the requests (`frame_run::REISSUE_EVERY`).
+#[cfg(feature = "test-hooks")]
+const X86_SILENT_CONTROL_REAPS: usize = 40;
+
+#[cfg(feature = "test-hooks")]
+pub(super) fn x86_silent_cpu_fixture_secondary() {
+    if X86_PROBE_STAGE.load(Ordering::Acquire) != X86_SILENT_ARMED {
+        return;
+    }
+    unsafe {
+        core::arch::asm!("cli", options(nomem, nostack));
+    }
+    X86_PROBE_STAGE.store(X86_SILENT_HELD, Ordering::Release);
+    // Spin on the stage word only: any lock spin would answer the BSP's
+    // request. Bounded by the clock (eight probe bounds), so a BSP that fails
+    // mid-fixture cannot park this CPU for good.
+    let deadline = unsafe { core::arch::x86_64::_rdtsc() }
+        .saturating_add(8 * crate::memory::tlb_shootdown::tag_probe_ticks());
+    while X86_PROBE_STAGE.load(Ordering::Acquire) != X86_SILENT_RELEASED
+        && unsafe { core::arch::x86_64::_rdtsc() } < deadline
+    {
+        core::hint::spin_loop();
+    }
+    unsafe {
+        core::arch::asm!("sti", options(nomem, nostack));
+    }
+    X86_PROBE_STAGE.store(X86_SILENT_DONE, Ordering::Release);
+}
+
+#[cfg(feature = "test-hooks")]
+pub(super) fn x86_silent_cpu_fixture_primary() {
+    use crate::memory::frame_run::{Batch, FlushOutcome, UnconfirmedCause, PENDING};
+    use crate::memory::paging::{Flags, PAGE_SIZE};
+    use crate::task::stack::{CellSegments, Stack};
+    fn fail(why: &str) -> ! {
+        panic!("S22-X86-QUARANTINE-SILENT-CPU: FAIL {why}")
+    }
+    let freed_since = |before: &[u64]| {
+        crate::memory::frame::changed_frames(before)
+            .into_iter()
+            .filter(|&(_, allocated)| !allocated)
+            .count()
+    };
+
+    // Owners, built while every CPU still answers.
+    let user = Stack::new_user(2).unwrap_or_else(|_| fail("user stack"));
+    let kernel = Stack::new_kernel(2).unwrap_or_else(|_| fail("kernel stack"));
+    let segments = {
+        let mut batch = Batch::new();
+        let flags = Flags::from_bits(
+            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+        );
+        let pages = crate::memory::frame::with(|allocator| {
+            let mut pages = alloc::vec::Vec::new();
+            for index in 0..X86_SILENT_SEGMENT_PAGES {
+                let va = X86_SILENT_SEGMENT_VA + index * PAGE_SIZE;
+                if crate::memory::paging::virt_to_phys(va).is_some() {
+                    return Err("segment VA already mapped");
+                }
+                let frame = allocator.allocate_frame().ok_or("segment frame")?;
+                pages.push((va, frame));
+                crate::memory::paging::map_page(allocator, &mut batch, va, frame, flags)
+                    .map_err(|_| "segment map")?;
+            }
+            Ok(pages)
+        })
+        .unwrap_or(Err("frame allocator"))
+        .unwrap_or_else(|why| fail(why));
+        // New leaves only: nothing to invalidate.
+        if !batch.complete().is_confirmed() {
+            fail("segment map invalidation");
+        }
+        CellSegments::new(pages, 0)
+    };
+    let grant = crate::task::syscall::test_alloc_grant_pages(X86_SILENT_GRANT_PAGES)
+        .unwrap_or_else(|| fail("grant run"));
+
+    let mut data: alloc::vec::Vec<(usize, usize)> = alloc::vec![
+        (user.base, user.allocated_bytes() / PAGE_SIZE),
+        (kernel.base, kernel.allocated_bytes() / PAGE_SIZE),
+        (grant, X86_SILENT_GRANT_PAGES),
+    ];
+    data.extend(segments.pages().iter().map(|&(_, frame)| (frame, 1)));
+    let data_pages: usize = data.iter().map(|&(_, pages)| pages).sum();
+    let within = |pa: usize| {
+        data.iter()
+            .any(|&(base, pages)| pa >= base && pa < base + pages * PAGE_SIZE)
+    };
+    let quarantined_before = PENDING.counters().quarantined();
+    let released_before = PENDING.counters().released_after_retry();
+    let before = crate::memory::frame::with(|allocator| allocator.used_bitmap())
+        .unwrap_or_else(|| fail("bitmap"));
+    let bound = crate::memory::tlb_shootdown::tag_probe_ticks();
+
+    log::info!("[frame-run] silent-cpu window OPEN");
+    crate::memory::frame_run::set_test_silent_cpu_fixture(true);
+    X86_PROBE_STAGE.store(X86_SILENT_ARMED, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == X86_SILENT_HELD);
+
+    // One operation: one batch, one shared flush, one probe bound.
+    let started = unsafe { core::arch::x86_64::_rdtsc() };
+    let mut batch = Batch::new();
+    user.retire_into(&mut batch);
+    kernel.retire_into(&mut batch);
+    segments.retire_into(&mut batch);
+    crate::task::syscall::test_retire_grant_pages_into(&mut batch, grant, X86_SILENT_GRANT_PAGES);
+    let mut cap = crate::memory::frame::FlushCap::take().unwrap_or_else(|| fail("flush cap"));
+    let outcome = batch.finish(&mut cap);
+    let ticks = unsafe { core::arch::x86_64::_rdtsc() }.saturating_sub(started);
+
+    // Still silent: nothing freed, nothing handed out again.
+    let silent = match outcome {
+        FlushOutcome::Unconfirmed {
+            cause: UnconfirmedCause::Timeout { hart },
+            ..
+        } => hart,
+        FlushOutcome::Confirmed => fail("the silent CPU confirmed"),
+        FlushOutcome::Unconfirmed { .. } => fail("unexpected unconfirmed cause"),
+    };
+    if silent != HART_RT {
+        fail("another CPU reported silent");
+    }
+    if ticks > 3 * bound {
+        fail("the teardown waited more than one probe bound");
+    }
+    let quarantined = PENDING
+        .counters()
+        .quarantined()
+        .saturating_sub(quarantined_before);
+    if quarantined < data_pages {
+        fail("not every data page quarantined");
+    }
+    if freed_since(&before) != 0 {
+        fail("a frame was freed under the silent CPU");
+    }
+    let mut fresh = alloc::vec::Vec::new();
+    for _ in 0..data_pages * 2 {
+        match crate::memory::frame::allocate_frame() {
+            Some(pa) if within(pa) => fail("a quarantined frame was handed out"),
+            Some(pa) => fresh.push(pa),
+            None => break,
+        }
+    }
+    for pa in fresh {
+        crate::memory::frame::deallocate_frame(pa);
+    }
+
+    // Control: the reaper, reissuing on schedule, frees nothing while the
+    // CPU is still silent.
+    for _ in 0..X86_SILENT_CONTROL_REAPS {
+        crate::memory::frame_run::reap();
+    }
+    if PENDING.counters().quarantined() < quarantined_before + quarantined
+        || freed_since(&before) != 0
+    {
+        fail("the reaper freed a frame under the silent CPU");
+    }
+    log::info!(
+        "S22-X86-QUARANTINE-SILENT-CPU: CONTROL silent={} reaps={} freed=0 quarantined={}",
+        silent,
+        X86_SILENT_CONTROL_REAPS,
+        quarantined
+    );
+
+    // Release the CPU: it serves the pending request with a full flush the
+    // moment it takes interrupts, and the reaper frees everything.
+    X86_PROBE_STAGE.store(X86_SILENT_RELEASED, Ordering::Release);
+    x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == X86_SILENT_DONE);
+    x86_bounded_wait(|| {
+        crate::memory::frame_run::reap();
+        PENDING.counters().quarantined() <= quarantined_before
+    });
+    crate::memory::frame_run::set_test_silent_cpu_fixture(false);
+    log::info!("[frame-run] silent-cpu window CLOSED");
+    let released = PENDING
+        .counters()
+        .released_after_retry()
+        .saturating_sub(released_before);
+    let still_allocated = crate::memory::frame::with(|allocator| {
+        data.iter().any(|&(base, pages)| {
+            (0..pages).any(|page| allocator.p01_allocated(base + page * PAGE_SIZE))
+        })
+    })
+    .unwrap_or(true);
+    if released < data_pages || still_allocated {
+        fail("quarantined frames were not freed after the acknowledgement");
+    }
+    log::info!(
+        "S22-X86-QUARANTINE-SILENT-CPU: PASS harts={} silent={} pages={} quarantined={} released={} teardown_ticks={} bound={}",
+        online_hart_count(),
+        silent,
+        data_pages,
+        quarantined,
+        released,
+        ticks,
+        bound
     );
 }
 
