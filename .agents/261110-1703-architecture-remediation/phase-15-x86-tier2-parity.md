@@ -1,7 +1,7 @@
 ---
 phase: 15
 title: "x86-64 Tier-2 parity"
-status: in-progress
+status: completed
 priority: P1
 effort: "7–10d"
 dependencies: [14]
@@ -125,3 +125,4 @@ Phase 16 unifies frame lifetime, including the grant path ported here.
 - **Surprise (second review, LOW, rollback prune):** no change needed. `alloc_grant_pages`' x86 rollback prunes pages `0..mapped` only, but the failing page's tables are already gone: `memory::paging::map_page` prunes every table its failed walk published (x86 `map_page_unflushed`: detach, invalidate every CPU, then recycle; RV64/AArch64: prune and free), and a table shared with a mapped page is pruned with that page. A comment at the rollback says so.
 - **Deviation (second review, LOW, RV64 lane evidence):** every RV64 test-hooks boot runs the withheld-ack seam, whose forced lines (`[tlb] tag N invalidation unconfirmed: withheld (test)`) satisfied the grant-revoke lane's "a release path reported an unconfirmed tag" evidence (deferred outcome) and its two truncation notes. `real_unconfirmed_tag` now excludes them from all three. Behaviour change (line ~882, park): since the previous fix the seam no longer prints `… silent through the … tick probe`, so a 2-hart `park` `UNAVAILABLE` reading is accepted only with a real silent hart (or `deferred release abandoned`) in the same boot — stricter; a boot that previously leaned on the forced line now fails.
 - **Deviation (second review, LOW, RV64 pair accounting):** every RV64 case excused the pair's four addresses with no count or order. `assert_grant_pair_faults` now runs for every case with a handoff line: at most id1:1, id2:2, id3:1, id4:1, exactly those once the launcher printed `tier2-grant-pair complete.` (always for `grant-pair`), and each fault after its own announcement (byte offsets; id2's second fault after `UNREGISTER-FAULT`). It replaces `grant-pair`'s old at-least counts. Checked against the 15 `/tmp/p15/final/rvdom-qemu` logs (all accept) and two edited copies (an extra id2 fault; an id1 fault moved before its announcement — both rejected).
+- **Close (2026-11-14):** checkpoint, two reviews and fixes in [reports/phase-15-evidence.md](reports/phase-15-evidence.md); no regression.
