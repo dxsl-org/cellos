@@ -260,6 +260,14 @@ impl ReleasedRange {
     pub fn pages(&self) -> usize {
         self.run.pages()
     }
+
+    /// Test-hooks: drop a released range whose frames are synthetic — a fixture
+    /// arena the frame allocator never managed. There is nothing to free and
+    /// nothing leaked, so it is neither released nor counted.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn discard_synthetic(self) {
+        core::mem::forget(self.run);
+    }
 }
 
 impl PartialEq for ReleasedRange {

@@ -1445,6 +1445,15 @@ fn retire_published_run_into(
     batch.retire(run);
 }
 
+/// Test-hooks: resume the release of withheld grant frames a fixture took
+/// back from the pin registry itself, as production callers do.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_free_released(ranges: Vec<crate::memory::pin::ReleasedRange>) {
+    for range in ranges {
+        free_released_range(range);
+    }
+}
+
 /// Test-hooks: a grant run exactly as `GrantAlloc` builds it.
 #[cfg(feature = "test-hooks")]
 // reason: only the x86 silent-CPU fixture uses it.

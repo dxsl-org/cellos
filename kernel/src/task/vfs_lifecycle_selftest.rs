@@ -23,6 +23,14 @@ const fn arena(n: usize) -> usize {
     0x5000_0000 + n * 0x10_0000
 }
 
+/// Drop ranges released over [`arena`] addresses: synthetic frames the
+/// allocator never managed, so there is nothing to free or count.
+fn discard_synthetic(ranges: vec::Vec<crate::memory::pin::ReleasedRange>) {
+    for range in ranges {
+        range.discard_synthetic();
+    }
+}
+
 fn fail(step: &str, detail: &str) -> bool {
     log::error!("[selftest] VFS-LIFETIME/{step}: FAIL — {detail}");
     false
@@ -413,7 +421,11 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
             "pending-revoked holder could obtain a second GrantSlice",
         );
     }
-    if released != vec![(grant_id, 1)] {
+    let exact = released == vec![(grant_id, 1)];
+    // The released run is the real registered grant: free it as the
+    // production release path does.
+    super::syscall::test_free_released(released);
+    if !exact {
         return fail(
             "reg-reap",
             "holder completion did not release the exact quarantined registered grant",
@@ -581,11 +593,11 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
         crate::memory::pin::holder_of(grant_id, PAGE_SIZE).is_some() && slice == Some(Ok(grant_id))
     });
     if let Some(request_generation) = lease_generation {
-        let _ = crate::memory::pin::release_vfs_lease(
+        super::syscall::test_free_released(crate::memory::pin::release_vfs_lease(
             VFS_WORKER_TID,
             CLIENT_WORKER_TID,
             request_generation,
-        );
+        ));
     }
     let leased_cleanup =
         leased.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
@@ -650,11 +662,11 @@ fn grant_slice_and_teardown_are_linearized(kind: GrantRaceKind) -> bool {
             .is_none()
     });
     if let Some(request_generation) = invalid_generation {
-        let _ = crate::memory::pin::release_vfs_lease(
+        super::syscall::test_free_released(crate::memory::pin::release_vfs_lease(
             VFS_WORKER_TID,
             CLIENT_WORKER_TID,
             request_generation,
-        );
+        ));
     }
     let invalid_cleanup =
         invalid.is_some_and(|grant_id| teardown_race_grant(kind, grant_id) == Ok(0));
@@ -768,11 +780,11 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
         Err(crate::memory::pin::VfsLeaseError::TableFull)
     );
     for slot in 0..crate::memory::pin::MAX_VFS_LEASES {
-        let _ = crate::memory::pin::release_vfs_lease(
+        discard_synthetic(crate::memory::pin::release_vfs_lease(
             0xB000 + slot,
             0xA000 + slot,
             0xD000 + slot as u64,
-        );
+        ));
     }
 
     revoke_vfs_role();
@@ -837,7 +849,7 @@ fn quarantine_waits_for_exact_release() -> bool {
         || !crate::memory::pin::mark_vfs_lease_pending_revoke(802, 702, 21)
         || !crate::memory::pin::withhold_vfs_frames(base, 1, 802, 702, 21)
     {
-        let _ = crate::memory::pin::release_vfs_lease(802, 702, 21);
+        discard_synthetic(crate::memory::pin::release_vfs_lease(802, 702, 21));
         return fail("quarantine", "setup failed");
     }
     let held = crate::memory::pin::holder_of(base, PAGE_SIZE);
@@ -848,7 +860,9 @@ fn quarantine_waits_for_exact_release() -> bool {
             "owner death did not leave the lease quarantined",
         );
     }
-    if !wrong.is_empty() {
+    let wrong_released = !wrong.is_empty();
+    discard_synthetic(wrong);
+    if wrong_released {
         return fail(
             "quarantine",
             "wrong request generation released quarantined frames",
@@ -861,7 +875,9 @@ fn quarantine_waits_for_exact_release() -> bool {
         );
     }
     let exact = crate::memory::pin::release_vfs_lease(802, 702, 21);
-    if exact != vec![(base, 1)] {
+    let exact_only = exact == vec![(base, 1)];
+    discard_synthetic(exact);
+    if !exact_only {
         return fail(
             "quarantine",
             "exact release did not return only the quarantined lease",
@@ -885,14 +901,18 @@ fn holder_death_is_selective() -> bool {
         || !crate::memory::pin::withhold_vfs_frames(first, 1, 803, 703, 31)
         || !crate::memory::pin::withhold_vfs_frames(second, 1, 804, 704, 32)
     {
-        let _ = crate::memory::pin::release_vfs_holder_leases(803);
-        let _ = crate::memory::pin::release_vfs_holder_leases(804);
+        discard_synthetic(crate::memory::pin::release_vfs_holder_leases(803));
+        discard_synthetic(crate::memory::pin::release_vfs_holder_leases(804));
         return fail("holder-death", "setup failed");
     }
     let released = crate::memory::pin::release_vfs_holder_leases(803);
     let still_second = crate::memory::pin::holder_of(second, PAGE_SIZE).is_some();
     let released_second = crate::memory::pin::release_vfs_holder_leases(804);
-    if released != vec![(first, 1)] {
+    let first_only = released == vec![(first, 1)];
+    let second_only = released_second == vec![(second, 1)];
+    discard_synthetic(released);
+    discard_synthetic(released_second);
+    if !first_only {
         return fail(
             "holder-death",
             "dead holder did not release only its own lease",
@@ -907,7 +927,7 @@ fn holder_death_is_selective() -> bool {
             "other holder lease was touched by the first release",
         );
     }
-    if released_second != vec![(second, 1)] {
+    if !second_only {
         return fail(
             "holder-death",
             "second holder release did not return its quarantined lease",
