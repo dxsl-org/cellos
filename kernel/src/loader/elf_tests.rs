@@ -94,10 +94,11 @@ fn test_pie_slot_admission_precedes_mapping() {
 
     image[104..112].copy_from_slice(&(stride as u64).to_le_bytes());
     let image_ref = &image;
+    let mut batch = crate::memory::frame_run::Batch::new();
     crate::memory::frame::with(|allocator| {
         let before = allocator.used_frames();
         assert!(matches!(
-            super::ElfLoader.load_segments(image_ref, allocator, base, base, false),
+            super::ElfLoader.load_segments(image_ref, allocator, &mut batch, base, base, false),
             Err(ViError::PermissionDenied)
         ));
         assert_eq!(
@@ -107,6 +108,8 @@ fn test_pie_slot_admission_precedes_mapping() {
         );
     })
     .expect("ELF selftest needs frame allocator");
+    assert!(batch.is_empty(), "a refused PIE retires nothing");
+    let _ = batch.complete();
     assert!(crate::memory::paging::virt_to_phys(base).is_none());
 
     // The desktop arena itself is admitted only with the opt-in slot size.

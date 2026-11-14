@@ -105,10 +105,17 @@ impl ElfLoader {
     ///   page or a stack run, a VA already owned by another live cell or kernel
     ///   MMIO, or a PT_LOAD declaring W+X.
     /// - `ViError::OutOfMemory` — no frame available, or the mapping failed.
+    ///
+    /// Every invalidation the mapping needs, and on failure every page and
+    /// table the unwind retires, goes to `batch`. The caller holds
+    /// `FRAME_ALLOCATOR` (the `frame_allocator` borrow) and must finish `batch`
+    /// once it is released, before relocating through the image or returning
+    /// the spawn.
     pub fn load_segments(
         &self,
         data: &[u8],
         frame_allocator: &mut crate::memory::frame::FrameAllocator,
+        batch: &mut crate::memory::frame_run::Batch,
         load_base: usize,
         slot_base: usize,
         guarded_code: bool,
@@ -133,22 +140,22 @@ impl ElfLoader {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {
                 let file_offset = usize::try_from(ph.offset())
                     .map_err(|_| ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 // For PIE cells load_base relocates every segment; for fixed-VA
                 // cells load_base == 0 so p_vaddr is used verbatim.
                 let segment_vaddr = usize::try_from(ph.virtual_addr())
                     .map_err(|_| ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 let vaddr = segment_vaddr
                     .checked_add(load_base)
                     .ok_or(ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 let mem_size = usize::try_from(ph.mem_size())
                     .map_err(|_| ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 let file_size = usize::try_from(ph.file_size())
                     .map_err(|_| ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 let ph_flags = ph.flags();
 
                 // --- Header sanity checks ---
@@ -160,7 +167,7 @@ impl ElfLoader {
                     ph_flags.is_write(),
                     ph_flags.is_execute(),
                 )
-                .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                .inspect_err(|_| Self::unwind(&mapped, batch))?;
 
                 // file_size MUST NOT exceed mem_size (the rest is BSS).
                 if file_size > mem_size {
@@ -169,14 +176,14 @@ impl ElfLoader {
                         file_size,
                         mem_size
                     );
-                    Self::unwind(&mapped, frame_allocator);
+                    Self::unwind(&mapped, batch);
                     return Err(ViError::InvalidInput);
                 }
                 // file_offset + file_size must fit inside the ELF buffer.
                 let file_end = file_offset
                     .checked_add(file_size)
                     .ok_or(ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
                 if file_end > data.len() {
                     log::error!(
                         "ELF: segment file range {}..{} exceeds buffer len {}",
@@ -184,7 +191,7 @@ impl ElfLoader {
                         file_end,
                         data.len()
                     );
-                    Self::unwind(&mapped, frame_allocator);
+                    Self::unwind(&mapped, batch);
                     return Err(ViError::InvalidInput);
                 }
                 // vaddr + mem_size must not overflow; preflight already held the
@@ -192,7 +199,7 @@ impl ElfLoader {
                 let end_addr = vaddr
                     .checked_add(mem_size)
                     .ok_or(ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?;
 
                 let start_addr = vaddr;
 
@@ -201,7 +208,7 @@ impl ElfLoader {
                 let end_page = end_addr
                     .checked_add(4095)
                     .ok_or(ViError::InvalidInput)
-                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?
+                    .inspect_err(|_| Self::unwind(&mapped, batch))?
                     & !(4096 - 1);
 
                 // --- Translate ELF p_flags to page-table flags ---
@@ -226,14 +233,14 @@ impl ElfLoader {
 
                 // Map pages. The invalidation is batched (phase 07b R1): every
                 // leaf of this segment is written through `map_page_deferred`
-                // under the caller's FRAME_ALLOCATOR guard, and ONE
-                // `flush_deferred_maps` over [start_page, end_page) — every page
-                // the loop touches, the merged boundary pages included — runs
-                // below, before the next segment and before this function
-                // returns, so relocation (which writes through the cell's VA)
-                // and the spawn's return only ever follow an acknowledged flush.
-                // An early return goes through `unwind`, which unmaps and
-                // flushes every recorded page before any frame is freed.
+                // under the caller's FRAME_ALLOCATOR guard, and
+                // `flush_deferred_maps` adds [start_page, end_page) — every page
+                // the loop touches, the merged boundary pages included — to the
+                // caller's batch, whose one shared flush runs after the guard is
+                // released and before relocation (which writes through the
+                // cell's VA) or the spawn's return. An early return goes through
+                // `unwind`, which unmaps every recorded page and retires its
+                // frame into the batch, freed only after that flush confirms.
                 let mut current_page = start_page;
                 while current_page < end_page {
                     // Overwrite guard: reject VA collision with kernel MMIO or a
@@ -252,7 +259,7 @@ impl ElfLoader {
                             "ELF: load VA 0x{:X} already mapped — rejecting spawn (VA collision with a live cell or kernel MMIO; fix the cell's linker script)",
                             current_page
                         );
-                        Self::unwind(&mapped, frame_allocator);
+                        Self::unwind(&mapped, batch);
                         return Err(ViError::PermissionDenied);
                     }
 
@@ -274,6 +281,7 @@ impl ElfLoader {
                                 entry.final_flags = merged;
                                 let _ = crate::memory::paging::map_page_deferred(
                                     frame_allocator,
+                                    batch,
                                     current_page,
                                     phys,
                                     Flags::from_bits(merged.bits() | Flags::WRITE),
@@ -290,13 +298,14 @@ impl ElfLoader {
                                     current_page,
                                     mapped.len()
                                 );
-                                Self::unwind(&mapped, frame_allocator);
+                                Self::unwind(&mapped, batch);
                                 return Err(ViError::OutOfMemory);
                             }
                         };
 
                         if crate::memory::paging::map_page_deferred(
                             frame_allocator,
+                            batch,
                             current_page,
                             buf_frame,
                             flags,
@@ -310,7 +319,7 @@ impl ElfLoader {
                             );
                             // buf_frame is not in `mapped` yet — free it separately.
                             frame_allocator.deallocate_frame(buf_frame);
-                            Self::unwind(&mapped, frame_allocator);
+                            Self::unwind(&mapped, batch);
                             return Err(ViError::OutOfMemory);
                         }
 
@@ -347,7 +356,7 @@ impl ElfLoader {
                         let src_end = src_offset_in_file
                             .checked_add(len)
                             .ok_or(ViError::InvalidInput)
-                            .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                            .inspect_err(|_| Self::unwind(&mapped, batch))?;
                         if src_end <= data.len() {
                             let src = &data[src_offset_in_file..src_end];
                             unsafe {
@@ -361,13 +370,13 @@ impl ElfLoader {
                     crate::loader::atomic_publication_tests::observe_unpublished_pages(&mapped);
 
                     if let Err(error) = crate::loader::atomic_checkpoint("AP-02") {
-                        Self::unwind(&mapped, frame_allocator);
+                        Self::unwind(&mapped, batch);
                         return Err(error);
                     }
 
                     current_page += 4096;
                 }
-                crate::memory::paging::flush_deferred_maps(start_page, end_page);
+                crate::memory::paging::flush_deferred_maps(batch, start_page, end_page);
 
                 log::info!(
                     "ELF LOAD: 0x{:X}-0x{:X} flags={}{}{}",
@@ -383,27 +392,29 @@ impl ElfLoader {
     }
 
     /// Undo a partially loaded image: unmap every page recorded so far and
-    /// return its frame to the allocator.
+    /// retire its frame, and every table it emptied, into `batch`.
     ///
     /// Every early return inside `load_segments` must call this. Without it a
     /// rejected ELF leaves its already-mapped pages resident, which both leaks
     /// the frames and poisons the VA-collision guard for the next spawn at the
-    /// same base.
-    pub(crate) fn unwind(
-        mapped: &[LoadedPage],
-        frame_allocator: &mut crate::memory::frame::FrameAllocator,
-    ) {
+    /// same base. The batch frees them only after one shared flush covering
+    /// the leaves and the detached tables confirms (census P10: the tables'
+    /// remote paging-structure caches are covered too, not only this hart's).
+    pub(crate) fn unwind(mapped: &[LoadedPage], batch: &mut crate::memory::frame_run::Batch) {
+        use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
         for page in mapped {
-            let _ = crate::memory::paging::unmap_page(page.va);
-            crate::memory::tlb_shootdown::flush_page(page.va);
+            let _ = crate::memory::paging::unmap_page(batch, page.va);
+            batch.invalidate(page.va);
         }
         for page in mapped {
-            let reclaimed = crate::memory::paging::prune_empty_tables(page.va);
-            if !reclaimed.is_empty() {
-                crate::memory::paging::tlb_flush_all();
-            }
-            reclaimed.release(frame_allocator);
-            frame_allocator.deallocate_frame(page.frame);
+            crate::memory::paging::prune_empty_tables(page.va).retire_into(batch, page.va);
+            batch.retire(FrameRun::unpublished(
+                page.frame,
+                1,
+                RunOwner::Kernel,
+                RunKind::Leaf,
+                KernelAlias::Intact,
+            ));
         }
     }
 }

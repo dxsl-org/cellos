@@ -92,9 +92,12 @@ impl Backend for Fake {
         self.normalised.push(run.base());
     }
 
-    fn free(&mut self, base: PhysAddr, pages: usize) {
+    fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {
         for page in 0..pages {
             self.allocator.deallocate_frame(base + page * PAGE_SIZE);
+        }
+        if let Some(hold) = hold {
+            (hold.release)(hold.start, hold.end);
         }
     }
 }

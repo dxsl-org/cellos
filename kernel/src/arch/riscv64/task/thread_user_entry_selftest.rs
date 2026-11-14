@@ -97,12 +97,14 @@ pub(super) fn map_test_page() -> Result<usize, &'static str> {
             | paging::Flags::ACCESSED
             | paging::Flags::DIRTY,
     );
+    let mut batch = crate::memory::frame_run::Batch::new();
     let frame = crate::memory::frame::with(|allocator| {
         let frame = allocator.allocate_frame().ok_or("frame unavailable")?;
-        paging::map_page(allocator, ENTRY, frame, flags).map_err(|_| "map failed")?;
+        paging::map_page(allocator, &mut batch, ENTRY, frame, flags).map_err(|_| "map failed")?;
         Ok(frame)
     })
     .ok_or("allocator unavailable")??;
+    let _ = batch.complete();
     unsafe {
         let base = frame as *mut u32;
         *base.add(0) = rv_addi(11, MSG.len() as u32);
@@ -117,7 +119,7 @@ pub(super) fn map_test_page() -> Result<usize, &'static str> {
 }
 
 pub(super) fn unmap_test_page(frame: usize) {
-    let _ = paging::unmap_page(ENTRY);
+    let _ = paging::unmap_page(&mut crate::memory::frame_run::Batch::new(), ENTRY);
     paging::tlb_flush_all();
     crate::memory::frame::deallocate_frame(frame);
 }

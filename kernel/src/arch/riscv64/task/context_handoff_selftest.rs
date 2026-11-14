@@ -223,13 +223,15 @@ pub fn run_primary() {
                 | crate::memory::paging::Flags::READ
                 | crate::memory::paging::Flags::WRITE,
         );
+        let mut batch = crate::memory::frame_run::Batch::new();
         let frame = crate::memory::frame::with(|alloc| {
             let frame = alloc.allocate_frame().expect("allocate frame for ctx test");
-            crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags)
+            crate::memory::paging::map_page(alloc, &mut batch, CTX_USER_PAGE, frame, flags)
                 .expect("map ctx user page");
             frame
         })
         .expect("frame allocator");
+        let _ = batch.complete();
         crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
         frame
     };
@@ -402,7 +404,10 @@ pub fn run_primary() {
     if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(root_tid, 0);
     }
-    let _ = crate::memory::paging::unmap_page(CTX_USER_PAGE);
+    let _ = crate::memory::paging::unmap_page(
+        &mut crate::memory::frame_run::Batch::new(),
+        CTX_USER_PAGE,
+    );
     crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
     crate::memory::frame::deallocate_frame(test_frame);
     crate::task::yield_cpu();

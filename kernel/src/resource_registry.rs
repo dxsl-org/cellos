@@ -516,6 +516,34 @@ pub fn release_mmio_for(tid: usize) {
 /// mapped, so revoking one device class never disarms another. Used by runtime
 /// revocation (`sys_cap_revoke`); task retirement uses [`release_mmio_for`],
 /// which drops every region regardless of class.
+/// The windows [`revoke_mmio_for`] would release, without releasing them: a
+/// revoke lowers their PTEs first and releases exactly these only once the
+/// lowering is in force on every hart ([`release_mmio_windows`]).
+pub fn mmio_windows_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
+    if device_mask == 0 {
+        return alloc::vec::Vec::new();
+    }
+    #[cfg(feature = "p01-trace")]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::DRIVER_SHARED,
+    );
+    REGISTRY
+        .lock()
+        .iter()
+        .filter(|(_, region)| region.owner_tid == tid && region.class & device_mask != 0)
+        .map(|(&base, region)| (base, region.len))
+        .collect()
+}
+
+/// Release exactly `windows` of `tid` (bases from [`mmio_windows_for`]); a
+/// window claimed since is untouched.
+pub fn release_mmio_windows(tid: usize, windows: &[(usize, usize)]) {
+    REGISTRY.lock().retain(|base, region| {
+        !(region.owner_tid == tid && windows.contains(&(*base, region.len)))
+    });
+}
+
 pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
     let mut revoked = alloc::vec::Vec::new();
     if device_mask == 0 {

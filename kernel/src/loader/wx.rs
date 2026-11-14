@@ -25,7 +25,8 @@
 //! x86_64 invalidates every PCID and global entry locally, then waits until
 //! every online CPU acknowledges its own local invalidation
 //! (`tlb_shootdown::flush_range`, one per contiguous run of lowered pages), and
-//! a CPU that never acknowledges is a fail-stop panic. The loader keeps the
+//! a CPU that does not acknowledge within the probe fails the lowering closed:
+//! the spawn is refused and its frames are quarantined. The loader keeps the
 //! stricter load -> relocate -> lower -> register ordering on every arch, even
 //! though AArch64 emits broadcast stage-1 TLBI today.
 //!

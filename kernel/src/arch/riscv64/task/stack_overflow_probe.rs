@@ -68,6 +68,7 @@ pub fn spawn() -> Result<usize, ViError> {
 }
 
 fn map_probe_code() -> Result<CellSegments, ViError> {
+    let mut batch = crate::memory::frame_run::Batch::new();
     let code_frame = crate::memory::frame::with(|allocator| {
         if paging::virt_to_phys(ENTRY).is_some() {
             return Err(ViError::NotSupported);
@@ -86,12 +87,13 @@ fn map_probe_code() -> Result<CellSegments, ViError> {
                 | Flags::ACCESSED
                 | Flags::DIRTY,
         );
-        if paging::map_page(allocator, ENTRY, code_frame, flags).is_err() {
+        if paging::map_page(allocator, &mut batch, ENTRY, code_frame, flags).is_err() {
             allocator.deallocate_frame(code_frame);
             return Err(ViError::OutOfMemory);
         }
         Ok(code_frame)
     })
     .ok_or(ViError::OutOfMemory)??;
+    let _ = batch.complete();
     Ok(CellSegments::new(alloc::vec![(ENTRY, code_frame)], 0))
 }

@@ -91,7 +91,7 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// Lock order: SHM_HANDLES (released); KERNEL_ROOT alone (unpublish); then
 /// FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
-    use crate::memory::paging::Flags;
+    use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner};
     let (frames, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
         cell: cell_id,
         generation,
@@ -100,29 +100,31 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
         return 0;
     }
     crate::memory::cell_quota::refund(cell_id as usize, total_bytes);
-    let kernel_rwx = Flags::from_bits(
-        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
-    );
+    let owner = RunOwner::Cell {
+        cell: cell_id,
+        generation,
+        tid: 0,
+    };
+    // One batch for every frame: one shared invalidation, then each frame is
+    // normalised and freed, or quarantined if a hart does not confirm.
+    let mut batch = Batch::new();
     for &frame in &frames {
-        if crate::memory::paging::virt_to_phys(frame) != Some(frame) {
+        let alias = if crate::memory::paging::virt_to_phys(frame) != Some(frame) {
             // The identity VA no longer maps this frame; only stale TLB
             // entries for it can remain.
-            crate::memory::tlb_shootdown::flush_page(frame);
-            continue;
-        }
-        crate::task::stack::unpublish_user_frames(frame, 1);
-        if crate::memory::frame::phys_to_virt(frame) == frame {
-            let _ = crate::memory::frame::with(|allocator| {
-                crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx)
-            });
-        }
+            batch.invalidate(frame);
+            KernelAlias::Intact
+        } else {
+            crate::task::stack::unpublish_user_frames(&mut batch, frame, 1);
+            if crate::memory::frame::phys_to_virt(frame) == frame {
+                KernelAlias::Removed
+            } else {
+                KernelAlias::Intact
+            }
+        };
+        batch.retire(FrameRun::unpublished(frame, 1, owner, RunKind::Leaf, alias));
     }
-    let released = &frames;
-    let _ = crate::memory::frame::with(|allocator| {
-        for &frame in released {
-            allocator.deallocate_frame(frame);
-        }
-    });
+    let _ = batch.complete();
     frames.len()
 }
 
@@ -1184,10 +1186,12 @@ pub(super) fn reserve_caller_owned_dma_range(
 
 /// Allocate `n_pages` contiguous physical frames, map them USER RW, and zero them.
 ///
-/// Returns the physical base address on success, or `None` on OOM or partial map.
-/// Lock order: FRAME_ALLOCATOR (alloc) → FRAME_ALLOCATOR (map_page) → release →
-///             FRAME_ALLOCATOR (partial-failure dealloc).
+/// Returns the physical base address on success, or `None` on OOM, partial map
+/// or an unconfirmed invalidation of a replaced translation.
+/// Lock order: FRAME_ALLOCATOR (alloc) → FRAME_ALLOCATOR (map_page) → release;
+/// the batch flushes and frees after FRAME_ALLOCATOR is released.
 pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
+    use crate::memory::frame_run::Batch;
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
 
@@ -1195,12 +1199,22 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
     let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
+    let identity_alias = crate::memory::frame::phys_to_virt(paddr) == paddr;
 
+    let mut batch = Batch::new();
     let mapped = crate::memory::frame::with(|alloc| {
         let mut mapped = 0usize;
         for i in 0..n_pages {
             let v = paddr + i * PAGE_SIZE;
-            if crate::memory::paging::map_page(alloc, v, v, Flags::from_bits(user_flags)).is_ok() {
+            if crate::memory::paging::map_page(
+                alloc,
+                &mut batch,
+                v,
+                v,
+                Flags::from_bits(user_flags),
+            )
+            .is_ok()
+            {
                 mapped += 1;
             } else {
                 break;
@@ -1220,31 +1234,38 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         // are pruned, as in `free_grant_pages_inner`. Those pages were briefly
         // USER, so a Sas copy may have probed them: unpublish (unmap, flush,
         // drain copies) first on every target.
-        crate::task::stack::unpublish_user_frames(paddr, mapped);
-        let identity_alias = crate::memory::frame::phys_to_virt(paddr) == paddr;
+        crate::task::stack::unpublish_user_frames(&mut batch, paddr, mapped);
         if !identity_alias {
             // Pages `0..mapped` only: the page that failed (`mapped`) needs no
             // prune here, because `map_page`'s own failure path already pruned
-            // every table it allocated for that page (on x86 after invalidating
-            // them), and a table it shares with a mapped page is pruned with it.
-            prune_unpublished_tables(paddr, mapped);
+            // every table it allocated for that page (on x86 into the batch),
+            // and a table it shares with a mapped page is pruned with it.
+            prune_unpublished_tables(&mut batch, paddr, mapped);
         }
-        let kernel_rwx = Flags::VALID
-            | Flags::READ
-            | Flags::WRITE
-            | Flags::EXECUTE
-            | Flags::ACCESSED
-            | Flags::DIRTY;
-        let _ = crate::memory::frame::with(|a| {
-            for i in (0..mapped).filter(|_| identity_alias) {
-                let f = paddr + i * PAGE_SIZE;
-                let _ = crate::memory::paging::map_page(a, f, f, Flags::from_bits(kernel_rwx));
-            }
-            for k in 0..n_pages {
-                a.deallocate_frame(paddr + k * PAGE_SIZE);
-            }
-        });
-        crate::memory::paging::tlb_flush_all();
+        // The remapped prefix gets its identity alias back; the rest never
+        // lost it.
+        retire_grant_run(&mut batch, paddr, mapped, identity_alias);
+        retire_grant_run(
+            &mut batch,
+            paddr + mapped * PAGE_SIZE,
+            n_pages - mapped,
+            false,
+        );
+        let _ = batch.complete();
+        return None;
+    }
+
+    // A replaced translation (an earlier owner's alias of these frames) must be
+    // gone on every hart before the cell can use the grant. If a hart does not
+    // confirm, take the run back exactly as a failed map does.
+    if !batch.complete().is_confirmed() {
+        let mut batch = Batch::new();
+        crate::task::stack::unpublish_user_frames(&mut batch, paddr, n_pages);
+        if !identity_alias {
+            prune_unpublished_tables(&mut batch, paddr, n_pages);
+        }
+        retire_grant_run(&mut batch, paddr, n_pages, identity_alias);
+        let _ = batch.complete();
         return None;
     }
 
@@ -1258,21 +1279,48 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
     Some(paddr)
 }
 
+/// Hand `n_pages` unpublished grant frames at `base` to `batch`.
+/// `restore_alias`: their identity leaf was remapped USER and must be restored
+/// kernel RWX before free (RV64, AArch64).
+fn retire_grant_run(
+    batch: &mut crate::memory::frame_run::Batch,
+    base: usize,
+    n_pages: usize,
+    restore_alias: bool,
+) {
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    if n_pages == 0 {
+        return;
+    }
+    let alias = if restore_alias {
+        KernelAlias::Removed
+    } else {
+        KernelAlias::Intact
+    };
+    batch.retire(FrameRun::unpublished(
+        base,
+        n_pages,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        alias,
+    ));
+}
+
 /// Detach the kernel-root tables a USER mapping of `[base, base + n_pages)`
-/// needed once it has been unpublished, invalidating before their frames return
-/// (the `CellSegments::drop` pattern).
+/// needed once it has been unpublished; `batch` invalidates before their
+/// frames return (the `CellSegments::drop` pattern).
 ///
 /// For targets without an identity alias of RAM (x86_64), where no kernel alias
 /// is restored over the range and the tables may now be empty (R3).
-fn prune_unpublished_tables(base: usize, n_pages: usize) {
+fn prune_unpublished_tables(
+    batch: &mut crate::memory::frame_run::Batch,
+    base: usize,
+    n_pages: usize,
+) {
     const PAGE_SIZE: usize = 4096;
     for i in 0..n_pages {
         let f = base + i * PAGE_SIZE;
-        let reclaimed = crate::memory::paging::prune_empty_tables(f);
-        if !reclaimed.is_empty() {
-            crate::memory::tlb_shootdown::flush_page(f);
-            let _ = crate::memory::frame::with(|alloc| reclaimed.release(alloc));
-        }
+        crate::memory::paging::prune_empty_tables(f).retire_into(batch, f);
     }
 }
 
@@ -1281,11 +1329,7 @@ pub(super) fn free_grant_pages_inner(
     n_pages: usize,
     #[cfg(feature = "p01-trace")] range: Option<crate::memory::pin::ReleasedRange>,
 ) {
-    use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
-    let kernel_rwx = Flags::from_bits(
-        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
-    );
 
     // Restore the kernel alias only where it is the identity map (RV64,
     // AArch64). x86_64 reaches RAM through the HHDM and never had an identity
@@ -1303,36 +1347,29 @@ pub(super) fn free_grant_pages_inner(
     let published = identity_alias
         || (0..n_pages)
             .any(|i| crate::memory::paging::virt_to_phys(base + i * PAGE_SIZE).is_some());
+    // One batch: one shared invalidation for the run, copy windows drained,
+    // then the alias restore and the free — or the quarantine of the run if a
+    // hart does not confirm.
+    let mut batch = crate::memory::frame_run::Batch::new();
     if published {
-        crate::task::stack::unpublish_user_frames(base, n_pages);
+        crate::task::stack::unpublish_user_frames(&mut batch, base, n_pages);
     }
     if !identity_alias && published {
-        prune_unpublished_tables(base, n_pages);
+        prune_unpublished_tables(&mut batch, base, n_pages);
     }
     #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
-    #[allow(unused_variables)] // reason: only the p01-trace witness reads it
-    let released = crate::memory::frame::with(|alloc| {
-        #[allow(unused_mut)] // reason: only p01-trace narrows it
-        let mut released = true;
-        for i in 0..n_pages {
-            let f = base + i * PAGE_SIZE;
-            if identity_alias {
-                let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
-            }
-            #[cfg(feature = "p01-trace")]
-            {
-                released &= alloc.p01_allocated(f);
-            }
-            alloc.deallocate_frame(f);
-        }
-        released
+    #[cfg(feature = "p01-trace")]
+    let allocated = crate::memory::frame::with(|alloc| {
+        (0..n_pages).all(|i| alloc.p01_allocated(base + i * PAGE_SIZE))
     })
     .unwrap_or(false);
-    crate::memory::paging::tlb_flush_all();
+    retire_grant_run(&mut batch, base, n_pages, identity_alias);
+    #[allow(unused_variables)] // reason: only the p01-trace witness reads it
+    let flushed = batch.complete();
     #[cfg(feature = "p01-trace")]
     if let Some(range) = range {
-        if released {
+        if allocated && flushed.is_confirmed() {
             crate::p01_retained::retire(range.p01_range);
             crate::p01_resources::finish(range.p01_obligation, 1);
         } else {
@@ -1371,11 +1408,13 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
     let user_flags = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY,
     );
+    let mut batch = crate::memory::frame_run::Batch::new();
     let mapped = crate::memory::frame::with(|allocator| {
-        let _ = crate::memory::paging::unmap_page(base);
-        crate::memory::paging::map_page(allocator, base, base, user_flags).is_ok()
+        let _ = crate::memory::paging::unmap_page(&mut batch, base);
+        crate::memory::paging::map_page(allocator, &mut batch, base, base, user_flags).is_ok()
     })
     .unwrap_or(false);
+    let mapped = batch.complete().is_confirmed() && mapped;
     if !mapped {
         free_grant_pages(base, 1);
         return false;
@@ -1728,10 +1767,21 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
     let flags =
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
+    let mut batch = crate::memory::frame_run::Batch::new();
     let mapped = crate::memory::frame::with(|allocator| {
-        crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags)).is_ok()
+        crate::memory::paging::map_page(
+            allocator,
+            &mut batch,
+            vaddr,
+            frame,
+            Flags::from_bits(flags),
+        )
+        .is_ok()
     });
-    if mapped == Some(true) {
+    // A replaced translation must be gone everywhere before the cell relies on
+    // the mapping; if a hart does not confirm, the map fails closed (the frame
+    // stays with its record, which `release_shm_for` unpublishes later).
+    if batch.complete().is_confirmed() && mapped == Some(true) {
         return Ok(vaddr);
     }
     Err(SyscallError::Unknown)

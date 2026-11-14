@@ -80,11 +80,17 @@ pub fn spawn() -> Result<usize, ViError> {
                 | Flags::ACCESSED
                 | Flags::DIRTY,
         );
-        crate::memory::frame::with(|allocator| {
-            crate::memory::paging::map_page(allocator, ENTRY, code_frame, code_flags)
-        })
-        .ok_or(ViError::OutOfMemory)?
-        .map_err(|_| ViError::OutOfMemory)?;
+        let mut batch = crate::memory::frame_run::Batch::new();
+        let mapped = crate::memory::frame::with(|allocator| {
+            crate::memory::paging::map_page(allocator, &mut batch, ENTRY, code_frame, code_flags)
+        });
+        let flushed = batch.complete();
+        mapped
+            .ok_or(ViError::OutOfMemory)?
+            .map_err(|_| ViError::OutOfMemory)?;
+        if !flushed.is_confirmed() {
+            return Err(ViError::OutOfMemory);
+        }
     }
 
     // -- 3. Configure the task to enter U-mode at ENTRY via sret --

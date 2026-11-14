@@ -362,13 +362,18 @@ fn run_copy_fixture() -> bool {
     const SAS_USER_VA: usize = 0x0500_0000;
     let sas_frame = {
         let flags = Flags::from_bits(Flags::VALID | Flags::USER | Flags::READ | Flags::WRITE);
+        let mut batch = crate::memory::frame_run::Batch::new();
         let frame = crate::memory::frame::with(|alloc| {
             let frame = alloc.allocate_frame().expect("allocate frame for sas test");
-            crate::memory::paging::map_page(alloc, SAS_USER_VA, frame, flags)
+            crate::memory::paging::map_page(alloc, &mut batch, SAS_USER_VA, frame, flags)
                 .expect("map sas user page");
             frame
         })
         .expect("frame allocator");
+        assert!(
+            batch.complete().is_confirmed(),
+            "sas test page invalidation"
+        );
         crate::hal::paging::flush_tlb_page(SAS_USER_VA);
         frame
     };
@@ -394,7 +399,8 @@ fn run_copy_fixture() -> bool {
     }
 
     // Clean up the mapped test page.
-    let _ = crate::memory::paging::unmap_page(SAS_USER_VA);
+    let _ =
+        crate::memory::paging::unmap_page(&mut crate::memory::frame_run::Batch::new(), SAS_USER_VA);
     crate::hal::paging::flush_tlb_page(SAS_USER_VA);
     crate::memory::frame::deallocate_frame(sas_frame);
 

@@ -31,6 +31,7 @@ pub(crate) fn run_fixture() -> bool {
         Ok(stack) => stack,
         Err(_) => return false,
     };
+    let mut batch = crate::memory::frame_run::Batch::new();
     let (cross_segment_base, read_only_base) = crate::memory::frame::with(|allocator| {
         let base = allocator
             .allocate_contiguous(2)
@@ -49,14 +50,21 @@ pub(crate) fn run_fixture() -> bool {
         let read_only_flags =
             Flags::from_bits(Flags::VALID | Flags::USER | Flags::READ | Flags::ACCESSED);
         for page in [base, base + PAGE_SIZE] {
-            crate::memory::paging::map_page(allocator, page, page, writable)
+            crate::memory::paging::map_page(allocator, &mut batch, page, page, writable)
                 .expect("map GetRandom writable segment page");
         }
-        crate::memory::paging::map_page(allocator, read_only, read_only, read_only_flags)
-            .expect("map GetRandom read-only segment page");
+        crate::memory::paging::map_page(
+            allocator,
+            &mut batch,
+            read_only,
+            read_only,
+            read_only_flags,
+        )
+        .expect("map GetRandom read-only segment page");
         (base, read_only)
     })
     .expect("frame allocator");
+    let _ = batch.complete();
     let caller_ptr = cross_segment_base + PAGE_SIZE - 32;
     let sibling_ptr = sibling_stack.usable_start() + 64;
     let peer_ptr = peer_stack.usable_start() + 64;

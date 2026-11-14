@@ -17,14 +17,18 @@
 //!   cannot accidentally re-point the page while "only" changing flags.
 //! - The per-VA TLB invalidate happens BEFORE returning. A caller that lowers
 //!   permissions may therefore assume the new rights are in force on the
-//!   calling hart the moment the call returns.
+//!   calling hart the moment the call returns. A remote hart that does not
+//!   confirm within the probe bound fails the call closed
+//!   (`InvalidationUnconfirmed`): the PTE is rewritten, but the caller must
+//!   not report the change as in force.
 //! - Cross-hart / cross-core scope is architecture-specific today:
 //!   - RV64: a changed PTE is ordered locally, invalidated with `sfence.vma`,
 //!     then invalidated synchronously on online remote harts through SBI RFENCE.
 //!     Firmware without RFENCE keeps the kernel single-hart; two-hart runtime
 //!     evidence remains a separate gate.
 //!   - x86_64: all-PCID/global local invalidation followed by every online CPU's
-//!     acknowledged local invalidation; missing acknowledgement is fail-closed.
+//!     acknowledged local invalidation; a missing acknowledgement is the
+//!     `InvalidationUnconfirmed` error.
 //!   - AArch64: `flush_tlb_page` broadcasts a stage-1 TLBI
 //!     (`tlbi vaae1is`, plus `vae2is` when EL2 is active) inside the required
 //!     barrier pair, but this repo still treats two-PE runtime proof as gated
@@ -55,11 +59,33 @@ use types::VAddr;
 #[cfg(cellos_wide)]
 pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
     let page_va = vaddr & !(PAGE_SIZE - 1);
+    // Before any rewrite: a hart that holds the frame allocator may not wait
+    // for the flush, so it must not change the leaf either.
+    let mut cap =
+        crate::memory::frame::FlushCap::take().ok_or(PageTableError::InvalidationUnconfirmed)?;
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
     rewrite_leaf(root_phys, page_va, new_flags)?;
-    crate::memory::tlb_shootdown::flush_page(page_va);
-    Ok(())
+    let outcome = crate::memory::tlb_shootdown::flush_page(&mut cap, page_va);
+    drop(root_lock);
+    confirmed(outcome, page_va)
+}
+
+/// `outcome` as the protect result, logging an unconfirmed one once the
+/// caller's `KERNEL_ROOT` is released (it ranks above the console).
+#[cfg(cellos_wide)]
+fn confirmed(outcome: crate::memory::frame_run::FlushOutcome, page_va: VAddr) -> PagingResult<()> {
+    match outcome {
+        crate::memory::frame_run::FlushOutcome::Confirmed => Ok(()),
+        crate::memory::frame_run::FlushOutcome::Unconfirmed { cause, .. } => {
+            log::error!(
+                "[tlb] shared invalidation unconfirmed: permission change at {:#x} not in force everywhere ({:?})",
+                page_va,
+                cause
+            );
+            Err(PageTableError::InvalidationUnconfirmed)
+        }
+    }
 }
 
 /// The leaf rewrite of [`protect_page`] without its invalidation. The caller
@@ -91,11 +117,11 @@ fn rewrite_leaf(root_phys: types::PhysAddr, page_va: VAddr, new_flags: Flags) ->
 /// - x86_64: `KERNEL_ROOT` is held from the first leaf write through the last
 ///   flush, as [`protect_page`] holds it through its own. Every leaf is written
 ///   first, then ONE `tlb_shootdown::flush_range` covers each contiguous run of
-///   written pages. `flush_range` returns only after every online CPU
-///   acknowledged; an unconfirmed CPU is its fail-stop panic, unchanged. So a
-///   lowering (W→R, X removal) is in force on every online CPU before this
-///   returns — before the Cell can be registered to run, and before a failed
-///   spawn's teardown can free a frame.
+///   written pages. `flush_range` returns `Confirmed` only after every online
+///   CPU acknowledged; an unconfirmed run is the `InvalidationUnconfirmed`
+///   error (every run is still flushed). So on `Ok` a lowering (W→R, X
+///   removal) is in force on every online CPU — before the Cell can be
+///   registered to run, and before a failed spawn's teardown can free a frame.
 /// - The error path flushes the pages written before the failure, too: no
 ///   caller ever sees a rewritten leaf whose invalidation is still pending.
 /// - riscv64/aarch64 (and the bare-physical arches): [`protect_page`] per page
@@ -109,14 +135,27 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
     let Some(&(first, _)) = pages.first() else {
         return Ok(());
     };
+    let mut cap = crate::memory::frame::FlushCap::take()
+        .ok_or((first, PageTableError::InvalidationUnconfirmed))?;
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or((first, PageTableError::NotSupported))?;
+    let mut unconfirmed = None;
     let result = write_then_flush(
         pages,
         |page_va, flags| rewrite_leaf(root_phys, page_va, flags),
-        crate::memory::tlb_shootdown::flush_range,
+        |start, size| match crate::memory::tlb_shootdown::flush_range(&mut cap, start, size) {
+            crate::memory::frame_run::FlushOutcome::Confirmed => Ok(()),
+            outcome => {
+                unconfirmed.get_or_insert(outcome);
+                Err(PageTableError::InvalidationUnconfirmed)
+            }
+        },
     );
     drop(root_lock);
+    if let (Some(outcome), Err((va, _))) = (unconfirmed, result) {
+        // Logs it; the error is already the result.
+        let _ = confirmed(outcome, va);
+    }
     result
 }
 
@@ -131,12 +170,14 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
 
 /// Write each page's leaf in order (stopping at the first failure), then call
 /// `flush` once per contiguous run of the pages actually written, before
-/// returning either way. The error carries the caller's address for the page.
+/// returning either way — every run is flushed even after one failed. The
+/// error carries the caller's address for the page: a write failure first,
+/// else the start of the first run whose flush failed.
 #[cfg(target_arch = "x86_64")]
 fn write_then_flush<E>(
     pages: &[(VAddr, Flags)],
     mut write: impl FnMut(VAddr, Flags) -> Result<(), E>,
-    mut flush: impl FnMut(VAddr, usize),
+    mut flush: impl FnMut(VAddr, usize) -> Result<(), E>,
 ) -> Result<(), (VAddr, E)> {
     let mut written = 0;
     let mut failure = None;
@@ -150,10 +191,13 @@ fn write_then_flush<E>(
     let written_pages = pages[..written]
         .iter()
         .map(|&(va, _)| va & !(PAGE_SIZE - 1));
+    let mut flush_failure = None;
     for (start, size) in contiguous_runs(written_pages) {
-        flush(start, size);
+        if let Err(error) = flush(start, size) {
+            flush_failure.get_or_insert((start, error));
+        }
     }
-    failure.map_or(Ok(()), Err)
+    failure.or(flush_failure).map_or(Ok(()), Err)
 }
 
 /// Coalesce page addresses, in the order given, into maximal runs of
@@ -233,7 +277,10 @@ mod tests {
                 events.borrow_mut().push(Event::Write(va));
                 Ok(())
             },
-            |start, size| events.borrow_mut().push(Event::Flush(start, size)),
+            |start, size| {
+                events.borrow_mut().push(Event::Flush(start, size));
+                Ok(())
+            },
         );
         (result, events.into_inner())
     }
@@ -328,6 +375,30 @@ mod tests {
         let (result, events) = run(&pages, Some(page(0)));
         assert_eq!(result, Err((page(0), ())));
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn an_unconfirmed_run_fails_the_pass_but_every_run_is_still_flushed() {
+        // Two runs; the first one's flush is not confirmed.
+        let pages: Vec<(VAddr, Flags)> = [0, 1, 5].into_iter().map(|n| (page(n), ro())).collect();
+        let flushed = core::cell::RefCell::new(Vec::new());
+        let result = write_then_flush(
+            &pages,
+            |_, _| Ok::<(), &str>(()),
+            |start, size| {
+                flushed.borrow_mut().push((start, size));
+                if start == page(0) {
+                    Err("unconfirmed")
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        assert_eq!(result, Err((page(0), "unconfirmed")));
+        assert_eq!(
+            flushed.into_inner(),
+            [(page(0), 2 * PAGE_SIZE), (page(5), PAGE_SIZE)]
+        );
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! Complies with Rule 2 (Owned Buffers / Memory Safety) and Rule 8 (Resource Management).
 
 use crate::memory::frame::FrameAllocator;
+use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner, VaHold};
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
@@ -65,29 +66,47 @@ impl Drop for SumAccessGuard {
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
-/// Hand `total_pages` frames starting at `base` back to `allocator`, restoring each
-/// to the boot identity mapping (kernel RWX) first.
+/// Hand the `total_pages` frames of a stack run at `base` to `batch`: unmap
+/// each (recording the shared-root invalidation), then retire the run, which
+/// the batch frees only once that invalidation is confirmed — restoring each
+/// frame to the boot identity mapping (kernel RWX) first.
 ///
 /// Invariant this upholds: every frame on the allocator's free list is
 /// identity-mapped kernel-RWX. The cell loader zeroes a freshly allocated frame
 /// through its identity address, so a frame released while unmapped (as the guard
 /// frame is) store-faults for its next owner, and one released carrying USER flags
-/// hands that owner the wrong permissions. Unmap-then-map normalises the PTE
-/// whatever state the frame was left in.
+/// hands that owner the wrong permissions. The run's `KernelAlias::Removed`
+/// makes the batch normalise the PTE whatever state the frame was left in.
 ///
-/// The caller must already hold `FRAME_ALLOCATOR`; only `KERNEL_ROOT` (a leaf) is
-/// taken here, which is the documented order.
-fn release_frames(allocator: &mut FrameAllocator, base: VAddr, total_pages: usize) {
-    let kernel_rwx = Flags::from_bits(
-        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
-    );
+/// `reserved`: the run is in `STACK_RESERVATIONS`, which keeps its VAs from the
+/// loader until the frames are free (removed in the same allocator hold).
+/// Takes only `KERNEL_ROOT` (a leaf); the caller may hold `FRAME_ALLOCATOR`.
+fn retire_frames(batch: &mut Batch, base: VAddr, total_pages: usize, reserved: bool) {
     for i in 0..total_pages {
-        let frame = base + (i * PAGE_SIZE);
-        let _ = paging::unmap_page(frame);
-        let _ = paging::map_page(allocator, frame, frame, kernel_rwx);
-        allocator.deallocate_frame(frame);
+        let _ = paging::unmap_page(batch, base + i * PAGE_SIZE);
     }
-    paging::tlb_flush_all();
+    let run = FrameRun::unpublished(
+        base,
+        total_pages,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        KernelAlias::Removed,
+    );
+    batch.retire(if reserved {
+        run.with_va_hold(VaHold {
+            release: release_stack_reservation,
+            start: base,
+            end: base + total_pages * PAGE_SIZE,
+        })
+    } else {
+        run
+    });
+}
+
+/// [`VaHold`] release for a stack run: only now are its guard VAs
+/// identity-mapped again, so the loader's collision check takes over.
+fn release_stack_reservation(start: VAddr, end: VAddr) {
+    STACK_RESERVATIONS.remove(start, end);
 }
 
 /// Retire `pages` identity-mapped frames at `base` from the shared root before
@@ -96,25 +115,23 @@ fn release_frames(allocator: &mut FrameAllocator, base: VAddr, total_pages: usiz
 /// A Sas user copy that probed one of these pages earlier must not land after
 /// the frame is re-mapped kernel-RWX: the kernel writes that mapping without
 /// faulting, so the copy would hit whatever the frame becomes next (page
-/// table, another cell). Clear every PTE, invalidate every hart, then wait out
-/// any Sas commit window still open (see `user_copy::sas_lease`). The frames
-/// stay UNMAPPED on return; the caller restores kernel-RWX and frees them.
+/// table, another cell). Every PTE is cleared here and recorded in `batch`,
+/// whose finish invalidates every hart and then waits out any Sas commit
+/// window still open (see `user_copy::sas_lease`) before it frees a run. The
+/// frames stay UNMAPPED; the caller retires them into the same batch.
 ///
-/// Lock order: KERNEL_ROOT (leaf) per page, nothing held across the flush or
-/// the wait. Must NOT be called holding FRAME_ALLOCATOR: the x86 flush waits
-/// for every peer's acknowledgement, and a peer may spin on that lock with
-/// interrupts masked.
-pub(crate) fn unpublish_user_frames(base: VAddr, pages: usize) {
+/// Lock order: KERNEL_ROOT (leaf) per page. The batch flushes only when it is
+/// finished, after the caller released `FRAME_ALLOCATOR`.
+pub(crate) fn unpublish_user_frames(batch: &mut Batch, base: VAddr, pages: usize) {
     // Before paging is live no translation (and no user copy) can exist.
     if pages == 0 || paging::KERNEL_ROOT.lock().is_none() {
         return;
     }
     for i in 0..pages {
-        let _ = paging::unmap_page(base + i * PAGE_SIZE);
+        let _ = paging::unmap_page(batch, base + i * PAGE_SIZE);
     }
-    crate::memory::tlb_shootdown::flush_range(base, pages * PAGE_SIZE);
-    #[cfg(all(feature = "native-domains", cellos_wide))]
-    crate::task::user_copy::wait_sas_copies_quiescent();
+    batch.invalidate_range(base, pages * PAGE_SIZE);
+    batch.drain_user_copies();
 }
 
 /// Represents an allocated Stack.
@@ -177,8 +194,19 @@ impl Stack {
     fn allocate(pages: usize, guard_pages: usize, user_mode: bool) -> Result<Self, ViError> {
         let total_pages = pages.checked_add(guard_pages).ok_or(ViError::OutOfMemory)?;
 
-        crate::memory::frame::with(|allocator| {
-            Self::allocate_in(allocator, pages, guard_pages, total_pages, user_mode)
+        // Remapped usable pages and unmapped guards are invalidated on every
+        // hart before the stack is handed out (or, on failure, before its run
+        // is freed): the batch finishes after the frame allocator is released.
+        let mut batch = Batch::new();
+        let allocated = crate::memory::frame::with(|allocator| {
+            Self::allocate_in(
+                allocator,
+                &mut batch,
+                pages,
+                guard_pages,
+                total_pages,
+                user_mode,
+            )
         })
         .unwrap_or_else(|| {
             error!(
@@ -186,12 +214,27 @@ impl Stack {
                 user_mode, total_pages
             );
             Err(ViError::OutOfMemory)
-        })
+        });
+        let flushed = batch.complete();
+        let stack = allocated?;
+        if !flushed.is_confirmed() {
+            // A remote hart may still translate a guard or the old rights of a
+            // usable page: no stack, and its own teardown quarantines the run.
+            error!(
+                "Stack alloc refused: invalidation of run 0x{:X} unconfirmed",
+                stack.base
+            );
+            drop(stack);
+            return Err(ViError::NotSupported);
+        }
+        Ok(stack)
     }
 
-    /// [`Self::allocate`] with the frame allocator held.
+    /// [`Self::allocate`] with the frame allocator held. Every changed
+    /// translation, and on failure the whole run, goes to `batch`.
     fn allocate_in(
         allocator: &mut FrameAllocator,
+        batch: &mut Batch,
         pages: usize,
         guard_pages: usize,
         total_pages: usize,
@@ -248,11 +291,11 @@ impl Stack {
 
         for i in usable_start_idx..total_pages {
             let addr = base_addr + (i * PAGE_SIZE);
-            if paging::map_page(allocator, addr, addr, flags).is_err() {
+            if paging::map_page(allocator, batch, addr, addr, flags).is_err() {
                 // The run is not yet owned by a Stack, so nothing will drop it —
                 // release it here or the frames are lost until reboot.
                 error!("Stack alloc failed: cannot map page 0x{:X}", addr);
-                release_frames(allocator, base_addr, total_pages);
+                retire_frames(batch, base_addr, total_pages, false);
                 return Err(ViError::OutOfMemory);
             }
         }
@@ -272,14 +315,14 @@ impl Stack {
         // what the hardware will do on overflow.
         for guard_index in 0..guard_pages {
             let guard_addr = base_addr + (guard_index * PAGE_SIZE);
-            let unmap_ok = paging::unmap_page(guard_addr).is_ok();
+            let unmap_ok = paging::unmap_page(batch, guard_addr).is_ok();
             paging::tlb_flush_all();
             if !unmap_ok || paging::virt_to_phys(guard_addr).is_some() {
                 error!(
                     "Stack alloc refused: guard frame 0x{:X} still mapped (unmap_ok={})",
                     guard_addr, unmap_ok
                 );
-                release_frames(allocator, base_addr, total_pages);
+                retire_frames(batch, base_addr, total_pages, false);
                 return Err(ViError::NotSupported);
             }
         }
@@ -293,7 +336,7 @@ impl Stack {
         // held since before the unmap, also excludes the ELF loader until then.
         if let Err(error) = STACK_RESERVATIONS.insert(base_addr, top) {
             error!("Stack alloc refused: run 0x{:X} not recorded", base_addr);
-            release_frames(allocator, base_addr, total_pages);
+            retire_frames(batch, base_addr, total_pages, false);
             return Err(error);
         }
 
@@ -314,8 +357,7 @@ impl Stack {
                 ) {
                     Ok(id) => Some(id),
                     Err(()) => {
-                        release_frames(allocator, base_addr, total_pages);
-                        STACK_RESERVATIONS.remove(base_addr, top);
+                        retire_frames(batch, base_addr, total_pages, true);
                         return Err(ViError::NotSupported);
                     }
                 }
@@ -456,19 +498,20 @@ impl Drop for Stack {
 
         let total_pages = self.pages + self.guard_pages;
 
-        // A sibling thread's Sas copy may still target this user stack.
-        unpublish_user_frames(self.base, total_pages);
-        let base = self.base;
+        // One batch for the whole run: one shared invalidation, not one per
+        // page. A sibling thread's Sas copy may still target this user stack,
+        // so the batch drains copy windows after the flush and before the free.
+        // An unconfirmed flush quarantines the run (and keeps its reservation)
+        // until every hart acknowledges.
+        let mut batch = Batch::new();
+        unpublish_user_frames(&mut batch, self.base, total_pages);
+        retire_frames(&mut batch, self.base, total_pages, true);
+        #[allow(unused_variables)] // reason: only the p01-trace ledger reads it
+        let flushed = batch.complete();
         #[cfg(feature = "p01-trace")]
-        let obligation = &mut self.p01_obligation;
-        let _ = crate::memory::frame::with(|allocator| {
-            release_frames(allocator, base, total_pages);
-            // Only now are the guard VAs identity-mapped again, so the loader's
-            // collision check takes over from the reservation.
-            STACK_RESERVATIONS.remove(base, base + total_pages * PAGE_SIZE);
-            #[cfg(feature = "p01-trace")]
-            crate::p01_resources::finish(obligation.take(), 1);
-        });
+        if flushed.is_confirmed() {
+            crate::p01_resources::finish(self.p01_obligation.take(), 1);
+        }
         #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
@@ -624,47 +667,86 @@ impl CellSegments {
     /// and (b) the load-time overwrite guard (`load_segments`) only ever observes
     /// LIVE cells' (and kernel MMIO) mappings, never a dead-but-unreaped cell's.
     /// Locks only `KERNEL_ROOT` (a leaf), so it is safe under the SCHEDULER lock.
+    /// One shared invalidation covers every page. Nothing is freed here, so an
+    /// unconfirmed flush (logged by the batch) only leaves the drop's own
+    /// flush to cover the stragglers; the VA slot stays held until then.
     pub fn eager_unmap(&self) {
+        let mut batch = Batch::new();
+        self.unmap_into(&mut batch);
+        let _ = batch.complete();
+    }
+
+    /// Unmap every VA that still resolves to this image's frame and record
+    /// every VA in `batch`.
+    fn unmap_into(&self, batch: &mut Batch) {
         for &(vaddr, frame) in &self.pages {
             // Only unmap a VA that still resolves to OUR frame (it won't if a
             // respawn already re-pointed it — leave the new mapping intact).
             if paging::virt_to_phys(vaddr) == Some(frame) {
-                let _ = paging::unmap_page(vaddr);
+                let _ = paging::unmap_page(batch, vaddr);
             }
-            // Flush even when a replacement mapping won the race: an old remote
-            // translation for this VA can still point at this segment's frame.
-            crate::memory::tlb_shootdown::flush_page(vaddr);
+            // Invalidate even when a replacement mapping won the race: an old
+            // remote translation for this VA can still point at this frame.
+            batch.invalidate(vaddr);
+        }
+    }
+
+    /// Hand every backing frame to `batch` as runs of physically adjacent
+    /// frames (the loader allocates them in order), the last one holding the
+    /// VA slot until the frames are free.
+    fn retire_into(&self, batch: &mut Batch) {
+        let mut runs = self.pages.iter().map(|&(_, frame)| frame).peekable();
+        while let Some(base) = runs.next() {
+            let mut pages = 1;
+            while runs.next_if_eq(&(base + pages * PAGE_SIZE)).is_some() {
+                pages += 1;
+            }
+            let run = FrameRun::unpublished(
+                base,
+                pages,
+                RunOwner::Kernel,
+                RunKind::Leaf,
+                KernelAlias::Intact,
+            );
+            batch.retire(match (runs.peek(), self.va_slot) {
+                (None, slot) if slot != 0 => run.with_va_hold(VaHold {
+                    release: release_cell_va,
+                    start: slot,
+                    end: slot,
+                }),
+                _ => run,
+            });
         }
     }
 }
 
+/// [`VaHold`] release for a cell image's VA slot.
+fn release_cell_va(slot: VAddr, _end: VAddr) {
+    crate::loader::va_alloc::free_cell_va(slot);
+}
+
 impl Drop for CellSegments {
     fn drop(&mut self) {
-        // Leaf and parent invalidations must reach every hart before either
-        // backing or page-table frames return to the allocator.
-        self.eager_unmap();
+        // One batch: leaf and parent invalidations reach every hart once,
+        // before either backing or page-table frames return to the allocator.
+        // An unconfirmed flush quarantines them, and the VA slot with them.
+        let mut batch = Batch::new();
+        self.unmap_into(&mut batch);
         for &(vaddr, _frame) in &self.pages {
-            let reclaimed = paging::prune_empty_tables(vaddr);
-            if !reclaimed.is_empty() {
-                crate::memory::tlb_shootdown::flush_page(vaddr);
-                let _ = crate::memory::frame::with(|allocator| reclaimed.release(allocator));
-            }
+            paging::prune_empty_tables(vaddr).retire_into(&mut batch, vaddr);
         }
-        let pages = &self.pages;
+        self.retire_into(&mut batch);
+        #[allow(unused_variables)] // reason: only the p01-trace ledger reads it
+        let flushed = batch.complete();
         #[cfg(feature = "p01-trace")]
-        let obligation = &mut self.p01_obligation;
-        let _ = crate::memory::frame::with(|allocator| {
-            for &(_vaddr, frame) in pages {
-                allocator.deallocate_frame(frame);
-            }
-            #[cfg(feature = "p01-trace")]
-            crate::p01_resources::finish(obligation.take(), 1);
-        });
+        if flushed.is_confirmed() {
+            crate::p01_resources::finish(self.p01_obligation.take(), 1);
+        }
         #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             crate::p01_resources::finish(self.p01_obligation.take(), 6);
         }
-        if self.va_slot != 0 {
+        if self.pages.is_empty() && self.va_slot != 0 {
             crate::loader::va_alloc::free_cell_va(self.va_slot);
         }
     }

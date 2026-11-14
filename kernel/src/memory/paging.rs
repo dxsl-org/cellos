@@ -6,6 +6,7 @@
 //!   riscv32, x86, arm  — bare physical (no page tables); stubs return NotSupported
 
 use crate::memory::frame::FrameAllocator;
+use crate::memory::frame_run::Batch;
 use crate::*;
 
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
@@ -21,6 +22,10 @@ pub enum PageTableError {
     OutOfMemory,
     InvalidAddress,
     NotSupported,
+    /// The PTE changed, but a remote hart did not confirm its invalidation
+    /// within the probe bound: a lowering is not in force everywhere yet, so
+    /// the caller must not report it as done.
+    InvalidationUnconfirmed,
 }
 
 pub type PagingResult<T> = core::result::Result<T, PageTableError>;
@@ -370,14 +375,19 @@ fn p01_observe_table_path(root: usize, va: usize, failed: bool, allocator: &Fram
 
 /// Map a virtual page to a physical frame in the kernel address space.
 ///
-/// Returns `NotSupported` on bare-physical arches (riscv32, x86_32, arm32).
+/// riscv64/aarch64 issue no invalidation for a mapping (the HAL map neither
+/// does), so `batch` is left untouched; it is in the signature so callers are
+/// arch-neutral. Returns `NotSupported` on bare-physical arches (riscv32,
+/// x86_32, arm32).
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn map_page(
     allocator: &mut FrameAllocator,
+    batch: &mut Batch,
     vaddr: VAddr,
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
+    let _ = batch;
     let root_lock = KERNEL_ROOT.lock();
     if let Some(root_phys) = *root_lock {
         #[cfg(feature = "p01-trace")]
@@ -411,9 +421,13 @@ pub fn map_page(
 /// Unmap a virtual page from the kernel address space (clears the PTE).
 /// Used to create guard pages. Returns Ok(()) if the page was not mapped.
 ///
+/// The HAL unmap already invalidates (riscv64: local `sfence.vma`; aarch64:
+/// broadcast `tlbi`), so `batch` is left untouched: a caller that needs the
+/// remote harts too records the page itself, as it always flushed it itself.
 /// Returns `NotSupported` on bare-physical arches.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
+pub fn unmap_page(batch: &mut Batch, vaddr: VAddr) -> PagingResult<()> {
+    let _ = batch;
     let root_lock = KERNEL_ROOT.lock();
     if let Some(root_phys) = *root_lock {
         let root_table = unsafe { &mut *(root_phys as *mut PageTable) };
@@ -612,13 +626,15 @@ fn emit_pcid_decision() {
 }
 
 /// Map one 4 KiB page of the shared kernel root (x86_64) without invalidating
-/// `vaddr`: the caller owns it and must invalidate every page it mapped this
-/// way (one `flush_range` over the batch, or `flush_page`) before anything may
-/// rely on the new leaves. A failed walk still invalidates before it recycles
-/// the detached tables.
+/// `vaddr`. A leaf that replaced a present one is recorded in `batch`: x86
+/// caches no not-present entry, so only a replacement can leave a stale
+/// translation. A failed walk detaches the tables it published and retires
+/// them into `batch`, which frees them only after the flush confirms. The
+/// caller holds `FRAME_ALLOCATOR` and finishes `batch` after releasing it.
 #[cfg(target_arch = "x86_64")]
 fn map_page_unflushed(
     allocator: &mut FrameAllocator,
+    batch: &mut Batch,
     vaddr: VAddr,
     paddr: PhysAddr,
     flags: Flags,
@@ -629,6 +645,7 @@ fn map_page_unflushed(
     let _physical_write = crate::p01_retained::physical_write();
     // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
     let table = unsafe { &mut *table_at(root_phys) };
+    let replaced = table.leaf_entry(vaddr).is_some();
 
     let result = {
         let mut alloc_fn = || {
@@ -643,24 +660,16 @@ fn map_page_unflushed(
     p01_observe_table_path(root_phys, vaddr, result.is_err(), allocator);
     if result.is_err() {
         // A failed walk may have published intermediate tables. Detach them
-        // first, invalidate every CPU's page-walk caches, and only then recycle
-        // their frames. Four-level x86 has at most three non-root tables here.
-        let mut retired = [0usize; 3];
-        let mut count = 0;
-        table.prune_empty(vaddr, &mut |frame| {
-            #[cfg(feature = "p01-trace")]
-            crate::p01_retained::physical_table_detached(frame);
-            assert!(count < retired.len(), "unexpected x86 pruning depth");
-            retired[count] = frame;
-            count += 1;
-        });
-        if count != 0 {
-            crate::memory::tlb_shootdown::flush_page(vaddr);
-            for frame in &retired[..count] {
-                allocator.deallocate_frame(*frame);
-            }
-        }
+        // first; the batch invalidates every CPU's page-walk caches before it
+        // recycles their frames.
+        let mut reclaimed = ReclaimedPageTables::new();
+        table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
+        drop(root_lock);
+        reclaimed.retire_into(batch, vaddr);
         return Err(PageTableError::OutOfMemory);
+    }
+    if replaced {
+        batch.invalidate(vaddr);
     }
     Ok(())
 }
@@ -699,37 +708,40 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
 }
 
 /// Write every leaf of the window first, then invalidate the whole window on
-/// every online CPU with ONE `flush_range` (phase 07b): a per-page shootdown
-/// made the 256 MiB ECAM window cost 65,536 broadcast rounds under
-/// `FRAME_ALLOCATOR`, which grew with the CPU count. The flush runs before
-/// this function returns, so a Cell reaches the window (after its
-/// `RequestMmio` returns) only once every CPU confirmed; an unconfirmed CPU
-/// is the same fail-stop panic in `flush_range` as before.
+/// every online CPU with ONE shared flush (phase 07b), after the frame
+/// allocator is released: a per-page shootdown made the 256 MiB ECAM window
+/// cost 65,536 broadcast rounds under `FRAME_ALLOCATOR`, which grew with the
+/// CPU count. The flush runs before this function returns. The window only
+/// gains rights (census §3 row 4), so a CPU that does not confirm within the
+/// probe can only fault on its older, narrower entry: the batch logs it and
+/// the map proceeds.
 #[cfg(target_arch = "x86_64")]
 fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) {
     let (start, end) = mmio_page_window(phys, size);
+    let mut batch = Batch::new();
     crate::memory::frame::with(|allocator| {
         let mut va = start;
         while va < end {
             // Errors are logged but not fatal; a broken mapping will fault on first use.
-            if let Err(e) = map_page_unflushed(allocator, va, va, flags) {
+            if let Err(e) = map_page_unflushed(allocator, &mut batch, va, va, flags) {
                 log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
             }
             va += PAGE_SIZE;
         }
     })
     .expect("map_mmio_x86: frame allocator not ready");
-    if end > start {
-        crate::memory::tlb_shootdown::flush_range(start, end - start);
-    }
+    batch.invalidate_range(start, end - start);
+    // A new MMIO window or a raised right: a CPU that has not confirmed yet can
+    // only fault on the old (absent or narrower) entry. Logged by the batch.
+    let _ = batch.complete();
 }
 
 /// Unmap a page of the shared kernel root (x86_64): clears the leaf and
-/// invalidates it on every online CPU (`tlb_shootdown::flush_page`). Returns
-/// Ok(()) even if the page was already unmapped (idempotent — safe for
-/// guard-page creation); only a present leaf is cleared and shot down.
+/// records it in `batch`, whose finish invalidates it on every online CPU.
+/// Returns Ok(()) even if the page was already unmapped (idempotent — safe for
+/// guard-page creation); only a present leaf is cleared and recorded.
 #[cfg(target_arch = "x86_64")]
-pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
+pub fn unmap_page(batch: &mut Batch, vaddr: VAddr) -> PagingResult<()> {
     let root_lock = KERNEL_ROOT.lock();
     let Some(root_phys) = *root_lock else {
         return Ok(()); // paging not yet active — no TLB entry to clear
@@ -737,7 +749,7 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
     // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
     let table = unsafe { &mut *table_at(root_phys) };
     if table.leaf_entry(vaddr).is_some() && table.unmap(vaddr).is_ok() {
-        crate::memory::tlb_shootdown::flush_page(vaddr);
+        batch.invalidate(vaddr);
     }
     Ok(())
 }
@@ -899,8 +911,10 @@ pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
 
 // ─── x86_64 map_page / map_page_deferred ─────────────────────────────────────
 
-/// Map a 4 KiB page of the shared kernel root (x86_64) and invalidate it on
-/// every online CPU (`tlb_shootdown::flush_page`).
+/// Map a 4 KiB page of the shared kernel root (x86_64). A leaf that replaced
+/// a present one is recorded in `batch`, which the caller finishes after
+/// releasing `FRAME_ALLOCATOR` and before anything relies on the new leaf; a
+/// new leaf needs no invalidation (x86 caches no not-present entry).
 ///
 /// The HAL translates `flags` for a new leaf and for `protect_page` alike, so
 /// a page cannot mean one thing when created and another when re-protected.
@@ -908,71 +922,45 @@ pub fn revoke_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
 #[cfg(target_arch = "x86_64")]
 pub fn map_page(
     allocator: &mut FrameAllocator,
+    batch: &mut Batch,
     vaddr: VAddr,
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    map_page_unflushed(allocator, vaddr, paddr, flags)?;
-    crate::memory::tlb_shootdown::flush_page(vaddr);
-    Ok(())
+    map_page_unflushed(allocator, batch, vaddr, paddr, flags)
 }
 
 /// [`map_page`] for one page of a batch whose invalidation the caller issues
 /// once, with [`flush_deferred_maps`] over the batch (Cell ELF segments, phase
-/// 07b R1, owner grant `s2-phase07b-flush-batching-grant.md`).
-///
-/// Concurrency contract, the same as the MMIO window batch
-/// (`map_mmio_x86_flags`):
-/// - x86_64: the leaf is written without `map_page`'s per-page global
-///   shootdown. The caller holds `FRAME_ALLOCATOR` (the `allocator` borrow)
-///   from the first leaf through `flush_deferred_maps`, which must cover every
-///   page mapped this way and must complete before the spawn that maps them
-///   returns or relocates through them. A failed walk still invalidates before
-///   it recycles detached tables, as in `map_page`.
-/// - riscv64/aarch64: exactly [`map_page`], which issues no invalidation for a
-///   new leaf on those arches, so batching changes nothing there.
+/// 07b R1, owner grant `s2-phase07b-flush-batching-grant.md`). Now that
+/// [`map_page`] records into a batch on every arch, the two are one function;
+/// the name keeps the loader's contract visible.
 ///
 /// Precondition: the leaf is new (absent before this call) or only gains
 /// rights over what it already maps. Never use this to re-point a present leaf
 /// to another frame or to remove a right, and never free a frame a leaf mapped
-/// this way referred to before [`flush_deferred_maps`] has covered it — until
-/// then another CPU may still hold the old translation.
-#[cfg(target_arch = "x86_64")]
+/// this way referred to before the batch has been finished — until then
+/// another CPU may still hold the old translation.
 pub(crate) fn map_page_deferred(
     allocator: &mut FrameAllocator,
+    batch: &mut Batch,
     vaddr: VAddr,
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    map_page_unflushed(allocator, vaddr, paddr, flags)
+    map_page(allocator, batch, vaddr, paddr, flags)
 }
 
-/// See the x86_64 [`map_page_deferred`].
-#[cfg(not(target_arch = "x86_64"))]
-pub(crate) fn map_page_deferred(
-    allocator: &mut FrameAllocator,
-    vaddr: VAddr,
-    paddr: PhysAddr,
-    flags: Flags,
-) -> PagingResult<()> {
-    map_page(allocator, vaddr, paddr, flags)
-}
-
-/// Complete a [`map_page_deferred`] batch over the page range `[start, end)`.
+/// Cover a [`map_page_deferred`] range `[start, end)` in `batch`.
 ///
-/// x86_64: ONE `tlb_shootdown::flush_range`, which returns only after every
-/// online CPU acknowledged (an unconfirmed CPU is its fail-stop panic,
-/// unchanged). Other arches: nothing, as `map_page_deferred` deferred nothing.
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn flush_deferred_maps(start: VAddr, end: VAddr) {
-    if end > start {
-        crate::memory::tlb_shootdown::flush_range(start, end - start);
+/// x86_64: the range joins the batch, whose finish is ONE shared flush that
+/// must complete before the spawn that maps the pages relocates through them
+/// or returns. Other arches: nothing, as their mappings defer nothing.
+pub(crate) fn flush_deferred_maps(batch: &mut Batch, start: VAddr, end: VAddr) {
+    if cfg!(target_arch = "x86_64") && end > start {
+        batch.invalidate_range(start, end - start);
     }
 }
-
-/// See the x86_64 [`flush_deferred_maps`].
-#[cfg(not(target_arch = "x86_64"))]
-pub(crate) fn flush_deferred_maps(_start: VAddr, _end: VAddr) {}
 
 /// Intermediate page-table frames detached from the active root.
 pub struct ReclaimedPageTables {
@@ -1003,9 +991,21 @@ impl ReclaimedPageTables {
         self.len == 0
     }
 
-    pub fn release(self, allocator: &mut FrameAllocator) {
+    /// Hand the detached tables to `batch`, which frees them only after the
+    /// flush of `vaddr` (the address whose walk they served) confirms.
+    pub fn retire_into(self, batch: &mut Batch, vaddr: VAddr) {
+        if self.len == 0 {
+            return;
+        }
+        batch.invalidate(vaddr);
         for frame in self.frames[..self.len].iter().copied() {
-            allocator.deallocate_frame(frame);
+            batch.retire(crate::memory::frame_run::FrameRun::unpublished(
+                frame,
+                1,
+                crate::memory::frame_run::RunOwner::Kernel,
+                crate::memory::frame_run::RunKind::PageTable,
+                crate::memory::frame_run::KernelAlias::Intact,
+            ));
         }
     }
 }
@@ -1185,7 +1185,8 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
         return Err(PageTableError::InvalidAddress);
     }
 
-    crate::memory::frame::with(|allocator| -> PagingResult<()> {
+    let mut batch = Batch::new();
+    let mapped = crate::memory::frame::with(|allocator| -> PagingResult<()> {
         let root_phys = {
             let root = KERNEL_ROOT.lock();
             match *root {
@@ -1212,11 +1213,11 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
 
         for index in 0..pages {
             let address = start + index * PAGE_SIZE;
-            let result = map_page(allocator, address, address, USER_RW_X86);
+            let result = map_page(allocator, &mut batch, address, address, USER_RW_X86);
             if result.is_err() {
                 for rollback in 0..index {
                     let rollback_addr = start + rollback * PAGE_SIZE;
-                    let _ = unmap_page(rollback_addr);
+                    let _ = unmap_page(&mut batch, rollback_addr);
                 }
                 tlb_flush_all();
                 return Err(PageTableError::OutOfMemory);
@@ -1225,7 +1226,15 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
         tlb_flush_all();
         Ok(())
     })
-    .unwrap_or(Err(PageTableError::NotSupported))
+    .unwrap_or(Err(PageTableError::NotSupported));
+    // Every leaf was absent before (checked above), so only a rollback or a
+    // failed walk's tables are in the batch.
+    let flushed = batch.complete();
+    mapped?;
+    if !flushed.is_confirmed() {
+        return Err(PageTableError::InvalidationUnconfirmed);
+    }
+    Ok(())
 }
 
 #[cfg(not(cellos_wide))]
@@ -1235,25 +1244,28 @@ pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingRe
 
 #[cfg(target_arch = "x86_64")]
 pub fn remap_range_user(start: PhysAddr, pages: usize) {
+    let mut batch = Batch::new();
     let _ = crate::memory::frame::with(|allocator| {
         for i in 0..pages {
             let addr = start + (i * PAGE_SIZE);
             // Map VA == PA (identity) with user-rw flags.
-            let _ = map_page(allocator, addr, addr, USER_RW_X86);
+            let _ = map_page(allocator, &mut batch, addr, addr, USER_RW_X86);
         }
     });
+    let _ = batch.complete();
 }
 
 // ─── Bare-physical stubs ─────────────────────────────────────────────────────
 
 #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
-pub fn unmap_page(_vaddr: VAddr) -> PagingResult<()> {
+pub fn unmap_page(_batch: &mut Batch, _vaddr: VAddr) -> PagingResult<()> {
     Err(PageTableError::NotSupported)
 }
 
 #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
 pub fn map_page(
     _allocator: &mut FrameAllocator,
+    _batch: &mut Batch,
     _vaddr: VAddr,
     _paddr: PhysAddr,
     _flags: Flags,
@@ -1485,6 +1497,7 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             // The VMA list is empty for ELF-backed cells today (segments are
             // mapped eagerly by the loader), so in practice only future
             // demand-allocated regions reach here.
+            let mut batch = Batch::new();
             crate::memory::frame::with(|alloc| {
                 let effective_pa = if paddr == 0 {
                     // Demand-allocate a new zeroed frame.
@@ -1494,9 +1507,10 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
                 } else {
                     paddr
                 };
-                let _ = map_page(alloc, va & !0xFFF, effective_pa & !0xFFF, flags);
+                let _ = map_page(alloc, &mut batch, va & !0xFFF, effective_pa & !0xFFF, flags);
             })
             .unwrap_or_else(|| panic!("[#PF] frame allocator unavailable at va={:#x}", va));
+            let _ = batch.complete();
         }
         None => {
             fault_kill_cell(va, error_code, rip, cs, "no VMA covers this address");

@@ -1055,6 +1055,12 @@ pub extern "Rust" fn vi_timer_tick() {
     if crate::sched::hart_local::current_hart_id() == 0 {
         crate::memory::deferred_release::reap_deferred_releases();
     }
+    // The same for frame runs a shared-root flush could not confirm: every
+    // pending entry is stepped, none waits, nothing is abandoned.
+    #[cfg(cellos_wide)]
+    if crate::sched::hart_local::current_hart_id() == 0 {
+        crate::memory::frame_run::reap();
+    }
 
     #[cfg(target_arch = "x86_64")]
     if crate::sched::hart_local::current_hart_id() == 0 {
@@ -2829,11 +2835,17 @@ pub fn spawn_synthetic(
                 | Flags::DIRTY,
         );
 
-        crate::memory::frame::with(|allocator| {
-            crate::memory::paging::map_page(allocator, entry, frame, flags)
-        })
-        .ok_or(ViError::OutOfMemory)?
-        .map_err(|_| ViError::OutOfMemory)?;
+        let mut batch = crate::memory::frame_run::Batch::new();
+        let mapped = crate::memory::frame::with(|allocator| {
+            crate::memory::paging::map_page(allocator, &mut batch, entry, frame, flags)
+        });
+        let flushed = batch.complete();
+        mapped
+            .ok_or(ViError::OutOfMemory)?
+            .map_err(|_| ViError::OutOfMemory)?;
+        if !flushed.is_confirmed() {
+            return Err(ViError::OutOfMemory);
+        }
     }
 
     // 3. Update Task Context (Copied from spawn_from_file)

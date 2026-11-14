@@ -13,15 +13,13 @@
 //! boot's time budget or — if it gave up sooner — frees a frame a remote hart can
 //! still resolve.
 
+use crate::memory::frame::FlushCap;
+use crate::memory::frame_run::{Epochs, FlushOutcome, UnconfirmedCause};
 use crate::memory::paging::PAGE_SIZE;
 use types::VAddr;
 
 #[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicBool, Ordering};
-
-/// Test-only negative control: pretend the peer's acknowledgement never arrives.
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-static TEST_SKIP_REMOTE_RFENCE: AtomicBool = AtomicBool::new(false);
 
 /// Test-only silent-peer window: while armed, every tag invalidation is reported
 /// unconfirmed even though the request was still delivered and, on a two-hart
@@ -63,17 +61,44 @@ static TEST_FLUSHED_PAGES: crate::sync::Spinlock<alloc::vec::Vec<VAddr>> =
 static TEST_FLUSHED_TAGS: crate::sync::Spinlock<alloc::vec::Vec<usize>> =
     crate::sync::Spinlock::ranked(alloc::vec::Vec::new(), crate::sync::rank::TEST_FLUSHED_TAGS);
 
+/// A full shared flush ran inside the observation window: every page counts
+/// as flushed.
+#[cfg(feature = "test-hooks")]
+static TEST_FLUSHED_ALL: AtomicBool = AtomicBool::new(false);
+
 #[cfg(feature = "test-hooks")]
 pub(crate) fn begin_test_flush_observation() {
     TEST_FLUSHED_PAGES.lock().clear();
     TEST_FLUSHED_TAGS.lock().clear();
+    TEST_FLUSHED_ALL.store(false, Ordering::Release);
     TEST_FLUSH_TRACKING.store(true, Ordering::Release);
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
     let page = vaddr & !(PAGE_SIZE - 1);
-    TEST_FLUSHED_PAGES.lock().contains(&page)
+    TEST_FLUSHED_ALL.load(Ordering::Acquire) || TEST_FLUSHED_PAGES.lock().contains(&page)
+}
+
+/// Record a shared flush's pages for the observation window.
+#[cfg(feature = "test-hooks")]
+fn observe_shared_flush(ranges: &[(VAddr, usize)], all: bool) {
+    if !TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
+        return;
+    }
+    if all {
+        TEST_FLUSHED_ALL.store(true, Ordering::Release);
+        return;
+    }
+    let mut pages = TEST_FLUSHED_PAGES.lock();
+    #[cfg(feature = "p01-trace")]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
+    );
+    for &(start, size) in ranges {
+        pages.extend((start..start.saturating_add(size)).step_by(PAGE_SIZE));
+    }
 }
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
@@ -87,12 +112,6 @@ pub(crate) fn test_tag_flush_observed(asid: usize) -> bool {
 #[cfg(feature = "test-hooks")]
 pub(crate) fn finish_test_flush_observation() {
     TEST_FLUSH_TRACKING.store(false, Ordering::Release);
-}
-
-/// Enable the test-only negative control around one known self-test operation.
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub(crate) fn set_test_skip_remote_rfence(enabled: bool) {
-    TEST_SKIP_REMOTE_RFENCE.store(enabled, Ordering::Release);
 }
 
 /// Why an invalidation could not be confirmed complete.
@@ -119,8 +138,9 @@ pub enum FlushAckError {
 pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
     local_tag_flush(asid);
     // `withheld`: the failure is the test seam's, not a silent hart's.
+    let mut asked = [0; crate::sched::smp::MAX_HARTS];
     #[allow(unused_variables)] // reason: only the test-hooks log below reads it
-    let (result, withheld) = match await_remote_invalidation(tag_probe_ticks()) {
+    let (result, withheld) = match await_remote_invalidation(tag_probe_ticks(), &mut asked) {
         Err(error) => (Err(error), false),
         Ok(()) => {
             // Test-only: the acknowledgement is withheld for a bounded window, so
@@ -239,14 +259,21 @@ fn local_tag_flush(asid: usize) {
 /// Broadcast, then wait over the set (phase 07b): every remote request is
 /// published and its IPI sent before the first wait, and one deadline covers
 /// the whole set. The targets are the online harts at the broadcast; the error
-/// names the lowest-numbered hart still silent at the deadline. Callers keep
-/// their fail-stop on that error (`flush_range` panics, tag releases defer
-/// their frames) — nothing here continues past an unconfirmed hart.
+/// names the lowest-numbered hart still silent at the deadline, and `asked`
+/// receives the epoch every hart was asked for. Callers keep their fail-closed
+/// on that error (shared flushes quarantine their frames, tag releases defer
+/// theirs) — nothing here continues past an unconfirmed hart.
 #[cfg(cellos_wide)]
-fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
+fn await_remote_invalidation(ticks: u64, asked: &mut Epochs) -> Result<(), FlushAckError> {
     use crate::sched::smp;
     let me = crate::sched::hart_local::current_hart_id();
-    let requested = smp::request_tlb_flush_set(smp::online_harts().filter(|hart| *hart != me));
+    let epochs = asked;
+    let requested =
+        smp::RemoteEpochs::broadcast(smp::online_harts().filter(|hart| *hart != me), |hart| {
+            let epoch = smp::request_tlb_flush(hart);
+            epochs[hart] = epoch;
+            epoch
+        });
     let deadline = counter_now() + ticks;
     while let Some((hart, epoch)) = smp::tlb_flush_set_outstanding(&requested) {
         if counter_now() > deadline {
@@ -285,8 +312,26 @@ fn await_remote_invalidation(ticks: u64) -> Result<(), FlushAckError> {
 /// Targets without a second hart: the local flush above is the whole contract
 /// and there is no remote to confirm.
 #[cfg(not(cellos_wide))]
-fn await_remote_invalidation(_ticks: u64) -> Result<(), FlushAckError> {
+fn await_remote_invalidation(_ticks: u64, _asked: &mut Epochs) -> Result<(), FlushAckError> {
     Ok(())
+}
+
+/// Ask every online remote hart for a full local flush and return the epochs,
+/// without waiting for any of them (0 = not asked).
+#[cfg(cellos_wide)]
+pub fn request_remote_flushes() -> Epochs {
+    let me = crate::sched::hart_local::current_hart_id();
+    let mut epochs = [0; crate::sched::smp::MAX_HARTS];
+    for hart in crate::sched::smp::online_harts().filter(|hart| *hart != me) {
+        epochs[hart] = crate::sched::smp::request_tlb_flush(hart);
+    }
+    epochs
+}
+
+/// No second hart: nothing to ask.
+#[cfg(not(cellos_wide))]
+pub fn request_remote_flushes() -> Epochs {
+    [0; crate::sched::smp::MAX_HARTS]
 }
 
 /// Free-running counter used for bounded probes.
@@ -353,8 +398,9 @@ fn tag_probe_ticks() -> u64 {
 
 #[cfg(target_arch = "x86_64")]
 const fn tag_probe_ticks() -> u64 {
-    // TSC ticks; exceeding this panics in `flush_range`, so it stays generous
-    // for slow (emulated) peers rather than tracking a nominal clock rate.
+    // TSC ticks; exceeding this quarantines the flushed frames, so it stays
+    // generous for slow (emulated) peers rather than tracking a nominal clock
+    // rate.
     2_000_000_000
 }
 
@@ -363,82 +409,126 @@ const fn tag_probe_ticks() -> u64 {
     0
 }
 
-/// Invalidate the translation for one changed page before its memory can run or reuse.
+/// Shared-root invalidations wider than this many pages flush everything
+/// locally instead of page by page (RV64 `sfence.vma`, AArch64 `tlbi vmalle1is`).
+const PAGE_FLUSH_LIMIT: usize = 64;
+
+/// Invalidate the translation for one changed page of the shared root on every
+/// online hart. See [`flush_ranges`].
 #[inline]
-pub fn flush_page(vaddr: VAddr) {
-    let page = vaddr & !(PAGE_SIZE - 1);
-    #[cfg(feature = "test-hooks")]
-    if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
-        let mut pages = TEST_FLUSHED_PAGES.lock();
-        #[cfg(feature = "p01-trace")]
-        let _semantic = crate::memory::heap::p01_owner::creation(
-            None,
-            crate::memory::heap::p01_owner::TEST_FIXTURE_SHARED,
-        );
-        pages.push(page);
-    }
-    flush_range(page, PAGE_SIZE);
+pub fn flush_page(cap: &mut FlushCap, vaddr: VAddr) -> FlushOutcome {
+    flush_range(cap, vaddr & !(PAGE_SIZE - 1), PAGE_SIZE)
 }
 
-/// Invalidate a page-aligned range after its PTEs have changed.
-pub fn flush_range(start: VAddr, size: usize) {
-    debug_assert!(start & (PAGE_SIZE - 1) == 0);
-    debug_assert!(size & (PAGE_SIZE - 1) == 0);
-    let end = start
-        .checked_add(size)
-        .expect("TLB flush range must not wrap the address space");
+/// Invalidate a page-aligned range of the shared root. See [`flush_ranges`].
+pub fn flush_range(cap: &mut FlushCap, start: VAddr, size: usize) -> FlushOutcome {
+    flush_ranges(cap, &[(start, size)], false)
+}
 
-    #[cfg(target_arch = "x86_64")]
-    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
-    #[cfg(target_arch = "riscv64")]
-    {
-        // Keep the PTE write visible to both the compiler and remote table walkers
-        // before the firmware asks those harts to execute SFENCE.VMA.
-        crate::arch::tlb::publish_pte_stores();
+/// Invalidate page-aligned ranges of the shared (kernel) root on every online
+/// hart, or every translation when `all`, as **one** operation: one remote
+/// request per hart, one bounded probe.
+///
+/// Never panics and never waits past the probe bound. `Unconfirmed` carries the
+/// epochs each remote hart was asked for: the caller keeps every frame the
+/// changed translations named (`frame_run::Batch` quarantines them) and must
+/// not report a permission lowering as done. Callers hold no `FRAME_ALLOCATOR`
+/// (the `cap` proves it) and log the outcome themselves, because this may run
+/// under `KERNEL_ROOT`, which ranks above the console.
+///
+/// - x86_64: every PCID and global entry locally, then every online CPU's
+///   acknowledged full flush.
+/// - riscv64: `sfence.vma` per page (or all), then SBI RFENCE per range. An
+///   RFENCE error, or `all`, takes the IPI epoch path instead: every remote hart
+///   serves the request with a full local flush.
+/// - aarch64: broadcast `tlbi` per page (or `vmalle1is`); no acknowledgement
+///   exists to wait for.
+pub fn flush_ranges(cap: &mut FlushCap, ranges: &[(VAddr, usize)], all: bool) -> FlushOutcome {
+    let _ = cap;
+    #[cfg(feature = "test-hooks")]
+    assert!(
+        !crate::memory::frame::held_here(),
+        "[tlb] shared flush while this hart holds the frame allocator"
+    );
+    let all = all || wider_than_page_flush(ranges);
+    shared_flush(ranges, all, true)
+}
 
-        for page in (start..end).step_by(PAGE_SIZE) {
-            hal::paging::flush_tlb_page(page);
+/// The local half of [`flush_ranges`] plus the remote *requests*, without
+/// waiting for any answer: the result is `Unconfirmed` whenever a remote hart
+/// was asked. For a path that cannot wait (it holds the frame allocator); its
+/// frames are quarantined until the reaper sees the epochs published.
+pub fn flush_ranges_without_wait(ranges: &[(VAddr, usize)], all: bool) -> FlushOutcome {
+    let all = all || wider_than_page_flush(ranges);
+    shared_flush(ranges, all, false)
+}
+
+/// Does the batch cover more pages than a per-page flush should, or wrap?
+fn wider_than_page_flush(ranges: &[(VAddr, usize)]) -> bool {
+    let mut pages = 0usize;
+    for &(start, size) in ranges {
+        debug_assert!(start & (PAGE_SIZE - 1) == 0);
+        debug_assert!(size & (PAGE_SIZE - 1) == 0);
+        if start.checked_add(size).is_none() {
+            // A wrapping range is a caller bug; invalidate everything rather
+            // than trust its bounds.
+            return true;
         }
-        let Some((remote_mask, remote_base)) = crate::sched::smp::remote_online_sbi_target() else {
-            return;
+        pages = pages.saturating_add(size / PAGE_SIZE);
+    }
+    pages > PAGE_FLUSH_LIMIT
+}
+
+/// What remote harts still owe after the arch half of a shared flush
+/// (`crate::arch::tlb::shared_flush_local`) has run.
+pub(crate) enum RemoteWork {
+    /// Nothing: the arch's own instructions reached every hart (AArch64
+    /// broadcast `tlbi`, a completed RV64 RFENCE) or there is no other hart.
+    // reason: x86 always takes the epoch path.
+    #[allow(dead_code)]
+    None,
+    /// Every online remote hart must serve the IPI epoch with a full flush.
+    /// `rfence_failed`: RV64 tried RFENCE first and the firmware refused.
+    // reason: AArch64's broadcast `tlbi` never needs it.
+    #[allow(dead_code)]
+    EpochPath { rfence_failed: bool },
+}
+
+fn shared_flush(ranges: &[(VAddr, usize)], all: bool, wait: bool) -> FlushOutcome {
+    #[cfg(feature = "test-hooks")]
+    observe_shared_flush(ranges, all);
+    match crate::arch::tlb::shared_flush_local(ranges, all) {
+        RemoteWork::None => FlushOutcome::Confirmed,
+        RemoteWork::EpochPath { rfence_failed } => remote_full_flush(wait, rfence_failed),
+    }
+}
+
+/// Every online remote hart's full flush: one bounded probe when `wait`,
+/// otherwise only the requests (`Unconfirmed` whenever one was sent).
+fn remote_full_flush(wait: bool, rfence_failed: bool) -> FlushOutcome {
+    let cause = |hart| {
+        if rfence_failed {
+            UnconfirmedCause::RfenceFailed { hart }
+        } else {
+            UnconfirmedCause::Timeout { hart }
+        }
+    };
+    if wait {
+        let mut epochs = [0; crate::sched::smp::MAX_HARTS];
+        return match await_remote_invalidation(tag_probe_ticks(), &mut epochs) {
+            Ok(()) => FlushOutcome::Confirmed,
+            Err(FlushAckError::Timeout { hart, .. }) => FlushOutcome::Unconfirmed {
+                epochs,
+                cause: cause(hart),
+            },
         };
-        #[cfg(feature = "test-hooks")]
-        if TEST_SKIP_REMOTE_RFENCE.load(Ordering::Acquire) {
-            return;
-        }
-        if let Err(error) = hal::sbi::sbi_remote_sfence_vma(remote_mask, remote_base, start, size) {
-            // Continuing would allow a remote hart to retain write access to a
-            // page that the current hart has already restricted or retired.
-            panic!("[tlb] RV64 RFENCE failed after PTE update: {}", error);
-        }
     }
-
-    #[cfg(not(any(
-        target_arch = "riscv64",
-        target_arch = "riscv32",
-        target_arch = "x86_64"
-    )))]
-    for page in (start..end).step_by(PAGE_SIZE) {
-        hal::paging::flush_tlb_page(page);
-    }
-    #[cfg(target_arch = "x86_64")]
-    {
-        let _ = end; // Overflow was checked even though invalidation covers every tag.
-                     // Shared leaves may be cached under inactive PCIDs too, and `invlpg`
-                     // only reaches the current PCID. Invalidate all local tags/globals, then
-                     // require every online peer's captured epoch before returning W^X
-                     // success or permitting frame reuse.
-        crate::memory::paging::tlb_flush_all();
-        if let Err(error) = await_remote_invalidation(tag_probe_ticks()) {
-            panic!(
-                "[x86-smp] shared mapping invalidation unconfirmed: {:?}",
-                error
-            );
-        }
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    {
-        let _ = end;
+    let epochs = request_remote_flushes();
+    match epochs.iter().position(|epoch| *epoch != 0) {
+        None => FlushOutcome::Confirmed,
+        Some(hart) => FlushOutcome::Unconfirmed {
+            epochs,
+            cause: cause(hart),
+        },
     }
 }

@@ -78,10 +78,9 @@ struct PreparationMappings<'a>(Option<&'a [crate::loader::elf::LoadedPage]>);
 impl Drop for PreparationMappings<'_> {
     fn drop(&mut self) {
         if let Some(pages) = self.0.take() {
-            crate::memory::frame::with(|allocator| {
-                crate::loader::ElfLoader::unwind(pages, allocator);
-            })
-            .expect("loaded ELF lost its frame allocator");
+            let mut batch = crate::memory::frame_run::Batch::new();
+            crate::loader::ElfLoader::unwind(pages, &mut batch);
+            let _ = batch.complete();
         }
     }
 }
@@ -127,11 +126,26 @@ pub fn prepare_elf_task(
     let mut va_rollback = PreparationVa(slot_base);
     crate::loader::atomic_checkpoint("AP-01")?;
 
-    let seg_pages = crate::memory::frame::with(|allocator| {
-        loader.load_segments(elf_data, allocator, load_base, slot_base, cfi.guarded_code)
-    })
-    .ok_or(ViError::OutOfMemory)??;
+    let mut load_batch = crate::memory::frame_run::Batch::new();
+    let loaded = crate::memory::frame::with(|allocator| {
+        loader.load_segments(
+            elf_data,
+            allocator,
+            &mut load_batch,
+            load_base,
+            slot_base,
+            cfi.guarded_code,
+        )
+    });
+    // One shared flush for the whole image (or for its unwind), after the frame
+    // allocator is released and before anything relocates through it.
+    let flushed = load_batch.complete();
+    let seg_pages = loaded.ok_or(ViError::OutOfMemory)??;
     let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
+    if !flushed.is_confirmed() {
+        log::error!("ELF: image mapping invalidation unconfirmed — refusing the spawn");
+        return Err(ViError::OutOfMemory);
+    }
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_unpublished_pages(&seg_pages);
     let final_flags = crate::loader::atomic_checkpoint("AP-RF")

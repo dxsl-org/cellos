@@ -548,6 +548,9 @@ pub(super) fn x86_shootdown_fixture_primary() {
             .map_with(X86_PROBE_VA, frame, flags, SAS_TABLES, &mut || None)
             .expect("fixture leaf");
     };
+    // The fixture leaf is new (asserted absent below), so mapping it needs no
+    // shared invalidation; the batch stays empty.
+    let mut batch = crate::memory::frame_run::Batch::new();
     let (old, new) = crate::memory::frame::with(|allocator| {
         let old = allocator.allocate_frame().expect("fixture old frame");
         let new = allocator
@@ -565,10 +568,13 @@ pub(super) fn x86_shootdown_fixture_primary() {
             "shootdown fixture VA already mapped"
         );
         drop(root);
-        crate::memory::paging::map_page(allocator, X86_PROBE_VA, old, flags).expect("fixture map");
+        crate::memory::paging::map_page(allocator, &mut batch, X86_PROBE_VA, old, flags)
+            .expect("fixture map");
         (old, new)
     })
     .expect("fixture frame allocator");
+    assert!(batch.complete().is_confirmed(), "fixture map invalidation");
+    let mut cap = crate::memory::frame::FlushCap::take().expect("fixture flush cap");
     X86_PROBE_STAGE.store(1, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 2);
     {
@@ -576,24 +582,34 @@ pub(super) fn x86_shootdown_fixture_primary() {
         repoint(*root, new);
         X86_PROBE_STAGE.store(3, Ordering::Release);
         x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 4);
-        crate::memory::tlb_shootdown::flush_range(X86_PROBE_VA, PAGE_SIZE);
+        let outcome = crate::memory::tlb_shootdown::flush_range(&mut cap, X86_PROBE_VA, PAGE_SIZE);
+        assert!(outcome.is_confirmed(), "fixture shootdown unconfirmed");
     }
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 5);
     assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
     assert_eq!(X86_PROBE_AFTER.load(Ordering::Acquire), 0x2468);
     // Round two: rebind to `old` and shoot it down while the AP holds IF clear
-    // and never contends. `flush_range` panics if the AP stays silent.
+    // and never contends. The fixture fails loudly if the AP stays silent.
     {
         let root = KERNEL_ROOT.lock();
         repoint(*root, old);
     }
     X86_PROBE_STAGE.store(6, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 7);
-    crate::memory::tlb_shootdown::flush_range(X86_PROBE_VA, PAGE_SIZE);
+    let outcome = crate::memory::tlb_shootdown::flush_range(&mut cap, X86_PROBE_VA, PAGE_SIZE);
+    assert!(
+        outcome.is_confirmed(),
+        "fixture masked shootdown unconfirmed"
+    );
     X86_PROBE_STAGE.store(8, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 9);
     assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
-    crate::memory::paging::unmap_page(X86_PROBE_VA).expect("fixture unmap");
+    let mut batch = crate::memory::frame_run::Batch::new();
+    crate::memory::paging::unmap_page(&mut batch, X86_PROBE_VA).expect("fixture unmap");
+    assert!(
+        batch.complete().is_confirmed(),
+        "fixture unmap invalidation"
+    );
     crate::memory::frame::deallocate_frame(old);
     crate::memory::frame::deallocate_frame(new);
     // Both shootdowns went to every online AP; the RT hart is the one that

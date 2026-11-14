@@ -422,9 +422,13 @@ pub(super) fn write_release_word(release_addr: usize, entry: u64) -> bool {
         let flags = Flags::from_bits(
             Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
         );
+        // AArch64 maps and unmaps without a deferred invalidation, so the
+        // batch stays empty.
+        let mut batch = crate::memory::frame_run::Batch::new();
         let mapped = crate::memory::frame::with(|allocator| {
-            paging::map_page(allocator, page, page, flags).is_ok()
+            paging::map_page(allocator, &mut batch, page, page, flags).is_ok()
         });
+        let _ = batch.complete();
         if mapped != Some(true) {
             return false;
         }
@@ -437,7 +441,7 @@ pub(super) fn write_release_word(release_addr: usize, entry: u64) -> bool {
     hal::aarch64::cache::clean_data_cache_range(release_addr, 8);
     if transient {
         // Never fails for a mapped page; it ends in a broadcast TLB invalidate.
-        let _ = paging::unmap_page(page);
+        let _ = paging::unmap_page(&mut crate::memory::frame_run::Batch::new(), page);
     }
     true
 }

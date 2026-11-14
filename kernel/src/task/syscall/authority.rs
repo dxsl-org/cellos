@@ -381,20 +381,25 @@ pub(super) fn cap_revoke_gate(
 /// accessibility away.
 ///
 /// Fail-closed: an error means a window the task can still reach, so the caller
-/// returns without clearing the capability.
+/// returns without clearing the capability. The windows stay registered to the
+/// task until their lowering is in force on every hart (an unconfirmed remote
+/// invalidation included), so none can be handed to another cell meanwhile; a
+/// retried revoke lowers them again.
 pub(super) fn revoke_mmio_classes(
     tid: usize,
     classes: crate::resource_registry::MmioClass,
 ) -> Result<(), SyscallError> {
-    for (base, len) in crate::resource_registry::revoke_mmio_for(tid, classes) {
+    let windows = crate::resource_registry::mmio_windows_for(tid, classes);
+    for &(base, len) in &windows {
         if let Err(e) = crate::memory::paging::revoke_mmio_user(base, len) {
             log::error!(
                 "[kernel] CapRevoke: MMIO window {base:#x}+{len:#x} is still user-reachable \
-                 ({e:?}); capability left intact"
+                 ({e:?}); capability and window left intact"
             );
             return Err(SyscallError::NotSupported);
         }
     }
+    crate::resource_registry::release_mmio_windows(tid, &windows);
     Ok(())
 }
 

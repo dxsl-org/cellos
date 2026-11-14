@@ -26,10 +26,11 @@ fn map_user_code() -> (usize, usize, usize, usize) {
     let flags = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::EXECUTE | Flags::USER | Flags::ACCESSED,
     );
+    let mut batch = crate::memory::frame_run::Batch::new();
     let mapped = crate::memory::frame::with(|allocator| {
-        crate::memory::paging::map_page(allocator, code, code, flags).is_ok()
+        crate::memory::paging::map_page(allocator, &mut batch, code, code, flags).is_ok()
     });
-    if mapped != Some(true) {
+    if mapped != Some(true) || !batch.complete().is_confirmed() {
         fail();
     }
     (code, code + a_offset, code + b_offset, b_return_offset)

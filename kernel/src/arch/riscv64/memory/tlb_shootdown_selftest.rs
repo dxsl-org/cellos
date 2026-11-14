@@ -78,15 +78,32 @@ fn set_phase(value: u8) {
 }
 
 fn unmap_and_release(frame: usize) {
-    let _ = paging::unmap_page(TEST_VA);
-    crate::memory::tlb_shootdown::flush_page(TEST_VA);
-    crate::memory::frame::deallocate_frame(frame);
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    let mut batch = crate::memory::frame_run::Batch::new();
+    let _ = paging::unmap_page(&mut batch, TEST_VA);
+    batch.invalidate(TEST_VA);
+    batch.retire(FrameRun::unpublished(
+        frame,
+        1,
+        RunOwner::Kernel,
+        RunKind::Leaf,
+        KernelAlias::Intact,
+    ));
+    let _ = batch.complete();
+}
+
+/// One shared invalidation of `TEST_VA` on every hart; `false` when a hart did
+/// not confirm (the self-test fails loudly instead of trusting the mapping).
+fn shoot_down_test_va() -> bool {
+    let mut batch = crate::memory::frame_run::Batch::new();
+    batch.invalidate(TEST_VA);
+    batch.complete().is_confirmed()
 }
 
 fn fail(frame: usize, reason: &str) {
     log::error!("[selftest] TLB-SHOOTDOWN: FAIL — {}", reason);
     set_phase(FAILED);
-    crate::memory::tlb_shootdown::set_test_skip_remote_rfence(false);
+    crate::arch::tlb::set_test_skip_remote_rfence(false);
     unmap_and_release(frame);
 }
 
@@ -100,19 +117,28 @@ pub fn run_primary() {
     // The boot identity map may already cover this canonical VA. Remove that
     // leaf first so the oracle maps the allocated frame rather than retaining
     // the pre-existing VA-to-PA binding.
-    let _ = paging::unmap_page(TEST_VA);
-    crate::memory::tlb_shootdown::flush_page(TEST_VA);
+    {
+        let mut batch = crate::memory::frame_run::Batch::new();
+        let _ = paging::unmap_page(&mut batch, TEST_VA);
+        batch.invalidate(TEST_VA);
+        if !batch.complete().is_confirmed() {
+            log::error!("[selftest] TLB-SHOOTDOWN: FAIL — stale test VA not invalidated");
+            return;
+        }
+    }
 
     let frame = {
+        let mut batch = crate::memory::frame_run::Batch::new();
         let mapped = crate::memory::frame::with(|allocator| {
             let frame = allocator.allocate_frame().ok_or("no frame")?;
-            if paging::map_page(allocator, TEST_VA, frame, writable_flags()).is_err() {
+            if paging::map_page(allocator, &mut batch, TEST_VA, frame, writable_flags()).is_err() {
                 allocator.deallocate_frame(frame);
                 return Err("map failed");
             }
             Ok(frame)
         })
         .unwrap_or(Err("frame allocator unavailable"));
+        let _ = batch.complete();
         let frame = match mapped {
             Ok(frame) => frame,
             Err(reason) => {
@@ -120,7 +146,10 @@ pub fn run_primary() {
                 return;
             }
         };
-        crate::memory::tlb_shootdown::flush_page(TEST_VA);
+        if !shoot_down_test_va() {
+            fail(frame, "mapping invalidation unconfirmed");
+            return;
+        }
         let translated = paging::virt_to_phys(TEST_VA).unwrap_or(0) & !(paging::PAGE_SIZE - 1);
         log::info!(
             "[selftest] TLB-SHOOTDOWN mapping va={:#x} frame={:#x} translated={:#x}",
@@ -174,9 +203,9 @@ pub fn run_primary() {
         fail(frame, "negative-control prime timed out");
         return;
     }
-    crate::memory::tlb_shootdown::set_test_skip_remote_rfence(true);
+    crate::arch::tlb::set_test_skip_remote_rfence(true);
     let lowered = paging::protect_page(TEST_VA, readonly_flags()).is_ok();
-    crate::memory::tlb_shootdown::set_test_skip_remote_rfence(false);
+    crate::arch::tlb::set_test_skip_remote_rfence(false);
     if !lowered {
         fail(frame, "negative-control lowering failed");
         return;

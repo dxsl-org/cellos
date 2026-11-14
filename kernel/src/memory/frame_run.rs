@@ -25,15 +25,14 @@
 //!
 //! The quarantine is bounded by refusing new allocations past 1/64 of managed
 //! memory ([`cap_exceeded`]): a degraded node, never a reused frame.
-// reason: the release paths adopt this module in the following Phase 16 commits.
-#![cfg_attr(not(test), allow(dead_code))]
 
+use crate::memory::frame::FlushCap;
 use crate::memory::paging::PAGE_SIZE;
 use crate::sched::smp::MAX_HARTS;
 use crate::sync::Spinlock;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use types::PhysAddr;
+use types::{PhysAddr, VAddr};
 
 /// One requested invalidation epoch per hart; 0 = that hart was not asked.
 pub type Epochs = [usize; MAX_HARTS];
@@ -239,7 +238,8 @@ fn max_epochs(a: &Epochs, b: &Epochs) -> Epochs {
 /// A virtual range that must stay reserved until the run's invalidation is
 /// confirmed (census risk 2): a VA handed out again while a remote hart may
 /// still translate it would resolve the new owner's VA to the old frame.
-/// `release(start, end)` runs once, after the frames are freed.
+/// `release(start, end)` runs once, right after the frames are freed and under
+/// the same frame-allocator hold, so it may take only leaf locks.
 #[derive(Clone, Copy, Debug)]
 pub struct VaHold {
     pub release: fn(usize, usize),
@@ -373,6 +373,9 @@ impl FrameRun {
 
     /// `Quarantined(event) → Mapped` once the event the hold waited on happened;
     /// the run then takes the normal release path.
+    // reason: the pin, DMA-export and domain-grant owners adopt event holds in
+    // their own Phase 16 migrations; host tests cover the transition today.
+    #[cfg_attr(not(test), allow(dead_code))]
     fn end_hold(&mut self) -> Result<(), StateError> {
         match self.state {
             RunState::Quarantined(reason) if !reason.waits_for_epochs() => {
@@ -403,11 +406,8 @@ impl FrameRun {
         if self.alias != KernelAlias::Intact {
             backend.normalise(self);
         }
-        backend.free(self.base, self.pages());
+        backend.free(self.base, self.pages(), self.va_hold.take());
         self.state = RunState::Free;
-        if let Some(hold) = self.va_hold.take() {
-            (hold.release)(hold.start, hold.end);
-        }
         Ok(())
     }
 }
@@ -439,8 +439,11 @@ pub(crate) trait Backend {
     fn reissue(&mut self, asid: Option<usize>) -> Epochs;
     /// Restore the frames' kernel alias before free (`KernelAlias` ≠ `Intact`).
     fn normalise(&mut self, run: &FrameRun);
-    /// Return `pages` frames at `base` to the allocator.
-    fn free(&mut self, base: PhysAddr, pages: usize);
+    /// Return `pages` frames at `base` to the allocator, then release `hold`
+    /// in the same allocator hold: no allocation can take the frames back
+    /// between the two, so a new owner's reservation of the same range is
+    /// never the one released.
+    fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>);
 }
 
 fn epochs_confirmed(backend: &impl Backend, epochs: &Epochs) -> bool {
@@ -605,7 +608,6 @@ impl Pending {
             return;
         };
         let pages = run.pages();
-        let base = run.base;
         let mut entries = self.entries.lock();
         let rejected = if let Some(entry) = entries.iter_mut().find(|e| e.reason == reason) {
             if entry.runs.try_reserve(1).is_ok() {
@@ -637,18 +639,10 @@ impl Pending {
         drop(entries);
         if let Some(run) = rejected {
             self.leak(run, "no heap for the pending entry");
-        } else {
-            log::warn!(
-                "[frame-run] quarantined {} pages at {:#x}: {} (total quarantined {})",
-                pages,
-                base,
-                reason.name(),
-                self.counters.quarantined()
-            );
         }
     }
 
-    fn leak(&self, run: FrameRun, why: &str) {
+    pub(crate) fn leak(&self, run: FrameRun, why: &str) {
         self.counters
             .leaked
             .fetch_add(run.pages(), Ordering::AcqRel);
@@ -736,6 +730,8 @@ impl Pending {
     /// End every event hold `matches` selects: those runs return to `Mapped`
     /// and to the caller, who resumes their release. Invalidation entries are
     /// never released here — only a published epoch ends them.
+    // reason: see `FrameRun::end_hold`.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn release_event(&self, matches: impl Fn(&Reason) -> bool) -> Vec<FrameRun> {
         let mut released = Vec::new();
         let mut entries = self.entries.lock();
@@ -772,6 +768,8 @@ impl Pending {
 
     /// Note one allocation refused by the cap; logs on powers of two so a
     /// sustained refusal is visible without flooding the console.
+    // reason: the allocator's quarantine cap calls it from the next commit.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn note_refused(&self, total_frames: usize) {
         let refused = self.counters.refused.fetch_add(1, Ordering::AcqRel) + 1;
         if refused.is_power_of_two() {
@@ -783,6 +781,269 @@ impl Pending {
             );
         }
     }
+}
+
+/// One operation's shared-root invalidation and the runs it frees.
+///
+/// Owners record every changed translation ([`Self::invalidate`]) and hand over
+/// every unpublished run ([`Self::retire`]); [`Self::finish`] then flushes
+/// **once** and frees or quarantines the runs. A cell teardown is O(operations)
+/// broadcasts, not O(pages). Dropping an unfinished batch finishes it (without
+/// waiting when the cap is unavailable), so a forgotten finish can never free a
+/// frame under a live translation.
+#[must_use = "a batch flushes and frees on finish (or drop)"]
+pub struct Batch {
+    ranges: Vec<(VAddr, usize)>,
+    all: bool,
+    runs: Vec<FrameRun>,
+    drain_user_copies: bool,
+}
+
+impl Batch {
+    pub const fn new() -> Self {
+        Self {
+            ranges: Vec::new(),
+            all: false,
+            runs: Vec::new(),
+            drain_user_copies: false,
+        }
+    }
+
+    /// Nothing to flush and nothing to free.
+    pub fn is_empty(&self) -> bool {
+        !self.all && self.ranges.is_empty() && self.runs.is_empty()
+    }
+
+    /// The translation of the page holding `vaddr` changed in the shared root.
+    pub fn invalidate(&mut self, vaddr: VAddr) {
+        self.invalidate_range(vaddr & !(PAGE_SIZE - 1), PAGE_SIZE);
+    }
+
+    /// The translations of `[start, start + size)` changed in the shared root.
+    /// Adjacent ranges merge; with no heap for a new range the batch widens to
+    /// a full invalidation rather than drop one.
+    pub fn invalidate_range(&mut self, start: VAddr, size: usize) {
+        if size == 0 || self.all {
+            return;
+        }
+        if let Some(last) = self.ranges.last_mut() {
+            if last.0.checked_add(last.1) == Some(start) {
+                last.1 += size;
+                return;
+            }
+            if last.0 <= start && start.checked_add(size) <= last.0.checked_add(last.1) {
+                return;
+            }
+        }
+        if self.ranges.try_reserve(1).is_ok() {
+            self.ranges.push((start, size));
+        } else {
+            self.all = true;
+        }
+    }
+
+    /// Invalidate every translation (a page-table detach whose span is unknown).
+    pub fn invalidate_all(&mut self) {
+        self.all = true;
+        self.ranges.clear();
+    }
+
+    /// Wait out open SAS user-copy windows after the flush and before any free
+    /// (census §7.2 step 5): a copy that probed a page earlier must not land in
+    /// its frame once it is reused.
+    pub fn drain_user_copies(&mut self) {
+        self.drain_user_copies = true;
+    }
+
+    /// Free `run` after the flush confirms; quarantine it otherwise. The run
+    /// must be `Unpublished`. With no heap to hold it the run is leaked
+    /// (counted), never freed.
+    pub fn retire(&mut self, run: FrameRun) {
+        if self.runs.try_reserve(1).is_ok() {
+            self.runs.push(run);
+        } else {
+            PENDING.leak(run, "no heap for the teardown batch");
+        }
+    }
+
+    /// Flush once, wait for the copy windows, then free every run or
+    /// quarantine it. Returns the flush outcome; an unconfirmed one is logged.
+    pub fn finish(mut self, cap: &mut FlushCap) -> FlushOutcome {
+        let outcome = if self.all || !self.ranges.is_empty() {
+            crate::memory::tlb_shootdown::flush_ranges(cap, &self.ranges, self.all)
+        } else {
+            FlushOutcome::Confirmed
+        };
+        self.settle(outcome);
+        outcome
+    }
+
+    /// [`Self::finish`] with this hart's cap, or — when it holds the frame
+    /// allocator and so may not wait — the local flush plus remote requests
+    /// with no wait, quarantining the runs until the reaper confirms them.
+    pub fn complete(self) -> FlushOutcome {
+        match FlushCap::take() {
+            Some(mut cap) => self.finish(&mut cap),
+            None => self.complete_without_wait(),
+        }
+    }
+
+    fn complete_without_wait(mut self) -> FlushOutcome {
+        let outcome = if self.all || !self.ranges.is_empty() {
+            crate::memory::tlb_shootdown::flush_ranges_without_wait(&self.ranges, self.all)
+        } else {
+            FlushOutcome::Confirmed
+        };
+        self.settle(outcome);
+        outcome
+    }
+
+    fn settle(&mut self, outcome: FlushOutcome) {
+        self.ranges.clear();
+        self.all = false;
+        if core::mem::take(&mut self.drain_user_copies) {
+            #[cfg(all(feature = "native-domains", cellos_wide))]
+            crate::task::user_copy::wait_sas_copies_quiescent();
+        }
+        let mut backend = KernelBackend;
+        let mut quarantined = 0;
+        for run in self.runs.drain(..) {
+            let pages = run.pages();
+            match settle(run, outcome, &mut backend, &PENDING) {
+                Ok(0) if !outcome.is_confirmed() => quarantined += pages,
+                Ok(_) => {}
+                Err(run) => PENDING.leak(run, "batch run not unpublished"),
+            }
+        }
+        if let FlushOutcome::Unconfirmed { cause, .. } = outcome {
+            log_unconfirmed(cause, quarantined);
+        }
+    }
+}
+
+impl Default for Batch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for Batch {
+    fn drop(&mut self) {
+        if !self.is_empty() {
+            let batch = core::mem::take(self);
+            let _ = batch.complete();
+        }
+    }
+}
+
+/// Log an unconfirmed shared flush once per operation. The lane gates count
+/// these lines; a fixture that holds a CPU on purpose brackets its own.
+fn log_unconfirmed(cause: UnconfirmedCause, quarantined: usize) {
+    let (hart, what) = match cause {
+        UnconfirmedCause::Timeout { hart } => (hart, "silent through the probe"),
+        UnconfirmedCause::RfenceFailed { hart } => (
+            hart,
+            "silent through the epoch fallback after an RFENCE error",
+        ),
+    };
+    #[cfg(feature = "test-hooks")]
+    if TEST_SILENT_CPU_FIXTURE.load(Ordering::Acquire) {
+        log::warn!(
+            "[frame-run] shared invalidation unconfirmed: hart {} {}; {} pages quarantined: held (fixture)",
+            hart,
+            what,
+            quarantined
+        );
+        return;
+    }
+    log::error!(
+        "[frame-run] shared invalidation unconfirmed: hart {} {}; {} pages quarantined until it acknowledges",
+        hart,
+        what,
+        quarantined
+    );
+}
+
+/// Test-hooks: a fixture holds a CPU silent on purpose; its unconfirmed
+/// flushes name themselves so the lane can excuse exactly those.
+#[cfg(feature = "test-hooks")]
+static TEST_SILENT_CPU_FIXTURE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Arm or disarm [`TEST_SILENT_CPU_FIXTURE`].
+#[cfg(feature = "test-hooks")]
+// reason: the x86 silent-CPU fixture arms it from the next commit.
+#[allow(dead_code)]
+pub(crate) fn set_test_silent_cpu_fixture(armed: bool) {
+    TEST_SILENT_CPU_FIXTURE.store(armed, Ordering::Release);
+}
+
+/// The kernel's [`Backend`]: per-hart flush epochs, the kernel root, the frame
+/// allocator.
+pub(crate) struct KernelBackend;
+
+impl Backend for KernelBackend {
+    fn completed(&self, hart: usize, epoch: usize) -> bool {
+        crate::sched::smp::tlb_flush_completed(hart, epoch)
+    }
+
+    fn reissue(&mut self, asid: Option<usize>) -> Epochs {
+        if let Some(asid) = asid {
+            crate::memory::tlb_shootdown::flush_tag_local(asid);
+        }
+        crate::memory::tlb_shootdown::request_remote_flushes()
+    }
+
+    /// Restore the identity leaf as kernel RWX: every free frame is
+    /// identity-mapped there on RV64/AArch64, because the loader zeroes a fresh
+    /// frame through `phys_to_virt`. The run is unpublished and its
+    /// invalidation confirmed, so each leaf is new and needs no shared flush;
+    /// the local flush drops any invalid entry this hart may still cache.
+    fn normalise(&mut self, run: &FrameRun) {
+        use crate::memory::paging::Flags;
+        let kernel_rwx = Flags::from_bits(
+            Flags::VALID
+                | Flags::READ
+                | Flags::WRITE
+                | Flags::EXECUTE
+                | Flags::ACCESSED
+                | Flags::DIRTY,
+        );
+        let (base, pages) = (run.base(), run.pages());
+        let restored = crate::memory::frame::with(|allocator| {
+            let mut batch = Batch::new();
+            for page in 0..pages {
+                let frame = base + page * PAGE_SIZE;
+                let _ = crate::memory::paging::map_page(
+                    allocator, &mut batch, frame, frame, kernel_rwx,
+                );
+            }
+            batch
+        });
+        // No allocator, nothing restored (and no paging to flush yet).
+        if let Some(batch) = restored {
+            drop(batch);
+            crate::memory::paging::tlb_flush_all();
+        }
+    }
+
+    fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {
+        let _ = crate::memory::frame::with(|allocator| {
+            for page in 0..pages {
+                allocator.deallocate_frame(base + page * PAGE_SIZE);
+            }
+            if let Some(hold) = hold {
+                (hold.release)(hold.start, hold.end);
+            }
+        });
+    }
+}
+
+/// One step of the hart-0 timer reaper: free every quarantined run whose
+/// epochs are all published, reissue the stale ones. Never waits.
+pub fn reap() {
+    crate::arch::tlb::report_rfence_failures();
+    let _ = PENDING.reap(&mut KernelBackend);
 }
 
 /// The quarantine cap: refuse new allocations once quarantined pages exceed
