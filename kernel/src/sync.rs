@@ -27,7 +27,7 @@ pub fn install_hart_hooks(hart_id: fn() -> Option<usize>, spin: fn(usize)) {
 
 // Host tests neither spin-answer nor keep per-hart masks (they use a thread-local).
 #[cfg_attr(all(test, not(target_os = "none")), allow(dead_code))]
-fn installed_hart_id() -> Option<usize> {
+pub(crate) fn installed_hart_id() -> Option<usize> {
     // Relaxed: the hook is published once, before any secondary starts; a hart
     // that still reads 0 is the single boot hart.
     match HART_ID_HOOK.load(Ordering::Relaxed) {

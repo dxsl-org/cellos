@@ -68,16 +68,15 @@ pub(super) fn ap02_cleanup_complete() -> bool {
         .iter()
         .all(|mapping| crate::memory::tlb_shootdown::test_flush_observed(mapping.va));
     crate::memory::tlb_shootdown::finish_test_flush_observation();
-    let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let Some(allocator) = frames.as_ref() else {
-        return false;
-    };
     !mappings.is_empty()
         && tlb_absent
-        && mappings.into_iter().all(|mapping| {
-            mapping.pte != 0
-                && crate::memory::paging::translation_probe(mapping.va).is_none()
-                && crate::memory::paging::virt_to_phys(mapping.va) != Some(mapping.frame)
-                && !allocator.p01_allocated(mapping.frame)
+        && crate::memory::frame::with(|allocator| {
+            mappings.into_iter().all(|mapping| {
+                mapping.pte != 0
+                    && crate::memory::paging::translation_probe(mapping.va).is_none()
+                    && crate::memory::paging::virt_to_phys(mapping.va) != Some(mapping.frame)
+                    && !allocator.p01_allocated(mapping.frame)
+            })
         })
+        .unwrap_or(false)
 }

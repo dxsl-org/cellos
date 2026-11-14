@@ -245,7 +245,7 @@
 //! is never linked into a kernel image.
 
 use crate::dev::block;
-use crate::memory::frame::{phys_to_virt, FrameAllocator, FRAME_ALLOCATOR};
+use crate::memory::frame::{phys_to_virt, FrameAllocator};
 use crate::sched::quiesce;
 use crate::sync::Spinlock;
 use alloc::vec::Vec;
@@ -1383,12 +1383,14 @@ pub fn reserve_scratch_region_at_boot() {
     if scratch_region().is_some() {
         return;
     }
-    let mut guard = FRAME_ALLOCATOR.lock();
-    let Some(allocator) = guard.as_mut() else {
+    let trusted = kernel_image().map(|image| image.trusted);
+    let Some(taken) =
+        crate::memory::frame::with(|allocator| take_scratch_region(allocator, trusted))
+    else {
         log::warn!("[snapshot] no frame allocator at boot → no capture scratch");
         return;
     };
-    match take_scratch_region(allocator, kernel_image().map(|image| image.trusted)) {
+    match taken {
         Ok(region) => {
             *SNAPSHOT_SCRATCH.lock() = Some(region);
             log::info!(
@@ -1987,7 +1989,10 @@ impl FrozenScratch {
     /// them (see [`take_allocated_frame`]).
     fn enumerate(&mut self) -> Result<RamLayout, SnapshotError> {
         let image = kernel_image().ok_or(SnapshotError::ImageRegionUnavailable)?;
-        let guard = FRAME_ALLOCATOR.lock();
+        let Some(mut cap) = crate::memory::frame::FlushCap::take() else {
+            return Err(SnapshotError::MemoryFault);
+        };
+        let guard = crate::memory::frame::lock(&mut cap);
         let allocator = guard.as_ref().ok_or(SnapshotError::MemoryFault)?;
         self.pas.clear();
         let mut excluded = 0u32;
@@ -2562,9 +2567,7 @@ pub fn restore_image(
 /// not delimit the kernel image — see [`kernel_image`]).
 fn live_layout() -> Option<RamLayout> {
     let image = kernel_image()?;
-    let guard = FRAME_ALLOCATOR.lock();
-    let allocator = guard.as_ref()?;
-    Some(RamLayout {
+    crate::memory::frame::with(|allocator| RamLayout {
         base: allocator.memory_start() as u64,
         end: allocator.memory_end() as u64,
         image: image.trusted,

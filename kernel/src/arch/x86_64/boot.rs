@@ -134,12 +134,8 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
 
     // x86_64 publishes the allocator immediately: Limine's paging already gives
     // its Spinlock usable memory attributes.
-    unsafe {
-        core::ptr::write(
-            &mut *memory::frame::FRAME_ALLOCATOR.lock(),
-            Some(frame_allocator),
-        );
-    }
+    // SAFETY: boot, once, before any other frame-allocator access.
+    unsafe { memory::frame::install(frame_allocator) };
     log_info("Frame allocator initialized");
 
     // Limine does not guarantee HHDM mappings for firmware-owned memory. The
@@ -180,17 +176,16 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
                 );
                 return None;
             }
-            let mut allocator = memory::frame::FRAME_ALLOCATOR.lock();
-            let mut allocate = || {
-                allocator
-                    .as_mut()
-                    .and_then(|frames| frames.allocate_frame())
-            };
-            // SAFETY: the published allocator owns returned frames and the live
-            // Limine page tables are reachable through the configured HHDM.
-            let mapped = unsafe {
-                crate::hal::paging::map_hhdm_firmware_range(physical, length, &mut allocate)
-            };
+            let mapped = memory::frame::with(|frames| {
+                let mut allocate = || frames.allocate_frame();
+                // SAFETY: the published allocator owns returned frames and the
+                // live Limine page tables are reachable through the configured
+                // HHDM.
+                unsafe {
+                    crate::hal::paging::map_hhdm_firmware_range(physical, length, &mut allocate)
+                }
+            })
+            .unwrap_or(false);
             if mapped {
                 Some(crate::memory::frame::phys_to_virt(physical))
             } else {
@@ -302,17 +297,17 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
 
         log_info("Initializing x86_64 paging (kernel PML4)...");
         let root_table_phys = {
-            let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
-            memory::paging::init_kernel_paging_x86(
-                locked_frame_allocator
-                    .as_mut()
-                    .expect("Frame allocator not initialized"),
-                x86_ioapic_base,
-                x86_hpet_base,
-                x86_lapic_base,
-                x86_ecam_base,
-                x86_ecam_len,
-            )
+            memory::frame::with(|allocator| {
+                memory::paging::init_kernel_paging_x86(
+                    allocator,
+                    x86_ioapic_base,
+                    x86_hpet_base,
+                    x86_lapic_base,
+                    x86_ecam_base,
+                    x86_ecam_len,
+                )
+            })
+            .expect("Frame allocator not initialized")
             .expect("Failed to initialize x86_64 kernel PML4")
         };
         log_info("x86_64 paging initialized");
@@ -634,10 +629,7 @@ fn offer_x86_clock_candidates(acpi_info: &crate::acpi::AcpiInfo) {
         }
     }
     if crate::hal::clock::kvmclock::available() {
-        let frame = memory::frame::FRAME_ALLOCATOR
-            .lock()
-            .as_mut()
-            .and_then(|frames| frames.allocate_frame());
+        let frame = memory::frame::allocate_frame();
         if let Some(phys) = frame {
             let virt = memory::frame::phys_to_virt(phys);
             // SAFETY: a freshly allocated, HHDM-mapped frame owned by this call.

@@ -60,11 +60,7 @@ const RETIRED_VA: usize = 0x30_0c00_0000;
 
 /// Frames currently available to the allocator.
 fn free_frames() -> usize {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.free_frames())
-        .unwrap_or(0)
+    crate::memory::frame::stats().map_or(0, |frames| frames.free_frames)
 }
 
 /// A live private root for one fixture task. The page is never faulted in by

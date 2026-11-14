@@ -67,13 +67,8 @@ pub(crate) fn x86_virt_kind() -> Option<X86Virt> {
 /// `Err` names the refusal for the caller's log line.
 pub(crate) fn enter_x86_root_on_current_cpu() -> Result<X86Virt, &'static str> {
     let kind = x86_virt_kind().ok_or("not supported by CPU")?;
-    let frame = {
-        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        guard
-            .as_mut()
-            .expect("Frame allocator not initialized")
-            .allocate_frame()
-    };
+    let frame = crate::memory::frame::with(|allocator| allocator.allocate_frame())
+        .expect("Frame allocator not initialized");
     match kind {
         X86Virt::Svm => {
             let pa = frame.ok_or("OOM allocating HSAVE frame")?;

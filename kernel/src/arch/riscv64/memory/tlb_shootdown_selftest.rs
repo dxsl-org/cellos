@@ -4,7 +4,6 @@
 //! 0 lowers it, then hart 1 either faults without changing the physical byte or
 //! proves the negative control can still write when RFENCE is deliberately skipped.
 
-use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::memory::paging::{self, Flags};
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use hal::arch::ViTrapFrame;
@@ -81,10 +80,7 @@ fn set_phase(value: u8) {
 fn unmap_and_release(frame: usize) {
     let _ = paging::unmap_page(TEST_VA);
     crate::memory::tlb_shootdown::flush_page(TEST_VA);
-    let mut frames = FRAME_ALLOCATOR.lock();
-    if let Some(allocator) = frames.as_mut() {
-        allocator.deallocate_frame(frame);
-    }
+    crate::memory::frame::deallocate_frame(frame);
 }
 
 fn fail(frame: usize, reason: &str) {
@@ -108,20 +104,22 @@ pub fn run_primary() {
     crate::memory::tlb_shootdown::flush_page(TEST_VA);
 
     let frame = {
-        let mut frames = FRAME_ALLOCATOR.lock();
-        let Some(allocator) = frames.as_mut() else {
-            log::error!("[selftest] TLB-SHOOTDOWN: FAIL — frame allocator unavailable");
-            return;
+        let mapped = crate::memory::frame::with(|allocator| {
+            let frame = allocator.allocate_frame().ok_or("no frame")?;
+            if paging::map_page(allocator, TEST_VA, frame, writable_flags()).is_err() {
+                allocator.deallocate_frame(frame);
+                return Err("map failed");
+            }
+            Ok(frame)
+        })
+        .unwrap_or(Err("frame allocator unavailable"));
+        let frame = match mapped {
+            Ok(frame) => frame,
+            Err(reason) => {
+                log::error!("[selftest] TLB-SHOOTDOWN: FAIL — {}", reason);
+                return;
+            }
         };
-        let Some(frame) = allocator.allocate_frame() else {
-            log::error!("[selftest] TLB-SHOOTDOWN: FAIL — no frame");
-            return;
-        };
-        if paging::map_page(allocator, TEST_VA, frame, writable_flags()).is_err() {
-            allocator.deallocate_frame(frame);
-            log::error!("[selftest] TLB-SHOOTDOWN: FAIL — map failed");
-            return;
-        }
         crate::memory::tlb_shootdown::flush_page(TEST_VA);
         let translated = paging::virt_to_phys(TEST_VA).unwrap_or(0) & !(paging::PAGE_SIZE - 1);
         log::info!(
@@ -131,7 +129,7 @@ pub fn run_primary() {
             translated
         );
         if translated != frame {
-            allocator.deallocate_frame(frame);
+            crate::memory::frame::deallocate_frame(frame);
             log::error!("[selftest] TLB-SHOOTDOWN: FAIL — test VA retained another frame");
             return;
         }

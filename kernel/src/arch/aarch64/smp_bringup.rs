@@ -419,14 +419,13 @@ pub(super) fn write_release_word(release_addr: usize, entry: u64) -> bool {
     let page = release_addr & !(PAGE_SIZE - 1);
     let transient = paging::virt_to_phys(page).is_none();
     if transient {
-        let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let Some(allocator) = frames.as_mut() else {
-            return false;
-        };
         let flags = Flags::from_bits(
             Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
         );
-        if paging::map_page(allocator, page, page, flags).is_err() {
+        let mapped = crate::memory::frame::with(|allocator| {
+            paging::map_page(allocator, page, page, flags).is_ok()
+        });
+        if mapped != Some(true) {
             return false;
         }
     }

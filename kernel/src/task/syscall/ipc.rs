@@ -1276,13 +1276,12 @@ pub(super) fn mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -> Sysc
     }
     validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
     let info = {
-        let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = guard.as_ref().ok_or(SyscallError::OutOfMemory)?;
+        let frames = crate::memory::frame::stats().ok_or(SyscallError::OutOfMemory)?;
         abi::syscall::ViMemInfoV1 {
-            total_frames: allocator.total_frames() as u64,
-            used_frames: allocator.used_frames() as u64,
-            free_frames: allocator.free_frames() as u64,
-            page_size: allocator.page_size() as u64,
+            total_frames: frames.total_frames as u64,
+            used_frames: frames.used_frames as u64,
+            free_frames: frames.free_frames as u64,
+            page_size: crate::memory::paging::PAGE_SIZE as u64,
         }
     };
     let raw_bytes = unsafe {

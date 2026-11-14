@@ -254,6 +254,9 @@ jobs:
       - name: Check HAL ownership and every board selection
         run: bash scripts/check-board-configs.sh
 
+      - name: Frame-allocator guard compile-fail witness
+        run: bash scripts/check-frame-guard-compile-fail.sh
+
   build:
     name: Build (${{ matrix.target }})
     runs-on: ubuntu-24.04

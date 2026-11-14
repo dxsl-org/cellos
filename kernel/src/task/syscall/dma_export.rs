@@ -839,10 +839,7 @@ impl Platform for KernelPlatform {
             if !crate::dev::iommu::is_active() {
                 return false;
             }
-            let top = crate::memory::frame::FRAME_ALLOCATOR
-                .lock()
-                .as_ref()
-                .map_or(usize::MAX, |a| a.memory_end());
+            let top = crate::memory::frame::with(|a| a.memory_end()).unwrap_or(usize::MAX);
             if top as u64 > WINDOW_BASE {
                 log::warn!("[export] RAM reaches {top:#x} >= 2^38: export windows could alias identity leaves");
                 return false;

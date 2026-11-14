@@ -707,19 +707,18 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
 /// is the same fail-stop panic in `flush_range` as before.
 #[cfg(target_arch = "x86_64")]
 fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) {
-    let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let allocator = fa
-        .as_mut()
-        .expect("map_mmio_x86: frame allocator not ready");
     let (start, end) = mmio_page_window(phys, size);
-    let mut va = start;
-    while va < end {
-        // Errors are logged but not fatal; a broken mapping will fault on first use.
-        if let Err(e) = map_page_unflushed(allocator, va, va, flags) {
-            log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
+    crate::memory::frame::with(|allocator| {
+        let mut va = start;
+        while va < end {
+            // Errors are logged but not fatal; a broken mapping will fault on first use.
+            if let Err(e) = map_page_unflushed(allocator, va, va, flags) {
+                log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
+            }
+            va += PAGE_SIZE;
         }
-        va += PAGE_SIZE;
-    }
+    })
+    .expect("map_mmio_x86: frame allocator not ready");
     if end > start {
         crate::memory::tlb_shootdown::flush_range(start, end - start);
     }
@@ -1076,8 +1075,7 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
     let mut root_guard = KERNEL_ROOT.lock();
     if let Some(root_addr) = root_guard.as_mut() {
         let table = unsafe { &mut *(*root_addr as *mut hal::paging::PageTable) };
-        let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        if let Some(allocator) = frame_guard.as_mut() {
+        let _ = crate::memory::frame::with(|allocator| {
             #[cfg(feature = "p01-trace")]
             let _physical_write = crate::p01_retained::physical_write();
             use hal::traits::PageTableTrait;
@@ -1103,7 +1101,7 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
                 p01_observe_table_path(*root_addr, addr, result.is_err(), allocator);
                 result.expect("Failed to map user stack page!");
             }
-        }
+        });
     }
 }
 
@@ -1127,59 +1125,58 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
             | Flags::ACCESSED
             | Flags::DIRTY,
     );
-    let mut allocator = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let Some(allocator) = allocator.as_mut() else {
-        return Err(PageTableError::NotSupported);
-    };
-    let root = KERNEL_ROOT.lock();
-    let Some(root_phys) = *root else {
-        return Err(PageTableError::NotSupported);
-    };
-    #[cfg(feature = "p01-trace")]
-    let _physical_write = crate::p01_retained::physical_write();
-    // SAFETY: KERNEL_ROOT names the active kernel-owned page table. The frame
-    // allocator remains locked throughout this transaction, matching map_page.
-    let table = unsafe { &mut *(root_phys as *mut PageTable) };
-    for index in 0..pages {
-        let address = start
-            .checked_add(
-                index
-                    .checked_mul(PAGE_SIZE)
-                    .ok_or(PageTableError::InvalidAddress)?,
-            )
-            .ok_or(PageTableError::InvalidAddress)?;
-        if table.translate(address).is_some() {
-            return Err(PageTableError::InvalidAddress);
-        }
-    }
-    for index in 0..pages {
-        let address = start
-            .checked_add(
-                index
-                    .checked_mul(PAGE_SIZE)
-                    .ok_or(PageTableError::InvalidAddress)?,
-            )
-            .ok_or(PageTableError::InvalidAddress)?;
-        let mut allocate_table_frame = || {
-            let frame = allocator.allocate_frame()?;
-            #[cfg(feature = "p01-trace")]
-            crate::p01_retained::physical_table_created(frame, root_phys, address);
-            Some(frame)
+    crate::memory::frame::with(|allocator| -> PagingResult<()> {
+        let root = KERNEL_ROOT.lock();
+        let Some(root_phys) = *root else {
+            return Err(PageTableError::NotSupported);
         };
-        let result = table.map(address, address, flags, &mut allocate_table_frame);
         #[cfg(feature = "p01-trace")]
-        p01_observe_table_path(root_phys, address, result.is_err(), allocator);
-        if result.is_err() {
-            for rollback in 0..index {
-                let address = start + rollback * PAGE_SIZE;
-                let _ = table.unmap(address);
+        let _physical_write = crate::p01_retained::physical_write();
+        // SAFETY: KERNEL_ROOT names the active kernel-owned page table. The frame
+        // allocator remains locked throughout this transaction, matching map_page.
+        let table = unsafe { &mut *(root_phys as *mut PageTable) };
+        for index in 0..pages {
+            let address = start
+                .checked_add(
+                    index
+                        .checked_mul(PAGE_SIZE)
+                        .ok_or(PageTableError::InvalidAddress)?,
+                )
+                .ok_or(PageTableError::InvalidAddress)?;
+            if table.translate(address).is_some() {
+                return Err(PageTableError::InvalidAddress);
             }
-            tlb_flush_all();
-            return Err(PageTableError::OutOfMemory);
         }
-    }
-    tlb_flush_all();
-    Ok(())
+        for index in 0..pages {
+            let address = start
+                .checked_add(
+                    index
+                        .checked_mul(PAGE_SIZE)
+                        .ok_or(PageTableError::InvalidAddress)?,
+                )
+                .ok_or(PageTableError::InvalidAddress)?;
+            let mut allocate_table_frame = || {
+                let frame = allocator.allocate_frame()?;
+                #[cfg(feature = "p01-trace")]
+                crate::p01_retained::physical_table_created(frame, root_phys, address);
+                Some(frame)
+            };
+            let result = table.map(address, address, flags, &mut allocate_table_frame);
+            #[cfg(feature = "p01-trace")]
+            p01_observe_table_path(root_phys, address, result.is_err(), allocator);
+            if result.is_err() {
+                for rollback in 0..index {
+                    let address = start + rollback * PAGE_SIZE;
+                    let _ = table.unmap(address);
+                }
+                tlb_flush_all();
+                return Err(PageTableError::OutOfMemory);
+            }
+        }
+        tlb_flush_all();
+        Ok(())
+    })
+    .unwrap_or(Err(PageTableError::NotSupported))
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -1188,49 +1185,47 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
         return Err(PageTableError::InvalidAddress);
     }
 
-    let mut allocator_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let Some(allocator) = allocator_guard.as_mut() else {
-        return Err(PageTableError::NotSupported);
-    };
-
-    let root_phys = {
-        let root = KERNEL_ROOT.lock();
-        match *root {
-            Some(r) => r,
-            None => return Err(PageTableError::NotSupported),
-        }
-    };
-    // SAFETY: the kernel's live PML4, walked read-only; FRAME_ALLOCATOR is
-    // held, so no table frame on the walk can be recycled under it.
-    let root = unsafe { &*table_at(root_phys) };
-
-    for index in 0..pages {
-        let address = start
-            .checked_add(
-                index
-                    .checked_mul(PAGE_SIZE)
-                    .ok_or(PageTableError::InvalidAddress)?,
-            )
-            .ok_or(PageTableError::InvalidAddress)?;
-        if root.leaf_entry(address).is_some() {
-            return Err(PageTableError::InvalidAddress);
-        }
-    }
-
-    for index in 0..pages {
-        let address = start + index * PAGE_SIZE;
-        let result = map_page(allocator, address, address, USER_RW_X86);
-        if result.is_err() {
-            for rollback in 0..index {
-                let rollback_addr = start + rollback * PAGE_SIZE;
-                let _ = unmap_page(rollback_addr);
+    crate::memory::frame::with(|allocator| -> PagingResult<()> {
+        let root_phys = {
+            let root = KERNEL_ROOT.lock();
+            match *root {
+                Some(r) => r,
+                None => return Err(PageTableError::NotSupported),
             }
-            tlb_flush_all();
-            return Err(PageTableError::OutOfMemory);
+        };
+        // SAFETY: the kernel's live PML4, walked read-only; FRAME_ALLOCATOR is
+        // held, so no table frame on the walk can be recycled under it.
+        let root = unsafe { &*table_at(root_phys) };
+
+        for index in 0..pages {
+            let address = start
+                .checked_add(
+                    index
+                        .checked_mul(PAGE_SIZE)
+                        .ok_or(PageTableError::InvalidAddress)?,
+                )
+                .ok_or(PageTableError::InvalidAddress)?;
+            if root.leaf_entry(address).is_some() {
+                return Err(PageTableError::InvalidAddress);
+            }
         }
-    }
-    tlb_flush_all();
-    Ok(())
+
+        for index in 0..pages {
+            let address = start + index * PAGE_SIZE;
+            let result = map_page(allocator, address, address, USER_RW_X86);
+            if result.is_err() {
+                for rollback in 0..index {
+                    let rollback_addr = start + rollback * PAGE_SIZE;
+                    let _ = unmap_page(rollback_addr);
+                }
+                tlb_flush_all();
+                return Err(PageTableError::OutOfMemory);
+            }
+        }
+        tlb_flush_all();
+        Ok(())
+    })
+    .unwrap_or(Err(PageTableError::NotSupported))
 }
 
 #[cfg(not(cellos_wide))]
@@ -1240,14 +1235,13 @@ pub fn map_display_framebuffer_user(_start: PhysAddr, _pages: usize) -> PagingRe
 
 #[cfg(target_arch = "x86_64")]
 pub fn remap_range_user(start: PhysAddr, pages: usize) {
-    let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    if let Some(allocator) = frame_guard.as_mut() {
+    let _ = crate::memory::frame::with(|allocator| {
         for i in 0..pages {
             let addr = start + (i * PAGE_SIZE);
             // Map VA == PA (identity) with user-rw flags.
             let _ = map_page(allocator, addr, addr, USER_RW_X86);
         }
-    }
+    });
 }
 
 // ─── Bare-physical stubs ─────────────────────────────────────────────────────
@@ -1491,19 +1485,18 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             // The VMA list is empty for ELF-backed cells today (segments are
             // mapped eagerly by the loader), so in practice only future
             // demand-allocated regions reach here.
-            let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            let alloc = frame_guard
-                .as_mut()
-                .unwrap_or_else(|| panic!("[#PF] frame allocator unavailable at va={:#x}", va));
-            let effective_pa = if paddr == 0 {
-                // Demand-allocate a new zeroed frame.
-                alloc
-                    .allocate_frame()
-                    .unwrap_or_else(|| panic!("[#PF] OOM allocating demand page at va={:#x}", va))
-            } else {
-                paddr
-            };
-            let _ = map_page(alloc, va & !0xFFF, effective_pa & !0xFFF, flags);
+            crate::memory::frame::with(|alloc| {
+                let effective_pa = if paddr == 0 {
+                    // Demand-allocate a new zeroed frame.
+                    alloc.allocate_frame().unwrap_or_else(|| {
+                        panic!("[#PF] OOM allocating demand page at va={:#x}", va)
+                    })
+                } else {
+                    paddr
+                };
+                let _ = map_page(alloc, va & !0xFFF, effective_pa & !0xFFF, flags);
+            })
+            .unwrap_or_else(|| panic!("[#PF] frame allocator unavailable at va={:#x}", va));
         }
         None => {
             fault_kill_cell(va, error_code, rip, cs, "no VMA covers this address");

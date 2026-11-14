@@ -217,17 +217,19 @@ pub fn run_primary() {
     PHASE.store(IDLE, Ordering::Release);
     WORKER_ORIGIN.store(0, Ordering::Release);
     let test_frame = {
-        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let alloc = guard.as_mut().expect("frame allocator");
-        let frame = alloc.allocate_frame().expect("allocate frame for ctx test");
         let flags = crate::memory::paging::Flags::from_bits(
             crate::memory::paging::Flags::VALID
                 | crate::memory::paging::Flags::USER
                 | crate::memory::paging::Flags::READ
                 | crate::memory::paging::Flags::WRITE,
         );
-        crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags)
-            .expect("map ctx user page");
+        let frame = crate::memory::frame::with(|alloc| {
+            let frame = alloc.allocate_frame().expect("allocate frame for ctx test");
+            crate::memory::paging::map_page(alloc, CTX_USER_PAGE, frame, flags)
+                .expect("map ctx user page");
+            frame
+        })
+        .expect("frame allocator");
         crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
         frame
     };
@@ -402,8 +404,6 @@ pub fn run_primary() {
     }
     let _ = crate::memory::paging::unmap_page(CTX_USER_PAGE);
     crate::hal::paging::flush_tlb_page(CTX_USER_PAGE);
-    if let Some(alloc) = crate::memory::frame::FRAME_ALLOCATOR.lock().as_mut() {
-        alloc.deallocate_frame(test_frame);
-    }
+    crate::memory::frame::deallocate_frame(test_frame);
     crate::task::yield_cpu();
 }

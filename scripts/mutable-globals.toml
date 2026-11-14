@@ -1989,12 +1989,23 @@ review = "kernel/src/memory/frame.rs:set_phys_offset; kernel/src/memory/frame.rs
 key = "kernel::memory::frame::FRAME_ALLOCATOR"
 lifetime = "global"
 mutation = "spinlock"
-owner = "memory::frame: kmain publishes the FrameAllocator; every frame allocation/free (paging, stacks, loader, grants, deferred_release, snapshot, #PF demand paging) goes through it"
+owner = "memory::frame: kmain publishes the FrameAllocator (frame::install); it is private to memory/frame.rs and every frame allocation/free (paging, stacks, loader, grants, deferred_release, snapshot, #PF demand paging) goes through frame::lock (borrowing a FlushCap), frame::with (a Send closure) or a single-operation accessor"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "Option<FrameAllocator> published once by core::ptr::write into the guard at boot (main.rs:368); the allocator bitmap is mutated for the whole run"
 retirement = "never: lives for the whole run"
 rationale = "Taken by vi_handle_page_fault for demand paging (exception), by Stack drop and frame frees in the yield_cpu funnel and the hart-0 deferred_release reaper (irq), and by Stack::new_kernel for the AP stack in smp::start_secondaries; the crate Spinlock masks IRQs, and the #PF path takes SCHEDULER, releases it, then FRAME_ALLOCATOR -> KERNEL_ROOT, matching the documented order."
-review = "kernel/src/memory/frame.rs:575; kernel/src/main.rs:368; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:558; kernel/src/sched/smp.rs:837"
+review = "kernel/src/memory/frame.rs:lock; kernel/src/memory/frame.rs:with; kernel/src/memory/frame.rs:install; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:Stack::allocate; kernel/src/sched/smp.rs:837"
+
+[[global]]
+key = "kernel::memory::frame::HELD_HERE @cfg(not (test))"
+lifetime = "per-cpu"
+mutation = "atomic"
+owner = "memory::frame: set by frame::lock / frame::with after FRAME_ALLOCATOR is acquired and cleared before it is released; read by FlushCap::take and held_here on the same hart"
+contexts = ["boot", "normal", "irq", "exception", "ap"]
+seal = "none: toggled around every allocator hold for the whole run"
+retirement = "never: lives for the whole run"
+rationale = "Each hart writes only its own slot, and only while it holds FRAME_ALLOCATOR, whose Spinlock masks interrupts: the holder cannot migrate or be interrupted between the set and the clear, so Relaxed suffices. An AP without a hart-local id is not tracked (it allocates nothing then). A stale read from another hart is impossible because no hart reads a slot but its own."
+review = "kernel/src/memory/frame.rs:lock; kernel/src/memory/frame.rs:with; kernel/src/memory/frame.rs:FlushCap::take; kernel/src/sync.rs:installed_hart_id"
 
 [[global]]
 key = "kernel::memory::domain_supervisor_registry::NEXT_ID @cfg(all (feature = \"native-domains\" , cellos_wide))"

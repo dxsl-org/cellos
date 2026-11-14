@@ -2779,9 +2779,7 @@ pub fn spawn_synthetic(
 
     // 2. Map Code Page at 'entry'
     {
-        let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-        let frame = allocator.allocate_frame().ok_or(ViError::OutOfMemory)?;
+        let frame = crate::memory::frame::allocate_frame().ok_or(ViError::OutOfMemory)?;
 
         // Write code to frame (Physical access)
         // Code: ecall (0x00000073) + loop (j .)
@@ -2831,8 +2829,11 @@ pub fn spawn_synthetic(
                 | Flags::DIRTY,
         );
 
-        crate::memory::paging::map_page(allocator, entry, frame, flags)
-            .map_err(|_| ViError::OutOfMemory)?;
+        crate::memory::frame::with(|allocator| {
+            crate::memory::paging::map_page(allocator, entry, frame, flags)
+        })
+        .ok_or(ViError::OutOfMemory)?
+        .map_err(|_| ViError::OutOfMemory)?;
     }
 
     // 3. Update Task Context (Copied from spawn_from_file)

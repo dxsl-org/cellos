@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
-use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
+use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
@@ -114,9 +114,10 @@ struct SvmVm {
 
 impl Drop for SvmVm {
     fn drop(&mut self) {
-        let mut g = FRAME_ALLOCATOR.lock();
-        if let Some(a) = g.as_mut() {
-            for f in &self.vcpu_frames {
+        let vcpu_frames = &self.vcpu_frames;
+        let apic_frame = self.apic_frame;
+        let _ = crate::memory::frame::with(|a| {
+            for f in vcpu_frames {
                 match f {
                     VcpuFrames::Svm {
                         vmcb,
@@ -144,10 +145,10 @@ impl Drop for SvmVm {
                     }
                 }
             }
-            if self.apic_frame != 0 {
-                a.deallocate_frame(self.apic_frame);
+            if apic_frame != 0 {
+                a.deallocate_frame(apic_frame);
             }
-        }
+        });
         // `npt` frees its own tree + guest RAM in its Drop.
     }
 }
@@ -176,7 +177,7 @@ fn nested_format() -> NestedFormat {
 
 /// Allocate `n` contiguous frames and return the base PA (no zeroing).
 fn alloc_contig(n: usize) -> Option<usize> {
-    FRAME_ALLOCATOR.lock().as_mut()?.allocate_contiguous(n)
+    crate::memory::frame::allocate_contiguous(n)
 }
 
 /// Allocate guest RAM + NPT, mapped at GPA 0; return the opaque `vm_id`.
@@ -228,9 +229,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         .is_err()
     {
         log::error!("[hv-x86] create_vm: xAPIC NPT map OOM");
-        if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
-            allocator.deallocate_frame(apic_frame);
-        }
+        crate::memory::frame::deallocate_frame(apic_frame);
         return Err(ViError::OutOfMemory);
     }
 

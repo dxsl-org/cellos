@@ -304,7 +304,11 @@ pub(crate) fn capture(sample: usize, metrics: &[crate::p01_resources::Metric; 16
             return;
         }
     }
-    let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let Some(mut cap) = crate::memory::frame::FlushCap::take() else {
+        snapshot.refuse(HISTORY);
+        return;
+    };
+    let frames = crate::memory::frame::lock(&mut cap);
     let Some(allocator) = frames.as_ref() else {
         snapshot.refuse(HISTORY);
         return;

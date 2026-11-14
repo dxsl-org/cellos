@@ -1,7 +1,6 @@
 //! QEMU-only transaction probes for the private-root substrate.
 
 use super::*;
-use crate::memory::frame::FRAME_ALLOCATOR;
 
 const PRIVATE_PAGE: usize = 0x4000;
 const ABI_PAGE: usize = 0x5000;
@@ -13,10 +12,7 @@ fn supervisor_flags() -> Flags {
     Flags::from_bits(Flags::VALID | Flags::READ | Flags::EXECUTE)
 }
 fn used_frames() -> Option<usize> {
-    FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|frames| frames.used_frames())
+    crate::memory::frame::stats().map(|frames| frames.used_frames)
 }
 
 pub(crate) fn run_primary() {

@@ -72,12 +72,8 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         }
         *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
         crate::hal::domain::record_kernel_ttbr0(root_table_phys);
-        unsafe {
-            core::ptr::write(
-                &mut *memory::frame::FRAME_ALLOCATOR.lock(),
-                Some(frame_allocator),
-            );
-        }
+        // SAFETY: boot, once, before any other frame-allocator access.
+        unsafe { memory::frame::install(frame_allocator) };
         log_info("Paging activated");
         log_info("Frame allocator initialized");
     }

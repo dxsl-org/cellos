@@ -28,9 +28,7 @@ impl FrameArena {
         let serial = crate::TEST_STATE_LOCK.lock();
         let backing = alloc::vec![0u8; (frames + 2) * PAGE_SIZE];
         let base = (backing.as_ptr() as usize).next_multiple_of(2 * PAGE_SIZE);
-        let previous = FRAME_ALLOCATOR
-            .lock()
-            .replace(allocator_for_tests(&[(base, frames)]));
+        let previous = crate::memory::frame::replace(Some(allocator_for_tests(&[(base, frames)])));
         Self {
             previous,
             _backing: backing,
@@ -39,16 +37,13 @@ impl FrameArena {
     }
 
     pub(crate) fn used(&self) -> usize {
-        FRAME_ALLOCATOR
-            .lock()
-            .as_ref()
-            .map_or(0, FrameAllocator::used_frames)
+        crate::memory::frame::with(|allocator| allocator.used_frames()).unwrap_or(0)
     }
 }
 
 impl Drop for FrameArena {
     fn drop(&mut self) {
-        *FRAME_ALLOCATOR.lock() = self.previous.take();
+        crate::memory::frame::replace(self.previous.take());
     }
 }
 

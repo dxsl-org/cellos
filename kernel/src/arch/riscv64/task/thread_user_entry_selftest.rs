@@ -3,7 +3,7 @@
 //! compiled as its `rv` child module (`#[path]`); it reads `crate::task`'s
 //! private scheduler state as the parent did.
 
-use crate::memory::{cell_quota, frame::FRAME_ALLOCATOR, paging};
+use crate::memory::{cell_quota, paging};
 use crate::task::syscall::{handle_syscall, Syscall};
 use crate::task::tcb::Task;
 use alloc::{boxed::Box, vec::Vec};
@@ -89,9 +89,6 @@ pub(super) fn rv_addi(rd: u32, imm: u32) -> u32 {
 }
 
 pub(super) fn map_test_page() -> Result<usize, &'static str> {
-    let mut frame_guard = FRAME_ALLOCATOR.lock();
-    let allocator = frame_guard.as_mut().ok_or("allocator unavailable")?;
-    let frame = allocator.allocate_frame().ok_or("frame unavailable")?;
     let flags = paging::Flags::from_bits(
         paging::Flags::VALID
             | paging::Flags::READ
@@ -100,7 +97,12 @@ pub(super) fn map_test_page() -> Result<usize, &'static str> {
             | paging::Flags::ACCESSED
             | paging::Flags::DIRTY,
     );
-    paging::map_page(allocator, ENTRY, frame, flags).map_err(|_| "map failed")?;
+    let frame = crate::memory::frame::with(|allocator| {
+        let frame = allocator.allocate_frame().ok_or("frame unavailable")?;
+        paging::map_page(allocator, ENTRY, frame, flags).map_err(|_| "map failed")?;
+        Ok(frame)
+    })
+    .ok_or("allocator unavailable")??;
     unsafe {
         let base = frame as *mut u32;
         *base.add(0) = rv_addi(11, MSG.len() as u32);
@@ -117,9 +119,7 @@ pub(super) fn map_test_page() -> Result<usize, &'static str> {
 pub(super) fn unmap_test_page(frame: usize) {
     let _ = paging::unmap_page(ENTRY);
     paging::tlb_flush_all();
-    if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
-        allocator.deallocate_frame(frame);
-    }
+    crate::memory::frame::deallocate_frame(frame);
 }
 
 pub fn self_test() -> Option<bool> {

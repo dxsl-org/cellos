@@ -975,12 +975,14 @@ pub(super) fn register_display_framebuffer(
         // `guard` borrow, or the RPi3 build refuses the guard's lifetime
         // (E0597) with the borrowed allocator still in scope.
         let overlaps_managed = {
-            let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            match guard.as_ref() {
-                Some(allocator) => allocator.managed_ranges().any(|range| {
+            let overlaps = crate::memory::frame::with(|allocator| {
+                allocator.managed_ranges().any(|range| {
                     let range_end = range.start + range.frames * PAGE_SIZE;
                     base < range_end && range.start < end
-                }),
+                })
+            });
+            match overlaps {
+                Some(overlaps) => overlaps,
                 None => return Err(SyscallError::Unknown),
             }
         };

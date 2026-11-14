@@ -35,11 +35,7 @@ const GRANT_SIZE: usize = PAGE_SIZE;
 
 /// Frames currently available to the allocator.
 fn free_frames() -> usize {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.free_frames())
-        .unwrap_or(0)
+    crate::memory::frame::stats().map_or(0, |frames| frames.free_frames)
 }
 
 /// Allocate a grant for `tid`, returning its id (the region's base address).

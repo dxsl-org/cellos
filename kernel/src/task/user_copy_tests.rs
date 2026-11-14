@@ -361,12 +361,14 @@ fn run_copy_fixture() -> bool {
     // ── Sas view round-trip on a genuine USER-mapped page in KERNEL_ROOT. ──
     const SAS_USER_VA: usize = 0x0500_0000;
     let sas_frame = {
-        let mut guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let alloc = guard.as_mut().expect("frame allocator");
-        let frame = alloc.allocate_frame().expect("allocate frame for sas test");
         let flags = Flags::from_bits(Flags::VALID | Flags::USER | Flags::READ | Flags::WRITE);
-        crate::memory::paging::map_page(alloc, SAS_USER_VA, frame, flags)
-            .expect("map sas user page");
+        let frame = crate::memory::frame::with(|alloc| {
+            let frame = alloc.allocate_frame().expect("allocate frame for sas test");
+            crate::memory::paging::map_page(alloc, SAS_USER_VA, frame, flags)
+                .expect("map sas user page");
+            frame
+        })
+        .expect("frame allocator");
         crate::hal::paging::flush_tlb_page(SAS_USER_VA);
         frame
     };
@@ -394,9 +396,7 @@ fn run_copy_fixture() -> bool {
     // Clean up the mapped test page.
     let _ = crate::memory::paging::unmap_page(SAS_USER_VA);
     crate::hal::paging::flush_tlb_page(SAS_USER_VA);
-    if let Some(alloc) = crate::memory::frame::FRAME_ALLOCATOR.lock().as_mut() {
-        alloc.deallocate_frame(sas_frame);
-    }
+    crate::memory::frame::deallocate_frame(sas_frame);
 
     // ── Sas privilege-escalation rejection: S-only identity-mapped RAM ──
     // A kernel stack or identity-mapped RAM pointer lacks the Sv39 USER flag (U=0).

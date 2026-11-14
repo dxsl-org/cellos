@@ -115,10 +115,7 @@ pub(super) fn snapshot() -> StateSnapshot {
         .iter()
         .map(|hart| hart.ready.lock().clone())
         .collect();
-    let free_frames = crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.free_frames());
+    let free_frames = crate::memory::frame::stats().map(|frames| frames.free_frames);
     StateSnapshot {
         tasks,
         zombies,
@@ -281,11 +278,7 @@ pub(super) fn report_frame_delta(stage: &'static str, before: &[u64]) {
 
 /// A copy of the frame allocator's allocation bitmap.
 pub(super) fn frame_bitmap() -> alloc::vec::Vec<u64> {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.used_bitmap())
-        .unwrap_or_default()
+    crate::memory::frame::with(|allocator| allocator.used_bitmap()).unwrap_or_default()
 }
 
 /// Frames the allocator has right now, read without building a snapshot.
@@ -293,11 +286,7 @@ pub(super) fn frame_bitmap() -> alloc::vec::Vec<u64> {
 /// `snapshot()` allocates (it clones task, queue and stash state), so a frame
 /// delta measured through it is not exactly the delta of the work being measured.
 pub(super) fn free_frame_count() -> usize {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.free_frames())
-        .unwrap_or(usize::MAX)
+    crate::memory::frame::stats().map_or(usize::MAX, |frames| frames.free_frames)
 }
 
 fn report_mismatch(case: &'static str, stage: &'static str, field: &'static str, mismatched: bool) {
@@ -493,9 +482,9 @@ pub(super) fn denied_with_full_rollback(
 /// branch. Restore the fixture allocator before comparing every global source.
 pub(super) fn denied_without_frame_allocator(action: impl FnOnce() -> Result<(), ViError>) -> bool {
     let before = snapshot();
-    let allocator = crate::memory::frame::FRAME_ALLOCATOR.lock().take();
+    let allocator = crate::memory::frame::replace(None);
     let denied = matches!(action(), Err(ViError::OutOfMemory));
-    *crate::memory::frame::FRAME_ALLOCATOR.lock() = allocator;
+    crate::memory::frame::replace(allocator);
     let restored = snapshot_matches("AP-FA", "missing-frame-allocator", &before, &snapshot());
     report_contract("AP-FA", "out-of-memory", denied);
     denied && restored

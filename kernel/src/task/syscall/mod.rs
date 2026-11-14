@@ -238,14 +238,9 @@ fn map_domain_owner_pages(
 /// root over the returned base.
 #[cfg(cellos_domain_grants)]
 fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
-    use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
+    use crate::memory::frame::phys_to_virt;
     const PAGE_SIZE: usize = 4096;
-    let paddr = {
-        let mut guard = FRAME_ALLOCATOR.lock();
-        guard
-            .as_mut()
-            .and_then(|alloc| alloc.allocate_contiguous(n_pages))?
-    };
+    let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
     // SAFETY: `phys_to_virt` names the kernel's supervisor alias of RAM (the
     // identity map on RV64/AArch64, the HHDM on x86_64), present in the root the
     // syscall runs on, and the run was just allocated to this call alone. x86

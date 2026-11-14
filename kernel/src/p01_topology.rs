@@ -362,7 +362,11 @@ pub(crate) fn capture(sample: usize) -> [crate::p01_resources::Metric; 16] {
             snapshot.refuse(CAPACITY);
             return metrics;
         }
-        let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+        let Some(mut cap) = crate::memory::frame::FlushCap::take() else {
+            snapshot.refuse(ROOT_MISSING);
+            return metrics;
+        };
+        let frames = crate::memory::frame::lock(&mut cap);
         let kernel_root = crate::memory::paging::KERNEL_ROOT.lock();
         let (Some(allocator), Some(root)) = (frames.as_ref(), *kernel_root) else {
             snapshot.refuse(ROOT_MISSING);

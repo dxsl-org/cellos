@@ -611,9 +611,194 @@ impl FrameAllocator {
     }
 }
 
-/// Global frame allocator
-pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
+/// The frame allocator. Private: every use goes through [`lock`], [`with`] or
+/// one of the single-operation accessors below, so no code outside this file
+/// can hold it across a shared TLB flush (see [`FlushCap`]).
+static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
     crate::sync::Spinlock::ranked(None, crate::sync::rank::FRAME_ALLOCATOR);
+
+/// Per-hart: this hart holds [`FRAME_ALLOCATOR`]. The lock masks interrupts, so
+/// a holder cannot migrate and its hart id is stable for the whole hold.
+#[cfg(not(test))]
+static HELD_HERE: [core::sync::atomic::AtomicBool; crate::sched::smp::MAX_HARTS] =
+    [const { core::sync::atomic::AtomicBool::new(false) }; crate::sched::smp::MAX_HARTS];
+
+#[cfg(not(test))]
+fn held_slot() -> Option<&'static core::sync::atomic::AtomicBool> {
+    // An AP before its hart-local install has no id and is not tracked; it
+    // allocates nothing then.
+    crate::sync::installed_hart_id().and_then(|hart| HELD_HERE.get(hart))
+}
+
+#[cfg(not(test))]
+fn set_held(held: bool) {
+    if let Some(slot) = held_slot() {
+        slot.store(held, Ordering::Relaxed);
+    }
+}
+
+/// Does this hart hold the frame allocator right now?
+#[cfg(not(test))]
+pub fn held_here() -> bool {
+    held_slot().is_some_and(|slot| slot.load(Ordering::Relaxed))
+}
+
+// Host tests share no hart: one flag per thread.
+#[cfg(test)]
+mod held_by_thread {
+    extern crate std;
+    std::thread_local!(pub(super) static HELD_HERE: core::cell::Cell<bool> = const { core::cell::Cell::new(false) });
+}
+
+#[cfg(test)]
+fn set_held(held: bool) {
+    held_by_thread::HELD_HERE.with(|slot| slot.set(held));
+}
+
+#[cfg(test)]
+pub fn held_here() -> bool {
+    held_by_thread::HELD_HERE.with(core::cell::Cell::get)
+}
+
+/// The right to issue a shared (kernel-root) TLB flush.
+///
+/// Every shared flush takes `&mut FlushCap`, and [`lock`] borrows the same cap
+/// for as long as its [`AllocGuard`] lives, so "flush while holding the frame
+/// allocator" is a borrow error (E0499) rather than a comment. [`with`] takes no
+/// cap but only a `Send` closure, and the cap is `!Send`, so the closure cannot
+/// capture one (E0277). [`FlushCap::take`] refuses to mint a cap on a hart that
+/// already holds the allocator, so none can be made inside either.
+///
+/// Zero-sized; minting one is free. `scripts/check-frame-guard-compile-fail.sh`
+/// keeps the compile-time half of this contract honest.
+#[must_use]
+pub struct FlushCap {
+    _not_send: core::marker::PhantomData<*mut ()>,
+}
+
+impl FlushCap {
+    /// A cap for this hart, or `None` while it holds the frame allocator.
+    pub fn take() -> Option<FlushCap> {
+        (!held_here()).then_some(FlushCap {
+            _not_send: core::marker::PhantomData,
+        })
+    }
+}
+
+/// The locked allocator, borrowing the caller's [`FlushCap`] for its lifetime.
+pub struct AllocGuard<'c> {
+    guard: crate::sync::SpinlockGuard<'static, Option<FrameAllocator>>,
+    _cap: core::marker::PhantomData<&'c mut FlushCap>,
+}
+
+impl core::ops::Deref for AllocGuard<'_> {
+    type Target = Option<FrameAllocator>;
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+impl core::ops::DerefMut for AllocGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
+    }
+}
+
+impl Drop for AllocGuard<'_> {
+    fn drop(&mut self) {
+        // Cleared before the field drop releases the lock (and interrupts).
+        set_held(false);
+    }
+}
+
+/// Lock the frame allocator for a multi-step hold. `cap` stays borrowed until
+/// the guard drops, so no shared flush can be issued meanwhile.
+pub fn lock(cap: &mut FlushCap) -> AllocGuard<'_> {
+    let _ = cap;
+    let guard = FRAME_ALLOCATOR.lock();
+    set_held(true);
+    AllocGuard {
+        guard,
+        _cap: core::marker::PhantomData,
+    }
+}
+
+/// Run `f` on the allocator, or return `None` before it is installed.
+///
+/// `f` must be `Send`, so it cannot capture a [`FlushCap`]; a cap cannot be
+/// minted inside it either. Neither can anything it calls.
+pub fn with<R>(f: impl FnOnce(&mut FrameAllocator) -> R + Send) -> Option<R> {
+    let mut guard = FRAME_ALLOCATOR.lock();
+    set_held(true);
+    let result = guard.as_mut().map(f);
+    set_held(false);
+    drop(guard);
+    result
+}
+
+/// Counts of the installed allocator, in frames.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrameStats {
+    pub total_frames: usize,
+    pub used_frames: usize,
+    pub free_frames: usize,
+}
+
+/// The allocator's counts, or `None` before it is installed.
+pub fn stats() -> Option<FrameStats> {
+    with(|allocator| FrameStats {
+        total_frames: allocator.total_frames(),
+        used_frames: allocator.used_frames(),
+        free_frames: allocator.free_frames(),
+    })
+}
+
+/// One frame, or `None` (no allocator, out of memory, or quarantine cap).
+pub fn allocate_frame() -> Option<PhysAddr> {
+    with(FrameAllocator::allocate_frame).flatten()
+}
+
+/// `n` contiguous frames in one managed range.
+pub fn allocate_contiguous(n: usize) -> Option<PhysAddr> {
+    with(|allocator| allocator.allocate_contiguous(n)).flatten()
+}
+
+/// `n` contiguous frames whose base is `align_bytes`-aligned.
+pub fn allocate_contiguous_aligned(n: usize, align_bytes: usize) -> Option<PhysAddr> {
+    with(|allocator| allocator.allocate_contiguous_aligned(n, align_bytes)).flatten()
+}
+
+/// Return one frame. Ignored before the allocator is installed.
+pub fn deallocate_frame(frame: PhysAddr) {
+    let _ = with(|allocator| allocator.deallocate_frame(frame));
+}
+
+/// Return `pages` frames starting at `base`.
+pub fn deallocate_frames(base: PhysAddr, pages: usize) {
+    let _ = with(|allocator| {
+        for page in 0..pages {
+            allocator.deallocate_frame(base + page * PAGE_SIZE);
+        }
+    });
+}
+
+/// Publish the boot allocator.
+///
+/// # Safety
+/// Boot only, once, before any other accessor: the lock's previous value is
+/// overwritten without being dropped (it may not be initialised memory yet on
+/// the arches that publish before their own paging is live).
+pub unsafe fn install(allocator: FrameAllocator) {
+    // SAFETY: the caller guarantees boot-time, single-hart, single call.
+    unsafe { core::ptr::write(&mut *FRAME_ALLOCATOR.lock(), Some(allocator)) };
+}
+
+/// Swap the installed allocator (host tests and test-hooks fixtures that need
+/// a missing or synthetic one); returns the previous one.
+#[cfg(any(test, feature = "test-hooks"))]
+pub(crate) fn replace(allocator: Option<FrameAllocator>) -> Option<FrameAllocator> {
+    core::mem::replace(&mut *FRAME_ALLOCATOR.lock(), allocator)
+}
 
 /// A non-copyable allocation lease returned to the bitmap only on drop.
 pub struct OwnedFrame {
@@ -624,15 +809,11 @@ pub struct OwnedFrame {
 
 impl OwnedFrame {
     pub fn allocate() -> Option<Self> {
-        FRAME_ALLOCATOR
-            .lock()
-            .as_mut()?
-            .allocate_frame()
-            .map(|physical| Self {
-                physical,
-                #[cfg(feature = "p01-trace")]
-                p01_retained: None,
-            })
+        allocate_frame().map(|physical| Self {
+            physical,
+            #[cfg(feature = "p01-trace")]
+            p01_retained: None,
+        })
     }
 
     pub const fn physical_address(&self) -> PhysAddr {
@@ -932,6 +1113,39 @@ mod tests {
         plan_managed_ranges, reserve_boot_heap, reserve_contiguous_run, FrameAllocator, PAGE_SIZE,
     };
     use crate::boot::{MemoryMapEntry, MemoryType};
+
+    #[test]
+    fn no_flush_cap_is_minted_while_this_hart_holds_the_allocator() {
+        let _serial = crate::TEST_STATE_LOCK.lock();
+        let previous = super::replace(Some(super::allocator_for_tests(&[(0x10_0000, 8)])));
+
+        let mut cap = super::FlushCap::take().expect("nothing held yet");
+        {
+            let mut guard = super::lock(&mut cap);
+            assert!(super::held_here());
+            assert!(
+                super::FlushCap::take().is_none(),
+                "no second cap under the guard"
+            );
+            assert!(guard
+                .as_mut()
+                .and_then(FrameAllocator::allocate_frame)
+                .is_some());
+        }
+        assert!(!super::held_here(), "the guard's drop clears the hold");
+
+        let inside = super::with(|_| (super::held_here(), super::FlushCap::take().is_none()));
+        assert_eq!(
+            inside,
+            Some((true, true)),
+            "with() holds it and refuses a cap"
+        );
+        assert!(!super::held_here());
+        assert!(super::FlushCap::take().is_some());
+
+        assert_eq!(super::stats().map(|stats| stats.used_frames), Some(1));
+        super::replace(previous);
+    }
 
     fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
         MemoryMapEntry { base, length, ty }
@@ -1423,11 +1637,12 @@ mod tests {
 /// marked in the same hold. There is no window left in which a candidate run can
 /// be taken by someone else.
 pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
-    let mut guard = FRAME_ALLOCATOR.lock();
-    let allocator = guard.as_mut()?;
-    let start = allocator.find_free_run(n_pages)?;
-    allocator.mark_range_used(start, n_pages);
-    Some(allocator.frame_addr(start))
+    with(|allocator| {
+        let start = allocator.find_free_run(n_pages)?;
+        allocator.mark_range_used(start, n_pages);
+        Some(allocator.frame_addr(start))
+    })
+    .flatten()
 }
 
 /// Longest free run the allocator has right now, in frames.
@@ -1435,11 +1650,7 @@ pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
 /// Logged when a guest carve fails, so the next report says whether the map is
 /// fragmented or simply too small.
 pub fn largest_free_run() -> usize {
-    let guard = FRAME_ALLOCATOR.lock();
-    guard
-        .as_ref()
-        .map(FrameAllocator::largest_free_run)
-        .unwrap_or(0)
+    with(|allocator| allocator.largest_free_run()).unwrap_or(0)
 }
 
 /// Test-hooks: frames whose allocation bit differs from `before`, capped.

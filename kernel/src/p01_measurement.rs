@@ -354,8 +354,9 @@ pub fn arm(owner: Owner, digest: [u8; 32]) {
         // No bitmap allocation/free can cross the arm cutoff unrepresented:
         // census preexisting bits while admission is still STOP, then open it
         // before releasing the existing source-owner lock.
-        let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        match frames.as_ref() {
+        let mut cap = crate::memory::frame::FlushCap::take();
+        let frames = cap.as_mut().map(crate::memory::frame::lock);
+        match frames.as_ref().and_then(|frames| frames.as_ref()) {
             Some(allocator) => allocator.p01_seed_physical(),
             None => crate::p01_retained::physical_fault(),
         }

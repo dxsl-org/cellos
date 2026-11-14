@@ -5,7 +5,6 @@
 //! `ecall Log("Hi from U-mode!\n")` then `ecall Exit(0)`, and spawns the task.
 //! Used to verify the full U-mode entry path end-to-end.
 
-use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::task::stack::Stack;
 use crate::task::{SCHEDULER, STACK_PAGES, TRAP_FRAME_SIZE};
 use types::{CellId, VAddr, ViError};
@@ -40,10 +39,7 @@ pub fn spawn() -> Result<usize, ViError> {
 
     // -- 2. Allocate + initialise user code page --
     {
-        let mut frame_guard = FRAME_ALLOCATOR.lock();
-        let allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-
-        let code_frame = allocator.allocate_frame().ok_or(ViError::OutOfMemory)?;
+        let code_frame = crate::memory::frame::allocate_frame().ok_or(ViError::OutOfMemory)?;
 
         // SAFETY: code_frame is a freshly allocated 4 KB frame; identity-mapped
         // (PAddr == VAddr before userspace runs), so the pointer is valid.
@@ -84,8 +80,11 @@ pub fn spawn() -> Result<usize, ViError> {
                 | Flags::ACCESSED
                 | Flags::DIRTY,
         );
-        crate::memory::paging::map_page(allocator, ENTRY, code_frame, code_flags)
-            .map_err(|_| ViError::OutOfMemory)?;
+        crate::memory::frame::with(|allocator| {
+            crate::memory::paging::map_page(allocator, ENTRY, code_frame, code_flags)
+        })
+        .ok_or(ViError::OutOfMemory)?
+        .map_err(|_| ViError::OutOfMemory)?;
     }
 
     // -- 3. Configure the task to enter U-mode at ENTRY via sret --

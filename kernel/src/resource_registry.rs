@@ -298,9 +298,8 @@ pub fn request_ecam_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
     let end = checked_mmio_end(base, len)?;
     let window = crate::dev::pcie_ecam::admitted_ecam_range();
     let admitted = {
-        let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         // No allocator means managed RAM is unknown: refuse rather than guess.
-        guard.as_ref().is_some_and(|allocator| {
+        crate::memory::frame::with(|allocator| {
             ecam_claim_admitted(
                 base,
                 end,
@@ -310,6 +309,7 @@ pub fn request_ecam_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
                     .map(|range| (range.start, range.start + range.frames * 4096)),
             )
         })
+        .unwrap_or(false)
     };
     if !admitted {
         log::warn!(

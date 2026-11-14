@@ -17,9 +17,7 @@ fn map_user_code() -> (usize, usize, usize, usize) {
     if image.len() > crate::memory::paging::PAGE_SIZE {
         fail();
     }
-    let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let allocator = frames.as_mut().unwrap_or_else(|| fail());
-    let code = allocator.allocate_frame().unwrap_or_else(|| fail());
+    let code = crate::memory::frame::allocate_frame().unwrap_or_else(|| fail());
     let code_virt = crate::memory::frame::phys_to_virt(code);
     unsafe {
         core::ptr::write_bytes(code_virt as *mut u8, 0, crate::memory::paging::PAGE_SIZE);
@@ -28,7 +26,10 @@ fn map_user_code() -> (usize, usize, usize, usize) {
     let flags = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::EXECUTE | Flags::USER | Flags::ACCESSED,
     );
-    if crate::memory::paging::map_page(allocator, code, code, flags).is_err() {
+    let mapped = crate::memory::frame::with(|allocator| {
+        crate::memory::paging::map_page(allocator, code, code, flags).is_ok()
+    });
+    if mapped != Some(true) {
         fail();
     }
     (code, code + a_offset, code + b_offset, b_return_offset)

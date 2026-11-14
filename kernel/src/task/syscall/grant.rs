@@ -91,7 +91,6 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// Lock order: SHM_HANDLES (released); KERNEL_ROOT alone (unpublish); then
 /// FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
-    use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
     let (frames, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
         cell: cell_id,
@@ -113,16 +112,17 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
         }
         crate::task::stack::unpublish_user_frames(frame, 1);
         if crate::memory::frame::phys_to_virt(frame) == frame {
-            if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
-                let _ = crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx);
-            }
+            let _ = crate::memory::frame::with(|allocator| {
+                crate::memory::paging::map_page(allocator, frame, frame, kernel_rwx)
+            });
         }
     }
-    if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
-        for &frame in &frames {
+    let released = &frames;
+    let _ = crate::memory::frame::with(|allocator| {
+        for &frame in released {
             allocator.deallocate_frame(frame);
         }
-    }
+    });
     frames.len()
 }
 
@@ -1188,34 +1188,27 @@ pub(super) fn reserve_caller_owned_dma_range(
 /// Lock order: FRAME_ALLOCATOR (alloc) → FRAME_ALLOCATOR (map_page) → release →
 ///             FRAME_ALLOCATOR (partial-failure dealloc).
 pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
-    use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
 
     let user_flags =
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
-    let paddr = {
-        let mut g = FRAME_ALLOCATOR.lock();
-        g.as_mut().and_then(|a| a.allocate_contiguous(n_pages))?
-    };
+    let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
 
-    let mut mapped = 0usize;
-    {
-        let mut guard = FRAME_ALLOCATOR.lock();
-        if let Some(alloc) = guard.as_mut() {
-            for i in 0..n_pages {
-                let v = paddr + i * PAGE_SIZE;
-                if crate::memory::paging::map_page(alloc, v, v, Flags::from_bits(user_flags))
-                    .is_ok()
-                {
-                    mapped += 1;
-                } else {
-                    break;
-                }
+    let mapped = crate::memory::frame::with(|alloc| {
+        let mut mapped = 0usize;
+        for i in 0..n_pages {
+            let v = paddr + i * PAGE_SIZE;
+            if crate::memory::paging::map_page(alloc, v, v, Flags::from_bits(user_flags)).is_ok() {
+                mapped += 1;
+            } else {
+                break;
             }
         }
-    }
+        mapped
+    })
+    .unwrap_or(0);
 
     if mapped < n_pages {
         // Partial map: where RAM is identity-mapped (RV64, AArch64), restore the
@@ -1242,8 +1235,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
             | Flags::EXECUTE
             | Flags::ACCESSED
             | Flags::DIRTY;
-        let mut fa = FRAME_ALLOCATOR.lock();
-        if let Some(a) = fa.as_mut() {
+        let _ = crate::memory::frame::with(|a| {
             for i in (0..mapped).filter(|_| identity_alias) {
                 let f = paddr + i * PAGE_SIZE;
                 let _ = crate::memory::paging::map_page(a, f, f, Flags::from_bits(kernel_rwx));
@@ -1251,7 +1243,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
             for k in 0..n_pages {
                 a.deallocate_frame(paddr + k * PAGE_SIZE);
             }
-        }
+        });
         crate::memory::paging::tlb_flush_all();
         return None;
     }
@@ -1273,16 +1265,13 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 /// For targets without an identity alias of RAM (x86_64), where no kernel alias
 /// is restored over the range and the tables may now be empty (R3).
 fn prune_unpublished_tables(base: usize, n_pages: usize) {
-    use crate::memory::frame::FRAME_ALLOCATOR;
     const PAGE_SIZE: usize = 4096;
     for i in 0..n_pages {
         let f = base + i * PAGE_SIZE;
         let reclaimed = crate::memory::paging::prune_empty_tables(f);
         if !reclaimed.is_empty() {
             crate::memory::tlb_shootdown::flush_page(f);
-            if let Some(alloc) = FRAME_ALLOCATOR.lock().as_mut() {
-                reclaimed.release(alloc);
-            }
+            let _ = crate::memory::frame::with(|alloc| reclaimed.release(alloc));
         }
     }
 }
@@ -1292,7 +1281,6 @@ pub(super) fn free_grant_pages_inner(
     n_pages: usize,
     #[cfg(feature = "p01-trace")] range: Option<crate::memory::pin::ReleasedRange>,
 ) {
-    use crate::memory::frame::FRAME_ALLOCATOR;
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
     let kernel_rwx = Flags::from_bits(
@@ -1323,14 +1311,10 @@ pub(super) fn free_grant_pages_inner(
     }
     #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
-    #[cfg(feature = "p01-trace")]
-    let mut released = false;
-    let mut fa = FRAME_ALLOCATOR.lock();
-    if let Some(alloc) = fa.as_mut() {
-        #[cfg(feature = "p01-trace")]
-        {
-            released = true;
-        }
+    #[allow(unused_variables)] // reason: only the p01-trace witness reads it
+    let released = crate::memory::frame::with(|alloc| {
+        #[allow(unused_mut)] // reason: only p01-trace narrows it
+        let mut released = true;
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
             if identity_alias {
@@ -1342,7 +1326,9 @@ pub(super) fn free_grant_pages_inner(
             }
             alloc.deallocate_frame(f);
         }
-    }
+        released
+    })
+    .unwrap_or(false);
     crate::memory::paging::tlb_flush_all();
     #[cfg(feature = "p01-trace")]
     if let Some(range) = range {
@@ -1374,22 +1360,22 @@ pub(crate) fn test_unregister_registered_grant_for_race(
 /// its replacement bytes have been cleared.
 #[cfg(all(feature = "getrandom-sas-test", target_arch = "riscv64"))]
 pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: usize) -> bool {
-    use crate::memory::{frame::FRAME_ALLOCATOR, paging::Flags};
+    use crate::memory::paging::Flags;
 
-    let claimed = FRAME_ALLOCATOR
-        .lock()
-        .as_mut()
-        .is_some_and(|allocator| allocator.claim_exact_frame_for_test(base));
+    let claimed =
+        crate::memory::frame::with(|allocator| allocator.claim_exact_frame_for_test(base))
+            .unwrap_or(false);
     if !claimed {
         return false;
     }
     let user_flags = Flags::from_bits(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY,
     );
-    let mapped = FRAME_ALLOCATOR.lock().as_mut().is_some_and(|allocator| {
+    let mapped = crate::memory::frame::with(|allocator| {
         let _ = crate::memory::paging::unmap_page(base);
         crate::memory::paging::map_page(allocator, base, base, user_flags).is_ok()
-    });
+    })
+    .unwrap_or(false);
     if !mapped {
         free_grant_pages(base, 1);
         return false;
@@ -1710,13 +1696,9 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
         return Err(SyscallError::BufferTooSmall);
     }
 
-    let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    if let Some(allocator) = frame_guard.as_mut() {
-        if let Some(frame) = allocator.allocate_frame() {
-            drop(frame_guard);
-            shm_register(frame, owner, bytes, None, 0x3);
-            return Ok(frame);
-        }
+    if let Some(frame) = crate::memory::frame::allocate_frame() {
+        shm_register(frame, owner, bytes, None, 0x3);
+        return Ok(frame);
     }
     crate::memory::cell_quota::refund(cell as usize, bytes);
     Err(SyscallError::BufferTooSmall)
@@ -1746,12 +1728,11 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
     let flags =
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
-    let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    if let Some(allocator) = frame_guard.as_mut() {
-        if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags)).is_ok()
-        {
-            return Ok(vaddr);
-        }
+    let mapped = crate::memory::frame::with(|allocator| {
+        crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags)).is_ok()
+    });
+    if mapped == Some(true) {
+        return Ok(vaddr);
     }
     Err(SyscallError::Unknown)
 }

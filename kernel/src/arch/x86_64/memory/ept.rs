@@ -23,7 +23,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use crate::memory::frame::{allocate_guest_ram, phys_to_virt, FRAME_ALLOCATOR};
+use crate::memory::frame::{allocate_guest_ram, phys_to_virt};
 use crate::memory::paging::PAGE_SIZE;
 
 /// Which nested-paging format this tree encodes, selected at VM-create time
@@ -141,10 +141,7 @@ impl NestedPageTable {
     pub fn new(format: NestedFormat) -> Option<Self> {
         #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
-        let root_pa = {
-            let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?.allocate_frame()? as u64
-        };
+        let root_pa = crate::memory::frame::allocate_frame()? as u64;
         let root_va = phys_to_virt(root_pa as usize) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours; 512 entries.
         unsafe {
@@ -234,10 +231,7 @@ impl NestedPageTable {
     }
 
     fn alloc_subtable(&mut self) -> Option<(*mut u64, u64)> {
-        let pa = {
-            let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?.allocate_frame()?
-        };
+        let pa = crate::memory::frame::allocate_frame()?;
         let va = phys_to_virt(pa) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours; 512 entries.
         unsafe {
@@ -461,21 +455,22 @@ impl Drop for NestedPageTable {
                 );
             }
         }
-        let mut g = FRAME_ALLOCATOR.lock();
-        if let Some(alloc) = g.as_mut() {
-            for &pa in &self.sub_frames {
+        let (sub_frames, root_pa) = (&self.sub_frames, self.root_pa);
+        let (guest_ram_pa, guest_ram_pages) = (self.guest_ram_pa, self.guest_ram_pages);
+        let _ = crate::memory::frame::with(|alloc| {
+            for &pa in sub_frames {
                 alloc.deallocate_frame(pa);
             }
-            alloc.deallocate_frame(self.root_pa as usize);
-            if self.guest_ram_pages > 0 {
-                let base = self.guest_ram_pa as usize;
-                for i in 0..self.guest_ram_pages {
+            alloc.deallocate_frame(root_pa as usize);
+            if guest_ram_pages > 0 {
+                let base = guest_ram_pa as usize;
+                for i in 0..guest_ram_pages {
                     alloc.deallocate_frame(base + i * PAGE_SIZE);
                 }
             }
             #[cfg(feature = "p01-trace")]
-            crate::p01_noncpu::released(self.root_pa);
-        }
+            crate::p01_noncpu::released(root_pa);
+        });
     }
 }
 

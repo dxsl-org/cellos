@@ -62,12 +62,8 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
     let (boot_info, frame_allocator) = crate::boot_memory(dtb);
 
     // These targets run without an MMU, so the allocator is published at once.
-    unsafe {
-        core::ptr::write(
-            &mut *memory::frame::FRAME_ALLOCATOR.lock(),
-            Some(frame_allocator),
-        );
-    }
+    // SAFETY: boot, once, before any other frame-allocator access.
+    unsafe { memory::frame::install(frame_allocator) };
     log_info("Frame allocator initialized");
 
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).

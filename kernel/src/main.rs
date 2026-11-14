@@ -150,10 +150,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_pointer_width = "32")]
     const HEAP_FRAMES: usize = 1_024; // 4 MiB
     let heap_start = {
-        let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = allocator_guard
-            .as_mut()
-            .expect("Frame allocator not initialized");
         // One contiguous reservation: the heap below is initialized over
         // `HEAP_FRAMES * 4096` bytes starting at this frame, so a scattered
         // allocation would write over frames this kernel does not own. Refusing
@@ -161,10 +157,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // The run is taken in the bitmap's range, right after the bitmap and the
         // early frames there: the shared `[bitmap, heap)` registration below
         // depends on that order.
-        memory::frame::reserve_boot_heap(allocator, HEAP_FRAMES).expect(
-            "OOM: no contiguous run for the boot heap in the frame bitmap's range — \
+        memory::frame::with(|allocator| memory::frame::reserve_boot_heap(allocator, HEAP_FRAMES))
+            .expect("Frame allocator not initialized")
+            .expect(
+                "OOM: no contiguous run for the boot heap in the frame bitmap's range — \
              refusing to boot with a fragmented heap",
-        )
+            )
     };
     let heap_size = HEAP_FRAMES * 4096;
     // On x86_64, phys_to_virt adds HHDM offset (Limine maps RAM at HHDM+phys).
@@ -369,14 +367,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     )
     .expect("kernel heap registration must be unique");
     #[cfg(all(feature = "native-domains", cellos_wide))]
-    if let Some(guard) = memory::frame::FRAME_ALLOCATOR.lock().as_ref() {
+    if let Some((bm_start, _)) = memory::frame::with(|allocator| allocator.bitmap_range()) {
         // `[bitmap, heap)`: the bitmap, plus any early boot frames the next-fit
         // cursor handed out from the bitmap's range before `reserve_boot_heap`
         // placed the heap there. When the bitmap's range is not the first
         // usable one (UEFI maps: ≥ 1 GiB under VMware, 4 GiB under OVMF), the
         // early paging frames come from lower ranges and the span is just the
         // bitmap.
-        let (bm_start, _) = guard.bitmap_range();
         memory::domain_supervisor_registry::register(
             bm_start,
             heap_virt,

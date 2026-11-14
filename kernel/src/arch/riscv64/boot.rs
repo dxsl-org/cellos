@@ -84,12 +84,8 @@ pub(crate) fn early(hartid: usize, dtb: usize) -> EarlyPlatform {
         *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
         #[cfg(feature = "test-hooks")]
         TEST_SAFE_ROOT.store(root_table_phys, core::sync::atomic::Ordering::Release);
-        unsafe {
-            core::ptr::write(
-                &mut *memory::frame::FRAME_ALLOCATOR.lock(),
-                Some(frame_allocator),
-            );
-        }
+        // SAFETY: boot, once, before any other frame-allocator access.
+        unsafe { memory::frame::install(frame_allocator) };
         log_info("Paging activated");
         log_info("Frame allocator initialized");
         // Set sstatus.SUM=1 so S-mode (kernel) can access USER-mapped pages throughout

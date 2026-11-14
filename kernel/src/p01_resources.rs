@@ -548,33 +548,32 @@ pub(crate) fn finalize_all(frozen: &trace::Frozen) {
 }
 pub(crate) fn reset_peaks() {
     crate::memory::heap::p01_reset_peak();
-    if let Some(allocator) = crate::memory::frame::FRAME_ALLOCATOR.lock().as_mut() {
-        allocator.p01_reset_peak();
-    }
+    let _ = crate::memory::frame::with(|allocator| allocator.p01_reset_peak());
 }
 pub(crate) fn peaks() -> [Metric; 2] {
     let (_, _, epoch, heap_peak) = crate::memory::heap::p01_snapshot();
     let heap = Metric::valid(heap_peak as u64, epoch as u64, 2);
-    let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let frame_peak = frames
-        .as_ref()
-        .map(|allocator| {
-            let (epoch, peak) = allocator.p01_snapshot();
-            Metric::valid(peak as u64, epoch, 1)
-        })
-        .unwrap_or_else(Metric::absent);
+    let frame_peak = crate::memory::frame::with(|allocator| {
+        let (epoch, peak) = allocator.p01_snapshot();
+        Metric::valid(peak as u64, epoch, 1)
+    })
+    .unwrap_or_else(Metric::absent);
     [heap, frame_peak]
 }
 pub(crate) fn snapshot() -> [Metric; 16] {
     let mut metrics = [const { Metric::absent() }; 16];
     {
-        let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        if let Some(allocator) = frames.as_ref() {
+        let frames = crate::memory::frame::with(|allocator| {
             let epoch = allocator.p01_snapshot().0;
-            metrics[0] = Metric::valid(allocator.total_frames() as u64, epoch, 1);
-            metrics[1] = Metric::valid(allocator.used_frames() as u64, epoch, 1);
-            metrics[2] = Metric::valid(allocator.free_frames() as u64, epoch, 1);
-            metrics[3] = Metric::valid(crate::memory::paging::PAGE_SIZE as u64, epoch, 1);
+            [
+                Metric::valid(allocator.total_frames() as u64, epoch, 1),
+                Metric::valid(allocator.used_frames() as u64, epoch, 1),
+                Metric::valid(allocator.free_frames() as u64, epoch, 1),
+                Metric::valid(crate::memory::paging::PAGE_SIZE as u64, epoch, 1),
+            ]
+        });
+        if let Some(frames) = frames {
+            metrics[..4].clone_from_slice(&frames);
         }
     }
     {

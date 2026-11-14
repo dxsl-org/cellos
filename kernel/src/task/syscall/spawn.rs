@@ -1117,14 +1117,13 @@ pub(super) fn telemetry_snapshot(
     } else if !memory_allowed {
         crate::task::telemetry::SystemMemory::Denied
     } else {
-        let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        match guard.as_ref() {
-            Some(allocator) => {
+        match crate::memory::frame::stats() {
+            Some(frames) => {
                 crate::task::telemetry::SystemMemory::Present(abi::syscall::ViMemInfoV1 {
-                    total_frames: allocator.total_frames() as u64,
-                    used_frames: allocator.used_frames() as u64,
-                    free_frames: allocator.free_frames() as u64,
-                    page_size: allocator.page_size() as u64,
+                    total_frames: frames.total_frames as u64,
+                    used_frames: frames.used_frames as u64,
+                    free_frames: frames.free_frames as u64,
+                    page_size: crate::memory::paging::PAGE_SIZE as u64,
                 })
             }
             None => crate::task::telemetry::SystemMemory::Unavailable,

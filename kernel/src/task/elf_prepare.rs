@@ -78,11 +78,10 @@ struct PreparationMappings<'a>(Option<&'a [crate::loader::elf::LoadedPage]>);
 impl Drop for PreparationMappings<'_> {
     fn drop(&mut self) {
         if let Some(pages) = self.0.take() {
-            let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            let allocator = frames
-                .as_mut()
-                .expect("loaded ELF lost its frame allocator");
-            crate::loader::ElfLoader::unwind(pages, allocator);
+            crate::memory::frame::with(|allocator| {
+                crate::loader::ElfLoader::unwind(pages, allocator);
+            })
+            .expect("loaded ELF lost its frame allocator");
         }
     }
 }
@@ -128,11 +127,10 @@ pub fn prepare_elf_task(
     let mut va_rollback = PreparationVa(slot_base);
     crate::loader::atomic_checkpoint("AP-01")?;
 
-    let seg_pages = {
-        let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = frames.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader.load_segments(elf_data, allocator, load_base, slot_base, cfi.guarded_code)?
-    };
+    let seg_pages = crate::memory::frame::with(|allocator| {
+        loader.load_segments(elf_data, allocator, load_base, slot_base, cfi.guarded_code)
+    })
+    .ok_or(ViError::OutOfMemory)??;
     let mut mapping_rollback = PreparationMappings(Some(&seg_pages));
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_unpublished_pages(&seg_pages);
@@ -293,9 +291,10 @@ fn write_initial_stack(
 fn p01_post_load_failure(pages: &[crate::loader::elf::LoadedPage], load_base: usize, edge: u64) {
     // Source lock only, no scheduler/owner invention. Preserve one coherent
     // physical witness batch while the mapped leaves remain allocator-resident.
-    let _frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let _physical_write = crate::p01_retained::physical_write();
-    for page in pages {
-        crate::p01_retained::physical_prepare_failed(page.frame, page.va, load_base, edge);
-    }
+    let _ = crate::memory::frame::with(|_frames| {
+        let _physical_write = crate::p01_retained::physical_write();
+        for page in pages {
+            crate::p01_retained::physical_prepare_failed(page.frame, page.va, load_base, edge);
+        }
+    });
 }

@@ -610,10 +610,7 @@ fn publication_is_refused_while_draining() -> bool {
     any(target_arch = "aarch64", target_arch = "x86_64")
 ))]
 fn frames_in_use() -> Option<usize> {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.used_frames())
+    crate::memory::frame::stats().map(|frames| frames.used_frames)
 }
 
 #[cfg(test)]

@@ -1,7 +1,6 @@
 #![cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 //! U-mode proof that a downward stack overflow traps without stopping boot.
 
-use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::memory::paging::{self, Flags};
 use crate::task::stack::{CellSegments, Stack};
 use crate::task::{SCHEDULER, TRAP_FRAME_SIZE};
@@ -69,23 +68,30 @@ pub fn spawn() -> Result<usize, ViError> {
 }
 
 fn map_probe_code() -> Result<CellSegments, ViError> {
-    let mut frame_guard = FRAME_ALLOCATOR.lock();
-    let allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-    if paging::virt_to_phys(ENTRY).is_some() {
-        return Err(ViError::NotSupported);
-    }
-    let code_frame = allocator.allocate_frame().ok_or(ViError::OutOfMemory)?;
+    let code_frame = crate::memory::frame::with(|allocator| {
+        if paging::virt_to_phys(ENTRY).is_some() {
+            return Err(ViError::NotSupported);
+        }
+        let code_frame = allocator.allocate_frame().ok_or(ViError::OutOfMemory)?;
 
-    // SAFETY: the newly allocated identity-mapped frame is exclusively owned.
-    unsafe {
-        (code_frame as *mut u32).write(STORE_ZERO_BELOW_SP);
-    }
-    let flags = Flags::from_bits(
-        Flags::VALID | Flags::READ | Flags::EXECUTE | Flags::USER | Flags::ACCESSED | Flags::DIRTY,
-    );
-    if paging::map_page(allocator, ENTRY, code_frame, flags).is_err() {
-        allocator.deallocate_frame(code_frame);
-        return Err(ViError::OutOfMemory);
-    }
+        // SAFETY: the newly allocated identity-mapped frame is exclusively owned.
+        unsafe {
+            (code_frame as *mut u32).write(STORE_ZERO_BELOW_SP);
+        }
+        let flags = Flags::from_bits(
+            Flags::VALID
+                | Flags::READ
+                | Flags::EXECUTE
+                | Flags::USER
+                | Flags::ACCESSED
+                | Flags::DIRTY,
+        );
+        if paging::map_page(allocator, ENTRY, code_frame, flags).is_err() {
+            allocator.deallocate_frame(code_frame);
+            return Err(ViError::OutOfMemory);
+        }
+        Ok(code_frame)
+    })
+    .ok_or(ViError::OutOfMemory)??;
     Ok(CellSegments::new(alloc::vec![(ENTRY, code_frame)], 0))
 }

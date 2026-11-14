@@ -534,7 +534,7 @@ pub(super) fn x86_shootdown_fixture_secondary() {
 
 #[cfg(feature = "test-hooks")]
 pub(super) fn x86_shootdown_fixture_primary() {
-    use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
+    use crate::memory::frame::phys_to_virt;
     use crate::memory::paging::{table_at, Flags, KERNEL_ROOT, PAGE_SIZE, SAS_TABLES};
     use hal::PageTableTrait;
     // A global leaf: the shootdown must reach translations a CR3 reload keeps.
@@ -548,9 +548,7 @@ pub(super) fn x86_shootdown_fixture_primary() {
             .map_with(X86_PROBE_VA, frame, flags, SAS_TABLES, &mut || None)
             .expect("fixture leaf");
     };
-    let (old, new) = {
-        let mut allocator = FRAME_ALLOCATOR.lock();
-        let allocator = allocator.as_mut().expect("fixture frame allocator");
+    let (old, new) = crate::memory::frame::with(|allocator| {
         let old = allocator.allocate_frame().expect("fixture old frame");
         let new = allocator
             .allocate_frame()
@@ -569,7 +567,8 @@ pub(super) fn x86_shootdown_fixture_primary() {
         drop(root);
         crate::memory::paging::map_page(allocator, X86_PROBE_VA, old, flags).expect("fixture map");
         (old, new)
-    };
+    })
+    .expect("fixture frame allocator");
     X86_PROBE_STAGE.store(1, Ordering::Release);
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 2);
     {
@@ -595,10 +594,8 @@ pub(super) fn x86_shootdown_fixture_primary() {
     x86_bounded_wait(|| X86_PROBE_STAGE.load(Ordering::Acquire) == 9);
     assert_eq!(X86_PROBE_BEFORE.load(Ordering::Acquire), 0x1357);
     crate::memory::paging::unmap_page(X86_PROBE_VA).expect("fixture unmap");
-    let mut allocator = FRAME_ALLOCATOR.lock();
-    let allocator = allocator.as_mut().expect("fixture frame allocator");
-    allocator.deallocate_frame(old);
-    allocator.deallocate_frame(new);
+    crate::memory::frame::deallocate_frame(old);
+    crate::memory::frame::deallocate_frame(new);
     // Both shootdowns went to every online AP; the RT hart is the one that
     // held IF clear and observed the binding.
     let harts = online_hart_count();

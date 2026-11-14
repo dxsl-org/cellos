@@ -31,9 +31,7 @@ pub(crate) fn run_fixture() -> bool {
         Ok(stack) => stack,
         Err(_) => return false,
     };
-    let (cross_segment_base, read_only_base) = {
-        let mut frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = frames.as_mut().expect("frame allocator");
+    let (cross_segment_base, read_only_base) = crate::memory::frame::with(|allocator| {
         let base = allocator
             .allocate_contiguous(2)
             .expect("two adjacent frames for GetRandom");
@@ -57,7 +55,8 @@ pub(crate) fn run_fixture() -> bool {
         crate::memory::paging::map_page(allocator, read_only, read_only, read_only_flags)
             .expect("map GetRandom read-only segment page");
         (base, read_only)
-    };
+    })
+    .expect("frame allocator");
     let caller_ptr = cross_segment_base + PAGE_SIZE - 32;
     let sibling_ptr = sibling_stack.usable_start() + 64;
     let peer_ptr = peer_stack.usable_start() + 64;

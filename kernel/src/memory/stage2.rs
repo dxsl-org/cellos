@@ -24,7 +24,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use super::frame::{allocate_guest_ram, phys_to_virt, FRAME_ALLOCATOR};
+use super::frame::{allocate_guest_ram, phys_to_virt};
 use super::paging::PAGE_SIZE;
 
 // ── S2 descriptor constants ─────────────────────────────────────────────────
@@ -182,10 +182,7 @@ impl Stage2Table {
         // parity depends on every allocation since boot — so a 4 KB-misaligned
         // root silently truncated in VTTBR and the guest died on a Stage-2
         // level-1 translation fault at its very first instruction fetch.
-        let root_pa = {
-            let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?.allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64
-        };
+        let root_pa = super::frame::allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64;
         debug_assert_eq!(
             root_pa % (2 * PAGE_SIZE as u64),
             0,
@@ -230,10 +227,7 @@ impl Stage2Table {
     // ── Internal table allocator ─────────────────────────────────────────────
 
     fn alloc_subtable(&mut self) -> Option<(*mut u64, u64)> {
-        let pa = {
-            let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?.allocate_frame()?
-        };
+        let pa = super::frame::allocate_frame()?;
         let va = phys_to_virt(pa) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours.
         unsafe {
@@ -420,24 +414,25 @@ impl Stage2Table {
 
 impl Drop for Stage2Table {
     fn drop(&mut self) {
-        let mut g = FRAME_ALLOCATOR.lock();
-        if let Some(alloc) = g.as_mut() {
+        let (sub_frames, root_pa) = (&self.sub_frames, self.root_pa);
+        let (guest_ram_pa, guest_ram_pages) = (self.guest_ram_pa, self.guest_ram_pages);
+        let _ = super::frame::with(|alloc| {
             // Free L2/L3 sub-table frames (individually allocated).
-            for &pa in &self.sub_frames {
+            for &pa in sub_frames {
                 alloc.deallocate_frame(pa);
             }
             // Free the 2 × root L1 frames (allocated contiguously).
-            let root = self.root_pa as usize;
+            let root = root_pa as usize;
             alloc.deallocate_frame(root);
             alloc.deallocate_frame(root + PAGE_SIZE);
             // Free guest RAM pages if they were carved here.
-            if self.guest_ram_pages > 0 {
-                let base = self.guest_ram_pa as usize;
-                for i in 0..self.guest_ram_pages {
+            if guest_ram_pages > 0 {
+                let base = guest_ram_pa as usize;
+                for i in 0..guest_ram_pages {
                     alloc.deallocate_frame(base + i * PAGE_SIZE);
                 }
             }
-        }
+        });
     }
 }
 

@@ -3,7 +3,7 @@
 //! Handles allocation, deallocation, and guard pages for Kernel and User stacks.
 //! Complies with Rule 2 (Owned Buffers / Memory Safety) and Rule 8 (Resource Management).
 
-use crate::memory::frame::{FrameAllocator, FRAME_ALLOCATOR};
+use crate::memory::frame::FrameAllocator;
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
@@ -177,15 +177,26 @@ impl Stack {
     fn allocate(pages: usize, guard_pages: usize, user_mode: bool) -> Result<Self, ViError> {
         let total_pages = pages.checked_add(guard_pages).ok_or(ViError::OutOfMemory)?;
 
-        let mut frame_guard = FRAME_ALLOCATOR.lock();
-        let allocator = frame_guard.as_mut().ok_or_else(|| {
+        crate::memory::frame::with(|allocator| {
+            Self::allocate_in(allocator, pages, guard_pages, total_pages, user_mode)
+        })
+        .unwrap_or_else(|| {
             error!(
                 "Stack alloc failed: frame allocator unavailable (user={}, pages={})",
                 user_mode, total_pages
             );
-            ViError::OutOfMemory
-        })?;
+            Err(ViError::OutOfMemory)
+        })
+    }
 
+    /// [`Self::allocate`] with the frame allocator held.
+    fn allocate_in(
+        allocator: &mut FrameAllocator,
+        pages: usize,
+        guard_pages: usize,
+        total_pages: usize,
+        user_mode: bool,
+    ) -> Result<Self, ViError> {
         // A stack must be ONE contiguous run of frames, and that is a consequence of
         // SAS rather than a shortcut: everything is identity-mapped (VA == PA) and
         // there is no virtual-address allocator, so virtual contiguity can only come
@@ -447,15 +458,17 @@ impl Drop for Stack {
 
         // A sibling thread's Sas copy may still target this user stack.
         unpublish_user_frames(self.base, total_pages);
-        let mut frame_guard = FRAME_ALLOCATOR.lock();
-        if let Some(allocator) = frame_guard.as_mut() {
-            release_frames(allocator, self.base, total_pages);
+        let base = self.base;
+        #[cfg(feature = "p01-trace")]
+        let obligation = &mut self.p01_obligation;
+        let _ = crate::memory::frame::with(|allocator| {
+            release_frames(allocator, base, total_pages);
             // Only now are the guard VAs identity-mapped again, so the loader's
             // collision check takes over from the reservation.
-            STACK_RESERVATIONS.remove(self.base, self.base + total_pages * PAGE_SIZE);
+            STACK_RESERVATIONS.remove(base, base + total_pages * PAGE_SIZE);
             #[cfg(feature = "p01-trace")]
-            crate::p01_resources::finish(self.p01_obligation.take(), 1);
-        }
+            crate::p01_resources::finish(obligation.take(), 1);
+        });
         #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
@@ -634,20 +647,19 @@ impl Drop for CellSegments {
             let reclaimed = paging::prune_empty_tables(vaddr);
             if !reclaimed.is_empty() {
                 crate::memory::tlb_shootdown::flush_page(vaddr);
-                let mut frames = FRAME_ALLOCATOR.lock();
-                if let Some(allocator) = frames.as_mut() {
-                    reclaimed.release(allocator);
-                }
+                let _ = crate::memory::frame::with(|allocator| reclaimed.release(allocator));
             }
         }
-        let mut frame_guard = FRAME_ALLOCATOR.lock();
-        if let Some(allocator) = frame_guard.as_mut() {
-            for &(_vaddr, frame) in &self.pages {
+        let pages = &self.pages;
+        #[cfg(feature = "p01-trace")]
+        let obligation = &mut self.p01_obligation;
+        let _ = crate::memory::frame::with(|allocator| {
+            for &(_vaddr, frame) in pages {
                 allocator.deallocate_frame(frame);
             }
             #[cfg(feature = "p01-trace")]
-            crate::p01_resources::finish(self.p01_obligation.take(), 1);
-        }
+            crate::p01_resources::finish(obligation.take(), 1);
+        });
         #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             crate::p01_resources::finish(self.p01_obligation.take(), 6);

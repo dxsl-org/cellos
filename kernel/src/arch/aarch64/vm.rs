@@ -387,17 +387,14 @@ pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         .carve_guest_ram(guest_pages)
         .ok_or_else(|| {
             let (total_mib, used_mib, largest_mib) = {
-                let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
-                frames
-                    .as_ref()
-                    .map(|allocator| {
-                        (
-                            allocator.total_memory() / (1024 * 1024),
-                            allocator.used_memory() / (1024 * 1024),
-                            allocator.largest_free_run() / 256,
-                        )
-                    })
-                    .unwrap_or((0, 0, 0))
+                crate::memory::frame::with(|allocator| {
+                    (
+                        allocator.total_memory() / (1024 * 1024),
+                        allocator.used_memory() / (1024 * 1024),
+                        allocator.largest_free_run() / 256,
+                    )
+                })
+                .unwrap_or((0, 0, 0))
             };
             log::error!(
                 "[hv] create_vm: no contiguous guest run ({} pages, {} MiB; allocator {} MiB total, {} MiB used, largest free run {} MiB)",
