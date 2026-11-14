@@ -50,11 +50,12 @@ rm -f "$TH_DIR/kernel_fs.img" "$TH_DIR/init"
 echo "==> Building base cells (init, fixture launcher, shell, vfs, machine-pin, config, platform, drivers)..."
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p app-init
-# `tier2-entry`/`tier2-rpc-entry` are fixture-launcher-only: a multi-package
-# `--features` would have to exist on every selected package, so the launcher is
-# built on its own. It schedules the Tier-2 fixtures from the boot order.
+# `tier2-entry`/`tier2-rpc-entry`/`tier2-grant-pair` are fixture-launcher-only:
+# a multi-package `--features` would have to exist on every selected package, so
+# the launcher is built on its own. It schedules the Tier-2 fixtures, and the
+# Phase-15 grant pair, from the boot order.
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
-    --features tier2-entry,tier2-rpc-entry \
+    --features tier2-entry,tier2-rpc-entry,tier2-grant-pair \
     -p fixture-launcher
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p app-cellbox -p service-vfs -p service-machine-pin -p service-config -p service-input -p service-platform
@@ -76,6 +77,15 @@ echo "==> Building the cross-tier exchange cells (tier2-rpc-*), phase-02 slice B
 cargo build --release --target "$TARGET" -Z build-std=core,alloc \
     -p tier2-rpc-provider -p tier2-rpc-driver
 
+echo "==> Building the Tier-2 grant pair (tier2-grant-owner, tier2-grant-receiver), Phase 15..."
+# Both domain-class. They run on the two reviewed launch paths whose real
+# services this image does not package — `/bin/silo` (owner) and
+# `/bin/net-broker` (receiver) — the substitution the AArch64 test-hooks image
+# makes; a brand-new `/bin/<name>` would need a launch-profile and a
+# boot-ceiling row. Every marker they emit is `S22-X86-GRANT-PAIR-*`.
+cargo build --release --target "$TARGET" -Z build-std=core,alloc \
+    -p tier2-grant-owner -p tier2-grant-receiver
+
 CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
@@ -95,6 +105,8 @@ CELL_BINARIES=(
     "$REL/tier2-rpc-provider"
     "$REL/tier2-rpc-driver"
     "$REL/cpp-smoke"
+    "$REL/tier2-grant-owner"
+    "$REL/tier2-grant-receiver"
 )
 CELL_IMAGE_PATHS=(
     /bin/cellbox
@@ -115,6 +127,8 @@ CELL_IMAGE_PATHS=(
     /bin/tier2-rpc-provider
     /bin/tier2-rpc-driver
     /bin/cpp-smoke
+    /bin/silo
+    /bin/net-broker
 )
 
 echo "==> Verifying ${#CELL_BINARIES[@]} cell binaries..."

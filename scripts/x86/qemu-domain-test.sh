@@ -8,17 +8,19 @@
 #     (`[domain] admitted cell … (CR3 isolation)`);
 #   * the **live CR3** read from inside the domain's own kernel context, with its
 #     root and PCID/tag bits;
-#   * a deliberate fault from the second domain cell contained — exactly one
-#     `[fault] Cell` line, the announced NULL store, the boot surviving it;
+#   * a deliberate fault from the second domain cell contained — the announced
+#     NULL store at `addr=0x0`, exactly once, the boot surviving it;
 #   * teardown with frames released and nothing quarantined;
 #   * shell recovery after the fault: the image's shell is interactive, so a
-#     command typed *after* the containment line must be answered with a new
-#     prompt;
-#   * the Phase-15 domain grant fixtures: the kernel lifecycle and capability
+#     `ps` typed *after* the containment line must be echoed and then answered
+#     with a new prompt;
+#   * the Phase-15 domain grant suite: the kernel lifecycle and capability
 #     fixtures (`S22-X86-GRANT-REVOKE`, `-GATE`), the deferred revoke
-#     (`-DEFERRED`), and the five negatives with their fault-injection controls
-#     (`-NEG-<case>: PASS`, `-CONTROL-<case>: CAUGHT`); a control that reports
-#     `MISSED` fails the lane.
+#     (`-DEFERRED`), the five negatives with their fault-injection controls
+#     (`-NEG-<case>: PASS`, `-CONTROL-<case>: CAUGHT`; a control that reports
+#     `MISSED` fails the lane), and the two-cell public pair
+#     (`S22-X86-GRANT-PAIR-*`) with its five deliberate receiver faults, each
+#     classified to the grant address the owner handed over.
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -27,8 +29,10 @@
 # DOMAIN-LIVE marker. Both are real observations of the kernel's own decision.
 #
 # Usage: bash scripts/x86/qemu-domain-test.sh [kernel-elf] [iso-out]
-# Env: BOOT_WINDOW (default 120), X86_ACCEL, X86_CPU_MODEL, X86_EXPECT_PCID,
-#      LOG_DIR (default: repository root)
+# Env: BOOT_WINDOW (default 120), X86_ACCEL (""|tcg|kvm), X86_CPUS (1..64),
+#      X86_CPU_MODEL, X86_EXPECT_PCID, LOG_DIR (default: repository root).
+#      The grant suite's evidence matrix is X86_CPUS ∈ {1,2,4} × X86_ACCEL ∈
+#      {tcg,kvm}; CI runs TCG at one CPU.
 #
 # Requires the image from scripts/build-x86_64-domain-test-ci.sh.
 
@@ -98,9 +102,9 @@ fi
 echo "[x86-domain-test] Booting ISO=$ISO (window=${BOOT_WINDOW}s, cpu=$X86_CPU_MODEL, pcid_expected=$X86_EXPECT_PCID)"
 
 # The shell's stdin is a FIFO so a command can be typed *after* the containment
-# line: the watcher below polls the raw log for the announced fault and only then
-# sends `ps`, which makes the recovery witness an ordering proof rather than a
-# race against the boot's timing.
+# line: the watcher below polls the raw log for the contained NULL store and only
+# then sends `ps`, which makes the recovery witness an ordering proof rather than
+# a race against the boot's timing.
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
     "${ACCEL_ARGS[@]}" \
@@ -116,21 +120,36 @@ QEMU_PID=$!
 exec 9> "$FIFO"
 
 (
-    # Type only after the fault AND a later prompt: the serial session is owned
-    # by the input service and starts after the fault on this image; bytes sent
-    # before the session exists are dropped, not queued.
+    # Type only once the NULL store is contained AND the serial session has
+    # printed a prompt: the session is owned by the input service, and bytes
+    # sent before it exists are dropped, not queued. The prompt may come before
+    # or after the fault (it races the fixture cells), so it is looked for
+    # anywhere. A `ps` the session dropped is never echoed, so it is typed again
+    # until the echo follows the fault (at most three times).
+    # `set -e` and `pipefail` hold in this subshell too: a probe that finds
+    # nothing must not end the watcher.
+    contained() { grep -naEm1 '\[fault\] Cell [0-9]+ .* terminated: .* addr=0x0' "$RAW_LOG" 2>/dev/null | cut -d: -f1 || true; }
+    echoed_after() { tail -n +"$1" "$RAW_LOG" | tr -d '\r' | grep -qaE '^USER: ps[[:space:]]*$'; }
     typed=0
     for _ in $(seq 1 $((BOOT_WINDOW * 4))); do
-        if fault_at=$(grep -nam1 "deliberately writing to NULL" "$RAW_LOG" 2>/dev/null | cut -d: -f1) \
-            && [[ -n "$fault_at" ]] \
-            && tail -n +"$fault_at" "$RAW_LOG" | grep -qa "Cellos > "; then
-            printf 'ps\r' >&9
-            typed=1
-            break
+        fault_at="$(contained)"
+        if [[ -n "$fault_at" ]] && grep -qa "Cellos > " "$RAW_LOG"; then
+            if (( typed > 0 )) && echoed_after "$fault_at"; then
+                exit 0
+            fi
+            if (( typed < 3 )); then
+                printf 'ps\r' >&9
+                typed=$((typed + 1))
+                for _ in $(seq 1 40); do
+                    echoed_after "$fault_at" && exit 0
+                    sleep 0.25
+                done
+                continue
+            fi
         fi
         sleep 0.25
     done
-    exit $((1 - typed))
+    exit 1
 ) &
 WATCHER_PID=$!
 
@@ -156,36 +175,98 @@ if grep -qia "KERNEL PANIC\|panicked" "$LOG"; then
 fi
 
 # --- Fault containment -------------------------------------------------------
-# The image is expected to contain exactly one fault: the announced NULL store
-# from `tier2-exploit`. A second fault, a different address, or a fault that the
-# launcher never announced all fail the lane.
-FAULT_COUNT=$(grep -ca "\[fault\] Cell" "$LOG" || true)
-if [[ "$FAULT_COUNT" -ne 1 ]]; then
-    echo "FAIL: expected exactly 1 contained cell fault, saw $FAULT_COUNT" >&2
-    grep -a "\[fault\] Cell" "$LOG" >&2 || true
+# Every `[fault] Cell` line in the boot must be one of the deliberate, announced,
+# address-classified faults, and nothing else:
+#
+#   * `tier2-exploit`'s NULL store — exactly one, at `addr=0x0`;
+#   * the grant pair's five receiver generations — each ends in the store its
+#     phase exists to witness, at the exact grant address the owner handed over
+#     (`S22-X86-GRANT-PAIR-HANDOFF`): the freed grant (id1), the ReadOnly page
+#     and then the same page after `GrantUnregister` (id2, twice), the address
+#     the owner's exit revoked (id3), and the downgraded grant (id4).
+#
+# The total is therefore fixed at six; any other fault — a second NULL store,
+# another cell, another address — fails the lane. The cause is not pinned: the
+# x86 page-fault error code differs between a not-present and a protection
+# fault, and the address is what attributes each fault to its phase.
+FAULT_PATTERN='\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0x[0-9a-f]+ pc=0x[0-9a-f]+ addr='
+FAULT_LINES="$(grep -a "\[fault\] Cell" "$LOG" || true)"
+FAULT_COUNT="$(printf '%s\n' "$FAULT_LINES" | grep -c . || true)"
+faults_at() { grep -acE "${FAULT_PATTERN}$1\$" "$LOG" || true; }
+# Byte offset of the Nth fault at one exact address (1-based); empty when absent.
+fault_offset_at() { grep -aboE "${FAULT_PATTERN}$1\$" "$LOG" | sed -n "$2p" | cut -d: -f1 || true; }
+offset_of() { grep -aboF -- "$1" "$LOG" | head -1 | cut -d: -f1 || true; }
+
+if [[ "$(faults_at 0x0)" != "1" ]]; then
+    echo "FAIL: expected exactly one contained NULL-store fault (addr=0x0), found $(faults_at 0x0):" >&2
+    printf '%s\n' "$FAULT_LINES" >&2
     tail -40 "$LOG" >&2
     exit 1
 fi
-if ! grep -qa "\[fault\] Cell .* terminated: cause=.* addr=0x0" "$LOG"; then
-    echo "FAIL: the single contained fault is not the announced NULL store (addr=0x0)" >&2
-    grep -a "\[fault\] Cell" "$LOG" >&2
+HANDOFF_LINE="$(grep -aoE 'S22-X86-GRANT-PAIR-HANDOFF id1=[0-9]+ id2=[0-9]+ id3=[0-9]+ id4=[0-9]+' "$LOG" | tail -1 || true)"
+if [[ -z "$HANDOFF_LINE" ]]; then
+    echo "FAIL: the grant pair published no handoff line, so no receiver fault can be classified" >&2
+    printf '%s\n' "$FAULT_LINES" >&2
     exit 1
 fi
+handoff_id() { printf '%s' "$HANDOFF_LINE" | sed -n "s/.*$1=\([0-9]\+\).*/\1/p"; }
+A1="$(printf '0x%x' "$(handoff_id id1)")"
+A2="$(printf '0x%x' "$(handoff_id id2)")"
+A3="$(printf '0x%x' "$(handoff_id id3)")"
+A4="$(printf '0x%x' "$(handoff_id id4)")"
+if [[ "$(faults_at "$A1")" != "1" || "$(faults_at "$A2")" != "2" \
+    || "$(faults_at "$A3")" != "1" || "$(faults_at "$A4")" != "1" ]]; then
+    echo "FAIL: the pair's deliberate fault counts are wrong (want id1:$A1=1 id2:$A2=2 id3:$A3=1 id4:$A4=1," >&2
+    echo "      found id1=$(faults_at "$A1") id2=$(faults_at "$A2") id3=$(faults_at "$A3") id4=$(faults_at "$A4")):" >&2
+    printf '%s\n' "$FAULT_LINES" >&2
+    exit 1
+fi
+if [[ "$FAULT_COUNT" != "6" ]]; then
+    echo "FAIL: expected exactly 6 accounted cell faults (the NULL store plus the pair's five), found $FAULT_COUNT:" >&2
+    printf '%s\n' "$FAULT_LINES" >&2
+    exit 1
+fi
+# Each fault must follow the announcement that names it, so no fault can be
+# attributed to a phase whose store had not been announced yet; byte offsets
+# make the ordering a property of the boot, not of the grep.
+assert_announced_before() {
+    local announcement="$1" address="$2" nth="$3" description="$4"
+    local announced_at faulted_at
+    announced_at="$(offset_of "$announcement")"
+    faulted_at="$(fault_offset_at "$address" "$nth")"
+    if [[ -z "$announced_at" || -z "$faulted_at" || "$announced_at" -ge "$faulted_at" ]]; then
+        echo "FAIL: fault '$description' at $address is not preceded by its announcement (announced=$announced_at faulted=$faulted_at)" >&2
+        exit 1
+    fi
+}
+assert_announced_before "[tier2-exploit] deliberately writing to NULL (0x0)" 0x0 1 "NULL store"
+assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED" "$A1" 1 "GrantFree revoke"
+assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED" "$A2" 1 "ReadOnly write"
+assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED" "$A2" 2 "GrantUnregister"
+assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED" "$A4" 1 "same-recipient downgrade"
+assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED" "$A3" 1 "owner exit"
 
 # --- Shell recovery ---------------------------------------------------------
 # The image has an interactive window, so recovery is witnessed rather than
-# inferred: the watcher typed `ps` only after the containment line, and that
-# command must have been answered with a second prompt.
-FAULT_LINE=$(grep -na "\[fault\] Cell" "$LOG" | head -1 | cut -d: -f1)
-PROMPT_LINES=$(grep -na "Cellos > " "$LOG" | cut -d: -f1 || true)
-PROMPT_AFTER=$(printf '%s\n' "$PROMPT_LINES" | awk -v f="$FAULT_LINE" '$1 > f' | wc -l | tr -d ' ')
-if [[ -z "$PROMPT_LINES" ]]; then
+# inferred: the watcher typed `ps` only after the NULL store was contained, the
+# shell must have echoed it after that line, and a prompt must follow the echo
+# (the command was answered). A prompt alone proves nothing: the session can
+# print its first prompt before or after the fault.
+FAULT_LINE=$(grep -naE "${FAULT_PATTERN}0x0\$" "$LOG" | head -1 | cut -d: -f1 || true)
+if ! grep -qa "Cellos > " "$LOG"; then
     echo "FAIL: 'Cellos >' prompt never appeared" >&2
     tail -40 "$LOG" >&2
     exit 1
 fi
-if [[ "$PROMPT_AFTER" -lt 2 ]]; then
-    echo "FAIL: shell did not recover after the contained fault (prompts after the fault: $PROMPT_AFTER)" >&2
+PS_ECHO_LINE=$(grep -naE '^USER: ps[[:space:]]*$' "$LOG" | cut -d: -f1 | awk -v f="$FAULT_LINE" '$1 > f { print; exit }' || true)
+if [[ -z "$PS_ECHO_LINE" ]]; then
+    echo "FAIL: the shell never echoed the 'ps' typed after the contained fault (line $FAULT_LINE)" >&2
+    tail -40 "$LOG" >&2
+    exit 1
+fi
+PROMPT_AFTER=$(grep -na "Cellos > " "$LOG" | cut -d: -f1 | awk -v e="$PS_ECHO_LINE" '$1 > e' | wc -l | tr -d ' ')
+if [[ "$PROMPT_AFTER" -lt 1 ]]; then
+    echo "FAIL: shell did not recover after the contained fault (no prompt after the echoed 'ps' at line $PS_ECHO_LINE)" >&2
     tail -40 "$LOG" >&2
     exit 1
 fi
@@ -290,6 +371,39 @@ REQUIRED_MARKERS=(
     "control cross-domain forgery:::S22-X86-GRANT-CONTROL-FORGERY: CAUGHT"
     "control fault during copy:::S22-X86-GRANT-CONTROL-COPY-FAULT: CAUGHT"
     "grant negatives:::S22-X86-GRANT-NEG: PASS"
+    # The two-cell public pair, launched from the boot order by the fixture
+    # launcher (`tier2-grant-pair`) on the two reviewed paths whose real services
+    # this image does not package (`/bin/silo`, `/bin/net-broker`).
+    "pair owner launch:::fixture-launcher: tier2-grant-pair owner admitted."
+    "pair complete:::fixture-launcher: tier2-grant-pair complete."
+    "pair owner admission:::[domain] admitted cell 'silo' to Tier 2 Paged Domain (CR3 isolation)"
+    "pair receiver admission:::[domain] admitted cell 'net-broker' to Tier 2 Paged Domain (CR3 isolation)"
+    "pair owner begin:::S22-X86-GRANT-PAIR-OWNER-BEGIN: public Grant* owner path"
+    "pair owner alloc:::S22-X86-GRANT-PAIR-OWNER-ALLOC: OK id="
+    "pair owner register:::S22-X86-GRANT-PAIR-OWNER-REGISTER: OK id="
+    "pair owner mapped:::S22-X86-GRANT-PAIR-OWNER-MAPPED: OK"
+    "pair owner registered mapping:::S22-X86-GRANT-PAIR-OWNER-REG-MAPPED: OK"
+    "pair foreign share denied:::S22-X86-GRANT-PAIR-OWNER-SHARE-FOREIGN: DENY"
+    "pair handoff:::S22-X86-GRANT-PAIR-HANDOFF id1="
+    "pair receiver rw:::S22-X86-GRANT-PAIR-RECEIVER-BEGIN: mode=rw"
+    "pair receiver ro:::S22-X86-GRANT-PAIR-RECEIVER-BEGIN: mode=ro"
+    "pair receiver downgrade:::S22-X86-GRANT-PAIR-RECEIVER-BEGIN: mode=downgrade"
+    "pair receiver unregister:::S22-X86-GRANT-PAIR-RECEIVER-BEGIN: mode=unregister"
+    "pair receiver exit:::S22-X86-GRANT-PAIR-RECEIVER-BEGIN: mode=exit"
+    "pair receiver alloc:::S22-X86-GRANT-PAIR-RECEIVER-ALLOC: OK id="
+    "pair unknown id denied:::S22-X86-GRANT-PAIR-RECEIVER-SLICE-UNKNOWN: DENY"
+    "pair write-only share denied:::S22-X86-GRANT-PAIR-OWNER-SHARE-WO: DENY"
+    "pair rw slice:::S22-X86-GRANT-PAIR-RECEIVER-SLICE-RW: OK"
+    "pair rw access:::S22-X86-GRANT-PAIR-RECEIVER-RW: OK"
+    "pair owner free:::S22-X86-GRANT-PAIR-OWNER-FREE: OK"
+    "pair revoked id refused:::S22-X86-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED"
+    "pair ro slice:::S22-X86-GRANT-PAIR-RECEIVER-SLICE-RO: OK (read "
+    "pair downgrade rw:::S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK"
+    "pair downgrade reshare:::S22-X86-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK"
+    "pair downgrade read:::S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)"
+    "pair owner unregister:::S22-X86-GRANT-PAIR-OWNER-UNREGISTER: OK"
+    "pair owner exit:::S22-X86-GRANT-PAIR-OWNER-EXIT: OK"
+    "pair terminal:::S22-X86-GRANT-PAIR-OWNER: PASS"
     "grant gate-held measurement:::[grant] gate-held max publish="
     "interactive shell:::Cellos > "
 )
@@ -337,10 +451,16 @@ bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"
 # --- Grant fixture negatives -------------------------------------------------
 # No x86 fixture may report FAIL, and no control may report MISSED: a control
 # whose case still passed with its check disabled proves nothing about that
-# check.
+# check. The marker prefix is architecture-honest: an x86 boot emitting an
+# RV64- or AArch64-tagged grant marker fails outright.
 if grep -aqE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG"; then
     echo "FAIL: an x86 fixture reported a failure or a control missed its violation:" >&2
     grep -aE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG" >&2
+    exit 1
+fi
+if grep -aqE 'S22-(RV64|AARCH64)-GRANT' "$LOG"; then
+    echo "FAIL: an x86 boot emitted another architecture's grant marker:" >&2
+    grep -aE 'S22-(RV64|AARCH64)-GRANT' "$LOG" | head -5 >&2
     exit 1
 fi
 
@@ -366,4 +486,5 @@ echo "PCID decision: $DECISION"
 echo "Domain live:   $LIVE"
 grep -a "S22-X86-DOMAIN-TEARDOWN\|\[selftest\] DOMAIN-FRAME-RELEASE\|\[domain\] admitted cell" "$LOG" || true
 grep -a "S22-X86-GRANT-CONTROL-\|\[grant\] gate-held max" "$LOG" || true
+echo "Pair faults: NULL=1 id1($A1)=$(faults_at "$A1") id2($A2)=$(faults_at "$A2") id3($A3)=$(faults_at "$A3") id4($A4)=$(faults_at "$A4")"
 echo "PASS: x86_64 Tier-2 domain-entry lane ($LABEL) — every marker present"

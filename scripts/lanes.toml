@@ -378,6 +378,9 @@ path = "scripts/x86/qemu-release-posture-test.sh"
 arch = "x86_64"
 tier = "pr"
 
+# x86 Tier-2 domain lane, incl. the Phase-15 grant suite (kernel fixtures, five
+# negatives with their controls, the two-cell pair). CI runs TCG at one CPU; the
+# evidence matrix X86_CPUS in {1,2,4} x X86_ACCEL in {tcg,kvm} is run locally.
 [[lane]]
 path = "scripts/x86/qemu-domain-test.sh"
 arch = "x86_64"
