@@ -8,6 +8,16 @@ use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
 
+/// VA bits of the TTBR0 regime the kernel boots with
+/// ([`TranslationConfig::default_39bit`], T0SZ = 25).
+const DEFAULT_VA_BITS: u32 = 64 - TranslationConfig::default_39bit().t0sz as u32;
+
+/// Exclusive end of the user virtual-address window: the lower half of the
+/// default 39-bit TTBR0 regime (256 GiB), the same window RV64's Sv39 gives, so
+/// one cell VA layout serves both. A 48-bit regime chosen for large RAM keeps
+/// this bound.
+pub const USER_LIMIT: usize = 1 << (DEFAULT_VA_BITS - 1);
+
 /// The address through which the HAL page-table walkers read a physical
 /// frame: the kernel identity-maps RAM, so the frame's own address.
 #[inline]

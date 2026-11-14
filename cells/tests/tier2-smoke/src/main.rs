@@ -29,12 +29,20 @@ use ostd::syscall::{sys_exit, sys_grant_register};
 /// Is this image's kernel private-root grant lifecycle open (phase 03)?
 ///
 /// Mirrors `task::syscall::domain_grant_lifecycle_supported` from the cell side,
-/// where the kernel's feature set is not visible: the lifecycle is open on RV64
-/// and on the AArch64 images that can admit a domain at all (test images), and
-/// closed on x86_64, which phase 02 deliberately left out.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+/// where the kernel's feature set is not visible: the lifecycle is open on RV64,
+/// on x86_64 (Phase 15) and on the AArch64 images that can admit a domain at all
+/// (test images). A target that cannot admit a domain never runs this cell.
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const GRANT_LIFECYCLE_OPEN: bool = true;
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 const GRANT_LIFECYCLE_OPEN: bool = false;
 
 abi::declare_manifest!(

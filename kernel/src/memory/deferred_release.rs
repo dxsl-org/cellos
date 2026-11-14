@@ -524,8 +524,8 @@ pub(crate) fn deferred_release_frames() -> usize {
 /// this to tell a correct deferral from a leak.
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
-    not(target_arch = "riscv64"),
-    allow(dead_code) // reason: the fixture that asserts on it is RV64-only today
+    not(cellos_domain_grants),
+    allow(dead_code) // reason: the grant fixtures assert on it
 )]
 pub(crate) fn deferred_release_frames_for(asid: usize) -> usize {
     DEFERRED
@@ -541,8 +541,8 @@ pub(crate) fn deferred_release_frames_for(asid: usize) -> usize {
 /// frame instead of inferring a retention owner.
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
-    not(target_arch = "riscv64"),
-    allow(dead_code) // reason: the fixture that asserts on it is RV64-only today
+    not(cellos_domain_grants),
+    allow(dead_code) // reason: the grant fixtures assert on it
 )]
 pub(crate) fn deferred_release_snapshot() -> Vec<(usize, usize, usize, &'static str)> {
     DEFERRED

@@ -14,6 +14,17 @@ use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
 
+/// Bytes one PML4 slot translates (512 GiB).
+const PML4_SLOT_SPAN: usize = 1 << 39;
+
+/// Exclusive end of the user virtual-address window: the lower half of PML4
+/// slot 0 (256 GiB). The kernel's private-root mapping validation, copy
+/// boundary and image placement all bound user addresses with it. 4-level
+/// paging could reach the whole canonical lower half (2^47); the window
+/// matches RV64's Sv39 user half so one cell VA layout serves every target,
+/// and widening it is a separate decision (Phase 15, D2).
+pub const USER_LIMIT: usize = PML4_SLOT_SPAN / 2;
+
 // ---------------------------------------------------------------------------
 // HHDM offset — stored once at boot by `set_hhdm_offset`.
 // Used by the walkers (`phys_to_virt`) so they can dereference PTE physical

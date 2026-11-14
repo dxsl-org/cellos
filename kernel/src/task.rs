@@ -11,35 +11,16 @@ pub mod completion_selftest;
 pub mod completion_wait;
 pub(crate) mod copy_glue;
 pub mod dir_inherit;
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 pub(crate) mod domain_grant;
 /// Publish/revoke ordering for `domain_grant`; host-tested on its own.
-#[cfg(any(
-    test,
-    all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    )
-))]
+#[cfg(any(test, cellos_domain_grants))]
 #[path = "task/domain-grant-gate.rs"]
 pub(crate) mod domain_grant_gate;
 mod elf_prepare;
 /// Phase-01 containment witness for domain-backed zero-copy grants, and the
 /// phase-03 capability witness on every architecture whose lifecycle is open.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "aarch64")
-))]
+#[cfg(all(cellos_domain_grants, feature = "test-hooks"))]
 #[cfg(not(cellos_posture = "release"))]
 pub(crate) mod grant_gate_selftest;
 #[cfg(not(cellos_posture = "release"))]

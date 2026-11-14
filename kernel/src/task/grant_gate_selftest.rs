@@ -3,8 +3,8 @@
 //! The phase-01 containment gate refused every grant entry point that named a
 //! private-root task. Phase 03 replaces that blanket refusal with a capability
 //! check: exactly one shape is allowed — a live task whose address space is a
-//! still-`Live` private root, on the one architecture whose lifecycle is
-//! implemented — and every other shape keeps the byte-for-byte sentinel.
+//! still-`Live` private root, on a target whose lifecycle is implemented — and
+//! every other shape keeps the byte-for-byte sentinel.
 //!
 //! This fixture drives the *production* `handle_syscall` path with real
 //! `TaskAddressSpace::Domain` tasks, so both sides of the check are asserted
@@ -50,11 +50,13 @@ const SAS_GRANTEE_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 16) as u64
 
 const PAGE_SIZE: usize = 4096;
 const GRANT_SIZE: usize = PAGE_SIZE;
-/// Private-root virtual addresses for the fixture's own pages. Kept out of the
-/// SAS identity window so nothing else in the boot can alias them.
-const DOMAIN_VA: usize = 0x0400_0000;
-const DOMAIN_RECEIVER_VA: usize = 0x0800_0000;
-const RETIRED_VA: usize = 0x0c00_0000;
+/// Private-root virtual addresses for the fixture's own pages. Grant pages are
+/// published at VA = PA, so these sit above the RAM of every QEMU machine the
+/// lanes boot (x86_64 RAM starts at 0) and below `hal::paging::USER_LIMIT`:
+/// no grant frame can land on them.
+const DOMAIN_VA: usize = 0x30_0400_0000;
+const DOMAIN_RECEIVER_VA: usize = 0x30_0800_0000;
+const RETIRED_VA: usize = 0x30_0c00_0000;
 
 /// Frames currently available to the allocator.
 fn free_frames() -> usize {
@@ -216,7 +218,7 @@ fn probe(
     //    USER access to it (the phase-01 information leak).
     let domain_grant = grant_alloc(DOMAIN_TID);
     let alloc = domain_grant.is_some_and(|base| {
-        let (present, user) = crate::memory::paging::mapping_state(base);
+        let (present, user) = super::domain_grant::sas_root_state(base);
         present
             && !user
             && ledger_has(domain_space, base, Flags::READ | Flags::WRITE)
@@ -226,7 +228,7 @@ fn probe(
     // 2. The persistent registered buffer follows the same rule.
     let domain_reg = grant_register(DOMAIN_TID);
     let register = domain_reg.is_some_and(|base| {
-        let (present, user) = crate::memory::paging::mapping_state(base);
+        let (present, user) = super::domain_grant::sas_root_state(base);
         present && !user && ledger_has(domain_space, base, Flags::READ | Flags::WRITE)
     });
 

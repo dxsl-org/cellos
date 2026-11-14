@@ -186,6 +186,12 @@ fn main() {
     if posture::wide(&target_arch) {
         println!("cargo:rustc-cfg=cellos_wide");
     }
+    // The private-root domain grant lifecycle (`posture::domain_grants`): shared
+    // code names this one predicate instead of an arch and feature list.
+    println!("cargo:rustc-check-cfg=cfg(cellos_domain_grants)");
+    if posture::domain_grants(&target_arch, &feature_on) {
+        println!("cargo:rustc-cfg=cellos_domain_grants");
+    }
     let embedded_out = out_dir.join("embedded");
     if embedded_out.exists() {
         fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");
@@ -415,13 +421,15 @@ fn provision_release_anchor(out_dir: &Path, var: &str, out_name: &str, dev_key: 
     fs::write(out_dir.join(out_name), key).expect("copy release anchor");
 }
 
+/// Is the Cargo feature `feature` enabled for this build?
+fn feature_on(feature: &str) -> bool {
+    let var = format!("CARGO_FEATURE_{}", feature.to_uppercase().replace('-', "_"));
+    std::env::var_os(var).is_some()
+}
+
 /// Enforce the single trust posture (`kernel/src/posture.rs`) and return its name.
 fn derive_posture(target_arch: &str) -> &'static str {
-    let on = |feature: &str| {
-        let var = format!("CARGO_FEATURE_{}", feature.to_uppercase().replace('-', "_"));
-        std::env::var_os(var).is_some()
-    };
-    match posture::derive(target_arch, &on) {
+    match posture::derive(target_arch, &feature_on) {
         Ok(posture) => posture.as_str(),
         Err(reason) => panic!("kernel feature set refused: {reason}"),
     }

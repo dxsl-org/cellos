@@ -696,7 +696,16 @@ pub(crate) fn browser_engine_admission() -> bool {
 }
 
 /// After the native-domain SAS scheduler fixture.
-pub(crate) fn fixtures_domain() {}
+pub(crate) fn fixtures_domain() {
+    // Phase 15 domain grant lifecycle: the same kernel-side fixtures the RV64
+    // and AArch64 lanes run drive the production `handle_syscall` entry points
+    // with real `TaskAddressSpace::Domain` tasks (`S22-X86-GRANT-*`).
+    #[cfg(all(cellos_domain_grants, feature = "test-hooks"))]
+    {
+        crate::task::domain_grant::run_selftest();
+        crate::task::grant_gate_selftest::run_primary();
+    }
+}
 
 /// After the IOMMU page-table fixture: the all-hart park hook (riscv64).
 pub(crate) fn fixtures_park() {}

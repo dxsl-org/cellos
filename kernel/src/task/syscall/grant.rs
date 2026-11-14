@@ -197,17 +197,15 @@ pub(super) fn domain_grant_task(_tid: usize) -> bool {
 /// already uses non-global private leaves plus deferred release, so the state
 /// machine needs no architecture-specific step beyond this cfg.
 ///
-/// x86_64 stays closed: it grew the same in-switch root write but has no
-/// root-switch witness, so no entry point may publish a domain record there.
-/// AArch64 production builds are pinned below.
+/// Phase 15 opens it on x86_64, production included, because x86 domain
+/// admission is production-qualified (`switch_ordering_qualified`; witnessed by
+/// `S22-X86-DOMAIN-LIVE`). x86 private leaves carry no `G` bit and a private
+/// root's tag is retired by `INVPCID` (or a CR3 reload without PCID) plus the
+/// IPI epoch, through the same probe-then-defer path. The one predicate is the
+/// `cellos_domain_grants` cfg (`posture::domain_grants`); AArch64 production
+/// builds are pinned below.
 pub(super) const fn domain_grant_lifecycle_supported() -> bool {
-    cfg!(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    ))
+    cfg!(cellos_domain_grants)
 }
 
 /// The phase-01 denial sentinels, named so the production pin below asserts the
@@ -228,9 +226,9 @@ pub(super) const GRANT_DENY_ERROR: SyscallError = SyscallError::PermissionDenied
 /// private-root grant lifecycle?
 ///
 /// Exactly one shape passes — a live task whose address space is a private root
-/// that is still `Live`, on the one architecture whose lifecycle is
-/// implemented. Every other shape keeps the denial sentinel: a non-RV64 target,
-/// an unknown or retired tid, and a root already marked dying.
+/// that is still `Live`, on a target whose lifecycle is implemented. Every other
+/// shape keeps the denial sentinel: a target without the lifecycle, an unknown
+/// or retired tid, and a root already marked dying.
 pub(super) fn domain_grant_capable(tid: usize) -> bool {
     domain_grant_lifecycle_supported() && live_domain_space(tid).is_some()
 }
@@ -319,6 +317,13 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize,
 /// the frames unmapped on every hart and drained in-flight Sas copies: a copy
 /// that probed the grant earlier would otherwise write the reused frame
 /// through the fault-free kernel mapping.
+///
+/// The restore applies only where the kernel reaches RAM through the identity
+/// VA (`phys_to_virt` is the identity: RV64, AArch64). x86_64 reaches RAM
+/// through the HHDM and has no boot identity map of RAM, so there the frames
+/// are unpublished, the kernel-root tables their USER mapping needed are pruned
+/// once empty, and the frames are freed; restoring would add a kernel-RWX alias
+/// to the lower half that never existed.
 ///
 /// Lock order: KERNEL_ROOT alone (unpublish), then FRAME_ALLOCATOR →
 /// (map_page → KERNEL_ROOT). Mirrors `Stack::drop`. Must NOT be called while
@@ -1241,6 +1246,26 @@ pub(super) fn free_grant_pages_inner(
     );
 
     crate::task::stack::unpublish_user_frames(base, n_pages);
+    // Restore the kernel alias only where it is the identity map (RV64,
+    // AArch64). x86_64 reaches RAM through the HHDM and never had an identity
+    // alias for this frame, so a restore there would add a new kernel-RWX
+    // mapping to the lower half (the rule `release_shm_for` already follows).
+    let identity_alias = crate::memory::frame::phys_to_virt(base) == base;
+    if !identity_alias {
+        // Without the restore, the kernel-root tables a USER mapping of these
+        // frames needed may now be empty: detach them and invalidate before
+        // their frames return, as `CellSegments::drop` does.
+        for i in 0..n_pages {
+            let f = base + i * PAGE_SIZE;
+            let reclaimed = crate::memory::paging::prune_empty_tables(f);
+            if !reclaimed.is_empty() {
+                crate::memory::tlb_shootdown::flush_page(f);
+                if let Some(alloc) = FRAME_ALLOCATOR.lock().as_mut() {
+                    reclaimed.release(alloc);
+                }
+            }
+        }
+    }
     #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
     #[cfg(feature = "p01-trace")]
@@ -1253,7 +1278,9 @@ pub(super) fn free_grant_pages_inner(
         }
         for i in 0..n_pages {
             let f = base + i * PAGE_SIZE;
-            let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
+            if identity_alias {
+                let _ = crate::memory::paging::map_page(alloc, f, f, kernel_rwx);
+            }
             #[cfg(feature = "p01-trace")]
             {
                 released &= alloc.p01_allocated(f);
@@ -1886,24 +1913,12 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
     let paddr = match &owner_space {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                all(target_arch = "aarch64", feature = "test-hooks")
-            )
-        ))]
+        #[cfg(cellos_domain_grants)]
         Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
             Some(paddr) => paddr,
             None => return Ok(0),
         },
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                all(target_arch = "aarch64", feature = "test-hooks")
-            )
-        )))]
+        #[cfg(not(cellos_domain_grants))]
         Some(_) => return Ok(0),
         None => match alloc_grant_pages(n_pages) {
             Some(paddr) => paddr,
@@ -1913,13 +1928,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     // A domain owner's backing is mapped only in its own root, RW+NX, and
     // stays supervisor-only in the SAS root. Every page is undone if any
     // one fails, so no raw pointer is ever published for a partial map.
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    ))]
+    #[cfg(cellos_domain_grants)]
     if let Some(space) = &owner_space {
         if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
             log::warn!("[grant] GrantAlloc owner mapping failed for task {caller_id}: {error:?}");
@@ -1980,13 +1989,7 @@ pub(super) fn grant_share(
     // phase-01 denial.
     let owner_is_domain = domain_grant_task(caller_id);
     let target_is_domain = domain_grant_task(target_cell);
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    ))]
+    #[cfg(cellos_domain_grants)]
     if owner_is_domain || target_is_domain {
         let owner_space = live_domain_space(caller_id);
         let target_space = live_domain_space(target_cell);
@@ -2086,13 +2089,7 @@ pub(super) fn grant_slice(
         );
         return Ok(GRANT_DENY_SLICE);
     }
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    ))]
+    #[cfg(cellos_domain_grants)]
     if let Some(receiver) = live_domain_space(caller_id) {
         // A private-root receiver resolves the owner's exact rights and
         // publishes the receiver mapping transactionally; a VFS context
@@ -2260,37 +2257,19 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
     let paddr = match &owner_space {
-        #[cfg(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                all(target_arch = "aarch64", feature = "test-hooks")
-            )
-        ))]
+        #[cfg(cellos_domain_grants)]
         Some(_) => match alloc_grant_pages_supervisor_only(n_pages) {
             Some(paddr) => paddr,
             None => return Ok(0),
         },
-        #[cfg(not(all(
-            feature = "native-domains",
-            any(
-                target_arch = "riscv64",
-                all(target_arch = "aarch64", feature = "test-hooks")
-            )
-        )))]
+        #[cfg(not(cellos_domain_grants))]
         Some(_) => return Ok(0),
         None => match alloc_grant_pages(n_pages) {
             Some(paddr) => paddr,
             None => return Ok(0),
         },
     };
-    #[cfg(all(
-        feature = "native-domains",
-        any(
-            target_arch = "riscv64",
-            all(target_arch = "aarch64", feature = "test-hooks")
-        )
-    ))]
+    #[cfg(cellos_domain_grants)]
     if let Some(space) = &owner_space {
         if let Err(error) = map_domain_owner_pages(space, paddr, n_pages) {
             log::warn!(

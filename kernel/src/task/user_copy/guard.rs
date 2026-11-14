@@ -1,6 +1,7 @@
 //! Per-hart recoverable-fault guard: window arming, the guarded byte-copy
-//! core, and the trap-facing glue contract. The RV64 trap handler routes
-//! guard-owned page faults here by rewinding `sepc` to the landing pad
+//! core, and the trap-facing glue contract. Each architecture's trap handler
+//! routes guard-owned page faults here by rewinding the faulting PC (`sepc` on
+//! RV64, `ELR_EL1` on AArch64, the saved `RIP` on x86_64) to the landing pad
 //! published in `user_copy_guard_resume_pc`.
 
 use super::range::CopyError;

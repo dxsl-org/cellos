@@ -57,6 +57,17 @@ pub fn wide(arch: &str) -> bool {
     matches!(arch, "x86_64" | "aarch64" | "riscv64")
 }
 
+/// Where the private-root domain grant lifecycle (`task::domain_grant`) is
+/// compiled; `build.rs` emits it as the `cellos_domain_grants` cfg.
+///
+/// It follows domain admission: a 64-bit kernel with `native-domains`, except
+/// AArch64 production, whose admission stays closed
+/// (`loader::domain_admission::switch_ordering_qualified`), so its lifecycle
+/// is open on test images only.
+pub fn domain_grants(arch: &str, on: &dyn Fn(&str) -> bool) -> bool {
+    wide(arch) && on("native-domains") && (arch != "aarch64" || on("test-hooks"))
+}
+
 /// Derive the posture from `target_arch` and a feature query (`on("test-hooks")`).
 ///
 /// Returns `Err(reason)` for a combination that must not build.
@@ -148,5 +159,17 @@ mod tests {
             derive("x86_64", &with(&["native-domains", "test-hooks"])),
             Ok(Posture::Test)
         );
+    }
+
+    #[test]
+    fn domain_grants_follow_admission() {
+        let native = with(&["native-domains"]);
+        let test = with(&["native-domains", "test-hooks"]);
+        assert!(domain_grants("riscv64", &native));
+        assert!(domain_grants("x86_64", &native));
+        assert!(!domain_grants("aarch64", &native));
+        assert!(domain_grants("aarch64", &test));
+        assert!(!domain_grants("x86_64", &with(&["test-hooks"])));
+        assert!(!domain_grants("arm", &test));
     }
 }

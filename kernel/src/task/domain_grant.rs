@@ -14,10 +14,11 @@
 //! mapping over the old one.
 //!
 //! The state machine is architecture-independent: the owner/receiver invalidation
-//! goes through `AddressSpace`, whose private-root leaves are non-global on both
-//! RV64 and AArch64, so no step here is target-specific. The module is compiled
-//! on the targets whose lifecycle is open (`native-domains` on RV64, and AArch64
-//! test images — see `super::syscall::domain_grant_lifecycle_supported`).
+//! goes through `AddressSpace`, whose private-root leaves are non-global on
+//! RV64, AArch64 and x86_64, so no step here is target-specific. The module is
+//! compiled on the targets whose lifecycle is open (`cellos_domain_grants`:
+//! `native-domains` on RV64 and x86_64, and AArch64 test images — see
+//! `super::syscall::domain_grant_lifecycle_supported`).
 //!
 //! The record is owned by the `PAGE_GRANT_TABLE`/`REG_GRANT_TABLE` rows in
 //! `super::syscall`; this module is the state machine they embed. Publication
@@ -44,6 +45,24 @@ use types::{CellId, GrantPerm, PhysAddr, VAddr};
 pub(crate) const ARCH_TAG: &str = "S22-RV64";
 #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
 pub(crate) const ARCH_TAG: &str = "S22-AARCH64";
+#[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+pub(crate) const ARCH_TAG: &str = "S22-X86";
+
+/// Test-hooks: `(present, user)` for a domain owner's backing in the SAS/global
+/// root, observed where each party would reach it.
+///
+/// `present` is read at the kernel's own alias of the frame (`phys_to_virt`:
+/// the identity map on RV64/AArch64, the HHDM on x86_64, where RAM has no
+/// identity alias), and `user` at the grant address itself, the VA a SAS cell
+/// would dereference. The backing must stay reachable by the kernel and never
+/// become USER in the shared root. Shared with `super::grant_gate_selftest`.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn sas_root_state(base: PhysAddr) -> (bool, bool) {
+    let alias = crate::memory::frame::phys_to_virt(base);
+    let (present, _) = crate::memory::paging::mapping_state(alias);
+    let (_, user) = crate::memory::paging::mapping_state(base);
+    (present, user)
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DomainGrantError {
@@ -315,13 +334,9 @@ impl DomainGrant {
 ///
 /// It witnesses rights, transactional publish, revoke and the deferred outcome
 /// on the arch whose lane runs it; it does **not** witness the two-cell public
-/// handoff or an address-classified receiver store fault — those belong to the
-/// RV64 `grant-pair` lane (`cells/tests/tier2-grant-*`).
-#[cfg(all(
-    feature = "test-hooks",
-    feature = "native-domains",
-    any(target_arch = "riscv64", target_arch = "aarch64")
-))]
+/// handoff or an address-classified receiver store fault — those belong to each
+/// lane's `grant-pair` cells (`cells/tests/tier2-grant-*`).
+#[cfg(feature = "test-hooks")]
 pub(crate) fn run_selftest() {
     use super::syscall::{handle_syscall, Syscall};
     use super::tcb::TaskAddressSpace;
@@ -335,9 +350,10 @@ pub(crate) fn run_selftest() {
     const RECEIVER_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 21) as u64;
     const PAGE: usize = PAGE_SIZE;
     const GRANT_SIZE: usize = PAGE;
-    /// A private-root VA for each fixture task, clear of the SAS identity window.
-    const OWNER_VA: usize = 0x0400_0000;
-    const RECEIVER_VA: usize = 0x0800_0000;
+    /// A private-root VA for each fixture task, above the RAM a grant frame (VA =
+    /// PA) can come from on every lane's machine, x86_64 included.
+    const OWNER_VA: usize = 0x30_0400_0000;
+    const RECEIVER_VA: usize = 0x30_0800_0000;
 
     fn space(va: usize) -> Option<Arc<AddressSpace>> {
         let mut builder = AddressSpaceBuilder::new();
@@ -403,7 +419,7 @@ pub(crate) fn run_selftest() {
     //    and the SAS/global root must stay supervisor-only.
     let allocated = grant_alloc(OWNER_TID);
     let owner_mapped = allocated.is_some_and(|base| {
-        let (present, user) = crate::memory::paging::mapping_state(base);
+        let (present, user) = sas_root_state(base);
         let ledger_owner = owner_space.ledger().into_iter().any(|entry| {
             entry.virtual_address == base
                 && entry.kind == MappingKind::Grant
@@ -510,9 +526,12 @@ pub(crate) fn run_selftest() {
     // 8. Frame reuse: an allocation handed the same frame must be zeroed before
     //    it can be published, so no byte of the revoked grant survives.
     let reuse_private = grant_alloc(OWNER_TID).is_some_and(|base| {
-        // SAFETY: the frame is identity-mapped supervisor in the current root.
-        let zeroed = (0..GRANT_SIZE)
-            .all(|offset| (unsafe { core::ptr::read_volatile((base + offset) as *const u8) }) == 0);
+        let alias = crate::memory::frame::phys_to_virt(base);
+        // SAFETY: `phys_to_virt` is the kernel's supervisor alias of the frame
+        // (identity on RV64/AArch64, HHDM on x86_64), present in this root.
+        let zeroed = (0..GRANT_SIZE).all(|offset| {
+            (unsafe { core::ptr::read_volatile((alias + offset) as *const u8) }) == 0
+        });
         let _ = handle_syscall(OWNER_TID, Syscall::GrantFree { grant_id: base });
         zeroed
     });

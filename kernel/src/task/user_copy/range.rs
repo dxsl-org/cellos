@@ -5,10 +5,10 @@
 use crate::memory::address_space::AddressSpace;
 use types::ViError;
 
-/// Upper bound of the canonical user half for every view this kernel serves.
-/// Anything at or above this boundary is non-canonical or kernel-owned and is
-/// rejected before any mapping is consulted.
-const USER_LIMIT: usize = 1usize << 38;
+// Upper bound of the user window for every view this kernel serves, from the
+// HAL. Anything at or above this boundary is non-canonical or kernel-owned and
+// is rejected before any mapping is consulted.
+use crate::hal::paging::USER_LIMIT;
 
 /// Recoverable failure of the copy transaction. Deliberately a single variant:
 /// every rejection — bad arithmetic, missing mapping, missing permission, a

@@ -4,6 +4,12 @@ use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
 
+/// Exclusive end of the user virtual-address window: Sv39 sign-extends bit 38,
+/// so the lower (user) half is every VA below 2^38 (256 GiB). The kernel's
+/// private-root mapping validation, copy boundary and image placement all
+/// bound user addresses with this one constant.
+pub const USER_LIMIT: usize = 1 << 38;
+
 /// The address through which the HAL page-table walkers read a physical
 /// frame: the kernel identity-maps RAM, so the frame's own address.
 #[inline]

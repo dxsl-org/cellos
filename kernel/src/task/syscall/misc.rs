@@ -21,37 +21,19 @@ pub(super) fn live_domain_space(_tid: usize) -> Option<DomainRoot> {
 ///
 /// The lifecycle exists on one target tuple only; on every other target the
 /// record type has no inhabitants, so this is the sole producer of `None`.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 pub(super) fn clone_domain_record(domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     domain.clone()
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 pub(super) fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<DomainRecord> {
     None
 }
 
 /// Build the lifecycle record for a domain owner that has just published its
 /// own mapping. Absent — `None` — wherever the lifecycle does not exist.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 pub(super) fn new_domain_record(
     space: &DomainRoot,
     base: usize,
@@ -67,13 +49,7 @@ pub(super) fn new_domain_record(
     )))
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 pub(super) fn new_domain_record(
     _space: &DomainRoot,
     _base: usize,
@@ -83,13 +59,7 @@ pub(super) fn new_domain_record(
 }
 
 /// Drop the receiver half of a record left unshared by receiver death.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 pub(super) fn drain_domain_receiver(record: &DomainRecord) {
     if record.drain_receiver().is_err() {
         log::warn!(
@@ -99,13 +69,7 @@ pub(super) fn drain_domain_receiver(record: &DomainRecord) {
     }
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 pub(super) fn drain_domain_receiver(_record: &DomainRecord) {}
 
 /// Whether the reaper must withhold `pages` frames at `base` instead of freeing

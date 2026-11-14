@@ -10,13 +10,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 /// Only the private-root lifecycle helpers below name `Arc`; every other
 /// target/feature combination has nothing to import.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 // use log::info;
@@ -199,13 +193,7 @@ type DomainRoot = ();
 /// The frames stay supervisor-only in the SAS/global root: this path never
 /// publishes USER access there, so a SAS cell cannot reach a domain owner's
 /// backing even if the grant later collapses.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 fn map_domain_owner_pages(
     space: &DomainRoot,
     base: usize,
@@ -240,22 +228,17 @@ fn map_domain_owner_pages(
     Ok(())
 }
 
-/// Allocate `n_pages` contiguous frames, zero them through the supervisor
-/// identity map, and leave the SAS/global root untouched.
+/// Allocate `n_pages` contiguous frames, zero them through the kernel's own
+/// alias of RAM, and leave the SAS/global root untouched.
 ///
 /// Domain owners must not have their backing published USER in the shared root
-/// (the phase-01 leak). The boot identity map already covers every usable
-/// frame supervisor RWX, so zeroing needs no remap at all; the caller then maps
-/// the owner's own private root over the returned base.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+/// (the phase-01 leak). The kernel already reaches every usable frame
+/// supervisor-only — the RV64/AArch64 identity map, the x86_64 HHDM — so
+/// zeroing needs no remap at all; the caller then maps the owner's own private
+/// root over the returned base.
+#[cfg(cellos_domain_grants)]
 fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
-    use crate::memory::frame::FRAME_ALLOCATOR;
+    use crate::memory::frame::{phys_to_virt, FRAME_ALLOCATOR};
     const PAGE_SIZE: usize = 4096;
     let paddr = {
         let mut guard = FRAME_ALLOCATOR.lock();
@@ -263,34 +246,24 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<usize> {
             .as_mut()
             .and_then(|alloc| alloc.allocate_contiguous(n_pages))?
     };
-    // SAFETY: every usable frame is identity-mapped supervisor RWX in the
-    // current (kernel) root, and the syscall runs on that root.
+    // SAFETY: `phys_to_virt` names the kernel's supervisor alias of RAM (the
+    // identity map on RV64/AArch64, the HHDM on x86_64), present in the root the
+    // syscall runs on, and the run was just allocated to this call alone. x86
+    // RAM has no identity alias, so the frame address itself would fault there.
     unsafe {
-        core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE);
+        core::ptr::write_bytes(phys_to_virt(paddr) as *mut u8, 0, n_pages * PAGE_SIZE);
     }
     Some(paddr)
 }
 
 /// The lifecycle record behind a table row, where this target can hold one.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 type DomainRecord = Arc<super::domain_grant::DomainGrant>;
 
 /// On every other target a row can never carry a lifecycle record:
 /// [`clone_domain_record`] is the only producer and always yields `None`, so the
 /// stubs below are unreachable rather than a second implementation.
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 type DomainRecord = ();
 
 /// A record the lifecycle cannot drain: it names a private-root endpoint but is
@@ -322,13 +295,7 @@ static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> =
 ///
 /// An unacknowledged invalidation never frees a frame. The row loses its owner
 /// so no caller can free it out from under the retry.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 fn release_deferred_domain_row(
     key: usize,
     record: DomainRecord,
@@ -369,13 +336,7 @@ fn release_deferred_domain_row(
     }
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 fn release_deferred_domain_row(
     _key: usize,
     _record: DomainRecord,
@@ -714,13 +675,7 @@ impl core::ops::Deref for MsgPayload {
 // base, domain, shared_to) plus the receiver binding (caller, target tid/root,
 // perm). Grouping them into a struct would only move the same list.
 #[allow(clippy::too_many_arguments)]
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 fn domain_grant_share_row(
     owner: usize,
     base: usize,
@@ -765,13 +720,7 @@ fn domain_grant_share_row(
 /// receiver, a SAS-owned record, an unresolvable or dying owner, a record that
 /// is not `Live`, missing or unsupported rights, a partial receiver mapping, or
 /// an unacknowledged rollback invalidation.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 #[allow(clippy::too_many_arguments)]
 fn domain_grant_slice_row(
     owner: usize,
@@ -851,13 +800,7 @@ fn domain_grant_slice_row(
 /// GrantSlice entry point for a capable domain receiver: resolve the row in
 /// either table and apply the lifecycle-aware resolver under the same lock that
 /// linearizes teardown.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 fn resolve_domain_grant_slice(
     caller_id: usize,
     grant_id: usize,

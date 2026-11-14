@@ -102,8 +102,8 @@ fn run_copy_fixture() -> bool {
     // ── Slice construction rejections (no execution at all) ──
     if UserReadSlice::new(0, 8, false).is_ok()
         || UserWriteSlice::new(usize::MAX - 8, 16, false).is_ok()
-        || UserReadSlice::new(1 << 39, 8, false).is_ok()
-        || UserWriteSlice::new((1usize << 38) - 4, 16, false).is_ok()
+        || UserReadSlice::new(2 * crate::hal::paging::USER_LIMIT, 8, false).is_ok()
+        || UserWriteSlice::new(crate::hal::paging::USER_LIMIT - 4, 16, false).is_ok()
     {
         log::error!("S22-RV64-COPY: FAIL slice-construction accepted-hostile");
         return false;

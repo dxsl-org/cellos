@@ -36,8 +36,8 @@
 //! and gets them back as four little-endian `u64`s on the same IPC channel — the
 //! handoff the interactive lane gets by reading this cell's `HANDOFF` line.
 //!
-//! Marker grammar (the QEMU lanes grep these verbatim; `<arch>` is `RV64` or
-//! `AARCH64`, matching the architecture the cell was built for):
+//! Marker grammar (the QEMU lanes grep these verbatim; `<arch>` is `RV64`,
+//! `AARCH64` or `X86`, matching the architecture the cell was built for):
 //!   S22-<arch>-GRANT-PAIR-OWNER-ALLOC: OK id=<n>|DENY
 //!   S22-<arch>-GRANT-PAIR-OWNER-REGISTER: OK id=<n>|DENY
 //!   S22-<arch>-GRANT-PAIR-OWNER-MAPPED: OK|MISMATCH*

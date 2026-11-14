@@ -21,12 +21,13 @@ use crate::loader::va_alloc;
 use crate::memory::paging::PAGE_SIZE;
 use types::{ViError, ViResult};
 
-/// SV39 user-half upper bound (256 GiB): 2^38. Cells compiled at 4 GiB+ slots
-/// are well inside it. On 32-bit targets the address space itself bounds the
-/// checked arithmetic, because `usize::MAX` cannot represent 4 GiB.
-#[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
-pub(crate) const USER_VADDR_MAX: usize = 0x40_0000_0000;
-#[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
+/// The user VA window's upper bound, from the HAL (`hal::paging::USER_LIMIT`,
+/// 256 GiB on every 64-bit target). Cells compiled at 4 GiB+ slots are well
+/// inside it. On 32-bit targets the address space itself bounds the checked
+/// arithmetic, because `usize::MAX` cannot represent 4 GiB.
+#[cfg(cellos_wide)]
+pub(crate) const USER_VADDR_MAX: usize = crate::hal::paging::USER_LIMIT;
+#[cfg(not(cellos_wide))]
 pub(crate) const USER_VADDR_MAX: usize = usize::MAX;
 
 /// The slot `[base, end)` a spawn owns.

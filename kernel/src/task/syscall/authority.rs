@@ -11,13 +11,7 @@ use super::{decode::*, dev::*, fs::*, grant::*, ipc::*, misc::*, spawn::*, vm::*
 /// Returns `false` when the receiver or owner invalidation is not acknowledged:
 /// the caller must keep the row (so a retry is idempotent) and must not release
 /// a single frame.
-#[cfg(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-))]
+#[cfg(cellos_domain_grants)]
 pub(super) fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str) -> bool {
     match record.revoke() {
         Ok(()) => true,
@@ -31,13 +25,7 @@ pub(super) fn revoke_domain_record(record: &DomainRecord, id: usize, kind: &str)
     }
 }
 
-#[cfg(not(all(
-    feature = "native-domains",
-    any(
-        target_arch = "riscv64",
-        all(target_arch = "aarch64", feature = "test-hooks")
-    )
-)))]
+#[cfg(not(cellos_domain_grants))]
 pub(super) fn revoke_domain_record(_record: &DomainRecord, _id: usize, _kind: &str) -> bool {
     false
 }

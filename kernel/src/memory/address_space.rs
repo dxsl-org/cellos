@@ -7,7 +7,8 @@ use crate::{sync::Spinlock, PhysAddr, VAddr};
 use alloc::{sync::Arc, vec::Vec};
 use core::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use hal::PageTableTrait;
-const USER_LIMIT: usize = 1usize << 38;
+// Exclusive end of the user VA window, from the HAL.
+use crate::hal::paging::USER_LIMIT;
 static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 
 /// Frames whose invalidation could not be confirmed. They never return to the
@@ -51,8 +52,8 @@ pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
 /// invalidation. A non-zero value is a leak by design, never a silent one.
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
-    not(target_arch = "riscv64"),
-    allow(dead_code) // reason: the fixture that asserts on it is RV64-only today
+    not(cellos_domain_grants),
+    allow(dead_code) // reason: the grant fixtures assert on it
 )]
 pub(crate) fn quarantined_frame_count() -> usize {
     QUARANTINED_FRAMES.lock().len()
@@ -691,8 +692,8 @@ impl AddressSpace {
     /// allocator's free count.
     #[cfg(feature = "test-hooks")]
     #[cfg_attr(
-        not(target_arch = "riscv64"),
-        allow(dead_code) // reason: the fixture that uses it is RV64-only today
+        not(cellos_domain_grants),
+        allow(dead_code) // reason: the grant fixtures assert on it
     )]
     pub(crate) fn owned_frame_count(&self) -> usize {
         1 + self.frames.lock().len() + self.table_frames.lock().len()
@@ -704,8 +705,8 @@ impl AddressSpace {
     /// the deferred release reports the tag confirmed; a no-op address (never
     /// reserved, or already released) is harmless.
     #[cfg_attr(
-        not(target_arch = "riscv64"),
-        allow(dead_code) // reason: the grant lifecycle that calls it is RV64-only today
+        not(cellos_domain_grants),
+        allow(dead_code) // reason: the grant lifecycle calls it
     )]
     pub(crate) fn release_reserved_address(&self, virtual_address: VAddr) {
         self.finish_unmap(virtual_address);

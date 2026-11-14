@@ -38,7 +38,7 @@ compile_error!(
 ///   - RAM identity map: supports physical configurations up to 48 GiB
 ///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
 ///     64 GiB clears all of the above with room to spare and remains well inside
-///     the SV39 user-half (256 GiB = 0x40_0000_0000).
+///     the user window (`hal::paging::USER_LIMIT`, 256 GiB).
 ///
 /// RISC-V medany: even the 256 MiB desktop slot stays within ±2 GiB.
 ///
@@ -68,8 +68,8 @@ const MAX_SLOTS: usize = 512;
 #[cfg(feature = "cell-scale-experiment")]
 const MAX_SLOTS: usize = 4096;
 
-#[cfg(target_pointer_width = "64")]
-const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= 0x40_0000_0000);
+#[cfg(cellos_wide)]
+const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= crate::hal::paging::USER_LIMIT);
 
 /// Exclusive end of a valid reservation, shared by ELF admission and release.
 pub(crate) fn slot_end(base: usize) -> Option<usize> {
