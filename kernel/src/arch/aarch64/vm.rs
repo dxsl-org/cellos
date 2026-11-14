@@ -13,7 +13,7 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, VgicWindows};
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
-    stage2_regs::{disable_stage2, enable_stage2},
+    stage2_regs::{disable_stage2, enable_stage2, s2_tlb_flush_all},
     vcpu::AArch64Vcpu,
 };
 use hal::aarch64::{vcpu::run_vcpu_impl, vgic};
@@ -855,11 +855,16 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
             .collect();
         dead_keys.iter().filter_map(|k| map.remove(k)).collect()
     };
-    // Disable Stage-2 for each dying VM before dropping the table.
+    // Disable Stage-2 for each dying VM and drop its translations before its
+    // tables and guest RAM go back to the allocator. `disable_stage2` flushes
+    // only the VMID in this CPU's VTTBR_EL2, which is the VM enabled (or, on
+    // the Pi, run) last — not necessarily the dying one — so every VMID is
+    // flushed, on every CPU, before the drop (census P13).
     for vm in dead_vms {
         // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
         unsafe {
             disable_stage2();
+            s2_tlb_flush_all();
         }
         drop(vm); // Stage2Table::drop frees all frames
     }

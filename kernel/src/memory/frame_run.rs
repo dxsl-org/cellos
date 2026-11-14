@@ -466,6 +466,74 @@ impl Drop for FrameRun {
     }
 }
 
+/// A run no shared root maps: the kernel reaches it only through its own
+/// alias of RAM (`Intact`), and hardware reaches it only through structures
+/// its owner tears down itself. Hypervisor control structures (VMCB, VMCS,
+/// MSR/IO bitmaps, the xAPIC page), nested and Stage-2 tables, and a VM's guest
+/// RAM are such runs (`RunKind::VmStructure`, `PageTable`, `Leaf`).
+///
+/// Its release has nothing to unpublish and nothing to flush in the shared
+/// root, so dropping it frees the frames (through a [`Batch`], which
+/// quarantines them for the reaper on a hart that may not take the
+/// allocator). The owner drops it only once nothing else can reach the frames:
+/// the VM left its registry, so no vCPU can enter it; its VMCS was cleared;
+/// its nested or Stage-2 translations were invalidated. An error path that
+/// drops a structure no VM ever used frees it the same way, so a partial
+/// construction never leaks (census §5).
+#[derive(Debug)]
+pub struct PrivateRun(Option<FrameRun>);
+
+impl PrivateRun {
+    /// `pages` fresh contiguous frames (not zeroed), or `None` when the
+    /// allocator has no such run or the quarantine cap refuses it.
+    pub fn allocate(pages: usize, owner: RunOwner, kind: RunKind) -> Option<Self> {
+        let base = crate::memory::frame::allocate_contiguous(pages)?;
+        Some(Self::adopt(base, pages, owner, kind))
+    }
+
+    /// Own `pages` frames at `base` the caller has just allocated.
+    pub fn adopt(base: PhysAddr, pages: usize, owner: RunOwner, kind: RunKind) -> Self {
+        Self(Some(FrameRun::mapped(
+            base,
+            pages,
+            owner,
+            kind,
+            KernelAlias::Intact,
+        )))
+    }
+
+    #[inline]
+    pub fn base(&self) -> PhysAddr {
+        self.0.as_ref().map_or(0, FrameRun::base)
+    }
+
+    /// Hand the run to `batch`, which frees it with the operation's other
+    /// runs once the batch finishes.
+    pub fn retire_into(mut self, batch: &mut Batch) {
+        if let Some(run) = self.0.take() {
+            retire_private(run, batch);
+        }
+    }
+}
+
+impl Drop for PrivateRun {
+    fn drop(&mut self) {
+        if let Some(run) = self.0.take() {
+            let mut batch = Batch::new();
+            retire_private(run, &mut batch);
+            let _ = batch.complete();
+        }
+    }
+}
+
+/// `Mapped → Unpublished` with nothing to remove, then into `batch`.
+fn retire_private(mut run: FrameRun, batch: &mut Batch) {
+    // A `PrivateRun` holds only `Mapped` runs; anything else is leaked by
+    // the batch (counted), never freed.
+    let _ = run.unpublish();
+    batch.retire(run);
+}
+
 /// The machinery a release needs, separated so host tests drive the same state
 /// machine with a fake acknowledgement source and allocator.
 pub(crate) trait Backend {

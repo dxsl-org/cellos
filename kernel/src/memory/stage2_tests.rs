@@ -123,3 +123,20 @@ fn a_map_that_runs_out_of_tables_writes_no_leaf() {
     assert_eq!(leaf(&table, IPA), existing, "earlier mapping untouched");
     assert_eq!(arena.used(), 4);
 }
+
+/// Phase 16 row 10: the table owns its frames as runs. Dropping it returns
+/// every one — root pair, sub-tables, guest RAM — and a second carve is
+/// refused rather than dropping RAM the table may already map.
+#[test]
+fn a_dropped_table_returns_every_frame_it_took() {
+    let arena = FrameArena::new(8);
+    let mut table = Stage2Table::new().expect("root pair");
+    // Mapped before the carve: the host arena lies above the IPA/HPA limit,
+    // so the carve itself cannot be the leaf's output address here.
+    table.map(IPA, HPA, 2, true).expect("map");
+    table.carve_guest_ram(2).expect("carve");
+    assert_eq!(table.carve_guest_ram(1), None, "a table carves once");
+    assert_eq!(arena.used(), 6, "root pair + L2 + L3 + two RAM pages");
+    drop(table);
+    assert_eq!(arena.used(), 0);
+}

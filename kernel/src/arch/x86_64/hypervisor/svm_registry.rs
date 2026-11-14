@@ -16,6 +16,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
 use crate::memory::frame::phys_to_virt;
+use crate::memory::frame_run::{PrivateRun, RunKind, RunOwner};
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
@@ -23,17 +24,50 @@ use hal::x86_64::vmx_vcpu::VmxVcpu;
 use hal::ViVmExit as HalVmExit;
 use types::{ViError, ViResult};
 
-/// Physical frames backing one vCPU's hardware structures, freed on VM teardown.
+/// Physical frames backing one vCPU's hardware structures, freed when the VM
+/// (or a vCPU creation that failed part-way) drops them.
+// reason: the runs are held for their `Drop`, which frees the frames; the vCPU
+// reads the addresses it captured at creation, not these fields. One value per
+// vCPU sits in a `Vec`, so the SVM variant's size costs nothing worth a box.
+#[allow(dead_code, clippy::large_enum_variant)]
 enum VcpuFrames {
     Svm {
-        vmcb: usize,
-        host: usize,
-        msrpm: usize,
-        iopm: usize,
+        vmcb: PrivateRun,
+        host: PrivateRun,
+        msrpm: PrivateRun,
+        iopm: PrivateRun,
     },
     Vmx {
-        vmcs: usize,
+        vmcs: Vmcs,
     },
+}
+
+/// A vCPU's VMCS frame. A VMCS still active on this CPU may be written back
+/// into its frame after the frame is reused, so the drop clears it before the
+/// run frees the frame.
+struct Vmcs(PrivateRun);
+
+impl Drop for Vmcs {
+    fn drop(&mut self) {
+        if crate::cpu_features::has_x86_virt() {
+            // SAFETY: VMX backend with every online CPU in VMX operation;
+            // `self.0` is this vCPU's VMCS frame.
+            let _ = unsafe { hal::x86_64::vmcs::vmclear(self.0.base() as u64) };
+        }
+    }
+}
+
+/// `pages` fresh frames for one of `owner`'s VM control structures.
+fn vm_structure(owner: usize, vm_id: usize, pages: usize) -> ViResult<PrivateRun> {
+    PrivateRun::allocate(
+        pages,
+        RunOwner::Vm {
+            owner,
+            vm_id: vm_id as u64,
+        },
+        RunKind::VmStructure,
+    )
+    .ok_or(ViError::OutOfMemory)
 }
 
 enum X86Vcpu {
@@ -99,58 +133,22 @@ fn next_asid(current: u32, max_asid: u32) -> Option<u32> {
         .filter(|_| current != 0 && current <= max_asid)
 }
 
+/// One VM. Dropped only after it left [`VM_REGISTRY`], so no vCPU can enter
+/// it: `run_vcpu_hal` holds the registry across every guest entry. Each field
+/// frees its own frames as it drops — the NPT/EPT its tree and guest RAM
+/// (after the teardown INVEPT), then the xAPIC page, then each vCPU's control
+/// structures (a VMCS after its VMCLEAR), after the vCPUs that point at them.
 struct SvmVm {
     npt: NestedPageTable,
     guest_pa: u64,
     guest_pages: usize,
     /// Kernel frame backing the RAM-backed xAPIC window at [`APIC_GPA`]. Guest
     /// LAPIC MMIO hits this frame directly (no trap); the timer is polled from
-    /// it on HLT. Freed here in `Drop` (it is not tracked by the NPT, which only
-    /// frees its own tree + guest RAM).
-    apic_frame: usize,
+    /// it on HLT. Not tracked by the NPT, which owns only its own tree + guest
+    /// RAM.
+    apic_frame: PrivateRun,
     vcpus: Vec<X86Vcpu>,
     vcpu_frames: Vec<VcpuFrames>,
-}
-
-impl Drop for SvmVm {
-    fn drop(&mut self) {
-        let vcpu_frames = &self.vcpu_frames;
-        let apic_frame = self.apic_frame;
-        let _ = crate::memory::frame::with(|a| {
-            for f in vcpu_frames {
-                match f {
-                    VcpuFrames::Svm {
-                        vmcb,
-                        host,
-                        msrpm,
-                        iopm,
-                    } => {
-                        a.deallocate_frame(*vmcb);
-                        a.deallocate_frame(*host);
-                        a.deallocate_frame(*msrpm);
-                        a.deallocate_frame(*msrpm + PAGE_SIZE);
-                        a.deallocate_frame(*iopm);
-                        a.deallocate_frame(*iopm + PAGE_SIZE);
-                        a.deallocate_frame(*iopm + 2 * PAGE_SIZE);
-                    }
-                    VcpuFrames::Vmx { vmcs } => {
-                        // A VMCS still active on this CPU may be written back
-                        // into its frame after the frame is reused.
-                        if crate::cpu_features::has_x86_virt() {
-                            // SAFETY: VMX backend with every online CPU in VMX
-                            // operation; `vmcs` is this vCPU's VMCS frame.
-                            let _ = unsafe { hal::x86_64::vmcs::vmclear(*vmcs as u64) };
-                        }
-                        a.deallocate_frame(*vmcs);
-                    }
-                }
-            }
-            if apic_frame != 0 {
-                a.deallocate_frame(apic_frame);
-            }
-        });
-        // `npt` frees its own tree + guest RAM in its Drop.
-    }
 }
 
 static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> =
@@ -173,11 +171,6 @@ fn nested_format() -> NestedFormat {
         Some(crate::arch::boot::cpu_features::X86Virt::Vmx) => NestedFormat::Ept,
         _ => NestedFormat::Npt,
     }
-}
-
-/// Allocate `n` contiguous frames and return the base PA (no zeroing).
-fn alloc_contig(n: usize) -> Option<usize> {
-    crate::memory::frame::allocate_contiguous(n)
 }
 
 /// Allocate guest RAM + NPT, mapped at GPA 0; return the opaque `vm_id`.
@@ -212,24 +205,24 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     // LAPIC MMIO hits memory (QEMU TCG has no DecodeAssist → per-access
     // emulation is impossible). Zeroed, then ID(0x20)=0 / VERSION(0x30)=0x50014
     // pre-populated; the timer is polled kernel-side on HLT.
-    let apic_frame = alloc_contig(1).ok_or_else(|| {
+    // The VM's id is assigned at registration below; 0 names "not yet".
+    let apic_frame = vm_structure(owner, 0, 1).inspect_err(|_| {
         log::error!("[hv-x86] create_vm: xAPIC frame OOM");
-        ViError::OutOfMemory
     })?;
     // SAFETY: freshly allocated, exclusively owned frame; HHDM-mapped VA. u32
     // stores are within the 4 KiB frame and naturally aligned (0x20 / 0x30).
     unsafe {
-        let va = phys_to_virt(apic_frame) as *mut u8;
+        let va = phys_to_virt(apic_frame.base()) as *mut u8;
         core::ptr::write_bytes(va, 0, PAGE_SIZE);
         (va.add(0x20) as *mut u32).write_volatile(0); // APIC ID = 0
         (va.add(0x30) as *mut u32).write_volatile(0x0005_0014); // version 0x14, max-LVT 5
     }
     if npt
-        .map_device_frame(APIC_GPA, apic_frame as u64, true)
+        .map_device_frame(APIC_GPA, apic_frame.base() as u64, true)
         .is_err()
     {
+        // No leaf was written; the frame and the table go back on return.
         log::error!("[hv-x86] create_vm: xAPIC NPT map OOM");
-        crate::memory::frame::deallocate_frame(apic_frame);
         return Err(ViError::OutOfMemory);
     }
 
@@ -263,16 +256,19 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     if crate::arch::boot::cpu_features::x86_virt_kind()
         == Some(crate::arch::boot::cpu_features::X86Virt::Vmx)
     {
-        let vmcs = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
+        // Every early return below drops `vmcs`: VMCLEAR, then the frame
+        // is freed (it leaked on these paths before, census §5).
+        let vmcs = Vmcs(vm_structure(owner, vm_id, 1)?);
         let mut guard = VM_REGISTRY.lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
         let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
         let vcpu_id = vm.vcpus.len() + 1;
         let host_cr3 = unsafe { hal::x86_64::paging::read_cr3() & !0xFFF };
+        let vmcs_pa = vmcs.0.base();
         let mut vcpu = match unsafe {
             VmxVcpu::new(
-                vmcs as u64,
-                phys_to_virt(vmcs) as *mut u8,
+                vmcs_pa as u64,
+                phys_to_virt(vmcs_pa) as *mut u8,
                 phys_to_virt(vm.guest_pa as usize) as *const u8,
                 vm.guest_pages * PAGE_SIZE,
             )
@@ -309,11 +305,19 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
             ViError::OutOfMemory
         })?;
 
-    // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM).
-    let vmcb = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
-    let host = alloc_contig(1).ok_or(ViError::OutOfMemory)?;
-    let msrpm = alloc_contig(2).ok_or(ViError::OutOfMemory)?;
-    let iopm = alloc_contig(3).ok_or(ViError::OutOfMemory)?;
+    // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM). An
+    // early return below frees the ones already allocated (they leaked on
+    // these paths before, census §5); the ASID stays spent.
+    let vmcb_run = vm_structure(owner, vm_id, 1)?;
+    let host_run = vm_structure(owner, vm_id, 1)?;
+    let msrpm_run = vm_structure(owner, vm_id, 2)?;
+    let iopm_run = vm_structure(owner, vm_id, 3)?;
+    let (vmcb, host, msrpm, iopm) = (
+        vmcb_run.base(),
+        host_run.base(),
+        msrpm_run.base(),
+        iopm_run.base(),
+    );
 
     // Zero the VMCB + host-save frames; fill the permission bitmaps with 0xFF
     // (intercept every MSR/port).
@@ -336,9 +340,10 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
 
     let ncr3 = vm.npt.ncr3();
     let vmcb_va = phys_to_virt(vmcb) as *mut u8;
-    let apic_va = phys_to_virt(vm.apic_frame) as *mut u8;
+    let apic_va = phys_to_virt(vm.apic_frame.base()) as *mut u8;
     // SAFETY: frames freshly allocated + zeroed/filled above; all outlive the
-    // vCPU (owned by this VM entry, freed only in SvmVm::drop). apic_va is the
+    // vCPU (owned by this VM entry's `vcpu_frames`, which drop after `vcpus`,
+    // and freed only when the VM drops). apic_va is the
     // live VA of the RAM-backed xAPIC frame (create_vm maps + pre-populates it).
     let vcpu = unsafe {
         SvmVcpu::new(
@@ -358,10 +363,10 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     };
     vm.vcpus.push(X86Vcpu::Svm(vcpu));
     vm.vcpu_frames.push(VcpuFrames::Svm {
-        vmcb,
-        host,
-        msrpm,
-        iopm,
+        vmcb: vmcb_run,
+        host: host_run,
+        msrpm: msrpm_run,
+        iopm: iopm_run,
     });
     Ok(vcpu_id)
 }
@@ -593,7 +598,7 @@ pub fn reap_vms_for_task(dead_tid: usize) {
             .collect();
         keys.iter().filter_map(|k| map.remove(k)).collect()
     };
-    drop(dead); // SvmVm::drop + NestedPageTable::drop free all frames
+    drop(dead); // each SvmVm field frees its own frames
 }
 
 fn interrupts_enabled() -> bool {

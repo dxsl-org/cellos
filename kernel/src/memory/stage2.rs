@@ -25,6 +25,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use super::frame::{allocate_guest_ram, phys_to_virt};
+use super::frame_run::{Batch, PrivateRun, RunKind, RunOwner};
 use super::paging::PAGE_SIZE;
 
 // ── S2 descriptor constants ─────────────────────────────────────────────────
@@ -159,12 +160,15 @@ pub struct Stage2Table {
     root_pa: u64,
     root_va: *mut u64, // maps to 1024 entries (2 × 512)
 
-    // L2/L3 sub-table frames allocated on demand.  Tracked for Drop.
-    sub_frames: Vec<usize>, // physical addresses
+    // The root pair and the L2/L3 sub-tables allocated on demand, root
+    // first. Freed in Drop.
+    tables: Vec<PrivateRun>,
 
     // Carved guest-RAM region used for SAS-isolation assertion in map().
     guest_ram_pa: u64,
     guest_ram_pages: usize,
+    // The carved guest RAM itself. Freed in Drop.
+    guest_ram: Option<PrivateRun>,
 }
 
 // SAFETY: Stage2Table is not Send/Sync by default because of *mut u64.
@@ -182,7 +186,13 @@ impl Stage2Table {
         // parity depends on every allocation since boot — so a 4 KB-misaligned
         // root silently truncated in VTTBR and the guest died on a Stage-2
         // level-1 translation fault at its very first instruction fetch.
-        let root_pa = super::frame::allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64;
+        let root = PrivateRun::adopt(
+            super::frame::allocate_contiguous_aligned(2, 2 * PAGE_SIZE)?,
+            2,
+            RunOwner::Kernel,
+            RunKind::PageTable,
+        );
+        let root_pa = root.base() as u64;
         debug_assert_eq!(
             root_pa % (2 * PAGE_SIZE as u64),
             0,
@@ -199,9 +209,10 @@ impl Stage2Table {
         Some(Self {
             root_pa,
             root_va,
-            sub_frames: Vec::new(),
+            tables: alloc::vec![root],
             guest_ram_pa: 0,
             guest_ram_pages: 0,
+            guest_ram: None,
         })
     }
 
@@ -216,12 +227,23 @@ impl Stage2Table {
     /// Records the carved region so `map()` can enforce the SAS-isolation
     /// invariant (guest Stage-2 may only map into this region).
     ///
-    /// Uses `allocate_guest_ram` (chunked scan, M2-mitigated).
+    /// Uses `allocate_guest_ram` (chunked scan, M2-mitigated). A table carves
+    /// once: a second carve is refused rather than dropping RAM the table may
+    /// already map.
     pub fn carve_guest_ram(&mut self, n_pages: usize) -> Option<u64> {
-        let pa = allocate_guest_ram(n_pages)? as u64;
-        self.guest_ram_pa = pa;
+        if self.guest_ram.is_some() {
+            return None;
+        }
+        let pa = allocate_guest_ram(n_pages)?;
+        self.guest_ram = Some(PrivateRun::adopt(
+            pa,
+            n_pages,
+            RunOwner::Kernel,
+            RunKind::Leaf,
+        ));
+        self.guest_ram_pa = pa as u64;
         self.guest_ram_pages = n_pages;
-        Some(pa)
+        Some(pa as u64)
     }
 
     // ── Internal table allocator ─────────────────────────────────────────────
@@ -233,7 +255,12 @@ impl Stage2Table {
         unsafe {
             core::ptr::write_bytes(va, 0, 512);
         }
-        self.sub_frames.push(pa);
+        self.tables.push(PrivateRun::adopt(
+            pa,
+            1,
+            RunOwner::Kernel,
+            RunKind::PageTable,
+        ));
         Some((va, pa as u64))
     }
 
@@ -412,27 +439,19 @@ impl Stage2Table {
 
 // ── Drop — free all allocated frames ────────────────────────────────────────
 
+/// The owner drops a table only after its VM's Stage-2 translations are
+/// invalidated (`arch::aarch64::vm::reap_vms_for_task`), or for a table no
+/// VM ever ran on.
 impl Drop for Stage2Table {
     fn drop(&mut self) {
-        let (sub_frames, root_pa) = (&self.sub_frames, self.root_pa);
-        let (guest_ram_pa, guest_ram_pages) = (self.guest_ram_pa, self.guest_ram_pages);
-        let _ = super::frame::with(|alloc| {
-            // Free L2/L3 sub-table frames (individually allocated).
-            for &pa in sub_frames {
-                alloc.deallocate_frame(pa);
-            }
-            // Free the 2 × root L1 frames (allocated contiguously).
-            let root = root_pa as usize;
-            alloc.deallocate_frame(root);
-            alloc.deallocate_frame(root + PAGE_SIZE);
-            // Free guest RAM pages if they were carved here.
-            if guest_ram_pages > 0 {
-                let base = guest_ram_pa as usize;
-                for i in 0..guest_ram_pages {
-                    alloc.deallocate_frame(base + i * PAGE_SIZE);
-                }
-            }
-        });
+        let mut batch = Batch::new();
+        for run in self.tables.drain(..) {
+            run.retire_into(&mut batch);
+        }
+        if let Some(run) = self.guest_ram.take() {
+            run.retire_into(&mut batch);
+        }
+        let _ = batch.complete();
     }
 }
 

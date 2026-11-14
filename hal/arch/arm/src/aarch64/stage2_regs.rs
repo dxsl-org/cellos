@@ -109,7 +109,10 @@ pub unsafe fn monitor_disable_stage2() {
 
 /// Invalidate all Stage-1 + Stage-2 TLB entries for all VMIDs (broadcast).
 ///
-/// Use after bulk Stage-2 table changes or during VM teardown.
+/// Use after bulk Stage-2 table changes or during VM teardown. `TLBI ALLE1IS`
+/// covers every VMID of the EL1&0 regime; `TLBI VMALLS12E1IS` would cover only
+/// the VMID in this CPU's `VTTBR_EL2`, which during a teardown is whichever VM
+/// was enabled or run last.
 ///
 /// # Safety
 /// Must be called from EL2.
@@ -119,7 +122,7 @@ pub unsafe fn monitor_s2_tlb_flush_all() {
     unsafe {
         core::arch::asm!(
             "dsb ishst",
-            "tlbi vmalls12e1is",
+            "tlbi alle1is",
             "dsb ish",
             "isb",
             options(nostack),

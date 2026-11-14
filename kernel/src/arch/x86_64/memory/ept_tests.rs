@@ -62,3 +62,18 @@ fn a_map_that_runs_out_of_tables_writes_no_leaf() {
     assert_eq!(table.translate(0), Some(carve), "earlier mapping untouched");
     assert_eq!(arena.used(), 8);
 }
+
+/// Phase 16 row 10: the table owns its frames as runs. Dropping it returns
+/// every one — root, sub-tables, guest RAM — and a second carve is refused
+/// rather than dropping RAM the table may already map.
+#[test]
+fn a_dropped_table_returns_every_frame_it_took() {
+    let arena = FrameArena::new(8);
+    let mut table = NestedPageTable::new(NestedFormat::Npt).expect("root");
+    let carve = table.carve_guest_ram(2).expect("carve");
+    assert_eq!(table.carve_guest_ram(1), None, "a table carves once");
+    table.map(0, carve, 2, true).expect("map");
+    assert_eq!(arena.used(), 6, "root + PDPT + PD + PT + two RAM pages");
+    drop(table);
+    assert_eq!(arena.used(), 0);
+}

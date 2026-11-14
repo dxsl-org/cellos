@@ -24,6 +24,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::memory::frame::{allocate_guest_ram, phys_to_virt};
+use crate::memory::frame_run::{Batch, PrivateRun, RunKind, RunOwner};
 use crate::memory::paging::PAGE_SIZE;
 
 /// Which nested-paging format this tree encodes, selected at VM-create time
@@ -123,11 +124,13 @@ pub struct NestedPageTable {
     format: NestedFormat,
     root_pa: u64,
     root_va: *mut u64,
-    /// L1/L2/L3 sub-table frames, tracked for `Drop`.
-    sub_frames: Vec<usize>,
+    /// The root and every L1/L2/L3 sub-table, root first; freed in `Drop`.
+    tables: Vec<PrivateRun>,
     /// Carved guest-RAM region for the SAS-isolation assertion in `map()`.
     guest_ram_pa: u64,
     guest_ram_pages: usize,
+    /// The carved guest RAM itself; freed in `Drop`.
+    guest_ram: Option<PrivateRun>,
 }
 
 // SAFETY: not Send/Sync by default (raw `*mut u64`); only touched from
@@ -141,7 +144,13 @@ impl NestedPageTable {
     pub fn new(format: NestedFormat) -> Option<Self> {
         #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
-        let root_pa = crate::memory::frame::allocate_frame()? as u64;
+        let root = PrivateRun::adopt(
+            crate::memory::frame::allocate_frame()?,
+            1,
+            RunOwner::Kernel,
+            RunKind::PageTable,
+        );
+        let root_pa = root.base() as u64;
         let root_va = phys_to_virt(root_pa as usize) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours; 512 entries.
         unsafe {
@@ -159,9 +168,10 @@ impl NestedPageTable {
             format,
             root_pa,
             root_va,
-            sub_frames: Vec::new(),
+            tables: alloc::vec![root],
             guest_ram_pa: 0,
             guest_ram_pages: 0,
+            guest_ram: None,
         })
     }
 
@@ -185,12 +195,23 @@ impl NestedPageTable {
     }
 
     /// Carve `n_pages` contiguous frames for guest RAM (chunked scan, M2-safe),
-    /// recording the region so `map()` can enforce SAS isolation.
+    /// recording the region so `map()` can enforce SAS isolation. A table
+    /// carves once: a second carve is refused rather than dropping RAM the
+    /// table may already map.
     pub fn carve_guest_ram(&mut self, n_pages: usize) -> Option<u64> {
-        let pa = allocate_guest_ram(n_pages)? as u64;
-        self.guest_ram_pa = pa;
+        if self.guest_ram.is_some() {
+            return None;
+        }
+        let pa = allocate_guest_ram(n_pages)?;
+        self.guest_ram = Some(PrivateRun::adopt(
+            pa,
+            n_pages,
+            RunOwner::Kernel,
+            RunKind::Leaf,
+        ));
+        self.guest_ram_pa = pa as u64;
         self.guest_ram_pages = n_pages;
-        Some(pa)
+        Some(pa as u64)
     }
 
     // ── Descriptor encoders (vendor-dispatched) ──────────────────────────────
@@ -237,7 +258,12 @@ impl NestedPageTable {
         unsafe {
             core::ptr::write_bytes(va, 0, 512);
         }
-        self.sub_frames.push(pa);
+        self.tables.push(PrivateRun::adopt(
+            pa,
+            1,
+            RunOwner::Kernel,
+            RunKind::PageTable,
+        ));
         Some((va, pa as u64))
     }
 
@@ -455,22 +481,21 @@ impl Drop for NestedPageTable {
                 );
             }
         }
-        let (sub_frames, root_pa) = (&self.sub_frames, self.root_pa);
-        let (guest_ram_pa, guest_ram_pages) = (self.guest_ram_pa, self.guest_ram_pages);
-        let _ = crate::memory::frame::with(|alloc| {
-            for &pa in sub_frames {
-                alloc.deallocate_frame(pa);
-            }
-            alloc.deallocate_frame(root_pa as usize);
-            if guest_ram_pages > 0 {
-                let base = guest_ram_pa as usize;
-                for i in 0..guest_ram_pages {
-                    alloc.deallocate_frame(base + i * PAGE_SIZE);
-                }
-            }
-            #[cfg(feature = "p01-trace")]
-            crate::p01_noncpu::released(root_pa);
-        });
+        // An INVEPT error is logged and the frames are still freed, as
+        // before: every VM entry invalidates its own EPTP on the entering CPU
+        // first, so a later VM whose root lands on these frames never walks
+        // this VM's entries. NPT needs nothing: ASIDs are never reused and
+        // every VMRUN flushes its guest's ASID.
+        let mut batch = Batch::new();
+        for run in self.tables.drain(..) {
+            run.retire_into(&mut batch);
+        }
+        if let Some(run) = self.guest_ram.take() {
+            run.retire_into(&mut batch);
+        }
+        let _ = batch.complete();
+        #[cfg(feature = "p01-trace")]
+        crate::p01_noncpu::released(self.root_pa);
     }
 }
 
