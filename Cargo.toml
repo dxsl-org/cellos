@@ -73,8 +73,6 @@ members = [
     "hal/soc/riscv",
     "hal/soc/x86",
     "hal/traits/arch",
-    "hal/traits/timer",
-    "hal/traits/interrupt",
     "hal/traits/uart",
     "hal/traits/gpio",
     "hal/traits/i2c",

@@ -22,7 +22,6 @@ pub mod uart_pl011;
 impl Arch for AArch32Arch {
     type Context = usize;
     fn init(&self) {}
-    unsafe fn switch_context(&self, _: *mut Self::Context, _: *const Self::Context) {}
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
@@ -38,11 +37,6 @@ impl Arch for AArch32Arch {
 
     /// Nano bringup: ARM virt GIC init deferred; UART already initialised in kmain.
     fn init(&self) {}
-
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        // SAFETY: callers guarantee valid, non-aliasing, aligned pointers.
-        context::switch(old, new);
-    }
 
     fn enable_interrupts(&self) {
         // SAFETY: cpsie i — enables IRQ in CPSR; standard ARMv7 SVC-mode instruction.

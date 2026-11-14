@@ -475,7 +475,6 @@ pub static ARCH: PlatformArch = X86_64Arch;
 impl Arch for X86_64Arch {
     type Context = usize;
     fn init(&self) {}
-    unsafe fn switch_context(&self, _: *mut Self::Context, _: *const Self::Context) {}
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
@@ -503,15 +502,6 @@ impl Arch for X86_64Arch {
         );
         apic::init_lapic();
         publish_boot_cpu_policy();
-    }
-
-    /// # Safety
-    /// Both pointers must point to valid, aligned `CpuContext` structs.
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        // SAFETY: invariant upheld by caller.
-        unsafe {
-            context::CpuContext::switch(old, new);
-        }
     }
 
     fn enable_interrupts(&self) {

@@ -52,10 +52,6 @@ impl Arch for RiscVArch {
         }
     }
 
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        context::Context::switch(old, new);
-    }
-
     fn enable_interrupts(&self) {
         unsafe {
             riscv::register::sstatus::set_sie();

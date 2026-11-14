@@ -28,7 +28,6 @@ pub mod uart_16550;
 impl Arch for X86_32Arch {
     type Context = usize;
     fn init(&self) {}
-    unsafe fn switch_context(&self, _: *mut Self::Context, _: *const Self::Context) {}
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
@@ -45,11 +44,6 @@ impl Arch for X86_32Arch {
     fn init(&self) {
         gdt::init();
         idt::init();
-    }
-
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        // SAFETY: callers guarantee valid, non-aliasing aligned pointers.
-        context::switch(old, new);
     }
 
     fn enable_interrupts(&self) {

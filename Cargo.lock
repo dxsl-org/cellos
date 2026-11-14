@@ -2282,10 +2282,8 @@ dependencies = [
  "hal-arm",
  "hal-display",
  "hal-hypervisor",
- "hal-interrupt",
  "hal-paging",
  "hal-riscv",
- "hal-timer",
  "hal-traits-mmc",
  "hal-uart",
  "hal-x86",
@@ -2309,22 +2307,12 @@ dependencies = [
 [[package]]
 name = "hal-hypervisor"
 version = "0.1.0"
-dependencies = [
- "types",
-]
 
 [[package]]
 name = "hal-i2c"
 version = "0.1.0"
 dependencies = [
  "embedded-hal",
-]
-
-[[package]]
-name = "hal-interrupt"
-version = "0.1.0"
-dependencies = [
- "types",
 ]
 
 [[package]]
@@ -2350,10 +2338,7 @@ dependencies = [
  "cc",
  "critical-section",
  "hal-arch-trait",
- "hal-hypervisor",
- "hal-interrupt",
  "hal-paging",
- "hal-timer",
  "hal-uart",
  "riscv",
  "types",
@@ -2378,13 +2363,6 @@ version = "0.2.0"
 [[package]]
 name = "hal-spi"
 version = "0.1.0"
-
-[[package]]
-name = "hal-timer"
-version = "0.1.0"
-dependencies = [
- "types",
-]
 
 [[package]]
 name = "hal-traits-mmc"

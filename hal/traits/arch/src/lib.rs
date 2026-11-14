@@ -11,11 +11,6 @@ pub trait Arch: Send + Sync {
     /// Initialize the architecture.
     fn init(&self);
 
-    /// Perform context switch.
-    /// # Safety
-    /// This function is unsafe because it manipulates raw pointers and machine state.
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context);
-
     /// Enable interrupts.
     fn enable_interrupts(&self);
 
@@ -27,11 +22,4 @@ pub trait Arch: Send + Sync {
 
     /// Check if interrupts are enabled.
     fn interrupts_enabled(&self) -> bool;
-}
-
-/// The BootController trait handles system life-cycle events.
-pub trait BootController {
-    fn init(&self);
-    fn reset(&self) -> !;
-    fn shutdown(&self) -> !;
 }

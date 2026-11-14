@@ -17,7 +17,6 @@ pub static ARCH: PlatformArch = RiscV32Arch;
 impl Arch for RiscV32Arch {
     type Context = usize;
     fn init(&self) {}
-    unsafe fn switch_context(&self, _: *mut Self::Context, _: *const Self::Context) {}
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
@@ -99,10 +98,6 @@ impl Arch for RiscV32Arch {
         unsafe {
             core::arch::asm!("csrsi sie, 0x2", options(nomem, nostack));
         }
-    }
-
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        Rv32Context::switch(old, new);
     }
 
     fn enable_interrupts(&self) {

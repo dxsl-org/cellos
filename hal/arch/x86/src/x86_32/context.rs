@@ -65,8 +65,3 @@ impl CpuContext32 {
         __switch_x86_32(old, new);
     }
 }
-
-/// Free-function alias for use in x86_32.rs `Arch::switch_context`.
-pub unsafe fn switch(old: *mut CpuContext32, new: *const CpuContext32) {
-    CpuContext32::switch(old, new);
-}

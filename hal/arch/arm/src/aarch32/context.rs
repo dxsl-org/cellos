@@ -68,8 +68,3 @@ impl Arm32Context {
         __switch_arm32(old, new);
     }
 }
-
-/// Free-function alias for use in aarch32.rs `Arch::switch_context`.
-pub unsafe fn switch(old: *mut Arm32Context, new: *const Arm32Context) {
-    Arm32Context::switch(old, new);
-}

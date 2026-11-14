@@ -12,9 +12,7 @@ pub mod traits {
     pub use hal_arch_trait::*;
     pub use hal_display::*;
     pub use hal_hypervisor::*;
-    pub use hal_interrupt::*;
     pub use hal_paging::*;
-    pub use hal_timer::*;
     pub use hal_traits_mmc::*;
     pub use hal_uart::*;
 }

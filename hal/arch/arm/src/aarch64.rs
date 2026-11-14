@@ -82,7 +82,6 @@ pub static ARCH: PlatformArch = AArch64Arch;
 impl Arch for AArch64Arch {
     type Context = usize;
     fn init(&self) {}
-    unsafe fn switch_context(&self, _old: *mut Self::Context, _new: *const Self::Context) {}
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
@@ -111,13 +110,6 @@ impl Arch for AArch64Arch {
 
         timer::init();
         trap::init();
-    }
-
-    unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
-        // SAFETY: invariant upheld by caller.
-        unsafe {
-            context::CpuContext::switch(old, new);
-        }
     }
 
     fn enable_interrupts(&self) {
@@ -176,50 +168,6 @@ pub fn set_kernel_stack(sp: usize) {
     // SAFETY: TPIDR_EL1 is EL1-private; writing from EL1 is safe.
     unsafe {
         core::arch::asm!("msr tpidr_el1, {}", in(reg) sp, options(nomem, nostack));
-    }
-}
-
-// ── Hypervisor skeleton (P01) ─────────────────────────────────────────────────
-
-#[cfg(target_arch = "aarch64")]
-use hal_hypervisor::{ViHypervisor, ViStage2TableStub, ViVcpuStub, ViVmExit, ViVmStub};
-#[cfg(target_arch = "aarch64")]
-use types::{ViError, ViResult};
-
-/// AArch64 hypervisor trait skeleton (ViHypervisor wiring deferred to P04).
-///
-/// Real Stage-2 + vcpu world-switch lives in `vcpu.rs` (`run_vcpu_impl`) and is
-/// called directly by `kernel::hypervisor::smoke_guest` in P03.  The trait
-/// methods are wired to concrete types once P04 adds the VMM syscalls.
-pub struct AArch64Hypervisor;
-
-#[cfg(target_arch = "aarch64")]
-impl ViHypervisor for AArch64Hypervisor {
-    type Vm = ViVmStub;
-    type Vcpu = ViVcpuStub;
-    type Stage2Table = ViStage2TableStub;
-
-    fn create_vm(&self) -> ViResult<Self::Vm> {
-        Err(ViError::NotSupported)
-    }
-    fn create_vcpu(&self, _vm: &mut Self::Vm) -> ViResult<Self::Vcpu> {
-        Err(ViError::NotSupported)
-    }
-    fn map_guest(
-        &self,
-        _t: &mut Self::Stage2Table,
-        _ipa: u64,
-        _hpa: u64,
-        _pages: usize,
-        _w: bool,
-    ) -> ViResult<()> {
-        Err(ViError::NotSupported)
-    }
-    fn run_vcpu(&self, _v: &mut Self::Vcpu) -> ViResult<ViVmExit> {
-        Err(ViError::NotSupported)
-    }
-    fn inject_irq(&self, _v: &mut Self::Vcpu, _intid: u32) -> ViResult<()> {
-        Err(ViError::NotSupported)
     }
 }
 

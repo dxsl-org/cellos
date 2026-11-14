@@ -9,8 +9,6 @@ types = { path = "../../libs/types", version = "0.1.0" }
 
 
 hal-arch-trait = { path = "../traits/arch", version = "0.1.0" }
-hal-timer = { path = "../traits/timer", version = "0.1.0" }
-hal-interrupt = { path = "../traits/interrupt", version = "0.1.0" }
 hal-paging = { path = "../traits/paging", version = "0.1.0" }
 
 hal-uart = { path = "../traits/uart", version = "0.1.0" }
