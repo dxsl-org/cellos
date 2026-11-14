@@ -704,6 +704,7 @@ pub(crate) fn fixtures_domain() {
     {
         crate::task::domain_grant::run_selftest();
         crate::task::grant_gate_selftest::run_primary();
+        crate::task::grant_negative_selftest::run_primary();
     }
 }
 

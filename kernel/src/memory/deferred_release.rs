@@ -292,7 +292,7 @@ fn tag_epochs_confirmed(entry: &DeferredRelease) -> bool {
     // Test-only: the withheld window reports every tag unconfirmed, which is how
     // the release-path fixture reaches the retained-frames branch on a one-hart
     // boot where nothing remote can be outstanding.
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    #[cfg(feature = "test-hooks")]
     if crate::memory::tlb_shootdown::test_tag_ack_withheld() {
         return false;
     }

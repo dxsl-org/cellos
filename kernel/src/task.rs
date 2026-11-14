@@ -23,6 +23,10 @@ mod elf_prepare;
 #[cfg(all(cellos_domain_grants, feature = "test-hooks"))]
 #[cfg(not(cellos_posture = "release"))]
 pub(crate) mod grant_gate_selftest;
+/// Phase-15 deferred-revoke witness and grant negatives; the body is
+/// arch-neutral, the x86_64 lane is the one that runs it.
+#[cfg(all(cellos_domain_grants, feature = "test-hooks", target_arch = "x86_64"))]
+pub(crate) mod grant_negative_selftest;
 #[cfg(not(cellos_posture = "release"))]
 pub mod grant_reclaim_selftest;
 #[cfg(not(cellos_posture = "release"))]

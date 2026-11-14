@@ -177,9 +177,16 @@ impl DomainGrant {
         generation: u64,
         rights: Flags,
     ) -> Result<(), DomainGrantError> {
-        self.lifecycle.while_live(DomainGrantError::NotLive, || {
+        #[cfg(feature = "test-hooks")]
+        let held = gate_hold::Hold::default();
+        let result = self.lifecycle.while_live(DomainGrantError::NotLive, || {
+            #[cfg(feature = "test-hooks")]
+            let _timer = held.time();
             self.publish_live(root, cell, generation, rights)
-        })
+        });
+        #[cfg(feature = "test-hooks")]
+        held.record(&gate_hold::PUBLISH_MAX_NS);
+        result
     }
 
     /// Body of [`Self::publish`]; the caller holds the gate and saw `Live`.
@@ -245,7 +252,16 @@ impl DomainGrant {
     /// Remove the receiver PTE and confirm the invalidation. `Ok(())` means the
     /// receiver half is drained and its retained root may be dropped.
     pub(crate) fn drain_receiver(&self) -> Result<(), DomainGrantError> {
-        self.lifecycle.serialized(|| self.drain_receiver_gated())
+        #[cfg(feature = "test-hooks")]
+        let held = gate_hold::Hold::default();
+        let result = self.lifecycle.serialized(|| {
+            #[cfg(feature = "test-hooks")]
+            let _timer = held.time();
+            self.drain_receiver_gated()
+        });
+        #[cfg(feature = "test-hooks")]
+        held.record(&gate_hold::DRAIN_MAX_NS);
+        result
     }
 
     /// [`Self::drain_receiver`] for a caller already holding the gate.
@@ -321,6 +337,61 @@ impl DomainGrant {
         self.drain_owner()?;
         self.lifecycle.finish_revoke();
         Ok(())
+    }
+}
+
+/// Test-hooks measurement of how long the lifecycle gate is held (Phase 15,
+/// risk R4).
+///
+/// The gate is a `Spinlock`, so its holder runs with interrupts masked, and a
+/// drain inside it includes the bounded wait for every online CPU to
+/// acknowledge the tag invalidation. `PUBLISH_MAX_NS` is the longest publish
+/// hold — the one taken under a grant-table lock — and `DRAIN_MAX_NS` the
+/// longest drain hold, which runs under no table lock (revoke, receiver death,
+/// and a share's pre-drain, see `super::syscall`). The x86 lane reports both
+/// rather than assuming either is short.
+#[cfg(feature = "test-hooks")]
+pub(crate) mod gate_hold {
+    use core::cell::Cell;
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    /// Longest single publish hold of any record's gate this boot, in ns.
+    pub(crate) static PUBLISH_MAX_NS: AtomicU64 = AtomicU64::new(0);
+    /// Longest single drain hold of any record's gate this boot, in ns.
+    pub(crate) static DRAIN_MAX_NS: AtomicU64 = AtomicU64::new(0);
+
+    fn now() -> u64 {
+        crate::arch::clock::monotonic_ns().unwrap_or(0)
+    }
+
+    /// One gate hold, measured inside the gate and recorded after release.
+    #[derive(Default)]
+    pub(super) struct Hold(Cell<u64>);
+
+    impl Hold {
+        /// Start timing; the returned guard stops when the gate's body ends.
+        pub(super) fn time(&self) -> Timer<'_> {
+            Timer {
+                hold: self,
+                start: now(),
+            }
+        }
+
+        /// Fold this hold into `max`; called once the gate is released.
+        pub(super) fn record(&self, max: &AtomicU64) {
+            max.fetch_max(self.0.get(), Ordering::AcqRel);
+        }
+    }
+
+    pub(super) struct Timer<'a> {
+        hold: &'a Hold,
+        start: u64,
+    }
+
+    impl Drop for Timer<'_> {
+        fn drop(&mut self) {
+            self.hold.0.set(now().saturating_sub(self.start));
+        }
     }
 }
 

@@ -66,7 +66,7 @@ fi
 
 # Phase 14 ratchet: architecture code moves into kernel/src/arch/. These
 # ceilings only go down; lower them in the commit that moves code.
-arch_cfg_max=714
+arch_cfg_max=704
 arch_asm_max=0
 
 count_outside_arch() {

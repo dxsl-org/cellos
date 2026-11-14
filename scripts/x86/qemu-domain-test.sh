@@ -271,6 +271,10 @@ REQUIRED_MARKERS=(
     "announced fault:::[tier2-exploit] deliberately writing to NULL (0x0) — expect Page Fault termination"
     "frame release:::[selftest] DOMAIN-FRAME-RELEASE: PASS"
     "domain teardown:::S22-X86-DOMAIN-TEARDOWN: PASS releases="
+    "grant lifecycle fixture:::S22-X86-GRANT-REVOKE: PASS"
+    "grant capability gate:::S22-X86-GRANT-GATE: PASS"
+    "grant deferred revoke:::S22-X86-GRANT-DEFERRED: PASS"
+    "grant gate-held measurement:::[grant] gate-held max publish="
     "interactive shell:::Cellos > "
 )
 if (( X86_CPUS >= 2 )); then
@@ -287,9 +291,26 @@ fi
 # Every unconfirmed tag or shared-mapping invalidation is logged (`[tlb] tag …
 # invalidation unconfirmed`, test-hooks) or panics (`[x86-smp] shared mapping
 # invalidation unconfirmed`); either is a lane failure, never a retry.
-if grep -qa "invalidation unconfirmed" "$LOG"; then
+#
+# One exception, bracketed by the kernel itself: the grant deferred-revoke
+# fixture withholds every tag acknowledgement between `[grant-neg]
+# withhold-ack window OPEN` and `… CLOSED`, and the unconfirmed tag lines inside
+# that window are its purpose. The brackets must balance and close; a line
+# outside them still fails the lane.
+WINDOW_OPEN=$(grep -ac "\[grant-neg\] withhold-ack window OPEN" "$LOG" || true)
+WINDOW_CLOSED=$(grep -ac "\[grant-neg\] withhold-ack window CLOSED" "$LOG" || true)
+if [[ "$WINDOW_OPEN" -ne "$WINDOW_CLOSED" ]]; then
+    echo "FAIL: withhold-ack windows do not balance (OPEN=$WINDOW_OPEN CLOSED=$WINDOW_CLOSED)" >&2
+    exit 1
+fi
+UNCONFIRMED=$(awk '
+    /\[grant-neg\] withhold-ack window OPEN/ { inside = 1; next }
+    /\[grant-neg\] withhold-ack window CLOSED/ { inside = 0; next }
+    /invalidation unconfirmed/ && (!inside || !/\[tlb\] tag [0-9]+ invalidation unconfirmed/) { print }
+' "$LOG")
+if [[ -n "$UNCONFIRMED" ]]; then
     echo "FAIL: an invalidation went unconfirmed:" >&2
-    grep -a "invalidation unconfirmed" "$LOG" >&2
+    printf '%s\n' "$UNCONFIRMED" >&2
     exit 1
 fi
 

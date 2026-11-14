@@ -713,6 +713,72 @@ fn domain_grant_share_row(
     Ok(())
 }
 
+/// Drain the receiver a `GrantShare` is about to supersede, before the caller
+/// takes the grant-table lock and before `DomainGrant::publish` takes the
+/// record's gate (Phase 15, risk R4).
+///
+/// A re-share (a new receiver, or the same one with other rights) revokes the
+/// old receiver PTE and waits for every online CPU to acknowledge the tag
+/// invalidation. Inside `publish` that wait ran under the table lock and the
+/// gate, so every other grant syscall on every CPU queued behind it, and gate
+/// holds of over 10 ms were measured at four TCG CPUs. Draining here moves the
+/// wait into its own gate hold under no table lock. The drain is still
+/// serialized with every publication by the record's gate (audit H-5), and
+/// `publish` re-checks the tuple and drains again if anything republished in
+/// between, so this only moves where the wait happens.
+///
+/// It drains only for a share that would itself drain: the caller owns a `Live`
+/// record, the rights are representable, and the target is a live private
+/// root. Every other shape leaves the record untouched and is refused by
+/// `domain_grant_share_row` exactly as before.
+#[cfg(cellos_domain_grants)]
+fn drain_superseded_receiver(
+    caller_id: usize,
+    grant_id: usize,
+    target_tid: usize,
+    target_root: &DomainRoot,
+    perm: GrantPerm,
+) {
+    let owned = |owner: usize, domain: &Option<DomainRecord>| {
+        (owner == caller_id)
+            .then(|| clone_domain_record(domain))
+            .flatten()
+    };
+    let record = {
+        let tbl = grant_table_lock().lock();
+        tbl.as_ref()
+            .and_then(|map| map.get(&grant_id))
+            .map(|grant| owned(grant.owner, &grant.domain))
+    };
+    let record = match record {
+        Some(record) => record,
+        None => {
+            let tbl = reg_grant_table_lock().lock();
+            tbl.as_ref()
+                .and_then(|map| map.get(&grant_id))
+                .and_then(|grant| owned(grant.owner, &grant.domain))
+        }
+    };
+    let Some(record) = record else {
+        return;
+    };
+    let (Some(rights), Some((cell, generation))) = (
+        super::domain_grant::rights_for(perm),
+        live_task_binding(target_tid),
+    ) else {
+        return;
+    };
+    if record.state() != super::domain_grant::DomainGrantState::Live
+        || !target_root.is_live()
+        || record.receiver_matches(cell, generation, target_root, rights)
+    {
+        return;
+    }
+    // An unconfirmed drain leaves the old receiver for `publish` to retry
+    // under the gate, which then refuses the share as it always did.
+    let _ = record.drain_receiver();
+}
+
 /// Resolve one grant row for a capable domain receiver.
 ///
 /// Returns the resolved base on success and the established `usize::MAX`

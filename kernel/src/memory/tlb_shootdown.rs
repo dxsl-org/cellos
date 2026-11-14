@@ -32,16 +32,21 @@ static TEST_SKIP_REMOTE_RFENCE: AtomicBool = AtomicBool::new(false);
 /// remote exists to stall at all. Arming it exercises exactly the release-path
 /// branch that must retain frames instead of freeing or quarantining them;
 /// disarming it is what "the acknowledgement resumes" means for the reaper.
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+/// Armed by the RV64 aspace fixture and the x86_64 grant fixtures.
+#[cfg(feature = "test-hooks")]
 static TEST_WITHHOLD_TAG_ACK: AtomicBool = AtomicBool::new(false);
 
 /// Arm or disarm [`TEST_WITHHOLD_TAG_ACK`].
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[cfg(feature = "test-hooks")]
+#[cfg_attr(
+    not(any(target_arch = "riscv64", target_arch = "x86_64")),
+    allow(dead_code) // reason: only the RV64 and x86_64 fixtures use it
+)]
 pub(crate) fn set_test_withhold_tag_ack(enabled: bool) {
     TEST_WITHHOLD_TAG_ACK.store(enabled, Ordering::Release);
 }
 
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[cfg(feature = "test-hooks")]
 pub(crate) fn test_tag_ack_withheld() -> bool {
     TEST_WITHHOLD_TAG_ACK.load(Ordering::Acquire)
 }
@@ -70,7 +75,11 @@ pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
     let page = vaddr & !(PAGE_SIZE - 1);
     TEST_FLUSHED_PAGES.lock().contains(&page)
 }
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[cfg(feature = "test-hooks")]
+#[cfg_attr(
+    not(any(target_arch = "riscv64", target_arch = "x86_64")),
+    allow(dead_code) // reason: only the RV64 and x86_64 fixtures use it
+)]
 pub(crate) fn test_tag_flush_observed(asid: usize) -> bool {
     TEST_FLUSHED_TAGS.lock().contains(&asid)
 }
@@ -116,7 +125,7 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             // the release paths' unconfirmed branch is reachable without a real
             // hart stalling mid-boot (and on a one-hart boot, where no remote
             // exists to stall).
-            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            #[cfg(feature = "test-hooks")]
             if test_tag_ack_withheld() {
                 Err(FlushAckError::Timeout {
                     hart: crate::sched::hart_local::current_hart_id(),
@@ -125,7 +134,7 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             } else {
                 Ok(())
             }
-            #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+            #[cfg(not(feature = "test-hooks"))]
             Ok(())
         }
     };
@@ -179,7 +188,7 @@ pub fn flush_tag_local(asid: usize) {
 pub fn tag_invalidation_outstanding() -> Option<usize> {
     // Test-only: inside the withheld window the tag reads unconfirmed even on a
     // one-hart boot, where nothing remote can be outstanding.
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    #[cfg(feature = "test-hooks")]
     if test_tag_ack_withheld() {
         return Some(crate::sched::hart_local::current_hart_id());
     }

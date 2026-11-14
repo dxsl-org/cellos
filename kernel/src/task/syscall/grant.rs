@@ -2000,6 +2000,9 @@ pub(super) fn grant_share(
             );
             return Err(SyscallError::PermissionDenied);
         };
+        // Any invalidation wait for the receiver this share supersedes happens
+        // here, outside the table lock (risk R4).
+        drain_superseded_receiver(caller_id, grant_id, target_cell, &target_space, perm);
         {
             let mut tbl = grant_table_lock().lock();
             if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
