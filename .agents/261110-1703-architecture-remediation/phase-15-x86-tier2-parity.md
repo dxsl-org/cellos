@@ -64,19 +64,19 @@ Uses Phase 14's `arch::page_probe` / `user_access` and `AddressSpace` (already a
 
 ## Todo List
 
-- [ ] Gate inventory
-- [ ] Neutral code un-gated
-- [ ] x86 revoke invalidation
-- [ ] Fixtures ported with fault-injection controls
-- [ ] Lane extended
-- [ ] Spec 22 updated
+- [x] Gate inventory
+- [x] Neutral code un-gated
+- [x] x86 revoke invalidation
+- [x] Fixtures ported with fault-injection controls
+- [x] Lane extended
+- [x] Spec 22 updated
 
 ## Success Criteria
 
-- [ ] x86 grant suite passes at 1/2/4 CPUs under TCG and, where available, KVM.
-- [ ] Each ported negative fixture fails when its corresponding check is disabled by the test hook.
-- [ ] RV64 `--harts 2` native-domain suite still passes.
-- [ ] No `1 << 38` user-limit literal remains outside the RV64 HAL.
+- [x] x86 grant suite passes at 1/2/4 CPUs under TCG and, where available, KVM.
+- [x] Each ported negative fixture fails when its corresponding check is disabled by the test hook.
+- [x] RV64 `--harts 2` native-domain suite still passes.
+- [x] No `1 << 38` user-limit literal remains outside the RV64 HAL.
 
 ## Risk Assessment
 
@@ -117,3 +117,4 @@ Phase 16 unifies frame lifetime, including the grant path ported here.
 - **Decision (R4, measured, KVM):** longest gate holds under KVM (`-cpu host`, PCID on): publish 1/43/126 µs and drain 3992/4086/4245 µs at 1/2/4 CPUs (TCG same build: publish 118/213/226 µs, drain 747/825/827 µs). The drain maximum is ~4 ms at every CPU count, including one CPU, where no remote acknowledgement exists to wait for, so it is not a shootdown wait. No further change: the drain already runs under no table lock (step 3) and stays serialised by the record gate (H-5). See the next entry for its cause.
 - **Surprise (R4, KVM, cause):** the ~4 ms KVM drain hold is serial output, not waiting. On the deferral path the drain logs inside the gate — the memory layer's `[aspace] deferred release queued: …` warning (~200 bytes, emitted in production too) and the test seam's `… withheld (test)` line — and KVM's emulated UART is slow per byte. A throwaway build without the test line (not committed) measured drain 3109/3336 µs at 1/4 KVM CPUs (`/tmp/p15/c5/r4/`), against 3992/4245 µs with it; the remainder is consistent with the `[aspace]` line [inference: no per-hold attribution was instrumented]. It only happens when an acknowledgement is missing (the fail-closed path). Moving that log out of the gate changes `memory/deferred_release.rs` logging for every arch, so it is left as an open item for the owner rather than changed here.
 - **Deviation (step 5b, RV64 grant-pair, census §8):** the interactive case could never pass (the shell refuses `tier2-smoke &` inside a serial session). The native-domain image now carries the pair at `/bin/silo` and `/bin/net-broker` and a fixture launcher built with `tier2-grant-pair` in its own target dir (`target/native-domain-launcher`, so the shared test-hooks launcher is untouched); `--case grant-pair` only watches. Because the pair runs in every boot of that image, every case classifies the pair's faults from its own boot's handoff line (R11). The fixture-launcher doc now says the pair is launched from the boot order on all three arches. Run: `--harts 2` with all 15 cases PASS, grant-pair faults 1/2/1/1 (`/tmp/p15/c5b/`, `BOOT_WINDOW=120` as in the Phase 14 runner).
+- **Evidence (step 6, criteria):** (1) x86 TCG and KVM at 1/2/4 CPUs PASS (`/tmp/p15/c5/m/summary.txt`); (2) every negative's CONTROL reports `CAUGHT` in each of those runs (controls table in the final report; first proven `/tmp/p15/c4/`); (3) RV64 `--harts 2`, all 15 cases incl. `grant-pair`, PASS (`/tmp/p15/c5b/`); (4) `grep '1 << 38'` over `kernel/src` and `hal`: only `hal/arch/riscv/src/rv64/paging.rs` `USER_LIMIT` plus two IOVA windows (`dev/iommu_pt.rs`, `syscall/dma_export.rs`, census §7: not user VA). Spec 22: header, §2.2 RV64/x86 rows, §2.5 lifecycle scope, record location, owner zeroing, revoke (x86 transport, single-free rule, no x86 alias), `USER_LIMIT` (+ R8 note), grant-pair launch, fault cause, new x86 witnesses section. The RV64 §2.2 row's "only architecture with admission" was also stale (x86 admission predates this phase) and was corrected with it. Phase status and the plan row stay "in progress" for the owner to close.

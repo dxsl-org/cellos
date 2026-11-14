@@ -1,19 +1,21 @@
 # Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)
 
-> **Status**: Implemented; **domain grants, non-RV64 admission and warm snapshot are
-> gated off** (phase-01 containment, 2026-09-27).
+> **Status**: Implemented; **AArch64 production admission and domain grants, and warm
+> snapshot, are gated off** (phase-01 containment, 2026-09-27; x86_64 reopened in
+> architecture remediation Phase 15, 2026-11-14).
 > RV64 Tier-2 launch, copied IPC and hardware Page-Fault containment are verified
 > (`tests/integration/tests/tier2_fault_isolation.rs`, `scripts/qemu-native-domain-test.sh`
-> including the new `--case grant-gate` and `--case grant-pair` witnesses). Since 2026-09-27 the kernel refuses every
-> `Grant*` call that names a private-root task (§2.5), keeps AArch64/x86_64 Tier-2 admission
-> closed (§2.2): no non-RV64 image has entered a real domain task, the ordered switch is
-> structural hardening rather than a demonstrated fix, and AArch64 private-root leaves are
-> global (no `PTE_nG`) so ASID-targeted invalidation cannot reach them. It also refuses warm
+> including the `--case grant-gate` and `--case grant-pair` witnesses). x86_64 Tier-2 entry,
+> fault containment and the private-root grant lifecycle are verified by
+> `scripts/x86/qemu-domain-test.sh` (`S22-X86-*`, QEMU TCG and KVM at 1, 2 and 4 CPUs; §2.5).
+> Since 2026-09-27 the kernel refuses every `Grant*` call that names a private-root task on a
+> target without the lifecycle (§2.5; today AArch64 production) and keeps AArch64 production
+> Tier-2 admission closed (§2.2, whose AArch64 row records why). It also refuses warm
 > snapshot capture/restore: the internal format v2 and its state machine are implemented and
 > unit-tested, but quiescence, closure and the board witness are not, and the
 > `snapshot-qualified` gate is off in every shipping image (see `docs/specs/03-runtime.md` §4).
-> RV64 is therefore the only architecture with Tier-2 admission today; §2.2's other rows are
-> feasibility statements with their current disposition, not enablement claims.
+> RV64 and x86_64 have Tier-2 admission today; AArch64 admits only in `test-hooks` images, and
+> its §2.2 row is a feasibility statement with its current disposition, not an enablement claim.
 ## 1. Context and current truth
 
 Tier 1 Cells share the SAS page-table view and rely on Rust LBI. The native loader has
@@ -80,9 +82,9 @@ user mapping ledger. The system must fail closed on a mapping request it cannot 
 
 | Architecture | Feasible control | Required implementation proof | Limitation / disposition |
 |---|---|---|---|
-| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | **The only architecture with admission today**: a real Tier-2 Cell is admitted into a private `satp` root, with copied IPC and hardware page-fault containment verified. RV32 bare-physical targets cannot implement Tier 2. |
+| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | **Admission open** (as on x86_64; AArch64 admits in `test-hooks` images only): a real Tier-2 Cell is admitted into a private `satp` root, with copied IPC and hardware page-fault containment verified. RV32 bare-physical targets cannot implement Tier 2. |
 | AArch64 | Write `TTBR0_EL1` with a private root and nonzero ASID; use `TLBI` plus required DSB/ISB ordering. | ASID generation/reuse protocol, multi-PE shootdown witness, and MAIR/TCR compatibility with the root. | **Admission refused.** No AArch64 image has entered a real domain task, and private-root leaves are composed without `PTE_nG` (`hal/arch/arm/src/aarch64/paging.rs`), so they are global: ASID-targeted `tlbi aside1is` cannot reach them and a stale entry of one private root stays usable under another ASID. Release currently uses a full `vmalle1is` stopgap. |
-| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | **Admission refused.** No x86_64 image has entered a real domain task, so the switch/admission path is unproven and the `INVPCID` instruction path stays unexecuted. The runtime gate now probes `CPUID.07H:EBX[10]` and requires INVPCID before any nonzero PCID (TCG boots PCID-off, KVM PCID-on). PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
+| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | **Admission open** (`loader/domain_admission.rs` `switch_ordering_qualified`, production included). Real domain tasks run under a private PML4 and are witnessed from inside the domain (`S22-X86-DOMAIN-LIVE` reports the live CR3, root and PCID; `scripts/x86/qemu-domain-test.sh`). Since architecture remediation Phase 15 the private-root grant lifecycle (§2.5) is open too: revoke flushes the receiver tag locally (`INVPCID` type 1, or a CR3 reload without PCID), confirms every online CPU through the IPI epoch, and defers to the reaper when an acknowledgement is missing (`S22-X86-GRANT-DEFERRED`). The runtime gate probes `CPUID.07H:EBX[10]` and requires INVPCID before any nonzero PCID (TCG boots PCID-off, KVM PCID-on). PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
 
 An architecture backend that lacks a safe private-root activation and invalidation protocol
 does not advertise Tier 2. It must retain Tier-1/Tier-3 behaviour; it may not label an
@@ -159,28 +161,32 @@ alloc-safe sentinel: `GrantAlloc`/`GrantRegister` return `0`, `GrantSlice` retur
 `libs/ostd/src/syscall.rs` decodes *any* nonzero `GrantAlloc`/`GrantRegister` return as a
 grant id, so a generic error sentinel would be published as a grant. SAS→SAS Tier-1 grants
 and copied IPC keep their exact behaviour. Tier-2 admission itself stays closed on AArch64
-and x86_64 until §2.2's ordered switch completion is proven on one CPU; RV64 keeps launch,
-copied IPC and fault containment.
+production until §2.2's ordered switch completion is proven there; RV64 and x86_64 keep
+launch, copied IPC and fault containment.
 
-**Private-root grant lifecycle (2026-09-28, phase 03 — RV64 only).** The gate above is now a
-capability check rather than a blanket refusal, on exactly one target tuple:
-`native-domains` on `riscv64`. It admits exactly one shape — a **live** task whose address
-space is a **live** private root — and every other shape keeps the phase-01 sentinel
-byte-for-byte: AArch64 and x86_64, an unknown or retired tid, a root already marked dying,
-a mixed `SAS↔private-root` pair, and an unsupported permission. The contract is:
+**Private-root grant lifecycle (2026-09-28, phase 03 on RV64; x86_64 since 2026-11-14).** The
+gate above is now a capability check rather than a blanket refusal wherever the build-script
+cfg `cellos_domain_grants` holds: `native-domains` on RV64 and on x86_64 (production
+included), and on AArch64 only with `test-hooks`. It admits exactly one shape — a **live**
+task whose address space is a **live** private root — and every other shape keeps the
+phase-01 sentinel byte-for-byte: AArch64 production, an unknown or retired tid, a root already
+marked dying, a mixed `SAS↔private-root` pair, and an unsupported permission. The contract is:
 
 1. **One kernel-owned record.** `kernel/src/task/domain_grant.rs`'s `DomainGrant` is the
-   single record behind both grant tables (`kernel/src/task/syscall.rs`
-   `PageGrant::domain` / `RegGrant::domain`). It carries the owner root, the receiver root
+   single record behind both grant tables (`kernel/src/task/syscall/mod.rs`
+   `PageGrant::domain` / `RegGrant::domain`; the syscall arms are in `task/syscall/grant.rs`,
+   the publish/revoke gate of audit H-5 in `task/domain-grant-gate.rs`). It carries the owner
+   root, the receiver root
    (`Arc<AddressSpace>`, retained while the receiver PTE is published), the receiver's cell
    identity and generation, the page-aligned owner/receiver range, the rights copied into
    the receiver PTE, and a `Live → Revoking → Revoked` state. `Live` records are revocable
    and therefore **do not** block domain admission; only a record the lifecycle cannot drain
    (pre-gate residue, or any record on a target where the lifecycle is absent) still does.
 2. **Owner mapping.** For a private-root owner, `GrantAlloc`/`GrantRegister` allocate
-   contiguous frames, zero them through the supervisor identity map, and map them RW+NX into
-   the owner's own root. They are **never** published USER in the SAS/global root, so a SAS
-   cell cannot reach a domain owner's backing. Any failed page is undone (unmap with
+   contiguous frames, zero them through the kernel's supervisor alias of RAM
+   (`phys_to_virt`: the identity map on RV64/AArch64, the HHDM on x86_64), and map them RW+NX
+   into the owner's own root. They are **never** published USER in the SAS/global root, so a
+   SAS cell cannot reach a domain owner's backing. Any failed page is undone (unmap with
    acknowledgement) and the frames are released before the alloc-safe `0` is returned, so a
    partially mapped pointer is never published.
 3. **Receiver mapping.** `GrantSlice` resolves rights from the owner's `shared_to`:
@@ -194,31 +200,45 @@ a mixed `SAS↔private-root` pair, and an unsupported permission. The contract i
 4. **Synchronous revoke.** `GrantFree`, `GrantUnregister`, re-share/downgrade, and either
    peer's exit all mark `Revoking`, release every table lock, drain copy readers, unmap the
    receiver PTE and await invalidation, then unmap the owner PTE, and only then release
-   frames. An unacknowledged invalidation (the SBI remote-fence transport, or a receiver root
-   still current on a hart) returns the bounded existing error, retains the frames, and keeps
-   the record `Revoking` for an idempotent retry — a caller-exit retry sweep runs on every
-   task retirement. New slices and shares refuse while `Revoking`. Receiver death drains only
-   the receiver half: the owner keeps the record and its frames and may re-share. A DMA pin
-   cannot exist on a domain grant because `GrantDma` remains denied for a private-root
-   caller; SAS-only grant clients, the VFS lease path and copied IPC are untouched.
+   frames. An unacknowledged invalidation (a remote hart that does not acknowledge the tag
+   flush — the SBI remote fence on RV64, the IPI epoch after the local `INVPCID`/CR3 flush on
+   x86_64 — or a receiver root still current on a hart) returns the bounded existing error,
+   retains the frames, and keeps the record `Revoking` for an idempotent retry — a
+   caller-exit retry sweep runs on every task retirement. Only the revoker whose removal takes
+   the table row releases its frames, so concurrent revokers of one record never free twice.
+   New slices and shares refuse while `Revoking`. Receiver death drains only the receiver half:
+   the owner keeps the record and its frames and may re-share. A DMA pin cannot exist on a
+   domain grant because `GrantDma` remains denied for a private-root caller; SAS-only grant
+   clients, the VFS lease path and copied IPC are untouched. Freed frames get the kernel's
+   identity alias back where RAM has one (RV64, AArch64); x86_64 adds no lower-half alias.
 5. **Virtual identity.** The receiver VA is the grant's physical base. A collision with an
-   existing mapping in the receiver root (or a base at or above `USER_LIMIT`) makes the
-   share/slice fail before anything is published; there is no alternate-VA fallback.
+   existing mapping in the receiver root (or a base at or above `hal::paging::USER_LIMIT`,
+   256 GiB on every 64-bit target) makes the share/slice fail before anything is published;
+   there is no alternate-VA fallback. x86_64 RAM starts at physical 0, so on a machine whose
+   RAM reaches the cell VA slots (`loader/va_alloc.rs` `CELL_VA_START`, 64 GiB) or
+   `USER_LIMIT` such a grant fails closed; the x86 evidence ceiling is a 256 MiB QEMU guest.
 
-**Paired public-syscall witness (2026-09-28, phase 03).**
+**Paired public-syscall witness (2026-09-28, phase 03; boot-order launch since 2026-11-14).**
 `scripts/qemu-native-domain-test.sh --case grant-pair` boots a fresh throwaway RV64 image
 whose VIFS1 store carries a two-cell Tier-2 pair (`cells/tests/tier2-grant-owner`,
-`cells/tests/tier2-grant-receiver`, installed on the two reviewed Tier-2 launch paths the
-shell edge already admits) and drives it from the guest shell. The owner is backgrounded and
-traverses `GrantAlloc`/`GrantRegister`/`GrantSlice`/`GrantShare`/`GrantFree`/
-`GrantUnregister` as a real `TaskAddressSpace::Domain`, proves its own pointer writable, and
-publishes the grant bases in `S22-RV64-GRANT-PAIR-HANDOFF`; the runner spawns one receiver
-generation per property, each ending in a deliberate store to the exact grant address. The
-runner asserts `OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-RO-WRITE: FAULT-EXPECTED`,
+`cells/tests/tier2-grant-receiver`, installed on the reviewed `/bin/silo` and
+`/bin/net-broker` launch paths, whose real services that image does not build) and a
+fixture launcher built with `tier2-grant-pair`, which runs the pair from the boot order.
+The pair can no longer be driven from the guest shell: the shell refuses to background an
+external cell inside a serial session, so the AArch64 test-hooks arrangement is used on every
+architecture (Phase 15). The owner traverses `GrantAlloc`/`GrantRegister`/`GrantSlice`/
+`GrantShare`/`GrantFree`/`GrantUnregister` as a real `TaskAddressSpace::Domain`, proves its
+own pointer writable, and publishes the grant bases in `S22-<arch>-GRANT-PAIR-HANDOFF`; the
+launcher starts one receiver generation per property, each ending in a deliberate store to the
+exact grant address and each started only after the previous one terminated. The runner
+asserts `OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-RO-WRITE: FAULT-EXPECTED`,
 `RECEIVER-REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED`,
 `RECEIVER-FRAME-REUSE: REFUSED`, and the surviving denials (`OWNER-SHARE-FOREIGN: DENY`,
-`OWNER-SHARE-WO: DENY`, `RECEIVER-SLICE-UNKNOWN: DENY`), and classifies each fault line as
-`cause=0xf` at the expected `addr=`. One generation is the **same-recipient
+`OWNER-SHARE-WO: DENY`, `RECEIVER-SLICE-UNKNOWN: DENY`), and classifies each fault line at
+the expected `addr=` — with `cause=0xf` (store page fault) on RV64; the AArch64 and x86_64
+lanes accept any cause and attribute each fault by its address and by the announcement that
+precedes it. Because the pair runs in every boot of the RV64 image, every RV64 case classifies
+its faults the same way. One generation is the **same-recipient
 ReadWrite→ReadOnly downgrade**: the receiver proves a writable mapping, the owner re-shares
 the same grant ReadOnly to that same recipient (`OWNER-DOWNGRADE-RESHARE: OK`), and the
 receiver then proves the address still resolves and still reads the byte the writable half
@@ -232,6 +252,40 @@ deferred). `scripts/qemu-native-domain-test.sh` accepts the first-attempt `-SLIC
 `-REVOKE` `FAIL` markers only in the deferred-ack form, with that invariant evidence and the
 explicit deferral log line in the same boot; the deferred outcome is reported as `DEFERRED`,
 never relabelled `PASS`.
+
+**x86_64 witnesses (2026-11-14, architecture remediation Phase 15).**
+`scripts/x86/qemu-domain-test.sh` (image: `scripts/build-x86_64-domain-test-ci.sh`) runs the
+same kernel fixtures (`S22-X86-GRANT-REVOKE: PASS`, `S22-X86-GRANT-GATE: PASS`), the same
+public pair (`S22-X86-GRANT-PAIR-*`, with exactly six accounted cell faults: the
+`tier2-exploit` NULL store plus the pair's five) and three x86-first fixtures from
+`kernel/src/task/grant_negative_selftest.rs`:
+
+- `S22-X86-GRANT-DEFERRED: PASS` — with the tag acknowledgement withheld, `GrantFree` fails
+  closed after the local `INVPCID`/CR3 flush ran: the row stays `Revoking` with its frames,
+  nothing resolves, and the receiver root's tables wait in the deferred-release queue; once
+  the acknowledgement resumes, the deferred sweep completes the revoke. The window is
+  bracketed by `[grant-neg] withhold-ack window OPEN`/`CLOSED`, and the lane excuses only the
+  forced `… invalidation unconfirmed: withheld (test)` lines inside it.
+- Five negatives, each run as built (`S22-X86-GRANT-NEG-<CASE>: PASS`) and then as its
+  **CONTROL** with exactly the one check it guards disabled by a `test-hooks`-only switch
+  (`task::fixture_controls`; production kernels have none), where it must report the
+  violation (`S22-X86-GRANT-CONTROL-<CASE>: CAUGHT`; `MISSED` fails the lane):
+
+  | Case | Check the CONTROL disables |
+  |---|---|
+  | `REVOKE-MAPPED` (revoke while mapped) | `DomainGrant::revoke` drains the receiver before the owner |
+  | `RECEIVER-DEATH` | receiver death drains the receiver half |
+  | `STALE-ID` (a `Revoking` record) | a slice resolves only a `Live` record |
+  | `FORGERY` (a third domain) | a slice resolves only for the domain `shared_to` names |
+  | `COPY-FAULT` (page revoked between probe and commit) | the domain copy commit re-walks every page |
+
+- `S22-X86-GRANT-NEG: PASS` is the terminal over all of them.
+
+Evidence: QEMU TCG at 1, 2 and 4 CPUs and QEMU/KVM (`X86_ACCEL=kvm`, `-cpu host`, PCID and
+INVPCID live) at 1, 2 and 4 CPUs; CI runs TCG at one CPU. The lane also prints the longest
+lifecycle-gate holds (`[grant] gate-held max publish=… drain=…`): the gate holder runs with
+interrupts masked, so a `GrantShare` drains the receiver it supersedes before the table lock
+and the publish gate (still serialised by the record's gate, audit H-5).
 
 ### 2.6 MMIO, DMA, and IOMMU confinement
 
