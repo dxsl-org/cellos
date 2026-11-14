@@ -1190,12 +1190,15 @@ pub(super) fn blk_read_async(caller_id: usize, sector: u64, grant_id: usize) -> 
     if !check_block_access(caller_id, sector, 1) {
         return Ok(0);
     }
-    // Validate ownership and minimum size (must hold ≥ 512 bytes).
+    // Validate ownership and minimum size (must hold ≥ 512 bytes). A domain
+    // owner's backing is excluded: it is not published at its physical address
+    // in the kernel root (no identity alias on x86_64), and the kernel must not
+    // write a private-root grant behind its lifecycle record.
     let buf_paddr = {
         let tbl = grant_table_lock().lock();
         tbl.as_ref()
             .and_then(|m| m.get(&grant_id))
-            .filter(|g| g.owner == caller_id && g.size >= 512)
+            .filter(|g| g.owner == caller_id && g.size >= 512 && g.domain.is_none())
             .map(|g| g.base)
     };
     let buf_paddr = match buf_paddr {

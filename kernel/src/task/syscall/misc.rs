@@ -31,6 +31,42 @@ pub(super) fn clone_domain_record(_domain: &Option<DomainRecord>) -> Option<Doma
     None
 }
 
+/// Does a row's `domain` slot carry exactly `record` (the same allocation)?
+#[cfg(cellos_domain_grants)]
+pub(super) fn carries_record(domain: &Option<DomainRecord>, record: &DomainRecord) -> bool {
+    domain
+        .as_ref()
+        .is_some_and(|carried| Arc::ptr_eq(carried, record))
+}
+
+#[cfg(not(cellos_domain_grants))]
+pub(super) fn carries_record(_domain: &Option<DomainRecord>, _record: &DomainRecord) -> bool {
+    false
+}
+
+/// Remove the row at `key` only while `carries` holds for it; `true` when this
+/// call removed it.
+///
+/// A domain record's revoke is idempotent, so every revoker that reaches it —
+/// `GrantFree`, `GrantUnregister`, the owner's exit, the deferred sweep on any
+/// hart, `CapRevoke`'s owned-grant reclaim — can see it succeed. The frames
+/// belong to the one revoker whose removal took the row: a caller that gets
+/// `false` must not release them, because another revoker already did (and the
+/// key may by now name a new grant over reused frames, which this leaves alone).
+pub(super) fn remove_row_if<G>(
+    map: Option<&mut BTreeMap<usize, G>>,
+    key: usize,
+    carries: impl Fn(&G) -> bool,
+) -> bool {
+    let Some(map) = map else {
+        return false;
+    };
+    if !map.get(&key).is_some_and(carries) {
+        return false;
+    }
+    map.remove(&key).is_some()
+}
+
 /// Build the lifecycle record for a domain owner that has just published its
 /// own mapping. Absent — `None` — wherever the lifecycle does not exist.
 #[cfg(cellos_domain_grants)]

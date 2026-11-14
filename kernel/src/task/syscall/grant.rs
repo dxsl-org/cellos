@@ -704,11 +704,15 @@ pub(super) fn sweep_deferred_domain_grants() {
             continue;
         }
         let pages = grant_pages_for_size(size);
-        {
+        // Another hart's sweep, or another revoker, may have completed the same
+        // record: only the one whose removal took the row frees its frames.
+        let removed = {
             let mut tbl = grant_table_lock().lock();
-            tbl.as_mut().and_then(|map| map.remove(&key));
-        }
-        if !withhold_or_free(base, pages) {
+            remove_row_if(tbl.as_mut(), key, |grant| {
+                carries_record(&grant.domain, &record)
+            })
+        };
+        if removed && !withhold_or_free(base, pages) {
             free_grant_pages(base, pages);
         }
     }
@@ -731,11 +735,15 @@ pub(super) fn sweep_deferred_domain_grants() {
             continue;
         }
         let pages = grant_pages_for_size(size);
-        {
+        // Another hart's sweep, or another revoker, may have completed the same
+        // record: only the one whose removal took the row frees its frames.
+        let removed = {
             let mut tbl = reg_grant_table_lock().lock();
-            tbl.as_mut().and_then(|map| map.remove(&key));
-        }
-        if !withhold_or_free(base, pages) {
+            remove_row_if(tbl.as_mut(), key, |grant| {
+                carries_record(&grant.domain, &record)
+            })
+        };
+        if removed && !withhold_or_free(base, pages) {
             free_grant_pages(base, pages);
         }
     }
@@ -1197,12 +1205,20 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
     }
 
     if mapped < n_pages {
-        // Partial map: restore the kernel identity mapping for the pages we
-        // re-mapped USER (NOT a bare unmap — every Usable frame must stay
-        // identity-mapped for the loader's identity-address zeroing), then free.
-        // Those pages were briefly USER, so a Sas copy may have probed them:
-        // unpublish (unmap, flush, drain copies) before the kernel restore.
+        // Partial map: where RAM is identity-mapped (RV64, AArch64), restore the
+        // kernel identity mapping for the pages we re-mapped USER (NOT a bare
+        // unmap — every Usable frame must stay identity-mapped for the loader's
+        // identity-address zeroing), then free. x86_64 has no identity alias
+        // to restore, so a restore there would add a kernel-RWX lower-half
+        // mapping (R3): its pages are left unmapped and the tables they needed
+        // are pruned, as in `free_grant_pages_inner`. Those pages were briefly
+        // USER, so a Sas copy may have probed them: unpublish (unmap, flush,
+        // drain copies) first on every target.
         crate::task::stack::unpublish_user_frames(paddr, mapped);
+        let identity_alias = crate::memory::frame::phys_to_virt(paddr) == paddr;
+        if !identity_alias {
+            prune_unpublished_tables(paddr, mapped);
+        }
         let kernel_rwx = Flags::VALID
             | Flags::READ
             | Flags::WRITE
@@ -1211,7 +1227,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
             | Flags::DIRTY;
         let mut fa = FRAME_ALLOCATOR.lock();
         if let Some(a) = fa.as_mut() {
-            for i in 0..mapped {
+            for i in (0..mapped).filter(|_| identity_alias) {
                 let f = paddr + i * PAGE_SIZE;
                 let _ = crate::memory::paging::map_page(a, f, f, Flags::from_bits(kernel_rwx));
             }
@@ -1233,6 +1249,27 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
     Some(paddr)
 }
 
+/// Detach the kernel-root tables a USER mapping of `[base, base + n_pages)`
+/// needed once it has been unpublished, invalidating before their frames return
+/// (the `CellSegments::drop` pattern).
+///
+/// For targets without an identity alias of RAM (x86_64), where no kernel alias
+/// is restored over the range and the tables may now be empty (R3).
+fn prune_unpublished_tables(base: usize, n_pages: usize) {
+    use crate::memory::frame::FRAME_ALLOCATOR;
+    const PAGE_SIZE: usize = 4096;
+    for i in 0..n_pages {
+        let f = base + i * PAGE_SIZE;
+        let reclaimed = crate::memory::paging::prune_empty_tables(f);
+        if !reclaimed.is_empty() {
+            crate::memory::tlb_shootdown::flush_page(f);
+            if let Some(alloc) = FRAME_ALLOCATOR.lock().as_mut() {
+                reclaimed.release(alloc);
+            }
+        }
+    }
+}
+
 pub(super) fn free_grant_pages_inner(
     base: usize,
     n_pages: usize,
@@ -1245,26 +1282,27 @@ pub(super) fn free_grant_pages_inner(
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
 
-    crate::task::stack::unpublish_user_frames(base, n_pages);
     // Restore the kernel alias only where it is the identity map (RV64,
     // AArch64). x86_64 reaches RAM through the HHDM and never had an identity
     // alias for this frame, so a restore there would add a new kernel-RWX
     // mapping to the lower half (the rule `release_shm_for` already follows).
     let identity_alias = crate::memory::frame::phys_to_virt(base) == base;
-    if !identity_alias {
-        // Without the restore, the kernel-root tables a USER mapping of these
-        // frames needed may now be empty: detach them and invalidate before
-        // their frames return, as `CellSegments::drop` does.
-        for i in 0..n_pages {
-            let f = base + i * PAGE_SIZE;
-            let reclaimed = crate::memory::paging::prune_empty_tables(f);
-            if !reclaimed.is_empty() {
-                crate::memory::tlb_shootdown::flush_page(f);
-                if let Some(alloc) = FRAME_ALLOCATOR.lock().as_mut() {
-                    reclaimed.release(alloc);
-                }
-            }
-        }
+    // A domain owner's backing is never published in the kernel root: it is
+    // zeroed through `phys_to_virt` and mapped only in private roots, whose tags
+    // the revoke has already confirmed. Without an identity alias such a run has
+    // no kernel-root leaf at all, so there is nothing to unpublish (the shared
+    // shootdown would only wait on, and fail-stop for, a mapping that never
+    // existed) and no table the run ever needed: it is only deallocated. This
+    // reads the root rather than the row, so a run released later from the pin
+    // quarantine is treated the same way.
+    let published = identity_alias
+        || (0..n_pages)
+            .any(|i| crate::memory::paging::virt_to_phys(base + i * PAGE_SIZE).is_some());
+    if published {
+        crate::task::stack::unpublish_user_frames(base, n_pages);
+    }
+    if !identity_alias && published {
+        prune_unpublished_tables(base, n_pages);
     }
     #[cfg(feature = "p01-trace")]
     let _range_write = crate::p01_retained::release_write();
@@ -2175,8 +2213,18 @@ pub(super) fn grant_free(caller_id: usize, grant_id: usize) -> SyscallResult {
             // record stays `Revoking` for an idempotent retry.
             return Err(SyscallError::PermissionDenied);
         }
-        let mut tbl = grant_table_lock().lock();
-        tbl.as_mut().and_then(|m| m.remove(&grant_id));
+        // A concurrent revoker of the same record (owner exit, the deferred
+        // sweep on another hart, `CapRevoke`'s reclaim) may have taken the row
+        // first; it then owns the frames, and this free is already complete.
+        let removed = {
+            let mut tbl = grant_table_lock().lock();
+            remove_row_if(tbl.as_mut(), grant_id, |grant| {
+                carries_record(&grant.domain, record)
+            })
+        };
+        if !removed {
+            return Ok(0);
+        }
     }
     free_grant_pages(base, grant_pages_for_size(size));
     Ok(0)

@@ -39,8 +39,8 @@ static TEST_WITHHOLD_TAG_ACK: AtomicBool = AtomicBool::new(false);
 /// Arm or disarm [`TEST_WITHHOLD_TAG_ACK`].
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
-    not(any(target_arch = "riscv64", target_arch = "x86_64")),
-    allow(dead_code) // reason: only the RV64 and x86_64 fixtures use it
+    not(all(feature = "native-domains", any(target_arch = "riscv64", target_arch = "x86_64"))),
+    allow(dead_code) // reason: only the RV64 and x86_64 native-domain fixtures use it
 )]
 pub(crate) fn set_test_withhold_tag_ack(enabled: bool) {
     TEST_WITHHOLD_TAG_ACK.store(enabled, Ordering::Release);
@@ -77,8 +77,8 @@ pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
 }
 #[cfg(feature = "test-hooks")]
 #[cfg_attr(
-    not(any(target_arch = "riscv64", target_arch = "x86_64")),
-    allow(dead_code) // reason: only the RV64 and x86_64 fixtures use it
+    not(all(feature = "native-domains", any(target_arch = "riscv64", target_arch = "x86_64"))),
+    allow(dead_code) // reason: only the RV64 and x86_64 native-domain fixtures use it
 )]
 pub(crate) fn test_tag_flush_observed(asid: usize) -> bool {
     TEST_FLUSHED_TAGS.lock().contains(&asid)
@@ -118,8 +118,10 @@ pub enum FlushAckError {
 /// invalidation from the timer path.
 pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
     local_tag_flush(asid);
-    let result = match await_remote_invalidation(tag_probe_ticks()) {
-        Err(error) => Err(error),
+    // `withheld`: the failure is the test seam's, not a silent hart's.
+    #[allow(unused_variables)] // reason: only the test-hooks log below reads it
+    let (result, withheld) = match await_remote_invalidation(tag_probe_ticks()) {
+        Err(error) => (Err(error), false),
         Ok(()) => {
             // Test-only: the acknowledgement is withheld for a bounded window, so
             // the release paths' unconfirmed branch is reachable without a real
@@ -127,31 +129,39 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             // exists to stall).
             #[cfg(feature = "test-hooks")]
             if test_tag_ack_withheld() {
-                Err(FlushAckError::Timeout {
+                let forced = FlushAckError::Timeout {
                     hart: crate::sched::hart_local::current_hart_id(),
                     epoch: 0,
-                })
+                };
+                (Err(forced), true)
             } else {
-                Ok(())
+                (Ok(()), false)
             }
             #[cfg(not(feature = "test-hooks"))]
-            Ok(())
+            (Ok(()), false)
         }
     };
-    // The stress gate (phase 07b) counts these lines on x86 as well.
+    // The stress gate (phase 07b) counts these lines on x86 as well. A forced
+    // failure names itself (`withheld (test)`), so a lane that excuses the
+    // withheld window excuses only those, and a "silent hart" line is always a
+    // real one.
     #[cfg(all(
         feature = "test-hooks",
         any(target_arch = "riscv64", target_arch = "x86_64")
     ))]
     if let Err(error) = &result {
-        log::warn!(
-            "[tlb] tag {} invalidation unconfirmed: hart {} silent through the {} tick probe",
-            asid,
-            match error {
-                FlushAckError::Timeout { hart, .. } => hart,
-            },
-            tag_probe_ticks()
-        );
+        if withheld {
+            log::warn!("[tlb] tag {asid} invalidation unconfirmed: withheld (test)");
+        } else {
+            log::warn!(
+                "[tlb] tag {} invalidation unconfirmed: hart {} silent through the {} tick probe",
+                asid,
+                match error {
+                    FlushAckError::Timeout { hart, .. } => hart,
+                },
+                tag_probe_ticks()
+            );
+        }
     }
     result
 }

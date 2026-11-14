@@ -31,9 +31,9 @@
 //! holder runs with interrupts masked while it waits for remote
 //! acknowledgements.
 
-use super::domain_grant::{gate_hold, ARCH_TAG};
+use super::domain_grant::{gate_hold, DomainGrantState, ARCH_TAG};
 use super::fixture_controls::{GuardedCheck, DISABLED};
-use super::syscall::{handle_syscall, Syscall, SyscallError};
+use super::syscall::{domain_row_for_test, handle_syscall, Syscall, SyscallError};
 use super::tcb::TaskAddressSpace;
 use super::thread_cap_selftest::{insert, mk_task, remove};
 use super::user_copy::{stage_domain_for_test, CopyError};
@@ -164,14 +164,6 @@ fn space(va: usize) -> Option<Arc<AddressSpace>> {
     builder.build().ok()
 }
 
-fn free_frames() -> usize {
-    crate::memory::frame::FRAME_ALLOCATOR
-        .lock()
-        .as_ref()
-        .map(|allocator| allocator.free_frames())
-        .unwrap_or(0)
-}
-
 fn grant_alloc(tid: usize) -> Option<usize> {
     match handle_syscall(tid, Syscall::GrantAlloc { size: GRANT_SIZE }) {
         Ok(base) if base != 0 => Some(base),
@@ -283,7 +275,6 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
     };
     let receiver_tag = fx.receiver.asid();
     let (_, flushes_before) = crate::hal::domain::switch_counters();
-    let free_before = free_frames();
     {
         let _window = WithheldAck::open();
         tlb_shootdown::begin_test_flush_observation();
@@ -293,7 +284,11 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
         // — and only the acknowledgement is missing.
         seen.tag_flushed = tlb_shootdown::test_tag_flush_observed(receiver_tag)
             && crate::hal::domain::switch_counters().1 > flushes_before;
-        seen.retained = free_frames() <= free_before;
+        // Retained: the row stays, owned, with its record `Revoking` (the
+        // frames leave only with the row), and the receiver root's detached
+        // tables wait in the deferred-release queue under its tag.
+        seen.retained = domain_row_for_test(base) == Some((OWNER_TID, DomainGrantState::Revoking))
+            && deferred_release::deferred_release_frames_for(receiver_tag) > 0;
         seen.revoking = grant_slice(OWNER_TID, base).is_none()
             && grant_slice(RECEIVER_TID, base).is_none()
             && !grant_share(OWNER_TID, base, RECEIVER_TID, GrantPerm::ReadWrite);
@@ -301,16 +296,20 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
         // The owner exits while the acknowledgement is still missing: its row
         // loses its owner and waits for the deferred sweep, frames retained.
         super::syscall::reclaim_owned_grants(OWNER_TID);
-        seen.retained &= free_frames() <= free_before;
+        seen.retained &= domain_row_for_test(base) == Some((0, DomainGrantState::Revoking));
     }
-    // Acknowledgement resumes: the next exit's sweep completes the revoke and
-    // returns the frames.
+    // Acknowledgement resumes: the next exit's sweep completes the revoke, and
+    // the row (with the frames it held) is gone.
     seen.swept = within_release_budget(|| {
         super::syscall::reap_grants_for_task(OWNER_TID);
-        free_frames() > free_before
+        domain_row_for_test(base).is_none()
     });
-    seen.released = !deferred_release::tag_invalidation_unconfirmed(receiver_tag)
-        && crate::memory::address_space::quarantined_frame_count() == 0;
+    // The receiver root's detached tables leave the queue at the reaper's next
+    // pass over their now-confirmed tag, not with the row.
+    seen.released =
+        within_release_budget(|| deferred_release::deferred_release_frames_for(receiver_tag) == 0)
+            && !deferred_release::tag_invalidation_unconfirmed(receiver_tag)
+            && crate::memory::address_space::quarantined_frame_count() == 0;
     seen
 }
 

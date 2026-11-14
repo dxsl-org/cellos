@@ -305,21 +305,32 @@ fn release_deferred_domain_row(
 ) {
     let pages = grant_pages_for_size(size);
     if revoke_domain_record(&record, base, "task-exit") {
-        if registered {
+        // Only the revoker whose removal takes the row frees its frames: a
+        // concurrent `GrantFree` or sweep may have completed the same record.
+        let removed = if registered {
             let mut tbl = reg_grant_table_lock().lock();
-            tbl.as_mut().and_then(|map| map.remove(&key));
+            remove_row_if(tbl.as_mut(), key, |grant| {
+                carries_record(&grant.domain, &record)
+            })
         } else {
             let mut tbl = grant_table_lock().lock();
-            tbl.as_mut().and_then(|map| map.remove(&key));
-        }
-        if !withhold_or_free(base, pages) {
+            remove_row_if(tbl.as_mut(), key, |grant| {
+                carries_record(&grant.domain, &record)
+            })
+        };
+        if removed && !withhold_or_free(base, pages) {
             free_grant_pages(base, pages);
         }
         return;
     }
+    // The key names this record's row only while the row still carries it.
     if registered {
         let mut tbl = reg_grant_table_lock().lock();
-        if let Some(grant) = tbl.as_mut().and_then(|map| map.get_mut(&key)) {
+        if let Some(grant) = tbl
+            .as_mut()
+            .and_then(|map| map.get_mut(&key))
+            .filter(|grant| carries_record(&grant.domain, &record))
+        {
             grant.owner = 0;
             grant.owner_cell = CellId(0);
             grant.owner_generation = 0;
@@ -327,7 +338,11 @@ fn release_deferred_domain_row(
         }
     } else {
         let mut tbl = grant_table_lock().lock();
-        if let Some(grant) = tbl.as_mut().and_then(|map| map.get_mut(&key)) {
+        if let Some(grant) = tbl
+            .as_mut()
+            .and_then(|map| map.get_mut(&key))
+            .filter(|grant| carries_record(&grant.domain, &record))
+        {
             grant.owner = 0;
             grant.owner_cell = CellId(0);
             grant.owner_generation = 0;
@@ -344,6 +359,27 @@ fn release_deferred_domain_row(
     _size: usize,
     _registered: bool,
 ) {
+}
+
+/// Test-hooks: the owner and lifecycle state of the domain row `grant_id`, in
+/// either grant table; `None` once no row carries that id.
+#[cfg(all(cellos_domain_grants, feature = "test-hooks"))]
+#[allow(dead_code)] // reason: only the x86_64 grant fixture (`task::grant_negative_selftest`) reads it
+pub(crate) fn domain_row_for_test(
+    grant_id: usize,
+) -> Option<(usize, super::domain_grant::DomainGrantState)> {
+    let page = {
+        let tbl = grant_table_lock().lock();
+        tbl.as_ref()
+            .and_then(|map| map.get(&grant_id))
+            .and_then(|grant| Some((grant.owner, grant.domain.as_ref()?.state())))
+    };
+    page.or_else(|| {
+        let tbl = reg_grant_table_lock().lock();
+        tbl.as_ref()
+            .and_then(|map| map.get(&grant_id))
+            .and_then(|grant| Some((grant.owner, grant.domain.as_ref()?.state())))
+    })
 }
 
 /// Pages leaked for the life of the boot because the quarantine was full.
@@ -2127,6 +2163,10 @@ mod grant_owner_tests;
 
 #[cfg(test)]
 mod grant_lease_tests;
+
+#[cfg(test)]
+#[path = "grant-row-tests.rs"]
+mod grant_row_tests;
 
 #[cfg(test)]
 mod tests;

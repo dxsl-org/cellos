@@ -310,9 +310,11 @@ fi
 #
 # One exception, bracketed by the kernel itself: the grant deferred-revoke
 # fixture withholds every tag acknowledgement between `[grant-neg]
-# withhold-ack window OPEN` and `… CLOSED`, and the unconfirmed tag lines inside
-# that window are its purpose. The brackets must balance and close; a line
-# outside them still fails the lane.
+# withhold-ack window OPEN` and `… CLOSED`, and the forced failures inside that
+# window are its purpose. Only those are excused — each names itself
+# (`[tlb] tag N invalidation unconfirmed: withheld (test)`) — so a real silent
+# hart inside the window still fails the lane, as does any line outside it. The
+# brackets must balance and close.
 WINDOW_OPEN=$(grep -ac "\[grant-neg\] withhold-ack window OPEN" "$LOG" || true)
 WINDOW_CLOSED=$(grep -ac "\[grant-neg\] withhold-ack window CLOSED" "$LOG" || true)
 if [[ "$WINDOW_OPEN" -ne "$WINDOW_CLOSED" ]]; then
@@ -322,7 +324,7 @@ fi
 UNCONFIRMED=$(awk '
     /\[grant-neg\] withhold-ack window OPEN/ { inside = 1; next }
     /\[grant-neg\] withhold-ack window CLOSED/ { inside = 0; next }
-    /invalidation unconfirmed/ && (!inside || !/\[tlb\] tag [0-9]+ invalidation unconfirmed/) { print }
+    /invalidation unconfirmed/ && (!inside || !/\[tlb\] tag [0-9]+ invalidation unconfirmed: withheld \(test\)$/) { print }
 ' "$LOG")
 if [[ -n "$UNCONFIRMED" ]]; then
     echo "FAIL: an invalidation went unconfirmed:" >&2

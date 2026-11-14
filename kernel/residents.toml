@@ -455,6 +455,7 @@
 "kernel/src/task/syscall/golden_tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/syscall/grant.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/grant_lease_tests.rs" = { category = "test", owner = "task" }
+"kernel/src/task/syscall/grant-row-tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/syscall/grant_owner_tests.rs" = { category = "test", owner = "task" }
 "kernel/src/task/syscall/ipc.rs" = { category = "A", owner = "task" }
 "kernel/src/task/syscall/misc.rs" = { category = "A", owner = "task" }
