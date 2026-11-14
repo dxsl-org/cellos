@@ -83,10 +83,10 @@ libs/posix-shim ◄── ffi-posix cells only
 
 ## Success Criteria
 
-- [ ] `cargo tree -p cellos-kernel` shows no dependency on `wire` or `posix-shim`.
-- [ ] x86 fixture: killing init produces the fault record and a platform reset, not a hung system.
-- [ ] x86 QEMU: config service hot-swap completes with state preserved (a key written before the swap is read after) — or, if removal was chosen, grep finds no swap target without a handler.
-- [ ] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, release-posture boot, review recorded.
+- [x] `cargo tree -p cellos-kernel` shows no dependency on `wire` or `posix-shim`.
+- [x] x86 fixture: killing init produces the fault record and a platform reset, not a hung system.
+- [x] x86 QEMU: config service hot-swap completes with state preserved (a key written before the swap is read after) — or, if removal was chosen, grep finds no swap target without a handler.
+- [x] Checkpoint: full `pr`-tier suite on three arches, `x86-c2c`, release-posture boot, review recorded.
 
 ## Risk Assessment
 
