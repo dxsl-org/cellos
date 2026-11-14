@@ -426,6 +426,10 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
     for (&eb, region) in reg.iter() {
         let ee = eb + region.len;
         if !(end <= eb || base >= ee) {
+            // A quarantined window is never handed over (`release_mmio_for`).
+            if region.owner_tid == QUARANTINED_OWNER {
+                return Err(ViError::AlreadyExists);
+            }
             if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
                 if let Some(task) = sched.tasks.get(&region.owner_tid) {
                     if matches!(task.state, crate::task::tcb::TaskState::Terminated) {
@@ -474,48 +478,112 @@ pub fn self_test() -> bool {
 /// Release all MMIO regions owned by task `tid`.
 ///
 /// Retirement calls this for every member task of the retiring incarnation.
-/// On RISC-V and AArch64 the released windows' USER pages go back to the boot
+/// On RISC-V and AArch64 the windows' USER pages first go back to the boot
 /// posture (kernel-only): `RequestMmio` installed them, so without this a dead
-/// Cell's window would stay U-mode/EL0-reachable for every other Cell.
+/// Cell's window would stay U-mode/EL0-reachable for every other Cell. The
+/// lowering runs while the windows are still owned, and a window is released
+/// only once its lowering is in force on every hart. A window whose lowering is
+/// not (a remote hart did not confirm the invalidation, or the leaf could not
+/// be rewritten) stays registered to [`QUARANTINED_OWNER`] — counted, logged,
+/// and never handed to another Cell in this boot — because a stale USER
+/// translation may survive on that hart.
 pub fn release_mmio_for(tid: usize) {
     let mut registry = REGISTRY.lock();
-    #[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
-    let released: alloc::vec::Vec<(usize, usize)> = registry
-        .iter()
-        .filter(|(_, region)| region.owner_tid == tid)
-        .map(|(&base, region)| (base, region.len))
-        .collect();
-    registry.retain(|_base, region| region.owner_tid != tid);
-    // REGISTRY stays held so no new owner can claim a page between the check
-    // below and its PTE update; a page a live region still covers (a window
-    // handed over from a Terminated owner before this reap) keeps USER.
-    #[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
-    for (base, len) in released {
-        const PAGE: usize = 4096;
-        for page in user_pages(base, len).step_by(PAGE) {
-            let still_owned = registry
-                .iter()
-                .any(|(&live, region)| live < page + PAGE && page < live + region.len);
-            if still_owned {
-                continue;
-            }
-            if let Err(e) = crate::memory::paging::restore_mmio_boot_posture(page, PAGE) {
-                log::error!("[mmio] release tid={tid}: page {page:#x} kept USER ({e:?})");
-            }
-        }
+    // REGISTRY stays held from the lowering through the release, so no new
+    // owner can claim a page between the check and its PTE update.
+    let unlowered = lower_released_windows(&registry, tid);
+    let quarantined = retire_windows(&mut registry, tid, &unlowered);
+    drop(registry);
+    for &(base, len, page, error) in &unlowered {
+        log::error!(
+            "[mmio] release tid={tid}: window {base:#x}+{len:#x} quarantined, page {page:#x} \
+             may stay USER ({error:?}); never handed out again this boot ({quarantined} quarantined)"
+        );
     }
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
 }
 
-/// Release the regions owned by task `tid` whose class is in `device_mask`, and
-/// return their `(base, len)` so the caller can remove user accessibility.
-///
-/// Selective by construction: a class the caller did not name stays owned and
-/// mapped, so revoking one device class never disarms another. Used by runtime
-/// revocation (`sys_cap_revoke`); task retirement uses [`release_mmio_for`],
-/// which drops every region regardless of class.
+/// Owner of a released window whose USER pages are not provably gone on every
+/// hart. No task id is ever `usize::MAX`, so no owner query matches it, and
+/// every claim overlapping it is refused for the rest of the boot.
+const QUARANTINED_OWNER: usize = usize::MAX;
+
+/// A released window `(base, len)` whose lowering failed at `page`.
+type Unlowered = (usize, usize, usize, crate::memory::paging::PageTableError);
+
+/// Return the whole USER pages of `tid`'s windows to the boot posture. A page
+/// another owner's live window still covers (one handed over from a Terminated
+/// owner before this reap) keeps USER; a quarantined window has no owner to
+/// keep it for. Every page is attempted; a window is reported with its first
+/// page that failed.
+#[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
+fn lower_released_windows(
+    registry: &BTreeMap<usize, MmioRegion>,
+    tid: usize,
+) -> alloc::vec::Vec<Unlowered> {
+    const PAGE: usize = 4096;
+    let mut unlowered = alloc::vec::Vec::new();
+    for (&base, region) in registry
+        .iter()
+        .filter(|(_, region)| region.owner_tid == tid)
+    {
+        let mut failed = None;
+        for page in user_pages(base, region.len).step_by(PAGE) {
+            let still_owned = registry.iter().any(|(&live, other)| {
+                other.owner_tid != tid
+                    && other.owner_tid != QUARANTINED_OWNER
+                    && live < page + PAGE
+                    && page < live + other.len
+            });
+            if still_owned {
+                continue;
+            }
+            if let Err(e) = crate::memory::paging::restore_mmio_boot_posture(page, PAGE) {
+                failed.get_or_insert((page, e));
+            }
+        }
+        if let Some((page, e)) = failed {
+            unlowered.push((base, region.len, page, e));
+        }
+    }
+    unlowered
+}
+
+/// Nothing to lower: only RV64 and AArch64 retirement restores a USER posture
+/// here, and host tests have no page tables.
+#[cfg(not(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test))))]
+fn lower_released_windows(
+    _registry: &BTreeMap<usize, MmioRegion>,
+    _tid: usize,
+) -> alloc::vec::Vec<Unlowered> {
+    alloc::vec::Vec::new()
+}
+
+/// Drop `tid`'s windows, except those in `unlowered`, which pass to
+/// [`QUARANTINED_OWNER`]. Returns the windows quarantined this boot.
+fn retire_windows(
+    registry: &mut BTreeMap<usize, MmioRegion>,
+    tid: usize,
+    unlowered: &[Unlowered],
+) -> usize {
+    let mut quarantined = 0;
+    registry.retain(|&base, region| {
+        if region.owner_tid == tid {
+            if !unlowered.iter().any(|window| window.0 == base) {
+                return false;
+            }
+            region.owner_tid = QUARANTINED_OWNER;
+        }
+        if region.owner_tid == QUARANTINED_OWNER {
+            quarantined += 1;
+        }
+        true
+    });
+    quarantined
+}
+
 /// The windows [`revoke_mmio_for`] would release, without releasing them: a
 /// revoke lowers their PTEs first and releases exactly these only once the
 /// lowering is in force on every hart ([`release_mmio_windows`]).
@@ -544,6 +612,14 @@ pub fn release_mmio_windows(tid: usize, windows: &[(usize, usize)]) {
     });
 }
 
+/// Release the regions owned by task `tid` whose class is in `device_mask`, and
+/// return their `(base, len)` so the caller can remove user accessibility.
+///
+/// Selective by construction: a class the caller did not name stays owned and
+/// mapped, so revoking one device class never disarms another. Used by the
+/// MMIO revoke self-test; `sys_cap_revoke` lowers first ([`mmio_windows_for`]),
+/// and task retirement uses [`release_mmio_for`], which drops every region
+/// regardless of class.
 pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(usize, usize)> {
     let mut revoked = alloc::vec::Vec::new();
     if device_mask == 0 {
@@ -567,10 +643,15 @@ pub fn revoke_mmio_for(tid: usize, device_mask: MmioClass) -> alloc::vec::Vec<(u
 /// Return the task ID (TID) of the cell that currently owns the MMIO region
 /// whose base address exactly matches `base`.
 ///
-/// Returns `None` if no cell has requested that exact base address.
+/// Returns `None` if no cell has requested that exact base address, or the
+/// window is quarantined (no cell owns it any more).
 /// Used by the GPIO IRQ handler to route interrupts to the current MMIO owner.
 pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
-    REGISTRY.lock().get(&base).map(|region| region.owner_tid)
+    REGISTRY
+        .lock()
+        .get(&base)
+        .map(|region| region.owner_tid)
+        .filter(|&tid| tid != QUARANTINED_OWNER)
 }
 
 /// Return whether task `tid` owns exactly `[base, base + len)`.

@@ -102,6 +102,63 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
     release_bdfs_for(DEAD_TID);
 }
 
+/// Phase 16: a released window whose lowering is not confirmed on every hart
+/// stays registered, owned by nobody, and no later claim or release frees it;
+/// the confirmed window of the same release is freed.
+#[test]
+fn an_unlowered_window_is_quarantined_for_the_rest_of_the_boot() {
+    use super::{
+        lookup_mmio_owner, release_mmio_for, request_mmio_unchecked, retire_windows,
+        QUARANTINED_OWNER, REGISTRY,
+    };
+    use crate::memory::paging::PageTableError;
+    const OWNER: usize = 0x7E2B;
+    const UNLOWERED: usize = 0x7E2B_0000_0000;
+    const LOWERED: usize = 0x7E2B_0000_1000;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    assert!(request_mmio_unchecked(OWNER, UNLOWERED, 0x1000).is_ok());
+    assert!(request_mmio_unchecked(OWNER, LOWERED, 0x1000).is_ok());
+
+    let before = {
+        let mut registry = REGISTRY.lock();
+        let before = registry
+            .values()
+            .filter(|region| region.owner_tid == QUARANTINED_OWNER)
+            .count();
+        let unlowered = [(
+            UNLOWERED,
+            0x1000,
+            UNLOWERED,
+            PageTableError::InvalidationUnconfirmed,
+        )];
+        assert_eq!(retire_windows(&mut registry, OWNER, &unlowered), before + 1);
+        before
+    };
+
+    assert_eq!(lookup_mmio_owner(UNLOWERED), None);
+    assert!(!owns_exact_mmio(OWNER, UNLOWERED, 0x1000));
+    assert_eq!(
+        request_mmio_unchecked(OWNER + 1, UNLOWERED, 0x1000),
+        Err(ViError::AlreadyExists)
+    );
+    // A later release of the same (reused) tid does not free it either.
+    release_mmio_for(OWNER);
+    assert_eq!(
+        request_mmio_unchecked(OWNER, UNLOWERED, 0x1000),
+        Err(ViError::AlreadyExists)
+    );
+    let after = REGISTRY
+        .lock()
+        .values()
+        .filter(|region| region.owner_tid == QUARANTINED_OWNER)
+        .count();
+    assert_eq!(after, before + 1);
+
+    // The window whose lowering was confirmed is free for the next owner.
+    assert!(request_mmio_unchecked(OWNER + 1, LOWERED, 0x1000).is_ok());
+    release_mmio_for(OWNER + 1);
+}
+
 /// H-3: the PlatformCap bypass may claim only inside the admitted ECAM window
 /// and never over managed RAM, even when firmware places the window on RAM.
 #[test]
