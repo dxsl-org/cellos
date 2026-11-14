@@ -80,7 +80,7 @@ FrameRun::drop ─► unpublish PTEs (all roots that map it)
 
 ## Success Criteria
 
-- [ ] x86 fixture: with one CPU held with interrupts masked past the wait bound, a cell teardown completes, frames are reported quarantined and later freed — the kernel does not panic (panics before this phase).
+- [x] x86 fixture: with one CPU held with interrupts masked past the wait bound, a cell teardown completes, frames are reported quarantined and later freed — the kernel does not panic (panics before this phase).
 - [x] Host tests cover each `FrameRun` transition; holding the allocator lock across a flush does not compile.
 - [ ] Raw `PhysAddr` free calls outside `memory/frame*.rs` reduced to zero (grep).
 - [ ] Checkpoint: full `pr`-tier suite on three arches; x86 4-CPU stress and domain grant suites; hypervisor smoke lane; review recorded.
