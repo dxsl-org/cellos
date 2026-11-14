@@ -14,12 +14,14 @@
 //! the deferred sweep, which completes the revoke and frees the frames.
 //!
 //! **Negatives** (`{ARCH_TAG}-GRANT-NEG-<CASE>`): revoke while mapped, receiver
-//! death, stale grant id, cross-domain forgery and fault during copy. Each runs
-//! as built and must report `PASS`; then its CONTROL disables exactly the one
-//! check the case guards ([`GuardedCheck`]) and the same assertions must catch
-//! the violation: `{ARCH_TAG}-GRANT-CONTROL-<CASE>: CAUGHT (<what failed>)`. A
-//! control that still passes reports `MISSED`, and the terminal
-//! `{ARCH_TAG}-GRANT-NEG` fails.
+//! death, stale grant id, cross-domain forgery, and fault during copy with its
+//! permission twin (a leaf downgraded during the copy). Each runs as built and
+//! must report `PASS`; then its CONTROL disables exactly the one check the case
+//! guards ([`GuardedCheck`]) and the same assertions must fail for exactly the
+//! reason that check exists for: `{ARCH_TAG}-GRANT-CONTROL-<CASE>: CAUGHT
+//! (<reason>)`. A control that fails for any other reason (setup, teardown, a
+//! different property) did not exercise its check and reports `FAIL`; one that
+//! still passes reports `MISSED`. Either fails the terminal `{ARCH_TAG}-GRANT-NEG`.
 //!
 //! The withheld window is bracketed by `[grant-neg] withhold-ack window OPEN` /
 //! `CLOSED`: the tag invalidations it reports unconfirmed are its purpose, and
@@ -39,6 +41,7 @@ use super::thread_cap_selftest::{insert, mk_task, remove};
 use super::user_copy::{stage_domain_for_test, CopyError};
 use crate::memory::address_space::{AddressSpace, AddressSpaceBuilder, MappingKind};
 use crate::memory::deferred_release;
+use crate::memory::frame::phys_to_virt;
 use crate::memory::paging::{Flags, PAGE_SIZE};
 use crate::memory::tlb_shootdown;
 use alloc::sync::Arc;
@@ -82,38 +85,52 @@ struct Fixture {
 /// A case's verdict: `Err` names the first property that did not hold.
 type Verdict = Result<(), &'static str>;
 
-/// One negative: its marker, the check its CONTROL disables, and its body.
+/// One negative: its marker, the check its CONTROL disables, the exact verdict
+/// that control must produce, and its body.
 struct Case {
     name: &'static str,
     check: GuardedCheck,
+    /// The `Err` the body returns when `check` is the only thing missing.
+    reason: &'static str,
     run: fn(&Fixture) -> Verdict,
 }
 
-const CASES: [Case; 5] = [
+const CASES: [Case; 6] = [
     Case {
         name: "REVOKE-MAPPED",
         check: GuardedCheck::RevokeDrainsReceiver,
+        reason: "receiver-mapping-survived-revoke",
         run: revoke_while_mapped,
     },
     Case {
         name: "RECEIVER-DEATH",
         check: GuardedCheck::DeathDrainsReceiver,
+        reason: "dead-receiver-mapping-survived",
         run: receiver_death,
     },
     Case {
         name: "STALE-ID",
         check: GuardedCheck::SliceNeedsLive,
+        reason: "owner-resolved-revoking-record",
         run: stale_grant_id,
     },
     Case {
         name: "FORGERY",
         check: GuardedCheck::SliceNeedsGrantee,
+        reason: "third-domain-resolved-grant",
         run: cross_domain_forgery,
     },
     Case {
         name: "COPY-FAULT",
-        check: GuardedCheck::CommitRewalksPages,
+        check: GuardedCheck::CommitNeedsLeaf,
+        reason: "commit-accepted-revoked-page",
         run: fault_during_copy,
+    },
+    Case {
+        name: "COPY-DOWNGRADE",
+        check: GuardedCheck::CommitNeedsRight,
+        reason: "commit-accepted-downgraded-page",
+        run: downgrade_during_copy,
     },
 ];
 
@@ -416,6 +433,11 @@ fn cross_domain_forgery(fx: &Fixture) -> Verdict {
     let base = shared_grant(RECEIVER_TID, &fx.receiver, GrantPerm::ReadOnly).ok_or("setup")?;
     let refused = grant_slice(THIRD_TID, base).is_none();
     let unmapped = !maps(&fx.third, base);
+    if !unmapped {
+        // The record never named the third domain, so its revoke cannot drain
+        // this PTE: drop it before the free returns the frames it maps.
+        scrub(&fx.third, base);
+    }
     let freed = grant_free(OWNER_TID, base).is_ok();
     if !refused || !unmapped {
         return Err("third-domain-resolved-grant");
@@ -445,6 +467,68 @@ fn fault_during_copy(_fx: &Fixture) -> Verdict {
     Ok(())
 }
 
+/// The first 64 bytes of the frame `space` maps at `va`, read through the
+/// kernel alias.
+fn frame_head(space: &AddressSpace, va: usize) -> Option<[u8; 64]> {
+    let entry = space
+        .ledger()
+        .into_iter()
+        .find(|entry| entry.virtual_address == va)?;
+    let mut head = [0u8; 64];
+    // SAFETY: the ledger names a frame this live address space owns, and
+    // `phys_to_virt` is the kernel's alias of it.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            phys_to_virt(entry.physical_address) as *const u8,
+            head.as_mut_ptr(),
+            head.len(),
+        );
+    }
+    Some(head)
+}
+
+/// Protocol-violation injection for [`downgrade_during_copy`]: rewrite the
+/// leaf `space` maps at `va` to user read-only, keeping its frame and leaving
+/// the ledger as it was, without the copy-reader drain every real permission
+/// change waits for. The synthetic root never runs on any CPU; the local flush
+/// keeps the TLB honest anyway.
+fn force_read_only(space: &AddressSpace, va: usize) -> Result<(), ()> {
+    use hal::PageTableTrait;
+    let root = space.root_ppn() << 12;
+    // SAFETY: `root` is the live root of a synthetic address space only this
+    // fixture uses, and `phys_to_virt` is the kernel's alias of it.
+    let table = unsafe { &mut *(phys_to_virt(root) as *mut hal::PageTable) };
+    table
+        .protect(
+            va,
+            Flags::from_bits(
+                Flags::VALID | Flags::READ | Flags::USER | Flags::ACCESSED | Flags::NON_GLOBAL,
+            ),
+        )
+        .map_err(drop)?;
+    crate::hal::paging::flush_tlb_page(va);
+    Ok(())
+}
+
+/// Fault during copy, permission half: a page whose write right is removed
+/// between the probe and the commit of a domain copy to user memory fails the
+/// commit with the recoverable error, and no byte reaches the page.
+fn downgrade_during_copy(_fx: &Fixture) -> Verdict {
+    let space = space(COPY_VA).ok_or("setup")?;
+    let before = frame_head(&space, COPY_VA).ok_or("setup")?;
+    let staged = stage_domain_for_test(&space, COPY_VA, 64, true).map_err(|_| "stage")?;
+    force_read_only(&space, COPY_VA).map_err(|_| "injection")?;
+    let src = [SENTINEL; 64];
+    let result = staged.commit(src.as_ptr().cast_mut());
+    if result != Err(CopyError::InvalidAddress) {
+        return Err("commit-accepted-downgraded-page");
+    }
+    if frame_head(&space, COPY_VA) != Some(before) {
+        return Err("bytes-moved");
+    }
+    Ok(())
+}
+
 /// Run one case as built and as its CONTROL; `true` when both behaved.
 fn run_case(fx: &Fixture, case: &Case) -> bool {
     let built = (case.run)(fx);
@@ -456,11 +540,22 @@ fn run_case(fx: &Fixture, case: &Case) -> bool {
         let _disabled = Control::disable(case.check);
         (case.run)(fx)
     };
+    // Only the case's own reason proves the disabled check was exercised: any
+    // other failure (setup, teardown, another property) happened elsewhere.
+    let caught = control == Err(case.reason);
     match control {
-        Err(why) => {
+        Err(why) if caught => {
             log::info!(
-                "{ARCH_TAG}-GRANT-CONTROL-{}: CAUGHT ({:?} disabled: {why})",
+                "{ARCH_TAG}-GRANT-CONTROL-{}: CAUGHT ({why}) with {:?} disabled",
                 case.name,
+                case.check
+            );
+        }
+        Err(why) => {
+            log::error!(
+                "{ARCH_TAG}-GRANT-CONTROL-{}: FAIL ({why}, want {}) with {:?} disabled",
+                case.name,
+                case.reason,
                 case.check
             );
         }
@@ -472,7 +567,7 @@ fn run_case(fx: &Fixture, case: &Case) -> bool {
             );
         }
     }
-    built.is_ok() && control.is_err()
+    built.is_ok() && caught
 }
 
 /// Run the deferred revoke and every negative with its CONTROL, leave the

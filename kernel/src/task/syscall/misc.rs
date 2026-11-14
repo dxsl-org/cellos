@@ -67,6 +67,32 @@ pub(super) fn remove_row_if<G>(
     map.remove(&key).is_some()
 }
 
+/// Complete a revoke that succeeded: take `key`'s row out of `table` only while
+/// it still carries the revoked record ([`remove_row_if`]), release the table
+/// lock, and only then — and only when this call took the row — run `release`,
+/// which returns the frames. `true` when this call took the row.
+///
+/// The one shape of the single-free rule, shared by every revoker (`GrantFree`,
+/// `GrantUnregister`, the owner's exit, the deferred sweep): a revoker that lost
+/// the race, or whose key now names a new grant over reused frames, releases
+/// nothing and leaves that row alone. `release` runs with no table lock held, so
+/// it may take `FRAME_ALLOCATOR` and `KERNEL_ROOT`.
+pub(super) fn release_if_row_taken<G>(
+    table: &Spinlock<Option<BTreeMap<usize, G>>>,
+    key: usize,
+    carries: impl Fn(&G) -> bool,
+    release: impl FnOnce(),
+) -> bool {
+    let taken = {
+        let mut rows = table.lock();
+        remove_row_if(rows.as_mut(), key, carries)
+    };
+    if taken {
+        release();
+    }
+    taken
+}
+
 /// Build the lifecycle record for a domain owner that has just published its
 /// own mapping. Absent — `None` — wherever the lifecycle does not exist.
 #[cfg(cellos_domain_grants)]

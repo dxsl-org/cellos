@@ -422,15 +422,26 @@ pub(super) fn unregister_registered_grant(
         }
     }
     .ok_or(SyscallError::PermissionDenied)?;
-    let n_pages = grant_pages_for_size(entry.1);
-    if let Some(record) = &entry.2 {
+    let (base, size, domain) = entry;
+    let n_pages = grant_pages_for_size(size);
+    if let Some(record) = &domain {
         if !revoke_domain_record(record, reg_id, "GrantUnregister") {
             return Err(SyscallError::PermissionDenied);
         }
-        let mut table = reg_grant_table_lock().lock();
-        table.as_mut().and_then(|grants| grants.remove(&reg_id));
+        // A concurrent revoker of the same record (`CapRevoke`'s reclaim, the
+        // deferred sweep after an ownerless retry) may have taken the row
+        // first; it then owns the frames, and this unregister is complete. A
+        // key that now names another cell's grant over reused frames is left
+        // alone.
+        release_if_row_taken(
+            reg_grant_table_lock(),
+            reg_id,
+            |grant| carries_record(&grant.domain, record),
+            || free_grant_pages(base, n_pages),
+        );
+        return Ok(());
     }
-    free_grant_pages(entry.0, n_pages);
+    free_grant_pages(base, n_pages);
     Ok(())
 }
 
@@ -706,15 +717,16 @@ pub(super) fn sweep_deferred_domain_grants() {
         let pages = grant_pages_for_size(size);
         // Another hart's sweep, or another revoker, may have completed the same
         // record: only the one whose removal took the row frees its frames.
-        let removed = {
-            let mut tbl = grant_table_lock().lock();
-            remove_row_if(tbl.as_mut(), key, |grant| {
-                carries_record(&grant.domain, &record)
-            })
-        };
-        if removed && !withhold_or_free(base, pages) {
-            free_grant_pages(base, pages);
-        }
+        release_if_row_taken(
+            grant_table_lock(),
+            key,
+            |grant| carries_record(&grant.domain, &record),
+            || {
+                if !withhold_or_free(base, pages) {
+                    free_grant_pages(base, pages);
+                }
+            },
+        );
     }
 
     let mut reg_retry: Vec<(usize, DomainRecord, usize, usize)> = Vec::new();
@@ -737,15 +749,16 @@ pub(super) fn sweep_deferred_domain_grants() {
         let pages = grant_pages_for_size(size);
         // Another hart's sweep, or another revoker, may have completed the same
         // record: only the one whose removal took the row frees its frames.
-        let removed = {
-            let mut tbl = reg_grant_table_lock().lock();
-            remove_row_if(tbl.as_mut(), key, |grant| {
-                carries_record(&grant.domain, &record)
-            })
-        };
-        if removed && !withhold_or_free(base, pages) {
-            free_grant_pages(base, pages);
-        }
+        release_if_row_taken(
+            reg_grant_table_lock(),
+            key,
+            |grant| carries_record(&grant.domain, &record),
+            || {
+                if !withhold_or_free(base, pages) {
+                    free_grant_pages(base, pages);
+                }
+            },
+        );
     }
 }
 
@@ -1217,6 +1230,10 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         crate::task::stack::unpublish_user_frames(paddr, mapped);
         let identity_alias = crate::memory::frame::phys_to_virt(paddr) == paddr;
         if !identity_alias {
+            // Pages `0..mapped` only: the page that failed (`mapped`) needs no
+            // prune here, because `map_page`'s own failure path already pruned
+            // every table it allocated for that page (on x86 after invalidating
+            // them), and a table it shares with a mapped page is pruned with it.
             prune_unpublished_tables(paddr, mapped);
         }
         let kernel_rwx = Flags::VALID
@@ -2207,6 +2224,7 @@ pub(super) fn grant_free(caller_id: usize, grant_id: usize) -> SyscallResult {
     let Some((base, size, domain)) = entry else {
         return Err(SyscallError::PermissionDenied);
     };
+    let n_pages = grant_pages_for_size(size);
     if let Some(record) = &domain {
         if !revoke_domain_record(record, grant_id, "GrantFree") {
             // Bounded existing error: the frames stay retained and the
@@ -2216,17 +2234,15 @@ pub(super) fn grant_free(caller_id: usize, grant_id: usize) -> SyscallResult {
         // A concurrent revoker of the same record (owner exit, the deferred
         // sweep on another hart, `CapRevoke`'s reclaim) may have taken the row
         // first; it then owns the frames, and this free is already complete.
-        let removed = {
-            let mut tbl = grant_table_lock().lock();
-            remove_row_if(tbl.as_mut(), grant_id, |grant| {
-                carries_record(&grant.domain, record)
-            })
-        };
-        if !removed {
-            return Ok(0);
-        }
+        release_if_row_taken(
+            grant_table_lock(),
+            grant_id,
+            |grant| carries_record(&grant.domain, record),
+            || free_grant_pages(base, n_pages),
+        );
+        return Ok(0);
     }
-    free_grant_pages(base, grant_pages_for_size(size));
+    free_grant_pages(base, n_pages);
     Ok(0)
 }
 

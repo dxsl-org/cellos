@@ -24,8 +24,11 @@ pub(crate) enum GuardedCheck {
     /// A domain slice resolves only for the task the grant is shared to.
     SliceNeedsGrantee,
     /// A domain copy commit re-walks every page under its reader pin and
-    /// refuses one whose leaf is gone or no longer grants the access.
-    CommitRewalksPages,
+    /// refuses one whose leaf is gone.
+    CommitNeedsLeaf,
+    /// The same re-walk refuses a page whose leaf no longer grants the copy's
+    /// access (a right removed between the probe and the commit).
+    CommitNeedsRight,
 }
 
 impl GuardedCheck {

@@ -18,7 +18,9 @@
 //!      *same* recipient; the receiver's old writable PTE must be
 //!      gone (its store faults) while a read of the address still
 //!      returns the byte the ReadWrite phase wrote;
-//!   4. `unregister` — the owner `GrantUnregister`s, the receiver's address faults;
+//!   4. `unregister` — the registered grant is re-shared ReadWrite (so only a
+//!      removed PTE can make the store fault), the owner `GrantUnregister`s,
+//!      the receiver's address faults;
 //!   5. `exit`       — the owner exits, its reaper revokes, the receiver faults.
 //!
 //! Denials that stay denials are asserted here too: a non-private-root peer and
@@ -325,8 +327,11 @@ fn cell_main() {
                 }
             }
             WANT_UNREGISTER => {
+                // ReadWrite, so the receiver's later store can only fault if
+                // `GrantUnregister` really removed its PTE: on a ReadOnly page a
+                // surviving PTE would fault too (on RV64 with the same cause).
                 if let Some(grant_id) = reg {
-                    let shared = sys_grant_share(grant_id, sender, PERM_RO);
+                    let shared = sys_grant_share(grant_id, sender, PERM_RW);
                     ack(sender, u8::from(shared));
                 }
             }

@@ -204,8 +204,11 @@ marked dying, a mixed `SAS↔private-root` pair, and an unsupported permission. 
    flush — the SBI remote fence on RV64, the IPI epoch after the local `INVPCID`/CR3 flush on
    x86_64 — or a receiver root still current on a hart) returns the bounded existing error,
    retains the frames, and keeps the record `Revoking` for an idempotent retry — a
-   caller-exit retry sweep runs on every task retirement. Only the revoker whose removal takes
-   the table row releases its frames, so concurrent revokers of one record never free twice.
+   caller-exit retry sweep runs on every task retirement. Every revoker — `GrantFree`,
+   `GrantUnregister`, the owner's exit (`CapRevoke`'s reclaim included) and the deferred sweep —
+   releases the frames only when its own removal takes the table row while the row still
+   carries the revoked record, so concurrent revokers of one record never free twice and a
+   key reused by a new grant keeps its row.
    New slices and shares refuse while `Revoking`. Receiver death drains only the receiver half:
    the owner keeps the record and its frames and may re-share. A DMA pin cannot exist on a
    domain grant because `GrantDma` remains denied for a private-root caller; SAS-only grant
@@ -235,10 +238,17 @@ asserts `OWNER-MAPPED: OK`, `RECEIVER-RW: OK`, `RECEIVER-RO-WRITE: FAULT-EXPECTE
 `RECEIVER-REVOKE-FAULT`/`UNREGISTER-FAULT`/`EXIT-FAULT: FAULT-EXPECTED`,
 `RECEIVER-FRAME-REUSE: REFUSED`, and the surviving denials (`OWNER-SHARE-FOREIGN: DENY`,
 `OWNER-SHARE-WO: DENY`, `RECEIVER-SLICE-UNKNOWN: DENY`), and classifies each fault line at
-the expected `addr=` — with `cause=0xf` (store page fault) on RV64; the AArch64 and x86_64
-lanes accept any cause and attribute each fault by its address and by the announcement that
-precedes it. Because the pair runs in every boot of the RV64 image, every RV64 case classifies
-its faults the same way. One generation is the **same-recipient
+the expected `addr=` — with `cause=0xf` (store page fault) on RV64 and the error-code `P`
+bit on x86_64 (not-present for the revoked addresses, protection for the ReadOnly and
+downgraded ones); the AArch64 lane accepts any cause. Every lane attributes each fault by its
+address, with an exact count per address, and by the announcement that precedes it. Because the
+pair runs in every boot of the RV64 image, every RV64 case classifies its faults the same way
+(exact counts once the launcher reports the pair complete, at most those counts in a boot the
+window cut short). The `GrantUnregister` generation takes its grant **ReadWrite** and proves a
+store lands (`RECEIVER-UNREGISTER-RW: OK`) before the owner unregisters, so only a removed PTE
+can turn its later store into a fault; if the unregistered id still resolves the receiver
+prints `RECEIVER-FRAME-REUSE: REUSED` and `RECEIVER: FAIL`, and every lane fails on either.
+One generation is the **same-recipient
 ReadWrite→ReadOnly downgrade**: the receiver proves a writable mapping, the owner re-shares
 the same grant ReadOnly to that same recipient (`OWNER-DOWNGRADE-RESHARE: OK`), and the
 receiver then proves the address still resolves and still reads the byte the writable half
@@ -257,7 +267,9 @@ never relabelled `PASS`.
 `scripts/x86/qemu-domain-test.sh` (image: `scripts/build-x86_64-domain-test-ci.sh`) runs the
 same kernel fixtures (`S22-X86-GRANT-REVOKE: PASS`, `S22-X86-GRANT-GATE: PASS`), the same
 public pair (`S22-X86-GRANT-PAIR-*`, with exactly six accounted cell faults: the
-`tier2-exploit` NULL store plus the pair's five) and three x86-first fixtures from
+`tier2-exploit` NULL store plus the pair's five, each with its x86 error-code `P` bit — the
+freed, unregistered and exit-revoked addresses fault not-present, the ReadOnly and
+downgraded ones on protection) and three x86-first fixtures from
 `kernel/src/task/grant_negative_selftest.rs`:
 
 - `S22-X86-GRANT-DEFERRED: PASS` — with the tag acknowledgement withheld, `GrantFree` fails
@@ -266,18 +278,21 @@ public pair (`S22-X86-GRANT-PAIR-*`, with exactly six accounted cell faults: the
   the acknowledgement resumes, the deferred sweep completes the revoke. The window is
   bracketed by `[grant-neg] withhold-ack window OPEN`/`CLOSED`, and the lane excuses only the
   forced `… invalidation unconfirmed: withheld (test)` lines inside it.
-- Five negatives, each run as built (`S22-X86-GRANT-NEG-<CASE>: PASS`) and then as its
+- Six negatives, each run as built (`S22-X86-GRANT-NEG-<CASE>: PASS`) and then as its
   **CONTROL** with exactly the one check it guards disabled by a `test-hooks`-only switch
-  (`task::fixture_controls`; production kernels have none), where it must report the
-  violation (`S22-X86-GRANT-CONTROL-<CASE>: CAUGHT`; `MISSED` fails the lane):
+  (`task::fixture_controls`; production kernels have none), where it must fail for exactly
+  the reason that check exists for (`S22-X86-GRANT-CONTROL-<CASE>: CAUGHT (<reason>)`, the
+  lane requires the reason). A control that fails for any other reason reports `FAIL`, one
+  that still passes reports `MISSED`; both fail the lane:
 
-  | Case | Check the CONTROL disables |
-  |---|---|
-  | `REVOKE-MAPPED` (revoke while mapped) | `DomainGrant::revoke` drains the receiver before the owner |
-  | `RECEIVER-DEATH` | receiver death drains the receiver half |
-  | `STALE-ID` (a `Revoking` record) | a slice resolves only a `Live` record |
-  | `FORGERY` (a third domain) | a slice resolves only for the domain `shared_to` names |
-  | `COPY-FAULT` (page revoked between probe and commit) | the domain copy commit re-walks every page |
+  | Case | Check the CONTROL disables | Required reason |
+  |---|---|---|
+  | `REVOKE-MAPPED` (revoke while mapped) | `DomainGrant::revoke` drains the receiver before the owner | `receiver-mapping-survived-revoke` |
+  | `RECEIVER-DEATH` | receiver death drains the receiver half | `dead-receiver-mapping-survived` |
+  | `STALE-ID` (a `Revoking` record) | a slice resolves only a `Live` record | `owner-resolved-revoking-record` |
+  | `FORGERY` (a third domain) | a slice resolves only for the domain `shared_to` names | `third-domain-resolved-grant` |
+  | `COPY-FAULT` (page revoked between probe and commit) | the domain copy commit refuses a page whose leaf is gone | `commit-accepted-revoked-page` |
+  | `COPY-DOWNGRADE` (write right removed between probe and commit) | the same commit refuses a leaf that no longer grants the access | `commit-accepted-downgraded-page` |
 
 - `S22-X86-GRANT-NEG: PASS` is the terminal over all of them.
 

@@ -307,19 +307,25 @@ fn release_deferred_domain_row(
     if revoke_domain_record(&record, base, "task-exit") {
         // Only the revoker whose removal takes the row frees its frames: a
         // concurrent `GrantFree` or sweep may have completed the same record.
-        let removed = if registered {
-            let mut tbl = reg_grant_table_lock().lock();
-            remove_row_if(tbl.as_mut(), key, |grant| {
-                carries_record(&grant.domain, &record)
-            })
-        } else {
-            let mut tbl = grant_table_lock().lock();
-            remove_row_if(tbl.as_mut(), key, |grant| {
-                carries_record(&grant.domain, &record)
-            })
+        let release = || {
+            if !withhold_or_free(base, pages) {
+                free_grant_pages(base, pages);
+            }
         };
-        if removed && !withhold_or_free(base, pages) {
-            free_grant_pages(base, pages);
+        if registered {
+            release_if_row_taken(
+                reg_grant_table_lock(),
+                key,
+                |grant| carries_record(&grant.domain, &record),
+                release,
+            );
+        } else {
+            release_if_row_taken(
+                grant_table_lock(),
+                key,
+                |grant| carries_record(&grant.domain, &record),
+                release,
+            );
         }
         return;
     }

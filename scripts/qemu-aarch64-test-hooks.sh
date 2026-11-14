@@ -480,7 +480,10 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         "S22-AARCH64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK"
         "S22-AARCH64-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK"
         "S22-AARCH64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)"
-        # Phase 4: `GrantUnregister` revokes the persistent buffer.
+        # Phase 4: `GrantUnregister` revokes the persistent buffer. The receiver
+        # holds it ReadWrite and proves a store lands first, so its later store
+        # can only fault because the PTE is gone.
+        "S22-AARCH64-GRANT-PAIR-RECEIVER-UNREGISTER-RW: OK"
         "S22-AARCH64-GRANT-PAIR-OWNER-UNREGISTER: OK"
         # Phase 5: the owner's exit revokes the mapping the receiver still holds.
         "S22-AARCH64-GRANT-PAIR-OWNER-EXIT: OK"
@@ -494,6 +497,15 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
     if grep -qaE 'S22-RV64-GRANT' "$LOG"; then
         echo "FAIL: an AArch64 boot emitted an RV64-tagged grant marker:" >&2
         grep -aE 'S22-RV64-GRANT' "$LOG" | head -5 >&2
+        exit 1
+    fi
+    # A pair half that reports a failure — a revoked id that still resolves
+    # (`FRAME-REUSE: REUSED`), or a receiver whose stores all landed (`RECEIVER:
+    # FAIL`) — fails the lane even if the fault accounting above balanced.
+    PAIR_FAILURES='S22-AARCH64-GRANT-PAIR-[A-Z0-9-]+: FAIL|S22-AARCH64-GRANT-PAIR-RECEIVER-FRAME-REUSE: REUSED'
+    if grep -qaE "$PAIR_FAILURES" "$LOG"; then
+        echo "FAIL: the grant pair reported a failure:" >&2
+        grep -aE "$PAIR_FAILURES" "$LOG" >&2
         exit 1
     fi
 fi

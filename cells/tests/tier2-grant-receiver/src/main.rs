@@ -31,8 +31,8 @@
 //! readable through the address afterwards (so the page was not merely unmapped)
 //! and the store to it now faults (so the old writable PTE is gone).
 //!
-//! Marker grammar (`<arch>` is `RV64` or `AARCH64`, matching the architecture the
-//! cell was built for):
+//! Marker grammar (`<arch>` is `RV64`, `AARCH64` or `X86`, matching the
+//! architecture the cell was built for):
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-BEGIN: mode=<m> ids=<a>,<b>,<c>,<d>
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-ALLOC: OK id=<n>|DENY
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-HANDOFF: REFUSED
@@ -45,11 +45,13 @@
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK|FAIL
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)|MISMATCH|MISSING
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED
-//!   S22-<arch>-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED|REUSED
+//!   S22-<arch>-GRANT-PAIR-RECEIVER-UNREGISTER-RW: OK|FAIL
+//!   S22-<arch>-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED|REUSED (then `RECEIVER: FAIL`)
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-REVOKE-FAULT: FAULT-EXPECTED
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED
 //!   S22-<arch>-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED
+//!   S22-<arch>-GRANT-PAIR-RECEIVER: FAIL
 
 #![no_std]
 #![no_main]
@@ -414,11 +416,24 @@ fn cell_main() {
             println(&format!("{TAG}-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: WROTE"));
         }
         "unregister" => {
+            // The owner shares this generation the registered grant ReadWrite,
+            // and the store below proves it: a store that later faults can then
+            // only mean the PTE is gone, never that the page was read-only.
             let Some(pointer) = sys_grant_slice(id_reg) else {
-                println(&format!("{TAG}-GRANT-PAIR-RECEIVER-SLICE-RO: FAIL"));
+                println(&format!("{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-RW: FAIL"));
                 sys_exit(1);
             };
-            println(&format!("{TAG}-GRANT-PAIR-RECEIVER-SLICE-RO: OK"));
+            let wrote = unsafe {
+                core::ptr::write_volatile(pointer, 0x6B);
+                core::ptr::read_volatile(pointer) == 0x6B
+            };
+            println(&format!(
+                "{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-RW: {}",
+                if wrote { "OK" } else { "FAIL" }
+            ));
+            if !wrote {
+                sys_exit(1);
+            }
             send_byte(owner, REQ_UNREGISTER);
             if recv_byte_from(owner).is_none() {
                 println(&format!("{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER: NO-ACK"));
@@ -427,13 +442,19 @@ fn cell_main() {
             if wait_until_revoked(id_reg) {
                 println(&format!("{TAG}-GRANT-PAIR-RECEIVER-FRAME-REUSE: REFUSED"));
             } else {
+                // An unregistered id that still resolves is the failure this
+                // phase exists to catch: report it and stop, so no later store
+                // can be read as the witness.
                 println(&format!("{TAG}-GRANT-PAIR-RECEIVER-FRAME-REUSE: REUSED"));
+                println(&format!("{TAG}-GRANT-PAIR-RECEIVER: FAIL"));
+                sys_exit(1);
             }
             // Same shape as the exit phase: the owner's `GrantUnregister` reports
             // itself drained once every hart has acknowledged the invalidation,
             // but a hart that has not published its epoch yet can still be running
             // this cell — so the first store may land. Store until the revocation
-            // traps (bounded; the trap is the witness).
+            // traps (bounded; the trap is the witness, and a PTE that survived
+            // lets every store land until the bound prints `WROTE` and `FAIL`).
             println(&format!(
                 "{TAG}-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED"
             ));

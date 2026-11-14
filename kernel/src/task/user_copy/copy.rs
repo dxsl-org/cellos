@@ -138,21 +138,35 @@ impl PinnedCopy<'_> {
             let chunk = hi - lo;
             // SAFETY: the reader pin keeps the private root and its tables
             // live until this commit returns.
-            let leaf = unsafe { crate::hal::paging::leaf(root_pa, page) }
-                .filter(|leaf| user_leaf_allows(leaf, self.direction));
-            let Some(leaf) = leaf else {
-                // Test-hooks CONTROL (`GuardedCheck::CommitRewalksPages`): the
-                // page is skipped instead of refused, so the commit reports a
-                // copy that never happened; the fault-during-copy fixture must
-                // catch that.
+            let leaf = match unsafe { crate::hal::paging::leaf(root_pa, page) } {
+                Some(leaf) if user_leaf_allows(&leaf, self.direction) => leaf,
+                // Test-hooks CONTROL (`GuardedCheck::CommitNeedsRight`): a leaf
+                // that lost the copy's right is used anyway, so the commit moves
+                // bytes the leaf no longer permits; the downgraded-copy fixture
+                // must catch that.
                 #[cfg(feature = "test-hooks")]
-                if crate::task::fixture_controls::disabled(
-                    crate::task::fixture_controls::GuardedCheck::CommitRewalksPages,
-                ) {
-                    page += PAGE_SIZE;
-                    continue;
+                Some(leaf)
+                    if crate::task::fixture_controls::disabled(
+                        crate::task::fixture_controls::GuardedCheck::CommitNeedsRight,
+                    ) =>
+                {
+                    leaf
                 }
-                return Err(CopyError::InvalidAddress);
+                Some(_) => return Err(CopyError::InvalidAddress),
+                None => {
+                    // Test-hooks CONTROL (`GuardedCheck::CommitNeedsLeaf`): the
+                    // page is skipped instead of refused, so the commit reports
+                    // a copy that never happened; the fault-during-copy fixture
+                    // must catch that.
+                    #[cfg(feature = "test-hooks")]
+                    if crate::task::fixture_controls::disabled(
+                        crate::task::fixture_controls::GuardedCheck::CommitNeedsLeaf,
+                    ) {
+                        page += PAGE_SIZE;
+                        continue;
+                    }
+                    return Err(CopyError::InvalidAddress);
+                }
             };
             let offset = lo - page;
             let alias = phys_to_virt(leaf.pa + offset);

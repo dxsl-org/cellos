@@ -16,11 +16,12 @@
 #     with a new prompt;
 #   * the Phase-15 domain grant suite: the kernel lifecycle and capability
 #     fixtures (`S22-X86-GRANT-REVOKE`, `-GATE`), the deferred revoke
-#     (`-DEFERRED`), the five negatives with their fault-injection controls
-#     (`-NEG-<case>: PASS`, `-CONTROL-<case>: CAUGHT`; a control that reports
-#     `MISSED` fails the lane), and the two-cell public pair
-#     (`S22-X86-GRANT-PAIR-*`) with its five deliberate receiver faults, each
-#     classified to the grant address the owner handed over.
+#     (`-DEFERRED`), the six negatives with their fault-injection controls
+#     (`-NEG-<case>: PASS`, `-CONTROL-<case>: CAUGHT (<reason>)` with the
+#     case's exact reason; a control that reports `FAIL` or `MISSED` fails the
+#     lane), and the two-cell public pair (`S22-X86-GRANT-PAIR-*`) with its five
+#     deliberate receiver faults, each classified to the grant address the owner
+#     handed over and to its page-fault kind.
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -186,15 +187,23 @@ fi
 #     the owner's exit revoked (id3), and the downgraded grant (id4).
 #
 # The total is therefore fixed at six; any other fault — a second NULL store,
-# another cell, another address — fails the lane. The cause is not pinned: the
-# x86 page-fault error code differs between a not-present and a protection
-# fault, and the address is what attributes each fault to its phase.
+# another cell, another address — fails the lane. The address attributes each
+# fault to its phase, and the page-fault error code's P bit (bit 0, which the
+# kernel reports as `cause`) says what the phase must have found: a revoked
+# address (id1 after `GrantFree`, id2 after `GrantUnregister`, id3 after the
+# owner's exit) is not present (P=0), while the ReadOnly page (id2's first
+# fault) and the downgraded page (id4) are present without the write right
+# (P=1). The unregister generation holds id2 ReadWrite, so a PTE that survived
+# `GrantUnregister` would let its store land rather than fault.
 FAULT_PATTERN='\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0x[0-9a-f]+ pc=0x[0-9a-f]+ addr='
 FAULT_LINES="$(grep -a "\[fault\] Cell" "$LOG" || true)"
 FAULT_COUNT="$(printf '%s\n' "$FAULT_LINES" | grep -c . || true)"
 faults_at() { grep -acE "${FAULT_PATTERN}$1\$" "$LOG" || true; }
 # Byte offset of the Nth fault at one exact address (1-based); empty when absent.
 fault_offset_at() { grep -aboE "${FAULT_PATTERN}$1\$" "$LOG" | sed -n "$2p" | cut -d: -f1 || true; }
+# Reported cause (the x86 page-fault error code) of the Nth fault at one exact
+# address (1-based); empty when absent.
+fault_cause_at() { grep -aoE "${FAULT_PATTERN}$1\$" "$LOG" | sed -n "$2p" | sed -n 's/.* cause=\(0x[0-9a-f]*\) .*/\1/p' || true; }
 offset_of() { grep -aboF -- "$1" "$LOG" | head -1 | cut -d: -f1 || true; }
 
 if [[ "$(faults_at 0x0)" != "1" ]]; then
@@ -245,6 +254,22 @@ assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-RO-WRITE: FAULT-EXPECTED" "
 assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED" "$A2" 2 "GrantUnregister"
 assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED" "$A4" 1 "same-recipient downgrade"
 assert_announced_before "S22-X86-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED" "$A3" 1 "owner exit"
+# present <0|1>: the P bit the Nth fault at an address must carry.
+assert_fault_kind() {
+    local address="$1" nth="$2" present="$3" description="$4"
+    local cause
+    cause="$(fault_cause_at "$address" "$nth")"
+    if [[ -z "$cause" ]] || (( (cause & 1) != present )); then
+        echo "FAIL: fault '$description' at $address has cause=${cause:-none}; want P=$present ($( (( present )) && echo protection || echo not-present))" >&2
+        printf '%s\n' "$FAULT_LINES" >&2
+        exit 1
+    fi
+}
+assert_fault_kind "$A1" 1 0 "GrantFree revoke"
+assert_fault_kind "$A2" 1 1 "ReadOnly write"
+assert_fault_kind "$A2" 2 0 "GrantUnregister"
+assert_fault_kind "$A4" 1 1 "same-recipient downgrade"
+assert_fault_kind "$A3" 1 0 "owner exit"
 
 # --- Shell recovery ---------------------------------------------------------
 # The image has an interactive window, so recovery is witnessed rather than
@@ -365,11 +390,14 @@ REQUIRED_MARKERS=(
     "negative stale grant id:::S22-X86-GRANT-NEG-STALE-ID: PASS"
     "negative cross-domain forgery:::S22-X86-GRANT-NEG-FORGERY: PASS"
     "negative fault during copy:::S22-X86-GRANT-NEG-COPY-FAULT: PASS"
-    "control revoke while mapped:::S22-X86-GRANT-CONTROL-REVOKE-MAPPED: CAUGHT"
-    "control receiver death:::S22-X86-GRANT-CONTROL-RECEIVER-DEATH: CAUGHT"
-    "control stale grant id:::S22-X86-GRANT-CONTROL-STALE-ID: CAUGHT"
-    "control cross-domain forgery:::S22-X86-GRANT-CONTROL-FORGERY: CAUGHT"
-    "control fault during copy:::S22-X86-GRANT-CONTROL-COPY-FAULT: CAUGHT"
+    "negative downgrade during copy:::S22-X86-GRANT-NEG-COPY-DOWNGRADE: PASS"
+    # Each control must fail for the one reason its disabled check exists for.
+    "control revoke while mapped:::S22-X86-GRANT-CONTROL-REVOKE-MAPPED: CAUGHT (receiver-mapping-survived-revoke)"
+    "control receiver death:::S22-X86-GRANT-CONTROL-RECEIVER-DEATH: CAUGHT (dead-receiver-mapping-survived)"
+    "control stale grant id:::S22-X86-GRANT-CONTROL-STALE-ID: CAUGHT (owner-resolved-revoking-record)"
+    "control cross-domain forgery:::S22-X86-GRANT-CONTROL-FORGERY: CAUGHT (third-domain-resolved-grant)"
+    "control fault during copy:::S22-X86-GRANT-CONTROL-COPY-FAULT: CAUGHT (commit-accepted-revoked-page)"
+    "control downgrade during copy:::S22-X86-GRANT-CONTROL-COPY-DOWNGRADE: CAUGHT (commit-accepted-downgraded-page)"
     "grant negatives:::S22-X86-GRANT-NEG: PASS"
     # The two-cell public pair, launched from the boot order by the fixture
     # launcher (`tier2-grant-pair`) on the two reviewed paths whose real services
@@ -401,6 +429,7 @@ REQUIRED_MARKERS=(
     "pair downgrade rw:::S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK"
     "pair downgrade reshare:::S22-X86-GRANT-PAIR-OWNER-DOWNGRADE-RESHARE: OK"
     "pair downgrade read:::S22-X86-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)"
+    "pair unregister rw store:::S22-X86-GRANT-PAIR-RECEIVER-UNREGISTER-RW: OK"
     "pair owner unregister:::S22-X86-GRANT-PAIR-OWNER-UNREGISTER: OK"
     "pair owner exit:::S22-X86-GRANT-PAIR-OWNER-EXIT: OK"
     "pair terminal:::S22-X86-GRANT-PAIR-OWNER: PASS"
@@ -451,11 +480,14 @@ bash scripts/assert-boot-markers.sh "$LOG" "$LABEL" "${REQUIRED_MARKERS[@]}"
 # --- Grant fixture negatives -------------------------------------------------
 # No x86 fixture may report FAIL, and no control may report MISSED: a control
 # whose case still passed with its check disabled proves nothing about that
-# check. The marker prefix is architecture-honest: an x86 boot emitting an
+# check, and one that failed for another reason (`FAIL`) did not exercise it.
+# An unregistered pair grant that still resolves (`FRAME-REUSE: REUSED`) fails
+# too. The marker prefix is architecture-honest: an x86 boot emitting an
 # RV64- or AArch64-tagged grant marker fails outright.
-if grep -aqE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG"; then
-    echo "FAIL: an x86 fixture reported a failure or a control missed its violation:" >&2
-    grep -aE 'S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED' "$LOG" >&2
+NEGATIVE_FAILURES='S22-X86-[A-Z0-9-]+: FAIL|S22-X86-GRANT-CONTROL-[A-Z-]+: MISSED|S22-X86-GRANT-PAIR-RECEIVER-FRAME-REUSE: REUSED'
+if grep -aqE "$NEGATIVE_FAILURES" "$LOG"; then
+    echo "FAIL: an x86 fixture reported a failure, a control missed or misattributed its violation, or a revoked pair id resolved:" >&2
+    grep -aE "$NEGATIVE_FAILURES" "$LOG" >&2
     exit 1
 fi
 if grep -aqE 'S22-(RV64|AARCH64)-GRANT' "$LOG"; then
@@ -487,4 +519,5 @@ echo "Domain live:   $LIVE"
 grep -a "S22-X86-DOMAIN-TEARDOWN\|\[selftest\] DOMAIN-FRAME-RELEASE\|\[domain\] admitted cell" "$LOG" || true
 grep -a "S22-X86-GRANT-CONTROL-\|\[grant\] gate-held max" "$LOG" || true
 echo "Pair faults: NULL=1 id1($A1)=$(faults_at "$A1") id2($A2)=$(faults_at "$A2") id3($A3)=$(faults_at "$A3") id4($A4)=$(faults_at "$A4")"
+echo "Pair causes: id1=$(fault_cause_at "$A1" 1) id2=$(fault_cause_at "$A2" 1),$(fault_cause_at "$A2" 2) id3=$(fault_cause_at "$A3" 1) id4=$(fault_cause_at "$A4" 1)"
 echo "PASS: x86_64 Tier-2 domain-entry lane ($LABEL) — every marker present"
