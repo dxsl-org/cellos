@@ -768,8 +768,6 @@ impl Pending {
 
     /// Note one allocation refused by the cap; logs on powers of two so a
     /// sustained refusal is visible without flooding the console.
-    // reason: the allocator's quarantine cap calls it from the next commit.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn note_refused(&self, total_frames: usize) {
         let refused = self.counters.refused.fetch_add(1, Ordering::AcqRel) + 1;
         if refused.is_power_of_two() {

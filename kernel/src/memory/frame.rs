@@ -161,8 +161,21 @@ impl FrameAllocator {
             .filter_map(|range| *range)
     }
 
-    /// Allocate a physical frame
+    /// Allocate a physical frame, or `None` on OOM or while the quarantine cap
+    /// refuses new allocations ([`Self::quarantine_refuses`]).
     pub fn allocate_frame(&mut self) -> Option<PhysAddr> {
+        if self.quarantine_refuses() {
+            return None;
+        }
+        self.allocate_frame_uncapped()
+    }
+
+    /// [`Self::allocate_frame`] exempt from the quarantine cap. For page-table
+    /// frames only (`memory::paging`): a teardown's normalisation may need one
+    /// to restore a freed frame's kernel alias, and boot and the dormant x86
+    /// `#PF` demand path panic on `None` — the cap must never turn a
+    /// quarantine into a panic or a leaked alias.
+    pub fn allocate_frame_uncapped(&mut self) -> Option<PhysAddr> {
         // Simple Next-Fit algorithm
         let start_index = self.last_alloc_index;
 
@@ -181,6 +194,19 @@ impl FrameAllocator {
         }
 
         None // OOM
+    }
+
+    /// The 1/64 quarantine cap (`frame_run::cap_exceeded`): refuse a new
+    /// allocation while the frame-run quarantine holds more than 1/64 of the
+    /// managed frames — a degraded node, never a reused frame. Each refusal is
+    /// counted and logged (rate-limited) by `frame_run`; callers see their
+    /// usual out-of-memory result.
+    fn quarantine_refuses(&self) -> bool {
+        if !crate::memory::frame_run::cap_exceeded(quarantined_pages(), self.total_frames) {
+            return false;
+        }
+        crate::memory::frame_run::PENDING.note_refused(self.total_frames);
+        true
     }
 
     /// Claim one known-free frame for an in-kernel reuse race.
@@ -541,6 +567,9 @@ impl FrameAllocator {
         if n == 1 {
             return self.allocate_frame();
         }
+        if self.quarantine_refuses() {
+            return None;
+        }
         (0..self.range_count).find_map(|range_index| self.allocate_contiguous_in(range_index, n))
     }
 
@@ -583,6 +612,9 @@ impl FrameAllocator {
         align_bytes: usize,
     ) -> Option<PhysAddr> {
         debug_assert!(align_bytes.is_power_of_two() && align_bytes >= PAGE_SIZE);
+        if self.quarantine_refuses() {
+            return None;
+        }
         // No allocation here: see `allocate_contiguous`.
         for range_index in 0..self.range_count {
             let Some(range) = self.ranges[range_index] else {
@@ -658,6 +690,25 @@ fn set_held(held: bool) {
 #[cfg(test)]
 pub fn held_here() -> bool {
     held_by_thread::HELD_HERE.with(core::cell::Cell::get)
+}
+
+/// Pages the frame-run quarantine holds now: the cap's input.
+#[cfg(not(test))]
+fn quarantined_pages() -> usize {
+    crate::memory::frame_run::PENDING.quarantined_pages()
+}
+
+// Host tests: one count per thread, set by the test itself, so no allocator
+// test sees another test's quarantine.
+#[cfg(test)]
+pub(crate) mod quarantine_by_thread {
+    extern crate std;
+    std::thread_local!(pub(crate) static PAGES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) });
+}
+
+#[cfg(test)]
+fn quarantined_pages() -> usize {
+    quarantine_by_thread::PAGES.with(core::cell::Cell::get)
 }
 
 /// The right to issue a shared (kernel-root) TLB flush.
@@ -1145,6 +1196,40 @@ mod tests {
 
         assert_eq!(super::stats().map(|stats| stats.used_frames), Some(1));
         super::replace(previous);
+    }
+
+    /// Phase 16: past 1/64 of the managed frames in quarantine every data
+    /// allocation is refused (and counted); page-table frames are exempt.
+    #[test]
+    fn the_quarantine_cap_refuses_data_frames_but_never_table_frames() {
+        let set = |pages| super::quarantine_by_thread::PAGES.with(|count| count.set(pages));
+        let refused = || crate::memory::frame_run::PENDING.counters().refused();
+        // 128 frames: 2 quarantined pages are exactly 1/64 (allowed), 3 exceed it.
+        let mut allocator = super::allocator_for_tests(&[(0x10_0000, 128)]);
+
+        set(2);
+        assert!(allocator.allocate_frame().is_some());
+        assert!(allocator.allocate_contiguous(2).is_some());
+        assert!(allocator
+            .allocate_contiguous_aligned(2, 2 * PAGE_SIZE)
+            .is_some());
+
+        set(3);
+        let used = allocator.used_frames();
+        let before = refused();
+        assert_eq!(allocator.allocate_frame(), None);
+        assert_eq!(allocator.allocate_contiguous(1), None);
+        assert_eq!(allocator.allocate_contiguous(2), None);
+        assert_eq!(
+            allocator.allocate_contiguous_aligned(2, 2 * PAGE_SIZE),
+            None
+        );
+        assert!(refused() >= before + 4, "every refusal is counted");
+        assert_eq!(allocator.used_frames(), used, "a refusal takes nothing");
+        assert!(allocator.allocate_frame_uncapped().is_some());
+
+        set(0);
+        assert!(allocator.allocate_frame().is_some());
     }
 
     fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
@@ -1638,6 +1723,9 @@ mod tests {
 /// be taken by someone else.
 pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
     with(|allocator| {
+        if allocator.quarantine_refuses() {
+            return None;
+        }
         let start = allocator.find_free_run(n_pages)?;
         allocator.mark_range_used(start, n_pages);
         Some(allocator.frame_addr(start))

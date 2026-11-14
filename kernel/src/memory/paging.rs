@@ -129,7 +129,7 @@ pub fn init_kernel_paging(
 
     // 1. Allocate root page table frame and zero it.
     let root_frame = allocator
-        .allocate_frame()
+        .allocate_frame_uncapped()
         .ok_or(PageTableError::OutOfMemory)?;
     #[cfg(feature = "p01-trace")]
     crate::p01_retained::physical_table_created(root_frame, root_frame, 0);
@@ -184,7 +184,7 @@ pub fn init_kernel_paging(
             _ => continue,
         };
 
-        let mut alloc_closure = || allocator.allocate_frame();
+        let mut alloc_closure = || allocator.allocate_frame_uncapped();
         root_table
             .identity_map(
                 entry.base,
@@ -218,7 +218,7 @@ pub fn init_kernel_paging(
             | PageFlags::ACCESSED
             | PageFlags::DIRTY,
     );
-    let mut alloc_fn = || allocator.allocate_frame();
+    let mut alloc_fn = || allocator.allocate_frame_uncapped();
 
     #[cfg(target_arch = "riscv64")]
     {
@@ -395,7 +395,7 @@ pub fn map_page(
         let root_table = unsafe { &mut *(root_phys as *mut PageTable) };
         let result = {
             let mut alloc_closure = || {
-                let frame = allocator.allocate_frame()?;
+                let frame = allocator.allocate_frame_uncapped()?;
                 #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
                 Some(frame)
@@ -494,7 +494,7 @@ pub fn init_kernel_paging_x86(
 
     // 1. Allocate and zero a new PML4 frame.
     let pml4_phys = allocator
-        .allocate_frame()
+        .allocate_frame_uncapped()
         .ok_or(PageTableError::OutOfMemory)?;
     #[cfg(feature = "p01-trace")]
     crate::p01_retained::physical_table_created(pml4_phys, pml4_phys, 0);
@@ -554,7 +554,7 @@ pub fn init_kernel_paging_x86(
         let mut va = start;
         while va < end {
             let mut alloc_fn = || {
-                let frame = allocator.allocate_frame()?;
+                let frame = allocator.allocate_frame_uncapped()?;
                 #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_created(frame, pml4_phys, va);
                 Some(frame)
@@ -649,7 +649,7 @@ fn map_page_unflushed(
 
     let result = {
         let mut alloc_fn = || {
-            let frame = allocator.allocate_frame()?;
+            let frame = allocator.allocate_frame_uncapped()?;
             #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
             Some(frame)
@@ -1091,7 +1091,7 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
             for i in 0..pages {
                 let addr = start + (i * PAGE_SIZE);
                 let mut alloc_closure = || {
-                    let frame = allocator.allocate_frame()?;
+                    let frame = allocator.allocate_frame_uncapped()?;
                     #[cfg(feature = "p01-trace")]
                     crate::p01_retained::physical_table_created(frame, *root_addr, addr);
                     Some(frame)
@@ -1156,7 +1156,7 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
                 )
                 .ok_or(PageTableError::InvalidAddress)?;
             let mut allocate_table_frame = || {
-                let frame = allocator.allocate_frame()?;
+                let frame = allocator.allocate_frame_uncapped()?;
                 #[cfg(feature = "p01-trace")]
                 crate::p01_retained::physical_table_created(frame, root_phys, address);
                 Some(frame)
@@ -1500,8 +1500,10 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             let mut batch = Batch::new();
             crate::memory::frame::with(|alloc| {
                 let effective_pa = if paddr == 0 {
-                    // Demand-allocate a new zeroed frame.
-                    alloc.allocate_frame().unwrap_or_else(|| {
+                    // Demand-allocate a new zeroed frame. Exempt from the
+                    // quarantine cap: this dormant path panics on `None`, and
+                    // the cap must never turn a quarantine into a panic.
+                    alloc.allocate_frame_uncapped().unwrap_or_else(|| {
                         panic!("[#PF] OOM allocating demand page at va={:#x}", va)
                     })
                 } else {
