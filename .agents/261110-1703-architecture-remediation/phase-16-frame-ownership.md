@@ -100,4 +100,10 @@ Phase 17 attaches quota ownership to `FrameRun` and hardens the shared root.
 
 ## Deviation Log
 
-None.
+- **Decision (step 1, 2026-11-14):** census in [research/p16-census.md](research/p16-census.md). The plan's claim (a) is false: at least seven conditions gate a free, and each extra one becomes a `Quarantined` reason. (b) Bounded drain is not true today; a per-CPU acknowledgement epoch will provide it. (c) Holds.
+- **Decision (owner, 2026-11-14):**
+  - F9: `ShmAlloc` zeroes its frame before handing it out.
+  - F3: the x86 stack teardown loses its lower-half f→f kernel-RWX alias, and its flushes are batched.
+  - The other defects the census found are fixed in this phase, each in its own commit with evidence: domain-grant rollback freeing unconfirmed frames, AArch64 VM teardown flushing only the VM loaded on the CPU, x86 vCPU creation leaks, and the DMA export lock-rank inversion.
+  - The "flush under `FRAME_ALLOCATOR` does not compile" proof is a standalone rustc script run in CI. This adds a file outside the S7c file set.
+- **Correction (step 1):** the drop order checks pins and leases held by other cells *before* unpublishing. The dead per-task `grant_table` was already deleted in `e88613a26b`; only a stale doc comment remains.
