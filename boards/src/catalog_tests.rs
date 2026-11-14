@@ -201,10 +201,7 @@ fn macmini_m1_descriptor_declares_typed_drivers() {
     assert_eq!(board.dma_isolation, DmaIsolation::Required);
     assert!(board.has_driver(DriverId::UartAppleS5l));
     assert!(board.has_driver(DriverId::IrqAppleAic1));
-    assert_eq!(
-        crate::find_by_slug(crate::aarch64_catalog(), "macmini-m1").map(|b| b.soc),
-        Some(SocId::AppleT8103)
-    );
+    assert_eq!(board.slug, "macmini-m1");
 }
 #[test]
 fn macmini_m2_descriptor_declares_typed_drivers() {
@@ -214,10 +211,7 @@ fn macmini_m2_descriptor_declares_typed_drivers() {
     assert_eq!(board.dma_isolation, DmaIsolation::Required);
     assert!(board.has_driver(DriverId::UartAppleS5l));
     assert!(board.has_driver(DriverId::IrqAppleAic2));
-    assert_eq!(
-        crate::find_by_slug(crate::aarch64_catalog(), "macmini-m2").map(|b| b.soc),
-        Some(SocId::AppleT8112)
-    );
+    assert_eq!(board.slug, "macmini-m2");
 }
 
 #[test]
@@ -238,8 +232,5 @@ fn aarch64_vm_descriptor_matches_the_hosted_vm_backend() {
         .join(board.boot.fallback_dts_path);
     let dts = std::fs::read_to_string(&dts).expect("aarch64-vm fallback DTS exists");
     assert!(dts.contains("\"arm,gic-v3\""));
-    assert_eq!(
-        crate::find_by_slug(crate::aarch64_catalog(), "aarch64-vm").map(|b| b.soc),
-        Some(SocId::GenericAArch64Vm)
-    );
+    assert_eq!(board.slug, "aarch64-vm");
 }

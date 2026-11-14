@@ -104,19 +104,6 @@ static X86_CATALOG: [&BoardDescriptor; 3] = [
 pub fn x86_catalog() -> &'static [&'static BoardDescriptor] {
     &X86_CATALOG
 }
-static AARCH64_CATALOG: [&BoardDescriptor; 6] = [
-    &qemu_virt_aarch64::QEMU_VIRT_AARCH64,
-    &raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B,
-    &raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B,
-    &vm_aarch64::AARCH64_VM,
-    &apple_macmini_m1::MACMINI_M1,
-    &apple_macmini_m2::MACMINI_M2,
-];
-
-/// Returns the compiled AArch64 catalog.
-pub fn aarch64_catalog() -> &'static [&'static BoardDescriptor] {
-    &AARCH64_CATALOG
-}
 
 /// Returns the descriptor in `catalog` whose slug equals `slug` byte for byte.
 ///
