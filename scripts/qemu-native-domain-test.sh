@@ -243,6 +243,44 @@ grant_pair_fault_addrs() {
     printf '%s %s %s %s' "${addrs[@]}"
 }
 
+# Account the grant pair's receiver faults in one boot's log, x86-style: each
+# pair address may fault only as often as its phases store there (id1 once, id2
+# twice — the ReadOnly write, then after GrantUnregister —, id3 once, id4 once),
+# and each fault must follow the announcement of the phase it belongs to (byte
+# offsets, so the order is the boot's, not the grep's). Once the launcher has
+# reported the pair complete — and always for the `grant-pair` case — the
+# counts are exact; a boot whose window closed mid-pair may have fewer.
+# Uses $GRANT_PAIR_FAULT_ADDRS and $case_id.
+assert_grant_pair_faults() {
+    local log="$1" a1 a2 a3 a4 exact=0 entry addr nth phase announced_at faulted_at count want
+    [[ -n "$GRANT_PAIR_FAULT_ADDRS" ]] || return 0
+    read -r a1 a2 a3 a4 <<< "$GRANT_PAIR_FAULT_ADDRS"
+    if [[ "$case_id" == "grant-pair" ]] || grep -Fq 'fixture-launcher: tier2-grant-pair complete.' "$log"; then
+        exact=1
+    fi
+    local fault_re='\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0xf pc=0x[0-9a-f]+ addr='
+    for entry in "$a1:1" "$a2:2" "$a3:1" "$a4:1"; do
+        IFS=: read -r addr want <<< "$entry"
+        count="$(grep -acE "${fault_re}${addr}\$" "$log" || true)"
+        if (( count > want )) || (( exact && count != want )); then
+            echo "FAIL: grant-pair fault count at $addr is $count, want $( (( exact )) && echo exactly || echo at most) $want" >&2
+            echo "      (id1=$a1:1 id2=$a2:2 id3=$a3:1 id4=$a4:1) for case=$case_id; see $log" >&2
+            exit 1
+        fi
+    done
+    for entry in "$a1:1:REVOKE-FAULT" "$a2:1:RO-WRITE" "$a2:2:UNREGISTER-FAULT" "$a4:1:DOWNGRADE-WRITE" "$a3:1:EXIT-FAULT"; do
+        IFS=: read -r addr nth phase <<< "$entry"
+        faulted_at="$(grep -aboE "${fault_re}${addr}\$" "$log" | sed -n "${nth}p" | cut -d: -f1 || true)"
+        [[ -n "$faulted_at" ]] || continue
+        announced_at="$(grep -aboF -- "S22-RV64-GRANT-PAIR-RECEIVER-${phase}: FAULT-EXPECTED" "$log" | head -n 1 | cut -d: -f1 || true)"
+        if [[ -z "$announced_at" || "$announced_at" -ge "$faulted_at" ]]; then
+            echo "FAIL: grant-pair fault #$nth at $addr is not preceded by its $phase announcement" >&2
+            echo "      (announced=${announced_at:-never} faulted=$faulted_at) for case=$case_id; see $log" >&2
+            exit 1
+        fi
+    done
+}
+
 # SWITCH logs one line per genuine Activate transition (domain_switch.rs
 # root_switch), so multi-stage fixtures emit it several times per boot; its
 # gate is at-least-one. Other markers are boot-terminal aggregates and stay
@@ -290,8 +328,9 @@ wait_for_log_pattern() {
 #   ro         -> ReadOnly mapping is readable and a store to it faults;
 #   downgrade  -> a same-recipient ReadWrite→ReadOnly re-share keeps the address
 #                 readable and its store faults;
-#   unregister -> owner GrantUnregister revokes and a store to the old address
-#                 faults;
+#   unregister -> a ReadWrite mapping takes a store, owner GrantUnregister
+#                 revokes, the unregistered id no longer resolves, and a store to
+#                 the old address faults;
 #   exit       -> owner exit revokes and a store to the old address faults.
 #
 # The phase address is what makes each fault attributable: every deliberate store
@@ -383,7 +422,11 @@ run_grant_pair_boot() {
         'downgrade write announcement'
     wait_fault "$a4" 1 'store fault at the downgraded grant address'
 
-    # Phase 4: GrantUnregister revokes the persistent buffer.
+    # Phase 4: GrantUnregister revokes the persistent buffer. The receiver holds
+    # it ReadWrite and proves a store lands first, so only a removed PTE can
+    # turn its later store into a fault (on RV64 a ReadOnly page would fault
+    # with the same cause).
+    wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-UNREGISTER-RW: OK' 'ReadWrite store before GrantUnregister'
     wait_marker 'S22-RV64-GRANT-PAIR-OWNER-UNREGISTER: OK' 'owner GrantUnregister'
     wait_marker 'S22-RV64-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED' 'unregister fault announcement'
     wait_fault "$a2" 2 'second store fault at the unregistered grant address'
@@ -451,6 +494,14 @@ run_grant_pair_boot() {
 # Sets GRANT_REVOKE_OUTCOME: `absent` (the fixture did not report), `direct`
 # (every property held on its first attempt) or `deferred` (accepted above).
 GRANT_REVOKE_OUTCOME=""
+# A release path's own unconfirmed tag invalidation. Every test-hooks boot also
+# runs the withheld-ack seam, whose forced failures name themselves
+# (`[tlb] tag N invalidation unconfirmed: withheld (test)`); those prove nothing
+# about a real stalled hart, so they never count as evidence here.
+real_unconfirmed_tag() {
+    grep -aE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$1" \
+        | grep -avE 'invalidation unconfirmed: withheld \(test\)$' || true
+}
 GRANT_REVOKE_UNCONDITIONAL=(
     OWNER-MAPPED OWNER-SLICE SLICE-RO WO-REFUSED FOREIGN-PEER FRAME-REUSE PARTIAL-MAP DEAD-ROOT
 )
@@ -513,7 +564,7 @@ assert_grant_revoke_outcome() {
             # window closed. Report it as truncated and let the case's own
             # markers decide the verdict — inventing a failure here blames the
             # wrong fixture.
-            if grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
+            if [[ -n "$(real_unconfirmed_tag "$log")" ]]; then
                 echo "NOTE: grant-revoke fixture truncated by a stalled remote acknowledgement" >&2
                 echo "      (properties present, no terminal, retries still failing); see $log" >&2
                 GRANT_REVOKE_OUTCOME="truncated"
@@ -532,7 +583,7 @@ assert_grant_revoke_outcome() {
         # Same truncation rule as above: a property FAIL with no terminal is a
         # boot that was still inside the deferred-release path when the window
         # closed, not a property failure without its evidence.
-        if grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
+        if [[ -n "$(real_unconfirmed_tag "$log")" ]]; then
             echo "NOTE: grant-revoke fixture truncated mid-deferral by a stalled remote acknowledgement" >&2
             echo "      (property FAIL present, no terminal, retries still failing); see $log" >&2
             GRANT_REVOKE_OUTCOME="truncated"
@@ -547,7 +598,7 @@ assert_grant_revoke_outcome() {
     # reaper instead of waiting. Both halves are required: a retained frame
     # without a failed probe would mean a release path blocked again — the exact
     # regression this lane exists to catch.
-    if ! grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed' "$log"; then
+    if [[ -z "$(real_unconfirmed_tag "$log")" ]]; then
         echo "FAIL: grant-revoke accepted-deferral cause missing: no release path reported" >&2
         echo "      an unconfirmed tag invalidation; see $log" >&2
         exit 1
@@ -672,7 +723,9 @@ assert_grant_revoke_outcome() {
     # `unavailable` when the readiness gate found the second hart not taking traps
     # before any request was made, and the park block above is what sets it.
     PARK_OUTCOME=""
-    unexpected="$(grep -aoE 'S22-RV64-[A-Z0-9-]+: FAIL' "$normalized_log" \
+    # A pair grant id that still resolves after its revoke is reported as
+    # `FRAME-REUSE: REUSED` (with `RECEIVER: FAIL`); it is a failure here too.
+    unexpected="$(grep -aoE 'S22-RV64-[A-Z0-9-]+: FAIL|S22-RV64-GRANT-PAIR-RECEIVER-FRAME-REUSE: REUSED' "$normalized_log" \
         | grep -vEx 'S22-RV64-GRANT-REVOKE(-SLICE-RW|-REVOKE)?: FAIL' | sort -u || true)"
     if [[ -n "$unexpected" ]]; then
         echo "FAIL: native-domain failure terminal for case=$case_id: $(tr '\n' ' ' <<< "$unexpected"); see $normalized_log" >&2
@@ -716,6 +769,9 @@ assert_grant_revoke_outcome() {
             exit 1
         fi
     done < <(grep -F '[fault] Cell' "$normalized_log" || true)
+    # The loop above only excuses the pair's addresses; this bounds how often
+    # each faulted and in which order.
+    assert_grant_pair_faults "$normalized_log"
     assert_runtime_hart_count
     terminal_count="$(grep -Ec "$terminal_pattern" "$normalized_log" || true)"
     terminal_min="$(terminal_min_for "$case_id")"
@@ -795,6 +851,7 @@ assert_grant_revoke_outcome() {
             'S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-RW: OK'
             'S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-READ: OK (read 0xa5)'
             'S22-RV64-GRANT-PAIR-RECEIVER-DOWNGRADE-WRITE: FAULT-EXPECTED'
+            'S22-RV64-GRANT-PAIR-RECEIVER-UNREGISTER-RW: OK'
             'S22-RV64-GRANT-PAIR-RECEIVER-UNREGISTER-FAULT: FAULT-EXPECTED'
             'S22-RV64-GRANT-PAIR-RECEIVER-SLICE-RW: OK'
             'S22-RV64-GRANT-PAIR-RECEIVER-EXIT-FAULT: FAULT-EXPECTED'
@@ -809,20 +866,13 @@ assert_grant_revoke_outcome() {
         # store fault at the freed address, one at the read-only page, a second
         # at the unregistered page, one at the address the same-recipient
         # downgrade made read-only, and one at the address the owner exit
-        # revoked. A receiver that silently stopped short of its store, or that
-        # never faulted — because the old writable PTE survived the re-share, for
-        # instance — cannot satisfy this.
+        # revoked — exact counts, each after its announcement
+        # (`assert_grant_pair_faults` above). A receiver that silently stopped
+        # short of its store, or that never faulted — because the old writable
+        # PTE survived the re-share, or the unregistered one survived
+        # `GrantUnregister` — cannot satisfy this.
         if [[ -z "$GRANT_PAIR_FAULT_ADDRS" ]]; then
             echo "FAIL: grant-pair observed no handoff line, so no fault address is known; see $normalized_log" >&2
-            exit 1
-        fi
-        read -r fault_a1 fault_a2 fault_a3 fault_a4 <<< "$GRANT_PAIR_FAULT_ADDRS"
-        observed_a1="$(grep -acE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0xf pc=0x[0-9a-f]+ addr=$fault_a1" "$normalized_log" || true)"
-        observed_a2="$(grep -acE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0xf pc=0x[0-9a-f]+ addr=$fault_a2" "$normalized_log" || true)"
-        observed_a3="$(grep -acE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0xf pc=0x[0-9a-f]+ addr=$fault_a3" "$normalized_log" || true)"
-        observed_a4="$(grep -acE "\[fault\] Cell [0-9]+ \(task [0-9]+ generation [0-9]+\) terminated: cause=0xf pc=0x[0-9a-f]+ addr=$fault_a4" "$normalized_log" || true)"
-        if [[ "$observed_a1" -lt 1 || "$observed_a2" -lt 2 || "$observed_a3" -lt 1 || "$observed_a4" -lt 1 ]]; then
-            echo "FAIL: grant-pair fault attribution ${fault_a1}=$observed_a1 ${fault_a2}=$observed_a2 ${fault_a3}=$observed_a3 ${fault_a4}=$observed_a4; see $normalized_log" >&2
             exit 1
         fi
     fi
