@@ -1084,6 +1084,23 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
         user_map(base, len);
     }
 
+    // A caller with no MMIO right at all is refused as before, ahead of any
+    // address check, so the arena refusal below never answers an unauthorized
+    // caller differently from today.
+    let allowed_devices = {
+        let sched = crate::task::SCHEDULER.lock();
+        sched
+            .as_ref()
+            .map_or(0, |s| s.cell_rights(caller_id).mmio_devices)
+    };
+    if allowed_devices == 0
+        && !caller_has_platform(caller_id)
+        && !caller_has_pcie_driver(caller_id)
+        && !caller_has_usb_driver(caller_id)
+    {
+        return Err(SyscallError::PermissionDenied);
+    }
+
     // Every grant below identity-maps (x86) or user-maps (RV64/AArch64) the
     // window at VA == PA. A window reaching the cell slots or the stack arena
     // would alias a cell image or a stack: refused before any claim, with the
@@ -1134,12 +1151,6 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
         };
     }
     // GPIO/UART path: gate on manifest-declared device classes.
-    let allowed_devices = {
-        let sched = crate::task::SCHEDULER.lock();
-        sched
-            .as_ref()
-            .map_or(0, |s| s.cell_rights(caller_id).mmio_devices)
-    };
     if allowed_devices == 0 {
         return Err(SyscallError::PermissionDenied);
     }
