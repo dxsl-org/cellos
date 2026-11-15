@@ -111,7 +111,7 @@ echo "[nginx-gate] $qemu_version iso=$ISO memory=$QEMU_MEMORY window=${BOOT_WIND
     -machine q35 \
     -device intel-iommu,intremap=on \
     -accel tcg \
-    -cpu qemu64,+pdpe1gb,+svm \
+    -cpu qemu64,+pdpe1gb,+svm,+smep,+smap,+umip \
     -m "$QEMU_MEMORY" \
     -nographic \
     -cdrom "$QEMU_ISO" \

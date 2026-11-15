@@ -21,7 +21,7 @@
 #     packaged x86 shell reaches its `Cellos >` prompt. Guest SVM failure after
 #     the prompt is outside this mode's contract.
 #
-# HV_ACCEL=tcg (default) runs QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm`: the
+# HV_ACCEL=tcg (default) runs QEMU-TCG with `-cpu qemu64,+pdpe1gb,+svm,+smep,+smap,+umip`: the
 # AMD SVM backend, slow under emulation — give BOOT_WINDOW generous headroom.
 # QEMU-TCG 10.2.0 is qualified for this mode at 1G and 2G. Ubuntu 24.04's
 # 8.2.2 build deterministically triple-faults on the same ISO; select another
@@ -71,7 +71,7 @@ fi
 HV_ACCEL="${HV_ACCEL:-tcg}"
 case "$HV_ACCEL" in
     tcg)
-        QEMU_ACCEL_ARGS=(-accel tcg -cpu qemu64,+pdpe1gb,+svm)
+        QEMU_ACCEL_ARGS=(-accel tcg -cpu qemu64,+pdpe1gb,+svm,+smep,+smap,+umip)
         QEMU_VERSION_LINE="$("$QEMU_X86_BIN" --version 2>&1 | sed -n '1p')"
         if [[ "$QEMU_VERSION_LINE" != "QEMU emulator version 10.2.0"* ]]; then
             echo "BLOCKED_ENVIRONMENT: requires exact 'QEMU emulator version 10.2.0' (got '$QEMU_VERSION_LINE' from $QEMU_X86_BIN)" >&2

@@ -62,7 +62,7 @@ PINS = {
     "vmlinux": "2d62d53b39ed16f5d24a89a39abebcf946d9a0f9482734baf3da51e867b1ec07",
     "qemu-system-x86_64": "169fb4eaaa79f7ad1f3a2d1a1f3534a0807354eabdedaf6a51b6f4b1412241fe",
 }
-EXPECTED_CPU = "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed"
+EXPECTED_CPU = "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed,+smep,+smap,+umip"
 FATAL_HOST = [r"KERNEL PANIC", r"\[fault\] Cell", r"create_vm failed", r"\[hv-x86\] .*guest triple-fault"]
 HV_BAD = re.compile(r"\[hv-x86\] .*(fail|error|unexpected|unhandled|guest exited)", re.I)
 S93 = ["ssh-conf", "ssh-refusals", "ssh-changed-host-key", "ssh-first-trust-no", "ssh-first-trust-paste-refused",

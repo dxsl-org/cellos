@@ -189,7 +189,7 @@ class Machine:
         self.sock = Path(a.work) / "sock"
         self.sock.mkdir(mode=0o700, exist_ok=True)
         self.serial_path, self.qmp_path = self.sock / f"{label}-serial.sock", self.sock / f"{label}-qmp.sock"
-        cpu = "qemu64,+pdpe1gb,+rdrand,+rdseed" if ssh else "qemu64,+pdpe1gb"
+        cpu = "qemu64,+pdpe1gb,+rdrand,+rdseed,+smep,+smap,+umip" if ssh else "qemu64,+pdpe1gb,+smep,+smap,+umip"
         netdev = "user,id=net0" if ssh else "user,id=net0,restrict=on"
         self.argv = ["qemu-system-x86_64", "-machine", "q35", "-accel", a.accel,
                      "-cpu", cpu if a.accel == "tcg" else "host", "-m", "256M", "-display", "none",

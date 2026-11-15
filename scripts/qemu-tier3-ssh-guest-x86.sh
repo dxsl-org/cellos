@@ -537,7 +537,7 @@ window = int(window)
 sock_path = os.path.join(work, "serial.sock")
 try: os.unlink(sock_path)
 except FileNotFoundError: pass
-argv = [qemu_bin, "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed",
+argv = [qemu_bin, "-machine", "q35", "-accel", "tcg", "-cpu", "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed,+smep,+smap,+umip",
         "-m", "1G", "-display", "none", "-chardev", f"socket,id=ser0,path={sock_path},server=on,wait=off",
         "-serial", "chardev:ser0", "-monitor", "none", "-cdrom", iso, "-boot", "d", "-no-reboot",
         "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{port}-10.0.2.16:22", "-device", "e1000,netdev=net0",

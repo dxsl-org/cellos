@@ -23,7 +23,7 @@ X86_STORAGE_MODEL="${X86_STORAGE_MODEL:-sata}"
 # CPU model decides whether the guest has PCID at all: `qemu64` does not, `max`
 # does. The lane asserts the kernel's own decision when X86_EXPECT_PCID is set,
 # so the PCID-off and PCID-on paths are both witnessed rather than assumed.
-X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb}"
+X86_CPU_MODEL="${X86_CPU_MODEL:-qemu64,+pdpe1gb,+smep,+smap,+umip}"
 X86_EXPECT_PCID="${X86_EXPECT_PCID:-}"
 # TCG cannot emulate PCID (QEMU clears the feature with a warning), so the
 # PCID-on path needs hardware acceleration: X86_ACCEL=kvm X86_CPU_MODEL=host.

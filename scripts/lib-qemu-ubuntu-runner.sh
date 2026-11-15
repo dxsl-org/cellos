@@ -51,7 +51,7 @@ start_boot() {
     mkfifo "$INPUT_FIFO"
     exec 3<> "$INPUT_FIFO"
     "$QEMU_X86_BIN" -machine q35 -device intel-iommu,intremap=on \
-        -accel tcg -cpu qemu64,+pdpe1gb,+svm -m "$QEMU_MEMORY" -nographic \
+        -accel tcg -cpu qemu64,+pdpe1gb,+svm,+smep,+smap,+umip -m "$QEMU_MEMORY" -nographic \
         -cdrom "$QEMU_ISO" -boot d -no-reboot \
         -drive "file=$QEMU_DISK,if=none,id=nvme0,format=raw" \
         -device nvme,drive=nvme0,serial=CELLOSUBUNTU \

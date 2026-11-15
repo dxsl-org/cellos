@@ -34,7 +34,7 @@ CPP_HOSTED_RUNS="${CPP_HOSTED_RUNS:-1}"
 X86_ACCEL="${X86_ACCEL:-}"
 X86_CPU_MODEL="${X86_CPU_MODEL:-}"
 if [[ -z "$X86_CPU_MODEL" ]]; then
-    if [[ "$X86_ACCEL" == "kvm" ]]; then X86_CPU_MODEL=host; else X86_CPU_MODEL="qemu64,+pdpe1gb"; fi
+    if [[ "$X86_ACCEL" == "kvm" ]]; then X86_CPU_MODEL=host; else X86_CPU_MODEL="qemu64,+pdpe1gb,+smep,+smap,+umip"; fi
 fi
 case "$X86_ACCEL" in ""|kvm|tcg) ;; *) echo "FAIL: X86_ACCEL must be empty, kvm or tcg" >&2; exit 1 ;; esac
 

@@ -77,7 +77,7 @@ LOG="$WORK_DIR/qemu-python-gate.log"
 SUCCESS=PYTHON_IN_VM_WORKLOAD_PASS
 FATAL='KERNEL PANIC|\[fault\] Cell|\[hv-x86\].*(fail|error|unexpected|unsupported|unknown vmexit|unhandled|guest (exited|shutdown)|triple-fault)|PYTHON_IN_VM_FAIL:|Out of memory: Killed process|Init: hypervisor exited|corrupt(ion|ed)?'
 "$QEMU_X86_BIN" -machine q35 -device intel-iommu,intremap=on \
-    -accel tcg -cpu qemu64,+pdpe1gb,+svm -m "$QEMU_MEMORY" -nographic \
+    -accel tcg -cpu qemu64,+pdpe1gb,+svm,+smep,+smap,+umip -m "$QEMU_MEMORY" -nographic \
     -cdrom "$QEMU_ISO" -boot d -no-reboot \
     -netdev user,id=net0,net=10.0.2.0/24 \
     -device e1000,netdev=net0,mac=52:54:00:12:34:56 \

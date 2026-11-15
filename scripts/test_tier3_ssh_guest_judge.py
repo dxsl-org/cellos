@@ -20,7 +20,7 @@ SEED = "ab" * 32
 KEY_LINES = ["b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW",
              "QyNTUxOQAAACBzZWNyZXRzZWNyZXRzZWNyZXRzZWNyZXRzZWNyZXRzZWNyZXQAAAA="]
 ARGV = ("/home/u/.cache/cellos/qemu-10.2.0/bin/qemu-system-x86_64 -machine q35 -accel tcg -cpu "
-        "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed -m 1G -display none -chardev socket,id=ser0,path=/tmp/s,server=on,wait=off "
+        "qemu64,+pdpe1gb,+svm,+rdrand,+rdseed,+smep,+smap,+umip -m 1G -display none -chardev socket,id=ser0,path=/tmp/s,server=on,wait=off "
         "-serial chardev:ser0 -monitor none -cdrom /tmp/i.iso -boot d -no-reboot "
         "-netdev user,id=net0,hostfwd=tcp:127.0.0.1:%s-10.0.2.16:22 -device e1000,netdev=net0 "
         "-drive file=/tmp/t.img,if=none,format=raw,id=p09fx -device nvme,drive=p09fx,serial=cellosp09\n") % PORT

@@ -207,7 +207,7 @@ if [[ "$ARCH" == "x86_64" ]]; then
         bash scripts/x86/make-iso-ci.sh "$ISO" >/dev/null
     QEMU_ARGS=(
         -machine q35
-        -cpu "${X86_CPU_MODEL:-qemu64,+pdpe1gb}"
+        -cpu "${X86_CPU_MODEL:-qemu64,+pdpe1gb,+smep,+smap,+umip}"
         -m 256M
         -smp 1
         -nographic

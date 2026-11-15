@@ -661,7 +661,7 @@ iso, evidence, accel, window, rg_disk = sys.argv[1], sys.argv[2], sys.argv[3], i
 sock_path = os.path.join(os.path.dirname(evidence), "serial.sock")
 try: os.unlink(sock_path)
 except FileNotFoundError: pass
-argv = ["qemu-system-x86_64","-machine","q35","-accel",accel,"-cpu","qemu64,+pdpe1gb" if accel=="tcg" else "host",
+argv = ["qemu-system-x86_64","-machine","q35","-accel",accel,"-cpu","qemu64,+pdpe1gb,+smep,+smap,+umip" if accel=="tcg" else "host",
         "-m","256M","-display","none","-chardev",f"socket,id=ser0,path={sock_path},server=on,wait=off","-serial","chardev:ser0",
         "-monitor","none","-cdrom",iso,"-boot","d","-no-reboot",
         "-netdev","user,id=net0,restrict=on","-device","e1000,netdev=net0",
