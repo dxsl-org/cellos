@@ -10,6 +10,15 @@ pub(super) fn caller_has_hypervisor(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.hypervisor)
 }
 
+/// The incarnation a VM syscall acts for: the caller's live Cell identity. A
+/// VM belongs to its creating incarnation, so every thread of it reaches the
+/// VM and no other incarnation does. `None` for a caller that is gone.
+fn vm_owner(caller_id: usize) -> Option<crate::memory::cell_quota::Charge> {
+    live_cell_identity(caller_id).map(|(cell, generation)| {
+        crate::memory::cell_quota::Charge::new(types::CellId(cell), generation)
+    })
+}
+
 /// Staging granule for guest-memory copies. Cell bytes cross the copy view
 /// into a kernel buffer of at most this size; the registry only ever sees that
 /// buffer, never a cell address.
@@ -28,14 +37,15 @@ pub(super) fn guest_copy_staging(len: usize) -> Result<Vec<u8>, SyscallError> {
 
 /// Refuse a guest-memory request unless `[gpa, gpa + len)` lies wholly inside
 /// the VM's guest-RAM window, so no chunk is copied for a request that would
-/// fail part-way on bounds.
+/// fail part-way on bounds. Returns the incarnation that owns the VM.
 pub(super) fn check_guest_range(
     caller_id: usize,
     vm_id: usize,
     gpa: u64,
     len: usize,
-) -> Result<(), SyscallError> {
-    let (base, bytes) = crate::hypervisor::registry::guest_window(caller_id, vm_id)
+) -> Result<crate::memory::cell_quota::Charge, SyscallError> {
+    let owner = vm_owner(caller_id).ok_or(SyscallError::InvalidInput)?;
+    let (base, bytes) = crate::hypervisor::registry::guest_window(owner, vm_id)
         .map_err(|_| SyscallError::InvalidInput)?;
     let end = gpa
         .checked_sub(base)
@@ -44,7 +54,7 @@ pub(super) fn check_guest_range(
     if end > bytes as u64 {
         return Err(SyscallError::InvalidInput);
     }
-    Ok(())
+    Ok(owner)
 }
 
 /// Handler for `Syscall::CreateVm` (extracted from the dispatcher).
@@ -61,8 +71,15 @@ pub(super) fn create_vm(caller_id: usize, guest_pages: usize) -> SyscallResult {
     {
         return Err(SyscallError::InvalidInput);
     }
-    crate::hypervisor::registry::create_vm(caller_id, guest_pages)
-        .map_err(|_| SyscallError::NotSupported)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    // Owner rule: only a guest-budget refusal reaches the cell as
+    // `OutOfMemory`; every other refusal, a failed carve included, stays
+    // `NotSupported`. `CreateVm` is not a typed-OOM syscall, so both encode
+    // as the generic error sentinel.
+    crate::hypervisor::registry::create_vm(owner, guest_pages).map_err(|error| match error {
+        crate::hypervisor::registry::VmCreateError::Budget => SyscallError::OutOfMemory,
+        crate::hypervisor::registry::VmCreateError::Refused(_) => SyscallError::NotSupported,
+    })
 }
 
 /// Handler for `Syscall::CreateVcpu` (extracted from the dispatcher).
@@ -70,7 +87,8 @@ pub(super) fn create_vcpu(caller_id: usize, vm_id: usize, entry_pc: u64) -> Sysc
     if !caller_has_hypervisor(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    crate::hypervisor::registry::create_vcpu(caller_id, vm_id, entry_pc)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    crate::hypervisor::registry::create_vcpu(owner, vm_id, entry_pc)
         .map_err(|_| SyscallError::NotSupported)
 }
 
@@ -90,12 +108,13 @@ pub(super) fn map_guest_memory(
         .ok_or(SyscallError::InvalidInput)?;
     // C-2: the range is backed from the start of the guest carve, so
     // it may never be larger than the carve (the table re-checks).
-    let (_, guest_bytes) = crate::hypervisor::registry::guest_window(caller_id, vm_id)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    let (_, guest_bytes) = crate::hypervisor::registry::guest_window(owner, vm_id)
         .map_err(|_| SyscallError::NotSupported)?;
     if size == 0 || size > guest_bytes {
         return Err(SyscallError::InvalidInput);
     }
-    crate::hypervisor::registry::map_guest_memory(caller_id, vm_id, ipa, size, writable)
+    crate::hypervisor::registry::map_guest_memory(owner, vm_id, ipa, size, writable)
         .map(|_| 0usize)
         .map_err(|_| SyscallError::NotSupported)
 }
@@ -118,7 +137,8 @@ pub(super) fn run_vcpu(
     // that cannot be delivered would be lost with the guest advanced.
     view.write_bytes(out_ptr, &[0u8; vmm_wire::EXIT_LEN])
         .map_err(|_| SyscallError::InvalidInput)?;
-    let exit = crate::hypervisor::registry::run_vcpu(caller_id, vm_id, vcpu_id, budget_ns)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    let exit = crate::hypervisor::registry::run_vcpu(owner, vm_id, vcpu_id, budget_ns)
         .map_err(|_| SyscallError::NotSupported)?;
     view.write_bytes(out_ptr, &vmm_wire::encode_exit(&exit))
         .map_err(|_| SyscallError::InvalidInput)?;
@@ -155,7 +175,8 @@ pub(super) fn vcpu_regs(
     view.read_into(buf_ptr, &mut bytes)
         .map_err(|_| SyscallError::InvalidInput)?;
     let mut regs = vmm_wire::regs_from_bytes(&bytes);
-    let result = crate::hypervisor::registry::vcpu_regs(caller_id, vm_id, vcpu_id, &mut regs, mode)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    let result = crate::hypervisor::registry::vcpu_regs(owner, vm_id, vcpu_id, &mut regs, mode)
         .map_err(|_| SyscallError::NotSupported)?;
     if mode != 1 {
         view.write_bytes(buf_ptr, &vmm_wire::regs_to_bytes(&regs))
@@ -178,7 +199,8 @@ pub(super) fn inject_irq(
     if intid > 1019 {
         return Err(SyscallError::InvalidInput);
     }
-    crate::hypervisor::registry::inject_irq(caller_id, vm_id, vcpu_id, intid)
+    let owner = vm_owner(caller_id).ok_or(SyscallError::NotSupported)?;
+    crate::hypervisor::registry::inject_irq(owner, vm_id, vcpu_id, intid)
         .map_err(|_| SyscallError::NotSupported)
 }
 
@@ -194,7 +216,7 @@ pub(super) fn write_guest_memory(
         return Err(SyscallError::PermissionDenied);
     }
     validate_user_buf(src_ptr, len, MAX_USER_BUF)?;
-    check_guest_range(caller_id, vm_id, gpa, len)?;
+    let owner = check_guest_range(caller_id, vm_id, gpa, len)?;
     let view = caller_copy_view(caller_id)?;
     let mut staging = guest_copy_staging(len)?;
     let mut done = 0;
@@ -202,7 +224,7 @@ pub(super) fn write_guest_memory(
         let chunk = &mut staging[..(len - done).min(GUEST_COPY_CHUNK)];
         view.read_into(src_ptr + done, chunk)
             .map_err(|_| SyscallError::InvalidInput)?;
-        crate::hypervisor::registry::write_guest_memory(caller_id, vm_id, gpa + done as u64, chunk)
+        crate::hypervisor::registry::write_guest_memory(owner, vm_id, gpa + done as u64, chunk)
             .map_err(|_| SyscallError::InvalidInput)?;
         done += chunk.len();
     }
@@ -221,13 +243,13 @@ pub(super) fn read_guest_memory(
         return Err(SyscallError::PermissionDenied);
     }
     validate_user_buf(dst_ptr, len, MAX_USER_BUF)?;
-    check_guest_range(caller_id, vm_id, gpa, len)?;
+    let owner = check_guest_range(caller_id, vm_id, gpa, len)?;
     let view = caller_copy_view(caller_id)?;
     let mut staging = guest_copy_staging(len)?;
     let mut done = 0;
     while done < len {
         let chunk = &mut staging[..(len - done).min(GUEST_COPY_CHUNK)];
-        crate::hypervisor::registry::read_guest_memory(caller_id, vm_id, gpa + done as u64, chunk)
+        crate::hypervisor::registry::read_guest_memory(owner, vm_id, gpa + done as u64, chunk)
             .map_err(|_| SyscallError::InvalidInput)?;
         view.write_bytes(dst_ptr + done, chunk)
             .map_err(|_| SyscallError::InvalidInput)?;

@@ -3,20 +3,22 @@
 //! operation returns `Err(ViError::NotSupported)` (`inject_irq` and the reaper
 //! do nothing).
 
+use crate::hypervisor::registry::VmCreateError;
+use crate::memory::cell_quota::Charge;
 use types::{ViError, ViResult};
 
-pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
+pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCreateError> {
     let _ = (owner, guest_pages);
-    Err(ViError::NotSupported)
+    Err(ViError::NotSupported.into())
 }
 
-pub(crate) fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
+pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     let _ = (owner, vm_id, entry_pc);
     Err(ViError::NotSupported)
 }
 
 pub(crate) fn map_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     ipa: u64,
     size: usize,
@@ -26,13 +28,13 @@ pub(crate) fn map_guest_memory(
     Err(ViError::NotSupported)
 }
 
-pub(crate) fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+pub(crate) fn guest_window(owner: Charge, vm_id: usize) -> ViResult<(u64, usize)> {
     let _ = (owner, vm_id);
     Err(ViError::NotSupported)
 }
 
 pub(crate) fn run_vcpu(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
@@ -42,7 +44,7 @@ pub(crate) fn run_vcpu(
 }
 
 pub(crate) fn vcpu_regs(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     regs: &mut [u64; 32],
@@ -53,7 +55,7 @@ pub(crate) fn vcpu_regs(
 }
 
 pub(crate) fn write_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     src: &[u8],
@@ -63,7 +65,7 @@ pub(crate) fn write_guest_memory(
 }
 
 pub(crate) fn read_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     dst: &mut [u8],
@@ -73,7 +75,7 @@ pub(crate) fn read_guest_memory(
 }
 
 pub(crate) fn inject_irq(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     intid: u32,
@@ -82,6 +84,6 @@ pub(crate) fn inject_irq(
     Ok(0)
 }
 
-pub(crate) fn reap_vms_for_task(dead_tid: usize) {
-    let _ = dead_tid;
+pub(crate) fn reap_vms_for(owner: Charge) {
+    let _ = owner;
 }

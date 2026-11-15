@@ -115,6 +115,7 @@ impl SharedStateBaseline {
             quota_generation,
             crate::memory::cell_quota::Limits {
                 memory: 0x2345_0000,
+                guest: 0,
             },
         );
         crate::loader::commit_launch_routes(

@@ -775,7 +775,14 @@ fn reserve(generation: u64, pages: usize) -> Reservation {
 #[test]
 fn a_billed_run_refunds_its_charge_once_whoever_frees_it() {
     let _guard = crate::TEST_STATE_LOCK.lock();
-    cell_quota::register(QUOTA_CELL, 1, cell_quota::Limits { memory: 1 << 20 });
+    cell_quota::register(
+        QUOTA_CELL,
+        1,
+        cell_quota::Limits {
+            memory: 1 << 20,
+            guest: 0,
+        },
+    );
     let mut fake = Fake::new(16);
     let quarantine = pending();
 
@@ -813,14 +820,28 @@ fn a_billed_run_refunds_its_charge_once_whoever_frees_it() {
 #[test]
 fn a_stale_generation_refund_leaves_the_next_incarnation_untouched() {
     let _guard = crate::TEST_STATE_LOCK.lock();
-    cell_quota::register(QUOTA_CELL, 1, cell_quota::Limits { memory: 1 << 20 });
+    cell_quota::register(
+        QUOTA_CELL,
+        1,
+        cell_quota::Limits {
+            memory: 1 << 20,
+            guest: 0,
+        },
+    );
     let mut fake = Fake::new(16);
     let quarantine = pending();
     let mut stale = fake.billed_run(2, KernelAlias::Intact, reserve(1, 2));
     stale.unpublish().unwrap();
 
     cell_quota::deregister(QUOTA_CELL);
-    cell_quota::register(QUOTA_CELL, 2, cell_quota::Limits { memory: 1 << 20 });
+    cell_quota::register(
+        QUOTA_CELL,
+        2,
+        cell_quota::Limits {
+            memory: 1 << 20,
+            guest: 0,
+        },
+    );
     let live = reserve(2, 1);
     settle(stale, FlushOutcome::Confirmed, &mut fake, &quarantine)
         .map_err(|_| ())

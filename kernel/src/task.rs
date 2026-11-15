@@ -1648,6 +1648,13 @@ fn drain_before_selection() {
                 retirement.owner.cell_id,
                 retirement.owner.generation,
             );
+            // VMs belong to the incarnation, not to a member tid: reaped once,
+            // here, after every member quiesced and before the CellId or its
+            // guest row can go to a new generation.
+            crate::hypervisor::registry::reap_vms_for(crate::memory::cell_quota::Charge::new(
+                types::CellId(retirement.owner.cell_id),
+                retirement.owner.generation,
+            ));
             crate::cell::state_stash::release_retired(crate::cell::state_stash::Incarnation {
                 cell: retirement.owner.cell_id,
                 generation: retirement.owner.generation,
@@ -1940,7 +1947,6 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
     }
     crate::dev::irq_wait::release_waiters_for(tid);
     let grants = crate::task::syscall::reap_grants_for_task(tid);
-    crate::hypervisor::registry::reap_vms_for_task(tid);
     MemberReap {
         dma_deferred,
         grants,

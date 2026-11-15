@@ -101,6 +101,17 @@ impl VmidPool {
             .fetch_and(!mask, core::sync::atomic::Ordering::Release);
         debug_assert!(previous & mask != 0, "VMID {vmid} released while free");
     }
+
+    /// Guest VMIDs free at the moment of the read; a snapshot, not a claim.
+    pub fn free_count(&self) -> usize {
+        self.used
+            .iter()
+            .map(|word| {
+                word.load(core::sync::atomic::Ordering::Relaxed)
+                    .count_zeros() as usize
+            })
+            .sum()
+    }
 }
 
 impl Default for VmidPool {
@@ -431,6 +442,18 @@ mod tests {
         assert_eq!(pool.allocate(), Some(3));
         assert_eq!(pool.allocate(), Some(70));
         assert_eq!(pool.allocate(), None);
+    }
+
+    #[test]
+    fn free_count_tracks_allocate_and_release() {
+        let pool = VmidPool::new();
+        assert_eq!(pool.free_count(), VMID_COUNT - 1, "VMID 0 is the host's");
+        let vmid = pool.allocate().expect("free");
+        assert_eq!(pool.free_count(), VMID_COUNT - 2);
+        pool.release(vmid);
+        assert_eq!(pool.free_count(), VMID_COUNT - 1);
+        while pool.allocate().is_some() {}
+        assert_eq!(pool.free_count(), 0);
     }
 
     #[test]

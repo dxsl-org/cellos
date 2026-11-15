@@ -37,6 +37,9 @@ pub struct TaskLaunchState {
     pub(crate) platform: Option<super::cap::PlatformCapReservation>,
     pub(crate) replacement: Option<crate::cell::hotswap::ReplacementReservation>,
     pub(crate) quota_limit: usize,
+    /// Guest-memory budget (`catalog::Cell::guest_memory` of the
+    /// kernel-resolved path); 0 refuses every VM.
+    pub(crate) guest_limit: usize,
     pub(crate) syscall_allowlist: u64,
     pub(crate) priority: u8,
     pub(crate) pku_key: u8,
@@ -65,6 +68,7 @@ impl TaskLaunchState {
         platform: Option<super::cap::PlatformCapReservation>,
         replacement: Option<crate::cell::hotswap::ReplacementReservation>,
         quota_limit: usize,
+        guest_limit: usize,
         syscall_allowlist: u64,
         priority: u8,
         pku_key: u8,
@@ -82,6 +86,7 @@ impl TaskLaunchState {
             platform,
             replacement,
             quota_limit,
+            guest_limit,
             syscall_allowlist,
             priority,
             pku_key,
@@ -160,6 +165,7 @@ pub fn publish_prepared(
     let generation = super::tcb::next_cell_generation();
     let limits = crate::memory::cell_quota::Limits {
         memory: state.quota_limit,
+        guest: state.guest_limit,
     };
     let quota = if requested_cell_id == CellId(0) {
         crate::memory::cell_quota::QuotaReservation::reserve_next(generation, limits)?
@@ -548,6 +554,7 @@ impl SessionPublication {
             generation,
             crate::memory::cell_quota::Limits {
                 memory: state.quota_limit,
+                guest: state.guest_limit,
             },
         )?;
         let cell = quota.cell_id();

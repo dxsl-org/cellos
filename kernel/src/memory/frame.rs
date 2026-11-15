@@ -1253,13 +1253,21 @@ mod tests {
             4,
             Limits {
                 memory: PAGE_SIZE - 1,
+                guest: 0,
             },
         );
         assert!(super::OwnedFrame::allocate(Charge::new(cell, 4)).is_none());
         assert_eq!(used(), Some(0), "no frame was taken");
         assert_eq!(cell_quota::in_use(cell), 0);
 
-        cell_quota::register(cell, 5, Limits { memory: PAGE_SIZE });
+        cell_quota::register(
+            cell,
+            5,
+            Limits {
+                memory: PAGE_SIZE,
+                guest: 0,
+            },
+        );
         let frame = super::OwnedFrame::allocate(Charge::new(cell, 5)).expect("fits");
         assert_eq!((used(), cell_quota::in_use(cell)), (Some(1), PAGE_SIZE));
         assert!(super::OwnedFrame::allocate(Charge::new(cell, 5)).is_none());

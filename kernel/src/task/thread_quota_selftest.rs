@@ -37,7 +37,7 @@ fn register_quota(memory: usize) {
     cell_quota::register(
         CellId(QUOTA_CELL),
         PARENT_GENERATION,
-        cell_quota::Limits { memory },
+        cell_quota::Limits { memory, guest: 0 },
     );
 }
 

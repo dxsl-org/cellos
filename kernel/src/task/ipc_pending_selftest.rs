@@ -621,7 +621,10 @@ fn quota_failure_is_fallible() -> bool {
     crate::memory::cell_quota::register(
         CellId(QUOTA_CELL),
         task.cell_generation,
-        crate::memory::cell_quota::Limits { memory: 0 },
+        crate::memory::cell_quota::Limits {
+            memory: 0,
+            guest: 0,
+        },
     );
     let inline_ok =
         super::queue_pending_msg(&mut task, SENDER, b"x", HOTSWAP_MSG_QUEUE_DEPTH).is_ok();
@@ -649,7 +652,10 @@ fn heap_payload_refunds_receiver_quota() -> bool {
     crate::memory::cell_quota::register(
         CellId(QUOTA_CELL),
         task.cell_generation,
-        crate::memory::cell_quota::Limits { memory: 4096 },
+        crate::memory::cell_quota::Limits {
+            memory: 4096,
+            guest: 0,
+        },
     );
     let payload = [0xa5; 33];
     let queued = super::queue_pending_msg(&mut task, SENDER, &payload, HOTSWAP_MSG_QUEUE_DEPTH);

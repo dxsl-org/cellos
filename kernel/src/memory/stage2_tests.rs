@@ -7,6 +7,7 @@
 extern crate alloc;
 
 use super::*;
+use crate::memory::cell_quota::{self, Account, Charge, Limits};
 use crate::memory::frame::{allocator_for_tests, FrameAllocator};
 use crate::sync::SpinlockGuard;
 use alloc::vec::Vec;
@@ -71,7 +72,7 @@ fn leaf(table: &Stage2Table, ipa: u64) -> u64 {
 #[test]
 fn a_page_count_whose_span_wraps_is_refused_before_any_walk() {
     let arena = FrameArena::new(2);
-    let mut table = Stage2Table::new().expect("root pair");
+    let mut table = Stage2Table::new(Reservation::kernel(Account::Guest)).expect("root pair");
     let used = arena.used();
     // 2^52 pages × 4 KiB wraps u64 to 0; usize::MAX is the syscall's
     // `size = usize::MAX` worst case.
@@ -92,7 +93,7 @@ fn a_page_count_whose_span_wraps_is_refused_before_any_walk() {
 #[test]
 fn a_map_larger_than_the_carve_is_refused() {
     let arena = FrameArena::new(4);
-    let mut table = Stage2Table::new().expect("root pair");
+    let mut table = Stage2Table::new(Reservation::kernel(Account::Guest)).expect("root pair");
     let carve = table.carve_guest_ram(2).expect("carve");
     let used = arena.used();
     for n_pages in [3usize, 1 << 52, usize::MAX] {
@@ -109,7 +110,7 @@ fn a_map_larger_than_the_carve_is_refused() {
 fn a_map_that_runs_out_of_tables_writes_no_leaf() {
     // Root pair + one L2 + one L3: the arena is full after the first map.
     let arena = FrameArena::new(4);
-    let mut table = Stage2Table::new().expect("root pair");
+    let mut table = Stage2Table::new(Reservation::kernel(Account::Guest)).expect("root pair");
     table.map(IPA, HPA, 1, true).expect("first page");
     let existing = leaf(&table, IPA);
     assert_ne!(existing, 0);
@@ -130,7 +131,7 @@ fn a_map_that_runs_out_of_tables_writes_no_leaf() {
 #[test]
 fn a_dropped_table_returns_every_frame_it_took() {
     let arena = FrameArena::new(8);
-    let mut table = Stage2Table::new().expect("root pair");
+    let mut table = Stage2Table::new(Reservation::kernel(Account::Guest)).expect("root pair");
     // Mapped before the carve: the host arena lies above the IPA/HPA limit,
     // so the carve itself cannot be the leaf's output address here.
     table.map(IPA, HPA, 2, true).expect("map");
@@ -139,4 +140,54 @@ fn a_dropped_table_returns_every_frame_it_took() {
     assert_eq!(arena.used(), 6, "root pair + L2 + L3 + two RAM pages");
     drop(table);
     assert_eq!(arena.used(), 0);
+}
+
+/// Census §8.4: every frame of a table is drawn from its owner's guest budget
+/// before it is allocated. A frame the rest cannot cover is refused with no
+/// frame taken, and the frames and the rest are refunded when the table drops.
+#[test]
+fn a_table_draws_every_frame_from_its_guest_budget() {
+    let arena = FrameArena::new(8);
+    let cell = types::CellId(cell_quota::MAX_CELLS as u64 - 2);
+    // Root pair + one L2 + one L3: what one mapped page needs.
+    const BUDGET: usize = (Stage2Table::ROOT_PAGES + 2) * PAGE_SIZE;
+    cell_quota::register(
+        cell,
+        1,
+        Limits {
+            memory: 0,
+            guest: BUDGET,
+        },
+    );
+    let owner = Charge::new(cell, 1);
+
+    let short = Reservation::take(owner, Account::Guest, PAGE_SIZE).expect("fits");
+    assert!(
+        Stage2Table::new(short).is_none(),
+        "a root the budget cannot cover"
+    );
+    assert_eq!(arena.used(), 0, "a refused root allocates nothing");
+    assert_eq!(cell_quota::guest_in_use(cell), 0, "and holds no charge");
+
+    let budget = Reservation::take(owner, Account::Guest, BUDGET).expect("fits");
+    let mut table = Stage2Table::new(budget).expect("root pair");
+    table.map(IPA, HPA, 1, true).expect("within the budget");
+    assert_eq!(arena.used(), 4);
+    assert_eq!(
+        table.map(IPA + TWO_MIB, HPA, 1, true),
+        Err(S2MapError::OutOfMemory),
+        "a second L3 is past the budget"
+    );
+    assert_eq!(table.carve_guest_ram(1), None, "so is guest RAM");
+    assert_eq!(arena.used(), 4, "a refused frame is never allocated");
+    assert_eq!(cell_quota::guest_in_use(cell), BUDGET);
+
+    drop(table);
+    assert_eq!(arena.used(), 0);
+    assert_eq!(
+        cell_quota::guest_in_use(cell),
+        0,
+        "every frame refunded once"
+    );
+    cell_quota::deregister(cell);
 }

@@ -24,7 +24,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use super::cell_quota::Charge;
+use super::cell_quota::Reservation;
 use super::frame::{allocate_guest_ram, phys_to_virt};
 use super::frame_run::{Batch, PrivateRun, RunKind};
 use super::paging::PAGE_SIZE;
@@ -170,6 +170,11 @@ pub struct Stage2Table {
     guest_ram_pages: usize,
     // The carved guest RAM itself. Freed in Drop.
     guest_ram: Option<PrivateRun>,
+
+    // The owner's guest charge every frame of the table is drawn from before
+    // it is allocated; a frame the rest cannot cover is refused. The rest is
+    // refunded when the table drops.
+    budget: Reservation,
 }
 
 // SAFETY: Stage2Table is not Send/Sync by default because of *mut u64.
@@ -177,20 +182,35 @@ pub struct Stage2Table {
 unsafe impl Send for Stage2Table {}
 
 impl Stage2Table {
-    /// Allocate a new Stage-2 root (2 × 4 KB frames, 8 KB-aligned).
+    /// Frames of the concatenated Level-1 root.
+    pub const ROOT_PAGES: usize = 2;
+
+    /// Most L2 and L3 tables mapping `pages` contiguous 4 KB pages at any
+    /// base can need: one L3 per 2 MiB and one L2 per 1 GiB the range touches.
+    pub const fn table_bound(pages: usize) -> usize {
+        pages.div_ceil(512) + 1 + pages.div_ceil(512 * 512) + 1
+    }
+
+    /// Allocate a new Stage-2 root (2 × 4 KB frames, 8 KB-aligned), drawing
+    /// it and every later frame of the table from `budget`.
     ///
-    /// Returns `None` when the frame allocator has fewer than 2 contiguous
-    /// free frames.
-    pub fn new() -> Option<Self> {
+    /// Returns `None` when `budget` cannot cover the root (nothing is
+    /// allocated) or the frame allocator has fewer than 2 contiguous free
+    /// frames.
+    pub(crate) fn new(mut budget: Reservation) -> Option<Self> {
+        let root_charge = budget.split(Self::ROOT_PAGES * PAGE_SIZE)?;
         // VTTBR_EL2.BADDR requires the concatenated root 8 KB-aligned. The old
         // allocate_contiguous(2) call returned the FIRST free pair — whose
         // parity depends on every allocation since boot — so a 4 KB-misaligned
         // root silently truncated in VTTBR and the guest died on a Stage-2
         // level-1 translation fault at its very first instruction fetch.
         let root = PrivateRun::adopt(
-            super::frame::allocate_contiguous_aligned(2, 2 * PAGE_SIZE)?,
-            2,
-            Charge::KERNEL,
+            super::frame::allocate_contiguous_aligned(
+                Self::ROOT_PAGES,
+                Self::ROOT_PAGES * PAGE_SIZE,
+            )?,
+            Self::ROOT_PAGES,
+            root_charge,
             RunKind::PageTable,
         );
         let root_pa = root.base() as u64;
@@ -214,6 +234,7 @@ impl Stage2Table {
             guest_ram_pa: 0,
             guest_ram_pages: 0,
             guest_ram: None,
+            budget,
         })
     }
 
@@ -223,7 +244,9 @@ impl Stage2Table {
         self.root_pa
     }
 
-    /// Carve `n_pages` contiguous physical frames for guest RAM.
+    /// Carve `n_pages` contiguous physical frames for guest RAM, drawn from
+    /// the table's budget first (refused, with nothing allocated, when the
+    /// rest cannot cover them).
     ///
     /// Records the carved region so `map()` can enforce the SAS-isolation
     /// invariant (guest Stage-2 may only map into this region).
@@ -235,13 +258,9 @@ impl Stage2Table {
         if self.guest_ram.is_some() {
             return None;
         }
+        let charge = self.budget.split(n_pages.checked_mul(PAGE_SIZE)?)?;
         let pa = allocate_guest_ram(n_pages)?;
-        self.guest_ram = Some(PrivateRun::adopt(
-            pa,
-            n_pages,
-            Charge::KERNEL,
-            RunKind::Leaf,
-        ));
+        self.guest_ram = Some(PrivateRun::adopt(pa, n_pages, charge, RunKind::Leaf));
         self.guest_ram_pa = pa as u64;
         self.guest_ram_pages = n_pages;
         Some(pa as u64)
@@ -250,6 +269,7 @@ impl Stage2Table {
     // ── Internal table allocator ─────────────────────────────────────────────
 
     fn alloc_subtable(&mut self) -> Option<(*mut u64, u64)> {
+        let charge = self.budget.split(PAGE_SIZE)?;
         let pa = super::frame::allocate_frame()?;
         let va = phys_to_virt(pa) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours.
@@ -257,7 +277,7 @@ impl Stage2Table {
             core::ptr::write_bytes(va, 0, 512);
         }
         self.tables
-            .push(PrivateRun::adopt(pa, 1, Charge::KERNEL, RunKind::PageTable));
+            .push(PrivateRun::adopt(pa, 1, charge, RunKind::PageTable));
         Some((va, pa as u64))
     }
 
@@ -437,8 +457,9 @@ impl Stage2Table {
 // ── Drop — free all allocated frames ────────────────────────────────────────
 
 /// The owner drops a table only after its VM's Stage-2 translations are
-/// invalidated (`arch::aarch64::vm::reap_vms_for_task`), or for a table no
-/// VM ever ran on.
+/// invalidated (`arch::aarch64::vm::reap_vms_for`), or for a table no VM ever
+/// ran on. The frames refund their guest charge as they are freed, then the
+/// unspent `budget` refunds as the field drops.
 impl Drop for Stage2Table {
     fn drop(&mut self) {
         let mut batch = Batch::new();
@@ -463,8 +484,9 @@ impl Drop for Stage2Table {
 /// # Panics
 /// Panics on any unexpected error — this is a development smoke check.
 pub fn probe_stage2_table() {
-    // Allocate a minimal table.
-    let mut tbl = Stage2Table::new().expect("Stage2Table::new failed");
+    // Allocate a minimal kernel-owned table.
+    let mut tbl = Stage2Table::new(Reservation::kernel(super::cell_quota::Account::Guest))
+        .expect("Stage2Table::new failed");
 
     // Carve 2 pages of guest RAM (trivial, no RT concern).
     let guest_pa = tbl.carve_guest_ram(2).expect("carve_guest_ram failed");

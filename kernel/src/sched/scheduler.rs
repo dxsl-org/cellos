@@ -449,7 +449,10 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     const WATCHER: usize = usize::MAX - 1;
     const GENERATION: u64 = 1;
 
-    let unlimited = cell_quota::Limits { memory: usize::MAX };
+    let unlimited = cell_quota::Limits {
+        memory: usize::MAX,
+        guest: 0,
+    };
     cell_quota::register(CellId(OWNER_CELL as u64), GENERATION, unlimited);
     cell_quota::register(CellId(EXIT_CELL as u64), GENERATION, unlimited);
     let owner_before = cell_quota::in_use(CellId(OWNER_CELL as u64));

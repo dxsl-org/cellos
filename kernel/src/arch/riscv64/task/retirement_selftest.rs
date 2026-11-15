@@ -31,6 +31,7 @@ const PLACEHOLDER_GENERATION: u64 = 0;
 fn default_limits() -> crate::memory::cell_quota::Limits {
     crate::memory::cell_quota::Limits {
         memory: crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        guest: 0,
     }
 }
 

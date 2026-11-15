@@ -184,6 +184,7 @@ pub(super) fn trusted_arming_completes_from_cell_context() -> bool {
         generation,
         crate::memory::cell_quota::Limits {
             memory: crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+            guest: 0,
         },
     ) else {
         return false;

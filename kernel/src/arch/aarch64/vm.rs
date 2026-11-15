@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 //! `vm`: the aarch64 VM registry behind `crate::hypervisor::registry` —
-//! per-owner RAII store for Stage-2 tables, guest RAM, and vCPUs.
+//! per-incarnation RAII store for Stage-2 tables, guest RAM, and vCPUs.
 //!
 //! # Lock order
 //! `VM_REGISTRY` → `FRAME_ALLOCATOR` (same order as grant reaper; never reverse).
 
 use crate::arch::hypervisor::pending_irqs::PendingIrqs;
+use crate::hypervisor::registry::{next_vm_id, VmCreateError, VmKey};
+use crate::memory::cell_quota::{Account, Charge, Reservation};
 use crate::memory::stage2::Stage2Table;
 use crate::sync::Spinlock;
 use abi::hypervisor::ViVmExit as ApiVmExit;
@@ -60,16 +62,16 @@ struct Vm {
     vcpu_vgic: Vec<vgic::CpuIfState>,
     /// The VM's Stage-2 VMID, loaded into `VTTBR_EL2` with its root on every
     /// guest entry (directly at an EL2 host, by the Pi monitor's run op).
-    /// Taken from [`VMIDS`]; `reap_vms_for_task` returns it.
+    /// Taken from [`VMIDS`]; `reap_vms_for` returns it.
     vmid: u16,
     /// Set once the guest RAM window has been cleaned to PoC and the I-cache
     /// invalidated, before the first vCPU entry.
     entry_flushed: bool,
 }
 
-// VM_REGISTRY is keyed by (owner_tid, vm_id).
-// vm_id is assigned sequentially per owner; starts at 1.
-static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), Vm>>> =
+// VM_REGISTRY is keyed by the owner incarnation and a boot-wide VM id
+// (`registry::next_vm_id`).
+static VM_REGISTRY: Spinlock<Option<BTreeMap<VmKey, Vm>>> =
     Spinlock::ranked(None, crate::sync::rank::VM_REGISTRY);
 
 /// Guest VMIDs within the 8-bit width `VTCR_EL2` configures. A VMID goes back
@@ -77,22 +79,44 @@ static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), Vm>>> =
 /// again invalidates it once more (`enable_stage2`).
 static VMIDS: VmidPool = VmidPool::new();
 
-fn registry_lock() -> &'static Spinlock<Option<BTreeMap<(usize, usize), Vm>>> {
+fn registry_lock() -> &'static Spinlock<Option<BTreeMap<VmKey, Vm>>> {
     &VM_REGISTRY
 }
 
-/// Per-owner sequential VM-id counter, stored alongside each owner's first VM.
-/// Simple: we just use the total registered VM count + 1 as the next id.
-// reason: kept for near-future VM lifecycle refactor (currently `create_vm`
-// inlines equivalent logic); not yet wired up as a callable helper.
-#[allow(dead_code)]
-fn next_vm_id_for(owner: usize) -> usize {
-    let guard = registry_lock().lock();
-    let count = guard
-        .as_ref()
-        .map_or(0, |m| m.keys().filter(|(o, _)| *o == owner).count());
-    count + 1
+/// The guest charge `create_vm` takes for a VM of `guest_pages`, before any
+/// frame: the guest RAM, the Stage-2 root pair, and the most L2/L3 tables the
+/// guest-RAM window and the GICV passthrough can need. A vCPU's state is heap,
+/// not frames, so vCPUs add nothing. `None` when the sum overflows, which no
+/// budget covers.
+pub(crate) fn guest_bytes(guest_pages: usize) -> Option<usize> {
+    use crate::memory::paging::PAGE_SIZE;
+    let gicv_tables = VGIC.map_or(0, |windows| {
+        Stage2Table::table_bound(windows.gicv.size / PAGE_SIZE)
+    });
+    guest_pages
+        .checked_add(Stage2Table::table_bound(guest_pages))?
+        .checked_add(gicv_tables)?
+        .checked_add(Stage2Table::ROOT_PAGES)?
+        .checked_mul(PAGE_SIZE)
 }
+
+/// Guest VMIDs free now (the `VM-GUEST-BUDGET` fixture's tag snapshot).
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) fn free_vm_tags() -> usize {
+    VMIDS.free_count()
+}
+
+/// The host the kernel's VM fixtures run on: an EL2 host (not the Pi, whose
+/// monitor runs guests on the kernel's behalf).
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) fn guest_fixture_host() -> bool {
+    !PI_MONITOR && hal::aarch64::el2::is_el2()
+}
+
+/// Boot fixture `VM-GUEST-BUDGET` (census §8.6(b)), shared with x86.
+#[cfg(not(cellos_posture = "release"))]
+#[path = "../guest_budget_selftest.rs"]
+pub(crate) mod guest_budget_selftest;
 
 /// Pi's EL1-host capability gate: an actual monitor round-trip must run guest
 /// HVC, WFI, MMIO and software-injected virtual IRQ before any VM is admitted.
@@ -111,7 +135,8 @@ pub fn pi_monitor_smoke() {
         return;
     }
     const IPA: u64 = 0x4000_0000;
-    let Some(mut table) = Stage2Table::new() else {
+    // A kernel-owned VM: its guest charge is never limited or counted.
+    let Some(mut table) = Stage2Table::new(Reservation::kernel(Account::Guest)) else {
         log::warn!("[pi-monitor] smoke: no Stage-2 root; HypervisorCap closed");
         return;
     };
@@ -380,13 +405,17 @@ pub fn pi_monitor_smoke() {
 
 // ── Registry operations (`crate::hypervisor::registry`) ──────────────────────
 
-pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
+pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCreateError> {
     build_vm(owner, guest_pages, false)
 }
 
 /// [`create_vm`]; `refusal_expected` (the VMID fixture exhausting the pool on
 /// purpose) logs an exhausted pool at info, tagged `(fixture)`, not at warn.
-fn build_vm(owner: usize, guest_pages: usize, refusal_expected: bool) -> ViResult<usize> {
+fn build_vm(
+    owner: Charge,
+    guest_pages: usize,
+    refusal_expected: bool,
+) -> Result<usize, VmCreateError> {
     if PI_MONITOR && !El2Monitor::is_verified() {
         // The cell can only print one sentence for every failure, so the
         // reason has to be here: a refused boot monitor and a failed carve
@@ -395,11 +424,24 @@ fn build_vm(owner: usize, guest_pages: usize, refusal_expected: bool) -> ViResul
             "[hv] create_vm refused: EL2 monitor not verified (ready={})",
             El2Monitor::is_ready()
         );
-        return Err(ViError::NotSupported);
+        return Err(ViError::NotSupported.into());
     }
     use crate::memory::paging::PAGE_SIZE;
 
-    let mut table = Stage2Table::new().ok_or_else(|| {
+    // The first effect: the owner's guest charge for every frame the VM can
+    // take. A refusal allocates nothing; every later frame is drawn from it,
+    // and an error below frees what was drawn and refunds the whole charge.
+    let budget = guest_bytes(guest_pages)
+        .and_then(|bytes| Reservation::take(owner, Account::Guest, bytes).ok())
+        .ok_or_else(|| {
+            log::warn!(
+                "[hv] create_vm refused: {} guest pages exceed cell {}'s guest budget",
+                guest_pages,
+                owner.cell().0
+            );
+            VmCreateError::Budget
+        })?;
+    let mut table = Stage2Table::new(budget).ok_or_else(|| {
         log::error!("[hv] create_vm: stage-2 root allocation failed");
         ViError::OutOfMemory
     })?;
@@ -487,9 +529,9 @@ fn build_vm(owner: usize, guest_pages: usize, refusal_expected: bool) -> ViResul
             *guard = Some(BTreeMap::new());
         }
         let map = guard.as_mut().unwrap();
-        let id = map.keys().filter(|(o, _)| *o == owner).count() + 1;
+        let id = next_vm_id();
         map.insert(
-            (owner, id),
+            VmKey::new(owner, id),
             Vm {
                 stage2: table,
                 guest_pa,
@@ -506,10 +548,12 @@ fn build_vm(owner: usize, guest_pages: usize, refusal_expected: bool) -> ViResul
     Ok(vm_id)
 }
 
-pub(crate) fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
+pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     let mut guard = registry_lock().lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let vcpu_id = vm.vcpus.len() + 1;
 
     // test-hooks: write P04 HVC smoke blob so the test cell can verify Hvc exit.
@@ -537,7 +581,7 @@ pub(crate) fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult
 }
 
 pub(crate) fn map_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     ipa: u64,
     size: usize,
@@ -547,7 +591,9 @@ pub(crate) fn map_guest_memory(
     let pages = size.div_ceil(PAGE_SIZE);
     let mut guard = registry_lock().lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     // Extend guest RAM mapping to cover the requested IPA range.
     vm.stage2
         .map(ipa, vm.guest_pa, pages, writable)
@@ -555,11 +601,13 @@ pub(crate) fn map_guest_memory(
     Ok(())
 }
 
-pub(crate) fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+pub(crate) fn guest_window(owner: Charge, vm_id: usize) -> ViResult<(u64, usize)> {
     const GUEST_IPA_BASE: u64 = 0x4000_0000;
     let guard = registry_lock().lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let bytes = vm
         .guest_pages
         .checked_mul(crate::memory::paging::PAGE_SIZE)
@@ -568,7 +616,7 @@ pub(crate) fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)>
 }
 
 pub(crate) fn run_vcpu(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
@@ -576,7 +624,9 @@ pub(crate) fn run_vcpu(
     let hal_exit = {
         let mut guard = registry_lock().lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
-        let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let vm = map
+            .get_mut(&VmKey::new(owner, vm_id))
+            .ok_or(ViError::NotFound)?;
         let vcpu_idx = vcpu_id.saturating_sub(1);
 
         // Pi's software GICC requests at most one edge per entry. Consume
@@ -768,7 +818,7 @@ pub(crate) fn run_vcpu(
 }
 
 pub(crate) fn vcpu_regs(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     regs: &mut [u64; 32],
@@ -776,7 +826,9 @@ pub(crate) fn vcpu_regs(
 ) -> ViResult<usize> {
     let mut guard = registry_lock().lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let vcpu = vm
         .vcpus
         .get_mut(vcpu_id.saturating_sub(1))
@@ -808,7 +860,7 @@ pub(crate) fn vcpu_regs(
 }
 
 pub(crate) fn write_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     src: &[u8],
@@ -819,7 +871,9 @@ pub(crate) fn write_guest_memory(
 
     let guard = registry_lock().lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
 
     // Validate gpa is within the mapped guest-RAM window.
     let offset = gpa
@@ -841,7 +895,7 @@ pub(crate) fn write_guest_memory(
 }
 
 pub(crate) fn read_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     dst: &mut [u8],
@@ -852,7 +906,9 @@ pub(crate) fn read_guest_memory(
 
     let guard = registry_lock().lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
 
     // Validate gpa is within the mapped guest-RAM window.
     let offset = gpa
@@ -874,14 +930,16 @@ pub(crate) fn read_guest_memory(
 }
 
 pub(crate) fn inject_irq(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     intid: u32,
 ) -> ViResult<usize> {
     let mut guard = registry_lock().lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let idx = vcpu_id.saturating_sub(1);
     if let Some(q) = vm.vcpu_irqs.get_mut(idx) {
         q.set(intid);
@@ -889,14 +947,17 @@ pub(crate) fn inject_irq(
     Ok(0)
 }
 
-pub(crate) fn reap_vms_for_task(dead_tid: usize) {
+/// Reclaim every VM `owner` holds: its tables, guest RAM, VMID and guest
+/// charge. Called once per incarnation from the root-retirement funnel, after
+/// every member quiesced (`hypervisor::registry::reap_vms_for`).
+pub(crate) fn reap_vms_for(owner: Charge) {
     // Collect entries to drop outside the lock (Stage2Table::drop frees frames).
     let dead_vms: alloc::vec::Vec<Vm> = {
         let mut guard = registry_lock().lock();
         let Some(map) = guard.as_mut() else { return };
-        let dead_keys: alloc::vec::Vec<(usize, usize)> = map
+        let dead_keys: alloc::vec::Vec<VmKey> = map
             .keys()
-            .filter(|(o, _)| *o == dead_tid)
+            .filter(|key| key.owned_by(owner))
             .copied()
             .collect();
         dead_keys.iter().filter_map(|k| map.remove(k)).collect()
@@ -915,14 +976,14 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
     if dead_vms.is_empty() {
         return;
     }
-    // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
+    // SAFETY: no vCPU is running (the owner quiesced); safe to disable Stage-2.
     unsafe {
         disable_stage2();
         s2_tlb_flush_all();
     }
     for vm in dead_vms {
         VMIDS.release(vm.vmid);
-        drop(vm); // Stage2Table::drop frees all frames
+        drop(vm); // Stage2Table::drop frees all frames and refunds their charge
     }
 }
 
@@ -956,8 +1017,9 @@ pub(crate) fn two_vm_stage2_selftest() {
         log::info!("S22-AARCH64-TWO-VM-STAGE2: SKIP (not an EL2 host)");
         return;
     }
-    /// A fixture owner no task id reaches.
-    const OWNER: usize = usize::MAX - 0x2e2;
+    /// The kernel: its guest charge is never limited or counted, so the
+    /// fixture can hold all 255 VMIDs.
+    const OWNER: Charge = Charge::KERNEL;
     const ENTRY: u64 = 0x4008_0000;
     const GUEST_PAGES: usize = 512;
     const MARKERS: [u16; 2] = [0xa1, 0xb2];
@@ -987,7 +1049,7 @@ pub(crate) fn two_vm_stage2_selftest() {
         registry_lock()
             .lock()
             .as_ref()
-            .and_then(|map| map.get(&(OWNER, vm_id)))
+            .and_then(|map| map.get(&VmKey::new(OWNER, vm_id)))
             .map(|vm| vm.vmid)
     }
     let guest = |marker: u16| -> [u8; 12] {
@@ -1037,7 +1099,7 @@ pub(crate) fn two_vm_stage2_selftest() {
     } else {
         [None; 3]
     };
-    reap_vms_for_task(OWNER);
+    reap_vms_for(OWNER);
     note_vttbr(&mut named_root);
 
     // Hold every VMID; `held` stops at the width so a VMID past it fails.
@@ -1062,7 +1124,7 @@ pub(crate) fn two_vm_stage2_selftest() {
         }
         None => true,
     };
-    reap_vms_for_task(OWNER);
+    reap_vms_for(OWNER);
     note_vttbr(&mut named_root);
 
     // VM C takes the lowest free VMID, the one A ran under (and the first
@@ -1076,7 +1138,7 @@ pub(crate) fn two_vm_stage2_selftest() {
     let vmid_c = vm_c.and_then(|(vm_id, _)| vmid_of(vm_id));
     let exit_c = vm_c
         .and_then(|vm| <Board as ArmIrqController>::with_irqs_held(|| run(&mut named_root, vm)));
-    reap_vms_for_task(OWNER);
+    reap_vms_for(OWNER);
     note_vttbr(&mut named_root);
 
     let marker_of = |exit: Option<ViResult<ApiVmExit>>| match exit {

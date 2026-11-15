@@ -32,6 +32,11 @@ pub struct Cell {
     pub boot: Option<CapSet>,
     pub user_target: Option<CapSet>,
     pub trusted_core: bool,
+    /// Guest-memory budget in bytes for the path's VMs (guest RAM, nested or
+    /// Stage-2 tables, VM control structures). Kernel-only: not exported to
+    /// `scripts/catalog.generated.json`, so the manifest and signed policy do
+    /// not carry it.
+    pub guest_memory: usize,
 }
 
 const ROW: Cell = Cell {
@@ -40,7 +45,10 @@ const ROW: Cell = Cell {
     boot: None,
     user_target: None,
     trusted_core: false,
+    guest_memory: 0,
 };
+
+const MIB: usize = 1024 * 1024;
 
 /// Install-path prefixes of the user-app sandbox: empty boot and target ceiling,
 /// and no S2-T/S2-W request (annex D-N2, D-TW1).
@@ -366,6 +374,8 @@ pub const CELLS: &[Cell] = &[
             hypervisor: true,
             ..CapSet::EMPTY
         })),
+        // A 16-page guest, its tables and one vCPU, with headroom.
+        guest_memory: MIB,
         ..ROW
     },
     // The VMM's virtual NIC backend sends and receives raw frames (`net_l2`).
@@ -383,6 +393,9 @@ pub const CELLS: &[Cell] = &[
                 ..CapSet::EMPTY
             },
         ))),
+        // The largest profile (Chrome, 1536 MiB guest RAM), its ~3 MiB of
+        // nested tables and its vCPU structures, with headroom (census §6.1).
+        guest_memory: 1544 * MIB,
         ..ROW
     },
     // ── PCIe / device Driver Cells ──────────────────────────────────────────

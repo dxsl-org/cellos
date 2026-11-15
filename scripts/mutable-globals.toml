@@ -1204,7 +1204,7 @@ mutation = "atomic"
 owner = "hypervisor::svm_registry; boot-wide SVM ASID allocator advanced by create_vcpu (SVM branch) under VM_REGISTRY; never reused"
 contexts = ["boot", "normal"]
 seal = "none: advanced on every SVM vCPU creation for the whole run"
-retirement = "never: ASIDs are deliberately not reused after reap_vms_for_task"
+retirement = "never: ASIDs are deliberately not reused after reap_vms_for"
 rationale = "fetch_update(Relaxed) issues ASIDs only in 1..=max_asid (CPUID 8000_000A.EBX - 1) and never wraps; the ASID is reserved before any VMCB/host/bitmap frame is allocated, so exhaustion refuses create_vcpu without leaking (CP1 p02-debt-semantic #7). Allocation runs from the hypervisor CreateVcpu syscall and the test-hooks boot smoke, never an ISR."
 review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:next_asid; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; test asid_reservation_is_bounded_and_never_wraps"
 
@@ -1212,12 +1212,23 @@ review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:next_asid; kernel/sr
 key = "kernel::arch::x86_64::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = \"x86_64\")"
 lifetime = "per-cell"
 mutation = "spinlock"
-owner = "hypervisor::svm_registry; (owner tid, vm id) -> SvmVm map created by create_vm and used by create_vcpu/run_vcpu_hal/memory/irq ops from hypervisor::registry syscalls; reaped by reap_vms_for_task"
+owner = "hypervisor::svm_registry; VmKey (owner incarnation, boot-wide vm id) -> SvmVm map created by create_vm and used by create_vcpu/run_vcpu_hal/memory/irq ops from hypervisor::registry syscalls; reaped by reap_vms_for"
 contexts = ["boot", "normal", "irq"]
 seal = "none: VMs are created and reaped for the whole run (map allocated by the first create_vm)"
-retirement = "reap_vms_for_task(tid) from task.rs:reap_retired_task_resources (yield_cpu retirement funnel) removes the dead owner's VMs under the lock and drops them (frees VMCB/NPT/guest RAM) outside it"
+retirement = "reap_vms_for(owner) from the yield_cpu root-retirement funnel (task.rs, beside release_shm_for, before the quota row is deregistered) removes the incarnation's VMs under the lock and drops them (frees VMCB/NPT/guest RAM and refunds their guest charge) outside it"
 rationale = "IRQ-masking spinlock with order VM_REGISTRY -> FRAME_ALLOCATOR; the reaper can run in the timer/IPI ISR via yield_cpu and cannot self-deadlock. Finding: run_vcpu_hal holds this global lock across the whole VMRUN world switch, serializing every VM on every hart and making a retirement on another hart spin until the guest exits (bounded because the VMCB intercepts physical INTR with V_INTR_MASKING)."
-review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vm; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:reap_vms_for_task; kernel/src/task.rs:reap_retired_task_resources; hal/arch/x86/src/x86_64/vmcb.rs:init"
+review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vm; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:run_vcpu_hal; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:reap_vms_for; kernel/src/task.rs:yield_cpu; hal/arch/x86/src/x86_64/vmcb.rs:init"
+
+[[global]]
+key = "kernel::hypervisor::registry::NEXT_VM_ID"
+lifetime = "global"
+mutation = "atomic"
+owner = "hypervisor::registry: next_vm_id mints the id of every VM registered by create_vm (AArch64 and x86 registries)"
+contexts = ["boot", "normal"]
+seal = "none: advanced on every VM creation for the whole run"
+retirement = "never: an id is never reused in a boot, so a stale id names no VM"
+rationale = "fetch_add(Relaxed) on a usize; ids only need to be unique, not ordered with any other memory. Called from the CreateVm syscall and the boot VM fixtures, never an ISR."
+review = "kernel/src/hypervisor/registry.rs:next_vm_id; kernel/src/hypervisor/registry.rs:VmKey; kernel/src/arch/aarch64/vm.rs:build_vm; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vm"
 
 # ---- slice C ----
 [[global]]
@@ -2160,6 +2171,28 @@ seal = "none: counters move for the whole run"
 retirement = "byte count zeroed by deregister in the yield_cpu root-retirement funnel; export windows refund through refund(Account::Dma), generation-checked"
 rationale = "Packed as IN_USE, so a DMA charge is bounded by the memory limit in one AcqRel fetch_update and concurrent reservations cannot overshoot; a refund for an earlier incarnation is a no-op. Grant reaping in the yield_cpu funnel reaches it from IRQ/exception contexts, which atomics tolerate."
 review = "kernel/src/memory/cell_quota.rs:add; kernel/src/memory/cell_quota.rs:refund; kernel/src/memory/cell_quota.rs:deregister; test concurrent_workers_share_one_atomic_dma_quota"
+
+[[global]]
+key = "kernel::memory::cell_quota::GUEST_LIMITS"
+lifetime = "per-cell"
+mutation = "atomic"
+owner = "memory::cell_quota: register stores the incarnation's guest limit (catalog guest_memory via TaskLaunchState.guest_limit), deregister stores 0; add reads it for Account::Guest"
+contexts = ["boot", "normal", "irq"]
+seal = "none: rows are claimed at spawn and released at retirement for the whole run"
+retirement = "deregister(cell) in the yield_cpu root-retirement funnel stores 0, or QuotaReservation::drop for an unpublished cell"
+rationale = "Read only while QUOTA_LIMITS holds the slot (add returns before reading it for an unregistered slot), so a Release store at register paired with the Acquire load in add gives a charge the limit of the incarnation it names; a slot with no incarnation reads 0 and refuses every VM."
+review = "kernel/src/memory/cell_quota.rs:register; kernel/src/memory/cell_quota.rs:deregister; kernel/src/memory/cell_quota.rs:add; test guest_reservation_is_bounded_by_the_guest_limit_alone"
+
+[[global]]
+key = "kernel::memory::cell_quota::GUEST_IN_USE"
+lifetime = "per-cell"
+mutation = "atomic"
+owner = "memory::cell_quota: Reservation take/split/drop and FrameRun refunds on Account::Guest per CellId slot (guest RAM, Stage-2/NPT/EPT tables, xAPIC page, vCPU control structures)"
+contexts = ["boot", "normal", "irq"]
+seal = "none: counters move for the whole run"
+retirement = "byte count zeroed by deregister in the yield_cpu root-retirement funnel, after reap_vms_for returned the incarnation's VM frames; register stores the new incarnation's generation, so refunds carrying an older generation are no-ops"
+rationale = "Packed as IN_USE (generation bits above a 40-bit byte count), so a guest charge is bounded by GUEST_LIMITS in one AcqRel fetch_update and a refund for an earlier incarnation is a no-op. Refunds run wherever a VM frame run is freed, including the yield_cpu funnel reached from the timer/IPI ISR; atomics tolerate it and nothing locks."
+review = "kernel/src/memory/cell_quota.rs:add; kernel/src/memory/cell_quota.rs:refund; kernel/src/memory/cell_quota.rs:deregister; kernel/src/memory/frame_run.rs:FrameRun::free; tests stale_guest_refund_misses_the_next_incarnation, a_table_draws_every_frame_from_its_guest_budget"
 
 [[global]]
 key = "kernel::memory::address_space::NEXT_DOMAIN @cfg(all (feature = \"native-domains\" , cellos_wide))"

@@ -457,6 +457,15 @@ if (( X86_CPUS >= 2 )); then
     )
 fi
 
+# The guest-memory budget fixture (census §8.6(b)) runs only with SVM/VMX root
+# operation, which this image enters when the CPU exposes it (e.g. KVM `-cpu
+# host` on a host with nested virtualization; the TCG default model has none).
+if grep -aqF "x86 virt: root operation active" "$LOG"; then
+    REQUIRED_MARKERS+=(
+        "guest-memory budget:::[selftest] VM-GUEST-BUDGET: PASS"
+    )
+fi
+
 # --- Shootdown fail-stop -----------------------------------------------------
 # Every unconfirmed tag or shared-mapping invalidation is logged (`[tlb] tag …
 # invalidation unconfirmed`, `[frame-run] shared invalidation unconfirmed`,

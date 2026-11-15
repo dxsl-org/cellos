@@ -537,6 +537,7 @@ fn publication_is_refused_while_draining() -> bool {
         None,
         None,
         crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        0,
         u64::MAX,
         abi::TaskPriority::Normal as u8,
         0,

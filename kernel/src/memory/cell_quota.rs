@@ -1,9 +1,10 @@
 //! Per-cell quota accounts.
 //!
 //! - `QUOTA_LIMITS`: one atomic limit word per CellId slot, `UNREGISTERED` when
-//!   the slot holds no incarnation.
-//! - `IN_USE` (memory) and `DMA_IN_USE`: one atomic counter per slot, packing
-//!   the registered incarnation's generation above its live byte count.
+//!   the slot holds no incarnation; `GUEST_LIMITS` beside it.
+//! - `IN_USE` (memory), `DMA_IN_USE` and `GUEST_IN_USE`: one atomic counter per
+//!   slot, packing the registered incarnation's generation above its live byte
+//!   count.
 //!
 //! A charge names its owner explicitly ([`Charge`]): one Cell incarnation, or
 //! the kernel. Nothing here locks or allocates, so a charge or refund is safe
@@ -103,10 +104,14 @@ impl Charge {
 /// Which counter a charge draws from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Account {
-    /// Kernel heap, and the frames billed beside it (thread stacks, SHM).
+    /// Kernel heap, and the frames billed beside it (thread stacks, SHM,
+    /// domain page tables).
     Memory,
     /// Bytes published for device DMA; bounded by the memory limit.
     Dma,
+    /// A VM's guest RAM, nested or Stage-2 tables and control structures;
+    /// bounded by the guest limit.
+    Guest,
 }
 
 impl Account {
@@ -114,6 +119,7 @@ impl Account {
         match self {
             Self::Memory => &IN_USE,
             Self::Dma => &DMA_IN_USE,
+            Self::Guest => &GUEST_IN_USE,
         }
     }
 }
@@ -123,6 +129,8 @@ impl Account {
 pub(crate) struct Limits {
     /// Bound on the memory account, and on the DMA account.
     pub(crate) memory: usize,
+    /// Bound on the guest account; 0 refuses every VM.
+    pub(crate) guest: usize,
 }
 
 /// A charge was refused; nothing was taken.
@@ -155,6 +163,13 @@ static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CE
 /// Live DMA-published bytes per CellId slot, packed as `IN_USE`.
 /// DMA quota = 1× memory quota (validated 2026-06-22).
 static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
+
+/// Guest limit per CellId slot, read only while `QUOTA_LIMITS` holds the slot;
+/// 0 for a slot that holds no incarnation.
+static GUEST_LIMITS: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
+
+/// Live guest bytes per CellId slot, packed as `IN_USE`.
+static GUEST_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
 /// Low bits of a counter word: live bytes, at most 1 TiB per Cell.
 const GENERATION_SHIFT: u32 = 40;
@@ -264,6 +279,7 @@ fn reset_counters(cell_id: CellId, tag: usize) {
     }
     IN_USE[id].store(tag, Ordering::Release);
     DMA_IN_USE[id].store(tag, Ordering::Release);
+    GUEST_IN_USE[id].store(tag, Ordering::Release);
 }
 
 /// Register incarnation `generation` of `cell_id` with `limits`, replacing
@@ -275,6 +291,7 @@ pub(crate) fn register(cell_id: CellId, generation: u64, limits: Limits) {
         return;
     };
     reset_counters(cell_id, charge.tag());
+    GUEST_LIMITS[id].store(limits.guest.min(BYTES_MASK), Ordering::Release);
     QUOTA_LIMITS[id].store(limits.memory.min(BYTES_MASK), Ordering::Release);
 }
 
@@ -293,7 +310,8 @@ pub(crate) fn deregister(cell_id: CellId) {
         }
     }
     QUOTA_LIMITS[id].store(UNREGISTERED, Ordering::Release);
-    for counters in [&IN_USE, &DMA_IN_USE] {
+    GUEST_LIMITS[id].store(0, Ordering::Release);
+    for counters in [&IN_USE, &DMA_IN_USE, &GUEST_IN_USE] {
         let _ = counters[id].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             Some(word & !BYTES_MASK)
         });
@@ -331,6 +349,7 @@ impl QuotaReservation {
             return Err(types::ViError::AlreadyExists);
         }
         reset_counters(cell_id, charge.tag());
+        GUEST_LIMITS[id].store(limits.guest.min(BYTES_MASK), Ordering::Release);
         Ok(Self {
             cell_id,
             committed: false,
@@ -381,10 +400,14 @@ fn add(charge: Charge, account: Account, bytes: usize) -> Result<bool, QuotaExce
     let Some(id) = charge.slot() else {
         return Ok(false);
     };
-    let limit = QUOTA_LIMITS[id].load(Ordering::Acquire);
-    if limit == UNREGISTERED {
+    let registered = QUOTA_LIMITS[id].load(Ordering::Acquire);
+    if registered == UNREGISTERED {
         return Ok(false);
     }
+    let limit = match account {
+        Account::Memory | Account::Dma => registered,
+        Account::Guest => GUEST_LIMITS[id].load(Ordering::Acquire),
+    };
     let tag = charge.tag();
     #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
@@ -442,6 +465,17 @@ impl Reservation {
             account,
             bytes,
         })
+    }
+
+    /// The kernel's budget for an object that draws frames over its life
+    /// (a kernel-owned VM's tables): every split succeeds and nothing is
+    /// counted.
+    pub(crate) const fn kernel(account: Account) -> Self {
+        Self {
+            charge: Charge::KERNEL,
+            account,
+            bytes: usize::MAX,
+        }
     }
 
     /// Draw `bytes` down into a reservation of their own, same owner and
@@ -526,19 +560,27 @@ pub fn in_use(cell_id: CellId) -> usize {
     }
 }
 
+/// Current guest-account usage for a Cell (for diagnostics and fixtures).
+pub fn guest_in_use(cell_id: CellId) -> usize {
+    GUEST_IN_USE
+        .get(cell_id.0 as usize)
+        .map_or(0, |word| word.load(Ordering::Acquire) & BYTES_MASK)
+}
+
 #[cfg(feature = "test-hooks")]
 #[derive(Debug, PartialEq)]
 pub(crate) struct QuotaSnapshot {
     limits: alloc::vec::Vec<Option<usize>>,
     heap: alloc::vec::Vec<usize>,
     dma: alloc::vec::Vec<usize>,
+    guest: alloc::vec::Vec<usize>,
 }
 
 #[cfg(feature = "test-hooks")]
 /// Copies quota state into heap-backed rows.
 ///
 /// Heap-backed, never stack-resident: under `cell-scale-experiment` `MAX_CELLS`
-/// is 4096, so these three arrays are 64 KiB + 32 KiB + 32 KiB = 128 KiB — twice
+/// is 4096, so these four arrays are 64 KiB + 3 × 32 KiB = 160 KiB — more than
 /// the 64 KiB kernel stack (`__stack_bottom..__stack_top`, `kernel/linker.ld`).
 /// A stack copy wrote straight through every static below the stack — `PLATFORM`
 /// sits 5.5 KiB under `__stack_bottom` — so the boot self-tests ran on smashed
@@ -550,12 +592,19 @@ pub(crate) fn snapshot() -> QuotaSnapshot {
     let mut limits = alloc::vec![None; MAX_CELLS];
     let mut heap = alloc::vec![0; MAX_CELLS];
     let mut dma = alloc::vec![0; MAX_CELLS];
+    let mut guest = alloc::vec![0; MAX_CELLS];
     for cell_id in 0..MAX_CELLS {
         limits[cell_id] = limit(cell_id);
         heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
         dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
+        guest[cell_id] = GUEST_IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
     }
-    QuotaSnapshot { limits, heap, dma }
+    QuotaSnapshot {
+        limits,
+        heap,
+        dma,
+        guest,
+    }
 }
 
 #[cfg(feature = "test-hooks")]
@@ -568,6 +617,7 @@ pub(crate) fn reusable_cell_id_contract() -> bool {
     const GENERATION: u64 = 1;
     let limits = Limits {
         memory: DEFAULT_QUOTA_BYTES,
+        guest: 0,
     };
     let before = snapshot();
     let mut held = alloc::vec::Vec::new();
@@ -602,7 +652,7 @@ mod tests {
     const CELL: CellId = CellId(CELL_RAW as u64);
 
     fn limits(memory: usize) -> Limits {
-        Limits { memory }
+        Limits { memory, guest: 0 }
     }
 
     fn dma_in_use(cell: CellId) -> usize {
@@ -754,5 +804,63 @@ mod tests {
         assert_eq!(limit(CELL_RAW), Some(4096));
         drop(first);
         assert_eq!(limit(CELL_RAW), None);
+    }
+
+    #[test]
+    fn guest_reservation_is_bounded_by_the_guest_limit_alone() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register(CELL, 1, limits(4096));
+        let charge = Charge::new(CELL, 1);
+        assert!(
+            Reservation::take(charge, Account::Guest, 1).is_err(),
+            "no guest limit refuses every VM"
+        );
+        register(
+            CELL,
+            2,
+            Limits {
+                memory: 0,
+                guest: 64 * 4096,
+            },
+        );
+        let charge = Charge::new(CELL, 2);
+        assert!(Reservation::take(charge, Account::Guest, 65 * 4096).is_err());
+        assert_eq!(guest_in_use(CELL), 0, "a refusal takes nothing");
+        let mut whole = Reservation::take(charge, Account::Guest, 64 * 4096).expect("fits");
+        assert_eq!((guest_in_use(CELL), in_use(CELL)), (64 * 4096, 0));
+        let page = whole.split(4096).expect("a page remains");
+        drop(whole);
+        assert_eq!(guest_in_use(CELL), 4096);
+        drop(page);
+        assert_eq!(guest_in_use(CELL), 0);
+        deregister(CELL);
+        assert!(Reservation::take(charge, Account::Guest, 1).is_ok());
+        assert_eq!(guest_in_use(CELL), 0, "an unregistered slot is not counted");
+    }
+
+    #[test]
+    fn stale_guest_refund_misses_the_next_incarnation() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let guest = |generation| {
+            register(
+                CELL,
+                generation,
+                Limits {
+                    memory: 0,
+                    guest: 1 << 20,
+                },
+            )
+        };
+        guest(1);
+        let stale = Reservation::take(Charge::new(CELL, 1), Account::Guest, 8192).expect("fits");
+        deregister(CELL);
+        guest(2);
+        let live = Reservation::take(Charge::new(CELL, 2), Account::Guest, 4096).expect("fits");
+        drop(stale);
+        refund(Charge::new(CELL, 1), Account::Guest, 4096);
+        assert_eq!(guest_in_use(CELL), 4096, "gen 1 refunds miss gen 2");
+        drop(live);
+        assert_eq!(guest_in_use(CELL), 0);
+        deregister(CELL);
     }
 }

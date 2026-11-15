@@ -144,6 +144,7 @@ pub fn self_test() -> Option<bool> {
         1,
         cell_quota::Limits {
             memory: cell_quota::DEFAULT_QUOTA_BYTES,
+            guest: 0,
         },
     );
     insert_parent();

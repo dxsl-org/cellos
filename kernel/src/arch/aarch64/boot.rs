@@ -213,14 +213,17 @@ pub(crate) fn fixtures_domain() {
 /// After the IOMMU page-table fixture: the all-hart park hook (riscv64).
 pub(crate) fn fixtures_park() {}
 
-/// Layer-2 hardware security self-test (MTE), after all hardware init and
-/// before the first cell spawn.
+/// Layer-2 hardware security self-test (MTE) and the VM fixtures, after all
+/// hardware init and before the first cell spawn.
 pub(crate) fn fixtures_hardware() {
     #[cfg(feature = "test-hooks")]
     crate::arch::layer2_selftest::run_mte_selftest();
-    // EL2 hosts only (it skips elsewhere); the virt-vhe lane requires it.
+    // EL2 hosts only (each skips elsewhere); the virt-vhe lane requires both.
     #[cfg(not(cellos_posture = "release"))]
-    crate::arch::vm::two_vm_stage2_selftest();
+    {
+        crate::arch::vm::two_vm_stage2_selftest();
+        crate::arch::vm::guest_budget_selftest::run();
+    }
 }
 
 /// The framebuffer console: x86_64 only.

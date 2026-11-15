@@ -23,7 +23,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use crate::memory::cell_quota::Charge;
+use crate::memory::cell_quota::Reservation;
 use crate::memory::frame::{allocate_guest_ram, phys_to_virt};
 use crate::memory::frame_run::{Batch, PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
@@ -132,6 +132,10 @@ pub struct NestedPageTable {
     guest_ram_pages: usize,
     /// The carved guest RAM itself; freed in `Drop`.
     guest_ram: Option<PrivateRun>,
+    /// The owner's guest charge every frame of the table is drawn from before
+    /// it is allocated; a frame the rest cannot cover is refused. The rest is
+    /// refunded when the table drops.
+    budget: Reservation,
 }
 
 // SAFETY: not Send/Sync by default (raw `*mut u64`); only touched from
@@ -139,16 +143,34 @@ pub struct NestedPageTable {
 unsafe impl Send for NestedPageTable {}
 
 impl NestedPageTable {
-    /// Allocate a new nested-paging root (one 4 KiB PML4 frame, zeroed).
+    /// Frames of the PML4 root.
+    pub const ROOT_PAGES: usize = 1;
+
+    /// Most PDPT, PD and PT tables mapping `pages` contiguous 4 KiB pages at
+    /// any base can need (`map` writes 4 KiB leaves only): one PT per 2 MiB,
+    /// one PD per 1 GiB and one PDPT per 512 GiB the range touches.
+    pub const fn table_bound(pages: usize) -> usize {
+        pages.div_ceil(512)
+            + 1
+            + pages.div_ceil(512 * 512)
+            + 1
+            + pages.div_ceil(512 * 512 * 512)
+            + 1
+    }
+
+    /// Allocate a new nested-paging root (one 4 KiB PML4 frame, zeroed),
+    /// drawing it and every later frame of the table from `budget`.
     ///
-    /// Returns `None` when the frame allocator is exhausted.
-    pub fn new(format: NestedFormat) -> Option<Self> {
+    /// Returns `None` when `budget` cannot cover the root (nothing is
+    /// allocated) or the frame allocator is exhausted.
+    pub(crate) fn new(format: NestedFormat, mut budget: Reservation) -> Option<Self> {
         #[cfg(feature = "p01-trace")]
         let _p01_activity = crate::p01_noncpu::activity();
+        let root_charge = budget.split(Self::ROOT_PAGES * PAGE_SIZE)?;
         let root = PrivateRun::adopt(
             crate::memory::frame::allocate_frame()?,
-            1,
-            Charge::KERNEL,
+            Self::ROOT_PAGES,
+            root_charge,
             RunKind::PageTable,
         );
         let root_pa = root.base() as u64;
@@ -173,6 +195,7 @@ impl NestedPageTable {
             guest_ram_pa: 0,
             guest_ram_pages: 0,
             guest_ram: None,
+            budget,
         })
     }
 
@@ -196,20 +219,17 @@ impl NestedPageTable {
     }
 
     /// Carve `n_pages` contiguous frames for guest RAM (chunked scan, M2-safe),
-    /// recording the region so `map()` can enforce SAS isolation. A table
-    /// carves once: a second carve is refused rather than dropping RAM the
-    /// table may already map.
+    /// drawn from the table's budget first (refused, with nothing allocated,
+    /// when the rest cannot cover them), recording the region so `map()` can
+    /// enforce SAS isolation. A table carves once: a second carve is refused
+    /// rather than dropping RAM the table may already map.
     pub fn carve_guest_ram(&mut self, n_pages: usize) -> Option<u64> {
         if self.guest_ram.is_some() {
             return None;
         }
+        let charge = self.budget.split(n_pages.checked_mul(PAGE_SIZE)?)?;
         let pa = allocate_guest_ram(n_pages)?;
-        self.guest_ram = Some(PrivateRun::adopt(
-            pa,
-            n_pages,
-            Charge::KERNEL,
-            RunKind::Leaf,
-        ));
+        self.guest_ram = Some(PrivateRun::adopt(pa, n_pages, charge, RunKind::Leaf));
         self.guest_ram_pa = pa as u64;
         self.guest_ram_pages = n_pages;
         Some(pa as u64)
@@ -253,6 +273,7 @@ impl NestedPageTable {
     }
 
     fn alloc_subtable(&mut self) -> Option<(*mut u64, u64)> {
+        let charge = self.budget.split(PAGE_SIZE)?;
         let pa = crate::memory::frame::allocate_frame()?;
         let va = phys_to_virt(pa) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours; 512 entries.
@@ -260,7 +281,7 @@ impl NestedPageTable {
             core::ptr::write_bytes(va, 0, 512);
         }
         self.tables
-            .push(PrivateRun::adopt(pa, 1, Charge::KERNEL, RunKind::PageTable));
+            .push(PrivateRun::adopt(pa, 1, charge, RunKind::PageTable));
         Some((va, pa as u64))
     }
 

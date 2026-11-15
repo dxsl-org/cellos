@@ -146,6 +146,9 @@ if grep -q "Cellos >" qemu-aarch64.log; then
                 # Two live VMs entered A, B, A through run_vcpu, each against
                 # its own Stage-2 root; VTTBR_EL2 clear outside every run.
                 "two-VM Stage-2:::S22-AARCH64-TWO-VM-STAGE2: PASS"
+                # A VM past its owner's guest budget is refused with nothing
+                # taken; one within it charges exactly its reservation.
+                "guest-memory budget:::[selftest] VM-GUEST-BUDGET: PASS"
             )
             ;;
         virt-el2-novhe)

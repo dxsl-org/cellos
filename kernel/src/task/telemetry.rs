@@ -541,7 +541,10 @@ mod tests {
         crate::memory::cell_quota::register(
             CellId(CELL_A),
             GEN_A,
-            crate::memory::cell_quota::Limits { memory: 1 << 20 },
+            crate::memory::cell_quota::Limits {
+                memory: 1 << 20,
+                guest: 0,
+            },
         );
         // b-root has been running since 2 500; the capture adds 100 ns in flight.
         let bytes = take(&mut sched, Some(2_600), 1 << 16, true);

@@ -521,7 +521,13 @@ pub(crate) mod irq_charge_selftest {
     /// logs its own line when it does return.
     pub(crate) fn run() {
         let generation = crate::task::tcb::next_cell_generation();
-        let Ok(quota) = QuotaReservation::reserve_next(generation, Limits { memory: 0 }) else {
+        let Ok(quota) = QuotaReservation::reserve_next(
+            generation,
+            Limits {
+                memory: 0,
+                guest: 0,
+            },
+        ) else {
             HELD_HART.store(NO_HART, Ordering::Release);
             log::error!("[selftest] IRQ-ALLOC-CHARGE: FAIL no free CellId for cell A");
             return;
@@ -692,7 +698,10 @@ mod tests {
                 .lock()
                 .init(arena.as_mut_ptr().cast(), arena.len() * 8)
         };
-        let limits = cell_quota::Limits { memory: 4096 };
+        let limits = cell_quota::Limits {
+            memory: 4096,
+            guest: 0,
+        };
         cell_quota::register(CellId(OWNER as u64), 1, limits);
         cell_quota::register(CellId(OTHER as u64), 1, limits);
         let small = Layout::from_size_align(24, 8).unwrap();
@@ -759,7 +768,14 @@ mod tests {
                 .lock()
                 .init(arena.as_mut_ptr().cast(), arena.len() * 8)
         };
-        cell_quota::register(CellId(OWNER as u64), 7, cell_quota::Limits { memory: 0 });
+        cell_quota::register(
+            CellId(OWNER as u64),
+            7,
+            cell_quota::Limits {
+                memory: 0,
+                guest: 0,
+            },
+        );
         let saved = (current_cell_id(), current_cell_generation());
         set_current_cell_context(OWNER, 7);
         let syscall = ChargeScope::enter(Charge::dispatched());

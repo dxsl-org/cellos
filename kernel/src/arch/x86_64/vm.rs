@@ -2,18 +2,45 @@
 //! `vm`: `crate::hypervisor::registry` on x86_64, backed by the SVM VM store
 //! (`crate::arch::hypervisor::svm_registry`).
 
+use crate::hypervisor::registry::VmCreateError;
+use crate::memory::cell_quota::Charge;
 use types::{ViError, ViResult};
 
-pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
+pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCreateError> {
     crate::arch::hypervisor::svm_registry::create_vm(owner, guest_pages)
 }
 
-pub(crate) fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
+/// The guest charge `create_vm` takes for a VM of `guest_pages`
+/// (`svm_registry::guest_bytes`).
+#[cfg(feature = "test-hooks")]
+pub(crate) fn guest_bytes(guest_pages: usize) -> Option<usize> {
+    crate::arch::hypervisor::svm_registry::guest_bytes(guest_pages)
+}
+
+/// VM tags (SVM ASIDs) not yet issued (`svm_registry::free_vm_tags`).
+#[cfg(feature = "test-hooks")]
+pub(crate) fn free_vm_tags() -> usize {
+    crate::arch::hypervisor::svm_registry::free_vm_tags()
+}
+
+/// The host the kernel's VM fixtures run on: SVM or VMX root operation is
+/// active on every online CPU.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn guest_fixture_host() -> bool {
+    crate::cpu_features::has_x86_virt()
+}
+
+/// Boot fixture `VM-GUEST-BUDGET` (census §8.6(b)), shared with AArch64.
+#[cfg(feature = "test-hooks")]
+#[path = "../guest_budget_selftest.rs"]
+pub(crate) mod guest_budget_selftest;
+
+pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     crate::arch::hypervisor::svm_registry::create_vcpu(owner, vm_id, entry_pc)
 }
 
 pub(crate) fn map_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     ipa: u64,
     size: usize,
@@ -22,12 +49,12 @@ pub(crate) fn map_guest_memory(
     crate::arch::hypervisor::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable)
 }
 
-pub(crate) fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+pub(crate) fn guest_window(owner: Charge, vm_id: usize) -> ViResult<(u64, usize)> {
     crate::arch::hypervisor::svm_registry::guest_window(owner, vm_id)
 }
 
 pub(crate) fn run_vcpu(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     _budget_ns: u64,
@@ -65,7 +92,7 @@ pub(crate) fn run_vcpu(
 }
 
 pub(crate) fn vcpu_regs(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     regs: &mut [u64; 32],
@@ -78,7 +105,7 @@ pub(crate) fn vcpu_regs(
 }
 
 pub(crate) fn write_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     src: &[u8],
@@ -87,7 +114,7 @@ pub(crate) fn write_guest_memory(
 }
 
 pub(crate) fn read_guest_memory(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     dst: &mut [u8],
@@ -96,7 +123,7 @@ pub(crate) fn read_guest_memory(
 }
 
 pub(crate) fn inject_irq(
-    owner: usize,
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     intid: u32,
@@ -106,6 +133,6 @@ pub(crate) fn inject_irq(
     Ok(0)
 }
 
-pub(crate) fn reap_vms_for_task(dead_tid: usize) {
-    crate::arch::hypervisor::svm_registry::reap_vms_for_task(dead_tid);
+pub(crate) fn reap_vms_for(owner: Charge) {
+    crate::arch::hypervisor::svm_registry::reap_vms_for(owner);
 }

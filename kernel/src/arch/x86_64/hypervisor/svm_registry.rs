@@ -15,7 +15,8 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
-use crate::memory::cell_quota::Charge;
+use crate::hypervisor::registry::{next_vm_id, VmCreateError, VmKey};
+use crate::memory::cell_quota::{Account, Charge, Reservation};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::frame_run::{PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
@@ -67,9 +68,13 @@ impl Drop for Vmcs {
     }
 }
 
-/// `pages` fresh frames for one VM control structure.
-fn vm_structure(pages: usize) -> ViResult<PrivateRun> {
-    PrivateRun::allocate(pages, Charge::KERNEL, RunKind::VmStructure).ok_or(ViError::OutOfMemory)
+/// `pages` fresh frames for one VM control structure, drawn from `budget`
+/// before they are allocated.
+fn vm_structure(pages: usize, budget: &mut Reservation) -> ViResult<PrivateRun> {
+    let charge = budget
+        .split(pages * PAGE_SIZE)
+        .ok_or(ViError::OutOfMemory)?;
+    PrivateRun::allocate(pages, charge, RunKind::VmStructure).ok_or(ViError::OutOfMemory)
 }
 
 enum X86Vcpu {
@@ -123,6 +128,39 @@ impl X86Vcpu {
 
 /// GPA of the guest LAPIC MMIO window (x86 architectural default).
 const APIC_GPA: u64 = 0xFEE0_0000;
+/// Frames the xAPIC window adds to a VM: its page, and the PD and PT that map
+/// [`APIC_GPA`] (the fourth GiB, beyond what the guest-RAM bound counts).
+const APIC_PAGES: usize = 1 + 2;
+/// Frames of one vCPU's control structures: the VMCS on VMX; on SVM the
+/// VMCB, the host-save area, the MSRPM (2) and the IOPM (3).
+const VMX_VCPU_PAGES: usize = 1;
+const SVM_VCPU_PAGES: usize = 1 + 1 + 2 + 3;
+
+/// The guest charge `create_vm` takes for a VM of `guest_pages`, before any
+/// frame: the guest RAM, the PML4 root, the most nested tables the guest-RAM
+/// window can need, and the xAPIC window. Each vCPU charges its control
+/// structures separately (`create_vcpu`). `None` when the sum overflows,
+/// which no budget covers.
+pub(crate) fn guest_bytes(guest_pages: usize) -> Option<usize> {
+    guest_pages
+        .checked_add(NestedPageTable::table_bound(guest_pages))?
+        .checked_add(NestedPageTable::ROOT_PAGES + APIC_PAGES)?
+        .checked_mul(PAGE_SIZE)
+}
+
+/// SVM ASIDs not yet issued (the `VM-GUEST-BUDGET` fixture's tag snapshot);
+/// 0 on VMX, which uses no VPID.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn free_vm_tags() -> usize {
+    if crate::arch::boot::cpu_features::x86_virt_kind()
+        != Some(crate::arch::boot::cpu_features::X86Virt::Svm)
+    {
+        return 0;
+    }
+    let next = NEXT_ASID.load(Ordering::Relaxed) as usize;
+    (hal::x86_64::svm::max_asid() as usize + 1).saturating_sub(next)
+}
+
 /// ASID 0 is reserved. Never reuse an ASID during a boot: stale nested-TLB
 /// translations would otherwise let a new VM execute a previous VM's GPA map.
 static NEXT_ASID: AtomicU32 = AtomicU32::new(1);
@@ -153,7 +191,7 @@ struct SvmVm {
     vcpu_frames: Vec<VcpuFrames>,
 }
 
-static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> =
+static VM_REGISTRY: Spinlock<Option<BTreeMap<VmKey, SvmVm>>> =
     Spinlock::ranked(None, crate::sync::rank::SVM_VM_REGISTRY);
 
 /// Registry references do not reconstruct root birth or exclusive ownership.
@@ -161,8 +199,9 @@ static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), SvmVm>>> =
 pub(crate) fn p01_visit_roots(mut visit: impl FnMut(u64, u64, u64)) {
     let registry = VM_REGISTRY.lock();
     if let Some(registry) = registry.as_ref() {
-        for (&(holder, object), vm) in registry.iter() {
-            visit(vm.npt.root_pa(), holder as u64, object as u64);
+        for (key, vm) in registry.iter() {
+            let (holder, object) = key.parts();
+            visit(vm.npt.root_pa(), holder, object as u64);
         }
     }
 }
@@ -176,7 +215,7 @@ fn nested_format() -> NestedFormat {
 }
 
 /// Allocate guest RAM + NPT, mapped at GPA 0; return the opaque `vm_id`.
-pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
+pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCreateError> {
     let format = nested_format();
     // SAFETY: the EPT format is selected only on a VMX CPU, so the VMX
     // capability MSRs exist.
@@ -184,9 +223,23 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         // Without INVEPT an unmap or a reused frame could never be made
         // visible to the CPU: refuse EPT guests outright.
         log::error!("[hv-x86] create_vm: CPU lacks INVEPT; EPT guests refused");
-        return Err(ViError::NotSupported);
+        return Err(ViError::NotSupported.into());
     }
-    let mut npt = NestedPageTable::new(format).ok_or_else(|| {
+    // The first effect: the owner's guest charge for every frame the VM can
+    // take. A refusal allocates nothing; every later frame is drawn from it,
+    // and an error below frees what was drawn and refunds the whole charge.
+    let mut budget = guest_bytes(guest_pages)
+        .and_then(|bytes| Reservation::take(owner, Account::Guest, bytes).ok())
+        .ok_or_else(|| {
+            log::warn!(
+                "[hv-x86] create_vm refused: {} guest pages exceed cell {}'s guest budget",
+                guest_pages,
+                owner.cell().0
+            );
+            VmCreateError::Budget
+        })?;
+    let mut apic_budget = budget.split(PAGE_SIZE).ok_or(ViError::OutOfMemory)?;
+    let mut npt = NestedPageTable::new(format, budget).ok_or_else(|| {
         log::error!("[hv-x86] create_vm: NestedPageTable::new OOM");
         ViError::OutOfMemory
     })?;
@@ -207,7 +260,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     // LAPIC MMIO hits memory (QEMU TCG has no DecodeAssist → per-access
     // emulation is impossible). Zeroed, then ID(0x20)=0 / VERSION(0x30)=0x50014
     // pre-populated; the timer is polled kernel-side on HLT.
-    let apic_frame = vm_structure(1).inspect_err(|_| {
+    let apic_frame = vm_structure(1, &mut apic_budget).inspect_err(|_| {
         log::error!("[hv-x86] create_vm: xAPIC frame OOM");
     })?;
     // SAFETY: freshly allocated, exclusively owned frame; HHDM-mapped VA. u32
@@ -224,7 +277,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     {
         // No leaf was written; the frame and the table go back on return.
         log::error!("[hv-x86] create_vm: xAPIC NPT map OOM");
-        return Err(ViError::OutOfMemory);
+        return Err(ViError::OutOfMemory.into());
     }
 
     let mut guard = VM_REGISTRY.lock();
@@ -232,14 +285,14 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         *guard = Some(BTreeMap::new());
     }
     let map = guard.as_mut().unwrap();
-    let id = map.keys().filter(|(o, _)| *o == owner).count() + 1;
+    let id = next_vm_id();
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::SERVICE_SHARED,
     );
     map.insert(
-        (owner, id),
+        VmKey::new(owner, id),
         SvmVm {
             npt,
             guest_pa,
@@ -253,16 +306,36 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
 }
 
 /// Create a vCPU entering at GPA `entry_pc`; returns the 1-based `vcpu_id`.
-pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
-    if crate::arch::boot::cpu_features::x86_virt_kind()
-        == Some(crate::arch::boot::cpu_features::X86Virt::Vmx)
-    {
+///
+/// The vCPU's control structures are the owner's guest charge, taken after
+/// the VM is found and before the ASID or any frame: a refusal
+/// (`OutOfMemory`) spends neither.
+pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
+    let key = VmKey::new(owner, vm_id);
+    // Refuse an unknown VM before charging or consuming a non-reusable ASID.
+    VM_REGISTRY
+        .lock()
+        .as_ref()
+        .and_then(|map| map.get(&key))
+        .ok_or(ViError::NotFound)?;
+    let vmx = crate::arch::boot::cpu_features::x86_virt_kind()
+        == Some(crate::arch::boot::cpu_features::X86Virt::Vmx);
+    let pages = if vmx { VMX_VCPU_PAGES } else { SVM_VCPU_PAGES };
+    let mut budget = Reservation::take(owner, Account::Guest, pages * PAGE_SIZE).map_err(|_| {
+        log::warn!(
+            "[hv-x86] create_vcpu refused: cell {}'s guest budget cannot cover {} pages",
+            owner.cell().0,
+            pages
+        );
+        ViError::OutOfMemory
+    })?;
+    if vmx {
         // Every early return below drops `vmcs`: VMCLEAR, then the frame
         // is freed (it leaked on these paths before, census §5).
-        let vmcs = Vmcs(vm_structure(1)?);
+        let vmcs = Vmcs(vm_structure(VMX_VCPU_PAGES, &mut budget)?);
         let mut guard = VM_REGISTRY.lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
-        let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let vm = map.get_mut(&key).ok_or(ViError::NotFound)?;
         let vcpu_id = vm.vcpus.len() + 1;
         let host_cr3 = unsafe { hal::x86_64::paging::read_cr3() & !0xFFF };
         let vmcs_pa = vmcs.0.base();
@@ -289,12 +362,6 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
         return Ok(vcpu_id);
     }
 
-    // Refuse an unknown VM before consuming a non-reusable ASID.
-    VM_REGISTRY
-        .lock()
-        .as_ref()
-        .and_then(|map| map.get(&(owner, vm_id)))
-        .ok_or(ViError::NotFound)?;
     // Reserve the ASID before any frame: exhaustion refuses without allocating.
     let max_asid = hal::x86_64::svm::max_asid();
     let asid = NEXT_ASID
@@ -309,10 +376,10 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM). An
     // early return below frees the ones already allocated (they leaked on
     // these paths before, census §5); the ASID stays spent.
-    let vmcb_run = vm_structure(1)?;
-    let host_run = vm_structure(1)?;
-    let msrpm_run = vm_structure(2)?;
-    let iopm_run = vm_structure(3)?;
+    let vmcb_run = vm_structure(1, &mut budget)?;
+    let host_run = vm_structure(1, &mut budget)?;
+    let msrpm_run = vm_structure(2, &mut budget)?;
+    let iopm_run = vm_structure(3, &mut budget)?;
     let (vmcb, host, msrpm, iopm) = (
         vmcb_run.base(),
         host_run.base(),
@@ -336,7 +403,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
 
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map.get_mut(&key).ok_or(ViError::NotFound)?;
     let vcpu_id = vm.vcpus.len() + 1;
 
     let ncr3 = vm.npt.ncr3();
@@ -373,10 +440,12 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
 }
 
 /// Guest-RAM window: GPA 0 and the carve size in bytes.
-pub fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
+pub(crate) fn guest_window(owner: Charge, vm_id: usize) -> ViResult<(u64, usize)> {
     let guard = VM_REGISTRY.lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let bytes = vm
         .guest_pages
         .checked_mul(PAGE_SIZE)
@@ -387,8 +456,8 @@ pub fn guest_window(owner: usize, vm_id: usize) -> ViResult<(u64, usize)> {
 /// Extend the guest NPT mapping to cover `[gpa, gpa+size)`, backed by the
 /// start of the guest carve. The table refuses any range larger than the
 /// carve, and a refused map changes nothing.
-pub fn map_guest_memory(
-    owner: usize,
+pub(crate) fn map_guest_memory(
+    owner: Charge,
     vm_id: usize,
     gpa: u64,
     size: usize,
@@ -397,7 +466,9 @@ pub fn map_guest_memory(
     let pages = size.div_ceil(PAGE_SIZE);
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     vm.npt
         .map(gpa, vm.guest_pa, pages, writable)
         .map_err(|error| match error {
@@ -424,10 +495,12 @@ fn invalidate_ept_on_this_cpu(eptp: u64) -> ViResult<()> {
 
 /// World-switch into a vCPU and return the HAL exit. Runs with interrupts
 /// masked (the `svm_vmrun` GS.base window requires IF=0).
-pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalVmExit> {
+pub(crate) fn run_vcpu_hal(owner: Charge, vm_id: usize, vcpu_id: usize) -> ViResult<HalVmExit> {
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let eptp = vm.npt.eptp();
     let vcpu = vm
         .vcpus
@@ -484,10 +557,17 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
 
 /// Copy `src` into guest RAM at GPA `gpa` (GPA base 0). Bounds-checked
 /// against the carved guest-RAM window before any byte is written.
-pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src: &[u8]) -> ViResult<usize> {
+pub(crate) fn write_guest_memory(
+    owner: Charge,
+    vm_id: usize,
+    gpa: u64,
+    src: &[u8],
+) -> ViResult<usize> {
     let guard = VM_REGISTRY.lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let len = src.len();
     let offset = gpa as usize;
     let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
@@ -516,10 +596,17 @@ pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src: &[u8]) -> V
 
 /// Copy guest RAM at GPA `gpa` into `dst`. Bounds-checked like
 /// [`write_guest_memory`].
-pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst: &mut [u8]) -> ViResult<usize> {
+pub(crate) fn read_guest_memory(
+    owner: Charge,
+    vm_id: usize,
+    gpa: u64,
+    dst: &mut [u8],
+) -> ViResult<usize> {
     let guard = VM_REGISTRY.lock();
     let map = guard.as_ref().ok_or(ViError::NotFound)?;
-    let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let len = dst.len();
     let offset = gpa as usize;
     let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
@@ -548,8 +635,8 @@ pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst: &mut [u8]) -
 
 /// Read/write vCPU GPRs (16×u64, x86 register-number indexed) in the first 16
 /// words of `regs`; the remaining words are not modelled and left untouched.
-pub fn vcpu_regs(
-    owner: usize,
+pub(crate) fn vcpu_regs(
+    owner: Charge,
     vm_id: usize,
     vcpu_id: usize,
     regs: &mut [u64; 32],
@@ -557,7 +644,9 @@ pub fn vcpu_regs(
 ) -> ViResult<usize> {
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let vcpu = vm
         .vcpus
         .get_mut(vcpu_id.saturating_sub(1))
@@ -575,10 +664,12 @@ pub fn vcpu_regs(
 /// Gated on the guest interrupt window: a Preempted exit can catch the guest in
 /// an IRQ-off section (or pre-IDT boot), where a forced EVENTINJ — which skips
 /// the hardware IF check — would corrupt it. A closed window drops the tick.
-pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, vector: u32) -> ViResult<()> {
+pub(crate) fn inject_irq(owner: Charge, vm_id: usize, vcpu_id: usize, vector: u32) -> ViResult<()> {
     let mut guard = VM_REGISTRY.lock();
     let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+    let vm = map
+        .get_mut(&VmKey::new(owner, vm_id))
+        .ok_or(ViError::NotFound)?;
     let vcpu = vm
         .vcpus
         .get_mut(vcpu_id.saturating_sub(1))
@@ -587,19 +678,21 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, vector: u32) -> Vi
     Ok(())
 }
 
-/// Reclaim all x86 VMs owned by `dead_tid` (task-exit / fault / watchdog).
-pub fn reap_vms_for_task(dead_tid: usize) {
+/// Reclaim every x86 VM `owner` holds: its tables, guest RAM, control
+/// structures and guest charge. Called once per incarnation from the
+/// root-retirement funnel, after every member quiesced.
+pub(crate) fn reap_vms_for(owner: Charge) {
     let dead: Vec<SvmVm> = {
         let mut guard = VM_REGISTRY.lock();
         let Some(map) = guard.as_mut() else { return };
-        let keys: Vec<(usize, usize)> = map
+        let keys: Vec<VmKey> = map
             .keys()
-            .filter(|(o, _)| *o == dead_tid)
+            .filter(|key| key.owned_by(owner))
             .copied()
             .collect();
         keys.iter().filter_map(|k| map.remove(k)).collect()
     };
-    drop(dead); // each SvmVm field frees its own frames
+    drop(dead); // each SvmVm field frees its own frames and refunds their charge
 }
 
 fn interrupts_enabled() -> bool {
@@ -615,7 +708,8 @@ fn interrupts_enabled() -> bool {
 /// world-switch it, and assert the decoded exits. Logs `X86-VMM-SMOKE: PASS`.
 #[cfg(feature = "test-hooks")]
 pub fn x86_smoke() {
-    const OWNER: usize = 0xF00D;
+    /// The kernel: its guest charge is never limited or counted.
+    const OWNER: Charge = Charge::KERNEL;
     const ENTRY: u64 = 0x1000; // GPA (base 0)
     const GUEST_PAGES: usize = 256; // 1 MiB
     const BLOB: [u8; 8] = [0x66, 0xBA, 0xF8, 0x03, 0xB0, 0x4B, 0xEE, 0xF4];
@@ -629,12 +723,12 @@ pub fn x86_smoke() {
     };
     if write_guest_memory(OWNER, vm_id, ENTRY, &BLOB).is_err() {
         log::error!("[hv-x86] smoke: fixture write failed");
-        reap_vms_for_task(OWNER);
+        reap_vms_for(OWNER);
         return;
     }
     if let Err(e) = create_vcpu(OWNER, vm_id, ENTRY) {
         log::error!("[hv-x86] smoke: create_vcpu failed: {:?}", e);
-        reap_vms_for_task(OWNER);
+        reap_vms_for(OWNER);
         return;
     }
 
@@ -670,14 +764,15 @@ pub fn x86_smoke() {
             e
         );
     }
-    reap_vms_for_task(OWNER);
+    reap_vms_for(OWNER);
 }
 
 /// Executable NPF contract: decode one VirtIO MMIO read, service its destination
 /// register, then prove exactly-once RIP advancement through PortOut + HLT.
 #[cfg(feature = "x86-mmio-smoke")]
 pub fn x86_mmio_smoke() {
-    const OWNER: usize = 0xF00E;
+    /// The kernel: its guest charge is never limited or counted.
+    const OWNER: Charge = Charge::KERNEL;
     const ENTRY: u64 = 0x1000;
     const GUEST_PAGES: usize = 256;
     const MAGIC: u64 = 0x7472_6976;
@@ -701,7 +796,7 @@ pub fn x86_mmio_smoke() {
         || create_vcpu(OWNER, vm_id, ENTRY).is_err()
     {
         log::error!("X86-MMIO-SMOKE: FAIL fixture setup/readback");
-        reap_vms_for_task(OWNER);
+        reap_vms_for(OWNER);
         return;
     }
 
@@ -747,14 +842,14 @@ pub fn x86_mmio_smoke() {
             hlt
         );
     }
-    reap_vms_for_task(OWNER);
+    reap_vms_for(OWNER);
 }
 
 /// Run the smoke vCPU until a non-`Preempted` exit. An external-interrupt exit
 /// leaves the host IRQ pending, so each `Preempted` opens a one-instruction IF
 /// window to service it; without that the next entry exits on it again.
 #[cfg(any(feature = "test-hooks", feature = "x86-mmio-smoke"))]
-fn run_smoke_until_exit(owner: usize, vm_id: usize, exit: &mut abi::hypervisor::ViVmExit) {
+fn run_smoke_until_exit(owner: Charge, vm_id: usize, exit: &mut abi::hypervisor::ViVmExit) {
     let interrupts_were_enabled = interrupts_enabled();
     for _ in 0..1024 {
         // `owner` owns this single-vCPU VM; a failed run keeps the last exit.

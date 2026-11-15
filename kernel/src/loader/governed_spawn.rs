@@ -216,6 +216,8 @@ fn prepare_gated(
         platform,
         request.replacement.take(),
         crate::memory::cell_quota::default_quota_bytes(),
+        // Kernel-resolved path: a `/mem/` label matches no row and gets 0.
+        crate::catalog::find(path).map_or(0, |row| row.guest_memory),
         allowlist,
         request.priority,
         pku_key,
@@ -314,6 +316,7 @@ fn spawn_init(elf: &[u8], #[cfg(feature = "p01-trace")] bootstrap_init: bool) ->
         None,
         None,
         crate::memory::cell_quota::default_quota_bytes(),
+        0,
         u64::MAX,
         abi::TaskPriority::Normal as u8,
         0,

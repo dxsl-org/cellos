@@ -2,6 +2,7 @@
 //! must never reach the walk, and a failed map must leave no partial mapping.
 
 use super::*;
+use crate::memory::cell_quota::{Account, Reservation};
 use crate::memory::stage2::tests::FrameArena;
 
 const TWO_MIB: u64 = 2 * 1024 * 1024;
@@ -9,7 +10,8 @@ const TWO_MIB: u64 = 2 * 1024 * 1024;
 #[test]
 fn a_page_count_whose_span_wraps_is_refused_before_any_walk() {
     let arena = FrameArena::new(4);
-    let mut table = NestedPageTable::new(NestedFormat::Ept).expect("root");
+    let mut table =
+        NestedPageTable::new(NestedFormat::Ept, Reservation::kernel(Account::Guest)).expect("root");
     let used = arena.used();
     // 2^52 pages × 4 KiB wraps u64 to 0; usize::MAX is the syscall's
     // `size = usize::MAX` worst case.
@@ -26,7 +28,8 @@ fn a_page_count_whose_span_wraps_is_refused_before_any_walk() {
 #[test]
 fn a_map_larger_than_the_carve_is_refused() {
     let arena = FrameArena::new(8);
-    let mut table = NestedPageTable::new(NestedFormat::Ept).expect("root");
+    let mut table =
+        NestedPageTable::new(NestedFormat::Ept, Reservation::kernel(Account::Guest)).expect("root");
     let carve = table.carve_guest_ram(4).expect("carve");
     let used = arena.used();
     // `usize::MAX.div_ceil(PAGE_SIZE)` is what `MapGuestMemory` derives from
@@ -45,7 +48,8 @@ fn a_map_larger_than_the_carve_is_refused() {
 fn a_map_that_runs_out_of_tables_writes_no_leaf() {
     // Root + 4-page carve + PDPT/PD/PT for the first 2 MiB: full afterwards.
     let arena = FrameArena::new(8);
-    let mut table = NestedPageTable::new(NestedFormat::Ept).expect("root");
+    let mut table =
+        NestedPageTable::new(NestedFormat::Ept, Reservation::kernel(Account::Guest)).expect("root");
     let carve = table.carve_guest_ram(4).expect("carve");
     table.map(0, carve, 1, true).expect("first page");
     assert_eq!(table.translate(0), Some(carve));
@@ -69,7 +73,8 @@ fn a_map_that_runs_out_of_tables_writes_no_leaf() {
 #[test]
 fn a_dropped_table_returns_every_frame_it_took() {
     let arena = FrameArena::new(8);
-    let mut table = NestedPageTable::new(NestedFormat::Npt).expect("root");
+    let mut table =
+        NestedPageTable::new(NestedFormat::Npt, Reservation::kernel(Account::Guest)).expect("root");
     let carve = table.carve_guest_ram(2).expect("carve");
     assert_eq!(table.carve_guest_ram(1), None, "a table carves once");
     table.map(0, carve, 2, true).expect("map");
