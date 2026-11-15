@@ -195,6 +195,10 @@ impl TaskCopyView {
     }
 }
 
+/// Probe a raw `KernelDirect` range: every page valid and readable (writable
+/// for `write`) in the live root. On x86_64 with SMAP a USER page is refused
+/// too: this raw path opens no user-access window, so touching it would be a
+/// kernel #PF instead of a recoverable error.
 #[cfg(all(feature = "native-domains", cellos_wide))]
 pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Result<(), ()> {
     if len == 0 {
@@ -204,6 +208,11 @@ pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Resu
         return Err(());
     }
     let end = ptr.checked_add(len).ok_or(())?;
+    #[cfg(target_arch = "x86_64")]
+    let refuse_user =
+        crate::hal::x86_64::protect::SMAP_ACTIVE.load(core::sync::atomic::Ordering::Acquire) != 0;
+    #[cfg(not(target_arch = "x86_64"))]
+    let refuse_user = false;
     if let Some(root_pa) = crate::hal::paging::current_root() {
         const PAGE_SIZE: usize = 4096;
         let mut page = ptr & !(PAGE_SIZE - 1);
@@ -211,7 +220,7 @@ pub(super) fn validate_kernel_range(ptr: usize, len: usize, write: bool) -> Resu
             // SAFETY: the live root of this hart; its tables outlive the probe.
             let leaf = unsafe { crate::hal::paging::leaf(root_pa, page) }.ok_or(())?;
             let right = if write { leaf.write } else { leaf.read };
-            if !(leaf.valid && right) {
+            if !(leaf.valid && right) || (refuse_user && leaf.user) {
                 return Err(());
             }
             page += PAGE_SIZE;

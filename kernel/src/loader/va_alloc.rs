@@ -4,7 +4,9 @@
 //! [CELL_VA_START, CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE): a PIE takes
 //! any free slot (`alloc_cell_va`); a fixed-VA image claims the one slot it is
 //! linked into (`reserve_cell_va`). Every PT_LOAD must stay inside the slot
-//! its spawn owns (see `loader::elf::image_va`).
+//! its spawn owns (see `loader::elf::image_va`). A fixed-VA image links into
+//! one of the lowest [`FIXED_VA_SLOTS`] slots: randomised order hands those to
+//! a PIE only once every other slot is held.
 //!
 //! Every user stack takes one `STACK_VA_STRIDE` slot of the stack arena right
 //! above the cell region (`alloc_stack_va`), so it is never mapped at its
@@ -21,18 +23,29 @@
 //! `reserve` sets one named bit; `free` clears it. Slots are all one size, so
 //! any free slot fits any request: the region is exhausted only when every slot
 //! is held, whatever the start index. A probe reads at most `slots / 64 + 1`
-//! bitmap words (9 for 512 cell slots, 513 for the 32 768 stack slots).
+//! bitmap words, one more for a region with a fixed-VA band (10 for the 512
+//! cell slots, 513 for the 32 768 stack slots).
 //!
 //! The start index is random per allocation when the kernel has a hardware
 //! entropy source at boot (x86 RDSEED/RDRAND), so a cell's image and stack
-//! addresses differ between boots. Without one (RV64, AArch64, an x86 CPU
-//! without RDRAND) it is 0: lowest free slot first, the historical order.
+//! addresses differ between boots; it is then drawn above the region's
+//! fixed-VA band ([`Region::fixed`]), and the band is probed last. Without one
+//! (RV64, AArch64, an x86 CPU without RDRAND) every probe starts at slot 0:
+//! lowest free slot first, band included, the historical order.
+//!
+//! # Identity-mapped RAM
+//! Grants and SHM pages keep their physical address as their VA, and RV64 and
+//! AArch64 also map all RAM at VA == PA, so RAM must end below the cell slots:
+//! the frame allocator leaves RAM at or above [`IDENTITY_RAM_END`] unused
+//! (logged once at boot), and the boot maps assert it
+//! ([`assert_identity_ram_below_cells`]). MMIO is refused window by window
+//! where it would reach the slots or the arena ([`overlaps_allocated_va`]).
 
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
@@ -85,13 +98,32 @@ const MAX_SLOTS: usize = 4096;
 #[cfg(cellos_wide)]
 const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= crate::hal::paging::USER_LIMIT);
 
+/// Exclusive end of the RAM the kernel manages and maps at VA == PA: the
+/// first cell slot. The frame allocator leaves usable RAM at or above it
+/// unused (`memory::frame::plan_managed_ranges`), so no grant, SHM page or
+/// RV64/AArch64 RAM alias can land on a cell slot or the stack arena. Bare
+/// physical targets map no cell slots and keep all RAM.
+#[cfg(cellos_wide)]
+pub(crate) const IDENTITY_RAM_END: usize = CELL_VA_START;
+#[cfg(not(cellos_wide))]
+pub(crate) const IDENTITY_RAM_END: usize = usize::MAX;
+
+/// The lowest cell slots, kept for fixed-VA (ET_EXEC) images: randomised
+/// order hands one to a PIE only once every other slot is held, so a fixed
+/// image linked into this band finds its slot free while any slot is. The
+/// deterministic order (no entropy) still takes slots lowest-first, band
+/// included, exactly as before randomisation. No shipped cell is fixed-VA.
+pub(crate) const FIXED_VA_SLOTS: usize = 8;
+
 /// A run of equal, aligned VA slots: `slots` slots of `stride` bytes from
-/// `start`.
+/// `start`; the lowest `fixed` of them are the fixed-VA band (see
+/// [`FIXED_VA_SLOTS`]; `0` for a region no fixed image links into).
 #[derive(Clone, Copy)]
 pub(super) struct Region {
     start: usize,
     stride: usize,
     slots: usize,
+    fixed: usize,
 }
 
 impl Region {
@@ -112,6 +144,7 @@ const CELLS: Region = Region {
     start: CELL_VA_START,
     stride: CELL_VA_STRIDE,
     slots: MAX_SLOTS,
+    fixed: FIXED_VA_SLOTS,
 };
 
 /// Exclusive end of a valid reservation, shared by ELF admission and release.
@@ -159,15 +192,16 @@ impl SlotOrder {
         randomised
     }
 
-    /// The start index for one allocation over `slots` slots, below `slots`.
-    /// In randomised order a source that fails this once (RDSEED and RDRAND
-    /// both exhausted after their bounded retries) starts that one allocation
-    /// at 0; which slot it gets never affects ownership.
-    fn start(&self, slots: usize) -> usize {
+    /// The random start offset for one allocation over a span of `span`
+    /// slots, below `span`; `None` in deterministic order. In randomised order
+    /// a source that fails this once (RDSEED and RDRAND both exhausted after
+    /// their bounded retries) starts that one allocation at offset 0; which
+    /// slot it gets never affects ownership.
+    fn random_start(&self, span: usize) -> Option<usize> {
         if !self.randomised.load(Ordering::Relaxed) {
-            return 0;
+            return None;
         }
-        self.word().map_or(0, |word| (word % slots as u64) as usize)
+        Some(self.word().map_or(0, |word| (word % span as u64) as usize))
     }
 
     fn word(&self) -> Option<u64> {
@@ -200,6 +234,8 @@ pub(super) struct SlotAllocator<const WORDS: usize = BITMAP_WORDS> {
     /// Each repeat of the inline `const` block is a distinct AtomicU64 (an
     /// inline const sidesteps `clippy::declare_interior_mutable_const`).
     owned: [AtomicU64; WORDS],
+    /// `free` calls that found their slot already clear (see [`Self::free`]).
+    stale_frees: AtomicUsize,
 }
 
 static SLOTS: SlotAllocator = SlotAllocator::new();
@@ -214,33 +250,49 @@ impl SlotAllocator {
 impl<const WORDS: usize> SlotAllocator<WORDS> {
     pub(super) const fn over(region: Region) -> Self {
         assert!(region.slots > 0 && region.slots <= WORDS * 64);
+        assert!(region.fixed < region.slots);
         Self {
             region,
             owned: [const { AtomicU64::new(0) }; WORDS],
+            stale_frees: AtomicUsize::new(0),
         }
     }
 
-    /// Take a free slot, probing from `order`'s start index; `None` only when
-    /// every slot is held.
+    /// Take a free slot in `order`; `None` only when every slot is held.
+    ///
+    /// Deterministic order: the lowest free slot. Randomised order: the first
+    /// free slot at or after a random start above the fixed-VA band, wrapping
+    /// once to the band's end; the band only when every other slot is held.
     pub(super) fn alloc(&self, order: &SlotOrder) -> Option<usize> {
-        self.claim_from(order.start(self.region.slots))
+        let (fixed, slots) = (self.region.fixed, self.region.slots);
+        match order.random_start(slots - fixed) {
+            None => self.claim_span(0, slots),
+            Some(offset) => {
+                let start = fixed + offset;
+                self.claim_span(start, slots)
+                    .or_else(|| self.claim_span(fixed, start))
+                    .or_else(|| self.claim_span(0, fixed))
+            }
+        }
     }
 
     /// Claim the first free slot at or after `start`, wrapping past the last
     /// slot to slot 0: every slot is probed once. `start == 0` is lowest-first.
+    #[cfg(test)]
     fn claim_from(&self, start: usize) -> Option<usize> {
-        let words = self.region.slots.div_ceil(64);
-        let (first, shift) = (start / 64, start % 64);
-        // `words + 1` visits: the start word from `start` up, every other word,
-        // then the start word again below `start` (nothing when `shift == 0`).
-        for visit in 0..=words {
-            let index = (first + visit) % words;
-            let mut probed = self.slot_bits(index);
-            if visit == 0 {
-                probed &= u64::MAX << shift;
-            } else if visit == words {
-                probed &= (1u64 << shift) - 1;
-            }
+        self.claim_span(start, self.region.slots)
+            .or_else(|| self.claim_span(0, start))
+    }
+
+    /// Claim the lowest free slot in `[from, to)` (`to <= region.slots`),
+    /// reading each bitmap word the span touches once.
+    fn claim_span(&self, from: usize, to: usize) -> Option<usize> {
+        let mut next = from;
+        while next < to {
+            let index = next / 64;
+            let word_end = ((index + 1) * 64).min(to);
+            // Bits `next % 64 ..= (word_end - 1) % 64` of word `index`.
+            let probed = (u64::MAX << (next % 64)) & (u64::MAX >> (64 - (word_end - index * 64)));
             let word = &self.owned[index];
             let mut seen = word.load(Ordering::Relaxed);
             loop {
@@ -261,16 +313,9 @@ impl<const WORDS: usize> SlotAllocator<WORDS> {
                     Err(now) => seen = now,
                 }
             }
+            next = word_end;
         }
         None
-    }
-
-    /// The bits of bitmap word `index` that name a slot of the region.
-    fn slot_bits(&self, index: usize) -> u64 {
-        match self.region.slots - index * 64 {
-            left if left >= 64 => u64::MAX,
-            left => (1u64 << left) - 1,
-        }
     }
 
     /// Claim the exact slot at `base`, or refuse when another holder owns it.
@@ -282,12 +327,27 @@ impl<const WORDS: usize> SlotAllocator<WORDS> {
         self.owned[slot / 64].fetch_or(mask, Ordering::AcqRel) & mask == 0
     }
 
-    /// Release the slot at `base`. Not a slot base: ignored.
+    /// Release the slot at `base`. Not a slot base: ignored. A slot nobody
+    /// holds stays clear, so the ownership invariant holds, but a second free
+    /// means some holder's bookkeeping is wrong (a later one could clear a new
+    /// holder's bit): it is logged and counted, and test builds fail on it.
     pub(super) fn free(&self, base: usize) {
         let Some(slot) = self.region.index_of_base(base) else {
             return;
         };
-        self.owned[slot / 64].fetch_and(!(1u64 << (slot % 64)), Ordering::Release);
+        let mask = 1u64 << (slot % 64);
+        if self.owned[slot / 64].fetch_and(!mask, Ordering::Release) & mask == 0 {
+            let stale = self.stale_frees.fetch_add(1, Ordering::Relaxed) + 1;
+            log::error!("[va] free of unheld slot {base:#x} ignored ({stale} so far)");
+            #[cfg(test)]
+            debug_assert!(false, "free of unheld slot {base:#x}");
+        }
+    }
+
+    /// `free` calls that found their slot already clear.
+    #[cfg(test)]
+    pub(super) fn stale_frees(&self) -> usize {
+        self.stale_frees.load(Ordering::Relaxed)
     }
 
     /// Slots owned right now.
@@ -307,11 +367,19 @@ impl<const WORDS: usize> SlotAllocator<WORDS> {
             .map(|word| word.load(Ordering::Acquire))
             .collect()
     }
+
+    /// Does the slot at `base` have a holder? `false` for a non-slot address.
+    #[cfg(all(cellos_wide, feature = "test-hooks"))]
+    fn held(&self, base: usize) -> bool {
+        self.region.index_of_base(base).is_some_and(|slot| {
+            self.owned[slot / 64].load(Ordering::Acquire) & (1u64 << (slot % 64)) != 0
+        })
+    }
 }
 
 /// First byte of the user-stack arena: right above the cell slots, so it lies
-/// inside the user window and above every identity-mapped byte (checked at
-/// boot by [`assert_stack_arena_above`]). 80 GiB by default, 192 GiB with
+/// inside the user window and above all identity-mapped RAM (which ends below
+/// the cell slots, [`IDENTITY_RAM_END`]). 80 GiB by default, 192 GiB with
 /// `large-cell-va` or `cell-scale-experiment`.
 #[cfg(cellos_wide)]
 pub(crate) const STACK_VA_START: usize = CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE;
@@ -337,6 +405,7 @@ const STACKS: Region = Region {
     start: STACK_VA_START,
     stride: STACK_VA_STRIDE,
     slots: STACK_SLOTS,
+    fixed: 0,
 };
 
 #[cfg(cellos_wide)]
@@ -364,14 +433,18 @@ pub(crate) fn free_stack_va(base: usize) {
     let _ = base;
 }
 
-/// Boot check: everything mapped at VA == PA (RAM, whose grants and SHM pages
-/// keep their physical address as VA, and the boot MMIO windows) ends at or
-/// below `identity_end`, which must not reach the stack arena.
+/// Boot check: RAM mapped at VA == PA (grants and SHM pages keep their
+/// physical address as VA; RV64 and AArch64 also map all RAM there) ends at or
+/// below `ram_end`, which must not reach the cell slots. The frame allocator
+/// already leaves RAM at or above [`IDENTITY_RAM_END`] unused, so this holds
+/// unless firmware placed the kernel or bootloader memory there, which cannot
+/// be dropped. MMIO is not RAM: each boot or later MMIO window is refused on
+/// its own when it reaches the slots or the arena ([`overlaps_allocated_va`]).
 #[cfg(cellos_wide)]
-pub(crate) fn assert_stack_arena_above(identity_end: usize) {
+pub(crate) fn assert_identity_ram_below_cells(ram_end: usize) {
     assert!(
-        identity_end <= STACK_VA_START,
-        "identity-mapped range ends at {identity_end:#x}, inside the stack arena at {STACK_VA_START:#x}"
+        ram_end <= IDENTITY_RAM_END,
+        "identity-mapped RAM ends at {ram_end:#x}, inside the cell VA slots at {CELL_VA_START:#x}"
     );
 }
 
@@ -405,10 +478,10 @@ pub(crate) fn in_stack_arena(va: usize) -> bool {
     (STACK_VA_START..STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE).contains(&va)
 }
 
-/// The stack arena's ownership bitmap, as [`snapshot`] is for the cell slots.
+/// Does the stack slot at `base` have a holder right now?
 #[cfg(all(cellos_wide, feature = "test-hooks"))]
-pub(crate) fn stack_snapshot() -> alloc::vec::Vec<u64> {
-    STACK_ARENA.snapshot()
+pub(crate) fn stack_slot_held(base: usize) -> bool {
+    STACK_ARENA.held(base)
 }
 
 /// Allocate one profile-sized VA slot for a new PIE cell, in this boot's
@@ -423,8 +496,8 @@ pub fn alloc_cell_va() -> Option<usize> {
 /// Claim the slot at `base` for a fixed-VA (ET_EXEC) image that is linked
 /// inside it. `false` when `base` is not a slot base or another cell owns it:
 /// a fixed-VA image may never land in a slot a PIE (or another image) holds.
-/// With randomised order a live PIE may hold any slot, so this can refuse
-/// while fewer than `MAX_SLOTS` slots are held.
+/// With randomised order a live PIE may hold any slot outside the lowest
+/// [`FIXED_VA_SLOTS`], and those only once every other slot is held.
 pub fn reserve_cell_va(base: usize) -> bool {
     SLOTS.reserve(base)
 }
@@ -432,7 +505,8 @@ pub fn reserve_cell_va(base: usize) -> bool {
 /// Return a VA slot so it can be reused by a future cell.
 ///
 /// `base` must be a value previously returned by `alloc_cell_va` or claimed
-/// by `reserve_cell_va`. Silently ignores invalid values.
+/// by `reserve_cell_va`. A non-slot address is ignored; a slot nobody holds
+/// is logged and counted (`SlotAllocator::free`).
 pub fn free_cell_va(base: usize) {
     SLOTS.free(base)
 }

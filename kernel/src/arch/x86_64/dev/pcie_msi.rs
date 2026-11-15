@@ -132,9 +132,20 @@ pub fn allocate(
         });
     // Map the table kernel-only before taking STATE: mapping may issue a TLB
     // shootdown, which must not wait on CPUs spinning for STATE. Carved pages
-    // are never user-mapped, so an early (or repeated) mapping is harmless.
+    // are never user-mapped, so an early (or repeated) mapping is harmless. A
+    // table that cannot be mapped fails this allocation with nothing programmed.
     if let Some((_, layout, table_phys)) = msix {
-        crate::memory::paging::map_mmio_x86(table_phys, layout.table_size as usize * 16);
+        if let Err(error) =
+            crate::memory::paging::map_mmio_x86(table_phys, layout.table_size as usize * 16)
+        {
+            log::error!(
+                "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?})",
+                bdf >> 8,
+                (bdf >> 3) & 0x1F,
+                bdf & 7,
+            );
+            return Err(PcieFunctionError::NotSupported);
+        }
     }
     let mut state = STATE.lock();
     if let Some(existing) = state

@@ -94,7 +94,8 @@ pub(crate) const MMIO_USER_X86: Flags =
 
 /// x86_64 user read/write data (`P|RW|US|NX`): framebuffers and user stacks.
 #[cfg(target_arch = "x86_64")]
-pub(crate) const USER_RW_X86: Flags = Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER);
+pub(crate) const USER_RW_X86: Flags =
+    Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER);
 
 /// Flush all TLB entries. Call after unmapping PTEs to prevent stale entries.
 ///
@@ -151,11 +152,18 @@ pub fn init_kernel_paging(
 
     let root_table = unsafe { &mut *(root_frame as *mut PageTable) };
 
-    // 2. Identity-map all usable memory and kernel sections.
+    // 2. Identity-map all usable memory and kernel sections. Usable RAM stops
+    //    at the cell slots: the frame allocator leaves the rest unused, so it
+    //    needs no alias, and an alias there would overlap the slots. A memory
+    //    map MMIO or framebuffer window reaching the slots or the stack arena
+    //    is refused (logged) and left unmapped; the kernel and bootloader
+    //    memory are always mapped, and the RAM-end check below covers them.
+    use crate::boot::MemoryType;
+    let mut ram_end = 0usize;
     for entry in mmap.iter() {
         let flags = match entry.ty {
-            crate::boot::MemoryType::Usable => FREE_FRAME_ALIAS,
-            crate::boot::MemoryType::Kernel => PageFlags::from_bits(
+            MemoryType::Usable => FREE_FRAME_ALIAS,
+            MemoryType::Kernel => PageFlags::from_bits(
                 PageFlags::VALID
                     | PageFlags::READ
                     | PageFlags::WRITE
@@ -163,21 +171,21 @@ pub fn init_kernel_paging(
                     | PageFlags::ACCESSED
                     | PageFlags::DIRTY,
             ),
-            crate::boot::MemoryType::Bootloader => PageFlags::from_bits(
+            MemoryType::Bootloader => PageFlags::from_bits(
                 PageFlags::VALID
                     | PageFlags::READ
                     | PageFlags::WRITE
                     | PageFlags::ACCESSED
                     | PageFlags::DIRTY,
             ),
-            crate::boot::MemoryType::Framebuffer => PageFlags::from_bits(
+            MemoryType::Framebuffer => PageFlags::from_bits(
                 PageFlags::VALID
                     | PageFlags::READ
                     | PageFlags::WRITE
                     | PageFlags::ACCESSED
                     | PageFlags::DIRTY,
             ),
-            crate::boot::MemoryType::MMIO => PageFlags::from_bits(
+            MemoryType::MMIO => PageFlags::from_bits(
                 PageFlags::VALID
                     | PageFlags::READ
                     | PageFlags::WRITE
@@ -186,15 +194,27 @@ pub fn init_kernel_paging(
             ),
             _ => continue,
         };
+        let start = entry.base;
+        let mut end = entry.base + entry.length;
+        match entry.ty {
+            MemoryType::Usable => {
+                end = end.min(crate::loader::va_alloc::IDENTITY_RAM_END);
+                if end <= start {
+                    continue;
+                }
+                ram_end = ram_end.max(end);
+            }
+            MemoryType::Kernel | MemoryType::Bootloader => ram_end = ram_end.max(end),
+            _ => {
+                if identity_map_refused("boot memory map", start, end - start) {
+                    continue;
+                }
+            }
+        }
 
         let mut alloc_closure = || allocator.allocate_frame_uncapped();
         root_table
-            .identity_map(
-                entry.base,
-                entry.base + entry.length,
-                flags,
-                &mut alloc_closure,
-            )
+            .identity_map(start, end, flags, &mut alloc_closure)
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
@@ -299,41 +319,26 @@ pub fn init_kernel_paging(
             )
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
-    // The user-stack arena must lie above everything mapped at VA == PA here:
-    // the memory map's mapped entries and (AArch64) the board's device windows.
-    // RV64's fixed device windows above all sit below 1 GiB.
-    use crate::boot::MemoryType;
-    #[allow(unused_mut)] // reason: only AArch64 adds its device windows
-    let mut mapped_end = mmap
-        .iter()
-        .filter(|entry| {
-            matches!(
-                entry.ty,
-                MemoryType::Usable
-                    | MemoryType::Kernel
-                    | MemoryType::Bootloader
-                    | MemoryType::Framebuffer
-                    | MemoryType::MMIO
-            )
-        })
-        .map(|entry| entry.base.saturating_add(entry.length))
-        .max()
-        .unwrap_or(0);
     #[cfg(target_arch = "aarch64")]
     {
         use hal::aarch64::backend::{ArmResources, Board};
         // All device windows boot kernel-only (mmio_flags). A Cell reaches a
         // window solely through `RequestMmio`, which sets USER on the granted
         // whole pages (`grant_mmio_user`); retirement restores the boot posture
-        // (`restore_mmio_boot_posture`).
+        // (`restore_mmio_boot_posture`). A window reaching the cell slots or
+        // the stack arena is refused like any other identity MMIO map.
         for map in <Board as ArmResources>::KERNEL_MMIO_MAPS {
+            if identity_map_refused("board MMIO window", map.base, map.end - map.base) {
+                continue;
+            }
             root_table
                 .identity_map(map.base, map.end, mmio_flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
-            mapped_end = mapped_end.max(map.end);
         }
     }
-    crate::loader::va_alloc::assert_stack_arena_above(mapped_end);
+    // RAM mapped at VA == PA must end below the cell slots (RV64's fixed
+    // device windows above sit below 1 GiB; MMIO was refused window by window).
+    crate::loader::va_alloc::assert_identity_ram_below_cells(ram_end);
 
     Ok(root_frame)
 }
@@ -589,13 +594,13 @@ pub fn init_kernel_paging_x86(
             va += PAGE_SIZE;
         }
     }
-    // The user-stack arena must lie above every lower-half VA == PA user: RAM
-    // (grants and SHM keep their physical address as VA) and these windows.
-    let identity_end = mmio_regions
-        .iter()
-        .map(|&(_, end)| end)
-        .fold(allocator.memory_end(), usize::max);
-    crate::loader::va_alloc::assert_stack_arena_above(identity_end);
+    // RAM reached at VA == PA (grants and SHM keep their physical address as
+    // VA) ends below the cell slots: the allocator manages nothing above. The
+    // caller refused any of these windows that would reach the slots or the
+    // stack arena (`arch::x86_64::boot`), so each is mapped as given.
+    debug_assert!(mmio_regions.iter().all(|&(start, end)| start == 0
+        || !crate::loader::va_alloc::overlaps_allocated_va(start, end - start)));
+    crate::loader::va_alloc::assert_identity_ram_below_cells(allocator.memory_end());
 
     // Sanity: verify the IOAPIC PTE was written correctly.
     // Uses the runtime ioapic_base parsed from validated ACPI.
@@ -710,12 +715,13 @@ fn map_page_unflushed(
     Ok(())
 }
 
-/// Refuse an identity (VA == PA) map of physical `[start, start + len)` made
-/// after boot when it reaches the VA the kernel allocates
-/// (`va_alloc::overlaps_allocated_va`: the cell slots and the stack arena),
-/// whose leaves it would overwrite or alias. Logs the refusal once, naming
-/// `what`; `true` means refused, and the caller maps nothing and fails with
-/// its own error. Boot maps are covered by `va_alloc::assert_stack_arena_above`.
+/// Refuse an identity (VA == PA) map of physical `[start, start + len)` when
+/// it reaches the VA the kernel allocates (`va_alloc::overlaps_allocated_va`:
+/// the cell slots and the stack arena), whose leaves it would overwrite or
+/// alias. Logs the refusal once, naming `what`; `true` means refused, and the
+/// caller maps nothing and fails with its own error (or, for a boot window,
+/// treats the device as absent). RAM never reaches the slots: the frame
+/// allocator manages none there (`va_alloc::IDENTITY_RAM_END`).
 pub(crate) fn identity_map_refused(what: &str, start: usize, len: usize) -> bool {
     let refused = crate::loader::va_alloc::overlaps_allocated_va(start, len);
     if refused {
@@ -728,16 +734,20 @@ pub(crate) fn identity_map_refused(what: &str, start: usize, len: usize) -> bool
 
 /// Identity-map a MMIO BAR region [phys, phys+size) at VA == PA (x86_64).
 ///
-/// Called by PCIe drivers at init time to make dynamically-assigned BAR windows
-/// accessible as identity-mapped VA == PA. Each page in the range is mapped with
-/// MMIO cache-disabling flags; existing mappings are silently overwritten. A
-/// window reaching the cell slots or the stack arena is refused whole and
-/// logged ([`identity_map_refused`]); its first access faults.
+/// Called by kernel device code (VT-d units, I/O APICs, MSI-X tables, the
+/// virtio bypass probe) to reach a window at VA == PA. Each page in the range
+/// is mapped with MMIO cache-disabling flags; existing mappings are silently
+/// overwritten. `Err(InvalidAddress)`: the window reaches the cell slots or
+/// the stack arena and nothing was mapped ([`identity_map_refused`], logged).
+/// `Err(OutOfMemory)`: a page table could not be allocated for some page; the
+/// others are mapped (harmless MMIO leaves). On `Err` the caller must not
+/// touch the window: it fails that unit or device.
 ///
-/// Panics on OOM or if the frame allocator is not yet initialised.
+/// Panics if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
-pub fn map_mmio_x86(phys: usize, size: usize) {
-    map_mmio_x86_flags(phys, size, MMIO_KERNEL_X86);
+#[must_use = "a refused or partial window must not be accessed"]
+pub fn map_mmio_x86(phys: usize, size: usize) -> PagingResult<()> {
+    map_mmio_x86_flags(phys, size, MMIO_KERNEL_X86)
 }
 
 /// Identity-map a MMIO region with USER access (x86_64).
@@ -749,9 +759,12 @@ pub fn map_mmio_x86(phys: usize, size: usize) {
 /// user-accessible — exclusivity is enforced by the resource registry + LBI
 /// (`forbid(unsafe_code)` cells cannot fabricate an MMIO dereference), not by
 /// the U/S bit.
+/// Its caller (`RequestMmio`) refuses a window reaching the cell slots or the
+/// stack arena before calling; a page that cannot be mapped is logged and the
+/// cell's first access to it faults, as before.
 #[cfg(target_arch = "x86_64")]
 pub fn map_mmio_user_x86(phys: usize, size: usize) {
-    map_mmio_x86_flags(phys, size, MMIO_USER_X86);
+    let _ = map_mmio_x86_flags(phys, size, MMIO_USER_X86);
 }
 
 /// Page-aligned identity window `[start, end)` covering `[phys, phys + size)`.
@@ -770,27 +783,30 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
 /// probe can only fault on its older, narrower entry: the batch logs it and
 /// the map proceeds.
 #[cfg(target_arch = "x86_64")]
-fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) {
+fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) -> PagingResult<()> {
     let (start, end) = mmio_page_window(phys, size);
     if identity_map_refused("map_mmio_x86", start, end - start) {
-        return;
+        return Err(PageTableError::InvalidAddress);
     }
     let mut batch = Batch::new();
-    crate::memory::frame::with(|allocator| {
+    let mapped = crate::memory::frame::with(|allocator| {
         let mut va = start;
+        let mut mapped = Ok(());
         while va < end {
-            // Errors are logged but not fatal; a broken mapping will fault on first use.
             if let Err(e) = map_page_unflushed(allocator, &mut batch, va, va, flags) {
                 log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
+                mapped = mapped.and(Err(e));
             }
             va += PAGE_SIZE;
         }
+        mapped
     })
     .expect("map_mmio_x86: frame allocator not ready");
     batch.invalidate_range(start, end - start);
     // A new MMIO window or a raised right: a CPU that has not confirmed yet can
     // only fault on the old (absent or narrower) entry. Logged by the batch.
     let _ = batch.complete();
+    mapped
 }
 
 /// Unmap a page of the shared kernel root (x86_64): clears the leaf and

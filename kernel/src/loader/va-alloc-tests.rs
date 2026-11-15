@@ -187,6 +187,7 @@ fn a_partial_last_word_never_yields_a_slot_past_the_region() {
         start: CELL_VA_START,
         stride: CELL_VA_STRIDE,
         slots: SLOTS,
+        fixed: 0,
     };
     let order = random_order();
     let slots: SlotAllocator<2> = SlotAllocator::over(region);
@@ -278,4 +279,55 @@ fn an_identity_range_overlaps_the_allocated_va_exactly_at_its_edges() {
     // Empty ranges never overlap; an overflowing end always does.
     assert!(!overlaps_allocated_va(STACK_VA_START, 0));
     assert!(overlaps_allocated_va(usize::MAX - PAGE, 2 * PAGE));
+}
+
+#[test]
+fn randomised_order_keeps_the_fixed_va_band_until_every_other_slot_is_held() {
+    let order = random_order();
+    let slots = SlotAllocator::new();
+    let band = slot(0)..slot(FIXED_VA_SLOTS);
+    for _ in 0..MAX_SLOTS - FIXED_VA_SLOTS {
+        let base = slots.alloc(&order).expect("a slot above the band is free");
+        assert!(!band.contains(&base), "a PIE took band slot {base:#x}");
+    }
+    // Every slot above the band is held: a fixed-VA image still claims its
+    // band slot, and only then do PIEs take what is left of the band.
+    assert!(slots.reserve(slot(3)), "band slot refused");
+    for _ in 0..FIXED_VA_SLOTS - 1 {
+        let base = slots.alloc(&order).expect("a band slot is free");
+        assert!(band.contains(&base) && base != slot(3));
+    }
+    assert_eq!(slots.alloc(&order), None);
+
+    // A freed slot above the band is taken before a freed band slot.
+    slots.free(slot(1));
+    slots.free(slot(FIXED_VA_SLOTS + 5));
+    assert_eq!(slots.alloc(&order), Some(slot(FIXED_VA_SLOTS + 5)));
+    assert_eq!(slots.alloc(&order), Some(slot(1)));
+}
+
+#[test]
+fn deterministic_order_still_takes_the_band_first() {
+    let order = lowest_first();
+    let slots = SlotAllocator::new();
+    assert_eq!(slots.alloc(&order), Some(slot(0)));
+    assert_eq!(slots.alloc(&order), Some(slot(1)));
+}
+
+#[test]
+fn freeing_an_unheld_slot_is_counted_and_fails_test_builds() {
+    let order = lowest_first();
+    let slots = SlotAllocator::new();
+    let base = slots.alloc(&order).unwrap();
+    slots.free(base);
+    assert_eq!(slots.stale_frees(), 0);
+    let second = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| slots.free(base)));
+    assert!(second.is_err(), "a second free must fail a test build");
+    assert_eq!(slots.stale_frees(), 1);
+    // The slot stays free: the stale free set nothing.
+    assert_eq!(slots.owned(), 0);
+    assert_eq!(slots.alloc(&order), Some(base));
+    // An address that is not a slot base is ignored, not counted.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| slots.free(base + 1)));
+    assert_eq!(slots.stale_frees(), 1);
 }

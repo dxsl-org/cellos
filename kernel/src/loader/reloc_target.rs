@@ -6,6 +6,10 @@ use types::{VAddr, ViError, ViResult};
 
 /// Resolve one relative relocation without permitting arithmetic wraparound or
 /// a write outside one page allocated for the Cell currently being prepared.
+///
+/// Returns the kernel alias of the patched word (its frame through
+/// `phys_to_virt`, never the cell's own VA, which is a USER page: x86 SMAP and
+/// AArch64 EL2 AP[1] refuse a kernel write there) and the value to store.
 pub(crate) fn relative_word(
     base: VAddr,
     offset: u64,
@@ -25,15 +29,16 @@ pub(crate) fn relative_word(
     let patch_end = patch
         .checked_add(core::mem::size_of::<usize>())
         .ok_or(ViError::InvalidInput)?;
-    let contained = owned_pages.iter().any(|page| {
-        page.va <= patch
-            && page
-                .va
-                .checked_add(PAGE_SIZE)
-                .is_some_and(|page_end| patch_end <= page_end)
-    });
-    if !contained {
-        return Err(ViError::InvalidInput);
-    }
-    Ok((patch, value))
+    let page = owned_pages
+        .iter()
+        .find(|page| {
+            page.va <= patch
+                && page
+                    .va
+                    .checked_add(PAGE_SIZE)
+                    .is_some_and(|page_end| patch_end <= page_end)
+        })
+        .ok_or(ViError::InvalidInput)?;
+    let alias = crate::memory::frame::phys_to_virt(page.frame + (patch - page.va));
+    Ok((alias, value))
 }

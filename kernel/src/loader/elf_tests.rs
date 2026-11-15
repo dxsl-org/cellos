@@ -378,7 +378,12 @@ fn test_reloc_relative_patches_memory() {
     let mut storage = alloc::vec![0u8; crate::memory::paging::PAGE_SIZE * 2];
     let base = (storage.as_mut_ptr() as usize + crate::memory::paging::PAGE_SIZE - 1)
         & !(crate::memory::paging::PAGE_SIZE - 1);
-    let owned = [owned_relocation_page(base)];
+    // The relocation writes through the frame's kernel alias, so the page
+    // records the buffer's real frame.
+    let owned = [crate::loader::elf::LoadedPage {
+        frame: crate::memory::paging::virt_to_phys(base).expect("heap buffer is mapped"),
+        ..owned_relocation_page(base)
+    }];
     let entry = make_rela(0, 3, 0x400_i64);
     let res = crate::loader::reloc::apply_relocations(base, &owned, &entry);
     assert!(res.is_ok(), "R_RISCV_RELATIVE should succeed: {:?}", res);

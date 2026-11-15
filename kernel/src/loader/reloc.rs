@@ -98,30 +98,20 @@ pub fn apply_relocations(
 
         macro_rules! apply_relative {
             () => {{
-                let (patch_va, value) = crate::loader::reloc_target::relative_word(
+                // The word's kernel alias, on every arch: the cell VA is a
+                // USER page, which x86 SMAP refuses a kernel store outside the
+                // user-copy window, and AArch64 non-VHE EL2 maps read-only
+                // (AP[1]); the loader filled the same frames this way.
+                let (alias, value) = crate::loader::reloc_target::relative_word(
                     base,
                     entry.offset,
                     entry.addend,
                     owned_pages,
                 )?;
-
-                // On AArch64 non-VHE (EL2 kernel), AP[1]=1 in the EL2 stage-1 PTE
-                // means the page is read-only from EL2 — the same bit that grants EL0
-                // access. Write through the physical frame's identity-mapped VA instead,
-                // which is always kernel-writable (no AP[1]).
-                // On RISC-V/x86 the SSTATUS.SUM / U-bit semantics allow S-mode writes.
-                #[cfg(target_arch = "aarch64")]
-                let write_ptr: *mut usize = {
-                    let phys = crate::memory::paging::virt_to_phys(patch_va)
-                        .expect("apply_relocations: owned relocation target unmapped");
-                    crate::memory::frame::phys_to_virt(phys) as *mut usize
-                };
-                #[cfg(not(target_arch = "aarch64"))]
-                let write_ptr: *mut usize = patch_va as *mut usize;
-
-                // SAFETY: `relative_word` proved the full machine word remains
-                // inside one page mapped exclusively for this new Cell.
-                unsafe { write_ptr.write_unaligned(value) };
+                // SAFETY: `relative_word` proved the full machine word lies
+                // inside one page allocated for this new Cell, and `alias` is
+                // that frame's kernel mapping.
+                unsafe { (alias as *mut usize).write_unaligned(value) };
             }};
         }
 

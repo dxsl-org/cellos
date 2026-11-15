@@ -217,9 +217,11 @@ marked dying, a mixed `SAS↔private-root` pair, and an unsupported permission. 
 5. **Virtual identity.** The receiver VA is the grant's physical base. A collision with an
    existing mapping in the receiver root (or a base at or above `hal::paging::USER_LIMIT`,
    256 GiB on every 64-bit target) makes the share/slice fail before anything is published;
-   there is no alternate-VA fallback. x86_64 RAM starts at physical 0, so on a machine whose
-   RAM reaches the cell VA slots (`loader/va_alloc.rs` `CELL_VA_START`, 64 GiB) or
-   `USER_LIMIT` such a grant fails closed; the x86 evidence ceiling is a 256 MiB QEMU guest.
+   there is no alternate-VA fallback. RAM never reaches the cell VA slots
+   (`loader/va_alloc.rs` `CELL_VA_START`, 64 GiB): the frame allocator leaves usable RAM at
+   or above them unused on every target (logged once at boot), so a grant base stays below
+   them; a machine with more RAM boots without it. The x86 evidence ceiling is a 256 MiB
+   QEMU guest.
 
 **Paired public-syscall witness (2026-09-28, phase 03; boot-order launch since 2026-11-14).**
 `scripts/qemu-native-domain-test.sh --case grant-pair` boots a fresh throwaway RV64 image

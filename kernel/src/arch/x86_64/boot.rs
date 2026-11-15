@@ -274,31 +274,46 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         let _ = crate::arch::dev::console_select::select_and_apply_console(console_opt, &acpi_info);
     }
 
+    // Each boot MMIO window is mapped at VA == PA; one that would reach the
+    // cell slots or the stack arena is refused (logged) and its device treated
+    // as absent, like any later identity MMIO map (`identity_map_refused`).
+    let window = |what: &str, base: u64, len: usize| {
+        if base != 0 && memory::paging::identity_map_refused(what, base as usize, len) {
+            0
+        } else {
+            base
+        }
+    };
     let x86_ioapic_base = if crate::board::active().has_driver(cellos_boards::DriverId::IoApic) {
-        acpi_info.ioapic_base
+        window("IOAPIC", acpi_info.ioapic_base, memory::paging::PAGE_SIZE)
     } else {
         0
     };
     let x86_lapic_base = if x86_ioapic_base != 0 {
-        acpi_info.lapic_base
+        window("LAPIC", acpi_info.lapic_base, memory::paging::PAGE_SIZE)
     } else {
         0
     };
     let x86_hpet_base = if crate::board::active().has_driver(cellos_boards::DriverId::Hpet) {
-        acpi_info.hpet_base
+        window("HPET", acpi_info.hpet_base, memory::paging::PAGE_SIZE)
     } else {
         0
     };
-    let x86_ecam_base = if crate::board::active().has_driver(cellos_boards::DriverId::PcieEcam) {
-        acpi_info.ecam_base
+    let (x86_ecam_base, x86_ecam_len) = if crate::board::active()
+        .has_driver(cellos_boards::DriverId::PcieEcam)
+        && acpi_info.ecam_base != 0
+    {
+        let len = crate::dev::pcie_ecam::ecam_window_size(
+            acpi_info.ecam_bus_start,
+            acpi_info.ecam_bus_end,
+        )
+        .expect("validated ACPI MCFG range has a bounded ECAM window");
+        match window("ECAM", acpi_info.ecam_base, len) {
+            0 => (0, 0),
+            base => (base, len),
+        }
     } else {
-        0
-    };
-    let x86_ecam_len = if x86_ecam_base == 0 {
-        0
-    } else {
-        crate::dev::pcie_ecam::ecam_window_size(acpi_info.ecam_bus_start, acpi_info.ecam_bus_end)
-            .expect("validated ACPI MCFG range has a bounded ECAM window")
+        (0, 0)
     };
     // The timer gate opens only after `init_timers` finds a clocksource
     // (phase 02 of plan 261103-2218); HPET is one candidate, not a requirement.
@@ -612,7 +627,15 @@ fn register_x86_ioapics() {
     let (declared, registered) = crate::acpi::with_topology(|topo| {
         let mut registered = 0;
         for unit in topo.ioapics.as_slice() {
-            memory::paging::map_mmio_x86(unit.address as usize, 0x1000);
+            // A unit whose window cannot be mapped is left unregistered: its
+            // GSIs stay unrouted instead of faulting on the first access.
+            if let Err(error) = memory::paging::map_mmio_x86(unit.address as usize, 0x1000) {
+                log::error!(
+                    "[x86-gate] ioapic {:#x} not registered: window not mapped ({error:?})",
+                    unit.address
+                );
+                continue;
+            }
             if crate::hal::ioapic::add_unit(unit.address, unit.gsi_base) {
                 registered += 1;
             }

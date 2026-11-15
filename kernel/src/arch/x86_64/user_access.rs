@@ -2,6 +2,15 @@
 //! `user_access`: the kernel's window onto user memory and user-visible
 //! registers.
 
+// The kernel sets CR4.SMAP whenever the CPU has it unless `x86-no-smap` is
+// set, and its only window onto user pages (STAC/CLAC around the user-copy
+// guard) is compiled with `native-domains`. Without it `copy_glue` copies
+// user memory raw, which would take a kernel #PF on every SMAP CPU.
+#[cfg(not(any(feature = "native-domains", feature = "x86-no-smap")))]
+compile_error!(
+    "x86_64 needs `native-domains` (the SMAP user-copy window) or `x86-no-smap` (SMAP off)"
+);
+
 /// Byte-copy loop with a trap-recoverable error landing pad (local label `3`).
 /// Direction-neutral: reading `src` and writing `dst` byte-by-byte covers both
 /// copy directions through the boundary; the caller picks which side points

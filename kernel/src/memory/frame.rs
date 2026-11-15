@@ -87,11 +87,19 @@ pub struct FrameAllocator {
 impl FrameAllocator {
     /// Initialize allocator from memory map
     ///
-    /// Every usable range the map describes is managed (see [`plan_managed_ranges`]);
-    /// the bitmap is placed at the start of the largest range and its own frames are
-    /// marked used.
+    /// Every usable range below the cell VA slots is managed (see
+    /// [`plan_managed_ranges`]); RAM at or above them is logged once here and
+    /// left unused. The bitmap is placed at the start of the largest range and
+    /// its own frames are marked used.
     pub fn new_from_map(entries: &[MemoryMapEntry]) -> Self {
         let plan = plan_managed_ranges(entries);
+        if plan.unmanaged_above() != 0 {
+            log::warn!(
+                "[boot] allocator: {} MiB of RAM at or above {:#x} left unused (identity-mapped RAM must end below the cell VA slots)",
+                plan.unmanaged_above() / (1024 * 1024),
+                crate::loader::va_alloc::IDENTITY_RAM_END
+            );
+        }
         let bitmap_u64_count = plan.total_frames().div_ceil(64);
 
         // SAFETY: the plan guarantees the largest range can hold the bitmap, and the
@@ -1025,6 +1033,8 @@ pub struct ManagedPlan {
     count: usize,
     bitmap_range: usize,
     total_frames: usize,
+    /// Usable bytes at or above the plan's ceiling, left unmanaged.
+    unmanaged_above: usize,
 }
 
 impl ManagedPlan {
@@ -1041,6 +1051,11 @@ impl ManagedPlan {
         self.total_frames
     }
 
+    /// Usable bytes at or above the ceiling, left unmanaged.
+    pub fn unmanaged_above(&self) -> usize {
+        self.unmanaged_above
+    }
+
     /// Physical address of the range that hosts the bitmap.
     pub fn bitmap_start(&self) -> PhysAddr {
         self.ranges[self.bitmap_range]
@@ -1049,34 +1064,55 @@ impl ManagedPlan {
     }
 }
 
-/// Normalize a memory map into the set of usable ranges the allocator manages.
+/// The page-aligned frames `[start, end)` a usable entry contributes, without
+/// physical frame 0; `None` for any other entry or one smaller than a page.
+fn usable_frames(entry: &MemoryMapEntry) -> Option<(PhysAddr, PhysAddr)> {
+    if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
+        return None;
+    }
+    let start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
+    // Physical frame 0 (0x0..PAGE_SIZE) is never managed: on x86 it contains
+    // real-mode IVT/BDA and physical 0 is the universal 'not set' sentinel for
+    // VI_KERNEL_CR3; on all architectures address 0 is the null/unmapped sentinel.
+    let start = start.max(PAGE_SIZE);
+    (end > start).then_some((start, end))
+}
+
+/// Normalize a memory map into the set of usable ranges the allocator manages:
+/// every usable frame below [`IDENTITY_RAM_END`](crate::loader::va_alloc::IDENTITY_RAM_END),
+/// the first cell VA slot. Grants and SHM pages keep their physical address as
+/// VA, and RV64/AArch64 map all RAM there, so RAM at or above it would alias
+/// the cell slots or the stack arena; it is left unused and counted in
+/// [`ManagedPlan::unmanaged_above`], and the machine boots with the rest.
 ///
 /// Malformed authoritative input (an entry that overlaps another, a usable entry
 /// smaller than a page, or more ranges than [`MAX_MANAGED_RANGES`]) **halts**: a
 /// wrong guess here is memory corruption, not a degraded boot.
 pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
+    plan_managed_ranges_below(entries, crate::loader::va_alloc::IDENTITY_RAM_END)
+}
+
+/// [`plan_managed_ranges`] with an explicit `ceiling` (rounded down to a
+/// page): usable RAM at or above it is not managed.
+pub fn plan_managed_ranges_below(entries: &[MemoryMapEntry], ceiling: PhysAddr) -> ManagedPlan {
+    let ceiling = ceiling & !(PAGE_SIZE - 1);
     let mut ranges: [Option<ManagedRange>; MAX_MANAGED_RANGES] = [None; MAX_MANAGED_RANGES];
     let mut count = 0usize;
     let mut total_frames = 0usize;
+    let below = |entry: &MemoryMapEntry| {
+        usable_frames(entry)
+            .map(|(start, end)| (start, end.min(ceiling)))
+            .filter(|(start, end)| end > start)
+    };
 
     // This runs before the heap exists, so the plan is built without allocating:
     // repeatedly select the lowest usable run at or after `cursor`.
     let mut cursor: PhysAddr = 0;
     loop {
         let mut best: Option<(PhysAddr, PhysAddr)> = None;
-        for entry in entries {
-            if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
-                continue;
-            }
-            let mut start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-            let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
-            // Physical frame 0 (0x0..PAGE_SIZE) is never managed: on x86 it contains
-            // real-mode IVT/BDA and physical 0 is the universal 'not set' sentinel for
-            // VI_KERNEL_CR3; on all architectures address 0 is the null/unmapped sentinel.
-            if start == 0 {
-                start = PAGE_SIZE;
-            }
-            if end <= start || start < cursor {
+        for (start, end) in entries.iter().filter_map(below) {
+            if start < cursor {
                 continue;
             }
             if best.is_none_or(|(best_start, _)| start < best_start) {
@@ -1117,19 +1153,7 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
 
     // Every usable entry must be fully inside exactly one selected range: an entry
     // that overlaps another cannot be resolved by guessing which claim wins.
-    for entry in entries {
-        if entry.ty != crate::boot::MemoryType::Usable || entry.length == 0 {
-            continue;
-        }
-        let mut start = (entry.base + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
-        let end = (entry.base + entry.length) & !(PAGE_SIZE - 1);
-        if start == 0 {
-            start = PAGE_SIZE;
-        }
-        if end <= start {
-            // Smaller than one page: it contributes no frame.
-            continue;
-        }
+    for (start, end) in entries.iter().filter_map(below) {
         let contained = ranges[..count]
             .iter()
             .filter_map(|range| *range)
@@ -1144,6 +1168,11 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
             );
         }
     }
+    let unmanaged_above = entries
+        .iter()
+        .filter_map(usable_frames)
+        .map(|(start, end)| end.saturating_sub(start.max(ceiling)))
+        .sum();
 
     // The bitmap lives in the largest range: it needs `total_frames / 512` bytes and
     // any range holding at least one frame is at least one page, so the largest range
@@ -1161,6 +1190,7 @@ pub fn plan_managed_ranges(entries: &[MemoryMapEntry]) -> ManagedPlan {
         count,
         bitmap_range,
         total_frames,
+        unmanaged_above,
     }
 }
 
@@ -1200,7 +1230,8 @@ pub(crate) fn allocator_for_tests(ranges: &[(usize, usize)]) -> FrameAllocator {
 #[cfg(test)]
 mod tests {
     use super::{
-        plan_managed_ranges, reserve_boot_heap, reserve_contiguous_run, FrameAllocator, PAGE_SIZE,
+        plan_managed_ranges, plan_managed_ranges_below, reserve_boot_heap, reserve_contiguous_run,
+        FrameAllocator, PAGE_SIZE,
     };
     use crate::boot::{MemoryMapEntry, MemoryType};
 
@@ -1315,6 +1346,39 @@ mod tests {
 
     fn map_entry(base: usize, length: usize, ty: MemoryType) -> MemoryMapEntry {
         MemoryMapEntry { base, length, ty }
+    }
+
+    #[test]
+    fn ram_at_or_above_the_cell_slots_is_left_unmanaged_and_counted() {
+        let ceiling = crate::loader::va_alloc::IDENTITY_RAM_END;
+        assert_eq!(ceiling, crate::loader::va_alloc::CELL_VA_START);
+        // 2 GiB low, then a run straddling the ceiling by 16 MiB on each side,
+        // then 1 GiB wholly above it.
+        let entries = [
+            map_entry(0x1000, 0x8000_0000 - 0x1000, MemoryType::Usable),
+            map_entry(ceiling - 0x0100_0000, 0x0200_0000, MemoryType::Usable),
+            map_entry(ceiling + 0x1_0000_0000, 0x4000_0000, MemoryType::Usable),
+            map_entry(ceiling + 0x2_0000_0000, 0x1000, MemoryType::MMIO),
+        ];
+        let plan = plan_managed_ranges(&entries);
+        let ranges: alloc::vec::Vec<_> = plan.ranges().collect();
+        assert_eq!(ranges.len(), 2);
+        let last = ranges[1];
+        assert_eq!(last.start, ceiling - 0x0100_0000);
+        assert_eq!(last.start + last.frames * PAGE_SIZE, ceiling);
+        assert!(ranges
+            .iter()
+            .all(|range| range.start + range.frames * PAGE_SIZE <= ceiling));
+        assert_eq!(plan.unmanaged_above(), 0x0100_0000 + 0x4000_0000);
+        // Nothing above the ceiling: nothing unmanaged.
+        assert_eq!(plan_managed_ranges(&entries[..1]).unmanaged_above(), 0);
+        // An explicit lower ceiling cuts inside a run and drops the rest.
+        let low = plan_managed_ranges_below(&entries, 0x4000_0000);
+        assert_eq!(low.total_frames(), (0x4000_0000 - 0x1000) / PAGE_SIZE);
+        assert_eq!(
+            low.unmanaged_above(),
+            0x4000_0000 + 0x0200_0000 + 0x4000_0000
+        );
     }
 
     #[test]

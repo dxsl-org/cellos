@@ -232,26 +232,28 @@ pub fn self_test() -> bool {
 #[cfg(all(feature = "test-hooks", cellos_wide))]
 const ARENA_ROUNDS: usize = 512;
 
+/// How long [`stack_arena_self_test`] lets the frame-run reaper return slots
+/// still quarantined behind an unconfirmed flush.
+#[cfg(all(feature = "test-hooks", cellos_wide))]
+const ARENA_DRAIN_NS: u64 = 2_000_000_000;
+
 /// Returns true iff every thread's user stack maps from the stack arena (never
-/// at its physical address) and `ARENA_ROUNDS` spawn/exit/reap rounds leave the
-/// arena exactly as they found it: the same slots owned, bit for bit, whichever
-/// slot each round took (random under randomised slot order). Logs
+/// at its physical address) and none of the slots `ARENA_ROUNDS`
+/// spawn/exit/reap rounds took (random under randomised slot order) is still
+/// held once the frame-run reaper has drained: a slot whose run waited behind
+/// an unconfirmed flush returns only when the reaper frees it, and a slot held
+/// by a live task's user stack (another hart spawning meanwhile) is not a
+/// leak. Slots the test never took are not compared. Logs
 /// `[selftest] STACK-ARENA`. Leaves `next_task_id` as found, as [`self_test`].
 #[cfg(all(feature = "test-hooks", cellos_wide))]
 pub fn stack_arena_self_test() -> bool {
     use crate::loader::va_alloc;
 
-    let owned = |bitmap: &alloc::vec::Vec<u64>| {
-        bitmap
-            .iter()
-            .map(|word| word.count_ones() as usize)
-            .sum::<usize>()
-    };
     let saved_next_tid = super::SCHEDULER.lock().as_ref().map(|s| s.next_task_id);
     register_quota(cell_quota::DEFAULT_QUOTA_BYTES);
     insert_parent();
 
-    let before = va_alloc::stack_snapshot();
+    let mut taken = alloc::collections::BTreeSet::new();
     let mut failure = None;
     for round in 0..ARENA_ROUNDS {
         let tid = match handle_syscall(
@@ -269,20 +271,25 @@ pub fn stack_arena_self_test() -> bool {
         };
         let placed = super::SCHEDULER.lock().as_mut().and_then(|sched| {
             let stack = sched.tasks.get(&tid)?.user_stack.as_ref()?;
-            let in_arena = va_alloc::in_stack_arena(stack.base);
+            let base = stack.base;
+            let in_arena = va_alloc::in_stack_arena(base);
             let off_identity = stack.usable_phys() != Some(stack.usable_start());
             sched.exit_task(tid, 0);
-            Some(in_arena && off_identity)
+            Some((base, in_arena && off_identity))
         });
         reap();
-        if placed != Some(true) {
-            failure = Some(alloc::format!(
-                "round {round}: user stack placed {placed:?}"
-            ));
-            break;
+        match placed {
+            Some((base, true)) => {
+                taken.insert(base);
+            }
+            _ => {
+                failure = Some(alloc::format!(
+                    "round {round}: user stack placed {placed:?}"
+                ));
+                break;
+            }
         }
     }
-    let after = va_alloc::stack_snapshot();
 
     remove(PARENT_TID);
     cell_quota::deregister(CellId(QUOTA_CELL));
@@ -290,12 +297,45 @@ pub fn stack_arena_self_test() -> bool {
         sched.next_task_id = n;
     }
 
-    if failure.is_none() && after != before {
-        failure = Some(alloc::format!(
-            "arena owned {} -> {} slots, or a different set",
-            owned(&before),
-            owned(&after),
-        ));
+    // A taken slot still held with no live user stack on it, once drained.
+    let leaked = || {
+        let live: alloc::collections::BTreeSet<usize> = super::SCHEDULER
+            .lock()
+            .as_ref()
+            .map(|sched| {
+                sched
+                    .tasks
+                    .values()
+                    .filter_map(|task| task.user_stack.as_ref().map(|stack| stack.base))
+                    .collect()
+            })
+            .unwrap_or_default();
+        taken
+            .iter()
+            .filter(|base| va_alloc::stack_slot_held(**base) && !live.contains(*base))
+            .count()
+    };
+    if failure.is_none() {
+        let start = crate::arch::clock::monotonic_ns();
+        loop {
+            crate::memory::frame_run::reap();
+            let still = leaked();
+            if still == 0 {
+                break;
+            }
+            match (start, crate::arch::clock::monotonic_ns()) {
+                (Some(start), Some(now)) if now.saturating_sub(start) < ARENA_DRAIN_NS => {
+                    core::hint::spin_loop()
+                }
+                _ => {
+                    failure = Some(alloc::format!(
+                        "{still} of {} slots taken still held after the reaper drained",
+                        taken.len()
+                    ));
+                    break;
+                }
+            }
+        }
     }
     match failure {
         None => {

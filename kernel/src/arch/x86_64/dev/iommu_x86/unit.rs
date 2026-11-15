@@ -55,7 +55,15 @@ impl VtdUnit {
             return None;
         }
 
-        crate::memory::paging::map_mmio_x86(base, 0x1000);
+        // A register page that cannot be mapped fails this unit: `None` is the
+        // same outcome as a unit whose GCAP reads invalid.
+        if let Err(error) = crate::memory::paging::map_mmio_x86(base, 0x1000) {
+            log::warn!(
+                "[vtd] unit at {:#x} skipped: register page not mapped ({error:?})",
+                base
+            );
+            return None;
+        }
         // SAFETY: the register page was just identity-mapped.
         let gcap = unsafe { core::ptr::read_volatile((base + VTD_GCAP) as *const u64) };
         if gcap == 0 || gcap == u64::MAX {

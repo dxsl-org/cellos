@@ -251,6 +251,8 @@ The non-`native-domains` branch of `TaskCopyView` copies raw (`task/copy_glue/mo
 
 Landing-pad note: a guard fault inside the window enters with AC=1. The IDT entry clears it, and IRETQ restores AC=1 at the landing pad (`hal/arch/x86/src/x86_64/idt/entry.rs:136-138`). The `clac` must therefore sit in `GuardWindow::drop`, not inside the asm loop.
 
+**Correction (review of 17b, 2026-11-16).** This table missed two U=1 stores outside the window: GrantSlice's `size_out` write (`task/user_out.rs`, a raw store to the caller's user stack) and the relocation write (`loader/reloc.rs`: on RV64 and x86 it went through the cell's USER image VA, so A14's "HHDM" was wrong for reloc). Both now go through the window or the frame's kernel alias; the full re-census is in the phase file's "Decision (review of 17b)" entry.
+
 ### 5.5 QEMU CPU models in x86 lanes
 
 | Model | Lanes (default) | SMEP/SMAP/UMIP |

@@ -113,7 +113,12 @@ fn probe_bypasses(dev: &PciDevice) -> bool {
         let _ = cfg.write16(0x04, command | CMD_MEM_SPACE);
     }
     let common = (base + offset as u64) as usize;
-    crate::memory::paging::map_mmio_x86(common, 8);
+    // A window that cannot be mapped is treated as bypassing: fail closed, so
+    // the function is refused under VT-d rather than read unmapped.
+    if let Err(error) = crate::memory::paging::map_mmio_x86(common, 8) {
+        log::warn!("[virtio-gate] common config {common:#x} not mapped ({error:?})");
+        return true;
+    }
     // SAFETY: `common` lies inside the function's memory BAR (checked above)
     // and was just identity-mapped kernel-only.
     let high = unsafe {
