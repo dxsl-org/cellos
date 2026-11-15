@@ -149,8 +149,7 @@ fn cpu_feature_policy() -> usize {
 /// They are defense in depth, not a substitute for LBI or for authority
 /// checks. A cargo feature (`x86-smep`, `x86-smap`, `x86-umip`) marks one
 /// *required*: a CPU without it is refused (boot or AP admission) instead of
-/// running unprotected. SMEP and SMAP are enabled whenever present; UMIP still
-/// only when required, until the kernel qualifies it (census Step 6c).
+/// running unprotected.
 ///
 /// SMAP: the kernel touches U=1 memory only between [`open_user_access`] and
 /// [`close_user_access`], the one AC setter, called by the kernel's user-copy
@@ -201,15 +200,6 @@ pub mod protect {
         }
     }
 
-    /// Protections this kernel sets on a CPU that enumerates `have`.
-    pub const fn enabled_on(have: Caps) -> Caps {
-        Caps {
-            smep: have.smep,
-            smap: have.smap,
-            umip: have.umip && required().umip,
-        }
-    }
-
     /// Protections currently set in this CPU's CR4.
     pub fn active() -> Caps {
         let cr4: u64;
@@ -221,15 +211,15 @@ pub mod protect {
         }
     }
 
-    /// Enable every protection this CPU enumerates (per [`enabled_on`]).
-    /// Returns false, changing nothing, when the CPU lacks a required one.
+    /// Enable every protection this CPU enumerates. Returns false, changing
+    /// nothing, when the CPU lacks a required one.
     pub fn init_cpu() -> bool {
         let need = required();
         let have = detect();
         if (need.smep && !have.smep) || (need.smap && !have.smap) || (need.umip && !have.umip) {
             return false;
         }
-        let want = enabled_on(have);
+        let want = have;
         let bits = if want.smep { CR4_SMEP } else { 0 }
             | if want.smap { CR4_SMAP } else { 0 }
             | if want.umip { CR4_UMIP } else { 0 };

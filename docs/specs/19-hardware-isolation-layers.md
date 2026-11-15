@@ -109,15 +109,18 @@ but the loader never stamps PTE bits `[62:59]`; every user page remains key 0, s
 does not currently enforce a page boundary. Its self-test checks PKRU constants and
 kernel `RDPKRU`, not a denied keyed-page access.
 
-x86 SMEP and SMAP are set on every CPU that enumerates them; UMIP only in a build that
-marks it required. The boot CPU logs `[x86] protection: smep=… smap=… umip=…` (`on`,
-`off` or `absent`). A build with `x86-smep`/`x86-smap`/`x86-umip` marks the bit required
+x86 SMEP, SMAP and UMIP are set on every CPU that enumerates them. The boot CPU logs
+`[x86] protection: smep=… smap=… umip=…` (`on` or `absent`). A build with
+`x86-smep`/`x86-smap`/`x86-umip` marks the bit required
 and refuses a CPU without it, at boot or AP admission. Limits, stated plainly: SMAP stops
 the *kernel* touching USER pages outside the user-copy window; it does nothing between
 cells, which inside the SAS still share USER+RW heap, stack, `.data`, grants and MMIO
 (Layer A limits), and it does not extend W^X beyond code integrity. RV64 keeps
 `sstatus.SUM` set for the kernel's lifetime and AArch64 runs without PAN, so the
-SMAP-class guard is x86-only.
+SMAP-class guard is x86-only. UMIP turns a CPL3 `sgdt`/`sidt`/`sldt`/`smsw`/`str` into
+`#GP`; no cell or library source uses them, but foreign binaries (mlibc, Tier-2 C code)
+were not audited, and such a cell now takes the `#GP` path instead of reading the table
+base. Guests under the hypervisor are governed by their own CR4.
 
 These are lane-specific bonuses, never load-bearing — the boards named in §1 do not
 provide them, and Layer B remains the wall where native code is untrusted.

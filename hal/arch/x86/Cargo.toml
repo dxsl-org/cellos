@@ -28,8 +28,8 @@ pku = []
 # PKS: supervisor protection keys (x86_64 G2 roadmap).
 pks = []
 # Required supervisor protections (CR4): each is set whenever the CPU
-# enumerates it (see `protect::enabled_on`); the feature additionally refuses
-# a CPU that lacks it at boot/AP admission.
+# enumerates it (`protect::init_cpu`); the feature additionally refuses a CPU
+# that lacks it at boot/AP admission.
 x86-smep = []
 x86-smap = []
 x86-umip = []
