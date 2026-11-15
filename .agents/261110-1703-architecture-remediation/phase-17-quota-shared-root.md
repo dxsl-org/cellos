@@ -96,4 +96,21 @@ Phase 18.
 
 ## Deviation Log
 
-None.
+- **Decision (step 1, 2026-11-15):** the census is in [research/p17-census-charge.md](research/p17-census-charge.md) (17a) and [research/p17-census-shared-root.md](research/p17-census-shared-root.md) (17b).
+  - There are 31 production cell-identity swap scopes in 11 files, not 14. Seven of them only free memory and already do nothing for accounting, because `dealloc` refunds the recorded owner.
+  - The timer interrupt runs the scheduler's housekeeping billed to the interrupted cell.
+  - Explicit refunds ignore the generation.
+  - VMs are keyed by owner tid. x86 VMX uses no VPID, so there are three tag allocators.
+  - Spec 02 §2 states an outdated charging rule.
+  - Assumption 1 is false for grants (six no-IOMMU DMA paths program the grant id directly, and `libs/abi` calls it a physical address) and true for stacks.
+  - Free frames become RW+NX through two flag edits on RV64/AArch64. x86 has no identity alias.
+  - The x86 user-copy path never sets AC, and six sites touch user memory outside any window.
+  - `kaslr_cell_base` cannot be wired up as it stands. Only x86 has a kernel entropy source.
+- **Decision (owner, 2026-11-15, census):**
+  - Only stacks move off VA = PA in this phase. Grants stay VA = PA, recorded as a residual: moving them needs ABI text or a translation syscall.
+  - SMEP/SMAP/UMIP are enabled when the CPU has them and logged when it does not. Only a build marked "required" refuses to boot. The lanes add `+smep,+smap,+umip` to prove the bits are on.
+  - The ELF spawn's unzeroed user stack (`task/elf_prepare.rs:246-256`, a cross-cell information leak) is fixed now, in its own commit.
+  - Grant pages, root stacks and cell segments stay uncharged, recorded as a residual.
+  - `create_vm` returns the existing `OutOfMemory` for a budget refusal; its other errors keep `NotSupported`.
+  - The stale charging comment in `libs/abi/src/telemetry.rs` is corrected (comment only, no byte changes).
+  - Guest-memory budgets: 1544 MiB for `/bin/hypervisor`, 1 MiB for `/bin/silo`, 0 for every other cell.
