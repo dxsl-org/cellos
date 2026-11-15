@@ -297,6 +297,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Logs its own `[selftest] STACK-ARENA` verdict.
         #[cfg(feature = "test-hooks")]
         let _ = task::thread_quota_selftest::stack_arena_self_test();
+        // Logs its own `[selftest] SMAP-GRANT-SLICE` verdict.
+        #[cfg(all(
+            feature = "test-hooks",
+            feature = "native-domains",
+            target_arch = "x86_64"
+        ))]
+        let _ = task::thread_quota_selftest::smap_grant_slice_self_test();
         #[cfg(feature = "test-hooks")]
         if task::task_id_selftest::self_test() {
             log_info("task-id-reuse self-test PASS (monotonic across spawn/exit)");

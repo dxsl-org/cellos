@@ -1077,7 +1077,7 @@ pub(super) struct GrantSliceRequest {
 pub(super) struct GrantSliceAccess {
     pub(super) base: usize,
     pub(super) size: usize,
-    pub(super) size_out: Option<*mut usize>,
+    pub(super) size_out: Option<crate::task::user_out::UsizeOutSlot>,
 }
 
 /// GrantSlice ABI a2: a grantee (the compositor) cannot otherwise learn who
@@ -1829,8 +1829,9 @@ pub(super) fn authorize_grant_slice_locked(
     }
 
     // Validate every fallible output before publishing a lease. Once the lease
-    // is installed, returning the raw mapping and writing this slot are
-    // infallible, so a failed GrantSlice cannot strand a pin.
+    // is installed, returning the raw mapping and writing this slot (through
+    // the caller's copy view, after the table lock drops) are infallible, so a
+    // failed GrantSlice cannot strand a pin.
     let size_out = crate::task::user_out::resolve_optional_usize_slot(
         request.caller_id,
         request.size_out_ptr,

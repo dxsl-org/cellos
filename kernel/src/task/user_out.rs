@@ -1,4 +1,4 @@
-use super::{stack::Stack, syscall::SyscallError, SCHEDULER};
+use super::{copy_glue::TaskCopyView, stack::Stack, syscall::SyscallError, SCHEDULER};
 
 fn usable_stack_bounds(stack: &Stack) -> Result<(usize, usize), SyscallError> {
     let start = stack.usable_start();
@@ -22,35 +22,65 @@ fn validate_stack_usize_slot(stack: &Stack, ptr: usize) -> Result<*mut usize, Sy
     Ok(ptr as *mut usize)
 }
 
+/// A validated optional `usize` output slot on the caller's user stack, with
+/// the copy view its write must go through.
+pub(super) struct UsizeOutSlot {
+    ptr: usize,
+    view: TaskCopyView,
+}
+
+/// Resolve an optional `usize` output pointer: it must name a whole aligned
+/// slot inside the caller's usable user stack, and the caller's copy view must
+/// prove it writable now. `0` means "no output". Every refusal happens here,
+/// before the caller commits anything, so the later write has no new failure
+/// source while the caller stays in this syscall.
 pub(super) fn resolve_optional_usize_slot(
     caller_id: usize,
     ptr: usize,
-) -> Result<Option<*mut usize>, SyscallError> {
+) -> Result<Option<UsizeOutSlot>, SyscallError> {
     if ptr == 0 {
         return Ok(None);
     }
-    let guard = SCHEDULER.lock();
-    let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
-    let task = sched
-        .tasks
-        .get(&caller_id)
-        .ok_or(SyscallError::PermissionDenied)?;
-    let stack = task
-        .user_stack
-        .as_ref()
-        .ok_or(SyscallError::PermissionDenied)?;
-    validate_stack_usize_slot(stack, ptr).map(Some)
+    let view = {
+        let guard = SCHEDULER.lock();
+        let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+        let task = sched
+            .tasks
+            .get(&caller_id)
+            .ok_or(SyscallError::PermissionDenied)?;
+        let stack = task
+            .user_stack
+            .as_ref()
+            .ok_or(SyscallError::PermissionDenied)?;
+        validate_stack_usize_slot(stack, ptr)?;
+        TaskCopyView::of(task)
+    };
+    view.validate_writable(ptr, core::mem::size_of::<usize>())
+        .map_err(|()| SyscallError::InvalidInput)?;
+    Ok(Some(UsizeOutSlot { ptr, view }))
 }
 
-/// Write a slot already validated by [`resolve_optional_usize_slot`].
+/// Write a slot resolved by [`resolve_optional_usize_slot`].
 ///
-/// The syscall runs in the caller's own context, so its stack mapping remains
-/// live between resolution and this write.
-pub(super) fn write_resolved_optional_usize(slot: Option<*mut usize>, value: usize) {
-    if let Some(slot) = slot {
-        // SAFETY: the resolver accepted the whole aligned slot in the current
-        // caller's usable user stack.
-        unsafe { slot.write(value) };
+/// The slot is user memory, so the write goes through the caller's copy view
+/// (the user-copy window: STAC/CLAC under x86 SMAP), never a raw store. The
+/// syscall runs in the caller's own context, so its stack mapping stays live
+/// between resolution and this write and the copy cannot fail; if it ever
+/// does, the value is dropped and logged, and the caller's result stands.
+/// Callers must not hold a grant-table lock here.
+pub(super) fn write_resolved_optional_usize(slot: Option<UsizeOutSlot>, value: usize) {
+    let Some(slot) = slot else {
+        return;
+    };
+    if slot
+        .view
+        .write_bytes(slot.ptr, &value.to_ne_bytes())
+        .is_err()
+    {
+        log::warn!(
+            "[user_out] usize out-slot {:#x} refused after validation; value not written",
+            slot.ptr
+        );
     }
 }
 
@@ -131,10 +161,10 @@ mod tests {
     fn rejects_missing_task_and_missing_stack() {
         let mut scheduler = SchedulerTestGuard::new();
         scheduler.set(Scheduler::new());
-        assert_eq!(
-            resolve_optional_usize_slot(99, fake_stack().usable_start()).unwrap_err(),
-            SyscallError::PermissionDenied
-        );
+        assert!(matches!(
+            resolve_optional_usize_slot(99, fake_stack().usable_start()),
+            Err(SyscallError::PermissionDenied)
+        ));
 
         let mut task = Box::new(Task::new(7, CellId(7), "nostack", Vec::new()));
         task.user_stack = None;
@@ -143,9 +173,9 @@ mod tests {
             let sched = guard.as_mut().unwrap();
             sched.tasks.insert(7, task);
         }
-        assert_eq!(
-            resolve_optional_usize_slot(7, fake_stack().usable_start()).unwrap_err(),
-            SyscallError::PermissionDenied
-        );
+        assert!(matches!(
+            resolve_optional_usize_slot(7, fake_stack().usable_start()),
+            Err(SyscallError::PermissionDenied)
+        ));
     }
 }

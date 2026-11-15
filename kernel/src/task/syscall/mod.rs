@@ -837,7 +837,6 @@ fn domain_grant_slice_row(
     caller_id: usize,
     expected_owner_tid: usize,
     receiver: &Arc<crate::memory::address_space::AddressSpace>,
-    size_out: Option<*mut usize>,
     lease_grant_id: Option<usize>,
 ) -> Result<usize, SyscallError> {
     // Same sentinel as an id absent from both tables (see `grant_owner_expected`).
@@ -868,7 +867,6 @@ fn domain_grant_slice_row(
         }) {
             return Ok(usize::MAX);
         }
-        super::user_out::write_resolved_optional_usize(size_out, size);
         return Ok(base);
     }
     let Some((shared_tid, perm)) = shared_to else {
@@ -903,10 +901,7 @@ fn domain_grant_slice_row(
         return Ok(usize::MAX);
     }
     match record.publish(receiver, cell, generation, rights) {
-        Ok(()) => {
-            super::user_out::write_resolved_optional_usize(size_out, size);
-            Ok(base)
-        }
+        Ok(()) => Ok(base),
         Err(error) => {
             if let Some(grant_id) = lease_grant_id {
                 crate::memory::pin::unlease_grant_hold(caller_id, owner, grant_id);
@@ -921,7 +916,8 @@ fn domain_grant_slice_row(
 
 /// GrantSlice entry point for a capable domain receiver: resolve the row in
 /// either table and apply the lifecycle-aware resolver under the same lock that
-/// linearizes teardown.
+/// linearizes teardown. `size_out` is written after that lock drops: it is a
+/// user copy through the caller's view.
 #[cfg(cellos_domain_grants)]
 fn resolve_domain_grant_slice(
     caller_id: usize,
@@ -933,39 +929,45 @@ fn resolve_domain_grant_slice(
 ) -> Result<usize, SyscallError> {
     let lease_grant_id = lease.then_some(grant_id);
     let size_out = super::user_out::resolve_optional_usize_slot(caller_id, size_out_ptr)?;
-    {
-        let tbl = grant_table_lock().lock();
-        if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
-            return domain_grant_slice_row(
-                grant.owner.tid,
-                grant.base(),
-                grant.size,
-                grant.shared_to(),
-                grant.domain.as_ref(),
-                caller_id,
-                expected_owner_tid,
-                receiver,
-                size_out,
-                lease_grant_id,
-            );
+    let (base, size) = 'row: {
+        {
+            let tbl = grant_table_lock().lock();
+            if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
+                let base = domain_grant_slice_row(
+                    grant.owner.tid,
+                    grant.base(),
+                    grant.size,
+                    grant.shared_to(),
+                    grant.domain.as_ref(),
+                    caller_id,
+                    expected_owner_tid,
+                    receiver,
+                    lease_grant_id,
+                )?;
+                break 'row (base, grant.size);
+            }
         }
-    }
-    let tbl = reg_grant_table_lock().lock();
-    let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) else {
-        return Ok(usize::MAX);
+        let tbl = reg_grant_table_lock().lock();
+        let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) else {
+            return Ok(usize::MAX);
+        };
+        let base = domain_grant_slice_row(
+            grant.owner.tid,
+            grant.base(),
+            grant.size,
+            grant.shared_to(),
+            grant.domain.as_ref(),
+            caller_id,
+            expected_owner_tid,
+            receiver,
+            lease_grant_id,
+        )?;
+        (base, grant.size)
     };
-    domain_grant_slice_row(
-        grant.owner.tid,
-        grant.base(),
-        grant.size,
-        grant.shared_to(),
-        grant.domain.as_ref(),
-        caller_id,
-        expected_owner_tid,
-        receiver,
-        size_out,
-        lease_grant_id,
-    )
+    if base != usize::MAX {
+        super::user_out::write_resolved_optional_usize(size_out, size);
+    }
+    Ok(base)
 }
 
 /// Return the syscall allowlist only for an active caller.

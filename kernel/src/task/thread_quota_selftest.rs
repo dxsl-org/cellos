@@ -310,3 +310,127 @@ pub fn stack_arena_self_test() -> bool {
         }
     }
 }
+
+/// Test hooks (x86_64): `[selftest] SMAP-GRANT-SLICE`. A real thread of a Sas
+/// cell (its user stack from the arena, mapped USER in the shared root)
+/// allocates a one-page grant and slices it with `size_out` on its own user
+/// stack, through the production `handle_syscall` path. The size must land in
+/// that slot, read back through the user-copy window; the slot is primed with
+/// a sentinel through the same window first, so a skipped write cannot pass.
+/// Under SMAP a raw kernel store to the slot is a kernel `#PF` (fatal), so a
+/// PASS with `smap=on` proves the write goes through the window. The domain
+/// lane requires the marker when its boot line says `smap=on`. Leaves the
+/// scheduler, the quota tables and `next_task_id` as found.
+#[cfg(all(
+    feature = "test-hooks",
+    feature = "native-domains",
+    cellos_wide,
+    target_arch = "x86_64"
+))]
+pub fn smap_grant_slice_self_test() -> bool {
+    let smap = if crate::arch::user_access::smap_active() {
+        "on"
+    } else {
+        "off"
+    };
+    let saved_next_tid = super::SCHEDULER.lock().as_ref().map(|s| s.next_task_id);
+    register_quota(cell_quota::DEFAULT_QUOTA_BYTES);
+    insert_parent();
+
+    let outcome = match handle_syscall(
+        PARENT_TID,
+        Syscall::Spawn {
+            entry: 0x1000,
+            arg: 0,
+        },
+    ) {
+        Ok(tid) if tid != 0 => {
+            let outcome = grant_slice_size_out_lands(tid);
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                sched.exit_task(tid, 0);
+            }
+            reap();
+            outcome
+        }
+        other => Err(alloc::format!("spawn returned {other:?}")),
+    };
+
+    remove(PARENT_TID);
+    cell_quota::deregister(CellId(QUOTA_CELL));
+    if let (Some(sched), Some(n)) = (super::SCHEDULER.lock().as_mut(), saved_next_tid) {
+        sched.next_task_id = n;
+    }
+    match outcome {
+        Ok(()) => {
+            log::info!(
+                "[selftest] SMAP-GRANT-SLICE: PASS (size_out landed on the user stack, smap={smap})"
+            );
+            true
+        }
+        Err(why) => {
+            log::error!("[selftest] SMAP-GRANT-SLICE: FAIL (smap={smap}) — {why}");
+            false
+        }
+    }
+}
+
+/// One `GrantAlloc` / `GrantSlice(size_out)` / `GrantFree` round by `tid`,
+/// with `size_out` at the top word of its user stack.
+#[cfg(all(
+    feature = "test-hooks",
+    feature = "native-domains",
+    cellos_wide,
+    target_arch = "x86_64"
+))]
+fn grant_slice_size_out_lands(tid: usize) -> Result<(), alloc::string::String> {
+    use alloc::format;
+    use core::mem::size_of;
+    const SENTINEL: usize = 0x5a5a_5a5a_5a5a_5a5a;
+    let size = crate::memory::paging::PAGE_SIZE;
+
+    let (slot, view) = super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| {
+            let task = sched.tasks.get(&tid)?;
+            let stack = task.user_stack.as_ref()?;
+            Some((
+                stack.top - size_of::<usize>(),
+                super::copy_glue::TaskCopyView::of(task),
+            ))
+        })
+        .ok_or_else(|| format!("thread {tid} has no user stack"))?;
+    if !view.is_sas() {
+        return Err(format!("thread {tid} is not a Sas task"));
+    }
+    view.write_bytes(slot, &SENTINEL.to_ne_bytes())
+        .map_err(|()| format!("priming slot {slot:#x} through the window failed"))?;
+    let grant_id = match handle_syscall(tid, Syscall::GrantAlloc { size }) {
+        Ok(id) if id != 0 => id,
+        other => return Err(format!("GrantAlloc returned {other:?}")),
+    };
+    let sliced = handle_syscall(
+        tid,
+        Syscall::GrantSlice {
+            grant_id,
+            size_out_ptr: slot,
+            expected_owner_tid: 0,
+            flags: 0,
+        },
+    );
+    let mut landed = [0u8; size_of::<usize>()];
+    let read = view.read_into(slot, &mut landed);
+    let freed = handle_syscall(tid, Syscall::GrantFree { grant_id });
+    if !matches!(sliced, Ok(base) if base == grant_id) {
+        return Err(format!(
+            "GrantSlice returned {sliced:?}, expected {grant_id:#x}"
+        ));
+    }
+    read.map_err(|()| format!("reading slot {slot:#x} back through the window failed"))?;
+    let value = usize::from_ne_bytes(landed);
+    if value != size {
+        return Err(format!("size_out holds {value:#x}, expected {size:#x}"));
+    }
+    freed.map_err(|error| format!("GrantFree returned {error:?}"))?;
+    Ok(())
+}

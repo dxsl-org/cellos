@@ -30,7 +30,9 @@
 #   * when the boot line says `smap=on` (the default model has SMAP), the
 #     SMAP window (`[selftest] SMAP-WINDOW: PASS`): a Sas cell's `Log` copies
 #     in through the user-copy window and a raw kernel read of the same user
-#     byte outside it faults.
+#     byte outside it faults; and `GrantSlice`'s `size_out`
+#     (`[selftest] SMAP-GRANT-SLICE: PASS`): a Sas thread's slice writes the
+#     grant size to its user stack through the window.
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -466,10 +468,13 @@ fi
 # SMAP is on whenever the CPU has it (the default TCG model and KVM `-cpu
 # host` on a host with SMAP). The kernel's boot line says so, and then a Sas
 # cell's `Log` must copy in through the user-access window while a raw
-# supervisor read of the same user byte faults (`SMAP-WINDOW`).
+# supervisor read of the same user byte faults (`SMAP-WINDOW`), and a Sas
+# thread's `GrantSlice` must write `size_out` to its user stack through the
+# window (`SMAP-GRANT-SLICE`; a raw store there is a kernel #PF).
 if grep -aqE '\[x86\] protection: .*smap=on' "$LOG"; then
     REQUIRED_MARKERS+=(
         "SMAP window:::[selftest] SMAP-WINDOW: PASS"
+        "GrantSlice size_out under SMAP:::[selftest] SMAP-GRANT-SLICE: PASS"
     )
 fi
 
