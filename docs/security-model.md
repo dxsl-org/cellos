@@ -144,6 +144,25 @@ OpenSBI → Limine → kernel, the kernel is built PIE (`-C relocation-model=pic
 via `kernel/build.rs`), and `limine.conf` sets `KASLR=yes` so consecutive boots load the kernel
 at different physical bases. Verified across the integration test suite.
 
+### Cell image and user-stack slot randomisation (2026-11-16)
+**Severity: Partial — x86 with RDSEED/RDRAND only**
+
+Every PIE image takes one `CELL_VA_STRIDE` slot of the cell region and every user stack one
+slot of the stack arena (`kernel/src/loader/va_alloc.rs`). Each allocation starts its probe for
+a free slot at a random index read from the kernel entropy source
+(`dev::virtio_rng::get_random`, x86 RDSEED then RDRAND) and takes the first free slot from
+there, wrapping. The boot log says which order is in force: `[va] slot order: randomised` or
+`[va] slot order: deterministic (no entropy)`. Limits, stated plainly:
+
+- RV64 and AArch64 have no kernel entropy source, and neither does an x86 CPU without RDRAND:
+  slots are then handed out lowest-first, the same addresses every boot.
+- The entropy is the slot index only: 9 bits for 512 cell slots, 15 bits for 32 768 stack
+  slots. Offsets inside a slot are not randomised, and a fixed-VA (ET_EXEC) image always sits
+  in the slot it is linked into.
+- It is not isolation: the SAS maps every Tier-1 cell's pages USER in one table, so a cell that
+  learns another cell's address (from an IPC pointer, a grant, a leak) can reach it. It only
+  makes a blind guess likely to land on an unmapped page, which faults and kills the guesser.
+
 ### x86-64 Privileged Entry — Hardened (2026-10-31)
 **Severity: Resolved for the entry paths listed; SMAP open**
 

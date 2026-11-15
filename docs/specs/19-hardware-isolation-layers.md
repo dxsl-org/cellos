@@ -155,7 +155,8 @@ requires three changes; this ruling authorizes no runtime or ABI change:
    handler cost ~1 GiB of identical, immutable pages. Layer A makes sharing safe: once those
    segments are read-only, N instances can map the *same* frames and allocate only stack,
    heap and TCB. Needs image-hash frame refcounting in the loader; the VA allocator already
-   hands out distinct slots (`MAX_SLOTS = 512`).
+   hands out distinct slots (`MAX_SLOTS = 512`), from a random start index per allocation
+   when the kernel has an entropy source (x86 RDSEED/RDRAND), else lowest-first.
 2. **Demand-paged stacks.** A 512 KiB pre-allocation per cell is the dominant fixed cost. A
    light request touches a few KiB. This goes beyond static per-path sizing, which still
    pre-allocates.

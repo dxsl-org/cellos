@@ -15,15 +15,24 @@
 //! the `USER_VADDR_MAX` guard is never triggered by any allocated slot.
 //!
 //! # Design
-//! Simple two-level allocator: a bump pointer for never-allocated slots, and a
-//! free list (atomic bitset) for slots returned by `free_cell_va`.  Allocations
-//! are O(n_freed) in the worst case, O(1) when the free list is empty.
+//! Each region is one atomic ownership bitmap: bit N is set iff slot N has a
+//! holder. `alloc` probes from a start index ([`SlotOrder`]) for the first clear
+//! bit, wrapping once through the region, and sets it with one compare-exchange;
+//! `reserve` sets one named bit; `free` clears it. Slots are all one size, so
+//! any free slot fits any request: the region is exhausted only when every slot
+//! is held, whatever the start index. A probe reads at most `slots / 64 + 1`
+//! bitmap words (9 for 512 cell slots, 513 for the 32 768 stack slots).
+//!
+//! The start index is random per allocation when the kernel has a hardware
+//! entropy source at boot (x86 RDSEED/RDRAND), so a cell's image and stack
+//! addresses differ between boots. Without one (RV64, AArch64, an x86 CPU
+//! without RDRAND) it is 0: lowest free slot first, the historical order.
 
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
@@ -120,17 +129,77 @@ pub(crate) fn slot_containing(va: usize) -> Option<usize> {
 /// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
 const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
 
+/// Where [`SlotAllocator::alloc`] starts probing.
+///
+/// Randomised iff [`seed`](Self::seed) found its source able to fill one
+/// 64-bit word; it is then read again for every allocation. Otherwise every
+/// start is 0 (lowest free slot first) and the source is never called again.
+pub(super) struct SlotOrder {
+    /// Fills a prefix of the buffer with hardware entropy and returns its length
+    /// (`dev::virtio_rng::get_random`'s contract); never allocates or blocks.
+    source: fn(&mut [u8]) -> usize,
+    randomised: AtomicBool,
+}
+
+impl SlotOrder {
+    pub(super) const fn new(source: fn(&mut [u8]) -> usize) -> Self {
+        Self {
+            source,
+            randomised: AtomicBool::new(false),
+        }
+    }
+
+    /// Probe the source once and fix the order for this boot: `true` (random
+    /// starts) iff it filled a whole word.
+    #[cfg(any(cellos_wide, test))]
+    pub(super) fn seed(&self) -> bool {
+        let randomised = self.word().is_some();
+        // Only this flag is published: the source holds its own state.
+        self.randomised.store(randomised, Ordering::Relaxed);
+        randomised
+    }
+
+    /// The start index for one allocation over `slots` slots, below `slots`.
+    /// In randomised order a source that fails this once (RDSEED and RDRAND
+    /// both exhausted after their bounded retries) starts that one allocation
+    /// at 0; which slot it gets never affects ownership.
+    fn start(&self, slots: usize) -> usize {
+        if !self.randomised.load(Ordering::Relaxed) {
+            return 0;
+        }
+        self.word().map_or(0, |word| (word % slots as u64) as usize)
+    }
+
+    fn word(&self) -> Option<u64> {
+        let mut bytes = [0u8; 8];
+        ((self.source)(&mut bytes) == bytes.len()).then(|| u64::from_le_bytes(bytes))
+    }
+}
+
+/// The start order of both regions, fixed once at boot by [`seed_slot_order`].
+static SLOT_ORDER: SlotOrder = SlotOrder::new(crate::dev::virtio_rng::get_random);
+
+/// Boot, once, before any cell image or user stack takes a slot: random slot
+/// starts if the kernel entropy source works, else lowest-first. Logs which.
+#[cfg(cellos_wide)]
+pub(crate) fn seed_slot_order() {
+    if SLOT_ORDER.seed() {
+        log::info!("[va] slot order: randomised");
+    } else {
+        log::info!("[va] slot order: deterministic (no entropy)");
+    }
+}
+
 /// Slot ownership over one [`Region`] (`WORDS` bitmap words cover its slots).
-/// Invariant: a slot is owned by exactly one holder iff its index is below
-/// `bump` and its `free` bit is clear; every `free` bit lies below `bump`.
+/// Invariant: bit N of `owned` is set iff slot N has exactly one holder, and no
+/// bit at or past `region.slots` is ever set. Only an atomic read-modify-write
+/// that finds a bit clear sets it (`alloc`, `reserve`), so no slot is handed
+/// out twice; only `free` clears one.
 pub(super) struct SlotAllocator<const WORDS: usize = BITMAP_WORDS> {
     region: Region,
-    /// The first slot that has NEVER been handed out.
-    bump: core::sync::atomic::AtomicUsize,
-    /// Bit N = 1 means slot N is available for reuse. Each repeat of the inline
-    /// `const` block is a distinct AtomicU64 (an inline const sidesteps
-    /// `clippy::declare_interior_mutable_const` without changing semantics).
-    free: [AtomicU64; WORDS],
+    /// Each repeat of the inline `const` block is a distinct AtomicU64 (an
+    /// inline const sidesteps `clippy::declare_interior_mutable_const`).
+    owned: [AtomicU64; WORDS],
 }
 
 static SLOTS: SlotAllocator = SlotAllocator::new();
@@ -144,44 +213,64 @@ impl SlotAllocator {
 
 impl<const WORDS: usize> SlotAllocator<WORDS> {
     pub(super) const fn over(region: Region) -> Self {
-        assert!(region.slots <= WORDS * 64);
+        assert!(region.slots > 0 && region.slots <= WORDS * 64);
         Self {
             region,
-            bump: core::sync::atomic::AtomicUsize::new(0),
-            free: [const { AtomicU64::new(0) }; WORDS],
+            owned: [const { AtomicU64::new(0) }; WORDS],
         }
     }
 
-    pub(super) fn alloc(&self) -> Option<usize> {
-        // 1. Try the free list first.
-        for (word_idx, word) in self.free.iter().enumerate() {
-            let mut val = word.load(Ordering::Relaxed);
-            while val != 0 {
-                let bit = val.trailing_zeros() as usize;
-                let slot = word_idx * 64 + bit;
-                if slot >= self.region.slots {
+    /// Take a free slot, probing from `order`'s start index; `None` only when
+    /// every slot is held.
+    pub(super) fn alloc(&self, order: &SlotOrder) -> Option<usize> {
+        self.claim_from(order.start(self.region.slots))
+    }
+
+    /// Claim the first free slot at or after `start`, wrapping past the last
+    /// slot to slot 0: every slot is probed once. `start == 0` is lowest-first.
+    fn claim_from(&self, start: usize) -> Option<usize> {
+        let words = self.region.slots.div_ceil(64);
+        let (first, shift) = (start / 64, start % 64);
+        // `words + 1` visits: the start word from `start` up, every other word,
+        // then the start word again below `start` (nothing when `shift == 0`).
+        for visit in 0..=words {
+            let index = (first + visit) % words;
+            let mut probed = self.slot_bits(index);
+            if visit == 0 {
+                probed &= u64::MAX << shift;
+            } else if visit == words {
+                probed &= (1u64 << shift) - 1;
+            }
+            let word = &self.owned[index];
+            let mut seen = word.load(Ordering::Relaxed);
+            loop {
+                let open = probed & !seen;
+                if open == 0 {
                     break;
                 }
-                let mask = 1u64 << bit;
+                let bit = open.trailing_zeros() as usize;
+                // Acquire: the previous holder's `free` happens before this
+                // holder's use of the slot.
                 match word.compare_exchange_weak(
-                    val,
-                    val & !mask,
+                    seen,
+                    seen | 1u64 << bit,
                     Ordering::AcqRel,
                     Ordering::Relaxed,
                 ) {
-                    Ok(_) => return Some(self.region.base(slot)),
-                    Err(cur) => val = cur, // retry with updated value
+                    Ok(_) => return Some(self.region.base(index * 64 + bit)),
+                    Err(now) => seen = now,
                 }
             }
         }
+        None
+    }
 
-        // 2. Bump-allocate a fresh slot.
-        let idx = self.bump.fetch_add(1, Ordering::SeqCst);
-        if idx >= self.region.slots {
-            self.bump.fetch_sub(1, Ordering::SeqCst);
-            return None;
+    /// The bits of bitmap word `index` that name a slot of the region.
+    fn slot_bits(&self, index: usize) -> u64 {
+        match self.region.slots - index * 64 {
+            left if left >= 64 => u64::MAX,
+            left => (1u64 << left) - 1,
         }
-        Some(self.region.base(idx))
     }
 
     /// Claim the exact slot at `base`, or refuse when another holder owns it.
@@ -189,65 +278,34 @@ impl<const WORDS: usize> SlotAllocator<WORDS> {
         let Some(slot) = self.region.index_of_base(base) else {
             return false;
         };
-        loop {
-            let bump = self.bump.load(Ordering::SeqCst);
-            if slot < bump {
-                // Handed out before: claimable only while it is on the free list.
-                let mask = 1u64 << (slot % 64);
-                return self.free[slot / 64].fetch_and(!mask, Ordering::AcqRel) & mask != 0;
-            }
-            if self
-                .bump
-                .compare_exchange(bump, slot + 1, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-            {
-                // The slots jumped over were never handed out: they go on the
-                // free list so the ownership invariant keeps holding.
-                for skipped in bump..slot {
-                    self.free[skipped / 64].fetch_or(1u64 << (skipped % 64), Ordering::Release);
-                }
-                return true;
-            }
-        }
+        let mask = 1u64 << (slot % 64);
+        self.owned[slot / 64].fetch_or(mask, Ordering::AcqRel) & mask == 0
     }
 
+    /// Release the slot at `base`. Not a slot base: ignored.
     pub(super) fn free(&self, base: usize) {
         let Some(slot) = self.region.index_of_base(base) else {
             return;
         };
-        // Restore the bump cursor exactly when this is the most recently minted
-        // slot. If another allocation raced ahead, publish it to the free bitmap.
-        if self
-            .bump
-            .compare_exchange(slot + 1, slot, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            let word = &self.free[slot / 64];
-            let mask = 1u64 << (slot % 64);
-            word.fetch_or(mask, Ordering::Release);
-        }
+        self.owned[slot / 64].fetch_and(!(1u64 << (slot % 64)), Ordering::Release);
     }
 
-    /// Slots owned right now: below `bump` and not on the free list.
+    /// Slots owned right now.
     #[cfg(test)]
     pub(super) fn owned(&self) -> usize {
-        let freed: u32 = self
-            .free
+        self.owned
             .iter()
-            .map(|word| word.load(Ordering::Acquire).count_ones())
-            .sum();
-        self.bump.load(Ordering::Acquire) - freed as usize
+            .map(|word| word.load(Ordering::Acquire).count_ones() as usize)
+            .sum()
     }
 
+    /// The ownership bitmap, word by word.
     #[cfg(feature = "test-hooks")]
-    fn snapshot(&self) -> (usize, alloc::vec::Vec<u64>) {
-        (
-            self.bump.load(Ordering::Acquire),
-            self.free
-                .iter()
-                .map(|word| word.load(Ordering::Acquire))
-                .collect(),
-        )
+    fn snapshot(&self) -> alloc::vec::Vec<u64> {
+        self.owned
+            .iter()
+            .map(|word| word.load(Ordering::Acquire))
+            .collect()
     }
 }
 
@@ -284,11 +342,11 @@ const STACKS: Region = Region {
 #[cfg(cellos_wide)]
 static STACK_ARENA: SlotAllocator<{ STACK_SLOTS / 64 }> = SlotAllocator::over(STACKS);
 
-/// Take one stack slot (`STACK_VA_STRIDE` bytes of VA, nothing mapped), or
-/// `None` when every slot is held.
+/// Take one stack slot (`STACK_VA_STRIDE` bytes of VA, nothing mapped) in
+/// this boot's [`SlotOrder`], or `None` when every slot is held.
 #[cfg(cellos_wide)]
 pub(crate) fn alloc_stack_va() -> Option<usize> {
-    STACK_ARENA.alloc()
+    STACK_ARENA.alloc(&SLOT_ORDER)
 }
 
 /// Paging targets only: the bare-physical ones never map a stack.
@@ -347,29 +405,31 @@ pub(crate) fn in_stack_arena(va: usize) -> bool {
     (STACK_VA_START..STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE).contains(&va)
 }
 
-/// The stack arena's allocator state (`bump`, free bitmap), as [`snapshot`]
-/// is for the cell slots.
+/// The stack arena's ownership bitmap, as [`snapshot`] is for the cell slots.
 #[cfg(all(cellos_wide, feature = "test-hooks"))]
-pub(crate) fn stack_snapshot() -> (usize, alloc::vec::Vec<u64>) {
+pub(crate) fn stack_snapshot() -> alloc::vec::Vec<u64> {
     STACK_ARENA.snapshot()
 }
 
-/// Allocate one profile-sized VA slot for a new PIE cell.
+/// Allocate one profile-sized VA slot for a new PIE cell, in this boot's
+/// [`SlotOrder`].
 ///
-/// Returns `None` when all slots are exhausted (unlikely in practice: 512 cells
-/// and the free list recycles dead cells' slots).
+/// Returns `None` only when every slot is held (`MAX_SLOTS` live images; a
+/// dead cell's slot returns once its flush is confirmed).
 pub fn alloc_cell_va() -> Option<usize> {
-    SLOTS.alloc()
+    SLOTS.alloc(&SLOT_ORDER)
 }
 
 /// Claim the slot at `base` for a fixed-VA (ET_EXEC) image that is linked
 /// inside it. `false` when `base` is not a slot base or another cell owns it:
 /// a fixed-VA image may never land in a slot a PIE (or another image) holds.
+/// With randomised order a live PIE may hold any slot, so this can refuse
+/// while fewer than `MAX_SLOTS` slots are held.
 pub fn reserve_cell_va(base: usize) -> bool {
     SLOTS.reserve(base)
 }
 
-/// Return a VA slot to the free list so it can be reused by a future cell.
+/// Return a VA slot so it can be reused by a future cell.
 ///
 /// `base` must be a value previously returned by `alloc_cell_va` or claimed
 /// by `reserve_cell_va`. Silently ignores invalid values.
@@ -377,8 +437,9 @@ pub fn free_cell_va(base: usize) {
     SLOTS.free(base)
 }
 
+/// The cell slots' ownership bitmap, word by word.
 #[cfg(feature = "test-hooks")]
-pub(crate) fn snapshot() -> (usize, alloc::vec::Vec<u64>) {
+pub(crate) fn snapshot() -> alloc::vec::Vec<u64> {
     SLOTS.snapshot()
 }
 

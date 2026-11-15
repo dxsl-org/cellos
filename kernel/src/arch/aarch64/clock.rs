@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! `clock`: counters, uptime and wall-clock time.
 
-/// Free-running counter for KASLR entropy.
-pub(crate) fn counter() -> u64 {
-    // SAFETY: CNTVCT_EL0 is the virtual count register; accessible from EL1.
-    let t: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, cntvct_el0", out(reg) t, options(nomem, nostack));
-    }
-    t
-}
-
 /// `CNTPCT_EL0`, the physical counter.
 pub(crate) fn physical_counter() -> u64 {
     let ticks: u64;

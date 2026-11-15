@@ -1931,17 +1931,6 @@ rationale = "Taken from the #PF demand path (vi_handle_page_fault -> map_page wh
 review = "kernel/src/memory/paging.rs:init_kernel_paging_x86; kernel/src/memory/paging.rs:map_page; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:223; kernel/src/sched/smp.rs:837"
 
 [[global]]
-key = "kernel::memory::kaslr::KASLR_SEED"
-lifetime = "boot"
-mutation = "atomic"
-owner = "memory::kaslr: init_kaslr writes it from the HHDM base and RDTSC; kaslr_cell_base is the only reader"
-contexts = ["boot"]
-seal = "stored once by init_kaslr (main.rs:224) on the BSP before APs"
-retirement = "never: lives for the whole run"
-rationale = "Single boot-time Relaxed store with no concurrent reader; kaslr_cell_base has no caller anywhere, so the seed is written but never consumed on this image."
-review = "kernel/src/memory/kaslr.rs:init_kaslr; kernel/src/memory/kaslr.rs:kaslr_cell_base; kernel/src/main.rs:224"
-
-[[global]]
 key = "kernel::memory::heap::NULL_FROM_QUOTA"
 lifetime = "global"
 mutation = "atomic"
@@ -2523,7 +2512,7 @@ owner = "kernel::loader::va_alloc cell virtual address slot bitmap allocator"
 contexts = ["boot", "normal"]
 seal = "none: allocated and freed on cell spawn and termination"
 retirement = "never: lives for the whole run"
-rationale = "Atomic bump counter and AtomicU64 free bitmap allocate disjoint PIE cell VA spaces without locking"
+rationale = "One AtomicU64 ownership bitmap: alloc and reserve set a clear bit with one atomic RMW, free clears it, so disjoint PIE cell VA slots are handed out without locking"
 review = "kernel/src/loader/va_alloc.rs:SLOTS"
 
 [[global]]
@@ -2534,8 +2523,19 @@ owner = "kernel::loader::va_alloc user-stack arena slot bitmap allocator"
 contexts = ["boot", "normal", "irq"]
 seal = "none: allocated by user-stack allocation, freed by the stack run's VaHold release"
 retirement = "never: lives for the whole run"
-rationale = "Atomic bump counter and AtomicU64 free bitmap hand out disjoint user-stack VA slots without locking; a slot returns only after its run's flush is confirmed, including from the hart-0 reaper in the timer interrupt"
+rationale = "One AtomicU64 ownership bitmap: alloc sets a clear bit with one atomic RMW, free clears it, so disjoint user-stack VA slots are handed out without locking; a slot returns only after its run's flush is confirmed, including from the hart-0 reaper in the timer interrupt"
 review = "kernel/src/loader/va_alloc.rs:STACK_ARENA; kernel/src/task/stack.rs:release_stack_slot"
+
+[[global]]
+key = "kernel::loader::va_alloc::SLOT_ORDER"
+lifetime = "boot"
+mutation = "atomic"
+owner = "kernel::loader::va_alloc slot start order shared by SLOTS and STACK_ARENA"
+contexts = ["boot", "normal"]
+seal = "the randomised flag is stored once by seed_slot_order in kmain on the boot hart, before any cell image or user stack takes a slot; the source fn pointer is const"
+retirement = "never: lives for the whole run"
+rationale = "A Relaxed AtomicBool publishes nothing but itself; an allocation that reads the pre-seed false only starts at slot 0, and ownership never depends on the start index"
+review = "kernel/src/loader/va_alloc.rs:SLOT_ORDER; kernel/src/loader/va_alloc.rs:seed_slot_order; kernel/src/main.rs:kmain"
 
 [[global]]
 key = "kernel::cell::service_registry::OWNERS"

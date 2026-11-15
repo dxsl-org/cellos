@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! `clock` for the 32-bit targets: no counter or wall clock is wired up.
 
-/// No hardware timer available; use a fixed diversifier.
-/// This means KASLR is purely seed-based (hhdm_offset) on these arches.
-pub(crate) fn counter() -> u64 {
-    0xDEAD_BEEF_CAFE_1234u64
-}
-
 pub(crate) fn uptime_ticks() -> usize {
     0usize
 }

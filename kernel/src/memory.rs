@@ -19,7 +19,6 @@ pub mod frame;
 /// follow: unpublish, flush once per operation, normalise, free — or quarantine.
 pub mod frame_run;
 pub mod heap;
-pub mod kaslr;
 /// Permission changes on already-mapped pages (`protect_page` / `protect_range`).
 /// Re-exported through `paging`; kept separate so `paging.rs` stops growing.
 pub mod page_protect;

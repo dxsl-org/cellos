@@ -42,7 +42,7 @@ pub(super) struct StateSnapshot {
     free_frames: Option<usize>,
     pub(super) quota: crate::memory::cell_quota::QuotaSnapshot,
     platform: bool,
-    va: (usize, alloc::vec::Vec<u64>),
+    va: alloc::vec::Vec<u64>,
     replacement: alloc::vec::Vec<crate::cell::hotswap::CeilingSnapshotEntry>,
     block_io_registered: bool,
     input_tid: usize,

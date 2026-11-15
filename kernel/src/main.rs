@@ -189,6 +189,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // The 32-bit targets spawn no cells, so nothing below reads these there.
     #[cfg(not(cellos_wide))]
     let _ = (console, pci, iommu);
+    // Before anything takes a cell image or user-stack slot: random slot starts
+    // when the kernel entropy source works. Logs `[va] slot order: …` once.
+    #[cfg(cellos_wide)]
+    crate::loader::va_alloc::seed_slot_order();
 
     match storage {
         boot::BootStorage::VirtioMmio => {

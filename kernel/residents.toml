@@ -339,7 +339,6 @@
 "kernel/src/memory/frame_run_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/heap.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/heap/p01_owner.rs" = { category = "test", owner = "memory" }
-"kernel/src/memory/kaslr.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/page_protect.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/paging.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/pin.rs" = { category = "A", owner = "memory" }

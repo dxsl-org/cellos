@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! `clock`: counters, uptime and wall-clock time.
 
-/// Free-running counter for KASLR entropy.
-pub(crate) fn counter() -> u64 {
-    // SAFETY: `csrr time` reads the mtime-backed TIME CSR (unprivileged read
-    // permitted in S-mode when sstatus.TVM=0, which is always the case here).
-    let t: u64;
-    unsafe {
-        core::arch::asm!("csrr {}, time", out(reg) t, options(nomem, nostack));
-    }
-    t
-}
-
 /// `GetTime(0)`: raw monotonic ticks (mtime).
 pub(crate) fn uptime_ticks() -> usize {
     hal::common::timer::read_mtime() as usize

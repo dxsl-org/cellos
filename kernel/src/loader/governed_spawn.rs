@@ -349,6 +349,11 @@ fn spawn_init(elf: &[u8], #[cfg(feature = "p01-trace")] bootstrap_init: bool) ->
         state.bootstrap_init = bootstrap_init;
         state
     };
+    let (image, stack) = prepared.placement();
     let tid = crate::task::publish_prepared(prepared, state).map(|(tid, _)| tid)?;
+    // One line per boot to compare placements across boots: under `[va] slot
+    // order: randomised` both bases differ between boots (barring a chance
+    // repeat of one slot); under `deterministic` they are the same every boot.
+    log::info!("[va] init: image base {image:#x}, user stack {stack:#x}");
     Ok(tid)
 }

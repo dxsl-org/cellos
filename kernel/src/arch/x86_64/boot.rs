@@ -116,8 +116,6 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         // Propagate the HHDM offset to the HAL page-table walkers so they can
         // dereference physical PTE addresses via HHDM virtual pointers.
         crate::hal::paging::set_hhdm_offset(hhdm as usize);
-        // Initialise KASLR seed from HHDM entropy + RDTSC.
-        crate::memory::kaslr::init_kaslr(hhdm);
     }
 
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup

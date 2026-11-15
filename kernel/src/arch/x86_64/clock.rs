@@ -1,25 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! `clock`: counters, uptime and wall-clock time.
 
-/// Free-running counter for KASLR entropy.
-pub(crate) fn counter() -> u64 {
-    // RDTSC returns the current timestamp counter. On QEMU TCG this is a
-    // monotonically increasing instruction count — sufficient for ASLR.
-    let lo: u32;
-    let hi: u32;
-    // SAFETY: RDTSC is an unprivileged instruction on x86_64; it reads the
-    // CPU time-stamp counter and has no memory or control-flow side-effects.
-    unsafe {
-        core::arch::asm!(
-            "rdtsc",
-            out("eax") lo,
-            out("edx") hi,
-            options(nomem, nostack)
-        );
-    }
-    ((hi as u64) << 32) | (lo as u64)
-}
-
 /// `GetTime(0)`: raw monotonic ticks (the clocksource is in nanoseconds).
 pub(crate) fn uptime_ticks() -> usize {
     hal::clock::now_ns() as usize

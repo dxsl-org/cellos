@@ -44,6 +44,12 @@ impl PreparedElfTask {
         Ok((task, self.load_base))
     }
 
+    /// Where the image and the user stack landed: (PIE load base, `0` for a
+    /// fixed-VA image; user-stack slot base).
+    pub(crate) fn placement(&self) -> (usize, usize) {
+        (self.load_base, self.ustack.base)
+    }
+
     pub(super) fn requested_cell_id(&self) -> CellId {
         self.requested_cell_id
     }

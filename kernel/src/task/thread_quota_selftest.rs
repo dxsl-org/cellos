@@ -234,15 +234,15 @@ const ARENA_ROUNDS: usize = 512;
 
 /// Returns true iff every thread's user stack maps from the stack arena (never
 /// at its physical address) and `ARENA_ROUNDS` spawn/exit/reap rounds leave the
-/// arena exactly as they found it: the same slots owned, and the bump cursor
-/// not advanced by more than the one slot a round holds. Logs
+/// arena exactly as they found it: the same slots owned, bit for bit, whichever
+/// slot each round took (random under randomised slot order). Logs
 /// `[selftest] STACK-ARENA`. Leaves `next_task_id` as found, as [`self_test`].
 #[cfg(all(feature = "test-hooks", cellos_wide))]
 pub fn stack_arena_self_test() -> bool {
     use crate::loader::va_alloc;
 
-    let owned = |(bump, free): &(usize, alloc::vec::Vec<u64>)| {
-        bump - free
+    let owned = |bitmap: &alloc::vec::Vec<u64>| {
+        bitmap
             .iter()
             .map(|word| word.count_ones() as usize)
             .sum::<usize>()
@@ -290,13 +290,11 @@ pub fn stack_arena_self_test() -> bool {
         sched.next_task_id = n;
     }
 
-    if failure.is_none() && (owned(&after) != owned(&before) || after.0 > before.0 + 1) {
+    if failure.is_none() && after != before {
         failure = Some(alloc::format!(
-            "arena owned {} -> {}, bump {} -> {}",
+            "arena owned {} -> {} slots, or a different set",
             owned(&before),
             owned(&after),
-            before.0,
-            after.0
         ));
     }
     match failure {
