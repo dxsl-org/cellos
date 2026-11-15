@@ -387,6 +387,9 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
         # a domain was switched away from.
         "[selftest] DOMAIN-FRAME-RELEASE: PASS"
         "S22-AARCH64-DOMAIN-TEARDOWN: PASS releases="
+        # A timer-tick allocation made while a cell's charge is open on the hart
+        # is billed to the kernel, not to that cell (Phase 17, census §8.6(a)).
+        "[selftest] IRQ-ALLOC-CHARGE: PASS"
         # Phase 03 domain grant lifecycle on this architecture. The kernel-side
         # fixtures drive the production `handle_syscall` entry points with two
         # real `TaskAddressSpace::Domain` tasks, so every property below is an

@@ -17,10 +17,11 @@
 //! exposes, so `cpu_ns` deltas divide directly by `capture_start_ns` deltas.
 //! `cpu_ns` is exact on-CPU time (charged at every scheduler pass), and a Cell's
 //! `cpu_ns` includes the CPU of its already-exited threads for this incarnation.
-//! Memory: `quota_charged_bytes` is the Cell's whole quota charge (kernel heap in
-//! its context, worker stacks, pipes, session objects), not a heap size, and task
-//! `user_stack_bytes`/`segment_bytes` are informational — never sum them into the
-//! Cell (DV-4).
+//! Memory: `quota_charged_bytes` is the Cell's whole quota charge (kernel heap
+//! charged to it explicitly: its syscalls' work and the objects it owns, never
+//! interrupt or scheduler bookkeeping; worker stacks, pipes, session objects),
+//! not a heap size, and task `user_stack_bytes`/`segment_bytes` are
+//! informational — never sum them into the Cell (DV-4).
 //!
 //! Encoding is explicit little-endian at fixed offsets; the `repr(C)` structs are
 //! the documented layout, never reinterpreted from raw bytes. A V1 row is never a

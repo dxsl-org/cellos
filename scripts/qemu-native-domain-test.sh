@@ -733,6 +733,12 @@ assert_grant_revoke_outcome() {
         echo "FAIL: native-domain failure terminal for case=$case_id: $(tr '\n' ' ' <<< "$unexpected"); see $normalized_log" >&2
         exit 1
     fi
+    # Every boot of this image runs the interrupt-charge fixture after the timer
+    # starts: a tick allocation while a cell's charge is open bills the kernel.
+    if ! grep -Fq '[selftest] IRQ-ALLOC-CHARGE: PASS' "$normalized_log"; then
+        echo "FAIL: [selftest] IRQ-ALLOC-CHARGE: PASS missing for case=$case_id: $(grep -aoF -m1 'IRQ-ALLOC-CHARGE: FAIL' "$normalized_log" || echo 'no verdict'); see $normalized_log" >&2
+        exit 1
+    fi
     # The grant pair runs in every boot of this image, so every case classifies
     # its receiver faults from that boot's own handoff line.
     [[ -n "$GRANT_PAIR_FAULT_ADDRS" ]] || GRANT_PAIR_FAULT_ADDRS="$(grant_pair_fault_addrs "$normalized_log")"

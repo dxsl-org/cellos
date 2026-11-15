@@ -442,6 +442,131 @@ pub fn oom_sources() -> (usize, usize) {
     )
 }
 
+/// The owner token recorded for a live block whose payload is `size` bytes.
+///
+/// # Safety
+/// `payload` must be a live block from this allocator, allocated with a
+/// layout of exactly `size` bytes.
+#[cfg(any(feature = "test-hooks", all(test, not(target_os = "none"))))]
+unsafe fn owner_word(payload: *const u8, size: usize) -> usize {
+    // SAFETY: the caller's contract; the tag word follows the payload.
+    unsafe { payload.add(size).cast::<usize>().read_unaligned() }
+}
+
+/// Boot fixture `IRQ-ALLOC-CHARGE` (census §8.6(a)): an allocation made in
+/// interrupt context while Cell A runs is not charged to A.
+#[cfg(feature = "test-hooks")]
+pub(crate) mod irq_charge_selftest {
+    use crate::memory::cell_quota::{self, Charge, Limits, QuotaReservation};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    const NO_HART: usize = usize::MAX;
+    const PROBE_BYTES: usize = 64;
+    const PENDING: usize = 0;
+    const ALLOCATED: usize = 1;
+    const REFUSED: usize = 2;
+
+    /// Hart whose next timer tick takes the probe, or `NO_HART`.
+    static ARMED_HART: AtomicUsize = AtomicUsize::new(NO_HART);
+    static PROBE: AtomicUsize = AtomicUsize::new(PENDING);
+    static PROBE_OWNER: AtomicUsize = AtomicUsize::new(0);
+
+    /// Called by `vi_timer_tick` right after its interrupt scope opens.
+    pub(crate) fn observe_tick() {
+        let hart = crate::sched::hart_local::current_hart_id();
+        if ARMED_HART
+            .compare_exchange(hart, NO_HART, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return;
+        }
+        match super::try_box([0u8; PROBE_BYTES]) {
+            Ok(probe) => {
+                // SAFETY: `probe` is a live block of exactly PROBE_BYTES.
+                let owner = unsafe { super::owner_word(probe.as_ptr(), PROBE_BYTES) };
+                PROBE_OWNER.store(owner, Ordering::Relaxed);
+                PROBE.store(ALLOCATED, Ordering::Release);
+            }
+            Err(_) => PROBE.store(REFUSED, Ordering::Release),
+        }
+    }
+
+    /// Run on the boot hart with interrupts enabled and the timer armed. The
+    /// boot context stands in for Cell A inside a syscall: A's identity and
+    /// scope are open, A's limit is 0, and the next tick on this hart takes a
+    /// 64-byte probe. Nothing between opening and closing A's scope logs or
+    /// allocates infallibly.
+    pub(crate) fn run() {
+        let generation = crate::task::tcb::next_cell_generation();
+        let Ok(quota) = QuotaReservation::reserve_next(generation, Limits { memory: 0 }) else {
+            log::error!("[selftest] IRQ-ALLOC-CHARGE: FAIL no free CellId for cell A");
+            return;
+        };
+        let cell = Charge::new(quota.cell_id(), generation);
+        let hart = crate::sched::hart_local::current_hart_id();
+        let saved = (
+            crate::sched::hart_local::current_cell_id(),
+            crate::sched::hart_local::current_cell_generation(),
+        );
+        crate::sched::hart_local::set_current_cell_context(cell.cell().0 as usize, generation);
+        let scope = super::ChargeScope::enter(Charge::dispatched());
+        let billed_to_a = super::try_box([0u8; PROBE_BYTES]).is_err();
+        PROBE.store(PENDING, Ordering::Relaxed);
+        ARMED_HART.store(hart, Ordering::Release);
+        let start = crate::task::system_ticks();
+        let mut spins = 0u64;
+        while ARMED_HART.load(Ordering::Acquire) == hart
+            && crate::task::system_ticks().wrapping_sub(start) < 500
+            && spins < 1 << 32
+        {
+            core::hint::spin_loop();
+            spins += 1;
+        }
+        let fired = ARMED_HART.swap(NO_HART, Ordering::AcqRel) != hart;
+        // One housekeeping pass while A's scope is open.
+        crate::task::yield_cpu();
+        let restored = super::try_box([0u8; PROBE_BYTES]).is_err();
+        drop(scope);
+        crate::sched::hart_local::set_current_cell_context(saved.0, saved.1);
+        let in_use = cell_quota::in_use(cell.cell());
+        drop(quota);
+
+        let probe = PROBE.load(Ordering::Acquire);
+        let owner = PROBE_OWNER.load(Ordering::Relaxed);
+        let failure = if !billed_to_a {
+            Some("cell A's scope did not bill A")
+        } else if !fired {
+            Some("no timer tick took the probe")
+        } else if probe == REFUSED {
+            Some("the interrupt-context probe was refused")
+        } else if probe != ALLOCATED {
+            Some("the probe did not record")
+        } else if owner != cell_quota::UNCHARGED_OWNER {
+            Some("the probe's owner word is not the kernel's")
+        } else if in_use != 0 {
+            Some("cell A was charged")
+        } else if !restored {
+            Some("cell A's scope was not restored after the interrupt")
+        } else {
+            None
+        };
+        match failure {
+            None => log::info!(
+                "[selftest] IRQ-ALLOC-CHARGE: PASS owner={:#x} in_use=0 spins={}",
+                owner,
+                spins
+            ),
+            Some(reason) => log::error!(
+                "[selftest] IRQ-ALLOC-CHARGE: FAIL {} (probe={} owner={:#x} in_use={})",
+                reason,
+                probe,
+                owner,
+                in_use
+            ),
+        }
+    }
+}
+
 /// Allocator error handler
 #[cfg(not(all(test, not(target_os = "none"))))]
 #[alloc_error_handler]
@@ -498,6 +623,9 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
 mod tests {
     use super::*;
     use crate::memory::cell_quota::{self, Charge, MAX_CELLS};
+    use crate::sched::hart_local::{
+        current_cell_generation, current_cell_id, set_current_cell_context,
+    };
     use types::CellId;
 
     const OWNER: usize = MAX_CELLS - 1;
@@ -574,5 +702,48 @@ mod tests {
 
         cell_quota::deregister(CellId(OWNER as u64));
         cell_quota::deregister(CellId(OTHER as u64));
+    }
+
+    /// Census §8.6(a): an allocation in interrupt context while Cell A runs a
+    /// syscall is not charged to A, and A's charge is back once it ends.
+    #[test]
+    fn interrupt_scope_does_not_charge_the_interrupted_cell() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut arena = alloc::vec![0u64; 1024];
+        let heap = QuotaAlloc {
+            inner: LockedHeap::empty(),
+        };
+        // SAFETY: the arena outlives `heap` and is used by nothing else.
+        unsafe {
+            heap.inner
+                .lock()
+                .init(arena.as_mut_ptr().cast(), arena.len() * 8)
+        };
+        cell_quota::register(CellId(OWNER as u64), 7, cell_quota::Limits { memory: 0 });
+        let saved = (current_cell_id(), current_cell_generation());
+        set_current_cell_context(OWNER, 7);
+        let syscall = ChargeScope::enter(Charge::dispatched());
+        let probe_layout = Layout::from_size_align(64, 8).unwrap();
+
+        // SAFETY: the probe is freed once with the layout it was allocated with.
+        unsafe {
+            assert!(heap.alloc(probe_layout).is_null(), "A is at its limit");
+            let probe = {
+                let _interrupt = ChargeScope::interrupt();
+                heap.alloc(probe_layout)
+            };
+            assert!(!probe.is_null(), "the interrupt allocates as the kernel");
+            assert_eq!(owner_word(probe, 64), cell_quota::UNCHARGED_OWNER);
+            assert_eq!(in_use(OWNER), 0);
+            assert!(
+                heap.alloc(probe_layout).is_null(),
+                "A's scope is restored when the interrupt scope ends"
+            );
+            heap.dealloc(probe, probe_layout);
+        }
+
+        drop(syscall);
+        set_current_cell_context(saved.0, saved.1);
+        cell_quota::deregister(CellId(OWNER as u64));
     }
 }

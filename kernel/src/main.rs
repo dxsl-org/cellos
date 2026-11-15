@@ -591,6 +591,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Enable interrupts before entering the idle loop.
     irq.enable(clock);
+    // Needs the timer running on this hart, so it follows the enable.
+    #[cfg(feature = "test-hooks")]
+    crate::memory::heap::irq_charge_selftest::run();
 
     // Test images keep kernel Info live.
     //

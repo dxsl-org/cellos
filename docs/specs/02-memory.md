@@ -19,9 +19,29 @@ Thay vì hardcode địa chỉ 64-bit, Cellos dùng bộ khung **Virtual Memory 
 Hệ thống sử dụng **Hybrid Allocator** để cân bằng giữa tốc độ và chống phân mảnh.
 
 ### Quota-based Allocation (Chống "Tham")
-* **Cơ chế**: Mỗi Cell có `MemoryQuota`.
-* **Thực thi**: Bộ cấp phát (`GlobalAlloc`) truy vấn `CallerID` (thông qua Program Counter range) để trừ vào quỹ RAM của Cell đó.
-* **OOM Policy**: Trả về `Result::Err(OutOfMemory)` thay vì panic toàn hệ thống.
+**Amended 2026-11-15** (architecture remediation Phase 17): heap được trừ vào một chủ tường
+minh, không còn vào "Cell đang chạy".
+
+* **Cơ chế**: Mỗi Cell incarnation có `MemoryQuota`. Chủ của một lần trừ là một `Charge`
+  (`CellId` + generation của incarnation); `Charge::KERNEL` không bị giới hạn và không được đếm.
+* **Thực thi**: Bộ cấp phát (`GlobalAlloc`) trừ mỗi lần cấp phát vào `Charge` mà hart đang mở
+  qua `heap::ChargeScope`. Nó không suy chủ từ Cell đang được dispatch hay từ Program Counter.
+  Chỉ ba loại code mở scope:
+  1. Syscall entry mở `Charge::dispatched()`: việc của syscall được tính cho Cell gọi. Đây là
+     nơi duy nhất dispatch identity trở thành một charge.
+  2. Cấp phát có chủ chỉ định: payload IPC wire tính cho Cell gửi, payload và phần tăng của
+     mailbox tính cho Cell nhận, completion queue tính cho Cell sở hữu.
+  3. Scope kernel (`Charge::KERNEL`) cho bookkeeping của kernel.
+
+  Mọi interrupt entry mở scope kernel làm lệnh đầu tiên, và `yield_cpu` giữ scope kernel qua
+  mỗi lần chuyển ngữ cảnh, nên không scope nào đi qua một interrupt hay một context switch.
+  Ngoài mọi scope, chủ là kernel. Mỗi block ghi lại incarnation đã bị trừ, và `dealloc` hoàn
+  lại đúng incarnation đó, bất kể ai giải phóng; incarnation đã bị thay thì không được hoàn.
+  Đối tượng có quota riêng (pipe ring, thread stack, SHM, DMA) trừ trực tiếp qua
+  `cell_quota::Reservation`.
+* **OOM Policy**: Khi vượt quota hoặc hết heap, bộ cấp phát trả về null. Lời gọi fallible
+  (`try_reserve`, `heap::try_box`) nhận `OutOfMemory`. Lời gọi infallible đi vào
+  `alloc_error_handler`, làm hart đó dừng (idle) chứ không panic toàn hệ thống.
 
 ### Real-Time Pool (TLSF)
 `rlsf 0.2.3` is linked and a 256 KiB static pool is initialised at boot, but no runtime

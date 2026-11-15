@@ -176,11 +176,22 @@ pub(super) fn finish_trusted_success(tid: usize) -> bool {
     passed
 }
 
-/// Regression for the recursive quota-lock path: arm while allocator
-/// attribution names a Cell and confirm that arming returns synchronously.
+/// Regression for the recursive quota-lock path: arm while allocations are
+/// charged to a Cell and confirm that arming returns synchronously.
 pub(super) fn trusted_arming_completes_from_cell_context() -> bool {
-    let previous_cell_id = crate::sched::hart_local::current_cell_id();
-    crate::sched::hart_local::set_current_cell_id(1);
+    let generation = crate::task::tcb::next_cell_generation();
+    let Ok(quota) = crate::memory::cell_quota::QuotaReservation::reserve_next(
+        generation,
+        crate::memory::cell_quota::Limits {
+            memory: crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        },
+    ) else {
+        return false;
+    };
+    let cell = crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::new(
+        quota.cell_id(),
+        generation,
+    ));
 
     arm_trusted_success();
 
@@ -188,6 +199,6 @@ pub(super) fn trusted_arming_completes_from_cell_context() -> bool {
     TRUSTED_PENDING.lock().take();
     TRUSTED_ARMED.store(false, Ordering::Release);
     disarm_observations(&["AP-15"]);
-    crate::sched::hart_local::set_current_cell_id(previous_cell_id);
+    drop(cell);
     armed
 }

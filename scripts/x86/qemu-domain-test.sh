@@ -386,6 +386,7 @@ REQUIRED_MARKERS=(
     "domain cell completed:::[tier2-smoke] PASS: All Tier 2 runtime invariants verified successfully!"
     "announced fault:::[tier2-exploit] deliberately writing to NULL (0x0) — expect Page Fault termination"
     "frame release:::[selftest] DOMAIN-FRAME-RELEASE: PASS"
+    "interrupt allocations charge the kernel:::[selftest] IRQ-ALLOC-CHARGE: PASS"
     "domain teardown:::S22-X86-DOMAIN-TEARDOWN: PASS releases="
     "grant lifecycle fixture:::S22-X86-GRANT-REVOKE: PASS"
     "grant capability gate:::S22-X86-GRANT-GATE: PASS"

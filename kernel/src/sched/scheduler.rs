@@ -23,7 +23,8 @@ pub const MAX_THREADS_PER_CELL: usize = 32;
 /// Read the currently-executing cell ID (0 = kernel).
 ///
 /// Delegates to `hart_local` which reads the per-hart `current_cell_id` field
-/// via the `tp` CSR — O(1), no lock.  Safe to call from the allocator hot path.
+/// — O(1), no lock. This is the dispatch and trap-attribution identity; the
+/// allocator charges `heap::ChargeScope`'s charge, not this.
 pub fn current_cell_id() -> usize {
     crate::sched::hart_local::current_cell_id()
 }
@@ -438,7 +439,8 @@ fn with_death_subscribers_of<R>(watched: usize, f: impl FnOnce(&[usize]) -> R) -
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn death_subscription_quota_self_test() -> bool {
-    use crate::memory::cell_quota;
+    use crate::memory::cell_quota::{self, Charge};
+    use crate::memory::heap::ChargeScope;
     use types::CellId;
 
     const OWNER_CELL: usize = cell_quota::MAX_CELLS - 2;
@@ -447,14 +449,15 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     const WATCHER: usize = usize::MAX - 1;
     const GENERATION: u64 = 1;
 
-    let original = crate::sched::hart_local::current_cell_id();
     let unlimited = cell_quota::Limits { memory: usize::MAX };
     cell_quota::register(CellId(OWNER_CELL as u64), GENERATION, unlimited);
     cell_quota::register(CellId(EXIT_CELL as u64), GENERATION, unlimited);
     let owner_before = cell_quota::in_use(CellId(OWNER_CELL as u64));
     let exit_before = cell_quota::in_use(CellId(EXIT_CELL as u64));
 
-    crate::sched::hart_local::set_current_cell_id(OWNER_CELL);
+    // Subscribing and draining from inside the owner's and the exiting cell's
+    // scopes, as their syscalls would, still charges neither.
+    let owner_scope = ChargeScope::enter(Charge::new(CellId(OWNER_CELL as u64), GENERATION));
     for offset in 0..32 {
         for _ in 0..8 {
             subscribe_death(WATCHED + offset, WATCHER);
@@ -469,7 +472,8 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     };
     let owner_after_subscribe = cell_quota::in_use(CellId(OWNER_CELL as u64));
 
-    crate::sched::hart_local::set_current_cell_id(EXIT_CELL);
+    drop(owner_scope);
+    let exit_scope = ChargeScope::enter(Charge::new(CellId(EXIT_CELL as u64), GENERATION));
     for offset in 0..16 {
         drain_death_subscribers(WATCHED + offset, |_| {});
     }
@@ -478,7 +482,7 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     let owner_after_remove = cell_quota::in_use(CellId(OWNER_CELL as u64));
     let exit_after = cell_quota::in_use(CellId(EXIT_CELL as u64));
 
-    crate::sched::hart_local::set_current_cell_id(original);
+    drop(exit_scope);
     cell_quota::deregister(CellId(OWNER_CELL as u64));
     cell_quota::deregister(CellId(EXIT_CELL as u64));
     let ok = subscriptions_bounded
@@ -2354,7 +2358,7 @@ impl Scheduler {
                     &token,
                     crate::memory::cell_quota::Charge::KERNEL,
                 )
-                    .expect("two-byte inline G1 notification");
+                .expect("two-byte inline G1 notification");
                 if task
                     .pending_msgs
                     .try_push(

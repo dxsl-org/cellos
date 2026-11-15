@@ -1009,6 +1009,8 @@ pub extern "Rust" fn vi_ipi_service() {
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
     let _kernel = crate::memory::heap::ChargeScope::interrupt();
+    #[cfg(feature = "test-hooks")]
+    crate::memory::heap::irq_charge_selftest::observe_tick();
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::arch::task::retirement_selftest::observe_forced_ssip_trap();
 

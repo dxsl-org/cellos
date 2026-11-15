@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 495 | 195 | 194 | 1 | 8 | 294 |
+| kernel | yes | 498 | 195 | 194 | 1 | 8 | 297 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 119 | 69 | 69 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -300,7 +300,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (415)
+## Other declarations (418)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -555,6 +555,9 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::memory::frame_run::tests::thread_local!#1 @cfg(test)` | `kernel/src/memory/frame_run_tests.rs` | item macro | `` | cfg inactive in this profile |
 | `kernel::memory::heap::P01_EPOCH @cfg(feature = "p01-trace")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::memory::heap::P01_PEAK @cfg(feature = "p01-trace")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
+| `kernel::memory::heap::irq_charge_selftest::ARMED_HART @cfg(feature = "test-hooks")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
+| `kernel::memory::heap::irq_charge_selftest::PROBE @cfg(feature = "test-hooks")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
+| `kernel::memory::heap::irq_charge_selftest::PROBE_OWNER @cfg(feature = "test-hooks")` | `kernel/src/memory/heap.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::memory::heap::p01_owner::CONTEXT @cfg(feature = "p01-trace")` | `kernel/src/memory/heap/p01_owner.rs` | static | `[AtomicU64;HARTS]` | cfg inactive in this profile |
 | `kernel::memory::heap::p01_owner::STORAGE @cfg(feature = "p01-trace")` | `kernel/src/memory/heap/p01_owner.rs` | static | `Storage` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::ALLOC_BYTES @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
