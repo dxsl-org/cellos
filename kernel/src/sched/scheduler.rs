@@ -2331,14 +2331,12 @@ impl Scheduler {
                 .expect("three-byte inline G1 compute barrier");
                 if task
                     .pending_msgs
-                    .try_push(
-                        crate::task::tcb::PendingMsg {
-                            sender_tid: 0,
-                            data,
-                            wire: None,
-                            enqueued_tick: now as u64,
-                        },
-                    )
+                    .try_push(crate::task::tcb::PendingMsg {
+                        sender_tid: 0,
+                        data,
+                        wire: None,
+                        enqueued_tick: now as u64,
+                    })
                     .is_err()
                 {
                     crate::sched::cpu_accounting::fatal(
@@ -2360,14 +2358,12 @@ impl Scheduler {
                 .expect("two-byte inline G1 notification");
                 if task
                     .pending_msgs
-                    .try_push(
-                        crate::task::tcb::PendingMsg {
-                            sender_tid: 0,
-                            data,
-                            wire: None,
-                            enqueued_tick: now as u64,
-                        },
-                    )
+                    .try_push(crate::task::tcb::PendingMsg {
+                        sender_tid: 0,
+                        data,
+                        wire: None,
+                        enqueued_tick: now as u64,
+                    })
                     .is_err()
                 {
                     crate::sched::cpu_accounting::fatal(

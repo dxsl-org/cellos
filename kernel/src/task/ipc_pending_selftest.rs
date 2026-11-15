@@ -695,18 +695,16 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
             .tasks
             .get_mut(&RECEIVER)
             .expect("synthetic receiver exists");
-        receiver.pending_msgs.try_push(
-            super::tcb::PendingMsg {
-                sender_tid: SENDER,
-                data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
-                    payload,
-                    crate::memory::cell_quota::Charge::KERNEL,
-                )
-                .expect("inline payload copy must fit"),
-                wire: None,
-                enqueued_tick: 0,
-            },
-        )
+        receiver.pending_msgs.try_push(super::tcb::PendingMsg {
+            sender_tid: SENDER,
+            data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                payload,
+                crate::memory::cell_quota::Charge::KERNEL,
+            )
+            .expect("inline payload copy must fit"),
+            wire: None,
+            enqueued_tick: 0,
+        })
     };
     if result.is_err() {
         reset();
@@ -762,18 +760,16 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
             .tasks
             .get_mut(&RECEIVER)
             .expect("synthetic receiver exists");
-        receiver.pending_msgs.try_push(
-            super::tcb::PendingMsg {
-                sender_tid: SENDER,
-                data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
-                    payload,
-                    crate::memory::cell_quota::Charge::KERNEL,
-                )
-                .expect("inline payload copy must fit"),
-                wire: None,
-                enqueued_tick: 0,
-            },
-        )
+        receiver.pending_msgs.try_push(super::tcb::PendingMsg {
+            sender_tid: SENDER,
+            data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                payload,
+                crate::memory::cell_quota::Charge::KERNEL,
+            )
+            .expect("inline payload copy must fit"),
+            wire: None,
+            enqueued_tick: 0,
+        })
     };
     if result.is_err() {
         reset();
@@ -819,18 +815,16 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver
                 .pending_msgs
-                .try_push(
-                    super::tcb::PendingMsg {
-                        sender_tid: SENDER,
-                        data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
-                            payload,
-                            crate::memory::cell_quota::Charge::KERNEL,
-                        )
-                        .expect("inline payload copy must fit"),
-                        wire: None,
-                        enqueued_tick: 0,
-                    },
-                )
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        crate::memory::cell_quota::Charge::KERNEL,
+                    )
+                    .expect("inline payload copy must fit"),
+                    wire: None,
+                    enqueued_tick: 0,
+                })
                 .ok();
         }
     }
@@ -864,18 +858,16 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver
                 .pending_msgs
-                .try_push(
-                    super::tcb::PendingMsg {
-                        sender_tid: SENDER,
-                        data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
-                            payload,
-                            crate::memory::cell_quota::Charge::KERNEL,
-                        )
-                        .expect("inline payload copy must fit"),
-                        wire: None,
-                        enqueued_tick: 0,
-                    },
-                )
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        crate::memory::cell_quota::Charge::KERNEL,
+                    )
+                    .expect("inline payload copy must fit"),
+                    wire: None,
+                    enqueued_tick: 0,
+                })
                 .expect("pending mailbox has room");
         }
     }
@@ -908,18 +900,16 @@ fn try_recv_attestation_writes_identity_trailer() -> bool {
         if let Some(receiver) = sched.tasks.get_mut(&RECEIVER) {
             receiver
                 .pending_msgs
-                .try_push(
-                    super::tcb::PendingMsg {
-                        sender_tid: SENDER,
-                        data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
-                            payload,
-                            crate::memory::cell_quota::Charge::KERNEL,
-                        )
-                        .expect("inline payload copy must fit"),
-                        wire: None,
-                        enqueued_tick: 0,
-                    },
-                )
+                .try_push(super::tcb::PendingMsg {
+                    sender_tid: SENDER,
+                    data: crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                        payload,
+                        crate::memory::cell_quota::Charge::KERNEL,
+                    )
+                    .expect("inline payload copy must fit"),
+                    wire: None,
+                    enqueued_tick: 0,
+                })
                 .expect("pending mailbox has room");
         }
     }

@@ -241,14 +241,12 @@ pub(crate) fn queue_pending_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
     );
-    let result = target.pending_msgs.try_push(
-        tcb::PendingMsg {
-            sender_tid,
-            data: owned,
-            wire: None,
-            enqueued_tick: system_ticks() as u64,
-        },
-    );
+    let result = target.pending_msgs.try_push(tcb::PendingMsg {
+        sender_tid,
+        data: owned,
+        wire: None,
+        enqueued_tick: system_ticks() as u64,
+    });
     #[cfg(feature = "p01-trace")]
     drop(_mailbox);
     #[cfg(feature = "p01-trace")]
@@ -282,14 +280,12 @@ pub(crate) fn queue_wire_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
     );
-    let result = target.pending_msgs.try_push(
-        tcb::PendingMsg {
-            sender_tid,
-            data: crate::ipc::pending_mailbox::PendingMsgData::empty(),
-            wire: Some(message),
-            enqueued_tick: system_ticks() as u64,
-        },
-    );
+    let result = target.pending_msgs.try_push(tcb::PendingMsg {
+        sender_tid,
+        data: crate::ipc::pending_mailbox::PendingMsgData::empty(),
+        wire: Some(message),
+        enqueued_tick: system_ticks() as u64,
+    });
     #[cfg(feature = "p01-trace")]
     drop(_mailbox);
     #[cfg(feature = "p01-trace")]
