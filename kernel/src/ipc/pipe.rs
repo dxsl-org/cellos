@@ -108,9 +108,9 @@ static PIPES: Spinlock<BTreeMap<usize, Pipe>> =
 static NEXT_PIPE_ID: Spinlock<usize> = Spinlock::ranked(1, crate::sync::rank::NEXT_PIPE_ID);
 
 /// Pipe rings are kernel objects. Charge their capacity explicitly to the
-/// creating cell, but allocate and free their storage as kernel memory so the
-/// allocator never silently adds a second per-cell charge or refunds a peer
-/// that happens to close the last end.
+/// creating cell, but allocate their storage as kernel memory so the allocator
+/// never silently adds a second per-cell charge. A free refunds the owner the
+/// block recorded, so whoever closes the last end is never refunded.
 struct PipeAllocationContext {
     previous_cell: usize,
 }
@@ -132,7 +132,6 @@ impl Drop for PipeAllocationContext {
 fn release_pipe(pipe: Pipe) {
     let owner_cell = pipe.owner_cell;
     let capacity = pipe.capacity();
-    let _kernel_allocation = PipeAllocationContext::enter();
     drop(pipe);
     crate::memory::cell_quota::refund(owner_cell, capacity);
 }

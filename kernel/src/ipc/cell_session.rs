@@ -3010,15 +3010,6 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
     }
     len
 }
-/// Context staging bytes are kernel memory: allocated and released under the
-/// kernel accounting identity, with the creator's explicit `Charge` as the quota.
-struct KernelBytes(Vec<u8>);
-impl Drop for KernelBytes {
-    fn drop(&mut self) {
-        let _kernel = KernelAllocationContext::enter();
-        drop(core::mem::take(&mut self.0));
-    }
-}
 fn prepare_child(
     caller: usize,
     principal: Principal,
@@ -3076,14 +3067,13 @@ fn prepare_child(
         }
     }
     let charge = Charge::reserve(principal, context_len + core::mem::size_of::<Prepared>())?;
-    let mut context = KernelBytes(Vec::new());
+    let mut context = Vec::new();
     {
         let _kernel = KernelAllocationContext::enter();
         context
-            .0
             .try_reserve_exact(context_len)
             .map_err(|_| Status::QuotaExceeded)?;
-        context.0.resize(context_len, 0);
+        context.resize(context_len, 0);
     }
     let launch_route = if elf.is_some() {
         crate::loader::launch_profile::LaunchRoute::Elf
@@ -3170,7 +3160,7 @@ fn prepare_child(
         operation,
         deadline,
         written: 0,
-        context: core::mem::take(&mut context.0),
+        context,
         parsed: None,
         publication: Some(publication),
         state: 0,

@@ -4,9 +4,9 @@
 //! before publication to the receiver's queue. Endpoints never retain raw peer pointers
 //! or direct access to peer address space pages.
 //!
-//! Allocations and deallocations for wire messages are explicitly performed under cell 0
-//! (kernel ownership) so that cross-cell IPC deliveries and task terminations never corrupt
-//! per-cell quota accounting.
+//! Wire payloads are allocated under cell 0 (kernel ownership) so that cross-cell IPC
+//! deliveries never charge an arbitrary cell's quota. A free refunds the owner recorded
+//! in the block, so dropping a wire needs no identity of its own.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -166,15 +166,5 @@ impl IpcWireMessage {
             header: self.header,
             payload,
         })
-    }
-}
-
-impl Drop for IpcWireMessage {
-    fn drop(&mut self) {
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        let owned = core::mem::take(&mut self.payload);
-        drop(owned);
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }

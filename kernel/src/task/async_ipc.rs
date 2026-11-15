@@ -257,16 +257,6 @@ pub(crate) fn restore_notification(task: &mut Task, token: usize) -> bool {
     restorable
 }
 
-impl Drop for Operations {
-    fn drop(&mut self) {
-        let rows = core::mem::take(&mut self.0);
-        let previous = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        drop(rows);
-        crate::sched::hart_local::set_current_cell_id(previous);
-    }
-}
-
 fn live(task: &Task) -> bool {
     !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
 }

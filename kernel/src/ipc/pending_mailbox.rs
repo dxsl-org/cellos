@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 /// Keeping them inline avoids entering the heap allocator from timer/IRQ context.
 const INLINE_MESSAGE_BYTES: usize = 32;
 
-/// Owned message bytes with explicit quota ownership for heap-backed payloads.
+/// Owned message bytes; a heap-backed payload is charged to the receiver.
 pub enum PendingMsgData {
     Inline {
         len: u8,
@@ -14,7 +14,6 @@ pub enum PendingMsgData {
     },
     Heap {
         bytes: Vec<u8>,
-        allocation_cell: usize,
     },
 }
 
@@ -40,10 +39,7 @@ impl PendingMsgData {
         })();
         crate::sched::hart_local::set_current_cell_id(previous_cell);
 
-        result.map(|bytes| Self::Heap {
-            bytes,
-            allocation_cell,
-        })
+        result.map(|bytes| Self::Heap { bytes })
     }
 
     /// Return an empty inline sentinel. Wire-backed records store this in
@@ -69,31 +65,13 @@ impl PendingMsgData {
     pub fn as_slice(&self) -> &[u8] {
         match self {
             Self::Inline { len, bytes } => &bytes[..*len as usize],
-            Self::Heap { bytes, .. } => bytes.as_slice(),
+            Self::Heap { bytes } => bytes.as_slice(),
         }
     }
 
     /// Pointer to the first payload byte.
     pub fn as_ptr(&self) -> *const u8 {
         self.as_slice().as_ptr()
-    }
-}
-
-impl Drop for PendingMsgData {
-    fn drop(&mut self) {
-        let Self::Heap {
-            bytes,
-            allocation_cell,
-        } = self
-        else {
-            return;
-        };
-
-        let owned = core::mem::take(bytes);
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(*allocation_cell);
-        drop(owned);
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }
 
@@ -235,15 +213,5 @@ impl PendingMailbox {
         }
         self.messages.push(message);
         Ok(())
-    }
-}
-
-impl Drop for PendingMailbox {
-    fn drop(&mut self) {
-        let messages = core::mem::take(&mut self.messages);
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        drop(messages);
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
     }
 }

@@ -427,7 +427,6 @@ pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: 
 }
 
 fn release_pending_deaths(task: &mut Task) {
-    let _allocation = KernelAllocationContext::enter();
     drop(core::mem::take(&mut task.pending_deaths));
 }
 

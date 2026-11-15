@@ -114,3 +114,6 @@ Phase 18.
   - `create_vm` returns the existing `OutOfMemory` for a budget refusal; its other errors keep `NotSupported`.
   - The stale charging comment in `libs/abi/src/telemetry.rs` is corrected (comment only, no byte changes).
   - Guest-memory budgets: 1544 MiB for `/bin/hypervisor`, 1 MiB for `/bin/silo`, 0 for every other cell.
+- **Decision (step 2, commit 1, 2026-11-15):** the seven drop-only pins are deleted (P4, P6, P8, P12, P20, P25 and the `release_pipe` half of P9). Each was read first: every one only drops memory, and `dealloc` refunds the owner word, so accounting does not change. No pin was kept.
+  - `PendingMsgData::Heap` loses its `allocation_cell` field, which only fed its drop pin.
+  - `cell_session::KernelBytes` is deleted. It existed only to drop under the kernel identity, so the staging bytes are a plain `Vec`.
