@@ -1,10 +1,10 @@
 # Spec 19 — Hardware Isolation Layers & Concurrency Scale Model (ADR)
 
 > **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12; amended 2026-09-22 by the
-> measured per-request scale review (§3). Layer A carries implementation and test
-> anchors in §2; per-domain page tables belong to the
-> following plan (they are the Tier-2 mechanism of Spec 18). Spec 22 is the
-> required pre-implementation design gate. This is the
+> measured per-request scale review (§3); amended 2026-11-15 by architecture remediation
+> Phase 16 (x86_64 shootdown, Layer B implemented). Layers A and B carry implementation
+> and test anchors in §2; per-domain page tables are the Tier-2 mechanism of Spec 18,
+> built under Spec 22, the required pre-implementation design gate. This is the
 > "layer2_hw_security" document that Spec 16 §8 reserved.
 
 ## 1. Context
@@ -15,7 +15,8 @@ LBI protects cell↔cell memory only where F1 holds (Spec 16, Spec 18 §1). Kern
 is hardware-protected (U/S privilege); cell↔cell was not: every cell page used to be
 left mapped `USER+WRITE` in the shared table — the loader needs WRITE to apply PIE
 relocations and never lowered it afterwards, so the `p_flags` W bit was ignored for
-the whole life of the cell. Layer A closes that; Layers B and C remain future work.
+the whole life of the cell. Layer A closes that, Layer B (per-domain page tables) is
+implemented for Tier-2 domains, and Layer C remains future work.
 Deployment hardware constrains the fixes: **VF2, Pioneer (RISC-V) and RK3588
 (Cortex-A76/A55, ARMv8.2) all have a full MMU with ASIDs, and none has MTE (needs
 v8.5+) or x86 PKU.** Any isolation layer that must work on real boards has to be
@@ -40,9 +41,10 @@ spawn preparation. The ordering is the whole design:
    that share a boundary page (the existing `already_ours` merge).
 2. `loader::reloc::apply_relocations` patches `.rela.dyn` through those writable pages.
 3. `wx::enforce` calls `memory::paging::protect_page` per page: the PTE keeps its frame,
-   takes the recorded flags, and gets a per-VA TLB invalidate
-   (`sfence.vma` / `tlbi vaae1is` / `invlpg`, added to the HAL as
-   `hal::paging::flush_tlb_page`).
+   takes the recorded flags, and the page is invalidated on every hart through the shared
+   flush (`memory::tlb_shootdown::flush_page`: RV64 `sfence.vma` plus SBI RFENCE, AArch64
+   `tlbi vaae1is`, x86_64 a local flush plus a per-CPU IPI epoch). An invalidation that is
+   not confirmed fails the lowering, so the spawn fails closed.
 
 Result: `.text` → USER+R+X, `.rodata`/RELRO → USER+R, `.data`/`.bss` → USER+RW. RELRO
 needs no special case — lowering happens *after* relocation, so `.data.rel.ro` lands on
@@ -59,21 +61,25 @@ paged arch, so a freshly spawned cell is never made runnable before its own fina
 flags are installed. That closes the writable-`.text` launch window on the calling hart
 everywhere and, by code inspection, across inner-shareable PEs on AArch64. Limits, stated
 plainly: heap, stack and `.data` remain USER+RW across cells inside the SAS (that is
-Layer B); RV64 orders the PTE store, local `sfence.vma`, and SBI RFENCE before W^X returns
-or a retired segment VA/frame is reused; the QEMU 8.2/OpenSBI two-hart oracle passed five
-repeated iterations, while real RV64 SMP hardware remains host-gated;
-x86_64 still uses only local `invlpg` and has no SMP IPI shootdown path; AArch64 already emits
+Layer B); RV64 orders the PTE store, local `sfence.vma`, and SBI RFENCE (falling back to
+the IPI epoch when RFENCE fails) before W^X returns or a retired segment VA/frame is reused;
+the QEMU 8.2/OpenSBI two-hart oracle passed five repeated iterations, while real RV64 SMP
+hardware remains host-gated; x86_64 has an SMP shootdown: a local all-PCID flush plus an
+IPI epoch every online CPU must acknowledge within a bound, and a CPU that does not
+acknowledge makes the lowering fail closed and the frames of the refused spawn quarantined,
+never a panic (fixture `S22-X86-QUARANTINE-SILENT-CPU`, QEMU TCG and KVM); AArch64 already emits
 `dsb ishst; tlbi vaae1is; [vae2is when EL2]; dsb ish; isb`, but the repo still lacks a two-PE
 runtime witness, so this document does not mark D7 complete;
 and bare-physical targets (riscv32 Nano) have no page tables, so `wx::enforce` logs the
 gap instead of enforcing.
 
-### Layer B — Per-domain page tables (Tier-2 mechanism, next plan)
+### Layer B — Per-domain page tables (Tier-2 mechanism)
 
-Anchor: planned .agents/260906-dual-mode-kernel-evolution/phase-02-tier2-paged-domain-engine.md
+Anchor: impl kernel/src/memory/address_space.rs::AddressSpace · impl kernel/src/memory/frame_run.rs::FrameRun · test kernel/src/memory/frame_run_tests.rs::a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs
 
-> **Status**: Planned — the RV64 substrate exists behind the `native-domains` feature;
-> production release is gated by Spec 22.
+> **Status**: Accepted; implemented behind the `native-domains` feature on RV64, x86_64
+> (production) and AArch64 test images. Spec 22 records the gate, its evidence and what
+> stays closed (AArch64 production admission and domain grants, warm snapshot).
 
 Classic SASOS design (Opal, Nemesis): one address-space *layout*, several protection
 *domains*. A domain gets its own root table mapping the same VA→PA as the SAS view,
@@ -82,8 +88,12 @@ This is simultaneously (a) the Tier-2 untrusted-cell mechanism (Spec 18 §2.2) a
 (b) defense-in-depth available for any high-value Tier-1 cell an operator chooses to
 demote into a domain. One kernel investment, two uses. Spec 22 defines the required
 page-table ownership, architecture-switch, domain-aware syscall copies and fault recovery,
-IPC/grant revoke, DMA, negative-test, and rollback gate; this document does not itself
-authorize a Layer-B implementation.
+IPC/grant revoke, DMA, negative-test, and rollback gate.
+
+Frames a private root maps follow the frame ownership contract of Spec 02 §3.1. A private
+root's tag invalidation that no hart has acknowledged keeps the frames behind it quarantined
+(`Quarantined(TagUnconfirmed)`) until every hart's requested epoch is published; nothing is
+abandoned, and the quarantine is bounded by the 1/64 allocation cap (Spec 02 §3.2).
 
 ### Layer C — Per-arch hardening (opportunistic, G2+)
 
@@ -223,4 +233,4 @@ Anchor: design
 | Current mapping code / W-for-relocation note | `kernel/src/loader/elf.rs` |
 | Reactor + completion queue (phase 07) | `.agents/260727-2101-midori-lessons-cellos/phase-07-async-reactor.md` |
 | Stack sizing measurements (phase 08) | `.agents/260727-2101-midori-lessons-cellos/phase-08-stack-sizing-table.md` |
-| Memory spec to amend when Layer B lands | `docs/specs/02-memory.md` |
+| Memory spec: frame ownership, quarantine cap, Layer B addendum | `docs/specs/02-memory.md` |

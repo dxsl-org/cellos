@@ -75,8 +75,8 @@ FrameRun::drop ─► unpublish PTEs (all roots that map it)
 - [x] `FrameRun` + host tests
 - [x] No-panic shootdown, batching
 - [x] Owners migrated
-- [ ] `Region` record
-- [ ] Specs updated
+- [x] `Region` record
+- [x] Specs updated
 
 ## Success Criteria
 
@@ -231,3 +231,12 @@ Phase 17 attaches quota ownership to `FrameRun` and hardens the shared root.
   - **`cortex-a57` (the script's CPU):** no FEAT_VHE, so the host runs at EL1 (`host regime: EL1`), the EL2 fixtures log `SKIP`, and the lane fails with `cell fault detected during the AArch64 development-Silo boot` (`[fault-probe] … ec=0x24`). Built at `98ff4e346b`, before D-vmid, it shows the same `[fault-probe]` lines and fails the same way.
   - **`cortex-a76`:** the host is EL2 VHE, and the boot panics after `S22-AARCH64-ROOT-SWITCH: FAIL` (kernel data abort, `far=0x100000`), as recorded for `f5d522becb` above; the owner reports `main` fails the same way.
   - **Default mode** (`virt`, no `DEVELOPMENT_SILO`) passes: `PASS: AArch64 test-hooks self-tests passed`.
+- **Surprise (rows 12–13 lanes, RV64 `--case switch`):** with rows 12 and 13 in place, the RV64 domain lane panicked with `kernel stack overflow: trap entry could not save a frame` in the copy-race revoker. The cause was a real overflow, not a frame owned twice. The fixture gave the revoker a one-page kernel stack, yet it runs `exit_task` and `yield_cpu`. Row 12 grew `yield_cpu`'s frame from 2992 to 3408 B (its inlined grant reap now uses `Region` maps), which took the chain from 4032 to 4144 B. Evidence: a single-boot memory dump and the saved return addresses (debug report `.agents/debug/debug-261115-1214-…`).
+- **Decision (fix, `8701bcec48`):** the copy-race revoker gets `Stack::new_kernel(STACK_PAGES)`, the size the GetRandom revoke-race revoker already uses. Any fixture that runs the scheduler must get `STACK_PAGES`. RV64 `--harts 2` then passed 15/15. An attempt to split `reclaim_owned_grants` out of line was not committed.
+- **Decision (step 6, row 14, specs):** Spec 02 §3 is rewritten in the section's own language (Vietnamese).
+  - **Owners:** frame owners are named with their `FrameRun`s, and the grant, SHM and export tables with `Region`. The stale bullet "grant ownership lives in per-task grant tables" is corrected; those tables were deleted in `e88613a26b`.
+  - **New sections:** §3.1 gives the release order and fail-closed lowering, and §3.2 the 1/64 cap and what it counts.
+  - **§5:** the x86_64 bullet now states the shootdown (local flush plus IPI epoch, fail closed, fixture `S22-X86-QUARANTINE-SILENT-CPU`), and the RV64 bullet states the RFENCE→IPI fallback.
+  - **Spec 19:** the status line is amended. Layer A step 3 and its limits describe the shared flush and the x86_64 shootdown. Layer B is `Accepted; implemented`, with `impl` and `test` anchors (`AddressSpace`, `FrameRun`, `a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs`) replacing the `planned` one, and it points at Spec 02 §3.1–§3.2 for frames behind a private tag. `docs/spec-status.generated.md` is regenerated.
+- **Deviation (row 14, checkpoint criterion):** the success criterion "Checkpoint: full `pr`-tier suite on three arches; …; review recorded" stays unticked. The lanes after row 13 are recorded in `/tmp/p16/c/final` (see the changelog entry), but the independent review is not recorded yet.
+

@@ -6,12 +6,12 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 435 |
+| Sections scanned | 437 |
 | Sections with an anchor | 20 |
-| Ratified/Accepted sections | 295 |
-| …of those, anchored | 19 |
+| Ratified/Accepted sections | 298 |
+| …of those, anchored | 20 |
 | Anchor violations | 0 |
-| Coverage gaps (ratified, unanchored) | 276 |
+| Coverage gaps (ratified, unanchored) | 278 |
 | Status-prose hits | 80 |
 | Plans linked from status docs | 14 |
 | Structural errors (plan frontmatter, doc links) | 0 |
@@ -28,7 +28,9 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 | `docs/specs/19-hardware-isolation-layers.md` | 2. Decision — three layers, in delivery order | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer A — Software W^X after relocation (all arches) | `impl kernel/src/loader/wx.rs::enforce` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer A — Software W^X after relocation (all arches) | `test tests/integration/tests/wx-text-write.rs::text_write_faults_and_terminates_cell` | OK |
-| `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism, next plan) | `planned .agents/260906-dual-mode-kernel-evolution/phase-02-tier2-paged-domain-engine.md` | OK |
+| `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism) | `impl kernel/src/memory/address_space.rs::AddressSpace` | OK |
+| `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism) | `impl kernel/src/memory/frame_run.rs::FrameRun` | OK |
+| `docs/specs/19-hardware-isolation-layers.md` | Layer B — Per-domain page tables (Tier-2 mechanism) | `test kernel/src/memory/frame_run_tests.rs::a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | Layer C — Per-arch hardening (opportunistic, G2+) | `design` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/memory/cell_quota.rs::MAX_CELLS=64` | OK |
 | `docs/specs/19-hardware-isolation-layers.md` | 3. Concurrency scale model — two profiles, not one number | `const kernel/src/loader/va_alloc.rs::MAX_SLOTS=512` | OK |
@@ -88,10 +90,12 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/02-memory.md:21` — Quota-based Allocation (Chống "Tham")
 - `docs/specs/02-memory.md:26` — Real-Time Pool (TLSF)
 - `docs/specs/02-memory.md:32` — 3. Focused ownership authorities
-- `docs/specs/02-memory.md:46` — 4. Stack Safety (Guard Pages)
-- `docs/specs/02-memory.md:50` — 5. Protection Policy (W^X)
-- `docs/specs/02-memory.md:63` — Bảo đảm này KHÔNG bao gồm
-- `docs/specs/02-memory.md:84` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
+- `docs/specs/02-memory.md:60` — 3.1 Hợp đồng release của `FrameRun`
+- `docs/specs/02-memory.md:88` — 3.2 Giới hạn quarantine
+- `docs/specs/02-memory.md:97` — 4. Stack Safety (Guard Pages)
+- `docs/specs/02-memory.md:101` — 5. Protection Policy (W^X)
+- `docs/specs/02-memory.md:114` — Bảo đảm này KHÔNG bao gồm
+- `docs/specs/02-memory.md:138` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
 - `docs/specs/03-runtime.md:7` — 1. IPC: Direct Method Calls
 - `docs/specs/03-runtime.md:14` — 2. Async/Await & Safety (Owned Buffers)
 - `docs/specs/03-runtime.md:17` — Quy tắc "Owned Buffers ONLY"
