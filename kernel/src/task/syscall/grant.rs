@@ -753,11 +753,16 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
 
 /// Retry owner-reclaimed domain rows whose invalidation was unacknowledged.
 ///
-/// The scheduler's housekeeping pass runs this while such a row exists (a
-/// deferral re-arms it), not only on another task's exit (census F5).
-/// Completing the revoke is what finally releases the record's backing; until
-/// then it stays with the record, still `Mapped`, so nothing reuses memory a
-/// stale translation could still reach. Returns `true` while a row still waits.
+/// The scheduler's housekeeping pass runs this, not only another task's exit
+/// (census F5). Completing the revoke is what finally releases the record's
+/// backing; until then it stays with the record, still `Mapped`, so nothing
+/// reuses memory a stale translation could still reach.
+///
+/// A row whose revoke waits on a tag the reaper has not confirmed is skipped
+/// (one quarantine lookup per root) instead of retried: a retry would scan
+/// every page again and still not complete. The reaper re-arms the pass when
+/// it completes a tag wait. Returns `true` only while a retried row still
+/// waits on something else, which re-arms the pass itself.
 pub(crate) fn sweep_deferred_domain_grants() -> bool {
     let mut page_retry: Vec<(usize, DomainRecord)> = Vec::new();
     {
@@ -774,8 +779,11 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
     }
     let mut waiting = false;
     for (key, record) in page_retry {
+        if domain_revoke_awaits_tag(&record) {
+            continue;
+        }
         if !retry_domain_revoke(&record) {
-            waiting = true;
+            waiting |= !domain_revoke_awaits_tag(&record);
             continue;
         }
         // Another hart's sweep, or another revoker, may have completed the same
@@ -802,8 +810,11 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
         }
     }
     for (key, record) in reg_retry {
+        if domain_revoke_awaits_tag(&record) {
+            continue;
+        }
         if !retry_domain_revoke(&record) {
-            waiting = true;
+            waiting |= !domain_revoke_awaits_tag(&record);
             continue;
         }
         // Another hart's sweep, or another revoker, may have completed the same

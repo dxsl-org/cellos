@@ -591,9 +591,10 @@ pub(crate) trait Backend {
     fn tag_ack_withheld(&self) -> bool {
         false
     }
-    /// The tag slot of `domain`'s private root, whose teardown could not
-    /// confirm tag `asid`, may be reissued: the wait holding it has ended.
-    fn release_tag_slot(&mut self, _asid: usize, _domain: u64) {}
+    /// Private tag `asid`'s wait has ended: `tag_slot`, the slot of a
+    /// private root whose teardown could not confirm the tag, may be reissued,
+    /// and work that skipped the tag while it was unconfirmed may run again.
+    fn tag_wait_ended(&mut self, _asid: usize, _tag_slot: Option<u64>) {}
 }
 
 fn epochs_confirmed(backend: &impl Backend, epochs: &Epochs) -> bool {
@@ -1140,9 +1141,7 @@ impl Pending {
             );
             // The tag's invalidation is confirmed: its slot may be reissued,
             // even if a run below still waits for its alias.
-            if let Some(domain) = entry.tag_slot.take() {
-                backend.release_tag_slot(asid, domain);
-            }
+            backend.tag_wait_ended(asid, entry.tag_slot.take());
         }
         let mut freed = 0;
         let mut kept = Vec::new();
@@ -1595,11 +1594,16 @@ impl Backend for KernelBackend {
         crate::memory::tlb_shootdown::test_tag_ack_withheld()
     }
 
-    fn release_tag_slot(&mut self, asid: usize, domain: u64) {
+    /// Hand the slot back, then re-arm the scheduler's housekeeping pass:
+    /// the domain-grant sweep skips a row while its tag is unconfirmed.
+    fn tag_wait_ended(&mut self, asid: usize, tag_slot: Option<u64>) {
         #[cfg(all(feature = "native-domains", cellos_wide))]
-        crate::memory::address_space::release_tag_slot_after_invalidation(asid, domain);
+        if let Some(domain) = tag_slot {
+            crate::memory::address_space::release_tag_slot_after_invalidation(asid, domain);
+        }
         #[cfg(not(all(feature = "native-domains", cellos_wide)))]
-        let _ = (asid, domain);
+        let _ = (asid, tag_slot);
+        crate::task::note_housekeeping();
     }
 
     fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {

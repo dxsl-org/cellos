@@ -1719,8 +1719,10 @@ fn drain_before_selection() {
         }
 
         // Domain rows whose owner died while their revoke was unacknowledged:
-        // retried every pass until their tags confirm, not only on another
-        // task's exit (census F5). A row still waiting re-arms the pass.
+        // retried here, not only on another task's exit (census F5). A row
+        // waiting on a tag is skipped until the reaper confirms it (the reaper
+        // re-arms the pass); a retried row still waiting on anything else
+        // re-arms it here.
         if crate::task::syscall::sweep_deferred_domain_grants() {
             note_housekeeping();
         }

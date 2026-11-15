@@ -32,6 +32,8 @@ struct Fake {
     withheld: bool,
     /// Tag slots handed back, as `(tag, domain)`.
     released_slots: Vec<(usize, u64)>,
+    /// Tag waits ended, in order.
+    ended_tags: Vec<usize>,
 }
 
 impl Fake {
@@ -47,6 +49,7 @@ impl Fake {
             alias_fails: false,
             withheld: false,
             released_slots: Vec::new(),
+            ended_tags: Vec::new(),
         }
     }
 
@@ -118,8 +121,11 @@ impl Backend for Fake {
         self.withheld
     }
 
-    fn release_tag_slot(&mut self, asid: usize, domain: u64) {
-        self.released_slots.push((asid, domain));
+    fn tag_wait_ended(&mut self, asid: usize, tag_slot: Option<u64>) {
+        self.ended_tags.push(asid);
+        if let Some(domain) = tag_slot {
+            self.released_slots.push((asid, domain));
+        }
     }
 }
 
@@ -652,6 +658,10 @@ fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
     assert_eq!(quarantine.reap(&mut fake), 0);
     assert_eq!(fake.used(), 2);
     assert!(fake.released_slots.is_empty());
+    assert!(
+        fake.ended_tags.is_empty(),
+        "nothing re-armed inside the window"
+    );
     assert_eq!(quarantine.tag_snapshot(), vec![(5, 2, 1)]);
 
     // The window closes: the frames are freed and the slot handed back once.
@@ -660,6 +670,11 @@ fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
     assert_eq!(quarantine.reap(&mut fake), 2);
     assert_eq!(fake.used(), 0);
     assert_eq!(fake.released_slots, [(5, 77)]);
+    assert_eq!(
+        fake.ended_tags,
+        [5],
+        "the end of the wait is announced once"
+    );
     assert!(!quarantine.tag_pending(5));
     assert_eq!(quarantine.counters().quarantined(), 0);
 }

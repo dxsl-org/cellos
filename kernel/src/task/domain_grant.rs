@@ -320,6 +320,25 @@ impl DomainGrant {
         Ok(())
     }
 
+    /// Is an undrained half waiting on its root's tag invalidation? While it
+    /// is, a revoke retry cannot complete that half, and would only scan its
+    /// pages again: a housekeeping retry skips the record until the reaper
+    /// confirms the tag.
+    pub(crate) fn awaits_tag(&self) -> bool {
+        let receiver_tag = self
+            .receiver
+            .lock()
+            .as_ref()
+            .filter(|receiver| !receiver.drained)
+            .map(|receiver| receiver.root.asid());
+        let owner_tag = (!self.owner_drained.load(Ordering::Acquire))
+            .then(|| self.owner.address_space().asid());
+        [receiver_tag, owner_tag]
+            .into_iter()
+            .flatten()
+            .any(crate::memory::deferred_release::tag_invalidation_unconfirmed)
+    }
+
     /// Remove the owner PTE and confirm the invalidation.
     fn drain_owner(&self) -> Result<(), DomainGrantError> {
         if self.owner_drained.load(Ordering::Acquire) {

@@ -43,6 +43,18 @@ pub(super) fn retry_domain_revoke(_record: &DomainRecord) -> bool {
     false
 }
 
+/// Is `record`'s revoke waiting on a tag invalidation the reaper has not
+/// confirmed yet? A retry then cannot complete it.
+#[cfg(cellos_domain_grants)]
+pub(super) fn domain_revoke_awaits_tag(record: &DomainRecord) -> bool {
+    record.awaits_tag()
+}
+
+#[cfg(not(cellos_domain_grants))]
+pub(super) fn domain_revoke_awaits_tag(_record: &DomainRecord) -> bool {
+    false
+}
+
 /// Returns `true` if the calling task satisfies the given capability check.
 ///
 /// Lock-ordering: acquires SCHEDULER, drops before returning.
