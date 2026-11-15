@@ -283,11 +283,25 @@ fn try_send_leg() {
     /// hands it back**: `usize::MAX`. It arrives as a value, not as an `Err`, so a
     /// caller that checks only the `Result` reads a dropped frame as a delivered one.
     const REFUSED: usize = usize::MAX;
+    /// How long the parked send may keep retrying before the provider counts as
+    /// never parked (scheduler ticks, about 5 s at the 100 Hz tick).
+    const PARK_WINDOW_TICKS: u64 = 500;
 
     let provider = spawn(SLOW_ROLE);
     settle();
 
-    let parked_ret = value_of(sys_try_send(provider, &[REQ_TAG, 1]));
+    // The provider parks in `Recv` only after its ready line reaches the UART, and
+    // on SMP it runs on another CPU, so no fixed number of yields here guarantees it
+    // is parked. A refusal while it is still running is correct and drops the frame
+    // (nothing is queued), so retry until it is accepted, within a bounded window.
+    let park_deadline = sys_get_scheduler_ticks().unwrap_or(0) + PARK_WINDOW_TICKS;
+    let mut park_attempts = 1usize;
+    let mut parked_ret = value_of(sys_try_send(provider, &[REQ_TAG, 1]));
+    while parked_ret == REFUSED && sys_get_scheduler_ticks().unwrap_or(u64::MAX) < park_deadline {
+        yield_now();
+        park_attempts += 1;
+        parked_ret = value_of(sys_try_send(provider, &[REQ_TAG, 1]));
+    }
 
     // Give the provider time to consume that frame and leave `Recv`.
     for _ in 0..200 {
@@ -304,10 +318,10 @@ fn try_send_leg() {
     let parked_refused = parked_ret == REFUSED;
     let busy_refused = busy_ret == REFUSED;
     println(&format!(
-        "[async-lifecycle] TRY-SEND parked_refused={parked_refused} busy_refused={busy_refused} parked_ret={parked_ret} busy_ret={busy_ret}"
+        "[async-lifecycle] TRY-SEND parked_refused={parked_refused} busy_refused={busy_refused} parked_ret={parked_ret} busy_ret={busy_ret} park_attempts={park_attempts}"
     ));
     if parked_refused {
-        fail("try_send refused a frame to a provider parked in Recv");
+        fail("try_send refused every frame to the slow provider within the park window");
     }
     if !busy_refused {
         fail("try_send accepted a frame for a receiver that was not in Recv");
