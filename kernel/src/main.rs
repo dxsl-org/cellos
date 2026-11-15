@@ -590,6 +590,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // surface real problems. Raise back to Info when debugging the spawn path.
 
     // Enable interrupts before entering the idle loop.
+    #[cfg(feature = "test-hooks")]
+    crate::memory::heap::irq_charge_selftest::hold_boot_hart();
     irq.enable(clock);
     // Needs the timer running on this hart, so it follows the enable.
     #[cfg(feature = "test-hooks")]

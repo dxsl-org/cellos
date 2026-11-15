@@ -468,17 +468,34 @@ pub(crate) mod irq_charge_selftest {
 
     /// Hart whose next timer tick takes the probe, or `NO_HART`.
     static ARMED_HART: AtomicUsize = AtomicUsize::new(NO_HART);
+    /// Hart whose ticks must not preempt the boot context until the fixture's
+    /// verdict is logged, or `NO_HART`.
+    static HELD_HART: AtomicUsize = AtomicUsize::new(NO_HART);
     static PROBE: AtomicUsize = AtomicUsize::new(PENDING);
     static PROBE_OWNER: AtomicUsize = AtomicUsize::new(0);
 
-    /// Called by `vi_timer_tick` right after its interrupt scope opens.
-    pub(crate) fn observe_tick() {
+    /// Called on the boot hart before interrupts are first enabled. On AArch64
+    /// the first tick after the enable switches straight into the cells, and the
+    /// boot context (which runs `run`) is not scheduled again before a test
+    /// image may exit; holding preemption on this hart keeps `run` ahead of them.
+    pub(crate) fn hold_boot_hart() {
+        HELD_HART.store(
+            crate::sched::hart_local::current_hart_id(),
+            Ordering::Release,
+        );
+    }
+
+    /// Called by `vi_timer_tick` right after its interrupt scope opens. Takes the
+    /// probe when this hart is armed. Returns whether the tick must return to the
+    /// interrupted context instead of preempting it (the boot hart while held).
+    pub(crate) fn observe_tick() -> bool {
         let hart = crate::sched::hart_local::current_hart_id();
+        let held = HELD_HART.load(Ordering::Acquire) == hart;
         if ARMED_HART
             .compare_exchange(hart, NO_HART, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            return;
+            return held;
         }
         match super::try_box([0u8; PROBE_BYTES]) {
             Ok(probe) => {
@@ -489,6 +506,7 @@ pub(crate) mod irq_charge_selftest {
             }
             Err(_) => PROBE.store(REFUSED, Ordering::Release),
         }
+        true
     }
 
     /// Run on the boot hart with interrupts enabled and the timer armed. The
@@ -496,9 +514,15 @@ pub(crate) mod irq_charge_selftest {
     /// scope are open, A's limit is 0, and the next tick on this hart takes a
     /// 64-byte probe. Nothing between opening and closing A's scope logs or
     /// allocates infallibly.
+    ///
+    /// The verdict on the interrupt (the lane's required `PASS`) is decided and
+    /// logged before the housekeeping pass, because that `yield_cpu` may not
+    /// return to this context until every cell has run. The housekeeping check
+    /// logs its own line when it does return.
     pub(crate) fn run() {
         let generation = crate::task::tcb::next_cell_generation();
         let Ok(quota) = QuotaReservation::reserve_next(generation, Limits { memory: 0 }) else {
+            HELD_HART.store(NO_HART, Ordering::Release);
             log::error!("[selftest] IRQ-ALLOC-CHARGE: FAIL no free CellId for cell A");
             return;
         };
@@ -523,13 +547,8 @@ pub(crate) mod irq_charge_selftest {
             spins += 1;
         }
         let fired = ARMED_HART.swap(NO_HART, Ordering::AcqRel) != hart;
-        // One housekeeping pass while A's scope is open.
-        crate::task::yield_cpu();
         let restored = super::try_box([0u8; PROBE_BYTES]).is_err();
-        drop(scope);
-        crate::sched::hart_local::set_current_cell_context(saved.0, saved.1);
         let in_use = cell_quota::in_use(cell.cell());
-        drop(quota);
 
         let probe = PROBE.load(Ordering::Acquire);
         let owner = PROBE_OWNER.load(Ordering::Relaxed);
@@ -550,7 +569,8 @@ pub(crate) mod irq_charge_selftest {
         } else {
             None
         };
-        match failure {
+        // Logging allocates; A's limit is 0, so it runs under a kernel scope.
+        super::alloc_for(Charge::KERNEL, || match failure {
             None => log::info!(
                 "[selftest] IRQ-ALLOC-CHARGE: PASS owner={:#x} in_use=0 spins={}",
                 owner,
@@ -563,6 +583,26 @@ pub(crate) mod irq_charge_selftest {
                 owner,
                 in_use
             ),
+        });
+
+        HELD_HART.store(NO_HART, Ordering::Release);
+
+        // One housekeeping pass while A's scope is open: `yield_cpu` must run it
+        // as the kernel and hand A's scope back when this context resumes.
+        crate::task::yield_cpu();
+        let resumed_as_a = super::try_box([0u8; PROBE_BYTES]).is_err();
+        drop(scope);
+        crate::sched::hart_local::set_current_cell_context(saved.0, saved.1);
+        let after = cell_quota::in_use(cell.cell());
+        drop(quota);
+        if after == 0 && resumed_as_a {
+            log::info!("[selftest] IRQ-ALLOC-CHARGE housekeeping: PASS in_use=0");
+        } else {
+            log::error!(
+                "[selftest] IRQ-ALLOC-CHARGE housekeeping: FAIL in_use={} resumed_as_a={}",
+                after,
+                resumed_as_a
+            );
         }
     }
 }

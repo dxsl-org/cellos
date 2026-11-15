@@ -1002,8 +1002,11 @@ pub extern "Rust" fn vi_ipi_service() {
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
     let _kernel = crate::memory::heap::ChargeScope::interrupt();
+    // While the `IRQ-ALLOC-CHARGE` fixture holds the boot hart (until its verdict
+    // is logged), ticks there return to the interrupted boot context instead of
+    // preempting it: an AArch64 test image can otherwise finish and exit first.
     #[cfg(feature = "test-hooks")]
-    crate::memory::heap::irq_charge_selftest::observe_tick();
+    let fixture_tick = crate::memory::heap::irq_charge_selftest::observe_tick();
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::arch::task::retirement_selftest::observe_forced_ssip_trap();
 
@@ -1104,6 +1107,10 @@ pub extern "Rust" fn vi_timer_tick() {
     //   (c) trap.S restores the correct ViTrapFrame from the new task's stack
     #[cfg(target_arch = "x86_64")]
     if !crate::sched::smp::x86_scheduler_ready() {
+        return;
+    }
+    #[cfg(feature = "test-hooks")]
+    if fixture_tick {
         return;
     }
     yield_cpu();

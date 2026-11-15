@@ -143,3 +143,20 @@ Phase 18.
   - The remaining §2.3 rewrites: `DEATH-SUBSCRIBER-QUOTA` subscribes and drains under the owner's and the exiting cell's scopes, and the AP-15 arming regression arms under a freshly reserved cell's scope (with the quota lock gone, it now proves arming does not depend on a kernel charge). The scheduler host tests at `scheduler.rs` touch only the dispatch identity and are unchanged. The RV64 retirement and heartbeat fixtures commit 2 touched read the identity only; their quota probes moved to scopes in 3a.
   - Spec 02 §2 states the explicit-charge rule and the actual OOM policy (null, `OutOfMemory` for fallible callers, idle hart for infallible ones). The `libs/abi/src/telemetry.rs` comment changes text only.
 - **Decision (parent, P7, 2026-11-15):** mailbox `Vec` growth (`PendingMailbox::try_push`) allocates under a kernel scope, not the receiver's, and `try_push` no longer takes a charge. Charging the receiver made a kernel relay (timer tick, UART/input) to a receiver at its limit refuse delivery, which is a failure mode beyond handoff §4. The mailbox is depth-bounded. P5 (the payload copy over 32 bytes) stays on the receiver. This supersedes the P7 owner scope and the "receiver at its limit refuses" behaviour logged for commit 3a. The two `ipc_pending_selftest` quota fixtures go back to limit 0 for inline delivery and check that exactly the payload is charged and refunded. Spec 02 §2 lists mailbox growth as kernel bookkeeping.
+- **Surprise (step 2 lanes, AArch64 test-hooks):** the lane failed with `missing required test marker: '[selftest] IRQ-ALLOC-CHARGE: PASS'`, and the fixture never logged anything. On AArch64, the first tick after `irq.enable` switches straight into the cells. `kmain`, which runs the fixture, is not scheduled again before `vfs-test` passes and the image exits through semihosting. A first fix that kept only the probe tick from preempting came too late.
+- **Decision (fix, IRQ-ALLOC-CHARGE ordering):**
+  - The boot hart sets a test-hooks preemption hold (`hold_boot_hart`) before `irq.enable`. While it is set, `vi_timer_tick` on that hart returns to the interrupted context instead of calling `yield_cpu`. Other harts are unaffected.
+  - The fixture logs its required verdict, then releases the hold. Only then does it run the housekeeping `yield_cpu`, whose check logs a separate line, `[selftest] IRQ-ALLOC-CHARGE housekeeping: PASS`, that no lane requires.
+  - Lanes: AArch64 test-hooks PASS; x86 domain on TCG 1/2/4 and KVM 4 PASS; RV64 `--harts 2` 15/15. Every boot logs both lines.
+- **Measurement (handoff §4, re-measured):** `top -b -n 1` on the x86 headless image after the shell settled, three boots per image; the three samples agree. Total memory is 81.3M in both.
+
+  | Cell | Before (`fbc17690ef`) | After (`a0bf00b07b`) |
+  |---|---|---|
+  | init | 3.1M | 3.1M |
+  | cellbox | 18.4K | 19.5K |
+  | e1000e | 11.8K | 12.7K |
+  | net | 0B | 928B |
+  | vfs | 1.1K | 1.1K |
+  | input, kms, machine-pin, serial, supervisor | 0B | 0B |
+
+  The increases fit in-flight wire payloads now charged to their sender and completion queues charged to their cell [INFERENCE: not traced per allocation]. Every change is under 1.2 KiB against the 16 MiB limit, so no limit is retuned.
