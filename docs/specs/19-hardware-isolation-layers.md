@@ -52,9 +52,12 @@ its declared R. A PT_LOAD declaring W+X is rejected at load time (spawn fails, l
 a page that becomes W+X only through the boundary merge is logged as a warning and left
 merged, because dropping either bit would break the cell.
 
-Kernel writes into cell memory (segment load, AArch64 relocation, warm-snapshot restore)
-go through the physical/HHDM alias, which is kernel-RW independently of the USER PTE —
-audited at implementation time, no path needed converting.
+Kernel writes into cell memory (segment load, AArch64 relocation, warm-snapshot restore,
+grant and stack zeroing, the test-hooks stack watermark, `BlkReadAsync`) go through the
+physical/HHDM alias, which is kernel-RW independently of the USER PTE. The only kernel
+access through a USER VA is the user-copy guard window (`task/user_copy`): on x86_64
+under SMAP it is the kernel's one AC setter (`STAC` after interrupts are masked, `CLAC`
+before they return), so a stray kernel access to a USER page elsewhere faults.
 
 Guarantee: the loader preserves the load -> relocate -> lower -> register order on every
 paged arch, so a freshly spawned cell is never made runnable before its own final per-page
@@ -105,6 +108,16 @@ x86 code enables CR4.PKE, computes task PKRU values, and writes PKRU on ring-3 r
 but the loader never stamps PTE bits `[62:59]`; every user page remains key 0, so PKU
 does not currently enforce a page boundary. Its self-test checks PKRU constants and
 kernel `RDPKRU`, not a denied keyed-page access.
+
+x86 SMEP and SMAP are set on every CPU that enumerates them; UMIP only in a build that
+marks it required. The boot CPU logs `[x86] protection: smep=… smap=… umip=…` (`on`,
+`off` or `absent`). A build with `x86-smep`/`x86-smap`/`x86-umip` marks the bit required
+and refuses a CPU without it, at boot or AP admission. Limits, stated plainly: SMAP stops
+the *kernel* touching USER pages outside the user-copy window; it does nothing between
+cells, which inside the SAS still share USER+RW heap, stack, `.data`, grants and MMIO
+(Layer A limits), and it does not extend W^X beyond code integrity. RV64 keeps
+`sstatus.SUM` set for the kernel's lifetime and AArch64 runs without PAN, so the
+SMAP-class guard is x86-only.
 
 These are lane-specific bonuses, never load-bearing — the boards named in §1 do not
 provide them, and Layer B remains the wall where native code is untrusted.

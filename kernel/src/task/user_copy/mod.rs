@@ -16,7 +16,9 @@
 //!    readers BEFORE tearing down any PTE, an in-window fault is unreachable
 //!    through the public API and remains a recoverable `CopyError` (never a
 //!    panic). For `CopyView::Sas` the commit copies through user VAs under the
-//!    active shared root, retaining today's SUM-based shared-space semantics.
+//!    active shared root; on x86_64 under SMAP the guard window is the only
+//!    place the kernel touches a USER page (it sets RFLAGS.AC), while RV64
+//!    keeps `sstatus.SUM` set and AArch64 runs without PAN.
 //!    The guard alone does NOT make that recoverable: a retired Sas page is
 //!    re-mapped kernel-RW, which the kernel writes without faulting. The Sas
 //!    commit therefore runs under the `sas_lease` window, and every path that
@@ -58,6 +60,13 @@ pub(crate) use sas_lease::wait_sas_copies_quiescent;
     target_arch = "riscv64"
 ))]
 pub(crate) use guard::forced_guard_fault_recovers_for_test;
+// The `SMAP-WINDOW` fixture (`task::syscall::ipc::log` on x86_64).
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "x86_64"
+))]
+pub(crate) use guard::raw_user_read_faults_for_test;
 #[cfg(all(
     feature = "native-domains",
     feature = "test-hooks",

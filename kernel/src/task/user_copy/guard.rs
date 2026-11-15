@@ -43,7 +43,10 @@ pub(super) fn commit_guarded(
 /// Arm the per-hart recoverable-fault window. Interrupts are masked FIRST so a
 /// timer preempting mid-window can never switch tasks with the guard set; the
 /// active flag publishes last (Release) so the trap hook never sees an armed
-/// guard with an unpublished range.
+/// guard with an unpublished range. The window is also the kernel's one
+/// supervisor-access window onto user pages: RV64 sets `sstatus.SUM`, x86_64
+/// sets RFLAGS.AC under SMAP (STAC after the mask, CLAC in `Drop` before the
+/// unmask); AArch64 runs without PAN.
 struct GuardWindow {
     saved_sstatus: usize,
 }
@@ -55,7 +58,7 @@ impl GuardWindow {
         hart.user_copy_guard_end.store(hi, Ordering::Relaxed);
         hart.user_copy_guard_resume_pc.store(0, Ordering::Relaxed);
         let saved_sstatus = crate::hal::arch::save_and_disable_interrupts();
-        #[cfg(target_arch = "riscv64")]
+        #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
         crate::arch::user_access::guard_open();
         hart.user_copy_guard_active.store(1, Ordering::Release);
         Self { saved_sstatus }
@@ -66,6 +69,8 @@ impl Drop for GuardWindow {
     fn drop(&mut self) {
         let hart = unsafe { hart_local::current_hart() };
         hart.user_copy_guard_active.store(0, Ordering::Release);
+        #[cfg(target_arch = "x86_64")]
+        crate::arch::user_access::guard_close();
         // SAFETY: paired with save_and_disable_interrupts in arm(); no lock,
         // allocation, or callback ran while interrupts were masked.
         unsafe { crate::hal::arch::restore_sstatus(self.saved_sstatus) };
@@ -111,4 +116,31 @@ pub(crate) fn forced_guard_fault_recovers_for_test(hole_pa: usize) -> bool {
     };
     drop(window);
     failed == 1 && hart.user_copy_guard_resume_pc.load(Ordering::Acquire) == 0
+}
+
+/// TEST HOOK (x86_64, SMAP): a raw supervisor read of `user_va`, a byte a Sas
+/// copy has just read through the window, taken *outside* the user-access
+/// window. The fault guard is armed but AC is cleared right after the arm, so
+/// the load runs as ordinary kernel code would. Returns whether it took a
+/// guard-recovered page fault at `user_va` (SMAP denied it), as opposed to
+/// reading the byte.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "x86_64"
+))]
+pub(crate) fn raw_user_read_faults_for_test(user_va: usize) -> bool {
+    let mut sink = 0u8;
+    let window = GuardWindow::arm(user_va, user_va + 1);
+    // Keep the recoverable-fault half of the window, drop the access half.
+    crate::arch::user_access::guard_close();
+    let hart = unsafe { hart_local::current_hart() };
+    let slot = core::ptr::addr_of!(hart.user_copy_guard_resume_pc) as *mut usize;
+    // SAFETY: the guard is armed for `user_va`, so its fault is recovered at
+    // the landing pad; `sink` is a kernel byte.
+    let failed = unsafe {
+        crate::arch::user_access::guarded_byte_copy(user_va as *const u8, &mut sink, 1, slot)
+    };
+    drop(window);
+    failed == 1
 }

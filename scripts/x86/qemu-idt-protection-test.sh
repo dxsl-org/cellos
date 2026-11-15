@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build and run the IDT fixture with SMEP and UMIP marked required on a CPU
-# model that also has SMAP.
+# Build and run the IDT fixture with SMEP, SMAP and UMIP marked required on a
+# CPU model that has all three.
 #
 # Positive: SMEP denies a supervisor fetch from a U=1 page; UMIP turns CPL3
-# `sgdt` into #GP(0); with CR4.SMAP set around the probe (mechanism only, no
-# boot profile: the SAS kernel still writes U=1 pages during task spawn),
-# a plain supervisor read of a U=1 page faults and `protect::user_access`
-# reads it. Refusal: the same image on a CPU without SMEP/UMIP must not boot
-# (the required features refuse; enable-if-present alone would boot).
+# `sgdt` into #GP(0); with CR4.SMAP set from boot, a plain supervisor read of
+# a U=1 page faults and the kernel's one user-access window
+# (`protect::open_user_access`, through the fixture's `protect::user_access`)
+# reads it. Refusal: the same image on a CPU without SMEP/SMAP/UMIP must not
+# boot (the required features refuse; enable-if-present alone would boot).
 #
 # Ceiling: QEMU/TCG CPU models only; not physical Intel evidence.
 
@@ -20,14 +20,14 @@ ISO="build/x86-idt-test-protect/vicell-x86-idt-test.iso"
 X86_IDT_CPU="qemu64,+pdpe1gb,+pku,+smep,+smap,+umip" X86_IDT_PROTECT=on \
     bash scripts/qemu-x86_64-idt-test.sh "$ISO"
 
-# Refusal control: no SMEP/UMIP in the CPU model.
+# Refusal control: no SMEP/SMAP/UMIP in the CPU model.
 LOG="build/x86-idt-test-protect/refusal.log"
 status=0
 timeout --signal=KILL 60 qemu-system-x86_64 -machine q35 -cpu qemu64,+pdpe1gb,+pku -m 256M \
     -nographic -cdrom "$ISO" -boot d -no-reboot \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 < /dev/null > "$LOG" 2>&1 || status=$?
 if [[ "$status" -eq 33 ]] || grep -Fq 'X86-IDT-CPL3: PASS' "$LOG"; then
-    echo "FAIL: protect image ran on a CPU lacking SMEP/UMIP" >&2
+    echo "FAIL: protect image ran on a CPU lacking SMEP/SMAP/UMIP" >&2
     exit 1
 fi
 if ! grep -Fq 'required SMEP/SMAP/UMIP profile unsupported by CPU' "$LOG"; then
@@ -35,4 +35,4 @@ if ! grep -Fq 'required SMEP/SMAP/UMIP profile unsupported by CPU' "$LOG"; then
     tail -20 "$LOG" >&2
     exit 1
 fi
-echo "PASS: protect profile refused on a CPU without SMEP/UMIP"
+echo "PASS: protect profile refused on a CPU without SMEP/SMAP/UMIP"

@@ -303,23 +303,17 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
         core::ptr::read_volatile(core::ptr::addr_of!(x86_idt_cpl3_user_start).cast::<u64>())
     };
 
-    // No SAS kernel profile qualifies for boot-time SMAP yet (task spawn
-    // writes U=1 stack pages directly). When the CPU has SMAP, exercise the
-    // mechanism with CR4.SMAP set only around these two reads.
-    let smap_probe = !active.smap && protect::detect().smap;
+    // SMAP is set at boot whenever the CPU has it: a plain supervisor read of
+    // the U=1 page must fault (present, not a fetch) while the kernel's one
+    // user-access window (`protect::open_user_access`) reads it. Without SMAP
+    // both reads succeed.
     let flags = super::super::context::save_and_disable_interrupts();
-    if smap_probe {
-        set_smap(true);
-    }
     let plain = probe_read(user_page);
     let windowed =
         protect::user_access(|| unsafe { core::ptr::read_volatile(user_page as *const u64) });
     let windowed_ac = live_rflags() & AC;
-    if smap_probe {
-        set_smap(false);
-    }
     unsafe { super::super::context::restore_sstatus(flags) };
-    if active.smap || smap_probe {
+    if active.smap {
         if plain.is_some()
             || FAULT_ERROR.load(Ordering::Acquire) & (PF_PRESENT | PF_FETCH) != PF_PRESENT
         {
@@ -356,8 +350,6 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
 
     super::super::uart_16550::puts(if active.smap {
         "\nX86-PROTECT: smap=on read=pf window=ok"
-    } else if smap_probe {
-        "\nX86-PROTECT: smap=probe read=pf window=ok"
     } else {
         "\nX86-PROTECT: smap=off read=ok window=ok"
     });
@@ -367,24 +359,6 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
         " smep=off"
     });
     super::super::uart_16550::puts(" syscall-flags=df+ac-cleared\n");
-}
-
-/// Fixture-only SMAP toggle with interrupts masked by the caller. CLAC is
-/// valid only while CR4.SMAP is set, so the entry flag follows it on enable
-/// and leads it on disable.
-fn set_smap(on: bool) {
-    const CR4_SMAP: u64 = 1 << 21;
-    unsafe {
-        let cr4: u64;
-        core::arch::asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack));
-        if on {
-            core::arch::asm!("mov cr4, {}", in(reg) cr4 | CR4_SMAP, options(nomem, nostack));
-            protect::SMAP_ACTIVE.store(1, Ordering::Release);
-        } else {
-            protect::SMAP_ACTIVE.store(0, Ordering::Release);
-            core::arch::asm!("mov cr4, {}", in(reg) cr4 & !CR4_SMAP, options(nomem, nostack));
-        }
-    }
 }
 
 /// CPL3 completion: UMIP trapped `sgdt` exactly when the profile enabled it.

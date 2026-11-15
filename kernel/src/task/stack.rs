@@ -23,47 +23,6 @@ pub(crate) fn overlaps_stack_reservation(start: usize, end: usize) -> bool {
 #[cfg(feature = "test-hooks")]
 const STACK_WATERMARK_PATTERN: u8 = 0xA5;
 
-#[cfg(all(
-    feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "riscv32")
-))]
-struct SumAccessGuard {
-    restore: bool,
-}
-
-#[cfg(all(
-    feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "riscv32")
-))]
-impl SumAccessGuard {
-    fn enter() -> Self {
-        // Test hooks run in supervisor mode. SUM is changed only for mapped
-        // stack sampling and restored by Drop before this scope exits.
-        const SUM_MASK: usize = 1usize << 18;
-        let status = crate::arch::user_access::stack_sample_status();
-        if status & SUM_MASK == 0 {
-            crate::arch::user_access::sum_mask_set();
-        }
-        Self {
-            restore: status & SUM_MASK == 0,
-        }
-    }
-}
-
-#[cfg(all(
-    feature = "test-hooks",
-    any(target_arch = "riscv64", target_arch = "riscv32")
-))]
-impl Drop for SumAccessGuard {
-    fn drop(&mut self) {
-        if self.restore {
-            // This reverses the matching supervisor CSR change made by `enter`;
-            // the guard is not shared across harts or task switches.
-            crate::arch::user_access::sum_mask_clear();
-        }
-    }
-}
-
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
@@ -623,16 +582,20 @@ impl Stack {
     #[cfg(feature = "test-hooks")]
     /// Prime the usable stack range with a sentinel pattern so later scans can
     /// estimate the deepest downward growth without adding a runtime ABI.
+    /// Writes through the frames' kernel alias, never the stack's own VA: a
+    /// user stack's VA is a USER mapping (SMAP on x86_64).
     pub fn test_hook_prime_watermark(&self) {
         assert!(paging::virt_to_phys(self.usable_start()).is_some());
         assert!(paging::virt_to_phys(self.top - 1).is_some());
-        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        let _sum_guard = SumAccessGuard::enter();
-        // SAFETY: Stack allocation maps the asserted usable range contiguously;
-        // this test hook owns the stack before the task can run.
+        let Some(usable) = self.usable_phys() else {
+            return;
+        };
+        // SAFETY: the run is this stack's alone and its kernel alias is
+        // writable and contiguous (see `zero_usable`); this test hook owns the
+        // stack before the task can run.
         unsafe {
             core::ptr::write_bytes(
-                self.usable_start() as *mut u8,
+                crate::memory::frame::phys_to_virt(usable) as *mut u8,
                 STACK_WATERMARK_PATTERN,
                 self.usable_bytes(),
             );
@@ -641,19 +604,20 @@ impl Stack {
 
     #[cfg(feature = "test-hooks")]
     /// Return the deepest observed stack footprint in bytes since the sentinel
-    /// pattern was primed.
+    /// pattern was primed, read through the frames' kernel alias.
     pub fn test_hook_watermark_bytes(&self) -> usize {
         assert!(paging::virt_to_phys(self.usable_start()).is_some());
         assert!(paging::virt_to_phys(self.top - 1).is_some());
-        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        let _sum_guard = SumAccessGuard::enter();
-
+        let Some(usable_pa) = self.usable_phys() else {
+            return 0;
+        };
         let usable = self.usable_bytes();
-        let start = self.usable_start() as *const u8;
+        let start = crate::memory::frame::phys_to_virt(usable_pa) as *const u8;
         let mut untouched_prefix = 0usize;
         while untouched_prefix < usable {
-            // SAFETY: Stack allocation maps the asserted usable range, and the
-            // scan stays within it. Volatile reads observe the live watermark.
+            // SAFETY: the scan stays within the run's usable bytes, read
+            // through its kernel alias. Volatile reads observe the live
+            // watermark.
             let byte = unsafe { core::ptr::read_volatile(start.add(untouched_prefix)) };
             if byte != STACK_WATERMARK_PATTERN {
                 break;
@@ -696,9 +660,10 @@ pub fn stack_probe_self_test() -> bool {
 
 /// A user stack is mapped from the stack arena, not at its physical address:
 /// its usable VA translates to its run but not to itself, both guards and the
-/// overflow target below them are unmapped, and a push at `top - 8` through
-/// the stack's VA lands in the run's last frame, read back through the
-/// frames' kernel alias.
+/// overflow target below them are unmapped, and the stack's top word
+/// (`top - 8`) translates to the run's last usable byte; a word written there
+/// through the frames' kernel alias reads back through the same alias. The
+/// kernel never dereferences the user stack VA (SMAP on x86_64).
 #[cfg(feature = "test-hooks")]
 fn user_stack_probe() -> bool {
     const MARK: u64 = 0x5354_4b41_5245_4e41;
@@ -716,14 +681,14 @@ fn user_stack_probe() -> bool {
     let guarded = (0..stack.guard_pages)
         .all(|guard| paging::virt_to_phys(stack.base + guard * PAGE_SIZE).is_none())
         && paging::virt_to_phys(usable - 8).is_none();
-    // SAFETY: the top 8 bytes of this stack's mapped usable range; the stack is
-    // owned here and runs no task. Kernel-mode stores reach a USER page: RV64
-    // keeps `sstatus.SUM` set for the kernel's lifetime, AArch64 runs without
-    // PAN, and test-hooks x86 images run without SMAP (as the watermark hooks).
-    unsafe { core::ptr::write_volatile((stack.top - 8) as *mut u64, MARK) };
-    let alias = crate::memory::frame::phys_to_virt(usable_pa + stack.usable_bytes() - 8);
-    // SAFETY: the same byte through the run's kernel alias, still owned here.
-    let landed = unsafe { core::ptr::read_volatile(alias as *const u64) } == MARK;
+    let top_pa = usable_pa + stack.usable_bytes() - 8;
+    let alias = crate::memory::frame::phys_to_virt(top_pa);
+    // SAFETY: the top 8 bytes of this stack's run, through its kernel alias;
+    // the stack is owned here and runs no task.
+    unsafe { core::ptr::write_volatile(alias as *mut u64, MARK) };
+    // SAFETY: the same word through the same alias, still owned here.
+    let landed = paging::virt_to_phys(stack.top - 8) == Some(top_pa)
+        && unsafe { core::ptr::read_volatile(alias as *const u64) } == MARK;
     if !(off_identity && guarded && landed) {
         error!(
             "stack-probe: user stack base=0x{:X} usable_pa=0x{:X} off_identity={} guarded={} landed={}",

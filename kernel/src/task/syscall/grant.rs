@@ -1292,7 +1292,7 @@ pub(super) fn reserve_caller_owned_dma_range(
     Err(DmaGrantError::NotOwned)
 }
 
-/// Allocate `n_pages` contiguous physical frames, map them USER RW, and zero them.
+/// Allocate `n_pages` contiguous physical frames, zero them, and map them USER RW.
 ///
 /// Returns the physical base address on success, or `None` on OOM, partial map
 /// or an unconfirmed invalidation of a replaced translation.
@@ -1308,6 +1308,20 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 
     let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
     let identity_alias = crate::memory::frame::phys_to_virt(paddr) == paddr;
+    // Zero through the frames' kernel alias before any USER mapping exists, as
+    // `ShmAlloc` does: stale data from a previously freed grant never reaches
+    // another cell (info-disclosure under G2), and the kernel never writes the
+    // grant through its USER VA (SMAP on x86_64).
+    // SAFETY: the run is freshly allocated and owned here; its kernel alias
+    // (identity on RV64/AArch64, still kernel RW, the HHDM on x86_64) is
+    // writable and contiguous.
+    unsafe {
+        core::ptr::write_bytes(
+            crate::memory::frame::phys_to_virt(paddr) as *mut u8,
+            0,
+            n_pages * PAGE_SIZE,
+        );
+    }
 
     let mut batch = Batch::new();
     let mapped = crate::memory::frame::with(|alloc| {
@@ -1375,13 +1389,6 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         retire_grant_run(&mut batch, paddr, n_pages, identity_alias);
         let _ = batch.complete();
         return None;
-    }
-
-    // Zero every mapped page before handing to user: prevents stale data from a
-    // previously-freed grant leaking to a different cell (info-disclosure under G2).
-    // SAFETY: frames are identity-mapped USER RW; SUM=1 allows S-mode writes.
-    unsafe {
-        core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE);
     }
 
     Some(paddr)

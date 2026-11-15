@@ -149,10 +149,13 @@ fn cpu_feature_policy() -> usize {
 /// They are defense in depth, not a substitute for LBI or for authority
 /// checks. A cargo feature (`x86-smep`, `x86-smap`, `x86-umip`) marks one
 /// *required*: a CPU without it is refused (boot or AP admission) instead of
-/// running unprotected. SMEP is enabled whenever present; SMAP and UMIP still
-/// only when required, until the kernel qualifies them (census Steps 6b, 6c).
-/// SMAP is only valid for a kernel that never touches U=1 memory outside a
-/// `user_access` window.
+/// running unprotected. SMEP and SMAP are enabled whenever present; UMIP still
+/// only when required, until the kernel qualifies it (census Step 6c).
+///
+/// SMAP: the kernel touches U=1 memory only between [`open_user_access`] and
+/// [`close_user_access`], the one AC setter, called by the kernel's user-copy
+/// guard window with interrupts masked. Every other kernel write into cell
+/// memory goes through the frame's kernel alias (HHDM), which is U=0.
 #[cfg(target_arch = "x86_64")]
 pub mod protect {
     use core::sync::atomic::{AtomicU8, Ordering};
@@ -202,7 +205,7 @@ pub mod protect {
     pub const fn enabled_on(have: Caps) -> Caps {
         Caps {
             smep: have.smep,
-            smap: have.smap && required().smap,
+            smap: have.smap,
             umip: have.umip && required().umip,
         }
     }
@@ -244,23 +247,42 @@ pub mod protect {
         active() == want
     }
 
-    /// Run `f` with supervisor access to U=1 pages allowed (SMAP profile).
+    /// Open supervisor access to U=1 pages on this CPU: set RFLAGS.AC when
+    /// SMAP is active (a no-op otherwise). This is the kernel's only STAC.
     ///
-    /// Interrupts stay masked for the window, so no handler or context switch
-    /// runs inside it; AC is cleared before interrupts return. `f` must not
-    /// unwind. Without SMAP active this is just `f()`.
+    /// The caller has masked interrupts and calls [`close_user_access`] before
+    /// unmasking, so no handler or context switch runs with AC set. An
+    /// exception taken inside the window enters with AC cleared by the IDT
+    /// entry and returns (IRETQ) with it set again, so a recovered fault keeps
+    /// the window open until the close.
+    #[inline(always)]
+    pub fn open_user_access() {
+        if SMAP_ACTIVE.load(Ordering::Acquire) != 0 {
+            // No `nomem`: STAC must not be reordered with the window's accesses.
+            unsafe { core::arch::asm!("stac", options(nostack)) };
+        }
+    }
+
+    /// Close the window [`open_user_access`] opened: clear RFLAGS.AC when SMAP
+    /// is active (a no-op otherwise).
+    #[inline(always)]
+    pub fn close_user_access() {
+        if SMAP_ACTIVE.load(Ordering::Acquire) != 0 {
+            // No `nomem`: CLAC must not be reordered with the window's accesses.
+            unsafe { core::arch::asm!("clac", options(nostack)) };
+        }
+    }
+
+    /// IDT fixture only: run `f` inside a user-access window with interrupts
+    /// masked. `f` must not unwind.
+    #[cfg(feature = "x86-idt-cpl3-test")]
     pub fn user_access<R>(f: impl FnOnce() -> R) -> R {
-        if SMAP_ACTIVE.load(Ordering::Acquire) == 0 {
-            return f();
-        }
         let flags = super::context::save_and_disable_interrupts();
-        // No `nomem`: STAC/CLAC must not be reordered with `f`'s user accesses.
-        unsafe { core::arch::asm!("stac", options(nostack)) };
+        open_user_access();
         let result = f();
-        unsafe {
-            core::arch::asm!("clac", options(nostack));
-            super::context::restore_sstatus(flags);
-        }
+        close_user_access();
+        // SAFETY: restores exactly the interrupt state saved above.
+        unsafe { super::context::restore_sstatus(flags) };
         result
     }
 }

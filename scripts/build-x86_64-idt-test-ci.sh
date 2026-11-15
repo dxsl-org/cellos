@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build the CPL0 + mandatory real-CPL3 IDT fixture in isolated outputs.
-# X86_IDT_PROFILE=protect adds the opt-in SMEP and UMIP features (SMAP has no
-# qualifying kernel profile yet) and builds into separate target/ISO dirs.
+# X86_IDT_PROFILE=protect marks SMEP, SMAP and UMIP required (`x86-smep`,
+# `x86-smap`, `x86-umip`: a CPU without one refuses boot) and builds into
+# separate target/ISO dirs. The base profile enables whichever the CPU has.
 
 set -euo pipefail
 
@@ -11,7 +12,7 @@ cd "$REPO_ROOT"
 
 case "${X86_IDT_PROFILE:-base}" in
     base) SUFFIX=""; EXTRA_FEATURES="" ;;
-    protect) SUFFIX="-protect"; EXTRA_FEATURES=",x86-smep,x86-umip" ;;
+    protect) SUFFIX="-protect"; EXTRA_FEATURES=",x86-smep,x86-smap,x86-umip" ;;
     *) echo "FAIL: X86_IDT_PROFILE must be base or protect" >&2; exit 1 ;;
 esac
 TARGET_DIR="target/x86-idt-test$SUFFIX"

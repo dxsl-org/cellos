@@ -27,6 +27,10 @@
 #     interrupts masked completes after one probe bound with every frame
 #     quarantined, the reaper frees nothing while the CPU stays silent
 #     (`CONTROL`), and frees everything once it answers (`PASS`).
+#   * when the boot line says `smap=on` (the default model has SMAP), the
+#     SMAP window (`[selftest] SMAP-WINDOW: PASS`): a Sas cell's `Log` copies
+#     in through the user-copy window and a raw kernel read of the same user
+#     byte outside it faults.
 #
 # PCID is a machine property, not a lane property: TCG cannot emulate it (QEMU
 # clears the feature), so the default run exercises the untagged-CR3 path and
@@ -456,6 +460,16 @@ if (( X86_CPUS >= 2 )); then
         "teardown quarantines under a silent CPU, frees after:::S22-X86-QUARANTINE-SILENT-CPU: PASS harts=$X86_CPUS "
         "silent-CPU window opened:::[frame-run] silent-cpu window OPEN"
         "silent-CPU window closed:::[frame-run] silent-cpu window CLOSED"
+    )
+fi
+
+# SMAP is on whenever the CPU has it (the default TCG model and KVM `-cpu
+# host` on a host with SMAP). The kernel's boot line says so, and then a Sas
+# cell's `Log` must copy in through the user-access window while a raw
+# supervisor read of the same user byte faults (`SMAP-WINDOW`).
+if grep -aqE '\[x86\] protection: .*smap=on' "$LOG"; then
+    REQUIRED_MARKERS+=(
+        "SMAP window:::[selftest] SMAP-WINDOW: PASS"
     )
 fi
 

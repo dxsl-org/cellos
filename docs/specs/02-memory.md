@@ -143,6 +143,10 @@ thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
 * **Chỉ là code integrity, không phải data confidentiality trong SAS.** Stack, heap, grant page và
   MMIO window trong SAS vẫn `USER+RW` **xuyên cell** đối với các Cell cùng chia sẻ `KERNEL_ROOT`.
   Tường cách ly dữ liệu vật lý là Layer B (per-domain page table, Tier 2 — đã hiện thực hóa theo Spec 22).
+  SMEP/SMAP trên x86_64 (bật khi CPU có) không đổi điều đó: SMAP chỉ chặn *kernel* chạm trang USER
+  ngoài user-copy window (`task/user_copy`, nơi duy nhất set RFLAGS.AC); kernel ghi vào bộ nhớ cell
+  (nạp segment, zero grant và stack) qua alias HHDM/identity. Giữa các Cell trong SAS, SMAP không chặn
+  gì. RV64 giữ `sstatus.SUM` suốt đời kernel, AArch64 chạy không có PAN: lớp chặn kiểu SMAP chỉ có trên x86_64.
 * **Cross-hart / cross-core closure còn phụ thuộc arch.**
   - `RV64`: W^X order PTE update, local `sfence.vma`, rồi SBI RFENCE tới mọi hart online từ xa;
     RFENCE lỗi thì quay về đường IPI epoch; firmware không probe được RFENCE phải giữ kernel

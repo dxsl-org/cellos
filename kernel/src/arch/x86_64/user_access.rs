@@ -57,6 +57,29 @@ pub(crate) unsafe fn guarded_byte_copy(
     ret
 }
 
+/// User-copy guard window: open SMAP user access (STAC) once the window has
+/// masked interrupts. The HAL's `protect::open_user_access` is the kernel's
+/// only AC setter; it is a no-op where SMAP is not active.
+#[cfg(feature = "native-domains")]
+pub(crate) fn guard_open() {
+    crate::hal::x86_64::protect::open_user_access();
+}
+
+/// User-copy guard window: close SMAP user access (CLAC) before the window
+/// unmasks interrupts. A guard fault recovered inside the window returns to
+/// the landing pad with AC set again (IRETQ restores it), so the close sits
+/// here, after the copy, never inside the copy loop.
+#[cfg(feature = "native-domains")]
+pub(crate) fn guard_close() {
+    crate::hal::x86_64::protect::close_user_access();
+}
+
+/// Test hooks: whether CR4.SMAP is set on this CPU (`SMAP-WINDOW` fixture).
+#[cfg(all(feature = "native-domains", feature = "test-hooks"))]
+pub(crate) fn smap_active() -> bool {
+    crate::hal::x86_64::protect::active().smap
+}
+
 /// Write the architecture's user thread pointer register.
 pub(crate) fn write_user_thread_pointer(base: usize) {
     const IA32_FS_BASE: u32 = 0xC000_0100;

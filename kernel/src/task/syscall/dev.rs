@@ -1226,11 +1226,18 @@ pub(super) fn blk_read_async(caller_id: usize, sector: u64, grant_id: usize) -> 
         Some(p) => p,
         None => return Ok(0),
     };
-    // Grant pages are identity-mapped (vaddr == paddr), so DMA addresses are correct.
-    // SAFETY: buf_paddr is a physically contiguous, identity-mapped grant page; valid
-    // for 512 bytes of VirtIO DMA read.
-
-    let buf = unsafe { core::slice::from_raw_parts_mut(buf_paddr as *mut u8, 512) };
+    // The kernel writes the grant through its frames' kernel alias, never the
+    // grant's USER VA (SMAP on x86_64): the identity map on RV64/AArch64 (the
+    // same address as before), the HHDM on x86_64. The in-kernel block device
+    // (SDHCI, PIO only) copies into the slice; no DMA address is derived from it.
+    // SAFETY: buf_paddr is a physically contiguous grant run of at least 512
+    // bytes owned by the caller; its kernel alias is contiguous and writable.
+    let buf = unsafe {
+        core::slice::from_raw_parts_mut(
+            crate::memory::frame::phys_to_virt(buf_paddr) as *mut u8,
+            512,
+        )
+    };
     match crate::dev::block::read_sector(sector, buf) {
         Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
         Err(_) => Ok(0),

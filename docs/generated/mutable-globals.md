@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 517 | 199 | 198 | 1 | 8 | 312 |
+| kernel | yes | 518 | 199 | 198 | 1 | 8 | 313 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 119 | 69 | 69 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -304,7 +304,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (433)
+## Other declarations (434)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -733,6 +733,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::syscall::GETRANDOM_RACE_NO_EARLY_DONE @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/task/syscall/mod.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::task::syscall::GETRANDOM_RACE_PROBED_BUSY @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/task/syscall/mod.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::task::syscall::GETRANDOM_RACE_PROBE_TIMED_OUT @cfg(all (feature = "getrandom-sas-test" , target_arch = "riscv64"))` | `kernel/src/task/syscall/mod.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
+| `kernel::task::syscall::ipc::smap_window_self_test()::RAN @cfg(all (feature = "test-hooks" , feature = "native-domains" , cellos_wide , target_arch = "x86_64"))` | `kernel/src/task/syscall/ipc.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::task::trace_try_send_refusal()::OVERFLOW @cfg(feature = "ipc-trace")` | `kernel/src/task.rs` | static | `AtomicU64` | cfg inactive in this profile |
 | `kernel::task::trace_try_send_refusal()::SLOTS @cfg(feature = "ipc-trace")` | `kernel/src/task.rs` | static | `[AtomicU64;PAIRS]` | cfg inactive in this profile |
 | `kernel::task::user_copy_tests::RACE_DONE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/task/user_copy_tests.rs` | static | `AtomicUsize` | cfg inactive in this profile |

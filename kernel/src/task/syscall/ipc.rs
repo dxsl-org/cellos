@@ -1160,9 +1160,46 @@ pub(super) fn futex_wake(caller_id: usize, addr: usize, count: usize) -> Syscall
     }
 }
 
+/// Test hook (x86_64): `[selftest] SMAP-WINDOW`, once per boot, on the first
+/// `Log` from a Sas cell while CR4.SMAP is set. Its message was just copied in
+/// through the user-copy window (a real syscall copy that succeeded under
+/// SMAP: without the window's STAC it would fault and the copy would fail);
+/// a raw supervisor read of the same user byte outside the window must take a
+/// page fault. Nothing is logged when SMAP is off; the lane requires the
+/// marker only when the boot line says `smap=on`.
+#[cfg(all(
+    feature = "test-hooks",
+    feature = "native-domains",
+    cellos_wide,
+    target_arch = "x86_64"
+))]
+fn smap_window_self_test(caller_id: usize, msg_ptr: usize) {
+    use core::sync::atomic::{AtomicBool, Ordering};
+    static RAN: AtomicBool = AtomicBool::new(false);
+    if RAN.load(Ordering::Acquire)
+        || !crate::arch::user_access::smap_active()
+        || !caller_copy_view(caller_id).is_ok_and(|view| view.is_sas())
+        || RAN.swap(true, Ordering::AcqRel)
+    {
+        return;
+    }
+    if crate::task::user_copy::raw_user_read_faults_for_test(msg_ptr) {
+        log::info!("[selftest] SMAP-WINDOW: PASS (syscall copy ok, raw read faulted)");
+    } else {
+        log::error!("[selftest] SMAP-WINDOW: FAIL (raw read of user 0x{msg_ptr:x} did not fault)");
+    }
+}
+
 /// Handler for `Syscall::Log` (extracted from the dispatcher).
 pub(super) fn log(caller_id: usize, msg_ptr: usize, msg_len: usize) -> SyscallResult {
     if let Ok(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
+        #[cfg(all(
+            feature = "test-hooks",
+            feature = "native-domains",
+            cellos_wide,
+            target_arch = "x86_64"
+        ))]
+        smap_window_self_test(caller_id, msg_ptr);
         #[cfg(feature = "p01-trace")]
         {
             let owner = crate::task::SCHEDULER

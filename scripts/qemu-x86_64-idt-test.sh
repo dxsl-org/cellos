@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Run the isolated x86 IDT actual-entry image with a strict serial/status oracle.
 #
-# Default: baseline profile (no SMEP/SMAP/UMIP) on qemu64. The protection
-# profile runner sets X86_IDT_CPU and X86_IDT_PROTECT=on; see
+# Default: base image on qemu64 without SMEP/SMAP/UMIP, so the kernel's
+# enable-if-present protections are all absent ("off" markers). The protection
+# runner sets X86_IDT_CPU and X86_IDT_PROTECT=on (all three on); see
 # scripts/x86/qemu-idt-protection-test.sh.
 
 set -euo pipefail
@@ -23,7 +24,7 @@ case "$PROTECT" in
         UMIP_MARKER="X86-PROTECT: umip=off sgdt=ran"
         ;;
     on)
-        KERNEL_PROTECT_MARKER="X86-PROTECT: smap=probe read=pf window=ok smep=on exec=pf syscall-flags=df+ac-cleared"
+        KERNEL_PROTECT_MARKER="X86-PROTECT: smap=on read=pf window=ok smep=on exec=pf syscall-flags=df+ac-cleared"
         UMIP_MARKER="X86-PROTECT: umip=on sgdt=gp"
         ;;
     *)

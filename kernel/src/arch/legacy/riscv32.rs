@@ -86,17 +86,6 @@ pub mod user_access {
         }
     }
 
-    /// `sstatus`, read by the test-hooks stack sampler.
-    #[cfg(feature = "test-hooks")]
-    pub(crate) fn stack_sample_status() -> usize {
-        let status: usize;
-        // SAFETY: reading sstatus from S-mode has no side effect.
-        unsafe {
-            core::arch::asm!("csrr {status}, sstatus", status = out(reg) status, options(nostack));
-        }
-        status
-    }
-
     /// `sstatus`, read around a VirtIO MMIO ACK.
     pub(crate) fn virtio_ack_status() -> usize {
         let sstatus: usize;

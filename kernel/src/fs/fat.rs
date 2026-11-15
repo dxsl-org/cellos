@@ -518,30 +518,17 @@ impl ViFile for FatFile {
         Ok(())
     }
 
+    /// Not supported. No syscall reaches it, and a kernel file must never
+    /// write through a raw user pointer: user bytes move only through the
+    /// user-copy window (SMAP on x86_64).
     fn read_async(
         self: Box<Self>,
-        buf_ptr: usize,
-        buf_len: usize,
+        _buf_ptr: usize,
+        _buf_len: usize,
     ) -> BoxFuture<'static, FileResult<usize>> {
-        // Contract guard (2026-07-31 Recv buffer-pinning audit): this synchronous
-        // future must not be wired to a live async syscall until cancellation has
-        // an explicit stop-touching-buffer acknowledgement and unpin point.
         Box::pin(async move {
-            let mut this = self;
-            // Create a temporary slice from the user pointer.
-            // SAFETY: The kernel guarantees the pointer is valid (mapped to user space)
-            // and we rely on the caller to ensure it doesn't race.
-            // In a real async driver, we would need to pin user memory.
-            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
-
-            // Perform synchronous read (for now, until RamDisk is async)
-            // This still satisfies the architectural requirement of returning a future.
-            let res = this.read(buf);
-
-            // Return ownership and result
-            // Cast FatFile back to Trait Object
-            let trait_obj: Box<dyn ViFile + Send + Sync> = this;
-            (trait_obj, res)
+            let file: Box<dyn ViFile + Send + Sync> = self;
+            (file, Err(ViError::NotSupported))
         })
     }
 }
