@@ -1,7 +1,7 @@
 ---
 phase: 17
 title: "Quota ownership, Tier-3 charging, shared-root hardening"
-status: pending
+status: in-progress
 priority: P2
 effort: "8–12d"
 dependencies: [16]
