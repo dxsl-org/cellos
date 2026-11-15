@@ -44,13 +44,15 @@ fn readonly_flags() -> Flags {
     Flags::from_bits(Flags::VALID | Flags::READ | Flags::ACCESSED | Flags::DIRTY)
 }
 
+/// Bounded by `mtime`, not the tick counter: the negative-control round masks
+/// the timer on both harts, which stops the tick counter.
 fn wait_for(expected: u8) -> bool {
-    let deadline = crate::task::system_ticks() + 500;
+    let deadline = hal::common::timer::read_mtime() + 500 * hal::common::timer::TICKS_PER_10MS;
     loop {
         match PHASE.load(Ordering::Acquire) {
             value if value == expected => return true,
             FAILED => return false,
-            _ if crate::task::system_ticks() >= deadline => return false,
+            _ if hal::common::timer::read_mtime() >= deadline => return false,
             _ => core::hint::spin_loop(),
         }
     }
@@ -205,21 +207,35 @@ pub fn run_primary() {
         fail(frame, "negative-control writable remap failed");
         return;
     }
+    // The stale entry this round relies on lives only in hart 1's TLB, and any
+    // unrelated flush that reaches hart 1 can drop it (QEMU's SFENCE.VMA has
+    // flushed the whole TLB). A timer tick on either hart runs the scheduler's
+    // housekeeping, whose reaps flush locally and RFENCE the peer, so both harts
+    // mask the timer for the round: hart 0 from arming to the verdict, hart 1
+    // from its prime to its stale write.
+    let primary_sstatus = crate::hal::arch::save_and_disable_interrupts();
     set_phase(NEGATIVE_ARMED);
-    if !wait_for(NEGATIVE_PRIMED) {
-        fail(frame, "negative-control prime timed out");
-        return;
-    }
-    crate::arch::tlb::set_test_skip_remote_rfence(true);
-    let lowered = paging::protect_page(TEST_VA, readonly_flags()).is_ok();
-    crate::arch::tlb::set_test_skip_remote_rfence(false);
-    if !lowered {
-        fail(frame, "negative-control lowering failed");
-        return;
-    }
-    set_phase(NEGATIVE_LOWERED);
-    if !wait_for(NEGATIVE_DONE) || frame_value() != MAGIC_WRITE {
-        fail(frame, "negative control did not prove stale write");
+    let negative = if !wait_for(NEGATIVE_PRIMED) {
+        Err("negative-control prime timed out")
+    } else {
+        crate::arch::tlb::set_test_skip_remote_rfence(true);
+        let lowered = paging::protect_page(TEST_VA, readonly_flags()).is_ok();
+        crate::arch::tlb::set_test_skip_remote_rfence(false);
+        if !lowered {
+            Err("negative-control lowering failed")
+        } else {
+            set_phase(NEGATIVE_LOWERED);
+            if !wait_for(NEGATIVE_DONE) || frame_value() != MAGIC_WRITE {
+                Err("negative control did not prove stale write")
+            } else {
+                Ok(())
+            }
+        }
+    };
+    // SAFETY: restores exactly the state this hart captured above.
+    unsafe { crate::hal::arch::restore_sstatus(primary_sstatus) };
+    if let Err(reason) = negative {
+        fail(frame, reason);
         return;
     }
 
@@ -297,15 +313,22 @@ pub fn run_secondary(hart_id: usize) {
     if !wait_for(NEGATIVE_ARMED) {
         return;
     }
+    // The timer stays masked from the prime to the stale write (see `run_primary`).
+    let secondary_sstatus = crate::hal::arch::save_and_disable_interrupts();
     // SAFETY: hart 0 remapped TEST_VA writable before publishing NEGATIVE_ARMED.
     unsafe { store_test_value(MAGIC_PRIME) };
     set_phase(NEGATIVE_PRIMED);
-    if !wait_for(NEGATIVE_LOWERED) {
+    let lowered = wait_for(NEGATIVE_LOWERED);
+    if lowered {
+        // SAFETY: the negative control deliberately retains this hart's stale entry.
+        unsafe { store_test_value(MAGIC_WRITE) };
+        set_phase(NEGATIVE_DONE);
+    }
+    // SAFETY: restores exactly the state this hart captured above.
+    unsafe { crate::hal::arch::restore_sstatus(secondary_sstatus) };
+    if !lowered {
         return;
     }
-    // SAFETY: the negative control deliberately retains this hart's stale entry.
-    unsafe { store_test_value(MAGIC_WRITE) };
-    set_phase(NEGATIVE_DONE);
 
     if !wait_for(FALLBACK_ARMED) {
         return;
