@@ -1055,6 +1055,7 @@ pub extern "Rust" fn vi_timer_tick() {
     #[cfg(cellos_wide)]
     if crate::sched::hart_local::current_hart_id() == 0 {
         crate::memory::frame_run::reap();
+        crate::resource_registry::poll_quarantined_windows();
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -1723,6 +1724,10 @@ fn drain_before_selection() {
         if crate::task::syscall::sweep_deferred_domain_grants() {
             note_housekeeping();
         }
+        // MMIO windows whose release lowering was unconfirmed: lowered again,
+        // and released once confirmed. Armed by the hart-0 timer poll, with
+        // backoff; a window still unconfirmed waits for the next poll.
+        crate::resource_registry::retry_quarantined_windows();
 
         if SCHEDULER
             .lock()

@@ -104,12 +104,13 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
 
 /// Phase 16: a released window whose lowering is not confirmed on every hart
 /// stays registered, owned by nobody, and no later claim or release frees it;
-/// the confirmed window of the same release is freed.
+/// the confirmed window of the same release is freed. A retry whose lowering
+/// is in force releases it.
 #[test]
-fn an_unlowered_window_is_quarantined_for_the_rest_of_the_boot() {
+fn an_unlowered_window_is_quarantined_until_a_retry_lowers_it() {
     use super::{
         lookup_mmio_owner, release_mmio_for, request_mmio_unchecked, retire_windows,
-        QUARANTINED_OWNER, REGISTRY,
+        retry_quarantined_windows, QUARANTINED_OWNER, REGISTRY,
     };
     use crate::memory::paging::PageTableError;
     const OWNER: usize = 0x7E2B;
@@ -156,6 +157,12 @@ fn an_unlowered_window_is_quarantined_for_the_rest_of_the_boot() {
 
     // The window whose lowering was confirmed is free for the next owner.
     assert!(request_mmio_unchecked(OWNER + 1, LOWERED, 0x1000).is_ok());
+    release_mmio_for(OWNER + 1);
+
+    // A retry lowers it again (host tests have no page tables: the lowering
+    // is in force) and releases it to the next claim.
+    assert_eq!(retry_quarantined_windows(), 0);
+    assert!(request_mmio_unchecked(OWNER + 1, UNLOWERED, 0x1000).is_ok());
     release_mmio_for(OWNER + 1);
 }
 

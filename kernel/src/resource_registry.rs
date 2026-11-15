@@ -12,9 +12,10 @@
 //!
 //! 3. **Release-on-exit**: `release_mmio_for(tid)` frees all ranges owned by
 //!    a task. Owners are task ids, the same key as `BDF_OWNERS`: the claiming
-//!    task holds the window, so retirement releases it per member task. On
-//!    AArch64 the released pages also return to their boot posture, which on
-//!    the Pi boards is kernel-only.
+//!    task holds the window, so retirement releases it per member task. The
+//!    released pages first return to their boot posture (kernel-only) on every
+//!    hart; a window whose lowering is unconfirmed stays owned by nobody until
+//!    a retry from the housekeeping pass confirms it.
 //!
 //! 4. **Grant is the mapping**: `RequestMmio` sets USER on the whole pages of
 //!    a granted window. A sub-page window (the BCM2837 mailbox, which shares
@@ -34,6 +35,7 @@
 
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use types::{CellId, ViError, ViResult};
 
 // ---------------------------------------------------------------------------
@@ -478,15 +480,16 @@ pub fn self_test() -> bool {
 /// Release all MMIO regions owned by task `tid`.
 ///
 /// Retirement calls this for every member task of the retiring incarnation.
-/// On RISC-V and AArch64 the windows' USER pages first go back to the boot
-/// posture (kernel-only): `RequestMmio` installed them, so without this a dead
-/// Cell's window would stay U-mode/EL0-reachable for every other Cell. The
-/// lowering runs while the windows are still owned, and a window is released
-/// only once its lowering is in force on every hart. A window whose lowering is
-/// not (a remote hart did not confirm the invalidation, or the leaf could not
-/// be rewritten) stays registered to [`QUARANTINED_OWNER`] — counted, logged,
-/// and never handed to another Cell in this boot — because a stale USER
-/// translation may survive on that hart.
+/// The windows' USER pages first go back to the boot posture (kernel-only) on
+/// every architecture: `RequestMmio` installed them, so without this a dead
+/// Cell's window would stay U-mode/EL0/ring-3-reachable for every other Cell.
+/// The lowering runs while the windows are still owned, and a window is
+/// released only once its lowering is in force on every hart. A window whose
+/// lowering is not (a remote hart did not confirm the invalidation, or the
+/// leaf could not be rewritten) stays registered to [`QUARANTINED_OWNER`] —
+/// counted, logged, and handed to no Cell — because a stale USER translation
+/// may survive on that hart, until [`retry_quarantined_windows`] lowers it
+/// again and that lowering is confirmed.
 pub fn release_mmio_for(tid: usize) {
     let mut registry = REGISTRY.lock();
     // REGISTRY stays held from the lowering through the release, so no new
@@ -497,7 +500,8 @@ pub fn release_mmio_for(tid: usize) {
     for &(base, len, page, error) in &unlowered {
         log::error!(
             "[mmio] release tid={tid}: window {base:#x}+{len:#x} quarantined, page {page:#x} \
-             may stay USER ({error:?}); never handed out again this boot ({quarantined} quarantined)"
+             may stay USER ({error:?}); handed out again only once a retry lowers it \
+             ({quarantined} quarantined)"
         );
     }
     // A VideoCore allocation and its USER mapping remain valid until reboot.
@@ -507,68 +511,173 @@ pub fn release_mmio_for(tid: usize) {
 
 /// Owner of a released window whose USER pages are not provably gone on every
 /// hart. No task id is ever `usize::MAX`, so no owner query matches it, and
-/// every claim overlapping it is refused for the rest of the boot.
+/// every claim overlapping it is refused until [`retry_quarantined_windows`]
+/// confirms its lowering.
 const QUARANTINED_OWNER: usize = usize::MAX;
+
+/// Windows registered to [`QUARANTINED_OWNER`], so the timer poll and the
+/// housekeeping retry cost one load while there are none. Written only under
+/// `REGISTRY`.
+static QUARANTINED_WINDOWS: AtomicUsize = AtomicUsize::new(0);
+
+/// Hart-0 timer ticks between two retries of the quarantined windows' lowering
+/// (about 1.3 s at 10 ms): the backoff that keeps a never-confirmed lowering
+/// from re-arming the housekeeping pass on every tick.
+const RETRY_EVERY_TICKS: usize = 128;
 
 /// A released window `(base, len)` whose lowering failed at `page`.
 type Unlowered = (usize, usize, usize, crate::memory::paging::PageTableError);
 
-/// Return the whole USER pages of `tid`'s windows to the boot posture. A page
-/// another owner's live window still covers (one handed over from a Terminated
-/// owner before this reap) keeps USER; a quarantined window has no owner to
-/// keep it for. Every page is attempted; a window is reported with its first
-/// page that failed.
-#[cfg(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test)))]
+/// Return the whole USER pages of `tid`'s windows to the boot posture. Every
+/// page is attempted; a window is reported with its first page that failed.
 fn lower_released_windows(
     registry: &BTreeMap<usize, MmioRegion>,
     tid: usize,
 ) -> alloc::vec::Vec<Unlowered> {
-    const PAGE: usize = 4096;
     let mut unlowered = alloc::vec::Vec::new();
     for (&base, region) in registry
         .iter()
         .filter(|(_, region)| region.owner_tid == tid)
     {
-        let mut failed = None;
-        for page in user_pages(base, region.len).step_by(PAGE) {
-            let still_owned = registry.iter().any(|(&live, other)| {
-                other.owner_tid != tid
-                    && other.owner_tid != QUARANTINED_OWNER
-                    && live < page + PAGE
-                    && page < live + other.len
-            });
-            if still_owned {
-                continue;
-            }
-            if let Err(e) = crate::memory::paging::restore_mmio_boot_posture(page, PAGE) {
-                failed.get_or_insert((page, e));
-            }
-        }
-        if let Some((page, e)) = failed {
+        if let Some((page, e)) = lower_window(registry, tid, base, region.len) {
             unlowered.push((base, region.len, page, e));
         }
     }
     unlowered
 }
 
-/// Nothing to lower: only RV64 and AArch64 retirement restores a USER posture
-/// here, and host tests have no page tables.
-#[cfg(not(all(any(target_arch = "riscv64", target_arch = "aarch64"), not(test))))]
-fn lower_released_windows(
+/// The pages `RequestMmio` made USER for `[base, base + len)`: the whole pages
+/// on RISC-V and AArch64 (`user_pages`), every page the window touches on
+/// x86_64 (`map_mmio_user_x86` maps the page-rounded window).
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+fn released_pages(base: usize, len: usize) -> core::ops::Range<usize> {
+    user_pages(base, len)
+}
+
+/// [`released_pages`] where `RequestMmio` maps the page-rounded window.
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+fn released_pages(base: usize, len: usize) -> core::ops::Range<usize> {
+    const PAGE: usize = 4096;
+    match base
+        .checked_add(len)
+        .and_then(|end| end.checked_add(PAGE - 1))
+    {
+        Some(end) if len != 0 => (base & !(PAGE - 1))..(end & !(PAGE - 1)),
+        _ => 0..0,
+    }
+}
+
+/// Lower the USER pages of window `[base, base + len)` held by `owner`. A page
+/// another owner's live window still covers (one handed over from a
+/// Terminated owner before this reap) keeps USER; a quarantined window has no
+/// owner to keep it for. Returns the first page whose lowering failed.
+#[cfg(all(cellos_wide, not(test)))]
+fn lower_window(
+    registry: &BTreeMap<usize, MmioRegion>,
+    owner: usize,
+    base: usize,
+    len: usize,
+) -> Option<(usize, crate::memory::paging::PageTableError)> {
+    const PAGE: usize = 4096;
+    let mut failed = None;
+    for page in released_pages(base, len).step_by(PAGE) {
+        let still_owned = registry.iter().any(|(&live, other)| {
+            other.owner_tid != owner
+                && other.owner_tid != QUARANTINED_OWNER
+                && live < page + PAGE
+                && page < live + other.len
+        });
+        if still_owned {
+            continue;
+        }
+        if let Err(e) = crate::memory::paging::restore_mmio_boot_posture(page, PAGE) {
+            failed.get_or_insert((page, e));
+        }
+    }
+    failed
+}
+
+/// Nothing to lower: host tests have no page tables, and the 32-bit targets
+/// never map a window USER.
+#[cfg(not(all(cellos_wide, not(test))))]
+fn lower_window(
     _registry: &BTreeMap<usize, MmioRegion>,
-    _tid: usize,
-) -> alloc::vec::Vec<Unlowered> {
-    alloc::vec::Vec::new()
+    _owner: usize,
+    base: usize,
+    len: usize,
+) -> Option<(usize, crate::memory::paging::PageTableError)> {
+    let _ = released_pages(base, len);
+    None
+}
+
+/// Lower every quarantined window again and release those whose lowering is
+/// now in force on every hart. The housekeeping pass calls it; it holds
+/// `REGISTRY` across the lowering, as [`release_mmio_for`] does. Returns the
+/// windows still quarantined.
+pub fn retry_quarantined_windows() -> usize {
+    if QUARANTINED_WINDOWS.load(Ordering::Acquire) == 0 {
+        return 0;
+    }
+    let mut registry = REGISTRY.lock();
+    let mut lowered = alloc::vec::Vec::new();
+    for (&base, region) in registry
+        .iter()
+        .filter(|(_, region)| region.owner_tid == QUARANTINED_OWNER)
+    {
+        if lower_window(&registry, QUARANTINED_OWNER, base, region.len).is_none()
+            && lowered.try_reserve(1).is_ok()
+        {
+            lowered.push((base, region.len));
+        }
+    }
+    for (base, _) in &lowered {
+        registry.remove(base);
+    }
+    let remaining = count_quarantined(&registry);
+    drop(registry);
+    for (base, len) in lowered {
+        log::warn!(
+            "[mmio] quarantined window {base:#x}+{len:#x} lowered on every hart: released \
+             ({remaining} still quarantined)"
+        );
+    }
+    remaining
+}
+
+/// Hart-0 timer hook: while a window is quarantined, arm the housekeeping
+/// pass every [`RETRY_EVERY_TICKS`] once no remote hart owes an invalidation,
+/// so [`retry_quarantined_windows`] runs when its flush can confirm. One load
+/// while nothing is quarantined; never waits.
+#[cfg(cellos_wide)]
+pub fn poll_quarantined_windows() {
+    if QUARANTINED_WINDOWS.load(Ordering::Acquire) == 0
+        || !crate::task::system_ticks().is_multiple_of(RETRY_EVERY_TICKS)
+    {
+        return;
+    }
+    if crate::memory::tlb_shootdown::tag_invalidation_outstanding().is_none() {
+        crate::task::note_housekeeping();
+    }
+}
+
+/// Windows registered to [`QUARANTINED_OWNER`]; refreshes
+/// [`QUARANTINED_WINDOWS`]. The caller holds `REGISTRY`.
+fn count_quarantined(registry: &BTreeMap<usize, MmioRegion>) -> usize {
+    let quarantined = registry
+        .values()
+        .filter(|region| region.owner_tid == QUARANTINED_OWNER)
+        .count();
+    QUARANTINED_WINDOWS.store(quarantined, Ordering::Release);
+    quarantined
 }
 
 /// Drop `tid`'s windows, except those in `unlowered`, which pass to
-/// [`QUARANTINED_OWNER`]. Returns the windows quarantined this boot.
+/// [`QUARANTINED_OWNER`]. Returns the windows quarantined now.
 fn retire_windows(
     registry: &mut BTreeMap<usize, MmioRegion>,
     tid: usize,
     unlowered: &[Unlowered],
 ) -> usize {
-    let mut quarantined = 0;
     registry.retain(|&base, region| {
         if region.owner_tid == tid {
             if !unlowered.iter().any(|window| window.0 == base) {
@@ -576,12 +685,9 @@ fn retire_windows(
             }
             region.owner_tid = QUARANTINED_OWNER;
         }
-        if region.owner_tid == QUARANTINED_OWNER {
-            quarantined += 1;
-        }
         true
     });
-    quarantined
+    count_quarantined(registry)
 }
 
 /// The windows [`revoke_mmio_for`] would release, without releasing them: a

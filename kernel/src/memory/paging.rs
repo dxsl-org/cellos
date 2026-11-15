@@ -817,12 +817,13 @@ pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     Ok(granted)
 }
 
-/// Return the whole pages of `[base, base+len)` to the access the boot map
-/// gave them, once no Cell holds the window any more.
+/// Return the pages of `[base, base+len)` to the access the boot map gave
+/// them, once no Cell holds the window any more.
 ///
-/// Every boot MMIO window is kernel-only on RISC-V and AArch64, so restoring
-/// is clearing USER.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+/// Every boot MMIO window is kernel-only (RISC-V, AArch64, and x86_64's
+/// `map_mmio_x86`), so restoring is clearing USER; x86_64 keeps the leaf's
+/// cache-disable bits.
+#[cfg(cellos_wide)]
 pub fn restore_mmio_boot_posture(base: usize, len: usize) -> PagingResult<usize> {
     clear_mmio_user(base, len)
 }

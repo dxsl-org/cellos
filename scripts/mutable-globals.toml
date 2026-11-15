@@ -1810,6 +1810,17 @@ rationale = "release_for runs inside task.rs:yield_cpu root-retirement funnel (t
 review = "kernel/src/resource_registry.rs:release_for; kernel/src/resource_registry.rs:request_mmio; kernel/src/task.rs:1470; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
+key = "kernel::resource_registry::QUARANTINED_WINDOWS"
+lifetime = "global"
+mutation = "atomic"
+owner = "resource_registry: count_quarantined stores the number of MMIO windows registered to QUARANTINED_OWNER (release_mmio_for via retire_windows, retry_quarantined_windows); poll_quarantined_windows and retry_quarantined_windows read it"
+contexts = ["normal", "irq", "exception"]
+seal = "none: windows enter and leave the quarantine for the whole run"
+retirement = "never: a counter for the whole run; it returns to 0 once every quarantined window's lowering is confirmed"
+rationale = "Written only under REGISTRY (Release store), read without it (Acquire) by the hart-0 timer poll and the housekeeping retry as a fast 'nothing quarantined' gate; a stale read only delays or adds one retry, which re-reads the registry under its lock."
+review = "kernel/src/resource_registry.rs:count_quarantined; kernel/src/resource_registry.rs:poll_quarantined_windows; kernel/src/resource_registry.rs:retry_quarantined_windows; kernel/src/task.rs:vi_timer_tick"
+
+[[global]]
 key = "kernel::resource_registry::DISPLAY_FRAMEBUFFER"
 lifetime = "global"
 mutation = "spinlock"
