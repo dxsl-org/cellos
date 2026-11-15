@@ -290,10 +290,10 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<RegionTable>> {
     &REG_GRANT_TABLE
 }
 
-/// Restore the boot identity mapping (kernel RWX) and deallocate a grant's
+/// Restore the boot identity mapping (kernel RW+NX) and deallocate a grant's
 /// run of physical frames.
 ///
-/// Grant frames are identity-mapped at boot (RWX kernel) and re-mapped USER RW by
+/// Grant frames are identity-mapped at boot (kernel RW+NX) and re-mapped USER RW by
 /// `alloc_grant_pages`. On free we must RESTORE the kernel identity mapping — NOT
 /// unmap it: in the SAS model every Usable frame must stay identity-mapped so the
 /// cell loader can zero a reused frame through its identity address
@@ -301,7 +301,7 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<RegionTable>> {
 /// a later cell load store-faulted while zeroing BSS (and read wrong pages).
 /// Dropping the USER bit also prevents a stale cell from touching a reused frame.
 ///
-/// The kernel-RWX restore happens only after `unpublish_user_frames` has left
+/// The kernel-alias restore happens only after `unpublish_user_frames` has left
 /// the frames unmapped on every hart and drained in-flight Sas copies: a copy
 /// that probed the grant earlier would otherwise write the reused frame
 /// through the fault-free kernel mapping.
@@ -310,7 +310,7 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<RegionTable>> {
 /// VA (`phys_to_virt` is the identity: RV64, AArch64). x86_64 reaches RAM
 /// through the HHDM and has no boot identity map of RAM, so there the frames
 /// are unpublished, the kernel-root tables their USER mapping needed are pruned
-/// once empty, and the frames are freed; restoring would add a kernel-RWX alias
+/// once empty, and the frames are freed; restoring would add a kernel alias
 /// to the lower half that never existed.
 ///
 /// Lock order: KERNEL_ROOT alone (unpublish), then FRAME_ALLOCATOR →
@@ -1337,7 +1337,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         // kernel identity mapping for the pages we re-mapped USER (NOT a bare
         // unmap — every Usable frame must stay identity-mapped for the loader's
         // identity-address zeroing), then free. x86_64 has no identity alias
-        // to restore, so a restore there would add a kernel-RWX lower-half
+        // to restore, so a restore there would add a kernel lower-half
         // mapping (R3): its pages are left unmapped and the tables they needed
         // are pruned, as in `free_grant_pages`. Those pages were briefly
         // USER, so a Sas copy may have probed them: unpublish (unmap, flush,
@@ -1389,7 +1389,7 @@ pub(super) fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
 
 /// Hand `n_pages` unpublished grant frames at `base` to `batch`.
 /// `restore_alias`: their identity leaf was remapped USER and must be restored
-/// kernel RWX before free (RV64, AArch64).
+/// kernel RW+NX before free (RV64, AArch64).
 fn retire_grant_run(
     batch: &mut crate::memory::frame_run::Batch,
     base: usize,
@@ -1484,7 +1484,7 @@ fn retire_grant_run_into(
     // Restore the kernel alias only where it is the identity map (RV64,
     // AArch64): the run's alias says which. x86_64 reaches RAM through the
     // HHDM and never had an identity alias for this frame, so a restore there
-    // would add a new kernel-RWX mapping to the lower half.
+    // would add a new kernel mapping to the lower half.
     let identity_alias = run.alias() != crate::memory::frame_run::KernelAlias::Intact;
     // A domain owner's backing is never published in the kernel root: it is
     // zeroed through `phys_to_virt` and mapped only in private roots, whose tags

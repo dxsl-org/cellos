@@ -18,7 +18,7 @@
 //!    panic). For `CopyView::Sas` the commit copies through user VAs under the
 //!    active shared root, retaining today's SUM-based shared-space semantics.
 //!    The guard alone does NOT make that recoverable: a retired Sas page is
-//!    re-mapped kernel-RWX, which the kernel writes without faulting. The Sas
+//!    re-mapped kernel-RW, which the kernel writes without faulting. The Sas
 //!    commit therefore runs under the `sas_lease` window, and every path that
 //!    retires a Sas user frame first unmaps it, flushes every hart, and calls
 //!    [`wait_sas_copies_quiescent`] (`task::stack::unpublish_user_frames`).

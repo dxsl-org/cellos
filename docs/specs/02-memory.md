@@ -94,8 +94,11 @@ kernel alias (`Intact`, `Removed`, `User`) và trạng thái
    gây panic. Reaper trên hart 0 giải phóng run khi mọi epoch per-hart đã yêu cầu được publish;
    không có gì bị bỏ rơi.
 5. Drain các copy window ngắn (SAS copy).
-6. Normalise: RV64/AArch64 khôi phục identity alias kernel RWX khi alias khác `Intact`;
+6. Normalise: RV64/AArch64 khôi phục identity alias kernel RW+NX (đọc/ghi, không bao giờ
+   thực thi; cùng leaf mà boot map cấp cho mọi frame `Usable`) khi alias khác `Intact`;
    x86_64 không bao giờ thêm alias mà prune các bảng trang lower-half vào cùng batch.
+   Không có gì thực thi từ một frame tự do hay từ identity alias của RAM: kernel chỉ fetch
+   từ image của chính nó (`MemoryType::Kernel`).
 7. Free dưới allocator guard.
 
 Một VA đã giải phóng (cell VA slot, stack reservation) vẫn reserved cho tới khi flush của nó

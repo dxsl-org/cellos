@@ -113,7 +113,7 @@ fn release_stack_reservation(start: VAddr, end: VAddr) {
 /// they return to the allocator.
 ///
 /// A Sas user copy that probed one of these pages earlier must not land after
-/// the frame is re-mapped kernel-RWX: the kernel writes that mapping without
+/// the frame is re-mapped kernel-RW: the kernel writes that mapping without
 /// faulting, so the copy would hit whatever the frame becomes next (page
 /// table, another cell). Every PTE is cleared here and recorded in `batch`,
 /// whose finish invalidates every hart and then waits out any Sas commit
@@ -306,7 +306,7 @@ impl Stack {
 
         let usable_start_idx = guard_pages;
 
-        // SAS identity map: all RAM is already identity-mapped RWX by
+        // SAS identity map: all RAM is already identity-mapped RW+NX by
         // init_kernel_paging. The usable pages are re-mapped below, then every
         // guard frame is unmapped after the loop so an overflow traps.
 
@@ -528,6 +528,55 @@ pub fn stack_probe_self_test() -> bool {
         core::ptr::write_bytes((stack.top - probe_bytes) as *mut u8, 0x11, probe_bytes);
     }
     stack.test_hook_watermark_bytes() == probe_bytes
+}
+
+/// Test-hooks: a free frame's kernel alias is `paging::FREE_FRAME_ALIAS`
+/// (`valid && write && !exec && !user`, translating to itself) both for a frame
+/// fresh from the boot map and for the frames of a `Removed` run once freed,
+/// whose alias `KernelBackend::normalise` restored: a user stack, dropped.
+///
+/// `None` where RAM has no identity alias (x86_64 reaches it through the HHDM).
+#[cfg(feature = "test-hooks")]
+pub fn free_frame_nx_self_test() -> Option<bool> {
+    fn free_alias(frame: usize) -> bool {
+        let Some(root) = *paging::KERNEL_ROOT.lock() else {
+            return false;
+        };
+        // SAFETY: the live kernel root; its tables outlive this walk.
+        unsafe { crate::hal::paging::leaf(root, frame) }.is_some_and(|leaf| {
+            leaf.pa == frame && leaf.valid && leaf.write && !leaf.exec && !leaf.user
+        })
+    }
+
+    let Some(fresh) = crate::memory::frame::allocate_frame() else {
+        return Some(false);
+    };
+    if crate::memory::frame::phys_to_virt(fresh) != fresh {
+        crate::memory::frame::deallocate_frame(fresh);
+        return None;
+    }
+    let fresh_ok = free_alias(fresh);
+    crate::memory::frame::deallocate_frame(fresh);
+
+    let Ok(stack) = Stack::new_user(1) else {
+        return Some(false);
+    };
+    let removed = stack
+        .run
+        .as_ref()
+        .is_some_and(|run| run.alias() == KernelAlias::Removed);
+    let (guard, usable) = (stack.base, stack.usable_start());
+    // While the stack lives its usable page is USER and its guard unmapped.
+    let live = !free_alias(usable) && paging::virt_to_phys(guard).is_none();
+    drop(stack);
+    let restored = free_alias(guard) && free_alias(usable);
+    if !(fresh_ok && removed && live && restored) {
+        error!(
+            "[selftest] FREE-FRAME-NX: fresh={} removed={} live={} restored={}",
+            fresh_ok, removed, live, restored
+        );
+    }
+    Some(fresh_ok && removed && live && restored)
 }
 
 impl Stack {

@@ -1,10 +1,11 @@
 //! Lease between Sas commits and the paths that retire a shared-root user page.
 //!
 //! A Sas commit copies through the user VA itself. The release paths retire
-//! such a page by re-mapping the same identity VA kernel-RWX and returning the
-//! frame to the allocator, so a commit that merely probed earlier would keep
-//! copying — without faulting, since kernel-RWX is writable from the kernel —
-//! into a frame that may already be a page table or another cell's memory.
+//! such a page by re-mapping the same identity VA kernel-RW (never executable)
+//! and returning the frame to the allocator, so a commit that merely probed
+//! earlier would keep copying — without faulting, since that alias is writable
+//! from the kernel — into a frame that may already be a page table or another
+//! cell's memory.
 //!
 //! Protocol:
 //! * commit ([`commit_sas`]): interrupts masked, this hart's window
@@ -13,7 +14,7 @@
 //! * release (`task::stack::unpublish_user_frames`): clear the PTEs,
 //!   invalidate every hart's TLB, then [`wait_sas_copies_quiescent`] — full
 //!   fence, wait for every hart that was inside a window to leave it. Only then
-//!   may the caller re-map the frames kernel-RWX and hand them to the allocator.
+//!   may the caller re-map the frames kernel-RW and hand them to the allocator.
 //!
 //! Store-buffering argument: each side stores (sequence / PTE), fences SeqCst,
 //! then loads the other's location, so at least one observes the other. Either

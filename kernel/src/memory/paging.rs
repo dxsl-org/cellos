@@ -44,6 +44,16 @@ use crate::sync::Spinlock;
 pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> =
     Spinlock::ranked(None, crate::sync::rank::KERNEL_ROOT);
 
+/// The kernel alias of every free RAM frame where RAM is identity-mapped
+/// (RV64, AArch64): supervisor read/write, never executable. The boot map gives
+/// it to every `Usable` frame, and a run whose alias was taken over restores it
+/// before free (`frame_run::KernelBackend::normalise`). Nothing executes from a
+/// free frame or its identity alias: the kernel fetches only its own image
+/// (`MemoryType::Kernel`), cells fetch through their USER mappings, and guests
+/// through Stage-2. x86_64 reaches RAM through the HHDM and never uses it.
+pub(crate) const FREE_FRAME_ALIAS: Flags =
+    Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY);
+
 /// No-op paging init for bare physical addressing (RV32 Nano, SATP=0).
 ///
 /// Phase-31 uses identity-mapped physical memory with no page tables.
@@ -144,14 +154,7 @@ pub fn init_kernel_paging(
     // 2. Identity-map all usable memory and kernel sections.
     for entry in mmap.iter() {
         let flags = match entry.ty {
-            crate::boot::MemoryType::Usable => PageFlags::from_bits(
-                PageFlags::VALID
-                    | PageFlags::READ
-                    | PageFlags::WRITE
-                    | PageFlags::EXECUTE
-                    | PageFlags::ACCESSED
-                    | PageFlags::DIRTY,
-            ),
+            crate::boot::MemoryType::Usable => FREE_FRAME_ALIAS,
             crate::boot::MemoryType::Kernel => PageFlags::from_bits(
                 PageFlags::VALID
                     | PageFlags::READ

@@ -327,6 +327,7 @@ fi
 REQUIRED_MARKERS=(
     "vfs-lifetime self-test PASS"
     "stack-probe self-test PASS"
+    "[selftest] FREE-FRAME-NX: PASS"
     "stack-sizing policy self-test PASS"
     "admission-core self-test PASS"
     "ATOMIC_PUBLICATION_ARMING: PASS"

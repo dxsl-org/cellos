@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 515 | 198 | 197 | 1 | 8 | 311 |
+| kernel | yes | 516 | 198 | 197 | 1 | 8 | 312 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 119 | 69 | 69 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -303,7 +303,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (432)
+## Other declarations (433)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -568,6 +568,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::memory::heap::size_hist::ALLOC_BYTES @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::ALLOC_COUNT @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
 | `kernel::memory::heap::size_hist::FREE_BYTES @cfg(feature = "cell-scale-experiment")` | `kernel/src/memory/heap.rs` | static | `[AtomicUsize;BUCKETS]` | cfg inactive in this profile |
+| `kernel::memory::heap::thread_local!#1 @cfg(all (test , not (target_os = "none")))` | `kernel/src/memory/heap.rs` | item macro | `` | cfg inactive in this profile |
 | `kernel::memory::tag_pool::tests::a_cancelled_lease_returns_value_and_count()::POOL @cfg(test)` | `kernel/src/memory/tag_pool.rs` | static | `TagPool` | cfg inactive in this profile |
 | `kernel::memory::tag_pool::tests::a_dropped_lease_stays_reserved_and_counted()::POOL @cfg(test)` | `kernel/src/memory/tag_pool.rs` | static | `TagPool` | cfg inactive in this profile |
 | `kernel::memory::tag_pool::tests::a_never_reused_pool_issues_each_value_once_per_boot()::POOL @cfg(test)` | `kernel/src/memory/tag_pool.rs` | static | `TagPool` | cfg inactive in this profile |

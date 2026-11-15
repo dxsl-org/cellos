@@ -108,6 +108,7 @@ fn riscv64_vfs_quota_all_pass() {
         &runner,
         "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
     );
+    wait_for_or_dump(&runner, "[selftest] FREE-FRAME-NX: PASS");
     wait_for_or_dump(&runner, "cwd-path self-test PASS");
     wait_for_or_dump(&runner, "fstat self-test PASS");
     wait_for_or_dump(

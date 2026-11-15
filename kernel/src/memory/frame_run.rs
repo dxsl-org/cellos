@@ -135,15 +135,16 @@ pub enum RunKind {
 
 /// The kernel-root alias of the run, which decides normalisation before free.
 ///
-/// RV64 and AArch64 keep every free frame identity-mapped kernel RWX (the loader
-/// zeroes a fresh frame through `phys_to_virt`); x86_64 reaches RAM through the
-/// HHDM only. The creator of a run picks the variant for its architecture.
+/// RV64 and AArch64 keep every free frame identity-mapped kernel RW+NX
+/// (`paging::FREE_FRAME_ALIAS`: the loader zeroes a fresh frame through
+/// `phys_to_virt`); x86_64 reaches RAM through the HHDM only. The creator of a
+/// run picks the variant for its architecture.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum KernelAlias {
     /// Whatever alias the frame has is the one a free frame must have: nothing
     /// to restore.
     Intact,
-    /// The identity leaf was removed: restore it as kernel RWX before free.
+    /// The identity leaf was removed: restore it as kernel RW+NX before free.
     Removed,
     /// The identity leaf is published USER: unpublish, then restore it.
     User,
@@ -155,7 +156,7 @@ impl KernelAlias {
     /// through that identity VA (RV64, AArch64), the run must restore it
     /// before free: `Removed`. Where it reaches RAM through the HHDM (x86_64),
     /// the identity VA was never the kernel's alias: `Intact`, and no
-    /// lower-half kernel-RWX alias is ever added (census F3).
+    /// lower-half kernel alias is ever added (census F3).
     pub fn of_identity_remap(base: PhysAddr) -> Self {
         if crate::memory::frame::phys_to_virt(base) == base {
             KernelAlias::Removed
@@ -1642,6 +1643,12 @@ pub(crate) fn set_test_silent_cpu_fixture(armed: bool) {
 /// allocator.
 pub(crate) struct KernelBackend;
 
+impl KernelBackend {
+    /// The leaf [`Backend::normalise`] restores: the boot alias of a free
+    /// frame, read/write and never executable.
+    pub(crate) const ALIAS: crate::memory::paging::Flags = crate::memory::paging::FREE_FRAME_ALIAS;
+}
+
 impl Backend for KernelBackend {
     fn completed(&self, hart: usize, epoch: usize) -> bool {
         crate::sched::smp::tlb_flush_completed(hart, epoch)
@@ -1654,25 +1661,16 @@ impl Backend for KernelBackend {
         crate::memory::tlb_shootdown::request_remote_flushes()
     }
 
-    /// Restore the identity leaf as kernel RWX: every free frame is
-    /// identity-mapped there on RV64/AArch64, because the loader zeroes a fresh
-    /// frame through `phys_to_virt`. The run is unpublished and its
-    /// invalidation confirmed, so each leaf is new and needs no shared flush;
-    /// the local flush drops any invalid entry this hart may still cache. A
-    /// page restored by an earlier, partly failed attempt is skipped. Never
-    /// waits: the hart-0 timer reaper runs this.
+    /// Restore the identity leaf as kernel RW+NX ([`KernelBackend::ALIAS`]):
+    /// every free frame is identity-mapped there on RV64/AArch64, because the
+    /// loader zeroes a fresh frame through `phys_to_virt`. The run is
+    /// unpublished and its invalidation confirmed, so each leaf is new and
+    /// needs no shared flush; the local flush drops any invalid entry this hart
+    /// may still cache. A page restored by an earlier, partly failed attempt is
+    /// skipped. Never waits: the hart-0 timer reaper runs this.
     fn normalise(&mut self, run: &FrameRun) -> bool {
-        use crate::memory::paging::Flags;
         // `frame::with` below would self-deadlock on a hart that holds it.
         debug_assert!(!crate::memory::frame::held_here());
-        let kernel_rwx = Flags::from_bits(
-            Flags::VALID
-                | Flags::READ
-                | Flags::WRITE
-                | Flags::EXECUTE
-                | Flags::ACCESSED
-                | Flags::DIRTY,
-        );
         let (base, pages) = (run.base(), run.pages());
         let restored = crate::memory::frame::with(|allocator| {
             let mut batch = Batch::new();
@@ -1682,7 +1680,7 @@ impl Backend for KernelBackend {
                 if crate::memory::paging::virt_to_phys(frame) == Some(frame) {
                     continue;
                 }
-                if crate::memory::paging::map_page(allocator, &mut batch, frame, frame, kernel_rwx)
+                if crate::memory::paging::map_page(allocator, &mut batch, frame, frame, Self::ALIAS)
                     .is_err()
                 {
                     restored = false;

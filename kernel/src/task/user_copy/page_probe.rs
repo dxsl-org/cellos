@@ -85,7 +85,7 @@ pub(super) fn stage_domain<'a>(
 /// Documented retained legacy exposure: Sas identity-maps RAM, so a wild
 /// pointer at another cell's USER page passes this probe by design. This probe
 /// is NOT the authority for the commit: a page may be retired between probe
-/// and commit, and a retired page is re-mapped kernel-RWX — writable by the
+/// and commit, and a retired page is re-mapped kernel-RW — writable by the
 /// kernel without any fault — before its frame is reused. The commit therefore
 /// re-validates every page inside its leased window (`sas_lease`), which is
 /// what keeps a racing release from receiving bytes after the frame is freed.

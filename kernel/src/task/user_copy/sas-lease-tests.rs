@@ -16,9 +16,8 @@ const USER_RW: hal::Leaf = hal::Leaf {
     user: true,
     exec: false,
 };
-const KERNEL_RWX: hal::Leaf = hal::Leaf {
+const KERNEL_RW: hal::Leaf = hal::Leaf {
     user: false,
-    exec: true,
     ..USER_RW
 };
 
@@ -27,11 +26,11 @@ fn retired_page_fails_in_window_revalidation() {
     let live = |_page: usize| Some(USER_RW);
     assert!(sas_span_live(0x4000_0000, 3 * 4096, Direction::ToUser, live).is_ok());
 
-    // The free path re-maps the identity VA kernel-RWX: writable from the
+    // The free path re-maps the identity VA kernel-RW: writable from the
     // kernel, so only the USER check stops the commit.
     let remapped = |page: usize| {
         Some(if page == 0x4000_1000 {
-            KERNEL_RWX
+            KERNEL_RW
         } else {
             USER_RW
         })
@@ -77,7 +76,7 @@ fn release_waits_for_an_open_window() {
 fn no_commit_write_lands_after_release() {
     for _ in 0..200 {
         let seqs = Arc::new(WindowSeqs::<2>::new());
-        // The leaf: USER_RW while live, KERNEL_RWX once retired.
+        // The leaf: USER_RW while live, KERNEL_RW once retired.
         let user = Arc::new(AtomicBool::new(true));
         let started = Arc::new(AtomicBool::new(false));
         let freed = Arc::new(AtomicBool::new(false));
@@ -97,7 +96,7 @@ fn no_commit_write_lands_after_release() {
                     Some(if user.load(Ordering::Relaxed) {
                         USER_RW
                     } else {
-                        KERNEL_RWX
+                        KERNEL_RW
                     })
                 };
                 if sas_span_live(0x8000, 16, Direction::ToUser, leaf).is_err() {

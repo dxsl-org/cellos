@@ -338,6 +338,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("stack-probe self-test FAIL");
         }
         #[cfg(feature = "test-hooks")]
+        match task::stack::free_frame_nx_self_test() {
+            Some(true) => log_info("[selftest] FREE-FRAME-NX: PASS"),
+            Some(false) => log_info("[selftest] FREE-FRAME-NX: FAIL"),
+            None => log_info("[selftest] FREE-FRAME-NX: SKIP (RAM has no identity alias)"),
+        }
+        #[cfg(feature = "test-hooks")]
         if task::stack_sizing_policy_self_test() {
             log_info("stack-sizing policy self-test PASS (measured=16, unknown=64)");
         } else {

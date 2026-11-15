@@ -867,3 +867,18 @@ fn kernel_runs_carry_no_account() {
         .map_err(|_| ())
         .unwrap();
 }
+
+#[test]
+fn the_restored_free_frame_alias_is_read_write_and_never_executable() {
+    use crate::memory::paging::Flags;
+    let alias = KernelBackend::ALIAS.bits();
+    assert_eq!(
+        alias & Flags::EXECUTE,
+        0,
+        "a free frame is never executable"
+    );
+    assert_eq!(alias & Flags::USER, 0, "a free frame is kernel-only");
+    let required = Flags::VALID | Flags::READ | Flags::WRITE;
+    assert_eq!(alias & required, required, "the loader writes a free frame");
+    assert_eq!(alias, crate::memory::paging::FREE_FRAME_ALIAS.bits());
+}
