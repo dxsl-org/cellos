@@ -518,7 +518,9 @@ fn run_race_fixture() -> bool {
             return false;
         };
         let spawned = (|| -> Result<usize, ViError> {
-            let kernel_stack = super::stack::Stack::new_kernel(1)?;
+            // The revoker runs exit_task and yield_cpu, whose frames alone take
+            // most of a page: size it like every scheduler-run kernel task.
+            let kernel_stack = super::stack::Stack::new_kernel(super::STACK_PAGES)?;
             let user_stack = super::stack::Stack::new_user(1)?;
             scheduler.spawn_with_stacks(
                 "user-copy-revoker",
