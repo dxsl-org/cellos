@@ -116,6 +116,20 @@ pub fn claim<G: GicV2Layout>() -> u32 {
     rd(gicc::<G>(GICC_IAR)) & 0x3FF
 }
 
+/// Block every interrupt at this CPU's interface (`GICC_PMR` = 0) and return
+/// the previous mask for [`restore_priority_mask`]. A pending interrupt stays
+/// pending and is signalled once the mask is restored.
+pub fn mask_all_priorities<G: GicV2Layout>() -> u32 {
+    let mask = rd(gicc::<G>(GICC_PMR));
+    wr(gicc::<G>(GICC_PMR), 0);
+    mask
+}
+
+/// Restore the priority mask [`mask_all_priorities`] returned.
+pub fn restore_priority_mask<G: GicV2Layout>(mask: u32) {
+    wr(gicc::<G>(GICC_PMR), mask);
+}
+
 /// Signal end-of-interrupt for `irq`.
 pub fn complete<G: GicV2Layout>(irq: u32) {
     wr(gicc::<G>(GICC_EOIR), irq);

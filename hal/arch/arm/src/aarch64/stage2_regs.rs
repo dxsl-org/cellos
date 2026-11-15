@@ -83,7 +83,9 @@ pub unsafe fn monitor_enable_stage2(vmid: u16, root_pa: u64) {
     }
 }
 
-/// Disable Stage-2 translation (clear HCR_EL2.VM=0) and flush the S2 TLB.
+/// Disable Stage-2 translation (clear HCR_EL2.VM=0), flush the S2 TLB for the
+/// VMID in this CPU's `VTTBR_EL2`, then clear `VTTBR_EL2` so this CPU names
+/// no Stage-2 root.
 ///
 /// Call during VM teardown before freeing the Stage-2 page table frames.
 ///
@@ -100,6 +102,7 @@ pub unsafe fn monitor_disable_stage2() {
             "isb",
             "tlbi vmalls12e1is",
             "dsb ish",
+            "msr vttbr_el2, xzr",
             "isb",
             tmp = out(reg) _,
             options(nomem, nostack),
@@ -107,12 +110,54 @@ pub unsafe fn monitor_disable_stage2() {
     }
 }
 
+/// Point this CPU's Stage-2 walk at `vmid`'s root for the guest entry that
+/// follows: `VTCR_EL2` and `VTTBR_EL2` only. `VTTBR_EL2` is per CPU, and a vCPU
+/// may enter on any CPU, so every entry programs it; without this a vCPU ran
+/// against whichever root that CPU last named. No TLB invalidation: entries
+/// are tagged by VMID, and the VMID's stale entries were invalidated when its
+/// VM was created ([`monitor_enable_stage2`]).
+///
+/// # Safety
+/// Must be called from EL2 with no vCPU running on this CPU, under the same
+/// conditions as [`monitor_enable_stage2`].
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn monitor_load_stage2(vmid: u16, root_pa: u64) {
+    debug_assert_eq!(root_pa % (2 * 4096), 0, "S2 root must be 8 KB-aligned");
+    debug_assert!(vmid >= 1, "VMID 0 is reserved for the EL2 host");
+    let vttbr = ((vmid as u64) << 48) | root_pa;
+    // SAFETY: caller guarantees EL2 context and a live, well-formed root.
+    unsafe {
+        core::arch::asm!(
+            "dsb ishst",
+            "msr vtcr_el2,  {vtcr}",
+            "msr vttbr_el2, {vttbr}",
+            "isb",
+            vtcr  = in(reg) VTCR_VALUE,
+            vttbr = in(reg) vttbr,
+            options(nostack),
+        );
+    }
+}
+
+/// Clear this CPU's `VTTBR_EL2`, so it names no Stage-2 root once its guest
+/// has exited: a root freed later is then named by no CPU.
+///
+/// # Safety
+/// Must be called from EL2 with no vCPU running on this CPU (`HCR_EL2.VM`
+/// clear).
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn monitor_clear_stage2_root() {
+    // SAFETY: EL2 context; VTTBR_EL2 is unused while HCR_EL2.VM is clear.
+    unsafe {
+        core::arch::asm!("msr vttbr_el2, xzr", "isb", options(nomem, nostack));
+    }
+}
+
 /// Invalidate all Stage-1 + Stage-2 TLB entries for all VMIDs (broadcast).
 ///
 /// Use after bulk Stage-2 table changes or during VM teardown. `TLBI ALLE1IS`
 /// covers every VMID of the EL1&0 regime; `TLBI VMALLS12E1IS` would cover only
-/// the VMID in this CPU's `VTTBR_EL2`, which during a teardown is whichever VM
-/// was enabled or run last.
+/// the VMID in this CPU's `VTTBR_EL2`, which outside a guest run names no VM.
 ///
 /// # Safety
 /// Must be called from EL2.
@@ -156,6 +201,20 @@ pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
     }
 }
 
+/// This CPU's `VTTBR_EL2` (VMID and Stage-2 root); 0 when it names no root.
+///
+/// # Safety
+/// Must be called from EL2 (an EL2 host; the Pi kernel runs at EL1).
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn monitor_read_vttbr() -> u64 {
+    let vttbr: u64;
+    // SAFETY: EL2 context; reading VTTBR_EL2 has no side effects.
+    unsafe {
+        core::arch::asm!("mrs {v}, vttbr_el2", v = out(reg) vttbr, options(nomem, nostack));
+    }
+    vttbr
+}
+
 /// Bind an S2 root through the private Pi HVC gateway or directly at an EL2 host.
 ///
 /// # Safety
@@ -171,6 +230,41 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
     } else {
         unsafe {
             monitor_enable_stage2(vmid, root_pa);
+        }
+    }
+}
+
+/// Program this CPU's `VTTBR_EL2` for one guest entry on an EL2 host
+/// ([`monitor_load_stage2`]). The Pi monitor does the same inside its run op,
+/// so this is for EL2 hosts only.
+///
+/// # Safety
+/// As [`monitor_load_stage2`]; never called through the Pi gateway.
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn load_stage2(vmid: u16, root_pa: u64) {
+    debug_assert!(
+        !El2Monitor::PRESENT,
+        "the Pi monitor loads VTTBR_EL2 itself"
+    );
+    unsafe {
+        monitor_load_stage2(vmid, root_pa);
+    }
+}
+
+/// Clear this CPU's `VTTBR_EL2` through the private Pi HVC gateway or
+/// directly at an EL2 host ([`monitor_clear_stage2_root`]).
+///
+/// # Safety
+/// Must be called with an active EL2 host, or after the Pi EL1 monitor
+/// initialized, and with no vCPU running on this CPU.
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn clear_stage2_root() {
+    if El2Monitor::PRESENT {
+        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
+        assert_eq!(El2Monitor::gateway(7, 0, 0, 0, 0), 0);
+    } else {
+        unsafe {
+            monitor_clear_stage2_root();
         }
     }
 }
@@ -238,6 +332,20 @@ pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
 /// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn enable_stage2(_vmid: u16, _root_pa: u64) {}
+
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
+#[cfg(not(target_arch = "aarch64"))]
+pub unsafe fn load_stage2(_vmid: u16, _root_pa: u64) {}
+
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
+#[cfg(not(target_arch = "aarch64"))]
+pub unsafe fn clear_stage2_root() {}
 
 /// No-op stub for non-AArch64 targets.
 ///

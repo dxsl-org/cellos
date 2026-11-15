@@ -188,8 +188,9 @@ pub fn init(root_pa: u64) {
 }
 
 /// Operations: 1 bind/flush VMID, 2 unbind/flush, 3 flush all, 4 flush IPA,
-/// 5 run vCPU. The immediate is private to the EL1 kernel; while a vCPU runs,
-/// TPIDR_EL2 directs *all* lower-EL exceptions into the guest-exit trampoline.
+/// 5 run vCPU, 6 probed run, 7 clear VTTBR_EL2. The immediate is private to
+/// the EL1 kernel; while a vCPU runs, TPIDR_EL2 directs *all* lower-EL
+/// exceptions into the guest-exit trampoline.
 #[inline(never)]
 pub(crate) fn gateway(op: u64, a: u64, b: u64, c: u64, d: u64) -> u64 {
     if !BOOTED_EL2.load(Ordering::Acquire) {
@@ -347,6 +348,12 @@ extern "C" fn pi_monitor_dispatch(frame: *mut u64) {
             }
             0
         }
+        7 if is_ready() => {
+            unsafe {
+                stage2_regs::monitor_clear_stage2_root();
+            }
+            0
+        }
         op @ (5 | 6) if is_ready() && regs[2] != 0 && regs[1] != 0 => {
             // Save HVC's return context: run_vcpu_impl programs ELR/SPSR_EL2
             // for the guest and its trap overwrites them with guest exit values.
@@ -367,6 +374,9 @@ extern "C" fn pi_monitor_dispatch(frame: *mut u64) {
                     None
                 };
                 let _exit = run_vcpu_impl(vcpu);
+                // Name no Stage-2 root once the guest has left this CPU: a
+                // root freed later is then named by no CPU.
+                stage2_regs::monitor_clear_stage2_root();
                 if let Some((entry, l1, l2, l3, instruction)) = probe {
                     regs[1] = entry;
                     regs[2] = l1;

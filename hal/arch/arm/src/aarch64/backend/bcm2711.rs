@@ -110,6 +110,13 @@ impl ArmIrqController for Bcm2711 {
     fn handle_irq() {
         trap::handle_gic_irq::<Self>();
     }
+
+    fn with_irqs_held<R>(f: impl FnOnce() -> R) -> R {
+        let mask = gic::mask_all_priorities::<Self>();
+        let result = f();
+        gic::restore_priority_mask::<Self>(mask);
+        result
+    }
 }
 
 impl ArmTimer for Bcm2711 {

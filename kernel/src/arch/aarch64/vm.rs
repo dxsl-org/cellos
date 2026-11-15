@@ -10,10 +10,14 @@ use crate::memory::stage2::Stage2Table;
 use crate::sync::Spinlock;
 use abi::hypervisor::ViVmExit as ApiVmExit;
 use alloc::{collections::BTreeMap, vec::Vec};
-use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, VgicWindows};
+use hal::aarch64::backend::{
+    ArmEl2Monitor, ArmIrqController, ArmResources, Board, El2Monitor, VgicWindows,
+};
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
-    stage2_regs::{disable_stage2, enable_stage2, s2_tlb_flush_all},
+    stage2_regs::{
+        clear_stage2_root, disable_stage2, enable_stage2, load_stage2, s2_tlb_flush_all,
+    },
     vcpu::AArch64Vcpu,
 };
 use hal::aarch64::{vcpu::run_vcpu_impl, vgic};
@@ -56,10 +60,8 @@ struct Vm {
     /// Per-vCPU GICv2 virtual CPU interface state (VMCR, APR, Active LRs),
     /// installed in GICH around each guest run on hosts without the Pi monitor.
     vcpu_vgic: Vec<vgic::CpuIfState>,
-    // reason: the Pi monitor's guest entry passes this to `monitor::run`; on the
-    // other AArch64 hosts the local `vmid` still carries the Stage-2 activation,
-    // so the field stays reserved for VM introspection until they read it too.
-    #[allow(dead_code)]
+    /// The VM's Stage-2 VMID, loaded into `VTTBR_EL2` with its root on every
+    /// guest entry (directly at an EL2 host, by the Pi monitor's run op).
     vmid: u16,
     /// Set once the guest RAM window has been cleaned to PoC and the I-cache
     /// invalidated, before the first vCPU entry.
@@ -433,11 +435,6 @@ pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
             })?;
     }
 
-    let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-    // SAFETY: table built and flushed; vmid ≥ 1; not yet active (enable later).
-    unsafe {
-        enable_stage2(vmid, table.root_pa());
-    }
     if let Some(windows) = VGIC {
         // SAFETY: EL2 host; the board's GICH window is kernel-mapped.
         unsafe {
@@ -445,8 +442,19 @@ pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         }
     }
 
+    let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let vm_id = {
         let mut guard = registry_lock().lock();
+        // Invalidate whatever a VMID reused after a wrap left cached, then
+        // leave this CPU naming no root: every guest entry programs its own
+        // VM's root (`run_vcpu`), and a root this CPU still named could be
+        // freed under it. Under the registry lock (interrupts masked), so the
+        // clear runs on the CPU the bind did.
+        // SAFETY: table built and flushed; vmid ≥ 1; no vCPU of it exists yet.
+        unsafe {
+            enable_stage2(vmid, table.root_pa());
+            clear_stage2_root();
+        }
         if guard.is_none() {
             *guard = Some(BTreeMap::new());
         }
@@ -610,7 +618,17 @@ pub(crate) fn run_vcpu(
                     }
                     vcpu.decode_exit()
                 } else {
-                    unsafe { run_vcpu_impl(vcpu) }
+                    // `VTTBR_EL2` is per CPU and this vCPU may enter on any
+                    // of them: name this VM's root for this entry only (the
+                    // Pi monitor does the same inside its run op).
+                    // SAFETY: EL2 host; the VM is registered (its root is
+                    // live) and the registry lock is held across the run.
+                    unsafe {
+                        load_stage2(vm.vmid, vm.stage2.root_pa());
+                        let exit = run_vcpu_impl(vcpu);
+                        clear_stage2_root();
+                        exit
+                    }
                 };
                 if let HalVmExit::SysReg {
                     op0,
@@ -857,9 +875,11 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
     };
     // Disable Stage-2 for each dying VM and drop its translations before its
     // tables and guest RAM go back to the allocator. `disable_stage2` flushes
-    // only the VMID in this CPU's VTTBR_EL2, which is the VM enabled (or, on
-    // the Pi, run) last — not necessarily the dying one — so every VMID is
-    // flushed, on every CPU, before the drop (census P13).
+    // only the VMID in this CPU's VTTBR_EL2 — none, since every guest exit
+    // and `create_vm` clear it — so every VMID is flushed, on every CPU,
+    // before the drop (census P13). No CPU names the dying root: VTTBR_EL2
+    // holds a root only during a guest run, under the registry lock, and the
+    // VM left the registry above.
     for vm in dead_vms {
         // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
         unsafe {
@@ -867,5 +887,117 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
             s2_tlb_flush_all();
         }
         drop(vm); // Stage2Table::drop frees all frames
+    }
+}
+
+/// Boot self-test `S22-AARCH64-TWO-VM-STAGE2` (non-release builds; the
+/// `virt-vhe` lane requires it): two live VMs, entered through `run_vcpu`,
+/// each run against its own Stage-2 root, and this CPU naming no root outside
+/// a guest run.
+///
+/// Both VMs carry a guest at the same IPA that loads a VM-specific marker into
+/// X0, traps with `HVC #0` and branches back, so every run exits with its
+/// marker. VM B is created last, which used to leave this CPU's `VTTBR_EL2`
+/// naming B's root; before every guest entry programmed it, running A executed
+/// B's guest (X0 = B's marker). The fixture runs A, B, then A again, and tears
+/// both down. `VTTBR_EL2` must read 0 after each create, each run and the
+/// teardown: a CPU left naming a root ran the next VM created on another CPU
+/// against that root once it was freed. A boot fixture cannot place work on a
+/// chosen CPU, so this is checked on the CPU it runs on. EL2 hosts only: the
+/// Pi kernel cannot read `VTTBR_EL2`, and its monitor programs it inside its
+/// own run op.
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) fn two_vm_stage2_selftest() {
+    if PI_MONITOR || !hal::aarch64::el2::is_el2() {
+        log::info!("S22-AARCH64-TWO-VM-STAGE2: SKIP (not an EL2 host)");
+        return;
+    }
+    /// A fixture owner no task id reaches.
+    const OWNER: usize = usize::MAX - 0x2e2;
+    const ENTRY: u64 = 0x4008_0000;
+    const GUEST_PAGES: usize = 512;
+    const MARKERS: [u16; 2] = [0xa1, 0xb2];
+    /// A host tick may exit a guest before its `HVC`; the next run resumes it.
+    const MAX_PREEMPTIONS: usize = 8;
+    /// Keeps the first nonzero `VTTBR_EL2` this CPU shows outside a guest run.
+    fn note_vttbr(named: &mut Option<u64>) {
+        // SAFETY: EL2 host (checked on entry to the fixture).
+        let vttbr = unsafe { hal::aarch64::stage2_regs::monitor_read_vttbr() };
+        if vttbr != 0 {
+            named.get_or_insert(vttbr);
+        }
+    }
+    let guest = |marker: u16| -> [u8; 12] {
+        // MOVZ X0, #marker; HVC #0; B .-8 (back to the MOVZ)
+        let words = [
+            0xd280_0000 | (u32::from(marker) << 5),
+            0xd400_0002,
+            0x17ff_fffe,
+        ];
+        let mut bytes = [0u8; 12];
+        for (chunk, word) in bytes.chunks_exact_mut(4).zip(words) {
+            chunk.copy_from_slice(&word.to_le_bytes());
+        }
+        bytes
+    };
+    let mut named_root = None;
+    let mut vms = [(0usize, 0usize); 2];
+    let mut built = true;
+    for (index, &marker) in MARKERS.iter().enumerate() {
+        let Ok(vm_id) = create_vm(OWNER, GUEST_PAGES) else {
+            built = false;
+            break;
+        };
+        note_vttbr(&mut named_root);
+        let Ok(vcpu) = create_vcpu(OWNER, vm_id, ENTRY) else {
+            built = false;
+            break;
+        };
+        vms[index] = (vm_id, vcpu);
+        if write_guest_memory(OWNER, vm_id, ENTRY, &guest(marker)).is_err() {
+            built = false;
+            break;
+        }
+    }
+    let mut run = |(vm_id, vcpu): (usize, usize)| {
+        let mut exit = run_vcpu(OWNER, vm_id, vcpu, 0);
+        for _ in 0..MAX_PREEMPTIONS {
+            if !matches!(exit, Ok(ApiVmExit::Preempted)) {
+                break;
+            }
+            exit = run_vcpu(OWNER, vm_id, vcpu, 0);
+        }
+        note_vttbr(&mut named_root);
+        Some(exit)
+    };
+    // Boot runs with host interrupts masked, so a pending host interrupt (a
+    // VirtIO line the boot left asserted) would exit every guest entry at once
+    // (`HCR_EL2.IMO`): hold them at the controller for the three runs.
+    let exits = if built {
+        <Board as ArmIrqController>::with_irqs_held(|| [run(vms[0]), run(vms[1]), run(vms[0])])
+    } else {
+        [None; 3]
+    };
+    reap_vms_for_task(OWNER);
+    note_vttbr(&mut named_root);
+    let seen = exits.map(|exit| match exit {
+        Some(Ok(ApiVmExit::Hvc { regs, .. })) => Some(regs[0]),
+        _ => None,
+    });
+    let expected = [MARKERS[0], MARKERS[1], MARKERS[0]].map(|marker| Some(u64::from(marker)));
+    if seen == expected && named_root.is_none() {
+        log::info!(
+            "S22-AARCH64-TWO-VM-STAGE2: PASS runs=A,B,A markers={:x?} vttbr-outside-runs=0",
+            MARKERS
+        );
+    } else {
+        log::error!(
+            "S22-AARCH64-TWO-VM-STAGE2: FAIL built={} seen={:x?} expected={:x?} vttbr-outside-runs={:#x} exits={:?}",
+            built,
+            seen,
+            expected,
+            named_root.unwrap_or(0),
+            exits
+        );
     }
 }

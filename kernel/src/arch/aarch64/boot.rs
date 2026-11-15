@@ -218,6 +218,9 @@ pub(crate) fn fixtures_park() {}
 pub(crate) fn fixtures_hardware() {
     #[cfg(feature = "test-hooks")]
     crate::arch::layer2_selftest::run_mte_selftest();
+    // EL2 hosts only (it skips elsewhere); the virt-vhe lane requires it.
+    #[cfg(not(cellos_posture = "release"))]
+    crate::arch::vm::two_vm_stage2_selftest();
 }
 
 /// The framebuffer console: x86_64 only.

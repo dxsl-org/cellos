@@ -141,7 +141,12 @@ if grep -q "Cellos >" qemu-aarch64.log; then
     # "USER:" lines are EL0 Cells writing through the console syscall.
     case "$LANE" in
         virt-vhe)
-            LANE_MARKERS=("VHE host regime:::[INFO] host regime: EL2 VHE (E2H=1 TGE=1), HCR_EL2 checked before EL0")
+            LANE_MARKERS=(
+                "VHE host regime:::[INFO] host regime: EL2 VHE (E2H=1 TGE=1), HCR_EL2 checked before EL0"
+                # Two live VMs entered A, B, A through run_vcpu, each against
+                # its own Stage-2 root; VTTBR_EL2 clear outside every run.
+                "two-VM Stage-2:::S22-AARCH64-TWO-VM-STAGE2: PASS"
+            )
             ;;
         virt-el2-novhe)
             LANE_MARKERS=("EL1 fallback host regime:::[INFO] host regime: EL1 (CPU lacks FEAT_VHE")

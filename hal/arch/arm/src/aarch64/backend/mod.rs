@@ -263,6 +263,16 @@ pub trait ArmIrqController {
     fn handle_fiq() {
         panic!("unexpected FIQ exception on backend without FIQ support");
     }
+
+    /// Run `f` with every interrupt held at this core's controller: none is
+    /// signalled to the core until `f` returns, and a pending one stays
+    /// pending. For a boot self-test that enters a guest: boot runs with host
+    /// interrupts masked, so a pending host interrupt routed to EL2
+    /// (`HCR_EL2.IMO`) would exit every guest entry at once. The default
+    /// holds nothing.
+    fn with_irqs_held<R>(f: impl FnOnce() -> R) -> R {
+        f()
+    }
 }
 
 /// The board's host tick source.
