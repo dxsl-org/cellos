@@ -1,9 +1,9 @@
 use super::{
-    check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, grant_run, map_syscall,
-    page_grant_authorizes_dma, reg_grant_authorizes_dma, staged_spawn_argv_cleanup,
-    supports_typed_oom, syscall_to_vi, withhold_if_pinned, PageGrant, RegGrant, Syscall,
-    SyscallError,
+    check_allowlist, consumes_staged_spawn_argv, encode_syscall_result, grant_authorizes_dma,
+    grant_run, map_syscall, staged_spawn_argv_cleanup, supports_typed_oom, syscall_to_vi,
+    withhold_if_pinned, Syscall, SyscallError,
 };
+use crate::memory::region::{Region, RegionOwner};
 use crate::sched::scheduler::Scheduler;
 use crate::task::cap::CapSet;
 use crate::task::{tcb::Task, SCHEDULER};
@@ -1870,37 +1870,31 @@ fn dma_authority_requires_live_owner_binding_and_contained_range() {
     const BASE: usize = 0x5100_0000;
     const SIZE: usize = 0x4000;
     let binding = (CellId(9), 3);
-    let page_grant = PageGrant {
-        base: BASE,
-        size: SIZE,
-        owner: OWNER,
-        owner_cell: binding.0,
-        owner_generation: binding.1,
-        shared_to: None,
-        domain: None,
-    };
-    assert!(page_grant_authorizes_dma(
+    let owner = RegionOwner::task(OWNER, binding.0, binding.1);
+    let pages = SIZE / 4096;
+    let page_grant = Region::grant(owner, grant_run(BASE, pages), SIZE, None);
+    assert!(grant_authorizes_dma(
         &page_grant,
         OWNER,
         binding,
         BASE + 0x1000,
         0x2000
     ));
-    assert!(!page_grant_authorizes_dma(
+    assert!(!grant_authorizes_dma(
         &page_grant,
         OWNER + 1,
         binding,
         BASE,
         0x1000
     ));
-    assert!(!page_grant_authorizes_dma(
+    assert!(!grant_authorizes_dma(
         &page_grant,
         OWNER,
         (binding.0, binding.1 + 1),
         BASE,
         0x1000
     ));
-    assert!(!page_grant_authorizes_dma(
+    assert!(!grant_authorizes_dma(
         &page_grant,
         OWNER,
         binding,
@@ -1908,25 +1902,17 @@ fn dma_authority_requires_live_owner_binding_and_contained_range() {
         0x2000
     ));
 
-    let reg_grant = RegGrant {
-        base: BASE,
-        size: SIZE,
-        owner: OWNER,
-        owner_cell: binding.0,
-        owner_generation: binding.1,
-        shared_to: None,
-        domain: None,
-    };
-    assert!(reg_grant_authorizes_dma(
-        &reg_grant, OWNER, binding, BASE, SIZE
-    ));
-    assert!(!reg_grant_authorizes_dma(
+    page_grant.discard_synthetic();
+    let reg_grant = Region::grant(owner, grant_run(BASE, pages), SIZE, None);
+    assert!(grant_authorizes_dma(&reg_grant, OWNER, binding, BASE, SIZE));
+    assert!(!grant_authorizes_dma(
         &reg_grant,
         OWNER,
         binding,
         BASE - 0x1000,
         0x2000
     ));
+    reg_grant.discard_synthetic();
 }
 
 #[test]
@@ -2453,19 +2439,34 @@ fn wait_irq_base_requires_the_callers_exact_granted_window() {
     assert!(wait_irq_base_permitted(OWNER, 0));
 }
 
+/// The bases and charged bytes of `owner`'s SHM regions, taken from the table;
+/// their runs name synthetic frames, so they are discarded, not freed.
+fn shm_take_bases(owner: crate::cell::state_stash::Incarnation) -> (alloc::vec::Vec<usize>, usize) {
+    let (regions, bytes) = super::shm_take_for(owner);
+    let bases = regions
+        .into_iter()
+        .map(|region| {
+            let base = region.base();
+            region.discard_synthetic();
+            base
+        })
+        .collect();
+    (bases, bytes)
+}
+
 /// CP1 #10: an `ShmAlloc` frame maps only for the incarnation that
 /// allocated it; another Cell or another generation of the same Cell is
 /// refused, as is a handle that was never issued.
 #[test]
 fn shm_frame_is_owned_by_exactly_the_allocating_incarnation() {
-    use super::{shm_owned_by, shm_register, shm_take_for};
+    use super::{shm_owned_by, shm_register};
     use crate::cell::state_stash::Incarnation;
     const FRAME: usize = 0x5A0_0000;
     let owner = Incarnation {
         cell: 0x5A1,
         generation: 3,
     };
-    shm_register(FRAME, owner, 4096, None, 0x3);
+    shm_register(FRAME, owner, 4096, None);
 
     assert!(shm_owned_by(FRAME, owner));
     assert!(!shm_owned_by(
@@ -2484,7 +2485,7 @@ fn shm_frame_is_owned_by_exactly_the_allocating_incarnation() {
     ));
     assert!(!shm_owned_by(FRAME + 0x1000, owner));
 
-    assert_eq!(shm_take_for(owner), (alloc::vec![FRAME], 4096));
+    assert_eq!(shm_take_bases(owner), (alloc::vec![FRAME], 4096));
     assert!(!shm_owned_by(FRAME, owner));
 }
 
@@ -2492,7 +2493,7 @@ fn shm_frame_is_owned_by_exactly_the_allocating_incarnation() {
 /// and nothing else — not its successor generation's, not a peer's.
 #[test]
 fn shm_reclaim_takes_only_the_dead_incarnations_records() {
-    use super::{shm_owned_by, shm_register, shm_take_for};
+    use super::{shm_owned_by, shm_register};
     use crate::cell::state_stash::Incarnation;
     let dead = Incarnation {
         cell: 0x5B1,
@@ -2506,23 +2507,23 @@ fn shm_reclaim_takes_only_the_dead_incarnations_records() {
         cell: 0x5B2,
         generation: 2,
     };
-    shm_register(0x5B0_0000, dead, 4096, None, 0x3);
-    shm_register(0x5B0_1000, successor, 4096, None, 0x3);
-    shm_register(0x5B0_2000, dead, 4096, None, 0x3);
-    shm_register(0x5B0_3000, peer, 4096, None, 0x3);
+    shm_register(0x5B0_0000, dead, 4096, None);
+    shm_register(0x5B0_1000, successor, 4096, None);
+    shm_register(0x5B0_2000, dead, 4096, None);
+    shm_register(0x5B0_3000, peer, 4096, None);
 
     assert_eq!(
-        shm_take_for(dead),
+        shm_take_bases(dead),
         (alloc::vec![0x5B0_0000, 0x5B0_2000], 8192)
     );
     assert!(!shm_owned_by(0x5B0_0000, dead));
     assert!(!shm_owned_by(0x5B0_2000, dead));
     assert!(shm_owned_by(0x5B0_1000, successor));
     assert!(shm_owned_by(0x5B0_3000, peer));
-    assert_eq!(shm_take_for(dead), (alloc::vec![], 0));
+    assert_eq!(shm_take_bases(dead), (alloc::vec![], 0));
 
-    assert_eq!(shm_take_for(successor), (alloc::vec![0x5B0_1000], 4096));
-    assert_eq!(shm_take_for(peer), (alloc::vec![0x5B0_3000], 4096));
+    assert_eq!(shm_take_bases(successor), (alloc::vec![0x5B0_1000], 4096));
+    assert_eq!(shm_take_bases(peer), (alloc::vec![0x5B0_3000], 4096));
 }
 
 #[test]
@@ -2534,12 +2535,13 @@ fn shm_accessible_by_owner_and_authorized_recipient() {
         cell: 10,
         generation: 1,
     };
-    shm_register(FRAME, owner, 4096, Some(20), 0x3);
+    shm_register(FRAME, owner, 4096, Some(20));
 
     assert!(shm_accessible_by(FRAME, 10, 1).is_some());
     assert!(shm_accessible_by(FRAME, 20, 1).is_some());
     assert!(shm_accessible_by(FRAME, 30, 1).is_none());
     assert!(shm_accessible_by(FRAME, 10, 2).is_none()); // Different generation
+    let _ = shm_take_bases(owner);
 }
 
 /// One Cell's posts may fill only `POST_QUOTA_PER_SENDER` slots of a target's

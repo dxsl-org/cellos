@@ -19,13 +19,9 @@ fn carries(row: &Option<Arc<u32>>, record: &Arc<u32>) -> bool {
 fn second_revoker_of_one_record_does_not_take_the_row() {
     let record = Arc::new(1u32);
     let mut map = BTreeMap::from([(KEY, Some(Arc::clone(&record)))]);
-    assert!(remove_row_if(Some(&mut map), KEY, |row| carries(
-        row, &record
-    )));
+    assert!(remove_row_if(Some(&mut map), KEY, |row| carries(row, &record)).is_some());
     // The racing revoker's removal must report that it owns nothing to free.
-    assert!(!remove_row_if(Some(&mut map), KEY, |row| carries(
-        row, &record
-    )));
+    assert!(remove_row_if(Some(&mut map), KEY, |row| carries(row, &record)).is_none());
     assert!(map.is_empty());
 }
 
@@ -35,30 +31,20 @@ fn stale_revoker_leaves_a_new_row_at_the_same_key() {
     let fresh = Arc::new(1u32);
     // The first revoker freed the frames and a new grant reused the base (key).
     let mut map = BTreeMap::from([(KEY, Some(Arc::clone(&fresh)))]);
-    assert!(!remove_row_if(Some(&mut map), KEY, |row| carries(
-        row, &stale
-    )));
+    assert!(remove_row_if(Some(&mut map), KEY, |row| carries(row, &stale)).is_none());
     assert!(map.get(&KEY).is_some_and(|row| carries(row, &fresh)));
     // A SAS row (no record) at the key is not a domain row either.
     let mut sas: BTreeMap<usize, Option<Arc<u32>>> = BTreeMap::from([(KEY, None)]);
-    assert!(!remove_row_if(Some(&mut sas), KEY, |row| carries(
-        row, &stale
-    )));
+    assert!(remove_row_if(Some(&mut sas), KEY, |row| carries(row, &stale)).is_none());
     assert_eq!(sas.len(), 1);
 }
 
 #[test]
 fn absent_table_or_row_takes_nothing() {
     let record = Arc::new(1u32);
-    assert!(!remove_row_if::<Option<Arc<u32>>>(
-        None,
-        KEY,
-        |row| carries(row, &record)
-    ));
+    assert!(remove_row_if::<Option<Arc<u32>>>(None, KEY, |row| carries(row, &record)).is_none());
     let mut empty: BTreeMap<usize, Option<Arc<u32>>> = BTreeMap::new();
-    assert!(!remove_row_if(Some(&mut empty), KEY, |row| carries(
-        row, &record
-    )));
+    assert!(remove_row_if(Some(&mut empty), KEY, |row| carries(row, &record)).is_none());
 }
 
 // The call-site shape every revoker uses (`GrantFree`, `GrantUnregister`, the
@@ -81,7 +67,7 @@ fn two_revokers_of_one_record_free_its_frames_once() {
             &table,
             KEY,
             |row| carries(row, &record),
-            || frees.set(frees.get() + 1),
+            |_row| frees.set(frees.get() + 1),
         );
     }
     assert_eq!(frees.get(), 1);
@@ -96,7 +82,12 @@ fn late_revoker_neither_frees_nor_removes_a_reused_row() {
     // same physical base, i.e. the same key.
     let table = table_with(Some(Arc::clone(&fresh)));
     let freed = Cell::new(false);
-    let taken = release_if_row_taken(&table, KEY, |row| carries(row, &stale), || freed.set(true));
+    let taken = release_if_row_taken(
+        &table,
+        KEY,
+        |row| carries(row, &stale),
+        |_row| freed.set(true),
+    );
     assert!(!taken);
     assert!(!freed.get());
     assert!(table

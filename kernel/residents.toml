@@ -343,6 +343,7 @@
 "kernel/src/memory/paging.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/pin.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/pin_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/region.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/rt_heap.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/stage2.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/stage2_tests.rs" = { category = "test", owner = "memory" }

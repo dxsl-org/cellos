@@ -6,10 +6,8 @@
 //! that does not name the owner answers exactly as an unknown id, the owner
 //! (or zero) resolves as before, and both grant tables honor it.
 
-use super::{
-    grant_table_lock, handle_syscall, map_syscall, reg_grant_table_lock, PageGrant, RegGrant,
-    Syscall,
-};
+use super::{grant_table_lock, handle_syscall, map_syscall, reg_grant_table_lock, Syscall};
+use crate::memory::region::{Region, RegionOwner};
 use crate::sched::scheduler::Scheduler;
 use crate::task::{tcb::Task, SCHEDULER};
 use abi::syscall::ViSyscall;
@@ -37,8 +35,21 @@ fn slice(grant_id: usize, size_out_ptr: usize, expected_owner_tid: usize) -> usi
     .expect("a SAS GrantSlice refusal is the usize::MAX sentinel, never an error")
 }
 
+/// An owner row at `base`, shared as `shared_to`. Its run names
+/// synthetic frames (a SAS slice only returns `base`); the fixture discards it.
+fn shared_row(base: usize, shared_to: Option<(usize, GrantPerm)>) -> Region {
+    let mut row = Region::grant(
+        RegionOwner::task(OWNER_TID, CellId(72), 1),
+        super::grant_run(base, SIZE / 4096),
+        SIZE,
+        None,
+    );
+    row.set_shared_to(shared_to);
+    row
+}
+
 /// Run `f` with a live SAS grantee task and one row shared to it in each
-/// grant table; rows carry no frames because a SAS slice only returns `base`.
+/// grant table ([`shared_row`]).
 fn with_shared_rows(f: impl FnOnce()) {
     let _guard = crate::TEST_STATE_LOCK.lock();
     let saved = SCHEDULER.lock().take();
@@ -58,42 +69,24 @@ fn with_shared_rows(f: impl FnOnce()) {
     grant_table_lock()
         .lock()
         .get_or_insert_with(BTreeMap::new)
-        .insert(
-            PAGE_BASE,
-            PageGrant {
-                base: PAGE_BASE,
-                size: SIZE,
-                owner: OWNER_TID,
-                owner_cell: CellId(72),
-                owner_generation: 1,
-                shared_to,
-                domain: None,
-            },
-        );
+        .insert(PAGE_BASE, shared_row(PAGE_BASE, shared_to));
     reg_grant_table_lock()
         .lock()
         .get_or_insert_with(BTreeMap::new)
-        .insert(
-            REG_BASE,
-            RegGrant {
-                base: REG_BASE,
-                size: SIZE,
-                owner: OWNER_TID,
-                owner_cell: CellId(72),
-                owner_generation: 1,
-                shared_to,
-                domain: None,
-            },
-        );
+        .insert(REG_BASE, shared_row(REG_BASE, shared_to));
 
     f();
 
-    if let Some(map) = grant_table_lock().lock().as_mut() {
-        map.remove(&PAGE_BASE);
-    }
-    if let Some(map) = reg_grant_table_lock().lock().as_mut() {
-        map.remove(&REG_BASE);
-    }
+    let page_row = grant_table_lock()
+        .lock()
+        .as_mut()
+        .and_then(|map| map.remove(&PAGE_BASE));
+    page_row.map(Region::discard_synthetic);
+    let reg_row = reg_grant_table_lock()
+        .lock()
+        .as_mut()
+        .and_then(|map| map.remove(&REG_BASE));
+    reg_row.map(Region::discard_synthetic);
     *SCHEDULER.lock() = saved;
 }
 

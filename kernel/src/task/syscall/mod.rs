@@ -15,6 +15,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 // use log::info;
 use super::copy_glue::TaskCopyView;
+use crate::memory::region::{DomainRecord, Receiver, Region, RegionOwner};
 use types::*;
 
 mod ipc;
@@ -101,7 +102,16 @@ static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
 static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
-static SHM_HANDLES: Spinlock<BTreeMap<usize, ShmRecord>> =
+/// Frames currently issued via `ShmAlloc`, one [`Region`] each, keyed by the
+/// frame's address and owned by the Cell incarnation that allocated it.
+///
+/// `ShmMap` accepts only a handle that appears here AND belongs to the
+/// caller's live incarnation (or names the caller's cell as its receiver), so
+/// a cell can neither forge a physical address ("ShmMap kernel_text_phys") nor
+/// map a peer's or a dead predecessor's frame. Root retirement reclaims the
+/// dead incarnation's frames ([`release_shm_for`]). A leaf lock: never held
+/// while taking another.
+static SHM_HANDLES: Spinlock<BTreeMap<usize, Region>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SHM_HANDLES);
 
 static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> = Spinlock::ranked(
@@ -133,7 +143,7 @@ pub(crate) mod dma_export;
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
 
-static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> =
+static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, Region>>> =
     Spinlock::ranked(None, crate::sync::rank::PAGE_GRANT_TABLE);
 
 #[cfg(all(feature = "native-domains", cellos_wide))]
@@ -287,16 +297,6 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::fr
     ))
 }
 
-/// The lifecycle record behind a table row, where this target can hold one.
-#[cfg(cellos_domain_grants)]
-type DomainRecord = Arc<super::domain_grant::DomainGrant>;
-
-/// On every other target a row can never carry a lifecycle record:
-/// [`clone_domain_record`] is the only producer and always yields `None`, so the
-/// stubs below are unreachable rather than a second implementation.
-#[cfg(not(cellos_domain_grants))]
-type DomainRecord = ();
-
 /// A record the lifecycle cannot drain: it names a private-root endpoint but is
 /// not carried by a managed domain record. Pre-gate residue, or a target where
 /// the lifecycle is not implemented at all.
@@ -314,7 +314,7 @@ fn residual_domain_record(
 
 // ── Registered Grant Table (GrantRegister / GrantUnregister, syscalls 215/216) ──
 
-static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> =
+static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, Region>>> =
     Spinlock::ranked(None, crate::sync::rank::REG_GRANT_TABLE);
 
 // ── Shared allocation/deallocation helpers ────────────────────────────────────
@@ -332,7 +332,7 @@ fn release_deferred_domain_row(key: usize, record: DomainRecord, base: usize, re
     if revoke_domain_record(&record, base, "task-exit") {
         // Only the revoker whose removal takes the row frees its frames: a
         // concurrent `GrantFree` or sweep may have completed the same record.
-        let release = || release_domain_backing(&record, true);
+        let release = |row| release_domain_backing(&record, row, true);
         if registered {
             release_if_row_taken(
                 reg_grant_table_lock(),
@@ -358,10 +358,7 @@ fn release_deferred_domain_row(key: usize, record: DomainRecord, base: usize, re
             .and_then(|map| map.get_mut(&key))
             .filter(|grant| carries_record(&grant.domain, &record))
         {
-            grant.owner = 0;
-            grant.owner_cell = CellId(0);
-            grant.owner_generation = 0;
-            grant.shared_to = None;
+            grant.orphan();
         }
     } else {
         let mut tbl = grant_table_lock().lock();
@@ -370,10 +367,7 @@ fn release_deferred_domain_row(key: usize, record: DomainRecord, base: usize, re
             .and_then(|map| map.get_mut(&key))
             .filter(|grant| carries_record(&grant.domain, &record))
         {
-            grant.owner = 0;
-            grant.owner_cell = CellId(0);
-            grant.owner_generation = 0;
-            grant.shared_to = None;
+            grant.orphan();
         }
     }
     // The housekeeping pass retries the revoke until the tags confirm.
@@ -400,13 +394,13 @@ pub(crate) fn domain_row_for_test(
         let tbl = grant_table_lock().lock();
         tbl.as_ref()
             .and_then(|map| map.get(&grant_id))
-            .and_then(|grant| Some((grant.owner, grant.domain.as_ref()?.state())))
+            .and_then(|grant| Some((grant.owner.tid, grant.domain.as_ref()?.state())))
     };
     page.or_else(|| {
         let tbl = reg_grant_table_lock().lock();
         tbl.as_ref()
             .and_then(|map| map.get(&grant_id))
-            .and_then(|grant| Some((grant.owner, grant.domain.as_ref()?.state())))
+            .and_then(|grant| Some((grant.owner.tid, grant.domain.as_ref()?.state())))
     })
 }
 
@@ -528,8 +522,8 @@ mod serial_port {
 #[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_record_end(
     sched: &crate::sched::scheduler::Scheduler,
-    page_grants: Option<&BTreeMap<usize, PageGrant>>,
-    registered_grants: Option<&BTreeMap<usize, RegGrant>>,
+    page_grants: Option<&BTreeMap<usize, Region>>,
+    registered_grants: Option<&BTreeMap<usize, Region>>,
     caller_id: usize,
     ptr: usize,
 ) -> Option<usize> {
@@ -566,23 +560,15 @@ fn sas_record_end(
     let page_grant_end = page_grants.and_then(|grants| {
         grants
             .values()
-            .filter(|grant| {
-                grant.owner == caller_id
-                    && grant.owner_cell == cell_id
-                    && grant.owner_generation == generation
-            })
-            .filter_map(|grant| record_end_containing(grant.base, grant.size, ptr))
+            .filter(|grant| grant.owner == RegionOwner::task(caller_id, cell_id, generation))
+            .filter_map(|grant| record_end_containing(grant.base(), grant.size, ptr))
             .max()
     });
     let registered_grant_end = registered_grants.and_then(|grants| {
         grants
             .values()
-            .filter(|grant| {
-                grant.owner == caller_id
-                    && grant.owner_cell == cell_id
-                    && grant.owner_generation == generation
-            })
-            .filter_map(|grant| record_end_containing(grant.base, grant.size, ptr))
+            .filter(|grant| grant.owner == RegionOwner::task(caller_id, cell_id, generation))
+            .filter_map(|grant| record_end_containing(grant.base(), grant.size, ptr))
             .max()
     });
     [stack_end, segment_end, page_grant_end, registered_grant_end]
@@ -599,8 +585,8 @@ fn sas_record_end(
 #[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_caller_owned_span(
     sched: &crate::sched::scheduler::Scheduler,
-    page_grants: Option<&BTreeMap<usize, PageGrant>>,
-    registered_grants: Option<&BTreeMap<usize, RegGrant>>,
+    page_grants: Option<&BTreeMap<usize, Region>>,
+    registered_grants: Option<&BTreeMap<usize, Region>>,
     caller_id: usize,
     ptr: usize,
     len: usize,
@@ -726,31 +712,26 @@ impl core::ops::Deref for MsgPayload {
 
 /// GrantShare for a private-root pair: publish the exact
 /// `(target identity, generation, root, rights)` tuple into the receiver root,
-/// then record `shared_to`.
+/// then record the grantee in `grant`.
 ///
 /// A redundant share of the same tuple is a no-op; any change republishes after
 /// revoking the old receiver PTE and shooting it down. Unsupported rights
 /// (write-only) and a non-live or non-domain target are refused with the
 /// established share failure.
-// reason: the eight values are the share's exact inputs — row identity (owner,
-// base, domain, shared_to) plus the receiver binding (caller, target tid/root,
-// perm). Grouping them into a struct would only move the same list.
-#[allow(clippy::too_many_arguments)]
 #[cfg(cellos_domain_grants)]
 fn domain_grant_share_row(
-    owner: usize,
-    base: usize,
-    domain: Option<&Arc<super::domain_grant::DomainGrant>>,
-    shared_to: &mut Option<(usize, GrantPerm)>,
+    grant: &mut Region,
     caller_id: usize,
     target_tid: usize,
     target_root: &Arc<crate::memory::address_space::AddressSpace>,
     perm: GrantPerm,
 ) -> Result<(), SyscallError> {
-    let Some(record) = domain else {
+    let base = grant.base();
+    let Some(record) = grant.domain.as_ref() else {
         return Err(SyscallError::PermissionDenied);
     };
-    if caller_id != owner || record.state() != super::domain_grant::DomainGrantState::Live {
+    if caller_id != grant.owner.tid || record.state() != super::domain_grant::DomainGrantState::Live
+    {
         return Err(SyscallError::PermissionDenied);
     }
     let Some(rights) = super::domain_grant::rights_for(perm) else {
@@ -770,7 +751,7 @@ fn domain_grant_share_row(
                 SyscallError::PermissionDenied
             })?;
     }
-    *shared_to = Some((target_tid, perm));
+    grant.set_shared_to(Some((target_tid, perm)));
     Ok(())
 }
 
@@ -809,7 +790,7 @@ fn drain_superseded_receiver(
         let tbl = grant_table_lock().lock();
         tbl.as_ref()
             .and_then(|map| map.get(&grant_id))
-            .map(|grant| owned(grant.owner, &grant.domain))
+            .map(|grant| owned(grant.owner.tid, &grant.domain))
     };
     let record = match record {
         Some(record) => record,
@@ -817,7 +798,7 @@ fn drain_superseded_receiver(
             let tbl = reg_grant_table_lock().lock();
             tbl.as_ref()
                 .and_then(|map| map.get(&grant_id))
-                .and_then(|grant| owned(grant.owner, &grant.domain))
+                .and_then(|grant| owned(grant.owner.tid, &grant.domain))
         }
     };
     let Some(record) = record else {
@@ -958,10 +939,10 @@ fn resolve_domain_grant_slice(
         let tbl = grant_table_lock().lock();
         if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&grant_id)) {
             return domain_grant_slice_row(
-                grant.owner,
-                grant.base,
+                grant.owner.tid,
+                grant.base(),
                 grant.size,
-                grant.shared_to,
+                grant.shared_to(),
                 grant.domain.as_ref(),
                 caller_id,
                 expected_owner_tid,
@@ -976,10 +957,10 @@ fn resolve_domain_grant_slice(
         return Ok(usize::MAX);
     };
     domain_grant_slice_row(
-        grant.owner,
-        grant.base,
+        grant.owner.tid,
+        grant.base(),
         grant.size,
-        grant.shared_to,
+        grant.shared_to(),
         grant.domain.as_ref(),
         caller_id,
         expected_owner_tid,

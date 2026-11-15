@@ -44,33 +44,32 @@ pub(super) fn carries_record(_domain: &Option<DomainRecord>, _record: &DomainRec
     false
 }
 
-/// Remove the row at `key` only while `carries` holds for it; `true` when this
-/// call removed it.
+/// Remove the row at `key` only while `carries` holds for it, and return it
+/// when this call removed it.
 ///
 /// A domain record's revoke is idempotent, so every revoker that reaches it —
 /// `GrantFree`, `GrantUnregister`, the owner's exit, the deferred sweep on any
 /// hart, `CapRevoke`'s owned-grant reclaim — can see it succeed. The frames
-/// belong to the one revoker whose removal took the row: a caller that gets
-/// `false` must not release them, because another revoker already did (and the
-/// key may by now name a new grant over reused frames, which this leaves alone).
+/// belong to the one revoker whose removal took the row, and they leave with
+/// it (the row's region owns them): a caller that gets `None` must not release
+/// anything, because another revoker already did (and the key may by now name
+/// a new grant over reused frames, which this leaves alone).
 pub(super) fn remove_row_if<G>(
     map: Option<&mut BTreeMap<usize, G>>,
     key: usize,
     carries: impl Fn(&G) -> bool,
-) -> bool {
-    let Some(map) = map else {
-        return false;
-    };
+) -> Option<G> {
+    let map = map?;
     if !map.get(&key).is_some_and(carries) {
-        return false;
+        return None;
     }
-    map.remove(&key).is_some()
+    map.remove(&key)
 }
 
 /// Complete a revoke that succeeded: take `key`'s row out of `table` only while
 /// it still carries the revoked record ([`remove_row_if`]), release the table
-/// lock, and only then — and only when this call took the row — run `release`,
-/// which returns the frames. `true` when this call took the row.
+/// lock, and only then — and only when this call took the row — hand the row
+/// to `release`, which returns its frames. `true` when this call took the row.
 ///
 /// The one shape of the single-free rule, shared by every revoker (`GrantFree`,
 /// `GrantUnregister`, the owner's exit, the deferred sweep): a revoker that lost
@@ -81,25 +80,28 @@ pub(super) fn release_if_row_taken<G>(
     table: &Spinlock<Option<BTreeMap<usize, G>>>,
     key: usize,
     carries: impl Fn(&G) -> bool,
-    release: impl FnOnce(),
+    release: impl FnOnce(G),
 ) -> bool {
     let taken = {
         let mut rows = table.lock();
         remove_row_if(rows.as_mut(), key, carries)
     };
-    if taken {
-        release();
+    match taken {
+        Some(row) => {
+            release(row);
+            true
+        }
+        None => false,
     }
-    taken
 }
 
 /// Build the lifecycle record for a domain owner that has just published its
-/// own mapping of `backing`; the record owns the run from here on. Absent —
-/// `None` — wherever the lifecycle does not exist.
+/// own mapping of the backing at `base`; the row's region owns the frames.
+/// Absent — `None` — wherever the lifecycle does not exist.
 #[cfg(cellos_domain_grants)]
 pub(super) fn new_domain_record(
     space: &DomainRoot,
-    backing: crate::memory::frame_run::FrameRun,
+    base: usize,
     size: usize,
 ) -> Option<DomainRecord> {
     #[cfg(feature = "p01-trace")]
@@ -108,20 +110,18 @@ pub(super) fn new_domain_record(
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
     Some(Arc::new(crate::task::domain_grant::DomainGrant::new(
-        space, backing, size,
+        space, base, size,
     )))
 }
 
-/// No domain owner gets a backing run where the lifecycle does not exist, so
-/// this never receives one; if it did, the frames are kept (leaked, counted),
-/// never freed.
+/// No domain owner gets a backing run where the lifecycle does not exist
+/// (`alloc_owned_grant` refuses first), so no record exists either.
 #[cfg(not(cellos_domain_grants))]
 pub(super) fn new_domain_record(
     _space: &DomainRoot,
-    backing: crate::memory::frame_run::FrameRun,
+    _base: usize,
     _size: usize,
 ) -> Option<DomainRecord> {
-    crate::memory::frame_run::PENDING.leak(backing, "no domain lifecycle on this target");
     None
 }
 

@@ -6,22 +6,6 @@ use super::*;
 #[allow(unused_imports)]
 use super::{authority::*, decode::*, dev::*, fs::*, ipc::*, misc::*, spawn::*, vm::*};
 
-/// Physical frames currently issued via `ShmAlloc`, each bound to the Cell
-/// incarnation that allocated it.
-///
-/// `ShmMap` accepts only a handle that appears here AND belongs to the
-/// caller's live incarnation, so a cell can neither forge a physical address
-/// ("ShmMap kernel_text_phys") nor map a peer's or a dead predecessor's frame.
-/// Root retirement reclaims the dead incarnation's frames
-/// ([`release_shm_for`]). A leaf lock: never held while taking another.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ShmRecord {
-    pub(crate) owner: crate::cell::state_stash::Incarnation,
-    pub(crate) recipient: Option<u64>,
-    pub(crate) size: usize,
-    pub(crate) rights: u32,
-}
-
 pub(super) const MAX_IN_FLIGHT_DMA_PUBLICATIONS: usize = 64;
 
 pub(crate) struct DmaPublicationGuard {
@@ -40,39 +24,51 @@ pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationG
     reserve_dma_publication(tid, quota)
 }
 
+/// The region an `ShmAlloc` handle names: owned by the incarnation that
+/// allocated it, never by a task.
+fn shm_owner(owner: crate::cell::state_stash::Incarnation) -> RegionOwner {
+    RegionOwner::incarnation(owner.cell, owner.generation)
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 /// Whether `handle` is an outstanding `ShmAlloc` frame owned by exactly `owner`
 /// (same Cell and generation).
 pub(super) fn shm_owned_by(handle: usize, owner: crate::cell::state_stash::Incarnation) -> bool {
-    SHM_HANDLES.lock().get(&handle).map(|r| r.owner) == Some(owner)
+    SHM_HANDLES.lock().get(&handle).map(|r| r.owner) == Some(shm_owner(owner))
 }
 
-pub(super) fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Option<ShmRecord> {
+/// The owner of SHM handle `handle` if incarnation `(cell, generation)` owns
+/// it or the cell is its receiver.
+pub(super) fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Option<RegionOwner> {
     let guard = SHM_HANDLES.lock();
-    let record = guard.get(&handle).copied()?;
-    if (record.owner.cell == cell && record.owner.generation == generation)
-        || record.recipient == Some(cell)
+    let region = guard.get(&handle)?;
+    if region.owner == RegionOwner::incarnation(cell, generation)
+        || region.receiver == Receiver::Cell(cell)
     {
-        Some(record)
+        Some(region.owner)
     } else {
         None
     }
 }
 
-/// Remove every `ShmAlloc` record of `owner` and return its frames and total bytes.
-pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec<usize>, usize) {
-    let mut frames = Vec::new();
-    let mut total_bytes = 0usize;
-    SHM_HANDLES.lock().retain(|&frame, record| {
-        if record.owner == owner {
-            frames.push(frame);
-            total_bytes = total_bytes.saturating_add(record.size);
-            false
-        } else {
-            true
-        }
-    });
-    (frames, total_bytes)
+/// Remove every `ShmAlloc` region of `owner` and return them with their total
+/// charged bytes.
+pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec<Region>, usize) {
+    let owner = shm_owner(owner);
+    let mut guard = SHM_HANDLES.lock();
+    let handles: Vec<usize> = guard
+        .iter()
+        .filter(|(_, region)| region.owner == owner)
+        .map(|(&handle, _)| handle)
+        .collect();
+    let regions: Vec<Region> = handles
+        .iter()
+        .filter_map(|handle| guard.remove(handle))
+        .collect();
+    let total_bytes = regions
+        .iter()
+        .fold(0usize, |total, region| total.saturating_add(region.size));
+    (regions, total_bytes)
 }
 
 /// Reclaim the `ShmAlloc` frames of a retired root's incarnation.
@@ -96,68 +92,47 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// Lock order: SHM_HANDLES (released); pin REGISTRY (released); KERNEL_ROOT
 /// alone (unpublish, prune); then FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
-    use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner};
-    let (frames, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
+    use crate::memory::frame_run::Batch;
+    let (regions, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
         cell: cell_id,
         generation,
     });
-    if frames.is_empty() {
+    if regions.is_empty() {
         return 0;
     }
     crate::memory::cell_quota::refund(cell_id as usize, total_bytes);
-    let owner = RunOwner::Cell {
-        cell: cell_id,
-        generation,
-        tid: 0,
-    };
+    let released = regions.len();
     // One batch for every frame: one shared invalidation, then each frame is
     // normalised and freed, or quarantined if a hart does not confirm.
     let mut batch = Batch::new();
-    for &frame in &frames {
-        // An identity VA that no longer maps this frame leaves only stale TLB
-        // entries for it: nothing to unpublish, nothing to restore.
-        let mapped_here = crate::memory::paging::virt_to_phys(frame) == Some(frame);
-        let alias = if mapped_here {
-            KernelAlias::of_identity_remap(frame)
-        } else {
-            KernelAlias::Intact
+    for region in regions {
+        let Some(run) = region.into_run() else {
+            continue;
         };
-        let Some(run) = withhold_if_pinned(FrameRun::mapped(frame, 1, owner, RunKind::Leaf, alias))
-        else {
+        let frame = run.base();
+        // An identity VA that no longer maps this frame leaves only stale TLB
+        // entries for it: nothing to unpublish.
+        let mapped_here = crate::memory::paging::virt_to_phys(frame) == Some(frame);
+        let Some(run) = withhold_if_pinned(run) else {
             continue;
         };
         batch.invalidate(frame);
         retire_published_run_into(&mut batch, run, mapped_here);
     }
     let _ = batch.complete();
-    frames.len()
+    released
 }
 
-/// Kernel-managed zero-copy memory region.
+/// The `GrantAlloc` table: one [`Region`] per grant, keyed by its base address.
 ///
-/// Distinct from `tcb::GrantEntry`, which tracks per-task grants from the kernel.
-/// The issuing task identity remains necessary for the existing grant ABI, but
-/// the Cell/generation binding prevents a stale task record from becoming a
-/// writable-output authority after retirement or transfer.
-pub(super) struct PageGrant {
-    pub(super) base: usize,
-    pub(super) size: usize,
-    pub(super) owner: usize,
-    // Read by the RV64 SAS ownership ledger; retained in every build so a
-    // grant cannot change its security identity across target tuples.
-    #[allow(dead_code)]
-    pub(super) owner_cell: CellId,
-    #[allow(dead_code)]
-    pub(super) owner_generation: u64,
-    pub(super) shared_to: Option<(usize, GrantPerm)>,
-    /// One kernel-owned lifecycle record, present only while the owner is a
-    /// private-root domain. It carries the owner/receiver roots, the exact
-    /// receiver mapping tuple and the `Live → Revoking → Revoked` state; a SAS
-    /// owner keeps today's zero-copy path and leaves this `None`.
-    pub(super) domain: Option<DomainRecord>,
-}
-
-pub(super) fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, PageGrant>>> {
+/// The owner is a task and the Cell/generation it ran as: the issuing task
+/// identity remains necessary for the existing grant ABI, but the binding
+/// prevents a stale task record from becoming a writable-output authority after
+/// retirement or transfer. A domain owner's row carries its lifecycle record
+/// (`Region::domain`: the owner/receiver roots, the exact receiver mapping
+/// tuple and the `Live → Revoking → Revoked` state); a SAS owner keeps the
+/// zero-copy path and leaves it `None`.
+pub(super) fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, Region>>> {
     &PAGE_GRANT_TABLE
 }
 
@@ -256,7 +231,7 @@ pub(crate) fn domain_grant_records_live() -> bool {
         let table = grant_table_lock().lock();
         table.as_ref().is_some_and(|grants| {
             grants.values().any(|grant| {
-                residual_domain_record(grant.owner, grant.shared_to, grant.domain.is_some())
+                residual_domain_record(grant.owner.tid, grant.shared_to(), grant.domain.is_some())
             })
         })
     };
@@ -266,7 +241,7 @@ pub(crate) fn domain_grant_records_live() -> bool {
     let table = reg_grant_table_lock().lock();
     table.as_ref().is_some_and(|grants| {
         grants.values().any(|grant| {
-            residual_domain_record(grant.owner, grant.shared_to, grant.domain.is_some())
+            residual_domain_record(grant.owner.tid, grant.shared_to(), grant.domain.is_some())
         })
     })
 }
@@ -289,28 +264,16 @@ pub(super) enum DmaGrantError {
     PublicationBusy,
 }
 
-/// Persistent kernel-managed Grant buffer for a cell's lifetime.
-///
-/// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as
-/// `PageGrant`). `owner == 0` denotes an owner-dead VFS handoff awaiting reap.
-pub(super) struct RegGrant {
-    pub(super) base: usize,
-    pub(super) size: usize,
-    pub(super) owner: usize,
-    pub(super) owner_cell: CellId,
-    pub(super) owner_generation: u64,
-    pub(super) shared_to: Option<(usize, GrantPerm)>,
-    /// See [`PageGrant::domain`]: the same single lifecycle record behind the
-    /// registered-grant table.
-    pub(super) domain: Option<DomainRecord>,
-}
-
-pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, RegGrant>>> {
+/// The `GrantRegister` table: persistent Grant buffers for a cell's lifetime,
+/// one [`Region`] each, keyed by base address, with one grantee at a time via
+/// `GrantShare`/`GrantSlice` as in [`grant_table_lock`]. An owner tid of 0
+/// denotes an owner-dead VFS handoff awaiting reap.
+pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, Region>>> {
     &REG_GRANT_TABLE
 }
 
-/// Restore the boot identity mapping (kernel RWX) and deallocate `n_pages`
-/// physical frames starting at `base`.
+/// Restore the boot identity mapping (kernel RWX) and deallocate a grant's
+/// run of physical frames.
 ///
 /// Grant frames are identity-mapped at boot (RWX kernel) and re-mapped USER RW by
 /// `alloc_grant_pages`. On free we must RESTORE the kernel identity mapping — NOT
@@ -335,12 +298,28 @@ pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize,
 /// Lock order: KERNEL_ROOT alone (unpublish), then FRAME_ALLOCATOR →
 /// (map_page → KERNEL_ROOT). Mirrors `Stack::drop`. Must NOT be called while
 /// already holding FRAME_ALLOCATOR.
-pub(super) fn free_grant_pages(base: usize, n_pages: usize) {
+pub(super) fn free_grant_pages(run: crate::memory::frame_run::FrameRun) {
     free_grant_run(
-        grant_run(base, n_pages),
+        run,
         #[cfg(feature = "p01-trace")]
         None,
     );
+}
+
+/// Release a removed grant row's frames: the caller took the row out of its
+/// table under the table lock and checked that no pin holds it.
+fn free_grant_row(row: Region) {
+    if let Some(run) = row.into_run() {
+        free_grant_pages(run);
+    }
+}
+
+/// Release a removed grant row's frames, withheld while a pin, lease or export
+/// still protects them.
+fn release_row_unless_pinned(row: Region) {
+    if let Some(run) = row.into_run() {
+        release_unless_pinned(run);
+    }
 }
 
 /// Resume the release of withheld frames whose key ended: the run comes back
@@ -372,21 +351,27 @@ fn release_unless_pinned(run: crate::memory::frame_run::FrameRun) {
     }
 }
 
-/// Release a revoked domain record's backing; only the revoker whose removal
-/// took the row calls this.
+/// Release the backing of `row`, a domain row whose record is revoked; only
+/// the revoker whose removal took the row calls this.
 ///
 /// The revoke removed the owner's and the receiver's private-root leaves and
 /// confirmed both tags, and the frames never lost the kernel's own alias, so
 /// the run has nothing to unpublish, flush or restore: it is only freed (RV64
 /// and AArch64 skip the old unmap-and-restore round trip of the identity
 /// alias). With `withhold`, a pin, lease or export that still protects the
-/// range keeps the run, still mapped, with that alias.
+/// range keeps the run, still mapped, with that alias. A row whose record is
+/// not `Revoked` keeps its frames: they are leaked (counted), never freed.
 #[cfg(cellos_domain_grants)]
-pub(super) fn release_domain_backing(record: &DomainRecord, withhold: bool) {
-    let Some(run) = record.take_backing() else {
-        log::error!("[grant] revoked domain record released without its backing");
+pub(super) fn release_domain_backing(record: &DomainRecord, row: Region, withhold: bool) {
+    let Some(run) = row.into_run() else {
+        log::error!("[grant] revoked domain row released without its backing");
         return;
     };
+    if record.state() != crate::task::domain_grant::DomainGrantState::Revoked {
+        crate::memory::frame_run::PENDING
+            .leak(run, "domain row taken before its record was revoked");
+        return;
+    }
     if withhold {
         release_unless_pinned(run);
     } else {
@@ -398,8 +383,15 @@ pub(super) fn release_domain_backing(record: &DomainRecord, withhold: bool) {
     }
 }
 
+/// No row carries a domain record on this target ([`clone_domain_record`] is
+/// always `None`), so no revoker reaches this; a row that did would keep its
+/// frames (leaked, counted), never free them.
 #[cfg(not(cellos_domain_grants))]
-pub(super) fn release_domain_backing(_record: &DomainRecord, _withhold: bool) {}
+pub(super) fn release_domain_backing(_record: &DomainRecord, row: Region, _withhold: bool) {
+    if let Some(run) = row.into_run() {
+        crate::memory::frame_run::PENDING.leak(run, "no domain lifecycle on this target");
+    }
+}
 
 /// A reclaimed grant's frames as one run, still mapped: USER in the shared root
 /// (and, on RV64/AArch64, over the kernel's identity alias, which the release
@@ -468,50 +460,68 @@ pub(super) fn unregister_registered_grant(
         );
         return Err(GRANT_DENY_ERROR);
     }
-    let entry = {
-        let mut table = reg_grant_table_lock().lock();
-        let owned = table
-            .as_ref()
-            .and_then(|grants| grants.get(&reg_id))
-            .filter(|grant| grant.owner == caller_id)
-            .map(|grant| (grant.base, grant.size, clone_domain_record(&grant.domain)));
-        match owned {
-            Some((base, size, domain)) => {
-                refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
-                if domain.is_some() {
-                    Some((base, size, domain))
-                } else {
-                    table
-                        .as_mut()
-                        .and_then(|grants| grants.remove(&reg_id))
-                        .map(|grant| (grant.base, grant.size, None))
-                }
+    let taken = take_owned_row(reg_grant_table_lock(), "GrantUnregister", caller_id, reg_id)?
+        .ok_or(SyscallError::PermissionDenied)?;
+    match taken {
+        TakenGrant::Domain(record) => {
+            if !revoke_domain_record(&record, reg_id, "GrantUnregister") {
+                return Err(SyscallError::PermissionDenied);
             }
-            None => None,
+            // A concurrent revoker of the same record (`CapRevoke`'s reclaim,
+            // the deferred sweep after an ownerless retry) may have taken the
+            // row first; it then owns the frames, and this unregister is
+            // complete. A key that now names another cell's grant over reused
+            // frames is left alone.
+            release_if_row_taken(
+                reg_grant_table_lock(),
+                reg_id,
+                |grant| carries_record(&grant.domain, &record),
+                |row| release_domain_backing(&record, row, false),
+            );
         }
+        TakenGrant::Row(row) => free_grant_row(row),
     }
-    .ok_or(SyscallError::PermissionDenied)?;
-    let (base, size, domain) = entry;
-    let n_pages = grant_pages_for_size(size);
-    if let Some(record) = &domain {
-        if !revoke_domain_record(record, reg_id, "GrantUnregister") {
-            return Err(SyscallError::PermissionDenied);
-        }
-        // A concurrent revoker of the same record (`CapRevoke`'s reclaim, the
-        // deferred sweep after an ownerless retry) may have taken the row
-        // first; it then owns the frames, and this unregister is complete. A
-        // key that now names another cell's grant over reused frames is left
-        // alone.
-        release_if_row_taken(
-            reg_grant_table_lock(),
-            reg_id,
-            |grant| carries_record(&grant.domain, record),
-            || release_domain_backing(record, false),
-        );
-        return Ok(());
-    }
-    free_grant_pages(base, n_pages);
     Ok(())
+}
+
+/// What an owner's `GrantFree`/`GrantUnregister` took from its table.
+enum TakenGrant {
+    /// A domain row stays in the table while its record revokes; the revoker
+    /// whose removal then takes the row releases the frames.
+    Domain(DomainRecord),
+    /// A SAS row, removed: its frames are the caller's to free.
+    Row(Region),
+}
+
+/// Take `id` from `table` for its owner `caller_id`'s free, unless an
+/// in-flight operation still holds the region (`refuse_if_pinned`); `None`
+/// when the caller owns no such row.
+///
+/// The pin check runs inside the table lock (order: grant table → pin
+/// `REGISTRY`, a leaf), so a concurrent VFS `GrantSlice` or `GrantDma` cannot
+/// publish a pin between the check and the removal.
+fn take_owned_row(
+    table: &Spinlock<Option<BTreeMap<usize, Region>>>,
+    kind: &str,
+    caller_id: usize,
+    id: usize,
+) -> Result<Option<TakenGrant>, SyscallError> {
+    let mut rows = table.lock();
+    let Some(row) = rows
+        .as_ref()
+        .and_then(|rows| rows.get(&id))
+        .filter(|row| row.owner.tid == caller_id)
+    else {
+        return Ok(None);
+    };
+    refuse_if_pinned(kind, id, row.base(), row.size)?;
+    if let Some(record) = clone_domain_record(&row.domain) {
+        return Ok(Some(TakenGrant::Domain(record)));
+    }
+    Ok(rows
+        .as_mut()
+        .and_then(|rows| rows.remove(&id))
+        .map(TakenGrant::Row))
 }
 
 /// Reclaim all grant pages owned or held by a dying task.
@@ -590,9 +600,9 @@ pub(super) fn clear_grantee_refs(tid: usize) -> (usize, usize) {
         let mut tbl = grant_table_lock().lock();
         if let Some(map) = tbl.as_mut() {
             for grant in map.values_mut() {
-                if let Some((_, perm)) = grant.shared_to.filter(|(grantee, _)| *grantee == tid) {
+                if let Some((_, perm)) = grant.shared_to().filter(|(grantee, _)| *grantee == tid) {
                     count(perm);
-                    grant.shared_to = None;
+                    grant.set_shared_to(None);
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         drained.push(record);
                     }
@@ -605,9 +615,9 @@ pub(super) fn clear_grantee_refs(tid: usize) -> (usize, usize) {
         let mut tbl = reg_grant_table_lock().lock();
         if let Some(map) = tbl.as_mut() {
             for grant in map.values_mut() {
-                if let Some((_, perm)) = grant.shared_to.filter(|(grantee, _)| *grantee == tid) {
+                if let Some((_, perm)) = grant.shared_to().filter(|(grantee, _)| *grantee == tid) {
                     count(perm);
-                    grant.shared_to = None;
+                    grant.set_shared_to(None);
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         drained.push(record);
                     }
@@ -647,13 +657,13 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
     // released: revocation awaits the receiver root's tag invalidation, which
     // must never hold this lock in the meantime.
     let mut page_deferred: Vec<(usize, DomainRecord, usize)> = Vec::new();
-    let owned: alloc::vec::Vec<PageGrant> = {
+    let owned: alloc::vec::Vec<Region> = {
         let mut tbl = grant_table_lock().lock();
         let mut owned = alloc::vec::Vec::new();
         if let Some(map) = tbl.as_mut() {
             let owned_keys: alloc::vec::Vec<usize> = map
                 .iter()
-                .filter(|(_, g)| g.owner == tid)
+                .filter(|(_, g)| g.owner.tid == tid)
                 .map(|(k, _)| *k)
                 .collect();
             for key in owned_keys {
@@ -662,7 +672,7 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
                         page_deferred.push((
                             key,
                             clone_domain_record(&grant.domain).expect("checked above"),
-                            grant.base,
+                            grant.base(),
                         ));
                     }
                     Some(_) => {
@@ -677,59 +687,51 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
         owned
     }; // PAGE_GRANT_TABLE lock released
 
-    for grant in &owned {
-        release_unless_pinned(grant_run(grant.base, grant_pages_for_size(grant.size)));
+    let mut reclaimed = owned.len() + page_deferred.len();
+    for grant in owned {
+        release_row_unless_pinned(grant);
     }
 
-    let mut reclaimed = owned.len() + page_deferred.len();
     for (key, record, base) in page_deferred {
         release_deferred_domain_row(key, record, base, false);
     }
 
     // ── REG_GRANT_TABLE pass ──────────────────────────────────────────────────
     let mut reg_deferred: Vec<(usize, DomainRecord, usize)> = Vec::new();
-    let reg_owned: alloc::vec::Vec<RegGrant> = {
+    let reg_owned: alloc::vec::Vec<Region> = {
         let mut tbl = reg_grant_table_lock().lock();
         let mut removed = alloc::vec::Vec::new();
         if let Some(map) = tbl.as_mut() {
             let mut owned_keys = alloc::vec::Vec::new();
             for (&key, grant) in map.iter_mut() {
-                if grant.owner != tid {
+                if grant.owner.tid != tid {
                     continue;
                 }
                 if grant.domain.is_some() {
                     reg_deferred.push((
                         key,
                         clone_domain_record(&grant.domain).expect("checked above"),
-                        grant.base,
+                        grant.base(),
                     ));
                     continue;
                 }
-                if let Some((grantee, _)) = grant.shared_to {
+                if let Some((grantee, _)) = grant.shared_to() {
                     // A live VFS request lease or `GrantSlice` holder lease
                     // keeps the frames: the row is orphaned and its frames go
                     // to the quarantine instead of passing to the grantee.
-                    let span = grant_allocated_bytes(grant.size);
-                    if crate::memory::pin::vfs_holder_of_owner(grant.base, span, tid).is_some()
-                        || crate::memory::pin::grant_lease_holder_of_owner(grant.base, span, tid)
+                    let (base, span) = (grant.base(), grant_allocated_bytes(grant.size));
+                    if crate::memory::pin::vfs_holder_of_owner(base, span, tid).is_some()
+                        || crate::memory::pin::grant_lease_holder_of_owner(base, span, tid)
                             .is_some()
                     {
-                        grant.owner = 0;
-                        grant.owner_cell = CellId(0);
-                        grant.owner_generation = 0;
-                        grant.shared_to = None;
+                        grant.orphan();
                         owned_keys.push(key);
                     } else if let Some((cell_id, generation)) = live_task_binding(grantee) {
                         // Preserve the legacy transfer only to a live,
                         // generation-attested grantee.
-                        grant.owner = grantee;
-                        grant.owner_cell = cell_id;
-                        grant.owner_generation = generation;
+                        grant.owner = RegionOwner::task(grantee, cell_id, generation);
                     } else {
-                        grant.owner = 0;
-                        grant.owner_cell = CellId(0);
-                        grant.owner_generation = 0;
-                        grant.shared_to = None;
+                        grant.orphan();
                         owned_keys.push(key);
                     }
                 } else {
@@ -741,10 +743,10 @@ pub(crate) fn reclaim_owned_grants(tid: usize) -> usize {
         removed
     }; // REG_GRANT_TABLE lock released
 
-    for reg in &reg_owned {
-        release_unless_pinned(grant_run(reg.base, grant_pages_for_size(reg.size)));
-    }
     reclaimed += reg_owned.len() + reg_deferred.len();
+    for reg in reg_owned {
+        release_row_unless_pinned(reg);
+    }
     for (key, record, base) in reg_deferred {
         release_deferred_domain_row(key, record, base, true);
     }
@@ -769,7 +771,7 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
         let tbl = grant_table_lock().lock();
         if let Some(map) = tbl.as_ref() {
             for (&key, grant) in map.iter() {
-                if grant.owner == 0 {
+                if grant.owner.tid == 0 {
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         page_retry.push((key, record));
                     }
@@ -792,7 +794,7 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
             grant_table_lock(),
             key,
             |grant| carries_record(&grant.domain, &record),
-            || release_domain_backing(&record, true),
+            |row| release_domain_backing(&record, row, true),
         );
     }
 
@@ -801,7 +803,7 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
         let tbl = reg_grant_table_lock().lock();
         if let Some(map) = tbl.as_ref() {
             for (&key, grant) in map.iter() {
-                if grant.owner == 0 {
+                if grant.owner.tid == 0 {
                     if let Some(record) = clone_domain_record(&grant.domain) {
                         reg_retry.push((key, record));
                     }
@@ -823,7 +825,7 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
             reg_grant_table_lock(),
             key,
             |grant| carries_record(&grant.domain, &record),
-            || release_domain_backing(&record, true),
+            |row| release_domain_backing(&record, row, true),
         );
     }
     waiting
@@ -835,13 +837,13 @@ pub(crate) fn sweep_deferred_domain_grants() -> bool {
 /// Death-only sweep — the state it clears is created by owner death, and a
 /// runtime revoke neither creates nor resolves it.
 pub(super) fn sweep_orphan_reg_grants() {
-    let removed: alloc::vec::Vec<RegGrant> = {
+    let removed: alloc::vec::Vec<Region> = {
         let mut tbl = reg_grant_table_lock().lock();
         let mut removed = alloc::vec::Vec::new();
         if let Some(map) = tbl.as_mut() {
             let orphan_keys: alloc::vec::Vec<usize> = map
                 .iter()
-                .filter(|(_, g)| g.owner == 0 && g.shared_to.is_none() && g.domain.is_none())
+                .filter(|(_, g)| g.owner.tid == 0 && g.shared_to().is_none() && g.domain.is_none())
                 .map(|(k, _)| *k)
                 .collect();
             removed = orphan_keys.iter().filter_map(|k| map.remove(k)).collect();
@@ -849,8 +851,8 @@ pub(super) fn sweep_orphan_reg_grants() {
         removed
     }; // REG_GRANT_TABLE lock released
 
-    for reg in &removed {
-        release_unless_pinned(grant_run(reg.base, grant_pages_for_size(reg.size)));
+    for reg in removed {
+        release_row_unless_pinned(reg);
     }
 }
 
@@ -1074,7 +1076,7 @@ pub(crate) fn test_registered_grant_owner(reg_id: usize) -> Option<usize> {
     let tbl = reg_grant_table_lock().lock();
     tbl.as_ref()
         .and_then(|map| map.get(&reg_id))
-        .map(|grant| grant.owner)
+        .map(|grant| grant.owner.tid)
 }
 
 pub(super) fn reserve_dma_publication(
@@ -1097,27 +1099,42 @@ pub(super) fn reserve_dma_publication(
     })
 }
 
+/// Record `ShmAlloc` frame `frame`, charged `size` bytes, as a region of
+/// `owner` that owns the frame from here on; `recipient` is the cell it was
+/// handed to, if any.
+///
+/// The frame is still the kernel's identity-mapped frame (RV64, AArch64) or
+/// unmapped at its identity VA (x86_64); `ShmMap` publishes it USER there, and
+/// the region's release restores the identity alias where RAM is reached
+/// through it (`KernelAlias::of_identity_remap`).
 pub(super) fn shm_register(
     frame: usize,
     owner: crate::cell::state_stash::Incarnation,
     size: usize,
     recipient: Option<u64>,
-    rights: u32,
 ) {
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    SHM_HANDLES.lock().insert(
+    let run = FrameRun::mapped(
         frame,
-        ShmRecord {
-            owner,
-            recipient,
-            size,
-            rights,
+        1,
+        RunOwner::Cell {
+            cell: owner.cell,
+            generation: owner.generation,
+            tid: 0,
         },
+        RunKind::Leaf,
+        KernelAlias::of_identity_remap(frame),
     );
+    let mut region = Region::shm(shm_owner(owner), run, size);
+    if let Some(cell) = recipient {
+        region.receiver = Receiver::Cell(cell);
+    }
+    SHM_HANDLES.lock().insert(frame, region);
 }
 
 pub(super) fn dma_range_within(
@@ -1135,28 +1152,18 @@ pub(super) fn dma_range_within(
     grant_base <= dma_base && dma_end <= grant_end
 }
 
-pub(super) fn page_grant_authorizes_dma(
-    grant: &PageGrant,
+/// Does `grant`, a row of either grant table, authorize DMA over
+/// `[dma_base, dma_base + dma_size)` for `caller_id` bound as `caller_binding`?
+pub(super) fn grant_authorizes_dma(
+    grant: &Region,
     caller_id: usize,
     caller_binding: (CellId, u64),
     dma_base: usize,
     dma_size: usize,
 ) -> bool {
-    grant.owner == caller_id
-        && (grant.owner_cell, grant.owner_generation) == caller_binding
-        && dma_range_within(grant.base, grant.size, dma_base, dma_size)
-}
-
-pub(super) fn reg_grant_authorizes_dma(
-    grant: &RegGrant,
-    caller_id: usize,
-    caller_binding: (CellId, u64),
-    dma_base: usize,
-    dma_size: usize,
-) -> bool {
-    grant.owner == caller_id
-        && (grant.owner_cell, grant.owner_generation) == caller_binding
-        && dma_range_within(grant.base, grant.size, dma_base, dma_size)
+    grant.owner.tid == caller_id
+        && grant.owner.binding() == caller_binding
+        && dma_range_within(grant.base(), grant.size, dma_base, dma_size)
 }
 
 /// Reserve one already-authorized DMA publication while the caller still holds
@@ -1205,9 +1212,9 @@ pub(super) fn reserve_caller_owned_dma_range(
             .map(|task| (task.cell_id, task.cell_generation))
             .ok_or(DmaGrantError::NotOwned)?;
         let authorized = page_grants.as_ref().is_some_and(|grants| {
-            grants.values().any(|grant| {
-                page_grant_authorizes_dma(grant, caller_id, caller_binding, base, size)
-            })
+            grants
+                .values()
+                .any(|grant| grant_authorizes_dma(grant, caller_id, caller_binding, base, size))
         });
         if authorized {
             return reserve_authorized_dma_publication(
@@ -1232,7 +1239,7 @@ pub(super) fn reserve_caller_owned_dma_range(
         let authorized = registered_grants.as_ref().is_some_and(|grants| {
             grants
                 .values()
-                .any(|grant| reg_grant_authorizes_dma(grant, caller_id, caller_binding, base, size))
+                .any(|grant| grant_authorizes_dma(grant, caller_id, caller_binding, base, size))
         });
         if authorized {
             return reserve_authorized_dma_publication(
@@ -1551,8 +1558,9 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
     })
     .unwrap_or(false);
     let mapped = batch.complete().is_confirmed() && mapped;
+    let run = grant_run(base, 1);
     if !mapped {
-        free_grant_pages(base, 1);
+        free_grant_pages(run);
         return false;
     }
     let zeroed = with_test_sum(|| unsafe {
@@ -1563,49 +1571,35 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
             .all(|byte| *byte == 0)
     });
     if !zeroed {
-        free_grant_pages(base, 1);
+        free_grant_pages(run);
         return false;
     }
-    let registered = {
-        let mut table = reg_grant_table_lock().lock();
-        match live_task_binding(caller_id) {
-            Some((owner_cell, owner_generation))
-                if !table
-                    .as_ref()
-                    .is_some_and(|grants| grants.contains_key(&base)) =>
-            {
-                if table.is_none() {
-                    *table = Some(BTreeMap::new());
-                }
-                table.as_mut().is_some_and(|grants| {
-                    #[cfg(feature = "p01-trace")]
-                    let _semantic = crate::memory::heap::p01_owner::creation(
-                        None,
-                        crate::memory::heap::p01_owner::GRANT_SHARED,
-                    );
-                    grants
-                        .insert(
-                            base,
-                            RegGrant {
-                                base,
-                                size: 128,
-                                owner: caller_id,
-                                owner_cell,
-                                owner_generation,
-                                shared_to: None,
-                                domain: None,
-                            },
-                        )
-                        .is_none()
-                })
-            }
-            _ => false,
-        }
+    let mut table = reg_grant_table_lock().lock();
+    let binding = live_task_binding(caller_id).filter(|_| {
+        !table
+            .as_ref()
+            .is_some_and(|grants| grants.contains_key(&base))
+    });
+    let Some((owner_cell, owner_generation)) = binding else {
+        drop(table);
+        free_grant_pages(run);
+        return false;
     };
-    if !registered {
-        free_grant_pages(base, 1);
-    }
-    registered
+    #[cfg(feature = "p01-trace")]
+    let _semantic = crate::memory::heap::p01_owner::creation(
+        None,
+        crate::memory::heap::p01_owner::GRANT_SHARED,
+    );
+    table.get_or_insert_with(BTreeMap::new).insert(
+        base,
+        Region::grant(
+            RegionOwner::task(caller_id, owner_cell, owner_generation),
+            run,
+            128,
+            None,
+        ),
+    );
+    true
 }
 
 /// Free owner-dead frames whose last `GrantSlice` lease `holder` just ended.
@@ -1647,16 +1641,16 @@ pub(crate) fn snapshot_grant_elf(
     let guard = grant_table_lock().lock();
     let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
     let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
-    if g.owner != caller {
+    if g.owner.tid != caller {
         return Err(SyscallError::PermissionDenied);
     }
     if len > g.size {
         return Err(SyscallError::InvalidInput);
     }
-    validate_user_buf(g.base, len, MAX_USER_BUF)?;
+    validate_user_buf(g.base(), len, MAX_USER_BUF)?;
     let mut snapshot = crate::loader::aligned_elf::ElfSnapshot::zeroed(len)
         .map_err(|_| SyscallError::OutOfMemory)?;
-    view.read_into(g.base, snapshot.bytes_mut())
+    view.read_into(g.base(), snapshot.bytes_mut())
         .map_err(|_| SyscallError::InvalidInput)?;
     Ok(snapshot)
 }
@@ -1832,9 +1826,9 @@ pub(super) fn resolve_and_lease_grant(
         if let Some(grant) = tbl.as_ref().and_then(|map| map.get(&request.grant_id)) {
             return authorize_grant_slice_locked(
                 request,
-                grant.owner,
-                grant.shared_to.as_ref().map(|(tid, _)| *tid),
-                grant.base,
+                grant.owner.tid,
+                grant.shared_to().map(|(tid, _)| tid),
+                grant.base(),
                 grant.size,
                 grant.domain.is_some(),
             );
@@ -1846,9 +1840,9 @@ pub(super) fn resolve_and_lease_grant(
     };
     authorize_grant_slice_locked(
         request,
-        grant.owner,
-        grant.shared_to.as_ref().map(|(tid, _)| *tid),
-        grant.base,
+        grant.owner.tid,
+        grant.shared_to().map(|(tid, _)| tid),
+        grant.base(),
         grant.size,
         grant.domain.is_some(),
     )
@@ -1884,7 +1878,7 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
                 page_size,
             );
         }
-        shm_register(frame, owner, bytes, None, 0x3);
+        shm_register(frame, owner, bytes, None);
         return Ok(frame);
     }
     crate::memory::cell_quota::refund(cell as usize, bytes);
@@ -1896,14 +1890,14 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
     let Some((caller_cell, caller_gen)) = live_cell_identity(caller_id) else {
         return Err(SyscallError::PermissionDenied);
     };
-    let Some(record) = shm_accessible_by(handle, caller_cell, caller_gen) else {
+    let Some(owner) = shm_accessible_by(handle, caller_cell, caller_gen) else {
         return Err(SyscallError::PermissionDenied);
     };
 
-    if target_pid != 0 && record.owner.cell == caller_cell {
+    if target_pid != 0 && owner.cell.0 == caller_cell {
         if let Some((target_cell, _)) = live_cell_identity(target_pid) {
             if let Some(r) = SHM_HANDLES.lock().get_mut(&handle) {
-                r.recipient = Some(target_cell);
+                r.receiver = Receiver::Cell(target_cell);
             }
         }
     }
@@ -1928,7 +1922,7 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
     });
     // A replaced translation must be gone everywhere before the cell relies on
     // the mapping; if a hart does not confirm, the map fails closed (the frame
-    // stays with its record, which `release_shm_for` unpublishes later).
+    // stays with its region, which `release_shm_for` unpublishes later).
     if batch.complete().is_confirmed() && mapped == Some(true) {
         return Ok(vaddr);
     }
@@ -2130,21 +2124,21 @@ pub(super) fn revoke_dma_export(
 /// A new grant's frames for `caller_id`, or `None` for the `Ok(0)` refusal.
 ///
 /// A SAS owner gets them USER in the shared root (`alloc_grant_pages`). A
-/// domain owner gets a supervisor-only run, mapped RW+NX in its own root only,
-/// which the row's lifecycle record will own; every page is undone if any one
-/// fails, so no raw pointer is ever published for a partial map.
+/// domain owner gets a supervisor-only run, mapped RW+NX in its own root only;
+/// every page is undone if any one fails, so no raw pointer is ever published
+/// for a partial map. The row's region owns the run.
 fn alloc_owned_grant(
     kind: &str,
     caller_id: usize,
     owner_space: &Option<DomainRoot>,
     n_pages: usize,
-) -> Option<(usize, Option<crate::memory::frame_run::FrameRun>)> {
+) -> Option<crate::memory::frame_run::FrameRun> {
     match owner_space {
         #[cfg(cellos_domain_grants)]
         Some(space) => {
             let backing = alloc_grant_pages_supervisor_only(n_pages)?;
             match map_domain_owner_pages(space, backing) {
-                Ok(backing) => Some((backing.base(), Some(backing))),
+                Ok(backing) => Some(backing),
                 Err(error) => {
                     log::warn!(
                         "[grant] {kind} owner mapping failed for task {caller_id}: {error:?}"
@@ -2158,7 +2152,7 @@ fn alloc_owned_grant(
             let _ = (kind, caller_id);
             None
         }
-        None => alloc_grant_pages(n_pages).map(|paddr| (paddr, None)),
+        None => alloc_grant_pages(n_pages).map(|paddr| grant_run(paddr, n_pages)),
     }
 }
 
@@ -2172,35 +2166,33 @@ fn alloc_owned_grant(
 /// release (unpublish, flush, free).
 fn release_unbound_grant(
     owner_space: &Option<DomainRoot>,
-    paddr: usize,
-    n_pages: usize,
-    backing: Option<crate::memory::frame_run::FrameRun>,
+    run: crate::memory::frame_run::FrameRun,
 ) {
-    match (owner_space, backing) {
+    match owner_space {
         #[cfg(cellos_domain_grants)]
-        (Some(space), Some(run)) => {
+        Some(space) => {
             let pages = run.pages();
             release_owner_mapped_backing(space, run, pages);
         }
-        // No other shape holds a backing run: only a domain owner's
-        // allocation makes one.
-        (_, Some(run)) => {
+        // `alloc_owned_grant` gives a domain owner no run on this target.
+        #[cfg(not(cellos_domain_grants))]
+        Some(_) => {
             crate::memory::frame_run::PENDING.leak(run, "unbound grant backing without its root")
         }
-        (_, None) => free_grant_pages(paddr, n_pages),
+        None => free_grant_pages(run),
     }
 }
 
-/// The lifecycle record a domain owner's new row carries; it owns the backing.
+/// The lifecycle record a domain owner's new row carries over its backing at
+/// `base`.
 fn owned_domain_record(
     owner_space: &Option<DomainRoot>,
-    backing: Option<crate::memory::frame_run::FrameRun>,
+    base: usize,
     size: usize,
 ) -> Option<DomainRecord> {
-    match (owner_space, backing) {
-        (Some(space), Some(backing)) => new_domain_record(space, backing, size),
-        _ => None,
-    }
+    owner_space
+        .as_ref()
+        .and_then(|space| new_domain_record(space, base, size))
 }
 
 /// Handler for `Syscall::GrantAlloc` (extracted from the dispatcher).
@@ -2222,20 +2214,20 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     }
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
-    let Some((paddr, backing)) = alloc_owned_grant("GrantAlloc", caller_id, &owner_space, n_pages)
-    else {
+    let Some(run) = alloc_owned_grant("GrantAlloc", caller_id, &owner_space, n_pages) else {
         return Ok(0);
     };
+    let paddr = run.base();
     let mut table = grant_table_lock().lock();
     let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
         Some(binding) => binding,
         None => {
             drop(table);
-            release_unbound_grant(&owner_space, paddr, n_pages, backing);
+            release_unbound_grant(&owner_space, run);
             return Err(SyscallError::PermissionDenied);
         }
     };
-    let domain = owned_domain_record(&owner_space, backing, size);
+    let domain = owned_domain_record(&owner_space, paddr, size);
     if table.is_none() {
         *table = Some(BTreeMap::new());
     }
@@ -2246,15 +2238,12 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     );
     table.as_mut().unwrap().insert(
         paddr,
-        PageGrant {
-            base: paddr,
+        Region::grant(
+            RegionOwner::task(caller_id, owner_cell, owner_generation),
+            run,
             size,
-            owner: caller_id,
-            owner_cell,
-            owner_generation,
-            shared_to: None,
             domain,
-        },
+        ),
     );
     Ok(paddr)
 }
@@ -2294,33 +2283,17 @@ pub(super) fn grant_share(
         {
             let mut tbl = grant_table_lock().lock();
             if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                return domain_grant_share_row(
-                    grant.owner,
-                    grant.base,
-                    grant.domain.as_ref(),
-                    &mut grant.shared_to,
-                    caller_id,
-                    target_cell,
-                    &target_space,
-                    perm,
-                )
-                .map(|()| 0);
+                return domain_grant_share_row(grant, caller_id, target_cell, &target_space, perm)
+                    .map(|()| 0);
             }
         }
         let mut rtbl = reg_grant_table_lock().lock();
         return match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
             None => Err(SyscallError::InvalidInput),
-            Some(grant) => domain_grant_share_row(
-                grant.owner,
-                grant.base,
-                grant.domain.as_ref(),
-                &mut grant.shared_to,
-                caller_id,
-                target_cell,
-                &target_space,
-                perm,
-            )
-            .map(|()| 0),
+            Some(grant) => {
+                domain_grant_share_row(grant, caller_id, target_cell, &target_space, perm)
+                    .map(|()| 0)
+            }
         };
     }
     // Without a private-root backend no task is a domain, so the residual
@@ -2333,10 +2306,10 @@ pub(super) fn grant_share(
             *tbl = Some(BTreeMap::new());
         }
         if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-            if grant.owner != caller_id {
+            if grant.owner.tid != caller_id {
                 return Err(SyscallError::PermissionDenied);
             }
-            grant.shared_to = Some((target_cell, perm));
+            grant.set_shared_to(Some((target_cell, perm)));
             return Ok(0);
         }
     }
@@ -2344,9 +2317,9 @@ pub(super) fn grant_share(
     let mut rtbl = reg_grant_table_lock().lock();
     match rtbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
         None => Err(SyscallError::InvalidInput),
-        Some(grant) if grant.owner != caller_id => Err(SyscallError::PermissionDenied),
+        Some(grant) if grant.owner.tid != caller_id => Err(SyscallError::PermissionDenied),
         Some(grant) => {
-            grant.shared_to = Some((target_cell, perm));
+            grant.set_shared_to(Some((target_cell, perm)));
             Ok(0)
         }
     }
@@ -2427,55 +2400,31 @@ pub(super) fn grant_free(caller_id: usize, grant_id: usize) -> SyscallResult {
         );
         return Err(GRANT_DENY_ERROR);
     }
-    // Owner-only, and only while no in-flight operation holds the region.
-    // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
-    // pin REGISTRY, a leaf), so a concurrent VFS GrantSlice or GrantDma
-    // cannot publish a pin between the check and removal.
-    let entry = {
-        let mut tbl = grant_table_lock().lock();
-        let owned = tbl
-            .as_ref()
-            .and_then(|m| m.get(&grant_id))
-            .filter(|g| g.owner == caller_id)
-            .map(|g| (g.base, g.size, clone_domain_record(&g.domain)));
-        match owned {
-            None => None,
-            Some((base, size, domain)) => {
-                refuse_if_pinned("GrantFree", grant_id, base, size)?;
-                if domain.is_some() {
-                    // The row stays while the revoke drains so a retry is
-                    // idempotent; a `Revoking` row refuses new slices.
-                    Some((base, size, domain))
-                } else {
-                    tbl.as_mut()
-                        .and_then(|m| m.remove(&grant_id))
-                        .map(|g| (g.base, g.size, None))
-                }
+    // Owner-only, and only while no in-flight operation holds the region. A
+    // domain row stays while the revoke drains so a retry is idempotent; a
+    // `Revoking` row refuses new slices.
+    let taken = take_owned_row(grant_table_lock(), "GrantFree", caller_id, grant_id)?
+        .ok_or(SyscallError::PermissionDenied)?;
+    match taken {
+        TakenGrant::Domain(record) => {
+            if !revoke_domain_record(&record, grant_id, "GrantFree") {
+                // Bounded existing error: the frames stay retained and the
+                // record stays `Revoking` for an idempotent retry.
+                return Err(SyscallError::PermissionDenied);
             }
+            // A concurrent revoker of the same record (owner exit, the
+            // deferred sweep on another hart, `CapRevoke`'s reclaim) may have
+            // taken the row first; it then owns the frames, and this free is
+            // already complete.
+            release_if_row_taken(
+                grant_table_lock(),
+                grant_id,
+                |grant| carries_record(&grant.domain, &record),
+                |row| release_domain_backing(&record, row, false),
+            );
         }
-    };
-    let Some((base, size, domain)) = entry else {
-        return Err(SyscallError::PermissionDenied);
-    };
-    let n_pages = grant_pages_for_size(size);
-    if let Some(record) = &domain {
-        if !revoke_domain_record(record, grant_id, "GrantFree") {
-            // Bounded existing error: the frames stay retained and the
-            // record stays `Revoking` for an idempotent retry.
-            return Err(SyscallError::PermissionDenied);
-        }
-        // A concurrent revoker of the same record (owner exit, the deferred
-        // sweep on another hart, `CapRevoke`'s reclaim) may have taken the row
-        // first; it then owns the frames, and this free is already complete.
-        release_if_row_taken(
-            grant_table_lock(),
-            grant_id,
-            |grant| carries_record(&grant.domain, record),
-            || release_domain_backing(record, false),
-        );
-        return Ok(0);
+        TakenGrant::Row(row) => free_grant_row(row),
     }
-    free_grant_pages(base, n_pages);
     Ok(0)
 }
 
@@ -2492,14 +2441,14 @@ pub(super) fn grant_cache_sync_begin(
             .as_ref()
             .and_then(|entries| entries.get(&grant_id))
             .ok_or(SyscallError::InvalidInput)?;
-        if grant.owner != caller_id {
+        if grant.owner.tid != caller_id {
             return Err(SyscallError::PermissionDenied);
         }
         if len == 0 || offset > grant.size || len > grant.size.saturating_sub(offset) {
             return Err(SyscallError::InvalidInput);
         }
         let base = grant
-            .base
+            .base()
             .checked_add(offset)
             .ok_or(SyscallError::InvalidInput)?;
         let token = crate::memory::pin::begin_cache_sync(base, len, caller_id)
@@ -2556,21 +2505,20 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     }
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
-    let Some((paddr, backing)) =
-        alloc_owned_grant("GrantRegister", caller_id, &owner_space, n_pages)
-    else {
+    let Some(run) = alloc_owned_grant("GrantRegister", caller_id, &owner_space, n_pages) else {
         return Ok(0);
     };
+    let paddr = run.base();
     let mut table = reg_grant_table_lock().lock();
     let (owner_cell, owner_generation) = match live_task_binding(caller_id) {
         Some(binding) => binding,
         None => {
             drop(table);
-            release_unbound_grant(&owner_space, paddr, n_pages, backing);
+            release_unbound_grant(&owner_space, run);
             return Err(SyscallError::PermissionDenied);
         }
     };
-    let domain = owned_domain_record(&owner_space, backing, size);
+    let domain = owned_domain_record(&owner_space, paddr, size);
     if table.is_none() {
         *table = Some(BTreeMap::new());
     }
@@ -2581,15 +2529,12 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     );
     table.as_mut().unwrap().insert(
         paddr,
-        RegGrant {
-            base: paddr,
+        Region::grant(
+            RegionOwner::task(caller_id, owner_cell, owner_generation),
+            run,
             size,
-            owner: caller_id,
-            owner_cell,
-            owner_generation,
-            shared_to: None,
             domain,
-        },
+        ),
     );
     Ok(paddr)
 }

@@ -1200,8 +1200,8 @@ pub(super) fn blk_read_async(caller_id: usize, sector: u64, grant_id: usize) -> 
         let tbl = grant_table_lock().lock();
         tbl.as_ref()
             .and_then(|m| m.get(&grant_id))
-            .filter(|g| g.owner == caller_id && g.size >= 512 && g.domain.is_none())
-            .map(|g| g.base)
+            .filter(|g| g.owner.tid == caller_id && g.size >= 512 && g.domain.is_none())
+            .map(|g| g.base())
     };
     let buf_paddr = match buf_paddr {
         Some(p) => p,

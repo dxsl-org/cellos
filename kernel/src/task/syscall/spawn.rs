@@ -18,7 +18,7 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
                     return None;
                 }
                 Some(!table.values().any(|g| {
-                    g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation
+                    g.owner.cell.0 == owner.cell && g.owner.generation == owner.generation
                 }))
             })
         };
@@ -30,7 +30,7 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
                     return None;
                 }
                 Some(!table.values().any(|g| {
-                    g.owner_cell.0 == owner.cell && g.owner_generation == owner.generation
+                    g.owner.cell.0 == owner.cell && g.owner.generation == owner.generation
                 }))
             })
         };

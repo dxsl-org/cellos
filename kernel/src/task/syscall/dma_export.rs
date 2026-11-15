@@ -37,6 +37,7 @@
 
 use super::super::SCHEDULER;
 use super::SyscallError;
+use crate::memory::region::{Receiver, Region, RegionOwner};
 use crate::sync::Spinlock;
 use abi::dma_export::{ViDmaExportV1, EXPORT_DEVICE_WRITE, EXPORT_FLAGS_KNOWN, EXPORT_MAX_BYTES};
 use alloc::collections::BTreeMap;
@@ -176,16 +177,58 @@ struct Mapping {
     bdfs: Vec<u32>,
 }
 
-#[derive(Clone, Debug)]
-struct Lease {
-    owner_tid: usize,
-    owner: Incarnation,
-    holder: Incarnation,
-    base: usize,
-    len: usize,
-    flags: u16,
+/// An export's own state; the rest of a lease is its [`Region`]: the owner
+/// task and incarnation, the holder incarnation (its receiver), the device
+/// rights, the locked range of the owner's grant (borrowed, never owned) and
+/// the range-lock key it holds in the pin registry.
+#[derive(Debug)]
+struct Export {
     state: LeaseState,
     mapping: Option<Mapping>,
+}
+
+/// One export lease.
+type Lease = Region<Export>;
+
+/// No incarnation: what [`Lease::holder`] reports for a region whose receiver
+/// is not a holder, which [`Region::export`]'s callers never build. It matches
+/// no live binding, so such a lease fails closed (refused, then dropped).
+const NO_HOLDER: Incarnation = Incarnation {
+    cell: u64::MAX,
+    generation: u64::MAX,
+};
+
+// The device rights are the only known flag (`rights()` relies on it).
+const _: () = assert!(EXPORT_FLAGS_KNOWN == EXPORT_DEVICE_WRITE);
+
+impl Lease {
+    /// The owner incarnation.
+    fn owner_incarnation(&self) -> Incarnation {
+        Incarnation {
+            cell: self.owner.cell.0,
+            generation: self.owner.generation,
+        }
+    }
+
+    /// The holder incarnation.
+    fn holder(&self) -> Incarnation {
+        match self.receiver {
+            Receiver::Holder { cell, generation } => Incarnation { cell, generation },
+            _ => {
+                debug_assert!(false, "an export's receiver is its holder");
+                NO_HOLDER
+            }
+        }
+    }
+
+    /// The export flags the rights came from.
+    fn flags(&self) -> u16 {
+        if self.rights == types::GrantPerm::ReadWrite {
+            EXPORT_DEVICE_WRITE
+        } else {
+            0
+        }
+    }
 }
 
 /// Free IOVA ranges of one holder task's window region, `start → len`.
@@ -278,7 +321,7 @@ fn table_bytes(len: usize) -> usize {
     (leaf_tables + parents) * PAGE
 }
 
-fn rights(flags: u16) -> &'static str {
+fn rights_name(flags: u16) -> &'static str {
     if flags & EXPORT_DEVICE_WRITE != 0 {
         "RW"
     } else {
@@ -296,13 +339,13 @@ impl ExportTable {
 
     fn set_state(&mut self, id: u64, state: LeaseState) {
         if let Some(lease) = self.leases.get_mut(&id) {
-            if lease.state != state {
+            if lease.ext.state != state {
                 if state == LeaseState::Revoking {
                     REVOKING.fetch_add(1, Ordering::Relaxed);
                 } else {
                     REVOKING.fetch_sub(1, Ordering::Relaxed);
                 }
-                lease.state = state;
+                lease.ext.state = state;
             }
         }
     }
@@ -327,17 +370,24 @@ impl ExportTable {
             return;
         };
         LEASES.fetch_sub(1, Ordering::Relaxed);
-        if lease.state == LeaseState::Revoking {
+        if lease.ext.state == LeaseState::Revoking {
             REVOKING.fetch_sub(1, Ordering::Relaxed);
         }
-        if let Some(m) = lease.mapping.take() {
-            self.retire_mapping(platform, lease.holder, m, lease.len);
+        if let Some(m) = lease.ext.mapping.take() {
+            self.retire_mapping(platform, lease.holder(), m, lease.size);
         }
+        debug_assert!(matches!(
+            lease.pin,
+            crate::memory::region::PinState::Locked(crate::memory::pin::ReleaseKey::DmaExport {
+                export_id,
+                ..
+            }) if export_id == id
+        ));
         let released = platform.unlock_range(id);
         log::warn!(
             "[export] drop id={id} ({why}): owner range {:#x}+{} unlocked, {released} quarantined page(s) released",
-            lease.base,
-            lease.len
+            lease.base(),
+            lease.size
         );
     }
 
@@ -353,8 +403,8 @@ impl ExportTable {
         let Some(lease) = self.leases.get(&id) else {
             return Err(SyscallError::FileNotFound);
         };
-        if let Some(m) = &lease.mapping {
-            if !platform.unmap_window(m.holder_tid, m.iova, lease.len) {
+        if let Some(m) = &lease.ext.mapping {
+            if !platform.unmap_window(m.holder_tid, m.iova, lease.size) {
                 log::warn!(
                     "[export] revoke id={id} ({why}): iova={:#x} invalidation unacknowledged; lease Revoking, range locked",
                     m.iova
@@ -364,7 +414,7 @@ impl ExportTable {
             log::warn!(
                 "[export] revoke id={id} ({why}): iova={:#x} len={} cleared, IOTLB drain acknowledged",
                 m.iova,
-                lease.len
+                lease.size
             );
         }
         self.drop_lease(platform, id, why);
@@ -417,7 +467,7 @@ impl ExportTable {
             || self
                 .leases
                 .values()
-                .filter(|l| l.owner_tid == caller)
+                .filter(|l| l.owner.tid == caller)
                 .count()
                 >= MAX_LEASES_PER_OWNER
         {
@@ -432,18 +482,32 @@ impl ExportTable {
             holder_cell: provider.who.cell,
             export_id: id,
         })?;
+        let rights = if flags & EXPORT_DEVICE_WRITE != 0 {
+            types::GrantPerm::ReadWrite
+        } else {
+            types::GrantPerm::ReadOnly
+        };
         self.leases.insert(
             id,
-            Lease {
-                owner_tid: caller,
-                owner,
-                holder: provider.who,
-                base: va,
+            Region::export(
+                RegionOwner::task(caller, types::CellId(owner.cell), owner.generation),
+                va,
                 len,
-                flags,
-                state: LeaseState::Live,
-                mapping: None,
-            },
+                rights,
+                Receiver::Holder {
+                    cell: provider.who.cell,
+                    generation: provider.who.generation,
+                },
+                crate::memory::pin::ReleaseKey::DmaExport {
+                    owner: caller,
+                    holder_cell: provider.who.cell,
+                    export_id: id,
+                },
+                Export {
+                    state: LeaseState::Live,
+                    mapping: None,
+                },
+            ),
         );
         LEASES.fetch_add(1, Ordering::Relaxed);
         log::warn!(
@@ -452,7 +516,7 @@ impl ExportTable {
             owner.generation,
             provider.who.cell,
             provider.who.generation,
-            rights(flags)
+            rights_name(flags)
         );
         Ok(id)
     }
@@ -476,35 +540,37 @@ impl ExportTable {
             .binding(caller)
             .ok_or(SyscallError::PermissionDenied)?;
         let lease = self.leases.get(&id).ok_or(SyscallError::FileNotFound)?;
-        if lease.holder != holder {
+        if lease.holder() != holder {
             log::warn!("[export] map id={id} refused: task {caller} is not the lease holder");
             return Err(SyscallError::PermissionDenied);
         }
-        if lease.state != LeaseState::Live {
+        if lease.ext.state != LeaseState::Live {
             return Err(SyscallError::FileNotFound);
         }
         if !platform.translating(bdf) {
             return Err(SyscallError::NotSupported);
         }
-        let writable = lease.flags & EXPORT_DEVICE_WRITE != 0;
+        let flags = lease.flags();
+        let writable = flags & EXPORT_DEVICE_WRITE != 0;
+        let owner = lease.owner_incarnation();
         let record = |iova| {
             ViDmaExportV1::new(
-                lease.flags,
+                flags,
                 id,
-                lease.owner.cell,
-                lease.owner.generation,
+                owner.cell,
+                owner.generation,
                 iova,
-                lease.len as u64,
+                lease.size as u64,
             )
         };
-        if let Some(m) = &lease.mapping {
+        if let Some(m) = &lease.ext.mapping {
             if m.holder_tid != caller {
                 return Err(SyscallError::PermissionDenied);
             }
             if !m.confirmed {
                 return Err(SyscallError::Unknown);
             }
-            let (iova, len, base, record) = (m.iova, lease.len, lease.base, record(m.iova));
+            let (iova, len, base, record) = (m.iova, lease.size, lease.base(), record(m.iova));
             if m.bdfs.contains(&bdf) {
                 return Ok(record);
             }
@@ -518,7 +584,11 @@ impl ExportTable {
                 writable,
             });
             let lease = self.leases.get_mut(&id).ok_or(SyscallError::FileNotFound)?;
-            let m = lease.mapping.as_mut().ok_or(SyscallError::FileNotFound)?;
+            let m = lease
+                .ext
+                .mapping
+                .as_mut()
+                .ok_or(SyscallError::FileNotFound)?;
             return match outcome {
                 MapOutcome::Mapped => {
                     m.bdfs.push(bdf);
@@ -533,7 +603,7 @@ impl ExportTable {
             };
         }
 
-        let (len, base, flags) = (lease.len, lease.base, lease.flags);
+        let (len, base) = (lease.size, lease.base());
         let quota_bytes = table_bytes(len);
         let iova = self
             .windows
@@ -565,7 +635,7 @@ impl ExportTable {
         }
         let confirmed = outcome == MapOutcome::Mapped;
         let lease = self.leases.get_mut(&id).ok_or(SyscallError::FileNotFound)?;
-        lease.mapping = Some(Mapping {
+        lease.ext.mapping = Some(Mapping {
             holder_tid: caller,
             iova,
             quota_bytes,
@@ -584,13 +654,13 @@ impl ExportTable {
             (bdf >> 8) & 0xFF,
             (bdf >> 3) & 0x1F,
             bdf & 7,
-            rights(flags)
+            rights_name(flags)
         );
         Ok(ViDmaExportV1::new(
             flags,
             id,
-            lease.owner.cell,
-            lease.owner.generation,
+            owner.cell,
+            owner.generation,
             iova,
             len as u64,
         ))
@@ -605,9 +675,9 @@ impl ExportTable {
     ) -> Result<(), SyscallError> {
         let who = platform.binding(caller).ok_or(SyscallError::FileNotFound)?;
         let lease = self.leases.get(&id).ok_or(SyscallError::FileNotFound)?;
-        let why = if lease.owner == who {
+        let why = if lease.owner_incarnation() == who {
             "owner"
-        } else if lease.holder == who {
+        } else if lease.holder() == who {
             "holder"
         } else {
             // No existence oracle for third parties.
@@ -621,7 +691,7 @@ impl ExportTable {
         let ids: Vec<u64> = self
             .leases
             .iter()
-            .filter(|(_, l)| l.owner_tid == tid)
+            .filter(|(_, l)| l.owner.tid == tid)
             .map(|(&id, _)| id)
             .collect();
         for id in ids {
@@ -635,18 +705,18 @@ impl ExportTable {
         let ids: Vec<u64> = self
             .leases
             .iter()
-            .filter(|(_, l)| l.mapping.as_ref().is_some_and(|m| m.holder_tid == tid))
+            .filter(|(_, l)| l.ext.mapping.as_ref().is_some_and(|m| m.holder_tid == tid))
             .map(|(&id, _)| id)
             .collect();
         for id in ids {
             let Some(lease) = self.leases.get_mut(&id) else {
                 continue;
             };
-            let (holder, len) = (lease.holder, lease.len);
-            if let Some(m) = lease.mapping.take() {
+            let (holder, len) = (lease.holder(), lease.size);
+            if let Some(m) = lease.ext.mapping.take() {
                 platform.release_quota(holder.cell, m.quota_bytes);
             }
-            let revoking = lease.state == LeaseState::Revoking;
+            let revoking = lease.ext.state == LeaseState::Revoking;
             if revoking || !platform.incarnation_live(holder) {
                 self.drop_lease(platform, id, "holder domain revoked");
             } else {
@@ -663,7 +733,7 @@ impl ExportTable {
         let ids: Vec<u64> = self
             .leases
             .iter()
-            .filter(|(_, l)| l.mapping.is_none() && !platform.incarnation_live(l.holder))
+            .filter(|(_, l)| l.ext.mapping.is_none() && !platform.incarnation_live(l.holder()))
             .map(|(&id, _)| id)
             .collect();
         for id in ids {
@@ -676,7 +746,7 @@ impl ExportTable {
         let ids: Vec<u64> = self
             .leases
             .iter()
-            .filter(|(_, l)| l.state == LeaseState::Revoking)
+            .filter(|(_, l)| l.ext.state == LeaseState::Revoking)
             .map(|(&id, _)| id)
             .collect();
         for id in ids {
@@ -688,7 +758,7 @@ impl ExportTable {
     fn state(&self, id: u64) -> Option<(LeaseState, Option<u64>)> {
         self.leases
             .get(&id)
-            .map(|l| (l.state, l.mapping.as_ref().map(|m| m.iova)))
+            .map(|l| (l.ext.state, l.ext.mapping.as_ref().map(|m| m.iova)))
     }
 }
 
@@ -804,7 +874,7 @@ fn lock_exported_range(req: &RangeLock) -> Result<(), SyscallError> {
         let owned = grants.as_ref().is_some_and(|grants| {
             grants
                 .values()
-                .any(|g| super::page_grant_authorizes_dma(g, req.tid, binding, req.base, req.len))
+                .any(|g| super::grant_authorizes_dma(g, req.tid, binding, req.base, req.len))
         });
         if owned {
             return lock();
@@ -818,7 +888,7 @@ fn lock_exported_range(req: &RangeLock) -> Result<(), SyscallError> {
         let owned = grants.as_ref().is_some_and(|grants| {
             grants
                 .values()
-                .any(|g| super::reg_grant_authorizes_dma(g, req.tid, binding, req.base, req.len))
+                .any(|g| super::grant_authorizes_dma(g, req.tid, binding, req.base, req.len))
         });
         if owned {
             return lock();

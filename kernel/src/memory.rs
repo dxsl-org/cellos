@@ -27,6 +27,9 @@ pub mod paging;
 /// Regions an in-flight asynchronous operation still reads or writes, and the
 /// quarantine that withholds their frames when the owner dies mid-operation.
 pub mod pin;
+/// The one record (owner, rights, receiver, pin state, frames) behind the grant,
+/// SHM and DMA export tables.
+pub mod region;
 pub mod rt_heap;
 pub mod stage2;
 // Uncalled allocator test runner; never compiled into a release kernel.
