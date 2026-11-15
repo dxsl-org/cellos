@@ -252,6 +252,13 @@ pub fn prepare_elf_task(
     kstack.test_hook_prime_watermark();
     crate::loader::atomic_checkpoint("AP-04")?;
     let ustack = super::stack::Stack::new_user(pages).map_err(|_| ViError::OutOfMemory)?;
+    // Frames come back from the allocator holding their last owner's bytes, and
+    // the initial-stack writer fills only the top of the range: zero all of it so
+    // a new cell can never read another cell's data off its own stack.
+    // SAFETY: the freshly allocated stack's usable range is exclusively owned.
+    unsafe {
+        core::ptr::write_bytes(ustack.usable_start() as *mut u8, 0, ustack.usable_bytes());
+    }
     #[cfg(feature = "test-hooks")]
     ustack.test_hook_prime_watermark();
     let entry = header.entry.wrapping_add(load_base);
