@@ -818,19 +818,18 @@ impl Drop for Task {
                     #[cfg(feature = "p01-trace")]
                     {
                         let owner = crate::p01_resources::owner(self);
-                        // Unlike the existing runtime leak counter, include guard frames.
-                        crate::p01_retained::begin(
-                            Some(owner),
-                            kernel_stack.base,
-                            kernel_stack.pages + kernel_stack.guard_pages,
-                            crate::p01_retained::Reason::TaskStackForget,
-                        );
-                        crate::p01_retained::begin(
-                            Some(owner),
-                            user_stack.base,
-                            user_stack.pages + user_stack.guard_pages,
-                            crate::p01_retained::Reason::TaskStackForget,
-                        );
+                        // Unlike the existing runtime leak counter, include a
+                        // kernel stack's guard frames: each run, by its PA.
+                        for stack in [&kernel_stack, &user_stack] {
+                            if let Some((base, frames)) = stack.frames() {
+                                crate::p01_retained::begin(
+                                    Some(owner),
+                                    base,
+                                    frames,
+                                    crate::p01_retained::Reason::TaskStackForget,
+                                );
+                            }
+                        }
                         crate::p01_resources::retained(owner, 1);
                         crate::p01_resources::finish(kernel_stack.p01_obligation.take(), 5);
                         crate::p01_resources::finish(user_stack.p01_obligation.take(), 5);

@@ -326,7 +326,8 @@ fi
 # Verify core test-hooks markers
 REQUIRED_MARKERS=(
     "vfs-lifetime self-test PASS"
-    "stack-probe self-test PASS"
+    "stack-probe self-test PASS (two guards, overflow target unmapped, watermark, user stack off identity)"
+    "[selftest] STACK-ARENA: PASS"
     "[selftest] FREE-FRAME-NX: PASS"
     "stack-sizing policy self-test PASS"
     "admission-core self-test PASS"

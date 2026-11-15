@@ -727,9 +727,12 @@ pub(super) fn x86_silent_cpu_fixture_primary() {
     let grant = crate::task::syscall::test_alloc_grant_pages(X86_SILENT_GRANT_PAGES)
         .unwrap_or_else(|| fail("grant run"));
 
+    // Physical ranges: a user stack's VA is an arena slot, not its frames.
     let mut data: alloc::vec::Vec<(usize, usize)> = alloc::vec![
-        (user.base, user.allocated_bytes() / PAGE_SIZE),
-        (kernel.base, kernel.allocated_bytes() / PAGE_SIZE),
+        user.frames().unwrap_or_else(|| fail("user stack frames")),
+        kernel
+            .frames()
+            .unwrap_or_else(|| fail("kernel stack frames")),
         (grant, X86_SILENT_GRANT_PAGES),
     ];
     data.extend(segments.pages().iter().map(|&(_, frame)| (frame, 1)));

@@ -41,10 +41,12 @@ fn register_quota(memory: usize) {
     );
 }
 
-/// Bytes one thread occupies: kernel stack plus user stack, each with guards.
+/// Bytes one thread occupies: a kernel stack with its guard frames, plus a user
+/// stack, whose guards are arena VA with no frame.
 fn stack_charge_bytes() -> usize {
-    2 * (crate::task::stack_pages_for("thread") + crate::task::stack::STACK_GUARD_PAGES)
-        * crate::memory::paging::PAGE_SIZE
+    let pages = crate::task::stack_pages_for("thread");
+    super::stack::Stack::kernel_reserved_bytes(pages)
+        + super::stack::Stack::user_reserved_bytes(pages)
 }
 
 fn insert_parent() {
@@ -224,4 +226,89 @@ pub fn self_test() -> bool {
         log::error!("[selftest] THREAD-QUOTA: FAIL");
     }
     ok
+}
+
+/// Thread spawn/exit rounds in [`stack_arena_self_test`].
+#[cfg(all(feature = "test-hooks", cellos_wide))]
+const ARENA_ROUNDS: usize = 512;
+
+/// Returns true iff every thread's user stack maps from the stack arena (never
+/// at its physical address) and `ARENA_ROUNDS` spawn/exit/reap rounds leave the
+/// arena exactly as they found it: the same slots owned, and the bump cursor
+/// not advanced by more than the one slot a round holds. Logs
+/// `[selftest] STACK-ARENA`. Leaves `next_task_id` as found, as [`self_test`].
+#[cfg(all(feature = "test-hooks", cellos_wide))]
+pub fn stack_arena_self_test() -> bool {
+    use crate::loader::va_alloc;
+
+    let owned = |(bump, free): &(usize, alloc::vec::Vec<u64>)| {
+        bump - free
+            .iter()
+            .map(|word| word.count_ones() as usize)
+            .sum::<usize>()
+    };
+    let saved_next_tid = super::SCHEDULER.lock().as_ref().map(|s| s.next_task_id);
+    register_quota(cell_quota::DEFAULT_QUOTA_BYTES);
+    insert_parent();
+
+    let before = va_alloc::stack_snapshot();
+    let mut failure = None;
+    for round in 0..ARENA_ROUNDS {
+        let tid = match handle_syscall(
+            PARENT_TID,
+            Syscall::Spawn {
+                entry: 0x1000,
+                arg: 0,
+            },
+        ) {
+            Ok(tid) if tid != 0 => tid,
+            other => {
+                failure = Some(alloc::format!("round {round}: spawn returned {other:?}"));
+                break;
+            }
+        };
+        let placed = super::SCHEDULER.lock().as_mut().and_then(|sched| {
+            let stack = sched.tasks.get(&tid)?.user_stack.as_ref()?;
+            let in_arena = va_alloc::in_stack_arena(stack.base);
+            let off_identity = stack.usable_phys() != Some(stack.usable_start());
+            sched.exit_task(tid, 0);
+            Some(in_arena && off_identity)
+        });
+        reap();
+        if placed != Some(true) {
+            failure = Some(alloc::format!(
+                "round {round}: user stack placed {placed:?}"
+            ));
+            break;
+        }
+    }
+    let after = va_alloc::stack_snapshot();
+
+    remove(PARENT_TID);
+    cell_quota::deregister(CellId(QUOTA_CELL));
+    if let (Some(sched), Some(n)) = (super::SCHEDULER.lock().as_mut(), saved_next_tid) {
+        sched.next_task_id = n;
+    }
+
+    if failure.is_none() && (owned(&after) != owned(&before) || after.0 > before.0 + 1) {
+        failure = Some(alloc::format!(
+            "arena owned {} -> {}, bump {} -> {}",
+            owned(&before),
+            owned(&after),
+            before.0,
+            after.0
+        ));
+    }
+    match failure {
+        None => {
+            log::info!(
+                "[selftest] STACK-ARENA: PASS ({ARENA_ROUNDS} thread spawn/exit rounds, no slot leaked)"
+            );
+            true
+        }
+        Some(why) => {
+            log::error!("[selftest] STACK-ARENA: FAIL — {why}");
+            false
+        }
+    }
 }

@@ -1063,22 +1063,11 @@ impl Scheduler {
         let stack_top = kstack.top;
         let stack_base = kstack.base;
 
-        // Zero the usable stack pages. Skip every guard frame at `stack_base`;
-        // `Stack::usable_start` is derived from the allocation's actual guard count.
-        //
-        // The length comes from the Stack we were handed, never from a constant:
-        // with a constant, handing in a smaller stack writes past its end, and in
-        // a single address space that lands in another cell's frames with no fault
-        // and no log.
-        // SAFETY: we own these freshly-allocated, mapped frames exclusively, and
-        // the range is exactly the usable extent this Stack reports.
-        unsafe {
-            core::ptr::write_bytes(
-                kstack.usable_start() as *mut u8,
-                0,
-                kstack.pages * crate::memory::paging::PAGE_SIZE,
-            );
-        }
+        // Zero the usable stack pages through their kernel alias
+        // (`Stack::zero_usable`): exactly the usable extent this Stack
+        // reports, never a constant, so a smaller stack handed in is never
+        // overrun into another cell's frames.
+        kstack.zero_usable();
         #[cfg(feature = "test-hooks")]
         kstack.test_hook_prime_watermark();
         #[cfg(feature = "test-hooks")]
@@ -1255,20 +1244,21 @@ impl Scheduler {
         // frames return to the allocator, so a refusal leaves nothing charged
         // and nothing allocated.
         let pages = crate::task::stack_pages_for(name);
-        let stack_bytes = crate::task::stack::Stack::reserved_bytes(pages);
+        let kernel_bytes = crate::task::stack::Stack::kernel_reserved_bytes(pages);
+        let user_bytes = crate::task::stack::Stack::user_reserved_bytes(pages);
         let charge = crate::memory::cell_quota::Charge::of(&task);
-        let take = || {
+        let take = |bytes| {
             crate::memory::cell_quota::Reservation::take(
                 charge,
                 crate::memory::cell_quota::Account::Memory,
-                stack_bytes,
+                bytes,
             )
         };
-        let (Ok(kcharge), Ok(ucharge)) = (take(), take()) else {
+        let (Ok(kcharge), Ok(ucharge)) = (take(kernel_bytes), take(user_bytes)) else {
             log::warn!(
                 "[sched] cell {:?} cannot afford thread stacks ({} bytes, {} in use) — refusing spawn_thread",
                 cell_id,
-                2 * stack_bytes,
+                kernel_bytes + user_bytes,
                 crate::memory::cell_quota::in_use(cell_id)
             );
             return Err(ViError::OutOfMemory);
@@ -1305,18 +1295,16 @@ impl Scheduler {
                         .map(|task| crate::p01_resources::owner(task))
                         .or_else(|| crate::p01_resources::owner_for_tid(parent_id))
                     {
-                        crate::p01_retained::begin(
-                            Some(owner),
-                            kstack.base,
-                            kstack.pages + kstack.guard_pages,
-                            crate::p01_retained::Reason::ThreadStackForget,
-                        );
-                        crate::p01_retained::begin(
-                            Some(owner),
-                            ustack.base,
-                            ustack.pages + ustack.guard_pages,
-                            crate::p01_retained::Reason::ThreadStackForget,
-                        );
+                        for stack in [&kstack, &ustack] {
+                            if let Some((base, frames)) = stack.frames() {
+                                crate::p01_retained::begin(
+                                    Some(owner),
+                                    base,
+                                    frames,
+                                    crate::p01_retained::Reason::ThreadStackForget,
+                                );
+                            }
+                        }
                         let bytes = (kstack.allocated_bytes() + ustack.allocated_bytes()) as u64;
                         let token = crate::p01_resources::obligation(owner, 1, bytes);
                         crate::p01_resources::finish(token, 5);
@@ -1342,45 +1330,34 @@ impl Scheduler {
 
         let user_stack_top = ustack.top;
         let stack_base = kstack.base;
-        let kstack_pages = kstack.pages;
-        let ustack_pages = ustack.pages;
 
-        // SAFETY: We own the allocated stack memory exclusively. The pointer is valid.
-        // Setting up task context with valid register values for thread initialization.
-        unsafe {
-            // Skip every guard frame and zero exactly the usable extent this
-            // Stack reports, never a global constant.
-            core::ptr::write_bytes(
-                kstack.usable_start() as *mut u8,
-                0,
-                kstack_pages * crate::memory::paging::PAGE_SIZE,
-            );
-            core::ptr::write_bytes(
-                ustack.usable_start() as *mut u8,
-                0,
-                ustack_pages * crate::memory::paging::PAGE_SIZE,
-            );
-            #[cfg(feature = "test-hooks")]
-            kstack.test_hook_prime_watermark();
-            #[cfg(feature = "test-hooks")]
-            ustack.test_hook_prime_watermark();
+        // Through the frames' kernel alias, never the user stack's USER VA.
+        kstack.zero_usable();
+        ustack.zero_usable();
 
-            task.kernel_stack = Some(kstack);
-            task.user_stack = Some(ustack);
-            crate::task::prime_user_mode_entry(&mut task, entry, arg);
-            crate::task::tls::inherit_from(&mut task, parent_tls);
+        #[cfg(feature = "test-hooks")]
+        kstack.test_hook_prime_watermark();
+        #[cfg(feature = "test-hooks")]
+        ustack.test_hook_prime_watermark();
 
-            info!(
-                "Thread '{}' (ID {}): KStack 0x{:X}-0x{:X}, UStackTop 0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
-                name,
-                id,
-                stack_base,
-                task.kernel_stack.as_ref().map(|stack| stack.top).unwrap_or(0),
-                user_stack_top,
-                entry,
-                arg
-            );
-        }
+        task.kernel_stack = Some(kstack);
+        task.user_stack = Some(ustack);
+        crate::task::prime_user_mode_entry(&mut task, entry, arg);
+        crate::task::tls::inherit_from(&mut task, parent_tls);
+
+        info!(
+            "Thread '{}' (ID {}): KStack 0x{:X}-0x{:X}, UStackTop 0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
+            name,
+            id,
+            stack_base,
+            task.kernel_stack
+                .as_ref()
+                .map(|stack| stack.top)
+                .unwrap_or(0),
+            user_stack_top,
+            entry,
+            arg
+        );
 
         #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::task_backing(&task);

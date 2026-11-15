@@ -2527,6 +2527,17 @@ rationale = "Atomic bump counter and AtomicU64 free bitmap allocate disjoint PIE
 review = "kernel/src/loader/va_alloc.rs:SLOTS"
 
 [[global]]
+key = "kernel::loader::va_alloc::STACK_ARENA @cfg(cellos_wide)"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::loader::va_alloc user-stack arena slot bitmap allocator"
+contexts = ["boot", "normal", "irq"]
+seal = "none: allocated by user-stack allocation, freed by the stack run's VaHold release"
+retirement = "never: lives for the whole run"
+rationale = "Atomic bump counter and AtomicU64 free bitmap hand out disjoint user-stack VA slots without locking; a slot returns only after its run's flush is confirmed, including from the hart-0 reaper in the timer interrupt"
+review = "kernel/src/loader/va_alloc.rs:STACK_ARENA; kernel/src/task/stack.rs:release_stack_slot"
+
+[[global]]
 key = "kernel::cell::service_registry::OWNERS"
 lifetime = "global"
 mutation = "spinlock"

@@ -63,3 +63,36 @@ fn slot_containing_maps_into_the_region_only() {
     assert_eq!(slot_containing(slot(2) + 0x1234), Some(slot(2)));
     assert_eq!(slot_containing(slot(MAX_SLOTS)), None);
 }
+
+#[test]
+fn the_stack_arena_lies_above_the_cell_slots_and_recycles_its_slots() {
+    let stack_pages = crate::task::STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES;
+    assert_eq!(STACK_VA_START, CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE);
+    assert!(STACK_VA_STRIDE.is_power_of_two());
+    assert!(stack_pages * crate::memory::paging::PAGE_SIZE <= STACK_VA_STRIDE);
+
+    let arena: SlotAllocator<{ STACK_SLOTS / 64 }> = SlotAllocator::over(STACKS);
+    let first = arena.alloc().expect("first stack slot");
+    let second = arena.alloc().expect("second stack slot");
+    assert_eq!(
+        (first, second),
+        (STACK_VA_START, STACK_VA_START + STACK_VA_STRIDE)
+    );
+    assert!(
+        slot_containing(first).is_none(),
+        "a stack slot is no cell slot"
+    );
+    assert_eq!(arena.owned(), 2);
+
+    // A returned slot is the next one handed out, and nothing leaks.
+    arena.free(first);
+    assert_eq!(arena.owned(), 1);
+    assert_eq!(arena.alloc(), Some(first));
+    arena.free(second);
+    arena.free(first);
+    assert_eq!(arena.owned(), 0);
+    // An address inside a slot, or past the arena, is not a slot base.
+    arena.free(first + crate::memory::paging::PAGE_SIZE);
+    arena.free(STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE);
+    assert_eq!(arena.owned(), 0);
+}

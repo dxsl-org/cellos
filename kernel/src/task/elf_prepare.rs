@@ -247,21 +247,16 @@ pub fn prepare_elf_task(
 
     let pages = super::stack_pages_for(name);
     let kstack = super::stack::Stack::new_kernel(pages).map_err(|_| ViError::OutOfMemory)?;
-    // SAFETY: the freshly allocated stack's usable range is exclusively owned.
-    unsafe {
-        core::ptr::write_bytes(kstack.usable_start() as *mut u8, 0, kstack.usable_bytes());
-    }
+    kstack.zero_usable();
     #[cfg(feature = "test-hooks")]
     kstack.test_hook_prime_watermark();
     crate::loader::atomic_checkpoint("AP-04")?;
     let ustack = super::stack::Stack::new_user(pages).map_err(|_| ViError::OutOfMemory)?;
     // Frames come back from the allocator holding their last owner's bytes, and
     // the initial-stack writer fills only the top of the range: zero all of it so
-    // a new cell can never read another cell's data off its own stack.
-    // SAFETY: the freshly allocated stack's usable range is exclusively owned.
-    unsafe {
-        core::ptr::write_bytes(ustack.usable_start() as *mut u8, 0, ustack.usable_bytes());
-    }
+    // a new cell can never read another cell's data off its own stack. Through
+    // the frames' kernel alias, never the user stack's USER VA (census G12).
+    ustack.zero_usable();
     #[cfg(feature = "test-hooks")]
     ustack.test_hook_prime_watermark();
     let entry = header.entry.wrapping_add(load_base);

@@ -290,6 +290,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-quota self-test FAIL");
         }
+        // Logs its own `[selftest] STACK-ARENA` verdict.
+        #[cfg(feature = "test-hooks")]
+        let _ = task::thread_quota_selftest::stack_arena_self_test();
         #[cfg(feature = "test-hooks")]
         if task::task_id_selftest::self_test() {
             log_info("task-id-reuse self-test PASS (monotonic across spawn/exit)");
@@ -332,7 +335,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         #[cfg(feature = "test-hooks")]
         if task::stack::stack_probe_self_test() {
             log_info(
-                "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
+                "stack-probe self-test PASS (two guards, overflow target unmapped, watermark, user stack off identity)",
             );
         } else {
             log_info("stack-probe self-test FAIL");

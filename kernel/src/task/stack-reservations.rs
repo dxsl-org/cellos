@@ -1,16 +1,19 @@
 //! Kernel-owned registry of stack VA runs, guard pages included.
 //!
-//! Stacks are identity-mapped physical runs whose bottom guard frames are
-//! deliberately *unmapped*. "Not currently mapped" is therefore no proof that
-//! a VA is free: a cell image placed over a guard page would turn the next
-//! overflow of that stack (kernel or user) into a silent write to an
-//! attacker-readable frame instead of a fault. Every live stack's whole run
-//! `[base, top)` is recorded here from allocation until its frames are back on
-//! the allocator, and the ELF loader refuses any page that overlaps one.
+//! A stack's bottom guard pages are deliberately *unmapped*: a kernel stack's
+//! guard frames at their identity VA, a user stack's guard VA in its arena
+//! slot. "Not currently mapped" is therefore no proof that a VA is free: a cell
+//! image placed over a guard page would turn the next overflow of that stack
+//! into a silent write to an attacker-readable frame instead of a fault. Every
+//! live stack's whole range `[base, top)` is recorded here from allocation
+//! until its frames are back on the allocator, and the ELF loader refuses any
+//! page that overlaps one. (The loader never places an image in the stack
+//! arena, which lies above the cell slots; the record keeps the one collision
+//! view for both placements.)
 //!
-//! The whole run is recorded, not only the guards, so the teardown window —
-//! frames unpublished but not yet restored to the identity map — is covered
-//! too.
+//! The whole range is recorded, not only the guards, so the teardown window —
+//! frames unpublished but not yet freed (or restored to the identity map) — is
+//! covered too.
 //!
 //! Lock order: the registry lock is a leaf. It is taken under
 //! `FRAME_ALLOCATOR` (stack allocation/release, ELF admission) and takes

@@ -67,24 +67,25 @@ impl Drop for SumAccessGuard {
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
-/// Hand a stack run to `batch`: unmap each page (recording the shared-root
-/// invalidation), detach the tables only the run needed where no alias is
-/// restored (x86_64), and retire the run, which the batch frees only once that
-/// invalidation is confirmed — restoring its kernel alias first where the run
-/// says so.
+/// Hand a stack run mapped at `va` to `batch`: unmap each of its pages
+/// (recording the shared-root invalidation), detach the tables only the run
+/// needed where no alias is restored (x86_64, and every user stack, whose
+/// frames keep their kernel alias), and retire the run, which the batch frees
+/// only once that invalidation is confirmed — restoring its kernel alias first
+/// where the run says so.
 ///
-/// `reserved`: the run is in `STACK_RESERVATIONS`, which keeps its VAs from the
-/// loader until the frames are free (removed in the same allocator hold).
+/// `hold`: the stack's VA, released only with the frames (or after them, once
+/// a quarantined run is freed): its `STACK_RESERVATIONS` entry, and for a user
+/// stack its arena slot. `None` before either was taken.
 /// Takes only `KERNEL_ROOT` (a leaf); the caller may hold `FRAME_ALLOCATOR`.
-fn retire_run(batch: &mut Batch, mut run: FrameRun, reserved: bool) {
-    let (base, total_pages) = (run.base(), run.pages());
-    for i in 0..total_pages {
-        let _ = paging::unmap_page(batch, base + i * PAGE_SIZE);
+fn retire_run(batch: &mut Batch, mut run: FrameRun, va: VAddr, hold: Option<VaHold>) {
+    let pages = run.pages();
+    for i in 0..pages {
+        let _ = paging::unmap_page(batch, va + i * PAGE_SIZE);
     }
     if run.alias() == KernelAlias::Intact {
-        for i in 0..total_pages {
-            let page = base + i * PAGE_SIZE;
-            paging::prune_empty_tables(page).retire_into(batch);
+        for i in 0..pages {
+            paging::prune_empty_tables(va + i * PAGE_SIZE).retire_into(batch);
         }
     }
     // Every leaf of the run is gone from the kernel root. A run in any other
@@ -92,30 +93,34 @@ fn retire_run(batch: &mut Batch, mut run: FrameRun, reserved: bool) {
     // never free it.
     let unpublished = run.unpublish();
     debug_assert!(unpublished.is_ok(), "stack run retired twice");
-    batch.retire(if reserved {
-        run.with_va_hold(VaHold {
-            release: release_stack_reservation,
-            start: base,
-            end: base + total_pages * PAGE_SIZE,
-        })
-    } else {
-        run
+    batch.retire(match hold {
+        Some(hold) => run.with_va_hold(hold),
+        None => run,
     });
 }
 
-/// [`VaHold`] release for a stack run: only now are its guard VAs
+/// [`VaHold`] release for a kernel stack's run: only now are its guard VAs
 /// identity-mapped again, so the loader's collision check takes over.
 fn release_stack_reservation(start: VAddr, end: VAddr) {
     STACK_RESERVATIONS.remove(start, end);
 }
 
-/// Retire `pages` identity-mapped frames at `base` from the shared root before
-/// they return to the allocator.
+/// [`VaHold`] release for a user stack: nothing translates any page of its
+/// arena slot on any hart, so the slot may be handed out again.
+fn release_stack_slot(start: VAddr, end: VAddr) {
+    STACK_RESERVATIONS.remove(start, end);
+    crate::loader::va_alloc::free_stack_va(start);
+}
+
+/// Retire `pages` user-published pages at VA `base` (a stack, or a grant at its
+/// physical address) from the shared root before their frames return to the
+/// allocator.
 ///
 /// A Sas user copy that probed one of these pages earlier must not land after
-/// the frame is re-mapped kernel-RW: the kernel writes that mapping without
-/// faulting, so the copy would hit whatever the frame becomes next (page
-/// table, another cell). Every PTE is cleared here and recorded in `batch`,
+/// its frame is freed (and, where the page was identity-mapped, re-mapped
+/// kernel-RW, which the kernel writes without faulting): the copy would hit
+/// whatever the frame becomes next (page table, another cell). Every PTE is
+/// cleared here and recorded in `batch`,
 /// whose finish invalidates every hart and then waits out any Sas commit
 /// window still open (see `user_copy::sas_lease`) before it frees a run. The
 /// frames stay UNMAPPED; the caller retires them into the same batch.
@@ -136,6 +141,14 @@ pub(crate) fn unpublish_user_frames(batch: &mut Batch, base: VAddr, pages: usize
 
 /// Represents an allocated Stack.
 /// Implements Drop to automatically free pages.
+///
+/// Placement: a kernel stack is one contiguous run identity-mapped at its
+/// physical address (VA == PA), guard frames included and unmapped. A user
+/// stack is a contiguous run of only its usable frames, mapped USER RW at
+/// `base + guard_pages * PAGE_SIZE` inside a stack-arena slot
+/// (`loader::va_alloc::alloc_stack_va`); its guards are VA with neither a leaf
+/// nor a frame behind them, and its frames keep their kernel alias. Either way
+/// the run backs the top `run.pages()` pages of `[base, top)`.
 #[derive(Debug)]
 pub struct Stack {
     /// Base address (lowest address) of the allocated range.
@@ -147,9 +160,11 @@ pub struct Stack {
     pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
-    /// The frames, guards included; `None` only once retired (or for a host
-    /// test's stack, which owns no frames).
+    /// The frames (a kernel stack's guards included); `None` only once retired
+    /// (or for a host test's stack, which owns no frames).
     run: Option<FrameRun>,
+    /// `base` is a stack-arena slot (a user stack), returned with the frames.
+    in_arena: bool,
     #[cfg(feature = "p01-trace")]
     pub(crate) p01_obligation: Option<crate::p01_resources::Obligation>,
     /// Test-only lifetime registration for a kernel stack selected by a
@@ -175,33 +190,41 @@ impl Stack {
         Self::allocate(pages, STACK_GUARD_PAGES, false, Charge::KERNEL.into())
     }
 
-    /// Allocate a new User Stack of `pages` usable pages plus the configured
-    /// bottom guards, owned by the kernel and billed to nobody. Usable pages
-    /// are mapped USER RW.
+    /// Allocate a new User Stack of `pages` usable pages below `STACK_GUARD_PAGES`
+    /// unmapped guard pages, in a stack-arena slot (see [`Stack`]), owned by the
+    /// kernel and billed to nobody. Usable pages are mapped USER RW.
     ///
     /// # Errors
-    /// Same as [`Self::new_kernel`].
+    /// Same as [`Self::new_kernel`], plus `OutOfMemory` when every arena slot
+    /// is held or the stack does not fit one.
     pub fn new_user(pages: usize) -> Result<Self, ViError> {
         Self::allocate(pages, STACK_GUARD_PAGES, true, Charge::KERNEL.into())
     }
 
     /// [`Self::new_kernel`] billed with `charge`, which covers exactly
-    /// [`Self::reserved_bytes`]`(pages)` and was taken before this call: the
-    /// stack refunds it when its frames are freed, and a failed allocation
+    /// [`Self::kernel_reserved_bytes`]`(pages)` and was taken before this call:
+    /// the stack refunds it when its frames are freed, and a failed allocation
     /// refunds it at once.
     pub(crate) fn new_kernel_billed(pages: usize, charge: Reservation) -> Result<Self, ViError> {
         Self::allocate(pages, STACK_GUARD_PAGES, false, charge.into())
     }
 
-    /// [`Self::new_user`] billed as [`Self::new_kernel_billed`].
+    /// [`Self::new_user`] billed as [`Self::new_kernel_billed`], with
+    /// [`Self::user_reserved_bytes`]`(pages)`.
     pub(crate) fn new_user_billed(pages: usize, charge: Reservation) -> Result<Self, ViError> {
         Self::allocate(pages, STACK_GUARD_PAGES, true, charge.into())
     }
 
-    /// Bytes of frames a stack of `pages` usable pages takes, guards included:
-    /// what a billed stack's reservation must cover.
-    pub const fn reserved_bytes(pages: usize) -> usize {
+    /// Bytes of frames a kernel stack of `pages` usable pages takes, guard
+    /// frames included: what a billed kernel stack's reservation must cover.
+    pub const fn kernel_reserved_bytes(pages: usize) -> usize {
         (pages + STACK_GUARD_PAGES) * PAGE_SIZE
+    }
+
+    /// Bytes of frames a user stack of `pages` usable pages takes: its guards
+    /// have no frame.
+    pub const fn user_reserved_bytes(pages: usize) -> usize {
+        pages * PAGE_SIZE
     }
 
     /// Internal allocation logic.
@@ -227,15 +250,18 @@ impl Stack {
         // is freed): the batch finishes after the frame allocator is released.
         let mut batch = Batch::new();
         let allocated = crate::memory::frame::with(|allocator| {
-            Self::allocate_in(
-                allocator,
-                &mut batch,
-                pages,
-                guard_pages,
-                total_pages,
-                user_mode,
-                bill,
-            )
+            if user_mode {
+                Self::allocate_user_in(allocator, &mut batch, pages, guard_pages, total_pages, bill)
+            } else {
+                Self::allocate_kernel_in(
+                    allocator,
+                    &mut batch,
+                    pages,
+                    guard_pages,
+                    total_pages,
+                    bill,
+                )
+            }
         })
         .unwrap_or_else(|| {
             error!(
@@ -259,31 +285,31 @@ impl Stack {
         Ok(stack)
     }
 
-    /// [`Self::allocate`] with the frame allocator held. Every changed
-    /// translation, and on failure the whole run, goes to `batch`.
-    fn allocate_in(
+    /// A kernel stack, with the frame allocator held: one contiguous run of
+    /// `total_pages` frames identity-mapped kernel RW at its physical address,
+    /// its bottom `guard_pages` frames unmapped. Every changed translation, and
+    /// on failure the whole run, goes to `batch`.
+    fn allocate_kernel_in(
         allocator: &mut FrameAllocator,
         batch: &mut Batch,
         pages: usize,
         guard_pages: usize,
         total_pages: usize,
-        user_mode: bool,
         bill: RunBill,
     ) -> Result<Self, ViError> {
-        // A stack must be ONE contiguous run of frames, and that is a consequence of
-        // SAS rather than a shortcut: everything is identity-mapped (VA == PA) and
-        // there is no virtual-address allocator, so virtual contiguity can only come
-        // from physical contiguity.
+        // A kernel stack stays ONE contiguous run at VA == PA: a secondary RV64
+        // hart runs `smp_hart_entry` on its kernel stack with translation off
+        // (`_secondary_entry` takes the stack top from the SBI opaque), so that
+        // address must be valid before and after paging is on. User stacks map
+        // from the stack arena instead (`allocate_user_in`).
         //
         // The cost: this can fail on a fragmented allocator while plenty of memory is
         // free, and no amount of lazy commit helps — a guard page cannot make VA != PA.
         // So callers must read `OutOfMemory` here as "no run this long exists right
-        // now", which is recoverable, and never as grounds to panic. Lifting the
-        // constraint means adding a VA allocator so stack pages can be scattered.
+        // now", which is recoverable, and never as grounds to panic.
         let base_frame = allocator.allocate_contiguous(total_pages).ok_or_else(|| {
             error!(
-                "Stack alloc failed: no contiguous run (user={}, pages={}, bytes={})",
-                user_mode,
+                "Stack alloc failed: no contiguous run (user=false, pages={}, bytes={})",
                 total_pages,
                 total_pages * PAGE_SIZE
             );
@@ -309,24 +335,9 @@ impl Stack {
         // SAS identity map: all RAM is already identity-mapped RW+NX by
         // init_kernel_paging. The usable pages are re-mapped below, then every
         // guard frame is unmapped after the loop so an overflow traps.
-
-        // Usable Pages
-        let flags = if user_mode {
-            // User Read/Write (Exec?)
-            Flags::from_bits(
-                Flags::VALID
-                    | Flags::READ
-                    | Flags::WRITE
-                    | Flags::USER
-                    | Flags::ACCESSED
-                    | Flags::DIRTY,
-            )
-        } else {
-            // Kernel Read/Write
-            Flags::from_bits(
-                Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
-            )
-        };
+        let flags = Flags::from_bits(
+            Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+        );
 
         for i in usable_start_idx..total_pages {
             let addr = base_addr + (i * PAGE_SIZE);
@@ -334,7 +345,7 @@ impl Stack {
                 // The run is not yet owned by a Stack, so nothing will drop it —
                 // release it here or the frames are lost until reboot.
                 error!("Stack alloc failed: cannot map page 0x{:X}", addr);
-                retire_run(batch, run, false);
+                retire_run(batch, run, base_addr, None);
                 return Err(ViError::OutOfMemory);
             }
         }
@@ -361,7 +372,7 @@ impl Stack {
                     "Stack alloc refused: guard frame 0x{:X} still mapped (unmap_ok={})",
                     guard_addr, unmap_ok
                 );
-                retire_run(batch, run, false);
+                retire_run(batch, run, base_addr, None);
                 return Err(ViError::NotSupported);
             }
         }
@@ -375,7 +386,7 @@ impl Stack {
         // held since before the unmap, also excludes the ELF loader until then.
         if let Err(error) = STACK_RESERVATIONS.insert(base_addr, top) {
             error!("Stack alloc refused: run 0x{:X} not recorded", base_addr);
-            retire_run(batch, run, false);
+            retire_run(batch, run, base_addr, None);
             return Err(error);
         }
 
@@ -384,30 +395,33 @@ impl Stack {
             feature = "test-hooks",
             target_arch = "riscv64"
         ))]
-        let supervisor_registration =
-            if user_mode || !crate::memory::domain_supervisor_registry::is_active() {
-                None
-            } else {
-                match crate::memory::domain_supervisor_registry::register(
-                    base_addr + (guard_pages * PAGE_SIZE),
-                    top,
-                    crate::memory::domain_supervisor_registry::SupervisorRangeKind::KernelStack,
-                    crate::memory::domain_supervisor_registry::SupervisorRangeOwner::TaskStack,
-                ) {
-                    Ok(id) => Some(id),
-                    Err(()) => {
-                        retire_run(batch, run, true);
-                        return Err(ViError::NotSupported);
-                    }
+        let supervisor_registration = if !crate::memory::domain_supervisor_registry::is_active() {
+            None
+        } else {
+            match crate::memory::domain_supervisor_registry::register(
+                base_addr + (guard_pages * PAGE_SIZE),
+                top,
+                crate::memory::domain_supervisor_registry::SupervisorRangeKind::KernelStack,
+                crate::memory::domain_supervisor_registry::SupervisorRangeOwner::TaskStack,
+            ) {
+                Ok(id) => Some(id),
+                Err(()) => {
+                    let hold = VaHold {
+                        release: release_stack_reservation,
+                        start: base_addr,
+                        end: top,
+                    };
+                    retire_run(batch, run, base_addr, Some(hold));
+                    return Err(ViError::NotSupported);
                 }
-            };
+            }
+        };
         trace!(
-            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, Guards={}, User={}",
+            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, Guards={}, User=false",
             base_addr,
             top,
             pages,
-            guard_pages,
-            user_mode
+            guard_pages
         );
 
         Ok(Stack {
@@ -416,6 +430,7 @@ impl Stack {
             guard_pages,
             top,
             run: Some(run),
+            in_arena: false,
             #[cfg(feature = "p01-trace")]
             p01_obligation: None,
             #[cfg(all(
@@ -427,9 +442,158 @@ impl Stack {
         })
     }
 
-    /// Total physical bytes reserved for this stack, including guard pages.
+    /// A user stack, with the frame allocator held: a stack-arena slot, and one
+    /// contiguous run of `pages` frames mapped USER RW right above the slot's
+    /// `guard_pages` guard pages. The guards are never mapped and have no
+    /// frame; the frames' kernel alias is never touched (`KernelAlias::Intact`).
+    /// Every new translation, and on failure the run and the slot, goes to
+    /// `batch`; the slot returns only after the batch's flush (`VaHold`).
+    fn allocate_user_in(
+        allocator: &mut FrameAllocator,
+        batch: &mut Batch,
+        pages: usize,
+        guard_pages: usize,
+        total_pages: usize,
+        bill: RunBill,
+    ) -> Result<Self, ViError> {
+        use crate::loader::va_alloc;
+
+        if total_pages > va_alloc::STACK_VA_STRIDE / PAGE_SIZE {
+            error!(
+                "Stack alloc refused: {} pages exceed a {}-byte stack slot",
+                total_pages,
+                va_alloc::STACK_VA_STRIDE
+            );
+            return Err(ViError::OutOfMemory);
+        }
+        let base = va_alloc::alloc_stack_va().ok_or_else(|| {
+            error!("Stack alloc failed: every stack arena slot is held");
+            ViError::OutOfMemory
+        })?;
+        let top = base + total_pages * PAGE_SIZE;
+        // Recorded before anything is mapped, so every failure below returns
+        // the slot through the run's `VaHold`, after the invalidation.
+        if let Err(error) = STACK_RESERVATIONS.insert(base, top) {
+            error!("Stack alloc refused: slot 0x{:X} not recorded", base);
+            va_alloc::free_stack_va(base);
+            return Err(error);
+        }
+        // Physically contiguous only to keep Phase 16's one-run release contract.
+        let Some(base_frame) = allocator.allocate_contiguous(pages) else {
+            error!(
+                "Stack alloc failed: no contiguous run (user=true, pages={}, bytes={})",
+                pages,
+                pages * PAGE_SIZE
+            );
+            // Nothing was mapped in the slot: no translation to wait out.
+            release_stack_slot(base, top);
+            return Err(ViError::OutOfMemory);
+        };
+        // Owned from here: every failure below retires it into `batch`.
+        let run = FrameRun::mapped(base_frame, pages, bill, RunKind::Leaf, KernelAlias::Intact);
+        let hold = VaHold {
+            release: release_stack_slot,
+            start: base,
+            end: top,
+        };
+        let usable = base + guard_pages * PAGE_SIZE;
+        let flags = Flags::from_bits(
+            Flags::VALID
+                | Flags::READ
+                | Flags::WRITE
+                | Flags::USER
+                | Flags::ACCESSED
+                | Flags::DIRTY,
+        );
+        for i in 0..pages {
+            let (va, frame) = (usable + i * PAGE_SIZE, base_frame + i * PAGE_SIZE);
+            if paging::map_page(allocator, batch, va, frame, flags).is_err() {
+                error!("Stack alloc failed: cannot map page 0x{:X}", va);
+                retire_run(batch, run, usable, Some(hold));
+                return Err(ViError::OutOfMemory);
+            }
+        }
+        // The guards were never mapped: verify by translation, as for a kernel
+        // stack, so a stale leaf in a reused slot can never pass as a guard.
+        for guard_index in 0..guard_pages {
+            let guard_addr = base + guard_index * PAGE_SIZE;
+            if paging::virt_to_phys(guard_addr).is_some() {
+                error!("Stack alloc refused: guard 0x{:X} is mapped", guard_addr);
+                retire_run(batch, run, usable, Some(hold));
+                return Err(ViError::NotSupported);
+            }
+        }
+        trace!(
+            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Frames=0x{:X}, Pages={}, Guards={}, User=true",
+            base,
+            top,
+            base_frame,
+            pages,
+            guard_pages
+        );
+
+        Ok(Stack {
+            base,
+            pages,
+            guard_pages,
+            top,
+            run: Some(run),
+            in_arena: true,
+            #[cfg(feature = "p01-trace")]
+            p01_obligation: None,
+            #[cfg(all(
+                feature = "native-domains",
+                feature = "test-hooks",
+                target_arch = "riscv64"
+            ))]
+            supervisor_registration: None,
+        })
+    }
+
+    /// Physical bytes this stack holds: its run, guard frames included for a
+    /// kernel stack (a user stack's guards have no frame).
     pub fn allocated_bytes(&self) -> usize {
-        (self.pages + self.guard_pages) * PAGE_SIZE
+        self.run
+            .as_ref()
+            .map_or((self.pages + self.guard_pages) * PAGE_SIZE, |run| {
+                run.pages() * PAGE_SIZE
+            })
+    }
+
+    /// The run's physical base and frame count, while the stack holds it.
+    pub fn frames(&self) -> Option<(usize, usize)> {
+        self.run.as_ref().map(|run| (run.base(), run.pages()))
+    }
+
+    /// Physical address of the lowest usable byte: the run backs the top
+    /// `run.pages()` pages of `[base, top)`.
+    pub fn usable_phys(&self) -> Option<usize> {
+        self.run
+            .as_ref()
+            .map(|run| run.base() + (run.pages() - self.pages) * PAGE_SIZE)
+    }
+
+    /// Zero the usable pages through the frames' kernel alias
+    /// (`frame::phys_to_virt`), never through the stack's own VA: a user
+    /// stack's VA is a USER mapping, which the kernel writes only inside a
+    /// user-access window. Frames come back from the allocator holding their
+    /// last owner's bytes, so every spawn path zeroes a stack before it runs.
+    pub fn zero_usable(&self) {
+        let Some(usable) = self.usable_phys() else {
+            return;
+        };
+        // SAFETY: the run is this stack's alone and physically contiguous, and
+        // its kernel alias is writable and contiguous: the identity map on
+        // RV64/AArch64 (a user stack's frames keep the free-frame alias, a
+        // kernel stack's usable pages are its own kernel RW leaves), the HHDM
+        // on x86_64.
+        unsafe {
+            core::ptr::write_bytes(
+                crate::memory::frame::phys_to_virt(usable) as *mut u8,
+                0,
+                self.usable_bytes(),
+            );
+        }
     }
 
     /// Task-owned usable stack bytes, excluding any kernel-only guard reservation.
@@ -527,13 +691,53 @@ pub fn stack_probe_self_test() -> bool {
     unsafe {
         core::ptr::write_bytes((stack.top - probe_bytes) as *mut u8, 0x11, probe_bytes);
     }
-    stack.test_hook_watermark_bytes() == probe_bytes
+    stack.test_hook_watermark_bytes() == probe_bytes && user_stack_probe()
+}
+
+/// A user stack is mapped from the stack arena, not at its physical address:
+/// its usable VA translates to its run but not to itself, both guards and the
+/// overflow target below them are unmapped, and a push at `top - 8` through
+/// the stack's VA lands in the run's last frame, read back through the
+/// frames' kernel alias.
+#[cfg(feature = "test-hooks")]
+fn user_stack_probe() -> bool {
+    const MARK: u64 = 0x5354_4b41_5245_4e41;
+    let Ok(stack) = Stack::new_user(2) else {
+        return false;
+    };
+    let (Some(usable_pa), Some((_, frames))) = (stack.usable_phys(), stack.frames()) else {
+        return false;
+    };
+    let usable = stack.usable_start();
+    let off_identity = stack.in_arena
+        && frames == stack.pages
+        && paging::virt_to_phys(usable) == Some(usable_pa)
+        && usable_pa != usable;
+    let guarded = (0..stack.guard_pages)
+        .all(|guard| paging::virt_to_phys(stack.base + guard * PAGE_SIZE).is_none())
+        && paging::virt_to_phys(usable - 8).is_none();
+    // SAFETY: the top 8 bytes of this stack's mapped usable range; the stack is
+    // owned here and runs no task. Kernel-mode stores reach a USER page: RV64
+    // keeps `sstatus.SUM` set for the kernel's lifetime, AArch64 runs without
+    // PAN, and test-hooks x86 images run without SMAP (as the watermark hooks).
+    unsafe { core::ptr::write_volatile((stack.top - 8) as *mut u64, MARK) };
+    let alias = crate::memory::frame::phys_to_virt(usable_pa + stack.usable_bytes() - 8);
+    // SAFETY: the same byte through the run's kernel alias, still owned here.
+    let landed = unsafe { core::ptr::read_volatile(alias as *const u64) } == MARK;
+    if !(off_identity && guarded && landed) {
+        error!(
+            "stack-probe: user stack base=0x{:X} usable_pa=0x{:X} off_identity={} guarded={} landed={}",
+            stack.base, usable_pa, off_identity, guarded, landed
+        );
+    }
+    off_identity && guarded && landed
 }
 
 /// Test-hooks: a free frame's kernel alias is `paging::FREE_FRAME_ALIAS`
-/// (`valid && write && !exec && !user`, translating to itself) both for a frame
-/// fresh from the boot map and for the frames of a `Removed` run once freed,
-/// whose alias `KernelBackend::normalise` restored: a user stack, dropped.
+/// (`valid && write && !exec && !user`, translating to itself) for a frame
+/// fresh from the boot map, for the frames of a `Removed` run once freed (a
+/// kernel stack, dropped: `KernelBackend::normalise` restored the alias), and
+/// throughout the life of a user stack's frames, whose alias is never taken.
 ///
 /// `None` where RAM has no identity alias (x86_64 reaches it through the HHDM).
 #[cfg(feature = "test-hooks")]
@@ -547,6 +751,9 @@ pub fn free_frame_nx_self_test() -> Option<bool> {
             leaf.pa == frame && leaf.valid && leaf.write && !leaf.exec && !leaf.user
         })
     }
+    fn alias_of(stack: &Stack) -> Option<KernelAlias> {
+        stack.run.as_ref().map(FrameRun::alias)
+    }
 
     let Some(fresh) = crate::memory::frame::allocate_frame() else {
         return Some(false);
@@ -558,25 +765,34 @@ pub fn free_frame_nx_self_test() -> Option<bool> {
     let fresh_ok = free_alias(fresh);
     crate::memory::frame::deallocate_frame(fresh);
 
-    let Ok(stack) = Stack::new_user(1) else {
+    let Ok(kernel) = Stack::new_kernel(1) else {
         return Some(false);
     };
-    let removed = stack
-        .run
-        .as_ref()
-        .is_some_and(|run| run.alias() == KernelAlias::Removed);
-    let (guard, usable) = (stack.base, stack.usable_start());
-    // While the stack lives its usable page is USER and its guard unmapped.
-    let live = !free_alias(usable) && paging::virt_to_phys(guard).is_none();
-    drop(stack);
+    let removed = alias_of(&kernel) == Some(KernelAlias::Removed);
+    let (guard, usable) = (kernel.base, kernel.usable_start());
+    // While the stack lives its guard frame is unmapped.
+    let live = paging::virt_to_phys(guard).is_none();
+    drop(kernel);
     let restored = free_alias(guard) && free_alias(usable);
-    if !(fresh_ok && removed && live && restored) {
+
+    let Ok(user) = Stack::new_user(1) else {
+        return Some(false);
+    };
+    let Some((frame, _)) = user.frames() else {
+        return Some(false);
+    };
+    let intact = alias_of(&user) == Some(KernelAlias::Intact) && free_alias(frame);
+    drop(user);
+    let kept = free_alias(frame);
+
+    let ok = fresh_ok && removed && live && restored && intact && kept;
+    if !ok {
         error!(
-            "[selftest] FREE-FRAME-NX: fresh={} removed={} live={} restored={}",
-            fresh_ok, removed, live, restored
+            "[selftest] FREE-FRAME-NX: fresh={} removed={} live={} restored={} intact={} kept={}",
+            fresh_ok, removed, live, restored, intact, kept
         );
     }
-    Some(fresh_ok && removed && live && restored)
+    Some(ok)
 }
 
 impl Stack {
@@ -597,8 +813,19 @@ impl Stack {
         let Some(run) = self.run.take() else {
             return;
         };
-        unpublish_user_frames(batch, run.base(), run.pages());
-        retire_run(batch, run, true);
+        let va = self.top - run.pages() * PAGE_SIZE;
+        unpublish_user_frames(batch, va, run.pages());
+        let release = if self.in_arena {
+            release_stack_slot
+        } else {
+            release_stack_reservation
+        };
+        let hold = VaHold {
+            release,
+            start: self.base,
+            end: self.top,
+        };
+        retire_run(batch, run, va, Some(hold));
     }
 
     /// Tear this stack down as part of a larger operation: its run joins
@@ -652,6 +879,7 @@ impl Stack {
             guard_pages,
             top,
             run: None,
+            in_arena: false,
             #[cfg(feature = "p01-trace")]
             p01_obligation: None,
             #[cfg(all(
@@ -688,6 +916,8 @@ impl Drop for Stack {
         // An unconfirmed flush quarantines the run (and keeps its reservation)
         // until every hart acknowledges.
         let mut batch = Batch::new();
+        #[cfg(feature = "p01-trace")]
+        let frames = self.frames();
         self.retire_run_into(&mut batch);
         #[allow(unused_variables)] // reason: only the p01-trace ledger reads it
         let flushed = batch.complete();
@@ -698,11 +928,11 @@ impl Drop for Stack {
         #[cfg(feature = "p01-trace")]
         if self.p01_obligation.is_some() {
             let owner = crate::p01_resources::obligation_owner(self.p01_obligation);
-            if owner.is_some() {
+            if let (Some(_), Some((base, pages))) = (owner, frames) {
                 crate::p01_retained::begin(
                     owner,
-                    self.base,
-                    self.pages + self.guard_pages,
+                    base,
+                    pages,
                     crate::p01_retained::Reason::TaskStackForget,
                 );
             }

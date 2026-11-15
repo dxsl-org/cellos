@@ -183,8 +183,10 @@ to remain per cell. The current large-app profile and 64-cell default do not cha
 > - **Isolation of a light cell.** LBI covers trusted first-party handlers only; a light cell
 >   handling untrusted input MUST be a Tier-2 domain (Spec 22), so mixed deployment of untrusted
 >   handlers is gated on Tier-2 admission, not on this section.
-> - **Contiguity binds.** Every thread's stacks need a contiguous `STACK_PAGES + 1` frame run
->   (`kernel/src/sched/scheduler.rs:9-13`), so heavy resident cells and churning light cells
+> - **Contiguity binds.** Every thread's stacks need contiguous frame runs: the kernel stack
+>   `STACK_PAGES + STACK_GUARD_PAGES` frames at VA == PA, the user stack `STACK_PAGES` frames
+>   mapped from a stack-arena slot whose guards have no frame (`kernel/src/task/stack.rs`,
+>   `kernel/src/loader/va_alloc.rs`), so heavy resident cells and churning light cells
 >   compete for contiguous frames; the largest satisfiable run is the measurement, not free-byte
 >   totals.
 >

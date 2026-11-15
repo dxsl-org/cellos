@@ -1,4 +1,4 @@
-//! Virtual address allocator for cell images.
+//! Virtual address allocators: cell image slots and the user-stack arena.
 //!
 //! Assigns each cell image one aligned VA slot within the cell VA region
 //! [CELL_VA_START, CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE): a PIE takes
@@ -6,7 +6,12 @@
 //! linked into (`reserve_cell_va`). Every PT_LOAD must stay inside the slot
 //! its spawn owns (see `loader::elf::image_va`).
 //!
-//! This region lives entirely below the SV39 user-half boundary (256 GiB), so
+//! Every user stack takes one `STACK_VA_STRIDE` slot of the stack arena right
+//! above the cell region (`alloc_stack_va`), so it is never mapped at its
+//! physical address; the slot returns (`free_stack_va`) only once its frames'
+//! translations are gone on every hart.
+//!
+//! Both regions live entirely below the SV39 user-half boundary (256 GiB), so
 //! the `USER_VADDR_MAX` guard is never triggered by any allocated slot.
 //!
 //! # Design
@@ -71,12 +76,38 @@ const MAX_SLOTS: usize = 4096;
 #[cfg(cellos_wide)]
 const _: () = assert!(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE <= crate::hal::paging::USER_LIMIT);
 
+/// A run of equal, aligned VA slots: `slots` slots of `stride` bytes from
+/// `start`.
+#[derive(Clone, Copy)]
+pub(super) struct Region {
+    start: usize,
+    stride: usize,
+    slots: usize,
+}
+
+impl Region {
+    /// Index of the slot whose base is exactly `base`.
+    fn index_of_base(&self, base: usize) -> Option<usize> {
+        let offset = base.checked_sub(self.start)?;
+        (offset.is_multiple_of(self.stride) && offset / self.stride < self.slots)
+            .then_some(offset / self.stride)
+    }
+
+    fn base(&self, index: usize) -> usize {
+        self.start + index * self.stride
+    }
+}
+
+/// The cell image slots.
+const CELLS: Region = Region {
+    start: CELL_VA_START,
+    stride: CELL_VA_STRIDE,
+    slots: MAX_SLOTS,
+};
+
 /// Exclusive end of a valid reservation, shared by ELF admission and release.
 pub(crate) fn slot_end(base: usize) -> Option<usize> {
-    let offset = base.checked_sub(CELL_VA_START)?;
-    if !offset.is_multiple_of(CELL_VA_STRIDE) || offset / CELL_VA_STRIDE >= MAX_SLOTS {
-        return None;
-    }
+    CELLS.index_of_base(base)?;
     base.checked_add(CELL_VA_STRIDE)
 }
 
@@ -89,25 +120,35 @@ pub(crate) fn slot_containing(va: usize) -> Option<usize> {
 /// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
 const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
 
-/// Slot ownership. Invariant: a slot is owned by exactly one spawn iff its
-/// index is below `bump` and its `free` bit is clear; every `free` bit lies
-/// below `bump`.
-pub(super) struct SlotAllocator {
+/// Slot ownership over one [`Region`] (`WORDS` bitmap words cover its slots).
+/// Invariant: a slot is owned by exactly one holder iff its index is below
+/// `bump` and its `free` bit is clear; every `free` bit lies below `bump`.
+pub(super) struct SlotAllocator<const WORDS: usize = BITMAP_WORDS> {
+    region: Region,
     /// The first slot that has NEVER been handed out.
     bump: core::sync::atomic::AtomicUsize,
     /// Bit N = 1 means slot N is available for reuse. Each repeat of the inline
     /// `const` block is a distinct AtomicU64 (an inline const sidesteps
     /// `clippy::declare_interior_mutable_const` without changing semantics).
-    free: [AtomicU64; BITMAP_WORDS],
+    free: [AtomicU64; WORDS],
 }
 
 static SLOTS: SlotAllocator = SlotAllocator::new();
 
 impl SlotAllocator {
+    /// The cell image slots.
     pub(super) const fn new() -> Self {
+        Self::over(CELLS)
+    }
+}
+
+impl<const WORDS: usize> SlotAllocator<WORDS> {
+    pub(super) const fn over(region: Region) -> Self {
+        assert!(region.slots <= WORDS * 64);
         Self {
+            region,
             bump: core::sync::atomic::AtomicUsize::new(0),
-            free: [const { AtomicU64::new(0) }; BITMAP_WORDS],
+            free: [const { AtomicU64::new(0) }; WORDS],
         }
     }
 
@@ -118,7 +159,7 @@ impl SlotAllocator {
             while val != 0 {
                 let bit = val.trailing_zeros() as usize;
                 let slot = word_idx * 64 + bit;
-                if slot >= MAX_SLOTS {
+                if slot >= self.region.slots {
                     break;
                 }
                 let mask = 1u64 << bit;
@@ -128,7 +169,7 @@ impl SlotAllocator {
                     Ordering::AcqRel,
                     Ordering::Relaxed,
                 ) {
-                    Ok(_) => return Some(CELL_VA_START + slot * CELL_VA_STRIDE),
+                    Ok(_) => return Some(self.region.base(slot)),
                     Err(cur) => val = cur, // retry with updated value
                 }
             }
@@ -136,19 +177,18 @@ impl SlotAllocator {
 
         // 2. Bump-allocate a fresh slot.
         let idx = self.bump.fetch_add(1, Ordering::SeqCst);
-        if idx >= MAX_SLOTS {
+        if idx >= self.region.slots {
             self.bump.fetch_sub(1, Ordering::SeqCst);
             return None;
         }
-        Some(CELL_VA_START + idx * CELL_VA_STRIDE)
+        Some(self.region.base(idx))
     }
 
-    /// Claim the exact slot at `base`, or refuse when another spawn owns it.
+    /// Claim the exact slot at `base`, or refuse when another holder owns it.
     pub(super) fn reserve(&self, base: usize) -> bool {
-        if slot_end(base).is_none() {
+        let Some(slot) = self.region.index_of_base(base) else {
             return false;
-        }
-        let slot = (base - CELL_VA_START) / CELL_VA_STRIDE;
+        };
         loop {
             let bump = self.bump.load(Ordering::SeqCst);
             if slot < bump {
@@ -172,10 +212,9 @@ impl SlotAllocator {
     }
 
     pub(super) fn free(&self, base: usize) {
-        if slot_end(base).is_none() {
+        let Some(slot) = self.region.index_of_base(base) else {
             return;
-        }
-        let slot = (base - CELL_VA_START) / CELL_VA_STRIDE;
+        };
         // Restore the bump cursor exactly when this is the most recently minted
         // slot. If another allocation raced ahead, publish it to the free bitmap.
         if self
@@ -188,6 +227,107 @@ impl SlotAllocator {
             word.fetch_or(mask, Ordering::Release);
         }
     }
+
+    /// Slots owned right now: below `bump` and not on the free list.
+    #[cfg(test)]
+    pub(super) fn owned(&self) -> usize {
+        let freed: u32 = self
+            .free
+            .iter()
+            .map(|word| word.load(Ordering::Acquire).count_ones())
+            .sum();
+        self.bump.load(Ordering::Acquire) - freed as usize
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn snapshot(&self) -> (usize, alloc::vec::Vec<u64>) {
+        (
+            self.bump.load(Ordering::Acquire),
+            self.free
+                .iter()
+                .map(|word| word.load(Ordering::Acquire))
+                .collect(),
+        )
+    }
+}
+
+/// First byte of the user-stack arena: right above the cell slots, so it lies
+/// inside the user window and above every identity-mapped byte (checked at
+/// boot by [`assert_stack_arena_above`]). 80 GiB by default, 192 GiB with
+/// `large-cell-va` or `cell-scale-experiment`.
+#[cfg(cellos_wide)]
+pub(crate) const STACK_VA_START: usize = CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE;
+
+/// One user stack per slot: its bottom guards, then its usable pages, then
+/// unmapped VA up to the next slot. The largest stack the kernel allocates
+/// (`task::STACK_PAGES` plus `task::stack::STACK_GUARD_PAGES`) rounded up to a
+/// power of two: 512 KiB.
+pub(crate) const STACK_VA_STRIDE: usize =
+    (crate::task::STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES).next_power_of_two()
+        * crate::memory::paging::PAGE_SIZE;
+
+/// Live user stacks at once (16 GiB of VA at the 512 KiB stride).
+#[cfg(cellos_wide)]
+const STACK_SLOTS: usize = 32 * 1024;
+
+#[cfg(cellos_wide)]
+const _: () =
+    assert!(STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE <= crate::hal::paging::USER_LIMIT);
+
+#[cfg(cellos_wide)]
+const STACKS: Region = Region {
+    start: STACK_VA_START,
+    stride: STACK_VA_STRIDE,
+    slots: STACK_SLOTS,
+};
+
+#[cfg(cellos_wide)]
+static STACK_ARENA: SlotAllocator<{ STACK_SLOTS / 64 }> = SlotAllocator::over(STACKS);
+
+/// Take one stack slot (`STACK_VA_STRIDE` bytes of VA, nothing mapped), or
+/// `None` when every slot is held.
+#[cfg(cellos_wide)]
+pub(crate) fn alloc_stack_va() -> Option<usize> {
+    STACK_ARENA.alloc()
+}
+
+/// Paging targets only: the bare-physical ones never map a stack.
+#[cfg(not(cellos_wide))]
+pub(crate) fn alloc_stack_va() -> Option<usize> {
+    None
+}
+
+/// Return a stack slot. Only once nothing translates any page of it on any
+/// hart: the stack's `VaHold` calls this after its run's flush is confirmed.
+pub(crate) fn free_stack_va(base: usize) {
+    #[cfg(cellos_wide)]
+    STACK_ARENA.free(base);
+    #[cfg(not(cellos_wide))]
+    let _ = base;
+}
+
+/// Boot check: everything mapped at VA == PA (RAM, whose grants and SHM pages
+/// keep their physical address as VA, and the boot MMIO windows) ends at or
+/// below `identity_end`, which must not reach the stack arena.
+#[cfg(cellos_wide)]
+pub(crate) fn assert_stack_arena_above(identity_end: usize) {
+    assert!(
+        identity_end <= STACK_VA_START,
+        "identity-mapped range ends at {identity_end:#x}, inside the stack arena at {STACK_VA_START:#x}"
+    );
+}
+
+/// Does `va` lie in the stack arena?
+#[cfg(all(cellos_wide, feature = "test-hooks"))]
+pub(crate) fn in_stack_arena(va: usize) -> bool {
+    (STACK_VA_START..STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE).contains(&va)
+}
+
+/// The stack arena's allocator state (`bump`, free bitmap), as [`snapshot`]
+/// is for the cell slots.
+#[cfg(all(cellos_wide, feature = "test-hooks"))]
+pub(crate) fn stack_snapshot() -> (usize, alloc::vec::Vec<u64>) {
+    STACK_ARENA.snapshot()
 }
 
 /// Allocate one profile-sized VA slot for a new PIE cell.
@@ -215,14 +355,7 @@ pub fn free_cell_va(base: usize) {
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn snapshot() -> (usize, alloc::vec::Vec<u64>) {
-    (
-        SLOTS.bump.load(Ordering::Acquire),
-        SLOTS
-            .free
-            .iter()
-            .map(|word| word.load(Ordering::Acquire))
-            .collect(),
-    )
+    SLOTS.snapshot()
 }
 
 #[cfg(test)]

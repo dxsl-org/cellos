@@ -299,6 +299,26 @@ pub fn init_kernel_paging(
             )
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
+    // The user-stack arena must lie above everything mapped at VA == PA here:
+    // the memory map's mapped entries and (AArch64) the board's device windows.
+    // RV64's fixed device windows above all sit below 1 GiB.
+    use crate::boot::MemoryType;
+    #[allow(unused_mut)] // reason: only AArch64 adds its device windows
+    let mut mapped_end = mmap
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.ty,
+                MemoryType::Usable
+                    | MemoryType::Kernel
+                    | MemoryType::Bootloader
+                    | MemoryType::Framebuffer
+                    | MemoryType::MMIO
+            )
+        })
+        .map(|entry| entry.base.saturating_add(entry.length))
+        .max()
+        .unwrap_or(0);
     #[cfg(target_arch = "aarch64")]
     {
         use hal::aarch64::backend::{ArmResources, Board};
@@ -310,8 +330,10 @@ pub fn init_kernel_paging(
             root_table
                 .identity_map(map.base, map.end, mmio_flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
+            mapped_end = mapped_end.max(map.end);
         }
     }
+    crate::loader::va_alloc::assert_stack_arena_above(mapped_end);
 
     Ok(root_frame)
 }
@@ -567,6 +589,13 @@ pub fn init_kernel_paging_x86(
             va += PAGE_SIZE;
         }
     }
+    // The user-stack arena must lie above every lower-half VA == PA user: RAM
+    // (grants and SHM keep their physical address as VA) and these windows.
+    let identity_end = mmio_regions
+        .iter()
+        .map(|&(_, end)| end)
+        .fold(allocator.memory_end(), usize::max);
+    crate::loader::va_alloc::assert_stack_arena_above(identity_end);
 
     // Sanity: verify the IOAPIC PTE was written correctly.
     // Uses the runtime ioapic_base parsed from validated ACPI.

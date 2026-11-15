@@ -101,7 +101,7 @@ kernel alias (`Intact`, `Removed`, `User`) và trạng thái
    từ image của chính nó (`MemoryType::Kernel`).
 7. Free dưới allocator guard.
 
-Một VA đã giải phóng (cell VA slot, stack reservation) vẫn reserved cho tới khi flush của nó
+Một VA đã giải phóng (cell VA slot, slot của stack arena, stack reservation) vẫn reserved cho tới khi flush của nó
 được xác nhận (`VaHold`). Flush trong lúc giữ `FRAME_ALLOCATOR` không biểu diễn được:
 `frame::lock` mượn `FlushCap` suốt đời guard (E0499), có witness
 `scripts/check-frame-guard-compile-fail.sh` chạy trong CI.
