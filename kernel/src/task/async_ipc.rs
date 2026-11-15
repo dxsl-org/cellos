@@ -2919,8 +2919,8 @@ mod tests {
 
     /// Thread-local allocation counter for the wait-path measurement (M2).
     /// Inside [`admitting_by_quota`](alloc_probe::admitting_by_quota) it also
-    /// refuses (returns null for) an allocation the open charge scope's quota
-    /// would refuse, as the kernel allocator does.
+    /// refuses (returns null for) an allocation the quota of this thread's
+    /// open charge scope would refuse, as the kernel allocator does.
     mod alloc_probe {
         use std::alloc::{GlobalAlloc, Layout, System};
         use std::cell::Cell;
@@ -2937,14 +2937,16 @@ mod tests {
             let _ = COUNT.try_with(|count| count.set(count.get() + 1));
         }
 
-        /// Whether the open charge scope's quota admits `size` bytes. Only a
-        /// check: an admitted charge is refunded at once, so no free has to
-        /// find it.
+        /// Whether the quota of this thread's open charge scope admits `size`
+        /// bytes. The charge is the scope's per-thread record
+        /// (`heap::thread_charge`), not the hart slot every test thread
+        /// shares. Only a check: an admitted charge is refunded at once, so no
+        /// free has to find it.
         fn admitted(size: usize) -> bool {
             if !ADMIT_BY_QUOTA.try_with(Cell::get).unwrap_or(false) {
                 return true;
             }
-            let charge = crate::sched::hart_local::alloc_charge();
+            let charge = crate::memory::heap::thread_charge();
             match crate::memory::cell_quota::charge_owner(charge, size) {
                 Some(owner) => {
                     crate::memory::cell_quota::refund_owner(owner, size);

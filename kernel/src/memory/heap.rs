@@ -343,6 +343,27 @@ static ALLOCATOR: QuotaAlloc = QuotaAlloc {
 #[must_use = "a charge scope ends when it is dropped"]
 pub(crate) struct ChargeScope {
     saved: crate::memory::cell_quota::Charge,
+    #[cfg(all(test, not(target_os = "none")))]
+    saved_on_thread: crate::memory::cell_quota::Charge,
+}
+
+// Host tests run concurrently on threads that all share one hart slot
+// (`HART_LOCALS[0]`), so the hart's charge is not this thread's. Every scope
+// also records its charge for the opening thread, which is what a
+// quota-checking test allocator reads ([`thread_charge`]).
+#[cfg(all(test, not(target_os = "none")))]
+std::thread_local! {
+    static THREAD_CHARGE: core::cell::Cell<crate::memory::cell_quota::Charge> =
+        const { core::cell::Cell::new(crate::memory::cell_quota::Charge::KERNEL) };
+}
+
+/// Host tests: the charge this thread's innermost open scope names, or the
+/// kernel outside every scope.
+#[cfg(all(test, not(target_os = "none")))]
+pub(crate) fn thread_charge() -> crate::memory::cell_quota::Charge {
+    THREAD_CHARGE
+        .try_with(core::cell::Cell::get)
+        .unwrap_or(crate::memory::cell_quota::Charge::KERNEL)
 }
 
 impl ChargeScope {
@@ -350,6 +371,10 @@ impl ChargeScope {
     pub(crate) fn enter(charge: crate::memory::cell_quota::Charge) -> Self {
         Self {
             saved: crate::sched::hart_local::replace_alloc_charge(charge),
+            #[cfg(all(test, not(target_os = "none")))]
+            saved_on_thread: THREAD_CHARGE
+                .try_with(|open| open.replace(charge))
+                .unwrap_or(crate::memory::cell_quota::Charge::KERNEL),
         }
     }
 
@@ -363,6 +388,8 @@ impl ChargeScope {
 impl Drop for ChargeScope {
     fn drop(&mut self) {
         crate::sched::hart_local::replace_alloc_charge(self.saved);
+        #[cfg(all(test, not(target_os = "none")))]
+        let _ = THREAD_CHARGE.try_with(|open| open.set(self.saved_on_thread));
     }
 }
 

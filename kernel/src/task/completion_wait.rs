@@ -387,6 +387,9 @@ pub(super) fn finish_net_rx_wait(
 /// - `TryAgain` — the caller's queue has no free slot. This is backpressure, and
 ///   it is reported here, to the cell that caused it, rather than to the
 ///   interrupt handler that would otherwise have had nowhere to put a result.
+/// - `OutOfMemory` — the caller's Cell has no completion queue yet and its
+///   quota cannot cover one (or the kernel heap is exhausted). `WaitCompletion`
+///   is not a typed-OOM syscall, so the caller sees the generic error sentinel.
 /// - `Unknown` — the caller is not a live task.
 ///
 /// # Panics
@@ -417,7 +420,10 @@ pub fn wait_completion(
     let queue = {
         let mut guard = super::SCHEDULER.lock();
         let sched = guard.as_mut().ok_or(SyscallError::Unknown)?;
-        completion::queue_for(sched, caller_id).ok_or(SyscallError::Unknown)?
+        if !sched.tasks.contains_key(&caller_id) {
+            return Err(SyscallError::Unknown);
+        }
+        completion::queue_for(sched, caller_id).ok_or(SyscallError::OutOfMemory)?
     };
     let slot = queue.reserve().ok_or(SyscallError::TryAgain)?;
     // Exit cleanup keys on who owns the slot: a NET_RX reservation is owned by

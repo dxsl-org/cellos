@@ -433,8 +433,12 @@ pub(crate) fn commit_hotswap_barrier(
 
     // Committed: hand each legacy wire to the record the copy loop appended for
     // it. Both sides skip async records, so the k-th legacy source record pairs
-    // with the k-th appended one.
+    // with the k-th appended one. Under p01-trace each moved wire is recorded
+    // as queued at the target, so the ledger never credits it to the retired
+    // provider.
     if let Some(target) = sched.tasks.get_mut(&target_tid) {
+        #[cfg(feature = "p01-trace")]
+        let receiver = crate::p01_resources::owner(target);
         let mut appended = target.pending_msgs.iter_mut().skip(target_start);
         for message in source_mailbox
             .iter_mut()
@@ -442,6 +446,10 @@ pub(crate) fn commit_hotswap_barrier(
         {
             if let Some(record) = appended.next() {
                 record.wire = message.wire.take();
+                #[cfg(feature = "p01-trace")]
+                if let Some(wire) = &record.wire {
+                    wire.observe_queue_commit(receiver);
+                }
             }
         }
     }
