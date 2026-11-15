@@ -110,9 +110,11 @@ does not currently enforce a page boundary. Its self-test checks PKRU constants 
 kernel `RDPKRU`, not a denied keyed-page access.
 
 x86 SMEP, SMAP and UMIP are set on every CPU that enumerates them. The boot CPU logs
-`[x86] protection: smep=… smap=… umip=…` (`on` or `absent`). A build with
-`x86-smep`/`x86-smap`/`x86-umip` marks the bit required
-and refuses a CPU without it, at boot or AP admission. Limits, stated plainly: SMAP stops
+`[x86] protection: smep=… smap=… umip=…` (`on`, `off` or `absent`). A build with
+`x86-smep`/`x86-smap`/`x86-umip` marks the bit required and refuses a CPU without it,
+at boot or AP admission; `x86-no-smep`/`x86-no-smap`/`x86-no-umip` keeps the bit off
+even where the CPU has it (`off`; a rollback switch kept for one cycle); setting both
+for one bit does not compile. Limits, stated plainly: SMAP stops
 the *kernel* touching USER pages outside the user-copy window; it does nothing between
 cells, which inside the SAS still share USER+RW heap, stack, `.data`, grants and MMIO
 (Layer A limits), and it does not extend W^X beyond code integrity. RV64 keeps

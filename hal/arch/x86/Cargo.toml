@@ -27,9 +27,13 @@ cet-shadow-stack = []
 pku = []
 # PKS: supervisor protection keys (x86_64 G2 roadmap).
 pks = []
-# Required supervisor protections (CR4): each is set whenever the CPU
-# enumerates it (`protect::init_cpu`); the feature additionally refuses a CPU
-# that lacks it at boot/AP admission.
+# Supervisor protections (CR4), set whenever the CPU enumerates them
+# (`protect::init_cpu`). `x86-<bit>` marks one required: a CPU lacking it is
+# refused at boot/AP admission. `x86-no-<bit>` keeps it off even where the CPU
+# has it. Both for one bit is a compile error.
 x86-smep = []
 x86-smap = []
 x86-umip = []
+x86-no-smep = []
+x86-no-smap = []
+x86-no-umip = []

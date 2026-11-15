@@ -296,7 +296,7 @@ pub(super) fn run_kernel_protection(user_page: u64, saved_flags: u64) {
         fail();
     }
     let active = protect::active();
-    if active != protect::detect() {
+    if active != protect::enabled_on(protect::detect()) {
         fail();
     }
     let expected = unsafe {

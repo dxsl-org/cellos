@@ -144,12 +144,14 @@ fn cpu_feature_policy() -> usize {
 }
 
 /// Supervisor protections (SMEP, SMAP, UMIP): set on every CPU that
-/// enumerates them, logged by the kernel when absent.
+/// enumerates them, logged by the kernel (`on`, `off` or `absent`).
 ///
 /// They are defense in depth, not a substitute for LBI or for authority
-/// checks. A cargo feature (`x86-smep`, `x86-smap`, `x86-umip`) marks one
-/// *required*: a CPU without it is refused (boot or AP admission) instead of
-/// running unprotected.
+/// checks. Per bit, two cargo features: `x86-smep`/`x86-smap`/`x86-umip`
+/// mark it *required* (a CPU without it is refused at boot or AP admission
+/// instead of running unprotected); `x86-no-smep`/`x86-no-smap`/`x86-no-umip`
+/// switch it *off* even where the CPU has it (a rollback switch kept for one
+/// cycle). Setting both for one bit is a compile error.
 ///
 /// SMAP: the kernel touches U=1 memory only between [`open_user_access`] and
 /// [`close_user_access`], the one AC setter, called by the kernel's user-copy
@@ -158,6 +160,13 @@ fn cpu_feature_policy() -> usize {
 #[cfg(target_arch = "x86_64")]
 pub mod protect {
     use core::sync::atomic::{AtomicU8, Ordering};
+
+    #[cfg(all(feature = "x86-smep", feature = "x86-no-smep"))]
+    compile_error!("`x86-smep` (required) and `x86-no-smep` (off) contradict");
+    #[cfg(all(feature = "x86-smap", feature = "x86-no-smap"))]
+    compile_error!("`x86-smap` (required) and `x86-no-smap` (off) contradict");
+    #[cfg(all(feature = "x86-umip", feature = "x86-no-umip"))]
+    compile_error!("`x86-umip` (required) and `x86-no-umip` (off) contradict");
 
     const CR4_UMIP: u64 = 1 << 11;
     const CR4_SMEP: u64 = 1 << 20;
@@ -200,6 +209,26 @@ pub mod protect {
         }
     }
 
+    /// Protections this build keeps off even where the CPU has them.
+    pub const fn switched_off() -> Caps {
+        Caps {
+            smep: cfg!(feature = "x86-no-smep"),
+            smap: cfg!(feature = "x86-no-smap"),
+            umip: cfg!(feature = "x86-no-umip"),
+        }
+    }
+
+    /// Protections this kernel sets on a CPU that enumerates `have`: all of
+    /// them but the switched-off ones.
+    pub const fn enabled_on(have: Caps) -> Caps {
+        let off = switched_off();
+        Caps {
+            smep: have.smep && !off.smep,
+            smap: have.smap && !off.smap,
+            umip: have.umip && !off.umip,
+        }
+    }
+
     /// Protections currently set in this CPU's CR4.
     pub fn active() -> Caps {
         let cr4: u64;
@@ -211,15 +240,17 @@ pub mod protect {
         }
     }
 
-    /// Enable every protection this CPU enumerates. Returns false, changing
-    /// nothing, when the CPU lacks a required one.
+    /// Enable every protection this CPU enumerates and the build does not
+    /// switch off (per [`enabled_on`]). Returns false, changing nothing, when
+    /// the CPU lacks a required one. `SMAP_ACTIVE` is set only when CR4.SMAP
+    /// is, so with `x86-no-smap` the user-access window issues no STAC/CLAC.
     pub fn init_cpu() -> bool {
         let need = required();
         let have = detect();
         if (need.smep && !have.smep) || (need.smap && !have.smap) || (need.umip && !have.umip) {
             return false;
         }
-        let want = have;
+        let want = enabled_on(have);
         let bits = if want.smep { CR4_SMEP } else { 0 }
             | if want.smap { CR4_SMAP } else { 0 }
             | if want.umip { CR4_UMIP } else { 0 };

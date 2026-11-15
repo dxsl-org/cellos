@@ -32,18 +32,24 @@ pub(crate) fn puts(s: &str) {
 }
 
 /// One boot line naming each supervisor protection on the boot CPU:
-/// `[x86] protection: smep=<s> smap=<s> umip=<s>`, where `<s>` is `on` (the
-/// CPU enumerates it, so `protect::init_cpu` set it in CR4) or `absent` (it
-/// does not). APs must match the boot CPU's set.
+/// `[x86] protection: smep=<s> smap=<s> umip=<s>`, where `<s>` is `on` (set in
+/// CR4), `off` (the CPU enumerates it but the build switches it off with
+/// `x86-no-*`) or `absent` (the CPU does not enumerate it). APs must match
+/// the boot CPU's set.
 fn log_protection() {
     let active = crate::hal::x86_64::protect::active();
-    let state = |on: bool| if on { "on" } else { "absent" };
+    let have = crate::hal::x86_64::protect::detect();
+    let state = |on: bool, present: bool| match (on, present) {
+        (true, _) => "on",
+        (false, true) => "off",
+        (false, false) => "absent",
+    };
     puts("[x86] protection: smep=");
-    puts(state(active.smep));
+    puts(state(active.smep, have.smep));
     puts(" smap=");
-    puts(state(active.smap));
+    puts(state(active.smap, have.smap));
     puts(" umip=");
-    puts(state(active.umip));
+    puts(state(active.umip, have.umip));
     puts("\n");
 }
 
