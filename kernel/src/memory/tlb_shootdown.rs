@@ -16,6 +16,7 @@
 use crate::memory::frame::FlushCap;
 use crate::memory::frame_run::{Epochs, FlushOutcome, UnconfirmedCause};
 use crate::memory::paging::PAGE_SIZE;
+use crate::memory::tag_pool::Invalidated;
 use types::VAddr;
 
 #[cfg(feature = "test-hooks")]
@@ -135,7 +136,10 @@ pub enum FlushAckError {
 /// can still resolve. Hand the frames to
 /// [`crate::memory::deferred_release`] instead and let its reaper confirm the
 /// invalidation from the timer path.
-pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
+///
+/// `Ok` carries the [`Invalidated`] proof for `asid`: on this path, the only
+/// way a private tag goes back to its pool.
+pub(crate) fn confirm_tag_invalidation(asid: usize) -> Result<Invalidated, FlushAckError> {
     local_tag_flush(asid);
     // `withheld`: the failure is the test seam's, not a silent hart's.
     let mut asked = [0; crate::sched::smp::MAX_HARTS];
@@ -183,7 +187,7 @@ pub fn confirm_tag_invalidation(asid: usize) -> Result<(), FlushAckError> {
             );
         }
     }
-    result
+    result.map(|()| Invalidated::of(asid as u32))
 }
 
 /// One non-blocking step of a deferred tag release: flush the tag locally and

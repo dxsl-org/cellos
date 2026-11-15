@@ -218,11 +218,13 @@ pub(crate) fn fixtures_park() {}
 pub(crate) fn fixtures_hardware() {
     #[cfg(feature = "test-hooks")]
     crate::arch::layer2_selftest::run_mte_selftest();
-    // EL2 hosts only (each skips elsewhere); the virt-vhe lane requires both.
+    // EL2 hosts only (each skips elsewhere); the virt-vhe lane requires all
+    // three.
     #[cfg(not(cellos_posture = "release"))]
     {
         crate::arch::vm::two_vm_stage2_selftest();
         crate::arch::vm::guest_budget_selftest::run();
+        crate::arch::vm::tag_pool_selftest::run();
     }
 }
 

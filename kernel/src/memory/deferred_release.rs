@@ -4,7 +4,7 @@
 //! A release path must never wait synchronously for a remote acknowledgement:
 //! a peer hart can be held non-preemptible for seconds. A path whose bounded
 //! probe did not confirm its tag hands the frames (and, for a root teardown,
-//! the tag's pool slot) to [`defer_frames`] / [`defer_frames_and_tag`]. They
+//! the tag's lease) to [`defer_frames`] / [`defer_frames_and_tag`]. They
 //! become `Quarantined(TagUnconfirmed)` runs in the one frame-run quarantine
 //! (`memory::frame_run::PENDING`), whose hart-0 reaper frees them once every
 //! remote hart has published an epoch asked for after the unmap.
@@ -25,6 +25,7 @@
 
 use super::frame::OwnedFrame;
 use super::frame_run::{FlushOutcome, KernelBackend, RunKind, TagWait, PENDING};
+use super::tag_pool::TagLease;
 use alloc::vec::Vec;
 
 /// Retain `frames` until `asid`'s invalidation is confirmed.
@@ -33,19 +34,21 @@ use alloc::vec::Vec;
 /// them back to the allocator: this is the last owner. The tag stays live (the
 /// caller keeps its lease), so nothing can reuse it while the wait is pending.
 pub fn defer_frames(asid: usize, domain: u64, frames: Vec<OwnedFrame>, reason: &'static str) {
-    defer(asid, domain, frames, reason, false)
+    defer(asid, domain, frames, reason, None)
 }
 
-/// Retain `frames` **and** the tag's pool slot until the invalidation is
-/// confirmed. Used by a root teardown, whose `AsidLease::release` kept its
-/// slot reserved: the slot is reissued only when the same wait completes.
-pub fn defer_frames_and_tag(
-    asid: usize,
+/// Retain `frames` **and** `tag`'s lease until its invalidation is confirmed.
+/// Used by a root teardown whose own confirmation failed: the reaper releases
+/// the lease, with its proof, only when the same wait completes. A wait that
+/// cannot be recorded drops the lease, which keeps the tag reserved for the
+/// boot.
+pub(crate) fn defer_frames_and_tag(
+    tag: TagLease,
     domain: u64,
     frames: Vec<OwnedFrame>,
     reason: &'static str,
 ) {
-    defer(asid, domain, frames, reason, true)
+    defer(tag.value() as usize, domain, frames, reason, Some(tag))
 }
 
 fn defer(
@@ -53,7 +56,7 @@ fn defer(
     domain: u64,
     frames: Vec<OwnedFrame>,
     reason: &'static str,
-    release_tag_slot: bool,
+    tag: Option<TagLease>,
 ) {
     #[cfg(feature = "p01-trace")]
     let frames = {
@@ -97,7 +100,7 @@ fn defer(
     let epochs = super::frame_run::tag_epochs(asid, FlushOutcome::Confirmed, &mut KernelBackend);
     // The decision and the log are separated so the console never nests inside
     // the quarantine lock.
-    match PENDING.defer_tag(asid, runs, release_tag_slot.then_some(domain), &epochs) {
+    match PENDING.defer_tag(asid, runs, tag, &epochs) {
         TagWait::Queued => log::warn!(
             "[aspace] deferred release queued: tag={} domain={} frames={} reason={} — the tag stays unconfirmed and every frame behind it is retained until an acknowledgement lands",
             asid,

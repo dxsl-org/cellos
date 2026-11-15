@@ -149,6 +149,9 @@ if grep -q "Cellos >" qemu-aarch64.log; then
                 # A VM past its owner's guest budget is refused with nothing
                 # taken; one within it charges exactly its reservation.
                 "guest-memory budget:::[selftest] VM-GUEST-BUDGET: PASS"
+                # A cell incarnation is refused its fifth VMID for its owner
+                # limit while the kernel and another cell still get one.
+                "tag-pool owner limit:::[selftest] TAG-POOL-OWNER-LIMIT: PASS"
             )
             ;;
         virt-el2-novhe)

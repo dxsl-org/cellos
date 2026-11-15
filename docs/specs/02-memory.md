@@ -162,7 +162,7 @@ thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
 Tier 2 cung cấp ranh giới cô lập phần cứng hoàn toàn (Hardware MMU Isolation) cho mã không tin cậy (C/C++ FFI, mlibc, Lua, hoặc unsigned binaries):
 
 1. **Bảng trang riêng (`AddressSpace`)**:
-   - Mỗi Tier 2 Cell sở hữu một gốc bảng trang Sv39 (`satp`) riêng biệt, được gán ASID độc lập (`AsidLease`).
+   - Mỗi Tier 2 Cell sở hữu một gốc bảng trang Sv39 (`satp`) riêng biệt, được gán ASID độc lập từ pool `PRIVATE_ASIDS` (`memory::tag_pool`, tối đa 1 tag mỗi incarnation; tag chỉ được cấp lại khi có bằng chứng `Invalidated` rằng mọi hart đã invalidate tag đó).
    - **User space**: Chỉ ánh xạ private ELF segments, stack và heap của chính cell đó. Toàn bộ không gian bộ nhớ của các Cell khác (bao gồm cả Tier 1 SAS) đều **unmapped**; bất kỳ hành vi đọc/ghi/thực thi trái phép nào ra ngoài đều kích hoạt Store/Load/Instruction Page Fault (`scause = 0xd, 0xf, 0xc`) và cell bị terminate an toàn mà không ảnh hưởng tới kernel.
    - **Kernel space**: Ánh xạ supervisor-only (không có cờ `USER`). U-mode không thể truy cập HHDM hay kernel text/data.
 2. **Quản lý Vòng đời & Teardown**:

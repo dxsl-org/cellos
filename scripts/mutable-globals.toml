@@ -1198,15 +1198,15 @@ rationale = "registry::init is called only from dev::init, which kmain runs unde
 review = "kernel/src/dev/registry.rs:init; kernel/src/dev/registry.rs:resolve; kernel/src/dev/registry.rs:register_driver; kernel/src/dev.rs:init; kernel/src/main.rs:797"
 
 [[global]]
-key = "kernel::arch::x86_64::hypervisor::svm_registry::NEXT_ASID @cfg(target_arch = \"x86_64\")"
+key = "kernel::arch::x86_64::hypervisor::svm_registry::SVM_ASIDS @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "atomic"
-owner = "hypervisor::svm_registry; boot-wide SVM ASID allocator advanced by create_vcpu (SVM branch) under VM_REGISTRY; never reused"
+owner = "hypervisor::svm_registry; the SVM ASID TagPool (memory::tag_pool, Reuse::Never, 1..=max_asid, 4 per cell incarnation, kernel exempt): create_vcpu (SVM branch) leases one ASID per vCPU; the lease is held in the VM's VcpuFrames and dropped with the VM"
 contexts = ["boot", "normal"]
-seal = "none: advanced on every SVM vCPU creation for the whole run"
-retirement = "never: ASIDs are deliberately not reused after reap_vms_for"
-rationale = "fetch_update(Relaxed) issues ASIDs only in 1..=max_asid (CPUID 8000_000A.EBX - 1) and never wraps; the ASID is reserved before any VMCB/host/bitmap frame is allocated, so exhaustion refuses create_vcpu without leaking (CP1 p02-debt-semantic #7). Allocation runs from the hypervisor CreateVcpu syscall and the test-hooks boot smoke, never an ISR."
-review = "kernel/src/arch/x86_64/hypervisor/svm_registry.rs:next_asid; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; test asid_reservation_is_bounded_and_never_wraps"
+seal = "none: issued on every SVM vCPU creation for the whole run"
+retirement = "never: an ASID is issued once per boot; a cancelled or dropped lease leaves it spent, and only the owner's per-incarnation count returns (cancel) or stays (drop)"
+rationale = "Lock-free TagPool: a Relaxed fetch_update on the issued counter issues ASIDs only in 1..=max_asid (CPUID 8000_000A.EBX - 1) and never wraps; the per-owner row is an AcqRel CAS on (generation, count) refused past 4. The ASID is leased after the vCPU's guest reservation and before any VMCB/host/bitmap frame, so exhaustion or the owner limit refuses create_vcpu without allocating. Called from the CreateVcpu syscall and the test-hooks boot fixtures, never an ISR."
+review = "kernel/src/memory/tag_pool.rs:TagPool::acquire; kernel/src/arch/x86_64/hypervisor/svm_registry.rs:create_vcpu; hal/arch/x86/src/x86_64/svm.rs:max_asid; tests a_never_reused_pool_issues_each_value_once_per_boot, a_never_reused_pool_with_no_capacity_or_at_the_top_issues_nothing"
 
 [[global]]
 key = "kernel::arch::x86_64::hypervisor::svm_registry::VM_REGISTRY @cfg(target_arch = \"x86_64\")"
@@ -2206,15 +2206,15 @@ rationale = "Relaxed fetch_add needs only uniqueness; values are stored in the b
 review = "kernel/src/memory/address_space.rs:AddressSpaceBuilder::new; kernel/src/memory/address_space.rs:451"
 
 [[global]]
-key = "kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = \"native-domains\" , cellos_wide))"
+key = "kernel::memory::address_space::PRIVATE_ASIDS @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "per-cell"
-mutation = "spinlock"
-owner = "memory::address_space: AsidLease::acquire assigns a tag slot per live private root; release_tag_slot frees it"
+mutation = "atomic"
+owner = "memory::address_space: the private-root TagPool (memory::tag_pool, Reuse::AfterInvalidation, 1..=256 capped by asid_width, 1 per cell incarnation, kernel exempt); AddressSpaceBuilder::build leases one tag per private root before any frame"
 contexts = ["normal", "irq", "exception"]
-seal = "none: slots are leased and returned for the whole run"
-retirement = "AsidLease::release from AddressSpace::drop after a confirmed tag invalidation; otherwise the frame-run quarantine's tag entry keeps the slot and release_tag_slot_after_invalidation frees it from the timer-ISR reaper once acknowledged"
-rationale = "Freed from the hart-0 timer ISR (frame_run::Pending::complete via KernelBackend::release_tag_slot) and from AddressSpace::drop when a domain task is dropped in the yield_cpu funnel; the IRQ-masking Spinlock and domain-checked release keep a tag from being reissued while live."
-review = "kernel/src/memory/address_space.rs:AsidLease::acquire; kernel/src/memory/address_space.rs:release_tag_slot; kernel/src/memory/frame_run.rs:Pending::complete"
+seal = "none: tags are leased and returned for the whole run"
+retirement = "AddressSpace::drop releases the lease with the Invalidated proof from tlb_shootdown::confirm_tag_invalidation; otherwise the lease rides the frame-run quarantine's tag entry and Pending::complete releases it from the timer-ISR reaper once the tag's epochs are published. A failed build cancels its never-bound lease; a dropped lease keeps the tag reserved for the boot"
+rationale = "Lock-free TagPool (bitmap CAS with Acquire claim / Release give-back, per-owner AcqRel CAS row), so the release from the hart-0 timer ISR and from AddressSpace::drop in the yield_cpu funnel takes no lock rank; a tag returns only with a proof for exactly its value, so it is never reissued while live."
+review = "kernel/src/memory/tag_pool.rs:TagLease::release; kernel/src/memory/address_space.rs:release_private_tag; kernel/src/memory/frame_run.rs:Pending::complete; tests a_released_tag_is_reused_only_with_its_proof, a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs"
 
 [[global]]
 key = "kernel::measurement_log::LOG"

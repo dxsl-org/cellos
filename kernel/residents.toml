@@ -59,6 +59,7 @@
 "kernel/src/arch/aarch64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/vm.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/guest_budget_selftest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/legacy/boot.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/boot/cpu_features.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/legacy/boot/firmware.rs" = { category = "A", owner = "arch" }
@@ -121,6 +122,7 @@
 "kernel/src/arch/riscv64/user_access.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/virtio_mmio.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/riscv64/vm.rs" = { category = "A", owner = "arch" }
+"kernel/src/arch/tag_pool_selftest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/x86_64/acpi/power.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/acpi/sci.rs" = { category = "exception", owner = "acpi", target = "Platform Cell power service (Spec 15 §3.3)" }
 "kernel/src/arch/x86_64/board.rs" = { category = "C", owner = "board" }
@@ -347,6 +349,7 @@
 "kernel/src/memory/rt_heap.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/stage2.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/stage2_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/memory/tag_pool.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/tlb_shootdown.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/vma.rs" = { category = "A", owner = "memory" }

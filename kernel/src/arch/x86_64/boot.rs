@@ -716,8 +716,10 @@ pub(crate) fn fixtures_hardware() {
         } else {
             log_info("X86-VMM-SMOKE: SKIP (no SVM/VMX root)");
         }
-        // Census §8.6(b); skips itself without SVM/VMX root operation.
+        // Census §8.6(b) and §8.5; each skips itself without SVM/VMX root
+        // operation (and the owner-limit fixture on VMX, which has no VM tag).
         crate::arch::vm::guest_budget_selftest::run();
+        crate::arch::vm::tag_pool_selftest::run();
     }
     #[cfg(feature = "x86-mmio-smoke")]
     if crate::cpu_features::has_x86_virt() {

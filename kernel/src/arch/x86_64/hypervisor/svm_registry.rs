@@ -12,7 +12,6 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
 use crate::hypervisor::registry::{next_vm_id, VmCreateError, VmKey};
@@ -20,6 +19,7 @@ use crate::memory::cell_quota::{Account, Charge, Reservation};
 use crate::memory::frame::phys_to_virt;
 use crate::memory::frame_run::{PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
+use crate::memory::tag_pool::{TagLease, TagPool, TagRefusal};
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
 use hal::x86_64::vmx_vcpu::VmxVcpu;
@@ -38,6 +38,10 @@ enum VcpuFrames {
         host: PrivateRun,
         msrpm: PrivateRun,
         iopm: PrivateRun,
+        /// The vCPU's ASID, held for the VM's life. [`SVM_ASIDS`] never
+        /// reissues a value, so the lease is dropped with the VM, not
+        /// released.
+        asid: TagLease,
     },
     Vmx {
         vmcs: Vmcs,
@@ -157,21 +161,26 @@ pub(crate) fn free_vm_tags() -> usize {
     {
         return 0;
     }
-    let next = NEXT_ASID.load(Ordering::Relaxed) as usize;
-    (hal::x86_64::svm::max_asid() as usize + 1).saturating_sub(next)
+    SVM_ASIDS.free_count()
 }
 
-/// ASID 0 is reserved. Never reuse an ASID during a boot: stale nested-TLB
-/// translations would otherwise let a new VM execute a previous VM's GPA map.
-static NEXT_ASID: AtomicU32 = AtomicU32::new(1);
-
-/// `fetch_update` step for [`NEXT_ASID`]: issue `current` only while it lies in
-/// `1..=max_asid`; never wraps, so exhaustion is permanent for the boot.
-fn next_asid(current: u32, max_asid: u32) -> Option<u32> {
-    current
-        .checked_add(1)
-        .filter(|_| current != 0 && current <= max_asid)
+/// Whether `owner` could take an SVM ASID now (the `TAG-POOL-OWNER-LIMIT`
+/// fixture). A taken ASID is cancelled: never used, and never reissued.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn vm_tag_probe(owner: Charge) -> Result<(), TagRefusal> {
+    SVM_ASIDS.acquire(owner).map(TagLease::cancel)
 }
+
+/// SVM ASIDs `1..=max_asid` (CPUID `8000_000A.EBX` − 1; ASID 0 is the
+/// host's), one per vCPU, at most [`SVM_ASIDS_PER_OWNER`] per cell
+/// incarnation and any number for the kernel. Never reused during a boot:
+/// stale nested-TLB translations would otherwise let a new VM execute a
+/// previous VM's GPA map. Exhaustion is permanent for the boot.
+static SVM_ASIDS: TagPool =
+    TagPool::never_reused(1, hal::x86_64::svm::max_asid, SVM_ASIDS_PER_OWNER);
+
+/// SVM vCPUs one cell incarnation may create (census §8.5).
+pub(crate) const SVM_ASIDS_PER_OWNER: u32 = 4;
 
 /// One VM. Dropped only after it left [`VM_REGISTRY`], so no vCPU can enter
 /// it: `run_vcpu_hal` holds the registry across every guest entry. Each field
@@ -362,24 +371,43 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
         return Ok(vcpu_id);
     }
 
-    // Reserve the ASID before any frame: exhaustion refuses without allocating.
-    let max_asid = hal::x86_64::svm::max_asid();
-    let asid = NEXT_ASID
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-            next_asid(current, max_asid)
-        })
-        .map_err(|_| {
-            log::warn!("[hv-x86] create_vcpu: ASIDs exhausted (max {})", max_asid);
-            ViError::OutOfMemory
-        })?;
+    // Reserve the ASID before any frame: exhaustion or an owner at its limit
+    // refuses without allocating. A failure below cancels the lease, so the
+    // owner's count returns; the ASID itself stays spent.
+    let asid = SVM_ASIDS.acquire(owner).map_err(|refusal| {
+        match refusal {
+            TagRefusal::Exhausted => log::warn!(
+                "[hv-x86] create_vcpu: ASIDs exhausted (max {})",
+                SVM_ASIDS.capacity()
+            ),
+            TagRefusal::OwnerLimit => log::warn!(
+                "[hv-x86] create_vcpu refused: cell {} generation {} already holds {} ASIDs",
+                owner.cell().0,
+                owner.generation(),
+                SVM_ASIDS_PER_OWNER
+            ),
+        }
+        ViError::OutOfMemory
+    })?;
 
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM). An
     // early return below frees the ones already allocated (they leaked on
-    // these paths before, census §5); the ASID stays spent.
-    let vmcb_run = vm_structure(1, &mut budget)?;
-    let host_run = vm_structure(1, &mut budget)?;
-    let msrpm_run = vm_structure(2, &mut budget)?;
-    let iopm_run = vm_structure(3, &mut budget)?;
+    // these paths before, census §5).
+    let frames = vm_structure(1, &mut budget).and_then(|vmcb| {
+        Ok((
+            vmcb,
+            vm_structure(1, &mut budget)?,
+            vm_structure(2, &mut budget)?,
+            vm_structure(3, &mut budget)?,
+        ))
+    });
+    let (vmcb_run, host_run, msrpm_run, iopm_run) = match frames {
+        Ok(frames) => frames,
+        Err(error) => {
+            asid.cancel();
+            return Err(error);
+        }
+    };
     let (vmcb, host, msrpm, iopm) = (
         vmcb_run.base(),
         host_run.base(),
@@ -402,8 +430,10 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
     }
 
     let mut guard = VM_REGISTRY.lock();
-    let map = guard.as_mut().ok_or(ViError::NotFound)?;
-    let vm = map.get_mut(&key).ok_or(ViError::NotFound)?;
+    let Some(vm) = guard.as_mut().and_then(|map| map.get_mut(&key)) else {
+        asid.cancel();
+        return Err(ViError::NotFound);
+    };
     let vcpu_id = vm.vcpus.len() + 1;
 
     let ncr3 = vm.npt.ncr3();
@@ -420,7 +450,7 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
             host as u64,
             entry_pc,
             ncr3,
-            asid,
+            asid.value(),
             0, // gdt_gpa — smoke/PVH guest does not reload segments in the MVP
             iopm as u64,
             msrpm as u64,
@@ -435,6 +465,7 @@ pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResul
         host: host_run,
         msrpm: msrpm_run,
         iopm: iopm_run,
+        asid,
     });
     Ok(vcpu_id)
 }
@@ -869,32 +900,5 @@ fn run_smoke_until_exit(owner: Charge, vm_id: usize, exit: &mut abi::hypervisor:
         unsafe {
             core::arch::asm!("sti", options(nomem, nostack));
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn asid_reservation_is_bounded_and_never_wraps() {
-        let max_asid = 4;
-        let next = AtomicU32::new(1);
-        let reserve = || {
-            next.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                next_asid(current, max_asid)
-            })
-        };
-        for expected in 1..=max_asid {
-            assert_eq!(reserve(), Ok(expected));
-        }
-        for _ in 0..3 {
-            assert!(reserve().is_err(), "exhaustion is permanent");
-        }
-        assert_eq!(next.load(Ordering::Relaxed), max_asid + 1);
-
-        assert_eq!(next_asid(1, 0), None, "zero capacity issues nothing");
-        assert_eq!(next_asid(0, 4), None, "ASID 0 belongs to the host");
-        assert_eq!(next_asid(u32::MAX, u32::MAX), None);
     }
 }

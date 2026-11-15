@@ -27,8 +27,6 @@ struct Fake {
     alias_fails: bool,
     /// The test-hooks withheld-acknowledgement window is open.
     withheld: bool,
-    /// Tag slots handed back, as `(tag, domain)`.
-    released_slots: Vec<(usize, u64)>,
     /// Tag waits ended, in order.
     ended_tags: Vec<usize>,
 }
@@ -45,7 +43,6 @@ impl Fake {
             normalised: Vec::new(),
             alias_fails: false,
             withheld: false,
-            released_slots: Vec::new(),
             ended_tags: Vec::new(),
         }
     }
@@ -129,11 +126,8 @@ impl Backend for Fake {
         self.withheld
     }
 
-    fn tag_wait_ended(&mut self, asid: usize, tag_slot: Option<u64>) {
+    fn tag_wait_ended(&mut self, asid: usize) {
         self.ended_tags.push(asid);
-        if let Some(domain) = tag_slot {
-            self.released_slots.push((asid, domain));
-        }
     }
 }
 
@@ -635,6 +629,10 @@ fn a_run_behind_an_unconfirmed_tag_waits_for_a_fresh_epoch() {
 
 #[test]
 fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
+    use crate::memory::tag_pool::TagPool;
+    /// A pool whose only value is the tag under test.
+    static TAGS: TagPool = TagPool::after_invalidation(5, 1, 1);
+    let root_owner = Charge::new(types::CellId(3), 1);
     let mut fake = Fake::new(16);
     let quarantine = pending();
     // A wait with no run still makes the tag read unconfirmed.
@@ -646,12 +644,13 @@ fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
     assert!(quarantine.tag_unconfirmed(5, &fake));
     assert!(!quarantine.tag_unconfirmed(6, &fake));
 
-    // A root teardown's frames and tag slot join the same wait.
+    // A root teardown's frames and tag lease join the same wait.
     let mut run = fake.run(2, KernelAlias::Intact);
     run.unpublish().unwrap();
     let epochs = fake.request();
+    let lease = TAGS.acquire(root_owner).expect("tag 5 is free");
     assert_eq!(
-        quarantine.defer_tag(5, vec![run], Some(77), &epochs),
+        quarantine.defer_tag(5, vec![run], Some(lease), &epochs),
         TagWait::Extended { pages: 2 }
     );
     assert_eq!(quarantine.tag_pages(5), 2);
@@ -665,19 +664,22 @@ fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
     assert!(quarantine.tag_unconfirmed(5, &fake));
     assert_eq!(quarantine.reap(&mut fake), 0);
     assert_eq!(fake.used(), 2);
-    assert!(fake.released_slots.is_empty());
+    assert_eq!(TAGS.free_count(), 0, "the slot stays reserved");
+    assert!(TAGS.acquire(root_owner).is_err(), "and counted");
     assert!(
         fake.ended_tags.is_empty(),
         "nothing re-armed inside the window"
     );
     assert_eq!(quarantine.tag_snapshot(), vec![(5, 2, 1)]);
 
-    // The window closes: the frames are freed and the slot handed back once.
+    // The window closes: the frames are freed and the slot handed back once,
+    // owner count included.
     fake.withheld = false;
     assert!(!quarantine.tag_unconfirmed(5, &fake));
     assert_eq!(quarantine.reap(&mut fake), 2);
     assert_eq!(fake.used(), 0);
-    assert_eq!(fake.released_slots, [(5, 77)]);
+    assert_eq!(TAGS.free_count(), 1);
+    assert_eq!(TAGS.acquire(root_owner).map(|lease| lease.value()), Ok(5));
     assert_eq!(
         fake.ended_tags,
         [5],

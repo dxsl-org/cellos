@@ -3,6 +3,7 @@ use super::{
     cell_quota::Charge,
     frame::{phys_to_virt, OwnedFrame},
     paging::{Flags, PAGE_SIZE},
+    tag_pool::{TagLease, TagPool, TagRefusal},
 };
 use crate::{sync::Spinlock, PhysAddr, VAddr};
 use alloc::{sync::Arc, vec::Vec};
@@ -346,9 +347,21 @@ impl AddressSpaceBuilder {
             charge,
         } = self;
         // Claim the architectural tag before anything is allocated: when every tag
-        // is held by a live root the builder must refuse the domain (no reuse of a
-        // live tag, no SAS fallback), and a refused build leaves no frame behind.
-        let asid = AsidLease::acquire(identity.raw()).ok_or(AddressSpaceError::OutOfMemory)?;
+        // is held by a live root, or the owner incarnation already holds its
+        // private tag, the builder must refuse the domain (no reuse of a live
+        // tag, no SAS fallback), and a refused build leaves no frame behind.
+        let tag = PRIVATE_ASIDS.acquire(charge).map_err(|refusal| {
+            if refusal == TagRefusal::OwnerLimit {
+                log::warn!(
+                    "[asid] domain {} refused: cell {} generation {} already holds its private tag",
+                    identity.raw(),
+                    charge.cell().0,
+                    charge.generation()
+                );
+            }
+            AddressSpaceError::OutOfMemory
+        })?;
+        let tag = UnboundTag(Some(tag));
         let root = allocate_owned_frame(charge)?;
         // SAFETY: root is a zeroed private page frame and PageTable has the same page layout.
         unsafe {
@@ -435,7 +448,7 @@ impl AddressSpaceBuilder {
             identity,
             charge,
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
-            asid,
+            tag: core::mem::ManuallyDrop::new(tag.bind()),
             #[cfg(feature = "p01-trace")]
             p01_owner: owner,
             state: AtomicU8::new(AddressSpaceState::Live as u8),
@@ -462,7 +475,9 @@ pub struct AddressSpace {
     /// tables and private pages it allocates as it grows.
     charge: Charge,
     generation: u64,
-    asid: AsidLease,
+    /// The root's private tag, from [`PRIVATE_ASIDS`]. Released (or handed to
+    /// the deferred-release reaper) in `Drop`, before any frame goes back.
+    tag: core::mem::ManuallyDrop<TagLease>,
     #[cfg(feature = "p01-trace")]
     p01_owner: Option<crate::p01_measurement::Owner>,
     state: AtomicU8,
@@ -506,7 +521,7 @@ impl AddressSpace {
         self.root.physical_address() >> 12
     }
     pub fn asid(&self) -> usize {
-        self.asid.value
+        self.tag.value() as usize
     }
 
     /// Reports whether new scheduling work may still target this private root.
@@ -1290,7 +1305,11 @@ mod domain_image_page_tests {
 
 impl Drop for AddressSpace {
     fn drop(&mut self) {
-        let acked = self.asid.release().is_ok();
+        // SAFETY: Drop runs once and ManuallyDrop suppresses the field destructor.
+        let lease = unsafe { core::mem::ManuallyDrop::take(&mut self.tag) };
+        #[cfg(feature = "test-hooks")]
+        let tag = lease.value() as usize;
+        let unconfirmed = release_private_tag(lease, self.identity.raw()).err();
         #[cfg(feature = "test-hooks")]
         for id in self.supervisor_registrations.drain(..) {
             let unregistered = crate::memory::domain_supervisor_registry::unregister(id);
@@ -1300,8 +1319,25 @@ impl Drop for AddressSpace {
         let root = unsafe { core::mem::ManuallyDrop::take(&mut self.root) };
         let mut frames: Vec<OwnedFrame> = self.frames.lock().drain(..).collect();
         frames.extend(self.table_frames.lock().drain(..));
-        let tag = self.asid.value;
-        if acked {
+        if let Some(lease) = unconfirmed {
+            // The invalidation is unconfirmed, so the root and every frame behind
+            // it are retained — including the tag's lease, still reserved and
+            // counted. A reaper completes the release once a hart acknowledges;
+            // until then nothing here can be reached through the old tag.
+            #[cfg(feature = "test-hooks")]
+            log::info!(
+                "[selftest] DOMAIN-FRAME-RELEASE: DEFERRED tag={} frames={}",
+                tag,
+                frames.len() + 1
+            );
+            frames.push(root);
+            crate::memory::deferred_release::defer_frames_and_tag(
+                lease,
+                self.identity.raw(),
+                frames,
+                "root teardown invalidation unacknowledged",
+            );
+        } else {
             #[cfg(feature = "p01-trace")]
             let p01_owner = crate::p01_resources::owner_for_domain(self.identity.raw());
             #[cfg(feature = "p01-trace")]
@@ -1324,190 +1360,143 @@ impl Drop for AddressSpace {
                     crate::p01_resources::checked(owner, 6);
                 }
             }
-        } else {
-            // The invalidation is unconfirmed, so the root and every frame behind
-            // it are retained — including the tag slot, which `release` kept
-            // reserved. A reaper completes the release once a hart acknowledges;
-            // until then nothing here can be reached through the old tag.
-            #[cfg(feature = "test-hooks")]
-            log::info!(
-                "[selftest] DOMAIN-FRAME-RELEASE: DEFERRED tag={} frames={}",
-                tag,
-                frames.len() + 1
-            );
-            frames.push(root);
-            crate::memory::deferred_release::defer_frames_and_tag(
-                tag,
-                self.asid.domain,
-                frames,
-                "root teardown invalidation unacknowledged",
-            );
         }
     }
 }
 
-/// Largest number of private roots that may hold an architectural tag at once.
+/// Private roots that may hold an architectural tag at once: values
+/// `1..=PRIVATE_ASID_COUNT`.
 ///
 /// A fixed pool makes exhaustion a bounded, checkable condition instead of a
-/// counter wrap that reissues a live tag. Every value handed out is `slot + 1`, so
-/// tag 0 stays reserved for "no architectural tag" (full-flush mode) and no value
-/// can exceed the narrowest supported width.
-const MAX_LIVE_ASIDS: usize = 256;
-
-/// The identity holding one live tag, for diagnostics and for the generation-tagged
-/// acknowledgement the non-RV64 switch still owes phase 02.
-#[derive(Clone, Copy)]
-struct AsidTagOwner {
-    domain: u64,
-}
-
-static LIVE_ASIDS: Spinlock<[Option<AsidTagOwner>; MAX_LIVE_ASIDS]> =
-    Spinlock::ranked([None; MAX_LIVE_ASIDS], crate::sync::rank::LIVE_ASIDS);
-
-/// Test-hooks view: which domain currently holds tag `value`, or `None` when the
-/// tag is free. The lease contract test uses it to prove a released tag is
-/// reissued to its new owner rather than aliasing the previous one.
-#[cfg(all(
-    feature = "native-domains",
-    feature = "test-hooks",
-    target_arch = "riscv64"
-))]
-pub(crate) fn live_tag_owner(value: usize) -> Option<u64> {
-    if value == 0 || value > MAX_LIVE_ASIDS {
-        return None;
+/// counter wrap that reissues a live tag. Tag 0 stays reserved for "no
+/// architectural tag" (full-flush mode), and no value exceeds what the root
+/// register carries: a value outside the width would be truncated or ignored
+/// by hardware, which is aliasing under another name. 256 on every target
+/// today (the narrowest width, x86 PCID, carries 4095).
+const PRIVATE_ASID_COUNT: u32 = {
+    let widest = (1u32 << asid_width()) - 1;
+    if widest < 256 {
+        widest
+    } else {
+        256
     }
-    LIVE_ASIDS.lock()[value - 1].map(|owner| owner.domain)
-}
+};
 
-/// An architectural tag owned by exactly one live private root.
+/// The private-root tags (census §8.5).
 ///
-/// The value is never reissued while another root holds it. A published root
-/// releases its tag before its frames; a standalone lease releases it on Drop.
-/// Both wait for local/remote invalidation, retaining the slot on failure.
-struct AsidLease {
-    value: usize,
-    domain: u64,
-    released: bool,
+/// A tag returns only with the proof that no hart still caches it:
+/// `tlb_shootdown::confirm_tag_invalidation` at teardown, or the
+/// deferred-release reaper once the tag's epochs are published. One per
+/// incarnation: an incarnation publishes exactly one private root
+/// (`task::launch::admit_and_bind_domain`, once per freshly minted generation,
+/// onto a task that holds none), so a second claim is refused. A retired
+/// incarnation's tag stays counted against it until its wait completes, which
+/// limits no live owner. Kernel-built roots (fixtures) are bounded by the pool
+/// alone.
+static PRIVATE_ASIDS: TagPool = TagPool::after_invalidation(1, PRIVATE_ASID_COUNT, 1);
+
+/// The private tag of a root still being built. No root register has carried
+/// it under this lease, so a failed build hands it back with
+/// [`TagLease::cancel`]: no invalidation is owed. [`Self::bind`] takes it for
+/// the published root.
+struct UnboundTag(Option<TagLease>);
+
+impl UnboundTag {
+    fn bind(mut self) -> TagLease {
+        self.0.take().expect("a tag is bound once")
+    }
 }
 
-impl AsidLease {
-    fn acquire(domain: u64) -> Option<Self> {
-        let mut tags = LIVE_ASIDS.lock();
-        let slot = tags.iter().position(Option::is_none)?;
-        let value = slot + 1;
-        // Never hand out a tag the root register cannot carry. The pool is sized so
-        // this cannot trigger today (256 < 2^12), and the guard is what keeps that
-        // true if the pool grows: a value outside the width would be truncated or
-        // ignored by hardware, which is aliasing under another name.
-        if value >= 1usize << asid_width() {
-            return None;
+impl Drop for UnboundTag {
+    fn drop(&mut self) {
+        if let Some(lease) = self.0.take() {
+            lease.cancel();
         }
-        tags[slot] = Some(AsidTagOwner { domain });
-        Some(Self {
-            value,
-            domain,
-            released: false,
-        })
     }
-    /// Release the tag once, preserving its reservation on an unacknowledged
-    /// flush. AddressSpace calls this before dropping any owned page-table frame;
-    /// standalone leases use Drop for the same tag-reuse ordering.
-    fn release(&mut self) -> Result<(), crate::memory::tlb_shootdown::FlushAckError> {
-        if self.released {
-            return Ok(());
+}
+
+/// Release private tag `lease` of `domain`: invalidate it locally, confirm
+/// every online hart once, and return it to [`PRIVATE_ASIDS`] with that proof.
+///
+/// An unconfirmed invalidation hands the lease back, still reserved and
+/// counted, for the caller to give to `deferred_release` together with the
+/// frames behind the tag.
+fn release_private_tag(lease: TagLease, domain: u64) -> Result<(), TagLease> {
+    match crate::memory::tlb_shootdown::confirm_tag_invalidation(lease.value() as usize) {
+        Ok(proof) => {
+            lease.release(proof);
+            Ok(())
         }
-        self.released = true;
-        if let Err(error) = crate::memory::tlb_shootdown::confirm_tag_invalidation(self.value) {
+        Err(error) => {
             log::error!(
                 "[asid] tag {} for domain {} not recycled: invalidation unconfirmed ({:?})",
-                self.value,
-                self.domain,
+                lease.value(),
+                domain,
                 error
             );
-            return Err(error);
+            Err(lease)
         }
-        release_tag_slot(self.value, self.domain);
-        Ok(())
     }
 }
 
-impl Drop for AsidLease {
+/// Test-hooks: a real tag for a fixture-owned root that is not published as an
+/// `AddressSpace`, owned by the kernel.
+///
+/// The AArch64 private-root invalidation witness builds its own page tables (it
+/// must reach and rewrite a leaf from inside the root under test), so it needs
+/// an architectural tag without a builder, and the RV64 lease contract fixture
+/// holds the whole pool. Taking it from the same pool keeps the fixture from
+/// aliasing a live domain's tag, and dropping it runs the real release path —
+/// tag-targeted invalidation, then the slot (or the deferred wait) — before
+/// the fixture's frames go back to the allocator.
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "aarch64", target_arch = "riscv64")
+))]
+pub(crate) struct FixtureAsidLease {
+    lease: Option<TagLease>,
+    domain: u64,
+}
+
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "aarch64", target_arch = "riscv64")
+))]
+impl FixtureAsidLease {
+    /// A tag for fixture root `domain`; `None` when the pool is exhausted.
+    pub(crate) fn acquire(domain: u64) -> Option<Self> {
+        Some(Self {
+            lease: Some(PRIVATE_ASIDS.acquire(Charge::KERNEL).ok()?),
+            domain,
+        })
+    }
+
+    pub(crate) fn value(&self) -> usize {
+        self.lease
+            .as_ref()
+            .map_or(0, |lease| lease.value() as usize)
+    }
+}
+
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "aarch64", target_arch = "riscv64")
+))]
+impl Drop for FixtureAsidLease {
     fn drop(&mut self) {
-        if self.release().is_err() {
-            // The slot stays reserved, so the tag cannot alias a new root. Whoever
-            // owns the tag's frames hands them to the same entry; for a standalone
-            // lease there are none, and the entry only carries the slot handover.
+        let Some(lease) = self.lease.take() else {
+            return;
+        };
+        if let Err(lease) = release_private_tag(lease, self.domain) {
+            // The tag stays reserved, so it cannot alias a new root. A
+            // standalone lease has no frames: the entry carries only the lease.
             crate::memory::deferred_release::defer_frames_and_tag(
-                self.value,
+                lease,
                 self.domain,
                 Vec::new(),
                 "asid lease release invalidation unacknowledged",
             );
         }
-    }
-}
-
-/// Return a tag slot whose root teardown could not confirm its invalidation.
-///
-/// Called by the deferred-release reaper once the acknowledgement lands: the slot
-/// must not be reissued while a hart might still hold a translation for the tag,
-/// which is exactly the state the entry waited in.
-pub(crate) fn release_tag_slot_after_invalidation(value: usize, domain: u64) {
-    release_tag_slot(value, domain);
-}
-
-/// Clear the pool slot of `value` when `domain` still owns it. A slot held by
-/// someone else is retained with a warning: handing it to a second owner would
-/// alias two live roots under one tag.
-fn release_tag_slot(value: usize, domain: u64) {
-    if value == 0 {
-        return;
-    }
-    let mut tags = LIVE_ASIDS.lock();
-    let Some(slot) = value.checked_sub(1).filter(|slot| *slot < MAX_LIVE_ASIDS) else {
-        log::warn!(
-            "[asid] tag {} released by domain {} is outside the pool — slot retained",
-            value,
-            domain
-        );
-        return;
-    };
-    match tags[slot] {
-        Some(owner) if owner.domain == domain => tags[slot] = None,
-        other => log::warn!(
-            "[asid] tag {} slot {} released by domain {} but held by {:?} — slot retained",
-            value,
-            slot,
-            domain,
-            other.map(|owner| owner.domain)
-        ),
-    }
-}
-
-/// Test-hooks: a real tag for a fixture-owned root that is not published as an
-/// `AddressSpace`.
-///
-/// The AArch64 private-root invalidation witness builds its own page tables (it
-/// must reach and rewrite a leaf from inside the root under test), so it needs
-/// an architectural tag without a builder. Taking it from the same pool keeps
-/// the fixture from aliasing a live domain's tag, and dropping it runs the real
-/// release path — ASID-targeted invalidation, then the slot — before the
-/// fixture's frames go back to the allocator.
-#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
-pub(crate) struct FixtureAsidLease {
-    lease: AsidLease,
-}
-
-#[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
-impl FixtureAsidLease {
-    pub(crate) fn acquire(domain: u64) -> Option<Self> {
-        Some(Self {
-            lease: AsidLease::acquire(domain)?,
-        })
-    }
-
-    pub(crate) fn value(&self) -> usize {
-        self.lease.value
     }
 }
 

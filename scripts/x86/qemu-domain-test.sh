@@ -466,6 +466,14 @@ if grep -aqF "x86 virt: root operation active" "$LOG"; then
     )
 fi
 
+# The tag-pool owner-limit fixture (census §8.5) needs a VM tag, which only SVM
+# has (an ASID per vCPU; VMX uses no VPID and the fixture logs SKIP there).
+if grep -aqF "x86 virt: root operation active (SVM)" "$LOG"; then
+    REQUIRED_MARKERS+=(
+        "tag-pool owner limit:::[selftest] TAG-POOL-OWNER-LIMIT: PASS"
+    )
+fi
+
 # --- Shootdown fail-stop -----------------------------------------------------
 # Every unconfirmed tag or shared-mapping invalidation is logged (`[tlb] tag …
 # invalidation unconfirmed`, `[frame-run] shared invalidation unconfirmed`,

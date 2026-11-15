@@ -9,6 +9,7 @@ use crate::arch::hypervisor::pending_irqs::PendingIrqs;
 use crate::hypervisor::registry::{next_vm_id, VmCreateError, VmKey};
 use crate::memory::cell_quota::{Account, Charge, Reservation};
 use crate::memory::stage2::Stage2Table;
+use crate::memory::tag_pool::{Invalidated, TagLease, TagPool, TagRefusal};
 use crate::sync::Spinlock;
 use abi::hypervisor::ViVmExit as ApiVmExit;
 use alloc::{collections::BTreeMap, vec::Vec};
@@ -16,7 +17,7 @@ use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, Vgic
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
     stage2_regs::{
-        clear_stage2_root, disable_stage2, enable_stage2, load_stage2, s2_tlb_flush_all, VmidPool,
+        clear_stage2_root, disable_stage2, enable_stage2, load_stage2, s2_tlb_flush_all, VMID_COUNT,
     },
     vcpu::AArch64Vcpu,
 };
@@ -62,8 +63,8 @@ struct Vm {
     vcpu_vgic: Vec<vgic::CpuIfState>,
     /// The VM's Stage-2 VMID, loaded into `VTTBR_EL2` with its root on every
     /// guest entry (directly at an EL2 host, by the Pi monitor's run op).
-    /// Taken from [`VMIDS`]; `reap_vms_for` returns it.
-    vmid: u16,
+    /// Leased from [`VMIDS`]; `reap_vms_for` releases it after its flush.
+    vmid: TagLease,
     /// Set once the guest RAM window has been cleaned to PoC and the I-cache
     /// invalidated, before the first vCPU entry.
     entry_flushed: bool,
@@ -74,10 +75,21 @@ struct Vm {
 static VM_REGISTRY: Spinlock<Option<BTreeMap<VmKey, Vm>>> =
     Spinlock::ranked(None, crate::sync::rank::VM_REGISTRY);
 
-/// Guest VMIDs within the 8-bit width `VTCR_EL2` configures. A VMID goes back
-/// only after `TLBI ALLE1IS` dropped every entry tagged with it, and binding it
-/// again invalidates it once more (`enable_stage2`).
-static VMIDS: VmidPool = VmidPool::new();
+/// Guest VMIDs within the 8-bit width `VTCR_EL2` configures: 1..=255 (VMID 0
+/// is the host's), at most [`VMIDS_PER_OWNER`] per cell incarnation and any
+/// number for the kernel. A VMID goes back only with the proof that
+/// `TLBI ALLE1IS` dropped every entry tagged with it (`reap_vms_for`), and
+/// binding it again invalidates it once more (`enable_stage2`).
+static VMIDS: TagPool = TagPool::after_invalidation(1, VMID_COUNT as u32 - 1, VMIDS_PER_OWNER);
+
+/// VMs one cell incarnation may hold at once (census §8.5).
+const VMIDS_PER_OWNER: u32 = 4;
+
+/// The VMID `lease` carries; [`VMIDS`] hands out only 1..=255, which fits the
+/// 8-bit `VTTBR_EL2` field.
+fn vmid(lease: &TagLease) -> u16 {
+    lease.value() as u16
+}
 
 fn registry_lock() -> &'static Spinlock<Option<BTreeMap<VmKey, Vm>>> {
     &VM_REGISTRY
@@ -106,6 +118,24 @@ pub(crate) fn free_vm_tags() -> usize {
     VMIDS.free_count()
 }
 
+/// Whether `owner` could take a VM tag now, without keeping it (the
+/// `TAG-POOL-OWNER-LIMIT` fixture). A VMID taken here was never bound.
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) fn vm_tag_probe(owner: Charge) -> Result<(), TagRefusal> {
+    VMIDS.acquire(owner).map(TagLease::cancel)
+}
+
+/// VM tags one cell incarnation may hold (the `TAG-POOL-OWNER-LIMIT`
+/// fixture): VMIDs, one per VM.
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) fn vm_tags_per_owner() -> Option<u32> {
+    Some(VMIDS_PER_OWNER)
+}
+
+/// A VM takes its tag at creation (`create_vm`), not with each vCPU.
+#[cfg(not(cellos_posture = "release"))]
+pub(crate) const VM_TAG_PER_VCPU: bool = false;
+
 /// The host the kernel's VM fixtures run on: an EL2 host (not the Pi, whose
 /// monitor runs guests on the kernel's behalf).
 #[cfg(not(cellos_posture = "release"))]
@@ -117,6 +147,11 @@ pub(crate) fn guest_fixture_host() -> bool {
 #[cfg(not(cellos_posture = "release"))]
 #[path = "../guest_budget_selftest.rs"]
 pub(crate) mod guest_budget_selftest;
+
+/// Boot fixture `TAG-POOL-OWNER-LIMIT` (census §8.5), shared with x86.
+#[cfg(not(cellos_posture = "release"))]
+#[path = "../tag_pool_selftest.rs"]
+pub(crate) mod tag_pool_selftest;
 
 /// Pi's EL1-host capability gate: an actual monitor round-trip must run guest
 /// HVC, WFI, MMIO and software-injected virtual IRQ before any VM is admitted.
@@ -149,10 +184,12 @@ pub fn pi_monitor_smoke() {
         return;
     }
     // The monitor binds and invalidates the VMID on every run (gateway op 5).
-    let Some(vmid) = VMIDS.allocate() else {
+    // A kernel-owned VM: bounded by the pool alone.
+    let Ok(lease) = VMIDS.acquire(Charge::KERNEL) else {
         log::warn!("[pi-monitor] smoke: no free VMID; HypervisorCap closed");
         return;
     };
+    let vmid = vmid(&lease);
     let page = phys_to_virt(guest_pa as usize) as *mut u32;
     // MOVZ X0,#42; HVC #0; WFI; MOVZ X0,#0x900,LSL#16;
     // STR X1,[X0]; HVC #0. The final HVC bounds a failure if MMIO did not
@@ -392,7 +429,9 @@ pub fn pi_monitor_smoke() {
         disable_stage2();
         s2_tlb_flush_all();
     }
-    VMIDS.release(vmid);
+    // The flush above dropped every VMID's entries on every CPU.
+    let value = lease.value();
+    lease.release(Invalidated::of(value));
     // Restore the ordinary host tick cadence before Cells can run.
     El2Monitor::restore_host_tick();
     if passed {
@@ -426,8 +465,6 @@ fn build_vm(
         );
         return Err(ViError::NotSupported.into());
     }
-    use crate::memory::paging::PAGE_SIZE;
-
     // The first effect: the owner's guest charge for every frame the VM can
     // take. A refusal allocates nothing; every later frame is drawn from it,
     // and an error below frees what was drawn and refunds the whole charge.
@@ -441,6 +478,77 @@ fn build_vm(
             );
             VmCreateError::Budget
         })?;
+    // The VM's tag, before any frame: an exhausted pool or an owner at its
+    // limit refuses here, and the budget above is refunded on return.
+    let tag = VMIDS.acquire(owner).map_err(|refusal| {
+        match refusal {
+            TagRefusal::Exhausted if refusal_expected => {
+                log::info!("[hv] create_vm refused (fixture): all 255 VMIDs in use")
+            }
+            TagRefusal::Exhausted => log::warn!("[hv] create_vm refused: all 255 VMIDs in use"),
+            TagRefusal::OwnerLimit => log::warn!(
+                "[hv] create_vm refused: cell {} generation {} already holds {} VMIDs",
+                owner.cell().0,
+                owner.generation(),
+                VMIDS_PER_OWNER
+            ),
+        }
+        ViError::OutOfMemory
+    })?;
+    let (table, guest_pa) = match build_stage2(budget, guest_pages) {
+        Ok(built) => built,
+        Err(error) => {
+            // The table, never bound, is freed on return: no TLB entry names
+            // it or the VMID, which goes back without an invalidation.
+            tag.cancel();
+            return Err(error.into());
+        }
+    };
+
+    let vm_id = {
+        let mut guard = registry_lock().lock();
+        // Invalidate whatever the VMID's previous VM left cached (its teardown
+        // already did, before it returned the VMID), then leave this CPU
+        // naming no root: every guest entry programs its own VM's root
+        // (`run_vcpu`), and a root this CPU still named could be freed under
+        // it. Under the registry lock (interrupts masked), so the clear runs on
+        // the CPU the bind did.
+        // SAFETY: table built and flushed; vmid in 1..=255; no vCPU of it
+        // exists yet.
+        unsafe {
+            enable_stage2(vmid(&tag), table.root_pa());
+            clear_stage2_root();
+        }
+        if guard.is_none() {
+            *guard = Some(BTreeMap::new());
+        }
+        let map = guard.as_mut().unwrap();
+        let id = next_vm_id();
+        map.insert(
+            VmKey::new(owner, id),
+            Vm {
+                stage2: table,
+                guest_pa,
+                guest_pages,
+                vcpus: Vec::new(),
+                vcpu_irqs: Vec::new(),
+                vcpu_vgic: Vec::new(),
+                vmid: tag,
+                entry_flushed: false,
+            },
+        );
+        id
+    };
+    Ok(vm_id)
+}
+
+/// The Stage-2 table of a new VM of `guest_pages`, every frame drawn from
+/// `budget`: guest RAM carved and mapped at IPA `0x4000_0000`, and the GICV
+/// passthrough where the board declares it. Returns the table and the guest
+/// RAM's PA; on error everything drawn is freed and the budget refunded.
+fn build_stage2(budget: Reservation, guest_pages: usize) -> Result<(Stage2Table, u64), ViError> {
+    use crate::memory::paging::PAGE_SIZE;
+
     let mut table = Stage2Table::new(budget).ok_or_else(|| {
         log::error!("[hv] create_vm: stage-2 root allocation failed");
         ViError::OutOfMemory
@@ -501,51 +609,7 @@ fn build_vm(
             vgic::enable(windows.gich_base);
         }
     }
-
-    // The table, never bound, is freed on refusal; no TLB entry names it.
-    let vmid = VMIDS.allocate().ok_or_else(|| {
-        if refusal_expected {
-            log::info!("[hv] create_vm refused (fixture): all 255 VMIDs in use");
-        } else {
-            log::warn!("[hv] create_vm refused: all 255 VMIDs in use");
-        }
-        ViError::OutOfMemory
-    })?;
-    let vm_id = {
-        let mut guard = registry_lock().lock();
-        // Invalidate whatever the VMID's previous VM left cached (its teardown
-        // already did, before it returned the VMID), then leave this CPU
-        // naming no root: every guest entry programs its own VM's root
-        // (`run_vcpu`), and a root this CPU still named could be freed under
-        // it. Under the registry lock (interrupts masked), so the clear runs on
-        // the CPU the bind did.
-        // SAFETY: table built and flushed; vmid in 1..=255; no vCPU of it
-        // exists yet.
-        unsafe {
-            enable_stage2(vmid, table.root_pa());
-            clear_stage2_root();
-        }
-        if guard.is_none() {
-            *guard = Some(BTreeMap::new());
-        }
-        let map = guard.as_mut().unwrap();
-        let id = next_vm_id();
-        map.insert(
-            VmKey::new(owner, id),
-            Vm {
-                stage2: table,
-                guest_pa,
-                guest_pages,
-                vcpus: Vec::new(),
-                vcpu_irqs: Vec::new(),
-                vcpu_vgic: Vec::new(),
-                vmid,
-                entry_flushed: false,
-            },
-        );
-        id
-    };
-    Ok(vm_id)
+    Ok((table, guest_pa))
 }
 
 pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
@@ -692,7 +756,7 @@ pub(crate) fn run_vcpu(
                 let exit = if PI_MONITOR {
                     let vi = core::mem::replace(&mut virtual_irq, false);
                     unsafe {
-                        El2Monitor::run(vcpu, vm.vmid, vm.stage2.root_pa(), vi);
+                        El2Monitor::run(vcpu, vmid(&vm.vmid), vm.stage2.root_pa(), vi);
                     }
                     vcpu.decode_exit()
                 } else {
@@ -702,7 +766,7 @@ pub(crate) fn run_vcpu(
                     // SAFETY: EL2 host; the VM is registered (its root is
                     // live) and the registry lock is held across the run.
                     unsafe {
-                        load_stage2(vm.vmid, vm.stage2.root_pa());
+                        load_stage2(vmid(&vm.vmid), vm.stage2.root_pa());
                         let exit = run_vcpu_impl(vcpu);
                         clear_stage2_root();
                         exit
@@ -982,8 +1046,12 @@ pub(crate) fn reap_vms_for(owner: Charge) {
         s2_tlb_flush_all();
     }
     for vm in dead_vms {
-        VMIDS.release(vm.vmid);
-        drop(vm); // Stage2Table::drop frees all frames and refunds their charge
+        // The flush above dropped every VMID's entries on every CPU: the
+        // proof the VMID's next holder needs.
+        let value = vm.vmid.value();
+        vm.vmid.release(Invalidated::of(value));
+        // The rest of `vm` drops here: Stage2Table::drop frees all frames and
+        // refunds their charge.
     }
 }
 
@@ -1011,14 +1079,14 @@ pub(crate) fn reap_vms_for(owner: Charge) {
 /// VM C is created; it must be handed A's VMID again and run its own guest.
 #[cfg(not(cellos_posture = "release"))]
 pub(crate) fn two_vm_stage2_selftest() {
-    use hal::aarch64::{backend::ArmIrqController, stage2_regs::VMID_COUNT};
+    use hal::aarch64::backend::ArmIrqController;
 
     if PI_MONITOR || !hal::aarch64::el2::is_el2() {
         log::info!("S22-AARCH64-TWO-VM-STAGE2: SKIP (not an EL2 host)");
         return;
     }
-    /// The kernel: its guest charge is never limited or counted, so the
-    /// fixture can hold all 255 VMIDs.
+    /// The kernel: its guest charge is never limited or counted, and it is
+    /// exempt from [`VMIDS_PER_OWNER`], so the fixture can hold all 255 VMIDs.
     const OWNER: Charge = Charge::KERNEL;
     const ENTRY: u64 = 0x4008_0000;
     const GUEST_PAGES: usize = 512;
@@ -1050,7 +1118,7 @@ pub(crate) fn two_vm_stage2_selftest() {
             .lock()
             .as_ref()
             .and_then(|map| map.get(&VmKey::new(OWNER, vm_id)))
-            .map(|vm| vm.vmid)
+            .map(|vm| vmid(&vm.vmid))
     }
     let guest = |marker: u16| -> [u8; 12] {
         // MOVZ X0, #marker; HVC #0; B .-8 (back to the MOVZ)
@@ -1117,12 +1185,12 @@ pub(crate) fn two_vm_stage2_selftest() {
         }
     }
     note_vttbr(&mut named_root);
-    let exhausted = match VMIDS.allocate() {
-        Some(vmid) => {
-            VMIDS.release(vmid);
+    let exhausted = match VMIDS.acquire(OWNER) {
+        Ok(lease) => {
+            lease.cancel();
             false
         }
-        None => true,
+        Err(refusal) => refusal == TagRefusal::Exhausted,
     };
     reap_vms_for(OWNER);
     note_vttbr(&mut named_root);

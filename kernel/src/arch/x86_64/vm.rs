@@ -23,6 +23,27 @@ pub(crate) fn free_vm_tags() -> usize {
     crate::arch::hypervisor::svm_registry::free_vm_tags()
 }
 
+/// VM tags one cell incarnation may hold (the `TAG-POOL-OWNER-LIMIT`
+/// fixture): SVM ASIDs, one per vCPU. `None` on VMX, whose VMs carry no tag
+/// (no VPID), so no owner limit applies to them.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn vm_tags_per_owner() -> Option<u32> {
+    (crate::arch::boot::cpu_features::x86_virt_kind()
+        == Some(crate::arch::boot::cpu_features::X86Virt::Svm))
+    .then_some(crate::arch::hypervisor::svm_registry::SVM_ASIDS_PER_OWNER)
+}
+
+/// A VM takes its tag with each vCPU (`create_vcpu`), not at creation.
+#[cfg(feature = "test-hooks")]
+pub(crate) const VM_TAG_PER_VCPU: bool = true;
+
+/// Whether `owner` could take a VM tag now, without keeping it
+/// (`svm_registry::vm_tag_probe`).
+#[cfg(feature = "test-hooks")]
+pub(crate) fn vm_tag_probe(owner: Charge) -> Result<(), crate::memory::tag_pool::TagRefusal> {
+    crate::arch::hypervisor::svm_registry::vm_tag_probe(owner)
+}
+
 /// The host the kernel's VM fixtures run on: SVM or VMX root operation is
 /// active on every online CPU.
 #[cfg(feature = "test-hooks")]
@@ -34,6 +55,11 @@ pub(crate) fn guest_fixture_host() -> bool {
 #[cfg(feature = "test-hooks")]
 #[path = "../guest_budget_selftest.rs"]
 pub(crate) mod guest_budget_selftest;
+
+/// Boot fixture `TAG-POOL-OWNER-LIMIT` (census §8.5), shared with AArch64.
+#[cfg(feature = "test-hooks")]
+#[path = "../tag_pool_selftest.rs"]
+pub(crate) mod tag_pool_selftest;
 
 pub(crate) fn create_vcpu(owner: Charge, vm_id: usize, entry_pc: u64) -> ViResult<usize> {
     crate::arch::hypervisor::svm_registry::create_vcpu(owner, vm_id, entry_pc)

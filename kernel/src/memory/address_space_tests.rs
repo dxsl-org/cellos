@@ -228,22 +228,19 @@ pub(crate) fn run_primary() {
     // refuse rather than reissue a live value. Claim the whole pool, prove the
     // values are distinct and inside the architectural width, then release one and
     // prove exactly that value comes back.
-    let mut live: Vec<AsidLease> = Vec::new();
-    while let Some(lease) = AsidLease::acquire(1) {
+    let mut live: Vec<FixtureAsidLease> = Vec::new();
+    while let Some(lease) = FixtureAsidLease::acquire(1) {
         live.push(lease);
     }
-    let exhausted = live.len() == MAX_LIVE_ASIDS;
-    let mut values: Vec<usize> = live.iter().map(|lease| lease.value).collect();
+    let exhausted = live.len() == PRIVATE_ASIDS.capacity() as usize;
+    let mut values: Vec<usize> = live.iter().map(FixtureAsidLease::value).collect();
     values.sort_unstable();
     values.dedup();
     let distinct_live = values.len() == live.len();
     let width_ok = live
         .iter()
-        .all(|lease| lease.value >= 1 && lease.value < 1usize << asid_width());
-    let owner_tracked = live
-        .iter()
-        .all(|lease| live_tag_owner(lease.value) == Some(1));
-    let refused_at_exhaustion = AsidLease::acquire(1).is_none();
+        .all(|lease| lease.value() >= 1 && lease.value() < 1usize << asid_width());
+    let refused_at_exhaustion = FixtureAsidLease::acquire(1).is_none();
 
     // Releasing a tag now waits for every online hart to confirm its own
     // invalidation, so the recycle below is also the witness that the wait
@@ -256,20 +253,18 @@ pub(crate) fn run_primary() {
         .collect();
 
     let released = live.pop();
-    let released_value = released.as_ref().map(|lease| lease.value);
+    let released_value = released.as_ref().map(FixtureAsidLease::value);
     drop(released);
     let remote_ack_advanced = remote_acks_before
         .iter()
         .all(|(hart, before)| crate::sched::smp::tlb_flush_complete_epoch(*hart) > *before);
-    let recycled = AsidLease::acquire(2).is_some_and(|again| {
-        Some(again.value) == released_value && live_tag_owner(again.value) == Some(2)
-    });
+    let recycled =
+        FixtureAsidLease::acquire(2).is_some_and(|again| Some(again.value()) == released_value);
     drop(live);
 
     if exhausted
         && distinct_live
         && width_ok
-        && owner_tracked
         && refused_at_exhaustion
         && remote_ack_advanced
         && recycled
@@ -285,7 +280,7 @@ pub(crate) fn run_primary() {
     } else {
         log::error!(
             "S22-RV64-ASID-LEASE: FAIL exhausted={exhausted} distinct={distinct_live} \
-             width={width_ok} owner={owner_tracked} refused_at_exhaustion={refused_at_exhaustion} \
+             width={width_ok} refused_at_exhaustion={refused_at_exhaustion} \
              remote_ack_advanced={remote_ack_advanced} recycled={recycled}"
         );
     }

@@ -32,6 +32,9 @@ pub mod pin;
 pub mod region;
 pub mod rt_heap;
 pub mod stage2;
+/// One allocator for architectural tags (private-root ASIDs, VMIDs, SVM
+/// ASIDs) with a per-owner limit.
+pub(crate) mod tag_pool;
 // Uncalled allocator test runner; never compiled into a release kernel.
 #[cfg(not(cellos_posture = "release"))]
 pub mod tests;

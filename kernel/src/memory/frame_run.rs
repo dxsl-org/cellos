@@ -31,6 +31,7 @@
 use crate::memory::cell_quota::{self, Account, Charge, Reservation};
 use crate::memory::frame::FlushCap;
 use crate::memory::paging::PAGE_SIZE;
+use crate::memory::tag_pool::{Invalidated, TagLease};
 use crate::sched::smp::MAX_HARTS;
 use crate::sync::Spinlock;
 use alloc::vec::Vec;
@@ -688,10 +689,10 @@ pub(crate) trait Backend {
     fn tag_ack_withheld(&self) -> bool {
         false
     }
-    /// Private tag `asid`'s wait has ended: `tag_slot`, the slot of a
-    /// private root whose teardown could not confirm the tag, may be reissued,
-    /// and work that skipped the tag while it was unconfirmed may run again.
-    fn tag_wait_ended(&mut self, _asid: usize, _tag_slot: Option<u64>) {}
+    /// Private tag `asid`'s wait has ended (its slot, if the entry held one,
+    /// is already back in its pool): work that skipped the tag while it was
+    /// unconfirmed may run again.
+    fn tag_wait_ended(&mut self, _asid: usize) {}
 }
 
 fn epochs_confirmed(backend: &impl Backend, epochs: &Epochs) -> bool {
@@ -880,9 +881,9 @@ struct Entry {
     runs: Vec<FrameRun>,
     pages: usize,
     attempts: usize,
-    /// The tag slot (its domain) of a private root whose teardown could not
-    /// confirm this entry's tag: reissued only once the entry completes.
-    tag_slot: Option<u64>,
+    /// The tag lease of a private root whose teardown could not confirm this
+    /// entry's tag: released, with the entry's proof, only once it completes.
+    tag_slot: Option<TagLease>,
 }
 
 /// Where [`Pending::defer_tag`] recorded a private tag's wait.
@@ -998,20 +999,25 @@ impl Pending {
 
     /// Wait for private tag `asid` until `epochs` are published: quarantine
     /// `runs` (unpublished: the private root no longer maps them) behind it
-    /// and, with `tag_slot`, keep that root's tag slot reserved until the same
-    /// entry completes. An entry is recorded even with no run: it is what makes
-    /// the tag read unconfirmed ([`Self::tag_unconfirmed`]).
+    /// and, with `tag_slot` (the lease of tag `asid`), keep that root's tag
+    /// reserved until the same entry completes. An entry is recorded even with
+    /// no run: it is what makes the tag read unconfirmed
+    /// ([`Self::tag_unconfirmed`]).
     ///
     /// Nothing waits here and nothing is freed. A wait that cannot be recorded
-    /// (no heap) leaks its runs (counted), keeps the slot reserved for the
-    /// boot, and makes every tag read unconfirmed from then on: fail closed.
+    /// (no heap) leaks its runs (counted), drops the lease (so its tag stays
+    /// reserved for the boot), and makes every tag read unconfirmed from then
+    /// on: fail closed.
     pub(crate) fn defer_tag(
         &self,
         asid: usize,
         runs: Vec<FrameRun>,
-        tag_slot: Option<u64>,
+        tag_slot: Option<TagLease>,
         epochs: &Epochs,
     ) -> TagWait {
+        debug_assert!(tag_slot
+            .as_ref()
+            .is_none_or(|lease| lease.value() as usize == asid));
         let Ok(tag) = u16::try_from(asid) else {
             self.lose_tag_wait(runs, "tag wider than a reason carries");
             return TagWait::Lost;
@@ -1037,7 +1043,9 @@ impl Pending {
                     entry.epochs = max_epochs(&entry.epochs, epochs);
                     entry.runs.append(&mut quarantined);
                     entry.pages += pages;
-                    entry.tag_slot = entry.tag_slot.or(tag_slot);
+                    // One lease per tag value, so an entry never holds two;
+                    // a second would be dropped, which keeps it reserved.
+                    entry.tag_slot = entry.tag_slot.take().or(tag_slot);
                     Ok(TagWait::Extended { pages: entry.pages })
                 } else {
                     Err(quarantined)
@@ -1236,9 +1244,15 @@ impl Pending {
                 entry.pages,
                 entry.attempts
             );
-            // The tag's invalidation is confirmed: its slot may be reissued,
-            // even if a run below still waits for its alias.
-            backend.tag_wait_ended(asid, entry.tag_slot.take());
+            // Only a confirmed entry reaches here (`reap` checked
+            // `entry_confirmed`): every hart published an epoch asked for
+            // after the tag's last unmap, which is the proof that the tag is
+            // clean. Its slot may be reissued even if a run below still waits
+            // for its alias.
+            if let Some(lease) = entry.tag_slot.take() {
+                lease.release(Invalidated::of(asid as u32));
+            }
+            backend.tag_wait_ended(asid);
         }
         let mut freed = 0;
         let mut kept = Vec::new();
@@ -1691,15 +1705,9 @@ impl Backend for KernelBackend {
         crate::memory::tlb_shootdown::test_tag_ack_withheld()
     }
 
-    /// Hand the slot back, then re-arm the scheduler's housekeeping pass:
-    /// the domain-grant sweep skips a row while its tag is unconfirmed.
-    fn tag_wait_ended(&mut self, asid: usize, tag_slot: Option<u64>) {
-        #[cfg(all(feature = "native-domains", cellos_wide))]
-        if let Some(domain) = tag_slot {
-            crate::memory::address_space::release_tag_slot_after_invalidation(asid, domain);
-        }
-        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
-        let _ = (asid, tag_slot);
+    /// Re-arm the scheduler's housekeeping pass: the domain-grant sweep skips
+    /// a row while its tag is unconfirmed.
+    fn tag_wait_ended(&mut self, _asid: usize) {
         crate::task::note_housekeeping();
     }
 
