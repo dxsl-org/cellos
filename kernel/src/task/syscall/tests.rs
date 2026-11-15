@@ -2528,7 +2528,7 @@ fn shm_reclaim_takes_only_the_dead_incarnations_records() {
 
 #[test]
 fn shm_accessible_by_owner_and_authorized_recipient() {
-    use super::{shm_accessible_by, shm_register};
+    use super::{shm_register, with_accessible_shm};
     use crate::cell::state_stash::Incarnation;
     const FRAME: usize = 0x5C0_0000;
     let owner = Incarnation {
@@ -2537,11 +2537,50 @@ fn shm_accessible_by_owner_and_authorized_recipient() {
     };
     shm_register(FRAME, owner, 4096, Some(20));
 
-    assert!(shm_accessible_by(FRAME, 10, 1).is_some());
-    assert!(shm_accessible_by(FRAME, 20, 1).is_some());
-    assert!(shm_accessible_by(FRAME, 30, 1).is_none());
-    assert!(shm_accessible_by(FRAME, 10, 2).is_none()); // Different generation
+    assert_eq!(with_accessible_shm(FRAME, 10, 1, None, || ()), Some(()));
+    assert_eq!(with_accessible_shm(FRAME, 20, 1, None, || ()), Some(()));
+    assert_eq!(with_accessible_shm(FRAME, 30, 1, None, || ()), None);
+    // Different generation
+    assert_eq!(with_accessible_shm(FRAME, 10, 2, None, || ()), None);
     let _ = shm_take_bases(owner);
+}
+
+/// `ShmMap` publishes while it holds the SHM row under `PAGE_GRANT_TABLE`, the
+/// lock the owner's retirement takes the row under: the take cannot run during
+/// a publication, and once it ran nothing is published. Checked and published
+/// under separate holds, a receiver mapped a frame its owner's retirement was
+/// freeing.
+#[test]
+fn shm_publication_holds_the_row_and_never_follows_its_take() {
+    use super::{grant_table_lock, shm_register, with_accessible_shm};
+    use crate::cell::state_stash::Incarnation;
+    const FRAME: usize = 0x5D0_0000;
+    let owner = Incarnation {
+        cell: 11,
+        generation: 1,
+    };
+    shm_register(FRAME, owner, 4096, None);
+
+    // The owner names cell 21 as the receiver and publishes with the row held.
+    let published = with_accessible_shm(FRAME, 11, 1, Some(21), || {
+        grant_table_lock().try_lock().is_none()
+    });
+    assert_eq!(published, Some(true));
+    assert_eq!(
+        with_accessible_shm(FRAME, 21, 1, None, || {
+            grant_table_lock().try_lock().is_none()
+        }),
+        Some(true)
+    );
+    // Only the owner's cell names a receiver.
+    assert_eq!(with_accessible_shm(FRAME, 21, 1, Some(31), || ()), Some(()));
+    assert_eq!(with_accessible_shm(FRAME, 31, 1, None, || ()), None);
+
+    // The retirement takes the row: the receiver's publication never runs.
+    assert_eq!(shm_take_bases(owner), (alloc::vec![FRAME], 4096));
+    let mut ran = false;
+    assert_eq!(with_accessible_shm(FRAME, 21, 1, None, || ran = true), None);
+    assert!(!ran);
 }
 
 /// One Cell's posts may fill only `POST_QUOTA_PER_SENDER` slots of a target's

@@ -42,18 +42,39 @@ pub(super) fn shm_owned_by(handle: usize, owner: crate::cell::state_stash::Incar
         == Some(shm_owner(owner))
 }
 
-/// The owner of SHM handle `handle` if incarnation `(cell, generation)` owns
-/// it or the cell is its receiver.
-pub(super) fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Option<RegionOwner> {
-    let guard = grant_table_lock().lock();
-    let region = guard.as_ref()?.shm(&handle)?;
-    if region.owner == RegionOwner::incarnation(cell, generation)
-        || region.receiver == Receiver::Cell(cell)
+/// Run `publish` for SHM handle `handle` while its row is held, if incarnation
+/// `(cell, generation)` owns it or the cell is its receiver; `None` otherwise.
+/// A caller in the owner's cell first records `receiver` (a live target cell)
+/// as the receiver.
+///
+/// The publication runs under `PAGE_GRANT_TABLE`, the lock the owner's
+/// retirement takes the row under (`release_shm_for`): a take that wins leaves
+/// no row, so nothing is published; a take that comes after sees the
+/// publication (the identity VA maps the frame) and unpublishes it before the
+/// frame is freed. Checked and published under separate holds, a receiver
+/// could map a frame USER RW after the retirement took its row, and keep it
+/// after the free. The caller completes the publication's flush batch after
+/// this returns, with the lock released.
+/// Lock order: PAGE_GRANT_TABLE → whatever `publish` takes (FRAME_ALLOCATOR →
+/// KERNEL_ROOT for `ShmMap`).
+pub(super) fn with_accessible_shm<R>(
+    handle: usize,
+    cell: u64,
+    generation: u64,
+    receiver: Option<u64>,
+    publish: impl FnOnce() -> R,
+) -> Option<R> {
+    let mut guard = grant_table_lock().lock();
+    let region = guard.as_mut()?.shm_mut(&handle)?;
+    if region.owner != RegionOwner::incarnation(cell, generation)
+        && region.receiver != Receiver::Cell(cell)
     {
-        Some(region.owner)
-    } else {
-        None
+        return None;
     }
+    if let Some(receiver) = receiver.filter(|_| region.owner.cell.0 == cell) {
+        region.receiver = Receiver::Cell(receiver);
+    }
+    Some(publish())
 }
 
 /// Remove every `ShmAlloc` region of `owner` and return them with their total
@@ -74,6 +95,9 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// regions leave the grant table and their runs take the grant release path.
 ///
 /// Called from the root-retirement funnel after the generation is quiescent.
+/// `ShmMap` publishes under `PAGE_GRANT_TABLE` ([`with_accessible_shm`]), so
+/// once the row is taken here no new USER mapping of the frame can appear, and
+/// the identity-VA check below sees every earlier one.
 /// `ShmMap` re-maps a frame's identity VA as USER. If that VA still maps the
 /// frame, the USER mapping is removed; where the kernel reaches RAM through the
 /// identity VA (`phys_to_virt` is the identity), the boot kernel mapping is
@@ -1890,21 +1914,11 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
     let Some((caller_cell, caller_gen)) = live_cell_identity(caller_id) else {
         return Err(SyscallError::PermissionDenied);
     };
-    let Some(owner) = shm_accessible_by(handle, caller_cell, caller_gen) else {
-        return Err(SyscallError::PermissionDenied);
+    let target_cell = if target_pid != 0 {
+        live_cell_identity(target_pid).map(|(cell, _)| cell)
+    } else {
+        None
     };
-
-    if target_pid != 0 && owner.cell.0 == caller_cell {
-        if let Some((target_cell, _)) = live_cell_identity(target_pid) {
-            if let Some(r) = grant_table_lock()
-                .lock()
-                .as_mut()
-                .and_then(|table| table.shm_mut(&handle))
-            {
-                r.receiver = Receiver::Cell(target_cell);
-            }
-        }
-    }
 
     let frame = handle;
     let vaddr = frame; // Identity map for SAS simplicity
@@ -1914,16 +1928,21 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
         Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
     let mut batch = crate::memory::frame_run::Batch::new();
-    let mapped = crate::memory::frame::with(|allocator| {
-        crate::memory::paging::map_page(
-            allocator,
-            &mut batch,
-            vaddr,
-            frame,
-            Flags::from_bits(flags),
-        )
-        .is_ok()
-    });
+    // Published under the grant table lock, so the owner's retirement takes the
+    // row either before (nothing is mapped) or after (it unpublishes this).
+    let mapped = with_accessible_shm(handle, caller_cell, caller_gen, target_cell, || {
+        crate::memory::frame::with(|allocator| {
+            crate::memory::paging::map_page(
+                allocator,
+                &mut batch,
+                vaddr,
+                frame,
+                Flags::from_bits(flags),
+            )
+            .is_ok()
+        })
+    })
+    .ok_or(SyscallError::PermissionDenied)?;
     // A replaced translation must be gone everywhere before the cell relies on
     // the mapping; if a hart does not confirm, the map fails closed (the frame
     // stays with its region, which `release_shm_for` unpublishes later).
