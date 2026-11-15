@@ -322,7 +322,7 @@ impl ElfLoader {
                             batch.retire(crate::memory::frame_run::FrameRun::unpublished(
                                 buf_frame,
                                 1,
-                                crate::memory::frame_run::RunOwner::Kernel,
+                                crate::memory::cell_quota::Charge::KERNEL,
                                 crate::memory::frame_run::RunKind::Leaf,
                                 crate::memory::frame_run::KernelAlias::Intact,
                             ));
@@ -409,7 +409,8 @@ impl ElfLoader {
     /// that flush global (census P10: every hart's cached walks through the
     /// table are dropped, not only this hart's and not only the leaf).
     pub(crate) fn unwind(mapped: &[LoadedPage], batch: &mut crate::memory::frame_run::Batch) {
-        use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+        use crate::memory::cell_quota::Charge;
+        use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
         for page in mapped {
             let _ = crate::memory::paging::unmap_page(batch, page.va);
             batch.invalidate(page.va);
@@ -419,7 +420,7 @@ impl ElfLoader {
             batch.retire(FrameRun::unpublished(
                 page.frame,
                 1,
-                RunOwner::Kernel,
+                Charge::KERNEL,
                 RunKind::Leaf,
                 KernelAlias::Intact,
             ));

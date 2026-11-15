@@ -855,17 +855,30 @@ pub(crate) fn replace(allocator: Option<FrameAllocator>) -> Option<FrameAllocato
     core::mem::replace(&mut *FRAME_ALLOCATOR.lock(), allocator)
 }
 
-/// A non-copyable allocation lease returned to the bitmap only on drop.
+/// A non-copyable allocation lease returned to the bitmap only on drop, with
+/// its charge refunded then.
 pub struct OwnedFrame {
     physical: PhysAddr,
+    charge: super::frame_run::RunCharge,
     #[cfg(feature = "p01-trace")]
     p01_retained: Option<crate::p01_retained::Token>,
 }
 
 impl OwnedFrame {
-    pub fn allocate() -> Option<Self> {
-        allocate_frame().map(|physical| Self {
+    /// One frame billed to `charge`'s memory account (the kernel is never
+    /// billed). The charge is taken first: when it does not fit, no frame is
+    /// taken.
+    pub(crate) fn allocate(charge: super::cell_quota::Charge) -> Option<Self> {
+        let reservation = super::cell_quota::Reservation::take(
+            charge,
+            super::cell_quota::Account::Memory,
+            super::paging::PAGE_SIZE,
+        )
+        .ok()?;
+        let physical = allocate_frame()?;
+        Some(Self {
             physical,
+            charge: super::frame_run::RunCharge::of(reservation.into(), 1),
             #[cfg(feature = "p01-trace")]
             p01_retained: None,
         })
@@ -897,21 +910,17 @@ impl OwnedFrame {
         );
     }
 
-    /// Hand the frame to a [`FrameRun`](super::frame_run::FrameRun) that the
-    /// frame-run quarantine frees once the invalidation covering it is
-    /// confirmed. The caller already removed it from its private root, so the
-    /// run is `Unpublished`; the kernel's own alias of the frame was never
-    /// removed (`Intact`).
-    pub(crate) fn into_run(
-        self,
-        owner: super::frame_run::RunOwner,
-        kind: super::frame_run::RunKind,
-    ) -> super::frame_run::FrameRun {
+    /// Hand the frame, and its charge, to a
+    /// [`FrameRun`](super::frame_run::FrameRun) that the frame-run quarantine
+    /// frees once the invalidation covering it is confirmed. The caller already
+    /// removed it from its private root, so the run is `Unpublished`; the
+    /// kernel's own alias of the frame was never removed (`Intact`).
+    pub(crate) fn into_run(self, kind: super::frame_run::RunKind) -> super::frame_run::FrameRun {
         let frame = core::mem::ManuallyDrop::new(self);
-        let run = super::frame_run::FrameRun::unpublished(
+        let run = super::frame_run::FrameRun::unpublished_carrying(
             frame.physical,
             1,
-            owner,
+            frame.charge,
             kind,
             super::frame_run::KernelAlias::Intact,
         );
@@ -930,6 +939,7 @@ impl Drop for OwnedFrame {
             #[cfg(feature = "p01-trace")]
             let released = frames.p01_allocated(self.physical);
             frames.deallocate_frame(self.physical);
+            self.charge.refund(1);
             #[cfg(feature = "p01-trace")]
             if released {
                 crate::p01_retained::retire(self.p01_retained.take());
@@ -1224,6 +1234,40 @@ mod tests {
         assert!(super::FlushCap::take().is_some());
 
         assert_eq!(super::stats().map(|stats| stats.used_frames), Some(1));
+        super::replace(previous);
+    }
+
+    /// A domain's table frame (`OwnedFrame::allocate`, the only allocation a
+    /// private root's growth makes) over its owner's limit is refused before
+    /// the allocator is asked; one that fits is billed until it is freed.
+    #[test]
+    fn a_domain_table_frame_over_the_limit_is_refused_before_a_frame_is_taken() {
+        use crate::memory::cell_quota::{self, Charge, Limits};
+        let _serial = crate::TEST_STATE_LOCK.lock();
+        let previous = super::replace(Some(super::allocator_for_tests(&[(0x10_0000, 8)])));
+        let cell = types::CellId((cell_quota::MAX_CELLS - 3) as u64);
+        let used = || super::stats().map(|stats| stats.used_frames);
+
+        cell_quota::register(
+            cell,
+            4,
+            Limits {
+                memory: PAGE_SIZE - 1,
+            },
+        );
+        assert!(super::OwnedFrame::allocate(Charge::new(cell, 4)).is_none());
+        assert_eq!(used(), Some(0), "no frame was taken");
+        assert_eq!(cell_quota::in_use(cell), 0);
+
+        cell_quota::register(cell, 5, Limits { memory: PAGE_SIZE });
+        let frame = super::OwnedFrame::allocate(Charge::new(cell, 5)).expect("fits");
+        assert_eq!((used(), cell_quota::in_use(cell)), (Some(1), PAGE_SIZE));
+        assert!(super::OwnedFrame::allocate(Charge::new(cell, 5)).is_none());
+        assert_eq!(used(), Some(1));
+        drop(frame);
+        assert_eq!((used(), cell_quota::in_use(cell)), (Some(0), 0));
+
+        cell_quota::deregister(cell);
         super::replace(previous);
     }
 

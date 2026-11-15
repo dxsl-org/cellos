@@ -53,7 +53,8 @@
 //! Neither is ever acquired while `SCHEDULER` is held — the watchdog defers its
 //! reap list precisely so `yield_cpu` can drain it after dropping `SCHEDULER`.
 
-use crate::memory::frame_run::{FrameRun, KernelAlias, Reason, RunKind, RunOwner, PENDING};
+use crate::memory::cell_quota::Charge;
+use crate::memory::frame_run::{FrameRun, KernelAlias, Reason, RunKind, PENDING};
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -615,7 +616,7 @@ fn grant_run(base: usize, pages: usize) -> FrameRun {
     FrameRun::mapped(
         base,
         pages,
-        RunOwner::Kernel,
+        Charge::KERNEL,
         RunKind::Leaf,
         KernelAlias::of_identity_remap(base),
     )

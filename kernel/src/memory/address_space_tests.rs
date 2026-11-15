@@ -171,7 +171,7 @@ pub(crate) fn run_primary() {
     // externally owned; only acknowledged tag invalidation permits reclaiming
     // the tables. An unowned "private" leaf must fail without losing its ledger.
     let grant_last_leaf = (|| {
-        let backing = allocate_owned_frame().ok()?;
+        let backing = allocate_owned_frame(Charge::KERNEL).ok()?;
         let space = AddressSpaceBuilder::new().build().ok()?;
         space
             .map_grant_page(ABI_PAGE, backing.physical_address(), flags())
@@ -193,7 +193,7 @@ pub(crate) fn run_primary() {
     })()
     .unwrap_or(false);
     let unowned_error_restores_ledger = (|| {
-        let backing = allocate_owned_frame().ok()?;
+        let backing = allocate_owned_frame(Charge::KERNEL).ok()?;
         let mut builder = AddressSpaceBuilder::new();
         builder
             .map_existing_user_page(

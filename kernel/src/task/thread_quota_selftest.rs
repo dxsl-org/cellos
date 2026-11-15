@@ -100,7 +100,7 @@ fn reap() {
     drop(dead);
 }
 
-/// Charge appears at spawn and is gone once the thread dies.
+/// Charge appears at spawn and is gone once the dead thread's stacks are freed.
 fn charge_then_release(expected: usize) -> bool {
     register_quota(cell_quota::DEFAULT_QUOTA_BYTES);
     insert_parent();
@@ -125,20 +125,30 @@ fn charge_then_release(expected: usize) -> bool {
                     expected
                 );
             }
-            // Death by the funnel every real death path uses, not by lifting the
-            // task out of the table: the refund is only correct if it happens there.
+            // Death by the funnel every real death path uses, then the reap that
+            // frees the stacks: their runs refund the charge with their frames,
+            // and not before.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 sched.exit_task(tid, 0);
             }
+            let held = cell_quota::in_use(CellId(QUOTA_CELL));
+            if held != expected {
+                ok = false;
+                log::error!(
+                    "[selftest] THREAD-QUOTA: FAIL — {} bytes charged between exit and reap, expected {}",
+                    held,
+                    expected
+                );
+            }
+            reap();
             let after = cell_quota::in_use(CellId(QUOTA_CELL));
             if after != 0 {
                 ok = false;
                 log::error!(
-                    "[selftest] THREAD-QUOTA: FAIL — {} bytes still charged after exit",
+                    "[selftest] THREAD-QUOTA: FAIL — {} bytes still charged after reap",
                     after
                 );
             }
-            reap();
         }
         other => {
             ok = false;

@@ -1040,7 +1040,7 @@ impl ReclaimedPageTables {
             batch.retire(crate::memory::frame_run::FrameRun::unpublished(
                 frame,
                 1,
-                crate::memory::frame_run::RunOwner::Kernel,
+                crate::memory::cell_quota::Charge::KERNEL,
                 crate::memory::frame_run::RunKind::PageTable,
                 crate::memory::frame_run::KernelAlias::Intact,
             ));

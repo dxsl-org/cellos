@@ -438,6 +438,7 @@ fn admit_and_bind_domain(
         return Err(ViError::InvalidInput);
     };
     let domain = crate::memory::address_space::create_cell_domain(
+        crate::memory::cell_quota::Charge::of(task),
         ks,
         us,
         seg,

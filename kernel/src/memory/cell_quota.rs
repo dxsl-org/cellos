@@ -460,6 +460,15 @@ impl Reservation {
     pub(crate) fn keep(self) {
         core::mem::forget(self);
     }
+
+    /// Hand the bytes to an object that refunds them itself (a `FrameRun`
+    /// when its frames are freed): they stay charged, and the parts name the
+    /// refund.
+    pub(crate) fn into_parts(self) -> (Charge, Account, usize) {
+        let parts = (self.charge, self.account, self.bytes);
+        core::mem::forget(self);
+        parts
+    }
 }
 
 impl Drop for Reservation {

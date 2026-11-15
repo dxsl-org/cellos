@@ -496,14 +496,15 @@ fn a_withheld_range_is_a_pinned_run_until_its_key_ends() {
 /// grant must not lose the restore.
 #[test]
 fn a_withheld_run_keeps_its_owners_alias() {
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner, PENDING};
+    use crate::memory::cell_quota::Charge;
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, PENDING};
     let _guard = crate::TEST_STATE_LOCK.lock();
     let owner = 961;
     for (slot, alias) in [(61, KernelAlias::Intact), (62, KernelAlias::Removed)] {
         let base = arena(slot);
         assert_eq!(pin(base, PAGE_SIZE, owner), Ok(()));
         assert_eq!(quarantine_task(owner), 1);
-        let run = FrameRun::mapped(base, 1, RunOwner::Kernel, RunKind::Leaf, alias);
+        let run = FrameRun::mapped(base, 1, Charge::KERNEL, RunKind::Leaf, alias);
         assert!(matches!(withhold_pinned_run(run), FrameTransfer::Withheld));
         let mut released = acknowledge(owner);
         assert_eq!(released, alloc::vec![(base, 1)]);

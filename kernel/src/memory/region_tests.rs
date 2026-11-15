@@ -3,7 +3,8 @@
 //! nothing but SHM handles.
 
 use super::{Region, RegionOwner, RegionTable};
-use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+use crate::memory::cell_quota::Charge;
+use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
 use types::CellId;
 
 const SHM: usize = 0x5d10_0000;
@@ -12,13 +13,7 @@ const OWNER_TID: usize = 54_001;
 
 /// A run over synthetic frames: discarded at the end, never freed.
 fn run(base: usize) -> FrameRun {
-    FrameRun::mapped(
-        base,
-        1,
-        RunOwner::Kernel,
-        RunKind::Leaf,
-        KernelAlias::Intact,
-    )
+    FrameRun::mapped(base, 1, Charge::KERNEL, RunKind::Leaf, KernelAlias::Intact)
 }
 
 fn table() -> (RegionTable, RegionOwner) {

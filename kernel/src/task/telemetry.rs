@@ -310,7 +310,11 @@ pub(crate) fn capture(
         if truncated {
             flags |= task_flags::NAME_TRUNCATED;
         }
-        if task.stack_quota_charge.is_some() {
+        if task
+            .user_stack
+            .as_ref()
+            .is_some_and(super::stack::Stack::is_billed)
+        {
             flags |= task_flags::STACK_IN_QUOTA;
         }
         tasks.push(TelemetryTaskV1 {
@@ -480,14 +484,9 @@ mod tests {
         sched
             .tasks
             .insert(100, task(100, CELL_A, GEN_A, 100, "a-root"));
-        let mut worker = task(103, CELL_A, GEN_A, 100, "a-worker");
-        worker.stack_quota_charge = crate::memory::cell_quota::Reservation::take(
-            crate::memory::cell_quota::Charge::KERNEL,
-            crate::memory::cell_quota::Account::Memory,
-            4096,
-        )
-        .ok();
-        sched.tasks.insert(103, worker);
+        sched
+            .tasks
+            .insert(103, task(103, CELL_A, GEN_A, 100, "a-worker"));
         sched
             .tasks
             .insert(101, task(101, CELL_B, GEN_B, 101, "b-root"));
@@ -526,6 +525,19 @@ mod tests {
         let _guard = crate::TEST_STATE_LOCK.lock();
         let _harts = Harts::save();
         let mut sched = two_cells();
+        // The worker's user stack is billed, as a thread's is; the slot is not
+        // registered yet, so nothing is counted.
+        let billed = crate::memory::cell_quota::Reservation::take(
+            crate::memory::cell_quota::Charge::new(CellId(CELL_A), GEN_A),
+            crate::memory::cell_quota::Account::Memory,
+            4096,
+        )
+        .expect("an unregistered slot is not limited");
+        if let Some(worker) = sched.tasks.get_mut(&103) {
+            worker.user_stack = Some(crate::task::stack::Stack::billed_for_tests(
+                0x7_0000, 1, billed,
+            ));
+        }
         crate::memory::cell_quota::register(
             CellId(CELL_A),
             GEN_A,
@@ -533,6 +545,9 @@ mod tests {
         );
         // b-root has been running since 2 500; the capture adds 100 ns in flight.
         let bytes = take(&mut sched, Some(2_600), 1 << 16, true);
+        if let Some(worker) = sched.tasks.get_mut(&103) {
+            core::mem::forget(worker.user_stack.take());
+        }
         crate::memory::cell_quota::deregister(CellId(CELL_A));
         let snapshot = TelemetrySnapshot::parse(&bytes).expect("kernel bytes decode");
         let header = snapshot.header();

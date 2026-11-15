@@ -274,8 +274,9 @@ fn release_owner_mapped_backing(
 /// the kernel root (census §7.8).
 #[cfg(cellos_domain_grants)]
 fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::frame_run::FrameRun> {
+    use crate::memory::cell_quota::Charge;
     use crate::memory::frame::phys_to_virt;
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     const PAGE_SIZE: usize = 4096;
     let paddr = crate::memory::frame::allocate_contiguous(n_pages)?;
     // SAFETY: `phys_to_virt` names the kernel's supervisor alias of RAM (the
@@ -288,7 +289,7 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::fr
     Some(FrameRun::mapped(
         paddr,
         n_pages,
-        RunOwner::Kernel,
+        Charge::KERNEL,
         RunKind::Leaf,
         KernelAlias::Intact,
     ))

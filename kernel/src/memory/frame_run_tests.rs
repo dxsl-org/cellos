@@ -10,11 +10,8 @@ use std::cell::RefCell;
 use std::vec;
 
 const BASE: usize = 0x4000_0000;
-const OWNER: RunOwner = RunOwner::Cell {
-    cell: 7,
-    generation: 2,
-    tid: 31,
-};
+/// The incarnation the plain test runs record; nothing is billed to it.
+const OWNER: Charge = Charge::new(types::CellId(7), 2);
 
 /// Fake hart set: hart 0 is the caller; `online` remotes answer requests only
 /// when the test publishes their epoch.
@@ -77,11 +74,22 @@ impl Fake {
 
     /// A run of `pages` freshly allocated frames, `Mapped`.
     fn run(&mut self, pages: usize, alias: KernelAlias) -> FrameRun {
+        self.billed_run(pages, alias, OWNER)
+    }
+
+    /// [`Self::run`] billed with `bill`, taken before its frames.
+    fn billed_run(
+        &mut self,
+        pages: usize,
+        alias: KernelAlias,
+        bill: impl Into<RunBill>,
+    ) -> FrameRun {
+        let bill = bill.into();
         let base = self
             .allocator
             .allocate_contiguous(pages)
             .expect("test frames");
-        FrameRun::mapped(base, pages, OWNER, RunKind::Leaf, alias)
+        FrameRun::mapped(base, pages, bill, RunKind::Leaf, alias)
     }
 
     fn used(&self) -> usize {
@@ -750,4 +758,89 @@ fn the_cap_counts_invalidation_waits_but_not_pin_holds() {
     for run in quarantine.release_event(|reason| matches!(reason, Reason::Pinned(_))) {
         quarantine.leak(run, "test");
     }
+}
+
+/// The quota slot the charge tests bill; registered only under the test lock.
+const QUOTA_CELL: types::CellId = types::CellId((cell_quota::MAX_CELLS - 2) as u64);
+
+fn reserve(generation: u64, pages: usize) -> Reservation {
+    Reservation::take(
+        Charge::new(QUOTA_CELL, generation),
+        Account::Memory,
+        pages * PAGE_SIZE,
+    )
+    .expect("within the test limit")
+}
+
+#[test]
+fn a_billed_run_refunds_its_charge_once_whoever_frees_it() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    cell_quota::register(QUOTA_CELL, 1, cell_quota::Limits { memory: 1 << 20 });
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+
+    // Freed by its owner's operation, on a confirmed flush.
+    let mut run = fake.billed_run(2, KernelAlias::Intact, reserve(1, 2));
+    assert_eq!(run.charge().owner, Charge::new(QUOTA_CELL, 1));
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), 2 * PAGE_SIZE);
+    run.unpublish().unwrap();
+    settle(run, FlushOutcome::Confirmed, &mut fake, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), 0);
+
+    // Freed by the reaper: billed while quarantined, refunded once at free.
+    let mut run = fake.billed_run(3, KernelAlias::Intact, reserve(1, 3));
+    run.unpublish().unwrap();
+    let outcome = fake.unconfirmed();
+    settle(run, outcome, &mut fake, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), 3 * PAGE_SIZE);
+    fake.answer(1);
+    fake.answer(2);
+    assert_eq!(quarantine.reap(&mut fake), 3);
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), 0);
+    assert_eq!(quarantine.reap(&mut fake), 0);
+
+    // A charge held elsewhere proves the refunds took exactly the run's bytes.
+    let held = reserve(1, 1);
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), PAGE_SIZE);
+    drop(held);
+    cell_quota::deregister(QUOTA_CELL);
+}
+
+#[test]
+fn a_stale_generation_refund_leaves_the_next_incarnation_untouched() {
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    cell_quota::register(QUOTA_CELL, 1, cell_quota::Limits { memory: 1 << 20 });
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+    let mut stale = fake.billed_run(2, KernelAlias::Intact, reserve(1, 2));
+    stale.unpublish().unwrap();
+
+    cell_quota::deregister(QUOTA_CELL);
+    cell_quota::register(QUOTA_CELL, 2, cell_quota::Limits { memory: 1 << 20 });
+    let live = reserve(2, 1);
+    settle(stale, FlushOutcome::Confirmed, &mut fake, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    assert_eq!(fake.used(), 0, "the frames are freed");
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), PAGE_SIZE, "gen 2 untouched");
+    drop(live);
+    assert_eq!(cell_quota::in_use(QUOTA_CELL), 0);
+    cell_quota::deregister(QUOTA_CELL);
+}
+
+#[test]
+fn kernel_runs_carry_no_account() {
+    let mut fake = Fake::new(4);
+    let quarantine = pending();
+    let kernel = Reservation::take(Charge::KERNEL, Account::Memory, PAGE_SIZE).unwrap();
+    let mut run = fake.billed_run(1, KernelAlias::Intact, kernel);
+    assert_eq!(run.charge(), RunCharge::KERNEL);
+    run.unpublish().unwrap();
+    settle(run, FlushOutcome::Confirmed, &mut fake, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
 }

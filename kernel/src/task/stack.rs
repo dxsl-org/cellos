@@ -3,8 +3,9 @@
 //! Handles allocation, deallocation, and guard pages for Kernel and User stacks.
 //! Complies with Rule 2 (Owned Buffers / Memory Safety) and Rule 8 (Resource Management).
 
+use crate::memory::cell_quota::{Charge, Reservation};
 use crate::memory::frame::FrameAllocator;
-use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner, VaHold};
+use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunBill, RunKind, VaHold};
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
@@ -163,7 +164,7 @@ pub struct Stack {
 
 impl Stack {
     /// Allocate a new Kernel Stack of `pages` usable pages plus the configured
-    /// bottom guard reservation.
+    /// bottom guard reservation, owned by the kernel and billed to nobody.
     ///
     /// # Errors
     /// - `OutOfMemory` — no contiguous run of usable plus guard frames exists, or a
@@ -171,16 +172,36 @@ impl Stack {
     /// - `NotSupported` — every guard page could not be established. No stack is
     ///   returned in that case; see [`Self::allocate`].
     pub fn new_kernel(pages: usize) -> Result<Self, ViError> {
-        Self::allocate(pages, STACK_GUARD_PAGES, false)
+        Self::allocate(pages, STACK_GUARD_PAGES, false, Charge::KERNEL.into())
     }
 
     /// Allocate a new User Stack of `pages` usable pages plus the configured
-    /// bottom guards. Usable pages are mapped USER RW.
+    /// bottom guards, owned by the kernel and billed to nobody. Usable pages
+    /// are mapped USER RW.
     ///
     /// # Errors
     /// Same as [`Self::new_kernel`].
     pub fn new_user(pages: usize) -> Result<Self, ViError> {
-        Self::allocate(pages, STACK_GUARD_PAGES, true)
+        Self::allocate(pages, STACK_GUARD_PAGES, true, Charge::KERNEL.into())
+    }
+
+    /// [`Self::new_kernel`] billed with `charge`, which covers exactly
+    /// [`Self::reserved_bytes`]`(pages)` and was taken before this call: the
+    /// stack refunds it when its frames are freed, and a failed allocation
+    /// refunds it at once.
+    pub(crate) fn new_kernel_billed(pages: usize, charge: Reservation) -> Result<Self, ViError> {
+        Self::allocate(pages, STACK_GUARD_PAGES, false, charge.into())
+    }
+
+    /// [`Self::new_user`] billed as [`Self::new_kernel_billed`].
+    pub(crate) fn new_user_billed(pages: usize, charge: Reservation) -> Result<Self, ViError> {
+        Self::allocate(pages, STACK_GUARD_PAGES, true, charge.into())
+    }
+
+    /// Bytes of frames a stack of `pages` usable pages takes, guards included:
+    /// what a billed stack's reservation must cover.
+    pub const fn reserved_bytes(pages: usize) -> usize {
+        (pages + STACK_GUARD_PAGES) * PAGE_SIZE
     }
 
     /// Internal allocation logic.
@@ -193,7 +214,12 @@ impl Stack {
     /// neighbour with no fault and no log, and the victim dies later somewhere
     /// unrelated. A log line at allocation time is not a mitigation: nothing reads
     /// it in the microseconds before the overflow.
-    fn allocate(pages: usize, guard_pages: usize, user_mode: bool) -> Result<Self, ViError> {
+    fn allocate(
+        pages: usize,
+        guard_pages: usize,
+        user_mode: bool,
+        bill: RunBill,
+    ) -> Result<Self, ViError> {
         let total_pages = pages.checked_add(guard_pages).ok_or(ViError::OutOfMemory)?;
 
         // Remapped usable pages and unmapped guards are invalidated on every
@@ -208,6 +234,7 @@ impl Stack {
                 guard_pages,
                 total_pages,
                 user_mode,
+                bill,
             )
         })
         .unwrap_or_else(|| {
@@ -241,6 +268,7 @@ impl Stack {
         guard_pages: usize,
         total_pages: usize,
         user_mode: bool,
+        bill: RunBill,
     ) -> Result<Self, ViError> {
         // A stack must be ONE contiguous run of frames, and that is a consequence of
         // SAS rather than a shortcut: everything is identity-mapped (VA == PA) and
@@ -268,7 +296,7 @@ impl Stack {
         let run = FrameRun::mapped(
             base_frame,
             total_pages,
-            RunOwner::Kernel,
+            bill,
             RunKind::Leaf,
             KernelAlias::of_identity_remap(base_frame),
         );
@@ -407,6 +435,13 @@ impl Stack {
     /// Task-owned usable stack bytes, excluding any kernel-only guard reservation.
     pub fn usable_bytes(&self) -> usize {
         self.pages * PAGE_SIZE
+    }
+
+    /// Are this stack's frames billed to a cell's quota (a thread's stacks)?
+    pub fn is_billed(&self) -> bool {
+        self.run
+            .as_ref()
+            .is_some_and(|run| run.charge().account.is_some())
     }
 
     /// Lowest mapped byte in the usable stack range.
@@ -577,6 +612,22 @@ impl Stack {
             ))]
             supervisor_registration: None,
         }
+    }
+
+    /// A descriptor over synthetic frames billed with `charge`, for host tests
+    /// that read [`Self::is_billed`]. The test must forget it: its frames are
+    /// not the allocator's.
+    #[cfg(test)]
+    pub(crate) fn billed_for_tests(base: VAddr, pages: usize, charge: Reservation) -> Self {
+        let mut stack = Self::for_tests(base, pages, 0, base + pages * PAGE_SIZE);
+        stack.run = Some(FrameRun::mapped(
+            base,
+            pages,
+            charge,
+            RunKind::Leaf,
+            KernelAlias::Intact,
+        ));
+        stack
     }
 }
 

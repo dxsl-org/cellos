@@ -2439,10 +2439,11 @@ fn wait_irq_base_requires_the_callers_exact_granted_window() {
     assert!(wait_irq_base_permitted(OWNER, 0));
 }
 
-/// The bases and charged bytes of `owner`'s SHM regions, taken from the table;
-/// their runs name synthetic frames, so they are discarded, not freed.
+/// The bases and requested bytes of `owner`'s SHM regions, taken from the
+/// table; their runs name synthetic frames, so they are discarded, not freed.
 fn shm_take_bases(owner: crate::cell::state_stash::Incarnation) -> (alloc::vec::Vec<usize>, usize) {
-    let (regions, bytes) = super::shm_take_for(owner);
+    let regions = super::shm_take_for(owner);
+    let bytes = regions.iter().map(|region| region.size).sum();
     let bases = regions
         .into_iter()
         .map(|region| {
@@ -2452,6 +2453,16 @@ fn shm_take_bases(owner: crate::cell::state_stash::Incarnation) -> (alloc::vec::
         })
         .collect();
     (bases, bytes)
+}
+
+/// A synthetic SHM frame's charge: these tests check ownership, not billing.
+fn shm_charge() -> crate::memory::cell_quota::Reservation {
+    crate::memory::cell_quota::Reservation::take(
+        crate::memory::cell_quota::Charge::KERNEL,
+        crate::memory::cell_quota::Account::Memory,
+        4096,
+    )
+    .expect("the kernel is never limited")
 }
 
 /// CP1 #10: an `ShmAlloc` frame maps only for the incarnation that
@@ -2466,7 +2477,7 @@ fn shm_frame_is_owned_by_exactly_the_allocating_incarnation() {
         cell: 0x5A1,
         generation: 3,
     };
-    shm_register(FRAME, owner, 4096, None);
+    shm_register(FRAME, owner, 4096, shm_charge(), None);
 
     assert!(shm_owned_by(FRAME, owner));
     assert!(!shm_owned_by(
@@ -2507,10 +2518,10 @@ fn shm_reclaim_takes_only_the_dead_incarnations_records() {
         cell: 0x5B2,
         generation: 2,
     };
-    shm_register(0x5B0_0000, dead, 4096, None);
-    shm_register(0x5B0_1000, successor, 4096, None);
-    shm_register(0x5B0_2000, dead, 4096, None);
-    shm_register(0x5B0_3000, peer, 4096, None);
+    shm_register(0x5B0_0000, dead, 4096, shm_charge(), None);
+    shm_register(0x5B0_1000, successor, 4096, shm_charge(), None);
+    shm_register(0x5B0_2000, dead, 4096, shm_charge(), None);
+    shm_register(0x5B0_3000, peer, 4096, shm_charge(), None);
 
     assert_eq!(
         shm_take_bases(dead),
@@ -2535,7 +2546,7 @@ fn shm_accessible_by_owner_and_authorized_recipient() {
         cell: 10,
         generation: 1,
     };
-    shm_register(FRAME, owner, 4096, Some(20));
+    shm_register(FRAME, owner, 4096, shm_charge(), Some(20));
 
     assert_eq!(with_accessible_shm(FRAME, 10, 1, None, || ()), Some(()));
     assert_eq!(with_accessible_shm(FRAME, 20, 1, None, || ()), Some(()));
@@ -2559,7 +2570,7 @@ fn shm_publication_holds_the_row_and_never_follows_its_take() {
         cell: 11,
         generation: 1,
     };
-    shm_register(FRAME, owner, 4096, None);
+    shm_register(FRAME, owner, 4096, shm_charge(), None);
 
     // The owner names cell 21 as the receiver and publishes with the row held.
     let published = with_accessible_shm(FRAME, 11, 1, Some(21), || {

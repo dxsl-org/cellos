@@ -77,18 +77,13 @@ pub(super) fn with_accessible_shm<R>(
     Some(publish())
 }
 
-/// Remove every `ShmAlloc` region of `owner` and return them with their total
-/// charged bytes.
-pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec<Region>, usize) {
-    let regions = grant_table_lock()
+/// Remove every `ShmAlloc` region of `owner` and return them.
+pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> Vec<Region> {
+    grant_table_lock()
         .lock()
         .as_mut()
         .map(|table| table.take_shm_of(shm_owner(owner)))
-        .unwrap_or_default();
-    let total_bytes = regions
-        .iter()
-        .fold(0usize, |total, region| total.saturating_add(region.size));
-    (regions, total_bytes)
+        .unwrap_or_default()
 }
 
 /// Reclaim the `ShmAlloc` frames of a retired root's incarnation: its SHM
@@ -117,18 +112,13 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// alone (unpublish, prune); then FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame_run::Batch;
-    let (regions, total_bytes) = shm_take_for(crate::cell::state_stash::Incarnation {
+    let regions = shm_take_for(crate::cell::state_stash::Incarnation {
         cell: cell_id,
         generation,
     });
     if regions.is_empty() {
         return 0;
     }
-    crate::memory::cell_quota::refund(
-        crate::memory::cell_quota::Charge::new(CellId(cell_id), generation),
-        crate::memory::cell_quota::Account::Memory,
-        total_bytes,
-    );
     let released = regions.len();
     // One batch for every frame: one shared invalidation, then each frame is
     // normalised and freed, or quarantined if a hart does not confirm.
@@ -425,11 +415,12 @@ pub(super) fn release_domain_backing(_record: &DomainRecord, row: Region, _withh
 /// (and, on RV64/AArch64, over the kernel's identity alias, which the release
 /// restores).
 pub(super) fn grant_run(base: usize, n_pages: usize) -> crate::memory::frame_run::FrameRun {
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    use crate::memory::cell_quota::Charge;
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     FrameRun::mapped(
         base,
         n_pages,
-        RunOwner::Kernel,
+        Charge::KERNEL,
         RunKind::Leaf,
         KernelAlias::of_identity_remap(base),
     )
@@ -1133,10 +1124,10 @@ fn refuse_duplicate_row(what: &str, id: usize, refused: Region) {
     drop(refused);
 }
 
-/// Record `ShmAlloc` frame `frame`, charged `size` bytes, as a region of
-/// `owner` that owns the frame from here on; `recipient` is the cell it was
-/// handed to, if any. `false` when the table refused the row
-/// ([`refuse_duplicate_row`]).
+/// Record `ShmAlloc` frame `frame`, `size` bytes requested, as a region of
+/// `owner` that owns the frame and its `charge` (exactly the frame, refunded
+/// when it is freed) from here on; `recipient` is the cell it was handed to,
+/// if any. `false` when the table refused the row ([`refuse_duplicate_row`]).
 ///
 /// The frame is still the kernel's identity-mapped frame (RV64, AArch64) or
 /// unmapped at its identity VA (x86_64); `ShmMap` publishes it USER there, and
@@ -1146,9 +1137,10 @@ pub(super) fn shm_register(
     frame: usize,
     owner: crate::cell::state_stash::Incarnation,
     size: usize,
+    charge: crate::memory::cell_quota::Reservation,
     recipient: Option<u64>,
 ) -> bool {
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
         None,
@@ -1157,11 +1149,7 @@ pub(super) fn shm_register(
     let run = FrameRun::mapped(
         frame,
         1,
-        RunOwner::Cell {
-            cell: owner.cell,
-            generation: owner.generation,
-            tid: 0,
-        },
+        charge,
         RunKind::Leaf,
         KernelAlias::of_identity_remap(frame),
     );
@@ -1408,7 +1396,8 @@ fn retire_grant_run(
     n_pages: usize,
     restore_alias: bool,
 ) {
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    use crate::memory::cell_quota::Charge;
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     if n_pages == 0 {
         return;
     }
@@ -1420,7 +1409,7 @@ fn retire_grant_run(
     batch.retire(FrameRun::unpublished(
         base,
         n_pages,
-        RunOwner::Kernel,
+        Charge::KERNEL,
         RunKind::Leaf,
         alias,
     ));
@@ -1915,12 +1904,12 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
         size.div_ceil(page_size) * page_size
     };
 
-    // Charged at allocation and refunded when the incarnation retires
-    // (`release_shm_for`).
+    // The frame is billed before it is taken; its run refunds it when the
+    // frame is freed (at the incarnation's retirement, `release_shm_for`).
     let Ok(charge) = crate::memory::cell_quota::Reservation::take(
         crate::memory::cell_quota::Charge::new(CellId(cell), generation),
         crate::memory::cell_quota::Account::Memory,
-        bytes,
+        page_size,
     ) else {
         return Err(SyscallError::BufferTooSmall);
     };
@@ -1938,8 +1927,7 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
                 page_size,
             );
         }
-        if shm_register(frame, owner, bytes, None) {
-            charge.keep();
+        if shm_register(frame, owner, bytes, charge, None) {
             return Ok(frame);
         }
         return Err(SyscallError::Unknown);

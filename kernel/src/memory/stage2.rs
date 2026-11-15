@@ -24,8 +24,9 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
+use super::cell_quota::Charge;
 use super::frame::{allocate_guest_ram, phys_to_virt};
-use super::frame_run::{Batch, PrivateRun, RunKind, RunOwner};
+use super::frame_run::{Batch, PrivateRun, RunKind};
 use super::paging::PAGE_SIZE;
 
 // ── S2 descriptor constants ─────────────────────────────────────────────────
@@ -189,7 +190,7 @@ impl Stage2Table {
         let root = PrivateRun::adopt(
             super::frame::allocate_contiguous_aligned(2, 2 * PAGE_SIZE)?,
             2,
-            RunOwner::Kernel,
+            Charge::KERNEL,
             RunKind::PageTable,
         );
         let root_pa = root.base() as u64;
@@ -238,7 +239,7 @@ impl Stage2Table {
         self.guest_ram = Some(PrivateRun::adopt(
             pa,
             n_pages,
-            RunOwner::Kernel,
+            Charge::KERNEL,
             RunKind::Leaf,
         ));
         self.guest_ram_pa = pa as u64;
@@ -255,12 +256,8 @@ impl Stage2Table {
         unsafe {
             core::ptr::write_bytes(va, 0, 512);
         }
-        self.tables.push(PrivateRun::adopt(
-            pa,
-            1,
-            RunOwner::Kernel,
-            RunKind::PageTable,
-        ));
+        self.tables
+            .push(PrivateRun::adopt(pa, 1, Charge::KERNEL, RunKind::PageTable));
         Some((va, pa as u64))
     }
 

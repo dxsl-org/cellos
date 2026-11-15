@@ -15,8 +15,9 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch::memory::ept::{EptMapError, NestedFormat, NestedPageTable};
+use crate::memory::cell_quota::Charge;
 use crate::memory::frame::phys_to_virt;
-use crate::memory::frame_run::{PrivateRun, RunKind, RunOwner};
+use crate::memory::frame_run::{PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
 use crate::sync::Spinlock;
 use hal::x86_64::svm_vcpu::SvmVcpu;
@@ -66,17 +67,9 @@ impl Drop for Vmcs {
     }
 }
 
-/// `pages` fresh frames for one of `owner`'s VM control structures.
-fn vm_structure(owner: usize, vm_id: usize, pages: usize) -> ViResult<PrivateRun> {
-    PrivateRun::allocate(
-        pages,
-        RunOwner::Vm {
-            owner,
-            vm_id: vm_id as u64,
-        },
-        RunKind::VmStructure,
-    )
-    .ok_or(ViError::OutOfMemory)
+/// `pages` fresh frames for one VM control structure.
+fn vm_structure(pages: usize) -> ViResult<PrivateRun> {
+    PrivateRun::allocate(pages, Charge::KERNEL, RunKind::VmStructure).ok_or(ViError::OutOfMemory)
 }
 
 enum X86Vcpu {
@@ -214,8 +207,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     // LAPIC MMIO hits memory (QEMU TCG has no DecodeAssist → per-access
     // emulation is impossible). Zeroed, then ID(0x20)=0 / VERSION(0x30)=0x50014
     // pre-populated; the timer is polled kernel-side on HLT.
-    // The VM's id is assigned at registration below; 0 names "not yet".
-    let apic_frame = vm_structure(owner, 0, 1).inspect_err(|_| {
+    let apic_frame = vm_structure(1).inspect_err(|_| {
         log::error!("[hv-x86] create_vm: xAPIC frame OOM");
     })?;
     // SAFETY: freshly allocated, exclusively owned frame; HHDM-mapped VA. u32
@@ -267,7 +259,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     {
         // Every early return below drops `vmcs`: VMCLEAR, then the frame
         // is freed (it leaked on these paths before, census §5).
-        let vmcs = Vmcs(vm_structure(owner, vm_id, 1)?);
+        let vmcs = Vmcs(vm_structure(1)?);
         let mut guard = VM_REGISTRY.lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
         let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
@@ -317,10 +309,10 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     // Allocate the SVM backing frames (VMCB + host-save + IOPM + MSRPM). An
     // early return below frees the ones already allocated (they leaked on
     // these paths before, census §5); the ASID stays spent.
-    let vmcb_run = vm_structure(owner, vm_id, 1)?;
-    let host_run = vm_structure(owner, vm_id, 1)?;
-    let msrpm_run = vm_structure(owner, vm_id, 2)?;
-    let iopm_run = vm_structure(owner, vm_id, 3)?;
+    let vmcb_run = vm_structure(1)?;
+    let host_run = vm_structure(1)?;
+    let msrpm_run = vm_structure(2)?;
+    let iopm_run = vm_structure(3)?;
     let (vmcb, host, msrpm, iopm) = (
         vmcb_run.base(),
         host_run.base(),

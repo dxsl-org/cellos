@@ -23,8 +23,9 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
+use crate::memory::cell_quota::Charge;
 use crate::memory::frame::{allocate_guest_ram, phys_to_virt};
-use crate::memory::frame_run::{Batch, PrivateRun, RunKind, RunOwner};
+use crate::memory::frame_run::{Batch, PrivateRun, RunKind};
 use crate::memory::paging::PAGE_SIZE;
 
 /// Which nested-paging format this tree encodes, selected at VM-create time
@@ -147,7 +148,7 @@ impl NestedPageTable {
         let root = PrivateRun::adopt(
             crate::memory::frame::allocate_frame()?,
             1,
-            RunOwner::Kernel,
+            Charge::KERNEL,
             RunKind::PageTable,
         );
         let root_pa = root.base() as u64;
@@ -206,7 +207,7 @@ impl NestedPageTable {
         self.guest_ram = Some(PrivateRun::adopt(
             pa,
             n_pages,
-            RunOwner::Kernel,
+            Charge::KERNEL,
             RunKind::Leaf,
         ));
         self.guest_ram_pa = pa as u64;
@@ -258,12 +259,8 @@ impl NestedPageTable {
         unsafe {
             core::ptr::write_bytes(va, 0, 512);
         }
-        self.tables.push(PrivateRun::adopt(
-            pa,
-            1,
-            RunOwner::Kernel,
-            RunKind::PageTable,
-        ));
+        self.tables
+            .push(PrivateRun::adopt(pa, 1, Charge::KERNEL, RunKind::PageTable));
         Some((va, pa as u64))
     }
 

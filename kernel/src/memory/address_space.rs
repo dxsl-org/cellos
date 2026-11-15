@@ -1,5 +1,6 @@
 //! Private Sv39 roots for native RV64 domains; a root remains private until its builder publishes it.
 use super::{
+    cell_quota::Charge,
     frame::{phys_to_virt, OwnedFrame},
     paging::{Flags, PAGE_SIZE},
 };
@@ -126,7 +127,10 @@ pub(crate) struct ExistingUserMapping {
     kind: MappingKind,
     flags: Flags,
 }
-fn allocate_owned_frame() -> Result<OwnedFrame, AddressSpaceError> {
+/// One zeroed frame for a domain (root, intermediate table or private page),
+/// billed to `charge`'s memory account. Over the limit it is refused before a
+/// frame is taken, as an `OutOfMemory` map failure.
+fn allocate_owned_frame(charge: Charge) -> Result<OwnedFrame, AddressSpaceError> {
     #[cfg(feature = "test-hooks")]
     {
         let remaining = FAIL_ALLOCATION_AFTER.load(Ordering::Acquire);
@@ -137,7 +141,7 @@ fn allocate_owned_frame() -> Result<OwnedFrame, AddressSpaceError> {
             FAIL_ALLOCATION_AFTER.store(remaining - 1, Ordering::Release);
         }
     }
-    let frame = OwnedFrame::allocate().ok_or(AddressSpaceError::OutOfMemory)?;
+    let frame = OwnedFrame::allocate(charge).ok_or(AddressSpaceError::OutOfMemory)?;
     // SAFETY: the newly allocated frame is exclusively owned by this value.
     unsafe {
         core::ptr::write_bytes(
@@ -169,6 +173,8 @@ pub struct AddressSpaceBuilder {
     /// every later release of that tag unconfirmed and therefore retained. `build`
     /// therefore adds them for every root that did not already ask for them.
     shared_supervisor: bool,
+    /// The incarnation every frame of the root is billed to.
+    charge: Charge,
 }
 impl Default for AddressSpaceBuilder {
     fn default() -> Self {
@@ -176,6 +182,7 @@ impl Default for AddressSpaceBuilder {
     }
 }
 impl AddressSpaceBuilder {
+    /// A root billed to the kernel.
     pub fn new() -> Self {
         Self {
             identity: DomainId(NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed)),
@@ -183,7 +190,14 @@ impl AddressSpaceBuilder {
             requests: Vec::new(),
             existing_user: Vec::new(),
             shared_supervisor: false,
+            charge: Charge::KERNEL,
         }
+    }
+
+    /// Bill every frame of the root — at build and as it grows later — to
+    /// `charge`'s memory account.
+    pub(crate) fn bill_to(&mut self, charge: Charge) {
+        self.charge = charge;
     }
 
     pub(crate) fn allow_supervisor(&mut self, mapping: SupervisorMapping) {
@@ -329,12 +343,13 @@ impl AddressSpaceBuilder {
             requests,
             existing_user,
             shared_supervisor: _,
+            charge,
         } = self;
         // Claim the architectural tag before anything is allocated: when every tag
         // is held by a live root the builder must refuse the domain (no reuse of a
         // live tag, no SAS fallback), and a refused build leaves no frame behind.
         let asid = AsidLease::acquire(identity.raw()).ok_or(AddressSpaceError::OutOfMemory)?;
-        let root = allocate_owned_frame()?;
+        let root = allocate_owned_frame(charge)?;
         // SAFETY: root is a zeroed private page frame and PageTable has the same page layout.
         unsafe {
             core::ptr::write(
@@ -369,6 +384,7 @@ impl AddressSpaceBuilder {
         for mapping in supervisor {
             if mapping.virtual_address < 0x0000_8000_0000_0000 {
                 map_page(
+                    charge,
                     root.physical_address(),
                     &mut table_frames,
                     mapping.virtual_address,
@@ -378,8 +394,9 @@ impl AddressSpaceBuilder {
             }
         }
         for request in requests {
-            let page = allocate_owned_frame()?;
+            let page = allocate_owned_frame(charge)?;
             map_page(
+                charge,
                 root.physical_address(),
                 &mut table_frames,
                 request.virtual_address,
@@ -396,6 +413,7 @@ impl AddressSpaceBuilder {
         }
         for mapping in existing_user {
             map_page(
+                charge,
                 root.physical_address(),
                 &mut table_frames,
                 mapping.virtual_address,
@@ -415,6 +433,7 @@ impl AddressSpaceBuilder {
         ledger.sort_unstable_by_key(|e| e.virtual_address);
         Ok(Arc::new(AddressSpace {
             identity,
+            charge,
             generation: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
             asid,
             #[cfg(feature = "p01-trace")]
@@ -439,6 +458,9 @@ impl AddressSpaceBuilder {
 /// only after its own bounded retry budget is spent.
 pub struct AddressSpace {
     identity: DomainId,
+    /// The incarnation every frame of this root is billed to, including the
+    /// tables and private pages it allocates as it grows.
+    charge: Charge,
     generation: u64,
     asid: AsidLease,
     #[cfg(feature = "p01-trace")]
@@ -690,13 +712,14 @@ impl AddressSpace {
         ledger
             .try_reserve(1)
             .map_err(|_| AddressSpaceError::OutOfMemory)?;
-        let page = allocate_owned_frame()?;
+        let page = allocate_owned_frame(self.charge)?;
         let mut table_frames = self.table_frames.lock();
         let mut frames = self.frames.lock();
         let mut pruned_tables = Vec::new();
         #[cfg(feature = "p01-trace")]
         let _semantic = self.p01_creation();
         let result = map_page_retaining_pruned_tables(
+            self.charge,
             self.root.physical_address(),
             &mut table_frames,
             &mut pruned_tables,
@@ -820,6 +843,7 @@ impl AddressSpace {
                 let physical_address = crate::memory::paging::virt_to_phys(address)
                     .ok_or(AddressSpaceError::InvalidMapping)?;
                 map_page_retaining_pruned_tables(
+                    self.charge,
                     self.root.physical_address(),
                     &mut table_frames,
                     &mut pruned_table_frames,
@@ -833,6 +857,7 @@ impl AddressSpace {
                 let physical_address = crate::memory::paging::virt_to_phys(address)
                     .ok_or(AddressSpaceError::InvalidMapping)?;
                 map_page_retaining_pruned_tables(
+                    self.charge,
                     self.root.physical_address(),
                     &mut table_frames,
                     &mut pruned_table_frames,
@@ -1091,6 +1116,7 @@ impl AddressSpace {
         #[cfg(feature = "p01-trace")]
         let _semantic = self.p01_creation();
         let result = map_page_retaining_pruned_tables(
+            self.charge,
             self.root.physical_address(),
             &mut table_frames,
             &mut pruned_tables,
@@ -1177,14 +1203,17 @@ impl AddressSpace {
 }
 
 /// Build a Tier 2 domain address space covering the kernel supervisor mapping,
-/// the cell's own kernel stack, its user stack, and its loaded ELF segments.
-pub fn create_cell_domain(
+/// the cell's own kernel stack, its user stack, and its loaded ELF segments,
+/// with every frame of it billed to `charge`.
+pub(crate) fn create_cell_domain(
+    charge: Charge,
     kstack: &crate::task::stack::Stack,
     ustack: &crate::task::stack::Stack,
     segments: &crate::memory::cell_segments::CellSegments,
     #[cfg(feature = "p01-trace")] owner: crate::p01_measurement::Owner,
 ) -> Result<Arc<AddressSpace>, AddressSpaceError> {
     let mut builder = AddressSpaceBuilder::new();
+    builder.bill_to(charge);
     builder.map_registered_execution(kstack);
 
     // Map user stack with User Read+Write permissions
@@ -1552,6 +1581,7 @@ fn user_flags(flags: Flags) -> Flags {
     )
 }
 fn map_page(
+    charge: Charge,
     root: PhysAddr,
     table_frames: &mut Vec<OwnedFrame>,
     virtual_address: VAddr,
@@ -1559,6 +1589,7 @@ fn map_page(
     flags: Flags,
 ) -> Result<(), AddressSpaceError> {
     map_page_inner(
+        charge,
         root,
         table_frames,
         None,
@@ -1569,6 +1600,7 @@ fn map_page(
 }
 
 fn map_page_retaining_pruned_tables(
+    charge: Charge,
     root: PhysAddr,
     table_frames: &mut Vec<OwnedFrame>,
     pruned_table_frames: &mut Vec<OwnedFrame>,
@@ -1577,6 +1609,7 @@ fn map_page_retaining_pruned_tables(
     flags: Flags,
 ) -> Result<(), AddressSpaceError> {
     map_page_inner(
+        charge,
         root,
         table_frames,
         Some(pruned_table_frames),
@@ -1586,7 +1619,10 @@ fn map_page_retaining_pruned_tables(
     )
 }
 
+/// Map one page, growing the tables it needs; every new table is billed to
+/// `charge`, and one that does not fit fails the map before its frame is taken.
 fn map_page_inner(
+    charge: Charge,
     root: PhysAddr,
     table_frames: &mut Vec<OwnedFrame>,
     mut pruned_table_frames: Option<&mut Vec<OwnedFrame>>,
@@ -1602,7 +1638,7 @@ fn map_page_inner(
     let table = unsafe { &mut *(phys_to_virt(root) as *mut hal::PageTable) };
     let result = {
         let mut allocate_table = || {
-            let frame = allocate_owned_frame().ok()?;
+            let frame = allocate_owned_frame(charge).ok()?;
             let physical_address = frame.physical_address();
             table_frames.push(frame);
             Some(physical_address)

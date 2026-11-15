@@ -24,7 +24,7 @@
 //! that no hart can still resolve a stale translation under the tag.
 
 use super::frame::OwnedFrame;
-use super::frame_run::{FlushOutcome, KernelBackend, RunKind, RunOwner, TagWait, PENDING};
+use super::frame_run::{FlushOutcome, KernelBackend, RunKind, TagWait, PENDING};
 use alloc::vec::Vec;
 
 /// Retain `frames` until `asid`'s invalidation is confirmed.
@@ -90,7 +90,7 @@ fn defer(
     runs.extend(
         frames
             .into_iter()
-            .map(|frame| frame.into_run(RunOwner::Kernel, RunKind::PageTable)),
+            .map(|frame| frame.into_run(RunKind::PageTable)),
     );
     // Every online remote is asked again after the unmap: each serves its
     // epoch with a full flush, which drops this tag's entries too.

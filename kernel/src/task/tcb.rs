@@ -326,26 +326,15 @@ pub struct Task {
     pub reply_value: Option<usize>,
     // Current Working Directory
     pub cwd: String,
-    // Stack management
+    // Stack management. A thread's stacks are billed to its incarnation's
+    // memory account until their frames are freed: a thread is a cost the cell
+    // chose at runtime and can choose repeatedly. A cell's own stacks are part
+    // of admitting it and are billed to nobody.
     pub kernel_stack: Option<super::stack::Stack>,
     pub user_stack: Option<super::stack::Stack>,
     /// Frames mapped for this cell's ELF segments, freed when the Task is dropped
     /// (reaped). Without it, a cell's code/data frames leak on every death.
     pub segment_mem: Option<crate::memory::cell_segments::CellSegments>,
-
-    /// Stack bytes charged to this task's incarnation, `None` if nothing was
-    /// charged.
-    ///
-    /// Only thread tasks carry a charge: a cell's own stacks are part of the cost
-    /// of admitting the cell, whereas a thread is a cost the cell chose at runtime
-    /// and can choose repeatedly, so it has to appear in the same ledger as the
-    /// cell's heap or concurrency becomes the one free way to grow a footprint.
-    ///
-    /// Released exactly once, in `Scheduler::exit_task` — the funnel every death
-    /// path passes through — by taking the field. Reaping is too late: a zombie
-    /// can sit unreaped indefinitely and the cell would be billed for a thread
-    /// that is already gone.
-    pub(crate) stack_quota_charge: Option<crate::memory::cell_quota::Reservation>,
 
     // Lifecycle
     pub waiters: Vec<usize>,
@@ -606,7 +595,6 @@ impl Task {
             kernel_stack: None,
             user_stack: None,
             segment_mem: None,
-            stack_quota_charge: None,
             waiters: Vec::new(),
             exit_code: None,
             pending_deaths: Vec::new(),

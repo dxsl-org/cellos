@@ -86,14 +86,15 @@ fn set_phase(value: u8) {
 }
 
 fn unmap_and_release(frame: usize) {
-    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
+    use crate::memory::cell_quota::Charge;
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     let mut batch = crate::memory::frame_run::Batch::new();
     let _ = paging::unmap_page(&mut batch, TEST_VA);
     batch.invalidate(TEST_VA);
     batch.retire(FrameRun::unpublished(
         frame,
         1,
-        RunOwner::Kernel,
+        Charge::KERNEL,
         RunKind::Leaf,
         KernelAlias::Intact,
     ));

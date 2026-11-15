@@ -9,7 +9,8 @@
 //! with them (census risk 2: a slot handed out again while a remote hart may
 //! still translate it would resolve the new image's VA to the old frame).
 
-use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, RunOwner, VaHold};
+use crate::memory::cell_quota::Charge;
+use crate::memory::frame_run::{Batch, FrameRun, KernelAlias, RunKind, VaHold};
 use crate::memory::paging::{self, PAGE_SIZE};
 use types::VAddr;
 
@@ -224,7 +225,7 @@ impl CellSegments {
             let run = FrameRun::unpublished(
                 base,
                 pages,
-                RunOwner::Kernel,
+                Charge::KERNEL,
                 RunKind::Leaf,
                 KernelAlias::Intact,
             );

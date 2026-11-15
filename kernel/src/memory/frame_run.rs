@@ -1,8 +1,8 @@
 //! One owner type for a run of physical frames, and the one release contract
 //! every owner of such a run follows (architecture remediation Phase 16).
 //!
-//! A [`FrameRun`] is a page-aligned run of frames with an owner incarnation and
-//! a state:
+//! A [`FrameRun`] is a page-aligned run of frames with a charge (its owner
+//! incarnation and the quota account its pages are billed to) and a state:
 //!
 //! ```text
 //! Mapped ──unpublish──► Unpublished ──flush confirmed──► (normalise) ─► Free
@@ -28,6 +28,7 @@
 //! degraded node, never a reused frame. Event holds (a pin, a lease, a DMA
 //! export) are not counted, as before the cap existed.
 
+use crate::memory::cell_quota::{self, Account, Charge, Reservation};
 use crate::memory::frame::FlushCap;
 use crate::memory::paging::PAGE_SIZE;
 use crate::sched::smp::MAX_HARTS;
@@ -39,20 +40,85 @@ use types::{PhysAddr, VAddr};
 /// One requested invalidation epoch per hart; 0 = that hart was not asked.
 pub type Epochs = [usize; MAX_HARTS];
 
-/// Who a run belongs to. A cell is named by its incarnation, not by a tid alone,
-/// so a reused tid can never inherit a dead incarnation's frames.
+/// Who a run belongs to and what it is billed to. The owner is an incarnation,
+/// never a tid, so a reused tid or CellId can never inherit a dead
+/// incarnation's frames or its refund.
+///
+/// `account: Some(_)` — the run holds `pages × PAGE_SIZE` bytes of that
+/// account, taken before its frames were allocated and refunded exactly once,
+/// when they return to the allocator. `None` — the owner is recorded and
+/// nothing is billed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RunOwner {
-    Cell {
-        cell: u64,
-        generation: u64,
-        tid: usize,
-    },
-    Kernel,
-    Vm {
-        owner: usize,
-        vm_id: u64,
-    },
+pub(crate) struct RunCharge {
+    pub(crate) owner: Charge,
+    pub(crate) account: Option<Account>,
+}
+
+impl RunCharge {
+    /// Kernel frames: never billed.
+    pub(crate) const KERNEL: Self = Self::unbilled(Charge::KERNEL);
+
+    /// `owner` recorded, nothing billed.
+    pub(crate) const fn unbilled(owner: Charge) -> Self {
+        Self {
+            owner,
+            account: None,
+        }
+    }
+
+    /// The charge of a run of `pages` frames billed with `bill`. A reservation
+    /// must cover exactly those frames; its bytes now belong to the run. The
+    /// kernel's reservations count nothing, so its runs carry no account.
+    pub(super) fn of(bill: RunBill, pages: usize) -> Self {
+        match bill {
+            RunBill::Unbilled(owner) => Self::unbilled(owner),
+            RunBill::Reserved(reservation) => {
+                let (owner, account, bytes) = reservation.into_parts();
+                debug_assert_eq!(
+                    bytes,
+                    pages * PAGE_SIZE,
+                    "a run is billed exactly its frames"
+                );
+                if owner == Charge::KERNEL {
+                    return Self::KERNEL;
+                }
+                Self {
+                    owner,
+                    account: Some(account),
+                }
+            }
+        }
+    }
+
+    /// Return a freed run's bytes to its account. Lock-free and allocation-free
+    /// (it runs in the hart-0 reaper inside the timer interrupt); a no-op once
+    /// the owner's slot holds another incarnation.
+    pub(super) fn refund(self, pages: usize) {
+        if let Some(account) = self.account {
+            cell_quota::refund(self.owner, account, pages * PAGE_SIZE);
+        }
+    }
+}
+
+/// What a new run is charged with: a [`Reservation`] covering exactly its
+/// frames, taken before they were allocated, or an owner billed nothing
+/// (`Charge::KERNEL` for kernel frames).
+#[derive(Debug)]
+pub(crate) enum RunBill {
+    Unbilled(Charge),
+    Reserved(Reservation),
+}
+
+impl From<Charge> for RunBill {
+    fn from(owner: Charge) -> Self {
+        Self::Unbilled(owner)
+    }
+}
+
+impl From<Reservation> for RunBill {
+    fn from(reservation: Reservation) -> Self {
+        Self::Reserved(reservation)
+    }
 }
 
 /// What the frames hold.
@@ -295,7 +361,7 @@ pub struct StateError {
     pub state: RunState,
 }
 
-/// A run of physical frames with one owner and one release protocol.
+/// A run of physical frames with one charge and one release protocol.
 ///
 /// Dropping a run that is not [`RunState::Free`] never frees it: the frames are
 /// leaked (counted in [`Counters::leaked`]) because nothing proves them safe.
@@ -303,7 +369,7 @@ pub struct StateError {
 pub struct FrameRun {
     base: PhysAddr,
     pages: u32,
-    owner: RunOwner,
+    charge: RunCharge,
     kind: RunKind,
     alias: KernelAlias,
     state: RunState,
@@ -315,33 +381,48 @@ pub struct FrameRun {
 }
 
 impl FrameRun {
-    /// A run some root still maps.
-    pub fn mapped(
+    /// A run some root still maps, billed with `bill`.
+    pub(crate) fn mapped(
         base: PhysAddr,
         pages: usize,
-        owner: RunOwner,
+        bill: impl Into<RunBill>,
         kind: RunKind,
         alias: KernelAlias,
     ) -> Self {
-        Self::with_state(base, pages, owner, kind, alias, RunState::Mapped)
+        let charge = RunCharge::of(bill.into(), pages);
+        Self::with_state(base, pages, charge, kind, alias, RunState::Mapped)
     }
 
     /// A run whose publications are already removed (or never existed); its
-    /// invalidation is still to be confirmed.
-    pub fn unpublished(
+    /// invalidation is still to be confirmed. Billed with `bill`.
+    pub(crate) fn unpublished(
         base: PhysAddr,
         pages: usize,
-        owner: RunOwner,
+        bill: impl Into<RunBill>,
         kind: RunKind,
         alias: KernelAlias,
     ) -> Self {
-        Self::with_state(base, pages, owner, kind, alias, RunState::Unpublished)
+        let charge = RunCharge::of(bill.into(), pages);
+        Self::unpublished_carrying(base, pages, charge, kind, alias)
+    }
+
+    /// [`Self::unpublished`] for frames that already carry `charge` (an
+    /// [`OwnedFrame`](super::frame::OwnedFrame) becoming a run): the bytes it
+    /// holds move into the run, nothing is taken again.
+    pub(super) fn unpublished_carrying(
+        base: PhysAddr,
+        pages: usize,
+        charge: RunCharge,
+        kind: RunKind,
+        alias: KernelAlias,
+    ) -> Self {
+        Self::with_state(base, pages, charge, kind, alias, RunState::Unpublished)
     }
 
     fn with_state(
         base: PhysAddr,
         pages: usize,
-        owner: RunOwner,
+        charge: RunCharge,
         kind: RunKind,
         alias: KernelAlias,
         state: RunState,
@@ -351,7 +432,7 @@ impl FrameRun {
             base,
             // A run longer than 2^32 pages (16 TiB) cannot be allocated.
             pages: u32::try_from(pages).unwrap_or(u32::MAX),
-            owner,
+            charge,
             kind,
             alias,
             state,
@@ -384,8 +465,8 @@ impl FrameRun {
         self.pages as usize
     }
 
-    pub const fn owner(&self) -> RunOwner {
-        self.owner
+    pub(crate) const fn charge(&self) -> RunCharge {
+        self.charge
     }
 
     pub const fn kind(&self) -> RunKind {
@@ -447,9 +528,11 @@ impl FrameRun {
     }
 
     /// `Unpublished | Quarantined(epochs) → Free`: normalise, free, release the
-    /// VA hold. Only callers that proved the invalidation reach this. A run
-    /// whose alias cannot be restored is not freed: it keeps its state (still
-    /// freeable) and the `Err` carries it, for the caller to quarantine as
+    /// VA hold, refund the charge. Only callers that proved the invalidation
+    /// reach this, whichever context they run in (the owner's syscall,
+    /// retirement, the hart-0 reaper in the timer interrupt). A run whose alias
+    /// cannot be restored is not freed: it keeps its state (still freeable) and
+    /// the `Err` carries it, for the caller to quarantine as
     /// [`Reason::AliasUnrestored`].
     fn free(&mut self, backend: &mut impl Backend) -> Result<(), StateError> {
         if !self.freeable() {
@@ -460,6 +543,8 @@ impl FrameRun {
         }
         backend.free(self.base, self.pages(), self.va_hold.take());
         self.state = RunState::Free;
+        // Once per run: `Free` is not freeable, so this is never reached again.
+        self.charge.refund(self.pages());
         #[cfg(feature = "p01-trace")]
         crate::p01_retained::retire(self.p01_retained.take());
         Ok(())
@@ -476,6 +561,9 @@ impl FrameRun {
     }
 }
 
+/// A run dropped outside `Free` keeps its frames and its charge: neither is
+/// returned while nothing proves the frames unreachable. The owner's
+/// deregistration at retirement resets the account.
 impl Drop for FrameRun {
     fn drop(&mut self) {
         if self.state != RunState::Free {
@@ -511,19 +599,28 @@ impl Drop for FrameRun {
 pub struct PrivateRun(Option<FrameRun>);
 
 impl PrivateRun {
-    /// `pages` fresh contiguous frames (not zeroed), or `None` when the
-    /// allocator has no such run or the quarantine cap refuses it.
-    pub fn allocate(pages: usize, owner: RunOwner, kind: RunKind) -> Option<Self> {
+    /// `pages` fresh contiguous frames (not zeroed) billed with `bill`, or
+    /// `None` when the allocator has no such run or the quarantine cap refuses
+    /// it (a reservation in `bill` is then refunded).
+    // reason: only the x86 VM control structures allocate a private run whole.
+    #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+    pub(crate) fn allocate(pages: usize, bill: impl Into<RunBill>, kind: RunKind) -> Option<Self> {
         let base = crate::memory::frame::allocate_contiguous(pages)?;
-        Some(Self::adopt(base, pages, owner, kind))
+        Some(Self::adopt(base, pages, bill, kind))
     }
 
-    /// Own `pages` frames at `base` the caller has just allocated.
-    pub fn adopt(base: PhysAddr, pages: usize, owner: RunOwner, kind: RunKind) -> Self {
+    /// Own `pages` frames at `base` the caller has just allocated, billed with
+    /// `bill`.
+    pub(crate) fn adopt(
+        base: PhysAddr,
+        pages: usize,
+        bill: impl Into<RunBill>,
+        kind: RunKind,
+    ) -> Self {
         Self(Some(FrameRun::mapped(
             base,
             pages,
-            owner,
+            bill,
             kind,
             KernelAlias::Intact,
         )))

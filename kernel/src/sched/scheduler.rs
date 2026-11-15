@@ -1245,31 +1245,31 @@ impl Scheduler {
         }
         let id = task.id;
 
-        let kstack = crate::task::stack::Stack::new_kernel(crate::task::stack_pages_for(name))?;
-        let ustack = crate::task::stack::Stack::new_user(crate::task::stack_pages_for(name))?;
-
-        // Charge the frames the thread actually took, read back from the Stack
-        // rather than recomputed from STACK_PAGES: a second, independent use of
-        // the same constant is how the charge and the allocation drift apart.
-        // On refusal `kstack` drops here and its frames go straight back, and
-        // nothing was charged, so nothing needs unwinding by hand.
-        let stack_bytes = kstack
-            .allocated_bytes()
-            .saturating_add(ustack.allocated_bytes());
-        let Ok(stack_charge) = crate::memory::cell_quota::Reservation::take(
-            crate::memory::cell_quota::Charge::of(&task),
-            crate::memory::cell_quota::Account::Memory,
-            stack_bytes,
-        ) else {
+        // The thread's stacks are billed to its incarnation before any frame is
+        // taken; each stack's run holds its bytes and refunds them when its
+        // frames return to the allocator, so a refusal leaves nothing charged
+        // and nothing allocated.
+        let pages = crate::task::stack_pages_for(name);
+        let stack_bytes = crate::task::stack::Stack::reserved_bytes(pages);
+        let charge = crate::memory::cell_quota::Charge::of(&task);
+        let take = || {
+            crate::memory::cell_quota::Reservation::take(
+                charge,
+                crate::memory::cell_quota::Account::Memory,
+                stack_bytes,
+            )
+        };
+        let (Ok(kcharge), Ok(ucharge)) = (take(), take()) else {
             log::warn!(
                 "[sched] cell {:?} cannot afford thread stacks ({} bytes, {} in use) — refusing spawn_thread",
                 cell_id,
-                stack_bytes,
+                2 * stack_bytes,
                 crate::memory::cell_quota::in_use(cell_id)
             );
             return Err(ViError::OutOfMemory);
         };
-        task.stack_quota_charge = Some(stack_charge);
+        let kstack = crate::task::stack::Stack::new_kernel_billed(pages, kcharge)?;
+        let ustack = crate::task::stack::Stack::new_user_billed(pages, ucharge)?;
 
         #[cfg(all(feature = "native-domains", cellos_wide))]
         if let crate::task::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
@@ -1279,7 +1279,8 @@ impl Scheduler {
                     cell_id,
                     error
                 );
-                task.stack_quota_charge = None;
+                // Dropping (or quarantining) the stacks refunds their charge
+                // when their frames are freed.
                 if matches!(
                     error,
                     crate::memory::address_space::AddressSpaceError::InvalidationUnacknowledged
@@ -1751,13 +1752,8 @@ impl Scheduler {
             crate::task::note_housekeeping();
         }
 
-        // Give the cell back the quota its thread stack was charged. Every death
-        // path — clean Exit, ForceExit, hardware fault, CPU watchdog, heartbeat
-        // kill, hot-swap retirement — funnels through here, which is why the refund
-        // lives here and not at reap: a zombie may sit unreaped for a long time, and
-        // billing a cell for a thread that has already died turns the quota into a
-        // slow leak that eventually refuses legitimate work. `take` makes the refund
-        // exactly-once even if this runs twice for the same tid.
+        // A thread's stacks stay billed until their frames are freed at reap
+        // (`FrameRun` refunds them), whichever path the thread died by.
         if let Some(t) = self.tasks.get_mut(&tid) {
             #[cfg(feature = "test-hooks")]
             crate::task::maybe_emit_exit_stack_baseline(
@@ -1768,7 +1764,6 @@ impl Scheduler {
             // The queued death notices die with the task, before it becomes a
             // zombie.
             release_pending_deaths(t);
-            drop(t.stack_quota_charge.take());
         }
 
         // Free the dying cell's address space NOW (unmap its segment VAs) so a
