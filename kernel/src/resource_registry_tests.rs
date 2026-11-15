@@ -104,37 +104,40 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
 
 /// Phase 16: a released window whose lowering is not confirmed on every hart
 /// stays registered, owned by nobody, and no later claim or release frees it;
-/// the confirmed window of the same release is freed. A retry whose lowering
-/// is in force releases it.
+/// the confirmed window of the same release is freed. Only a retry the timer
+/// poll armed lowers it again, and releases it once that lowering is in force.
 #[test]
-fn an_unlowered_window_is_quarantined_until_a_retry_lowers_it() {
+fn an_unlowered_window_is_quarantined_until_an_armed_retry_lowers_it() {
     use super::{
-        lookup_mmio_owner, release_mmio_for, request_mmio_unchecked, retire_windows,
-        retry_quarantined_windows, QUARANTINED_OWNER, REGISTRY,
+        lookup_mmio_owner, release_mmio_for, release_windows, request_mmio_unchecked,
+        retry_quarantined_windows, QUARANTINED_OWNER, REGISTRY, RETRY_ARMED,
     };
     use crate::memory::paging::PageTableError;
+    use core::sync::atomic::Ordering;
     const OWNER: usize = 0x7E2B;
     const UNLOWERED: usize = 0x7E2B_0000_0000;
     const LOWERED: usize = 0x7E2B_0000_1000;
     let _guard = crate::TEST_STATE_LOCK.lock();
+    let quarantined = || {
+        REGISTRY
+            .lock()
+            .values()
+            .filter(|region| region.owner_tid == QUARANTINED_OWNER)
+            .count()
+    };
     assert!(request_mmio_unchecked(OWNER, UNLOWERED, 0x1000).is_ok());
     assert!(request_mmio_unchecked(OWNER, LOWERED, 0x1000).is_ok());
 
-    let before = {
-        let mut registry = REGISTRY.lock();
-        let before = registry
-            .values()
-            .filter(|region| region.owner_tid == QUARANTINED_OWNER)
-            .count();
-        let unlowered = [(
-            UNLOWERED,
-            0x1000,
-            UNLOWERED,
-            PageTableError::InvalidationUnconfirmed,
-        )];
-        assert_eq!(retire_windows(&mut registry, OWNER, &unlowered), before + 1);
-        before
-    };
+    let before = quarantined();
+    let release = release_windows(OWNER, |start, _| {
+        if start == UNLOWERED {
+            Err((start, PageTableError::InvalidationUnconfirmed))
+        } else {
+            Ok(())
+        }
+    });
+    assert_eq!(release.released, [(LOWERED, 0x1000)]);
+    assert_eq!(release.quarantined, before + 1);
 
     assert_eq!(lookup_mmio_owner(UNLOWERED), None);
     assert!(!owns_exact_mmio(OWNER, UNLOWERED, 0x1000));
@@ -148,22 +151,93 @@ fn an_unlowered_window_is_quarantined_until_a_retry_lowers_it() {
         request_mmio_unchecked(OWNER, UNLOWERED, 0x1000),
         Err(ViError::AlreadyExists)
     );
-    let after = REGISTRY
-        .lock()
-        .values()
-        .filter(|region| region.owner_tid == QUARANTINED_OWNER)
-        .count();
-    assert_eq!(after, before + 1);
+    assert_eq!(quarantined(), before + 1);
 
     // The window whose lowering was confirmed is free for the next owner.
     assert!(request_mmio_unchecked(OWNER + 1, LOWERED, 0x1000).is_ok());
     release_mmio_for(OWNER + 1);
 
-    // A retry lowers it again (host tests have no page tables: the lowering
-    // is in force) and releases it to the next claim.
+    // A housekeeping pass another producer armed does not lower it again.
+    RETRY_ARMED.store(false, Ordering::Release);
+    assert_eq!(retry_quarantined_windows(), before + 1);
+    assert_eq!(
+        request_mmio_unchecked(OWNER + 1, UNLOWERED, 0x1000),
+        Err(ViError::AlreadyExists)
+    );
+
+    // The timer poll's arming does, once (host tests have no page tables: the
+    // lowering is in force), and releases it to the next claim.
+    RETRY_ARMED.store(true, Ordering::Release);
     assert_eq!(retry_quarantined_windows(), 0);
+    assert!(!RETRY_ARMED.load(Ordering::Acquire));
     assert!(request_mmio_unchecked(OWNER + 1, UNLOWERED, 0x1000).is_ok());
     release_mmio_for(OWNER + 1);
+}
+
+/// Phase 16 (MMIO lowering off the registry lock): a release lowers its
+/// windows with `REGISTRY` free (it ranks after `KERNEL_ROOT` and the console
+/// that the lowering takes), and meanwhile the window has no owner and refuses
+/// every claim on it, including one that only shares the page being lowered.
+#[test]
+fn a_release_lowers_without_the_registry_and_refuses_claims_meanwhile() {
+    use super::{lookup_mmio_owner, release_windows, request_mmio_unchecked, REGISTRY};
+    const OWNER: usize = 0x7E2C;
+    const PAGE: usize = 0x7E2C_0000_0000;
+    // A sub-page window: x86_64 (this host) lowers the page it touches.
+    const BASE: usize = PAGE + 0x10;
+    const NEIGHBOUR: usize = PAGE + 0x800;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    assert!(request_mmio_unchecked(OWNER, BASE, 0x20).is_ok());
+
+    let mut lowered = alloc::vec::Vec::new();
+    let release = release_windows(OWNER, |start, pages| {
+        assert!(REGISTRY.try_lock().is_some(), "lowering under REGISTRY");
+        assert_eq!(lookup_mmio_owner(BASE), None);
+        assert!(!owns_exact_mmio(OWNER, BASE, 0x20));
+        assert_eq!(
+            request_mmio_unchecked(OWNER + 1, BASE, 0x20),
+            Err(ViError::AlreadyExists)
+        );
+        assert_eq!(
+            request_mmio_unchecked(OWNER + 1, NEIGHBOUR, 0x10),
+            Err(ViError::AlreadyExists)
+        );
+        lowered.push((start, pages));
+        Ok(())
+    });
+    assert_eq!(lowered, [(PAGE, 1)]);
+    assert_eq!(release.released, [(BASE, 0x20)]);
+    assert!(release.unlowered.is_empty());
+
+    // Released: the page is free for the neighbour's claim.
+    assert!(request_mmio_unchecked(OWNER + 1, NEIGHBOUR, 0x10).is_ok());
+    super::release_mmio_for(OWNER + 1);
+}
+
+/// A release lowers its window's pages as contiguous runs, skips a page
+/// another owner's live window still covers, and keeps nothing for a
+/// quarantined or releasing window.
+#[test]
+fn a_release_lowers_contiguous_runs_and_keeps_a_page_a_live_window_covers() {
+    use super::{lowering_runs, MmioRegion, CLASS_ECAM, QUARANTINED_OWNER, RELEASING_OWNER};
+    const BASE: usize = 0x7E2D_0000_0000;
+    const PAGE: usize = 0x1000;
+    let region = |owner_tid, len| MmioRegion {
+        len,
+        owner_tid,
+        class: CLASS_ECAM,
+    };
+    let mut registry = alloc::collections::BTreeMap::new();
+    registry.insert(BASE, region(1, 6 * PAGE));
+    // A live window handed over on page 2.
+    registry.insert(BASE + 2 * PAGE + 0x10, region(2, 0x10));
+    // Quarantined on page 4, releasing on page 5: neither keeps its page.
+    registry.insert(BASE + 4 * PAGE, region(QUARANTINED_OWNER, PAGE));
+    registry.insert(BASE + 5 * PAGE, region(RELEASING_OWNER, PAGE));
+    assert_eq!(
+        lowering_runs(&registry, 1, BASE, 6 * PAGE),
+        [(BASE, 2), (BASE + 3 * PAGE, 3)]
+    );
 }
 
 /// H-3: the PlatformCap bypass may claim only inside the admitted ECAM window

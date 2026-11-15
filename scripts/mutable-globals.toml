@@ -1813,12 +1813,23 @@ review = "kernel/src/resource_registry.rs:release_for; kernel/src/resource_regis
 key = "kernel::resource_registry::QUARANTINED_WINDOWS"
 lifetime = "global"
 mutation = "atomic"
-owner = "resource_registry: count_quarantined stores the number of MMIO windows registered to QUARANTINED_OWNER (release_mmio_for via retire_windows, retry_quarantined_windows); poll_quarantined_windows and retry_quarantined_windows read it"
+owner = "resource_registry: count_quarantined stores the number of MMIO windows registered to QUARANTINED_OWNER (release_mmio_for and retry_quarantined_windows via finish_release); poll_quarantined_windows and retry_quarantined_windows read it"
 contexts = ["normal", "irq", "exception"]
 seal = "none: windows enter and leave the quarantine for the whole run"
 retirement = "never: a counter for the whole run; it returns to 0 once every quarantined window's lowering is confirmed"
 rationale = "Written only under REGISTRY (Release store), read without it (Acquire) by the hart-0 timer poll and the housekeeping retry as a fast 'nothing quarantined' gate; a stale read only delays or adds one retry, which re-reads the registry under its lock."
 review = "kernel/src/resource_registry.rs:count_quarantined; kernel/src/resource_registry.rs:poll_quarantined_windows; kernel/src/resource_registry.rs:retry_quarantined_windows; kernel/src/task.rs:vi_timer_tick"
+
+[[global]]
+key = "kernel::resource_registry::RETRY_ARMED"
+lifetime = "global"
+mutation = "atomic"
+owner = "resource_registry: poll_quarantined_windows (hart-0 timer) sets it when a window is quarantined and no remote hart owes an invalidation; retry_quarantined_windows (housekeeping pass) consumes it with a swap"
+contexts = ["normal", "irq", "exception"]
+seal = "none: armed and consumed for the whole run"
+retirement = "never: a one-shot arming flag for the whole run"
+rationale = "Only the timer poll arms the quarantined-window retry, so a housekeeping pass armed by any other producer does not lower every quarantined page again. Release store, AcqRel swap: one armed poll yields at most one retry, and a lost race only delays the retry to the next poll."
+review = "kernel/src/resource_registry.rs:poll_quarantined_windows; kernel/src/resource_registry.rs:retry_quarantined_windows; kernel/src/task.rs:vi_timer_tick"
 
 [[global]]
 key = "kernel::resource_registry::DISPLAY_FRAMEBUFFER"

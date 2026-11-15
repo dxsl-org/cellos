@@ -1727,8 +1727,10 @@ fn drain_before_selection() {
             note_housekeeping();
         }
         // MMIO windows whose release lowering was unconfirmed: lowered again,
-        // and released once confirmed. Armed by the hart-0 timer poll, with
-        // backoff; a window still unconfirmed waits for the next poll.
+        // and released once confirmed. Only the hart-0 timer poll arms the
+        // retry (its own flag, with backoff); a pass another producer armed
+        // returns at once, and a window still unconfirmed waits for the next
+        // poll.
         crate::resource_registry::retry_quarantined_windows();
 
         if SCHEDULER

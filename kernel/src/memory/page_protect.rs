@@ -168,6 +168,92 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
     Ok(())
 }
 
+/// Rewrite the permission bits of every *mapped* page of the `pages` pages
+/// from page-aligned `start`, then invalidate the whole range on every hart
+/// with ONE shared flush, before returning either way (the MMIO lowering,
+/// `paging::restore_mmio_run`).
+///
+/// - An absent leaf is skipped, not an error, but the flush still covers it:
+///   a translation removed without one may still be cached.
+/// - A leaf that cannot be rewritten does not stop the pass: every other page
+///   is still lowered and flushed, so a failure never leaves more pages
+///   reachable than it must.
+/// - `KERNEL_ROOT` is held from the first leaf write through the flush, as
+///   [`protect_pages`] holds it.
+///
+/// Returns the pages rewritten.
+///
+/// # Errors
+/// The first page that could not be rewritten, else `(start,
+/// InvalidationUnconfirmed)` when a remote hart did not confirm the flush.
+#[cfg(cellos_wide)]
+pub fn protect_mapped_range(
+    start: VAddr,
+    pages: usize,
+    new_flags: Flags,
+) -> Result<usize, (VAddr, PageTableError)> {
+    debug_assert_eq!(start & (PAGE_SIZE - 1), 0);
+    if pages == 0 {
+        return Ok(0);
+    }
+    let mut cap = crate::memory::frame::FlushCap::take()
+        .ok_or((start, PageTableError::InvalidationUnconfirmed))?;
+    let root_lock = KERNEL_ROOT.lock();
+    let root_phys = (*root_lock).ok_or((start, PageTableError::NotSupported))?;
+    let mut unconfirmed = None;
+    let result = write_mapped_then_flush(
+        start,
+        pages,
+        |page_va| match rewrite_leaf(root_phys, page_va, new_flags) {
+            Ok(()) => Ok(true),
+            Err(PageTableError::InvalidAddress) => Ok(false),
+            Err(error) => Err(error),
+        },
+        |from, size| match crate::memory::tlb_shootdown::flush_range(&mut cap, from, size) {
+            crate::memory::frame_run::FlushOutcome::Confirmed => Ok(()),
+            outcome => {
+                unconfirmed = Some(outcome);
+                Err(PageTableError::InvalidationUnconfirmed)
+            }
+        },
+    );
+    drop(root_lock);
+    if let Some(outcome) = unconfirmed {
+        // Logs it; the result already carries the failure.
+        let _ = confirmed(outcome, start);
+    }
+    result
+}
+
+/// Write the leaf of each of the `pages` pages from `start` (`write` returns
+/// `false` for an absent leaf), every page even after one failed, then call
+/// `flush` once over the whole range. Returns the pages written; the error is
+/// the first failed write, else the flush's (named by `start`).
+#[cfg(cellos_wide)]
+fn write_mapped_then_flush<E>(
+    start: VAddr,
+    pages: usize,
+    mut write: impl FnMut(VAddr) -> Result<bool, E>,
+    flush: impl FnOnce(VAddr, usize) -> Result<(), E>,
+) -> Result<usize, (VAddr, E)> {
+    let mut written = 0;
+    let mut failure = None;
+    for page_va in (0..pages).map(|page| start + page * PAGE_SIZE) {
+        match write(page_va) {
+            Ok(true) => written += 1,
+            Ok(false) => {}
+            Err(error) => {
+                failure.get_or_insert((page_va, error));
+            }
+        }
+    }
+    let flushed = flush(start, pages * PAGE_SIZE).map_err(|error| (start, error));
+    match failure {
+        Some(failure) => Err(failure),
+        None => flushed.map(|()| written),
+    }
+}
+
 /// Write each page's leaf in order (stopping at the first failure), then call
 /// `flush` once per contiguous run of the pages actually written, before
 /// returning either way — every run is flushed even after one failed. The
@@ -399,6 +485,53 @@ mod tests {
             flushed.into_inner(),
             [(page(0), 2 * PAGE_SIZE), (page(5), PAGE_SIZE)]
         );
+    }
+
+    #[test]
+    fn a_mapped_range_skips_absent_leaves_and_flushes_the_whole_range_once() {
+        let absent = |va: VAddr| va == page(2) || va == page(3);
+        let flushes = core::cell::RefCell::new(Vec::new());
+        let flush = |start, size| {
+            flushes.borrow_mut().push((start, size));
+            Ok::<(), &str>(())
+        };
+        let result = write_mapped_then_flush(page(0), 6, |va| Ok(!absent(va)), flush);
+        assert_eq!(result, Ok(4));
+        // The absent leaves are flushed with the rest: one flush, whole range.
+        assert_eq!(flushes.take(), [(page(0), 6 * PAGE_SIZE)]);
+
+        // Nothing mapped at all still flushes the range.
+        let result = write_mapped_then_flush(page(2), 2, |va| Ok(!absent(va)), flush);
+        assert_eq!(result, Ok(0));
+        assert_eq!(flushes.take(), [(page(2), 2 * PAGE_SIZE)]);
+    }
+
+    #[test]
+    fn a_failed_leaf_does_not_stop_the_mapped_range_and_an_unconfirmed_flush_fails_it() {
+        let written = core::cell::RefCell::new(Vec::new());
+        let flushes = core::cell::RefCell::new(Vec::new());
+        let result = write_mapped_then_flush(
+            page(0),
+            4,
+            |va| {
+                if va == page(1) {
+                    return Err("oom");
+                }
+                written.borrow_mut().push(va);
+                Ok(true)
+            },
+            |start, size| {
+                flushes.borrow_mut().push((start, size));
+                Ok(())
+            },
+        );
+        // Every other page is still lowered and flushed; the error names the page.
+        assert_eq!(result, Err((page(1), "oom")));
+        assert_eq!(written.take(), [page(0), page(2), page(3)]);
+        assert_eq!(flushes.take(), [(page(0), 4 * PAGE_SIZE)]);
+
+        let result = write_mapped_then_flush(page(4), 2, |_| Ok(true), |_, _| Err("unconfirmed"));
+        assert_eq!(result, Err((page(4), "unconfirmed")));
     }
 
     #[test]

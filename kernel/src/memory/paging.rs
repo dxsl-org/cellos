@@ -771,28 +771,52 @@ pub fn unmap_page(batch: &mut Batch, vaddr: VAddr) -> PagingResult<()> {
 /// every MMIO window kernel-only; a window is user-mapped only while a
 /// `RequestMmio` grant holds it. Lowering the page's permissions makes the
 /// Cell's next access fault.
-/// Pages that are not mapped are skipped; a mapped page that cannot be
-/// re-protected is an error, because that page would stay user-reachable.
+/// Pages that are not mapped are skipped (their range is still flushed); a
+/// mapped page that cannot be re-protected is an error, because that page
+/// would stay user-reachable.
 #[cfg(cellos_wide)]
 pub fn clear_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
     let Some(end) = checked_page_end(base, len) else {
         return Ok(0);
     };
+    let start = base & !(PAGE_SIZE - 1);
+    restore_mmio_run(start, (end - start) / PAGE_SIZE).map_err(|(va, e)| {
+        log::error!("[paging] clear_mmio_user: {va:#x} still user-reachable ({e:?})");
+        e
+    })
+}
+
+/// Pages one MMIO lowering step rewrites under one `KERNEL_ROOT` hold and
+/// invalidates with one shared flush (2 MiB): it bounds how long the lock is
+/// held with interrupts masked, at 128 flushes for a 256 MiB ECAM claim.
+#[cfg(cellos_wide)]
+const MMIO_LOWER_CHUNK_PAGES: usize = 512;
+
+/// Clear USER on the `pages` pages from page-aligned `start`, in steps of
+/// [`MMIO_LOWER_CHUNK_PAGES`]: each step's mapped leaves are rewritten and the
+/// whole step, absent leaves included, is invalidated with one shared flush
+/// (`protect_mapped_range`). Every page is attempted, even after one failed.
+/// Returns the pages cleared, or the first failure.
+#[cfg(cellos_wide)]
+pub fn restore_mmio_run(start: usize, pages: usize) -> Result<usize, (usize, PageTableError)> {
     let mut cleared = 0;
-    let mut va = base & !(PAGE_SIZE - 1);
-    while va < end {
-        match protect_page(va, mmio_kernel_flags()) {
-            Ok(()) => cleared += 1,
-            // Not mapped: nothing to take away.
-            Err(PageTableError::InvalidAddress) => {}
-            Err(e) => {
-                log::error!("[paging] clear_mmio_user: {va:#x} still user-reachable ({e:?})");
-                return Err(e);
+    let mut failure = None;
+    let mut done = 0;
+    while done < pages {
+        let step = (pages - done).min(MMIO_LOWER_CHUNK_PAGES);
+        match super::page_protect::protect_mapped_range(
+            start + done * PAGE_SIZE,
+            step,
+            mmio_kernel_flags(),
+        ) {
+            Ok(stepped) => cleared += stepped,
+            Err(error) => {
+                failure.get_or_insert(error);
             }
         }
-        va += PAGE_SIZE;
+        done += step;
     }
-    Ok(cleared)
+    failure.map_or(Ok(cleared), Err)
 }
 
 /// Make the whole pages of `[base, base+len)` reachable from EL0/U-mode on
