@@ -796,18 +796,23 @@ const MMIO_LOWER_CHUNK_PAGES: usize = 512;
 /// [`MMIO_LOWER_CHUNK_PAGES`]: each step's mapped leaves are rewritten and the
 /// whole step, absent leaves included, is invalidated with one shared flush
 /// (`protect_mapped_range`). Every page is attempted, even after one failed.
+/// Once a step's flush is unconfirmed the lowering has failed (its window is
+/// quarantined), so the remaining steps still rewrite their leaves but only
+/// request their flushes, without waiting a probe bound each.
 /// Returns the pages cleared, or the first failure.
 #[cfg(cellos_wide)]
 pub fn restore_mmio_run(start: usize, pages: usize) -> Result<usize, (usize, PageTableError)> {
     let mut cleared = 0;
     let mut failure = None;
     let mut done = 0;
+    let mut await_flush = true;
     while done < pages {
         let step = (pages - done).min(MMIO_LOWER_CHUNK_PAGES);
         match super::page_protect::protect_mapped_range(
             start + done * PAGE_SIZE,
             step,
             mmio_kernel_flags(),
+            &mut await_flush,
         ) {
             Ok(stepped) => cleared += stepped,
             Err(error) => {

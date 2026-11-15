@@ -381,6 +381,12 @@ pub fn pi_monitor_smoke() {
 // ── Registry operations (`crate::hypervisor::registry`) ──────────────────────
 
 pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
+    build_vm(owner, guest_pages, false)
+}
+
+/// [`create_vm`]; `refusal_expected` (the VMID fixture exhausting the pool on
+/// purpose) logs an exhausted pool at info, tagged `(fixture)`, not at warn.
+fn build_vm(owner: usize, guest_pages: usize, refusal_expected: bool) -> ViResult<usize> {
     if PI_MONITOR && !El2Monitor::is_verified() {
         // The cell can only print one sentence for every failure, so the
         // reason has to be here: a refused boot monitor and a failed carve
@@ -456,7 +462,11 @@ pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
 
     // The table, never bound, is freed on refusal; no TLB entry names it.
     let vmid = VMIDS.allocate().ok_or_else(|| {
-        log::warn!("[hv] create_vm refused: all 255 VMIDs in use");
+        if refusal_expected {
+            log::info!("[hv] create_vm refused (fixture): all 255 VMIDs in use");
+        } else {
+            log::warn!("[hv] create_vm refused: all 255 VMIDs in use");
+        }
         ViError::OutOfMemory
     })?;
     let vm_id = {
@@ -891,21 +901,26 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
             .collect();
         dead_keys.iter().filter_map(|k| map.remove(k)).collect()
     };
-    // Disable Stage-2 for each dying VM and drop its translations before its
+    // Disable Stage-2 and drop the dying VMs' translations before their
     // tables and guest RAM go back to the allocator. `disable_stage2` flushes
     // only the VMID in this CPU's VTTBR_EL2 — none, since every guest exit
     // and `create_vm` clear it — so every VMID is flushed, on every CPU,
     // before the drop (census P13). No CPU names the dying root: VTTBR_EL2
     // holds a root only during a guest run, under the registry lock, and the
     // VM left the registry above.
-    // Each VMID goes back to the pool only after that flush completed, so the
-    // VM that is handed it next starts with no entry tagged with it.
+    // One flush covers every dying VM (every VMID on every CPU), so a
+    // teardown costs one broadcast, not one per VM. Each VMID goes back to
+    // the pool only after that flush completed, so the VM that is handed it
+    // next starts with no entry tagged with it.
+    if dead_vms.is_empty() {
+        return;
+    }
+    // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
+    unsafe {
+        disable_stage2();
+        s2_tlb_flush_all();
+    }
     for vm in dead_vms {
-        // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
-        unsafe {
-            disable_stage2();
-            s2_tlb_flush_all();
-        }
         VMIDS.release(vm.vmid);
         drop(vm); // Stage2Table::drop frees all frames
     }
@@ -1030,7 +1045,7 @@ pub(crate) fn two_vm_stage2_selftest() {
     let mut count = 0usize;
     let mut each_once = true;
     while count < VMID_COUNT {
-        let Ok(vm_id) = create_vm(OWNER, 1) else {
+        let Ok(vm_id) = build_vm(OWNER, 1, true) else {
             break;
         };
         count += 1;

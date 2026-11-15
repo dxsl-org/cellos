@@ -334,9 +334,21 @@ impl RegionTable {
         self.rows.contains_key(id)
     }
 
-    /// Insert `region` at `id`, returning the row of any kind it replaced.
+    /// Insert `region` at `id`, or hand it back (`Some`) if a row of any kind
+    /// holds `id`; that row stays. Each id is the address of a frame its row owns,
+    /// so an occupied id means two runs name the same frames: replacing the
+    /// row would drop its run (leaked) while the new row went on to free those
+    /// frames. A refused region's run is leaked and logged when the caller
+    /// drops it (`FrameRun`'s drop), never freed.
+    #[must_use = "a refused region is dropped with no table lock held"]
     pub(crate) fn insert(&mut self, id: usize, region: Region) -> Option<Region> {
-        self.rows.insert(id, region)
+        match self.rows.entry(id) {
+            alloc::collections::btree_map::Entry::Occupied(_) => Some(region),
+            alloc::collections::btree_map::Entry::Vacant(slot) => {
+                slot.insert(region);
+                None
+            }
+        }
     }
 
     /// The SHM region `handle`.

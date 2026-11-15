@@ -49,6 +49,4 @@ pub mod dev {
 
 pub mod hypervisor {
     pub mod pending_irqs;
-    #[cfg(feature = "test-hooks")]
-    pub mod smoke_guest;
 }

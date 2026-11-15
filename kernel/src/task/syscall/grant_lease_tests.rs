@@ -76,14 +76,16 @@ fn with_leasable_rows(f: impl FnOnce()) {
     *SCHEDULER.lock() = Some(scheduler);
 
     let shared_to = Some((HOLDER_TID, GrantPerm::ReadOnly));
-    grant_table_lock()
+    assert!(grant_table_lock()
         .lock()
         .get_or_insert_with(RegionTable::new)
-        .insert(PAGE_BASE, shared_row(PAGE_BASE, shared_to));
-    reg_grant_table_lock()
+        .insert(PAGE_BASE, shared_row(PAGE_BASE, shared_to))
+        .is_none());
+    assert!(reg_grant_table_lock()
         .lock()
         .get_or_insert_with(RegionTable::new)
-        .insert(REG_BASE, shared_row(REG_BASE, shared_to));
+        .insert(REG_BASE, shared_row(REG_BASE, shared_to))
+        .is_none());
 
     f();
 

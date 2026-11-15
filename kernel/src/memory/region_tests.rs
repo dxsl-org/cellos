@@ -73,3 +73,25 @@ fn the_shm_view_never_sees_a_grant() {
     assert!(!table.occupied(&SHM));
     discard(table);
 }
+
+/// An occupied id refuses the insert, whatever kind either row is: the row
+/// already there keeps its run, and the refused region comes back whole.
+#[test]
+fn an_insert_never_replaces_a_row() {
+    let (mut table, shm_owner) = table();
+    let other = RegionOwner::task(OWNER_TID + 1, CellId(9), 1);
+    for (id, region) in [
+        (SHM, Region::grant(other, run(SHM), 8192, None)),
+        (GRANT, Region::shm(other, run(GRANT), 8192)),
+    ] {
+        let refused = table.insert(id, region).expect("occupied id");
+        assert_eq!((refused.owner, refused.size), (other, 8192));
+        refused.discard_synthetic();
+    }
+    assert_eq!(
+        table.shm(&SHM).map(|r| (r.owner, r.size)),
+        Some((shm_owner, 4096))
+    );
+    assert_eq!(table.get(&GRANT).map(|r| r.size), Some(4096));
+    discard(table);
+}

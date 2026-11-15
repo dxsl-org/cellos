@@ -170,8 +170,8 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
 
 /// Rewrite the permission bits of every *mapped* page of the `pages` pages
 /// from page-aligned `start`, then invalidate the whole range on every hart
-/// with ONE shared flush, before returning either way (the MMIO lowering,
-/// `paging::restore_mmio_run`).
+/// with ONE shared flush, before returning either way (one step of the MMIO
+/// lowering, `paging::restore_mmio_run`).
 ///
 /// - An absent leaf is skipped, not an error, but the flush still covers it:
 ///   a translation removed without one may still be cached.
@@ -180,24 +180,36 @@ pub fn protect_pages(pages: &[(VAddr, Flags)]) -> Result<(), (VAddr, PageTableEr
 ///   reachable than it must.
 /// - `KERNEL_ROOT` is held from the first leaf write through the flush, as
 ///   [`protect_pages`] holds it.
+/// - `await_flush`: wait for every hart to confirm the flush. An unconfirmed
+///   flush clears it (and is logged), so the later steps of the same lowering
+///   only send their requests: the lowering has already failed, and a silent
+///   hart would otherwise cost each step a full probe bound.
 ///
 /// Returns the pages rewritten.
 ///
 /// # Errors
 /// The first page that could not be rewritten, else `(start,
-/// InvalidationUnconfirmed)` when a remote hart did not confirm the flush.
+/// InvalidationUnconfirmed)` when the flush is not confirmed on every hart
+/// (without `await_flush`, whenever a remote hart was asked).
 #[cfg(cellos_wide)]
 pub fn protect_mapped_range(
     start: VAddr,
     pages: usize,
     new_flags: Flags,
+    await_flush: &mut bool,
 ) -> Result<usize, (VAddr, PageTableError)> {
     debug_assert_eq!(start & (PAGE_SIZE - 1), 0);
     if pages == 0 {
         return Ok(0);
     }
-    let mut cap = crate::memory::frame::FlushCap::take()
-        .ok_or((start, PageTableError::InvalidationUnconfirmed))?;
+    let mut cap = if *await_flush {
+        Some(
+            crate::memory::frame::FlushCap::take()
+                .ok_or((start, PageTableError::InvalidationUnconfirmed))?,
+        )
+    } else {
+        None
+    };
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or((start, PageTableError::NotSupported))?;
     let mut unconfirmed = None;
@@ -209,16 +221,25 @@ pub fn protect_mapped_range(
             Err(PageTableError::InvalidAddress) => Ok(false),
             Err(error) => Err(error),
         },
-        |from, size| match crate::memory::tlb_shootdown::flush_range(&mut cap, from, size) {
-            crate::memory::frame_run::FlushOutcome::Confirmed => Ok(()),
-            outcome => {
-                unconfirmed = Some(outcome);
-                Err(PageTableError::InvalidationUnconfirmed)
+        |from, size| {
+            let outcome = match cap.as_mut() {
+                Some(cap) => crate::memory::tlb_shootdown::flush_range(cap, from, size),
+                None => {
+                    crate::memory::tlb_shootdown::flush_ranges_without_wait(&[(from, size)], false)
+                }
+            };
+            match outcome {
+                crate::memory::frame_run::FlushOutcome::Confirmed => Ok(()),
+                outcome => {
+                    unconfirmed = Some(outcome);
+                    Err(PageTableError::InvalidationUnconfirmed)
+                }
             }
         },
     );
     drop(root_lock);
-    if let Some(outcome) = unconfirmed {
+    if let (Some(outcome), true) = (unconfirmed, cap.is_some()) {
+        *await_flush = false;
         // Logs it; the result already carries the failure.
         let _ = confirmed(outcome, start);
     }

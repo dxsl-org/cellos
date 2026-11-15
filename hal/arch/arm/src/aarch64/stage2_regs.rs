@@ -261,32 +261,6 @@ pub unsafe fn monitor_s2_tlb_flush_all() {
     }
 }
 
-/// Invalidate the Stage-2 TLB entry for a single guest IPA.
-///
-/// Encodes `ipa >> 12` into the `TLBI IPAS2E1IS` operand as required by the
-/// ARM architecture (D8-7204: Xt = IPA[47:12]).  Also issues `TLBI VMALLE1IS`
-/// to flush any Stage-1 entries cached during the S2 walk.
-///
-/// # Safety
-/// Must be called from EL2 after updating the Stage-2 descriptor for `ipa`.
-#[cfg(target_arch = "aarch64")]
-pub unsafe fn monitor_s2_tlb_flush_ipa(ipa: u64) {
-    let encoded = ipa >> 12; // TLBI IPAS2E1IS encodes IPA[47:12] in Xt
-                             // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
-    unsafe {
-        core::arch::asm!(
-            "dsb ishst",
-            "tlbi ipas2e1is, {x}",  // invalidate Stage-2 entry for this IPA
-            "dsb ish",
-            "tlbi vmalle1is",       // flush Stage-1 entries cached during S2 walk
-            "dsb ish",
-            "isb",
-            x = in(reg) encoded,
-            options(nostack),
-        );
-    }
-}
-
 /// This CPU's `VTTBR_EL2` (VMID and Stage-2 root); 0 when it names no root.
 ///
 /// # Safety
@@ -392,24 +366,6 @@ pub unsafe fn s2_tlb_flush_all() {
     }
 }
 
-/// Invalidate the Stage-2 entry for one guest IPA through the private Pi HVC
-/// gateway or directly at an EL2 host.
-///
-/// # Safety
-/// Must be called with an active EL2 host, or after the Pi EL1 monitor
-/// initialized, after updating the Stage-2 descriptor for `ipa`.
-#[cfg(target_arch = "aarch64")]
-pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
-    if El2Monitor::PRESENT {
-        assert!(El2Monitor::is_ready(), "EL2 monitor unavailable");
-        assert_eq!(El2Monitor::gateway(4, ipa, 0, 0, 0), 0);
-    } else {
-        unsafe {
-            monitor_s2_tlb_flush_ipa(ipa);
-        }
-    }
-}
-
 // ── Non-AArch64 stubs (keeps workspace compiling on RISC-V / x86_64) ────────
 // `unsafe` mirrors the aarch64 signatures so call sites are identical.
 
@@ -447,13 +403,6 @@ pub unsafe fn disable_stage2() {}
 /// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn s2_tlb_flush_all() {}
-
-/// No-op stub for non-AArch64 targets.
-///
-/// # Safety
-/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
-#[cfg(not(target_arch = "aarch64"))]
-pub unsafe fn s2_tlb_flush_ipa(_ipa: u64) {}
 
 #[cfg(test)]
 mod tests {

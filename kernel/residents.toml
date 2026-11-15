@@ -44,7 +44,6 @@
 "kernel/src/arch/aarch64/gpio_irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/hart_local.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/hypervisor/pending_irqs.rs" = { category = "A", owner = "hypervisor" }
-"kernel/src/arch/aarch64/hypervisor/smoke_guest.rs" = { category = "test", owner = "hypervisor" }
 "kernel/src/arch/aarch64/iommu.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/irq.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/aarch64/layer2_selftest.rs" = { category = "test", owner = "layer2" }

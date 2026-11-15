@@ -1123,9 +1123,20 @@ pub(super) fn reserve_dma_publication(
     })
 }
 
+/// Log and drop a row [`RegionTable::insert`] refused. Its id is the address
+/// of a frame a live row still owns, so its run names that row's frames: it is
+/// leaked (counted and logged by `FrameRun`'s drop), never freed, and the live
+/// row is untouched. Reaching this means the allocator handed out an owned
+/// frame. Called with no table lock held.
+fn refuse_duplicate_row(what: &str, id: usize, refused: Region) {
+    log::error!("[grant] {what}: id {id:#x} already names a live row; the new row is refused");
+    drop(refused);
+}
+
 /// Record `ShmAlloc` frame `frame`, charged `size` bytes, as a region of
 /// `owner` that owns the frame from here on; `recipient` is the cell it was
-/// handed to, if any.
+/// handed to, if any. `false` when the table refused the row
+/// ([`refuse_duplicate_row`]).
 ///
 /// The frame is still the kernel's identity-mapped frame (RV64, AArch64) or
 /// unmapped at its identity VA (x86_64); `ShmMap` publishes it USER there, and
@@ -1136,7 +1147,7 @@ pub(super) fn shm_register(
     owner: crate::cell::state_stash::Incarnation,
     size: usize,
     recipient: Option<u64>,
-) {
+) -> bool {
     use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind, RunOwner};
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
@@ -1158,10 +1169,17 @@ pub(super) fn shm_register(
     if let Some(cell) = recipient {
         region.receiver = Receiver::Cell(cell);
     }
-    grant_table_lock()
+    let inserted = grant_table_lock()
         .lock()
         .get_or_insert_with(RegionTable::new)
         .insert(frame, region);
+    match inserted {
+        None => true,
+        Some(refused) => {
+            refuse_duplicate_row("ShmAlloc", frame, refused);
+            false
+        }
+    }
 }
 
 pub(super) fn dma_range_within(
@@ -1614,7 +1632,8 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    table.get_or_insert_with(RegionTable::new).insert(
+    // `occupied` was checked under this lock, so the insert takes the id.
+    let inserted = table.get_or_insert_with(RegionTable::new).insert(
         base,
         Region::grant(
             RegionOwner::task(caller_id, owner_cell, owner_generation),
@@ -1623,7 +1642,14 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
             None,
         ),
     );
-    true
+    drop(table);
+    match inserted {
+        None => true,
+        Some(refused) => {
+            refuse_duplicate_row("GrantRegister fixture", base, refused);
+            false
+        }
+    }
 }
 
 /// Free owner-dead frames whose last `GrantSlice` lease `holder` just ended.
@@ -1902,8 +1928,11 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
                 page_size,
             );
         }
-        shm_register(frame, owner, bytes, None);
-        return Ok(frame);
+        if shm_register(frame, owner, bytes, None) {
+            return Ok(frame);
+        }
+        crate::memory::cell_quota::refund(cell as usize, bytes);
+        return Err(SyscallError::Unknown);
     }
     crate::memory::cell_quota::refund(cell as usize, bytes);
     Err(SyscallError::BufferTooSmall)
@@ -2259,7 +2288,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    table.as_mut().unwrap().insert(
+    let inserted = table.as_mut().unwrap().insert(
         paddr,
         Region::grant(
             RegionOwner::task(caller_id, owner_cell, owner_generation),
@@ -2268,6 +2297,11 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
             domain,
         ),
     );
+    drop(table);
+    if let Some(refused) = inserted {
+        refuse_duplicate_row("GrantAlloc", paddr, refused);
+        return Err(SyscallError::Unknown);
+    }
     Ok(paddr)
 }
 
@@ -2550,7 +2584,7 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    table.as_mut().unwrap().insert(
+    let inserted = table.as_mut().unwrap().insert(
         paddr,
         Region::grant(
             RegionOwner::task(caller_id, owner_cell, owner_generation),
@@ -2559,6 +2593,11 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
             domain,
         ),
     );
+    drop(table);
+    if let Some(refused) = inserted {
+        refuse_duplicate_row("GrantRegister", paddr, refused);
+        return Err(SyscallError::Unknown);
+    }
     Ok(paddr)
 }
 
