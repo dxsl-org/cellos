@@ -96,3 +96,27 @@ fn the_stack_arena_lies_above_the_cell_slots_and_recycles_its_slots() {
     arena.free(STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE);
     assert_eq!(arena.owned(), 0);
 }
+
+#[test]
+fn an_identity_range_overlaps_the_allocated_va_exactly_at_its_edges() {
+    const PAGE: usize = crate::memory::paging::PAGE_SIZE;
+    let end = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+    // Below the cell slots, and from the arena's end up: free to identity-map.
+    assert!(!overlaps_allocated_va(0, CELL_VA_START));
+    assert!(!overlaps_allocated_va(CELL_VA_START - PAGE, PAGE));
+    assert!(!overlaps_allocated_va(end, PAGE));
+    assert!(!overlaps_allocated_va(end, usize::MAX - end));
+    // Touching either region by one page, or straddling both.
+    assert!(overlaps_allocated_va(CELL_VA_START - PAGE, 2 * PAGE));
+    assert!(overlaps_allocated_va(STACK_VA_START, PAGE));
+    assert!(overlaps_allocated_va(STACK_VA_START - PAGE, 2 * PAGE));
+    assert!(overlaps_allocated_va(end - PAGE, PAGE));
+    assert!(overlaps_allocated_va(0, end + PAGE));
+    // A 64-bit BAR in the default q35 64-bit hole [4 GiB, 36 GiB) is clear;
+    // one at 80 GiB is not.
+    assert!(!overlaps_allocated_va(4 << 30, 32 << 30));
+    assert!(overlaps_allocated_va(80 << 30, 1 << 20));
+    // Empty ranges never overlap; an overflowing end always does.
+    assert!(!overlaps_allocated_va(STACK_VA_START, 0));
+    assert!(overlaps_allocated_va(usize::MAX - PAGE, 2 * PAGE));
+}

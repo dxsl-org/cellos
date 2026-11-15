@@ -317,6 +317,30 @@ pub(crate) fn assert_stack_arena_above(identity_end: usize) {
     );
 }
 
+/// End of the VA the kernel hands out from its allocators: the cell slots
+/// `[CELL_VA_START, STACK_VA_START)`, then the stack arena right above them.
+#[cfg(cellos_wide)]
+const ALLOCATED_VA_END: usize = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+
+/// Does `[start, start + len)` reach the VA the kernel hands out from its
+/// allocators, `[CELL_VA_START, ALLOCATED_VA_END)` (cell slots and stack
+/// arena)? A physical range that does can never be mapped at VA == PA: its
+/// leaves would alias a cell image or a user stack. A range whose end
+/// overflows counts as overlapping; an empty one never does.
+#[cfg(cellos_wide)]
+pub(crate) fn overlaps_allocated_va(start: usize, len: usize) -> bool {
+    match start.checked_add(len) {
+        Some(end) => len != 0 && start < ALLOCATED_VA_END && CELL_VA_START < end,
+        None => true,
+    }
+}
+
+/// Paging targets only: the bare-physical ones allocate no VA.
+#[cfg(not(cellos_wide))]
+pub(crate) fn overlaps_allocated_va(_start: usize, _len: usize) -> bool {
+    false
+}
+
 /// Does `va` lie in the stack arena?
 #[cfg(all(cellos_wide, feature = "test-hooks"))]
 pub(crate) fn in_stack_arena(va: usize) -> bool {

@@ -1084,6 +1084,14 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
         user_map(base, len);
     }
 
+    // Every grant below identity-maps (x86) or user-maps (RV64/AArch64) the
+    // window at VA == PA. A window reaching the cell slots or the stack arena
+    // would alias a cell image or a stack: refused before any claim, with the
+    // registry-refusal code every path below returns for `Err(_)`.
+    if crate::memory::paging::identity_map_refused("RequestMmio", base, len) {
+        return Ok(3);
+    }
+
     if caller_has_platform(caller_id) {
         return match crate::resource_registry::request_ecam_mmio(caller_id, base, len) {
             Ok(()) => {

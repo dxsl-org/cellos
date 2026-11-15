@@ -710,11 +710,29 @@ fn map_page_unflushed(
     Ok(())
 }
 
+/// Refuse an identity (VA == PA) map of physical `[start, start + len)` made
+/// after boot when it reaches the VA the kernel allocates
+/// (`va_alloc::overlaps_allocated_va`: the cell slots and the stack arena),
+/// whose leaves it would overwrite or alias. Logs the refusal once, naming
+/// `what`; `true` means refused, and the caller maps nothing and fails with
+/// its own error. Boot maps are covered by `va_alloc::assert_stack_arena_above`.
+pub(crate) fn identity_map_refused(what: &str, start: usize, len: usize) -> bool {
+    let refused = crate::loader::va_alloc::overlaps_allocated_va(start, len);
+    if refused {
+        log::error!(
+            "[paging] {what}: identity map of {start:#x} (+{len:#x}) refused: it overlaps the cell slots or the stack arena"
+        );
+    }
+    refused
+}
+
 /// Identity-map a MMIO BAR region [phys, phys+size) at VA == PA (x86_64).
 ///
 /// Called by PCIe drivers at init time to make dynamically-assigned BAR windows
 /// accessible as identity-mapped VA == PA. Each page in the range is mapped with
-/// MMIO cache-disabling flags; existing mappings are silently overwritten.
+/// MMIO cache-disabling flags; existing mappings are silently overwritten. A
+/// window reaching the cell slots or the stack arena is refused whole and
+/// logged ([`identity_map_refused`]); its first access faults.
 ///
 /// Panics on OOM or if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
@@ -754,6 +772,9 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
 #[cfg(target_arch = "x86_64")]
 fn map_mmio_x86_flags(phys: usize, size: usize, flags: Flags) {
     let (start, end) = mmio_page_window(phys, size);
+    if identity_map_refused("map_mmio_x86", start, end - start) {
+        return;
+    }
     let mut batch = Batch::new();
     crate::memory::frame::with(|allocator| {
         let mut va = start;
@@ -864,9 +885,14 @@ pub fn restore_mmio_run(start: usize, pages: usize) -> Result<usize, (usize, Pag
 /// lying entirely inside the window gain USER: a page shared with registers
 /// the Cell was not granted stays kernel-only, and the kernel mediates the
 /// Cell's accesses to its granted bytes instead (`resource_registry`
-/// mediation). Unmapped pages are skipped.
+/// mediation). Unmapped pages are skipped. A window reaching the cell slots or
+/// the stack arena is refused whole (`InvalidAddress`): rewriting those leaves
+/// would turn another cell's image or stack page into a USER device page.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn grant_mmio_user(base: usize, len: usize) -> PagingResult<usize> {
+    if identity_map_refused("grant_mmio_user", base, len) {
+        return Err(PageTableError::InvalidAddress);
+    }
     let mut granted = 0;
     for va in crate::resource_registry::user_pages(base, len).step_by(PAGE_SIZE) {
         match protect_page(va, mmio_user_flags()) {
@@ -1186,6 +1212,13 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
     if pages == 0 || start & (PAGE_SIZE - 1) != 0 {
         return Err(PageTableError::InvalidAddress);
     }
+    if identity_map_refused(
+        "map_display_framebuffer_user",
+        start,
+        pages.saturating_mul(PAGE_SIZE),
+    ) {
+        return Err(PageTableError::InvalidAddress);
+    }
     let flags = Flags::from_bits(
         Flags::VALID
             | Flags::READ
@@ -1252,6 +1285,13 @@ pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResu
 #[cfg(target_arch = "x86_64")]
 pub fn map_display_framebuffer_user(start: PhysAddr, pages: usize) -> PagingResult<()> {
     if pages == 0 || start & (PAGE_SIZE - 1) != 0 {
+        return Err(PageTableError::InvalidAddress);
+    }
+    if identity_map_refused(
+        "map_display_framebuffer_user",
+        start,
+        pages.saturating_mul(PAGE_SIZE),
+    ) {
         return Err(PageTableError::InvalidAddress);
     }
 

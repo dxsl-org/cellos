@@ -417,6 +417,11 @@ pub(super) fn write_release_word(release_addr: usize, entry: u64) -> bool {
         return false;
     }
     let page = release_addr & !(PAGE_SIZE - 1);
+    // A firmware word inside the cell slots or the stack arena: its VA is a
+    // cell image or a stack, not the word.
+    if paging::identity_map_refused("spin-table release word", page, PAGE_SIZE) {
+        return false;
+    }
     let transient = paging::virt_to_phys(page).is_none();
     if transient {
         let flags = Flags::from_bits(
