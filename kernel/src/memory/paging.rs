@@ -375,10 +375,12 @@ fn p01_observe_table_path(root: usize, va: usize, failed: bool, allocator: &Fram
 
 /// Map a virtual page to a physical frame in the kernel address space.
 ///
-/// riscv64/aarch64 issue no invalidation for a mapping (the HAL map neither
-/// does), so `batch` is left untouched; it is in the signature so callers are
-/// arch-neutral. Returns `NotSupported` on bare-physical arches (riscv32,
-/// x86_32, arm32).
+/// riscv64/aarch64 issue no invalidation for a new mapping (the HAL map
+/// neither does). A failed walk detaches the tables it published and retires
+/// them into `batch`, which frees them only after a global flush confirms: a
+/// remote hart may have cached a walk through them. The caller holds
+/// `FRAME_ALLOCATOR` and finishes `batch` after releasing it. Returns
+/// `NotSupported` on bare-physical arches (riscv32, x86_32, arm32).
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn map_page(
     allocator: &mut FrameAllocator,
@@ -387,7 +389,6 @@ pub fn map_page(
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    let _ = batch;
     let root_lock = KERNEL_ROOT.lock();
     if let Some(root_phys) = *root_lock {
         #[cfg(feature = "p01-trace")]
@@ -405,11 +406,10 @@ pub fn map_page(
         #[cfg(feature = "p01-trace")]
         p01_observe_table_path(root_phys, vaddr, result.is_err(), allocator);
         if result.is_err() {
-            root_table.prune_empty(vaddr, &mut |frame| {
-                #[cfg(feature = "p01-trace")]
-                crate::p01_retained::physical_table_detached(frame);
-                allocator.deallocate_frame(frame);
-            });
+            let mut reclaimed = ReclaimedPageTables::new();
+            root_table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
+            drop(root_lock);
+            reclaimed.retire_into(batch);
             return Err(PageTableError::OutOfMemory);
         }
         Ok(())

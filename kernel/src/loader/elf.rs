@@ -317,8 +317,15 @@ impl ElfLoader {
                                 current_page,
                                 mapped.len()
                             );
-                            // buf_frame is not in `mapped` yet — free it separately.
-                            frame_allocator.deallocate_frame(buf_frame);
+                            // buf_frame is not in `mapped` yet and was never
+                            // published: it rides the same batch as the unwind.
+                            batch.retire(crate::memory::frame_run::FrameRun::unpublished(
+                                buf_frame,
+                                1,
+                                crate::memory::frame_run::RunOwner::Kernel,
+                                crate::memory::frame_run::RunKind::Leaf,
+                                crate::memory::frame_run::KernelAlias::Intact,
+                            ));
                             Self::unwind(&mapped, batch);
                             return Err(ViError::OutOfMemory);
                         }

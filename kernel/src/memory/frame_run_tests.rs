@@ -28,6 +28,10 @@ struct Fake {
     normalised: Vec<PhysAddr>,
     /// The alias restore runs out of page-table frames.
     alias_fails: bool,
+    /// The test-hooks withheld-acknowledgement window is open.
+    withheld: bool,
+    /// Tag slots handed back, as `(tag, domain)`.
+    released_slots: Vec<(usize, u64)>,
 }
 
 impl Fake {
@@ -41,6 +45,8 @@ impl Fake {
             reissued_tags: Vec::new(),
             normalised: Vec::new(),
             alias_fails: false,
+            withheld: false,
+            released_slots: Vec::new(),
         }
     }
 
@@ -106,6 +112,14 @@ impl Backend for Fake {
         if let Some(hold) = hold {
             (hold.release)(hold.start, hold.end);
         }
+    }
+
+    fn tag_ack_withheld(&self) -> bool {
+        self.withheld
+    }
+
+    fn release_tag_slot(&mut self, asid: usize, domain: u64) {
+        self.released_slots.push((asid, domain));
     }
 }
 
@@ -603,4 +617,75 @@ fn a_run_behind_an_unconfirmed_tag_waits_for_a_fresh_epoch() {
     let refused = quarantine_behind_tag(mapped, 13, &epochs, &quarantine).unwrap_err();
     assert_eq!(refused.state(), RunState::Mapped);
     quarantine.leak(refused, "test");
+}
+
+#[test]
+fn a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs() {
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+    // A wait with no run still makes the tag read unconfirmed.
+    let epochs = fake.request();
+    assert_eq!(
+        quarantine.defer_tag(5, Vec::new(), None, &epochs),
+        TagWait::Queued
+    );
+    assert!(quarantine.tag_unconfirmed(5, &fake));
+    assert!(!quarantine.tag_unconfirmed(6, &fake));
+
+    // A root teardown's frames and tag slot join the same wait.
+    let mut run = fake.run(2, KernelAlias::Intact);
+    run.unpublish().unwrap();
+    let epochs = fake.request();
+    assert_eq!(
+        quarantine.defer_tag(5, vec![run], Some(77), &epochs),
+        TagWait::Extended { pages: 2 }
+    );
+    assert_eq!(quarantine.tag_pages(5), 2);
+    assert_eq!(quarantine.counters().quarantined_for(0), 2);
+
+    // Every epoch is published, but the withheld window keeps the tag
+    // unconfirmed: nothing is freed and the slot stays reserved.
+    fake.answer(1);
+    fake.answer(2);
+    fake.withheld = true;
+    assert!(quarantine.tag_unconfirmed(5, &fake));
+    assert_eq!(quarantine.reap(&mut fake), 0);
+    assert_eq!(fake.used(), 2);
+    assert!(fake.released_slots.is_empty());
+    assert_eq!(quarantine.tag_snapshot(), vec![(5, 2, 1)]);
+
+    // The window closes: the frames are freed and the slot handed back once.
+    fake.withheld = false;
+    assert!(!quarantine.tag_unconfirmed(5, &fake));
+    assert_eq!(quarantine.reap(&mut fake), 2);
+    assert_eq!(fake.used(), 0);
+    assert_eq!(fake.released_slots, [(5, 77)]);
+    assert!(!quarantine.tag_pending(5));
+    assert_eq!(quarantine.counters().quarantined(), 0);
+}
+
+#[test]
+fn a_still_mapped_run_never_joins_a_tag_wait() {
+    let mut fake = Fake::new(16);
+    let quarantine = pending();
+    let mapped = fake.run(1, KernelAlias::Intact);
+    let epochs = fake.request();
+    assert_eq!(
+        quarantine.defer_tag(4, vec![mapped], None, &epochs),
+        TagWait::Queued
+    );
+    assert_eq!(
+        quarantine.tag_pages(4),
+        0,
+        "the mapped run is not quarantined"
+    );
+    assert_eq!(
+        quarantine.counters().leaked(),
+        1,
+        "it is leaked, never freed"
+    );
+    fake.answer(1);
+    fake.answer(2);
+    assert_eq!(quarantine.reap(&mut fake), 0);
+    assert_eq!(fake.used(), 1);
 }

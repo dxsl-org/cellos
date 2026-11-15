@@ -267,26 +267,27 @@ else
         echo "FAIL: tier2-smoke was never admitted to a private root" >&2
         exit 1
     fi
-    # `quarantine_frames` is the only sink for a frame whose invalidation was
-    # never acknowledged, so its log line is a leak: the lane fails on any
-    # teardown that had to retire frames that way. The reaper's own give-up path
-    # is the same outcome one step later.
-    if grep -qaiF "[aspace] quarantining" "$LOG"; then
-        echo "FAIL: a domain teardown quarantined frames instead of releasing them" >&2
-        grep -aiF "[aspace] quarantining" "$LOG" | head -5
+    # A frame whose invalidation is unacknowledged waits in the frame-run
+    # quarantine until a hart acknowledges; nothing is abandoned. Only a frame
+    # that could be neither freed nor recorded is leaked, and a tag wait that
+    # could not be recorded makes every tag read unconfirmed: either line is a
+    # leak, and the lane fails on it.
+    if grep -qaF "frames leaked, never reused" "$LOG"; then
+        echo "FAIL: frames were leaked instead of released" >&2
+        grep -aF "frames leaked, never reused" "$LOG" | head -5
         exit 1
     fi
-    if grep -qaiF "[aspace] deferred release abandoned" "$LOG"; then
-        echo "FAIL: the deferred reaper abandoned a tag instead of releasing it" >&2
-        grep -aiF "[aspace] deferred release abandoned" "$LOG" | head -5
+    if grep -qaF "[frame-run] tag wait not recorded" "$LOG"; then
+        echo "FAIL: a tag wait was not recorded; every tag reads unconfirmed" >&2
+        grep -aF "[frame-run] tag wait not recorded" "$LOG" | head -5
         exit 1
     fi
     # A deferral is only a fault when there is no peer to wait for. With a second
     # hart online a teardown can legitimately hand its frames to the reaper (the
     # peer may be inside a syscall or a cell loop for seconds), and what must hold
     # instead is that the reaper *completes*: every tag that was queued is
-    # confirmed, and nothing was abandoned or quarantined (the two checks above,
-    # plus the tag accounting here). Measured at `QEMU_SMP=2`: confirmations land
+    # confirmed, and nothing was leaked (the two checks above, plus the tag
+    # accounting here). Measured at `QEMU_SMP=2`: confirmations land
     # with `attempts=1` to `attempts=235`, i.e. seconds after the teardown.
     if grep -qiaF "[smp] hart 1 online" "$LOG"; then
         LAST_ACK_LINE="$(grep -an "TLB-ACK: stage=remote-flush-completed" "$LOG" | tail -1 | cut -d: -f1 || true)"

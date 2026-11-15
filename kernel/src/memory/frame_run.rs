@@ -169,7 +169,7 @@ impl Reason {
     }
 
     /// The private tag a reissue must flush locally, if any.
-    const fn asid(&self) -> Option<usize> {
+    pub(crate) const fn asid(&self) -> Option<usize> {
         match self {
             Reason::TagUnconfirmed { asid } => Some(*asid as usize),
             _ => None,
@@ -296,6 +296,10 @@ pub struct FrameRun {
     alias: KernelAlias,
     state: RunState,
     va_hold: Option<VaHold>,
+    /// p01 provenance of a frame retained before it became a run; retired
+    /// when the run is freed.
+    #[cfg(feature = "p01-trace")]
+    p01_retained: Option<crate::p01_retained::Token>,
 }
 
 impl FrameRun {
@@ -340,7 +344,16 @@ impl FrameRun {
             alias,
             state,
             va_hold: None,
+            #[cfg(feature = "p01-trace")]
+            p01_retained: None,
         }
+    }
+
+    /// Carry `token`'s p01 provenance until the run is freed.
+    #[cfg(feature = "p01-trace")]
+    pub(crate) fn with_p01_retained(mut self, token: Option<crate::p01_retained::Token>) -> Self {
+        self.p01_retained = token;
+        self
     }
 
     /// Keep `hold` reserved until the frames are freed.
@@ -435,6 +448,8 @@ impl FrameRun {
         }
         backend.free(self.base, self.pages(), self.va_hold.take());
         self.state = RunState::Free;
+        #[cfg(feature = "p01-trace")]
+        crate::p01_retained::retire(self.p01_retained.take());
         Ok(())
     }
 
@@ -550,6 +565,14 @@ pub(crate) trait Backend {
     /// between the two, so a new owner's reservation of the same range is
     /// never the one released.
     fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>);
+    /// Test-hooks seam: is every private tag's acknowledgement withheld? A
+    /// tag entry then stays unconfirmed whatever its epochs say.
+    fn tag_ack_withheld(&self) -> bool {
+        false
+    }
+    /// The tag slot of `domain`'s private root, whose teardown could not
+    /// confirm tag `asid`, may be reissued: the wait holding it has ended.
+    fn release_tag_slot(&mut self, _asid: usize, _domain: u64) {}
 }
 
 fn epochs_confirmed(backend: &impl Backend, epochs: &Epochs) -> bool {
@@ -557,6 +580,13 @@ fn epochs_confirmed(backend: &impl Backend, epochs: &Epochs) -> bool {
         .iter()
         .enumerate()
         .all(|(hart, &epoch)| backend.completed(hart, epoch))
+}
+
+/// Has `entry`'s wait ended? A private tag's entry also waits out the
+/// test-hooks withheld-acknowledgement window.
+fn entry_confirmed(backend: &impl Backend, entry: &Entry) -> bool {
+    !(entry.reason.asid().is_some() && backend.tag_ack_withheld())
+        && epochs_confirmed(backend, &entry.epochs)
 }
 
 /// Finish an unpublished run after its operation's flush: free it when
@@ -714,6 +744,21 @@ struct Entry {
     runs: Vec<FrameRun>,
     pages: usize,
     attempts: usize,
+    /// The tag slot (its domain) of a private root whose teardown could not
+    /// confirm this entry's tag: reissued only once the entry completes.
+    tag_slot: Option<u64>,
+}
+
+/// Where [`Pending::defer_tag`] recorded a private tag's wait.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TagWait {
+    /// A new entry for the tag.
+    Queued,
+    /// Merged into the tag's entry, which now holds `pages`.
+    Extended { pages: usize },
+    /// Not recorded (no heap): the runs are leaked and every tag reads
+    /// unconfirmed from now on.
+    Lost,
 }
 
 /// Quarantined runs, one entry per wait (one per private tag, one for shared
@@ -721,6 +766,10 @@ struct Entry {
 pub struct Pending {
     entries: Spinlock<Vec<Entry>>,
     counters: Counters,
+    /// Set once a private tag's wait could not be recorded (no heap): from
+    /// then on every tag reads unconfirmed, because a missing entry would read
+    /// as a confirmed one.
+    tags_saturated: core::sync::atomic::AtomicBool,
 }
 
 /// The kernel's quarantine.
@@ -731,6 +780,7 @@ impl Pending {
         Self {
             entries: Spinlock::ranked(Vec::new(), rank),
             counters: Counters::new(),
+            tags_saturated: core::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -753,6 +803,9 @@ impl Pending {
     /// recorded is leaked (counted), never freed.
     pub(crate) fn push(&self, run: FrameRun, epochs: &Epochs) {
         if let Err((run, why)) = self.try_push(run, epochs) {
+            if matches!(run.state, RunState::Quarantined(reason) if reason.asid().is_some()) {
+                self.saturate_tags(why);
+            }
             self.leak(run, why);
         }
     }
@@ -792,6 +845,7 @@ impl Pending {
                     runs,
                     pages,
                     attempts: 0,
+                    tag_slot: None,
                 });
                 self.counters.add(&reason, pages);
                 None
@@ -804,6 +858,144 @@ impl Pending {
             Some(run) => Err((run, "no heap for the pending entry")),
             None => Ok(()),
         }
+    }
+
+    /// Wait for private tag `asid` until `epochs` are published: quarantine
+    /// `runs` (unpublished: the private root no longer maps them) behind it
+    /// and, with `tag_slot`, keep that root's tag slot reserved until the same
+    /// entry completes. An entry is recorded even with no run: it is what makes
+    /// the tag read unconfirmed ([`Self::tag_unconfirmed`]).
+    ///
+    /// Nothing waits here and nothing is freed. A wait that cannot be recorded
+    /// (no heap) leaks its runs (counted), keeps the slot reserved for the
+    /// boot, and makes every tag read unconfirmed from then on: fail closed.
+    pub(crate) fn defer_tag(
+        &self,
+        asid: usize,
+        runs: Vec<FrameRun>,
+        tag_slot: Option<u64>,
+        epochs: &Epochs,
+    ) -> TagWait {
+        let Ok(tag) = u16::try_from(asid) else {
+            self.lose_tag_wait(runs, "tag wider than a reason carries");
+            return TagWait::Lost;
+        };
+        let reason = Reason::TagUnconfirmed { asid: tag };
+        let mut quarantined = Vec::new();
+        if quarantined.try_reserve_exact(runs.len()).is_err() {
+            self.lose_tag_wait(runs, "no heap for the tag wait");
+            return TagWait::Lost;
+        }
+        for mut run in runs {
+            match run.quarantine(reason) {
+                Ok(()) => quarantined.push(run),
+                Err(_) => self.leak(run, "tag run not unpublished"),
+            }
+        }
+        let pages: usize = quarantined.iter().map(FrameRun::pages).sum();
+        let mut entries = self.entries.lock();
+        let placed = match entries.iter().position(|entry| entry.reason == reason) {
+            Some(index) => {
+                let entry = &mut entries[index];
+                if entry.runs.try_reserve(quarantined.len()).is_ok() {
+                    entry.epochs = max_epochs(&entry.epochs, epochs);
+                    entry.runs.append(&mut quarantined);
+                    entry.pages += pages;
+                    entry.tag_slot = entry.tag_slot.or(tag_slot);
+                    Ok(TagWait::Extended { pages: entry.pages })
+                } else {
+                    Err(quarantined)
+                }
+            }
+            None if entries.try_reserve(1).is_ok() => {
+                entries.push(Entry {
+                    reason,
+                    epochs: *epochs,
+                    runs: quarantined,
+                    pages,
+                    attempts: 0,
+                    tag_slot,
+                });
+                Ok(TagWait::Queued)
+            }
+            None => Err(quarantined),
+        };
+        if placed.is_ok() {
+            self.counters.add(&reason, pages);
+        }
+        drop(entries);
+        placed.unwrap_or_else(|runs| {
+            self.lose_tag_wait(runs, "no heap for the tag wait");
+            TagWait::Lost
+        })
+    }
+
+    /// Fail closed for a tag wait that could not be recorded: its runs are
+    /// leaked (counted, never freed) and every tag reads unconfirmed from now
+    /// on.
+    fn lose_tag_wait(&self, runs: Vec<FrameRun>, why: &str) {
+        self.saturate_tags(why);
+        for run in runs {
+            self.leak(run, why);
+        }
+    }
+
+    /// [`Self::lose_tag_wait`] for `pages` frames that could not even become
+    /// runs (no heap): the caller already forgot them.
+    pub(crate) fn lose_frames(&self, pages: usize, why: &str) {
+        self.counters.leaked.fetch_add(pages, Ordering::AcqRel);
+        log::error!(
+            "[frame-run] {} frames not recorded ({}): frames leaked, never reused",
+            pages,
+            why
+        );
+        self.saturate_tags(why);
+    }
+
+    fn saturate_tags(&self, why: &str) {
+        if !self.tags_saturated.swap(true, Ordering::AcqRel) {
+            log::error!(
+                "[frame-run] tag wait not recorded ({}): every private tag now reads unconfirmed",
+                why
+            );
+        }
+    }
+
+    /// Is private tag `asid`'s invalidation still unconfirmed? True while a
+    /// tag entry waits on epochs not all published (or inside the test-hooks
+    /// withheld window), and for every tag once a tag wait was lost.
+    pub(crate) fn tag_unconfirmed(&self, asid: usize, backend: &impl Backend) -> bool {
+        self.tags_saturated.load(Ordering::Acquire)
+            || self
+                .entries
+                .lock()
+                .iter()
+                .any(|entry| entry.reason.asid() == Some(asid) && !entry_confirmed(backend, entry))
+    }
+
+    /// Pages quarantined behind private tag `asid`.
+    pub fn tag_pages(&self, asid: usize) -> usize {
+        self.entries
+            .lock()
+            .iter()
+            .filter(|entry| entry.reason.asid() == Some(asid))
+            .map(|entry| entry.pages)
+            .sum()
+    }
+
+    /// `(tag, pages, attempts)` of every private-tag entry, for fixtures that
+    /// must name what holds a frame.
+    pub fn tag_snapshot(&self) -> Vec<(usize, usize, usize)> {
+        let entries = self.entries.lock();
+        let mut out = Vec::new();
+        if out.try_reserve(entries.len()).is_ok() {
+            out.extend(
+                entries
+                    .iter()
+                    .filter_map(|entry| Some((entry.reason.asid()?, entry.pages, entry.attempts))),
+            );
+        }
+        out
     }
 
     /// Leak `run` (counted, never reused) without logging: the caller holds a
@@ -849,7 +1041,7 @@ impl Pending {
                 if !entry.reason.waits_for_epochs() {
                     index += 1;
                     None
-                } else if epochs_confirmed(backend, &entry.epochs) {
+                } else if entry_confirmed(backend, entry) {
                     // Do not advance: the last entry moved into `index`.
                     Some(entries.swap_remove(index))
                 } else {
@@ -899,6 +1091,21 @@ impl Pending {
     /// (its counters already removed; [`Self::reinsert`] restores them).
     fn complete(&self, mut entry: Entry, backend: &mut impl Backend) -> (usize, Option<Entry>) {
         self.counters.sub(&entry.reason, entry.pages);
+        if let Some(asid) = entry.reason.asid() {
+            // The lanes pair this line with the `queued`/`extended` line of
+            // `memory::deferred_release`.
+            log::info!(
+                "[aspace] deferred release confirmed: tag={} frames={} attempts={}",
+                asid,
+                entry.pages,
+                entry.attempts
+            );
+            // The tag's invalidation is confirmed: its slot may be reissued,
+            // even if a run below still waits for its alias.
+            if let Some(domain) = entry.tag_slot.take() {
+                backend.release_tag_slot(asid, domain);
+            }
+        }
         let mut freed = 0;
         let mut kept = Vec::new();
         let mut kept_pages = 0;
@@ -1343,6 +1550,18 @@ impl Backend for KernelBackend {
         let _ = batch.complete_without_wait();
         crate::memory::paging::tlb_flush_all();
         restored
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn tag_ack_withheld(&self) -> bool {
+        crate::memory::tlb_shootdown::test_tag_ack_withheld()
+    }
+
+    fn release_tag_slot(&mut self, asid: usize, domain: u64) {
+        #[cfg(all(feature = "native-domains", cellos_wide))]
+        crate::memory::address_space::release_tag_slot_after_invalidation(asid, domain);
+        #[cfg(not(all(feature = "native-domains", cellos_wide)))]
+        let _ = (asid, domain);
     }
 
     fn free(&mut self, base: PhysAddr, pages: usize, hold: Option<VaHold>) {

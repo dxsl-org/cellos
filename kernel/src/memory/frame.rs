@@ -893,12 +893,28 @@ impl OwnedFrame {
         );
     }
 
-    #[cfg(feature = "p01-trace")]
-    pub(crate) fn p01_quarantine(&self) {
-        crate::p01_retained::mark(
-            self.p01_retained,
-            crate::p01_retained::Reason::AddressSpaceQuarantine,
+    /// Hand the frame to a [`FrameRun`](super::frame_run::FrameRun) that the
+    /// frame-run quarantine frees once the invalidation covering it is
+    /// confirmed. The caller already removed it from its private root, so the
+    /// run is `Unpublished`; the kernel's own alias of the frame was never
+    /// removed (`Intact`).
+    pub(crate) fn into_run(
+        self,
+        owner: super::frame_run::RunOwner,
+        kind: super::frame_run::RunKind,
+    ) -> super::frame_run::FrameRun {
+        let frame = core::mem::ManuallyDrop::new(self);
+        let run = super::frame_run::FrameRun::unpublished(
+            frame.physical,
+            1,
+            owner,
+            kind,
+            super::frame_run::KernelAlias::Intact,
         );
+        #[cfg(feature = "p01-trace")]
+        return run.with_p01_retained(frame.p01_retained);
+        #[cfg(not(feature = "p01-trace"))]
+        run
     }
 }
 
@@ -935,6 +951,15 @@ impl Drop for OwnedFrame {
 /// smaller or scattered heap.
 pub fn reserve_contiguous_run(allocator: &mut FrameAllocator, frames: usize) -> Option<PhysAddr> {
     allocator.allocate_contiguous(frames)
+}
+
+/// Give back a run [`reserve_contiguous_run`] reserved and the caller never
+/// published: nothing ever mapped it outside the kernel's own alias, so no
+/// invalidation is owed and the frames return in the caller's allocator hold.
+pub fn unreserve_contiguous_run(allocator: &mut FrameAllocator, base: PhysAddr, frames: usize) {
+    for frame in 0..frames {
+        allocator.deallocate_frame(base + frame * PAGE_SIZE);
+    }
 }
 
 /// Reserve the boot heap: the first run of `frames` free frames inside the range

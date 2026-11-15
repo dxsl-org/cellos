@@ -480,8 +480,10 @@ run_grant_pair_boot() {
 #     so each refusal is a state change, not the absence of one);
 #   * `-SLICE-RW: FAIL` needs `[grant] GrantShare <id> receiver publish refused:
 #     AwaitingSafeRoot` — the ReadWrite republish was refused, so nothing was
-#     widened — plus the memory layer's `[aspace] quarantining N frame(s):
-#     grant-page unmap invalidation unacknowledged` for the PTE it had to remove;
+#     widened — plus the memory layer's `[aspace] deferred release
+#     queued|extended: tag=N … reason=grant-page unmap invalidation
+#     unacknowledged` for the PTE it had to remove (its frames retained behind
+#     the tag, never reused);
 #   * `-REVOKE: FAIL` needs `[grant] GrantFree <id>: domain revoke deferred
 #     (AwaitingSafeRoot); frames retained and record kept Revoking for idempotent
 #     retry` — the explicit deferral log, and the kernel's own statement that no
@@ -628,11 +630,11 @@ assert_grant_revoke_outcome() {
         fi
     fi
     # Either path removes the receiver PTE before the unacknowledged flush, and
-    # the memory layer must withhold its frames: that is the "not widened, not
-    # reused" half, and it must be visible in this boot.
-    if ! grep -aqE '\[aspace\] quarantining [0-9]+ frame\(s\): grant-page unmap invalidation unacknowledged' "$log"; then
+    # the memory layer must withhold its frames behind the tag: that is the "not
+    # widened, not reused" half, and it must be visible in this boot.
+    if ! grep -aqE '\[aspace\] deferred release (queued|extended): tag=[0-9]+ .*reason=grant-page unmap invalidation unacknowledged' "$log"; then
         echo "FAIL: the deferred outcome removed no receiver PTE whose frames were" >&2
-        echo "      quarantined (they may have been widened or reused); see $log" >&2
+        echo "      retained behind its tag (they may have been widened or reused); see $log" >&2
         exit 1
     fi
     if [[ "$slice_rw_fail" != 0 && "$revoke_fail" != 0 ]]; then
@@ -922,7 +924,7 @@ assert_grant_revoke_outcome() {
             # independently report the same silent remote hart, or this boot is
             # just a fixture that stopped working.
             if ! grep -aqE '\[tlb\] tag [0-9]+ invalidation unconfirmed: hart [0-9]+ silent through the' "$normalized_log" \
-                && ! grep -aqF '[aspace] deferred release abandoned after' "$normalized_log"; then
+                && ! grep -aqE '\[frame-run\] [0-9]+ pages still tag-unconfirmed after' "$normalized_log"; then
                 echo "FAIL: park reported UNAVAILABLE but no release path in this boot recorded" >&2
                 echo "      a silent remote hart, so the unavailability has no independent cause; see $normalized_log" >&2
                 exit 1

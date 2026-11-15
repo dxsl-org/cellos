@@ -410,9 +410,6 @@ pub(crate) fn domain_row_for_test(
     })
 }
 
-/// Pages leaked for the life of the boot because the quarantine was full.
-static LEAKED_PAGES: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
-
 /// Result of a System Call
 pub type SyscallResult = core::result::Result<usize, SyscallError>;
 

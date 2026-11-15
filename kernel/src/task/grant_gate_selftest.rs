@@ -318,7 +318,7 @@ fn probe(
     // leak:
     //
     //   * owned by one of the probe's own roots (`owned_frame_count`);
-    //   * queued for a deferred release — the page-table frames a deferred unmap
+    //   * quarantined behind a tag — the page-table frames a deferred unmap
     //     pruned, held until a hart acknowledges the tag (`deferred_release`);
     //   * retained by a `Revoking` grant record, i.e. the backings of the two rows
     //     whose revoke deferred.
@@ -349,7 +349,7 @@ fn probe(
     // retain more than the attempt already did, nor push the pool above baseline.
     let frames = accounted && after_sweep >= before_sweep && after_sweep <= baseline;
     log::info!(
-        "[grant-gate] frame accounting: baseline={} before_sweep={} after_sweep={} deficit={} owned_delta={} backings={} queued_tables={} deferred={} reg_deferred={} quarantined={} run_quarantined={} run_leaked={}",
+        "[grant-gate] frame accounting: baseline={} before_sweep={} after_sweep={} deficit={} owned_delta={} backings={} queued_tables={} deferred={} reg_deferred={} run_quarantined={} run_leaked={}",
         baseline,
         before_sweep,
         after_sweep,
@@ -359,7 +359,6 @@ fn probe(
         retained_tables,
         retire.deferred,
         reg_deferred,
-        crate::memory::address_space::quarantined_frame_count(),
         crate::memory::frame_run::PENDING.quarantined_pages(),
         crate::memory::frame_run::PENDING.counters().leaked()
     );
@@ -367,12 +366,9 @@ fn probe(
         // The terms above may not add up because of a frame withheld by an owner
         // this fixture cannot see; name every retention the queue holds so the
         // unaccounted frame can be attributed instead of guessed at.
-        for (tag, frames, attempts, reason) in
-            crate::memory::deferred_release::deferred_release_snapshot()
+        for (tag, frames, attempts) in crate::memory::deferred_release::deferred_release_snapshot()
         {
-            log::error!(
-                "[grant-gate]   withheld: tag={tag} frames={frames} attempts={attempts} reason={reason}"
-            );
+            log::error!("[grant-gate]   withheld: tag={tag} frames={frames} attempts={attempts}");
         }
     }
 

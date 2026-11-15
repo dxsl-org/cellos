@@ -136,9 +136,9 @@ pub(crate) fn run_primary() {
                     crate::sched::smp::tlb_flush_complete_epoch(*hart) > *before
                 });
                 let released = space.frames.lock().len() < before;
-                let not_quarantined = quarantined_frame_count() == 0;
-                unmap_order_detail = (unmapped, tagged, remote_acked, released, not_quarantined);
-                unmapped && tagged && remote_acked && released && not_quarantined
+                let not_leaked = crate::memory::frame_run::PENDING.counters().leaked() == 0;
+                unmap_order_detail = (unmapped, tagged, remote_acked, released, not_leaked);
+                unmapped && tagged && remote_acked && released && not_leaked
             }
             Err(_) => false,
         }
@@ -151,14 +151,14 @@ pub(crate) fn run_primary() {
             .filter(|hart| *hart != me)
             .collect();
         log::info!(
-            "[aspace] unmap release confirmed: remote_harts={} quarantined={}",
+            "[aspace] unmap release confirmed: remote_harts={} leaked={}",
             remotes.len(),
-            quarantined_frame_count()
+            crate::memory::frame_run::PENDING.counters().leaked()
         );
         log::info!("S22-RV64-UNMAP-ORDER: PASS");
     } else {
         log::error!(
-            "S22-RV64-UNMAP-ORDER: FAIL unmapped={} tagged={} remote_acked={} released={} not_quarantined={}",
+            "S22-RV64-UNMAP-ORDER: FAIL unmapped={} tagged={} remote_acked={} released={} not_leaked={}",
             unmap_order_detail.0,
             unmap_order_detail.1,
             unmap_order_detail.2,
@@ -188,7 +188,7 @@ pub(crate) fn run_primary() {
                 && tagged
                 && space.table_frames.lock().len() < before
                 && space.page_proof_for(ABI_PAGE).is_none()
-                && quarantined_frame_count() == 0,
+                && crate::memory::frame_run::PENDING.counters().leaked() == 0,
         )
     })()
     .unwrap_or(false);
@@ -297,8 +297,8 @@ pub(crate) fn run_primary() {
     // invalidation is reported unconfirmed, so `unmap_private_page` has to retain
     // its frames and record the tag while returning its error. Proven here:
     //
-    //   * the frames are retained, not freed and not quarantined;
-    //   * the queue entry is pending and the tag reads unconfirmed;
+    //   * the frames are retained, not freed and not leaked;
+    //   * the tag's quarantine entry is pending and the tag reads unconfirmed;
     //   * the reaper cannot release anything while the window lasts;
     //   * once the acknowledgement resumes, the reaper releases exactly those
     //     frames — no more, no fewer — and the tag reads confirmed again.
@@ -306,9 +306,10 @@ pub(crate) fn run_primary() {
     // The seam reports the invalidation unconfirmed rather than a real remote hart
     // stalling: the deferred branch must be reachable on a one-hart boot, where no
     // remote exists to stall at all.
-    let mut deferred_detail = (0usize, 0usize, 0usize, false, false, false, false, false);
+    let mut deferred_detail = (0usize, 0usize, false, false, false, false, false);
     let deferred_release = (|| {
         use crate::memory::deferred_release as queue;
+        use crate::memory::frame_run::PENDING;
         let mut builder = AddressSpaceBuilder::new();
         let space = builder
             .map_user_page(PRIVATE_PAGE, MappingKind::Private, flags())
@@ -316,36 +317,41 @@ pub(crate) fn run_primary() {
             .ok()?;
         let tag = space.asid();
         let frames_before = used_frames()?;
-        let depth_before = queue::deferred_release_depth();
-        let queued_frames_before = queue::deferred_release_frames();
-        let attempts_before = queue::deferred_release_attempts();
+        let leaked_before = PENDING.counters().leaked();
+        let attempts = || {
+            queue::deferred_release_snapshot()
+                .into_iter()
+                .find(|(entry_tag, _, _)| *entry_tag == tag)
+                .map_or(0, |(_, _, attempts)| attempts)
+        };
+        let pending_before = PENDING.tag_pending(tag);
 
         crate::memory::tlb_shootdown::set_test_withhold_tag_ack(true);
         let unconfirmed_error = space.unmap_private_page(PRIVATE_PAGE)
             == Err(AddressSpaceError::InvalidationUnacknowledged);
-        let depth_after = queue::deferred_release_depth();
-        let retained = queue::deferred_release_frames() - queued_frames_before;
-        let queued = depth_after == depth_before + 1 && retained > 0;
+        let retained = queue::deferred_release_frames_for(tag);
+        let queued = !pending_before && PENDING.tag_pending(tag) && retained > 0;
         let unconfirmed = queue::tag_invalidation_unconfirmed(tag);
         let retained_not_freed = used_frames() == Some(frames_before);
-        let not_quarantined = quarantined_frame_count() == 0;
+        let not_leaked = PENDING.counters().leaked() == leaked_before;
 
         // The reaper may not release it while the acknowledgement is missing. Two
         // full reissue cycles: the reissue branch must not confirm the tag either.
         for _ in 0..64 {
-            queue::reap_deferred_releases();
+            crate::memory::frame_run::reap();
         }
-        let still_pending = queue::deferred_release_depth() == depth_after;
-        let attempted = queue::deferred_release_attempts() > attempts_before;
+        let still_pending = queue::deferred_release_frames_for(tag) == retained;
+        let attempted = attempts() > 0;
         let reaper_released_nothing = used_frames() == Some(frames_before);
+        let attempts_in_window = attempts();
 
         // Acknowledgement resumes.
         crate::memory::tlb_shootdown::set_test_withhold_tag_ack(false);
         let mut released = false;
         let deadline = hal::common::timer::read_mtime() + 40 * hal::common::timer::TICKS_PER_10MS;
         while hal::common::timer::read_mtime() < deadline {
-            queue::reap_deferred_releases();
-            if queue::deferred_release_depth() == depth_before {
+            crate::memory::frame_run::reap();
+            if !PENDING.tag_pending(tag) {
                 released = true;
                 break;
             }
@@ -357,14 +363,10 @@ pub(crate) fn run_primary() {
         let released_exactly =
             used_frames().and_then(|now| frames_before.checked_sub(now)) == Some(retained);
         let tag_confirmed = !queue::tag_invalidation_unconfirmed(tag);
-        let quiet = quarantined_frame_count() == 0
-            && queue::deferred_release_abandoned() == 0
-            && queue::deferred_release_abandoned_frames() == 0
-            && crate::memory::frame_run::PENDING.counters().leaked() == 0;
+        let quiet = PENDING.counters().leaked() == leaked_before;
         deferred_detail = (
             retained,
-            depth_after,
-            queue::deferred_release_attempts() - attempts_before,
+            attempts_in_window,
             unconfirmed_error,
             queued && unconfirmed,
             still_pending && attempted && reaper_released_nothing,
@@ -376,7 +378,7 @@ pub(crate) fn run_primary() {
                 && queued
                 && unconfirmed
                 && retained_not_freed
-                && not_quarantined
+                && not_leaked
                 && still_pending
                 && attempted
                 && reaper_released_nothing
@@ -389,16 +391,15 @@ pub(crate) fn run_primary() {
     .unwrap_or(false);
     if deferred_release {
         log::info!(
-            "[aspace] deferred release confirmed: retained={} frames depth={} attempts={} released=true quarantined={}",
+            "[aspace] deferred release confirmed: retained={} frames attempts={} released=true leaked={}",
             deferred_detail.0,
             deferred_detail.1,
-            deferred_detail.2,
-            quarantined_frame_count()
+            crate::memory::frame_run::PENDING.counters().leaked()
         );
         log::info!("S22-RV64-DEFERRED-RELEASE: PASS");
     } else {
         log::error!(
-            "S22-RV64-DEFERRED-RELEASE: FAIL retained={} depth={} attempts={} withheld_error={} \
+            "S22-RV64-DEFERRED-RELEASE: FAIL retained={} attempts={} withheld_error={} \
              queued={} pending_through_window={} released={} quiet={}",
             deferred_detail.0,
             deferred_detail.1,
@@ -406,8 +407,7 @@ pub(crate) fn run_primary() {
             deferred_detail.3,
             deferred_detail.4,
             deferred_detail.5,
-            deferred_detail.6,
-            deferred_detail.7
+            deferred_detail.6
         );
     }
 }

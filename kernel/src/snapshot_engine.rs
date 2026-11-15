@@ -1349,9 +1349,7 @@ pub fn take_scratch_region(
     if let Some(image) = image {
         if region_intersects_image(region, image) {
             // Give the frames back: an unusable region is not a workspace.
-            for frame in 0..SCRATCH_FRAMES {
-                allocator.deallocate_frame(base + frame * FRAME_SIZE);
-            }
+            crate::memory::frame::unreserve_contiguous_run(allocator, base, SCRATCH_FRAMES);
             log::error!(
                 "[snapshot] scratch {:#x}..{:#x} intersects the kernel image {:#x}..{:#x}",
                 region.base,

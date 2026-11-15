@@ -317,11 +317,12 @@ pub(crate) fn observe_incoming_live_root() {
 /// counter; the reading is taken at the first later departure that sees it move,
 /// which is therefore after `AddressSpace::drop` ran.
 ///
-/// `quarantine_frames` is the kernel's only sink for frames whose invalidation
-/// was never acknowledged, so a zero count at that point is the fail-closed half
-/// of the release contract: no frame was silently dropped and none was retained
-/// forever. The liveness half — frames returning to the allocator, counted — is
-/// the release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… quarantined=…`
+/// A frame whose invalidation is not yet acknowledged waits in the frame-run
+/// quarantine and is freed once it is; only a frame that could be neither freed
+/// nor recorded is leaked (the frame-run `leaked` counter). A zero count at that
+/// point is the fail-closed half of the release contract: no frame was silently
+/// dropped and none was retained forever. The liveness half — frames returning to the allocator, counted — is
+/// the release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… leaked=…`
 /// line, emitted from inside `AddressSpace::drop`.
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn observe_domain_teardown(hart: usize) {
@@ -349,24 +350,24 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
     if releases == 0 {
         return;
     }
-    let quarantined = crate::memory::address_space::quarantined_frame_count();
+    let leaked = crate::memory::frame_run::PENDING.counters().leaked();
     if REPORTED.swap(true, Ordering::AcqRel) {
         return;
     }
-    if quarantined == 0 {
+    if leaked == 0 {
         log::info!(
-            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} quarantined={} ack_generation={}",
+            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} leaked={} ack_generation={}",
             ARCH_TAG,
             releases,
-            quarantined,
+            leaked,
             ack_generation
         );
     } else {
         log::error!(
-            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} quarantined={} ack_generation={}",
+            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} leaked={} ack_generation={}",
             ARCH_TAG,
             releases,
-            quarantined,
+            leaked,
             ack_generation
         );
     }
@@ -461,7 +462,7 @@ pub(crate) fn observe_incoming_live_root() {
 ///
 /// x86_64 twin of the AArch64 witness: same trigger (a departure after a private
 /// root was seen live, proven by a non-zero `domain_ack_generation`), same
-/// gating, same `quarantined == 0` verdict.
+/// gating, same `leaked == 0` verdict.
 ///
 /// The release observable here is the invalidation counter, not a flush *kind*:
 /// on x86_64 the release path's tag invalidation is a type-1 `INVPCID` when the
@@ -471,7 +472,7 @@ pub(crate) fn observe_incoming_live_root() {
 /// the same boot by `S22-X86-FLUSH-COUNTER`'s explicit `flush_asid` control, and
 /// no other post-boot path on this lane issues one, so a non-zero delta is a root
 /// release. The liveness half — frames returning to the allocator — is the
-/// release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… quarantined=…`
+/// release path's own `DOMAIN-FRAME-RELEASE: PASS tag=… frames=… leaked=…`
 /// line, emitted from inside `AddressSpace::drop`.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn observe_domain_teardown(hart: usize) {
@@ -499,24 +500,24 @@ pub(crate) fn observe_domain_teardown(hart: usize) {
     if releases == 0 {
         return;
     }
-    let quarantined = crate::memory::address_space::quarantined_frame_count();
+    let leaked = crate::memory::frame_run::PENDING.counters().leaked();
     if REPORTED.swap(true, Ordering::AcqRel) {
         return;
     }
-    if quarantined == 0 {
+    if leaked == 0 {
         log::info!(
-            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} quarantined={} ack_generation={}",
+            "S22-{}-DOMAIN-TEARDOWN: PASS releases={} leaked={} ack_generation={}",
             ARCH_TAG,
             releases,
-            quarantined,
+            leaked,
             ack_generation
         );
     } else {
         log::error!(
-            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} quarantined={} ack_generation={}",
+            "S22-{}-DOMAIN-TEARDOWN: FAIL releases={} leaked={} ack_generation={}",
             ARCH_TAG,
             releases,
-            quarantined,
+            leaked,
             ack_generation
         );
     }

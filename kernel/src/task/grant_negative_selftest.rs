@@ -249,13 +249,13 @@ fn shared_grant(receiver_tid: usize, receiver: &AddressSpace, perm: GrantPerm) -
 }
 
 /// Spin until `done` holds or [`RELEASE_BUDGET_NS`] passes, reaping the
-/// deferred-release queue on every pass.
+/// frame-run quarantine on every pass.
 fn within_release_budget(mut done: impl FnMut() -> bool) -> bool {
     let Some(start) = crate::arch::clock::monotonic_ns() else {
         return false;
     };
     loop {
-        deferred_release::reap_deferred_releases();
+        crate::memory::frame_run::reap();
         if done() {
             return true;
         }
@@ -308,7 +308,7 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
             && crate::hal::domain::switch_counters().1 > flushes_before;
         // Retained: the row stays, owned, with its record `Revoking` (the
         // frames leave only with the row), and the receiver root's detached
-        // tables wait in the deferred-release queue under its tag.
+        // tables wait in the frame-run quarantine under its tag.
         seen.retained = domain_row_for_test(base) == Some((OWNER_TID, DomainGrantState::Revoking))
             && deferred_release::deferred_release_frames_for(receiver_tag) > 0;
         seen.revoking = grant_slice(OWNER_TID, base).is_none()
@@ -327,12 +327,12 @@ fn deferred_revoke(fx: &Fixture) -> Deferred {
         super::syscall::sweep_deferred_domain_grants();
         domain_row_for_test(base).is_none()
     });
-    // The receiver root's detached tables leave the queue at the reaper's next
+    // The receiver root's detached tables leave the quarantine at the reaper's next
     // pass over their now-confirmed tag, not with the row.
     seen.released =
         within_release_budget(|| deferred_release::deferred_release_frames_for(receiver_tag) == 0)
             && !deferred_release::tag_invalidation_unconfirmed(receiver_tag)
-            && crate::memory::address_space::quarantined_frame_count() == 0;
+            && crate::memory::frame_run::PENDING.counters().leaked() == 0;
     seen
 }
 

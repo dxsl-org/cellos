@@ -161,7 +161,8 @@ pub(super) fn drain_domain_receiver(_record: &DomainRecord) {}
 ///
 /// Returns the run when nothing protects it: the caller releases it. A hold
 /// that could not be recorded (no heap) returns `None` too: leaking the frames
-/// is the only safe answer left, and the leak is counted in [`leaked_pages`].
+/// is the only safe answer left, and the frame-run quarantine counted the leak
+/// ([`leaked_pages`]).
 pub(super) fn withhold_if_pinned(
     run: crate::memory::frame_run::FrameRun,
 ) -> Option<crate::memory::frame_run::FrameRun> {
@@ -170,7 +171,6 @@ pub(super) fn withhold_if_pinned(
         crate::memory::pin::FrameTransfer::Free(run) => Some(run),
         crate::memory::pin::FrameTransfer::Withheld => None,
         crate::memory::pin::FrameTransfer::Full => {
-            LEAKED_PAGES.fetch_add(pages, core::sync::atomic::Ordering::Relaxed);
             log::error!(
                 "[grant] withheld run not recorded (no heap): leaking {pages} page(s) at {base:#x} protected by a live pin"
             );

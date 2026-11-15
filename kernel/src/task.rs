@@ -1044,19 +1044,14 @@ pub extern "Rust" fn vi_timer_tick() {
         }
     }
 
-    // Complete frame releases whose tag invalidation a release path could not
-    // confirm. Hart 0 owns the global sweeps, this is the trap path where the
-    // acknowledgements are published, no lock is held here, and the drain never
-    // waits — so it cannot widen the interrupt window the trap already closed nor
-    // block the slice. Before the second hart is online there is no remote to
-    // survey and an empty queue makes the call a no-op, so it is also safe on the
-    // way up.
-    #[cfg(all(feature = "native-domains", cellos_wide))]
-    if crate::sched::hart_local::current_hart_id() == 0 {
-        crate::memory::deferred_release::reap_deferred_releases();
-    }
-    // The same for frame runs a shared-root flush could not confirm: every
-    // pending entry is stepped, none waits, nothing is abandoned.
+    // Complete frame releases whose invalidation (a private tag or the shared
+    // root) a release path could not confirm. Hart 0 owns the global sweeps,
+    // this is the trap path where the acknowledgements are published, no lock
+    // is held here, and the drain never waits — so it cannot widen the
+    // interrupt window the trap already closed nor block the slice. Every
+    // pending entry is stepped and nothing is abandoned. Before the second hart
+    // is online there is no remote to survey and an empty quarantine makes the
+    // call a no-op, so it is also safe on the way up.
     #[cfg(cellos_wide)]
     if crate::sched::hart_local::current_hart_id() == 0 {
         crate::memory::frame_run::reap();

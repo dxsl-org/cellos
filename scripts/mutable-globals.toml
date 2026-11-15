@@ -1452,17 +1452,6 @@ rationale = "Fixed array under a Spinlock, so no allocation. Written only on the
 review = "kernel/src/task/syscall/mod.rs:reserve_dma_publication; kernel/src/task/syscall/mod.rs:DmaPublicationGuard; kernel/src/sched/scheduler.rs:1910"
 
 [[global]]
-key = "kernel::task::syscall::LEAKED_PAGES"
-lifetime = "global"
-mutation = "atomic"
-owner = "kernel::task::syscall; incremented by withhold_or_free when the grant quarantine is full and a live pin forces a leak; read by leaked_pages() for the retirement tally (task.rs yield_cpu retirement funnel)"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "none: monotonic count for the whole run"
-retirement = "never: a boot-wide counter; retirement reads a delta across its own reclaim window"
-rationale = "A single Relaxed fetch_add/load counter with no ordering obligation: the tally takes a before/after delta that may over-report concurrent leaks and never under-reports. Lock-free, so the grant reap paths reached from yield_cpu (timer ISR, user faults, AP idle loop) cannot deadlock on it."
-review = "kernel/src/task/syscall/mod.rs:withhold_or_free; kernel/src/task/syscall/mod.rs:leaked_pages; kernel/src/task.rs:yield_cpu"
-
-[[global]]
 key = "kernel::task::syscall::PAGE_GRANT_TABLE"
 lifetime = "global"
 mutation = "spinlock"
@@ -1537,7 +1526,7 @@ contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
 retirement = "never: monotone epoch"
 rationale = "Single writer per slot (the owner CPU), Release store after the local flush, Acquire loads by requesters; the owner's service calls cannot nest because both the ISR and the Spinlock spin run with IF masked. Touched in the AP handshake, timer/IPI ISRs, lock spins and the hart-0 deferred-release reaper in the timer ISR."
-review = "kernel/src/sched/smp.rs:service_tlb_flush; kernel/src/sched/smp.rs:tlb_flush_completed; kernel/src/memory/deferred_release.rs:283"
+review = "kernel/src/sched/smp.rs:service_tlb_flush; kernel/src/sched/smp.rs:tlb_flush_completed; kernel/src/memory/frame_run.rs:Pending::reap"
 
 [[global]]
 key = "kernel::sched::smp::RETIRE_SWITCH_REQUEST"
@@ -1971,8 +1960,8 @@ owner = "memory::heap: #[global_allocator] QuotaAlloc wrapping linked_list_alloc
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "heap region installed once by init_heap (main.rs:723) at boot; mutated for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "linked_list_allocator's LockedHeap lock does not mask interrupts by itself, and the timer ISR (deferred_release) and the yield_cpu funnel (timer/IPI ISRs, #PF funnel) allocate and free. Every QuotaAlloc entry (alloc, dealloc, the p01 realloc/alloc_zeroed, init_heap, usage, p01 snapshots) first takes HeapIrqMask, the same save/disable/restore as crate::sync::Spinlock, so no IF=1 kernel context (for example a kernel task after task_entry_point enables interrupts) can hold the heap lock while a same-hart interrupt allocates. Cost: heap operations are IRQ-off windows."
-review = "kernel/src/memory/heap.rs:HeapIrqMask; kernel/src/memory/heap.rs:QuotaAlloc (GlobalAlloc impl); kernel/src/memory/deferred_release.rs:complete; kernel/src/task.rs:yield_cpu; kernel/src/sched/scheduler.rs:task_entry_point"
+rationale = "linked_list_allocator's LockedHeap lock does not mask interrupts by itself, and the timer ISR (the frame_run reaper) and the yield_cpu funnel (timer/IPI ISRs, #PF funnel) allocate and free. Every QuotaAlloc entry (alloc, dealloc, the p01 realloc/alloc_zeroed, init_heap, usage, p01 snapshots) first takes HeapIrqMask, the same save/disable/restore as crate::sync::Spinlock, so no IF=1 kernel context (for example a kernel task after task_entry_point enables interrupts) can hold the heap lock while a same-hart interrupt allocates. Cost: heap operations are IRQ-off windows."
+review = "kernel/src/memory/heap.rs:HeapIrqMask; kernel/src/memory/heap.rs:QuotaAlloc (GlobalAlloc impl); kernel/src/memory/frame_run.rs:Pending::complete; kernel/src/task.rs:yield_cpu; kernel/src/sched/scheduler.rs:task_entry_point"
 
 [[global]]
 key = "kernel::memory::frame::PHYS_OFFSET"
@@ -1993,7 +1982,7 @@ owner = "memory::frame: kmain publishes the FrameAllocator (frame::install); it 
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "Option<FrameAllocator> published once by core::ptr::write into the guard at boot (main.rs:368); the allocator bitmap is mutated for the whole run"
 retirement = "never: lives for the whole run"
-rationale = "Taken by vi_handle_page_fault for demand paging (exception), by Stack drop and frame frees in the yield_cpu funnel and the hart-0 deferred_release reaper (irq), and by Stack::new_kernel for the AP stack in smp::start_secondaries; the crate Spinlock masks IRQs, and the #PF path takes SCHEDULER, releases it, then FRAME_ALLOCATOR -> KERNEL_ROOT, matching the documented order."
+rationale = "Taken by vi_handle_page_fault for demand paging (exception), by Stack drop and frame frees in the yield_cpu funnel and the hart-0 frame_run reaper (irq), and by Stack::new_kernel for the AP stack in smp::start_secondaries; the crate Spinlock masks IRQs, and the #PF path takes SCHEDULER, releases it, then FRAME_ALLOCATOR -> KERNEL_ROOT, matching the documented order."
 review = "kernel/src/memory/frame.rs:lock; kernel/src/memory/frame.rs:with; kernel/src/memory/frame.rs:install; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:Stack::allocate; kernel/src/sched/smp.rs:837"
 
 [[global]]
@@ -2110,78 +2099,12 @@ review = "kernel/linker-x86-64.ld; kernel/src/memory/domain-supervisor-registry.
 key = "kernel::memory::frame_run::PENDING"
 lifetime = "global"
 mutation = "spinlock"
-owner = "memory::frame_run: release paths quarantine runs whose invalidation is unconfirmed or whose holder is still live; the hart-0 timer reaper frees confirmed entries; event holders end theirs with release_event"
+owner = "memory::frame_run: release paths quarantine runs whose invalidation is unconfirmed (shared root, RFENCE fallback, or a private tag via deferred_release::defer_frames, which may also hold that root's tag slot) or whose holder is still live; the hart-0 timer reaper frees confirmed entries and hands held tag slots back; event holders end theirs with release_event; tag_unconfirmed answers deferred_release::tag_invalidation_unconfirmed"
 contexts = ["normal", "irq", "exception"]
-seal = "none: entries queue and drain for the whole run; the counters are atomics read by the allocator cap"
-retirement = "reap() removes an entry once every requested hart epoch is published and frees its runs outside the lock; release_event() returns event holds to their owner; nothing is ever abandoned"
+seal = "none: entries queue and drain for the whole run; the counters are atomics read by the allocator cap; tags_saturated is a one-way false -> true flag set when a tag wait cannot be recorded (no heap)"
+retirement = "reap() removes an entry once every requested hart epoch is published (and, for a private tag, outside the test-hooks withheld-ack window) and frees its runs and returns its tag slot outside the lock; release_event() returns event holds to their owner; nothing is ever abandoned"
 rationale = "Pushed from teardown paths in syscalls, the yield_cpu funnel and the #PF funnel, and drained by the hart-0 timer ISR; the crate Spinlock masks IRQs so an ISR cannot deadlock a same-hart holder, the Vec grows with try_reserve under the lock, and frames are normalised and freed only after the entry left the lock."
-review = "kernel/src/memory/frame_run.rs:Pending::push; kernel/src/memory/frame_run.rs:Pending::reap; kernel/src/memory/frame_run.rs:Pending::release_event"
-
-[[global]]
-key = "kernel::memory::deferred_release::DEFERRED @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "spinlock"
-owner = "memory::deferred_release: release paths (address_space unmap/teardown, AsidLease drop) enqueue frames per tag; the hart-0 timer reaper completes or abandons them"
-contexts = ["normal", "irq", "exception"]
-seal = "none: entries queue and drain for the whole run"
-retirement = "complete() removes an entry once every hart acknowledges the tag epoch and frees its frames; note_attempt() removes it after REAPER_MAX_ATTEMPTS and quarantines the frames"
-rationale = "reap_deferred_releases runs in vi_timer_tick on hart 0 and defer_frames runs from AddressSpace::drop in the yield_cpu funnel and from syscalls; the crate Spinlock masks IRQs so ISR vs same-hart release cannot deadlock, and frames are freed outside the lock. Pushing into the Vec under this lock allocates, inheriting the ALLOCATOR IRQ hazard."
-review = "kernel/src/memory/deferred_release.rs:place; kernel/src/memory/deferred_release.rs:reap_deferred_releases; kernel/src/memory/deferred_release.rs:complete; kernel/src/task.rs:1034"
-
-[[global]]
-key = "kernel::memory::deferred_release::ABANDONED_TAGS @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "spinlock"
-owner = "memory::deferred_release: mark_abandoned records tags whose invalidation was given up; tag_invalidation_unconfirmed and tag_abandoned read it"
-contexts = ["normal", "irq", "exception"]
-seal = "none: grows monotonically for the whole run up to MAX_ABANDONED_TAGS"
-retirement = "never: an abandoned tag stays unconfirmed for the rest of the boot by design"
-rationale = "Written from the timer-ISR reaper (note_attempt) and from defer() on release paths; read by grant/address-space reuse checks. IRQ-masking Spinlock makes ISR access safe."
-review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:tag_invalidation_unconfirmed"
-
-[[global]]
-key = "kernel::memory::deferred_release::ABANDONED_SATURATED @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "atomic"
-owner = "memory::deferred_release: mark_abandoned sets it when ABANDONED_TAGS is full; tag_invalidation_unconfirmed/tag_abandoned read it"
-contexts = ["normal", "irq", "exception"]
-seal = "one-way false -> true when the abandoned-tag table saturates"
-retirement = "never: never reset"
-rationale = "Release store / Acquire load of a one-way fail-closed flag; it is set while ABANDONED_TAGS is held, and readers only need the monotonic true value."
-review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:tag_invalidation_unconfirmed"
-
-[[global]]
-key = "kernel::memory::deferred_release::ATTEMPTS_TOTAL @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "atomic"
-owner = "memory::deferred_release: note_attempt counts reaper attempts; deferred_release_attempts (cfg(feature = \"test-hooks\")) reads it"
-contexts = ["irq"]
-seal = "none: counter for the whole run"
-retirement = "never: lives for the whole run"
-rationale = "Only writer is note_attempt, called solely from reap_deferred_releases in the hart-0 timer ISR; AcqRel fetch_add is stronger than a diagnostic counter needs. Production builds have no reader."
-review = "kernel/src/memory/deferred_release.rs:note_attempt; kernel/src/memory/deferred_release.rs:deferred_release_attempts; kernel/src/task.rs:1034"
-
-[[global]]
-key = "kernel::memory::deferred_release::ABANDONED_ENTRIES @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "atomic"
-owner = "memory::deferred_release: mark_abandoned counts abandoned tags; deferred_release_abandoned (cfg(feature = \"test-hooks\")) reads it"
-contexts = ["normal", "irq", "exception"]
-seal = "none: counter for the whole run"
-retirement = "never: lives for the whole run"
-rationale = "Incremented under ABANDONED_TAGS from the timer-ISR reaper and from a full-queue defer() on release paths; a diagnostic counter, so atomic increments suffice. Production builds have no reader."
-review = "kernel/src/memory/deferred_release.rs:mark_abandoned; kernel/src/memory/deferred_release.rs:deferred_release_abandoned"
-
-[[global]]
-key = "kernel::memory::deferred_release::ABANDONED_FRAMES @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "atomic"
-owner = "memory::deferred_release: note_attempt adds the frames of an abandoned entry; deferred_release_abandoned_frames (cfg(feature = \"test-hooks\")) reads it"
-contexts = ["irq"]
-seal = "none: counter for the whole run"
-retirement = "never: lives for the whole run"
-rationale = "Only written by note_attempt in the hart-0 timer-ISR reaper; atomic add of a diagnostic count is sufficient. Production builds have no reader."
-review = "kernel/src/memory/deferred_release.rs:note_attempt; kernel/src/memory/deferred_release.rs:deferred_release_abandoned_frames"
+review = "kernel/src/memory/frame_run.rs:Pending::push; kernel/src/memory/frame_run.rs:Pending::defer_tag; kernel/src/memory/frame_run.rs:Pending::tag_unconfirmed; kernel/src/memory/frame_run.rs:Pending::reap; kernel/src/memory/frame_run.rs:Pending::release_event; kernel/src/memory/deferred_release.rs:defer"
 
 [[global]]
 key = "kernel::memory::cell_quota::RUNTIME_DEFAULT_QUOTA_BYTES"
@@ -2239,26 +2162,15 @@ rationale = "Relaxed fetch_add needs only uniqueness; values are stored in the b
 review = "kernel/src/memory/address_space.rs:AddressSpaceBuilder::new; kernel/src/memory/address_space.rs:451"
 
 [[global]]
-key = "kernel::memory::address_space::QUARANTINED_FRAMES @cfg(all (feature = \"native-domains\" , cellos_wide))"
-lifetime = "global"
-mutation = "spinlock"
-owner = "memory::address_space: quarantine_frames, called only via deferred_release (full queue, abandoned tag, exhausted retries); quarantined_frame_count (test-hooks) reads it"
-contexts = ["normal", "irq", "exception"]
-seal = "none: grows monotonically for the whole run"
-retirement = "never: frames are leaked by design; no drain function exists"
-rationale = "Reached from the hart-0 timer-ISR reaper (note_attempt) and from release paths in syscalls and the yield_cpu funnel; the IRQ-masking Spinlock makes this safe, and Vec::extend under the lock allocates, inheriting the ALLOCATOR IRQ hazard."
-review = "kernel/src/memory/address_space.rs:quarantine_frames; kernel/src/memory/deferred_release.rs:note_attempt"
-
-[[global]]
 key = "kernel::memory::address_space::LIVE_ASIDS @cfg(all (feature = \"native-domains\" , cellos_wide))"
 lifetime = "per-cell"
 mutation = "spinlock"
 owner = "memory::address_space: AsidLease::acquire assigns a tag slot per live private root; release_tag_slot frees it"
 contexts = ["normal", "irq", "exception"]
 seal = "none: slots are leased and returned for the whole run"
-retirement = "AsidLease::release from AddressSpace::drop after a confirmed tag invalidation; otherwise deferred_release keeps the slot and release_tag_slot_after_invalidation frees it from the timer-ISR reaper once acknowledged"
-rationale = "Freed from the hart-0 timer ISR (deferred_release::complete) and from AddressSpace::drop when a domain task is dropped in the yield_cpu funnel; the IRQ-masking Spinlock and domain-checked release keep a tag from being reissued while live."
-review = "kernel/src/memory/address_space.rs:AsidLease::acquire; kernel/src/memory/address_space.rs:release_tag_slot; kernel/src/memory/deferred_release.rs:complete"
+retirement = "AsidLease::release from AddressSpace::drop after a confirmed tag invalidation; otherwise the frame-run quarantine's tag entry keeps the slot and release_tag_slot_after_invalidation frees it from the timer-ISR reaper once acknowledged"
+rationale = "Freed from the hart-0 timer ISR (frame_run::Pending::complete via KernelBackend::release_tag_slot) and from AddressSpace::drop when a domain task is dropped in the yield_cpu funnel; the IRQ-masking Spinlock and domain-checked release keep a tag from being reissued while live."
+review = "kernel/src/memory/address_space.rs:AsidLease::acquire; kernel/src/memory/address_space.rs:release_tag_slot; kernel/src/memory/frame_run.rs:Pending::complete"
 
 [[global]]
 key = "kernel::measurement_log::LOG"

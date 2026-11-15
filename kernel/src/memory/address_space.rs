@@ -11,54 +11,6 @@ use hal::PageTableTrait;
 use crate::hal::paging::USER_LIMIT;
 static NEXT_DOMAIN: AtomicU64 = AtomicU64::new(1);
 
-/// Frames whose invalidation could not be confirmed. They never return to the
-/// allocator: a hart that still resolves the retired translation could walk into
-/// them, and "leaked" is the only safe end state for that. Drained only by an
-/// explicit audit, and counted so the leak is visible rather than silent.
-static QUARANTINED_FRAMES: Spinlock<Vec<OwnedFrame>> =
-    Spinlock::ranked(Vec::new(), crate::sync::rank::QUARANTINED_FRAMES);
-
-/// Retain frames whose invalidation was not acknowledged and that no deferred
-/// release can complete — the loud, counted end state for a leak by design.
-///
-/// Called by the release paths only through [`super::deferred_release`]: a
-/// deferral that finds no room, and a deferred entry whose bounded retry budget
-/// is exhausted. The reason string is preserved verbatim so a reader can tell
-/// which release path leaked.
-pub(crate) fn quarantine_frames(frames: Vec<OwnedFrame>, reason: &str) {
-    let count = frames.len();
-    if count == 0 {
-        return;
-    }
-    #[cfg(feature = "p01-trace")]
-    for frame in &frames {
-        frame.p01_quarantine();
-    }
-    log::error!(
-        "[aspace] quarantining {} frame(s): {} — they will not be reused",
-        count,
-        reason
-    );
-    let mut quarantined = QUARANTINED_FRAMES.lock();
-    #[cfg(feature = "p01-trace")]
-    let _semantic = crate::memory::heap::p01_owner::creation(
-        None,
-        crate::memory::heap::p01_owner::DOMAIN_SHARED,
-    );
-    quarantined.extend(frames);
-}
-
-/// Test-hooks view of the quarantine: frames retained after an unacknowledged
-/// invalidation. A non-zero value is a leak by design, never a silent one.
-#[cfg(feature = "test-hooks")]
-#[cfg_attr(
-    not(cellos_domain_grants),
-    allow(dead_code) // reason: the grant fixtures assert on it
-)]
-pub(crate) fn quarantined_frame_count() -> usize {
-    QUARANTINED_FRAMES.lock().len()
-}
-
 /// Width of the architectural tag a root register can carry on this target.
 ///
 /// RV64 `satp` and AArch64 `TTBR0` carry 16-bit ASIDs; x86 PCID is 12-bit. A tag
@@ -1329,10 +1281,10 @@ impl Drop for AddressSpace {
             });
             #[cfg(feature = "test-hooks")]
             log::info!(
-                "[selftest] DOMAIN-FRAME-RELEASE: PASS tag={} frames={} quarantined={}",
+                "[selftest] DOMAIN-FRAME-RELEASE: PASS tag={} frames={} leaked={}",
                 tag,
                 frames.len(),
-                quarantined_frame_count()
+                crate::memory::frame_run::PENDING.counters().leaked()
             );
             drop(frames);
             drop(root);

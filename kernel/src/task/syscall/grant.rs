@@ -843,11 +843,13 @@ pub(super) fn sweep_orphan_reg_grants() {
     }
 }
 
-/// Monotonic boot-wide count of pages leaked by [`withhold_if_pinned`]. A delta
-/// across a window counts every leak in that window, including concurrent
-/// leaks attributed to other tasks: it can over-report, never under-report.
+/// Monotonic boot-wide count of pages leaked (never reused): the frame-run
+/// quarantine's `leaked` counter, which [`withhold_if_pinned`]'s unrecorded
+/// holds and every other frame-run leak add to. A delta across a window counts
+/// every leak in that window, including concurrent leaks attributed to other
+/// tasks: it can over-report, never under-report.
 pub(crate) fn leaked_pages() -> usize {
-    LEAKED_PAGES.load(core::sync::atomic::Ordering::Relaxed)
+    crate::memory::frame_run::PENDING.counters().leaked()
 }
 
 /// Return quarantined frames owned by `tid` to the allocator once the driver has
