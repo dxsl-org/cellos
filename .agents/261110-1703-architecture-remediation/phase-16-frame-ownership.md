@@ -1,7 +1,7 @@
 ---
 phase: 16
 title: "Frame ownership and shootdown contract"
-status: in-progress
+status: completed
 priority: P1
 effort: "10–14d"
 dependencies: [15]
@@ -83,7 +83,7 @@ FrameRun::drop ─► unpublish PTEs (all roots that map it)
 - [x] x86 fixture: with one CPU held with interrupts masked past the wait bound, a cell teardown completes, frames are reported quarantined and later freed — the kernel does not panic (panics before this phase).
 - [x] Host tests cover each `FrameRun` transition; holding the allocator lock across a flush does not compile.
 - [x] Raw `PhysAddr` free calls outside `memory/frame*.rs` reduced to zero (grep).
-- [ ] Checkpoint: full `pr`-tier suite on three arches; x86 4-CPU stress and domain grant suites; hypervisor smoke lane; review recorded.
+- [x] Checkpoint: full `pr`-tier suite on three arches; x86 4-CPU stress and domain grant suites; hypervisor smoke lane; review recorded ([evidence](reports/phase-16-evidence.md) §4–§5).
 
 ## Risk Assessment
 
@@ -259,4 +259,7 @@ Phase 17 attaches quota ownership to `FrameRun` and hardens the shared root.
 - **Residual (review, no fix):**
   - **Per-owner VM limit:** one owner can hold all 255 VMIDs, so it can deny VMs to every other owner. This is left to Phase 17, which attaches quota ownership.
   - **`map_guest_memory` without TLBI:** AArch64 `map_guest_memory` can overwrite live Stage-2 leaves of a VM with no TLB invalidation. This predates the phase. The leaves only ever name that VM's own guest RAM (`vm.guest_pa`), so a stale entry reaches nothing outside the guest. A fix needs a VMID-scoped flush, and `s2_tlb_flush_ipa` (deleted above) was never one.
+- **Surprise (checkpoint, lifecycle lane):** `x86_multi_source_wait_holds_on_two_cpus` (`-smp 2`) failed 2 times in 5 runs at `c49a67eae5`; base `94536305eb` passed 6/6. An `ipc-trace` build showed `try_send refused … reason=not-recv state=running` right after `slow-provider-ready`. The provider, on the other CPU, had not reached `Recv` after the caller's fixed 60 yields. The refusal is correct, and `ipc_try_send` is unchanged in this phase; Phase 16 widened the window, most likely through the batched shared flushes on the x86 spawn path (not measured).
+- **Decision (owner, 2026-11-15, fixture retry):** `2de3642ba3` retries the parked `try_send` within 500 scheduler ticks. A refusal queues nothing, and the busy-refusal and queued checks are unchanged. The file (`cells/tests/bench/src/scenarios/async_lifecycle.rs`) is outside the S7c file set. After the fix the lane passed 10/10.
+- **Decision (step 7, checkpoint):** the full checkpoint ran at `c49a67eae5`. Every lane passes, or fails exactly as it does on base ([evidence](reports/phase-16-evidence.md) §4). The 2026-11-15 WSL restart wiped `/tmp`, including the earlier lane logs and runner scripts; the runner was recovered from the session transcripts, and every lane was rerun. The final re-review (`15a6ae3145..c49a67eae5`) is PASS. Its three LOWs are listed as residuals in the evidence. Phase 16 is closed, and S7 closes with it.
 

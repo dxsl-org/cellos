@@ -41,7 +41,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 13 | [Init reduction, hot-swap decision, `api` split](phase-13-init-hotswap-api.md) — completed 2026-11-13 ([CP1](cp1-api-split.md), [CP2](cp2-api-split.md) confirmed); S6 closes | S6 | 12 | CP1/CP2 | ✓ |
 | 14 | [Kernel `arch/` seam and boot split](phase-14-arch-seam.md) — completed 2026-11-14 ([evidence](reports/phase-14-evidence.md)); the S7 handoff for Phase 14 is closed | S7 arch/memory | 09 | — | |
 | 15 | [x86-64 Tier-2 parity](phase-15-x86-tier2-parity.md) — completed 2026-11-14 ([evidence](reports/phase-15-evidence.md)); the S7b handoff is closed | S7 | 14 | — | |
-| 16 | [Frame ownership and shootdown contract](phase-16-frame-ownership.md) — in progress ([S7c handoff](s7c-handoff-approval.md) approved 2026-11-14) | S7 | 15 | — | ✓ |
+| 16 | [Frame ownership and shootdown contract](phase-16-frame-ownership.md) — completed 2026-11-15 ([evidence](reports/phase-16-evidence.md)); the S7c handoff is closed and S7 closes | S7 | 15 | — | ✓ |
 | 17 | [Quota ownership, Tier-3 charging, shared-root hardening](phase-17-quota-shared-root.md) | S8 hardening | 16 | — | |
 | 18 | [Driver model and Tier-1 TCB perimeter](phase-18-driver-model-tcb.md) | S8 | 05, 12 | — | |
 | 19 | [Spec reconciliation, hygiene and closure](phase-19-closure.md) | S8 | all | — | ✓ |
