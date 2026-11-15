@@ -198,11 +198,12 @@ impl FrameAllocator {
 
     /// The 1/64 quarantine cap (`frame_run::cap_exceeded`): refuse a new
     /// allocation while the frame-run quarantine holds more than 1/64 of the
-    /// managed frames — a degraded node, never a reused frame. Each refusal is
+    /// managed frames behind an unacknowledged invalidation — a degraded
+    /// node, never a reused frame. Pin, lease and DMA holds do not count. Each refusal is
     /// counted and logged (rate-limited) by `frame_run`; callers see their
     /// usual out-of-memory result.
     fn quarantine_refuses(&self) -> bool {
-        if !crate::memory::frame_run::cap_exceeded(quarantined_pages(), self.total_frames) {
+        if !crate::memory::frame_run::cap_exceeded(capped_pages(), self.total_frames) {
             return false;
         }
         crate::memory::frame_run::PENDING.note_refused(self.total_frames);
@@ -692,10 +693,13 @@ pub fn held_here() -> bool {
     held_by_thread::HELD_HERE.with(core::cell::Cell::get)
 }
 
-/// Pages the frame-run quarantine holds now: the cap's input.
+/// Pages the frame-run quarantine holds behind an invalidation now: the cap's
+/// input.
 #[cfg(not(test))]
-fn quarantined_pages() -> usize {
-    crate::memory::frame_run::PENDING.quarantined_pages()
+fn capped_pages() -> usize {
+    crate::memory::frame_run::PENDING
+        .counters()
+        .awaiting_invalidation()
 }
 
 // Host tests: one count per thread, set by the test itself, so no allocator
@@ -707,7 +711,7 @@ pub(crate) mod quarantine_by_thread {
 }
 
 #[cfg(test)]
-fn quarantined_pages() -> usize {
+fn capped_pages() -> usize {
     quarantine_by_thread::PAGES.with(core::cell::Cell::get)
 }
 

@@ -689,3 +689,50 @@ fn a_still_mapped_run_never_joins_a_tag_wait() {
     assert_eq!(quarantine.reap(&mut fake), 0);
     assert_eq!(fake.used(), 1);
 }
+
+/// Owner decision D-cap: the 1/64 cap counts only runs waiting on an
+/// invalidation. A pin hold is not counted, however large; a tag or shared
+/// wait is, and leaves the count when the reaper frees it.
+#[test]
+fn the_cap_counts_invalidation_waits_but_not_pin_holds() {
+    let mut fake = Fake::new(64);
+    let quarantine = pending();
+    let total = 64;
+
+    let mut pinned = fake.run(8, KernelAlias::Intact);
+    pinned
+        .hold(Reason::Pinned(crate::memory::pin::ReleaseKey::Owner(3)))
+        .unwrap();
+    quarantine.push(pinned, &[0; MAX_HARTS]);
+    assert_eq!(quarantine.quarantined_pages(), 8);
+    assert_eq!(quarantine.counters().awaiting_invalidation(), 0);
+    assert!(!cap_exceeded(
+        quarantine.counters().awaiting_invalidation(),
+        total
+    ));
+
+    let mut tagged = fake.run(1, KernelAlias::Intact);
+    tagged.unpublish().unwrap();
+    let epochs = fake.request();
+    quarantine.defer_tag(2, vec![tagged], None, &epochs);
+    let mut shared = fake.run(1, KernelAlias::Intact);
+    shared.unpublish().unwrap();
+    let outcome = fake.unconfirmed();
+    settle(shared, outcome, &mut fake, &quarantine)
+        .map_err(|_| ())
+        .unwrap();
+    assert_eq!(quarantine.counters().awaiting_invalidation(), 2);
+    assert!(cap_exceeded(
+        quarantine.counters().awaiting_invalidation(),
+        total
+    ));
+
+    fake.answer(1);
+    fake.answer(2);
+    assert_eq!(quarantine.reap(&mut fake), 2);
+    assert_eq!(quarantine.counters().awaiting_invalidation(), 0);
+    assert_eq!(quarantine.quarantined_pages(), 8, "the pin hold stays");
+    for run in quarantine.release_event(|reason| matches!(reason, Reason::Pinned(_))) {
+        quarantine.leak(run, "test");
+    }
+}

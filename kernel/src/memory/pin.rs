@@ -29,9 +29,10 @@
 //! the frame-run quarantine (`memory::frame_run::PENDING`), still mapped: the
 //! holder may still dereference them, so the hold is taken before anything is
 //! unpublished (census F15). This registry decides *which* key protects a range
-//! and when that key ends; the pending list keeps the frames and counts them
-//! against the 1/64 quarantine cap. A released run comes back `Mapped`, and the
-//! caller resumes its release (unpublish, flush, free) outside every lock here.
+//! and when that key ends; the pending list keeps the frames (counted, but not
+//! against the 1/64 cap, which bounds only invalidation waits). A released run
+//! comes back `Mapped`, and the caller resumes its release (unpublish, flush,
+//! free) outside every lock here.
 //!
 //! # Lock order
 //!

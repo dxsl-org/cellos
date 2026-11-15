@@ -23,8 +23,10 @@
 //! invalidations alike. Nothing is ever abandoned: a hart that stays silent
 //! keeps its frames quarantined, counted, and logged once on escalation.
 //!
-//! The quarantine is bounded by refusing new allocations past 1/64 of managed
-//! memory ([`cap_exceeded`]): a degraded node, never a reused frame.
+//! The quarantine of runs waiting on an invalidation is bounded by refusing new
+//! allocations once it passes 1/64 of managed memory ([`cap_exceeded`]): a
+//! degraded node, never a reused frame. Event holds (a pin, a lease, a DMA
+//! export) are not counted, as before the cap existed.
 
 use crate::memory::frame::FlushCap;
 use crate::memory::paging::PAGE_SIZE;
@@ -165,6 +167,16 @@ impl Reason {
                 | Reason::SharedUnconfirmed
                 | Reason::RfenceFailed
                 | Reason::AliasUnrestored
+        )
+    }
+
+    /// A reason only an acknowledged invalidation ends (a private tag, the
+    /// shared root, an RFENCE fallback): the silent-CPU case the 1/64 cap
+    /// bounds. Event holds and an unrestored alias are not counted.
+    pub const fn awaits_invalidation(&self) -> bool {
+        matches!(
+            self,
+            Reason::TagUnconfirmed { .. } | Reason::SharedUnconfirmed | Reason::RfenceFailed
         )
     }
 
@@ -674,6 +686,9 @@ pub struct Counters {
     quarantined: AtomicUsize,
     /// Pages currently quarantined, per [`Reason::index`].
     by_reason: [AtomicUsize; REASONS],
+    /// Pages currently quarantined behind an invalidation
+    /// ([`Reason::awaits_invalidation`]): the 1/64 cap's input.
+    awaiting_invalidation: AtomicUsize,
     /// Pages the reaper freed after a later epoch confirmed them.
     released_after_retry: AtomicUsize,
     /// Allocations refused by the 1/64 cap.
@@ -688,6 +703,7 @@ impl Counters {
         Self {
             quarantined: AtomicUsize::new(0),
             by_reason: [const { AtomicUsize::new(0) }; REASONS],
+            awaiting_invalidation: AtomicUsize::new(0),
             released_after_retry: AtomicUsize::new(0),
             refused: AtomicUsize::new(0),
             leaked: AtomicUsize::new(0),
@@ -702,6 +718,11 @@ impl Counters {
         self.by_reason
             .get(reason_index)
             .map_or(0, |count| count.load(Ordering::Acquire))
+    }
+
+    /// Pages quarantined behind an invalidation: what the 1/64 cap counts.
+    pub fn awaiting_invalidation(&self) -> usize {
+        self.awaiting_invalidation.load(Ordering::Acquire)
     }
 
     pub fn released_after_retry(&self) -> usize {
@@ -719,11 +740,19 @@ impl Counters {
     fn add(&self, reason: &Reason, pages: usize) {
         self.quarantined.fetch_add(pages, Ordering::AcqRel);
         self.by_reason[reason.index()].fetch_add(pages, Ordering::AcqRel);
+        if reason.awaits_invalidation() {
+            self.awaiting_invalidation
+                .fetch_add(pages, Ordering::AcqRel);
+        }
     }
 
     fn sub(&self, reason: &Reason, pages: usize) {
         self.quarantined.fetch_sub(pages, Ordering::AcqRel);
         self.by_reason[reason.index()].fetch_sub(pages, Ordering::AcqRel);
+        if reason.awaits_invalidation() {
+            self.awaiting_invalidation
+                .fetch_sub(pages, Ordering::AcqRel);
+        }
     }
 }
 
@@ -1217,8 +1246,8 @@ impl Pending {
         let refused = self.counters.refused.fetch_add(1, Ordering::AcqRel) + 1;
         if refused.is_power_of_two() {
             log::error!(
-                "[frame-run] allocation refused: {} pages quarantined exceed 1/64 of {} managed frames (refusals {})",
-                self.counters.quarantined(),
+                "[frame-run] allocation refused: {} pages awaiting an invalidation exceed 1/64 of {} managed frames (refusals {})",
+                self.counters.awaiting_invalidation(),
                 total_frames,
                 refused
             );
@@ -1585,8 +1614,9 @@ pub fn reap() {
     let _ = PENDING.reap(&mut KernelBackend);
 }
 
-/// The quarantine cap: refuse new allocations once quarantined pages exceed
-/// 1/64 of the frames the allocator manages.
+/// The quarantine cap: refuse new allocations once the pages quarantined
+/// behind an invalidation ([`Counters::awaiting_invalidation`]) exceed 1/64 of
+/// the frames the allocator manages.
 pub const fn cap_exceeded(quarantined: usize, total_frames: usize) -> bool {
     quarantined.saturating_mul(64) > total_frames
 }
