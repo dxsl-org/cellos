@@ -439,15 +439,16 @@ impl Drop for CompletionQueue {
 /// cell before a new one is allocated. Returns `None` when `tid` names no live task
 /// or the queue cannot be allocated.
 ///
-/// The queue and its fixed waiter table are kernel bookkeeping, charged to the
-/// kernel (cell 0) as `async_ipc::Operations::push` charges its storage. They
-/// are allocated once per Cell here, so later waits allocate nothing.
+/// The queue and its fixed waiter table are charged to the owning Cell
+/// incarnation, since every thread of that Cell shares them. They are
+/// allocated once per Cell here, so later waits allocate nothing.
 ///
 /// Call from a submitting context with `SCHEDULER` held. The append path never
 /// comes here — it uses the handle it was given, which is the reason it needs no
 /// lock but its own.
 pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueue>> {
-    let cell = sched.tasks.get(&tid)?.cell_id;
+    let task = sched.tasks.get(&tid)?;
+    let (cell, owner) = (task.cell_id, crate::memory::cell_quota::Charge::of(task));
     if let Some(existing) = sched.tasks.get(&tid).and_then(|t| t.completion.clone()) {
         return Some(existing);
     }
@@ -464,10 +465,8 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
                 None,
                 crate::memory::heap::p01_owner::COMPLETION_SHARED,
             );
-            let previous = crate::sched::hart_local::current_cell_id();
-            crate::sched::hart_local::set_current_cell_id(0);
-            let created = CompletionQueue::new(cell).map(Arc::new);
-            crate::sched::hart_local::set_current_cell_id(previous);
+            let created =
+                crate::memory::heap::alloc_for(owner, || CompletionQueue::new(cell).map(Arc::new));
             created?
         }
     };

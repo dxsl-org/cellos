@@ -2010,6 +2010,10 @@ fn admission(syscall_id: usize, caller_id: usize) -> Result<(), u32> {
 #[no_mangle]
 #[allow(non_snake_case)] // ABI name required by the HAL trap vector — cannot be snake_case
 pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
+    // The one place a cell charge is made from the dispatch identity: syscall
+    // work allocates as the caller unless a narrower scope says otherwise.
+    let _charge =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::dispatched());
     #[cfg(all(feature = "x86-idt-cpl3-test", target_arch = "x86_64"))]
     if crate::hal::idt::handle_cpl3_probe_syscall(frame) {
         return;
@@ -2102,6 +2106,9 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTrapFrame) {
+    // As the entry above: syscall work allocates as the caller.
+    let _charge =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::dispatched());
     #[cfg(feature = "bench-counters")]
     crate::bench_counters::syscall();
     // Promote u32 register slots to usize (= u32 on rv32) for arch-agnostic helpers.

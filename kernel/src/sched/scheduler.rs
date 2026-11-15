@@ -75,29 +75,6 @@ const WATCHDOG_FAULT_CAUSE: u32 = 0x0000_DEAD;
 static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
     crate::sync::Spinlock::ranked(BTreeMap::new(), crate::sync::rank::DEATH_SUBSCRIBERS);
 
-/// Lexically pins heap accounting to the kernel for scheduler-owned containers.
-///
-/// Callers must not yield or context-switch while this guard is live. Scheduler
-/// and subscriber mutations run under spinlocks with interrupts excluded, so
-/// the current hart cannot publish this temporary accounting identity.
-pub(crate) struct KernelAllocationContext {
-    previous_cell: usize,
-}
-
-impl KernelAllocationContext {
-    pub(crate) fn enter() -> Self {
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        Self { previous_cell }
-    }
-}
-
-impl Drop for KernelAllocationContext {
-    fn drop(&mut self) {
-        crate::sched::hart_local::set_current_cell_id(self.previous_cell);
-    }
-}
-
 /// Indirect sorted task storage. Reserved publications hold capacity rather
 /// than inserting a hidden task into the live scheduler namespace.
 pub struct TaskTable {
@@ -380,7 +357,9 @@ fn may_watch_owner_deaths(watcher: &Task) -> bool {
 
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
-    let _allocation = KernelAllocationContext::enter();
+    // Kernel-funded and bounded to live watched/watcher pairs.
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
     let mut subscribers = DEATH_SUBSCRIBERS.lock();
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
@@ -403,7 +382,8 @@ pub fn subscribe_death(watched: usize, watcher: usize) {
     }
 }
 pub(crate) fn queue_pending_death(task: &mut Task, watched: usize, exit_reason: usize) {
-    let _allocation = KernelAllocationContext::enter();
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
     if !task.pending_deaths.contains(&(watched, exit_reason)) {
         #[cfg(feature = "p01-trace")]
         crate::memory::heap::p01_owner::runtime_vec(
@@ -431,7 +411,8 @@ fn release_pending_deaths(task: &mut Task) {
 }
 
 fn drain_death_subscribers(watched_tid: usize, mut deliver: impl FnMut(usize)) {
-    let _allocation = KernelAllocationContext::enter();
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
     let watchers = {
         let mut subscribers = DEATH_SUBSCRIBERS.lock();
         let watchers = subscribers.remove(&watched_tid).unwrap_or_default();
@@ -627,7 +608,8 @@ impl Scheduler {
     fn insert_cell_owner_slot(&mut self, cell_id: u64, slot: CellOwnerSlot) {
         // The directory is scheduler bookkeeping, not an object of the Cell
         // whose launch happens to grow it.
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel =
+            crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
         self.cell_owners.insert(cell_id, slot);
     }
     pub(crate) fn reserve_session_owner(
@@ -2338,17 +2320,22 @@ impl Scheduler {
             );
             for tid in start.into_iter().flatten() {
                 let task = self.tasks.get_mut(&tid).expect("locked G1 start target");
-                let data =
-                    crate::ipc::pending_mailbox::PendingMsgData::try_copy(&[0x74, harts, 0], 0)
-                        .expect("three-byte inline G1 compute barrier");
+                let data = crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                    &[0x74, harts, 0],
+                    crate::memory::cell_quota::Charge::KERNEL,
+                )
+                .expect("three-byte inline G1 compute barrier");
                 if task
                     .pending_msgs
-                    .try_push(crate::task::tcb::PendingMsg {
-                        sender_tid: 0,
-                        data,
-                        wire: None,
-                        enqueued_tick: now as u64,
-                    })
+                    .try_push(
+                        crate::memory::cell_quota::Charge::KERNEL,
+                        crate::task::tcb::PendingMsg {
+                            sender_tid: 0,
+                            data,
+                            wire: None,
+                            enqueued_tick: now as u64,
+                        },
+                    )
                     .is_err()
                 {
                     crate::sched::cpu_accounting::fatal(
@@ -2363,16 +2350,22 @@ impl Scheduler {
                 // Existing inline mailbox after ACCOUNTING unlock: either the
                 // root has installed a real Wait, or checked HPET reached16P.
                 let task = self.tasks.get_mut(&tid).expect("locked G1 wait target");
-                let data = crate::ipc::pending_mailbox::PendingMsgData::try_copy(&token, 0)
+                let data = crate::ipc::pending_mailbox::PendingMsgData::try_copy(
+                    &token,
+                    crate::memory::cell_quota::Charge::KERNEL,
+                )
                     .expect("two-byte inline G1 notification");
                 if task
                     .pending_msgs
-                    .try_push(crate::task::tcb::PendingMsg {
-                        sender_tid: 0,
-                        data,
-                        wire: None,
-                        enqueued_tick: now as u64,
-                    })
+                    .try_push(
+                        crate::memory::cell_quota::Charge::KERNEL,
+                        crate::task::tcb::PendingMsg {
+                            sender_tid: 0,
+                            data,
+                            wire: None,
+                            enqueued_tick: now as u64,
+                        },
+                    )
                     .is_err()
                 {
                     crate::sched::cpu_accounting::fatal(

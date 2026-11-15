@@ -133,7 +133,7 @@ pub fn observe_exit_deferred_record_commit(exit: crate::sched::hart_local::Defer
 
     let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::current_cell_id(), 1)
+        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::alloc_charge(), 1)
             .map(|owner| crate::memory::cell_quota::refund_owner(owner, 1))
             .is_some();
     if ROOT_EXIT_QUOTA_SATURATED.load(Ordering::Acquire) && kernel_attribution && allocator_accepts
@@ -346,7 +346,7 @@ pub fn observe_fault_kernel_attribution(victim_cell: usize) {
     }
     let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::current_cell_id(), 1)
+        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::alloc_charge(), 1)
             .map(|owner| crate::memory::cell_quota::refund_owner(owner, 1))
             .is_some();
     if kernel_attribution && allocator_accepts {
@@ -618,6 +618,9 @@ extern "C" fn remote_worker_entry() -> ! {
     )
     .map(crate::memory::cell_quota::Reservation::keep)
     .is_ok();
+    // The worker's own allocations are charged as its syscalls' would be.
+    let _syscall_charge =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::dispatched());
     let mut allocation_probe = alloc::vec::Vec::<u8>::new();
     let allocation_rejected = allocation_probe.try_reserve_exact(1).is_err();
     let quota_exhausted = quota_charged && allocation_rejected;
@@ -860,6 +863,9 @@ pub fn run_primary() {
     // victim-attributed work is the fixed scalar record; `yield_cpu` consumes
     // it after attribution becomes kernel-owned.
     crate::sched::hart_local::set_current_cell_context(CELL_RAW as usize, owner.generation);
+    // Opened as `ViCell_syscall_dispatch` opens it for the root's syscall.
+    let syscall_charge =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::dispatched());
     let quota_charged = crate::memory::cell_quota::Reservation::take(
         crate::memory::cell_quota::Charge::new(CellId(CELL_RAW), owner.generation),
         crate::memory::cell_quota::Account::Memory,
@@ -880,7 +886,7 @@ pub fn run_primary() {
     log::info!(
         "[selftest] SMP-ROOT-EXIT-QUOTA: stage=hart0-root-quota-saturated-before-clean-exit"
     );
-    if !matches!(
+    let exited = matches!(
         handle_syscall(
             root_tid,
             Syscall::Exit {
@@ -888,7 +894,9 @@ pub fn run_primary() {
             }
         ),
         Ok(0)
-    ) {
+    );
+    drop(syscall_charge);
+    if !exited {
         crate::sched::hart_local::set_current_cell_id(0);
         log::error!("[selftest] SMP-ROOT-EXIT-QUOTA: FAIL — clean root Exit rejected");
         return;

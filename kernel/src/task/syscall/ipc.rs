@@ -462,7 +462,7 @@ pub(super) fn recv(
                                 }
                             }
                             if let Some(token) = held {
-                                sched.async_index.note_holder(caller_id, token);
+                                crate::task::async_ipc::note_holder(sched, caller_id, token);
                             }
                             if let ResumeSnapshot::Message {
                                 sender_tid,
@@ -514,7 +514,7 @@ pub(super) fn recv(
             }
         }
         if let Some(token) = held {
-            sched.async_index.note_holder(caller_id, token);
+            crate::task::async_ipc::note_holder(sched, caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -685,7 +685,7 @@ pub(super) fn recv_scatter(
             }
         }
         if let Some(token) = held {
-            sched.async_index.note_holder(caller_id, token);
+            crate::task::async_ipc::note_holder(sched, caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -873,7 +873,7 @@ pub(super) fn recv_timeout(
                                 }
                             }
                             if let Some(token) = held {
-                                sched.async_index.note_holder(caller_id, token);
+                                crate::task::async_ipc::note_holder(sched, caller_id, token);
                             }
                             if let ResumeSnapshot::Message {
                                 sender_tid,
@@ -927,7 +927,7 @@ pub(super) fn recv_timeout(
             }
         }
         if let Some(token) = held {
-            sched.async_index.note_holder(caller_id, token);
+            crate::task::async_ipc::note_holder(sched, caller_id, token);
         }
         if let Some(header) = wire_header {
             crate::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -1067,7 +1067,7 @@ pub(super) fn try_recv(
                 }
             }
             if let Some(token) = held {
-                sched.async_index.note_holder(caller_id, token);
+                crate::task::async_ipc::note_holder(sched, caller_id, token);
             }
             if let Some(header) = wire_header {
                 crate::task::wake_sender_token(sched, sender_tid, caller_id, header);

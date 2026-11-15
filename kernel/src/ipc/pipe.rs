@@ -108,28 +108,6 @@ static PIPES: Spinlock<BTreeMap<usize, Pipe>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::PIPES);
 static NEXT_PIPE_ID: Spinlock<usize> = Spinlock::ranked(1, crate::sync::rank::NEXT_PIPE_ID);
 
-/// Pipe rings are kernel objects. Charge their capacity explicitly to the
-/// creating cell, but allocate their storage as kernel memory so the allocator
-/// never silently adds a second per-cell charge. A free refunds the owner the
-/// block recorded, so whoever closes the last end is never refunded.
-struct PipeAllocationContext {
-    previous_cell: usize,
-}
-
-impl PipeAllocationContext {
-    fn enter() -> Self {
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        Self { previous_cell }
-    }
-}
-
-impl Drop for PipeAllocationContext {
-    fn drop(&mut self) {
-        crate::sched::hart_local::set_current_cell_id(self.previous_cell);
-    }
-}
-
 fn next_pipe_id() -> usize {
     let mut next = NEXT_PIPE_ID.lock();
     let id = *next;
@@ -178,7 +156,10 @@ pub(crate) fn create(
     )
     .map_err(|_| crate::task::syscall::SyscallError::OutOfMemory)?;
 
-    let _kernel_allocation = PipeAllocationContext::enter();
+    // The creator is charged through `charge`; the ring and the table entry
+    // are kernel memory, so the allocator never adds a second per-cell charge.
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
     let mut buffer = Vec::new();
     #[cfg(feature = "p01-trace")]
     let _semantic =

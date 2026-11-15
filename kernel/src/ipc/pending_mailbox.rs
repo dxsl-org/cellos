@@ -18,8 +18,12 @@ pub enum PendingMsgData {
 }
 
 impl PendingMsgData {
-    /// Copy bytes into inline storage or a fallibly allocated receiver-owned buffer.
-    pub fn try_copy(data: &[u8], allocation_cell: usize) -> Result<Self, ()> {
+    /// Copy bytes into inline storage, or into a buffer charged to the
+    /// receiving incarnation `receiver` (refused past its quota).
+    pub(crate) fn try_copy(
+        data: &[u8],
+        receiver: crate::memory::cell_quota::Charge,
+    ) -> Result<Self, ()> {
         if data.len() <= INLINE_MESSAGE_BYTES {
             let mut bytes = [0; INLINE_MESSAGE_BYTES];
             bytes[..data.len()].copy_from_slice(data);
@@ -29,17 +33,12 @@ impl PendingMsgData {
             });
         }
 
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(allocation_cell);
-        let result = (|| {
+        crate::memory::heap::alloc_for(receiver, || {
             let mut bytes = Vec::new();
             bytes.try_reserve_exact(data.len()).map_err(|_| ())?;
             bytes.extend_from_slice(data);
-            Ok(bytes)
-        })();
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
-
-        result.map(|bytes| Self::Heap { bytes })
+            Ok(Self::Heap { bytes })
+        })
     }
 
     /// Return an empty inline sentinel. Wire-backed records store this in
@@ -202,14 +201,16 @@ impl PendingMailbox {
         Some(self.messages.remove(index))
     }
 
-    /// Push without charging mailbox-container growth to an arbitrary cell.
-    pub fn try_push(&mut self, message: PendingMsg) -> Result<(), ()> {
+    /// Push `message`; container growth is charged to the receiving
+    /// incarnation `receiver`, so the mailbox depth bounds what it can cost.
+    pub(crate) fn try_push(
+        &mut self,
+        receiver: crate::memory::cell_quota::Charge,
+        message: PendingMsg,
+    ) -> Result<(), ()> {
         if self.messages.len() == self.messages.capacity() {
-            let previous_cell = crate::sched::hart_local::current_cell_id();
-            crate::sched::hart_local::set_current_cell_id(0);
-            let result = self.messages.try_reserve(1).map_err(|_| ());
-            crate::sched::hart_local::set_current_cell_id(previous_cell);
-            result?;
+            crate::memory::heap::alloc_for(receiver, || self.messages.try_reserve(1))
+                .map_err(|_| ())?;
         }
         self.messages.push(message);
         Ok(())

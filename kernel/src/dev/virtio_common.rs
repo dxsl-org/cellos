@@ -153,6 +153,7 @@ fn ack_unclaimed(irq: u32) -> bool {
 /// `sys_wait_irq` path above.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     let nic_irq = crate::dev::driver_cell::owns_registered_nic_irq(irq);
 
     // Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —

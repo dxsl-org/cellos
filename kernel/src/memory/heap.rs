@@ -1,11 +1,12 @@
 //! Heap allocator for ViCell kernel.
 //!
 //! Wraps `linked_list_allocator::LockedHeap` in a `QuotaAlloc` that charges
-//! every allocation to the currently-executing Cell's quota.  The kernel
-//! itself (CellId = 0) is unlimited.  A Cell that exceeds its quota receives
-//! a null pointer from `alloc()` — no panic, no system halt.  Each block
-//! records the quota owner it was charged to, and `dealloc` refunds that
-//! owner rather than whichever Cell is current at free time.
+//! every allocation to the hart's explicit allocation charge, set only by a
+//! [`ChargeScope`]. Outside every scope it is the kernel, which is unlimited.
+//! A Cell that exceeds its quota receives a null pointer from `alloc()` — no
+//! panic, no system halt. Each block records the quota owner it was charged
+//! to, and `dealloc` refunds that owner rather than whichever charge is open
+//! at free time.
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -166,8 +167,8 @@ impl QuotaAlloc {
         layout: Layout,
         #[cfg(feature = "p01-trace")] origin: Option<p01_owner::Provenance>,
     ) -> *mut u8 {
-        let cell = crate::sched::scheduler::current_cell_id();
-        let Some(owner) = crate::memory::cell_quota::charge_owner(cell, layout.size()) else {
+        let charge = crate::sched::hart_local::alloc_charge();
+        let Some(owner) = crate::memory::cell_quota::charge_owner(charge, layout.size()) else {
             // Cell quota exceeded — return null, no panic.
             NULL_FROM_QUOTA.fetch_add(1, Ordering::Relaxed);
             #[cfg(target_arch = "riscv64")]
@@ -330,6 +331,47 @@ static ALLOCATOR: QuotaAlloc = QuotaAlloc {
     inner: LockedHeap::empty(),
 };
 
+/// The allocation charge open on this hart, restored on drop.
+///
+/// Only three kinds of code open one: syscall entry (`Charge::dispatched()`),
+/// an owner-directed allocation (the incarnation that owns the object), and a
+/// kernel scope (`Charge::KERNEL`) for kernel bookkeeping. Every interrupt
+/// entry opens [`ChargeScope::interrupt`] first, and `yield_cpu` holds a
+/// kernel scope across each switch, so no scope crosses a switch or reaches an
+/// interrupt handler. A scope dropped on another hart than it was opened on
+/// restores that hart: the activation, not the hart, owns it.
+#[must_use = "a charge scope ends when it is dropped"]
+pub(crate) struct ChargeScope {
+    saved: crate::memory::cell_quota::Charge,
+}
+
+impl ChargeScope {
+    /// Charge every allocation on this hart to `charge` until drop.
+    pub(crate) fn enter(charge: crate::memory::cell_quota::Charge) -> Self {
+        Self {
+            saved: crate::sched::hart_local::replace_alloc_charge(charge),
+        }
+    }
+
+    /// The first statement of every interrupt entry: the handler allocates as
+    /// the kernel, never as the interrupted context's charge.
+    pub(crate) fn interrupt() -> Self {
+        Self::enter(crate::memory::cell_quota::Charge::KERNEL)
+    }
+}
+
+impl Drop for ChargeScope {
+    fn drop(&mut self) {
+        crate::sched::hart_local::replace_alloc_charge(self.saved);
+    }
+}
+
+/// Run `f` with every allocation on this hart charged to `charge`.
+pub(crate) fn alloc_for<R>(charge: crate::memory::cell_quota::Charge, f: impl FnOnce() -> R) -> R {
+    let _scope = ChargeScope::enter(charge);
+    f()
+}
+
 /// Initialise the kernel heap.
 ///
 /// # Safety
@@ -455,12 +497,15 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
-    use crate::memory::cell_quota::{self, MAX_CELLS};
-    use crate::sched::hart_local::{current_cell_id, set_current_cell_id};
+    use crate::memory::cell_quota::{self, Charge, MAX_CELLS};
     use types::CellId;
 
     const OWNER: usize = MAX_CELLS - 1;
     const OTHER: usize = MAX_CELLS - 2;
+
+    fn charge(cell: usize, generation: u64) -> Charge {
+        Charge::new(CellId(cell as u64), generation)
+    }
 
     fn in_use(cell: usize) -> usize {
         cell_quota::in_use(CellId(cell as u64))
@@ -469,7 +514,6 @@ mod tests {
     #[test]
     fn dealloc_refunds_the_charged_owner_incarnation() {
         let _guard = crate::TEST_STATE_LOCK.lock();
-        let previous = current_cell_id();
         let mut arena = alloc::vec![0u64; 1024];
         let heap = QuotaAlloc {
             inner: LockedHeap::empty(),
@@ -488,11 +532,9 @@ mod tests {
 
         // SAFETY: every block below is freed once with the layout it was allocated with.
         unsafe {
-            // Freed while another Cell is current: the original owner is refunded.
-            set_current_cell_id(OWNER);
-            let owned = heap.alloc(small);
-            set_current_cell_id(OTHER);
-            let other = heap.alloc(aligned);
+            // Freed under another charge: the original owner is refunded.
+            let owned = alloc_for(charge(OWNER, 1), || heap.alloc(small));
+            let other = alloc_for(charge(OTHER, 1), || heap.alloc(aligned));
             assert!(!owned.is_null() && !other.is_null());
             assert_eq!(
                 other as usize % 64,
@@ -500,23 +542,24 @@ mod tests {
                 "payload keeps the requested alignment"
             );
             assert_eq!((in_use(OWNER), in_use(OTHER)), (24, 40));
-            heap.dealloc(owned, small);
+            alloc_for(charge(OTHER, 1), || heap.dealloc(owned, small));
             assert_eq!((in_use(OWNER), in_use(OTHER)), (0, 40));
 
             // Charged to (OWNER, gen1); OWNER re-registered as gen2 before the free.
-            set_current_cell_id(OWNER);
-            let stale = heap.alloc(small);
+            let stale = alloc_for(charge(OWNER, 1), || heap.alloc(small));
             cell_quota::register(CellId(OWNER as u64), 2, limits);
-            let fresh = heap.alloc(aligned);
+            assert!(
+                alloc_for(charge(OWNER, 1), || heap.alloc(small)).is_null(),
+                "a retired incarnation is refused"
+            );
+            let fresh = alloc_for(charge(OWNER, 2), || heap.alloc(aligned));
             assert_eq!(in_use(OWNER), 40);
             heap.dealloc(stale, small);
             assert_eq!(in_use(OWNER), 40, "gen1 free must not refund gen2");
 
-            // Kernel-context blocks stay uncharged wherever they are freed.
-            set_current_cell_id(0);
+            // Kernel blocks stay uncharged wherever they are freed.
             let kernel = heap.alloc(small);
-            set_current_cell_id(OWNER);
-            heap.dealloc(kernel, small);
+            alloc_for(charge(OWNER, 2), || heap.dealloc(kernel, small));
             assert_eq!(in_use(OWNER), 40);
 
             heap.dealloc(fresh, aligned);
@@ -529,7 +572,6 @@ mod tests {
             "tagged layouts round-trip exactly"
         );
 
-        set_current_cell_id(previous);
         cell_quota::deregister(CellId(OWNER as u64));
         cell_quota::deregister(CellId(OTHER as u64));
     }

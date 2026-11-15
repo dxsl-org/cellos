@@ -178,6 +178,7 @@ fn arm() {
 /// SCI interrupt: acknowledge `PWRBTN_STS` and mark a press pending.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_sci() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     let mut pressed = false;
     for status in [&PM1A_STATUS, &PM1B_STATUS]
         .map(|port| port.load(Ordering::Relaxed))

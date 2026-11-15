@@ -602,6 +602,10 @@ pub(super) fn exit(caller_id: usize, code: usize) -> SyscallResult {
     };
     crate::sched::hart_local::defer_exit(exit);
     crate::sched::hart_local::set_current_cell_id(0);
+    // The identity write above is the trap-attribution handoff; this scope is
+    // the charging one: everything after the record allocates as the kernel.
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::arch::task::retirement_selftest::observe_exit_deferred_record_commit(exit);

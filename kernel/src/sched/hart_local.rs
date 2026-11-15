@@ -119,6 +119,11 @@ pub struct ViHartLocal {
     /// path needs no scheduler lock. Unused on riscv64, where the trap frame
     /// carries the user `tp`.
     pub current_tls_base: AtomicUsize,
+    /// Quota owner the heap allocator charges on this hart, as a CellId and
+    /// generation pair; `(0, 0)` is the kernel. Only `memory::heap::ChargeScope`
+    /// writes it, so a scope's save and restore bracket every write.
+    alloc_charge_cell: AtomicUsize,
+    alloc_charge_generation: AtomicU64,
 }
 
 // The leading word-sized fields keep their documented offsets (0/8/16/24 on
@@ -183,6 +188,8 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         #[cfg(cellos_wide)]
         user_copy_guard_end: AtomicUsize::new(0),
         current_tls_base: AtomicUsize::new(0),
+        alloc_charge_cell: AtomicUsize::new(0),
+        alloc_charge_generation: AtomicU64::new(0),
     };
     [ZERO; MAX_HARTS]
 };
@@ -464,6 +471,43 @@ pub fn set_current_cell_context(id: usize, generation: u64) {
     hart.current_cell_generation
         .store(generation, Ordering::Relaxed);
     hart.current_cell_id.store(id, Ordering::Relaxed);
+}
+
+/// This hart's slot once its hart-local state is installed.
+#[inline(always)]
+fn installed_hart() -> Option<&'static ViHartLocal> {
+    installed_hart_id().map(|id| &HART_LOCALS[id])
+}
+
+/// The quota owner the heap allocator charges on this hart. A hart whose
+/// local state is not installed yet allocates as the kernel.
+#[inline(always)]
+pub(crate) fn alloc_charge() -> crate::memory::cell_quota::Charge {
+    installed_hart().map_or(crate::memory::cell_quota::Charge::KERNEL, |hart| {
+        crate::memory::cell_quota::Charge::new(
+            types::CellId(hart.alloc_charge_cell.load(Ordering::Relaxed) as u64),
+            hart.alloc_charge_generation.load(Ordering::Relaxed),
+        )
+    })
+}
+
+/// Make `charge` this hart's allocation owner and return the previous one.
+/// Only `memory::heap::ChargeScope` calls this. An uninstalled hart keeps
+/// charging the kernel. An interrupt between the two stores restores both
+/// words before it returns, so the pair is never observed torn by an
+/// allocation.
+#[inline(always)]
+pub(crate) fn replace_alloc_charge(
+    charge: crate::memory::cell_quota::Charge,
+) -> crate::memory::cell_quota::Charge {
+    let previous = alloc_charge();
+    if let Some(hart) = installed_hart() {
+        hart.alloc_charge_generation
+            .store(charge.generation(), Ordering::Relaxed);
+        hart.alloc_charge_cell
+            .store(charge.cell().0 as usize, Ordering::Relaxed);
+    }
+    previous
 }
 
 /// Publish the incoming task's user thread pointer for this hart. Called by the

@@ -139,11 +139,10 @@ impl Operations {
             return Err(Failure::Busy);
         }
         if self.0.len() == self.0.capacity() {
-            let previous = crate::sched::hart_local::current_cell_id();
-            crate::sched::hart_local::set_current_cell_id(0);
-            let reserved = self.0.try_reserve(1);
-            crate::sched::hart_local::set_current_cell_id(previous);
-            reserved.map_err(|_| Failure::Busy)?;
+            crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
+                self.0.try_reserve(1)
+            })
+            .map_err(|_| Failure::Busy)?;
         }
         self.0.push(op);
         Ok(())
@@ -288,14 +287,12 @@ impl AsyncIndex {
     /// Reserve room for one more operation, charged to the kernel like the
     /// operation record itself.
     fn reserve(&mut self) -> Result<(), Failure> {
-        let previous = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        let reserved = self
-            .owners
-            .try_reserve(1)
-            .and_then(|()| self.holders.try_reserve(self.owners.len() + 1));
-        crate::sched::hart_local::set_current_cell_id(previous);
-        reserved.map_err(|_| Failure::Busy)
+        crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
+            self.owners
+                .try_reserve(1)
+                .and_then(|()| self.holders.try_reserve(self.owners.len() + 1))
+        })
+        .map_err(|_| Failure::Busy)
     }
 
     fn insert(&mut self, token: usize, owner: usize) {
@@ -314,24 +311,45 @@ impl AsyncIndex {
         }
     }
 
-    /// Record that `tid`'s request context now names `token` (0: none).
+    /// Record that `tid`'s request context now names `token` (0: none);
+    /// refused when the table cannot grow, with `tid` then holding no row.
     ///
     /// Submit reserved a row per accepted operation, so this normally does not
     /// allocate; a token delivered twice (a wire that outlived its operation)
     /// can still need a row, which is then charged to the kernel, never to the
     /// receiving Cell.
-    pub(crate) fn note_holder(&mut self, tid: usize, token: usize) {
+    fn try_note_holder(&mut self, tid: usize, token: usize) -> Result<(), Failure> {
+        self.forget_holder(tid);
+        if token == 0 {
+            return Ok(());
+        }
+        if self.holders.len() == self.holders.capacity() {
+            crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
+                self.holders.try_reserve(1)
+            })
+            .map_err(|_| Failure::Busy)?;
+        }
+        self.holders.push((token, tid));
+        Ok(())
+    }
+
+    /// `tid` no longer holds a request context.
+    fn forget_holder(&mut self, tid: usize) {
         if let Some(at) = self.holders.iter().position(|&(_, t)| t == tid) {
             self.holders.swap_remove(at);
         }
-        if token != 0 {
-            if self.holders.len() == self.holders.capacity() {
-                let previous = crate::sched::hart_local::current_cell_id();
-                crate::sched::hart_local::set_current_cell_id(0);
-                self.holders.reserve(1);
-                crate::sched::hart_local::set_current_cell_id(previous);
-            }
-            self.holders.push((token, tid));
+    }
+}
+
+/// Record that `tid`'s request context now names `token`. Call after
+/// `Task::set_received_request_context` returned that token. If the index
+/// cannot grow, `tid` keeps the caller context but no async token: its reply
+/// settles no operation, which then ends by its deadline, cancel or owner
+/// death like any unanswered one.
+pub(crate) fn note_holder(sched: &mut Scheduler, tid: usize, token: usize) {
+    if sched.async_index.try_note_holder(tid, token).is_err() {
+        if let Some(task) = sched.tasks.get_mut(&tid) {
+            task.current_async_op = 0;
         }
     }
 }
@@ -374,7 +392,7 @@ pub(crate) fn forget_task(sched: &mut Scheduler, task: &Task) {
     for op in &task.async_operations.0 {
         sched.async_index.remove(op.id);
     }
-    sched.async_index.note_holder(task.id, 0);
+    sched.async_index.forget_holder(task.id);
 }
 
 /// The live owner of `token`, from the index. Test kernels cross-check it
@@ -1633,7 +1651,7 @@ mod tests {
             .unwrap()
             .set_received_request_context(owner, cell, generation, token);
         if let Some(token) = held {
-            sched.async_index.note_holder(peer, token);
+            note_holder(sched, peer, token);
         }
     }
 

@@ -66,6 +66,15 @@ impl Charge {
         Self::new(task.cell_id, task.cell_generation)
     }
 
+    /// The incarnation dispatched on this hart. Only syscall entry turns it
+    /// into an allocation charge (`memory::heap::ChargeScope`).
+    pub(crate) fn dispatched() -> Self {
+        Self::new(
+            CellId(crate::sched::hart_local::current_cell_id() as u64),
+            crate::sched::hart_local::current_cell_generation(),
+        )
+    }
+
     pub(crate) fn cell(self) -> CellId {
         self.cell
     }
@@ -459,33 +468,19 @@ impl Drop for Reservation {
     }
 }
 
-/// Charge `size` bytes to the incarnation slot `cell_id_raw` holds now and
-/// return the owner token the charge was recorded against, or `None` if the
-/// quota would be exceeded — the caller (`QuotaAlloc::alloc`) must return
-/// `null_mut()` in that case.
+/// Charge `size` heap bytes to `charge` and return the owner token the charge
+/// was recorded against, or `None` if it is refused — the caller
+/// (`QuotaAlloc::alloc`) must return `null_mut()` in that case.
 ///
-/// The token names the exact row incarnation (CellId + generation) that was
-/// charged; `UNCHARGED_OWNER` when the slot is not counted. Pass it to
+/// The token names the exact incarnation (CellId + generation) that was
+/// charged; `UNCHARGED_OWNER` when the charge is not counted. Pass it to
 /// `refund_owner` so the refund reaches that incarnation and nothing else.
-pub(crate) fn charge_owner(cell_id_raw: usize, size: usize) -> Option<usize> {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return Some(UNCHARGED_OWNER);
+pub(crate) fn charge_owner(charge: Charge, size: usize) -> Option<usize> {
+    match add(charge, Account::Memory, size) {
+        Ok(true) => Some(charge.tag() | charge.cell.0 as usize),
+        Ok(false) => Some(UNCHARGED_OWNER),
+        Err(QuotaExceeded) => None,
     }
-    let limit = QUOTA_LIMITS[cell_id_raw].load(Ordering::Acquire);
-    if limit == UNREGISTERED {
-        return Some(UNCHARGED_OWNER);
-    }
-    #[cfg(feature = "p01-trace")]
-    let _write = P01_SOURCE.write();
-    IN_USE[cell_id_raw]
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
-            let bytes = (word & BYTES_MASK)
-                .checked_add(size)
-                .filter(|&bytes| bytes <= limit)?;
-            Some((word & !BYTES_MASK) | bytes)
-        })
-        .ok()
-        .map(|word| (word & !BYTES_MASK) | cell_id_raw)
 }
 
 /// Refund `size` bytes to the row incarnation named by `owner` (from
@@ -640,11 +635,11 @@ mod tests {
     fn stale_generation_refund_leaves_reregistered_row_untouched() {
         let _guard = crate::TEST_STATE_LOCK.lock();
         register(CELL, 1, limits(4096));
-        let first = charge_owner(CELL_RAW, 100).expect("gen1 charge fits");
+        let first = charge_owner(Charge::new(CELL, 1), 100).expect("gen1 charge fits");
         assert_eq!(in_use(CELL), 100);
 
         register(CELL, 2, limits(4096));
-        let second = charge_owner(CELL_RAW, 40).expect("gen2 charge fits");
+        let second = charge_owner(Charge::new(CELL, 2), 40).expect("gen2 charge fits");
         assert_ne!(first, second);
         refund_owner(first, 100);
         assert_eq!(in_use(CELL), 40, "stale gen1 refund must not touch gen2");
@@ -668,7 +663,7 @@ mod tests {
         assert_eq!(in_use(CELL), 4096);
         drop(full);
         assert_eq!(in_use(CELL), 0);
-        assert_eq!(charge_owner(0, 1), Some(UNCHARGED_OWNER));
+        assert_eq!(charge_owner(Charge::KERNEL, 1), Some(UNCHARGED_OWNER));
         deregister(CELL);
     }
 

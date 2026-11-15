@@ -719,7 +719,7 @@ impl Task {
     ///
     /// Returns the token now held as `current_async_op` (0: none) when the
     /// context changed, for the caller to record with
-    /// [`AsyncIndex::note_holder`](crate::task::async_ipc::AsyncIndex::note_holder);
+    /// [`async_ipc::note_holder`](crate::task::async_ipc::note_holder);
     /// `None` when VFS keeps its outer context.
     #[must_use = "record the new holder in the scheduler's async index"]
     pub fn set_received_request_context(

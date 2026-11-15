@@ -32,6 +32,7 @@ const GPIO_IRQ_NOTIFY: u8 = 0xA0;
 /// dropped and the cell re-polls GPIOMIS on its next recv.
 #[no_mangle]
 pub extern "Rust" fn vi_gpio_notify_irq() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     let Some(tid) = crate::resource_registry::lookup_mmio_owner(GPIO_MMIO_BASE) else {
         return;
     };
@@ -45,5 +46,6 @@ pub extern "Rust" fn vi_gpio_notify_irq() {
 /// Signal USB DWC2 hardware interrupt to the driver cell waiting on USB_IRQ.
 #[no_mangle]
 pub extern "Rust" fn vi_signal_usb_irq() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     crate::arch::gpio_irq::signal_usb_irq();
 }

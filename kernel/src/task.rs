@@ -232,8 +232,8 @@ pub(crate) fn queue_pending_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::LEGACY_PAYLOAD,
     );
-    let owned =
-        crate::ipc::pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
+    let receiver = crate::memory::cell_quota::Charge::of(target);
+    let owned = crate::ipc::pending_mailbox::PendingMsgData::try_copy(data, receiver)?;
     #[cfg(feature = "p01-trace")]
     drop(_semantic);
     #[cfg(feature = "p01-trace")]
@@ -241,12 +241,15 @@ pub(crate) fn queue_pending_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
     );
-    let result = target.pending_msgs.try_push(tcb::PendingMsg {
-        sender_tid,
-        data: owned,
-        wire: None,
-        enqueued_tick: system_ticks() as u64,
-    });
+    let result = target.pending_msgs.try_push(
+        receiver,
+        tcb::PendingMsg {
+            sender_tid,
+            data: owned,
+            wire: None,
+            enqueued_tick: system_ticks() as u64,
+        },
+    );
     #[cfg(feature = "p01-trace")]
     drop(_mailbox);
     #[cfg(feature = "p01-trace")]
@@ -280,12 +283,16 @@ pub(crate) fn queue_wire_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
     );
-    let result = target.pending_msgs.try_push(tcb::PendingMsg {
-        sender_tid,
-        data: crate::ipc::pending_mailbox::PendingMsgData::empty(),
-        wire: Some(message),
-        enqueued_tick: system_ticks() as u64,
-    });
+    let receiver = crate::memory::cell_quota::Charge::of(target);
+    let result = target.pending_msgs.try_push(
+        receiver,
+        tcb::PendingMsg {
+            sender_tid,
+            data: crate::ipc::pending_mailbox::PendingMsgData::empty(),
+            wire: Some(message),
+            enqueued_tick: system_ticks() as u64,
+        },
+    );
     #[cfg(feature = "p01-trace")]
     drop(_mailbox);
     #[cfg(feature = "p01-trace")]
@@ -974,6 +981,7 @@ const _: crate::hal::CurrentCellId = vi_current_cell_id;
 #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "Rust" fn vi_ipi_service() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     let hart = crate::sched::hart_local::current_hart_id();
     #[cfg(target_arch = "aarch64")]
     crate::sched::smp::note_ipi_taken(hart);
@@ -1000,6 +1008,7 @@ pub extern "Rust" fn vi_ipi_service() {
 /// current task if a higher-priority task has become runnable.
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::arch::task::retirement_selftest::observe_forced_ssip_trap();
 
@@ -1256,6 +1265,10 @@ pub fn terminate_current_cell_on_fault(
     // scheduler collection work above this attribution handoff.
     crate::sched::hart_local::defer_fault(fault);
     crate::sched::hart_local::set_current_cell_id(0);
+    // The identity write above is the trap-attribution handoff; this scope is
+    // the charging one. It is never dropped: the victim does not resume.
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
 
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     crate::arch::task::retirement_selftest::observe_fault_deferred_record_commit(fault);
@@ -1358,6 +1371,11 @@ pub fn yield_cpu() {
     // scheduler state interruptible; on x86_64 a LAPIC tick inside the lock
     // would re-enter `yield_cpu` and deadlock on the same spinlock.
     let entry_irq = crate::arch::sched::MASK_AT_ENTRY.then(crate::arch::sched::IrqSaved::save);
+    // Housekeeping, the sweep and selection allocate as the kernel, and no
+    // scope opened by this activation reaches the incoming one: the charge it
+    // saves here is restored only when this activation resumes.
+    let resumed_charge =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
 
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_schedule_attempt();
@@ -1438,6 +1456,7 @@ pub fn yield_cpu() {
     // (aarch64/x86_64; riscv64 carries it in the trap frame) from the hart-local
     // value the scheduler published, so this stays lock-free.
     tls::apply_on_resume();
+    drop(resumed_charge);
     // This activation may resume on another CPU. Its captured interrupt state
     // belongs to the suspended context, not the selecting CPU; never enable
     // interrupts inside an activation that originally entered masked. (RV64's
@@ -2343,7 +2362,7 @@ pub fn ipc_recv(
             header.async_op,
         );
         if let Some(token) = held {
-            sched.async_index.note_holder(caller_id, token);
+            async_ipc::note_holder(sched, caller_id, token);
         }
     }
     wake_sender_token(sched, sender_id, caller_id, header);
@@ -2416,7 +2435,7 @@ pub fn ipc_try_recv(
             header.async_op,
         );
         if let Some(token) = held {
-            sched.async_index.note_holder(caller_id, token);
+            async_ipc::note_holder(sched, caller_id, token);
         }
     }
     wake_sender_token(sched, sender_id, caller_id, header);

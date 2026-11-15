@@ -35,6 +35,7 @@ fn warn_unknown_irq(irq: u32) {
 
 #[no_mangle]
 pub extern "Rust" fn vi_handle_riscv_external_irq(irq: u32) {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     let route = crate::platform::with(|platform| {
         if platform.riscv_irq_owner_count(irq) != 1 {
             return ExternalIrqRoute::Unknown;

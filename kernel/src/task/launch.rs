@@ -172,7 +172,10 @@ pub fn publish_prepared(
     }
     crate::loader::atomic_checkpoint("AP-07")?;
     crate::loader::atomic_checkpoint("AP-08")?;
-    let _kernel_alloc = crate::sched::scheduler::KernelAllocationContext::enter();
+    // Heap bookkeeping for the unpublished task is kernel memory; the creator
+    // is charged explicitly through its `PublicationClaim`.
+    let _kernel =
+        crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
 
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
     // InheritedDirHandles is bounded inline state, not an independently
@@ -535,7 +538,8 @@ impl SessionPublication {
         }
         // Heap bookkeeping for the unpublished task is kernel memory, exactly as
         // in `publish_prepared`; per-principal accounting is the explicit claim.
-        let _kernel_alloc = crate::sched::scheduler::KernelAllocationContext::enter();
+        let _kernel =
+            crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
         let tid = sched.next_task_id;
         let next = tid.checked_add(1).ok_or(ViError::OutOfMemory)?;
         let generation = super::tcb::next_cell_generation();

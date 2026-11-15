@@ -4,9 +4,10 @@
 //! before publication to the receiver's queue. Endpoints never retain raw peer pointers
 //! or direct access to peer address space pages.
 //!
-//! Wire payloads are allocated under cell 0 (kernel ownership) so that cross-cell IPC
-//! deliveries never charge an arbitrary cell's quota. A free refunds the owner recorded
-//! in the block, so dropping a wire needs no identity of its own.
+//! Wire payloads are charged to the sender incarnation the header names, or to
+//! the kernel for a kernel sender (CellId 0), whoever ends up freeing them. A
+//! free refunds the owner recorded in the block, so dropping a wire needs no
+//! charge of its own.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -39,28 +40,32 @@ pub struct IpcWireMessage {
 }
 
 impl IpcWireMessage {
-    /// Create a wire message from header and raw payload slice.
-    /// Allocation is strictly kernel-owned (cell 0).
+    /// The incarnation a payload for `header` is charged to.
+    fn sender(header: &IpcWireHeader) -> crate::memory::cell_quota::Charge {
+        crate::memory::cell_quota::Charge::new(
+            types::CellId(header.sender_cell_id),
+            header.sender_generation,
+        )
+    }
+
+    /// Copy `payload` into a wire charged to the sender `header` names.
     /// Fails if payload length exceeds `MAX_IPC_WIRE_PAYLOAD` or allocation fails.
     pub fn try_new(header: IpcWireHeader, payload: &[u8]) -> Result<Self, ()> {
         if payload.len() > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        let result = (|| {
+        let payload = crate::memory::heap::alloc_for(Self::sender(&header), || {
             let mut vec = Vec::new();
             vec.try_reserve_exact(payload.len()).map_err(|_| ())?;
             vec.extend_from_slice(payload);
-            Ok(vec.into_boxed_slice())
-        })();
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
-
-        result.map(|payload| Self { header, payload })
+            Ok::<_, ()>(vec.into_boxed_slice())
+        })?;
+        Ok(Self { header, payload })
     }
 
-    /// Construct a kernel-owned wire record directly from a caller's copy view
-    /// without a second heap allocation or an intermediate payload copy.
+    /// Construct a wire record, charged to the sender `header` names, directly
+    /// from a caller's copy view without a second heap allocation or an
+    /// intermediate payload copy.
     pub(crate) fn try_from_user(
         header: IpcWireHeader,
         view: &crate::task::copy_glue::TaskCopyView,
@@ -71,15 +76,12 @@ impl IpcWireMessage {
         if len > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        let allocated = (|| {
+        let allocated = crate::memory::heap::alloc_for(Self::sender(&header), || {
             let mut vec = Vec::new();
             vec.try_reserve_exact(len).map_err(|_| ())?;
             vec.resize(len, 0);
-            Ok(vec.into_boxed_slice())
-        })();
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
+            Ok::<_, ()>(vec.into_boxed_slice())
+        });
         let mut message = Self {
             header,
             payload: allocated?,
@@ -150,19 +152,17 @@ impl IpcWireMessage {
         );
     }
 
-    /// Fallibly duplicate this message. Unlike `Clone`, allocation failure is
-    /// reported instead of aborting the kernel via the non-returning OOM path.
+    /// Fallibly duplicate this message, charged to the sender its header
+    /// names. Unlike `Clone`, allocation failure is reported instead of
+    /// aborting the kernel via the non-returning OOM path.
     pub fn try_clone(&self) -> Result<Self, ()> {
-        let previous_cell = crate::sched::hart_local::current_cell_id();
-        crate::sched::hart_local::set_current_cell_id(0);
-        let result = (|| {
+        let payload = crate::memory::heap::alloc_for(Self::sender(&self.header), || {
             let mut vec = Vec::new();
             vec.try_reserve_exact(self.payload.len()).map_err(|_| ())?;
             vec.extend_from_slice(&self.payload);
-            Ok(vec.into_boxed_slice())
-        })();
-        crate::sched::hart_local::set_current_cell_id(previous_cell);
-        result.map(|payload| Self {
+            Ok::<_, ()>(vec.into_boxed_slice())
+        })?;
+        Ok(Self {
             header: self.header,
             payload,
         })

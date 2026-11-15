@@ -398,6 +398,7 @@ pub fn poll_rhr() -> Option<u8> {
 /// itself in the legacy no-input-service fallback.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_uart_irq() {
+    let _kernel = crate::memory::heap::ChargeScope::interrupt();
     if let Some(buf) = RX_BUFFER.lock().as_mut() {
         // Drain the UART receive FIFO; stop when no more data is ready.
         loop {

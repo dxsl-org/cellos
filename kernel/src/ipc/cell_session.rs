@@ -6,8 +6,9 @@
 //! only bookkeeping that is not allocation-free is *reservation*: the final
 //! `commit_child` consumes capacity promised during `PrepareChild`.
 use crate::ipc::pipe::{self, PipeEnd, PipeHandle};
-use crate::memory::cell_quota::Reservation;
-use crate::sched::scheduler::{KernelAllocationContext, Scheduler};
+use crate::memory::cell_quota::{Charge, Reservation};
+use crate::memory::heap::ChargeScope;
+use crate::sched::scheduler::Scheduler;
 use crate::task::child_context;
 use abi::cell_session::{
     ChildRefV1 as Child, ObjectRefV1 as Ref, PrincipalV1 as Principal, Reader, RequestHeaderV1,
@@ -2702,7 +2703,7 @@ impl State {
 /// update the scheduler without any second owner lock or recursive acquisition.
 /// Bookkeeping heap is kernel memory; per-principal charges are explicit.
 fn with_state<T>(sched: &mut Scheduler, f: impl FnOnce(&mut State, &mut Scheduler) -> T) -> T {
-    let _kernel = KernelAllocationContext::enter();
+    let _kernel = ChargeScope::enter(Charge::KERNEL);
     let mut state = core::mem::replace(&mut sched.cell_session, State::new());
     let result = f(&mut state, sched);
     sched.cell_session = state;
@@ -2897,7 +2898,7 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
     let commit_domain_grant_live =
         selector == 13 && crate::task::launch::domain_grant_records_live();
     let (principal, operation) = {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let mut guard = crate::task::SCHEDULER.lock();
         let Some(sched) = guard.as_mut() else {
             return encode_result(header, Status::Denied, 0, result);
@@ -2958,7 +2959,7 @@ pub(crate) fn dispatch(caller: usize, request: &[u8], result: &mut [u8]) -> usiz
         stream_io(caller, principal, selector, body, &mut result[HEADER_LEN..])
     };
     let len = render(header, outcome, result);
-    let _kernel = KernelAllocationContext::enter();
+    let _kernel = ChargeScope::enter(Charge::KERNEL);
     let mut guard = crate::task::SCHEDULER.lock();
     if let Some(sched) = guard.as_mut() {
         if ledgered {
@@ -3032,7 +3033,7 @@ fn prepare_child(
     let charge = reserve(principal, context_len + core::mem::size_of::<Prepared>())?;
     let mut context = Vec::new();
     {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         context
             .try_reserve_exact(context_len)
             .map_err(|_| Status::QuotaExceeded)?;
@@ -3061,7 +3062,7 @@ fn prepare_child(
     if crate::task::system_ticks() as u64 >= deadline {
         return Err(Status::TimedOut);
     }
-    let _kernel = KernelAllocationContext::enter();
+    let _kernel = ChargeScope::enter(Charge::KERNEL);
     // ADR-0019 §2.1 live-grant preflight for a domain child, before SCHEDULER
     // (grant-table → SCHEDULER lock order), exactly as `publish_prepared` does.
     if state.is_domain {
@@ -3378,7 +3379,7 @@ pub(crate) mod test_hooks {
         generation: u64,
         operation: Ref,
     ) -> Option<Ref> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let preparer = Principal {
             cell_id: cell,
             generation,
@@ -3630,7 +3631,7 @@ pub(crate) mod test_hooks {
         operation: Ref,
         writers: [Ref; 2],
     ) -> Option<(Ref, [Ref; 2])> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let preparer = Principal {
             cell_id: preparer.0,
             generation: preparer.1,
@@ -3731,7 +3732,7 @@ pub(crate) mod test_hooks {
         operation: Ref,
         root: u64,
     ) -> Option<Child> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let preparer = Principal {
             cell_id: preparer.0,
             generation: preparer.1,
@@ -3778,7 +3779,7 @@ pub(crate) mod test_hooks {
         operation: Ref,
         root: u64,
     ) -> Option<Child> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let preparer = Principal {
             cell_id: preparer.0,
             generation: preparer.1,
@@ -3864,7 +3865,7 @@ pub(crate) mod test_hooks {
         root: u64,
         frontend: Ref,
     ) -> Option<Child> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let preparer = Principal {
             cell_id: cell,
             generation,
@@ -3927,7 +3928,7 @@ pub(crate) mod test_hooks {
         child: Child,
         frontend: Ref,
     ) -> Option<Ref> {
-        let _kernel = KernelAllocationContext::enter();
+        let _kernel = ChargeScope::enter(Charge::KERNEL);
         let state = &mut sched.cell_session;
         let pi = state.preparation(prepared).ok()?;
         let (operation, digest) = (
