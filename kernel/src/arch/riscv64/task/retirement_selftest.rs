@@ -24,6 +24,15 @@ const WORKER_EXECUTING: u8 = 4;
 const SWITCHED_AWAY: u8 = 5;
 const ALLOW_COMPLETION: u8 = 6;
 const COMPLETED: u8 = 7;
+/// Generation of the quota rows that only occupy lower CellIds; no task runs
+/// as them.
+const PLACEHOLDER_GENERATION: u64 = 0;
+
+fn default_limits() -> crate::memory::cell_quota::Limits {
+    crate::memory::cell_quota::Limits {
+        memory: crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+    }
+}
 
 static PHASE: AtomicU8 = AtomicU8::new(IDLE);
 static FORCED_SSIP_ARMED: AtomicBool = AtomicBool::new(false);
@@ -76,13 +85,15 @@ pub fn observe_cell_id_release(owner: abi::cell_owner::CellOwner) {
     for raw in 1..CELL_RAW {
         if let Ok(reservation) = crate::memory::cell_quota::QuotaReservation::reserve(
             CellId(raw),
-            crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+            PLACEHOLDER_GENERATION,
+            default_limits(),
         ) {
             lower_reservations.push(reservation);
         }
     }
     let quota_released = crate::memory::cell_quota::QuotaReservation::reserve_next(
-        crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        PLACEHOLDER_GENERATION,
+        default_limits(),
     )
     .map(|reservation| {
         let reused_retiring_cell = reservation.cell_id() == CellId(CELL_RAW);
@@ -122,10 +133,9 @@ pub fn observe_exit_deferred_record_commit(exit: crate::sched::hart_local::Defer
 
     let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge(crate::sched::hart_local::current_cell_id(), 1);
-    if allocator_accepts {
-        crate::memory::cell_quota::refund(0, 1);
-    }
+        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::current_cell_id(), 1)
+            .map(|owner| crate::memory::cell_quota::refund_owner(owner, 1))
+            .is_some();
     if ROOT_EXIT_QUOTA_SATURATED.load(Ordering::Acquire) && kernel_attribution && allocator_accepts
     {
         ROOT_EXIT_DEFERRED_COMMITTED.store(true, Ordering::Release);
@@ -336,10 +346,9 @@ pub fn observe_fault_kernel_attribution(victim_cell: usize) {
     }
     let kernel_attribution = crate::sched::hart_local::current_cell_id() == 0;
     let allocator_accepts =
-        crate::memory::cell_quota::charge(crate::sched::hart_local::current_cell_id(), 1);
-    if allocator_accepts {
-        crate::memory::cell_quota::refund(0, 1);
-    }
+        crate::memory::cell_quota::charge_owner(crate::sched::hart_local::current_cell_id(), 1)
+            .map(|owner| crate::memory::cell_quota::refund_owner(owner, 1))
+            .is_some();
     if kernel_attribution && allocator_accepts {
         FAULT_KERNEL_ATTRIBUTION.store(true, Ordering::Release);
         log::info!(
@@ -599,10 +608,16 @@ extern "C" fn remote_worker_entry() -> ! {
     // fill only that gap so the existing H1 fault regression remains exactly
     // quota-saturated without double-charging past the limit.
     let used = crate::memory::cell_quota::in_use(CellId(CELL_RAW));
-    let quota_charged = crate::memory::cell_quota::charge(
-        CELL_RAW as usize,
+    let quota_charged = crate::memory::cell_quota::Reservation::take(
+        crate::memory::cell_quota::Charge::new(
+            CellId(CELL_RAW),
+            crate::sched::hart_local::current_cell_generation(),
+        ),
+        crate::memory::cell_quota::Account::Memory,
         crate::memory::cell_quota::DEFAULT_QUOTA_BYTES.saturating_sub(used),
-    );
+    )
+    .map(crate::memory::cell_quota::Reservation::keep)
+    .is_ok();
     let mut allocation_probe = alloc::vec::Vec::<u8>::new();
     let allocation_rejected = allocation_probe.try_reserve_exact(1).is_err();
     let quota_exhausted = quota_charged && allocation_rejected;
@@ -642,9 +657,11 @@ fn run_heartbeat_terminal_identity_regression() {
     HEARTBEAT_CURRENT_RETAINED.store(false, Ordering::Release);
     HEARTBEAT_BOOT_COMPLETED.store(false, Ordering::Release);
 
+    let generation = crate::task::tcb::next_cell_generation();
     let quota = match crate::memory::cell_quota::QuotaReservation::reserve(
         CellId(HEARTBEAT_CELL_RAW),
-        crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        generation,
+        default_limits(),
     ) {
         Ok(reservation) => reservation,
         Err(_) => {
@@ -671,6 +688,7 @@ fn run_heartbeat_terminal_identity_regression() {
             return;
         };
         task.heartbeat_deadline = Some(0);
+        task.cell_generation = generation;
         task.syscall_allowlist = 0;
         task.context.ra = heartbeat_no_successor_entry as *const () as usize;
         let owner =
@@ -740,9 +758,11 @@ pub fn run_primary() {
     ROOT_EXIT_DEFERRED_COMMITTED.store(false, Ordering::Release);
     ROOT_EXIT_KERNEL_ATTRIBUTION.store(false, Ordering::Release);
     ROOT_EXIT_QUOTA_RELEASED.store(false, Ordering::Release);
+    let generation = crate::task::tcb::next_cell_generation();
     let quota = match crate::memory::cell_quota::QuotaReservation::reserve(
         CellId(CELL_RAW),
-        crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        generation,
+        default_limits(),
     ) {
         Ok(reservation) => reservation,
         Err(_) => {
@@ -765,6 +785,7 @@ pub fn run_primary() {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root task disappeared");
             return;
         };
+        root.cell_generation = generation;
         root.state = crate::task::tcb::TaskState::Blocked {
             wait: crate::task::tcb::WaitKind::Recv {
                 mask: 0,
@@ -839,10 +860,13 @@ pub fn run_primary() {
     // victim-attributed work is the fixed scalar record; `yield_cpu` consumes
     // it after attribution becomes kernel-owned.
     crate::sched::hart_local::set_current_cell_context(CELL_RAW as usize, owner.generation);
-    let quota_charged = crate::memory::cell_quota::charge(
-        CELL_RAW as usize,
+    let quota_charged = crate::memory::cell_quota::Reservation::take(
+        crate::memory::cell_quota::Charge::new(CellId(CELL_RAW), owner.generation),
+        crate::memory::cell_quota::Account::Memory,
         crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
-    );
+    )
+    .map(crate::memory::cell_quota::Reservation::keep)
+    .is_ok();
     let mut allocation_probe = alloc::vec::Vec::<u8>::new();
     let allocation_rejected = allocation_probe.try_reserve_exact(1).is_err();
     if !(quota_charged && allocation_rejected) {

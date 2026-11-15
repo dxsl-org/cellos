@@ -78,6 +78,12 @@ pub(crate) struct Incarnation {
     pub generation: u64,
 }
 
+impl Incarnation {
+    fn charge(self) -> crate::memory::cell_quota::Charge {
+        crate::memory::cell_quota::Charge::new(types::CellId(self.cell), self.generation)
+    }
+}
+
 /// A bound provider resolved for an export.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Provider {
@@ -126,10 +132,11 @@ pub(crate) trait Platform {
     fn owns_bdf(&self, tid: usize, bdf: u32) -> bool;
     /// The remapping unit covering `bdf` translates.
     fn translating(&self, bdf: u32) -> bool;
-    /// Charge `bytes` to `cell`'s DMA quota.
-    fn reserve_quota(&mut self, cell: u64, bytes: usize) -> bool;
-    /// Return `bytes` to `cell`'s DMA quota.
-    fn release_quota(&mut self, cell: u64, bytes: usize);
+    /// Charge `bytes` to `holder`'s DMA quota.
+    fn reserve_quota(&mut self, holder: Incarnation, bytes: usize) -> bool;
+    /// Return `bytes` to `holder`'s DMA quota; a no-op once that incarnation's
+    /// CellId names another.
+    fn release_quota(&mut self, holder: Incarnation, bytes: usize);
     /// Publish `[iova, iova + len) → [phys, phys + len)` in `holder_tid`'s domain for `bdf`.
     fn map_window(&mut self, w: &WindowMap) -> MapOutcome;
     /// Clear the window's leaves and drain the domain IOTLB; `true` once acknowledged.
@@ -361,7 +368,7 @@ impl ExportTable {
         if let Some(windows) = self.windows.get_mut(&m.holder_tid) {
             windows.release(m.iova, len as u64);
         }
-        platform.release_quota(holder.cell, m.quota_bytes);
+        platform.release_quota(holder, m.quota_bytes);
     }
 
     /// Remove lease `id` entirely: its mapping is gone (or never existed).
@@ -611,7 +618,7 @@ impl ExportTable {
             .or_insert_with(Windows::new)
             .allocate(len as u64)
             .ok_or(SyscallError::OutOfMemory)?;
-        if !platform.reserve_quota(holder.cell, quota_bytes) {
+        if !platform.reserve_quota(holder, quota_bytes) {
             if let Some(w) = self.windows.get_mut(&caller) {
                 w.release(iova, len as u64);
             }
@@ -626,7 +633,7 @@ impl ExportTable {
             writable,
         });
         if outcome == MapOutcome::Rejected {
-            platform.release_quota(holder.cell, quota_bytes);
+            platform.release_quota(holder, quota_bytes);
             if let Some(w) = self.windows.get_mut(&caller) {
                 w.release(iova, len as u64);
             }
@@ -714,7 +721,7 @@ impl ExportTable {
             };
             let (holder, len) = (lease.holder(), lease.size);
             if let Some(m) = lease.ext.mapping.take() {
-                platform.release_quota(holder.cell, m.quota_bytes);
+                platform.release_quota(holder, m.quota_bytes);
             }
             let revoking = lease.ext.state == LeaseState::Revoking;
             if revoking || !platform.incarnation_live(holder) {
@@ -1010,18 +1017,22 @@ impl Platform for KernelPlatform {
         }
     }
 
-    fn reserve_quota(&mut self, cell: u64, bytes: usize) -> bool {
-        match crate::memory::cell_quota::try_reserve_dma(cell as usize, bytes) {
-            Some(reservation) => {
-                reservation.commit();
-                true
-            }
-            None => false,
-        }
+    fn reserve_quota(&mut self, holder: Incarnation, bytes: usize) -> bool {
+        crate::memory::cell_quota::Reservation::take(
+            holder.charge(),
+            crate::memory::cell_quota::Account::Dma,
+            bytes,
+        )
+        .map(crate::memory::cell_quota::Reservation::keep)
+        .is_ok()
     }
 
-    fn release_quota(&mut self, cell: u64, bytes: usize) {
-        crate::memory::cell_quota::record_dma_unmapped(cell as usize, bytes);
+    fn release_quota(&mut self, holder: Incarnation, bytes: usize) {
+        crate::memory::cell_quota::refund(
+            holder.charge(),
+            crate::memory::cell_quota::Account::Dma,
+            bytes,
+        );
     }
 
     fn map_window(&mut self, w: &WindowMap) -> MapOutcome {

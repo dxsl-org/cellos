@@ -464,10 +464,12 @@ pub(crate) fn death_subscription_quota_self_test() -> bool {
     const EXIT_CELL: usize = cell_quota::MAX_CELLS - 1;
     const WATCHED: usize = usize::MAX - 64;
     const WATCHER: usize = usize::MAX - 1;
+    const GENERATION: u64 = 1;
 
     let original = crate::sched::hart_local::current_cell_id();
-    cell_quota::register(CellId(OWNER_CELL as u64), usize::MAX);
-    cell_quota::register(CellId(EXIT_CELL as u64), usize::MAX);
+    let unlimited = cell_quota::Limits { memory: usize::MAX };
+    cell_quota::register(CellId(OWNER_CELL as u64), GENERATION, unlimited);
+    cell_quota::register(CellId(EXIT_CELL as u64), GENERATION, unlimited);
     let owner_before = cell_quota::in_use(CellId(OWNER_CELL as u64));
     let exit_before = cell_quota::in_use(CellId(EXIT_CELL as u64));
 
@@ -1264,12 +1266,15 @@ impl Scheduler {
         // rather than recomputed from STACK_PAGES: a second, independent use of
         // the same constant is how the charge and the allocation drift apart.
         // On refusal `kstack` drops here and its frames go straight back, and
-        // `charge` has already rolled its own optimistic add back, so nothing
-        // needs unwinding by hand.
+        // nothing was charged, so nothing needs unwinding by hand.
         let stack_bytes = kstack
             .allocated_bytes()
             .saturating_add(ustack.allocated_bytes());
-        if !crate::memory::cell_quota::charge(cell_id.0 as usize, stack_bytes) {
+        let Ok(stack_charge) = crate::memory::cell_quota::Reservation::take(
+            crate::memory::cell_quota::Charge::of(&task),
+            crate::memory::cell_quota::Account::Memory,
+            stack_bytes,
+        ) else {
             log::warn!(
                 "[sched] cell {:?} cannot afford thread stacks ({} bytes, {} in use) — refusing spawn_thread",
                 cell_id,
@@ -1277,8 +1282,8 @@ impl Scheduler {
                 crate::memory::cell_quota::in_use(cell_id)
             );
             return Err(ViError::OutOfMemory);
-        }
-        task.stack_quota_charge = stack_bytes;
+        };
+        task.stack_quota_charge = Some(stack_charge);
 
         #[cfg(all(feature = "native-domains", cellos_wide))]
         if let crate::task::tcb::TaskAddressSpace::Domain(space) = &task.address_space {
@@ -1288,8 +1293,7 @@ impl Scheduler {
                     cell_id,
                     error
                 );
-                crate::memory::cell_quota::refund(cell_id.0 as usize, stack_bytes);
-                task.stack_quota_charge = 0;
+                task.stack_quota_charge = None;
                 if matches!(
                     error,
                     crate::memory::address_space::AddressSpaceError::InvalidationUnacknowledged
@@ -1775,15 +1779,10 @@ impl Scheduler {
                 t.kernel_stack.as_ref(),
                 t.user_stack.as_ref(),
             );
-            // pending_deaths is scheduler-owned and allocated under Cell 0.
-            // Destroy its backing allocation before this Task moves to zombies,
-            // where dropping the rest of the task uses its ordinary owner context.
+            // The queued death notices die with the task, before it becomes a
+            // zombie.
             release_pending_deaths(t);
-            let charge = core::mem::take(&mut t.stack_quota_charge);
-            if charge != 0 {
-                let cell_raw = t.cell_id.0 as usize;
-                crate::memory::cell_quota::refund(cell_raw, charge);
-            }
+            drop(t.stack_quota_charge.take());
         }
 
         // Free the dying cell's address space NOW (unmap its segment VAs) so a

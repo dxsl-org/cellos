@@ -310,7 +310,7 @@ pub(crate) fn capture(
         if truncated {
             flags |= task_flags::NAME_TRUNCATED;
         }
-        if task.stack_quota_charge != 0 {
+        if task.stack_quota_charge.is_some() {
             flags |= task_flags::STACK_IN_QUOTA;
         }
         tasks.push(TelemetryTaskV1 {
@@ -481,7 +481,12 @@ mod tests {
             .tasks
             .insert(100, task(100, CELL_A, GEN_A, 100, "a-root"));
         let mut worker = task(103, CELL_A, GEN_A, 100, "a-worker");
-        worker.stack_quota_charge = 4096;
+        worker.stack_quota_charge = crate::memory::cell_quota::Reservation::take(
+            crate::memory::cell_quota::Charge::KERNEL,
+            crate::memory::cell_quota::Account::Memory,
+            4096,
+        )
+        .ok();
         sched.tasks.insert(103, worker);
         sched
             .tasks
@@ -521,7 +526,11 @@ mod tests {
         let _guard = crate::TEST_STATE_LOCK.lock();
         let _harts = Harts::save();
         let mut sched = two_cells();
-        crate::memory::cell_quota::register(CellId(CELL_A), 1 << 20);
+        crate::memory::cell_quota::register(
+            CellId(CELL_A),
+            GEN_A,
+            crate::memory::cell_quota::Limits { memory: 1 << 20 },
+        );
         // b-root has been running since 2 500; the capture adds 100 ns in flight.
         let bytes = take(&mut sched, Some(2_600), 1 << 16, true);
         crate::memory::cell_quota::deregister(CellId(CELL_A));

@@ -30,6 +30,17 @@ const PARENT_TID: usize = 9201;
 /// this point in boot, and the test deregisters it before anything can.
 const QUOTA_CELL: u64 = (cell_quota::MAX_CELLS - 1) as u64;
 
+/// The parent incarnation's generation; its quota row is registered with it.
+const PARENT_GENERATION: u64 = 1;
+
+fn register_quota(memory: usize) {
+    cell_quota::register(
+        CellId(QUOTA_CELL),
+        PARENT_GENERATION,
+        cell_quota::Limits { memory },
+    );
+}
+
 /// Bytes one thread occupies: kernel stack plus user stack, each with guards.
 fn stack_charge_bytes() -> usize {
     2 * (crate::task::stack_pages_for("thread") + crate::task::stack::STACK_GUARD_PAGES)
@@ -43,11 +54,12 @@ fn insert_parent() {
         "selftest",
         alloc::vec::Vec::new(),
     ));
-    parent.cell_generation = 1;
+    parent.cell_generation = PARENT_GENERATION;
     parent.root_tid = PARENT_TID;
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if (QUOTA_CELL as usize) < crate::memory::cell_quota::MAX_CELLS {
-            let owner = abi::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);
+            let owner =
+                abi::cell_owner::CellOwner::new(QUOTA_CELL, PARENT_GENERATION, PARENT_TID as u64);
             sched.publish_live_cell_owner(owner);
         }
         #[cfg(feature = "p01-trace")]
@@ -90,7 +102,7 @@ fn reap() {
 
 /// Charge appears at spawn and is gone once the thread dies.
 fn charge_then_release(expected: usize) -> bool {
-    cell_quota::register(CellId(QUOTA_CELL), cell_quota::DEFAULT_QUOTA_BYTES);
+    register_quota(cell_quota::DEFAULT_QUOTA_BYTES);
     insert_parent();
 
     let mut ok = true;
@@ -144,7 +156,7 @@ fn charge_then_release(expected: usize) -> bool {
 fn refused_when_unaffordable() -> bool {
     // One page of quota — below a stack by three orders of magnitude, so the
     // refusal cannot be an artefact of a borderline comparison.
-    cell_quota::register(CellId(QUOTA_CELL), crate::memory::paging::PAGE_SIZE);
+    register_quota(crate::memory::paging::PAGE_SIZE);
     insert_parent();
 
     let mut ok = true;

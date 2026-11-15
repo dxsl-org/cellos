@@ -138,7 +138,14 @@ pub fn self_test() -> Option<bool> {
         }
     };
 
-    cell_quota::register(CellId(TEST_CELL_ID), cell_quota::DEFAULT_QUOTA_BYTES);
+    // Generation 1: the parent `insert_parent` installs.
+    cell_quota::register(
+        CellId(TEST_CELL_ID),
+        1,
+        cell_quota::Limits {
+            memory: cell_quota::DEFAULT_QUOTA_BYTES,
+        },
+    );
     insert_parent();
     let spawned = handle_syscall(
         PARENT_TID,

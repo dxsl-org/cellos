@@ -107,9 +107,10 @@ static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> = Spi
 );
 
 impl DmaPublicationGuard {
+    /// A published grant keeps its DMA quota until its incarnation retires.
     fn commit(mut self) {
         if let Some(quota) = self.quota.take() {
-            quota.commit();
+            quota.keep();
         }
     }
 }

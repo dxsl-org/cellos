@@ -74,7 +74,7 @@ impl SharedStateBaseline {
         let next_generation = crate::task::tcb::cell_generation_snapshot();
         let block_io_registered = crate::loader::block_io_registered_snapshot();
         let input_tid = crate::dev::driver_cell::input_cell_snapshot();
-        let [(vfs_cell, vfs_generation), (service_cell, service_generation)] = {
+        let [(vfs_cell, vfs_generation), (service_cell, service_generation), (_, quota_generation)] = {
             let mut scheduler = crate::task::SCHEDULER.lock();
             let sched = scheduler.as_mut().expect("atomic corpus needs scheduler");
             for (tid, cell, name) in [
@@ -102,15 +102,21 @@ impl SharedStateBaseline {
                 );
                 assert!(sched.tasks.insert(tid, task).is_none());
             }
-            [VFS_TID, SERVICE_TID].map(|tid| {
+            [VFS_TID, SERVICE_TID, QUOTA_TID].map(|tid| {
                 sched
                     .tasks
                     .get(&tid)
                     .map(|task| (task.cell_id.0, task.cell_generation))
-                    .expect("service owner installed")
+                    .expect("owner task installed")
             })
         };
-        crate::memory::cell_quota::register(QUOTA_CELL, 0x2345_0000);
+        crate::memory::cell_quota::register(
+            QUOTA_CELL,
+            quota_generation,
+            crate::memory::cell_quota::Limits {
+                memory: 0x2345_0000,
+            },
+        );
         crate::loader::commit_launch_routes(
             ROUTE_TID,
             crate::task::LaunchRoutes {

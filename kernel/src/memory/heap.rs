@@ -480,8 +480,9 @@ mod tests {
                 .lock()
                 .init(arena.as_mut_ptr().cast(), arena.len() * 8)
         };
-        cell_quota::register(CellId(OWNER as u64), 4096);
-        cell_quota::register(CellId(OTHER as u64), 4096);
+        let limits = cell_quota::Limits { memory: 4096 };
+        cell_quota::register(CellId(OWNER as u64), 1, limits);
+        cell_quota::register(CellId(OTHER as u64), 1, limits);
         let small = Layout::from_size_align(24, 8).unwrap();
         let aligned = Layout::from_size_align(40, 64).unwrap();
 
@@ -505,7 +506,7 @@ mod tests {
             // Charged to (OWNER, gen1); OWNER re-registered as gen2 before the free.
             set_current_cell_id(OWNER);
             let stale = heap.alloc(small);
-            cell_quota::register(CellId(OWNER as u64), 4096);
+            cell_quota::register(CellId(OWNER as u64), 2, limits);
             let fresh = heap.alloc(aligned);
             assert_eq!(in_use(OWNER), 40);
             heap.dealloc(stale, small);

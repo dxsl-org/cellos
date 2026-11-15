@@ -616,7 +616,11 @@ fn full_mailbox_refuses_without_wake() -> bool {
 
 fn quota_failure_is_fallible() -> bool {
     let mut task = Task::new(9330, CellId(QUOTA_CELL), "ipc-quota-selftest", Vec::new());
-    crate::memory::cell_quota::register(CellId(QUOTA_CELL), 0);
+    crate::memory::cell_quota::register(
+        CellId(QUOTA_CELL),
+        task.cell_generation,
+        crate::memory::cell_quota::Limits { memory: 0 },
+    );
     let inline_ok =
         super::queue_pending_msg(&mut task, SENDER, b"x", HOTSWAP_MSG_QUEUE_DEPTH).is_ok();
     if inline_ok {
@@ -640,7 +644,11 @@ fn quota_failure_is_fallible() -> bool {
 
 fn heap_payload_refunds_receiver_quota() -> bool {
     let mut task = Task::new(9331, CellId(QUOTA_CELL), "ipc-refund-selftest", Vec::new());
-    crate::memory::cell_quota::register(CellId(QUOTA_CELL), 4096);
+    crate::memory::cell_quota::register(
+        CellId(QUOTA_CELL),
+        task.cell_generation,
+        crate::memory::cell_quota::Limits { memory: 4096 },
+    );
     let payload = [0xa5; 33];
     let queued = super::queue_pending_msg(&mut task, SENDER, &payload, HOTSWAP_MSG_QUEUE_DEPTH);
     let charged = crate::memory::cell_quota::in_use(CellId(QUOTA_CELL));

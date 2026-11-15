@@ -22,14 +22,17 @@ pub struct PreparedElfTask {
 }
 
 impl PreparedElfTask {
+    /// The task of incarnation `generation`, minted before its quota row.
     pub(super) fn into_task(
         self,
         id: usize,
         cell_id: CellId,
+        generation: u64,
     ) -> Result<(alloc::boxed::Box<super::Task>, usize), ViError> {
-        let mut task = crate::memory::heap::try_box(super::Task::new(
+        let mut task = crate::memory::heap::try_box(super::Task::of_incarnation(
             id,
             cell_id,
+            generation,
             &self.name,
             self.allowed_drivers,
         ))?;

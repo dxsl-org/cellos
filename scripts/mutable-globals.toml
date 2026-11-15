@@ -1678,9 +1678,9 @@ mutation = "spinlock"
 owner = "kernel::ipc::pipe kernel pipe objects; created by cell_session, read/written by syscalls, closed on task exit and deadline sweep"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run"
-retirement = "pipe removed and its ring freed (release_pipe) when the last end closes; pipe::on_task_leaves and disown_cell run from exit_task/cell retirement"
-rationale = "Leaf Spinlock under SCHEDULER (order SCHEDULER -> PIPES). exit_task (on_task_leaves) and pick_next's deadline sweep (on_deadline) run inside yield_cpu, so pipes are closed and freed from timer-ISR, user-fault and AP-idle contexts, with allocation attribution forced to the kernel by PipeAllocationContext."
-review = "kernel/src/ipc/pipe.rs:create; kernel/src/ipc/pipe.rs:release_pipe; kernel/src/sched/scheduler.rs:1485; kernel/src/sched/scheduler.rs:2105"
+retirement = "pipe removed and dropped (its ring freed, its creator's reservation refunded) when the last end closes; pipe::on_task_leaves runs from exit_task"
+rationale = "Leaf Spinlock under SCHEDULER (order SCHEDULER -> PIPES). exit_task (on_task_leaves) and pick_next's deadline sweep (on_deadline) run inside yield_cpu, so pipes are closed and freed from timer-ISR, user-fault and AP-idle contexts; the ring's free refunds the owner its block recorded and the pipe's reservation refunds the creating incarnation only, whoever closes the last end."
+review = "kernel/src/ipc/pipe.rs:create; kernel/src/ipc/pipe.rs:Pipe; kernel/src/sched/scheduler.rs:1485; kernel/src/sched/scheduler.rs:2105"
 
 [[global]]
 key = "kernel::ipc::pipe::NEXT_PIPE_ID"
@@ -2121,45 +2121,45 @@ review = "kernel/src/memory/frame_run.rs:Pending::push; kernel/src/memory/frame_
 key = "kernel::memory::cell_quota::RUNTIME_DEFAULT_QUOTA_BYTES"
 lifetime = "boot"
 mutation = "atomic"
-owner = "memory::cell_quota: system_config::load_from_vifs1 lowers it; governed_spawn and try_reserve_dma read it"
+owner = "memory::cell_quota: system_config::load_from_vifs1 lowers it; governed_spawn reads it"
 contexts = ["boot", "normal"]
 seal = "stored by set_default_quota_bytes from system_config::load_from_vifs1 (main.rs:918) before APs and before cap-bearing spawns"
 retirement = "never: lives for the whole run"
-rationale = "A boot-time Release store paired with Acquire loads of a plain value; only spawn/DMA-grant paths read it, none from trap context."
+rationale = "A boot-time Release store paired with Acquire loads of a plain value; only spawn paths read it, none from trap context."
 review = "kernel/src/memory/cell_quota.rs:set_default_quota_bytes; kernel/src/system_config.rs:31; kernel/src/loader/governed_spawn.rs:212"
 
 [[global]]
 key = "kernel::memory::cell_quota::QUOTA_LIMITS"
 lifetime = "per-cell"
-mutation = "spinlock"
-owner = "memory::cell_quota: register/QuotaReservation insert a limit per CellId; deregister removes it; charge/limit/try_reserve_dma read it"
+mutation = "atomic"
+owner = "memory::cell_quota: QuotaReservation::reserve claims a slot by CAS from UNREGISTERED; register stores a limit; deregister stores UNREGISTERED; every charge reads it"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
-seal = "none: rows are added at spawn and removed at retirement for the whole run"
-retirement = "deregister(cell) in the yield_cpu root-retirement funnel (task.rs:1496) after finish_root_retirement releases the owner slot, or QuotaReservation::drop for an unpublished cell"
-rationale = "charge() locks it on every cell-attributed allocation, so it is taken in every allocating context including the timer/IPI/#PF funnel (the doc comment saying it is not on the allocator hot path is stale); the IRQ-masking Spinlock plus register's CellId-0 pinning prevent same-hart and alloc-inside-lock deadlocks."
-review = "kernel/src/memory/cell_quota.rs:register; kernel/src/memory/cell_quota.rs:deregister; kernel/src/memory/cell_quota.rs:charge; kernel/src/task.rs:1496"
+seal = "none: rows are claimed at spawn and released at retirement for the whole run"
+retirement = "deregister(cell) in the yield_cpu root-retirement funnel after finish_root_retirement releases the owner slot, or QuotaReservation::drop for an unpublished cell"
+rationale = "One AtomicUsize per CellId slot, so a charge reads its limit without a lock in every allocating context, including the timer/IPI/#PF funnel, and register never allocates. The reservation's CAS is the slot claim, so two launches cannot both take one CellId."
+review = "kernel/src/memory/cell_quota.rs:QuotaReservation::reserve; kernel/src/memory/cell_quota.rs:register; kernel/src/memory/cell_quota.rs:deregister; kernel/src/memory/cell_quota.rs:add; test reserve_claims_a_slot_once"
 
 [[global]]
 key = "kernel::memory::cell_quota::IN_USE"
 lifetime = "per-cell"
 mutation = "atomic"
-owner = "memory::cell_quota: charge/refund from QuotaAlloc (and launch/pipe/thread stack charges) per CellId slot; reset by register/deregister"
+owner = "memory::cell_quota: Reservation take/drop, refund, charge_owner/refund_owner from QuotaAlloc, per CellId slot; reset by register/QuotaReservation::reserve and deregister"
 contexts = ["boot", "normal", "irq", "exception", "ap"]
 seal = "none: counters move for the whole run"
-retirement = "deregister zeroes the byte count in the yield_cpu root-retirement funnel; register bumps the row generation, so refunds carrying an older generation are no-ops"
-rationale = "Each word packs a 24-bit row generation and a 40-bit byte count, so a refund checks the generation and subtracts in one atomic step. QuotaAlloc stores the charged owner token (generation + cell) in a word just past each payload and dealloc refunds that owner, not the current cell, so cross-context frees and CellId reuse no longer move the wrong counter. A generation repeats only after 16M re-registrations of one slot."
-review = "kernel/src/memory/cell_quota.rs:charge_owner; kernel/src/memory/cell_quota.rs:refund_owner; kernel/src/memory/cell_quota.rs:register; kernel/src/memory/heap.rs:alloc_impl; kernel/src/memory/heap.rs:dealloc; tests stale_generation_refund_leaves_reregistered_row_untouched, dealloc_refunds_the_charged_owner_incarnation"
+retirement = "deregister zeroes the byte count in the yield_cpu root-retirement funnel; register stores the new incarnation's generation, so refunds carrying an older generation are no-ops"
+rationale = "Each word packs the low 24 bits of the registered task generation and a 40-bit byte count, so a charge or refund checks the incarnation and moves the bytes in one atomic step. QuotaAlloc stores the charged owner token (generation + cell) in a word just past each payload and dealloc refunds that owner, so cross-context frees and CellId reuse never move the wrong counter. A stale refund aliases only after 16M launches between two incarnations of one CellId."
+review = "kernel/src/memory/cell_quota.rs:add; kernel/src/memory/cell_quota.rs:refund; kernel/src/memory/cell_quota.rs:charge_owner; kernel/src/memory/cell_quota.rs:refund_owner; kernel/src/memory/heap.rs:alloc_impl; kernel/src/memory/heap.rs:dealloc; tests stale_generation_refund_leaves_reregistered_row_untouched, stale_reservation_refund_misses_the_next_incarnation, dealloc_refunds_the_charged_owner_incarnation"
 
 [[global]]
 key = "kernel::memory::cell_quota::DMA_IN_USE"
 lifetime = "per-cell"
 mutation = "atomic"
-owner = "memory::cell_quota: try_reserve_dma/DmaQuotaReservation and record_dma_unmapped per CellId slot"
+owner = "memory::cell_quota: Reservation take/drop and refund on Account::Dma per CellId slot (DMA grants, DMA export windows)"
 contexts = ["normal", "irq", "exception"]
 seal = "none: counters move for the whole run"
-retirement = "slot zeroed by deregister in the yield_cpu root-retirement funnel (task.rs:1496); DMA unmaps during grant reaping refund through record_dma_unmapped"
-rationale = "try_reserve_dma uses an AcqRel fetch_update bounded by the limit, so concurrent reservations cannot overshoot; refunds are saturating. Grant reaping in the yield_cpu funnel reaches it from IRQ/exception contexts, which atomics tolerate."
-review = "kernel/src/memory/cell_quota.rs:try_reserve_dma; kernel/src/memory/cell_quota.rs:record_dma_unmapped; kernel/src/memory/cell_quota.rs:deregister"
+retirement = "byte count zeroed by deregister in the yield_cpu root-retirement funnel; export windows refund through refund(Account::Dma), generation-checked"
+rationale = "Packed as IN_USE, so a DMA charge is bounded by the memory limit in one AcqRel fetch_update and concurrent reservations cannot overshoot; a refund for an earlier incarnation is a no-op. Grant reaping in the yield_cpu funnel reaches it from IRQ/exception contexts, which atomics tolerate."
+review = "kernel/src/memory/cell_quota.rs:add; kernel/src/memory/cell_quota.rs:refund; kernel/src/memory/cell_quota.rs:deregister; test concurrent_workers_share_one_atomic_dma_quota"
 
 [[global]]
 key = "kernel::memory::address_space::NEXT_DOMAIN @cfg(all (feature = \"native-domains\" , cellos_wide))"

@@ -84,7 +84,6 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 77 | `FRAME_RUN_PENDING` |  |
 | 78 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
 | 79 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
-| 80 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |
-| 81 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
-| 82 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
-| 83 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 80 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
+| 81 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 82 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |

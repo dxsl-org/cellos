@@ -6,6 +6,7 @@
 //! only bookkeeping that is not allocation-free is *reservation*: the final
 //! `commit_child` consumes capacity promised during `PrepareChild`.
 use crate::ipc::pipe::{self, PipeEnd, PipeHandle};
+use crate::memory::cell_quota::Reservation;
 use crate::sched::scheduler::{KernelAllocationContext, Scheduler};
 use crate::task::child_context;
 use abi::cell_session::{
@@ -47,33 +48,19 @@ const DRAIN_BUDGET: usize = 4;
 type Result<T, E = Status> = core::result::Result<T, E>;
 
 /// Explicit per-principal accounting. Rings charge their creator in `pipe.rs`;
-/// every other record is charged here and refunded exactly once on drop, unless
-/// the principal's Cell has already retired (`forfeit`): its quota row is then
-/// deregistered and its CellId may name a different generation.
-struct Charge {
-    cell: usize,
-    bytes: usize,
+/// every other record holds a reservation on its principal's incarnation,
+/// refunded exactly once on drop and never to a later incarnation of the
+/// CellId.
+fn reserve(actor: Principal, bytes: usize) -> Result<Reservation> {
+    Reservation::take(
+        principal_charge(actor),
+        crate::memory::cell_quota::Account::Memory,
+        bytes,
+    )
+    .map_err(|_| Status::QuotaExceeded)
 }
-impl Charge {
-    fn reserve(actor: Principal, bytes: usize) -> Result<Self> {
-        if !crate::memory::cell_quota::charge(actor.cell_id as usize, bytes) {
-            return Err(Status::QuotaExceeded);
-        }
-        Ok(Self {
-            cell: actor.cell_id as usize,
-            bytes,
-        })
-    }
-    fn forfeit(&mut self, cell: usize) {
-        if self.cell == cell {
-            self.bytes = 0;
-        }
-    }
-}
-impl Drop for Charge {
-    fn drop(&mut self) {
-        crate::memory::cell_quota::refund(self.cell, self.bytes);
-    }
+fn principal_charge(actor: Principal) -> crate::memory::cell_quota::Charge {
+    crate::memory::cell_quota::Charge::new(CellId(actor.cell_id), actor.generation)
 }
 
 struct Operation {
@@ -81,7 +68,7 @@ struct Operation {
     owner: Principal,
     parent: Ref,
     state: u32,
-    charge: Charge,
+    _charge: Reservation,
     /// Parent-chain length (roots are 0). A parent outlives every child, so the
     /// chain from any operation is intact and exactly `depth` hops long.
     depth: u32,
@@ -111,7 +98,7 @@ struct Endpoint {
 /// CommitChild moves the sole writer count to it.
 struct Holder {
     endpoint: Endpoint,
-    charge: Charge,
+    _charge: Reservation,
 }
 #[derive(Clone, Copy)]
 // `#[allow(dead_code)]` fields: written for the retained record, no reader yet.
@@ -139,7 +126,7 @@ struct Prepared {
     /// Bound owner receipts: 0 InputForeground, 1 VFS cwd, 2 InputFrontend.
     intent: Option<Intent>,
     receipts: [Ref; 3],
-    charge: Charge,
+    _charge: Reservation,
 }
 struct Receipt {
     reference: Ref,
@@ -162,7 +149,7 @@ struct Receipt {
     producers: [Ref; 2],
     restored: bool,
     materialized: bool,
-    charge: Charge,
+    _charge: Reservation,
 }
 struct Bootstrap {
     reference: Ref,
@@ -173,7 +160,7 @@ struct Bootstrap {
     session: Ref,
     state: u32,
     deadline: u64,
-    charge: Charge,
+    _charge: Reservation,
 }
 struct Outcome {
     request_id: u64,
@@ -181,7 +168,7 @@ struct Outcome {
     result: Vec<u8>,
     complete: bool,
     observed: bool,
-    charge: Charge,
+    _charge: Reservation,
 }
 struct Ledger {
     actor: Principal,
@@ -414,7 +401,7 @@ impl State {
         prepared: Option<Child>,
     ) -> Result<Ref> {
         self.holder_capacity(operation, 1)?;
-        let charge = Charge::reserve(charged, core::mem::size_of::<Holder>())?;
+        let charge = reserve(charged, core::mem::size_of::<Holder>())?;
         let reference = self.mint()?;
         self.endpoints.push(Holder {
             endpoint: Endpoint {
@@ -429,7 +416,7 @@ impl State {
                 state: 0,
                 issuer_held: false,
             },
-            charge,
+            _charge: charge,
         });
         Ok(reference)
     }
@@ -444,11 +431,11 @@ impl State {
             return Err(Status::Malformed);
         }
         self.holder_capacity(operation, 2)?;
-        let first = Charge::reserve(actor, core::mem::size_of::<Holder>())?;
-        let second = Charge::reserve(actor, core::mem::size_of::<Holder>())?;
+        let first = reserve(actor, core::mem::size_of::<Holder>())?;
+        let second = reserve(actor, core::mem::size_of::<Holder>())?;
         let reader = self.mint()?;
         let writer = self.mint()?;
-        let (read, write) = pipe::create(capacity as usize, actor.cell_id as usize)
+        let (read, write) = pipe::create(capacity as usize, principal_charge(actor))
             .map_err(|_| Status::QuotaExceeded)?;
         for (reference, handle, rights, charge) in [
             (reader, read, READ | DUPLICATE | DELEGATE | CLOSE, first),
@@ -467,7 +454,7 @@ impl State {
                     enabled: true,
                     issuer_held: false,
                 },
-                charge,
+                _charge: charge,
             });
         }
         Ok([reader, writer])
@@ -728,28 +715,6 @@ impl State {
                     self.prepared[i].reason = reason;
                 }
                 self.prepared[i].kill = true;
-            }
-        }
-    }
-    fn forfeit_charges(&mut self, cell: usize) {
-        for o in &mut self.operations {
-            o.charge.forfeit(cell);
-        }
-        for h in &mut self.endpoints {
-            h.charge.forfeit(cell);
-        }
-        for p in &mut self.prepared {
-            p.charge.forfeit(cell);
-        }
-        for r in &mut self.receipts {
-            r.charge.forfeit(cell);
-        }
-        for b in &mut self.bootstraps {
-            b.charge.forfeit(cell);
-        }
-        for l in &mut self.ledgers {
-            for o in &mut l.outcomes {
-                o.charge.forfeit(cell);
             }
         }
     }
@@ -1158,7 +1123,7 @@ impl State {
             .outcomes
             .try_reserve(1)
             .map_err(|_| Status::QuotaExceeded)?;
-        let charge = Charge::reserve(
+        let charge = reserve(
             actor,
             request.len() + RESULT_MAX + core::mem::size_of::<Outcome>(),
         )?;
@@ -1177,7 +1142,7 @@ impl State {
             result: response,
             complete: false,
             observed: false,
-            charge,
+            _charge: charge,
         });
         ledger.next = next;
         Ok(Begin::New)
@@ -1294,7 +1259,7 @@ impl State {
                 {
                     return Err(Status::QuotaExceeded);
                 }
-                let charge = Charge::reserve(actor, core::mem::size_of::<Operation>())?;
+                let charge = reserve(actor, core::mem::size_of::<Operation>())?;
                 self.operations
                     .try_reserve(1)
                     .map_err(|_| Status::QuotaExceeded)?;
@@ -1304,7 +1269,7 @@ impl State {
                     owner: actor,
                     parent,
                     state: 0,
-                    charge,
+                    _charge: charge,
                     depth,
                     cancelled_by: 0,
                     pending: 0,
@@ -2126,7 +2091,7 @@ impl State {
         self.receipts
             .try_reserve(1)
             .map_err(|_| Status::QuotaExceeded)?;
-        let charge = Charge::reserve(preparer, core::mem::size_of::<Receipt>())?;
+        let charge = reserve(preparer, core::mem::size_of::<Receipt>())?;
         let mut seal_bytes = [0u8; 256];
         seal_bytes[..seal_len].copy_from_slice(seal);
         let receipt = self.mint()?;
@@ -2136,8 +2101,8 @@ impl State {
             // the sole writer count to them without allocating or failing.
             self.holder_capacity(operation, 2)?;
             let charges = [
-                Charge::reserve(preparer, core::mem::size_of::<Holder>())?,
-                Charge::reserve(preparer, core::mem::size_of::<Holder>())?,
+                reserve(preparer, core::mem::size_of::<Holder>())?,
+                reserve(preparer, core::mem::size_of::<Holder>())?,
             ];
             let writers = intent.ok_or(Status::Denied)?.writers;
             let sources = [
@@ -2162,7 +2127,7 @@ impl State {
                         enabled: false,
                         issuer_held: true,
                     },
-                    charge: holder_charge,
+                    _charge: holder_charge,
                 });
             }
         }
@@ -2185,7 +2150,7 @@ impl State {
             producers,
             restored: false,
             materialized: false,
-            charge,
+            _charge: charge,
         });
         w.reference(receipt)
     }
@@ -2446,7 +2411,7 @@ impl State {
         self.bootstraps
             .try_reserve(1)
             .map_err(|_| Status::QuotaExceeded)?;
-        let charge = Charge::reserve(actor, core::mem::size_of::<Bootstrap>())?;
+        let charge = reserve(actor, core::mem::size_of::<Bootstrap>())?;
         let reference = self.mint()?;
         let deadline = (crate::task::system_ticks() as u64)
             .checked_add(PREPARE_TICKS)
@@ -2506,7 +2471,7 @@ impl State {
             session: ZERO,
             state: 0,
             deadline,
-            charge,
+            _charge: charge,
         });
         Ok((reference, endpoints))
     }
@@ -2801,12 +2766,10 @@ pub(crate) fn retired(sched: &mut Scheduler, owner: abi::cell_owner::CellOwner) 
                 state.prepared[i].terminal_sequence = terminal;
             }
         }
-        state.forfeit_charges(owner.cell_id as usize);
         state
             .ledgers
             .retain(|l| l.actor.cell_id != owner.cell_id || l.actor.generation != owner.generation);
     });
-    pipe::disown_cell(owner.cell_id as usize);
 }
 pub(crate) fn sweep(sched: &mut Scheduler) {
     with_state(sched, |state, sched| state.maintenance(sched));
@@ -3066,7 +3029,7 @@ fn prepare_child(
             return Err(Status::QuotaExceeded);
         }
     }
-    let charge = Charge::reserve(principal, context_len + core::mem::size_of::<Prepared>())?;
+    let charge = reserve(principal, context_len + core::mem::size_of::<Prepared>())?;
     let mut context = Vec::new();
     {
         let _kernel = KernelAllocationContext::enter();
@@ -3170,7 +3133,7 @@ fn prepare_child(
         kill: false,
         intent: None,
         receipts: [ZERO; 3],
-        charge,
+        _charge: charge,
     });
     let mut w = Writer::new(out);
     w.reference(reference)?;
@@ -3385,6 +3348,15 @@ pub(crate) fn stdio_write(caller: usize, fd: usize, src: &[u8]) -> Option<usize>
 #[cfg(feature = "test-hooks")]
 pub(crate) mod test_hooks {
     use super::*;
+    /// A fixture record's charge: nothing taken from anyone.
+    fn uncharged() -> Reservation {
+        Reservation::take(
+            crate::memory::cell_quota::Charge::KERNEL,
+            crate::memory::cell_quota::Account::Memory,
+            0,
+        )
+        .expect("the kernel is never refused")
+    }
     /// Request ledgers held by one principal `(cell, generation)`, or all of them.
     pub(crate) fn ledgers(sched: &Scheduler, actor: Option<(u64, u64)>) -> usize {
         sched
@@ -3442,10 +3414,7 @@ pub(crate) mod test_hooks {
             kill: false,
             intent: None,
             receipts: [ZERO; 3],
-            charge: Charge {
-                cell: cell as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         state.receipts.push(Receipt {
             reference: receipt,
@@ -3466,10 +3435,7 @@ pub(crate) mod test_hooks {
             producers: [ZERO; 2],
             restored: false,
             materialized: false,
-            charge: Charge {
-                cell: cell as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some(reference)
     }
@@ -3596,10 +3562,7 @@ pub(crate) mod test_hooks {
                     enabled: true,
                     issuer_held: false,
                 },
-                charge: Charge {
-                    cell: cell as usize,
-                    bytes: 0,
-                },
+                _charge: uncharged(),
             });
             Some(reference)
         })
@@ -3714,10 +3677,7 @@ pub(crate) mod test_hooks {
                     enabled: true,
                     issuer_held: true,
                 },
-                charge: Charge {
-                    cell: preparer.cell_id as usize,
-                    bytes: 0,
-                },
+                _charge: uncharged(),
             });
         }
         state.prepared.push(Prepared {
@@ -3737,10 +3697,7 @@ pub(crate) mod test_hooks {
             kill: false,
             intent: None,
             receipts: [ZERO; 3],
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         state.receipts.push(Receipt {
             reference: receipt,
@@ -3761,10 +3718,7 @@ pub(crate) mod test_hooks {
             producers,
             restored: false,
             materialized: false,
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some((reference, producers))
     }
@@ -3810,10 +3764,7 @@ pub(crate) mod test_hooks {
             kill: false,
             intent: None,
             receipts: [ZERO; 3],
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some(child)
     }
@@ -3862,10 +3813,7 @@ pub(crate) mod test_hooks {
             kill: false,
             intent: None,
             receipts: [ZERO, receipt, ZERO],
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         state.receipts.push(Receipt {
             reference: receipt,
@@ -3886,10 +3834,7 @@ pub(crate) mod test_hooks {
             producers: [ZERO; 2],
             restored: false,
             materialized: false,
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some(child)
     }
@@ -3970,10 +3915,7 @@ pub(crate) mod test_hooks {
             kill: false,
             intent: None,
             receipts: [ZERO; 3],
-            charge: Charge {
-                cell: cell as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some(child)
     }
@@ -3988,9 +3930,8 @@ pub(crate) mod test_hooks {
         let _kernel = KernelAllocationContext::enter();
         let state = &mut sched.cell_session;
         let pi = state.preparation(prepared).ok()?;
-        let (operation, preparer, digest) = (
+        let (operation, digest) = (
             state.prepared[pi].operation,
-            state.prepared[pi].preparer,
             state.prepared[pi].parsed.as_ref()?.digest,
         );
         state.receipts.try_reserve(1).ok()?;
@@ -4017,10 +3958,7 @@ pub(crate) mod test_hooks {
             producers: [ZERO; 2],
             restored: false,
             materialized: false,
-            charge: Charge {
-                cell: preparer.cell_id as usize,
-                bytes: 0,
-            },
+            _charge: uncharged(),
         });
         Some(receipt)
     }

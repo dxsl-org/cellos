@@ -333,8 +333,8 @@ pub struct Task {
     /// (reaped). Without it, a cell's code/data frames leak on every death.
     pub segment_mem: Option<crate::memory::cell_segments::CellSegments>,
 
-    /// Bytes of stack charged to `cell_id`'s memory quota on this task's behalf,
-    /// `0` if nothing was charged.
+    /// Stack bytes charged to this task's incarnation, `None` if nothing was
+    /// charged.
     ///
     /// Only thread tasks carry a charge: a cell's own stacks are part of the cost
     /// of admitting the cell, whereas a thread is a cost the cell chose at runtime
@@ -342,10 +342,10 @@ pub struct Task {
     /// cell's heap or concurrency becomes the one free way to grow a footprint.
     ///
     /// Released exactly once, in `Scheduler::exit_task` — the funnel every death
-    /// path passes through — by taking the field, so a double call cannot
-    /// double-refund. Reaping is too late: a zombie can sit unreaped indefinitely
-    /// and the cell would be billed for a thread that is already gone.
-    pub stack_quota_charge: usize,
+    /// path passes through — by taking the field. Reaping is too late: a zombie
+    /// can sit unreaped indefinitely and the cell would be billed for a thread
+    /// that is already gone.
+    pub(crate) stack_quota_charge: Option<crate::memory::cell_quota::Reservation>,
 
     // Lifecycle
     pub waiters: Vec<usize>,
@@ -540,7 +540,9 @@ pub struct CompletionWait {
 static NEXT_CELL_GENERATION: crate::sync::Spinlock<u64> =
     crate::sync::Spinlock::ranked(1, crate::sync::rank::NEXT_CELL_GENERATION);
 
-fn next_cell_generation() -> u64 {
+/// Mint a fresh incarnation generation. A launch mints it before reserving the
+/// quota row, so the row and the task carry the same generation.
+pub(crate) fn next_cell_generation() -> u64 {
     let mut next = NEXT_CELL_GENERATION.lock();
     let generation = *next;
     *next = generation
@@ -561,6 +563,18 @@ pub(crate) fn restore_cell_generation_for_test(next: u64) {
 
 impl Task {
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
+        Self::of_incarnation(id, cell_id, next_cell_generation(), name, allowed_drivers)
+    }
+
+    /// A task of incarnation `generation` of `cell_id`, which the caller minted
+    /// with [`next_cell_generation`].
+    pub(crate) fn of_incarnation(
+        id: usize,
+        cell_id: CellId,
+        generation: u64,
+        name: &str,
+        allowed_drivers: Vec<usize>,
+    ) -> Self {
         Self {
             id,
             cell_id,
@@ -592,7 +606,7 @@ impl Task {
             kernel_stack: None,
             user_stack: None,
             segment_mem: None,
-            stack_quota_charge: 0,
+            stack_quota_charge: None,
             waiters: Vec::new(),
             exit_code: None,
             pending_deaths: Vec::new(),
@@ -614,7 +628,7 @@ impl Task {
             hotswap: HotswapState::default(),
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
-            cell_generation: next_cell_generation(),
+            cell_generation: generation,
             inherited_dirs: abi::dir_handles::InheritedDirHandles::NONE,
             staged_dirs: abi::dir_handles::DirHandleSet::EMPTY,
             completion: None,

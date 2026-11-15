@@ -205,15 +205,15 @@ pub(super) fn write_user_slice(
 
 /// Handler for `Syscall::PipeCreate` (extracted from the dispatcher).
 pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> SyscallResult {
-    // The ring is charged to the creating cell, so a pipe is not a way to
-    // hold memory outside the per-cell quota.
-    let owner_cell = crate::task::SCHEDULER
+    // The ring is charged to the creating incarnation, so a pipe is not a way
+    // to hold memory outside the per-cell quota.
+    let owner = crate::task::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| task.cell_id.0 as usize)
+        .map(|task| crate::memory::cell_quota::Charge::of(task))
         .ok_or(SyscallError::PermissionDenied)?;
-    let (read_handle, write_handle) = crate::ipc::pipe::create(capacity, owner_cell)?;
+    let (read_handle, write_handle) = crate::ipc::pipe::create(capacity, owner)?;
     let mut out = [0u8; 16];
     let mut offset = 0usize;
     for word in [read_handle.to_raw(), write_handle.to_raw()] {

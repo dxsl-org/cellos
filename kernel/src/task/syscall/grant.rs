@@ -11,7 +11,8 @@ pub(super) const MAX_IN_FLIGHT_DMA_PUBLICATIONS: usize = 64;
 pub(crate) struct DmaPublicationGuard {
     pub(super) slot: usize,
     pub(super) tid: usize,
-    pub(super) quota: Option<crate::memory::cell_quota::DmaQuotaReservation>,
+    /// The DMA quota this publication took; `None` for a retirement barrier.
+    pub(super) quota: Option<crate::memory::cell_quota::Reservation>,
 }
 
 pub(crate) fn dma_publication_in_flight(tid: usize) -> bool {
@@ -20,8 +21,7 @@ pub(crate) fn dma_publication_in_flight(tid: usize) -> bool {
 
 #[cfg(test)]
 pub(crate) fn test_reserve_dma_publication(tid: usize) -> Option<DmaPublicationGuard> {
-    let quota = crate::memory::cell_quota::try_reserve_dma(0, 0)?;
-    reserve_dma_publication(tid, quota)
+    reserve_dma_publication(tid, None)
 }
 
 /// The region an `ShmAlloc` handle names: owned by the incarnation that
@@ -124,7 +124,11 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     if regions.is_empty() {
         return 0;
     }
-    crate::memory::cell_quota::refund(cell_id as usize, total_bytes);
+    crate::memory::cell_quota::refund(
+        crate::memory::cell_quota::Charge::new(CellId(cell_id), generation),
+        crate::memory::cell_quota::Account::Memory,
+        total_bytes,
+    );
     let released = regions.len();
     // One batch for every frame: one shared invalidation, then each frame is
     // normalised and freed, or quarantined if a hart does not confirm.
@@ -1105,7 +1109,7 @@ pub(crate) fn test_registered_grant_owner(reg_id: usize) -> Option<usize> {
 
 pub(super) fn reserve_dma_publication(
     tid: usize,
-    quota: crate::memory::cell_quota::DmaQuotaReservation,
+    quota: Option<crate::memory::cell_quota::Reservation>,
 ) -> Option<DmaPublicationGuard> {
     if tid == 0 {
         return None;
@@ -1116,11 +1120,7 @@ pub(super) fn reserve_dma_publication(
     }
     let slot = publications.iter().position(|entry| *entry == 0)?;
     publications[slot] = tid;
-    Some(DmaPublicationGuard {
-        slot,
-        tid,
-        quota: Some(quota),
-    })
+    Some(DmaPublicationGuard { slot, tid, quota })
 }
 
 /// Log and drop a row [`RegionTable::insert`] refused. Its id is the address
@@ -1217,7 +1217,7 @@ pub(super) fn grant_authorizes_dma(
 /// the grant lock.
 pub(super) fn reserve_authorized_dma_publication(
     caller_id: usize,
-    caller_cell: CellId,
+    caller: crate::memory::cell_quota::Charge,
     bdf: u32,
     base: usize,
     size: usize,
@@ -1231,10 +1231,14 @@ pub(super) fn reserve_authorized_dma_publication(
             return Err(DmaGrantError::BdfNotOwned);
         }
     }
-    let quota = crate::memory::cell_quota::try_reserve_dma(caller_cell.0 as usize, size)
-        .ok_or(DmaGrantError::QuotaExceeded)?;
+    let quota = crate::memory::cell_quota::Reservation::take(
+        caller,
+        crate::memory::cell_quota::Account::Dma,
+        size,
+    )
+    .map_err(|_| DmaGrantError::QuotaExceeded)?;
     let publication =
-        reserve_dma_publication(caller_id, quota).ok_or(DmaGrantError::PublicationBusy)?;
+        reserve_dma_publication(caller_id, Some(quota)).ok_or(DmaGrantError::PublicationBusy)?;
     crate::memory::pin::pin(base, size, caller_id).map_err(DmaGrantError::Pin)?;
     Ok(publication)
 }
@@ -1264,7 +1268,7 @@ pub(super) fn reserve_caller_owned_dma_range(
         if authorized {
             return reserve_authorized_dma_publication(
                 caller_id,
-                caller_binding.0,
+                crate::memory::cell_quota::Charge::new(caller_binding.0, caller_binding.1),
                 bdf,
                 base,
                 size,
@@ -1289,7 +1293,7 @@ pub(super) fn reserve_caller_owned_dma_range(
         if authorized {
             return reserve_authorized_dma_publication(
                 caller_id,
-                caller_binding.0,
+                crate::memory::cell_quota::Charge::new(caller_binding.0, caller_binding.1),
                 bdf,
                 base,
                 size,
@@ -1911,9 +1915,15 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
         size.div_ceil(page_size) * page_size
     };
 
-    if !crate::memory::cell_quota::charge(cell as usize, bytes) {
+    // Charged at allocation and refunded when the incarnation retires
+    // (`release_shm_for`).
+    let Ok(charge) = crate::memory::cell_quota::Reservation::take(
+        crate::memory::cell_quota::Charge::new(CellId(cell), generation),
+        crate::memory::cell_quota::Account::Memory,
+        bytes,
+    ) else {
         return Err(SyscallError::BufferTooSmall);
-    }
+    };
 
     if let Some(frame) = crate::memory::frame::allocate_frame() {
         // A free frame keeps whatever its last owner wrote, and `ShmMap`
@@ -1929,12 +1939,11 @@ pub(super) fn shm_alloc(caller_id: usize, size: usize) -> SyscallResult {
             );
         }
         if shm_register(frame, owner, bytes, None) {
+            charge.keep();
             return Ok(frame);
         }
-        crate::memory::cell_quota::refund(cell as usize, bytes);
         return Err(SyscallError::Unknown);
     }
-    crate::memory::cell_quota::refund(cell as usize, bytes);
     Err(SyscallError::BufferTooSmall)
 }
 
@@ -2148,8 +2157,7 @@ pub(super) fn map_dma_export(
         .map_err(|_| SyscallError::InvalidInput)?;
     // Same retirement barrier as GrantDma: the holder's root cannot
     // retire (and tear its domain down) mid-publication.
-    let barrier = crate::memory::cell_quota::try_reserve_dma(0, 0).ok_or(SyscallError::Unknown)?;
-    let publication = reserve_dma_publication(caller_id, barrier).ok_or(SyscallError::TryAgain)?;
+    let publication = reserve_dma_publication(caller_id, None).ok_or(SyscallError::TryAgain)?;
     let record = dma_export::map(caller_id, export_id, bdf);
     drop(publication);
     let mut bytes = [0u8; abi::dma_export::DMA_EXPORT_RECORD_LEN];

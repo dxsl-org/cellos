@@ -1,14 +1,15 @@
-//! Per-cell heap quota enforcement.
+//! Per-cell quota accounts.
 //!
-//! Uses a split design to avoid the alloc-inside-alloc deadlock:
-//! - `QUOTA_LIMITS`: `Spinlock<BTreeMap<usize, usize>>` stores the limit per Cell.
-//!   Only locked in `register`/`deregister` — never inside `GlobalAlloc::alloc`.
-//! - `IN_USE`: `[AtomicUsize; MAX_CELLS]` stores the live byte count per Cell,
-//!   packed with the row's registration generation.
-//!   Updated atomically without any lock — safe to call from inside `GlobalAlloc::alloc`.
+//! - `QUOTA_LIMITS`: one atomic limit word per CellId slot, `UNREGISTERED` when
+//!   the slot holds no incarnation.
+//! - `IN_USE` (memory) and `DMA_IN_USE`: one atomic counter per slot, packing
+//!   the registered incarnation's generation above its live byte count.
+//!
+//! A charge names its owner explicitly ([`Charge`]): one Cell incarnation, or
+//! the kernel. Nothing here locks or allocates, so a charge or refund is safe
+//! inside `GlobalAlloc::alloc` and in interrupt context, and every refund is
+//! checked against the generation it was charged to.
 
-use crate::sync::Spinlock;
-use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use types::CellId;
 
@@ -44,18 +45,95 @@ pub(crate) fn set_default_quota_bytes(bytes: usize) {
     RUNTIME_DEFAULT_QUOTA_BYTES.store(bytes, Ordering::Release);
 }
 
-/// Limit store — BTreeMap keyed by CellId raw value, stores the byte limit.
-/// Locked only in `register`/`deregister` — NOT inside the allocator hot path.
-static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> =
-    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::QUOTA_LIMITS);
+/// A quota owner: one Cell incarnation, or the kernel (cell 0).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Charge {
+    cell: CellId,
+    generation: u64,
+}
 
-/// Live byte counters — one AtomicUsize per Cell slot, zero-initialized.
-/// Updated lock-free inside `charge`/`refund` to avoid alloc-inside-alloc deadlock.
+impl Charge {
+    /// The kernel: never limited and never counted.
+    pub(crate) const KERNEL: Charge = Charge::new(CellId(0), 0);
+
+    /// Incarnation `generation` of `cell`.
+    pub(crate) const fn new(cell: CellId, generation: u64) -> Self {
+        Self { cell, generation }
+    }
+
+    /// The incarnation `task` runs as.
+    pub(crate) fn of(task: &crate::task::Task) -> Self {
+        Self::new(task.cell_id, task.cell_generation)
+    }
+
+    pub(crate) fn cell(self) -> CellId {
+        self.cell
+    }
+
+    pub(crate) fn generation(self) -> u64 {
+        self.generation
+    }
+
+    /// The counter slot this charge names; `None` for the kernel and for a
+    /// CellId beyond the table, neither of which is counted.
+    fn slot(self) -> Option<usize> {
+        if self.cell == Self::KERNEL.cell {
+            return None;
+        }
+        usize::try_from(self.cell.0)
+            .ok()
+            .filter(|&id| id < MAX_CELLS)
+    }
+
+    /// The generation bits a counter word carries for this incarnation.
+    fn tag(self) -> usize {
+        (self.generation as usize & GENERATION_MASK) << GENERATION_SHIFT
+    }
+}
+
+/// Which counter a charge draws from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Account {
+    /// Kernel heap, and the frames billed beside it (thread stacks, SHM).
+    Memory,
+    /// Bytes published for device DMA; bounded by the memory limit.
+    Dma,
+}
+
+impl Account {
+    fn counters(self) -> &'static [AtomicUsize; MAX_CELLS] {
+        match self {
+            Self::Memory => &IN_USE,
+            Self::Dma => &DMA_IN_USE,
+        }
+    }
+}
+
+/// The limits an incarnation is registered with.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Limits {
+    /// Bound on the memory account, and on the DMA account.
+    pub(crate) memory: usize,
+}
+
+/// A charge was refused; nothing was taken.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct QuotaExceeded;
+
+/// `QUOTA_LIMITS` value of a slot with no registered incarnation.
+const UNREGISTERED: usize = usize::MAX;
+
+/// Limit per CellId slot. A registered limit is clamped to `BYTES_MASK`, so it
+/// never equals `UNREGISTERED`. Read lock-free by every charge.
+static QUOTA_LIMITS: [AtomicUsize; MAX_CELLS] =
+    [const { AtomicUsize::new(UNREGISTERED) }; MAX_CELLS];
+
+/// Live memory bytes per CellId slot.
 ///
-/// Each word packs the row's registration generation (bits `GENERATION_SHIFT..`)
-/// above its live byte count (`BYTES_MASK`). `register` bumps the generation,
-/// and an owner-tagged refund compares it in the same CAS that subtracts, so a
-/// free charged to an earlier incarnation of a reused CellId can never land on
+/// Each word packs the registered incarnation's generation (bits
+/// `GENERATION_SHIFT..`) above its live byte count (`BYTES_MASK`). Every charge
+/// and refund compares the generation in the same CAS that adds or subtracts,
+/// so bytes charged to an earlier incarnation of a reused CellId can never move
 /// the current incarnation's counter.
 ///
 /// Uses an inline `const { }` repeat-array seed (not a named `const`) — each
@@ -65,12 +143,18 @@ static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> =
 /// `Copy`, which the `[expr; N]` repeat form otherwise requires.
 static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
-/// Low bits of an `IN_USE` word: live bytes, at most 1 TiB per Cell.
+/// Live DMA-published bytes per CellId slot, packed as `IN_USE`.
+/// DMA quota = 1× memory quota (validated 2026-06-22).
+static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
+
+/// Low bits of a counter word: live bytes, at most 1 TiB per Cell.
 const GENERATION_SHIFT: u32 = 40;
 const BYTES_MASK: usize = (1 << GENERATION_SHIFT) - 1;
+/// The task generation bits a counter word keeps (the low 24).
+const GENERATION_MASK: usize = (1 << (usize::BITS - GENERATION_SHIFT)) - 1;
 const _: () = assert!(
     usize::BITS == 64,
-    "IN_USE packs generation and bytes into 64 bits"
+    "counter words pack generation and bytes into 64 bits"
 );
 
 /// Owner token for allocations that are not charged to any Cell row.
@@ -105,7 +189,7 @@ pub(crate) fn p01_static_bytes() -> usize {
     core::mem::size_of_val(&P01_SOURCE) + core::mem::size_of_val(&P01_SUBJECTS)
 }
 /// Publication binds the quota row while the exact incarnation still owns it.
-/// This is a copy-only hook; it never takes QUOTA_LIMITS or allocator locks.
+/// This is a copy-only hook; it never locks or allocates.
 #[cfg(feature = "p01-trace")]
 pub(crate) fn p01_bind(subject: u8, cell: u64, generation: u64) {
     let _write = P01_SOURCE.write();
@@ -156,72 +240,55 @@ pub(crate) fn p01_snapshot() -> crate::p01_resources::Metric {
     P01_SOURCE.metric(charge, before, 5)
 }
 
-/// Register a new Cell with the given heap quota.
-///
-/// Call this at spawn, OUTSIDE the allocator.
-///
-/// Deadlock contract: `BTreeMap::insert` allocates a new tree node via the
-/// global `QuotaAlloc`, whose `alloc` calls `charge(current_cell_id())`.  When
-/// `register` runs inside a cell's syscall (e.g. init calling `SpawnFromPath`),
-/// `current_cell_id()` is that cell (non-zero), so `charge` would try to RE-LOCK
-/// the `QUOTA_LIMITS` Spinlock we already hold here → self-deadlock.  We pin
-/// `CURRENT_CELL_ID` to 0 (kernel = unlimited, charge short-circuits without
-/// locking) across the insert so the node allocation never re-enters `charge`'s
-/// lock.  The node is kernel bookkeeping, so charging it to the kernel is also
-/// semantically correct.
-pub fn register(cell_id: CellId, limit: usize) {
+/// Start slot `id`'s counters from zero under `tag`.
+fn reset_counters(cell_id: CellId, tag: usize) {
     let id = cell_id.0 as usize;
-    if id < MAX_CELLS {
-        #[cfg(feature = "p01-trace")]
-        let _write = P01_SOURCE.write();
-        #[cfg(feature = "p01-trace")]
-        if P01_SUBJECTS.iter().any(|row| {
-            row.ready.load(Ordering::SeqCst)
-                && !row.retired.load(Ordering::SeqCst)
-                && row.cell.load(Ordering::SeqCst) == cell_id.0
-        }) {
-            P01_SOURCE.fault();
-        }
-        // A new incarnation: bump the generation and start from zero bytes.
-        let _ = IN_USE[id].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
-            Some((word & !BYTES_MASK).wrapping_add(1 << GENERATION_SHIFT))
-        });
+    #[cfg(feature = "p01-trace")]
+    let _write = P01_SOURCE.write();
+    #[cfg(feature = "p01-trace")]
+    if P01_SUBJECTS.iter().any(|row| {
+        row.ready.load(Ordering::SeqCst)
+            && !row.retired.load(Ordering::SeqCst)
+            && row.cell.load(Ordering::SeqCst) == cell_id.0
+    }) {
+        P01_SOURCE.fault();
     }
-    // Pin to kernel context (0) so the BTreeMap::insert's node allocation does
-    // not re-enter `charge` (which locks QUOTA_LIMITS) while we hold that lock.
-    // Deadlock contract: see module doc.
-    let prev_cell = crate::sched::hart_local::current_cell_id();
-    crate::sched::hart_local::set_current_cell_id(0);
-    {
-        let mut limits = QUOTA_LIMITS.lock();
-        #[cfg(feature = "p01-trace")]
-        let _semantic = crate::memory::heap::p01_owner::creation(
-            None,
-            crate::memory::heap::p01_owner::QUOTA_SHARED,
-        );
-        limits.insert(id, limit);
-    }
-    crate::sched::hart_local::set_current_cell_id(prev_cell);
+    IN_USE[id].store(tag, Ordering::Release);
+    DMA_IN_USE[id].store(tag, Ordering::Release);
 }
 
-/// Deregister a Cell on exit.
-pub fn deregister(cell_id: CellId) {
-    let id = cell_id.0 as usize;
-    if id < MAX_CELLS {
-        #[cfg(feature = "p01-trace")]
-        let _write = P01_SOURCE.write();
-        #[cfg(feature = "p01-trace")]
-        for row in &P01_SUBJECTS {
-            if row.ready.load(Ordering::SeqCst) && row.cell.load(Ordering::SeqCst) == cell_id.0 {
-                row.retired.store(true, Ordering::SeqCst);
-            }
+/// Register incarnation `generation` of `cell_id` with `limits`, replacing
+/// whatever the slot held: its counters restart from zero under the new
+/// generation. Allocates nothing and takes no lock.
+pub(crate) fn register(cell_id: CellId, generation: u64, limits: Limits) {
+    let charge = Charge::new(cell_id, generation);
+    let Some(id) = charge.slot() else {
+        return;
+    };
+    reset_counters(cell_id, charge.tag());
+    QUOTA_LIMITS[id].store(limits.memory.min(BYTES_MASK), Ordering::Release);
+}
+
+/// Deregister a Cell on exit: the slot holds no incarnation, and its counters
+/// keep the retired generation at zero bytes, so a late refund is a no-op.
+pub(crate) fn deregister(cell_id: CellId) {
+    let Some(id) = Charge::new(cell_id, 0).slot() else {
+        return;
+    };
+    #[cfg(feature = "p01-trace")]
+    let _write = P01_SOURCE.write();
+    #[cfg(feature = "p01-trace")]
+    for row in &P01_SUBJECTS {
+        if row.ready.load(Ordering::SeqCst) && row.cell.load(Ordering::SeqCst) == cell_id.0 {
+            row.retired.store(true, Ordering::SeqCst);
         }
-        let _ = IN_USE[id].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+    }
+    QUOTA_LIMITS[id].store(UNREGISTERED, Ordering::Release);
+    for counters in [&IN_USE, &DMA_IN_USE] {
+        let _ = counters[id].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             Some(word & !BYTES_MASK)
         });
-        DMA_IN_USE[id].store(0, Ordering::Relaxed);
     }
-    QUOTA_LIMITS.lock().remove(&id);
 }
 
 /// Rollback owner for a quota row belonging to an unpublished cell.
@@ -231,16 +298,30 @@ pub(crate) struct QuotaReservation {
 }
 
 impl QuotaReservation {
-    /// Reserve the exact requested CellId.
-    pub(crate) fn reserve(cell_id: CellId, limit: usize) -> Result<Self, types::ViError> {
-        let id = cell_id.0 as usize;
-        if id == 0 || id >= MAX_CELLS {
+    /// Reserve the exact requested CellId for incarnation `generation`.
+    pub(crate) fn reserve(
+        cell_id: CellId,
+        generation: u64,
+        limits: Limits,
+    ) -> Result<Self, types::ViError> {
+        let charge = Charge::new(cell_id, generation);
+        let Some(id) = charge.slot() else {
             return Err(types::ViError::PermissionDenied);
-        }
-        if QUOTA_LIMITS.lock().contains_key(&id) {
+        };
+        // The claim is the limit store itself, so two reservations of one
+        // CellId cannot both succeed.
+        if QUOTA_LIMITS[id]
+            .compare_exchange(
+                UNREGISTERED,
+                limits.memory.min(BYTES_MASK),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_err()
+        {
             return Err(types::ViError::AlreadyExists);
         }
-        register(cell_id, limit);
+        reset_counters(cell_id, charge.tag());
         Ok(Self {
             cell_id,
             committed: false,
@@ -250,9 +331,9 @@ impl QuotaReservation {
     /// Reserve the lowest vacant bounded identity. Cell identity is independent
     /// from the monotonic task ID, so exited cells release their quota slot for
     /// later publication rather than permanently exhausting `MAX_CELLS`.
-    pub(crate) fn reserve_next(limit: usize) -> Result<Self, types::ViError> {
+    pub(crate) fn reserve_next(generation: u64, limits: Limits) -> Result<Self, types::ViError> {
         for raw in 1..MAX_CELLS {
-            match Self::reserve(CellId(raw as u64), limit) {
+            match Self::reserve(CellId(raw as u64), generation, limits) {
                 Ok(reservation) => return Ok(reservation),
                 Err(types::ViError::AlreadyExists) => {}
                 Err(error) => return Err(error),
@@ -283,66 +364,128 @@ impl Drop for QuotaReservation {
     }
 }
 
-/// Charge `size` bytes to the Cell.
-///
-/// Returns `false` if the quota would be exceeded — callers must refuse the
-/// request in that case.
-pub fn charge(cell_id_raw: usize, size: usize) -> bool {
-    charge_owner(cell_id_raw, size).is_some()
+/// Add `bytes` to `charge`'s `account`. Refused past the slot's limit, or when
+/// the slot holds a different incarnation. The kernel, a CellId beyond the
+/// table and an unregistered slot have no limit and are not counted
+/// (`Ok(false)`).
+fn add(charge: Charge, account: Account, bytes: usize) -> Result<bool, QuotaExceeded> {
+    let Some(id) = charge.slot() else {
+        return Ok(false);
+    };
+    let limit = QUOTA_LIMITS[id].load(Ordering::Acquire);
+    if limit == UNREGISTERED {
+        return Ok(false);
+    }
+    let tag = charge.tag();
+    #[cfg(feature = "p01-trace")]
+    let _write = P01_SOURCE.write();
+    // checked_add refuses a hostile size near MAX instead of wrapping past the
+    // limit, and the byte count can never carry into the generation bits.
+    account.counters()[id]
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+            if word & !BYTES_MASK != tag {
+                return None;
+            }
+            let bytes = (word & BYTES_MASK)
+                .checked_add(bytes)
+                .filter(|&total| total <= limit)?;
+            Some(tag | bytes)
+        })
+        .map(|_| true)
+        .map_err(|_| QuotaExceeded)
 }
 
-/// Charge `size` bytes to the Cell and return the owner token the charge was
-/// recorded against, or `None` if the quota would be exceeded — the caller
-/// (`QuotaAlloc::alloc`) must return `null_mut()` in that case.
+/// Return `bytes` to `charge`'s `account`. A no-op unless the slot still holds
+/// that incarnation, so a refund never lands on a later incarnation of the
+/// CellId. Saturating: never underflows into the generation bits.
+pub(crate) fn refund(charge: Charge, account: Account, bytes: usize) {
+    let Some(id) = charge.slot() else {
+        return;
+    };
+    let tag = charge.tag();
+    #[cfg(feature = "p01-trace")]
+    let _write = P01_SOURCE.write();
+    let _ = account.counters()[id].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
+        (word & !BYTES_MASK == tag).then(|| without_bytes(word, bytes))
+    });
+}
+
+/// Bytes taken from one account of one incarnation, refunded once on drop, to
+/// that incarnation only (a no-op once the slot was re-registered).
+#[must_use = "dropping a reservation refunds it"]
+#[derive(Debug)]
+pub(crate) struct Reservation {
+    charge: Charge,
+    account: Account,
+    bytes: usize,
+}
+
+impl Reservation {
+    /// Take `bytes` from `charge`'s `account`, or refuse with nothing taken.
+    pub(crate) fn take(
+        charge: Charge,
+        account: Account,
+        bytes: usize,
+    ) -> Result<Self, QuotaExceeded> {
+        add(charge, account, bytes)?;
+        Ok(Self {
+            charge,
+            account,
+            bytes,
+        })
+    }
+
+    /// Draw `bytes` down into a reservation of their own, same owner and
+    /// account; `None`, changing nothing, when fewer remain.
+    pub(crate) fn split(&mut self, bytes: usize) -> Option<Self> {
+        self.bytes = self.bytes.checked_sub(bytes)?;
+        Some(Self {
+            charge: self.charge,
+            account: self.account,
+            bytes,
+        })
+    }
+
+    /// Leave the bytes charged with no owning object. They return only through
+    /// [`refund`] with the same charge and account, or at `deregister`.
+    pub(crate) fn keep(self) {
+        core::mem::forget(self);
+    }
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        refund(self.charge, self.account, self.bytes);
+    }
+}
+
+/// Charge `size` bytes to the incarnation slot `cell_id_raw` holds now and
+/// return the owner token the charge was recorded against, or `None` if the
+/// quota would be exceeded — the caller (`QuotaAlloc::alloc`) must return
+/// `null_mut()` in that case.
 ///
 /// The token names the exact row incarnation (CellId + generation) that was
-/// charged; `UNCHARGED_OWNER` when the Cell has no counter row. Pass it to
+/// charged; `UNCHARGED_OWNER` when the slot is not counted. Pass it to
 /// `refund_owner` so the refund reaches that incarnation and nothing else.
-///
-/// Lock-ordering: acquires `QUOTA_LIMITS` briefly for a read (no allocation inside),
-/// then updates `IN_USE` atomically without any lock.
 pub(crate) fn charge_owner(cell_id_raw: usize, size: usize) -> Option<usize> {
-    if cell_id_raw == 0 {
-        return Some(UNCHARGED_OWNER); // kernel itself: unlimited
+    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
+        return Some(UNCHARGED_OWNER);
     }
-    // Read the limit — BTreeMap::get does NOT allocate.  Lock released immediately.
-    let limit = QUOTA_LIMITS
-        .lock()
-        .get(&cell_id_raw)
-        .copied()
-        .unwrap_or(usize::MAX);
-    if cell_id_raw >= MAX_CELLS {
-        return Some(UNCHARGED_OWNER); // no slot in IN_USE — uncapped
+    let limit = QUOTA_LIMITS[cell_id_raw].load(Ordering::Acquire);
+    if limit == UNREGISTERED {
+        return Some(UNCHARGED_OWNER);
     }
-    // Compare-and-add: checked_add refuses a hostile layout.size() near MAX
-    // instead of wrapping past the limit, and the byte count can never carry
-    // into the generation bits.
     #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
     IN_USE[cell_id_raw]
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
             let bytes = (word & BYTES_MASK)
                 .checked_add(size)
-                .filter(|&bytes| bytes <= limit.min(BYTES_MASK))?;
+                .filter(|&bytes| bytes <= limit)?;
             Some((word & !BYTES_MASK) | bytes)
         })
         .ok()
         .map(|word| (word & !BYTES_MASK) | cell_id_raw)
-}
-
-/// Refund `size` bytes to the current incarnation of the Cell.  Lock-free.
-///
-/// Uses saturating subtraction to prevent underflow if a refund is attributed
-/// to a cell that has already been deregistered.
-pub fn refund(cell_id_raw: usize, size: usize) {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return;
-    }
-    #[cfg(feature = "p01-trace")]
-    let _write = P01_SOURCE.write();
-    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
-        Some(without_bytes(word, size))
-    });
 }
 
 /// Refund `size` bytes to the row incarnation named by `owner` (from
@@ -355,19 +498,18 @@ pub(crate) fn refund_owner(owner: usize, size: usize) {
     }
     #[cfg(feature = "p01-trace")]
     let _write = P01_SOURCE.write();
-    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |word| {
+    let _ = IN_USE[cell_id_raw].fetch_update(Ordering::AcqRel, Ordering::Acquire, |word| {
         (word & !BYTES_MASK == owner & !BYTES_MASK).then(|| without_bytes(word, size))
     });
 }
 
-/// The registered byte limit of a Cell slot, or `None` when it has none.
-///
-/// Lock order: takes `QUOTA_LIMITS` briefly and allocates nothing. It is safe
-/// under `SCHEDULER` — the same `SCHEDULER → QUOTA_LIMITS` order `charge` already
-/// takes whenever a kernel-heap allocation happens under the scheduler lock — and
-/// nothing holding `QUOTA_LIMITS` ever takes `SCHEDULER`.
+/// The registered memory limit of a Cell slot, or `None` when it has none.
+/// Lock-free; safe under any lock.
 pub fn limit(cell_id_raw: usize) -> Option<usize> {
-    QUOTA_LIMITS.lock().get(&cell_id_raw).copied()
+    QUOTA_LIMITS
+        .get(cell_id_raw)
+        .map(|limit| limit.load(Ordering::Acquire))
+        .filter(|&limit| limit != UNREGISTERED)
 }
 
 /// Current byte usage for a Cell (for diagnostics).
@@ -380,77 +522,6 @@ pub fn in_use(cell_id: CellId) -> usize {
     }
 }
 
-// ── DMA quota tracking (for sys_grant_dma) ───────────────────────────────────
-
-/// Live DMA-mapped byte counts — one AtomicUsize per Cell slot, zero-initialized.
-/// DMA quota = 1× memory quota (validated 2026-06-22).
-///
-/// See `IN_USE` above for why this uses an inline `const { }` repeat seed
-/// instead of a named `const`.
-static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
-
-/// Atomic DMA quota reservation. Dropping an uncommitted reservation refunds
-/// its bytes, so every failure path can roll back without a separate check/add
-/// window.
-pub(crate) struct DmaQuotaReservation {
-    cell_id_raw: usize,
-    size: usize,
-    committed: bool,
-}
-
-impl DmaQuotaReservation {
-    pub(crate) fn commit(mut self) {
-        self.committed = true;
-    }
-}
-
-impl Drop for DmaQuotaReservation {
-    fn drop(&mut self) {
-        if !self.committed {
-            record_dma_unmapped(self.cell_id_raw, self.size);
-        }
-    }
-}
-
-/// Atomically reserve `size` bytes against the Cell's DMA quota.
-///
-/// Concurrent worker tasks in one Cell contend on the same atomic counter; at
-/// most the reservations fitting within the configured limit can succeed.
-pub(crate) fn try_reserve_dma(cell_id_raw: usize, size: usize) -> Option<DmaQuotaReservation> {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return Some(DmaQuotaReservation {
-            cell_id_raw,
-            size,
-            committed: true,
-        });
-    }
-    let limit = QUOTA_LIMITS
-        .lock()
-        .get(&cell_id_raw)
-        .copied()
-        .unwrap_or_else(default_quota_bytes);
-    DMA_IN_USE[cell_id_raw]
-        .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
-            current.checked_add(size).filter(|next| *next <= limit)
-        })
-        .ok()?;
-    Some(DmaQuotaReservation {
-        cell_id_raw,
-        size,
-        committed: false,
-    })
-}
-
-/// Record `size` bytes of DMA released for Cell `cell_id_raw`. Lock-free.
-pub fn record_dma_unmapped(cell_id_raw: usize, size: usize) {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
-        return;
-    }
-    let _ = DMA_IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
-        Some(cur.saturating_sub(size))
-    });
-}
-
 #[cfg(feature = "test-hooks")]
 #[derive(Debug, PartialEq)]
 pub(crate) struct QuotaSnapshot {
@@ -460,8 +531,7 @@ pub(crate) struct QuotaSnapshot {
 }
 
 #[cfg(feature = "test-hooks")]
-/// Copies quota state into fixed-size cells so `QUOTA_LIMITS` is never held
-/// across an allocation that would re-enter `charge`.
+/// Copies quota state into heap-backed rows.
 ///
 /// Heap-backed, never stack-resident: under `cell-scale-experiment` `MAX_CELLS`
 /// is 4096, so these three arrays are 64 KiB + 32 KiB + 32 KiB = 128 KiB — twice
@@ -474,32 +544,31 @@ pub(crate) struct QuotaSnapshot {
 /// heap-backed.
 pub(crate) fn snapshot() -> QuotaSnapshot {
     let mut limits = alloc::vec![None; MAX_CELLS];
-    for (&cell_id, &limit) in QUOTA_LIMITS.lock().iter() {
-        if cell_id < MAX_CELLS {
-            limits[cell_id] = Some(limit);
-        }
-    }
-
     let mut heap = alloc::vec![0; MAX_CELLS];
     let mut dma = alloc::vec![0; MAX_CELLS];
     for cell_id in 0..MAX_CELLS {
+        limits[cell_id] = limit(cell_id);
         heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
-        dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire);
+        dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire) & BYTES_MASK;
     }
     QuotaSnapshot { limits, heap, dma }
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn registered_limit_for_test(cell_id: CellId) -> Option<usize> {
-    QUOTA_LIMITS.lock().get(&(cell_id.0 as usize)).copied()
+    limit(cell_id.0 as usize)
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn reusable_cell_id_contract() -> bool {
+    const GENERATION: u64 = 1;
+    let limits = Limits {
+        memory: DEFAULT_QUOTA_BYTES,
+    };
     let before = snapshot();
     let mut held = alloc::vec::Vec::new();
     loop {
-        match QuotaReservation::reserve_next(DEFAULT_QUOTA_BYTES) {
+        match QuotaReservation::reserve_next(GENERATION, limits) {
             Ok(reservation) => held.push(reservation),
             Err(types::ViError::OutOfMemory) | Err(types::ViError::PermissionDenied) => break,
             Err(_) => return false,
@@ -510,7 +579,7 @@ pub(crate) fn reusable_cell_id_contract() -> bool {
     };
     let released_id = released.cell_id();
     drop(released);
-    let reused = QuotaReservation::reserve_next(DEFAULT_QUOTA_BYTES)
+    let reused = QuotaReservation::reserve_next(GENERATION, limits)
         .map(|reservation| reservation.cell_id() == released_id)
         .unwrap_or(false);
     drop(held);
@@ -525,13 +594,23 @@ mod tests {
     use std::sync::Barrier;
     use std::thread;
 
+    const CELL_RAW: usize = MAX_CELLS - 1;
+    const CELL: CellId = CellId(CELL_RAW as u64);
+
+    fn limits(memory: usize) -> Limits {
+        Limits { memory }
+    }
+
+    fn dma_in_use(cell: CellId) -> usize {
+        DMA_IN_USE[cell.0 as usize].load(Ordering::Relaxed) & BYTES_MASK
+    }
+
     #[test]
     fn concurrent_workers_share_one_atomic_dma_quota() {
         let _guard = crate::TEST_STATE_LOCK.lock();
-        const CELL_RAW: usize = MAX_CELLS - 1;
         const LIMIT: usize = 4096;
-        let cell = CellId(CELL_RAW as u64);
-        register(cell, LIMIT);
+        register(CELL, 1, limits(LIMIT));
+        let charge = Charge::new(CELL, 1);
 
         let barrier = Arc::new(Barrier::new(2));
         let successes = Arc::new(AtomicUsize::new(0));
@@ -540,8 +619,8 @@ mod tests {
             let barrier = Arc::clone(&barrier);
             let successes = Arc::clone(&successes);
             workers.push(thread::spawn(move || {
-                let reservation = try_reserve_dma(CELL_RAW, LIMIT);
-                if reservation.is_some() {
+                let reservation = Reservation::take(charge, Account::Dma, LIMIT);
+                if reservation.is_ok() {
                     successes.fetch_add(1, Ordering::Relaxed);
                 }
                 barrier.wait();
@@ -553,43 +632,123 @@ mod tests {
         }
 
         assert_eq!(successes.load(Ordering::Relaxed), 1);
-        assert_eq!(DMA_IN_USE[CELL_RAW].load(Ordering::Relaxed), 0);
-        deregister(cell);
+        assert_eq!(dma_in_use(CELL), 0);
+        deregister(CELL);
     }
 
     #[test]
     fn stale_generation_refund_leaves_reregistered_row_untouched() {
         let _guard = crate::TEST_STATE_LOCK.lock();
-        const CELL_RAW: usize = MAX_CELLS - 1;
-        let cell = CellId(CELL_RAW as u64);
-        register(cell, 4096);
+        register(CELL, 1, limits(4096));
         let first = charge_owner(CELL_RAW, 100).expect("gen1 charge fits");
-        assert_eq!(in_use(cell), 100);
+        assert_eq!(in_use(CELL), 100);
 
-        register(cell, 4096);
+        register(CELL, 2, limits(4096));
         let second = charge_owner(CELL_RAW, 40).expect("gen2 charge fits");
         assert_ne!(first, second);
         refund_owner(first, 100);
-        assert_eq!(in_use(cell), 40, "stale gen1 refund must not touch gen2");
+        assert_eq!(in_use(CELL), 40, "stale gen1 refund must not touch gen2");
 
         refund_owner(second, 40);
-        assert_eq!(in_use(cell), 0);
-        deregister(cell);
+        assert_eq!(in_use(CELL), 0);
+        deregister(CELL);
     }
 
     #[test]
     fn charge_limit_boundary_is_unchanged() {
         let _guard = crate::TEST_STATE_LOCK.lock();
-        const CELL_RAW: usize = MAX_CELLS - 1;
-        let cell = CellId(CELL_RAW as u64);
-        register(cell, 4096);
-        assert!(charge(CELL_RAW, 4096));
-        assert!(!charge(CELL_RAW, 1));
-        assert!(!charge(CELL_RAW, usize::MAX));
-        assert_eq!(in_use(cell), 4096);
-        refund(CELL_RAW, 4096);
-        assert_eq!(in_use(cell), 0);
+        register(CELL, 1, limits(4096));
+        let charge = Charge::new(CELL, 1);
+        let full = Reservation::take(charge, Account::Memory, 4096).expect("limit fits");
+        assert_eq!(
+            Reservation::take(charge, Account::Memory, 1).unwrap_err(),
+            QuotaExceeded
+        );
+        assert!(Reservation::take(charge, Account::Memory, usize::MAX).is_err());
+        assert_eq!(in_use(CELL), 4096);
+        drop(full);
+        assert_eq!(in_use(CELL), 0);
         assert_eq!(charge_owner(0, 1), Some(UNCHARGED_OWNER));
-        deregister(cell);
+        deregister(CELL);
+    }
+
+    #[test]
+    fn refused_reservation_takes_nothing() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register(CELL, 1, limits(4096));
+        let charge = Charge::new(CELL, 1);
+        let held = Reservation::take(charge, Account::Memory, 4000).expect("fits");
+        assert!(Reservation::take(charge, Account::Memory, 97).is_err());
+        assert!(Reservation::take(charge, Account::Dma, 4097).is_err());
+        assert_eq!((in_use(CELL), dma_in_use(CELL)), (4000, 0));
+        // An incarnation the slot does not hold is refused, not billed to it.
+        assert!(Reservation::take(Charge::new(CELL, 2), Account::Memory, 1).is_err());
+        assert_eq!(in_use(CELL), 4000);
+        drop(held);
+        deregister(CELL);
+    }
+
+    #[test]
+    fn split_draws_down_and_each_part_refunds_once() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register(CELL, 1, limits(4096));
+        let mut whole =
+            Reservation::take(Charge::new(CELL, 1), Account::Memory, 3000).expect("fits");
+        let part = whole.split(1000).expect("1000 of 3000 remain");
+        assert!(whole.split(2001).is_none(), "only 2000 remain");
+        assert_eq!(in_use(CELL), 3000, "a split moves bytes, it charges none");
+        drop(part);
+        assert_eq!(in_use(CELL), 2000);
+        let rest = whole.split(2000).expect("the remainder");
+        drop(whole);
+        assert_eq!(in_use(CELL), 2000, "an emptied reservation refunds nothing");
+        drop(rest);
+        assert_eq!(in_use(CELL), 0);
+        deregister(CELL);
+    }
+
+    #[test]
+    fn stale_reservation_refund_misses_the_next_incarnation() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register(CELL, 7, limits(4096));
+        let stale = Reservation::take(Charge::new(CELL, 7), Account::Memory, 100).expect("fits");
+        let stale_dma = Reservation::take(Charge::new(CELL, 7), Account::Dma, 50).expect("fits");
+        deregister(CELL);
+        register(CELL, 8, limits(4096));
+        let live = Reservation::take(Charge::new(CELL, 8), Account::Memory, 40).expect("fits");
+        let live_dma = Reservation::take(Charge::new(CELL, 8), Account::Dma, 20).expect("fits");
+        drop(stale);
+        drop(stale_dma);
+        refund(Charge::new(CELL, 7), Account::Memory, 40);
+        assert_eq!((in_use(CELL), dma_in_use(CELL)), (40, 20));
+        drop(live);
+        drop(live_dma);
+        assert_eq!((in_use(CELL), dma_in_use(CELL)), (0, 0));
+        deregister(CELL);
+    }
+
+    #[test]
+    fn kernel_and_unregistered_charges_are_not_counted() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        deregister(CELL);
+        let kernel = Reservation::take(Charge::KERNEL, Account::Memory, usize::MAX);
+        assert!(kernel.is_ok());
+        let unregistered = Reservation::take(Charge::new(CELL, 3), Account::Memory, 1 << 20);
+        assert!(unregistered.is_ok());
+        assert_eq!(in_use(CELL), 0);
+        assert_eq!(limit(CELL_RAW), None);
+    }
+
+    #[test]
+    fn reserve_claims_a_slot_once() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let first = QuotaReservation::reserve(CELL, 5, limits(4096)).expect("vacant");
+        assert_eq!(
+            QuotaReservation::reserve(CELL, 6, limits(4096)).err(),
+            Some(types::ViError::AlreadyExists)
+        );
+        assert_eq!(limit(CELL_RAW), Some(4096));
+        drop(first);
+        assert_eq!(limit(CELL_RAW), None);
     }
 }

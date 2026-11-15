@@ -131,7 +131,7 @@ impl Platform for Fake {
     fn translating(&self, _bdf: u32) -> bool {
         self.translating
     }
-    fn reserve_quota(&mut self, _cell: u64, bytes: usize) -> bool {
+    fn reserve_quota(&mut self, _holder: Incarnation, bytes: usize) -> bool {
         if bytes > self.quota_left {
             return false;
         }
@@ -139,7 +139,7 @@ impl Platform for Fake {
         self.quota_used += bytes;
         true
     }
-    fn release_quota(&mut self, _cell: u64, bytes: usize) {
+    fn release_quota(&mut self, _holder: Incarnation, bytes: usize) {
         self.quota_left = self.quota_left.saturating_add(bytes);
         self.quota_used -= bytes;
     }

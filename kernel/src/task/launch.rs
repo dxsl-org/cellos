@@ -156,10 +156,15 @@ pub fn publish_prepared(
         return Err(ViError::PermissionDenied);
     }
 
+    // The quota row carries the task's generation, so it is minted first.
+    let generation = super::tcb::next_cell_generation();
+    let limits = crate::memory::cell_quota::Limits {
+        memory: state.quota_limit,
+    };
     let quota = if requested_cell_id == CellId(0) {
-        crate::memory::cell_quota::QuotaReservation::reserve_next(state.quota_limit)?
+        crate::memory::cell_quota::QuotaReservation::reserve_next(generation, limits)?
     } else {
-        crate::memory::cell_quota::QuotaReservation::reserve(requested_cell_id, state.quota_limit)?
+        crate::memory::cell_quota::QuotaReservation::reserve(requested_cell_id, generation, limits)?
     };
     let cell_id = quota.cell_id();
     if !sched.cell_owner_slot_is_empty(cell_id) {
@@ -172,7 +177,7 @@ pub fn publish_prepared(
     let inherited_dirs = super::dir_inherit::take_for_launch(sched, state.inherit_from);
     // InheritedDirHandles is bounded inline state, not an independently
     // allocated buffer: its storage is already part of the task allocation.
-    let (mut task, load_base) = prepared.into_task(tid, cell_id)?;
+    let (mut task, load_base) = prepared.into_task(tid, cell_id, generation)?;
     task.inherited_dirs = inherited_dirs;
     // The command line lives on the task record itself, so it is reachable by
     // this task's own `StateRestore` and by nothing else, and it is installed
@@ -307,43 +312,46 @@ pub fn publish_prepared(
 }
 
 /// Creator-quota claim for resources a prepared child will retain or briefly
-/// occupy. It is charged to the creator's exact live Cell before preparation
+/// occupy. It is charged to the creator's exact incarnation before preparation
 /// succeeds and refunded exactly once when the preparation is dropped; a
-/// successful commit transfers the retained portion (the historical measurement
-/// entry and its path) to the retained log owner instead of refunding it.
+/// successful commit keeps the retained portion (the historical measurement
+/// entry and its path) charged to the creator instead of refunding it.
 struct PublicationClaim {
-    cell: usize,
-    retained: usize,
-    transient: usize,
-    armed: bool,
+    retained: crate::memory::cell_quota::Reservation,
+    transient: crate::memory::cell_quota::Reservation,
 }
 impl PublicationClaim {
-    fn charge(cell: usize, retained: usize, transient: usize) -> Result<Self, ViError> {
+    fn charge(
+        creator: crate::memory::cell_quota::Charge,
+        retained: usize,
+        transient: usize,
+    ) -> Result<Self, ViError> {
         let total = retained
             .checked_add(transient)
             .ok_or(ViError::OutOfMemory)?;
-        if !crate::memory::cell_quota::charge(cell, total) {
-            return Err(ViError::OutOfMemory);
-        }
+        let mut transient = crate::memory::cell_quota::Reservation::take(
+            creator,
+            crate::memory::cell_quota::Account::Memory,
+            total,
+        )
+        .map_err(|_| ViError::OutOfMemory)?;
+        let retained = transient
+            .split(retained)
+            .expect("the claim covers its retained part");
         Ok(Self {
-            cell,
             retained,
             transient,
-            armed: true,
         })
     }
     /// Commit: the queue slot is consumed by the runnable task, so only that
     /// transient part is refunded; the retained log history stays attributed.
-    fn transfer(mut self) {
-        crate::memory::cell_quota::refund(self.cell, self.transient);
-        self.armed = false;
-    }
-}
-impl Drop for PublicationClaim {
-    fn drop(&mut self) {
-        if self.armed {
-            crate::memory::cell_quota::refund(self.cell, self.retained + self.transient);
-        }
+    fn transfer(self) {
+        let Self {
+            retained,
+            transient,
+        } = self;
+        retained.keep();
+        drop(transient);
     }
 }
 
@@ -505,10 +513,10 @@ impl SessionPublication {
         if !authority_is_current(sched, caller) {
             return Err(ViError::PermissionDenied);
         }
-        let (creator, creator_generation) = sched
+        let creator = sched
             .tasks
             .get(&caller.tid)
-            .map(|t| (t.cell_id.0 as usize, t.cell_generation))
+            .map(|t| crate::memory::cell_quota::Charge::of(t))
             .ok_or(ViError::PermissionDenied)?;
         // A session child is an ordinary governed path launch: never a boot
         // singleton, hotswap replacement, or service route publisher. A domain
@@ -530,9 +538,15 @@ impl SessionPublication {
         let _kernel_alloc = crate::sched::scheduler::KernelAllocationContext::enter();
         let tid = sched.next_task_id;
         let next = tid.checked_add(1).ok_or(ViError::OutOfMemory)?;
-        let quota = crate::memory::cell_quota::QuotaReservation::reserve_next(state.quota_limit)?;
+        let generation = super::tcb::next_cell_generation();
+        let quota = crate::memory::cell_quota::QuotaReservation::reserve_next(
+            generation,
+            crate::memory::cell_quota::Limits {
+                memory: state.quota_limit,
+            },
+        )?;
         let cell = quota.cell_id();
-        let (mut task, _) = prepared.into_task(tid, cell)?;
+        let (mut task, _) = prepared.into_task(tid, cell, generation)?;
         task.root_tid = tid;
         task.syscall_allowlist = state.syscall_allowlist;
         task.priority = state.priority;
@@ -566,8 +580,8 @@ impl SessionPublication {
             crate::sched::hart_local::ready::PublicationReservation::SLOT_BYTES,
         )?;
         let measurement = crate::measurement_log::PublicationReservation::reserve((
-            creator as u64,
-            creator_generation,
+            creator.cell().0,
+            creator.generation(),
         ))?;
         let ready =
             crate::sched::hart_local::ready::PublicationReservation::reserve(state.priority)?;

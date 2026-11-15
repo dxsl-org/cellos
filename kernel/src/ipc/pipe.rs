@@ -59,8 +59,9 @@ struct Pipe {
     writers: usize,
     read_waiters: VecDeque<usize>,
     write_waiters: VecDeque<usize>,
-    /// Cell charged for the ring; the charge is refunded when the pipe is dropped.
-    owner_cell: usize,
+    /// The ring's capacity, charged to the creating incarnation and refunded
+    /// to it when the pipe is dropped.
+    _charge: crate::memory::cell_quota::Reservation,
 }
 
 impl Pipe {
@@ -129,13 +130,6 @@ impl Drop for PipeAllocationContext {
     }
 }
 
-fn release_pipe(pipe: Pipe) {
-    let owner_cell = pipe.owner_cell;
-    let capacity = pipe.capacity();
-    drop(pipe);
-    crate::memory::cell_quota::refund(owner_cell, capacity);
-}
-
 fn next_pipe_id() -> usize {
     let mut next = NEXT_PIPE_ID.lock();
     let id = *next;
@@ -167,19 +161,22 @@ impl PipeHandle {
     }
 }
 
-/// Create a pipe. The ring capacity is charged exactly once to `owner_cell`.
+/// Create a pipe. The ring capacity is charged exactly once to `owner`.
 pub(crate) fn create(
     capacity: usize,
-    owner_cell: usize,
+    owner: crate::memory::cell_quota::Charge,
 ) -> Result<(PipeHandle, PipeHandle), crate::task::syscall::SyscallError> {
     let capacity = if capacity == 0 {
         DEFAULT_CAPACITY
     } else {
         capacity.clamp(MIN_CAPACITY, MAX_CAPACITY)
     };
-    if !crate::memory::cell_quota::charge(owner_cell, capacity) {
-        return Err(crate::task::syscall::SyscallError::OutOfMemory);
-    }
+    let charge = crate::memory::cell_quota::Reservation::take(
+        owner,
+        crate::memory::cell_quota::Account::Memory,
+        capacity,
+    )
+    .map_err(|_| crate::task::syscall::SyscallError::OutOfMemory)?;
 
     let _kernel_allocation = PipeAllocationContext::enter();
     let mut buffer = Vec::new();
@@ -187,8 +184,6 @@ pub(crate) fn create(
     let _semantic =
         crate::memory::heap::p01_owner::creation(None, crate::memory::heap::p01_owner::PIPE_SHARED);
     if buffer.try_reserve_exact(capacity).is_err() {
-        drop(_kernel_allocation);
-        crate::memory::cell_quota::refund(owner_cell, capacity);
         return Err(crate::task::syscall::SyscallError::OutOfMemory);
     }
     buffer.resize(capacity, 0);
@@ -202,7 +197,7 @@ pub(crate) fn create(
         writers: 1,
         read_waiters: VecDeque::new(),
         write_waiters: VecDeque::new(),
-        owner_cell,
+        _charge: charge,
     };
     let id = next_pipe_id();
     {
@@ -266,7 +261,7 @@ pub(crate) fn close_end(handle: PipeHandle, tid: usize) -> bool {
             .remove(&handle.pipe)
             .expect("pipe remained present while holding PIPES");
         drop(pipes);
-        release_pipe(pipe);
+        drop(pipe);
         return true;
     }
     false
@@ -410,9 +405,7 @@ pub(crate) fn on_task_leaves(tid: usize, owned: &[PipeHandle]) {
             .filter_map(|id| pipes.remove(&id))
             .collect();
         drop(pipes);
-        for pipe in released {
-            release_pipe(pipe);
-        }
+        drop(released);
     }
     for waiter in to_wake {
         crate::task::wake_task(waiter, 0);
@@ -527,15 +520,6 @@ pub(crate) fn session_wake_all(sched: &mut crate::sched::scheduler::Scheduler, h
         session_wake(sched, tid);
     }
 }
-/// A retired Cell can no longer be refunded: its quota row is deregistered and
-/// the CellId may be reissued, so rings it created must not refund a successor.
-pub(crate) fn disown_cell(cell: usize) {
-    for pipe in PIPES.lock().values_mut() {
-        if pipe.owner_cell == cell {
-            pipe.owner_cell = 0;
-        }
-    }
-}
 pub(crate) fn session_close(
     sched: &mut crate::sched::scheduler::Scheduler,
     handle: PipeHandle,
@@ -566,7 +550,7 @@ pub(crate) fn session_close(
     if pipe.readers == 0 && pipe.writers == 0 {
         let pipe = pipes.remove(&handle.pipe).expect("locked ring disappeared");
         drop(pipes);
-        release_pipe(pipe);
+        drop(pipe);
     }
     final_reader
 }

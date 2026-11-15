@@ -93,7 +93,14 @@ fn reap() {
 /// Spawn, retire, spawn again: no issued id may come back, and the sequence must
 /// only move forward.
 fn ids_are_never_reissued() -> bool {
-    cell_quota::register(CellId(QUOTA_CELL), cell_quota::DEFAULT_QUOTA_BYTES);
+    // Generation 1: the parent `insert_parent` installs.
+    cell_quota::register(
+        CellId(QUOTA_CELL),
+        1,
+        cell_quota::Limits {
+            memory: cell_quota::DEFAULT_QUOTA_BYTES,
+        },
+    );
     insert_parent();
 
     let mut ok = true;
