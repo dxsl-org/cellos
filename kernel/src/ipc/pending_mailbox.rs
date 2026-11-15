@@ -201,16 +201,14 @@ impl PendingMailbox {
         Some(self.messages.remove(index))
     }
 
-    /// Push `message`; container growth is charged to the receiving
-    /// incarnation `receiver`, so the mailbox depth bounds what it can cost.
-    pub(crate) fn try_push(
-        &mut self,
-        receiver: crate::memory::cell_quota::Charge,
-        message: PendingMsg,
-    ) -> Result<(), ()> {
+    /// Push `message`. Container growth is kernel memory: the depth bound caps
+    /// it, and a kernel relay to a receiver at its quota is never refused for it.
+    pub(crate) fn try_push(&mut self, message: PendingMsg) -> Result<(), ()> {
         if self.messages.len() == self.messages.capacity() {
-            crate::memory::heap::alloc_for(receiver, || self.messages.try_reserve(1))
-                .map_err(|_| ())?;
+            crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
+                self.messages.try_reserve(1)
+            })
+            .map_err(|_| ())?;
         }
         self.messages.push(message);
         Ok(())

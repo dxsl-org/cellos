@@ -382,7 +382,7 @@ pub(crate) fn commit_hotswap_barrier(
             target
                 .pending_msgs
                 .observe_owner(crate::p01_resources::owner(target));
-            let result = target.pending_msgs.try_push(target_cell, message);
+            let result = target.pending_msgs.try_push(message);
             #[cfg(feature = "p01-trace")]
             target
                 .pending_msgs

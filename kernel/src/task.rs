@@ -242,7 +242,6 @@ pub(crate) fn queue_pending_msg(
         crate::memory::heap::p01_owner::MAILBOX,
     );
     let result = target.pending_msgs.try_push(
-        receiver,
         tcb::PendingMsg {
             sender_tid,
             data: owned,
@@ -283,9 +282,7 @@ pub(crate) fn queue_wire_msg(
         Some(crate::p01_resources::owner(target)),
         crate::memory::heap::p01_owner::MAILBOX,
     );
-    let receiver = crate::memory::cell_quota::Charge::of(target);
     let result = target.pending_msgs.try_push(
-        receiver,
         tcb::PendingMsg {
             sender_tid,
             data: crate::ipc::pending_mailbox::PendingMsgData::empty(),

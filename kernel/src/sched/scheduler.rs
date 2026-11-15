@@ -2332,7 +2332,6 @@ impl Scheduler {
                 if task
                     .pending_msgs
                     .try_push(
-                        crate::memory::cell_quota::Charge::KERNEL,
                         crate::task::tcb::PendingMsg {
                             sender_tid: 0,
                             data,
@@ -2362,7 +2361,6 @@ impl Scheduler {
                 if task
                     .pending_msgs
                     .try_push(
-                        crate::memory::cell_quota::Charge::KERNEL,
                         crate::task::tcb::PendingMsg {
                             sender_tid: 0,
                             data,

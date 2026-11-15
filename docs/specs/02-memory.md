@@ -29,9 +29,10 @@ minh, không còn vào "Cell đang chạy".
   Chỉ ba loại code mở scope:
   1. Syscall entry mở `Charge::dispatched()`: việc của syscall được tính cho Cell gọi. Đây là
      nơi duy nhất dispatch identity trở thành một charge.
-  2. Cấp phát có chủ chỉ định: payload IPC wire tính cho Cell gửi, payload và phần tăng của
-     mailbox tính cho Cell nhận, completion queue tính cho Cell sở hữu.
-  3. Scope kernel (`Charge::KERNEL`) cho bookkeeping của kernel.
+  2. Cấp phát có chủ chỉ định: payload IPC wire tính cho Cell gửi, payload mailbox lớn hơn
+     32 byte tính cho Cell nhận, completion queue tính cho Cell sở hữu.
+  3. Scope kernel (`Charge::KERNEL`) cho bookkeeping của kernel, kể cả phần tăng của mailbox
+     (bị giới hạn bởi độ sâu mailbox).
 
   Mọi interrupt entry mở scope kernel làm lệnh đầu tiên, và `yield_cpu` giữ scope kernel qua
   mỗi lần chuyển ngữ cảnh, nên không scope nào đi qua một interrupt hay một context switch.
