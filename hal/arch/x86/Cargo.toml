@@ -27,9 +27,9 @@ cet-shadow-stack = []
 pku = []
 # PKS: supervisor protection keys (x86_64 G2 roadmap).
 pks = []
-# Opt-in supervisor protections (CR4), each refused at boot/AP admission when
-# the CPU lacks it. SMAP is only valid for images whose kernel never touches
-# U=1 memory outside `protect::user_access`; no SAS profile qualifies yet.
+# Required supervisor protections (CR4): each is set whenever the CPU
+# enumerates it (see `protect::enabled_on`); the feature additionally refuses
+# a CPU that lacks it at boot/AP admission.
 x86-smep = []
 x86-smap = []
 x86-umip = []

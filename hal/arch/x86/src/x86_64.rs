@@ -143,13 +143,16 @@ fn cpu_feature_policy() -> usize {
         | (protect.umip as usize) << 10
 }
 
-/// Opt-in supervisor protections, one cargo feature each (`x86-smep`,
-/// `x86-smap`, `x86-umip`); all off by default.
+/// Supervisor protections (SMEP, SMAP, UMIP): set on every CPU that
+/// enumerates them, logged by the kernel when absent.
 ///
 /// They are defense in depth, not a substitute for LBI or for authority
-/// checks. A requested protection the CPU lacks refuses the CPU (boot or AP
-/// admission) instead of running unprotected. SMAP is only selectable for an
-/// image whose kernel never touches U=1 memory outside a `user_access` window.
+/// checks. A cargo feature (`x86-smep`, `x86-smap`, `x86-umip`) marks one
+/// *required*: a CPU without it is refused (boot or AP admission) instead of
+/// running unprotected. SMEP is enabled whenever present; SMAP and UMIP still
+/// only when required, until the kernel qualifies them (census Steps 6b, 6c).
+/// SMAP is only valid for a kernel that never touches U=1 memory outside a
+/// `user_access` window.
 #[cfg(target_arch = "x86_64")]
 pub mod protect {
     use core::sync::atomic::{AtomicU8, Ordering};
@@ -186,11 +189,21 @@ pub mod protect {
         }
     }
 
-    pub const fn requested() -> Caps {
+    /// Protections this build refuses to run without.
+    pub const fn required() -> Caps {
         Caps {
             smep: cfg!(feature = "x86-smep"),
             smap: cfg!(feature = "x86-smap"),
             umip: cfg!(feature = "x86-umip"),
+        }
+    }
+
+    /// Protections this kernel sets on a CPU that enumerates `have`.
+    pub const fn enabled_on(have: Caps) -> Caps {
+        Caps {
+            smep: have.smep,
+            smap: have.smap && required().smap,
+            umip: have.umip && required().umip,
         }
     }
 
@@ -205,14 +218,15 @@ pub mod protect {
         }
     }
 
-    /// Enable the requested protections on this CPU. Returns false, changing
-    /// nothing, when the CPU lacks one of them.
+    /// Enable every protection this CPU enumerates (per [`enabled_on`]).
+    /// Returns false, changing nothing, when the CPU lacks a required one.
     pub fn init_cpu() -> bool {
-        let want = requested();
+        let need = required();
         let have = detect();
-        if (want.smep && !have.smep) || (want.smap && !have.smap) || (want.umip && !have.umip) {
+        if (need.smep && !have.smep) || (need.smap && !have.smap) || (need.umip && !have.umip) {
             return false;
         }
+        let want = enabled_on(have);
         let bits = if want.smep { CR4_SMEP } else { 0 }
             | if want.smap { CR4_SMAP } else { 0 }
             | if want.umip { CR4_UMIP } else { 0 };
@@ -498,7 +512,7 @@ impl Arch for X86_64Arch {
         syscall::init();
         assert!(
             protect::init_cpu(),
-            "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU"
+            "x86: required SMEP/SMAP/UMIP profile unsupported by CPU"
         );
         apic::init_lapic();
         publish_boot_cpu_policy();

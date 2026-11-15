@@ -31,6 +31,27 @@ pub(crate) fn puts(s: &str) {
     }
 }
 
+/// One boot line naming each supervisor protection on the boot CPU:
+/// `[x86] protection: smep=<s> smap=<s> umip=<s>`, where `<s>` is `on` (set
+/// in CR4), `off` (enumerated, not yet enabled by this kernel) or `absent`
+/// (the CPU does not enumerate it). APs must match the boot CPU's set.
+fn log_protection() {
+    let active = crate::hal::x86_64::protect::active();
+    let have = crate::hal::x86_64::protect::detect();
+    let state = |on: bool, present: bool| match (on, present) {
+        (true, _) => "on",
+        (false, true) => "off",
+        (false, false) => "absent",
+    };
+    puts("[x86] protection: smep=");
+    puts(state(active.smep, have.smep));
+    puts(" smap=");
+    puts(state(active.smap, have.smap));
+    puts(" umip=");
+    puts(state(active.umip, have.umip));
+    puts("\n");
+}
+
 /// What the early phase hands [`platform_init`].
 pub struct EarlyPlatform {
     boot_info: BootInfoSource,
@@ -118,17 +139,19 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
         crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
-        // Opt-in SMEP/SMAP/UMIP profile: a requested protection the CPU
-        // lacks refuses boot rather than running unprotected.
+        // SMEP/SMAP/UMIP are set when the CPU enumerates them; a protection
+        // the build marks required (cargo feature) and the CPU lacks refuses
+        // boot rather than running unprotected.
         assert!(
             crate::hal::x86_64::protect::init_cpu(),
-            "x86: requested SMEP/SMAP/UMIP profile unsupported by CPU"
+            "x86: required SMEP/SMAP/UMIP profile unsupported by CPU"
         );
         crate::hal::x86_64::publish_boot_cpu_policy();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
 
     crate::boot_banner();
+    log_protection();
     let (boot_info, frame_allocator) = crate::boot_memory(dtb);
     let mmap_entries = boot_info.get().memory_map();
 

@@ -177,7 +177,8 @@ snapshot-qualified = []
 test-hooks = ["dep:qemu-exit", "hal/test-hooks"]
 # Terminal x86 per-vector IDT CPL3 oracle; never enable in generic test images.
 x86-idt-cpl3-test = ["test-hooks", "hal/x86-idt-cpl3-test"]
-# Opt-in x86 supervisor protections (see hal-x86). Off in every shipped profile.
+# x86 supervisor protections (see hal-x86 `protect`): set whenever the CPU
+# enumerates them; each feature marks one *required*, refusing a CPU without it.
 x86-smep = ["hal/x86-smep"]
 x86-smap = ["hal/x86-smap"]
 x86-umip = ["hal/x86-umip"]
