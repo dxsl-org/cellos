@@ -3010,3 +3010,47 @@ retirement = "never: returns to 0 when every lease is dropped"
 rationale = "reap_owner reads it Relaxed to skip EXPORTS on the common death of a task that never exported; a lease the dying owner holds was created by that task's own earlier 437, whose EXPORTS critical section and the scheduler handoffs to the retirement funnel order the increment before the read, so a dying owner never reads a stale zero for its own lease. holder_domain_revoked deliberately does not use it."
 review = "kernel/src/task/syscall/dma_export.rs:reap_owner; kernel/src/task/syscall/dma_export.rs:holder_domain_revoked"
 
+
+[[global]]
+key = "kernel::cell::init_death::PENDING"
+lifetime = "global"
+mutation = "atomic"
+owner = "cell::init_death: record() publishes the action after the one record line; act_if_pending() (yield_cpu, outside SCHEDULER) claims RESET with a compare-exchange"
+contexts = ["normal", "irq", "exception"]
+seal = "none: set at most once per boot, then claimed"
+retirement = "never: the machine resets or halts"
+rationale = "The init-death action is decided under SCHEDULER but must run outside it; Release/Acquire orders the record before the action, and the RESET_CLAIMED exchange lets exactly one hart reset while the others park."
+review = "kernel/src/cell/init_death.rs:record; kernel/src/cell/init_death.rs:act_if_pending"
+
+[[global]]
+key = "kernel::cell::init_death::RECORDED"
+lifetime = "global"
+mutation = "atomic"
+owner = "cell::init_death: record() swaps it to write the [init-death] line once per boot"
+contexts = ["normal", "irq", "exception"]
+seal = "none: set once"
+retirement = "never: the machine resets or halts after it is set"
+rationale = "Init's root can reach exit_task once; the swap makes the record idempotent if a second path also reports the death."
+review = "kernel/src/cell/init_death.rs:record"
+
+[[global]]
+key = "kernel::cell::init_death::FAULT_ROOT"
+lifetime = "global"
+mutation = "atomic"
+owner = "cell::init_death: stage_fault() (trap path, under SCHEDULER) stores init's root tid; record() reads it to attach the pc"
+contexts = ["normal", "exception"]
+seal = "none: overwritten by each staged fault of init's generation"
+retirement = "never"
+rationale = "Carries the faulting pc of init's root from the trap into the record its retirement writes; Release on FAULT_ROOT publishes FAULT_PC."
+review = "kernel/src/cell/init_death.rs:stage_fault; kernel/src/cell/init_death.rs:record"
+
+[[global]]
+key = "kernel::cell::init_death::FAULT_PC"
+lifetime = "global"
+mutation = "atomic"
+owner = "cell::init_death: stage_fault() stores the pc before publishing FAULT_ROOT; record() reads it after an Acquire load of FAULT_ROOT"
+contexts = ["normal", "exception"]
+seal = "none: overwritten by each staged fault of init's generation"
+retirement = "never"
+rationale = "The pc printed in the [init-death] record; ordered by FAULT_ROOT's Release/Acquire."
+review = "kernel/src/cell/init_death.rs:stage_fault; kernel/src/cell/init_death.rs:record"
