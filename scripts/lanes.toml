@@ -102,7 +102,7 @@ reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 path = "scripts/qemu-aarch64-test-hooks.sh"
 arch = "aarch64"
 tier = "manual"
-reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
+reason = "not named by any workflow as of 2026-11-10. Its EL2 mode (CELLOS_AARCH64_TEST_HOOKS_DEVELOPMENT_SILO=1, virtualization=on) is broken as of 2026-11-15, owner Phase 19: cortex-a57 lacks FEAT_VHE, so the host runs at EL1, the EL2 fixtures skip and the boot fails on cell faults; on cortex-a76 it panics after S22-AARCH64-ROOT-SWITCH fails, on main too. The default mode passes."
 
 [[lane]]
 path = "scripts/qemu-aarch64-test.sh"
