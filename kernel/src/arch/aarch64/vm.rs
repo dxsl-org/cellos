@@ -10,13 +10,11 @@ use crate::memory::stage2::Stage2Table;
 use crate::sync::Spinlock;
 use abi::hypervisor::ViVmExit as ApiVmExit;
 use alloc::{collections::BTreeMap, vec::Vec};
-use hal::aarch64::backend::{
-    ArmEl2Monitor, ArmIrqController, ArmResources, Board, El2Monitor, VgicWindows,
-};
+use hal::aarch64::backend::{ArmEl2Monitor, ArmResources, Board, El2Monitor, VgicWindows};
 use hal::aarch64::{
     id_regs::read_trapped_id_reg,
     stage2_regs::{
-        clear_stage2_root, disable_stage2, enable_stage2, load_stage2, s2_tlb_flush_all,
+        clear_stage2_root, disable_stage2, enable_stage2, load_stage2, s2_tlb_flush_all, VmidPool,
     },
     vcpu::AArch64Vcpu,
 };
@@ -62,6 +60,7 @@ struct Vm {
     vcpu_vgic: Vec<vgic::CpuIfState>,
     /// The VM's Stage-2 VMID, loaded into `VTTBR_EL2` with its root on every
     /// guest entry (directly at an EL2 host, by the Pi monitor's run op).
+    /// Taken from [`VMIDS`]; `reap_vms_for_task` returns it.
     vmid: u16,
     /// Set once the guest RAM window has been cleaned to PoC and the I-cache
     /// invalidated, before the first vCPU entry.
@@ -73,7 +72,10 @@ struct Vm {
 static VM_REGISTRY: Spinlock<Option<BTreeMap<(usize, usize), Vm>>> =
     Spinlock::ranked(None, crate::sync::rank::VM_REGISTRY);
 
-static NEXT_VMID: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(1);
+/// Guest VMIDs within the 8-bit width `VTCR_EL2` configures. A VMID goes back
+/// only after `TLBI ALLE1IS` dropped every entry tagged with it, and binding it
+/// again invalidates it once more (`enable_stage2`).
+static VMIDS: VmidPool = VmidPool::new();
 
 fn registry_lock() -> &'static Spinlock<Option<BTreeMap<(usize, usize), Vm>>> {
     &VM_REGISTRY
@@ -109,7 +111,6 @@ pub fn pi_monitor_smoke() {
         return;
     }
     const IPA: u64 = 0x4000_0000;
-    const VMID: u16 = 0xfffe;
     let Some(mut table) = Stage2Table::new() else {
         log::warn!("[pi-monitor] smoke: no Stage-2 root; HypervisorCap closed");
         return;
@@ -122,6 +123,11 @@ pub fn pi_monitor_smoke() {
         log::warn!("[pi-monitor] smoke: guest map failed; HypervisorCap closed");
         return;
     }
+    // The monitor binds and invalidates the VMID on every run (gateway op 5).
+    let Some(vmid) = VMIDS.allocate() else {
+        log::warn!("[pi-monitor] smoke: no free VMID; HypervisorCap closed");
+        return;
+    };
     let page = phys_to_virt(guest_pa as usize) as *mut u32;
     // MOVZ X0,#42; HVC #0; WFI; MOVZ X0,#0x900,LSL#16;
     // STR X1,[X0]; HVC #0. The final HVC bounds a failure if MMIO did not
@@ -166,7 +172,7 @@ pub fn pi_monitor_smoke() {
         for _ in 0..16 {
             prepare();
             unsafe {
-                El2Monitor::run(cpu, VMID, table.root_pa(), vi);
+                El2Monitor::run(cpu, vmid, table.root_pa(), vi);
             }
             if !matches!(cpu.decode_exit(), HalVmExit::Preempted) {
                 return;
@@ -183,7 +189,7 @@ pub fn pi_monitor_smoke() {
         );
         prepare();
         let first = unsafe {
-            El2Monitor::run_probed(&mut vcpu, VMID, table.root_pa(), false, IPA, guest_pa)
+            El2Monitor::run_probed(&mut vcpu, vmid, table.root_pa(), false, IPA, guest_pa)
         };
         log::info!(
             "[pi-monitor] first-run root={:#x} page={:#x} EL2 entry={:#x} s2=[{:#x},{:#x},{:#x}] insn={:#x} exit=[{:#x},{:#x},irq={}] EL1 exit=[{:#x},{:#x},irq={}]",
@@ -336,7 +342,7 @@ pub fn pi_monitor_smoke() {
                     spin_cpu.g_elr_el2 = IPA + 0x300;
                     El2Monitor::arm_smoke_preemption();
                     unsafe {
-                        El2Monitor::run(&mut spin_cpu, VMID, table.root_pa(), false);
+                        El2Monitor::run(&mut spin_cpu, vmid, table.root_pa(), false);
                     }
                     let preempted = matches!(spin_cpu.decode_exit(), HalVmExit::Preempted);
                     if !preempted {
@@ -352,10 +358,16 @@ pub fn pi_monitor_smoke() {
             }
         }
     };
-    // Flush before freeing the Stage-2 frames even on a failed smoke.
+    // Flush before freeing the Stage-2 frames even on a failed smoke. The
+    // monitor cleared VTTBR_EL2 after the last run, so `disable_stage2` flushes
+    // no guest VMID: drop every VMID's entries before the frames and the VMID
+    // go back.
+    // SAFETY: the monitor is ready (checked on entry) and no vCPU is running.
     unsafe {
         disable_stage2();
+        s2_tlb_flush_all();
     }
+    VMIDS.release(vmid);
     // Restore the ordinary host tick cadence before Cells can run.
     El2Monitor::restore_host_tick();
     if passed {
@@ -442,15 +454,21 @@ pub(crate) fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         }
     }
 
-    let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    // The table, never bound, is freed on refusal; no TLB entry names it.
+    let vmid = VMIDS.allocate().ok_or_else(|| {
+        log::warn!("[hv] create_vm refused: all 255 VMIDs in use");
+        ViError::OutOfMemory
+    })?;
     let vm_id = {
         let mut guard = registry_lock().lock();
-        // Invalidate whatever a VMID reused after a wrap left cached, then
-        // leave this CPU naming no root: every guest entry programs its own
-        // VM's root (`run_vcpu`), and a root this CPU still named could be
-        // freed under it. Under the registry lock (interrupts masked), so the
-        // clear runs on the CPU the bind did.
-        // SAFETY: table built and flushed; vmid ≥ 1; no vCPU of it exists yet.
+        // Invalidate whatever the VMID's previous VM left cached (its teardown
+        // already did, before it returned the VMID), then leave this CPU
+        // naming no root: every guest entry programs its own VM's root
+        // (`run_vcpu`), and a root this CPU still named could be freed under
+        // it. Under the registry lock (interrupts masked), so the clear runs on
+        // the CPU the bind did.
+        // SAFETY: table built and flushed; vmid in 1..=255; no vCPU of it
+        // exists yet.
         unsafe {
             enable_stage2(vmid, table.root_pa());
             clear_stage2_root();
@@ -880,12 +898,15 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
     // before the drop (census P13). No CPU names the dying root: VTTBR_EL2
     // holds a root only during a guest run, under the registry lock, and the
     // VM left the registry above.
+    // Each VMID goes back to the pool only after that flush completed, so the
+    // VM that is handed it next starts with no entry tagged with it.
     for vm in dead_vms {
         // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
         unsafe {
             disable_stage2();
             s2_tlb_flush_all();
         }
+        VMIDS.release(vm.vmid);
         drop(vm); // Stage2Table::drop frees all frames
     }
 }
@@ -893,7 +914,7 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
 /// Boot self-test `S22-AARCH64-TWO-VM-STAGE2` (non-release builds; the
 /// `virt-vhe` lane requires it): two live VMs, entered through `run_vcpu`,
 /// each run against its own Stage-2 root, and this CPU naming no root outside
-/// a guest run.
+/// a guest run; then VMIDs that stay within their 8-bit width and are recycled.
 ///
 /// Both VMs carry a guest at the same IPA that loads a VM-specific marker into
 /// X0, traps with `HVC #0` and branches back, so every run exits with its
@@ -906,8 +927,16 @@ pub(crate) fn reap_vms_for_task(dead_tid: usize) {
 /// chosen CPU, so this is checked on the CPU it runs on. EL2 hosts only: the
 /// Pi kernel cannot read `VTTBR_EL2`, and its monitor programs it inside its
 /// own run op.
+///
+/// VMIDs: one-page VMs are then created until `create_vm` refuses. Every VMID
+/// must lie in 1..=255 and be held once, and the refusal must come from an
+/// exhausted pool: VMIDs used to count up through 16 bits, so VM 256 shared
+/// the host's TLB tag and set RES0 bits of `VTTBR_EL2`. After their teardown
+/// VM C is created; it must be handed A's VMID again and run its own guest.
 #[cfg(not(cellos_posture = "release"))]
 pub(crate) fn two_vm_stage2_selftest() {
+    use hal::aarch64::{backend::ArmIrqController, stage2_regs::VMID_COUNT};
+
     if PI_MONITOR || !hal::aarch64::el2::is_el2() {
         log::info!("S22-AARCH64-TWO-VM-STAGE2: SKIP (not an EL2 host)");
         return;
@@ -917,6 +946,7 @@ pub(crate) fn two_vm_stage2_selftest() {
     const ENTRY: u64 = 0x4008_0000;
     const GUEST_PAGES: usize = 512;
     const MARKERS: [u16; 2] = [0xa1, 0xb2];
+    const MARKER_C: u16 = 0xc3;
     /// A host tick may exit a guest before its `HVC`; the next run resumes it.
     const MAX_PREEMPTIONS: usize = 8;
     /// Keeps the first nonzero `VTTBR_EL2` this CPU shows outside a guest run.
@@ -926,6 +956,24 @@ pub(crate) fn two_vm_stage2_selftest() {
         if vttbr != 0 {
             named.get_or_insert(vttbr);
         }
+    }
+    fn run(named: &mut Option<u64>, (vm_id, vcpu): (usize, usize)) -> Option<ViResult<ApiVmExit>> {
+        let mut exit = run_vcpu(OWNER, vm_id, vcpu, 0);
+        for _ in 0..MAX_PREEMPTIONS {
+            if !matches!(exit, Ok(ApiVmExit::Preempted)) {
+                break;
+            }
+            exit = run_vcpu(OWNER, vm_id, vcpu, 0);
+        }
+        note_vttbr(named);
+        Some(exit)
+    }
+    fn vmid_of(vm_id: usize) -> Option<u16> {
+        registry_lock()
+            .lock()
+            .as_ref()
+            .and_then(|map| map.get(&(OWNER, vm_id)))
+            .map(|vm| vm.vmid)
     }
     let guest = |marker: u16| -> [u8; 12] {
         // MOVZ X0, #marker; HVC #0; B .-8 (back to the MOVZ)
@@ -959,45 +1007,100 @@ pub(crate) fn two_vm_stage2_selftest() {
             break;
         }
     }
-    let mut run = |(vm_id, vcpu): (usize, usize)| {
-        let mut exit = run_vcpu(OWNER, vm_id, vcpu, 0);
-        for _ in 0..MAX_PREEMPTIONS {
-            if !matches!(exit, Ok(ApiVmExit::Preempted)) {
-                break;
-            }
-            exit = run_vcpu(OWNER, vm_id, vcpu, 0);
-        }
-        note_vttbr(&mut named_root);
-        Some(exit)
-    };
+    let vmid_a = vmid_of(vms[0].0);
     // Boot runs with host interrupts masked, so a pending host interrupt (a
     // VirtIO line the boot left asserted) would exit every guest entry at once
-    // (`HCR_EL2.IMO`): hold them at the controller for the three runs.
+    // (`HCR_EL2.IMO`): hold them at the controller for the guest runs.
     let exits = if built {
-        <Board as ArmIrqController>::with_irqs_held(|| [run(vms[0]), run(vms[1]), run(vms[0])])
+        <Board as ArmIrqController>::with_irqs_held(|| {
+            [
+                run(&mut named_root, vms[0]),
+                run(&mut named_root, vms[1]),
+                run(&mut named_root, vms[0]),
+            ]
+        })
     } else {
         [None; 3]
     };
     reap_vms_for_task(OWNER);
     note_vttbr(&mut named_root);
-    let seen = exits.map(|exit| match exit {
+
+    // Hold every VMID; `held` stops at the width so a VMID past it fails.
+    let mut held = [false; VMID_COUNT];
+    let mut count = 0usize;
+    let mut each_once = true;
+    while count < VMID_COUNT {
+        let Ok(vm_id) = create_vm(OWNER, 1) else {
+            break;
+        };
+        count += 1;
+        match vmid_of(vm_id).map(usize::from) {
+            Some(vmid) if vmid != 0 && vmid < VMID_COUNT && !held[vmid] => held[vmid] = true,
+            _ => each_once = false,
+        }
+    }
+    note_vttbr(&mut named_root);
+    let exhausted = match VMIDS.allocate() {
+        Some(vmid) => {
+            VMIDS.release(vmid);
+            false
+        }
+        None => true,
+    };
+    reap_vms_for_task(OWNER);
+    note_vttbr(&mut named_root);
+
+    // VM C takes the lowest free VMID, the one A ran under (and the first
+    // one-page VM after it), and must run its own guest, not A's.
+    let vm_c = create_vm(OWNER, GUEST_PAGES).ok().and_then(|vm_id| {
+        let vcpu = create_vcpu(OWNER, vm_id, ENTRY).ok()?;
+        write_guest_memory(OWNER, vm_id, ENTRY, &guest(MARKER_C)).ok()?;
+        Some((vm_id, vcpu))
+    });
+    note_vttbr(&mut named_root);
+    let vmid_c = vm_c.and_then(|(vm_id, _)| vmid_of(vm_id));
+    let exit_c = vm_c
+        .and_then(|vm| <Board as ArmIrqController>::with_irqs_held(|| run(&mut named_root, vm)));
+    reap_vms_for_task(OWNER);
+    note_vttbr(&mut named_root);
+
+    let marker_of = |exit: Option<ViResult<ApiVmExit>>| match exit {
         Some(Ok(ApiVmExit::Hvc { regs, .. })) => Some(regs[0]),
         _ => None,
-    });
+    };
+    let seen = exits.map(marker_of);
+    let seen_c = marker_of(exit_c);
     let expected = [MARKERS[0], MARKERS[1], MARKERS[0]].map(|marker| Some(u64::from(marker)));
-    if seen == expected && named_root.is_none() {
+    let vmids_ok = exhausted && each_once && count == VMID_COUNT - 1;
+    let recycled = vmid_a.is_some() && vmid_c == vmid_a;
+    if seen == expected
+        && named_root.is_none()
+        && vmids_ok
+        && recycled
+        && seen_c == Some(u64::from(MARKER_C))
+    {
         log::info!(
-            "S22-AARCH64-TWO-VM-STAGE2: PASS runs=A,B,A markers={:x?} vttbr-outside-runs=0",
-            MARKERS
+            "S22-AARCH64-TWO-VM-STAGE2: PASS runs=A,B,A markers={:x?} vttbr-outside-runs=0 vmids={} then refused; C reran VMID {} with {:x}",
+            MARKERS,
+            count,
+            vmid_c.unwrap_or(0),
+            MARKER_C
         );
     } else {
         log::error!(
-            "S22-AARCH64-TWO-VM-STAGE2: FAIL built={} seen={:x?} expected={:x?} vttbr-outside-runs={:#x} exits={:?}",
+            "S22-AARCH64-TWO-VM-STAGE2: FAIL built={} seen={:x?} expected={:x?} vttbr-outside-runs={:#x} exits={:?} vmids={} exhausted={} each-once={} vmid-a={:?} vmid-c={:?} seen-c={:x?} exit-c={:?}",
             built,
             seen,
             expected,
             named_root.unwrap_or(0),
-            exits
+            exits,
+            count,
+            exhausted,
+            each_once,
+            vmid_a,
+            vmid_c,
+            seen_c,
+            exit_c
         );
     }
 }
