@@ -12,11 +12,10 @@ use super::{
     release_vfs_holder_leases, Syscall, SyscallError,
 };
 use crate::memory::pin;
-use crate::memory::region::{Region, RegionOwner};
+use crate::memory::region::{Region, RegionOwner, RegionTable};
 use crate::sched::scheduler::Scheduler;
 use crate::task::{tcb::Task, SCHEDULER};
 use abi::syscall::{grant_slice::LEASE, ViSyscall};
-use alloc::collections::BTreeMap;
 use types::{CellId, GrantPerm};
 
 const HOLDER_TID: usize = 53_001;
@@ -79,11 +78,11 @@ fn with_leasable_rows(f: impl FnOnce()) {
     let shared_to = Some((HOLDER_TID, GrantPerm::ReadOnly));
     grant_table_lock()
         .lock()
-        .get_or_insert_with(BTreeMap::new)
+        .get_or_insert_with(RegionTable::new)
         .insert(PAGE_BASE, shared_row(PAGE_BASE, shared_to));
     reg_grant_table_lock()
         .lock()
-        .get_or_insert_with(BTreeMap::new)
+        .get_or_insert_with(RegionTable::new)
         .insert(REG_BASE, shared_row(REG_BASE, shared_to));
 
     f();
@@ -142,11 +141,11 @@ fn lease_blocks_owner_free_and_unregister_and_re_lease_adds_a_hold() {
         assert!(grant_table_lock()
             .lock()
             .as_ref()
-            .is_some_and(|map| map.contains_key(&PAGE_BASE)));
+            .is_some_and(|map| map.occupied(&PAGE_BASE)));
         assert!(reg_grant_table_lock()
             .lock()
             .as_ref()
-            .is_some_and(|map| map.contains_key(&REG_BASE)));
+            .is_some_and(|map| map.occupied(&REG_BASE)));
         assert_eq!(holds(PAGE_BASE), Some(2));
         // An unleased slice still publishes nothing.
         assert!(pin::release_grant_holder_leases(HOLDER_TID).is_empty());
@@ -281,11 +280,11 @@ fn owner_death_quarantines_leased_rows_until_the_lease_ends() {
         assert!(grant_table_lock()
             .lock()
             .as_ref()
-            .is_none_or(|map| !map.contains_key(&PAGE_BASE)));
+            .is_none_or(|map| !map.occupied(&PAGE_BASE)));
         assert!(reg_grant_table_lock()
             .lock()
             .as_ref()
-            .is_none_or(|map| !map.contains_key(&REG_BASE)));
+            .is_none_or(|map| !map.occupied(&REG_BASE)));
         assert_eq!(pin::quarantined_pages(), before + 2);
         let held = pin::holder_of(REG_BASE, SIZE).expect("lease outlives its owner");
         assert!(held.quarantined && held.pending_revoke);

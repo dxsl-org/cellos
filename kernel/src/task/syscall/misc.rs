@@ -54,11 +54,11 @@ pub(super) fn carries_record(_domain: &Option<DomainRecord>, _record: &DomainRec
 /// it (the row's region owns them): a caller that gets `None` must not release
 /// anything, because another revoker already did (and the key may by now name
 /// a new grant over reused frames, which this leaves alone).
-pub(super) fn remove_row_if<G>(
-    map: Option<&mut BTreeMap<usize, G>>,
+pub(super) fn remove_row_if(
+    map: Option<&mut RegionTable>,
     key: usize,
-    carries: impl Fn(&G) -> bool,
-) -> Option<G> {
+    carries: impl Fn(&Region) -> bool,
+) -> Option<Region> {
     let map = map?;
     if !map.get(&key).is_some_and(carries) {
         return None;
@@ -76,11 +76,11 @@ pub(super) fn remove_row_if<G>(
 /// the race, or whose key now names a new grant over reused frames, releases
 /// nothing and leaves that row alone. `release` runs with no table lock held, so
 /// it may take `FRAME_ALLOCATOR` and `KERNEL_ROOT`.
-pub(super) fn release_if_row_taken<G>(
-    table: &Spinlock<Option<BTreeMap<usize, G>>>,
+pub(super) fn release_if_row_taken(
+    table: &Spinlock<Option<RegionTable>>,
     key: usize,
-    carries: impl Fn(&G) -> bool,
-    release: impl FnOnce(G),
+    carries: impl Fn(&Region) -> bool,
+    release: impl FnOnce(Region),
 ) -> bool {
     let taken = {
         let mut rows = table.lock();

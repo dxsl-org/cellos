@@ -72,20 +72,19 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 65 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
 | 66 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
 | 67 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
-| 68 | `SHM_HANDLES` | `kernel::task::syscall::SHM_HANDLES` (kernel/src/task/syscall/mod.rs) |
-| 69 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
-| 70 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
-| 71 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
-| 72 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
-| 73 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
-| 74 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
-| 75 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
-| 76 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
-| 77 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
-| 78 | `FRAME_RUN_PENDING` |  |
-| 79 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
-| 80 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
-| 81 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |
-| 82 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
-| 83 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
-| 84 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 68 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
+| 69 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
+| 70 | `RACE_SPACE` | `kernel::task::user_copy_tests::RACE_SPACE @cfg(all (feature = "native-domains" , feature = "test-hooks" , target_arch = "riscv64"))` (kernel/src/task/user_copy_tests.rs, cfg inactive here) |
+| 71 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
+| 72 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
+| 73 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
+| 74 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
+| 75 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
+| 76 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
+| 77 | `FRAME_RUN_PENDING` |  |
+| 78 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
+| 79 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
+| 80 | `QUOTA_LIMITS` | `kernel::memory::cell_quota::QUOTA_LIMITS` (kernel/src/memory/cell_quota.rs) |
+| 81 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
+| 82 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 83 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |

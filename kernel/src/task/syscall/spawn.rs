@@ -14,7 +14,7 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
         {
             let table = grant_table_lock().lock();
             table.as_ref().map_or(Some(true), |table| {
-                if table.len() > 128 {
+                if table.values().nth(128).is_some() {
                     return None;
                 }
                 Some(!table.values().any(|g| {
@@ -26,7 +26,7 @@ pub(crate) fn p01_retirement_check(owner: crate::p01_measurement::Owner) {
         {
             let table = reg_grant_table_lock().lock();
             table.as_ref().map_or(Some(true), |table| {
-                if table.len() > 128 {
+                if table.values().nth(128).is_some() {
                     return None;
                 }
                 Some(!table.values().any(|g| {

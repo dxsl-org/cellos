@@ -7,11 +7,10 @@
 //! (or zero) resolves as before, and both grant tables honor it.
 
 use super::{grant_table_lock, handle_syscall, map_syscall, reg_grant_table_lock, Syscall};
-use crate::memory::region::{Region, RegionOwner};
+use crate::memory::region::{Region, RegionOwner, RegionTable};
 use crate::sched::scheduler::Scheduler;
 use crate::task::{tcb::Task, SCHEDULER};
 use abi::syscall::ViSyscall;
-use alloc::collections::BTreeMap;
 use types::{CellId, GrantPerm};
 
 const GRANTEE_TID: usize = 52_001;
@@ -68,11 +67,11 @@ fn with_shared_rows(f: impl FnOnce()) {
     let shared_to = Some((GRANTEE_TID, GrantPerm::ReadOnly));
     grant_table_lock()
         .lock()
-        .get_or_insert_with(BTreeMap::new)
+        .get_or_insert_with(RegionTable::new)
         .insert(PAGE_BASE, shared_row(PAGE_BASE, shared_to));
     reg_grant_table_lock()
         .lock()
-        .get_or_insert_with(BTreeMap::new)
+        .get_or_insert_with(RegionTable::new)
         .insert(REG_BASE, shared_row(REG_BASE, shared_to));
 
     f();

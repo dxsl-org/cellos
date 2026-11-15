@@ -6,7 +6,6 @@
 use super::tcb::TaskState;
 use crate::sync::Spinlock;
 use abi::syscall::ViSpawnArgs;
-use alloc::collections::BTreeMap;
 use alloc::string::String;
 /// Only the private-root lifecycle helpers below name `Arc`; every other
 /// target/feature combination has nothing to import.
@@ -15,7 +14,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 // use log::info;
 use super::copy_glue::TaskCopyView;
-use crate::memory::region::{DomainRecord, Receiver, Region, RegionOwner};
+use crate::memory::region::{DomainRecord, Receiver, Region, RegionOwner, RegionTable};
 use types::*;
 
 mod ipc;
@@ -102,18 +101,6 @@ static GETRANDOM_RACE_NO_EARLY_DONE: core::sync::atomic::AtomicBool =
 static GETRANDOM_RACE_PROBE_TIMED_OUT: core::sync::atomic::AtomicBool =
     core::sync::atomic::AtomicBool::new(false);
 
-/// Frames currently issued via `ShmAlloc`, one [`Region`] each, keyed by the
-/// frame's address and owned by the Cell incarnation that allocated it.
-///
-/// `ShmMap` accepts only a handle that appears here AND belongs to the
-/// caller's live incarnation (or names the caller's cell as its receiver), so
-/// a cell can neither forge a physical address ("ShmMap kernel_text_phys") nor
-/// map a peer's or a dead predecessor's frame. Root retirement reclaims the
-/// dead incarnation's frames ([`release_shm_for`]). A leaf lock: never held
-/// while taking another.
-static SHM_HANDLES: Spinlock<BTreeMap<usize, Region>> =
-    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::SHM_HANDLES);
-
 static DMA_PUBLICATIONS: Spinlock<[usize; MAX_IN_FLIGHT_DMA_PUBLICATIONS]> = Spinlock::ranked(
     [0; MAX_IN_FLIGHT_DMA_PUBLICATIONS],
     crate::sync::rank::DMA_PUBLICATIONS,
@@ -143,7 +130,16 @@ pub(crate) mod dma_export;
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
 
-static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, Region>>> =
+/// The `GrantAlloc` rows and the `ShmAlloc` frames ([`RegionTable`]).
+///
+/// An SHM region is keyed by its frame's address and owned by the Cell
+/// incarnation that allocated it. `ShmMap` accepts only a handle that is an SHM
+/// row here AND belongs to the caller's live incarnation (or names the
+/// caller's cell as its receiver), so a cell can neither forge a physical
+/// address ("ShmMap kernel_text_phys") nor map a peer's, a dead predecessor's
+/// or a grant's frame. Root retirement reclaims the dead incarnation's frames
+/// ([`release_shm_for`]).
+static PAGE_GRANT_TABLE: Spinlock<Option<RegionTable>> =
     Spinlock::ranked(None, crate::sync::rank::PAGE_GRANT_TABLE);
 
 #[cfg(all(feature = "native-domains", cellos_wide))]
@@ -314,7 +310,7 @@ fn residual_domain_record(
 
 // ── Registered Grant Table (GrantRegister / GrantUnregister, syscalls 215/216) ──
 
-static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, Region>>> =
+static REG_GRANT_TABLE: Spinlock<Option<RegionTable>> =
     Spinlock::ranked(None, crate::sync::rank::REG_GRANT_TABLE);
 
 // ── Shared allocation/deallocation helpers ────────────────────────────────────
@@ -522,8 +518,8 @@ mod serial_port {
 #[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_record_end(
     sched: &crate::sched::scheduler::Scheduler,
-    page_grants: Option<&BTreeMap<usize, Region>>,
-    registered_grants: Option<&BTreeMap<usize, Region>>,
+    page_grants: Option<&RegionTable>,
+    registered_grants: Option<&RegionTable>,
     caller_id: usize,
     ptr: usize,
 ) -> Option<usize> {
@@ -585,8 +581,8 @@ fn sas_record_end(
 #[cfg(all(feature = "native-domains", cellos_wide))]
 fn sas_caller_owned_span(
     sched: &crate::sched::scheduler::Scheduler,
-    page_grants: Option<&BTreeMap<usize, Region>>,
-    registered_grants: Option<&BTreeMap<usize, Region>>,
+    page_grants: Option<&RegionTable>,
+    registered_grants: Option<&RegionTable>,
     caller_id: usize,
     ptr: usize,
     len: usize,

@@ -5,12 +5,14 @@
 //! SHM handles (`ShmAlloc`), the DMA export leases (`EXPORTS`) and the domain
 //! grant records (carried by grant rows) each kept their own row type, with its
 //! own owner, rights and receiver fields and its own idea of who frees the
-//! frames. Each table now stores one [`Region`]: who owns it, what it allows,
-//! who receives it, what it holds in the pin registry, and its frames — a
-//! [`FrameRun`] the region owns until its release takes it, or the range of
-//! another region's frames it locks (a DMA export). Every table keeps its
-//! lock, its rank and its key, so the syscall-visible ids (a grant's or an SHM
-//! frame's base address, an export id) do not change.
+//! frames. Each table now stores one [`Region`]: what kind it is, who owns it,
+//! what it allows, who receives it, what it holds in the pin registry, and its
+//! frames — a [`FrameRun`] the region owns until its release takes it, or the
+//! range of another region's frames it locks (a DMA export). The SHM regions
+//! live in the `GrantAlloc` table ([`RegionTable`]), where only the SHM
+//! syscalls see them. Every table keeps its lock, its rank and its key, so the
+//! syscall-visible ids (a grant's or an SHM frame's base address, an export id)
+//! do not change.
 //!
 //! A region's frames leave it only through [`Region::into_run`], which consumes
 //! the region: whoever took the row out of its table is the one releaser (the
@@ -19,6 +21,8 @@
 
 use crate::memory::frame_run::FrameRun;
 use crate::memory::pin::ReleaseKey;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use types::{CellId, GrantPerm};
 
 /// The lifecycle record a domain-backed grant row carries (owner and receiver
@@ -30,6 +34,18 @@ pub(crate) type DomainRecord = alloc::sync::Arc<crate::task::domain_grant::Domai
 /// Elsewhere no row can carry a lifecycle record: the slot is always `None`.
 #[cfg(not(cellos_domain_grants))]
 pub(crate) type DomainRecord = ();
+
+/// What a region is, and so which syscalls may name it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RegionKind {
+    /// An `ShmAlloc` frame (syscalls 20/21); id = the frame's address.
+    Shm,
+    /// A `GrantAlloc` (208) or `GrantRegister` (215) buffer, by its table;
+    /// id = the base address.
+    Grant,
+    /// An `ExportDmaRange` (437) lease; id = the export id.
+    DmaExport,
+}
 
 /// Who owns a region: a task and the cell incarnation it ran as.
 ///
@@ -128,6 +144,7 @@ enum Backing {
 /// One row of a region table. `X` is the table's own state, if it has any
 /// (a DMA export's lifecycle and device window).
 pub(crate) struct Region<X = ()> {
+    kind: RegionKind,
     pub(crate) owner: RegionOwner,
     /// Bytes the region was asked for (and charged): a grant's or an export's
     /// frames cover them rounded up to whole pages; an SHM handle is one frame
@@ -153,6 +170,7 @@ impl Region {
         domain: Option<DomainRecord>,
     ) -> Self {
         Self {
+            kind: RegionKind::Grant,
             owner,
             size,
             rights: GrantPerm::ReadWrite,
@@ -167,6 +185,7 @@ impl Region {
     /// An `ShmAlloc` frame owned by an incarnation, not yet handed to a cell.
     pub(crate) fn shm(owner: RegionOwner, run: FrameRun, size: usize) -> Self {
         Self {
+            kind: RegionKind::Shm,
             owner,
             size,
             rights: GrantPerm::ReadWrite,
@@ -192,6 +211,7 @@ impl<X> Region<X> {
         ext: X,
     ) -> Self {
         Self {
+            kind: RegionKind::DmaExport,
             owner,
             size,
             rights,
@@ -249,3 +269,100 @@ impl<X> Region<X> {
         }
     }
 }
+
+/// One grant table's rows, keyed by id.
+///
+/// The `GrantAlloc` table also holds the SHM regions ([`RegionKind::Shm`],
+/// keyed by the frame's address): SHM rides on the grant table and its
+/// release path, and keeps its own syscalls. Only the `shm*` methods see those
+/// rows. Every other method is the grant view and skips them, so no grant path
+/// (`GrantShare`, `GrantSlice`, `GrantFree`, `GrantDma`, an export's ownership
+/// proof, the SAS output ledger, a reaper) can resolve, change or remove an SHM
+/// handle, and `ShmMap` resolves nothing but SHM handles. Two rows never share
+/// an id: each is the address of a frame its region owns.
+pub(crate) struct RegionTable {
+    rows: BTreeMap<usize, Region>,
+}
+
+fn is_grant(region: &Region) -> bool {
+    region.kind != RegionKind::Shm
+}
+
+impl RegionTable {
+    pub(crate) const fn new() -> Self {
+        Self {
+            rows: BTreeMap::new(),
+        }
+    }
+
+    /// The grant row `id`.
+    pub(crate) fn get(&self, id: &usize) -> Option<&Region> {
+        self.rows.get(id).filter(|region| is_grant(region))
+    }
+
+    pub(crate) fn get_mut(&mut self, id: &usize) -> Option<&mut Region> {
+        self.rows.get_mut(id).filter(|region| is_grant(region))
+    }
+
+    /// Take grant row `id` out of the table; an SHM row stays.
+    pub(crate) fn remove(&mut self, id: &usize) -> Option<Region> {
+        self.get(id)?;
+        self.rows.remove(id)
+    }
+
+    /// The grant rows.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&usize, &Region)> {
+        self.rows.iter().filter(|(_, region)| is_grant(region))
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = (&usize, &mut Region)> {
+        self.rows.iter_mut().filter(|(_, region)| is_grant(region))
+    }
+
+    pub(crate) fn values(&self) -> impl Iterator<Item = &Region> {
+        self.iter().map(|(_, region)| region)
+    }
+
+    pub(crate) fn values_mut(&mut self) -> impl Iterator<Item = &mut Region> {
+        self.iter_mut().map(|(_, region)| region)
+    }
+
+    /// Does any row, grant or SHM, hold `id`? Only the RV64 grant race
+    /// fixture reissues a grant at a chosen address.
+    #[cfg(any(test, all(feature = "getrandom-sas-test", target_arch = "riscv64")))]
+    pub(crate) fn occupied(&self, id: &usize) -> bool {
+        self.rows.contains_key(id)
+    }
+
+    /// Insert `region` at `id`, returning the row of any kind it replaced.
+    pub(crate) fn insert(&mut self, id: usize, region: Region) -> Option<Region> {
+        self.rows.insert(id, region)
+    }
+
+    /// The SHM region `handle`.
+    pub(crate) fn shm(&self, handle: &usize) -> Option<&Region> {
+        self.rows.get(handle).filter(|region| !is_grant(region))
+    }
+
+    pub(crate) fn shm_mut(&mut self, handle: &usize) -> Option<&mut Region> {
+        self.rows.get_mut(handle).filter(|region| !is_grant(region))
+    }
+
+    /// Take every SHM region `owner` owns out of the table.
+    pub(crate) fn take_shm_of(&mut self, owner: RegionOwner) -> Vec<Region> {
+        let handles: Vec<usize> = self
+            .rows
+            .iter()
+            .filter(|(_, region)| !is_grant(region) && region.owner == owner)
+            .map(|(&handle, _)| handle)
+            .collect();
+        handles
+            .iter()
+            .filter_map(|handle| self.rows.remove(handle))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+#[path = "region_tests.rs"]
+mod tests;

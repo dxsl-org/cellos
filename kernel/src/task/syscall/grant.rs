@@ -34,14 +34,19 @@ fn shm_owner(owner: crate::cell::state_stash::Incarnation) -> RegionOwner {
 /// Whether `handle` is an outstanding `ShmAlloc` frame owned by exactly `owner`
 /// (same Cell and generation).
 pub(super) fn shm_owned_by(handle: usize, owner: crate::cell::state_stash::Incarnation) -> bool {
-    SHM_HANDLES.lock().get(&handle).map(|r| r.owner) == Some(shm_owner(owner))
+    grant_table_lock()
+        .lock()
+        .as_ref()
+        .and_then(|table| table.shm(&handle))
+        .map(|r| r.owner)
+        == Some(shm_owner(owner))
 }
 
 /// The owner of SHM handle `handle` if incarnation `(cell, generation)` owns
 /// it or the cell is its receiver.
 pub(super) fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Option<RegionOwner> {
-    let guard = SHM_HANDLES.lock();
-    let region = guard.get(&handle)?;
+    let guard = grant_table_lock().lock();
+    let region = guard.as_ref()?.shm(&handle)?;
     if region.owner == RegionOwner::incarnation(cell, generation)
         || region.receiver == Receiver::Cell(cell)
     {
@@ -54,24 +59,19 @@ pub(super) fn shm_accessible_by(handle: usize, cell: u64, generation: u64) -> Op
 /// Remove every `ShmAlloc` region of `owner` and return them with their total
 /// charged bytes.
 pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec<Region>, usize) {
-    let owner = shm_owner(owner);
-    let mut guard = SHM_HANDLES.lock();
-    let handles: Vec<usize> = guard
-        .iter()
-        .filter(|(_, region)| region.owner == owner)
-        .map(|(&handle, _)| handle)
-        .collect();
-    let regions: Vec<Region> = handles
-        .iter()
-        .filter_map(|handle| guard.remove(handle))
-        .collect();
+    let regions = grant_table_lock()
+        .lock()
+        .as_mut()
+        .map(|table| table.take_shm_of(shm_owner(owner)))
+        .unwrap_or_default();
     let total_bytes = regions
         .iter()
         .fold(0usize, |total, region| total.saturating_add(region.size));
     (regions, total_bytes)
 }
 
-/// Reclaim the `ShmAlloc` frames of a retired root's incarnation.
+/// Reclaim the `ShmAlloc` frames of a retired root's incarnation: its SHM
+/// regions leave the grant table and their runs take the grant release path.
 ///
 /// Called from the root-retirement funnel after the generation is quiescent.
 /// `ShmMap` re-maps a frame's identity VA as USER. If that VA still maps the
@@ -89,7 +89,7 @@ pub(super) fn shm_take_for(owner: crate::cell::state_stash::Incarnation) -> (Vec
 /// Returns the number of frames taken from the dead incarnation: each was
 /// mapped USER in the shared root with no borrower record, which the
 /// retirement verdict reports.
-/// Lock order: SHM_HANDLES (released); pin REGISTRY (released); KERNEL_ROOT
+/// Lock order: PAGE_GRANT_TABLE (released); pin REGISTRY (released); KERNEL_ROOT
 /// alone (unpublish, prune); then FRAME_ALLOCATOR → KERNEL_ROOT.
 pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
     use crate::memory::frame_run::Batch;
@@ -132,7 +132,7 @@ pub(crate) fn release_shm_for(cell_id: u64, generation: u64) -> usize {
 /// (`Region::domain`: the owner/receiver roots, the exact receiver mapping
 /// tuple and the `Live → Revoking → Revoked` state); a SAS owner keeps the
 /// zero-copy path and leaves it `None`.
-pub(super) fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, Region>>> {
+pub(super) fn grant_table_lock() -> &'static Spinlock<Option<RegionTable>> {
     &PAGE_GRANT_TABLE
 }
 
@@ -268,7 +268,7 @@ pub(super) enum DmaGrantError {
 /// one [`Region`] each, keyed by base address, with one grantee at a time via
 /// `GrantShare`/`GrantSlice` as in [`grant_table_lock`]. An owner tid of 0
 /// denotes an owner-dead VFS handoff awaiting reap.
-pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, Region>>> {
+pub(super) fn reg_grant_table_lock() -> &'static Spinlock<Option<RegionTable>> {
     &REG_GRANT_TABLE
 }
 
@@ -501,7 +501,7 @@ enum TakenGrant {
 /// `REGISTRY`, a leaf), so a concurrent VFS `GrantSlice` or `GrantDma` cannot
 /// publish a pin between the check and the removal.
 fn take_owned_row(
-    table: &Spinlock<Option<BTreeMap<usize, Region>>>,
+    table: &Spinlock<Option<RegionTable>>,
     kind: &str,
     caller_id: usize,
     id: usize,
@@ -1134,7 +1134,10 @@ pub(super) fn shm_register(
     if let Some(cell) = recipient {
         region.receiver = Receiver::Cell(cell);
     }
-    SHM_HANDLES.lock().insert(frame, region);
+    grant_table_lock()
+        .lock()
+        .get_or_insert_with(RegionTable::new)
+        .insert(frame, region);
 }
 
 pub(super) fn dma_range_within(
@@ -1575,11 +1578,8 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
         return false;
     }
     let mut table = reg_grant_table_lock().lock();
-    let binding = live_task_binding(caller_id).filter(|_| {
-        !table
-            .as_ref()
-            .is_some_and(|grants| grants.contains_key(&base))
-    });
+    let binding = live_task_binding(caller_id)
+        .filter(|_| !table.as_ref().is_some_and(|grants| grants.occupied(&base)));
     let Some((owner_cell, owner_generation)) = binding else {
         drop(table);
         free_grant_pages(run);
@@ -1590,7 +1590,7 @@ pub(crate) fn test_reregister_registered_grant_for_race(caller_id: usize, base: 
         None,
         crate::memory::heap::p01_owner::GRANT_SHARED,
     );
-    table.get_or_insert_with(BTreeMap::new).insert(
+    table.get_or_insert_with(RegionTable::new).insert(
         base,
         Region::grant(
             RegionOwner::task(caller_id, owner_cell, owner_generation),
@@ -1896,7 +1896,11 @@ pub(super) fn shm_map(caller_id: usize, handle: usize, target_pid: usize) -> Sys
 
     if target_pid != 0 && owner.cell.0 == caller_cell {
         if let Some((target_cell, _)) = live_cell_identity(target_pid) {
-            if let Some(r) = SHM_HANDLES.lock().get_mut(&handle) {
+            if let Some(r) = grant_table_lock()
+                .lock()
+                .as_mut()
+                .and_then(|table| table.shm_mut(&handle))
+            {
                 r.receiver = Receiver::Cell(target_cell);
             }
         }
@@ -2229,7 +2233,7 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     };
     let domain = owned_domain_record(&owner_space, paddr, size);
     if table.is_none() {
-        *table = Some(BTreeMap::new());
+        *table = Some(RegionTable::new());
     }
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(
@@ -2303,7 +2307,7 @@ pub(super) fn grant_share(
     {
         let mut tbl = grant_table_lock().lock();
         if tbl.is_none() {
-            *tbl = Some(BTreeMap::new());
+            *tbl = Some(RegionTable::new());
         }
         if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
             if grant.owner.tid != caller_id {
@@ -2520,7 +2524,7 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     };
     let domain = owned_domain_record(&owner_space, paddr, size);
     if table.is_none() {
-        *table = Some(BTreeMap::new());
+        *table = Some(RegionTable::new());
     }
     #[cfg(feature = "p01-trace")]
     let _semantic = crate::memory::heap::p01_owner::creation(

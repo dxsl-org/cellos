@@ -1430,17 +1430,6 @@ rationale = "Spinlock<u64> gives cross-CPU uniqueness without relying on 64-bit 
 review = "kernel/src/task/tcb.rs:next_cell_generation; kernel/src/task/tcb.rs:706"
 
 [[global]]
-key = "kernel::task::syscall::SHM_HANDLES"
-lifetime = "global"
-mutation = "spinlock"
-owner = "kernel::task::syscall ShmAlloc/ShmMap handle allowlist (shm_register / shm_is_valid)"
-contexts = ["normal", "irq", "exception", "ap"]
-seal = "none: records come and go for the whole run"
-retirement = "release_shm_for(cell, generation) in the root-retirement funnel (after resource_registry::release_for): removes the dead incarnation's frames, unmaps each identity VA if it still maps that frame (restoring the kernel RW mapping where RAM is identity-reached), flushes on all harts, then frees the frame"
-rationale = "Spinlock<BTreeMap<frame, memory::region::Region>>: the owner incarnation, the receiver cell, the charged bytes and the frame's FrameRun, which the region owns until release_shm_for takes it; held alone and released before FRAME_ALLOCATOR/KERNEL_ROOT are taken. ShmAlloc records the caller's live (cell, generation); ShmMap succeeds only for that exact incarnation, else PermissionDenied (CP1 p02-debt-semantic #10). The reclaim runs only at the post-quiescence funnel, so no task of the dead incarnation is mid-syscall."
-review = "kernel/src/task/syscall/mod.rs:shm_owned_by; kernel/src/task/syscall/mod.rs:release_shm_for; kernel/src/task.rs (retirement funnel call); tests shm_frame_is_owned_by_exactly_the_allocating_incarnation, shm_reclaim_takes_only_the_dead_incarnations_records"
-
-[[global]]
 key = "kernel::task::syscall::DMA_PUBLICATIONS"
 lifetime = "global"
 mutation = "spinlock"
@@ -1455,10 +1444,10 @@ review = "kernel/src/task/syscall/mod.rs:reserve_dma_publication; kernel/src/tas
 key = "kernel::task::syscall::PAGE_GRANT_TABLE"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::task::syscall page-grant table (GrantAlloc/Share/Slice/Free); reaped by reap_grants_for_task"
+owner = "kernel::task::syscall page-grant table (GrantAlloc/Share/Slice/Free) and ShmAlloc/ShmMap frames (memory::region::RegionTable; SHM rows seen only by the shm* methods); reaped by reap_grants_for_task and release_shm_for"
 contexts = ["normal", "irq", "exception", "ap"]
 seal = "none: mutated for the whole run (lazily Some on first insert)"
-retirement = "rows of a dead tid reclaimed/unshared in reap_grants_for_task (clear_grantee_refs, reclaim_owned_grants, sweep_deferred_domain_grants) during root/worker retirement"
+retirement = "rows of a dead tid reclaimed/unshared in reap_grants_for_task (clear_grantee_refs, reclaim_owned_grants, sweep_deferred_domain_grants) during root/worker retirement; a dead incarnation's SHM rows taken by release_shm_for in the root-retirement funnel, which unpublishes, flushes and frees each frame (or withholds it while pinned)"
 rationale = "Spinlock with documented order PAGE_GRANT_TABLE -> REG_GRANT_TABLE -> SCHEDULER -> pin. Syscalls touch it in normal context, and reap_retired_task_resources calls reap_grants_for_task outside SCHEDULER from yield_cpu, i.e. from timer-ISR, user-fault and AP-idle contexts, where it frees grant pages."
 review = "kernel/src/task/syscall/mod.rs:grant_table_lock; kernel/src/task/syscall/mod.rs:reap_grants_for_task; kernel/src/task.rs:reap_retired_task_resources; kernel/src/task/syscall/mod.rs:3090"
 
