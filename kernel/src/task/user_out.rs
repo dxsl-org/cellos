@@ -1,4 +1,5 @@
 use super::{copy_glue::TaskCopyView, stack::Stack, syscall::SyscallError, SCHEDULER};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 fn usable_stack_bounds(stack: &Stack) -> Result<(usize, usize), SyscallError> {
     let start = stack.usable_start();
@@ -60,14 +61,20 @@ pub(super) fn resolve_optional_usize_slot(
     Ok(Some(UsizeOutSlot { ptr, view }))
 }
 
+/// `size_out` writes that failed after a successful resolve (see
+/// [`write_resolved_optional_usize`]).
+static UNWRITTEN_SIZE_OUTS: AtomicUsize = AtomicUsize::new(0);
+
 /// Write a slot resolved by [`resolve_optional_usize_slot`].
 ///
 /// The slot is user memory, so the write goes through the caller's copy view
-/// (the user-copy window: STAC/CLAC under x86 SMAP), never a raw store. The
-/// syscall runs in the caller's own context, so its stack mapping stays live
-/// between resolution and this write and the copy cannot fail; if it ever
-/// does, the value is dropped and logged, and the caller's result stands.
-/// Callers must not hold a grant-table lock here.
+/// (the user-copy window: STAC/CLAC under x86 SMAP), never a raw store. It runs
+/// after the caller's result is committed (lease and publish) and can still
+/// fail: when the caller's stack or address space is no longer live by then,
+/// e.g. a sibling thread killed a private-root domain between publish and
+/// this write (its `is_live()` turns false). The result then stands, the slot
+/// keeps its old value, and the failure is counted and logged. Callers must
+/// not hold a grant-table lock here.
 pub(super) fn write_resolved_optional_usize(slot: Option<UsizeOutSlot>, value: usize) {
     let Some(slot) = slot else {
         return;
@@ -77,8 +84,9 @@ pub(super) fn write_resolved_optional_usize(slot: Option<UsizeOutSlot>, value: u
         .write_bytes(slot.ptr, &value.to_ne_bytes())
         .is_err()
     {
+        let unwritten = UNWRITTEN_SIZE_OUTS.fetch_add(1, Ordering::Relaxed) + 1;
         log::warn!(
-            "[user_out] usize out-slot {:#x} refused after validation; value not written",
+            "[user_out] the call succeeded but size_out {:#x} was not written: the caller's stack is no longer writable ({unwritten} so far)",
             slot.ptr
         );
     }

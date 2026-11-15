@@ -237,10 +237,11 @@ impl ElfLoader {
                 // `flush_deferred_maps` adds [start_page, end_page) — every page
                 // the loop touches, the merged boundary pages included — to the
                 // caller's batch, whose one shared flush runs after the guard is
-                // released and before relocation (which writes through the
-                // cell's VA) or the spawn's return. An early return goes through
-                // `unwind`, which unmaps every recorded page and retires its
-                // frame into the batch, freed only after that flush confirms.
+                // released and before the spawn's return (relocation writes each
+                // frame's kernel alias on every arch, never the cell's VA). An
+                // early return goes through `unwind`, which unmaps every recorded
+                // page and retires its frame into the batch, freed only after
+                // that flush confirms.
                 let mut current_page = start_page;
                 while current_page < end_page {
                     // Overwrite guard: reject VA collision with kernel MMIO or a

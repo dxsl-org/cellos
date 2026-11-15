@@ -124,7 +124,7 @@ pub fn allocate(
     }
     let cfg = Config::new(bdf);
     let msi_cap = cfg.find_capability(CAP_ID_MSI);
-    let msix = record::carved_layout(&dev, &cfg)
+    let mut msix = record::carved_layout(&dev, &cfg)
         .filter(|_| mode & IRQ_MODE_ALLOW_MSIX != 0)
         .and_then(|(cap, layout)| {
             let base = dev.bars[layout.table_bar as usize].base_addr();
@@ -133,18 +133,29 @@ pub fn allocate(
     // Map the table kernel-only before taking STATE: mapping may issue a TLB
     // shootdown, which must not wait on CPUs spinning for STATE. Carved pages
     // are never user-mapped, so an early (or repeated) mapping is harmless. A
-    // table that cannot be mapped fails this allocation with nothing programmed.
+    // table that cannot be mapped is never touched: this call falls back to
+    // plain MSI when the caller allowed it, and otherwise fails with nothing
+    // programmed.
     if let Some((_, layout, table_phys)) = msix {
         if let Err(error) =
             crate::memory::paging::map_mmio_x86(table_phys, layout.table_size as usize * 16)
         {
+            let fallback = mode & IRQ_MODE_ALLOW_MSI != 0 && msi_cap.is_some();
             log::error!(
-                "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?})",
+                "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?}); {}",
                 bdf >> 8,
                 (bdf >> 3) & 0x1F,
                 bdf & 7,
+                if fallback {
+                    "trying MSI"
+                } else {
+                    "no interrupts"
+                },
             );
-            return Err(PcieFunctionError::NotSupported);
+            if !fallback {
+                return Err(PcieFunctionError::NotSupported);
+            }
+            msix = None;
         }
     }
     let mut state = STATE.lock();

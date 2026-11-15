@@ -2538,6 +2538,17 @@ rationale = "A Relaxed AtomicBool publishes nothing but itself; an allocation th
 review = "kernel/src/loader/va_alloc.rs:SLOT_ORDER; kernel/src/loader/va_alloc.rs:seed_slot_order; kernel/src/main.rs:kmain"
 
 [[global]]
+key = "kernel::task::user_out::UNWRITTEN_SIZE_OUTS"
+lifetime = "global"
+mutation = "atomic"
+owner = "kernel::task::user_out size_out write path"
+contexts = ["normal"]
+seal = "none: incremented whenever a size_out write fails after its call committed"
+retirement = "never: lives for the whole run"
+rationale = "A Relaxed AtomicUsize diagnostic counter, only incremented and read into the same log line; it publishes no other state"
+review = "kernel/src/task/user_out.rs:write_resolved_optional_usize"
+
+[[global]]
 key = "kernel::cell::service_registry::OWNERS"
 lifetime = "global"
 mutation = "spinlock"

@@ -10,7 +10,8 @@
 //! # Ordering contract (do not reorder)
 //! 1. `elf::load_segments` maps all pages WRITE and records the *target* flags,
 //!    OR-ing them across PT_LOADs that share a boundary page.
-//! 2. `reloc::apply_relocations` patches through those writable mappings.
+//! 2. `reloc::apply_relocations` patches each owned frame through its kernel
+//!    alias (every arch), never through the cell's USER mapping.
 //! 3. `enforce` lowers each page to its recorded target flags.
 //! 4. Only then may the spawn path register the task with the scheduler.
 //!
@@ -42,8 +43,8 @@
 //! # What stays writable
 //! Cell stacks, heaps, grant pages, and MMIO windows are mapped by other paths
 //! and are untouched here. Kernel writes into cell memory (segment load, warm
-//! snapshot restore, AArch64 relocation) go through the physical/HHDM alias,
-//! which carries kernel RW independently of the USER mapping's W bit.
+//! snapshot restore, relocation on every arch) go through the physical/HHDM
+//! alias, which carries kernel RW independently of the USER mapping's W bit.
 
 use crate::memory::paging::Flags;
 use types::{VAddr, ViError, ViResult};
