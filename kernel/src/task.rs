@@ -2335,7 +2335,10 @@ pub fn ipc_recv(
             Some(crate::p01_resources::owner(receiver_task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
         );
-        let snapshot = wire.try_clone()?;
+        // The snapshot is kernel scratch, at most `MAX_IPC_WIRE_PAYLOAD` bytes
+        // and freed before this call returns: neither the sender's quota nor a
+        // later incarnation on its CellId can refuse a queued message.
+        let snapshot = wire.try_clone(crate::memory::cell_quota::Charge::KERNEL)?;
         let receiver_view = copy_glue::TaskCopyView::of(receiver_task);
         async_ipc::dispatch(sched, caller_id, header);
         (sender_id, header, snapshot, receiver_view)
@@ -2410,7 +2413,8 @@ pub fn ipc_try_recv(
             Some(crate::p01_resources::owner(receiver_task)),
             crate::memory::heap::p01_owner::RECEIVE_SCRATCH,
         );
-        let snapshot = wire.try_clone()?;
+        // Kernel scratch, freed within the call (see `ipc_recv`).
+        let snapshot = wire.try_clone(crate::memory::cell_quota::Charge::KERNEL)?;
         let receiver_view = copy_glue::TaskCopyView::of(receiver_task);
         async_ipc::dispatch(sched, caller_id, header);
         (sender_id, header, snapshot, receiver_view)

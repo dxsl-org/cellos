@@ -219,7 +219,9 @@ pub(crate) fn fixtures_hardware() {
     #[cfg(feature = "test-hooks")]
     crate::arch::layer2_selftest::run_mte_selftest();
     // EL2 hosts only (each skips elsewhere); the virt-vhe lane requires all
-    // three.
+    // three. Dev posture, not `test-hooks` as on x86: that lane boots the
+    // default dev image, which has no `test-hooks`. Each fixture reaps the VMs
+    // it creates and releases its CellId before the first cell spawns.
     #[cfg(not(cellos_posture = "release"))]
     {
         crate::arch::vm::two_vm_stage2_selftest();

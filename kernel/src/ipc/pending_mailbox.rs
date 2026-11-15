@@ -138,6 +138,11 @@ impl PendingMailbox {
         self.messages.iter()
     }
 
+    /// Records in queue order, mutably; the queue's length and order stay fixed.
+    pub(crate) fn iter_mut(&mut self) -> core::slice::IterMut<'_, PendingMsg> {
+        self.messages.iter_mut()
+    }
+
     #[cfg(feature = "p01-trace")]
     pub(crate) fn observe_owner(&self, owner: crate::p01_measurement::Owner) {
         crate::memory::heap::p01_owner::runtime_vec(

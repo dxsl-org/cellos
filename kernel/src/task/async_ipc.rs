@@ -544,9 +544,15 @@ pub fn submit_request(owner: usize, peer: usize, request: Request<'_>) -> Result
         delivery_id: 0,
         async_op: token,
     };
-    let reply =
-        ipc_wire::IpcWireMessage::try_new(reply_header, &[0u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD])
-            .map_err(|_| Failure::Busy)?;
+    // The reply storage is the submitter's: it is charged to `binding`, the
+    // incarnation that asked, never to the server the reply header names, so
+    // no client can spend a peer's quota by submitting.
+    let reply = ipc_wire::IpcWireMessage::try_new_charged(
+        reply_header,
+        &[0u8; ipc_wire::MAX_IPC_WIRE_PAYLOAD],
+        crate::memory::cell_quota::Charge::new(types::CellId(binding.0), binding.1),
+    )
+    .map_err(|_| Failure::Busy)?;
     #[cfg(feature = "p01-trace")]
     reply.observe_owner(heap_owner, crate::memory::heap::p01_owner::REPLY);
     let mut guard = SCHEDULER.lock();
@@ -2912,6 +2918,9 @@ mod tests {
     const ALL_SOURCES: u32 = NET_RX | IPC | TIMER;
 
     /// Thread-local allocation counter for the wait-path measurement (M2).
+    /// Inside [`admitting_by_quota`](alloc_probe::admitting_by_quota) it also
+    /// refuses (returns null for) an allocation the open charge scope's quota
+    /// would refuse, as the kernel allocator does.
     mod alloc_probe {
         use std::alloc::{GlobalAlloc, Layout, System};
         use std::cell::Cell;
@@ -2919,6 +2928,7 @@ mod tests {
         std::thread_local! {
             static COUNT: Cell<usize> = const { Cell::new(0) };
             static FREED: Cell<usize> = const { Cell::new(0) };
+            static ADMIT_BY_QUOTA: Cell<bool> = const { Cell::new(false) };
         }
 
         pub struct Counting;
@@ -2927,25 +2937,61 @@ mod tests {
             let _ = COUNT.try_with(|count| count.set(count.get() + 1));
         }
 
-        // SAFETY: every call forwards unchanged to `System`; the counter is a
-        // const-initialised thread-local `Cell` that never allocates.
+        /// Whether the open charge scope's quota admits `size` bytes. Only a
+        /// check: an admitted charge is refunded at once, so no free has to
+        /// find it.
+        fn admitted(size: usize) -> bool {
+            if !ADMIT_BY_QUOTA.try_with(Cell::get).unwrap_or(false) {
+                return true;
+            }
+            let charge = crate::sched::hart_local::alloc_charge();
+            match crate::memory::cell_quota::charge_owner(charge, size) {
+                Some(owner) => {
+                    crate::memory::cell_quota::refund_owner(owner, size);
+                    true
+                }
+                None => false,
+            }
+        }
+
+        // SAFETY: every admitted call forwards unchanged to `System`; a refused
+        // one returns null, which `GlobalAlloc` permits. The thread-locals are
+        // const-initialised `Cell`s that never allocate.
         unsafe impl GlobalAlloc for Counting {
             unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
                 bump();
+                if !admitted(layout.size()) {
+                    return core::ptr::null_mut();
+                }
                 unsafe { System.alloc(layout) }
             }
             unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
                 bump();
+                if !admitted(layout.size()) {
+                    return core::ptr::null_mut();
+                }
                 unsafe { System.alloc_zeroed(layout) }
             }
             unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
                 bump();
+                if !admitted(new_size) {
+                    return core::ptr::null_mut();
+                }
                 unsafe { System.realloc(ptr, layout, new_size) }
             }
             unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
                 let _ = FREED.try_with(|freed| freed.set(freed.get() + layout.size()));
                 unsafe { System.dealloc(ptr, layout) }
             }
+        }
+
+        /// Run `f` with this thread's allocations refused where the open
+        /// charge scope's quota refuses them.
+        pub fn admitting_by_quota<R>(f: impl FnOnce() -> R) -> R {
+            ADMIT_BY_QUOTA.with(|admit| admit.set(true));
+            let result = f();
+            ADMIT_BY_QUOTA.with(|admit| admit.set(false));
+            result
         }
 
         #[global_allocator]
@@ -3418,7 +3464,7 @@ mod tests {
             add_operation(&mut sched, OWNER, PROVIDER, token, Phase::Dispatched);
             settle(&mut sched, PROVIDER, token);
         }
-        // A Cell's queue is created once, charged to the kernel; count after it.
+        // A Cell's queue is created once; count after it.
         let created = alloc_probe::allocations();
         let queue = super::super::completion::queue_for(&mut sched, OWNER).expect("queue");
         let creation_allocations = alloc_probe::allocations() - created;
@@ -3571,5 +3617,102 @@ mod tests {
         crate::sched::hart_local::ready::remove_from_all(OWNER);
         crate::sched::hart_local::ready::remove_from_all(PROVIDER);
         *SCHEDULER.lock() = saved;
+    }
+
+    /// A queued message is received and removed whatever its sender's quota
+    /// row now holds: the sender at its limit, or its CellId re-registered for
+    /// a later incarnation. The receive snapshot is kernel scratch.
+    #[test]
+    fn a_queued_message_is_received_whatever_its_senders_quota_row_holds() {
+        use crate::memory::cell_quota::{self, Limits};
+        use types::CellId;
+        const SENDER_CELL: CellId = CellId((cell_quota::MAX_CELLS - 1) as u64);
+        const SENT_AS: u64 = 5;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let saved = SCHEDULER.lock().take();
+        // (generation the slot holds, its memory limit)
+        for (registered, limit) in [(SENT_AS, 0), (SENT_AS + 1, 1 << 20)] {
+            let mut sched = fixture();
+            let header = ipc_wire::IpcWireHeader {
+                sender_tid: OWNER,
+                sender_cell_id: SENDER_CELL.0,
+                sender_generation: SENT_AS,
+                delivery_id: 91,
+                async_op: 0,
+            };
+            super::super::queue_wire_msg(
+                sched.tasks.get_mut(&PROVIDER).unwrap(),
+                ipc_wire::IpcWireMessage::try_new(header, b"queued").unwrap(),
+                64,
+            )
+            .unwrap();
+            *SCHEDULER.lock() = Some(sched);
+            cell_quota::register(
+                SENDER_CELL,
+                registered,
+                Limits {
+                    memory: limit,
+                    guest: 0,
+                },
+            );
+            let received =
+                alloc_probe::admitting_by_quota(|| super::super::ipc_try_recv(PROVIDER, 0, 0, 0));
+            cell_quota::deregister(SENDER_CELL);
+            assert_eq!(received, Ok(OWNER), "slot generation {registered}");
+            assert!(
+                SCHEDULER.lock().as_ref().unwrap().tasks[&PROVIDER]
+                    .pending_msgs
+                    .is_empty(),
+                "slot generation {registered}: the message is removed"
+            );
+        }
+        *SCHEDULER.lock() = saved;
+    }
+
+    /// A Cell's completion queue is reserved on the Cell before anything is
+    /// allocated: a quota that covers only part of it (the waiter table) is a
+    /// clean `None` with nothing charged; otherwise the Cell holds the queue's
+    /// charge until the last handle drops.
+    #[test]
+    fn completion_queue_is_reserved_on_its_cell_before_it_is_allocated() {
+        use crate::memory::cell_quota::{self, Limits};
+        use types::CellId;
+        const CELL: CellId = CellId((cell_quota::MAX_CELLS - 1) as u64);
+        const GENERATION: u64 = 4;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue_for = |limit: usize| {
+            let mut sched = fixture();
+            let task = sched.tasks.get_mut(&OWNER).unwrap();
+            task.cell_id = CELL;
+            task.cell_generation = GENERATION;
+            cell_quota::register(
+                CELL,
+                GENERATION,
+                Limits {
+                    memory: limit,
+                    guest: 0,
+                },
+            );
+            let queue = alloc_probe::admitting_by_quota(|| {
+                super::super::completion::queue_for(&mut sched, OWNER)
+            });
+            let charged = cell_quota::in_use(CELL);
+            drop(sched);
+            (queue, charged)
+        };
+        let waiter_table = super::super::completion::MAX_WAITERS * core::mem::size_of::<usize>();
+        let (refused, charged) = queue_for(waiter_table);
+        assert!(refused.is_none(), "the waiter table alone is not a queue");
+        assert_eq!(charged, 0, "a refusal charges nothing");
+
+        let (queue, charged) = queue_for(1 << 20);
+        let queue = queue.expect("the quota covers the queue");
+        assert!(
+            charged > waiter_table,
+            "the Cell holds the whole queue's charge"
+        );
+        drop(queue);
+        assert_eq!(cell_quota::in_use(CELL), 0, "the last handle refunds it");
+        cell_quota::deregister(CELL);
     }
 }

@@ -551,12 +551,14 @@ pub(crate) fn restore_cell_generation_for_test(next: u64) {
 }
 
 impl Task {
+    /// A task of a fresh incarnation of `cell_id`: mints its generation. A
+    /// thread of a live Cell is built with [`Self::of_incarnation`] instead.
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
         Self::of_incarnation(id, cell_id, next_cell_generation(), name, allowed_drivers)
     }
 
-    /// A task of incarnation `generation` of `cell_id`, which the caller minted
-    /// with [`next_cell_generation`].
+    /// A task of incarnation `generation` of `cell_id`: one the caller minted
+    /// with [`next_cell_generation`], or the owning Cell's for a thread.
     pub(crate) fn of_incarnation(
         id: usize,
         cell_id: CellId,

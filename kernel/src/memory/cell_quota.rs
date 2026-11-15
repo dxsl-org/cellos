@@ -171,14 +171,25 @@ static GUEST_LIMITS: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; 
 /// Live guest bytes per CellId slot, packed as `IN_USE`.
 static GUEST_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
-/// Low bits of a counter word: live bytes, at most 1 TiB per Cell.
-const GENERATION_SHIFT: u32 = 40;
+/// Low bits of a counter word: live bytes, at most 4 GiB - 1 per account.
+/// Every account's bound fits: the memory and DMA limits default to
+/// `DEFAULT_QUOTA_BYTES` (16 MiB), the largest guest budget is 1544 MiB
+/// (`catalog`), and a larger registered limit is clamped to `BYTES_MASK`.
+const GENERATION_SHIFT: u32 = 32;
 const BYTES_MASK: usize = (1 << GENERATION_SHIFT) - 1;
-/// The task generation bits a counter word keeps (the low 24).
+/// The task generation bits a counter word keeps (the low 32). A generation is
+/// minted per incarnation (`tcb::next_cell_generation`; a thread takes its
+/// Cell's), so a stale charge or refund can alias a later incarnation of its
+/// CellId only after 2^32 incarnations.
 const GENERATION_MASK: usize = (1 << (usize::BITS - GENERATION_SHIFT)) - 1;
 const _: () = assert!(
     usize::BITS == 64,
     "counter words pack generation and bytes into 64 bits"
+);
+const _: () = assert!(
+    DEFAULT_QUOTA_BYTES <= BYTES_MASK && MAX_CELLS <= BYTES_MASK,
+    "a counter's byte field holds every default limit, and an owner token's \
+     low bits every CellId"
 );
 
 /// Owner token for allocations that are not charged to any Cell row.
@@ -861,6 +872,64 @@ mod tests {
         assert_eq!(guest_in_use(CELL), 4096, "gen 1 refunds miss gen 2");
         drop(live);
         assert_eq!(guest_in_use(CELL), 0);
+        deregister(CELL);
+    }
+
+    #[test]
+    fn every_account_bound_fits_the_byte_field() {
+        let largest_guest = crate::catalog::rows()
+            .map(|cell| cell.guest_memory)
+            .max()
+            .unwrap_or(0);
+        assert_eq!(largest_guest, 1544 * 1024 * 1024, "the hypervisor budget");
+        assert!(largest_guest <= BYTES_MASK && DEFAULT_QUOTA_BYTES <= BYTES_MASK);
+
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register(
+            CELL,
+            1,
+            Limits {
+                memory: DEFAULT_QUOTA_BYTES,
+                guest: largest_guest,
+            },
+        );
+        let charge = Charge::new(CELL, 1);
+        let guest = Reservation::take(charge, Account::Guest, largest_guest).expect("fits");
+        let memory = Reservation::take(charge, Account::Memory, DEFAULT_QUOTA_BYTES).expect("fits");
+        assert_eq!(
+            (guest_in_use(CELL), in_use(CELL)),
+            (largest_guest, DEFAULT_QUOTA_BYTES),
+            "a full account never carries into the generation"
+        );
+        assert!(Reservation::take(charge, Account::Guest, 1).is_err());
+        drop((guest, memory));
+        assert_eq!((guest_in_use(CELL), in_use(CELL)), (0, 0));
+        deregister(CELL);
+    }
+
+    #[test]
+    fn generations_differing_in_any_low_32_bit_never_alias() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        for stale in [1u64, (1 << 24) + 1, (1 << 31) + 1] {
+            for bit in 0..32 {
+                let live = stale ^ (1 << bit);
+                register(CELL, stale, limits(4096));
+                let old = Reservation::take(Charge::new(CELL, stale), Account::Memory, 100)
+                    .expect("fits");
+                let old_owner = charge_owner(Charge::new(CELL, stale), 8).expect("fits");
+                register(CELL, live, limits(4096));
+                let current =
+                    Reservation::take(Charge::new(CELL, live), Account::Memory, 40).expect("fits");
+                assert!(
+                    Reservation::take(Charge::new(CELL, stale), Account::Memory, 1).is_err(),
+                    "generation {stale} must not charge {live}"
+                );
+                drop(old);
+                refund_owner(old_owner, 8);
+                assert_eq!(in_use(CELL), 40, "generation {stale} refunded {live}");
+                drop(current);
+            }
+        }
         deregister(CELL);
     }
 }

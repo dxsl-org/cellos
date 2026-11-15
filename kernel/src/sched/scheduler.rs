@@ -1220,14 +1220,16 @@ impl Scheduler {
             return Err(ViError::OutOfMemory);
         }
 
-        let mut task = crate::memory::heap::try_box(Task::new(
+        // A thread is its Cell's incarnation: it takes the Cell's generation
+        // rather than minting one.
+        let mut task = crate::memory::heap::try_box(Task::of_incarnation(
             self.next_task_id,
             cell_id,
+            owner.generation,
             name,
             parent_allowed_drivers,
         ))?;
         task.state = TaskState::Ready;
-        task.cell_generation = owner.generation;
         task.root_tid = owner.root_tid as usize;
         // No rights copy: a thread is gated on its Cell's record
         // (`cell_rights` via `root_tid`), so it can never outlive a revoke.

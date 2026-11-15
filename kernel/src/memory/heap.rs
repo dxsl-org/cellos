@@ -521,13 +521,16 @@ pub(crate) mod irq_charge_selftest {
     /// logs its own line when it does return.
     pub(crate) fn run() {
         let generation = crate::task::tcb::next_cell_generation();
-        let Ok(quota) = QuotaReservation::reserve_next(
-            generation,
-            Limits {
-                memory: 0,
-                guest: 0,
-            },
-        ) else {
+        // The highest free CellId: every launch asks `reserve_next` for the
+        // lowest, so holding this one across the housekeeping `yield_cpu`
+        // below never takes an identity a launch wants.
+        let limits = Limits {
+            memory: 0,
+            guest: 0,
+        };
+        let Some(quota) = (1..cell_quota::MAX_CELLS).rev().find_map(|raw| {
+            QuotaReservation::reserve(types::CellId(raw as u64), generation, limits).ok()
+        }) else {
             HELD_HART.store(NO_HART, Ordering::Release);
             log::error!("[selftest] IRQ-ALLOC-CHARGE: FAIL no free CellId for cell A");
             return;

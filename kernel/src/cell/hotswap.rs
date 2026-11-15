@@ -365,14 +365,19 @@ pub(crate) fn commit_hotswap_barrier(
             );
             let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
             let message = &source.pending_msgs.as_slice()[index];
-            let wire = match &message.wire {
-                Some(w) => w.try_clone().ok(),
-                None => None,
+            // A wire is moved, never copied, once the cutover below commits: its
+            // bytes stay charged to the sender that built them, and no quota can
+            // refuse or drop it. Until then the appended record holds the empty
+            // sentinel every wire-backed record keeps in `data`.
+            let data = if message.wire.is_some() {
+                Ok(PendingMsgData::empty())
+            } else {
+                PendingMsgData::try_copy(message.data.as_slice(), target_cell)
             };
-            PendingMsgData::try_copy(message.payload(), target_cell).map(|data| PendingMsg {
+            data.map(|data| PendingMsg {
                 sender_tid: message.sender_tid,
                 data,
-                wire,
+                wire: None,
                 enqueued_tick: message.enqueued_tick,
             })
         };
@@ -424,6 +429,21 @@ pub(crate) fn commit_hotswap_barrier(
         }
         rollback_mailbox_appends(sched, target_tid, target_start);
         return Err(ViError::WouldBlock);
+    }
+
+    // Committed: hand each legacy wire to the record the copy loop appended for
+    // it. Both sides skip async records, so the k-th legacy source record pairs
+    // with the k-th appended one.
+    if let Some(target) = sched.tasks.get_mut(&target_tid) {
+        let mut appended = target.pending_msgs.iter_mut().skip(target_start);
+        for message in source_mailbox
+            .iter_mut()
+            .filter(|msg| !msg.wire_header().is_some_and(|header| header.async_op != 0))
+        {
+            if let Some(record) = appended.next() {
+                record.wire = message.wire.take();
+            }
+        }
     }
 
     // A queued async request is bound to the old provider incarnation. Unlike

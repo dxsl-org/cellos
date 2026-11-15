@@ -4,10 +4,11 @@
 //! before publication to the receiver's queue. Endpoints never retain raw peer pointers
 //! or direct access to peer address space pages.
 //!
-//! Wire payloads are charged to the sender incarnation the header names, or to
-//! the kernel for a kernel sender (CellId 0), whoever ends up freeing them. A
-//! free refunds the owner recorded in the block, so dropping a wire needs no
-//! charge of its own.
+//! A wire built from a sender's bytes is charged to the sender incarnation the
+//! header names, or to the kernel for a kernel sender (CellId 0). Storage built
+//! for anyone else (an async reply buffer, a receive snapshot) names its charge
+//! explicitly. A free refunds the owner recorded in the block, whoever ends up
+//! freeing it, so dropping a wire needs no charge of its own.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -51,16 +52,35 @@ impl IpcWireMessage {
     /// Copy `payload` into a wire charged to the sender `header` names.
     /// Fails if payload length exceeds `MAX_IPC_WIRE_PAYLOAD` or allocation fails.
     pub fn try_new(header: IpcWireHeader, payload: &[u8]) -> Result<Self, ()> {
+        Self::try_new_charged(header, payload, Self::sender(&header))
+    }
+
+    /// Copy `payload` into a wire charged to `charge`, whatever `header` names.
+    /// Fails if payload length exceeds `MAX_IPC_WIRE_PAYLOAD` or `charge`
+    /// refuses the bytes.
+    pub(crate) fn try_new_charged(
+        header: IpcWireHeader,
+        payload: &[u8],
+        charge: crate::memory::cell_quota::Charge,
+    ) -> Result<Self, ()> {
         if payload.len() > MAX_IPC_WIRE_PAYLOAD {
             return Err(());
         }
-        let payload = crate::memory::heap::alloc_for(Self::sender(&header), || {
-            let mut vec = Vec::new();
-            vec.try_reserve_exact(payload.len()).map_err(|_| ())?;
-            vec.extend_from_slice(payload);
-            Ok::<_, ()>(vec.into_boxed_slice())
-        })?;
+        let payload = Self::copy_payload(payload, charge)?;
         Ok(Self { header, payload })
+    }
+
+    /// `bytes` in a buffer of exactly their length charged to `charge`.
+    fn copy_payload(
+        bytes: &[u8],
+        charge: crate::memory::cell_quota::Charge,
+    ) -> Result<Box<[u8]>, ()> {
+        crate::memory::heap::alloc_for(charge, || {
+            let mut vec = Vec::new();
+            vec.try_reserve_exact(bytes.len()).map_err(|_| ())?;
+            vec.extend_from_slice(bytes);
+            Ok(vec.into_boxed_slice())
+        })
     }
 
     /// Construct a wire record, charged to the sender `header` names, directly
@@ -152,19 +172,14 @@ impl IpcWireMessage {
         );
     }
 
-    /// Fallibly duplicate this message, charged to the sender its header
-    /// names. Unlike `Clone`, allocation failure is reported instead of
-    /// aborting the kernel via the non-returning OOM path.
-    pub fn try_clone(&self) -> Result<Self, ()> {
-        let payload = crate::memory::heap::alloc_for(Self::sender(&self.header), || {
-            let mut vec = Vec::new();
-            vec.try_reserve_exact(self.payload.len()).map_err(|_| ())?;
-            vec.extend_from_slice(&self.payload);
-            Ok::<_, ()>(vec.into_boxed_slice())
-        })?;
+    /// Fallibly duplicate this message into storage charged to `charge`; the
+    /// header is copied, never consulted for the charge. Unlike `Clone`,
+    /// allocation failure is reported instead of aborting the kernel via the
+    /// non-returning OOM path.
+    pub(crate) fn try_clone(&self, charge: crate::memory::cell_quota::Charge) -> Result<Self, ()> {
         Ok(Self {
             header: self.header,
-            payload,
+            payload: Self::copy_payload(&self.payload, charge)?,
         })
     }
 }

@@ -119,7 +119,17 @@ pub struct CompletionQueue {
     wake_requested: AtomicBool,
     #[cfg(feature = "p01-trace")]
     p01_tid: AtomicUsize,
+    /// [`QUEUE_BYTES`] charged to the owning Cell incarnation; the storage
+    /// itself is kernel memory, so the charge is refunded exactly when the
+    /// queue is freed.
+    _charge: crate::memory::cell_quota::Reservation,
 }
+
+/// Heap bytes one queue occupies: its `Arc` block (two counts and the queue)
+/// and the pre-sized waiter table.
+const QUEUE_BYTES: usize = 2 * core::mem::size_of::<AtomicUsize>()
+    + core::mem::size_of::<CompletionQueue>()
+    + MAX_WAITERS * core::mem::size_of::<usize>();
 
 impl CompletionQueue {
     /// Capacity of the pre-sized waiter table (test observation only).
@@ -130,8 +140,9 @@ impl CompletionQueue {
 
     /// A queue whose waiter table already holds [`MAX_WAITERS`] entries, so
     /// [`register_waiter`](Self::register_waiter) never allocates on the wait
-    /// path. `None` when the table cannot be reserved.
-    fn new(cell: CellId) -> Option<Self> {
+    /// path, holding `charge` for its bytes. `None` when the table cannot be
+    /// reserved.
+    fn new(cell: CellId, charge: crate::memory::cell_quota::Reservation) -> Option<Self> {
         let mut waiters = Vec::new();
         waiters.try_reserve_exact(MAX_WAITERS).ok()?;
         Some(Self {
@@ -149,6 +160,7 @@ impl CompletionQueue {
             wake_requested: AtomicBool::new(false),
             #[cfg(feature = "p01-trace")]
             p01_tid: AtomicUsize::new(0),
+            _charge: charge,
         })
     }
 
@@ -439,9 +451,12 @@ impl Drop for CompletionQueue {
 /// cell before a new one is allocated. Returns `None` when `tid` names no live task
 /// or the queue cannot be allocated.
 ///
-/// The queue and its fixed waiter table are charged to the owning Cell
-/// incarnation, since every thread of that Cell shares them. They are
-/// allocated once per Cell here, so later waits allocate nothing.
+/// The queue's bytes are charged to the owning Cell incarnation, since every
+/// thread of that Cell shares them: an explicit reservation taken before
+/// anything is allocated, so a refusal is a clean `None`. The storage is
+/// allocated as kernel memory, so nothing infallible (the `Arc` block) is ever
+/// charged to the Cell while `SCHEDULER` is held. It is allocated once per
+/// Cell here, so later waits allocate nothing.
 ///
 /// Call from a submitting context with `SCHEDULER` held. The append path never
 /// comes here — it uses the handle it was given, which is the reason it needs no
@@ -465,9 +480,15 @@ pub fn queue_for(sched: &mut Scheduler, tid: usize) -> Option<Arc<CompletionQueu
                 None,
                 crate::memory::heap::p01_owner::COMPLETION_SHARED,
             );
-            let created =
-                crate::memory::heap::alloc_for(owner, || CompletionQueue::new(cell).map(Arc::new));
-            created?
+            let charge = crate::memory::cell_quota::Reservation::take(
+                owner,
+                crate::memory::cell_quota::Account::Memory,
+                QUEUE_BYTES,
+            )
+            .ok()?;
+            crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
+                CompletionQueue::new(cell, charge).map(Arc::new)
+            })?
         }
     };
     #[cfg(feature = "p01-trace")]
