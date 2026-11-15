@@ -626,11 +626,13 @@ fn emit_pcid_decision() {
 }
 
 /// Map one 4 KiB page of the shared kernel root (x86_64) without invalidating
-/// `vaddr`. A leaf that replaced a present one is recorded in `batch`: x86
-/// caches no not-present entry, so only a replacement can leave a stale
-/// translation. A failed walk detaches the tables it published and retires
-/// them into `batch`, which frees them only after the flush confirms. The
-/// caller holds `FRAME_ALLOCATOR` and finishes `batch` after releasing it.
+/// `vaddr`. A leaf that replaced a present one is recorded in `batch`, and so
+/// is a leaf whose walk had to allocate an intermediate table: a CPU that
+/// raced the publication may hold a paging-structure entry from before it,
+/// and would take a spurious #PF until the batch's flush drops it. A failed
+/// walk detaches the tables it published and retires them into `batch`, which
+/// frees them only after the flush confirms. The caller holds
+/// `FRAME_ALLOCATOR` and finishes `batch` after releasing it.
 #[cfg(target_arch = "x86_64")]
 fn map_page_unflushed(
     allocator: &mut FrameAllocator,
@@ -646,10 +648,12 @@ fn map_page_unflushed(
     // SAFETY: KERNEL_ROOT names the kernel's live PML4 and we hold its lock.
     let table = unsafe { &mut *table_at(root_phys) };
     let replaced = table.leaf_entry(vaddr).is_some();
+    let mut allocated_table = false;
 
     let result = {
         let mut alloc_fn = || {
             let frame = allocator.allocate_frame_uncapped()?;
+            allocated_table = true;
             #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, root_phys, vaddr);
             Some(frame)
@@ -668,7 +672,7 @@ fn map_page_unflushed(
         reclaimed.retire_into(batch);
         return Err(PageTableError::OutOfMemory);
     }
-    if replaced {
+    if replaced || allocated_table {
         batch.invalidate(vaddr);
     }
     Ok(())

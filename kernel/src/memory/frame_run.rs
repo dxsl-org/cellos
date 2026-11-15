@@ -534,6 +534,15 @@ impl PrivateRun {
         self.0.as_ref().map_or(0, FrameRun::base)
     }
 
+    /// Never free the run: hardware may still reach it (its owner's release
+    /// of it failed). Counted and logged as leaked; the owner drops what is
+    /// left as an empty run.
+    pub fn leak(&mut self, why: &str) {
+        if let Some(run) = self.0.take() {
+            PENDING.leak(run, why);
+        }
+    }
+
     /// Hand the run to `batch`, which frees it with the operation's other
     /// runs once the batch finishes.
     pub fn retire_into(mut self, batch: &mut Batch) {

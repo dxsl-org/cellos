@@ -578,7 +578,8 @@ fn hold_quarantined_frames(reg: &mut Registry, run: FrameRun, release: ReleaseKe
             crate::p01_retained::Reason::PinWithheld
         },
     );
-    if !hold_run(run, release) {
+    if let Err(run) = hold_run(run, release) {
+        PENDING.forget_unlogged(run);
         #[cfg(feature = "p01-trace")]
         {
             // Observe Full before frames lose their only structured release key.
@@ -635,17 +636,21 @@ pub(crate) fn test_withhold(base: usize, pages: usize) -> &'static str {
     }
 }
 
-/// Hold a `Mapped` run under `key` in the frame-run quarantine. `false` when it
-/// could not be recorded: it is leaked (counted, never freed).
-fn hold_run(mut run: FrameRun, key: ReleaseKey) -> bool {
-    // A `Mapped` run takes any event hold; anything else is leaked below.
+/// Hold a `Mapped` run under `key` in the frame-run quarantine. A run that
+/// could not be recorded (no heap) comes back in `Err`, never freed: the
+/// caller leaks it (counted) and logs it once `REGISTRY` is released.
+fn hold_run(mut run: FrameRun, key: ReleaseKey) -> Result<(), FrameRun> {
+    // A `Mapped` run takes any event hold; anything else is not recorded.
     let _ = run.hold(Reason::Pinned(key));
-    match PENDING.try_push(run, &NO_EPOCHS) {
-        Ok(()) => true,
-        Err((run, _)) => {
-            PENDING.forget_unlogged(run);
-            false
-        }
+    PENDING.try_push(run, &NO_EPOCHS).map_err(|(run, _)| run)
+}
+
+/// Leak `lost`, the re-keyed holds [`rekey_or_release`] could not record, now
+/// that `REGISTRY` is released and the console may be taken: counted and
+/// logged, never freed.
+fn leak_lost_holds(lost: Vec<FrameRun>) {
+    for run in lost {
+        PENDING.leak(run, "no heap for a re-keyed pin hold");
     }
 }
 
@@ -682,12 +687,25 @@ fn released_range(reg: &mut Registry, run: FrameRun) -> ReleasedRange {
 }
 
 /// Re-key a run whose key just ended to the next live protector of its frames,
-/// or hand it back when nothing protects them any more.
-fn rekey_or_release(reg: &mut Registry, run: FrameRun, released: &mut Vec<ReleasedRange>) {
+/// or hand it back when nothing protects them any more. A re-keyed hold that
+/// cannot be recorded goes to `lost`, for the caller to leak and log after it
+/// releases `REGISTRY` ([`leak_lost_holds`]); with no heap for that either it
+/// is leaked here, counted but unlogged.
+fn rekey_or_release(
+    reg: &mut Registry,
+    run: FrameRun,
+    released: &mut Vec<ReleasedRange>,
+    lost: &mut Vec<FrameRun>,
+) {
     match live_protector_key(reg, (run.base(), run.pages())) {
-        // A run that cannot be recorded is leaked (counted), never freed.
         Some(key) => {
-            let _ = hold_run(run, key);
+            if let Err(run) = hold_run(run, key) {
+                if lost.try_reserve(1).is_ok() {
+                    lost.push(run);
+                } else {
+                    PENDING.forget_unlogged(run);
+                }
+            }
         }
         None => {
             let range = released_range(reg, run);
@@ -1406,7 +1424,11 @@ pub fn grant_leases_live() -> bool {
 pub fn release_grant_holder_leases(holder_tid: usize) -> Vec<ReleasedRange> {
     let mut reg = REGISTRY.lock();
     clear_grant_leases(&mut reg, |e| e.holder_tid == holder_tid);
-    release_orphaned_grant_lease_holds(&mut reg)
+    let mut lost = Vec::new();
+    let released = release_orphaned_grant_lease_holds(&mut reg, &mut lost);
+    drop(reg);
+    leak_lost_holds(lost);
+    released
 }
 
 /// End `holder_tid`'s leases on Grants `grant_owner` owns: the holder's next
@@ -1416,7 +1438,11 @@ pub fn release_grant_leases_to_owner(holder_tid: usize, grant_owner: usize) -> V
     clear_grant_leases(&mut reg, |e| {
         e.holder_tid == holder_tid && e.grant_owner == grant_owner
     });
-    release_orphaned_grant_lease_holds(&mut reg)
+    let mut lost = Vec::new();
+    let released = release_orphaned_grant_lease_holds(&mut reg, &mut lost);
+    drop(reg);
+    leak_lost_holds(lost);
+    released
 }
 
 fn clear_grant_leases(reg: &mut Registry, matches: impl Fn(&GrantLeaseEntry) -> bool) {
@@ -1435,7 +1461,10 @@ fn clear_grant_leases(reg: &mut Registry, matches: impl Fn(&GrantLeaseEntry) -> 
 /// ends, the hold is re-keyed to the next live protector found by
 /// [`live_protector_key`]; only frames nothing protects any more are returned
 /// for the caller to free outside `REGISTRY`.
-fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> {
+fn release_orphaned_grant_lease_holds(
+    reg: &mut Registry,
+    lost: &mut Vec<FrameRun>,
+) -> Vec<ReleasedRange> {
     let orphaned = {
         let leases = &reg.grant_leases;
         PENDING.release_event(|reason| match *reason {
@@ -1451,7 +1480,7 @@ fn release_orphaned_grant_lease_holds(reg: &mut Registry) -> Vec<ReleasedRange> 
     };
     let mut released = Vec::new();
     for run in orphaned {
-        rekey_or_release(reg, run, &mut released);
+        rekey_or_release(reg, run, &mut released, lost);
     }
     released
 }
@@ -1557,9 +1586,12 @@ pub(crate) fn unlock_dma_export(export_id: u64) -> Vec<ReleasedRange> {
         matches!(reason, Reason::Pinned(ReleaseKey::DmaExport { export_id: id, .. }) if *id == export_id)
     });
     let mut released = Vec::new();
+    let mut lost = Vec::new();
     for run in ended {
-        rekey_or_release(&mut reg, run, &mut released);
+        rekey_or_release(&mut reg, run, &mut released, &mut lost);
     }
+    drop(reg);
+    leak_lost_holds(lost);
     released
 }
 

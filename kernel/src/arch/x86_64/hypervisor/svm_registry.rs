@@ -52,7 +52,16 @@ impl Drop for Vmcs {
         if crate::cpu_features::has_x86_virt() {
             // SAFETY: VMX backend with every online CPU in VMX operation;
             // `self.0` is this vCPU's VMCS frame.
-            let _ = unsafe { hal::x86_64::vmcs::vmclear(self.0.base() as u64) };
+            if let Err(error) = unsafe { hal::x86_64::vmcs::vmclear(self.0.base() as u64) } {
+                // A VMCS VMCLEAR did not take may still be active on a CPU,
+                // which can write it back: never reuse the frame.
+                log::error!(
+                    "[hv] VMCLEAR of VMCS {:#x} failed ({:?}): the frame is leaked",
+                    self.0.base(),
+                    error
+                );
+                self.0.leak("VMCLEAR failed");
+            }
         }
     }
 }
