@@ -30,6 +30,7 @@ static FORCED_SSIP_ARMED: AtomicBool = AtomicBool::new(false);
 static FORCED_SSIP_DELIVERED: AtomicBool = AtomicBool::new(false);
 static FORCED_SSIP_EARLY: AtomicBool = AtomicBool::new(false);
 static CELL_ID_RELEASE_ORDER_OK: AtomicBool = AtomicBool::new(false);
+static CELL_ID_RELEASE_OBSERVED: AtomicBool = AtomicBool::new(false);
 static FAULT_ARMED: AtomicBool = AtomicBool::new(false);
 static FAULT_DIRECT_TRIGGERED: AtomicBool = AtomicBool::new(false);
 static FAULT_TASK_ENTRY: AtomicBool = AtomicBool::new(false);
@@ -105,6 +106,7 @@ pub fn observe_cell_id_release(owner: abi::cell_owner::CellOwner) {
             quota_released,
         );
     }
+    CELL_ID_RELEASE_OBSERVED.store(true, Ordering::Release);
 }
 
 /// The root's clean `Exit` reaches this hook only after publishing its scalar
@@ -1005,6 +1007,25 @@ pub fn run_primary() {
     log::info!(
         "[selftest] SMP-FAULT-RETIREMENT: stage=worker-retiring-record-and-root-owner-retained-until-quiescence"
     );
+
+    // The quiescence gate arms a fresh switch epoch for hart 1 only while it
+    // still sees the faulted worker there. Run it before hart 1 may switch away:
+    // a hart that has already switched to idle is quiescent, the gate correctly
+    // needs no epoch from it and releases the owner slot at once, and the
+    // pre-epoch hold below would then gate nothing.
+    let rt = crate::sched::smp::HART_RT;
+    let deadline = crate::task::system_ticks() + 500;
+    while !crate::sched::smp::retirement_switch_pending(rt) {
+        if crate::task::system_ticks() >= deadline {
+            log::error!(
+                "[selftest] SMP-RETIREMENT: FAIL — quiescence gate never armed hart 1's switch epoch"
+            );
+            PHASE.store(ALLOW_COMPLETION, Ordering::Release);
+            FAULT_SWITCH_ALLOWED.store(true, Ordering::Release);
+            return;
+        }
+        crate::task::yield_cpu();
+    }
     FAULT_SWITCH_ALLOWED.store(true, Ordering::Release);
 
     // Root retirement was deliberately requested in the selected-before-
@@ -1031,13 +1052,25 @@ pub fn run_primary() {
     };
     if !blocked {
         log::error!("[selftest] SMP-RETIREMENT: FAIL — owner slot reused before completion");
+        // Let hart 1 leave its pre-epoch hold, so this verdict stays the only
+        // failure instead of a silent hart timing out every later shootdown.
+        PHASE.store(ALLOW_COMPLETION, Ordering::Release);
         return;
     }
 
     PHASE.store(ALLOW_COMPLETION, Ordering::Release);
     log::info!("[selftest] SMP-RETIREMENT: stage=completion-permitted");
     wait_for(COMPLETED);
-    crate::task::yield_cpu();
+    // Either hart may run the reap that releases the owner slot: hart 1 resumes
+    // its own `yield_cpu` housekeeping right after the completion, and can take
+    // the pass this hart's next yield would have run. Wait for the release
+    // itself rather than assume one local yield performed it.
+    let deadline = crate::task::system_ticks() + 500;
+    while !CELL_ID_RELEASE_OBSERVED.load(Ordering::Acquire)
+        && crate::task::system_ticks() < deadline
+    {
+        crate::task::yield_cpu();
+    }
 
     let reused = {
         let mut guard = crate::task::SCHEDULER.lock();
@@ -1077,7 +1110,6 @@ pub fn run_primary() {
         return;
     }
 
-    let rt = crate::sched::smp::HART_RT;
     let idle_current = crate::sched::hart_local::ready::current_task_id_for(rt);
     let idle_executing = crate::sched::hart_local::ready::executing_task_id_for(rt);
     let idle_selected = crate::sched::hart_local::ready::selected_task_id_for(rt);
