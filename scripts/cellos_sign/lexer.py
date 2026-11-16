@@ -19,6 +19,11 @@ own lexer for every construct that can swallow a delimiter:
 A lifetime (`&'a str`) also starts with a quote but is not a literal, so a
 quote that does not complete a char literal is emitted as ordinary code.
 
+A bare quote opens a literal wherever it stands, as in rustc: `0"/*"` is the
+integer `0` followed by a string, and `0'"'` the integer followed by a char.
+Only the letter prefixes (`r`, `b`, `c`) need a token boundary, because
+`r#type` is a raw identifier and `absorb` merely ends in `b`.
+
 Every removed span is replaced by one space plus the newlines it contained, so
 line numbers and line boundaries survive the reduction: an attribute that began
 a line still begins a line afterwards.
@@ -31,8 +36,9 @@ from __future__ import annotations
 
 import re
 
-# A string/char prefix only counts at a token boundary: `r#type` is a raw
-# identifier and `absorb` merely ends in `b`, neither starts a literal.
+# A letter prefix only counts at a token boundary: `r#type` is a raw
+# identifier and `absorb` merely ends in `b`, neither starts a literal. A bare
+# quote needs no boundary.
 _IDENT_CHARS = re.compile(r"[A-Za-z0-9_]")
 _RAW_PREFIX = re.compile(r'(?:b|c)?r(#*)"')
 _STR_PREFIX = re.compile(r'(?:b|c)?"')
@@ -102,7 +108,7 @@ def strip_noncode(text: str) -> str:
             i = end
             continue
 
-        if (char in "rbc" or char == '"') and _at_boundary(text, i):
+        if char == '"' or (char in "rbc" and _at_boundary(text, i)):
             raw = _RAW_PREFIX.match(text, i)
             if raw:
                 closing = '"' + raw.group(1)
@@ -118,7 +124,7 @@ def strip_noncode(text: str) -> str:
                 i = end
                 continue
 
-        if (char == "'" or char == "b") and _at_boundary(text, i):
+        if char == "'" or (char == "b" and _at_boundary(text, i)):
             literal = _CHAR_LITERAL.match(text, i)
             if literal:
                 out.append(_blank(literal.group(0)))

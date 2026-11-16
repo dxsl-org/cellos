@@ -575,6 +575,37 @@ class ScannerLiteralTests(unittest.TestCase):
         # `'a` opens no literal, so the `unsafe` after it must still be seen.
         self.assertEqual(self.unsafe("fn f<'a>(x: &'a str) { unsafe { } }\n"), 1)
 
+    def test_a_bare_quote_after_a_digit_opens_a_string(self):
+        # P18 review HIGH 2: `0"/*"` is the integer 0 and a string to rustc
+        # (it compiles inside a macro call), so the `/*` must not open a comment.
+        src = ('macro_rules! eat { ($($t:tt)*) => {} }\n'
+               'eat!(0"/*");\n'
+               'pub fn f(p: *const u8) -> u8 { unsafe { *p } }\n'
+               'eat!(0"*/");\n'
+               '#[no_mangle]\npub extern "C" fn g() {}\n')
+        self.assertEqual(self.unsafe(src), 1)
+        self.assertEqual(scan.count_unsafe_attrs(scan.strip_noncode(src)), 1)
+
+    def test_a_quote_after_a_digit_tries_a_char_literal(self):
+        # `0'"'` is the integer 0 and the char `"`: the `"` opens no string.
+        src = ("macro_rules! eat { ($($t:tt)*) => {} }\n"
+               "eat!(0'\"');\n"
+               "pub fn f(p: *const u8) -> u8 { unsafe { *p } }\n"
+               "eat!(0'\"');\n")
+        self.assertEqual(self.unsafe(src), 1)
+
+    def test_a_manifest_inside_a_digit_prefixed_string_is_not_read(self):
+        from cellos_sign import tier_class
+        src = ('eat!(0" abi::declare_manifest!(block_io = false, network = false, '
+               'spawn = false, tier = abi::manifest::PROTECTION_CLASS_FFI); ");\n')
+        self.assertEqual(tier_class.invocation_classes(scan.strip_noncode(src)), [])
+
+    def test_letter_prefixes_still_need_a_boundary(self):
+        # `r#type` is a raw identifier, not a raw string, and `cab` merely ends
+        # in `b`; the code after each must stay visible.
+        self.assertEqual(self.unsafe('let r#type = 1; unsafe { }\n'), 1)
+        self.assertEqual(self.unsafe('let cab = 1; unsafe { }\n'), 1)
+
     def test_real_attribute_and_real_comments_still_read_correctly(self):
         src = "//! docs mentioning unsafe\n#![forbid(unsafe_code)]\n/* unsafe */\nfn f() {}\n"
         self.assertTrue(self.forbid(src))
