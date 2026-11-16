@@ -805,7 +805,7 @@ mod tests {
     #[test]
     fn the_nic_route_key_is_the_one_owned_network_device() {
         use super::{owned_network_device, NicDeviceError, CLASS_ETHERNET};
-        use crate::dev::ownership::{claim_pci, register_pci_function, release_pci_for};
+        use crate::dev::ownership::{claim_pci, register_pci_function, release_for, Scope};
         const TID: usize = 0x5E01;
         let _guard = crate::TEST_STATE_LOCK.lock();
         register_pci_function(0x5E0, CLASS_ETHERNET);
@@ -818,7 +818,7 @@ mod tests {
         assert_eq!(owned_network_device(TID), Ok(pci(0x5E0)));
         assert!(claim_pci(0x5E2, TID));
         assert_eq!(owned_network_device(TID), Err(NicDeviceError::Several));
-        release_pci_for(TID);
+        release_for(TID, Scope::Retired);
         assert_eq!(owned_network_device(TID), Err(NicDeviceError::None));
     }
 

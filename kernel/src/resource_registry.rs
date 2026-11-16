@@ -508,9 +508,6 @@ pub fn release_mmio_for(tid: usize) {
             release.quarantined
         );
     }
-    // The MMIO devices (VirtIO slot, DWC2 aperture) it claimed are free again;
-    // a quarantined window still refuses every claim.
-    crate::dev::ownership::release_mmio_devices_for(tid);
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
@@ -1046,33 +1043,6 @@ mod display_tests {
         release_mmio_for(owner.0 as usize);
         assert_eq!(display_framebuffer_resolution(), Some((800, 480)));
     }
-}
-
-// ---------------------------------------------------------------------------
-// PCIe BDF ownership: views over the device records (`dev::ownership`)
-// ---------------------------------------------------------------------------
-
-/// Atomically claim an unowned PCIe BDF for task `tid`.
-///
-/// Repeated claims by the same task are idempotent. A live owner cannot be
-/// displaced; task reaping releases its claims through [`release_bdfs_for`].
-pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
-    crate::dev::ownership::claim_pci(bdf, tid)
-}
-
-/// Return the task ID that currently owns `bdf`, or `None` if unowned.
-pub fn owner_of_bdf(bdf: u32) -> Option<usize> {
-    crate::dev::ownership::pci_owner(bdf)
-}
-
-/// Every BDF that task `tid` currently owns.
-pub fn bdfs_owned_by(tid: usize) -> alloc::vec::Vec<u32> {
-    crate::dev::ownership::pci_functions_of(tid)
-}
-
-/// Release all BDF ownerships held by task `tid` (called on Cell exit).
-pub fn release_bdfs_for(tid: usize) {
-    crate::dev::ownership::release_pci_for(tid);
 }
 
 #[cfg(feature = "test-hooks")]

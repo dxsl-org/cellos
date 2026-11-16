@@ -520,6 +520,9 @@ pub(super) fn cap_revoke(caller_id: usize, target_tid: usize, cap_mask: u32) -> 
                 tid,
                 crate::resource_registry::DEV_PCIE as crate::resource_registry::MmioClass,
             )?;
+            // Its PCI functions and VirtIO slots are free once both the DMA
+            // and the windows are gone.
+            crate::dev::ownership::release_for(tid, crate::dev::ownership::Scope::PcieDriver);
             reclaim_owned_grants(tid);
         }
 

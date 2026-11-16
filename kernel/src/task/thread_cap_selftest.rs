@@ -406,7 +406,7 @@ pub fn self_test() -> bool {
         driver.rights.platform = true;
         insert(driver);
 
-        let bdf_claimed = crate::resource_registry::claim_bdf_owner(DRIVER_BDF, DRIVER_TID);
+        let bdf_claimed = crate::dev::ownership::claim_pci(DRIVER_BDF, DRIVER_TID);
         // The BAR table is boot-discovered data with no removal path, so the
         // synthetic window is registered only where the test hook exists.
         #[cfg(feature = "test-hooks")]
@@ -432,8 +432,7 @@ pub fn self_test() -> bool {
                 let rights = sched.cell_rights(DRIVER_TID);
                 rights.pcie_driver && rights.platform && rights.supervisor
             });
-            let bdf_retained =
-                crate::resource_registry::owner_of_bdf(DRIVER_BDF) == Some(DRIVER_TID);
+            let bdf_retained = crate::dev::ownership::pci_owner(DRIVER_BDF) == Some(DRIVER_TID);
             let refused_closed = matches!(refused, Err(SyscallError::NotSupported));
             if !(refused_closed && caps_intact && bdf_retained) {
                 ok = false;
@@ -445,7 +444,7 @@ pub fn self_test() -> bool {
                     bdf_retained
                 );
             }
-            crate::resource_registry::release_bdfs_for(DRIVER_TID);
+            crate::dev::ownership::release_for(DRIVER_TID, crate::dev::ownership::Scope::Retired);
         }
 
         let r_priv = handle_syscall(
@@ -479,8 +478,7 @@ pub fn self_test() -> bool {
                 )
             })
         });
-        let bdf_released =
-            bdf_claimed && crate::resource_registry::owner_of_bdf(DRIVER_BDF).is_none();
+        let bdf_released = bdf_claimed && crate::dev::ownership::pci_owner(DRIVER_BDF).is_none();
         #[cfg(feature = "test-hooks")]
         let bar_released =
             bar_claimed && crate::resource_registry::lookup_mmio_owner(DRIVER_BAR).is_none();

@@ -1,8 +1,8 @@
 use super::{
-    checked_mmio_end, claim_bdf_owner, ecam_claim_admitted, owner_of_bdf, owns_exact_mmio,
-    release_bdfs_for, request_ecam_mmio, static_range_class, valid_pcie_bar_window, DEV_GPIO,
-    DEV_I2C, DEV_SPI,
+    checked_mmio_end, ecam_claim_admitted, owns_exact_mmio, request_ecam_mmio, static_range_class,
+    valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
 };
+use crate::dev::ownership::{claim_pci, pci_owner, release_for, Scope};
 use types::ViError;
 
 const BCM_WINDOWS: &[(usize, usize, u8)] = &[
@@ -61,25 +61,6 @@ fn pcie_bar_windows_reject_unbounded_or_misaligned_authority() {
     assert!(!valid_pcie_bar_window(usize::MAX - 0xFFF, 0x1000));
 }
 
-#[test]
-fn bdf_claim_preserves_live_owner_until_reap() {
-    const BDF: u32 = 0x00_FE_ED;
-    const FIRST_TID: usize = 0xA001;
-    const COMPETING_TID: usize = 0xA002;
-
-    release_bdfs_for(FIRST_TID);
-    release_bdfs_for(COMPETING_TID);
-    assert!(claim_bdf_owner(BDF, FIRST_TID));
-    assert!(claim_bdf_owner(BDF, FIRST_TID));
-    assert!(!claim_bdf_owner(BDF, COMPETING_TID));
-    assert_eq!(owner_of_bdf(BDF), Some(FIRST_TID));
-
-    release_bdfs_for(FIRST_TID);
-    assert!(claim_bdf_owner(BDF, COMPETING_TID));
-    assert_eq!(owner_of_bdf(BDF), Some(COMPETING_TID));
-    release_bdfs_for(COMPETING_TID);
-}
-
 /// Phase 08C non-reuse: a retirement that cannot prove the function quiescent
 /// (no ECAM window on the host, so `quiesce_function` refuses) keeps the dead
 /// owner's BDF, and a replacement cannot claim it.
@@ -88,18 +69,18 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
     const BDF: u32 = 0x00_E1;
     const DEAD_TID: usize = 0x5_08C1;
     const REPLACEMENT_TID: usize = 0x5_08C2;
-    release_bdfs_for(DEAD_TID);
-    release_bdfs_for(REPLACEMENT_TID);
-    assert!(claim_bdf_owner(BDF, DEAD_TID));
+    release_for(DEAD_TID, Scope::Retired);
+    release_for(REPLACEMENT_TID, Scope::Retired);
+    assert!(claim_pci(BDF, DEAD_TID));
 
     assert!(
         !crate::task::teardown_dma_authority(DEAD_TID),
         "teardown must report retention"
     );
-    assert_eq!(owner_of_bdf(BDF), Some(DEAD_TID));
-    assert!(!claim_bdf_owner(BDF, REPLACEMENT_TID));
+    assert_eq!(pci_owner(BDF), Some(DEAD_TID));
+    assert!(!claim_pci(BDF, REPLACEMENT_TID));
 
-    release_bdfs_for(DEAD_TID);
+    release_for(DEAD_TID, Scope::Retired);
 }
 
 /// X1: a PCIe BAR goes only to the owner of its function, and a VirtIO slot's
@@ -127,17 +108,17 @@ fn a_device_window_goes_only_to_the_owner_of_its_device() {
         request_mmio(OWNER, BAR, 0x4000, DEV_PCIE),
         Err(ViError::PermissionDenied)
     );
-    assert!(claim_bdf_owner(BDF, OTHER));
+    assert!(claim_pci(BDF, OTHER));
     assert_eq!(
         request_mmio(OWNER, BAR, 0x4000, DEV_PCIE),
         Err(ViError::PermissionDenied)
     );
-    release_bdfs_for(OTHER);
-    assert!(claim_bdf_owner(BDF, OWNER));
+    release_for(OTHER, Scope::Retired);
+    assert!(claim_pci(BDF, OWNER));
     assert_eq!(request_mmio(OWNER, BAR, 0x4000, DEV_PCIE), Ok(()));
     assert_eq!(lookup_mmio_owner(BAR), Some(OWNER));
     release_mmio_for(OWNER);
-    release_bdfs_for(OWNER);
+    release_for(OWNER, Scope::Retired);
 
     // A free slot whose window is still quarantined: the claim is refused and
     // the record is left free.
@@ -164,6 +145,7 @@ fn a_device_window_goes_only_to_the_owner_of_its_device() {
         Err(ViError::AlreadyExists)
     );
     release_mmio_for(OWNER);
+    release_for(OWNER, Scope::Retired);
     assert!(!ownership::irq_owned_by(OWNER, LINE));
 }
 

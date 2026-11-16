@@ -813,7 +813,7 @@ fn block_routes_snapshot(
 #[test]
 fn register_block_driver_binds_only_the_callers_owned_device_route() {
     use crate::dev::driver_cell::{deregister_all_for, reset_block_routes};
-    use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
+    use crate::dev::ownership::{claim_pci, release_for, Scope};
     use abi::block_route::MAX_BLOCK_ROUTES;
     const BDF: usize = 0x4160;
     const FOREIGN_BDF: usize = 0x4161;
@@ -874,8 +874,8 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
                 ..CapSet::EMPTY
             },
         );
-        assert!(claim_bdf_owner(BDF as u32, tid));
-        assert!(claim_bdf_owner(FOREIGN_BDF as u32, 2));
+        assert!(claim_pci(BDF as u32, tid));
+        assert!(claim_pci(FOREIGN_BDF as u32, 2));
         // `RequestMmio` records the claiming task id as the slot's owner.
         crate::dev::ownership::test_own_mmio(4, BASE, 0x2E);
         let empty = block_routes_snapshot();
@@ -898,8 +898,8 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
             assert_eq!(not_owner, Err(SyscallError::FileNotFound), "{kind} {id:#x}");
             assert_eq!(super::encode_ipc_result(not_owner), usize::MAX - 2);
         }
-        assert!(claim_bdf_owner(0x4163, 3));
-        assert!(claim_bdf_owner(0x4164, 6));
+        assert!(claim_pci(0x4163, 3));
+        assert!(claim_pci(0x4164, 6));
         for (caller, bdf) in [(3, 0x4163), (6, 0x4164)] {
             let denied = register(caller, 1, bdf, (0, 0));
             assert_eq!(
@@ -948,8 +948,8 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
             (released.kind, released.id, released.provider()),
             (1, BDF as u64, None)
         );
-        release_bdfs_for(tid);
-        assert!(claim_bdf_owner(BDF as u32, 2));
+        release_for(tid, Scope::Retired);
+        assert!(claim_pci(BDF as u32, 2));
         assert_eq!(
             register(2, 1, BDF, (0, 0)),
             Ok(0),
@@ -966,10 +966,10 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
         );
 
         for bdf in 0x4170..0x4170 + (MAX_BLOCK_ROUTES - 2) {
-            assert!(claim_bdf_owner(bdf as u32, 2));
+            assert!(claim_pci(bdf as u32, 2));
             assert_eq!(register(2, 1, bdf, (0, 0)), Ok(0));
         }
-        assert!(claim_bdf_owner(0x4180, 2));
+        assert!(claim_pci(0x4180, 2));
         let full = block_routes_snapshot();
         let refused = register(2, 1, 0x4180, (0, 0));
         assert_eq!(refused, Err(SyscallError::PermissionDenied), "table full");
@@ -982,10 +982,9 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
         );
 
         for owner in [1, 2, 3, 4, 5, 6] {
-            release_bdfs_for(owner);
+            release_for(owner, Scope::Retired);
             deregister_all_for(owner);
         }
-        crate::resource_registry::release_mmio_for(4);
         reset_block_routes();
     });
 }
@@ -1202,8 +1201,8 @@ fn query_machine_facts_is_gated_on_the_machine_pin_provider_with_typed_errors() 
 /// owner's re-query still reaches its own function.
 #[test]
 fn vendor_lookup_skips_functions_owned_by_another_driver() {
+    use crate::dev::ownership::{claim_pci, release_for, Scope};
     use crate::dev::pcie_ecam::{self, Bar, PciDevice};
-    use crate::resource_registry::{claim_bdf_owner, release_bdfs_for};
     const VENDOR: u16 = 0x1b36;
     const DEVICE: u16 = 0xfa04;
     let function = |fun| PciDevice {
@@ -1224,19 +1223,19 @@ fn vendor_lookup_skips_functions_owned_by_another_driver() {
             .map(|d| d.canonical_bdf())
     };
     let a = find(first).expect("function A offered");
-    assert!(claim_bdf_owner(a, first));
+    assert!(claim_pci(a, first));
     let b = find(second).expect("function B offered to a second driver");
     assert_ne!(a, b);
-    assert!(claim_bdf_owner(b, second));
+    assert!(claim_pci(b, second));
     assert_eq!(find(third), None);
     assert_eq!(find(second), Some(b));
-    release_bdfs_for(first);
+    release_for(first, Scope::Retired);
     assert_eq!(
         find(third),
         Some(a),
         "a reaped owner's function is offered again"
     );
-    release_bdfs_for(second);
+    release_for(second, Scope::Retired);
     pcie_ecam::test_remove_devices(VENDOR);
 }
 

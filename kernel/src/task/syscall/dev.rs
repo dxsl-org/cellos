@@ -156,7 +156,7 @@ pub(super) fn caller_has_platform(caller_id: usize) -> bool {
 }
 
 pub(super) fn pcie_usable_by(caller_id: usize, bdf: u32) -> bool {
-    crate::resource_registry::owner_of_bdf(bdf).is_none_or(|owner| owner == caller_id)
+    crate::dev::ownership::pci_owner(bdf).is_none_or(|owner| owner == caller_id)
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -401,14 +401,14 @@ pub(super) fn offer_pcie_device(
     // virtio probe writes the function's `device_feature_select`, which must
     // not happen under a live owner's driver.
     #[cfg(target_arch = "x86_64")]
-    if crate::resource_registry::owner_of_bdf(bdf).is_none()
+    if crate::dev::ownership::pci_owner(bdf).is_none()
         && crate::arch::dev::pcie_msi::dma_bypasses_iommu(&dev)
     {
         return Ok(0);
     }
     // Claim without displacing a live Driver Cell. A competing instance observes
     // "not found" and may retry after reap.
-    if !crate::resource_registry::claim_bdf_owner(bdf, caller_id) {
+    if !crate::dev::ownership::claim_pci(bdf, caller_id) {
         return Ok(0);
     }
     // The owner may now reach its BARs: memory decoding on, bus mastering

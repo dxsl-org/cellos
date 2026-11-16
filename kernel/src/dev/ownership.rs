@@ -6,12 +6,13 @@
 //! its claimable windows, its interrupts and its DMA domain, so MMIO
 //! (`RequestMmio`), IRQ (435, `WaitIrq`, the MSI and VirtIO ISRs), DMA
 //! (`GrantDma`, DMA export) and route (416/417) checks answer from one record,
-//! and one teardown releases it.
+//! and one release ([`release_for`]) frees it.
 //!
 //! The owner is the claiming task id, the key every check used before. A dead
-//! owner's PCI record stays owned (quarantined) until its DMA teardown is
-//! acknowledged, so no replacement can claim the function, its windows or its
-//! vectors while hardware may still reach the old domain.
+//! owner's records stay owned (quarantined) until its DMA teardown is
+//! acknowledged and its windows are released, so no replacement can claim the
+//! device, its windows or its vectors while hardware may still reach the old
+//! domain.
 //!
 //! The table is a fixed array: teardown and the ISR readers never allocate.
 
@@ -310,28 +311,6 @@ pub(crate) fn devices_of(tid: usize) -> alloc::vec::Vec<(DeviceKey, DeviceKind)>
         .collect()
 }
 
-/// Every PCI function `tid` owns.
-pub(crate) fn pci_functions_of(tid: usize) -> alloc::vec::Vec<u32> {
-    DEVICES
-        .lock()
-        .records
-        .iter()
-        .flatten()
-        .filter(|record| record.key.kind == BLOCK_DEVICE_PCI && record.owner == Some(tid))
-        .map(|record| record.key.id as u32)
-        .collect()
-}
-
-/// Free every PCI function `tid` owns. Only after its DMA teardown was
-/// acknowledged.
-pub(crate) fn release_pci_for(tid: usize) {
-    for record in DEVICES.lock().records.iter_mut().flatten() {
-        if record.key.kind == BLOCK_DEVICE_PCI && record.owner == Some(tid) {
-            record.owner = None;
-        }
-    }
-}
-
 /// Whether `[base, base + len)` is a window of a PCI function or VirtIO slot
 /// record (the `RequestMmio` PCIe path).
 pub(crate) fn is_device_window(base: usize, len: usize) -> bool {
@@ -401,10 +380,24 @@ pub(crate) fn unclaim(tid: usize, key: DeviceKey) {
     }
 }
 
-/// Free every MMIO device `tid` owns (its windows were released).
-pub(crate) fn release_mmio_devices_for(tid: usize) {
+/// Which of an owner's records [`release_for`] frees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scope {
+    /// Every record: the owner retired, its DMA teardown was acknowledged and
+    /// its windows were released.
+    Retired,
+    /// The records `PcieDriverCap` claims (PCI functions through 418/424,
+    /// VirtIO slots through `RequestMmio`): a runtime revoke of that
+    /// capability, after its DMA teardown and the release of its windows.
+    PcieDriver,
+}
+
+/// Free the records `tid` owns in `scope`: the one release of device
+/// ownership. A freed record keeps its windows and fixed line for the next
+/// claimant; MSI vectors were already taken out by [`release_msis`].
+pub(crate) fn release_for(tid: usize, scope: Scope) {
     for record in DEVICES.lock().records.iter_mut().flatten() {
-        if record.key.kind == BLOCK_DEVICE_MMIO && record.owner == Some(tid) {
+        if record.owned_by(tid) && (scope == Scope::Retired || record.kind != DeviceKind::Dwc2) {
             record.owner = None;
         }
     }
@@ -576,20 +569,50 @@ mod tests {
         const BDF: u32 = 0x00_FE_ED;
         const FIRST: usize = 0xA001;
         const COMPETING: usize = 0xA002;
-        release_pci_for(FIRST);
-        release_pci_for(COMPETING);
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        release_for(FIRST, Scope::Retired);
+        release_for(COMPETING, Scope::Retired);
         assert!(claim_pci(BDF, FIRST));
         assert!(claim_pci(BDF, FIRST), "idempotent");
         assert!(!claim_pci(BDF, COMPETING));
         assert_eq!(pci_owner(BDF), Some(FIRST));
-        assert_eq!(pci_functions_of(FIRST), alloc::vec![BDF]);
+        assert!(devices_of(FIRST)
+            .iter()
+            .any(|&(key, _)| key == pci_key(BDF).unwrap()));
 
-        release_pci_for(FIRST);
+        release_for(FIRST, Scope::PcieDriver);
         assert_eq!(pci_owner(BDF), None);
         assert!(claim_pci(BDF, COMPETING));
         assert_eq!(pci_owner(BDF), Some(COMPETING));
-        release_pci_for(COMPETING);
+        release_for(COMPETING, Scope::Retired);
         assert!(!claim_pci(0x1_0000, FIRST), "not a BDF");
+    }
+
+    /// A `PcieDriverCap` revoke frees what that capability claimed and
+    /// leaves the DWC2 aperture, which `UsbDriverCap` claimed.
+    #[test]
+    fn a_pcie_driver_release_keeps_the_dwc2_aperture() {
+        const TID: usize = 0xA0D2;
+        const DWC2: usize = 0x7A10_0000;
+        const SLOT: usize = 0x7A20_0000;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register_mmio_device(DWC2, 0x1_0000, DeviceKind::Dwc2, Some(0x2C));
+        assert_eq!(
+            claim_window(TID, DWC2 + 0x1000, 0x1000, true),
+            WindowClaim::Claimed(mmio_key(DWC2).unwrap())
+        );
+        test_own_mmio(TID, SLOT, 0x2D);
+        release_for(TID, Scope::PcieDriver);
+        assert!(irq_owned_by(TID, 0x2C), "DWC2 kept");
+        assert!(!irq_owned_by(TID, 0x2D), "VirtIO slot freed");
+        release_for(TID, Scope::Retired);
+        assert!(!irq_owned_by(TID, 0x2C));
+        assert_eq!(
+            claim_window(TID + 1, DWC2, 0x1000, true),
+            WindowClaim::Claimed(mmio_key(DWC2).unwrap()),
+            "free for the next claimant"
+        );
+        release_for(TID + 1, Scope::Retired);
     }
 
     /// X2: a fixed line answers only for the owner of its device, on every
@@ -603,7 +626,7 @@ mod tests {
         assert!(!irq_owned_by(0x7A01, 0x2B));
         assert!(irq_owned_for(0x7A01, 0x2A, mmio_key(0x7A00_0000).unwrap()));
         assert!(lines_owned_by(0x7A01).contains(0x2A));
-        release_mmio_devices_for(0x7A01);
+        release_for(0x7A01, Scope::Retired);
         assert!(!irq_owned_by(0x7A01, 0x2A), "released with the device");
     }
 

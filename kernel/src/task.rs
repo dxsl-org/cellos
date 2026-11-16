@@ -1818,16 +1818,22 @@ pub(crate) fn wake_task(tid: usize, result: usize) {
 /// other teardowns: a timed-out invalidation must be retried, not interleaved.
 ///
 /// Order: quiesce every owned PCI function (no new DMA, no interrupts), then
-/// revoke and fence its IOMMU translations, then release the BDFs and the
-/// acknowledged frames. Quiescing is idempotent, so a retried teardown repeats
-/// it harmlessly.
+/// revoke and fence its IOMMU translations, then release the acknowledged
+/// frames. Quiescing is idempotent, so a retried teardown repeats it
+/// harmlessly. The device records stay owned: the caller frees them with
+/// [`ownership::release_for`](crate::dev::ownership::release_for) once the
+/// windows are released too.
 ///
 /// Returns `false` when hardware did not acknowledge the teardown, including a
 /// function that could not be shown quiescent; the caller must then keep the
 /// authority (and the frames) fail-closed.
 pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
-    let owned = crate::resource_registry::bdfs_owned_by(tid);
+    let owned: alloc::vec::Vec<u32> = crate::dev::ownership::devices_of(tid)
+        .into_iter()
+        .filter(|(_, kind)| matches!(kind, crate::dev::ownership::DeviceKind::Pci { .. }))
+        .map(|(key, _)| key.id as u32)
+        .collect();
     #[cfg(feature = "bench-counters")]
     let owned_any = !owned.is_empty();
     for bdf in owned {
@@ -1845,7 +1851,7 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
             Ok(_) => {}
             Err(error) => {
                 log::warn!(
-                    "[pcie] {:02x}:{:02x}.{} of tid {} not quiescent ({:?}); BDF and frames retained",
+                    "[pcie] {:02x}:{:02x}.{} of tid {} not quiescent ({:?}); function and frames retained",
                     (bdf >> 8) & 0xFF,
                     (bdf >> 3) & 0x1F,
                     bdf & 0x7,
@@ -1866,7 +1872,6 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     // The holder's export windows lived in that domain: their leases now drop
     // (or lose their mapping) before any owner frame can leave quarantine.
     crate::task::syscall::dma_export::holder_domain_revoked(tid);
-    crate::resource_registry::release_bdfs_for(tid);
     crate::task::syscall::release_acked_frames(tid);
     #[cfg(feature = "bench-counters")]
     if owned_any {
@@ -1892,6 +1897,13 @@ fn queue_retired_dma_cleanup(tid: usize) {
     }
 }
 
+/// Release a retired `tid`'s device authority once its DMA teardown was
+/// acknowledged: its MMIO windows (lowered first), then its device records.
+fn release_retired_devices(tid: usize) {
+    crate::resource_registry::release_mmio_for(tid);
+    crate::dev::ownership::release_for(tid, crate::dev::ownership::Scope::Retired);
+}
+
 fn retry_retired_dma_cleanup() {
     let retry = IOMMU_CLEANUP_RETRIES.lock().pop_front();
     #[cfg(not(feature = "p01-trace"))]
@@ -1899,7 +1911,7 @@ fn retry_retired_dma_cleanup() {
         if !teardown_dma_authority(tid) {
             queue_retired_dma_cleanup(tid);
         } else {
-            crate::resource_registry::release_mmio_for(tid);
+            release_retired_devices(tid);
         }
     }
     #[cfg(feature = "p01-trace")]
@@ -1911,7 +1923,7 @@ fn retry_retired_dma_cleanup() {
             // Preserve the immutable incarnation and token through every retry.
             IOMMU_CLEANUP_RETRIES.lock().push_back(cleanup);
         } else {
-            crate::resource_registry::release_mmio_for(cleanup.tid);
+            release_retired_devices(cleanup.tid);
             crate::p01_resources::finish(cleanup.obligation, 1);
             if let Some(owner) = cleanup.owner {
                 crate::p01_resources::checked(owner, 5);
@@ -1941,9 +1953,9 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
     if dma_deferred {
         queue_retired_dma_cleanup(tid);
     } else {
-        // A window stays owned, like its BDF, until the device's DMA teardown
-        // is acknowledged; the deferred retry releases it on success.
-        crate::resource_registry::release_mmio_for(tid);
+        // A window and a device stay owned until the device's DMA teardown
+        // is acknowledged; the deferred retry releases them on success.
+        release_retired_devices(tid);
     }
     crate::dev::irq_wait::release_waiters_for(tid);
     let grants = crate::task::syscall::reap_grants_for_task(tid);
