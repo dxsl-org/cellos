@@ -322,9 +322,52 @@ pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
         .is_some_and(|entry| entry.paused && entry.tid == expected_tid)
 }
 
-/// Whether `service_id` has a row, active or paused.
-pub(crate) fn has_entry(service_id: u16) -> bool {
-    REGISTRY.lock().contains_key(&service_id)
+/// Register `tid` as the provider of `service_id`, without flags, only while
+/// `service_id` has no row, active or paused: an existing row is never
+/// replaced. The check and the insert share one `REGISTRY` hold. `false`, with
+/// nothing changed, when a row exists, the registry is full, or `tid` is 0.
+pub(crate) fn register_if_absent(
+    service_id: u16,
+    tid: usize,
+    cell_id: u64,
+    generation: u64,
+) -> bool {
+    if tid == 0 {
+        return false;
+    }
+    let inserted = {
+        let mut map = REGISTRY.lock();
+        if map.contains_key(&service_id) || map.len() >= MAX_SERVICES {
+            false
+        } else {
+            #[cfg(feature = "p01-trace")]
+            let _semantic = crate::memory::heap::p01_owner::creation(
+                None,
+                crate::memory::heap::p01_owner::SERVICE_SHARED,
+            );
+            map.insert(
+                service_id,
+                ServiceEntry {
+                    tid,
+                    cell_id,
+                    generation,
+                    flags: 0,
+                    paused: false,
+                },
+            );
+            true
+        }
+    };
+    if inserted {
+        log::info!(
+            "[service-registry] {} -> tid {} (cell {} gen {}), registered while vacant",
+            service_id,
+            tid,
+            cell_id,
+            generation
+        );
+    }
+    inserted
 }
 
 /// Return whether `tid` is hidden behind any paused service mapping.
@@ -496,6 +539,24 @@ mod tests {
             "the old tid's teardown misses it"
         );
         clear_tid(NEW);
+    }
+
+    #[test]
+    fn register_if_absent_never_replaces_a_row() {
+        const TEST_SERVICE: u16 = 60_022;
+        const HELD: usize = 0x6_0221;
+        const LATE: usize = 0x6_0222;
+        assert!(!register_if_absent(TEST_SERVICE, 0, CELL, GEN), "tid 0");
+        register(TEST_SERVICE, HELD, CELL, GEN);
+        assert!(!register_if_absent(TEST_SERVICE, LATE, CELL, GEN));
+        assert_eq!(lookup_bound(TEST_SERVICE), Some((HELD, CELL, GEN)));
+        assert!(pause(TEST_SERVICE, HELD));
+        assert!(!register_if_absent(TEST_SERVICE, LATE, CELL, GEN));
+        assert!(paused_matches(TEST_SERVICE, HELD), "paused row kept");
+        clear_tid(HELD);
+        assert!(register_if_absent(TEST_SERVICE, LATE, CELL, GEN + 1));
+        assert_eq!(lookup_bound(TEST_SERVICE), Some((LATE, CELL, GEN + 1)));
+        clear_tid(LATE);
     }
 
     /// A paused row is mid hot-swap: neither re-pointed nor removed by the

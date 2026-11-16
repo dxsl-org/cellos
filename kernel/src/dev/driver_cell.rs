@@ -615,17 +615,16 @@ pub fn deregister_all_for(tid: usize) {
 /// `service::NIC_DRIVER` row was paused for a hot swap, so it could not be
 /// re-pointed, and `clear_tid` has now removed it — make the lowest live route
 /// the primary and register its provider, so networking survives as on the
-/// re-point path. Nothing happens while any `NIC_DRIVER` row exists (another
-/// registration owns the service) or a primary is set.
+/// re-point path. A `NIC_DRIVER` row that exists by then (another
+/// registration owns the service) is never replaced: the row is written only
+/// if absent, under one registry hold, and the primary is then left vacant.
+/// Nothing happens while a primary is set.
 ///
 /// The new row is one heap node, charged to the kernel; the heap masks
 /// interrupts, so exit teardown inside the timer/IPI ISR may allocate it.
 /// Caller holds `ROLE_PUBLICATION`.
 fn promote_vacant_primary() {
     use abi::syscall::service::NIC_DRIVER;
-    if crate::cell::service_registry::has_entry(NIC_DRIVER) {
-        return;
-    }
     let promoted = {
         let mut routes = NIC_ROUTES.lock();
         let successor = routes
@@ -648,7 +647,7 @@ fn promote_vacant_primary() {
     let registered = {
         let _kernel =
             crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
-        crate::cell::service_registry::register(NIC_DRIVER, tid, cell_id, generation)
+        crate::cell::service_registry::register_if_absent(NIC_DRIVER, tid, cell_id, generation)
     };
     if registered {
         log::warn!(
@@ -1224,6 +1223,46 @@ mod tests {
         );
         deregister_all_for(C.0);
         assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (None, None));
+        reset_nic_routes();
+    }
+
+    /// The promotion never replaces a `NIC_DRIVER` row that exists by the
+    /// time it runs, active or paused: the primary stays vacant and the row
+    /// is untouched. With no row, the lowest live route is registered.
+    #[test]
+    fn a_promotion_never_replaces_an_existing_row() {
+        use crate::cell::service_registry::{clear_tid, lookup_bound, pause, register};
+        use abi::syscall::service::NIC_DRIVER;
+        const OTHER: Provider = (0x5F11, 91, 1);
+        const LIVE: Provider = (0x5F12, 92, 1);
+        let promote = || {
+            let _publication = super::ROLE_PUBLICATION.lock();
+            super::promote_vacant_primary();
+        };
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        reset_nic_routes();
+        assert_eq!(publish_nic_route(pci(0x5F8), LIVE, || true), Some(0));
+        NIC_ROUTES.lock().primary = None;
+
+        assert!(register(NIC_DRIVER, OTHER.0, OTHER.1, OTHER.2));
+        promote();
+        assert_eq!(nic_primary(), None);
+        assert_eq!(lookup_bound(NIC_DRIVER), Some(OTHER), "active row kept");
+        assert!(pause(NIC_DRIVER, OTHER.0));
+        promote();
+        assert_eq!(nic_primary(), None);
+        assert!(
+            crate::cell::service_registry::paused_matches(NIC_DRIVER, OTHER.0),
+            "paused row kept"
+        );
+
+        clear_tid(OTHER.0);
+        promote();
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(0), Some(LIVE))
+        );
+        deregister_all_for(LIVE.0);
         reset_nic_routes();
     }
 }
