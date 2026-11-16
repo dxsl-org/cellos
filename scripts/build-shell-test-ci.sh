@@ -93,7 +93,7 @@ if [[ ! -f "$ST_DIR/kernel_fs.img" ]]; then
 fi
 "$PYTHON_BIN" tools/inspect_fat.py "$ST_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
-   ! grep -q -- 'SFN SHELL' "$TMPDIR_KFS/fat-layout.txt"; then
+   ! grep -q -- "LFN 'cellbox'" "$TMPDIR_KFS/fat-layout.txt"; then
     echo "FAIL: kernel_fs.img does not contain /bin/cellbox" >&2
     exit 1
 fi
