@@ -4,8 +4,15 @@
 behavior and [Spec 09](09-vfs.md) remain relevant to existing code. The accepted
 next shell/tooling direction is [ADR-0028](../decisions/0028-cellbox-cli-first-structured-pipelines-and-tui.md)
 and the [Cellbox CLI design](../cellbox-cli.md); its
-[implementation plan](../../.agents/261020-1750-cellbox-cli/plan.md) is pending.
+[implementation plan](../../.agents/261020-1750-cellbox-cli/plan.md) is closed at its stated
+ceilings with deferred items. The shell is now Cellbox at `cells/tools/cellbox` (`5043e2cf59`).
 The old tiny-shell recommendations below do not override that accepted design.
+
+**Code check (2026-11-16):** the "no copy" claims below (§1 borrowing from the VFS page cache,
+§3 zero-copy loading, the `Box<[u8]>` borrow in strategy item 4, and the `ls` flow) do not
+match the code. Shell, VFS and drivers are separate Cells with separate heaps; data crosses
+them as kernel-copied IPC messages (Spec 00 Law 2, Spec 17). The `ls` flow section is
+corrected; the rest is kept as the historical sketch.
 
 
 ### 1. Giai đoạn 1: Built-in Commands (Tier 1 Cell)
@@ -36,7 +43,7 @@ Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file
 
 ### 🛠️ Chiến thuật cho dev và Agent (Áp dụng các Luật)
 
-1. **Luật 5 (No `mod.rs`)**: Shell phải nằm trong `cells\apps\shell`.
+1. **Luật 5 (No `mod.rs`)**: Shell phải nằm trong `cells\apps\shell`. *(Cập nhật 2026-11-16: shell hiện là Cellbox tại `cells/tools/cellbox`; Luật 5 đã là historical, xem Spec 00.)*
 2. **Luật 6 (Naming)**: Mọi interface giao tiếp với Kernel phải dùng tiền tố `Vi` (ví dụ: `ViSyscall`).
 3. **Luật 8 (Resource)**: Cấm dùng `String` hay `Vec` vô tội vạ cho việc parse lệnh. Hãy dùng `&str` và split bằng iterator để giảm áp lực cho Heap của robot nano.
 4. **Luật 8 (Borrowing)**: Khi Shell thực hiện lệnh cat, nó sẽ nhận về một Box<[u8]> từ VFS. Theo Luật 8, Shell nên mượn (borrow) dữ liệu này để in ra UART thay vì copy sang một buffer trung gian, tận dụng tối đa lợi thế của Single Address Space (SAS).
@@ -44,12 +51,12 @@ Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file
 
 ### Luồng chạy của lệnh `ls` trong Shell (Kết nối 3 khu vực)
 
-Khi mày gõ lệnh `ls` trong `cells/apps/shell`, đây là cách 3 khu vực này phối hợp mà không cần `memcpy`:
+*Cập nhật 2026-11-16 theo code.* Khi mày gõ lệnh `ls` trong Cellbox (`cells/tools/cellbox`), dữ liệu **được copy** qua ranh giới Cell; không có đường nào "không cần `memcpy`":
 
-1. **App Cell (`shell`)**: Gọi syscall `open("/")` thông qua **`libs/abi`** (`abi::fs`).
-2. **Service Cell (`vfs_dispatcher`)**: Nhận trap, kiểm tra bảng mount, thấy `/` thuộc về `viRamDisk`, liền gọi sang Driver tương ứng.
-3. **Driver Cell (`viRamDisk`)**: Nhờ **SAS**, nó chỉ việc trả về một vùng nhớ chứa danh sách file.
-4. **Kết quả**: `shell` nhận được dữ liệu và in ra UART (cũng là một Driver).
+1. **App Cell (`cellbox`)**: `ls_collect` (`cells/tools/cellbox/src/commands.rs:167`) gửi `VfsRequest::ListDir` (`libs/wire/src/ipc.rs`) tới VFS service qua IPC (`vfs_list_dir_details`, `cells/tools/cellbox/src/cmd_fs.rs:969`). Kernel copy request vào recv buffer của VFS (≤ `IPC_BUF_SIZE` = 4096, `libs/abi/src/kernel_ipc.rs:8`).
+2. **Service Cell (`vfs`)**: tra MountTable ([Spec 09](09-vfs.md)), đọc thư mục từ backend, rồi trả reply; kernel lại copy reply vào buffer reply 512 byte trên stack của `cellbox` (`cmd_fs.rs:974-975`), nên thư mục lớn bị cắt bớt (`cmd_fs.rs:907-908`).
+3. **Kernel BootFS (VIFS1)**: với `/` và các đường dẫn fallback, `cellbox` còn đọc BootFS qua `ostd::fs::read_dir` (`libs/ostd/src/fs.rs:45`); mỗi `sys_read_dir` copy một `DirEntry` vào buffer trên stack của caller.
+4. **Kết quả**: `cellbox` gộp, loại trùng, sắp xếp danh sách trên heap của chính nó rồi in ra console.
 
 
 ### Bộ Dispatcher "Zero-copy" (Tuân thủ Luật 8)
