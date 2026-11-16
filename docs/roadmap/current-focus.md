@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-10-19 — Unified Desktop Phase 11 complete image and user-path qualification under ADR-0027; Cell/Kernel authority and C2C on Intel x86-64
+**Last updated**: 2026-11-16 — architecture remediation plan (`261110-1703`) at its closing phase; residuals handed back below. Earlier: 2026-10-19 Unified Desktop Phase 11 under ADR-0027
 
 ## Sole active direction: C2C Anywhere on Intel x86-64
 
@@ -14,6 +14,88 @@ Tier 3 Linux guest adapters, sharing service contracts, identity/authority and
 lifecycle semantics. Local IPC, LAN and relay remain distinct transports:
 `anywhere` does not mean shared pointers across machines, automatic distribution
 of arbitrary applications, invisible failures or unbounded retries.
+
+### Architecture remediation plan closes; residuals handed back (2026-11-16)
+
+The [architecture remediation plan](../../.agents/261110-1703-architecture-remediation/plan.md)
+answered the 2026-11-10 architecture review in Phases 00–18. Phase 19 is its closing phase:
+spec reconciliation, residue removal, living docs and the owner closure request. Every
+Critical and High finding in the
+[closure matrix](../../.agents/261110-1703-architecture-remediation/reports/closure-matrix.md)
+is `closed` with evidence, or `residual` with the owner's written acceptance
+([Phase 19 Deviation Log](../../.agents/261110-1703-architecture-remediation/phase-19-closure.md#deviation-log)).
+The code it left is summarised in [system architecture § 11](../system-architecture.md) and
+[security model § Current enforcement](../security-model.md#current-enforcement-2026-11-16).
+Its evidence ceiling is host plus QEMU (TCG, KVM); nothing was pushed or run on hardware.
+
+The residuals return to the portfolio as candidate work. Each item needs its own admission
+under the rules below; this list admits nothing by itself.
+
+1. **Owner-accepted High residuals.**
+   - H-2: launch edges stay code in `kernel/src/loader/launch_profile/profiles.rs`, and the
+     kernel still holds 152 distinct `/bin/…` literals.
+   - H-5: 63 of 64 syscall allowlist bits are used; the widening designed in CP1 §4 is not
+     implemented.
+   - H-8: dev and test images still run the boot self-tests.
+   - H-13: input, net-broker and silo keep their own receive loops; the init boot-stop halt
+     path is host-tested only.
+   - H-14: tracked build artifacts and Phases 03/03b wait for one pushed CI cycle; release
+     signing is blocked; the remote endpoint adapter returns `NotSupported`.
+2. **Open findings with no remediation phase, owner-accepted and handed back.**
+   - M-K4: `memory` still calls `task::*` (25 sites).
+   - M-A1: `CapSet` carries service rights, and each costs a policy wire version.
+   - M-I4: CPU budgets are not in the default build.
+   - M-U3: net's 13-argument dispatch.
+   - M-U4: three C-runtime paths.
+   - M-B2: `scripts/check-baseline.sh` targets RV64 only.
+   - M-B4: the 2,700-line `ci.yml` is still one file.
+   - M-B5b: `build/` and the DOOM WAD are tracked.
+   - L-6: "supervisor" names three things.
+3. **Other recorded residuals.**
+   - M-K2: `Task` keeps about 55 flat fields.
+   - M-K3: trace sites need a tracing facade.
+   - M-A2: device, BDF and service ownership are keyed by tid.
+   - M-A4: domain-admission `CellSpawnDenied` records carry no subject.
+   - M-T4: grants and kernel stacks stay at VA = PA.
+   - M-W4: only the primary NIC carries traffic; concurrent traffic needs an ABI change.
+   - M-W5: igc, ixgbe, i40e, r8169 and bcm57xx have no catalog row or device IDs; they need
+     physical captures.
+   - L-3: duplicate `PAGE_SIZE` definitions.
+   - L-8: 32-bit targets stay quarantined and do not build.
+   - M-D1: `.agents/` size; retention is report-only by owner decision.
+4. **Carried from Phases 16–18** (closure matrix § Residuals carried).
+   - A refused `RegionTable::insert` leaves private-root PTEs.
+   - `await_flush` is reset per run, not per release.
+   - The RV64 shootdown self-test does not cover 3+ harts.
+   - AArch64 `map_guest_memory` can overwrite live Stage-2 leaves without a TLBI.
+   - `request_mmio` takes `SCHEDULER` under `RESOURCE_REGISTRY`.
+   - On RV64 and AArch64, boot stops when kernel memory sits at or above 64 GiB.
+   - RV64 issues no `fence.i` after loader writes.
+   - The dormant x86 demand-paging path maps a "zeroed" frame without clearing it.
+   - UMIP: foreign binaries are not audited.
+   - A restarted virtio-blk skips its predecessor's slot (`DRIVER_OK` is never reset).
+   - A renamed Tier-1 ELF gets only a NOTE from the signer.
+   - Device-capability revoke has no end-to-end test.
+   - The `nic2-x86` CI cost is unmeasured.
+   - No lane checks the aarch64 `IOMMU-TEARDOWN: SKIP`.
+   - The x86 SVM `TAG-POOL-OWNER-LIMIT` path and x86 boots with RAM at or above 64 GiB have not
+     been exercised.
+5. **Phase 19 findings.**
+   - N-1: x86 virtio-blk never latches `poisoned`; the owner directed a fix in Phase 19.
+   - N-2: allowlist items re-read in the Phase 19 wave are still open: `push_ip`, doom
+     `DG_ScreenBuffer`, nvme CQ references, net TLS `# Safety` docs and the silo-guest
+     `publish_response` length.
+   - The next allowlist review wave is due before the entries dated 2027-05-14…28. The three
+     signed tier exceptions are due 2027-05-14 and 2027-05-21.
+6. **2026-11-05 security audit.** Its
+   [remediation status](../../.agents/reports/security-261105-1635-cellos-full-audit.md)
+   (§ 9) lists as open: guest FPU state (05 S-8), NMI exiting (05 S-15), Stage-2 TLB
+   invalidation on ARM remap, and every Medium/Low finding not marked fixed. Some of those were
+   closed by the remediation plan, such as per-cell slot randomisation (Phase 17) and release
+   owner admission (Phase 04), so the list needs a re-triage before it is scheduled.
+7. **Physical qualification.** No result above has run on physical hardware. The
+   [HCL](../hardware-compatibility-list.md) has no physical x86 row, and every promotion stays
+   gated on exact-device evidence (see § Evidence and security).
 
 ### Current admission: contract cutover and execution freeze
 
@@ -523,7 +605,7 @@ This remains `qemu`-ceiling work.
   synchronous TCG fault before the guest probe; rerun that corpus only in an
   environment that reaches the probe.
 - The Tier 3 wide-guest Ubuntu/glibc substrate is implemented: stable service ID
-  14 (`HYPERVISOR_SERVICE_ID` in `libs/api/src/abi/hypervisor.rs`) registers the hypervisor on spawn, the kernel
+  14 (`HYPERVISOR_SERVICE_ID` in `libs/abi/src/hypervisor.rs`) registers the hypervisor on spawn, the kernel
   auto-clears dead registrations on task exit, VFS grants the live provider
   preallocated fixed-capacity write access to `/mnt/sd/guest_disk.img` without
   quota charging while forbidding file growth, whole-file write, and recursive tree
@@ -868,6 +950,10 @@ events are maintained in
   belongs in `.agents/`.
 
 ## Next-session work order
+
+Admission order starts with the architecture remediation hand-back
+(§ Architecture remediation plan closes); the owner selects which item enters next. The
+items below are the earlier session order and keep their scope.
 
 1. AArch64 semihosting ledger closure is complete: Issue #47 ratified
    `B-AARCH64-SEMHOSTING` resolution to PASS under schema v4 with bound QEMU
