@@ -749,7 +749,9 @@ This remains `qemu`-ceiling work.
   5/5 with a two-boot persistence oracle), xHCI is being reopened for this lane
   by the owner's 2026-10-05 decision, the e1000 cell fail-closing every Ethernet binding
   other than 82540EM (`kernel/src/task/drivers/pcie_ecam.rs:894`), no ACPI DMAR
-  discovery (`kernel/src/task/drivers/iommu_x86.rs:59-60`), and no Intel VMX
+  discovery (`kernel/src/task/drivers/iommu_x86.rs:59-60`; both files have since moved to
+  `kernel/src/dev/pcie_ecam.rs` and `kernel/src/arch/x86_64/dev/iommu_x86.rs`, lines not
+  re-checked 2026-11-16), and no Intel VMX
   backend. What is **witnessed** is the q35 software lane: Cellos boots there to
   a COM1 shell from the embedded VIFS1 and runs a Tier 3 guest from the
   hypervisor cell's filesystem. A SATA-only industrial PC is *expected* to do

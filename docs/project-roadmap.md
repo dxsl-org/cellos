@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current direction**: C2C Anywhere on Intel x86-64 — sole active program
-**Last updated**: 2026-10-08 (ADR-0022 direction cutover)
+**Last updated**: 2026-11-16 (architecture remediation plan at its closing phase; earlier: 2026-10-08 ADR-0022 direction cutover)
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -173,6 +173,40 @@ All former G1–G5 product programs are parked except concrete slices admitted a
 Intel C2C dependencies. Keep one physical configuration, one implementation slice
 and bounded acceptance scenarios; see ADR-0022 and the current-focus milestone table.
 
+## Architecture remediation (plan 261110-1703)
+
+The [architecture remediation plan](../.agents/261110-1703-architecture-remediation/plan.md)
+answered the 2026-11-10 whole-architecture review without changing the ADR-0022 direction,
+frozen syscall numbers or wire bytes. Phases 00–18 are complete and Phase 19 (spec
+reconciliation, residue and closure) is its last phase. Every Critical and High review finding
+is `closed` with evidence or `residual` with the owner's written acceptance in the
+[closure matrix](../.agents/261110-1703-architecture-remediation/reports/closure-matrix.md).
+Evidence is host plus QEMU (TCG, KVM) only.
+
+What it changed, by area:
+
+- **Trust and authority.** One trust posture per kernel, with refused combinations failing the
+  build. A single cell catalog, launch by measured identity, and one rights record per Cell
+  incarnation.
+- **Kernel shape.** A generated syscall table and split dispatcher, kernel residents with
+  self-tests kept out of release builds, lock ranks, and one IPC operation model.
+- **Services.** A shared service runtime and wire modules, and `libs/api` split into `abi`,
+  `wire` and `posix-shim`.
+- **Architecture and memory.** The `kernel/src/arch/` seam, x86-64 Tier-2 parity, frame
+  ownership and the shootdown contract, explicit quota charging, and shared-root hardening with
+  SMEP/SMAP/UMIP.
+- **Drivers and Tier 1.** One device-ownership record, NIC routes, the `DmaRemapper` trait, and
+  the Tier-1 TCB perimeter: the signer's tier-class gate and the closure `unsafe` ratchet.
+
+See [system architecture § 11](system-architecture.md) and the
+[security model](security-model.md#current-enforcement-2026-11-16).
+
+Its residuals return to the portfolio; the list is in
+[current focus](roadmap/current-focus.md#architecture-remediation-plan-closes-residuals-handed-back-2026-11-16).
+It covers the owner-accepted High residuals, the open findings with no phase, the carried
+Phase 16–18 residuals, the Phase 19 findings, the open items of the 2026-11-05 security audit,
+and physical qualification.
+
 ## Retained Codebase Snapshot
 
 The following snapshot and open-gate records predate this direction change.
@@ -267,6 +301,10 @@ claim. In particular, x86 guest evidence below is SVM/TCG, not Intel VMX.
 
 - Production signing is not fleet-enforced by default: `signing-required` is
   non-default and the non-dev public key path is still a `[0u8; 32]` placeholder.
+  *(2026-11-16 correction: `signing-required` is now a default feature, and a release
+  kernel must provision real cell, policy and owner anchors; a zero or dev key fails the
+  build. Release kernels still refuse every spawn after init until a qualified owner
+  backend exists. See [security model § Posture](security-model.md#posture-one-per-kernel-refused-combinations-fail-the-build).)*
 - Physical hardware evidence remains separate from QEMU/compile evidence. RPi3
   boot/storage/UART and BCM GPIO/I2C/SPI gates pass; VF2, Pioneer, RPi4, and
   physical x86 remain hardware-gated.
@@ -296,7 +334,10 @@ claim. In particular, x86 guest evidence below is SVM/TCG, not Intel VMX.
   disabling Secure Boot (no signed/measured x86 boot path exists, so a board
   that locks it on is not compatible) are recorded in
   [hardware-tracks.md](roadmap/hardware-tracks.md); this bullet authorizes no
-  implementation.
+  implementation. *(2026-11-16 correction: AHCI and xHCI driver cells now exist with
+  QEMU lanes (`cells/drivers/ahci`, `cells/drivers/xhci`); the cited kernel files moved to
+  `kernel/src/dev/pcie_ecam.rs` and `kernel/src/arch/x86_64/dev/iommu_x86.rs`, and the
+  cited lines were not re-checked.)*
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
 - RV32 release compilation is verified, but RV32 runtime cannot run on this
