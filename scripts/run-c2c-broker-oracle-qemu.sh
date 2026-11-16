@@ -86,6 +86,7 @@ chmod 0600 "$KEY_FILE"
 COMMON_PACKAGES=(
     -p app-init
     -p app-cellbox
+    -p service-input
     -p service-config
     -p service-platform
     -p driver-virtio-blk
@@ -113,6 +114,7 @@ CELL_BINARIES=(
     "$REL/cellbox"
     "$REL/service-vfs"
     "$REL/service-config"
+    "$REL/service-input"
     "$REL/platform"
     "$REL/driver-virtio-blk"
     "$REL/driver-virtio-net"
@@ -138,12 +140,13 @@ printf 'Cellos-C2C-Oracle\n' > "$WORK/hostname"
 printf 'Cellos C2C broker oracle\n' > "$WORK/readme.txt"
 
 "$PYTHON_BIN" tools/mkfat32.py \
-    --config-features c2c-broker \
+    --config-features c2c-broker,input \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/cellbox"         /bin/cellbox \
     "$REL/service-vfs"       /bin/vfs \
     "$REL/service-config"    /bin/config \
+    "$REL/service-input"     /bin/input \
     "$REL/platform"          /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/driver-virtio-net" /bin/virtio-net \
@@ -159,6 +162,7 @@ cp -- "$REL/app-init" "$EMBEDDED/init"
 "$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED/kernel_fs.img" > "$WORK/fat-layout.txt"
 for required in \
     "LFN 'vfs'" \
+    "LFN 'input'" \
     "LFN 'virtio-net'" \
     "LFN 'net-broker'" \
     "LFN 'bench'" \
