@@ -15,7 +15,7 @@ a source file, never from prose:
     kernel RAM alias   hal/arch/<hal>/src/<arch>/paging.rs::phys_to_virt
                        (returns `phys` = identity map, adds an offset = HHDM)
     toolchain target   rust-toolchain.toml `targets`
-    workflow lines     .github/workflows/*.yml lines naming the arch's target
+    workflows          .github/workflows/*.yml files naming the arch's target
     lanes              scripts/lanes.toml rows per arch and tier; `default`
                        rows count for the arch of scripts/cargo-config-linux.toml
                        `[build] target`
@@ -285,7 +285,7 @@ def render() -> str:
         "| Architecture | Kernel arch module | 64-bit set (`cellos_wide`) | Tier-2 admission "
         "(`switch_ordering_qualified`) | Private-root domain grants (`cellos_domain_grants`) "
         "| Tier-3 hypervisor module | `MAX_HARTS` | Kernel RAM alias (`phys_to_virt`) "
-        "| Toolchain target | Workflow lines naming "
+        "| Toolchain target | Workflows naming "
         "the target | Lane rows pr / nightly / manual | Board descriptors |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
@@ -326,7 +326,7 @@ def render() -> str:
         tc = ", ".join(code(t) for t in targets) if targets else "none"
 
         wf = probe_workflows(wf_pattern)
-        wf_cell = ", ".join(f"{k} {v}" for k, v in wf.items()) if wf else "0"
+        wf_cell = ", ".join(code(k) for k in wf) if wf else "none"
 
         counts = {t: 0 for t in TIERS}
         defaults = 0
@@ -386,7 +386,7 @@ def render() -> str:
         "| Kernel RAM alias | `hal::paging::phys_to_virt` in each arch's HAL paging file "
         "(returns `phys`: identity; adds an offset: HHDM) |",
         f"| Toolchain target | {code(TOOLCHAIN)} `targets` |",
-        f"| Workflow lines | {code(WORKFLOWS + '/*.yml')} lines naming the kernel target |",
+        f"| Workflows | {code(WORKFLOWS + '/*.yml')} files with a line naming the kernel target |",
         f"| Lane rows | {code(LANES)} `arch` and `tier` |",
         f"| Board descriptors | {code(BOARDS + '/**/board.rs')} `slug` and `architecture` |",
         "",
