@@ -29,10 +29,11 @@ pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
 pub mod virtio_rng; // Kernel entropy source (x86 RDSEED/RDRAND)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.
-pub mod irq_wait; // IRQ wait/pending tables for Driver Cell sys_wait_irq
-                  // blk_nvme and nic_e1000 have been migrated to Driver Cells:
-                  //   cells/drivers/nvme/   ← NVMe PCIe block driver
-                  //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
+pub mod irq_wait;
+pub mod ownership; // Per-device ownership records: MMIO, IRQ, DMA and route checks. // IRQ wait/pending tables for Driver Cell sys_wait_irq
+                                                                                     // blk_nvme and nic_e1000 have been migrated to Driver Cells:
+                                                                                     //   cells/drivers/nvme/   ← NVMe PCIe block driver
+                                                                                     //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
 
 /// Initialize drivers subsystem
 ///
@@ -69,19 +70,26 @@ pub fn init() {
         {
             mmc::init_driver();
         }
-        // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so Driver Cells
-        // can request only slots enabled by the active board contract. A slot
-        // alone in its page is registered as that page so its claim maps it for
-        // U-mode (a sub-page window is never user-mapped, and RISC-V has no
-        // kernel mediation of sub-page accesses).
+        // Record the VirtIO MMIO slots enabled by the active board contract,
+        // so Driver Cells can request only those. A slot alone in its page is
+        // recorded as that page so its claim maps it for U-mode (a sub-page
+        // window is never user-mapped, and RISC-V has no kernel mediation of
+        // sub-page accesses).
         if board.has_driver(cellos_boards::DriverId::VirtioMmio) {
             for slot in virtio_common::virtio_slots() {
                 let window = virtio_common::slot_window(
                     slot.base,
                     virtio_common::virtio_slots().map(|other| other.base),
                 );
-                crate::resource_registry::register_pcie_bar(slot.base, window);
+                ownership::register_mmio_device(
+                    slot.base,
+                    window,
+                    ownership::DeviceKind::VirtioSlot,
+                );
             }
+        }
+        if let Some((base, size)) = crate::resource_registry::dwc2_aperture() {
+            ownership::register_mmio_device(base, size, ownership::DeviceKind::Dwc2);
         }
     }
     // VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).

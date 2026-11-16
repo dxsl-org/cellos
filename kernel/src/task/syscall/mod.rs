@@ -1717,10 +1717,11 @@ fn handle_syscall_inner(
         Syscall::WaitIrq { irq, mmio_base } => dev::wait_irq(caller_id, irq, mmio_base),
 
         // 235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
-        // Populates the MMIO allowlist only. BDF ownership belongs to the Driver
-        // Cell that claims the device through FindPcieDevice.
-        Syscall::RegisterPcieBar { bdf: _, base, len } => {
-            dev::register_pcie_bar(caller_id, base, len)
+        // Records the window on function `bdf`'s device record only. BDF
+        // ownership belongs to the Driver Cell that claims the device through
+        // FindPcieDevice.
+        Syscall::RegisterPcieBar { bdf, base, len } => {
+            dev::register_pcie_bar(caller_id, bdf, base, len)
         }
 
         // 236: RegisterPciDevice — Platform Cell announces a device with class/BAR info.

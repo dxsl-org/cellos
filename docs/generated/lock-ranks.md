@@ -67,9 +67,9 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 60 | `P01_VTD_SNAPSHOTS` | `kernel::p01_vtd_topology::SNAPSHOTS @cfg(feature = "p01-trace")` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
 | 61 | `P01_VTD_TEST_SNAPSHOT` | `kernel::p01_vtd_topology::tests::TEST_SNAPSHOT @cfg(feature = "p01-trace" & test)` (kernel/src/p01_vtd_topology.rs, cfg inactive here) |
 | 62 | `POLICY` | `kernel::policy::POLICY` (kernel/src/policy.rs) |
-| 63 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
-| 64 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
-| 65 | `PCIE_BARS` | `kernel::resource_registry::PCIE_BARS` (kernel/src/resource_registry.rs) |
+| 63 | `DEVICES` | `kernel::dev::ownership::DEVICES` (kernel/src/dev/ownership.rs) |
+| 64 | `RESOURCE_REGISTRY` | `kernel::resource_registry::REGISTRY` (kernel/src/resource_registry.rs) |
+| 65 | `DISPLAY_FRAMEBUFFER` | `kernel::resource_registry::DISPLAY_FRAMEBUFFER` (kernel/src/resource_registry.rs) |
 | 66 | `SNAPSHOT_SCRATCH` | `kernel::snapshot_engine::SNAPSHOT_SCRATCH @cfg(any (feature = "snapshot-qualified" , test))` (kernel/src/snapshot_engine.rs, cfg inactive here) |
 | 67 | `DMA_PUBLICATIONS` | `kernel::task::syscall::DMA_PUBLICATIONS` (kernel/src/task/syscall/mod.rs) |
 | 68 | `NEXT_CELL_GENERATION` | `kernel::task::tcb::NEXT_CELL_GENERATION` (kernel/src/task/tcb.rs) |
@@ -77,13 +77,12 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 70 | `IOMMU_CLEANUP_RETRIES` | `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(not (feature = "p01-trace"))` (kernel/src/task.rs); `kernel::task::IOMMU_CLEANUP_RETRIES @cfg(feature = "p01-trace")` (kernel/src/task.rs, cfg inactive here) |
 | 71 | `CQ_TRANSACTION` | `kernel::arch::riscv64::dev::iommu_riscv::CQ_TRANSACTION @cfg(target_arch = "riscv64")` (kernel/src/arch/riscv64/dev/iommu_riscv.rs, cfg inactive here) |
 | 72 | `PCIE_MSI_STATE` | `kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/pcie_msi.rs) |
-| 73 | `BDF_OWNERS` | `kernel::resource_registry::BDF_OWNERS` (kernel/src/resource_registry.rs) |
-| 74 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
-| 75 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
-| 76 | `FRAME_RUN_PENDING` |  |
-| 77 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
-| 78 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
-| 79 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
-| 80 | `KERNEL_MMIO` | `kernel::memory::paging::mmio_alias::KERNEL_MMIO @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/memory/mmio_alias.rs) |
-| 81 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
-| 82 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 73 | `LOG_RING` | `kernel::task::LOG_RING` (kernel/src/task.rs) |
+| 74 | `PIN_REGISTRY` | `kernel::memory::pin::REGISTRY` (kernel/src/memory/pin.rs) |
+| 75 | `FRAME_RUN_PENDING` |  |
+| 76 | `FB_STATE` | `kernel::arch::x86_64::dev::fb_console::FB_STATE @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/dev/fb_console.rs) |
+| 77 | `AP02_MAPPINGS` | `kernel::loader::atomic_publication_tests::probe::AP02_MAPPINGS @cfg(feature = "test-hooks")` (kernel/src/loader/atomic_publication_tests/probe.rs, cfg inactive here) |
+| 78 | `SUPERVISOR_RANGES` | `kernel::memory::domain_supervisor_registry::RANGES @cfg(all (feature = "native-domains" , cellos_wide))` (kernel/src/memory/domain-supervisor-registry.rs) |
+| 79 | `KERNEL_MMIO` | `kernel::memory::paging::mmio_alias::KERNEL_MMIO @cfg(target_arch = "x86_64")` (kernel/src/arch/x86_64/memory/mmio_alias.rs) |
+| 80 | `TEST_FLUSHED_TAGS` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_TAGS @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |
+| 81 | `TEST_FLUSHED_PAGES` | `kernel::memory::tlb_shootdown::TEST_FLUSHED_PAGES @cfg(feature = "test-hooks")` (kernel/src/memory/tlb_shootdown.rs, cfg inactive here) |

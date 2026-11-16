@@ -11,7 +11,7 @@
 //!    A second `request_mmio` for an overlapping range returns `AlreadyExists`.
 //!
 //! 3. **Release-on-exit**: `release_mmio_for(tid)` frees all ranges owned by
-//!    a task. Owners are task ids, the same key as `BDF_OWNERS`: the claiming
+//!    a task. Owners are task ids, the same key as the device records: the claiming
 //!    task holds the window, so retirement releases it per member task. The
 //!    released pages first return to their boot posture (kernel-only) on every
 //!    hart, lowered without the registry lock while the window refuses every
@@ -143,12 +143,6 @@ static DISPLAY_FRAMEBUFFER: Spinlock<DisplayFramebufferState> = Spinlock::ranked
     crate::sync::rank::DISPLAY_FRAMEBUFFER,
 );
 
-/// Dynamically discovered PCIe BAR windows (base → len).
-/// Populated by `pcie_ecam::init()` after the ECAM scan; consumed by
-/// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
-static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> =
-    Spinlock::ranked(BTreeMap::new(), crate::sync::rank::PCIE_BARS);
-
 /// Test-hooks only: register a window with an explicit class, so a boot
 /// self-test can prove class-selective revocation on boards whose allowlist
 /// has no window of the class it needs.
@@ -211,34 +205,11 @@ fn static_range_class(
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Register a PCIe BAR window discovered during ECAM scan.
-///
-/// Called by `pcie_ecam::init()` for every non-zero BAR on every device.
-/// Driver Cells may subsequently call `sys_request_mmio` on these ranges
-/// if they hold `PcieDriverCap`.
-pub fn register_pcie_bar(base: usize, len: usize) {
-    if !valid_pcie_bar_window(base, len) {
-        log::warn!(
-            "[pcie] rejected invalid BAR window base={:#x} len={:#x}",
-            base,
-            len
-        );
-        return;
-    }
-    let mut bars = PCIE_BARS.lock();
-    #[cfg(feature = "p01-trace")]
-    let _semantic = crate::memory::heap::p01_owner::creation(
-        None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED,
-    );
-    bars.insert(base, len);
-}
-
 /// Current Driver Cells support bounded conventional BARs only.
 ///
 /// ReBAR and larger accelerator apertures need a separate policy because they
 /// materially widen a Cell's MMIO authority.
-fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
+pub(crate) fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
     const MAX_SUPPORTED_BAR_LEN: usize = 1 << 30;
 
     base != 0
@@ -247,17 +218,6 @@ fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
         && len.is_power_of_two()
         && base & (len - 1) == 0
         && base.checked_add(len).is_some()
-}
-
-/// Return `true` if `[base, base+len)` is a known PCIe BAR window.
-///
-/// Used by the `RequestMmio` handler to decide whether to take the PCIe path.
-pub fn is_pcie_bar(base: usize, len: usize) -> bool {
-    if len == 0 {
-        return false;
-    }
-    let guard = PCIE_BARS.lock();
-    guard.get(&base).is_some_and(|&bar_len| len <= bar_len)
 }
 
 fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
@@ -344,7 +304,7 @@ fn ecam_claim_admitted(
 }
 
 /// The platform's DWC2 host controller aperture `(base, size)`, if it has one.
-fn dwc2_aperture() -> Option<(usize, usize)> {
+pub(crate) fn dwc2_aperture() -> Option<(usize, usize)> {
     #[cfg(target_arch = "aarch64")]
     if let Some(dwc2) =
         <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::DWC2_WINDOW
@@ -419,10 +379,10 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
     //    AND that window's device class must be one the cell declared.
     let end = checked_mmio_end(base, len)?;
 
-    // PCIe path: validate against the dynamic BAR table populated by pcie_ecam.
+    // PCIe path: the window must be one a device record holds (a scanned or
+    // registered BAR, or a VirtIO slot).
     let class: MmioClass = if allowed_devices & DEV_PCIE != 0 {
-        let bars = PCIE_BARS.lock();
-        if !bars.get(&base).is_some_and(|&bar_len| len <= bar_len) {
+        if !crate::dev::ownership::is_device_window(base, len) {
             return Err(ViError::PermissionDenied);
         }
         DEV_PCIE as MmioClass
@@ -521,6 +481,9 @@ pub fn release_mmio_for(tid: usize) {
             release.quarantined
         );
     }
+    // The MMIO devices (VirtIO slot, DWC2 aperture) it claimed are free again;
+    // a quarantined window still refuses every claim.
+    crate::dev::ownership::release_mmio_devices_for(tid);
     // A VideoCore allocation and its USER mapping remain valid until reboot.
     // Do not clear Active metadata or permit a restarted cell to replace it:
     // restart is fail-stop for display after registration.
@@ -838,6 +801,7 @@ pub fn release_mmio_windows(tid: usize, windows: &[(usize, usize)]) {
     REGISTRY.lock().retain(|base, region| {
         !(region.owner_tid == tid && windows.contains(&(*base, region.len)))
     });
+    crate::dev::ownership::release_mmio_devices_in(tid, windows);
 }
 
 /// Release the regions owned by task `tid` whose class is in `device_mask`, and
@@ -1058,58 +1022,30 @@ mod display_tests {
 }
 
 // ---------------------------------------------------------------------------
-// PCIe BDF ownership (for sys_grant_dma authorization)
+// PCIe BDF ownership: views over the device records (`dev::ownership`)
 // ---------------------------------------------------------------------------
-
-/// Maps PCIe BDF → owning task ID.
-///
-/// Kernel drivers (NIC, NVMe) are not registered here — they bypass `sys_grant_dma`
-/// and call `iommu::map_dma_for_cell(0, bdf, ...)` directly during init.
-/// Only userspace Driver Cells that receive PCIe device ownership via capability
-/// delegation need to register here.
-static BDF_OWNERS: Spinlock<alloc::collections::BTreeMap<u32, usize>> = Spinlock::ranked(
-    alloc::collections::BTreeMap::new(),
-    crate::sync::rank::BDF_OWNERS,
-);
 
 /// Atomically claim an unowned PCIe BDF for task `tid`.
 ///
 /// Repeated claims by the same task are idempotent. A live owner cannot be
 /// displaced; task reaping releases its claims through [`release_bdfs_for`].
 pub fn claim_bdf_owner(bdf: u32, tid: usize) -> bool {
-    let mut owners = BDF_OWNERS.lock();
-    match owners.get(&bdf).copied() {
-        Some(owner) => owner == tid,
-        None => {
-            #[cfg(feature = "p01-trace")]
-            let _semantic = crate::memory::heap::p01_owner::creation(
-                None,
-                crate::memory::heap::p01_owner::DRIVER_SHARED,
-            );
-            owners.insert(bdf, tid);
-            true
-        }
-    }
+    crate::dev::ownership::claim_pci(bdf, tid)
 }
 
 /// Return the task ID that currently owns `bdf`, or `None` if unowned.
 pub fn owner_of_bdf(bdf: u32) -> Option<usize> {
-    BDF_OWNERS.lock().get(&bdf).copied()
+    crate::dev::ownership::pci_owner(bdf)
 }
 
 /// Every BDF that task `tid` currently owns.
 pub fn bdfs_owned_by(tid: usize) -> alloc::vec::Vec<u32> {
-    BDF_OWNERS
-        .lock()
-        .iter()
-        .filter(|(_, &owner)| owner == tid)
-        .map(|(&bdf, _)| bdf)
-        .collect()
+    crate::dev::ownership::pci_functions_of(tid)
 }
 
 /// Release all BDF ownerships held by task `tid` (called on Cell exit).
 pub fn release_bdfs_for(tid: usize) {
-    BDF_OWNERS.lock().retain(|_bdf, &mut owner| owner != tid);
+    crate::dev::ownership::release_pci_for(tid);
 }
 
 #[cfg(feature = "test-hooks")]

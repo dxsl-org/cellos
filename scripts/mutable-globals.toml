@@ -1843,26 +1843,15 @@ rationale = "Read from the x86_64 timer ISR on hart 0 via vi_timer_tick -> conso
 review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/src/resource_registry.rs:display_framebuffer_resolution; kernel/src/arch/x86_64/dev/ps2_keyboard.rs:poll_absolute_mouse; kernel/src/task.rs:1062; kernel/src/main.rs:1486"
 
 [[global]]
-key = "kernel::resource_registry::PCIE_BARS"
-lifetime = "global"
-mutation = "spinlock"
-owner = "resource_registry: written by pcie_ecam::init/register_device at boot and by the Platform Cell via RegisterPcieBar (syscall 235); read by request_mmio/is_pcie_bar"
-contexts = ["boot", "normal"]
-seal = "none: syscall 235 can add BAR windows for the whole run"
-retirement = "never: no removal path; windows announced by a Platform Cell outlive that cell"
-rationale = "Only boot enumeration and syscall handlers touch it, none from trap context; Spinlock is adequate. Entries are global device facts rather than per-cell grants, so not retiring them is consistent, though nothing re-validates them after the announcing cell dies."
-review = "kernel/src/resource_registry.rs:register_pcie_bar; kernel/src/resource_registry.rs:is_pcie_bar; kernel/src/dev/pcie_ecam.rs:init; kernel/src/task/syscall/mod.rs:8023"
-
-[[global]]
-key = "kernel::resource_registry::BDF_OWNERS"
+key = "kernel::dev::ownership::DEVICES"
 lifetime = "per-thread"
 mutation = "spinlock"
-owner = "resource_registry: PCIe BDF -> owning driver task id; claimed by sys_grant_dma path (syscall.rs:2216), checked at syscall.rs:730, released by task::teardown_dma_authority"
-contexts = ["normal", "irq", "exception"]
-seal = "none: claims and releases for the whole run"
-retirement = "release_bdfs_for(tid) in teardown_dma_authority, called by reap_retired_task_resources and retry_retired_dma_cleanup in yield_cpu; retained fail-closed until the IOMMU revoke is acknowledged"
-rationale = "Teardown runs inside task.rs:yield_cpu root-retirement funnel (task.rs:1358-1523), reached from vi_timer_tick (task.rs:1075), vi_ipi_service (task.rs:968) and the #PF/user-trap funnel (paging.rs:fault_kill_cell -> task.rs:terminate_current_cell_on_fault); the crate Spinlock masks IRQs so this is safe. Keyed by the monotonic task id, so a delayed release cannot be inherited by a new task."
-review = "kernel/src/resource_registry.rs:claim_bdf_owner; kernel/src/resource_registry.rs:release_bdfs_for; kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:retry_retired_dma_cleanup"
+owner = "dev::ownership: one record per PCI function, VirtIO MMIO slot and DWC2 aperture (key, kind, owner tid, claimable windows); records are created by the boot ECAM scan, RegisterPcieBar (235), RegisterPciDevice (236), the VirtIO slot and DWC2 registration in dev::init and the 418/424 handout; owners are set by claim_pci (418/424) and note_mmio_claim (RequestMmio), read by the BDF/MMIO ownership queries, and cleared by release_pci_for (teardown_dma_authority) and release_mmio_devices_for/in (MMIO release)"
+contexts = ["boot", "normal", "irq", "exception"]
+seal = "none: claims and releases for the whole run; a record's key and windows are never removed"
+retirement = "release_pci_for(tid) in teardown_dma_authority, called by reap_retired_task_resources and retry_retired_dma_cleanup in yield_cpu, only once the IOMMU revoke is acknowledged (a dead owner's PCI record stays owned, fail closed, until then); release_mmio_devices_for(tid) after release_mmio_for"
+rationale = "Fixed array of MAX_DEVICES records under one IRQ-masking spinlock, so teardown inside the yield_cpu root-retirement funnel (timer/IPI ISR, #PF funnel) never allocates in the table. Lock order: after SCHEDULER, the grant tables and ROLE_PUBLICATION (GrantDma reads the owner under them), before RESOURCE_REGISTRY; nothing is acquired under it except the log ring. Keyed by the monotonic task id, so a delayed release cannot be inherited by a new task."
+review = "kernel/src/dev/ownership.rs:claim_pci; kernel/src/dev/ownership.rs:release_pci_for; kernel/src/dev/ownership.rs:note_mmio_claim; kernel/src/dev/pcie_ecam.rs:init; kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:retry_retired_dma_cleanup"
 
 [[global]]
 key = "kernel::policy::POLICY"

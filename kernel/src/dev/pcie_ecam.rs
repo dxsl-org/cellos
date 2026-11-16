@@ -208,6 +208,11 @@ impl PciDevice {
     pub fn canonical_bdf(&self) -> u32 {
         (self.bdf.0 as u32) << 8 | (self.bdf.1 as u32) << 3 | self.bdf.2 as u32
     }
+
+    /// Class code `class << 16 | subclass << 8 | prog_if`.
+    pub fn class_code(&self) -> u32 {
+        (self.class as u32) << 16 | (self.subclass as u32) << 8 | self.prog_if as u32
+    }
 }
 
 // ── Global device list ────────────────────────────────────────────────────────
@@ -1054,9 +1059,11 @@ pub fn init() {
         log::info!("[pcie] ECAM scan complete: {} device(s) found", count);
     }
 
-    // Register all discovered BAR windows in the Resource Registry so Driver
-    // Cells with PcieDriverCap can call sys_request_mmio on them.
+    // Record every discovered function and its BAR windows, so a Driver Cell
+    // that claims a function can call sys_request_mmio on its BARs.
     for dev in PCI_DEVICES.lock().iter() {
+        let bdf = dev.canonical_bdf();
+        crate::dev::ownership::register_pci_function(bdf, dev.class_code());
         for bar in &dev.bars {
             let base = bar.base_addr() as usize;
             if base == 0 {
@@ -1081,7 +1088,7 @@ pub fn init() {
                 }
                 _ => continue,
             };
-            crate::resource_registry::register_pcie_bar(base, len);
+            crate::dev::ownership::register_pci_bar(bdf, base, len);
         }
     }
 }
@@ -1119,8 +1126,8 @@ pub enum Registration {
 /// `PCI_DEVICES` guard, so two registrations of one BDF cannot both probe it or
 /// both insert it; a BDF already present (the kernel ECAM scan may have found
 /// it) is not probed again. Other architectures keep the Platform Cell's class
-/// and BAR0. A new record also registers BAR0 in the Resource Registry for
-/// `sys_request_mmio` validation.
+/// and BAR0. A new record also records the function's class and BAR0 in its
+/// ownership record ([`crate::dev::ownership`]) for `sys_request_mmio`.
 #[must_use]
 pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) -> Registration {
     // Canonical BDF wire layout everywhere (Platform Cell, FindPcieDevice,
@@ -1185,8 +1192,13 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) -
         (Registration::Recorded, added)
     };
 
-    if added && bar0_base != 0 && bar0_size != 0 {
-        crate::resource_registry::register_pcie_bar(bar0_base, bar0_size);
+    if added {
+        if let Some(dev) = device(bdf) {
+            crate::dev::ownership::register_pci_function(bdf, dev.class_code());
+        }
+        if bar0_base != 0 && bar0_size != 0 {
+            crate::dev::ownership::register_pci_bar(bdf, bar0_base, bar0_size);
+        }
     }
     registration
 }

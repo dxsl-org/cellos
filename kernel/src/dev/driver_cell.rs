@@ -110,6 +110,8 @@ static ROLE_PUBLICATION: Spinlock<()> = Spinlock::ranked((), crate::sync::rank::
 
 const VIRTIO_DEVICE_ID_OFFSET: usize = 0x8;
 const VIRTIO_DEVICE_ID_NETWORK: u32 = 1;
+/// PCI class code of an Ethernet controller (`02:00:00`).
+const CLASS_ETHERNET: u32 = 0x02_00_00;
 
 /// Why the caller of 417 has no NIC route key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,8 +139,7 @@ pub(crate) fn owned_network_device(tid: usize) -> Result<(DeviceKey, u32), NicDe
         }
     };
     for bdf in crate::resource_registry::bdfs_owned_by(tid) {
-        let network = crate::dev::pcie_ecam::device(bdf)
-            .is_some_and(|dev| (dev.class, dev.subclass, dev.prog_if) == (0x02, 0x00, 0x00));
+        let network = crate::dev::ownership::pci_class(bdf) == Some(CLASS_ETHERNET);
         if network {
             note(DeviceKey::new(BLOCK_DEVICE_PCI, bdf as u64), 0);
         }

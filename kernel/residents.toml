@@ -238,6 +238,7 @@
 "kernel/src/dev/iommu.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/iommu_pt.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/irq_wait.rs" = { category = "A", owner = "dev" }
+"kernel/src/dev/ownership.rs" = { category = "D", owner = "dev" }
 "kernel/src/dev/mmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/core.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/dev/mmc/emmc.rs" = { category = "exception", owner = "dev", target = "cells/drivers/mmc (Spec 15 §3.1 remaining exceptions)" }

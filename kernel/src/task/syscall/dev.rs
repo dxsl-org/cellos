@@ -795,11 +795,16 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
 }
 
 /// Handler for `Syscall::RegisterPcieBar` (extracted from the dispatcher).
-pub(super) fn register_pcie_bar(caller_id: usize, base: usize, len: usize) -> SyscallResult {
+pub(super) fn register_pcie_bar(
+    caller_id: usize,
+    bdf: u32,
+    base: usize,
+    len: usize,
+) -> SyscallResult {
     if !caller_has_platform(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    crate::resource_registry::register_pcie_bar(base, len);
+    crate::dev::ownership::register_pci_bar(bdf, base, len);
     // Any RegisterPcieBar call from the Platform Cell marks it as active;
     // Phase 08 uses this to gate out the kernel ECAM scan.
     crate::dev::pcie_ecam::mark_platform_registered();
@@ -1050,7 +1055,7 @@ pub(super) fn register_display_framebuffer(
 /// Handler for `Syscall::RequestMmio` (extracted from the dispatcher).
 pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> SyscallResult {
     // PlatformCap bypass: the Platform Cell may claim only the kernel-admitted
-    // ECAM config-space window (not in PCIE_BARS), never managed RAM — the
+    // ECAM config-space window (no device record holds it), never managed RAM — the
     // claim is user-mapped. Overlap check still applies.
     // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
     // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
@@ -1130,9 +1135,9 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
             Err(_) => Ok(3),
         };
     }
-    // PCIe BAR path: cells with PcieDriverCap may claim any BAR
-    // discovered during ECAM scan (registered in resource_registry::PCIE_BARS).
-    if caller_has_pcie_driver(caller_id) && crate::resource_registry::is_pcie_bar(base, len) {
+    // PCIe BAR path: cells with PcieDriverCap may claim a window of a device
+    // record (a BAR found by the ECAM scan or registered, or a VirtIO slot).
+    if caller_has_pcie_driver(caller_id) && crate::dev::ownership::is_device_window(base, len) {
         return match crate::resource_registry::request_mmio(
             caller_id,
             base,
@@ -1140,6 +1145,7 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
             crate::resource_registry::DEV_PCIE,
         ) {
             Ok(()) => {
+                crate::dev::ownership::note_mmio_claim(caller_id, base, len);
                 user_map_pcie_bar(base, len);
                 Ok(0)
             }
@@ -1152,6 +1158,7 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     if caller_has_usb_driver(caller_id) && crate::resource_registry::is_dwc2_mmio(base, len) {
         return match crate::resource_registry::request_dwc2_mmio(caller_id, base, len) {
             Ok(()) => {
+                crate::dev::ownership::note_mmio_claim(caller_id, base, len);
                 user_map(base, len);
                 Ok(0)
             }
