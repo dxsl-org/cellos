@@ -29,29 +29,19 @@ pub(crate) use error;
 mod board {
     use cellos_boards::BoardDescriptor;
 
-    pub(crate) fn selected() -> &'static BoardDescriptor {
+    pub(crate) fn active() -> &'static BoardDescriptor {
         &cellos_boards::qemu_q35_x86_64::QEMU_Q35_X86_64
     }
 }
 
-#[allow(dead_code)]
-mod iommu_x86 {
-    use super::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
+/// Host stand-in for `crate::arch::iommu`: the remapper the kernel names per
+/// architecture. The host has none, as on aarch64 (`kernel/src/arch/aarch64/iommu.rs`).
+mod arch {
+    pub mod iommu {
+        pub use crate::iommu::NoRemapper as Backend;
 
-    pub fn init_hw(_dma: DmaIsolationInput) {}
-    pub fn is_present() -> bool {
-        false
+        pub const BACKEND: Backend = Backend;
     }
-    pub fn map_range_for_cell(_tid: u64, _bdf: u32, phys: u64, _size: usize) -> DmaMapResult {
-        DmaMapResult::Mapped(phys)
-    }
-    pub fn unmap_range_for_cell(_tid: u64, _iova: u64, _size: usize) -> DmaUnmapResult {
-        DmaUnmapResult::NothingMapped
-    }
-    pub fn unmap_cell_domain(_tid: u64) -> bool {
-        true
-    }
-    pub fn activate() {}
 }
 
 #[allow(dead_code)]
