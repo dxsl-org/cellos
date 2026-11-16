@@ -149,6 +149,6 @@ pub fn find_and_init_blk() -> Option<BlkDevice> {
         blk,
         route: BlockDevice::Pci { bdf: bdf as u16 },
         bars,
-        poisoned: false,
+        poisoned: Default::default(),
     })
 }

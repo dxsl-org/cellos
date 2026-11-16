@@ -29,18 +29,48 @@ use ostd::syscall::{sys_get_time_ms, BlockDevice};
 use types::block_wire::BlockOutcome;
 use virtio_drivers::device::blk::{BlkReq, BlkResp};
 
-impl BlkDevice {
-    /// Refuses without touching the device once it is poisoned.
-    fn usable(&self) -> Result<(), BlockOutcome> {
-        if self.poisoned {
+/// Poison latch: set by the first stall and never cleared. While set, every
+/// request is refused before it reaches the queue, so it claims no bounce slot
+/// (the stalled request keeps its slots, and repeated stalls would otherwise
+/// exhaust them).
+#[derive(Default)]
+pub(crate) struct Poison(bool);
+
+impl Poison {
+    /// Admits a request, or refuses it as `NotIssued` once poisoned.
+    const fn admit(&self) -> Result<(), BlockOutcome> {
+        if self.0 {
             Err(BlockOutcome::NotIssued)
         } else {
             Ok(())
         }
     }
 
-    /// Marks the device dead; the only place the poison line is printed.
+    /// Sets the latch; `true` only on the first call.
+    const fn set(&mut self) -> bool {
+        let first = !self.0;
+        self.0 = true;
+        first
+    }
+}
+
+// The cell has no host-test harness, so the latch is checked at build time:
+// a stall poisons once, and every later request is refused.
+const _: () = {
+    let mut poison = Poison(false);
+    assert!(poison.admit().is_ok());
+    assert!(poison.set());
+    assert!(matches!(poison.admit(), Err(BlockOutcome::NotIssued)));
+    assert!(!poison.set());
+    assert!(matches!(poison.admit(), Err(BlockOutcome::NotIssued)));
+};
+
+impl BlkDevice {
+    /// Marks the device dead; the poison line is printed once.
     fn poison(&mut self, reason: &str) {
+        if !self.poisoned.set() {
+            return;
+        }
         // The x86_64 path only ever publishes `Pci` routes.
         let bdf = match self.route {
             BlockDevice::Pci { bdf } => u32::from(bdf),
@@ -81,7 +111,7 @@ impl BlkDevice {
     /// Read `buf.len() / 512` consecutive sectors into `buf` in one request;
     /// `buf` is a whole number of sectors, at most one page (the bounce size).
     pub fn read_sectors(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
-        self.usable()?;
+        self.poisoned.admit()?;
         let mut req = BlkReq::default();
         let mut resp = BlkResp::default();
         // SAFETY: `req`, `buf` and `resp` are not accessed again until
@@ -100,7 +130,7 @@ impl BlkDevice {
 
     /// Write one 512-byte sector.
     pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), BlockOutcome> {
-        self.usable()?;
+        self.poisoned.admit()?;
         let mut req = BlkReq::default();
         let mut resp = BlkResp::default();
         // SAFETY: as in `read_sectors`.
@@ -116,7 +146,7 @@ impl BlkDevice {
 
     /// Send a VirtIO FLUSH request.
     pub fn flush(&mut self) -> Result<(), BlockOutcome> {
-        self.usable()?;
+        self.poisoned.admit()?;
         if self.bars.needs_reset() {
             self.poison("device reports DEVICE_NEEDS_RESET");
             return Err(BlockOutcome::NotIssued);

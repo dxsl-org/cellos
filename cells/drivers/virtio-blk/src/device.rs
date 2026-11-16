@@ -38,7 +38,7 @@ pub struct BlkDevice {
     pub(crate) bars: crate::bars_x86::BarRegions,
     /// Set when a request stalled; the device is never touched again.
     #[cfg(target_arch = "x86_64")]
-    pub(crate) poisoned: bool,
+    pub(crate) poisoned: crate::io_x86::Poison,
 }
 
 /// Classify a virtio-drivers request result by issue certainty.
