@@ -1,5 +1,5 @@
 # Cellos system context & design rules
-**Last Updated**: 2026-11-16 (Phase 19 reconciliation: prime directive, §2 tree and Laws 1, 2, 4, 5 checked against code)
+**Last Updated**: 2026-11-16 (Phase 19 reconciliation: prime directive, §2 tree and Laws 1, 2, 4–8 checked against code)
 **Audience**: Developers & AI Agents
 
 
@@ -98,7 +98,7 @@ Cellos/
 **Luật 6: Cellos Naming Convention**
 - Mọi thành phần trong mã nguồn phải tuân thủ quy tắc đặt tên để phân biệt giữa **Hợp đồng Cellos (Contract)**, **Thực thi (Implementation)** và **Mã nguồn Fork**.
 - **Chống đụng độ:** Không được đặt tên trùng với các thư viện fork (ví dụ: cấm đặt tên Trait là `FileSystem` nếu đã fork RedoxFS).
-- **Định danh SAS:** Các Trait bắt đầu bằng `Vi` phải hỗ trợ cơ chế chuyển giao sở hữu (Ownership) hoặc Lease/Grant để tối ưu hóa Single Address Space.
+- ~~**Định danh SAS:** Các Trait bắt đầu bằng `Vi` phải hỗ trợ cơ chế chuyển giao sở hữu (Ownership) hoặc Lease/Grant để tối ưu hóa Single Address Space.~~ (**Historical (2026-11-16):** code không theo — nhiều trait `Vi` chỉ là giao diện thiết bị/UI không có ownership hay Lease/Grant, ví dụ `ViUart`, `ViGpio`, `ViSpi` (`hal/traits/`) và `ViTheme`, `ViWidget` (`libs/viui`). Tiền tố `Vi` hiện chỉ là quy ước đặt tên.)
 - **Refactor hàng Fork:** Khi đưa mã nguồn ngoại lai vào, phải giữ nguyên logic gốc nhưng phải bọc (wrap) hoặc implement lại các Trait theo chuẩn `Vi` để Kernel có thể gọi.
 
 | Đối tượng | Tiền tố / Quy tắc | Ví dụ |
@@ -111,15 +111,16 @@ Cellos/
 
 
 **Luật 7: Quản lý Trait & Tính Linh Hoạt (Polymorphism)**
-- **Trait Object**: Sử dụng `dyn Trait` thay cho Generics tại các interface hệ thống (VFS, Drivers, Network) để hỗ trợ nạp/gỡ Cell động.
-- **Bắt buộc Bounds an toàn**: Mọi trait object được lưu trữ hoặc chuyển giao giữa các Task phải chỉ định rõ Send + Sync (ví dụ: `Arc<dyn ViDriver + Send + Sync>`).
-- **Box vs Arc**: Sử dụng `Box` cho các đối tượng có chủ sở hữu duy nhất và Arc cho các tài nguyên dùng chung trong SAS.
+> **Cập nhật 2026-11-16 theo code.** Trait object chỉ dùng **bên trong một binary**: kernel giữ BootFS/FAT sau `Box<dyn ViFileSystem>` / `Box<dyn ViFile + Send + Sync>` (`kernel/src/fs.rs:18`, `libs/abi/src/fs.rs:40`). Không có trait object nào đi qua ranh giới Cell: mỗi Cell là một ELF riêng với heap riêng, và giao diện giữa các Cell là giao thức message trong `libs/wire` (Spec 17). Nạp/gỡ Cell động đi qua loader và service registry của kernel, không qua `dyn Trait`. Ví dụ `Arc<dyn ViDriver + Send + Sync>` là historical: `ViDriver` (`libs/wire/src/driver.rs:10`) không có implementor nào.
+- **Trait Object**: Sử dụng `dyn Trait` thay cho Generics tại các interface hệ thống bên trong một binary (ví dụ VFS phía kernel). ~~để hỗ trợ nạp/gỡ Cell động~~
+- **Bắt buộc Bounds an toàn**: Mọi trait object được lưu trữ hoặc chuyển giao giữa các Task phải chỉ định rõ Send + Sync (ví dụ: `Box<dyn ViFile + Send + Sync>`, `libs/abi/src/fs.rs:21`).
+- **Box vs Arc**: Sử dụng `Box` cho các đối tượng có chủ sở hữu duy nhất và Arc cho các tài nguyên dùng chung bên trong một Cell hoặc trong kernel (không chia sẻ giữa các Cell).
 
 
 **Luật 8: Quản lý tài nguyên & LBI (Memory Safety)**
-- **Tối ưu hóa tham chiếu (Borrowing over Heap)**: Sử dụng tham chiếu (`&` / `&mut`) thay vì Ownership (`Box`) khi chỉ cần truy cập dữ liệu tạm thời để giảm áp lực cấp phát lên Global Heap.
+- **Tối ưu hóa tham chiếu (Borrowing over Heap)**: Sử dụng tham chiếu (`&` / `&mut`) thay vì Ownership (`Box`) khi chỉ cần truy cập dữ liệu tạm thời để giảm áp lực cấp phát lên heap. *(Cập nhật 2026-11-16: không có "Global Heap" chung cho Cells; mỗi Cell có arena riêng, mặc định 1 MiB (`libs/ostd/src/heap.rs`), kernel có heap riêng.)*
 - **Lifetime**: Mọi struct chứa tham chiếu phải chỉ định rõ `lifetime` để ngăn chặn dangling references trong Single Address Space.
-- **Drop**: Bắt buộc triển khai `Drop` trait cho các cấu trúc quản lý tài nguyên (Lease, FileHandle, DriverContext) để đảm bảo thu hồi tài nguyên ngay lập tức khi đối tượng ra khỏi phạm vi (scope).
+- **Drop**: Bắt buộc triển khai `Drop` trait cho các cấu trúc quản lý tài nguyên để đảm bảo thu hồi tài nguyên ngay lập tức khi đối tượng ra khỏi phạm vi (scope). *(Cập nhật 2026-11-16: các `Drop` hiện có: `FileHandle` (`libs/abi/src/fs.rs:196`), `ostd::fs::File` và `ReadDir` (`libs/ostd/src/fs.rs:217`, `:38`), `GrantHandle` (`libs/ostd/src/grant.rs:223`). `Lease::drop` (`libs/abi/src/fs.rs:212`) vẫn rỗng — chưa có Lock Manager. `DriverContext` không tồn tại.)*
 
 
 ## 4. Agent Workflow
