@@ -1,0 +1,8 @@
+# Two-NIC fixture: the suite shell, which sends the fault frame with `nc`.
+version = 1
+
+[[cells]]
+name = "cellbox"
+path = "/bin/cellbox"
+args = ["sh"]
+restart = "on-failure"

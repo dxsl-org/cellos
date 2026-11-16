@@ -1,0 +1,8 @@
+# Two-NIC fixture: the repository defaults (config/system.toml).
+version = 1
+
+[logging]
+level = "info"
+
+[memory]
+default_cell_heap_mib = 16

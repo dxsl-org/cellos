@@ -1169,6 +1169,25 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture --test-threads=2
 
+      # Plan 261110-1703 phase 18: two NICs, one driver instance per function.
+      # Two boots (e1000e + igb, and two e1000e): both register on their own
+      # routes, the primary completes DHCP, and a fault frame kills the primary
+      # (`nic-driver/fault-inject`): NIC_DRIVER moves to the other route, which
+      # stays bound, init restarts the dead driver, then the roles reverse. The
+      # private ISO (fault-injecting drivers, its own boot config) is built under
+      # its own target directory so it never reaches the canonical image.
+      - name: Two-NIC integration test (x86_64, e1000e+igb / e1000e+e1000e)
+        env:
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+        run: |
+          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target/nic2-18" \
+            bash scripts/x86/make-nic2-iso.sh "$GITHUB_WORKSPACE/build/vicell-x86-nic2.iso"
+          VICELL_NIC2_ISO="$GITHUB_WORKSPACE/build/vicell-x86-nic2.iso" \
+            cargo test --manifest-path tests/integration/Cargo.toml \
+            --test nic2-x86 --target x86_64-unknown-linux-gnu -- --nocapture --test-threads=2
+
       # Plan 261103-2218 phase 09: QEMU `vmxnet3` on `/bin/vmxnet3`, with and
       # without VT-d: SKU bind line with `irq=msix rx=request-driven`,
       # registration → TX → RX → DHCP order, exactly one NIC Driver Cell.

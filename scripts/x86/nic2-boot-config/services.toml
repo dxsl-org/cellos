@@ -1,0 +1,44 @@
+# Two-NIC fixture (scripts/x86/make-nic2-iso.sh, tests/integration/tests/nic2-x86.rs).
+# Copied verbatim into the image by `mkfat32.py --config-dir`; never selected by
+# packaging features.
+#
+# One driver entry per NIC instance: `/bin/e1000e` runs twice so two 82574L
+# functions each get a driver (an entry without a service_id may share a path),
+# and `/bin/igb` covers the mixed pair. An instance without hardware exits 0
+# and stays down. The fixture's drivers are built with `nic-driver/fault-inject`,
+# so a frame naming one function kills that driver with exit 1, and
+# `on-failure` makes init restart it.
+version = 1
+
+[[cells]]
+name = "serial"
+path = "/bin/serial"
+restart = "never"
+
+[[cells]]
+name = "e1000e-a"
+path = "/bin/e1000e"
+restart = "on-failure"
+
+[[cells]]
+name = "e1000e-b"
+path = "/bin/e1000e"
+restart = "on-failure"
+
+[[cells]]
+name = "igb"
+path = "/bin/igb"
+restart = "on-failure"
+
+[[cells]]
+name = "input"
+path = "/bin/input"
+service_id = 3
+restart = "always"
+
+[[cells]]
+name = "net"
+path = "/bin/net"
+service_id = 2
+required = true
+restart = "always"

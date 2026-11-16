@@ -652,6 +652,11 @@ arch = "x86_64"
 tier = "pr"
 
 [[test]]
+name = "nic2-x86"
+arch = "x86_64"
+tier = "pr"
+
+[[test]]
 name = "nvme-dma-addressing"
 arch = "default"
 tier = "manual"
