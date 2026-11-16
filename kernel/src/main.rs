@@ -453,7 +453,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Page-table teardown primitives behind runtime cap revoke (`.agents/260712-1901`
     // P01). The tables are plain kernel-heap memory, so this needs no IOMMU
-    // hardware and runs on every arch whose lane enables hooks.
+    // hardware; it probes the arch's own DMA remapper table (VT-d SLPT on
+    // x86_64, Sv39 on riscv64) and reports SKIP where there is none.
     #[cfg(feature = "test-hooks")]
     crate::dev::iommu_pt::run_selftest();
 

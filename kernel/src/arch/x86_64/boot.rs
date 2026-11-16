@@ -589,10 +589,10 @@ pub(crate) fn platform_init(early: EarlyPlatform) -> PlatformReady {
         // Platform Cell receives the full validated MCFG range via argv
         // later and performs authoritative multi-bus enumeration.
         crate::dev::pcie_ecam::init();
-        let probed = crate::dev::iommu::init(crate::dev::iommu::DmaIsolationInput {
-            vtd_base: acpi_info.dmar_base,
-            vtd_units: acpi_info.dmar_units,
-            vtd_include_pci_all: acpi_info.dmar_include_pci_all,
+        let probed = crate::dev::iommu::init(crate::arch::dev::iommu_x86::Dmar {
+            base: acpi_info.dmar_base,
+            units: acpi_info.dmar_units,
+            include_pci_all: acpi_info.dmar_include_pci_all,
         });
         let isolation = crate::dev::iommu::activate_isolation(probed);
         // FADT IAPC_BOOT_ARCH bit 3: firmware says MSI must not be enabled.

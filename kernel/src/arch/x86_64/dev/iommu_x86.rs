@@ -9,6 +9,7 @@ pub mod ir;
 pub mod qi;
 pub mod remap;
 pub mod rmrr;
+pub mod slpt;
 pub mod unit;
 
 use crate::acpi::{BoundedVec, DeviceScope, DrhdEntry};
@@ -16,21 +17,87 @@ use crate::sync::Spinlock;
 use alloc::vec::Vec;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
-use crate::dev::iommu::{DmaIsolationInput, DmaMapResult};
-use crate::dev::iommu_pt::VtdSlpt;
+use crate::dev::iommu::{DeviceKey, DmaMapResult, DmaRemapper, DomainKey};
 use context::{
     canonical_bdf, clear_ctx_slot, context_entry, context_slot, read_ctx_slot, write_ctx_entry,
 };
 use domain::VtdDomain;
 use invalidate::Scope;
 use rmrr::apply_rmrr_to_slpt;
+use slpt::VtdSlpt;
 use unit::VtdUnit;
+
+/// What the ACPI DMAR table told the boot path about VT-d.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Dmar {
+    /// DRHD register base (0 = no DMAR table, or no usable unit).
+    pub base: u64,
+    /// DRHD unit count the DMAR table declared (0 = no DMAR table).
+    pub units: u8,
+    /// The selected DRHD covers PCI devices that declare no device scope.
+    pub include_pci_all: bool,
+}
+
+/// Intel VT-d behind [`DmaRemapper`]: a domain per owner (one DID and one
+/// [`VtdSlpt`] on each unit), context entries per requester.
+pub struct Vtd;
+
+impl DmaRemapper for Vtd {
+    type Firmware = Dmar;
+    const UNTRANSLATED_WITHOUT_UNIT: bool = true;
+    const EXPORT_WINDOWS: bool = true;
+
+    fn probe(&self, dmar: Dmar) {
+        init_hw(dmar);
+    }
+
+    fn present(&self) -> bool {
+        is_present()
+    }
+
+    fn activate(&self) {
+        activate();
+    }
+
+    fn map(&self, owner: DomainKey, dev: DeviceKey, phys: u64, len: usize) -> DmaMapResult {
+        map_range_for_cell(owner, dev, phys, len)
+    }
+
+    fn map_window(
+        &self,
+        owner: DomainKey,
+        dev: DeviceKey,
+        iova: u64,
+        phys: u64,
+        len: usize,
+        writable: bool,
+    ) -> DmaMapResult {
+        map_window_for_cell(owner, dev, iova, phys, len, writable)
+    }
+
+    fn unmap_window(&self, owner: DomainKey, iova: u64, len: usize) -> bool {
+        unmap_window_for_cell(owner, iova, len)
+    }
+
+    fn revoke(&self, owner: DomainKey) -> bool {
+        unmap_cell_domain(owner)
+    }
+
+    fn translating(&self, dev: DeviceKey) -> bool {
+        bdf_translating(dev)
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn teardown_probe(&self) -> Option<crate::dev::iommu_pt::TeardownProbe> {
+        Some(slpt::teardown_probe())
+    }
+}
 
 const VTD_BASE: usize = 0xFED9_0000;
 static PRIMARY_BASE: AtomicUsize = AtomicUsize::new(VTD_BASE);
 
 static UNITS: Spinlock<Vec<VtdUnit>> = Spinlock::ranked(Vec::new(), crate::sync::rank::UNITS);
-pub fn is_present() -> bool {
+fn is_present() -> bool {
     !UNITS.lock().is_empty()
 }
 
@@ -49,18 +116,18 @@ fn q35_ioapic_scope() -> Option<DeviceScope> {
     Some(scope)
 }
 
-pub fn init_hw(dma: DmaIsolationInput) {
+fn init_hw(dmar: Dmar) {
     let mut units = UNITS.lock();
     units.clear();
 
-    if dma.vtd_base != 0 {
+    if dmar.base != 0 {
         log::info!(
             "[vtd] register base {:#x} from ACPI DMAR (units={} include_pci_all={})",
-            dma.vtd_base,
-            dma.vtd_units,
-            dma.vtd_include_pci_all
+            dmar.base,
+            dmar.units,
+            dmar.include_pci_all
         );
-        PRIMARY_BASE.store(dma.vtd_base as usize, Ordering::Relaxed);
+        PRIMARY_BASE.store(dmar.base as usize, Ordering::Relaxed);
 
         crate::acpi::with_topology(|topo| {
             // DMAR INTR_REMAP clear: the platform does not support remapping
@@ -152,7 +219,7 @@ pub fn unit_index_for_bdf(units: &[VtdUnit], bdf: u16, segment: u16) -> Option<u
     None
 }
 
-pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     publish_for_cell(tid, bdf, phys, |_| true, |slpt| slpt.map_range(phys, size))
 }
 
@@ -342,7 +409,7 @@ fn publish_for_cell(
 /// Clear Cell `tid`'s requester entries on every unit, then invalidate its
 /// domain. A unit whose invalidation times out keeps the domain (and its DID)
 /// so teardown can be retried; returns whether every unit completed.
-pub fn unmap_cell_domain(tid: u64) -> bool {
+fn unmap_cell_domain(tid: u64) -> bool {
     let units = UNITS.lock();
     let mut all_ok = true;
 
@@ -393,7 +460,7 @@ pub fn unmap_cell_domain(tid: u64) -> bool {
 /// unit and platform support it (see [`remap`] for the ordering). Queued
 /// invalidation goes on first: interrupt remapping needs it, and the same
 /// mechanism must then serve every later context/IOTLB invalidation.
-pub fn activate() {
+fn activate() {
     let mut units = UNITS.lock();
     if units.is_empty() {
         return;

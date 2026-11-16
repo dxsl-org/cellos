@@ -1,8 +1,8 @@
 //! RMRR (Reserved Memory Region Reporting) support (VT-d spec §8.4).
 
 use super::context::canonical_bdf;
+use super::slpt::VtdSlpt;
 use crate::acpi::{DeviceScope, RmrrEntry};
-use crate::dev::iommu_pt::VtdSlpt;
 use alloc::vec::Vec;
 
 const SCOPE_PCI_ENDPOINT: u8 = 1;

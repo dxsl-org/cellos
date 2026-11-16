@@ -1,4 +1,4 @@
-//! IOMMU common API — three-phase DMA isolation.
+//! IOMMU common API — three-phase DMA isolation behind one [`DmaRemapper`].
 //!
 //! Phase 1 `init()`             — probe hardware, allocate page tables, stay passthrough.
 //! Phase 2 `activate_isolation()` — switch from passthrough to enforced page-table mode.
@@ -8,28 +8,135 @@
 //! enforced by tokens: `init` returns a [`Probed`] that `activate_isolation`
 //! consumes, and its [`Isolation`] result is what `IommuReady` carries:
 //!   `iommu::init(firmware)` → `iommu::activate_isolation(probed)`
+//!
+//! Each architecture names its remapper as `crate::arch::iommu::Backend`
+//! (VT-d on x86_64, the RISC-V IOMMU on riscv64, [`NoRemapper`] elsewhere);
+//! every call here goes through that one [`DmaRemapper`].
 
+use crate::arch::iommu::{Backend, BACKEND};
 use cellos_boards::DmaIsolation;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Firmware-discovered remapping input for the boot path.
+/// The owner of a DMA domain: the thread that owns the device's record.
+pub type DomainKey = u64;
+
+/// A PCI function: segment in bits 31:16, `bus:device.function` below.
+pub type DeviceKey = u32;
+
+/// One family of DMA remapping hardware.
 ///
-/// x86_64 fills this from the parsed ACPI DMAR table. Architectures with no
-/// equivalent table pass [`Default::default`], which leaves their own backends
-/// (ARM EL2 stage-2, RISC-V IOMMU) untouched.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct DmaIsolationInput {
-    /// Intel VT-d DRHD register base (0 = no DMAR table, or no usable unit).
-    pub vtd_base: u64,
-    /// DRHD unit count the DMAR table declared (0 = no DMAR table).
-    pub vtd_units: u8,
-    /// The selected DRHD covers PCI devices that declare no device scope.
-    pub vtd_include_pci_all: bool,
+/// A domain holds the translations granted to one owner; a device joins its
+/// owner's domain on the first mapping and leaves it when the owner's domain is
+/// revoked. Firmware tables, page-table formats, cache write-back and
+/// interrupt remapping stay inside the implementation.
+pub trait DmaRemapper: Sync {
+    /// What [`Self::probe`] reads from firmware; `()` for a unit found
+    /// otherwise.
+    type Firmware: Default;
+
+    /// With no unit found, whether the board's `dma_isolation` may grant
+    /// untranslated (identity) DMA. When `false`, every request is refused.
+    const UNTRANSLATED_WITHOUT_UNIT: bool;
+
+    /// Whether [`Self::map_window`] can publish export windows.
+    const EXPORT_WINDOWS: bool;
+
+    /// Find the hardware and allocate its tables; translation stays off.
+    fn probe(&self, firmware: Self::Firmware);
+
+    /// Whether [`Self::probe`] found a usable unit.
+    fn present(&self) -> bool;
+
+    /// Turn translation on. Calls [`set_active`] once DMA is translated.
+    fn activate(&self);
+
+    /// Publish the identity range `[phys, phys + len)` in `owner`'s domain and
+    /// attach `dev` to it.
+    fn map(&self, owner: DomainKey, dev: DeviceKey, phys: u64, len: usize) -> DmaMapResult;
+
+    /// Publish `[phys, phys + len)` at the export window `[iova, iova + len)`
+    /// of `owner`'s domain for `dev`, read-only unless `writable`.
+    fn map_window(
+        &self,
+        owner: DomainKey,
+        dev: DeviceKey,
+        iova: u64,
+        phys: u64,
+        len: usize,
+        writable: bool,
+    ) -> DmaMapResult;
+
+    /// Clear export window `[iova, iova + len)` from `owner`'s domain and flush
+    /// its cached translations. `true` only when the flush was acknowledged.
+    fn unmap_window(&self, owner: DomainKey, iova: u64, len: usize) -> bool;
+
+    /// Detach every device from `owner`'s domain, flush it and drop it. `true`
+    /// only when hardware acknowledged the teardown.
+    fn revoke(&self, owner: DomainKey) -> bool;
+
+    /// Whether DMA from `dev` is translated.
+    fn translating(&self, dev: DeviceKey) -> bool;
+
+    /// The boot-time teardown probe of this remapper's page table.
+    #[cfg(feature = "test-hooks")]
+    fn teardown_probe(&self) -> Option<crate::dev::iommu_pt::TeardownProbe> {
+        None
+    }
+}
+
+/// No DMA remapping hardware: every mapping is refused.
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "riscv64"), allow(dead_code))]
+pub struct NoRemapper;
+
+impl DmaRemapper for NoRemapper {
+    type Firmware = ();
+    const UNTRANSLATED_WITHOUT_UNIT: bool = false;
+    const EXPORT_WINDOWS: bool = false;
+
+    fn probe(&self, _: ()) {}
+
+    fn present(&self) -> bool {
+        false
+    }
+
+    fn activate(&self) {}
+
+    fn map(&self, owner: DomainKey, dev: DeviceKey, phys: u64, len: usize) -> DmaMapResult {
+        let _ = (owner, dev, phys, len);
+        DmaMapResult::Rejected
+    }
+
+    fn map_window(
+        &self,
+        owner: DomainKey,
+        dev: DeviceKey,
+        iova: u64,
+        phys: u64,
+        len: usize,
+        writable: bool,
+    ) -> DmaMapResult {
+        let _ = (owner, dev, iova, phys, len, writable);
+        DmaMapResult::Rejected
+    }
+
+    fn unmap_window(&self, owner: DomainKey, iova: u64, len: usize) -> bool {
+        let _ = (owner, iova, len);
+        true
+    }
+
+    fn revoke(&self, owner: DomainKey) -> bool {
+        let _ = owner;
+        true
+    }
+
+    fn translating(&self, dev: DeviceKey) -> bool {
+        let _ = dev;
+        false
+    }
 }
 
 /// What the kernel does with a DMA request when no remapper was discovered.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 pub enum DmaWithoutRemapper {
     /// Refuse the request: this profile requires translation.
     Refuse,
@@ -42,7 +149,6 @@ pub enum DmaWithoutRemapper {
 /// Never resolved silently: the caller logs the arm it took, so a machine that
 /// runs untranslated DMA says so, and a profile that requires isolation refuses
 /// instead of degrading to identity addressing.
-#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 pub const fn dma_without_remapper(required: DmaIsolation) -> DmaWithoutRemapper {
     match required {
         DmaIsolation::Required => DmaWithoutRemapper::Refuse,
@@ -80,14 +186,17 @@ static IOMMU_ISOLATED: AtomicBool = AtomicBool::new(false);
 /// `try_deferred_init()` (called from `RegisterPciDevice` handler) checks this
 /// and runs `init()` once PCI_DEVICES is populated with the IOMMU device entry.
 static IOMMU_DEFERRED: AtomicBool = AtomicBool::new(false);
+/// Set once when a machine without a remapper is allowed identity DMA, so the
+/// condition appears in the boot log without repeating on every buffer.
+static IDENTITY_DMA_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// Phase 1: probe IOMMU hardware and allocate isolation data structures.
 ///
 /// Must be called after `pcie_ecam::init()` and before any DMA allocation.
 /// Does NOT enable enforcement yet — hardware stays in passthrough mode.
 /// [`activate_isolation`] takes the returned token, so it runs after a probe.
-pub fn init(dma: DmaIsolationInput) -> Probed {
-    crate::arch::iommu::init(dma);
+pub fn init(firmware: <Backend as DmaRemapper>::Firmware) -> Probed {
+    BACKEND.probe(firmware);
     Probed { _private: () }
 }
 
@@ -106,9 +215,76 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
         return DmaMapResult::Rejected;
     }
     if !is_active() {
-        return crate::arch::iommu::map_inactive(tid, bdf, phys, size);
+        return map_inactive(tid, bdf, phys, size);
     }
-    crate::arch::iommu::map_range_for_cell(tid, bdf, phys, size)
+    BACKEND.map(tid, bdf, phys, size)
+}
+
+/// [`map_dma_for_cell`] while isolation is not active.
+///
+/// A unit that is present but not translating fails closed. With no unit, the
+/// board decides between refusal and identity DMA where the remapper allows
+/// untranslated DMA at all ([`DmaRemapper::UNTRANSLATED_WITHOUT_UNIT`]).
+fn map_inactive(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+    if !Backend::UNTRANSLATED_WITHOUT_UNIT || BACKEND.present() {
+        return DmaMapResult::Rejected;
+    }
+    let board = crate::board::active();
+    match dma_without_remapper(board.dma_isolation) {
+        DmaWithoutRemapper::Refuse => {
+            log::error!(
+                "[iommu] DMA isolation REQUIRED by board {} but no remapper was \
+                 discovered — refusing untranslated DMA (tid={} bdf={:#x} \
+                 phys={:#x} size={})",
+                board.slug,
+                tid,
+                bdf,
+                phys,
+                size
+            );
+            DmaMapResult::Rejected
+        }
+        DmaWithoutRemapper::Identity => {
+            if !IDENTITY_DMA_LOGGED.swap(true, Ordering::Relaxed) {
+                log::warn!(
+                    "[iommu] board {} declares no DMA remapper; DMA is untranslated \
+                     (identity addressing)",
+                    board.slug
+                );
+            }
+            DmaMapResult::Mapped(phys)
+        }
+    }
+}
+
+/// Whether DMA export windows can be published: the remapper supports them and
+/// translation is on.
+pub fn export_windows_active() -> bool {
+    Backend::EXPORT_WINDOWS && is_active()
+}
+
+/// Map export window `[iova, iova + size)` of Cell `tid`'s domain for `bdf` to
+/// the contiguous frames `[phys, phys + size)`; see [`DmaRemapper::map_window`].
+pub fn map_window_for_cell(
+    tid: u64,
+    bdf: u32,
+    iova: u64,
+    phys: u64,
+    size: usize,
+    writable: bool,
+) -> DmaMapResult {
+    BACKEND.map_window(tid, bdf, iova, phys, size, writable)
+}
+
+/// Clear export window `[iova, iova + size)` from Cell `tid`'s domain; see
+/// [`DmaRemapper::unmap_window`].
+pub fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
+    BACKEND.unmap_window(tid, iova, size)
+}
+
+/// Whether DMA from `bdf` (segment in bits 31:16) is translated.
+pub fn bdf_translating(bdf: u32) -> bool {
+    BACKEND.translating(bdf)
 }
 
 /// Tear down `tid`'s whole DMA domain: clear its requester entries, zero its
@@ -122,7 +298,7 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
 /// Returns `true` only when hardware acknowledged teardown. Callers must keep
 /// pinned frames quarantined when it returns `false`.
 pub fn revoke_dma_for_cell(tid: u64) -> bool {
-    crate::arch::iommu::revoke_cell(tid)
+    BACKEND.revoke(tid)
 }
 
 /// What [`activate_isolation`] found. Only that function makes one, so a holder
@@ -151,20 +327,18 @@ pub enum Remapper {
     NotFound,
 }
 
-/// Phase 3: switch IOMMU from passthrough to page-table enforcement.
-///
-/// On RISC-V: writes DDTP with MODE=1LVL + pre-built Sv39 DDT → faults any
-///   IOVA not in a registered DMA range.
-/// On x86_64: fills VT-d context entries with TT=TRANSLATED+SLPT, enables TE.
+/// Phase 3: switch IOMMU from passthrough to page-table enforcement
+/// ([`DmaRemapper::activate`]); afterwards any IOVA outside a registered DMA
+/// range faults.
 ///
 /// Call with the token of the [`init`] that probed the hardware, before any
 /// Driver Cell can request DMA.
 pub fn activate_isolation(probed: Probed) -> Isolation {
     let Probed { _private: () } = probed;
-    crate::arch::iommu::activate();
+    BACKEND.activate();
     let remapper = if is_active() {
         Remapper::Translating
-    } else if crate::arch::iommu::is_present() {
+    } else if BACKEND.present() {
         Remapper::Inactive
     } else {
         Remapper::NotFound
@@ -198,7 +372,7 @@ pub fn set_deferred_init_pending() {
 /// Called from the `RegisterPciDevice` syscall handler after each device is added
 /// to `PCI_DEVICES`. Returns immediately if already initialized or not deferred.
 ///
-/// Phase 3 (`activate_isolation`) runs immediately after `init_hw` here. Until
+/// Phase 3 (`activate_isolation`) runs immediately after the probe here. Until
 /// activation succeeds, a present remapper causes DMA grants to fail closed;
 /// later mappings take effect through the active per-Cell backend.
 pub fn try_deferred_init() {
@@ -209,13 +383,14 @@ pub fn try_deferred_init() {
         return;
     }
 
-    // init() calls arch init_hw() which calls find_class() — succeeds only once
-    // the IOMMU device has been registered in PCI_DEVICES. The deferred path is
-    // RISC-V only, whose remapper is not discovered from ACPI DMAR.
-    let probed = init(DmaIsolationInput::default());
+    // The probe succeeds only once the IOMMU device has been registered in
+    // PCI_DEVICES. The deferred path is RISC-V only, whose remapper reads no
+    // firmware table (`Firmware` is `()` there, a DMAR summary on x86_64).
+    #[allow(clippy::unit_arg)]
+    let probed = init(Default::default());
 
-    // If init_hw() found the IOMMU hardware (BAR0 != 0), activate isolation.
-    // activate() is a no-op when init_hw() returned early (device not found yet).
+    // If the probe found the IOMMU hardware, activate isolation. Activation is
+    // a no-op when the probe returned early (device not found yet).
     if activate_isolation(probed).remapper() == Remapper::Translating {
         IOMMU_DEFERRED.store(false, Ordering::Relaxed);
         log::info!("[iommu] deferred init complete — DMA isolation active");
@@ -238,5 +413,27 @@ mod tests {
             dma_without_remapper(DmaIsolation::Optional),
             DmaWithoutRemapper::Identity
         );
+    }
+
+    /// Without hardware, nothing is mapped, nothing is translated, and teardown
+    /// has nothing to wait for.
+    #[test]
+    fn no_remapper_refuses_every_mapping() {
+        let r = NoRemapper;
+        r.probe(());
+        r.activate();
+        assert!(!r.present());
+        assert_eq!(
+            r.map(7, 0x0010, 0x4000_0000, 0x1000),
+            DmaMapResult::Rejected
+        );
+        assert_eq!(
+            r.map_window(7, 0x0010, 1 << 38, 0x4000_0000, 0x1000, true),
+            DmaMapResult::Rejected
+        );
+        assert!(r.unmap_window(7, 1 << 38, 0x1000));
+        assert!(r.revoke(7));
+        assert!(!r.translating(0x0010));
+        const { assert!(!NoRemapper::UNTRANSLATED_WITHOUT_UNIT && !NoRemapper::EXPORT_WINDOWS) };
     }
 }

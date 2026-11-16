@@ -21,8 +21,9 @@ use alloc::{
 use super::iommu_riscv_cmd::{
     encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
 };
-use crate::dev::iommu::{classify_dma_publication, DmaMapResult};
-use crate::dev::iommu_pt::Sv39IommuPt;
+use crate::dev::iommu::{
+    classify_dma_publication, DeviceKey, DmaMapResult, DmaRemapper, DomainKey,
+};
 use crate::dev::pcie_ecam;
 use crate::sync::Spinlock;
 #[cfg(not(target_arch = "riscv32"))]
@@ -30,6 +31,68 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
+use sv39::Sv39IommuPt;
+
+pub mod sv39;
+
+/// The RISC-V IOMMU behind [`DmaRemapper`]: a domain per owner (one PSCID and
+/// one [`Sv39IommuPt`]), device contexts per requester. It has no export
+/// windows, and with no IOMMU found every DMA request is refused.
+pub struct RiscvIommu;
+
+impl DmaRemapper for RiscvIommu {
+    type Firmware = ();
+    const UNTRANSLATED_WITHOUT_UNIT: bool = false;
+    const EXPORT_WINDOWS: bool = false;
+
+    fn probe(&self, _: ()) {
+        init_hw();
+    }
+
+    fn present(&self) -> bool {
+        is_present()
+    }
+
+    fn activate(&self) {
+        activate();
+    }
+
+    fn map(&self, owner: DomainKey, dev: DeviceKey, phys: u64, len: usize) -> DmaMapResult {
+        map_range_for_cell(owner, dev, phys, len)
+    }
+
+    fn map_window(
+        &self,
+        owner: DomainKey,
+        dev: DeviceKey,
+        iova: u64,
+        phys: u64,
+        len: usize,
+        writable: bool,
+    ) -> DmaMapResult {
+        let _ = (owner, dev, iova, phys, len, writable);
+        DmaMapResult::Rejected
+    }
+
+    fn unmap_window(&self, owner: DomainKey, iova: u64, len: usize) -> bool {
+        let _ = (owner, iova, len);
+        true
+    }
+
+    fn revoke(&self, owner: DomainKey) -> bool {
+        unmap_cell(owner)
+    }
+
+    fn translating(&self, dev: DeviceKey) -> bool {
+        let _ = dev;
+        false
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn teardown_probe(&self) -> Option<crate::dev::iommu_pt::TeardownProbe> {
+        Some(sv39::teardown_probe())
+    }
+}
 
 const CLASS: u8 = 0x08;
 const SUB: u8 = 0x06;
@@ -315,7 +378,7 @@ fn zero_dc_3lvl(l1_virt: usize, bdf: u32) {
 
 /// Probe RISC-V IOMMU hardware, allocate L1 DDT and command queue.
 /// Stays in BARE (passthrough) mode until `activate()` is called.
-pub(crate) fn init_hw() {
+fn init_hw() {
     let dev = match pcie_ecam::find_class(CLASS, SUB, PROGIF) {
         Some(d) => d,
         None => {
@@ -402,7 +465,7 @@ pub(crate) fn init_hw() {
 /// Creates a per-Cell `Sv39IommuPt` + PSCID on first call. Writes a DDT entry
 /// for `bdf` immediately (even before `activate()`). IODIR.INVAL_DDT and
 /// IOTINVAL.VMA are acknowledged together by IOFENCE.C after each update.
-pub(crate) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
+fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
@@ -462,7 +525,7 @@ pub(crate) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> 
 ///
 /// Returns `true` only after hardware acknowledges every teardown command.
 /// Failure keeps the domain so ownership and pinned frames remain quarantined.
-pub(crate) fn unmap_cell(tid: u64) -> bool {
+fn unmap_cell(tid: u64) -> bool {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
@@ -509,7 +572,7 @@ pub(crate) fn unmap_cell(tid: u64) -> bool {
 }
 
 /// `init_hw` found the IOMMU and set up its DDT and command queue.
-pub(crate) fn is_present() -> bool {
+fn is_present() -> bool {
     BAR0.load(Ordering::Relaxed) != 0
 }
 
@@ -518,7 +581,7 @@ pub(crate) fn is_present() -> bool {
 /// Switch DDTP from BARE to 3LVL. Eagerly fills DCs for all registered kernel-domain BDFs.
 ///
 /// After this call, DMA from any unregistered device triggers an IOMMU fault.
-pub(crate) fn activate() {
+fn activate() {
     let bar0 = BAR0.load(Ordering::Relaxed);
     let ddt_virt = DDT_VIRT.load(Ordering::Relaxed);
     let ddt_phys = DDT_PHYS.load(Ordering::Relaxed);
