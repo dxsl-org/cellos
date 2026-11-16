@@ -358,6 +358,43 @@ pub fn clear_tid(tid: usize) {
     OWNERS.lock().retain(|_, owner| *owner != tid);
 }
 
+/// Re-point `service_id` from provider `from_tid` to `to = (tid, cell_id,
+/// generation)` in place: only a row that still names `from_tid` changes, so a
+/// racing re-registration is never overwritten. The row keeps its map slot,
+/// so nothing is allocated (exit teardown, which may run in an ISR, calls
+/// it); it takes `to`'s identity with no flags and no pause, as
+/// [`register`] would write it. `false`, with nothing changed, when no row of
+/// `service_id` names `from_tid` or `to` names tid 0.
+pub(crate) fn repoint(service_id: u16, from_tid: usize, to: (usize, u64, u64)) -> bool {
+    let (tid, cell_id, generation) = to;
+    if tid == 0 {
+        return false;
+    }
+    let mut map = REGISTRY.lock();
+    let Some(entry) = map
+        .get_mut(&service_id)
+        .filter(|entry| entry.tid == from_tid)
+    else {
+        return false;
+    };
+    *entry = ServiceEntry {
+        tid,
+        cell_id,
+        generation,
+        flags: 0,
+        paused: false,
+    };
+    log::info!(
+        "[service-registry] {} -> tid {} (cell {} gen {}), re-pointed from dead tid {}",
+        service_id,
+        tid,
+        cell_id,
+        generation,
+        from_tid
+    );
+    true
+}
+
 /// `(service_id, tid, paused, flags)` for every row.
 #[cfg(feature = "test-hooks")]
 pub(crate) fn snapshot() -> alloc::vec::Vec<(u16, usize, bool, usize)> {
@@ -399,6 +436,33 @@ mod tests {
         register(abi::syscall::service::CONFIG, 12, CELL, GEN);
         clear_tid(12);
         assert_eq!(lookup(abi::syscall::service::CONFIG), None);
+    }
+
+    #[test]
+    fn repoint_moves_only_a_row_naming_the_old_provider() {
+        const TEST_SERVICE: u16 = 60_020;
+        const OLD: usize = 0x6_0201;
+        const NEW: usize = 0x6_0202;
+        assert!(!repoint(TEST_SERVICE, OLD, (NEW, CELL, GEN)), "no row");
+        assert_eq!(lookup(TEST_SERVICE), None);
+
+        register(TEST_SERVICE, OLD, CELL, GEN);
+        assert!(
+            !repoint(TEST_SERVICE, OLD - 1, (NEW, CELL, GEN)),
+            "another provider"
+        );
+        assert!(!repoint(TEST_SERVICE, OLD, (0, CELL, GEN)), "tid 0");
+        assert_eq!(lookup_bound(TEST_SERVICE), Some((OLD, CELL, GEN)));
+
+        assert!(repoint(TEST_SERVICE, OLD, (NEW, CELL + 1, GEN + 1)));
+        assert_eq!(lookup_bound(TEST_SERVICE), Some((NEW, CELL + 1, GEN + 1)));
+        clear_tid(OLD);
+        assert_eq!(
+            lookup(TEST_SERVICE),
+            Some(NEW),
+            "the old tid's teardown misses it"
+        );
+        clear_tid(NEW);
     }
 
     #[test]

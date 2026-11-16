@@ -842,8 +842,8 @@ mutation = "spinlock"
 owner = "dev::driver_cell; per-device NIC routes (key = the caller's one owned network device, provider (tid, cell, generation)) and the primary index, written by the RegisterNicDriver syscall (publish_nic_route), cleared by deregister_all_for, read by owns_registered_nic_irq from the x86 MSI and riscv64/aarch64 VirtIO ISRs"
 contexts = ["normal", "irq"]
 seal = "none: a route is rebound on every RegisterNicDriver of its device"
-retirement = "Scheduler::exit_task -> deregister_all_for -> clear_nic_route_provider clears the provider and the primary of every route naming the dead tid; keys stay for the boot"
-rationale = "Fixed array of MAX_NIC_ROUTES slots under one IRQ-masking spinlock, no allocation, so the ISR reader copies it out and proves each live route's lines against its device record after releasing it (NIC_ROUTES before DEVICES). Lock order SCHEDULER -> ROLE_PUBLICATION -> NIC_ROUTES, released before the primary's service-registry publication and re-taken only for its rollback; teardown takes it under ROLE_PUBLICATION and can run in the timer/IPI ISR via yield_cpu."
+retirement = "Scheduler::exit_task -> deregister_all_for -> clear_nic_route_provider clears the provider of every route naming the dead tid; a cleared primary passes to the lowest live route, whose provider service::NIC_DRIVER is re-pointed to in place (service_registry::repoint), or is left vacant; keys stay for the boot"
+rationale = "Fixed array of MAX_NIC_ROUTES slots under one IRQ-masking spinlock, no allocation, so the ISR reader copies it out and proves each live route's lines against its device record after releasing it (NIC_ROUTES before DEVICES). Lock order SCHEDULER -> ROLE_PUBLICATION -> NIC_ROUTES, released before the primary's service-registry publication or re-point (both under ROLE_PUBLICATION) and re-taken only for their rollback; teardown takes it under ROLE_PUBLICATION and can run in the timer/IPI ISR via yield_cpu, where the re-point rewrites the existing row without allocating."
 review = "kernel/src/dev/driver_cell.rs:publish_nic_route; kernel/src/dev/driver_cell.rs:clear_nic_route_provider; kernel/src/dev/driver_cell.rs:owns_registered_nic_irq; kernel/src/arch/x86_64/dev/pcie_msi.rs:on_msi; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:exit_task"
 
 [[global]]
@@ -2333,9 +2333,9 @@ mutation = "spinlock"
 owner = "cell::service_registry: supervisor registers service_id -> provider tid/identity; hotswap pauses/commits; lookups from IPC and launch"
 contexts = ["normal", "irq", "exception"]
 seal = "none: registrations change for the whole run"
-retirement = "clear_tid(tid) via driver_cell::deregister_all_for in Scheduler::exit_task, which runs in the yield_cpu funnel (retire_deferred_fault/exit) and the watchdog in pick_next_unaccounted"
+retirement = "clear_tid(tid) via driver_cell::deregister_all_for in Scheduler::exit_task, which runs in the yield_cpu funnel (retire_deferred_fault/exit) and the watchdog in pick_next_unaccounted; just before it, a dead NIC primary's NIC_DRIVER row is re-pointed in place to the next live NIC route (repoint, no allocation)"
 rationale = "exit_task runs under SCHEDULER inside yield_cpu, reachable from timer/IPI ISRs and the #PF funnel, so the IRQ-masking Spinlock is required and present; lock order SCHEDULER -> registry is respected."
-review = "kernel/src/cell/service_registry.rs:clear_tid; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/sched/scheduler.rs:1620; kernel/src/cell/service_registry.rs:commit_paused"
+review = "kernel/src/cell/service_registry.rs:clear_tid; kernel/src/cell/service_registry.rs:repoint; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/sched/scheduler.rs:1620; kernel/src/cell/service_registry.rs:commit_paused"
 
 [[global]]
 key = "kernel::cell::hotswap::SWAP_CEILINGS"
