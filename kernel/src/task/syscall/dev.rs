@@ -260,36 +260,31 @@ pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
         return Err(SyscallError::PermissionDenied);
     }
 
-    let (key, virtio_irq) =
-        crate::dev::driver_cell::owned_network_device(caller_id).map_err(|error| {
-            log::warn!(
-                "[driver_cell] NIC registration refused: tid={} owns {} network device",
-                caller_id,
-                match error {
-                    crate::dev::driver_cell::NicDeviceError::None => "no",
-                    crate::dev::driver_cell::NicDeviceError::Several => "more than one",
-                }
-            );
-            SyscallError::PermissionDenied
-        })?;
+    let key = crate::dev::driver_cell::owned_network_device(caller_id).map_err(|error| {
+        log::warn!(
+            "[driver_cell] NIC registration refused: tid={} owns {} network device",
+            caller_id,
+            match error {
+                crate::dev::driver_cell::NicDeviceError::None => "no",
+                crate::dev::driver_cell::NicDeviceError::Several => "more than one",
+            }
+        );
+        SyscallError::PermissionDenied
+    })?;
 
     let scheduler = crate::task::SCHEDULER.lock();
     let Some((cell_id, generation)) = live_driver(&scheduler) else {
         return Err(SyscallError::PermissionDenied);
     };
-    let published = crate::dev::driver_cell::publish_nic_route(
-        key,
-        (caller_id, cell_id, generation),
-        virtio_irq,
-        || {
+    let published =
+        crate::dev::driver_cell::publish_nic_route(key, (caller_id, cell_id, generation), || {
             crate::cell::service_registry::register(
                 abi::syscall::service::NIC_DRIVER,
                 caller_id,
                 cell_id,
                 generation,
             )
-        },
-    );
+        });
     drop(scheduler);
     published.map(|_| 0).ok_or(SyscallError::PermissionDenied)
 }
@@ -748,27 +743,26 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
     {
         return Err(SyscallError::PermissionDenied);
     }
-    #[cfg(target_arch = "aarch64")]
-    {
-        use hal::aarch64::backend::{ArmIrqController, Board};
-        if let Some(usb_irq) = <Board as ArmIrqController>::USB_ONE_SHOT_IRQ {
-            if caller_has_usb_driver(caller_id) && irq == usb_irq as u8 {
-                // One-shot unmask: re-enable the USB legacy IRQ after the
-                // driver has cleared GINTSTS.
-                <Board as ArmIrqController>::unmask_usb_irq();
-            }
-        }
-    }
     // The ISR dereferences a stored nonzero base (VirtIO InterruptACK),
     // so only an MMIO window the caller was granted is accepted.
     if !wait_irq_base_permitted(caller_id, mmio_base) {
         return Err(SyscallError::PermissionDenied);
     }
-    // x86 IRQ numbers are MSI vectors from 435; a cell waits only on its
-    // own, so it can neither steal nor drain another driver's interrupts.
-    #[cfg(target_arch = "x86_64")]
-    if !crate::arch::dev::pcie_msi::irq_owned_by(irq, caller_id) {
+    // On every architecture a cell waits only on a line of a device it owns
+    // (x86: an MSI vector 435 allocated for its function; elsewhere its
+    // VirtIO slot's or the DWC2 line), so it can neither steal nor drain
+    // another driver's interrupts.
+    if !crate::dev::ownership::irq_owned_by(caller_id, irq) {
         return Err(SyscallError::PermissionDenied);
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        use hal::aarch64::backend::{ArmIrqController, Board};
+        if <Board as ArmIrqController>::USB_ONE_SHOT_IRQ == Some(irq as u32) {
+            // One-shot unmask: re-enable the USB legacy IRQ after its owner
+            // (the DWC2 driver) has cleared GINTSTS.
+            <Board as ArmIrqController>::unmask_usb_irq();
+        }
     }
     // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
     if crate::dev::irq_wait::take_pending(irq) {

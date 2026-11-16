@@ -31,9 +31,9 @@ pub mod virtio_rng; // Kernel entropy source (x86 RDSEED/RDRAND)
 pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.
 pub mod irq_wait;
 pub mod ownership; // Per-device ownership records: MMIO, IRQ, DMA and route checks. // IRQ wait/pending tables for Driver Cell sys_wait_irq
-                                                                                     // blk_nvme and nic_e1000 have been migrated to Driver Cells:
-                                                                                     //   cells/drivers/nvme/   ← NVMe PCIe block driver
-                                                                                     //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
+                   // blk_nvme and nic_e1000 have been migrated to Driver Cells:
+                   //   cells/drivers/nvme/   ← NVMe PCIe block driver
+                   //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
 
 /// Initialize drivers subsystem
 ///
@@ -85,11 +85,18 @@ pub fn init() {
                     slot.base,
                     window,
                     ownership::DeviceKind::VirtioSlot,
+                    u8::try_from(slot.irq).ok(),
                 );
             }
         }
         if let Some((base, size)) = crate::resource_registry::dwc2_aperture() {
-            ownership::register_mmio_device(base, size, ownership::DeviceKind::Dwc2);
+            // The board's USB one-shot line belongs to the aperture's owner.
+            #[cfg(target_arch = "aarch64")]
+            let line = <hal::aarch64::backend::Board as hal::aarch64::backend::ArmIrqController>::USB_ONE_SHOT_IRQ
+                .and_then(|line| u8::try_from(line).ok());
+            #[cfg(not(target_arch = "aarch64"))]
+            let line = None;
+            ownership::register_mmio_device(base, size, ownership::DeviceKind::Dwc2, line);
         }
     }
     // VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).

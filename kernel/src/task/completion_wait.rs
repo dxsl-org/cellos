@@ -683,20 +683,20 @@ fn irq_lines_after_revoke(
     Err(SyscallError::PermissionDenied)
 }
 
-/// Every `AllocPcieIrq` line `tid` holds. Takes the allocation lock alone.
+/// Every `AllocPcieIrq` line `tid` holds. Takes the device table lock alone.
 #[cfg(target_arch = "x86_64")]
 fn owned_irq_lines(tid: usize) -> IrqLineSet {
-    crate::arch::dev::pcie_msi::lines_owned_by(tid)
+    crate::dev::ownership::lines_owned_by(tid)
 }
 
 #[cfg(target_arch = "x86_64")]
 fn take_owned_line(tid: usize, line: u8) -> bool {
-    crate::arch::dev::pcie_msi::take_owned(tid, line)
+    crate::dev::ownership::take_owned_line(tid, line)
 }
 
 #[cfg(target_arch = "x86_64")]
 fn repend_owned_line(tid: usize, line: u8) {
-    crate::arch::dev::pcie_msi::repend_owned(tid, line)
+    crate::dev::ownership::repend_owned_line(tid, line)
 }
 
 // Off x86_64 `source_is_valid` refuses `IRQ`, so no wait ever holds a line.

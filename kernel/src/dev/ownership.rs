@@ -44,6 +44,40 @@ pub(crate) enum DeviceKind {
     Dwc2,
 }
 
+/// The interrupt lines a record holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum IrqLines {
+    /// The fixed line of a VirtIO slot or of the DWC2 aperture.
+    #[cfg_attr(
+        not(any(target_arch = "riscv64", target_arch = "aarch64", test)),
+        allow(dead_code)
+    )]
+    Line(u8),
+    /// The MSI/MSI-X vectors 435 allocated to the owner.
+    #[cfg(target_arch = "x86_64")]
+    Msi(abi::pcie_function::PcieIrqAlloc),
+}
+
+impl IrqLines {
+    fn contains(self, irq: u8) -> bool {
+        match self {
+            Self::Line(line) => line == irq,
+            #[cfg(target_arch = "x86_64")]
+            Self::Msi(alloc) => irq >= alloc.first_irq && (irq - alloc.first_irq) < alloc.count,
+        }
+    }
+
+    /// Every line, in ascending order.
+    fn lines(self) -> impl Iterator<Item = u8> {
+        let (first, count) = match self {
+            Self::Line(line) => (line, 1),
+            #[cfg(target_arch = "x86_64")]
+            Self::Msi(alloc) => (alloc.first_irq, alloc.count),
+        };
+        (0..count).map(move |offset| first.wrapping_add(offset))
+    }
+}
+
 /// One device's ownership record.
 #[derive(Clone, Copy)]
 pub(crate) struct DeviceRecord {
@@ -53,6 +87,10 @@ pub(crate) struct DeviceRecord {
     owner: Option<usize>,
     /// Claimable windows `(base, len)`; `len == 0` is an empty slot.
     bars: [(usize, usize); MAX_BARS],
+    /// The device's interrupts: a VirtIO slot's or the DWC2 line, fixed at
+    /// registration; on x86_64 a PCI function's MSI vectors once 435
+    /// allocated them to its owner.
+    irq: Option<IrqLines>,
 }
 
 impl DeviceRecord {
@@ -62,7 +100,16 @@ impl DeviceRecord {
             kind,
             owner: None,
             bars: [(0, 0); MAX_BARS],
+            irq: None,
         }
+    }
+
+    fn owned_by(&self, tid: usize) -> bool {
+        self.owner == Some(tid)
+    }
+
+    fn holds_irq(&self, irq: u8) -> bool {
+        self.irq.is_some_and(|lines| lines.contains(irq))
     }
 
     /// Whether `[base, base + len)` is one of this record's windows: a BAR or
@@ -194,17 +241,18 @@ pub(crate) fn register_pci_bar(bdf: u32, base: usize, len: usize) {
 }
 
 /// Record the MMIO device at `base` (a VirtIO slot or the DWC2 aperture)
-/// with its claimable window.
+/// with its claimable window and its fixed interrupt line, if it has one.
 #[cfg_attr(
     not(any(target_arch = "riscv64", target_arch = "aarch64")),
     allow(dead_code)
 )]
-pub(crate) fn register_mmio_device(base: usize, len: usize, kind: DeviceKind) {
+pub(crate) fn register_mmio_device(base: usize, len: usize, kind: DeviceKind, line: Option<u8>) {
     let Some(key) = mmio_key(base) else {
         return;
     };
     if let Some(record) = DEVICES.lock().find_or_insert(key, kind) {
         record.add_window(base, len);
+        record.irq = line.map(IrqLines::Line);
     }
 }
 
@@ -316,6 +364,148 @@ pub(crate) fn release_mmio_devices_in(tid: usize, windows: &[(usize, usize)]) {
     }
 }
 
+/// Whether `irq` is a line of a device `tid` owns: an MSI vector 435
+/// allocated for its function, or the fixed line of its VirtIO slot or DWC2
+/// aperture. The `WaitIrq` gate on every architecture.
+pub(crate) fn irq_owned_by(tid: usize, irq: u8) -> bool {
+    DEVICES
+        .lock()
+        .records
+        .iter()
+        .flatten()
+        .any(|record| record.owned_by(tid) && record.holds_irq(irq))
+}
+
+/// Whether `irq` is a line of device `key` and `tid` owns it: the per-route
+/// proof of a NIC route's interrupts (MSI and VirtIO ISRs).
+pub(crate) fn irq_owned_for(tid: usize, irq: u8, key: DeviceKey) -> bool {
+    DEVICES
+        .lock()
+        .find(key)
+        .is_some_and(|record| record.owned_by(tid) && record.holds_irq(irq))
+}
+
+/// Every line of every device `tid` owns: the snapshot a
+/// `WaitCompletion(IRQ)` waits on.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub(crate) fn lines_owned_by(tid: usize) -> crate::dev::irq_wait::IrqLineSet {
+    let mut set = crate::dev::irq_wait::IrqLineSet::EMPTY;
+    for record in DEVICES.lock().records.iter().flatten() {
+        if let Some(lines) = record.irq.filter(|_| record.owned_by(tid)) {
+            lines.lines().for_each(|line| set.insert(line));
+        }
+    }
+    set
+}
+
+/// Consume `irq`'s pending flag only while `tid` still owns the line.
+///
+/// The ownership check and the swap share one `DEVICES` hold, and
+/// [`release_msis`] drops the flags under it too, so a revoked (and possibly
+/// re-allocated) line is never consumed by its former owner.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub(crate) fn take_owned_line(tid: usize, irq: u8) -> bool {
+    let devices = DEVICES.lock();
+    let owned = devices
+        .records
+        .iter()
+        .flatten()
+        .any(|record| record.owned_by(tid) && record.holds_irq(irq));
+    owned && crate::dev::irq_wait::take_pending(irq)
+}
+
+/// Re-pend a line taken by [`take_owned_line`] whose record could not be
+/// delivered; a line revoked meanwhile is left alone.
+#[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
+pub(crate) fn repend_owned_line(tid: usize, irq: u8) {
+    let devices = DEVICES.lock();
+    if devices
+        .records
+        .iter()
+        .flatten()
+        .any(|record| record.owned_by(tid) && record.holds_irq(irq))
+    {
+        crate::dev::irq_wait::restore_pending(irq);
+    }
+}
+
+/// Run `allocate` on the MSI allocation of PCI function `bdf` while `tid`
+/// owns it: the slot holds the existing allocation, if any, and keeps what
+/// `allocate` leaves in it. `None` when `tid` does not own `bdf`. Lock order
+/// `DEVICES -> PCIE_MSI_STATE`.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn with_owned_msi<R>(
+    tid: usize,
+    bdf: u32,
+    allocate: impl FnOnce(&mut Option<abi::pcie_function::PcieIrqAlloc>) -> R,
+) -> Option<R> {
+    let mut devices = DEVICES.lock();
+    let record = devices
+        .find(pci_key(bdf)?)
+        .filter(|record| record.owned_by(tid))?;
+    let mut msi = match record.irq {
+        Some(IrqLines::Msi(alloc)) => Some(alloc),
+        _ => None,
+    };
+    let result = allocate(&mut msi);
+    record.irq = msi.map(IrqLines::Msi);
+    Some(result)
+}
+
+/// Take every MSI allocation of the PCI functions `tid` owns out of their
+/// records, handing each to `free` and dropping its lines' pending flags,
+/// under one `DEVICES` hold. Returns how many. Call only after the functions
+/// were quiesced.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn release_msis(
+    tid: usize,
+    mut free: impl FnMut(abi::pcie_function::PcieIrqAlloc),
+) -> usize {
+    let mut released = 0;
+    for record in DEVICES.lock().records.iter_mut().flatten() {
+        if !record.owned_by(tid) {
+            continue;
+        }
+        if let Some(IrqLines::Msi(alloc)) = record.irq {
+            record.irq = None;
+            free(alloc);
+            IrqLines::Msi(alloc).lines().for_each(|line| {
+                let _ = crate::dev::irq_wait::take_pending(line);
+            });
+            released += 1;
+        }
+    }
+    released
+}
+
+/// Make `tid` the owner of a VirtIO slot record at `base` with line `line`,
+/// displacing any owner; host tests only, under `TEST_STATE_LOCK`.
+#[cfg(test)]
+pub(crate) fn test_own_mmio(tid: usize, base: usize, line: u8) {
+    let mut devices = DEVICES.lock();
+    let record = devices
+        .find_or_insert(mmio_key(base).expect("valid base"), DeviceKind::VirtioSlot)
+        .expect("room for a test record");
+    record.add_window(base, 0x200);
+    record.owner = Some(tid);
+    record.irq = Some(IrqLines::Line(line));
+}
+
+/// Make `tid` the owner of PCI function `bdf` holding `msi`, displacing any
+/// owner; host tests only, under `TEST_STATE_LOCK`.
+#[cfg(all(test, target_arch = "x86_64"))]
+pub(crate) fn test_own_msi(tid: usize, bdf: u32, msi: abi::pcie_function::PcieIrqAlloc) {
+    let mut devices = DEVICES.lock();
+    let record = devices
+        .find_or_insert(
+            pci_key(bdf).expect("valid BDF"),
+            DeviceKind::Pci { class: None },
+        )
+        .expect("room for a test record");
+    record.owner = Some(tid);
+    record.irq = Some(IrqLines::Msi(msi));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,6 +529,21 @@ mod tests {
         assert_eq!(pci_owner(BDF), Some(COMPETING));
         release_pci_for(COMPETING);
         assert!(!claim_pci(0x1_0000, FIRST), "not a BDF");
+    }
+
+    /// X2: a fixed line answers only for the owner of its device, on every
+    /// architecture, and goes with the device.
+    #[test]
+    fn a_line_belongs_only_to_the_owner_of_its_device() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        test_own_mmio(0x7A01, 0x7A00_0000, 0x2A);
+        assert!(irq_owned_by(0x7A01, 0x2A));
+        assert!(!irq_owned_by(0x7A02, 0x2A), "another driver's line");
+        assert!(!irq_owned_by(0x7A01, 0x2B));
+        assert!(irq_owned_for(0x7A01, 0x2A, mmio_key(0x7A00_0000).unwrap()));
+        assert!(lines_owned_by(0x7A01).contains(0x2A));
+        release_mmio_devices_for(0x7A01);
+        assert!(!irq_owned_by(0x7A01, 0x2A), "released with the device");
     }
 
     #[test]

@@ -1,8 +1,9 @@
 //! PCIe function query (434), MSI/MSI-X allocation (435) and the MSI-X table
 //! carve-out (ADR-0031, CP1 §3–§4). x86_64 only.
 //!
-//! Lifetime: an allocation belongs to the BDF owner and lives until that task's
-//! DMA authority is torn down. Teardown quiesces the function first (MSI off,
+//! Lifetime: an allocation belongs to the BDF owner and is held in the
+//! function's device record ([`crate::dev::ownership`]) until that task's DMA
+//! authority is torn down. Teardown quiesces the function first (MSI off,
 //! MSI-X masked, Bus Master off), then [`release_for`] frees the vectors, so a
 //! dead cell's device cannot fire into a reused vector.
 
@@ -36,21 +37,15 @@ pub enum PcieFunctionError {
     NoVectors,
 }
 
-struct Allocation {
-    bdf: u32,
-    owner: usize,
-    irq: PcieIrqAlloc,
-}
-
+/// The vector pool. Allocations live in the device records; lock order
+/// `DEVICES -> PCIE_MSI_STATE`.
 struct State {
     pool: VectorPool,
-    allocations: Vec<Allocation>,
 }
 
 static STATE: Spinlock<State> = Spinlock::ranked(
     State {
         pool: VectorPool::new(),
-        allocations: Vec::new(),
     },
     crate::sync::rank::PCIE_MSI_STATE,
 );
@@ -166,163 +161,106 @@ pub fn allocate(
             }
         }
     }
-    let mut state = STATE.lock();
-    if let Some(existing) = state
-        .allocations
-        .iter()
-        .find(|a| a.bdf == bdf && a.owner == owner)
-    {
-        return Ok(existing.irq);
-    }
-    let mut irq = None;
-    if let Some((cap, layout, table)) = msix {
-        let count = want.min(layout.table_size as usize);
-        let first = state
-            .pool
-            .alloc(count, 1)
-            .ok_or(PcieFunctionError::NoVectors)?;
-        if let Some(at) = msi_cap {
-            let _ = cfg
-                .read16(at as usize + 2)
-                .map(|c| cfg.write16(at as usize + 2, c & !1));
+    crate::dev::ownership::with_owned_msi(owner, bdf, |held| {
+        if let Some(existing) = *held {
+            return Ok(existing);
         }
-        if program::program_msix(&cfg, cap, &layout, table, first, count).is_some() {
-            irq = Some(PcieIrqAlloc {
-                first_irq: first,
-                count: count as u8,
-                kind: IRQ_KIND_MSIX,
-            });
-        } else {
-            // A block that failed partway leaves MSI-X enabled and
-            // function-masked: turn it off, so the function is never left
-            // with every vector masked and MSI disabled, then fall back to
-            // MSI when the caller allowed it.
-            state.pool.free(first, count);
-            program::disable_msix(&cfg, cap);
-            log::warn!(
-                "[msi] {:02x}:{:02x}.{} MSI-X programming failed; {}",
-                bdf >> 8,
-                (bdf >> 3) & 0x1F,
-                bdf & 7,
-                if msi_allowed {
-                    "trying MSI"
-                } else {
-                    "no interrupts"
-                },
-            );
-        }
-    }
-    let irq = match (irq, msi_cap) {
-        (Some(irq), _) => irq,
-        (None, Some(cap)) if msi_allowed => {
-            let control = cfg
-                .read16(cap as usize + 2)
-                .ok_or(PcieFunctionError::NotSupported)?;
-            let count = program::msi_count(want, control);
+        let mut state = STATE.lock();
+        let mut irq = None;
+        if let Some((cap, layout, table)) = msix {
+            let count = want.min(layout.table_size as usize);
             let first = state
                 .pool
-                .alloc(count, count)
+                .alloc(count, 1)
                 .ok_or(PcieFunctionError::NoVectors)?;
-            if let Some(at) = cfg.find_capability(CAP_ID_MSIX) {
-                let off = at as usize + 2;
+            if let Some(at) = msi_cap {
                 let _ = cfg
-                    .read16(off)
-                    .map(|c| cfg.write16(off, (c & !(1 << 15)) | (1 << 14)));
+                    .read16(at as usize + 2)
+                    .map(|c| cfg.write16(at as usize + 2, c & !1));
             }
-            if program::program_msi(&cfg, cap, first, count).is_none() {
+            if program::program_msix(&cfg, cap, &layout, table, first, count).is_some() {
+                irq = Some(PcieIrqAlloc {
+                    first_irq: first,
+                    count: count as u8,
+                    kind: IRQ_KIND_MSIX,
+                });
+            } else {
+                // A block that failed partway leaves MSI-X enabled and
+                // function-masked: turn it off, so the function is never left
+                // with every vector masked and MSI disabled, then fall back to
+                // MSI when the caller allowed it.
                 state.pool.free(first, count);
-                return Err(PcieFunctionError::NotSupported);
-            }
-            PcieIrqAlloc {
-                first_irq: first,
-                count: count as u8,
-                kind: IRQ_KIND_MSI,
+                program::disable_msix(&cfg, cap);
+                log::warn!(
+                    "[msi] {:02x}:{:02x}.{} MSI-X programming failed; {}",
+                    bdf >> 8,
+                    (bdf >> 3) & 0x1F,
+                    bdf & 7,
+                    if msi_allowed {
+                        "trying MSI"
+                    } else {
+                        "no interrupts"
+                    },
+                );
             }
         }
-        _ => return Err(PcieFunctionError::NotSupported),
-    };
-    for line in irq.first_irq..irq.first_irq + irq.count {
-        let _ = irq_wait::take_pending(line);
-    }
-    state.allocations.push(Allocation { bdf, owner, irq });
-    log::info!(
-        "[msi] {:02x}:{:02x}.{} tid={} kind={} irq={:#x}+{}",
-        bdf >> 8,
-        (bdf >> 3) & 0x1F,
-        bdf & 7,
-        owner,
-        if irq.kind == IRQ_KIND_MSIX {
-            "msix"
-        } else {
-            "msi"
-        },
-        irq.first_irq,
-        irq.count
-    );
-    Ok(irq)
-}
-
-/// Whether `irq` belongs to an allocation `owner` holds (x86 `WaitIrq` gate).
-pub fn irq_owned_by(irq: u8, owner: usize) -> bool {
-    holds(&STATE.lock(), owner, irq)
-}
-
-/// Whether `irq` belongs to the allocation `owner` holds for function `bdf`:
-/// the per-route proof of a NIC route's interrupts.
-pub fn irq_owned_for(irq: u8, owner: usize, bdf: u32) -> bool {
-    STATE.lock().allocations.iter().any(|a| {
-        a.owner == owner
-            && a.bdf == bdf
-            && irq >= a.irq.first_irq
-            && irq < a.irq.first_irq + a.irq.count
+        let irq = match (irq, msi_cap) {
+            (Some(irq), _) => irq,
+            (None, Some(cap)) if msi_allowed => {
+                let control = cfg
+                    .read16(cap as usize + 2)
+                    .ok_or(PcieFunctionError::NotSupported)?;
+                let count = program::msi_count(want, control);
+                let first = state
+                    .pool
+                    .alloc(count, count)
+                    .ok_or(PcieFunctionError::NoVectors)?;
+                if let Some(at) = cfg.find_capability(CAP_ID_MSIX) {
+                    let off = at as usize + 2;
+                    let _ = cfg
+                        .read16(off)
+                        .map(|c| cfg.write16(off, (c & !(1 << 15)) | (1 << 14)));
+                }
+                if program::program_msi(&cfg, cap, first, count).is_none() {
+                    state.pool.free(first, count);
+                    return Err(PcieFunctionError::NotSupported);
+                }
+                PcieIrqAlloc {
+                    first_irq: first,
+                    count: count as u8,
+                    kind: IRQ_KIND_MSI,
+                }
+            }
+            _ => return Err(PcieFunctionError::NotSupported),
+        };
+        for line in irq.first_irq..irq.first_irq + irq.count {
+            let _ = irq_wait::take_pending(line);
+        }
+        *held = Some(irq);
+        log::info!(
+            "[msi] {:02x}:{:02x}.{} tid={} kind={} irq={:#x}+{}",
+            bdf >> 8,
+            (bdf >> 3) & 0x1F,
+            bdf & 7,
+            owner,
+            if irq.kind == IRQ_KIND_MSIX {
+                "msix"
+            } else {
+                "msi"
+            },
+            irq.first_irq,
+            irq.count
+        );
+        Ok(irq)
     })
-}
-
-fn holds(state: &State, owner: usize, irq: u8) -> bool {
-    state
-        .allocations
-        .iter()
-        .any(|a| a.owner == owner && irq >= a.irq.first_irq && irq < a.irq.first_irq + a.irq.count)
-}
-
-/// Every line `owner` holds: the snapshot a `WaitCompletion(IRQ)` waits on.
-/// Takes `STATE` alone; never call it with `SCHEDULER` held.
-pub fn lines_owned_by(owner: usize) -> irq_wait::IrqLineSet {
-    let mut set = irq_wait::IrqLineSet::EMPTY;
-    for a in STATE.lock().allocations.iter().filter(|a| a.owner == owner) {
-        for line in a.irq.first_irq..a.irq.first_irq + a.irq.count {
-            set.insert(line);
-        }
-    }
-    set
-}
-
-/// Consume `irq`'s pending flag only while `owner` still holds the line.
-///
-/// Ownership check and swap share one `STATE` hold, and [`release_for`]
-/// clears flags under `STATE` too, so a revoked (and possibly re-allocated)
-/// vector is never consumed by its former owner. `false` when the line is no
-/// longer owned or nothing was pending.
-pub fn take_owned(owner: usize, irq: u8) -> bool {
-    let state = STATE.lock();
-    holds(&state, owner, irq) && irq_wait::take_pending(irq)
-}
-
-/// Re-pend a line taken by [`take_owned`] whose record could not be
-/// delivered; a line revoked meanwhile is left alone.
-pub fn repend_owned(owner: usize, irq: u8) {
-    let state = STATE.lock();
-    if holds(&state, owner, irq) {
-        irq_wait::restore_pending(irq);
-    }
+    .unwrap_or(Err(PcieFunctionError::PermissionDenied))
 }
 
 /// Record an allocation without touching config space; host tests only,
 /// under `TEST_STATE_LOCK`.
 #[cfg(test)]
 pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrqAlloc {
-    let mut state = STATE.lock();
-    let first = state.pool.alloc(count, 1).expect("test vectors");
+    let first = STATE.lock().pool.alloc(count, 1).expect("test vectors");
     let irq = PcieIrqAlloc {
         first_irq: first,
         count: count as u8,
@@ -331,7 +269,7 @@ pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrq
     for line in first..first + count as u8 {
         let _ = irq_wait::take_pending(line);
     }
-    state.allocations.push(Allocation { bdf, owner, irq });
+    crate::dev::ownership::test_own_msi(owner, bdf, irq);
     irq
 }
 
@@ -339,20 +277,9 @@ pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrq
 /// owner's functions were quiesced. Pending flags are dropped so the next
 /// owner of a reused vector never sees the dead owner's interrupt.
 pub fn release_for(owner: usize) -> usize {
-    let mut state = STATE.lock();
-    let State { pool, allocations } = &mut *state;
-    let before = allocations.len();
-    allocations.retain(|a| {
-        if a.owner != owner {
-            return true;
-        }
-        pool.free(a.irq.first_irq, a.irq.count as usize);
-        for line in a.irq.first_irq..a.irq.first_irq + a.irq.count {
-            let _ = irq_wait::take_pending(line);
-        }
-        false
-    });
-    before - allocations.len()
+    crate::dev::ownership::release_msis(owner, |irq| {
+        STATE.lock().pool.free(irq.first_irq, irq.count as usize);
+    })
 }
 
 /// Physical ranges of the PCIe BAR window `[base, base+len)` that may be
@@ -381,6 +308,9 @@ pub fn user_ranges(base: usize, len: usize) -> Vec<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dev::ownership::{
+        lines_owned_by, repend_owned_line as repend_owned, take_owned_line as take_owned,
+    };
 
     #[test]
     fn a_revoked_line_is_neither_taken_nor_repended_by_its_former_owner() {
@@ -442,7 +372,7 @@ mod tests {
         let key = abi::block_route::DeviceKey::new(abi::block_route::BLOCK_DEVICE_PCI, 0x0010)
             .expect("valid BDF");
         assert!(
-            crate::dev::driver_cell::publish_nic_route(key, (NIC_TID, 1, 1), 0, || true).is_some()
+            crate::dev::driver_cell::publish_nic_route(key, (NIC_TID, 1, 1), || true).is_some()
         );
 
         // MSI for NIC driver: signals IRQ AND signals NET_RX.

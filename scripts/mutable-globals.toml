@@ -839,11 +839,11 @@ review = "kernel/src/dev/driver_cell.rs:publish_block_route; kernel/src/dev/driv
 key = "kernel::dev::driver_cell::NIC_ROUTES"
 lifetime = "per-cell"
 mutation = "spinlock"
-owner = "dev::driver_cell; per-device NIC routes (key = the caller's one owned network device, provider (tid, cell, generation), proven VirtIO line) and the primary index, written by the RegisterNicDriver syscall (publish_nic_route), cleared by deregister_all_for, read by owns_registered_nic_irq from the x86 MSI and riscv64/aarch64 VirtIO ISRs"
+owner = "dev::driver_cell; per-device NIC routes (key = the caller's one owned network device, provider (tid, cell, generation)) and the primary index, written by the RegisterNicDriver syscall (publish_nic_route), cleared by deregister_all_for, read by owns_registered_nic_irq from the x86 MSI and riscv64/aarch64 VirtIO ISRs"
 contexts = ["normal", "irq"]
 seal = "none: a route is rebound on every RegisterNicDriver of its device"
-retirement = "Scheduler::exit_task -> deregister_all_for -> clear_nic_route_provider clears the provider, line and primary of every route naming the dead tid; keys stay for the boot"
-rationale = "Fixed array of MAX_NIC_ROUTES slots under one IRQ-masking spinlock, no allocation, so the ISR reader copies it out and checks each route's own lines after releasing it. A route's provider and proven line are written together, so a reader sees both or neither (fail closed during replacement). Lock order SCHEDULER -> ROLE_PUBLICATION -> NIC_ROUTES, released before the primary's service-registry publication and re-taken only for its rollback; teardown takes it under ROLE_PUBLICATION and can run in the timer/IPI ISR via yield_cpu."
+retirement = "Scheduler::exit_task -> deregister_all_for -> clear_nic_route_provider clears the provider and the primary of every route naming the dead tid; keys stay for the boot"
+rationale = "Fixed array of MAX_NIC_ROUTES slots under one IRQ-masking spinlock, no allocation, so the ISR reader copies it out and proves each live route's lines against its device record after releasing it (NIC_ROUTES before DEVICES). Lock order SCHEDULER -> ROLE_PUBLICATION -> NIC_ROUTES, released before the primary's service-registry publication and re-taken only for its rollback; teardown takes it under ROLE_PUBLICATION and can run in the timer/IPI ISR via yield_cpu."
 review = "kernel/src/dev/driver_cell.rs:publish_nic_route; kernel/src/dev/driver_cell.rs:clear_nic_route_provider; kernel/src/dev/driver_cell.rs:owns_registered_nic_irq; kernel/src/arch/x86_64/dev/pcie_msi.rs:on_msi; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:exit_task"
 
 [[global]]
@@ -1846,12 +1846,12 @@ review = "kernel/src/resource_registry.rs:reserve_display_framebuffer; kernel/sr
 key = "kernel::dev::ownership::DEVICES"
 lifetime = "per-thread"
 mutation = "spinlock"
-owner = "dev::ownership: one record per PCI function, VirtIO MMIO slot and DWC2 aperture (key, kind, owner tid, claimable windows); records are created by the boot ECAM scan, RegisterPcieBar (235), RegisterPciDevice (236), the VirtIO slot and DWC2 registration in dev::init and the 418/424 handout; owners are set by claim_pci (418/424) and note_mmio_claim (RequestMmio), read by the BDF/MMIO ownership queries, and cleared by release_pci_for (teardown_dma_authority) and release_mmio_devices_for/in (MMIO release)"
+owner = "dev::ownership: one record per PCI function, VirtIO MMIO slot and DWC2 aperture (key, kind, owner tid, claimable windows, interrupt lines); records are created by the boot ECAM scan, RegisterPcieBar (235), RegisterPciDevice (236), the VirtIO slot and DWC2 registration in dev::init and the 418/424 handout; owners are set by claim_pci (418/424) and note_mmio_claim (RequestMmio); x86 MSI allocations are stored by 435 (with_owned_msi); read by the ownership queries, the WaitIrq/WaitCompletion line checks and the NIC ISR proof (irq_owned_for); cleared by release_msis/release_pci_for (teardown_dma_authority) and release_mmio_devices_for/in (MMIO release)"
 contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: claims and releases for the whole run; a record's key and windows are never removed"
-retirement = "release_pci_for(tid) in teardown_dma_authority, called by reap_retired_task_resources and retry_retired_dma_cleanup in yield_cpu, only once the IOMMU revoke is acknowledged (a dead owner's PCI record stays owned, fail closed, until then); release_mmio_devices_for(tid) after release_mmio_for"
-rationale = "Fixed array of MAX_DEVICES records under one IRQ-masking spinlock, so teardown inside the yield_cpu root-retirement funnel (timer/IPI ISR, #PF funnel) never allocates in the table. Lock order: after SCHEDULER, the grant tables and ROLE_PUBLICATION (GrantDma reads the owner under them), before RESOURCE_REGISTRY; nothing is acquired under it except the log ring. Keyed by the monotonic task id, so a delayed release cannot be inherited by a new task."
-review = "kernel/src/dev/ownership.rs:claim_pci; kernel/src/dev/ownership.rs:release_pci_for; kernel/src/dev/ownership.rs:note_mmio_claim; kernel/src/dev/pcie_ecam.rs:init; kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:retry_retired_dma_cleanup"
+retirement = "release_msis and release_pci_for(tid) in teardown_dma_authority, called by reap_retired_task_resources and retry_retired_dma_cleanup in yield_cpu, the PCI release only once the IOMMU revoke is acknowledged (a dead owner's PCI record stays owned, fail closed, until then); release_mmio_devices_for(tid) after release_mmio_for"
+rationale = "Fixed array of MAX_DEVICES records under one IRQ-masking spinlock, so teardown inside the yield_cpu root-retirement funnel (timer/IPI ISR, #PF funnel) and the x86 MSI / riscv64-aarch64 VirtIO ISR readers (owns_registered_nic_irq -> irq_owned_for) never allocate in the table, and a same-hart ISR cannot interrupt a holder. Lock order: after SCHEDULER, the grant tables, ROLE_PUBLICATION and NIC_ROUTES (copied out before), before RESOURCE_REGISTRY and PCIE_MSI_STATE (DEVICES -> PCIE_MSI_STATE in 435 and release_for); the line checks swap the irq_wait pending flags under it. Keyed by the monotonic task id, so a delayed release cannot be inherited by a new task."
+review = "kernel/src/dev/ownership.rs:claim_pci; kernel/src/dev/ownership.rs:release_pci_for; kernel/src/dev/ownership.rs:note_mmio_claim; kernel/src/dev/ownership.rs:irq_owned_for; kernel/src/dev/ownership.rs:with_owned_msi; kernel/src/dev/ownership.rs:release_msis; kernel/src/dev/pcie_ecam.rs:init; kernel/src/task.rs:teardown_dma_authority; kernel/src/task.rs:retry_retired_dma_cleanup"
 
 [[global]]
 key = "kernel::policy::POLICY"
@@ -2497,12 +2497,12 @@ review = "kernel/src/dev/irq_wait.rs:MSI_WAKE"
 key = "kernel::arch::x86_64::dev::pcie_msi::STATE @cfg(target_arch = \"x86_64\")"
 lifetime = "global"
 mutation = "spinlock"
-owner = "kernel::dev::pcie_msi MSI vector allocator state"
-contexts = ["boot", "normal"]
+owner = "kernel::arch::x86_64::dev::pcie_msi MSI vector pool; the allocations themselves live in the device records (dev::ownership::DEVICES)"
+contexts = ["boot", "normal", "irq", "exception"]
 seal = "none: vectors allocated and freed as PCIe devices bind/unbind"
-retirement = "never: lives for the whole run"
-rationale = "Spinlock protects MSI vector pool and allocation records across driver cells"
-review = "kernel/src/arch/x86_64/dev/pcie_msi.rs:STATE"
+retirement = "never: lives for the whole run; release_for returns a dead owner's vectors from teardown_dma_authority"
+rationale = "Spinlock protects the vector pool. Taken only under DEVICES (lock order DEVICES -> PCIE_MSI_STATE): 435 allocation and programming run inside ownership::with_owned_msi, and release_for frees each allocation from ownership::release_msis, which can run in the yield_cpu retirement funnel (timer/IPI ISR, #PF funnel); the lock masks interrupts."
+review = "kernel/src/arch/x86_64/dev/pcie_msi.rs:allocate; kernel/src/arch/x86_64/dev/pcie_msi.rs:release_for; kernel/src/dev/ownership.rs:with_owned_msi; kernel/src/dev/ownership.rs:release_msis"
 
 [[global]]
 key = "kernel::arch::x86_64::dev::pcie_msi::READY @cfg(target_arch = \"x86_64\")"

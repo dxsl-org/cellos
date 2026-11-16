@@ -63,15 +63,12 @@ impl core::fmt::Display for DeviceName {
 /// NIC route slots. Fixed so the interrupt-time reader never allocates.
 pub(crate) const MAX_NIC_ROUTES: usize = 8;
 
-/// One network device's route: its key is fixed at first bind; the provider
-/// and the interrupt proven at that bind change together.
+/// One network device's route: its key is fixed at first bind; only the
+/// provider changes. The route's interrupts are its device record's.
 #[derive(Clone, Copy)]
 struct NicRoute {
     key: DeviceKey,
     provider: Option<Provider>,
-    /// The device's VirtIO MMIO slot line, proven at bind; 0 for a PCI or a
-    /// DWC2 device (x86 MSI vectors are proven per device at interrupt time).
-    virtio_irq: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -122,26 +119,26 @@ pub(crate) enum NicDeviceError {
     Several,
 }
 
-/// The one network device `tid` owns, as a route key with its proven VirtIO
-/// line: a PCI function of class `02:00:00` it claimed through 418/424, a
-/// VirtIO MMIO slot it claimed whose `device_id` is network, or the DWC2
-/// aperture (the RPi3 LAN9514 sits behind it).
+/// The one network device `tid` owns, as a route key: a PCI function of
+/// class `02:00:00` it claimed through 418/424, a VirtIO MMIO slot it claimed
+/// whose `device_id` is network, or the DWC2 aperture (the RPi3 LAN9514 sits
+/// behind it).
 ///
 /// Syscall context only, without `SCHEDULER` held (the ownership tables are
 /// taken here; `request_mmio` takes the MMIO registry before `SCHEDULER`).
-pub(crate) fn owned_network_device(tid: usize) -> Result<(DeviceKey, u32), NicDeviceError> {
+pub(crate) fn owned_network_device(tid: usize) -> Result<DeviceKey, NicDeviceError> {
     let mut found = None;
     let mut count = 0usize;
-    let mut note = |key: Option<DeviceKey>, irq: u32| {
+    let mut note = |key: Option<DeviceKey>| {
         if let Some(key) = key {
             count += 1;
-            found.get_or_insert((key, irq));
+            found.get_or_insert(key);
         }
     };
     for bdf in crate::resource_registry::bdfs_owned_by(tid) {
         let network = crate::dev::ownership::pci_class(bdf) == Some(CLASS_ETHERNET);
         if network {
-            note(DeviceKey::new(BLOCK_DEVICE_PCI, bdf as u64), 0);
+            note(DeviceKey::new(BLOCK_DEVICE_PCI, bdf as u64));
         }
     }
     for slot in crate::dev::virtio_common::virtio_slots() {
@@ -157,14 +154,11 @@ pub(crate) fn owned_network_device(tid: usize) -> Result<(DeviceKey, u32), NicDe
             core::ptr::read_volatile((slot.base + VIRTIO_DEVICE_ID_OFFSET) as *const u32)
         };
         if device_id == VIRTIO_DEVICE_ID_NETWORK {
-            note(
-                DeviceKey::new(BLOCK_DEVICE_MMIO, slot.base as u64),
-                slot.irq,
-            );
+            note(DeviceKey::new(BLOCK_DEVICE_MMIO, slot.base as u64));
         }
     }
     if let Some(base) = crate::resource_registry::dwc2_aperture_owned_by(tid) {
-        note(DeviceKey::new(BLOCK_DEVICE_MMIO, base as u64), 0);
+        note(DeviceKey::new(BLOCK_DEVICE_MMIO, base as u64));
     }
     match (count, found) {
         (1, Some(device)) => Ok(device),
@@ -307,7 +301,7 @@ pub(crate) fn reset_block_routes() {
     *BLOCK_ROUTES.lock() = [None; MAX_BLOCK_ROUTES];
 }
 
-/// Bind the NIC route of `key` to `provider`, with the line proven for it.
+/// Bind the NIC route of `key` to `provider`.
 ///
 /// The caller holds `SCHEDULER` and has proven that `provider` owns `key`
 /// ([`owned_network_device`]). The slot rules are those of
@@ -324,7 +318,6 @@ pub(crate) fn reset_block_routes() {
 pub(crate) fn publish_nic_route(
     key: DeviceKey,
     provider: Provider,
-    virtio_irq: u32,
     publish_primary: impl FnOnce() -> bool,
 ) -> Option<usize> {
     enum Bind {
@@ -337,7 +330,6 @@ pub(crate) fn publish_nic_route(
     let bound = Some(NicRoute {
         key,
         provider: Some(provider),
-        virtio_irq,
     });
     let outcome = {
         let mut routes = NIC_ROUTES.lock();
@@ -375,7 +367,6 @@ pub(crate) fn publish_nic_route(
                 let mut routes = NIC_ROUTES.lock();
                 if let Some(route) = routes.slots[index].as_mut() {
                     route.provider = None;
-                    route.virtio_irq = 0;
                 }
                 routes.primary = None;
                 log::warn!(
@@ -420,7 +411,7 @@ pub(crate) fn publish_nic_route(
     }
 }
 
-/// Clear the provider and proven line of every NIC route naming exactly
+/// Clear the provider of every NIC route naming exactly
 /// `tid`; keys stay. The primary is released with its provider: the service
 /// row goes with `service_registry::clear_tid`, and the next registration
 /// becomes the primary.
@@ -433,7 +424,6 @@ fn clear_nic_route_provider(tid: usize) {
         };
         if route.provider.is_some_and(|(holder, _, _)| holder == tid) {
             route.provider = None;
-            route.virtio_irq = 0;
             if *primary == Some(index) {
                 *primary = None;
             }
@@ -449,33 +439,26 @@ pub(crate) fn reset_nic_routes() {
     routes.primary = None;
 }
 
-/// Whether `irq` belongs to the device of a live NIC route: the VirtIO line
-/// proven at its bind, or (on x86_64) an MSI vector allocated to its provider
-/// for that route's PCI function. Each route proves its own lines, so a
-/// provider's interrupt for any other device never signals `NET_RX`.
+/// Whether `irq` belongs to the device of a live NIC route: a line of the
+/// route's device record that the route's provider owns (its VirtIO slot's
+/// line, or on x86_64 an MSI vector 435 allocated for its PCI function). Each
+/// route proves its own lines, so a provider's interrupt for any other device
+/// never signals `NET_RX`.
 ///
-/// ISR-safe: the table is copied out under its lock and checked after it.
+/// ISR-safe: the route table is copied out under its lock, and each live
+/// route takes the device table once; neither allocates.
 pub fn owns_registered_nic_irq(irq: u32) -> bool {
+    let Ok(irq) = u8::try_from(irq) else {
+        return false;
+    };
     if irq == 0 {
         return false;
     }
     let routes = NIC_ROUTES.lock().slots;
     routes.iter().flatten().any(|route| {
-        let Some((tid, _, _)) = route.provider else {
-            return false;
-        };
-        if route.virtio_irq == irq {
-            return true;
-        }
-        #[cfg(target_arch = "x86_64")]
-        if route.key.kind == BLOCK_DEVICE_PCI
-            && irq <= 0xFF
-            && crate::arch::dev::pcie_msi::irq_owned_for(irq as u8, tid, route.key.id as u32)
-        {
-            return true;
-        }
-        let _ = tid;
-        false
+        route
+            .provider
+            .is_some_and(|(tid, _, _)| crate::dev::ownership::irq_owned_for(tid, irq, route.key))
     })
 }
 
@@ -576,25 +559,29 @@ mod tests {
         DeviceKey::new(BLOCK_DEVICE_MMIO, base).expect("valid base")
     }
 
-    /// `(provider, proven line)` of NIC route `index`, which must be keyed.
-    fn nic_route(index: usize) -> (Option<Provider>, u32) {
-        let route = NIC_ROUTES.lock().slots[index].expect("keyed NIC route");
-        (route.provider, route.virtio_irq)
+    fn nic_route(index: usize) -> Option<Provider> {
+        NIC_ROUTES.lock().slots[index]
+            .expect("keyed NIC route")
+            .provider
     }
 
     fn nic_primary() -> Option<usize> {
         NIC_ROUTES.lock().primary
     }
 
-    fn seed_roles(owner_tid: usize, nic_irq: u32) {
+    /// A VirtIO slot at `base` with line `line`, owned by `tid`.
+    fn owned_slot(tid: usize, base: u64, line: u8) -> DeviceKey {
+        crate::dev::ownership::test_own_mmio(tid, base as usize, line);
+        mmio(base)
+    }
+
+    fn seed_roles(owner_tid: usize, nic_irq: u8) {
         reset_block_routes();
         reset_nic_routes();
         if owner_tid != 0 {
             assert_eq!(publish_block_route(pci(0xF8), (owner_tid, 9, 1)), Some(0));
-            assert_eq!(
-                publish_nic_route(mmio(0x1000_8000), (owner_tid, 9, 1), nic_irq, || true),
-                Some(0)
-            );
+            let slot = owned_slot(owner_tid, 0x1000_8000, nic_irq);
+            assert_eq!(publish_nic_route(slot, (owner_tid, 9, 1), || true), Some(0));
         }
         GPU_DRIVER_CELL.store(owner_tid, Ordering::Release);
         INPUT_CELL_TID.store(owner_tid, Ordering::Release);
@@ -614,7 +601,7 @@ mod tests {
         deregister_all_for(7);
 
         assert_eq!(provider_of(0), Some((41, 9, 1)));
-        assert_eq!(nic_route(0), (Some((41, 9, 1)), 29));
+        assert_eq!(nic_route(0), Some((41, 9, 1)));
         assert!(owns_registered_nic_irq(29));
         assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 41);
         assert_eq!(INPUT_CELL_TID.load(Ordering::Acquire), 41);
@@ -628,7 +615,7 @@ mod tests {
             Some(pci(0xF8)),
             "key stays"
         );
-        assert_eq!(nic_route(0), (None, 0), "provider and line go together");
+        assert_eq!(nic_route(0), None);
         assert_eq!(nic_primary(), None);
         assert!(!owns_registered_nic_irq(29));
         assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 0);
@@ -636,16 +623,15 @@ mod tests {
         assert_eq!(USB_HID_PRODUCER_CELL.load(Ordering::Acquire), 0);
 
         assert_eq!(
-            publish_nic_route(mmio(0x1000_8000), (22, 9, 2), 0, || true),
+            publish_nic_route(mmio(0x1000_8000), (22, 9, 2), || true),
             Some(0),
             "the replacement rebinds the same route"
         );
-        assert_eq!(
-            nic_route(0),
-            (Some((22, 9, 2)), 0),
-            "stale NIC IRQ cache must not survive owner teardown"
+        assert_eq!(nic_route(0), Some((22, 9, 2)));
+        assert!(
+            !owns_registered_nic_irq(29),
+            "the dead owner's line is not the replacement's until it owns the device"
         );
-        assert!(!owns_registered_nic_irq(29));
 
         reset_roles();
     }
@@ -666,42 +652,36 @@ mod tests {
                 true
             }
         };
+        let second = owned_slot(32, 0x1000_9000, 7);
         assert_eq!(
-            publish_nic_route(pci(0x18), (31, 3, 1), 0, publish(31)),
+            publish_nic_route(pci(0x18), (31, 3, 1), publish(31)),
             Some(0)
         );
-        assert_eq!(
-            publish_nic_route(mmio(0x1000_8000), (32, 4, 1), 7, publish(32)),
-            Some(1)
-        );
+        assert_eq!(publish_nic_route(second, (32, 4, 1), publish(32)), Some(1));
         assert_eq!(published.get(), 31, "a secondary does not take the service");
         assert_eq!(nic_primary(), Some(0));
         assert_eq!(
-            publish_nic_route(pci(0x18), (33, 5, 1), 0, publish(33)),
+            publish_nic_route(pci(0x18), (33, 5, 1), publish(33)),
             None,
             "live foreign provider"
         );
-        assert_eq!(nic_route(0), (Some((31, 3, 1)), 0));
+        assert_eq!(nic_route(0), Some((31, 3, 1)));
         assert!(owns_registered_nic_irq(7), "the secondary's line is proven");
 
         deregister_all_for(31);
-        assert_eq!(nic_route(0), (None, 0));
-        assert_eq!(
-            nic_route(1),
-            (Some((32, 4, 1)), 7),
-            "the other NIC stays bound"
-        );
+        assert_eq!(nic_route(0), None);
+        assert_eq!(nic_route(1), Some((32, 4, 1)), "the other NIC stays bound");
         assert!(owns_registered_nic_irq(7));
         assert_eq!(nic_primary(), None);
 
         assert_eq!(
-            publish_nic_route(pci(0x18), (34, 3, 2), 0, publish(34)),
+            publish_nic_route(pci(0x18), (34, 3, 2), publish(34)),
             Some(0),
             "the replacement regains its own route"
         );
         assert_eq!(published.get(), 34, "and the vacant primary");
         assert_eq!(nic_primary(), Some(0));
-        assert_eq!(nic_route(1), (Some((32, 4, 1)), 7));
+        assert_eq!(nic_route(1), Some((32, 4, 1)));
 
         deregister_all_for(34);
         deregister_all_for(32);
@@ -714,16 +694,17 @@ mod tests {
     fn nic_route_rolls_back_a_refused_publication_and_refuses_a_full_table() {
         let _guard = crate::TEST_STATE_LOCK.lock();
         reset_nic_routes();
-        assert_eq!(publish_nic_route(pci(0x20), (41, 4, 1), 9, || false), None);
-        assert_eq!(nic_route(0), (None, 0));
+        let slot = owned_slot(41, 0x1000_A000, 9);
+        assert_eq!(publish_nic_route(slot, (41, 4, 1), || false), None);
+        assert_eq!(nic_route(0), None);
         assert_eq!(nic_primary(), None);
         assert!(!owns_registered_nic_irq(9));
 
-        for (n, bdf) in (0..MAX_NIC_ROUTES).zip(0x20u64..) {
-            assert_eq!(publish_nic_route(pci(bdf), (42, 4, 1), 0, || true), Some(n));
+        for (n, bdf) in (1..MAX_NIC_ROUTES).zip(0x20u64..) {
+            assert_eq!(publish_nic_route(pci(bdf), (42, 4, 1), || true), Some(n));
         }
         assert_eq!(
-            publish_nic_route(pci(0x100), (43, 4, 1), 0, || true),
+            publish_nic_route(pci(0x100), (43, 4, 1), || true),
             None,
             "table full"
         );
@@ -748,7 +729,7 @@ mod tests {
         assert!(!owns_registered_nic_irq(other_alloc.first_irq as u32));
 
         assert_eq!(
-            publish_nic_route(pci(0x10), (NIC_OWNER, 8, 1), 0, || true),
+            publish_nic_route(pci(0x10), (NIC_OWNER, 8, 1), || true),
             Some(0)
         );
 
@@ -759,6 +740,9 @@ mod tests {
         assert!(!owns_registered_nic_irq(side_alloc.first_irq as u32));
         assert!(!owns_registered_nic_irq(other_alloc.first_irq as u32));
         assert!(!owns_registered_nic_irq(0xFE));
+        assert!(!owns_registered_nic_irq(
+            0x1_0000 + nic_alloc.first_irq as u32
+        ));
 
         // Teardown clears recognition.
         deregister_all_for(NIC_OWNER);
