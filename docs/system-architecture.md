@@ -1,7 +1,7 @@
 # Cellos System Architecture
 
 **Audience:** developers integrating Cells, services and C2C consumers  
-**Updated:** 2026-11-10  
+**Updated:** 2026-11-16  
 **Scope:** operational architecture, ownership and implementation boundaries
 
 ## 1. Read this guide with the contracts
@@ -179,8 +179,9 @@ profiles. Its traits cover:
 The MMIO authority tables stay kernel-side, selected by `ArmResources::SOC`
 and pinned by compile-time equality assertions; the AArch64 board descriptor is
 selected the same way and read, as on every arch, through `board::active()`. The `AArch64Vcpu` size and extension offset are asserted
-per build. Group 2/3 boards would add a backend against these traits; the IOMMU
-trait is a shape-only hook with no implementation.
+per build. Group 2/3 boards would add a backend against these traits. The HAL has no IOMMU hook:
+DMA remapping is the kernel's `DmaRemapper` (§ 11), and AArch64 has no remapper, so it refuses
+every DMA mapping.
 
 ## 5. Capability authority: selected model and current gaps
 
@@ -221,13 +222,17 @@ acknowledgement means refusal or quarantine, never frame reuse. Validation and
 cleanup use bounded lineage checks/batches, not an unbounded global traversal or
 per-local-call cryptographic verification.
 
-**Current gap:** the reusable baseline still contains per-task capability
-snapshots/CapSet, name/path-selected launch policy and existing service-specific
-checks. Those checks remain enforced until equivalent replacement is approved
-and migrated. Current spawn-only VFS grants do not become post-start transferable
-because the target allows bounded opt-in receipt. Shared CSpace, derivation,
-whole-Cell revocation and every caller migration are pending P01/P02/P05 work.
-The kernel must not create a competing copy of VFS/NET object ACLs.
+**Current state (2026-11-16, architecture remediation plan):** a Cell's rights are one record
+per incarnation, the root task's `Task::rights`, read through `Scheduler::cell_rights`.
+`CapRevoke` narrows it for every thread. Every install-path ceiling is one row of
+`kernel/src/catalog.rs`. Launch edges key on the kernel-measured program name, never the task
+name. [Security model § Current enforcement](security-model.md#current-enforcement-2026-11-16)
+has the code citations. This is still a per-Cell `CapSet` snapshot plus service-specific checks,
+not the target. Typed handles in a shared CSpace, derivation, delegation and every caller's
+migration remain pending P01/P02/P05 work; `CellAuthority` holds only the CSpace slot arena
+(BootFS file tickets). Device, BDF and service ownership stay keyed by tid. Current spawn-only
+VFS grants do not become post-start transferable because the target allows bounded opt-in
+receipt. The kernel must not create a competing copy of VFS/NET object ACLs.
 
 ## 6. Threads, budgets and SMP lifetime
 
@@ -550,7 +555,35 @@ all consumers remains P07 target work. Consult the
 symbols and failures. Do not infer Linux binary ABI, `fork`, full signals, dynamic
 loading or hosted C++ from the freestanding profile or compatibility terminology.
 
-## 11. Current baseline, remaining gates and execution ownership
+## 11. Kernel substrate as built (architecture remediation, 2026-11-16)
+
+The [architecture remediation plan](../.agents/261110-1703-architecture-remediation/plan.md)
+(Phases 01–19) reshaped the local kernel without changing the ADR-0022 direction, frozen
+syscall numbers or wire bytes. Its evidence ceiling is host tests plus QEMU (TCG, KVM). This
+section names the structure it left; per-architecture status lives in the generated
+[per-architecture status table](generated/arch-status.md) (`scripts/generate-arch-status.py
+--check` in CI, `.github/workflows/ci.yml:89`) and is not restated here.
+
+| Area | Structure | Where |
+|---|---|---|
+| Architecture seam | Every architecture difference lives under `kernel/src/arch/<arch>/`, one module selected by `target_arch`; shared code calls `crate::arch::<set>::<fn>()`. `legacy/` holds the 32-bit code, quarantined and not building. Board data is read through one `board::active()`. | `kernel/src/arch/mod.rs:1-36`; `kernel/src/board.rs` |
+| HAL boundary ceiling | `target_arch` lines outside `kernel/src/arch/` may not exceed 692, `asm!` outside it may not exceed 0; the ceilings only go down. Run by `scripts/check-board-configs.sh`. | `scripts/check-hal-boundaries.sh:64-80` |
+| Kernel residents | Every kernel file has a Spec 15 category (A, B, C, D, exception with a migration target, or `test`); an unlisted file fails CI, and release kernels contain no self-test symbol. | `kernel/residents.toml`; `scripts/check-kernel-residents.py` |
+| Syscall table | One table generates `ViSyscall`, the raw-id decode, the allowlist bits and the C/Zig headers; a golden file pins numbers and bits. 63 of 64 allowlist bits are used. | `libs/abi/abi/syscalls.toml`; `scripts/gen-syscall-headers.py --check` |
+| Lock ranks | Every static `Spinlock` is `Spinlock::ranked` with a rank from one table; a hart may take a ranked lock only above every ranked lock it holds. Checked in `test-hooks` kernels and host tests; dev and release kernels carry no check. Instance locks are unranked. | `kernel/src/sync/rank.rs:1-13`; [generated table](generated/lock-ranks.md) |
+| Device ownership | One `DeviceRecord` per PCI function, VirtIO slot or DWC2 aperture names the owner tid, windows, interrupt lines and DMA domain; MMIO, IRQ, DMA and route checks read it, one `release_for` frees it, and records never leave the table, so ISRs never allocate. | `kernel/src/dev/ownership.rs:1-21,83,492` |
+| NIC routes | One route per network device; the first live registration is primary, and when its provider dies the next live route is promoted. Only the primary carries traffic. `libs/nic-driver` is the shared NIC cell skeleton for nine drivers. | `kernel/src/dev/driver_cell.rs:63-93`; `libs/nic-driver/src/lib.rs:1-25` |
+| DMA remapping | One `DmaRemapper` trait: VT-d on x86_64, the RISC-V IOMMU on riscv64, `NoRemapper` (refuse) on aarch64 and 32-bit targets, selected as `crate::arch::iommu::Backend`. | `kernel/src/dev/iommu.rs:1-32,89` |
+| Frame ownership | A `FrameRun` is a run of frames with a charge and a state (`Mapped`, `Unpublished`, `Quarantined`, `Free`). A run whose invalidation is unconfirmed is quarantined, never freed and never a panic; the quarantine above 1/64 of RAM refuses new allocations. The allocator is private behind `frame::lock(&mut FlushCap)` / `frame::with`, so a flush under the allocator lock does not compile (`scripts/check-frame-guard-compile-fail.sh`). Grant, SHM, DMA-export and domain-grant rows share one `Region`. | `kernel/src/memory/frame_run.rs:1-28,371,1736`; `memory/frame.rs:658,738-793`; `memory/region.rs` |
+| Quota charging | A charge names its owner, `Charge { cell, generation }`, on one of three accounts (`Memory`, `Dma`, `Guest`). Refunds are checked against the generation and need no lock or allocation. The heap charges the hart's `alloc_charge`, which syscall entry sets to the caller and interrupt entry to the kernel. A `FrameRun` carries its charge and refunds it once. Grant pages, root stacks and cell segments remain uncharged (owner decision). | `kernel/src/memory/cell_quota.rs:1-12,51,106`; `memory/heap.rs:170`; `frame_run.rs:53` |
+| Tags and guest memory | One `TagPool` hands out private-root ASIDs, AArch64 VMIDs and x86 SVM ASIDs, reused only with an invalidation proof, with per-owner limits. A VM's guest charge is reserved against the catalog's `guest_memory` budget before any mapping. | `kernel/src/memory/tag_pool.rs:1-20,82`; `kernel/src/catalog.rs:35-39` |
+| Shared root | Free RAM's identity alias is RW+NX on RV64 and AArch64; user stacks live in a VA arena with guard pages; identity MMIO maps refuse the cell-slot and stack ranges; cell image and stack slots start at a random index when x86 RDSEED/RDRAND exists. x86 runs SMEP/SMAP/UMIP whenever the CPU has them. Grants and kernel stacks stay at VA = PA. | `kernel/src/memory/paging.rs:54`; `kernel/src/loader/va_alloc.rs`; [security model](security-model.md) |
+
+Residuals of the plan are tracked in the
+[closure matrix](../.agents/261110-1703-architecture-remediation/reports/closure-matrix.md)
+and handed back through the [current focus](roadmap/current-focus.md).
+
+## 12. Current baseline, remaining gates and execution ownership
 
 This is a compact boundary summary, not a duplicate milestone ledger. Retained
 witnesses below describe their recorded images and environments; none is a new
@@ -625,7 +658,7 @@ retains independent promotion rules. Automated agents/CI are assurance, not the
 required independent human approval. Missing external evidence blocks its named
 promotion without globally prohibiting bounded local software work.
 
-## 12. Evidence navigation and maintenance
+## 13. Evidence navigation and maintenance
 
 Historical logs are intentionally not duplicated in this guide. Use existing
 sources, preserving their original scope:
@@ -656,4 +689,6 @@ with this bounded guide; aligned identity/ownership with Spec 25 v1.3 and worklo
 policy with Spec 26; retained access to existing historical evidence without
 creating an archive or changing implementation/qualification status.
 
-**Revision note — 2026-11-10:** the controlling plan header, phase table, phase frontmatter and portfolio had claimed all ten phases complete since 2026-10-16; they now match this guide (P01/P02/P04 in progress, others pending). §11 records that the Spec 26 skeleton crates are excluded from the workspace. No implementation or qualification status changed.
+**Revision note — 2026-11-10:** the controlling plan header, phase table, phase frontmatter and portfolio had claimed all ten phases complete since 2026-10-16; they now match this guide (P01/P02/P04 in progress, others pending). §11 (now §12) records that the Spec 26 skeleton crates are excluded from the workspace. No implementation or qualification status changed.
+
+**Revision note — 2026-11-16:** added § 11, the kernel substrate the architecture remediation plan left (arch seam, residents, syscall table, lock ranks, device ownership, NIC routes, `DmaRemapper`, frame ownership, quota charging), with per-arch status deferred to `docs/generated/arch-status.md`; § 5 records the per-incarnation rights record; § 4 drops the AArch64 IOMMU hook the HAL no longer has. Later sections are renumbered.
