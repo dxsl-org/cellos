@@ -122,7 +122,7 @@ fn riscv64_vfs_quota_all_pass() {
     );
     wait_for_or_dump(&runner, "terminated: cause=0xf");
     wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
-    wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
+    wait_for_or_dump(&runner, "[stack-baseline] name=cellbox phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");
     for marker in [
         "[vfs-file-handle] wrong-owner-read-close-preserves-entry PASS",
