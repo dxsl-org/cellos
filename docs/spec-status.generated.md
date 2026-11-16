@@ -186,17 +186,17 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/10-testing.md:7` — 1. Triết lý: Test trong "Nồi lẩu" SAS
 - `docs/specs/10-testing.md:10` — 2. Các tầng Testing
 - `docs/specs/10-testing.md:22` — 3. Fault Injection Cell (Kẻ phá hoại)
-- `docs/specs/10-testing.md:28` — 4. Hardware-in-the-loop (HITL)
-- `docs/specs/10-testing.md:35` — 5. Integration Test Guide (English)
-- `docs/specs/10-testing.md:43` — Test layers
-- `docs/specs/10-testing.md:65` — Host Unit Tests
-- `docs/specs/10-testing.md:81` — Boot-time Kernel Tests
-- `docs/specs/10-testing.md:111` — QEMU Integration Tests
-- `docs/specs/10-testing.md:132` — Coverage Measurement
-- `docs/specs/10-testing.md:148` — 6. Hardware Security Tests
-- `docs/specs/10-testing.md:167` — Test locations
-- `docs/specs/10-testing.md:175` — Running Layer-2 tests
-- `docs/specs/10-testing.md:208` — Test availability and SKIP behaviour
+- `docs/specs/10-testing.md:31` — 4. Hardware-in-the-loop (HITL)
+- `docs/specs/10-testing.md:42` — 5. Integration Test Guide (English)
+- `docs/specs/10-testing.md:50` — Test layers
+- `docs/specs/10-testing.md:72` — Host Unit Tests
+- `docs/specs/10-testing.md:88` — Boot-time Kernel Tests
+- `docs/specs/10-testing.md:118` — QEMU Integration Tests
+- `docs/specs/10-testing.md:139` — Coverage Measurement
+- `docs/specs/10-testing.md:155` — 6. Hardware Security Tests
+- `docs/specs/10-testing.md:174` — Test locations
+- `docs/specs/10-testing.md:182` — Running Layer-2 tests
+- `docs/specs/10-testing.md:215` — Test availability and SKIP behaviour
 - `docs/specs/12-reliability.md:14` — 1. What "Never-Die" Means — Six Independent Axes
 - `docs/specs/12-reliability.md:46` — 2. Isolation Strategy Decision (2026-06-05)
 - `docs/specs/12-reliability.md:91` — 3. Current Status — Scored per Axis
@@ -355,10 +355,10 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 ### Status prose in specs (Spec 21 §2 Layer 3)
 
-- `docs/specs/00-context.md:10` — `✅` in: - ✅ **YES** Cellular architecture with zero-copy IPC
-- `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for safety, not hardware MMU
-- `docs/specs/00-context.md:196` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
-- `docs/specs/00-context.md:198` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
+- `docs/specs/00-context.md:10` — `✅` in: - ✅ **YES** Cellular architecture with bounded, kernel-copied IPC messages; zero-copy only through page-level Grants
+- `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for Tier 1 isolation; Tier 2 private roots and Tier 3 VMs add hardware isolation ([ADR-0015
+- `docs/specs/00-context.md:176` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
+- `docs/specs/00-context.md:178` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 - `docs/specs/04-hardware.md:127` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
