@@ -269,6 +269,18 @@ tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[lane]]
+path = "scripts/qemu-tier3-chrome-x86.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "Tier 3 Chrome desktop proof; needs nested Intel VMX (KVM), which CI runners lack (exits 2 BLOCKED_ENVIRONMENT without it)"
+
+[[lane]]
+path = "scripts/qemu-tier3-display-x86.sh"
+arch = "x86_64"
+tier = "manual"
+reason = "Tier 3 guest display and network proof; needs nested Intel VMX (KVM), which CI runners lack (exits 2 BLOCKED_ENVIRONMENT without it)"
+
+[[lane]]
 path = "scripts/qemu-tier3-hostile-runner-arm64.sh"
 arch = "aarch64"
 tier = "manual"
