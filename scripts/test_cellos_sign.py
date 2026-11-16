@@ -1007,6 +1007,34 @@ class BaselineWriterTests(unittest.TestCase):
             self.assertEqual(baseline.total, tcb.Counts(1, 0))
             self.assertEqual(baseline.sites, {"libs/l/src/lib.rs": tcb.Counts(1, 0)})
 
+    def test_values_and_headers_are_read_as_toml(self):
+        # P18 re-review LOW: hex/underscore values and commented or spaced headers.
+        text = ("version = 1\n[ total ]  # the Tier-1 total\nunsafe = 0x0A  # ten\nattrs = 5\n\n"
+                '[[site]] # one row\npath = "a.rs"  # x\nunsafe = 1_0\nattrs = 0o1\n\n'
+                '[[ site ]]\npath = "b.rs"\nunsafe = 0x2\nattrs = 0\n')
+        report = tcb.Report(per_file={"a.rs": tcb.Counts(4, 1)}, closure=tcb.Counts(4, 1))
+        out = tcb.lowered_baseline(text, report)
+        self.assertEqual(out, (
+            "version = 1\n[ total ]  # the Tier-1 total\nunsafe = 4  # ten\nattrs = 1\n\n"
+            '[[site]] # one row\npath = "a.rs"  # x\nunsafe = 4\nattrs = 0o1\n\n'))
+        with tempfile.TemporaryDirectory() as tmp:
+            write(Path(tmp), tcb.BASELINE_PATH, out)
+            baseline = tcb.load_baseline(Path(tmp))
+        self.assertEqual((baseline.total, baseline.sites),
+                         (tcb.Counts(4, 1), {"a.rs": tcb.Counts(4, 1)}))
+
+    def test_a_row_at_its_ceiling_is_left_byte_for_byte(self):
+        text = 'version = 1\n[total]\nunsafe=0x3\nattrs = 0\n[[site]]\npath="a.rs"\nunsafe=0x3\nattrs=0\n'
+        report = tcb.Report(per_file={"a.rs": tcb.Counts(3, 0)}, closure=tcb.Counts(3, 0))
+        self.assertEqual(tcb.lowered_baseline(text, report), text)
+
+    def test_never_raised_reports_every_loosening(self):
+        before = tcb.Baseline(sites={"a.rs": tcb.Counts(2, 0)}, total=tcb.Counts(2, 0))
+        after = tcb.Baseline(sites={"a.rs": tcb.Counts(3, 0), "b.rs": tcb.Counts(1, 0)},
+                             total=tcb.Counts(2, 1))
+        self.assertEqual(len(tcb.never_raised(before, after)), 3)
+        self.assertEqual(tcb.never_raised(before, before), [])
+
 
 class ClosureFileTests(unittest.TestCase):
     BASE = 'version = 1\ntargets = []\ntier1_roots = []\n'

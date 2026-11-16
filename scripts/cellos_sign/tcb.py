@@ -356,6 +356,21 @@ def check(
     return report
 
 
+def _header(line: str) -> str | None:
+    """The table header a line opens (`[total]`, `[[site]]`), comments and spaces removed."""
+    code = line.split("#", 1)[0].strip()
+    return "".join(code.split()) if code.startswith("[") else None
+
+
+def _key_value(line: str) -> tuple[str, object] | None:
+    """`(key, value)` of a `key = value` line, as TOML reads it (hex, `_`, comments)."""
+    try:
+        parsed = tomllib.loads(line)
+    except tomllib.TOMLDecodeError:
+        return None
+    return next(iter(parsed.items())) if len(parsed) == 1 else None
+
+
 def lowered_baseline(text: str, report: Report) -> str:
     """`text` (the baseline file) with every ceiling lowered to the tree.
 
@@ -364,7 +379,8 @@ def lowered_baseline(text: str, report: Report) -> str:
     clean or outside the closure) is deleted with the blank line after it. A
     count above its ceiling keeps the ceiling, and a file without a row gets
     none, so the check still fails for those: raising a ceiling stays a
-    reviewed hand edit. Comments and layout are kept.
+    reviewed hand edit. Values are read as TOML reads them; comments and layout
+    are kept, and a rewritten ceiling is written in decimal.
     """
     lines = text.splitlines(keepends=True)
     out: list[str] = []
@@ -372,18 +388,16 @@ def lowered_baseline(text: str, report: Report) -> str:
     i = 0
     while i < len(lines):
         line = lines[i]
-        stripped = line.strip()
-        if stripped == "[[site]]":
+        header = _header(line)
+        if header == "[[site]]":
             block = [line]
             j = i + 1
-            while j < len(lines) and lines[j].strip() and not lines[j].lstrip().startswith("["):
+            while j < len(lines) and lines[j].strip() and _header(lines[j]) is None:
                 block.append(lines[j])
                 j += 1
-            fields = {ln.split("=", 1)[0].strip(): ln.split("=", 1)[1].split("#", 1)[0].strip()
-                      for ln in block[1:] if "=" in ln}
-            path = fields.get("path", "").strip('"')
-            current = report.per_file.get(path, Counts())
-            cap = Counts(int(fields.get("unsafe", 0)), int(fields.get("attrs", 0)))
+            fields = dict(kv for kv in map(_key_value, block[1:]) if kv)
+            current = report.per_file.get(fields.get("path"), Counts())
+            cap = Counts(fields.get("unsafe", 0), fields.get("attrs", 0))
             if not Counts(min(cap.unsafe, current.unsafe), min(cap.attrs, current.attrs)):
                 if j < len(lines) and not lines[j].strip():
                     j += 1  # the separating blank line
@@ -393,14 +407,28 @@ def lowered_baseline(text: str, report: Report) -> str:
             out.append(line)
             i += 1
             continue
-        if stripped.startswith("["):
-            table = "total" if stripped == "[total]" else None
+        if header is not None:
+            table = "total" if header == "[total]" else None
             current = report.total
-        key, sep, value = line.partition("=")
-        if sep and table and key.strip() in ("unsafe", "attrs"):
-            cap = int(value.split("#", 1)[0])
-            lowered = min(cap, getattr(current, key.strip()))
-            line = f"{key}= {lowered}\n"
+        pair = _key_value(line) if table else None
+        if pair and pair[0] in ("unsafe", "attrs") and isinstance(pair[1], int):
+            key, cap = pair
+            lowered = min(cap, getattr(current, key))
+            if lowered < cap:  # untouched lines stay byte for byte
+                comment = line.split("#", 1)[1].rstrip("\n") if "#" in line else ""
+                indent = line[: len(line) - len(line.lstrip())]
+                line = f"{indent}{key} = {lowered}" + (f"  #{comment}" if comment else "") + "\n"
         out.append(line)
         i += 1
     return "".join(out)
+
+
+def never_raised(before: Baseline, after: Baseline) -> list[str]:
+    """Every way `after` is looser than `before` (must be empty for a lowering)."""
+    problems = [f"{path}: new row" for path in set(after.sites) - set(before.sites)]
+    problems += [f"{path}: {before.sites[path]} -> {counts}" for path, counts in after.sites.items()
+                 if path in before.sites and (counts.unsafe > before.sites[path].unsafe
+                                              or counts.attrs > before.sites[path].attrs)]
+    if after.total.unsafe > before.total.unsafe or after.total.attrs > before.total.attrs:
+        problems.append(f"[total]: {before.total} -> {after.total}")
+    return problems

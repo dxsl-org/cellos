@@ -221,7 +221,15 @@ def run_write_baseline(args: argparse.Namespace) -> int:
         print(f"{tcb.BASELINE_PATH}: no ceiling is above the tree; nothing to lower")
         return EXIT_OK
     path.write_text(after, encoding="utf-8")
-    tcb.load_baseline(repo)  # the rewrite must still parse
+    try:  # the rewrite must parse and be no looser than the reviewed file
+        problems = tcb.never_raised(baseline, tcb.load_baseline(repo))
+    except tcb.TcbError as exc:
+        problems = [str(exc)]
+    if problems:
+        path.write_text(before, encoding="utf-8")
+        print(f"FAIL: --write-baseline would loosen {tcb.BASELINE_PATH}; left unchanged: "
+              + "; ".join(problems), file=sys.stderr)
+        return EXIT_USAGE
     print(f"wrote {tcb.BASELINE_PATH}: ceilings lowered to the tree; review and commit the diff")
     return EXIT_OK
 
