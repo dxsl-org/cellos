@@ -60,7 +60,7 @@ Write-Info "rustup $(rustup --version 2>$null | Select-Object -First 1)"
 if (-not $Check) {
     rustup toolchain install $Toolchain --allow-downgrade
     rustup component add rust-src rustfmt clippy llvm-tools-preview
-    rustup target add riscv64gc-unknown-none-elf aarch64-unknown-none x86_64-unknown-none
+    rustup target add riscv64gc-unknown-none-elf aarch64-unknown-none-softfloat x86_64-unknown-none
 }
 
 # ── 2. QEMU ───────────────────────────────────────────────────────────────────

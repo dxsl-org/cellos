@@ -11,7 +11,7 @@
 //!
 //! Prerequisites per arch:
 //!   RV64 : qemu-system-riscv64 + `cargo build --release -p cellos-kernel`
-//!   ARM64: qemu-system-aarch64 + `cargo build --target aarch64-unknown-none -p cellos-kernel --release`
+//!   ARM64: qemu-system-aarch64 + `cargo build --target aarch64-unknown-none-softfloat -p cellos-kernel --release`
 //!   RV32 : qemu-system-riscv32 + `cargo build --target riscv32imc-unknown-none-elf -p cellos-kernel --release`
 //!   x86  : `cargo build --target x86_64-unknown-none -p cellos-kernel --release` (no QEMU needed)
 
@@ -45,7 +45,7 @@ fn rv64_kernel_path() -> String {
 
 fn aarch64_kernel_path() -> String {
     repo_root()
-        .join("target/aarch64-unknown-none/release/cellos-kernel")
+        .join("target/aarch64-unknown-none-softfloat/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -109,7 +109,7 @@ fn aarch64_prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!(
-            "SKIP: AArch64 kernel not built ({})\n  build: cargo build --target aarch64-unknown-none -p cellos-kernel --release",
+            "SKIP: AArch64 kernel not built ({})\n  build: cargo build --target aarch64-unknown-none-softfloat -p cellos-kernel --release",
             aarch64_kernel_path()
         );
     }
