@@ -145,10 +145,10 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/05-application.md:312` — 4.3 VMM: Minimal VMM (custom, ~2.9K LOC shipped; ~9K planned at full device coverage)
 - `docs/specs/05-application.md:379` — 4.3.1 Tier-3 Threat Model (guest-escape)
 - `docs/specs/05-application.md:415` — 4.4 Kernel H-extension requirements (RISC-V)
-- `docs/specs/05-application.md:445` — 4.5 Multi-arch HAL trait
-- `docs/specs/05-application.md:472` — 4.6 Implementation status
-- `docs/specs/05-application.md:512` — 5. Platform Profiles
-- `docs/specs/05-application.md:522` — 6. Những đường sai cần tránh (Wrong Paths)
+- `docs/specs/05-application.md:445` — 4.5 Multi-arch hypervisor dispatch
+- `docs/specs/05-application.md:481` — 4.6 Implementation status
+- `docs/specs/05-application.md:523` — 5. Platform Profiles
+- `docs/specs/05-application.md:533` — 6. Những đường sai cần tránh (Wrong Paths)
 - `docs/specs/06-graphics.md:8` — 1. Triết lý Đồ họa: Shared Framebuffer
 - `docs/specs/06-graphics.md:11` — Quy trình hiển thị Zero-Copy
 - `docs/specs/06-graphics.md:18` — 2. Hệ thống Input: Focus-Gated Dispatcher
@@ -381,11 +381,11 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/05-application.md:392` — `✅` in: | 1 | Wrapper `read/write_guest_memory` (mọi truy cập RAM guest đi qua đây) | Kernel bounds-check GPA vào cửa sổ guest-R
 - `docs/specs/05-application.md:397` — `✅` in: | 6 | MMIO dispatch default arm | Run-loop có default arm (log + error) cho IPA chưa đăng ký. | ✅ (m2 red-team ARM64 đã 
 - `docs/specs/05-application.md:398` — `✅` in: | 7 | Config-space reads | `config_read` trả hằng số (`virtio_blk.rs:41-47`). | ✅ hiện tại; giữ bất biến "config trả giá
-- `docs/specs/05-application.md:462` — `✅` in: | **ARM64** | EL2 non-VHE (HCR_EL2, VTTBR_EL2, Stage-2, GICH) | `hal-arm` | **✅ G1 shipped** (P01–P10) |
-- `docs/specs/05-application.md:474` — `✅` in: **ARM64 EL2 VMM — ✅ COMPLETE (G1, 2026-06-16)**
-- `docs/specs/05-application.md:524` — `✅` in: 1. **Type-1 hypervisor**: Tier 3 phải chạy ON TOP of Cellos, không phải thay thế kernel. Cellos kernel = Type-2 host. ✅ 
-- `docs/specs/05-application.md:525` — `LOC` in: 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
-- `docs/specs/05-application.md:526` — `✅` in: 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM 
+- `docs/specs/05-application.md:469` — `✅` in: | **ARM64** | EL2 non-VHE (HCR_EL2, VTTBR_EL2, Stage-2, GICH) | `hal-arm` | **✅ G1 shipped** (P01–P10) |
+- `docs/specs/05-application.md:483` — `✅` in: **ARM64 EL2 VMM — ✅ COMPLETE (G1, 2026-06-16)**
+- `docs/specs/05-application.md:535` — `✅` in: 1. **Type-1 hypervisor**: Tier 3 phải chạy ON TOP of Cellos, không phải thay thế kernel. Cellos kernel = Type-2 host. ✅ 
+- `docs/specs/05-application.md:536` — `LOC` in: 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
+- `docs/specs/05-application.md:537` — `✅` in: 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM 
 - `docs/specs/09-vfs.md:52` — `LOC` in: * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI
 - `docs/specs/09b-vfs-native-fs-adr.md:16` — `LOC` in: Use **RedoxFS** (MIT licence, approximately 10 K LOC Rust) as the `/srv` backend. Do not
 - `docs/specs/09b-vfs-native-fs-adr.md:44` — `LOC` in: | Option | LOC | Licence | CoW | Checksum | `no_std` | Verdict |
