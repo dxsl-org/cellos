@@ -370,7 +370,7 @@ reason = "Driver Cell (x86 virtio-pci): the non-blocking virtio-drivers block ca
 approver = "owner (x86 breadth phase 05, 2026-11-04)"
 date = "2026-11-04"
 review_by = "2027-05-14"
-tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): drivers group; new finding (poison never set)"
+tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): drivers group; finding N-1 (poison never set) fixed in c7a36575d2"
 
 [[file]]
 path = "cells/drivers/virtio-blk/src/mmio.rs"
