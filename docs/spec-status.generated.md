@@ -244,26 +244,26 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/16-rustc-tcb.md:14` — 1. What "TCB" Means for Cellos
 - `docs/specs/16-rustc-tcb.md:40` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
 - `docs/specs/16-rustc-tcb.md:42` — 2.1 `#![forbid(unsafe_code)]` enforcement
-- `docs/specs/16-rustc-tcb.md:59` — 2.2 Ownership and Borrow Check (Memory Safety)
-- `docs/specs/16-rustc-tcb.md:70` — 2.3 Type Safety (No Transmute Across Cell Boundaries)
-- `docs/specs/16-rustc-tcb.md:79` — 2.4 `Send + Sync` Enforcement (Concurrency Safety)
-- `docs/specs/16-rustc-tcb.md:89` — 2.5 Lifetime Validity (No Dangling References Across Async Await Points)
-- `docs/specs/16-rustc-tcb.md:101` — 3. What rustc Does NOT Guarantee
-- `docs/specs/16-rustc-tcb.md:106` — 3.1 Capability Revocation
-- `docs/specs/16-rustc-tcb.md:114` — 3.2 Time and Scheduling
-- `docs/specs/16-rustc-tcb.md:120` — 3.3 Side Channels (Spectre / Meltdown)
-- `docs/specs/16-rustc-tcb.md:133` — 3.4 Supply Chain / Compiler Compromise
-- `docs/specs/16-rustc-tcb.md:139` — 3.5 Trusted I/O Path
-- `docs/specs/16-rustc-tcb.md:148` — 4. TCB Component Inventory (smallest → largest)
-- `docs/specs/16-rustc-tcb.md:181` — 5. Risk Mitigations for rustc-as-TCB
-- `docs/specs/16-rustc-tcb.md:183` — 5.1 Open Source Auditability
-- `docs/specs/16-rustc-tcb.md:188` — 5.2 Ferrocene qualification lane
-- `docs/specs/16-rustc-tcb.md:208` — 5.3 miri: MIR Interpreter for Unsoundness Detection
-- `docs/specs/16-rustc-tcb.md:219` — 5.4 Reproducible Builds + Toolchain Pin
-- `docs/specs/16-rustc-tcb.md:225` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
-- `docs/specs/16-rustc-tcb.md:241` — 6. Policies Derived from This Spec
-- `docs/specs/16-rustc-tcb.md:260` — 7. Comparison with Prior Art
-- `docs/specs/16-rustc-tcb.md:276` — 8. Cross-References
+- `docs/specs/16-rustc-tcb.md:60` — 2.2 Ownership and Borrow Check (Memory Safety)
+- `docs/specs/16-rustc-tcb.md:71` — 2.3 Type Safety (No Transmute Across Cell Boundaries)
+- `docs/specs/16-rustc-tcb.md:80` — 2.4 `Send + Sync` Enforcement (Concurrency Safety)
+- `docs/specs/16-rustc-tcb.md:90` — 2.5 Lifetime Validity (No Dangling References Across Async Await Points)
+- `docs/specs/16-rustc-tcb.md:102` — 3. What rustc Does NOT Guarantee
+- `docs/specs/16-rustc-tcb.md:107` — 3.1 Capability Revocation
+- `docs/specs/16-rustc-tcb.md:115` — 3.2 Time and Scheduling
+- `docs/specs/16-rustc-tcb.md:121` — 3.3 Side Channels (Spectre / Meltdown)
+- `docs/specs/16-rustc-tcb.md:134` — 3.4 Supply Chain / Compiler Compromise
+- `docs/specs/16-rustc-tcb.md:140` — 3.5 Trusted I/O Path
+- `docs/specs/16-rustc-tcb.md:149` — 4. TCB Component Inventory (smallest → largest)
+- `docs/specs/16-rustc-tcb.md:182` — 5. Risk Mitigations for rustc-as-TCB
+- `docs/specs/16-rustc-tcb.md:184` — 5.1 Open Source Auditability
+- `docs/specs/16-rustc-tcb.md:189` — 5.2 Ferrocene qualification lane
+- `docs/specs/16-rustc-tcb.md:209` — 5.3 miri: MIR Interpreter for Unsoundness Detection
+- `docs/specs/16-rustc-tcb.md:220` — 5.4 Reproducible Builds + Toolchain Pin
+- `docs/specs/16-rustc-tcb.md:226` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
+- `docs/specs/16-rustc-tcb.md:242` — 6. Policies Derived from This Spec
+- `docs/specs/16-rustc-tcb.md:261` — 7. Comparison with Prior Art
+- `docs/specs/16-rustc-tcb.md:277` — 8. Cross-References
 - `docs/specs/17-ipc-wire-contract.md:20` — 1. Scope & model
 - `docs/specs/17-ipc-wire-contract.md:63` — 2. The recv-mask rule (most important)
 - `docs/specs/17-ipc-wire-contract.md:110` — 3. Byte-0 discriminant registry
