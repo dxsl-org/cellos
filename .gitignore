@@ -158,6 +158,7 @@ cells/apps/vove/
 /build/x86-c2c-render-iso-root/
 /build/x86-config-hotswap-iso-root/
 /build/x86-domain-test-iso-root/
+/build/x86-hv-lane/
 /build/x86-nginx-gate/
 /build/x86-nginx-initramfs.cpio.gz
 /build/x86-nginx-regression/

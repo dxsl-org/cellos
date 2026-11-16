@@ -1485,7 +1485,13 @@ jobs:
           -Z build-std=core,alloc
 
       - name: Build x86 hypervisor Limine ISO
-        run: bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso
+        # The default kernel path is the rollout route: make-iso-ci.sh refuses a kernel
+        # there that does not embed kernel/src/embedded-x86_64. Stage the hv kernel apart.
+        run: |
+          mkdir -p build/x86-hv-lane
+          cp target/x86_64-unknown-none/release/cellos-kernel build/x86-hv-lane/cellos-kernel
+          X86_KERNEL=build/x86-hv-lane/cellos-kernel X86_ISO_ROOT=build/x86-hv-lane/iso-root \
+            bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso
 
       - name: Run x86 hypervisor boot-to-shell gate
         id: hypervisor-smoke

@@ -221,7 +221,11 @@ case "$BUILDER" in
         RUSTFLAGS="-C relocation-model=static -C code-model=kernel -C no-redzone=yes -Z cf-protection=full" \
             EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" \
             cargo build --release -p cellos-kernel --target "$TARGET" -Z build-std=core,alloc
-        bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso >/dev/null
+        # The default kernel path is the rollout route; make-iso-ci.sh refuses it here.
+        mkdir -p build/x86-hv-lane
+        cp "target/$TARGET/release/cellos-kernel" build/x86-hv-lane/cellos-kernel
+        X86_KERNEL=build/x86-hv-lane/cellos-kernel X86_ISO_ROOT=build/x86-hv-lane/iso-root \
+            bash scripts/x86/make-iso-ci.sh build/vicell-x86-hv.iso >/dev/null
         ARTIFACTS=(build/vicell-x86-hv.iso)
         ;;
 esac
