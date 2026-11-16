@@ -14,17 +14,15 @@
 //! device, its windows or its vectors while hardware may still reach the old
 //! domain.
 //!
-//! The table is a fixed array: teardown and the ISR readers never allocate.
+//! The table holds a record for every device the boot scan, the Platform Cell
+//! or a claim names, however many there are: records are appended only at
+//! registration and claim (boot and syscall context, charged to the kernel)
+//! and never removed, so release, teardown (which may run in the timer/IPI
+//! ISR) and every check only touch records in place and never allocate.
 
 use crate::sync::Spinlock;
 use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
-
-/// Records the table holds: every scanned or registered PCI function, every
-/// VirtIO slot and the DWC2 aperture.
-#[cfg(cellos_wide)]
-pub(crate) const MAX_DEVICES: usize = 256;
-#[cfg(not(cellos_wide))]
-pub(crate) const MAX_DEVICES: usize = 16;
+use alloc::vec::Vec;
 
 /// Windows one record may hold: a PCI function's six BARs.
 const MAX_BARS: usize = 6;
@@ -147,39 +145,36 @@ impl DeviceRecord {
 }
 
 struct Devices {
-    records: [Option<DeviceRecord>; MAX_DEVICES],
+    /// Append-only: a record's index never changes and none is removed.
+    records: Vec<DeviceRecord>,
 }
 
 impl Devices {
     fn find(&mut self, key: DeviceKey) -> Option<&mut DeviceRecord> {
-        self.records
-            .iter_mut()
-            .flatten()
-            .find(|record| record.key == key)
+        self.records.iter_mut().find(|record| record.key == key)
     }
 
-    /// The record of `key`, created as `kind` when absent; `None` only when
-    /// the table is full.
+    /// The record of `key`, appended as `kind` when absent. Boot or syscall
+    /// context only: the append may grow the table, charged to the kernel.
+    /// `None` only when the heap refuses that growth.
     fn find_or_insert(&mut self, key: DeviceKey, kind: DeviceKind) -> Option<&mut DeviceRecord> {
-        let index = match self
-            .records
-            .iter()
-            .position(|record| record.is_some_and(|record| record.key == key))
-        {
+        let index = match self.records.iter().position(|record| record.key == key) {
             Some(index) => index,
             None => {
-                let Some(index) = self.records.iter().position(Option::is_none) else {
-                    log::warn!(
-                        "[devices] table full ({MAX_DEVICES}); {} has no ownership record",
-                        crate::dev::driver_cell::DeviceName(key)
-                    );
-                    return None;
-                };
-                self.records[index] = Some(DeviceRecord::new(key, kind));
-                index
+                let _kernel = crate::memory::heap::ChargeScope::enter(
+                    crate::memory::cell_quota::Charge::KERNEL,
+                );
+                #[cfg(feature = "p01-trace")]
+                let _semantic = crate::memory::heap::p01_owner::creation(
+                    None,
+                    crate::memory::heap::p01_owner::DRIVER_SHARED,
+                );
+                self.records.try_reserve(1).ok()?;
+                self.records.push(DeviceRecord::new(key, kind));
+                self.records.len() - 1
             }
         };
-        self.records[index].as_mut()
+        self.records.get_mut(index)
     }
 }
 
@@ -187,7 +182,7 @@ impl Devices {
 /// `ROLE_PUBLICATION`, before `RESOURCE_REGISTRY` and `PCIE_MSI_STATE`.
 static DEVICES: Spinlock<Devices> = Spinlock::ranked(
     Devices {
-        records: [None; MAX_DEVICES],
+        records: Vec::new(),
     },
     crate::sync::rank::DEVICES,
 );
@@ -200,16 +195,27 @@ fn mmio_key(base: usize) -> Option<DeviceKey> {
     DeviceKey::new(BLOCK_DEVICE_MMIO, base as u64)
 }
 
+/// Logged, after `DEVICES` is released, when the heap refused `key` a record.
+fn no_record(key: DeviceKey) {
+    log::warn!(
+        "[devices] out of memory; {} has no ownership record",
+        crate::dev::driver_cell::DeviceName(key)
+    );
+}
+
 /// Record PCI function `bdf` with its class code (boot scan, 236).
 pub(crate) fn register_pci_function(bdf: u32, class: u32) {
     let Some(key) = pci_key(bdf) else {
         return;
     };
-    if let Some(record) = DEVICES
+    let kind = DeviceKind::Pci { class: Some(class) };
+    let recorded = DEVICES
         .lock()
-        .find_or_insert(key, DeviceKind::Pci { class: Some(class) })
-    {
-        record.kind = DeviceKind::Pci { class: Some(class) };
+        .find_or_insert(key, kind)
+        .map(|record| record.kind = kind)
+        .is_some();
+    if !recorded {
+        no_record(key);
     }
 }
 
@@ -229,15 +235,17 @@ pub(crate) fn register_pci_bar(bdf: u32, base: usize, len: usize) {
         log::warn!("[pcie] BAR {base:#x}+{len:#x} names no function (bdf={bdf:#x}); not recorded");
         return;
     };
-    let mut devices = DEVICES.lock();
-    let Some(record) = devices.find_or_insert(key, DeviceKind::Pci { class: None }) else {
-        return;
-    };
-    if !record.add_window(base, len) {
-        log::warn!(
+    let added = DEVICES
+        .lock()
+        .find_or_insert(key, DeviceKind::Pci { class: None })
+        .map(|record| record.add_window(base, len));
+    match added {
+        Some(true) => {}
+        Some(false) => log::warn!(
             "[pcie] {}: no BAR slot left for {base:#x}+{len:#x}",
             crate::dev::driver_cell::DeviceName(key)
-        );
+        ),
+        None => no_record(key),
     }
 }
 
@@ -251,9 +259,18 @@ pub(crate) fn register_mmio_device(base: usize, len: usize, kind: DeviceKind, li
     let Some(key) = mmio_key(base) else {
         return;
     };
-    if let Some(record) = DEVICES.lock().find_or_insert(key, kind) {
-        record.add_window(base, len);
-        record.irq = line.map(IrqLines::Line);
+    let recorded = {
+        let mut devices = DEVICES.lock();
+        devices
+            .find_or_insert(key, kind)
+            .map(|record| {
+                record.add_window(base, len);
+                record.irq = line.map(IrqLines::Line);
+            })
+            .is_some()
+    };
+    if !recorded {
+        no_record(key);
     }
 }
 
@@ -264,17 +281,20 @@ pub(crate) fn claim_pci(bdf: u32, tid: usize) -> bool {
     let Some(key) = pci_key(bdf) else {
         return false;
     };
-    let mut devices = DEVICES.lock();
-    let Some(record) = devices.find_or_insert(key, DeviceKind::Pci { class: None }) else {
-        return false;
-    };
-    match record.owner {
-        Some(owner) => owner == tid,
-        None => {
-            record.owner = Some(tid);
-            true
-        }
-    }
+    let claimed = DEVICES
+        .lock()
+        .find_or_insert(key, DeviceKind::Pci { class: None })
+        .map(|record| match record.owner {
+            Some(owner) => owner == tid,
+            None => {
+                record.owner = Some(tid);
+                true
+            }
+        });
+    claimed.unwrap_or_else(|| {
+        no_record(key);
+        false
+    })
 }
 
 /// The task that owns PCI function `bdf`, if any.
@@ -305,7 +325,6 @@ pub(crate) fn devices_of(tid: usize) -> alloc::vec::Vec<(DeviceKey, DeviceKind)>
         .lock()
         .records
         .iter()
-        .flatten()
         .filter(|record| record.owned_by(tid))
         .map(|record| (record.key, record.kind))
         .collect()
@@ -318,7 +337,6 @@ pub(crate) fn is_device_window(base: usize, len: usize) -> bool {
         .lock()
         .records
         .iter()
-        .flatten()
         .any(|record| record.kind != DeviceKind::Dwc2 && record.has_window(base, len))
 }
 
@@ -347,10 +365,9 @@ pub(crate) enum WindowClaim {
 /// or, when free, for its first claimant.
 pub(crate) fn claim_window(tid: usize, base: usize, len: usize, dwc2: bool) -> WindowClaim {
     let mut devices = DEVICES.lock();
-    let mut matching =
-        devices.records.iter_mut().flatten().filter(|record| {
-            (record.kind == DeviceKind::Dwc2) == dwc2 && record.has_window(base, len)
-        });
+    let mut matching = devices.records.iter_mut().filter(|record| {
+        (record.kind == DeviceKind::Dwc2) == dwc2 && record.has_window(base, len)
+    });
     let Some(record) = matching.next() else {
         return WindowClaim::NoDevice;
     };
@@ -396,7 +413,7 @@ pub(crate) enum Scope {
 /// ownership. A freed record keeps its windows and fixed line for the next
 /// claimant; MSI vectors were already taken out by [`release_msis`].
 pub(crate) fn release_for(tid: usize, scope: Scope) {
-    for record in DEVICES.lock().records.iter_mut().flatten() {
+    for record in DEVICES.lock().records.iter_mut() {
         if record.owned_by(tid) && (scope == Scope::Retired || record.kind != DeviceKind::Dwc2) {
             record.owner = None;
         }
@@ -406,7 +423,7 @@ pub(crate) fn release_for(tid: usize, scope: Scope) {
 /// Free the MMIO devices `tid` owns through one of the released `windows`
 /// (a capability revoke releases windows by class while the task lives).
 pub(crate) fn release_mmio_devices_in(tid: usize, windows: &[(usize, usize)]) {
-    for record in DEVICES.lock().records.iter_mut().flatten() {
+    for record in DEVICES.lock().records.iter_mut() {
         if record.key.kind == BLOCK_DEVICE_MMIO
             && record.owner == Some(tid)
             && windows
@@ -426,7 +443,6 @@ pub(crate) fn irq_owned_by(tid: usize, irq: u8) -> bool {
         .lock()
         .records
         .iter()
-        .flatten()
         .any(|record| record.owned_by(tid) && record.holds_irq(irq))
 }
 
@@ -444,7 +460,7 @@ pub(crate) fn irq_owned_for(tid: usize, irq: u8, key: DeviceKey) -> bool {
 #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 pub(crate) fn lines_owned_by(tid: usize) -> crate::dev::irq_wait::IrqLineSet {
     let mut set = crate::dev::irq_wait::IrqLineSet::EMPTY;
-    for record in DEVICES.lock().records.iter().flatten() {
+    for record in DEVICES.lock().records.iter() {
         if let Some(lines) = record.irq.filter(|_| record.owned_by(tid)) {
             lines.lines().for_each(|line| set.insert(line));
         }
@@ -463,7 +479,6 @@ pub(crate) fn take_owned_line(tid: usize, irq: u8) -> bool {
     let owned = devices
         .records
         .iter()
-        .flatten()
         .any(|record| record.owned_by(tid) && record.holds_irq(irq));
     owned && crate::dev::irq_wait::take_pending(irq)
 }
@@ -476,7 +491,6 @@ pub(crate) fn repend_owned_line(tid: usize, irq: u8) {
     if devices
         .records
         .iter()
-        .flatten()
         .any(|record| record.owned_by(tid) && record.holds_irq(irq))
     {
         crate::dev::irq_wait::restore_pending(irq);
@@ -516,7 +530,7 @@ pub(crate) fn release_msis(
     mut free: impl FnMut(abi::pcie_function::PcieIrqAlloc),
 ) -> usize {
     let mut released = 0;
-    for record in DEVICES.lock().records.iter_mut().flatten() {
+    for record in DEVICES.lock().records.iter_mut() {
         if !record.owned_by(tid) {
             continue;
         }
@@ -539,7 +553,7 @@ pub(crate) fn test_own_mmio(tid: usize, base: usize, line: u8) {
     let mut devices = DEVICES.lock();
     let record = devices
         .find_or_insert(mmio_key(base).expect("valid base"), DeviceKind::VirtioSlot)
-        .expect("room for a test record");
+        .expect("heap for a test record");
     record.add_window(base, 0x200);
     record.owner = Some(tid);
     record.irq = Some(IrqLines::Line(line));
@@ -555,7 +569,7 @@ pub(crate) fn test_own_msi(tid: usize, bdf: u32, msi: abi::pcie_function::PcieIr
             pci_key(bdf).expect("valid BDF"),
             DeviceKind::Pci { class: None },
         )
-        .expect("room for a test record");
+        .expect("heap for a test record");
     record.owner = Some(tid);
     record.irq = Some(IrqLines::Msi(msi));
 }
@@ -586,6 +600,30 @@ mod tests {
         assert_eq!(pci_owner(BDF), Some(COMPETING));
         release_for(COMPETING, Scope::Retired);
         assert!(!claim_pci(0x1_0000, FIRST), "not a BDF");
+    }
+
+    /// A machine with more functions than the old fixed table (256) loses
+    /// none: each keeps its record and class, and each is claimable.
+    #[test]
+    fn every_registered_function_keeps_a_claimable_record() {
+        const TID: usize = 0xA0C0;
+        const FUNCTIONS: u32 = 600;
+        const FIRST_BDF: u32 = 0xB000;
+        const CLASS: u32 = 0x02_00_00;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        for bdf in FIRST_BDF..FIRST_BDF + FUNCTIONS {
+            register_pci_function(bdf, CLASS);
+        }
+        for bdf in FIRST_BDF..FIRST_BDF + FUNCTIONS {
+            assert!(claim_pci(bdf, TID), "{bdf:#x} claimable");
+        }
+        let owned = devices_of(TID);
+        assert_eq!(owned.len(), FUNCTIONS as usize);
+        assert!(owned
+            .iter()
+            .all(|&(_, kind)| kind == DeviceKind::Pci { class: Some(CLASS) }));
+        release_for(TID, Scope::Retired);
+        assert!(devices_of(TID).is_empty());
     }
 
     /// A `PcieDriverCap` revoke frees what that capability claimed and
