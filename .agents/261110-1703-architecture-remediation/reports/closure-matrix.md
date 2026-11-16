@@ -22,9 +22,9 @@
 | High | 14 | 9 | 5 | 0 |
 | Medium (37 clauses) | 37 | 20 | 17 | 0 |
 | Low | 8 | 5 | 3 | 0 |
-| New (Phase 19) | 7 | 1 | 6 | 0 |
+| New (Phase 19) | 9 | 1 | 8 | 0 |
 
-Every Critical and High row is `closed` or `residual`. H-9 is closed against Phase 14's amended criterion, not against the review's symptom. The owner accepted the five High residuals in writing on 2026-11-16 ([phase-19-closure.md](../phase-19-closure.md) Deviation Log, `ea771d0131`). The nine former open rows with no Phase 19 step are owner-accepted residuals, handed back to the portfolio. No row is `open`. § For owner closure lists the eleven residuals still needing written acceptance, plus H-9 for acknowledgement.
+Every Critical and High row is `closed` or `residual`. H-9 is closed against Phase 14's amended criterion, not against the review's symptom. The owner accepted the five High residuals in writing on 2026-11-16 ([phase-19-closure.md](../phase-19-closure.md) Deviation Log, `ea771d0131`). The nine former open rows with no Phase 19 step are owner-accepted residuals, handed back to the portfolio. No row is `open`. § For owner closure lists the thirteen residuals still needing written acceptance, plus H-9 for acknowledgement.
 
 ## Critical
 
@@ -176,6 +176,18 @@ Taken from the evidence reports' residual sections. "Today" is this step's check
 | P14 §6 | Old HAL-trait text in `docs/specs/00-context.md`, `05-application.md`, `docs/code-standards.md` | fixed: `00-context.md` and `code-standards.md` no longer name the deleted traits, and Spec 05 states `ViHypervisor` was deleted (`bb74b7a810`; `05-application.md:448`). Line 486 keeps it only in the historical phase list |
 | All | Evidence ceiling: host and QEMU (TCG, KVM); no physical hardware | plan scope |
 
+## Closing lane run
+
+Each failure below also fails on `1d13abd68e`, before Phase 18, so none is a regression from this plan.
+
+| Lane | Failure | Disposition |
+|---|---|---|
+| `shellutils` | `build-shell-test-ci.sh` still checked for `SFN SHELL`, which no longer exists after the cellbox rename (`e053cdca62`). | fixed by a script change (P19Diag; SHA pending) |
+| `aioracle` (riscv64, aarch64) | The oracle image was built without `--config-features ai` since `cb1d636714`. | fixed by a script change (P19Diag; SHA pending) |
+| `c2c-broker-oracle` | `oracle passed without proving interrupt-driven NET_RX completion` (`tests/integration/tests/c2c-broker-oracle.rs:376`), with `[net-bridge] NIC driver reply timeout` in the log. It fails after the input-service fix and the same way on `1d13abd68e`. | residual N-8 |
+| `bootsuite` (RV64 `gen_disk.ps1` image) | Six tests fail; see N-9. | residual N-9 |
+| `x86hvfull`, `tier3py`, `tier3e2e`, `tier3hostile` | Environment-only failures in the first closing run: the Alpine download returned HTTP 429, and the snapshot lacked `.alpine-cache-x86`. | cleared on rerun; all four pass |
+
 ## Owner decisions (2026-11-16)
 
 Recorded in [phase-19-closure.md](../phase-19-closure.md) Deviation Log (`ea771d0131`):
@@ -186,7 +198,7 @@ Recorded in [phase-19-closure.md](../phase-19-closure.md) Deviation Log (`ea771d
 
 ## New findings (Phase 19)
 
-These came from the Phase 19 allowlist re-review wave (`708b80877b`, `fef6f2ff93`, `1420ea6984`), from the N-1 fix, and from the end-to-end review (`P19ReviewE2E`; N-4 to N-7). They are not review findings; they are listed so closure does not hide them.
+These came from the Phase 19 allowlist re-review wave (`708b80877b`, `fef6f2ff93`, `1420ea6984`), from the N-1 fix, from the end-to-end review (`P19ReviewE2E`; N-4 to N-7), and from the closing lane run (N-8, N-9). They are not review findings; they are listed so closure does not hide them.
 
 | ID | Finding | Evidence | Status |
 |---|---|---|---|
@@ -196,7 +208,9 @@ These came from the Phase 19 allowlist re-review wave (`708b80877b`, `fef6f2ff93
 | N-4 | Spec 00 Law 5 (no `mod.rs`) and the Law 6 rule that `Vi` traits must support ownership transfer were never followed by code. They are now bannered "Historical" (`docs/specs/00-context.md:93,101`), and `6d4219819e` removed the `mod.rs` ban from the contributor docs. No earlier phase changed this behaviour on purpose, so under the Phase 19 rule it is a new finding, not a banner case. | end-to-end review; `docs/specs/00-context.md:93,101`; `6d4219819e` | residual; owner decision pending |
 | N-5 | `Lease::drop` is empty: the doc says it releases the lease, but the body is a comment (`libs/abi/src/fs.rs:211-213`). | end-to-end review (Spec 00 sweep); re-read at `73f0215eed` | residual; owner acceptance pending |
 | N-6 | VFS answers with a raw `VfsResponse::DataPtr { ptr, len }`, so a pointer crosses Cells (`cells/services/vfs/src/dispatch_paths.rs:20-24`). | end-to-end review (Spec 03 sweep); re-read at `73f0215eed` | residual; owner acceptance pending |
-| N-7 | On an EL2 host `switch_with_root` drops a requested private root with only a `debug_assert_eq!(root_baddr, 0)` (`hal/arch/arm/src/aarch64/context.rs:137-140`), not a hard refusal. The Silo lane does not require the "Tier 2 admission: DISABLED" marker, so nothing positively proves EL2 refuses private roots. | end-to-end review (`268db39da4`); re-read at `73f0215eed` | residual; owner acceptance pending |
+| N-7 | On an EL2 host `switch_with_root` drops a requested private root with only a `debug_assert_eq!(root_baddr, 0)` (`hal/arch/arm/src/aarch64/context.rs:137-140`), not a hard refusal. Since `1017e68b0f` the Silo lane requires kmain's "Tier 2 admission: DISABLED" line, so EL2's refusal of the Tier 2 posture is now proven by the lane (`domain_admission.rs:365`). The switch itself still has no hard refusal. | end-to-end review (`268db39da4`); `1017e68b0f`; re-read at `1017e68b0f` | residual; owner acceptance pending |
+| N-8 | `c2c-broker-oracle` fails: `oracle passed without proving interrupt-driven NET_RX completion` (`tests/integration/tests/c2c-broker-oracle.rs:376`), log shows `[net-bridge] NIC driver reply timeout`. Root cause not traced. It fails the same way on `1d13abd68e` (pre-Phase 18). | closing lane run (§ Closing lane run) | residual; owner acceptance pending |
+| N-9 | `bootsuite` (RV64 `gen_disk.ps1` image): six tests fail, all pre-existing (same on `1d13abd68e`). `http-smoke`: `/bin/http-smoke` has no network right (`kernel/src/catalog.rs:530`), and net refuses `Connect` since `8fe158478a`. `ocel-browser` and `ocel-quickjs`: reader mode is the default and disables scripts since `4994602b55` (`cells/apps/ocel/src/main.rs:206,286`). `ocel-static`: the serial shell refuses a `&` background launch since `5043e2cf59` (`cells/tools/cellbox/src/executor.rs:4276`). `window-policy`: a typed command is delivered to the focused window [INFERENCE]. `viui-managed-surface`: fixed decoration coordinates [INFERENCE]. Each needs a product or test decision. | closing lane run (§ Closing lane run) | residual; owner decision pending |
 
 ## For owner closure
 
@@ -214,5 +228,7 @@ These are recorded but have no written owner acceptance yet. Every other residua
 | N-4 | Spec 00 Laws 5 and 6 bannered "Historical" because code never followed them; needs an owner decision (keep the banner, or restore and enforce the laws). | this matrix; `docs/specs/00-context.md:93,101` |
 | N-5 | `Lease::drop` releases nothing (`libs/abi/src/fs.rs:211-213`). | this matrix |
 | N-6 | A raw `DataPtr` pointer crosses Cells in VFS replies (`cells/services/vfs/src/dispatch_paths.rs:20-24`). | this matrix |
-| N-7 | The EL2 private-root drop is a `debug_assert`, not a hard refusal (`hal/arch/arm/src/aarch64/context.rs:137-140`). | this matrix |
+| N-7 | The EL2 private-root drop is a `debug_assert`, not a hard refusal (`hal/arch/arm/src/aarch64/context.rs:137-140`); the lane now proves the Tier 2 posture is refused at EL2 (`1017e68b0f`). | this matrix |
+| N-8 | `c2c-broker-oracle` cannot prove interrupt-driven NET_RX completion (NIC driver reply timeout); root cause untraced; pre-existing. | this matrix |
+| N-9 | Six `bootsuite` tests fail (http-smoke, ocel-browser, ocel-quickjs, ocel-static, window-policy, viui-managed-surface); each needs a product or test decision. | this matrix |
 | H-9 (acknowledge) | Closed against Phase 14's amended criterion (`phase-14-arch-seam.md:85`), not the review's one-cfg target: 692 `target_arch` lines (at the 692 ceiling) and 29 `hal::aarch64::` uses remain outside `arch/`. | this matrix, H-9 row |
