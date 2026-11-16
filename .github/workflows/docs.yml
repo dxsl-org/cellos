@@ -51,8 +51,6 @@ jobs:
           --exclude tetris-lua
           --target riscv64gc-unknown-none-elf
           -Z build-std=core,alloc
-      - name: Generate llms.txt
-        run: bash scripts/gen-llms-txt.sh
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
