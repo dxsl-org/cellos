@@ -82,6 +82,12 @@ jobs:
           python3 -m unittest scripts/test_check_spec_anchors.py
           python3 scripts/check-spec-anchors.py --check
 
+      # docs/generated/arch-status.md is read from kernel cfgs, lanes.toml,
+      # workflows and boards; a stale table or a probe that no longer matches
+      # its source fails here (Phase 19).
+      - name: Check generated per-architecture status
+        run: python3 scripts/generate-arch-status.py --check
+
       # A plan or phase may not claim `status: complete` while its success
       # criteria / todo checkboxes are unchecked (architecture review C-2).
       # Plans created before 261110-1703 are reported, not enforced.
