@@ -1,28 +1,49 @@
 # Cellos Architecture: Runtime & SDK
-**Version**: 0.3 (Zero-Copy Inter-Cell Communication)
+**Version**: 0.4 (kernel-mediated IPC)
 **Status**: Definitive
+**Amended 2026-11-16** (architecture remediation Phase 19): §1, §2, §4 và §5 được sửa cho khớp code.
 
 ---
 
-## 1. IPC: Direct Method Calls
-Trong Cellos, khái niệm IPC truyền thống bị loại bỏ. Mọi tương tác giữa các Cell là **gọi hàm trực tiếp (Direct Call)** thông qua Rust Traits.
+## 1. IPC: kernel-mediated message passing
+Giữa các Cell không có lời gọi hàm trực tiếp qua Rust Trait. Cell Tier 1 có VA slot riêng
+trong SAS, Cell Tier 2 có page table riêng ([Spec 18](18-cell-trust-tiers.md) §2), và mọi tương
+tác giữa các Cell là **message passing qua kernel**. Hợp đồng chuẩn
+là [Spec 17](17-ipc-wire-contract.md) §1 (amendment Phase 11, 2026-11-12):
 
-* **Performance**: Chi phí tương đương một lời gọi hàm ảo (~2-3 chu kỳ CPU).
-* **Interface**: Định nghĩa trong crate `libs/abi` (ABI kernel) và `libs/wire` (hợp đồng dịch vụ). Sử dụng `#[repr(C)]` cho các cấu trúc dữ liệu ở biên giới (Boundaries) để đảm bảo **Stable ABI**.
-* **Data Flow**: Mặc định là **Zero-copy**. Dữ liệu được truyền dưới dạng tham chiếu (`&T`) hoặc quyền sở hữu (`Box<T>`).
+* **Request/reply** là một exact operation: caller `IpcSubmit` rồi chờ đúng terminal của
+  operation đó (`IpcWait`/`WaitCompletion(IPC)` → `IpcTake`); provider trả lời bằng `IpcReply`.
+  SDK: `ostd::ipc::call_bytes`, `service_call*_bounded`, `ServiceRef::call`
+  (`libs/ostd/src/ipc.rs`, `libs/ostd/src/call_outcome.rs`).
+* **Event** là một post vào mailbox có giới hạn của đích (`ostd::ipc::post`, `SendGather`);
+  mailbox đầy thì trả `Busy`, không bao giờ park.
+* **Interface**: số syscall và kiểu ABI ở `libs/abi` (`libs/abi/src/syscall.rs`); hợp đồng
+  dịch vụ (byte-0 discriminant, postcard message) ở `libs/wire` (`libs/wire/src/proto/`).
+* **Data flow**: byte request và reply được kernel copy (`kernel/src/task/syscall/ipc.rs`).
+  Dữ liệu lớn đi qua grant (`libs/ostd/src/grant.rs`): trong SAS là trang identity-mapped USER;
+  với Tier-2 domain, grant được map tường minh vào page table của bên nhận
+  ([Spec 17](17-ipc-wire-contract.md) §12). Không có tham chiếu Rust (`&T`, `Box<T>`) nào đi qua
+  ranh giới Cell. Ngoại lệ đã biết là con trỏ thô `VfsResponse::DataPtr` mà `GetFile` trả cho
+  Cell Tier 1 cùng SAS (`cells/services/vfs/src/dispatch_paths.rs:20-24`).
 
 ## 2. Async/Await & Safety (Owned Buffers)
-Cellos tận dụng triệt để mô hình lập trình bất đồng bộ của Rust để tối ưu I/O.
+Cellos dùng mô hình bất đồng bộ của Rust **bên trong** một Cell (`ostd::executor`). Giữa các
+Cell, bộ nhớ chỉ được chia sẻ qua grant, nên quy tắc dưới đây áp dụng cho grant.
 
 ### Quy tắc "Owned Buffers ONLY"
 Để ngăn chặn lỗi ghi đè bộ nhớ khi một Cell bị unload đột ngột:
-* **Quy tắc**: Cấm truyền `&mut [u8]` qua ranh giới Async giữa các Cell.
-* **Giải pháp**: Phải truyền `Box<[u8]>` hoặc `Vec<u8>`. Quyền sở hữu (Ownership) được chuyển giao hoàn toàn cho Driver.
+* **Quy tắc**: Một buffer mà thao tác async (DMA, ISR, service khác) còn ghi vào phải thuộc về
+  một grant có chủ, không phải một tham chiếu mượn.
+* **Giải pháp**: SDK trao quyền sở hữu buffer (`Box<[u8]>`/`Vec<u8>`, hoặc `GrantHandle`) cho
+  thao tác và nhận lại khi thao tác kết thúc.
 
 ### Async Pinning Registry (Lá chắn Unload)
 * **Cơ chế**: Khi một vùng nhớ tham gia Async/DMA, pin registry ghi owner, range và
-  lifecycle; quarantine ngăn reclaim trước khi cancellation/unpin hoàn tất.
-* **Bảo vệ**: Kernel sẽ từ chối lệnh `unload` của Cell sở hữu ban đầu cho đến khi tác vụ Async hoàn tất và quyền sở hữu được trả về hoặc giải phóng.
+  lifecycle (`kernel/src/memory/pin.rs`).
+* **Bảo vệ**: Kernel không bao giờ trì hoãn cái chết của Cell. Khi vùng còn bị pin,
+  `GrantFree`/`GrantUnregister` bị từ chối; nếu chủ chết, frame của vùng bị quarantine
+  (`Quarantined(Pinned)`, vẫn mapped) cho tới khi driver xác nhận (`pin::acknowledge`), không bao
+  giờ theo timer (`kernel/src/memory/pin.rs:1-35`; [Spec 02](02-memory.md) §3).
 
 ## 3. Hot-Swap & State Transfer
 Một Cell dịch vụ đang chạy có thể được thay bằng một bản mới cùng service id. Việc này do
@@ -53,10 +74,12 @@ cấp các primitive (pause, freeze, `SpawnReplacement`, state stash, `CommitHot
 
 ## 4. Boot Optimization (Snapshot)
 
-> **Trạng thái (2026-09-28)**: warm boot qua snapshot **chưa được bật trên bất kỳ ảnh nào**.
-> Cổng qualify là một feature build, `QUALIFICATION_ENABLED = cfg!(feature = "snapshot-qualified")`,
-> mặc định tắt trong mọi ảnh shipping: capture và restore đều từ chối trước khi chạm đĩa hoặc
-> RAM, và builtin `snapshot` của shell từ chối trước khi chạm Supervisor (`snapshot: not available from the suite shell, requires a lifecycle owner`).
+> **Trạng thái (2026-09-28; sửa 2026-11-16)**: warm boot qua snapshot **chưa được bật trên bất kỳ ảnh nào**.
+> Cổng qualify là feature build `snapshot-qualified`, tắt trong mọi ảnh shipping. Từ Phase 09
+> (2026-11-11), kernel không có feature này không biên dịch engine (`kernel/src/snapshot_engine.rs`)
+> mà dùng `kernel/src/snapshot_disabled.rs` (`kernel/src/main.rs:88-99`): không giữ vùng scratch
+> lúc boot, capture trả `SnapshotError::GateClosed`, boot không bao giờ restore và xoá header một ảnh
+> cũ để lại. Builtin `snapshot` của shell từ chối trước khi chạm Supervisor (`snapshot: not available from the suite shell, requires a lifecycle owner`).
 > **Chưa có phép đo warm-boot nào và chưa có witness trên board** — con số `<100 ms` trước đây
 > không có witness đứng sau. Định dạng v2 ở §4.3 là hợp đồng **nội bộ** đã có code + unit test
 > (nửa thiết bị-độc-lập của phase 07), không phải một tuyên bố sẵn sàng.
@@ -171,6 +194,10 @@ không thuộc run nào thì không có trong ảnh — reader replay đúng `ru
 - [ ] Witness thật `save → reset → restore → resume` trên board có block device, kèm loại trừ transport MMC
 - [ ] Phép đo warm boot trên đúng thiết bị — không con số nào được claim trước khi đo
 
-## 5. Tooling: `ostd` & `cargo-Cellos`
-* **`ostd`**: Thư viện chuẩn thay thế `std`, cung cấp các interface cho Allocator, Async Runtime và Logging.
-* **Multi-Arch Build**: `cargo-Cellos` hỗ trợ biên dịch song song cho nhiều Target (RV32, RV64) từ cùng một mã nguồn thông qua cơ chế `hal/core`.
+## 5. Tooling: `ostd` & build
+* **`ostd`**: Thư viện chuẩn thay thế `std` trong Cell, cung cấp allocator (`heap`), async
+  executor (`executor`), IPC/grant và client dịch vụ (`libs/ostd/src/`).
+* **Multi-Arch Build**: Không có subcommand `cargo-Cellos`. Kernel và Cell được build bằng cargo
+  với `--target` cho từng kiến trúc; kiến trúc nào có module kernel, target toolchain và lane là
+  bảng sinh tự động [`docs/generated/arch-status.md`](../generated/arch-status.md). Code 32-bit
+  (RV32) nằm ở `kernel/src/arch/legacy` và không được build.

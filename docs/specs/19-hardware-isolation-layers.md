@@ -2,7 +2,9 @@
 
 > **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12; amended 2026-09-22 by the
 > measured per-request scale review (§3); amended 2026-11-15 by architecture remediation
-> Phase 16 (x86_64 shootdown, Layer B implemented). Layers A and B carry implementation
+> Phase 16 (x86_64 shootdown, Layer B implemented); amended 2026-11-16 by Phase 19
+> (per-architecture status moved to [`docs/generated/arch-status.md`](../generated/arch-status.md),
+> stale code citations fixed). Layers A and B carry implementation
 > and test anchors in §2; per-domain page tables are the Tier-2 mechanism of Spec 18,
 > built under Spec 22, the required pre-implementation design gate. This is the
 > "layer2_hw_security" document that Spec 16 §8 reserved.
@@ -73,16 +75,18 @@ acknowledge makes the lowering fail closed and the frames of the refused spawn q
 never a panic (fixture `S22-X86-QUARANTINE-SILENT-CPU`, QEMU TCG and KVM); AArch64 already emits
 `dsb ishst; tlbi vaae1is; [vae2is when EL2]; dsb ish; isb`, but the repo still lacks a two-PE
 runtime witness, so this document does not mark D7 complete;
-and bare-physical targets (riscv32 Nano) have no page tables, so `wx::enforce` logs the
-gap instead of enforcing.
+and the 32-bit legacy targets (riscv32, x86, arm) have no page tables: their `wx::enforce` only
+logs the gap (`kernel/src/loader/wx.rs:213-227`), and they do not build at all
+([arch-status](../generated/arch-status.md)).
 
 ### Layer B — Per-domain page tables (Tier-2 mechanism)
 
 Anchor: impl kernel/src/memory/address_space.rs::AddressSpace · impl kernel/src/memory/frame_run.rs::FrameRun · test kernel/src/memory/frame_run_tests.rs::a_private_tag_wait_holds_its_frames_and_slot_until_its_epochs
 
-> **Status**: Accepted; implemented behind the `native-domains` feature on RV64, x86_64
-> (production) and AArch64 test images. Spec 22 records the gate, its evidence and what
-> stays closed (AArch64 production admission and domain grants, warm snapshot).
+> **Status**: Accepted; implemented behind the `native-domains` feature. Which architectures
+> admit Tier-2 domains and run the private-root grant lifecycle is the generated
+> [arch-status](../generated/arch-status.md) table. Spec 22 records the gate, its evidence and
+> what stays closed (warm snapshot, and the architectures the table does not mark).
 
 Classic SASOS design (Opal, Nemesis): one address-space *layout*, several protection
 *domains*. A domain gets its own root table mapping the same VA→PA as the SAS view,
@@ -189,7 +193,7 @@ to remain per cell. The current large-app profile and 64-cell default do not cha
 > this section:
 > - **Cell VA stride is fixed at 32 MiB** (`CELL_VA_STRIDE`, `kernel/src/loader/va_alloc.rs:47`).
 >   It bounds a cell's private code + data + heap; bulk data must travel through grants
->   (identity-mapped, ≤ 4096 pages = 16 MiB per grant, `kernel/src/task/syscall.rs:150-151`) or
+>   (identity-mapped, ≤ 4096 pages = 16 MiB per grant, `MAX_GRANT_PAGES`, `kernel/src/task/syscall/grant.rs:159`) or
 >   VFS. A variable VA budget is a named prerequisite of this profile.
 > - **Slot accounting is profile-blind.** `MAX_CELLS = 64` (`kernel/src/memory/cell_quota.rs:15`)
 >   and `MAX_SLOTS = 512` give a heavy cell exactly one slot, so any N-gate measurement for the
@@ -197,7 +201,7 @@ to remain per cell. The current large-app profile and 64-cell default do not cha
 >   does not describe a deployment.
 > - **A churn class cannot be supervised by `init`.** `init`'s child table is static
 >   (`service_table::configured()`) with per-service restart intensity, and `NotifyOnExit`
->   requires `SpawnCap` (`kernel/src/task/syscall.rs:3829-3855`); a high-churn class needs a
+>   requires `SpawnCap` (`kernel/src/task/syscall/spawn.rs:685-690`); a high-churn class needs a
 >   userspace supervisor with its own rate limiting.
 > - **Isolation of a light cell.** LBI covers trusted first-party handlers only; a light cell
 >   handling untrusted input MUST be a Tier-2 domain (Spec 22), so mixed deployment of untrusted

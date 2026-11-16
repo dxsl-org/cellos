@@ -114,8 +114,9 @@ syscall). This assumption is **load-bearing** and must be stated wherever "LBI
 isolates Cells" is claimed — the claim holds for safe Rust Cells, not for FFI code.
 
 **Requirement (G2 / untrusted third-party):** before FFI code (or any native
-Cell) may run **untrusted**, it must execute in Tier 2 once native domains exist;
-today it belongs in a Tier 3 VM. The MMIO window must be gated in hardware per-domain:
+Cell) may run **untrusted**, it must execute in Tier 2 (Spec 22) or a Tier 3 VM. A Tier-2
+domain cannot hold MMIO, DMA or device authority (`loader/domain_admission.rs::unenforceable_authority`),
+so an untrusted *driver* still belongs in a Tier 3 VM. The MMIO window must be gated in hardware per-domain:
 - **RISC-V**: Spec 19 Layer B page-table domains are the implementable S-mode wall.
   PMP/Smepmp would require a separately approved M-mode firmware owner; the current
   runtime cannot program PMP or reconfigure it on a cell switch.
@@ -237,14 +238,14 @@ remaining bootstrap RAM image, not a device driver.
 
 **Remaining genuine exceptions (tech debt — G2).** The authoritative list, with each
 target, is the `exception` rows of [`kernel/residents.toml`](../../kernel/residents.toml)
-(§2.5); the device ones as of 2026-11-11:
+(§2.5); the device ones as of 2026-11-16 (paths after the Phase 14 `arch/` move):
 
 | Driver | Migration target |
 |--------|-----------------|
-| `kernel/src/dev/mmc.rs` + `dev/mmc/`, `dev/bcm_pinmux.rs` | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
-| `kernel/src/dev/pcie_ecam.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
-| `kernel/src/dev/ps2_keyboard.rs` | input Driver Cell |
-| `kernel/src/dev/fb_console.rs`, `dev/fb_font.rs` (in-kernel text console) | GPU Cell + compositor |
+| `kernel/src/dev/mmc.rs` + `dev/mmc/`, `arch/aarch64/dev/bcm_pinmux.rs`, `arch/aarch64/dev/mmc/pinmux_bcm.rs` | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
+| `kernel/src/dev/pcie_ecam.rs`, `arch/x86_64/dev/pcie_ecam.rs`, `acpi/mcfg.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
+| `kernel/src/arch/x86_64/dev/ps2_keyboard.rs` | input Driver Cell |
+| `kernel/src/arch/x86_64/dev/fb_console.rs`, `arch/x86_64/dev/fb_font.rs` (in-kernel text console) | GPU Cell + compositor |
 | `kernel/src/dev/input_irq_ack.rs`, `dev/virtio_hal.rs` | input Driver Cell acknowledges its own IRQ |
 | `kernel/src/dev/block.rs` (null block device) | removed once the boot-time readers use a block route |
 

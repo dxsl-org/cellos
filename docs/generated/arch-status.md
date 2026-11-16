@@ -5,12 +5,12 @@ Each cell is read from the tree by a probe named in [Sources](#sources); the spe
 reference this table instead of restating per-architecture status. `--check` fails
 when this file no longer matches the tree.
 
-| Architecture | Kernel arch module | 64-bit set (`cellos_wide`) | Tier-2 admission (`switch_ordering_qualified`) | Private-root domain grants (`cellos_domain_grants`) | Tier-3 hypervisor module | `MAX_HARTS` | Toolchain target | Workflow lines naming the target | Lane rows pr / nightly / manual | Board descriptors |
-|---|---|---|---|---|---|---|---|---|---|---|
-| x86_64 | `kernel/src/arch/x86_64/` (56 files) under `target_arch = "x86_64"` | yes | yes | with `native-domains` | yes | 64 | `x86_64-unknown-none` | ci.yml 23, perf.yml 1 | 29 / 1 / 25 | `x86_64-pc`, `qemu-q35-x86_64`, `x86_64-vm` |
-| riscv64 | `kernel/src/arch/riscv64/` (43 files) under `target_arch = "riscv64"` | yes | yes | with `native-domains` | no | 2 | `riscv64gc-unknown-none-elf` | ci.yml 8, docs.yml 2, perf.yml 5, release.yml 4 | 21 / 0 / 64 (incl. 83 `default`) | `milk-v-pioneer`, `qemu-virt-riscv64`, `starfive-visionfive-2` |
-| aarch64 | `kernel/src/arch/aarch64/` (26 files) under `target_arch = "aarch64"` | yes | only with `test-hooks` | with `native-domains` and `test-hooks` | yes | 32 | `aarch64-unknown-none-softfloat` | ci.yml 20 | 1 / 0 / 8 | `macmini-m1`, `macmini-m2`, `qemu-virt-aarch64`, `raspberry-pi-3-model-b`, `raspberry-pi-4-model-b`, `aarch64-vm` |
-| 32-bit legacy | `kernel/src/arch/legacy/` (19 files) under `not(cellos_wide)` | no | no (not in the 64-bit set) | no (not in the 64-bit set) | no | 2 | none | 0 | 0 / 0 / 0 | none; directories without a descriptor: `qemu/q35-x86_32`, `qemu/virt-aarch32`, `qemu/virt-riscv32` |
+| Architecture | Kernel arch module | 64-bit set (`cellos_wide`) | Tier-2 admission (`switch_ordering_qualified`) | Private-root domain grants (`cellos_domain_grants`) | Tier-3 hypervisor module | `MAX_HARTS` | Kernel RAM alias (`phys_to_virt`) | Toolchain target | Workflow lines naming the target | Lane rows pr / nightly / manual | Board descriptors |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| x86_64 | `kernel/src/arch/x86_64/` (56 files) under `target_arch = "x86_64"` | yes | yes | with `native-domains` | yes | 64 | HHDM (PA + offset) | `x86_64-unknown-none` | ci.yml 23, perf.yml 1 | 29 / 1 / 25 | `x86_64-pc`, `qemu-q35-x86_64`, `x86_64-vm` |
+| riscv64 | `kernel/src/arch/riscv64/` (43 files) under `target_arch = "riscv64"` | yes | yes | with `native-domains` | no | 2 | identity (VA = PA) | `riscv64gc-unknown-none-elf` | ci.yml 8, docs.yml 2, perf.yml 5, release.yml 4 | 21 / 0 / 64 (incl. 83 `default`) | `milk-v-pioneer`, `qemu-virt-riscv64`, `starfive-visionfive-2` |
+| aarch64 | `kernel/src/arch/aarch64/` (26 files) under `target_arch = "aarch64"` | yes | only with `test-hooks` | with `native-domains` and `test-hooks` | yes | 32 | identity (VA = PA) | `aarch64-unknown-none-softfloat` | ci.yml 20 | 1 / 0 / 8 | `macmini-m1`, `macmini-m2`, `qemu-virt-aarch64`, `raspberry-pi-3-model-b`, `raspberry-pi-4-model-b`, `aarch64-vm` |
+| 32-bit legacy | `kernel/src/arch/legacy/` (19 files) under `not(cellos_wide)` | no | no (not in the 64-bit set) | no (not in the 64-bit set) | no | 2 | — | none | 0 | 0 / 0 / 0 | none; directories without a descriptor: `qemu/q35-x86_32`, `qemu/virt-aarch32`, `qemu/virt-riscv32` |
 
 Reading the table:
 
@@ -28,6 +28,7 @@ Reading the table:
 | Domain grants | `kernel/src/posture.rs::domain_grants` |
 | Tier-3 hypervisor module | `kernel/src/arch/<arch>/hypervisor/` exists |
 | `MAX_HARTS` | `kernel/src/sched/smp.rs::MAX_HARTS` |
+| Kernel RAM alias | `hal::paging::phys_to_virt` in each arch's HAL paging file (returns `phys`: identity; adds an offset: HHDM) |
 | Toolchain target | `rust-toolchain.toml` `targets` |
 | Workflow lines | `.github/workflows/*.yml` lines naming the kernel target |
 | Lane rows | `scripts/lanes.toml` `arch` and `tier` |

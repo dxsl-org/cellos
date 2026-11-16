@@ -5,6 +5,9 @@
 > 2026-08-19 by ADR 0003. Supersedes the WASM runtime tier wherever older documents mention it.
 > Tier 2 Paged Domain Engine is shipped and verified on 2026-09-06 (ADR-0015 Phase 02) via
 > negative hardware page-fault test (`tests/integration/tests/tier2_fault_isolation.rs`).
+> Amended 2026-11-16 (architecture remediation Phase 19): §2 admission truth and §4
+> consequences corrected to the code; per-architecture status is the generated table
+> [`docs/generated/arch-status.md`](../generated/arch-status.md).
 
 ## 1. Context
 
@@ -50,8 +53,8 @@ and `PROTECTION_CLASS_FFI`), while signed Safe Rust cells execute in Tier 1 SAS.
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
 | **1 — Trusted SAS cell** | SAS shipped; mandatory signing in Phase 01 ([ADR-0015](../decisions/0015-dual-mode-hybrid-architecture.md)) | 100% Safe Rust cells (`no_std` and in-tree pure-Rust `std`) + audited Driver Cells (e1000, NVMe, VirtIO with MMIO/DMA). Requires valid Ed25519 signature. | LBI: rustc `#![forbid(unsafe_code)]` + audited driver MMIO/DMA under IOMMU | Native zero-cost SAS boundary; no TLB flush | Zero-trap SPSC Ring Buffer / Zero-copy grants |
-| **2 — Native domain cell** | **Shipped (2026-09-06, ADR-0015 Phase 02)** — verified via negative hardware Page Fault containment test | All unsigned binaries (including unsigned Rust), all C/C++/Zig FFI profiles, Doom, Tetris-C, and Lua runtime | Hardware: private page-table (`satp`/`CR3`/`TTBR0`) — other cells' and kernel pages unmapped/NX | Native inside domain; ASID-tagged switch | Kernel-copied messages; `validate_user_buf` |
-| **3 — VM guest** | ARM64 & x86 QEMU lanes shipped | Whole legacy stacks, normally Linux guests (Alpine, Nginx, ROS2) | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
+| **2 — Native domain cell** | **Shipped (2026-09-06, ADR-0015 Phase 02)** — verified via negative hardware Page Fault containment test; per-arch admission in [arch-status](../generated/arch-status.md) | All unsigned binaries (including unsigned Rust), all C/C++/Zig FFI profiles, Doom, Tetris-C, and Lua runtime | Hardware: private page-table (`satp`/`CR3`/`TTBR0`) — other cells' and kernel pages unmapped/NX | Native inside domain; ASID-tagged switch | Kernel-copied messages; `validate_user_buf` |
+| **3 — VM guest** | Shipped where the arch has a hypervisor module ([arch-status](../generated/arch-status.md), Tier-3 column) | Whole legacy stacks, normally Linux guests (Alpine, Nginx, ROS2) | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
 
 Profiles under the Dual-Mode Hybrid Architecture (ADR-0015):
 
@@ -84,10 +87,13 @@ a page-table switch per cell would destroy zero-copy IPC and the SAS economy. Ti
 that exact cost on purpose, and only for cells that have not been verified — which is why the
 two decisions coexist rather than contradict.
 
-Target invariant: **there is no unverified native code inside the shared SAS view in a
-fleet-secure build.** Current G1/dev builds do not enforce this invariant: when
-`signing-required` is off, an ELF with no `__ViCell_sig` section is admitted to the SAS.
-This is a development posture, not a sandbox for hostile native code.
+Invariant: **an unsigned native ELF loaded through the governed spawn never runs inside the
+shared SAS view.** The governed spawn denies it in the release posture and otherwise routes it
+to Tier 2 (`kernel/src/loader/governed_spawn.rs:102-119`, `kernel/src/signing.rs:90-95`). Where
+the boot leaves Tier-2 admission disabled (fleet profiles, AArch64 without `test-hooks`), a
+domain-class artifact is denied rather than admitted elsewhere (`kernel/src/main.rs:414-447`;
+Spec 22 §4). The one exception is `init`: it is embedded in the kernel image and published as
+trusted with a digest, not a signature (`kernel/src/loader/governed_spawn.rs:333-345`).
 
 ### 2.1 Tier 1 admission — `cellos-sign`
 
@@ -103,8 +109,13 @@ artifact. `18b-cell-admission-consent-adr.md` separates them:
   signature embedded in the ELF.
 
 Admission is `A ∧ B`: the owner's record may withhold Tier 1 from a validly signed
-binary and can never grant Tier 1 without one. Neither the owner anchor nor the
-admission store is implemented; §2.1 as written below describes Claim A only.
+binary and can never grant Tier 1 without one. The owner anchor
+(`CELLOS_RELEASE_OWNER_PUBLIC_KEY`, provisioned at build time by `kernel/build.rs`) and the
+gate (`admission::evaluate_owner_admission`, `kernel/src/admission/gate.rs:93`, called by every
+governed spawn) exist. Dev and test kernels are permissive; a release kernel refuses every
+spawn until a qualified backend installs an admitted A/B slot, and
+`OwnerAdmissionRegistry::update` has no production caller yet (`kernel/src/admission/mod.rs:1-7`).
+§2.1 as written below describes Claim A only.
 
 In a controlled fleet pipeline, the platform signature is intended to mean **"approved
 by a pipeline that enforced F1/F5"**. The normal `cellos-sign` route refuses to sign
@@ -192,30 +203,32 @@ item; not a prerequisite for anything above.
 
 ## 4. Consequences
 
-- The future kernel loader gains a tier decision point: an artifact approved by the
-  fleet pipeline may use the SAS; an unapproved/unsigned artifact uses a domain mapping
-  once Spec 19 Layer B exists. Today there is no domain branch: default builds admit an
-  absent signature to the SAS, while `signing-required` builds refuse it.
+- The kernel loader has a tier decision point: the governed spawn verifies the signature and
+  reads the manifest class (`kernel/src/loader/governed_spawn.rs`), and
+  `task::launch::publish_prepared` admits a domain-class artifact into a private root through
+  `domain_admission::admit_for_launch` or denies it with no SAS fallback (Spec 22 §4). Default
+  (development) builds route an absent signature to Tier 2; release builds deny it.
 - A production profile must provision the kernel's immutable cell-signing public key,
   enable `signing-required` and `policy-required`, remove dev-key/weak-RNG features, bind
   checked source to the signed artifact, and test unsigned, stripped, wrong-key,
-  dev-key, tampered, and unchecked-dev-signed negative cases. Provisioning that key
-  requires the anchors to become boot-provisioned data rather than the `const` values in
-  `kernel/src/signing.rs` and `kernel/src/policy.rs` — the blocking prerequisite named in
-  `18b-cell-admission-consent-adr.md`.
+  dev-key, tampered, and unchecked-dev-signed negative cases. The `release-posture` feature
+  selects that set, and the build refuses any dev, test, recovery or fixture feature beside it
+  (`kernel/src/posture.rs`). Its three trust anchors come from provisioned key files at build
+  time (`CELLOS_RELEASE_{CELL,POLICY,OWNER}_PUBLIC_KEY`, `kernel/build.rs:115-175`), so they are
+  compiled into the image, not boot-provisioned data.
 - Owner consent is a separate mechanism from fleet policy. `/POLICY.BIN` is verified
   against the fleet root key, so it expresses the *operator's* capability ceiling, not the
   machine owner's admission decision; see `18b-cell-admission-consent-adr.md` §4.
-- An installer must not offer a Tier-1/Tier-2 choice until Spec 19 Layer B exists. Before
-  then the Tier-2 option would describe containment the kernel cannot provide, and the
-  code would land in the shared SAS regardless.
+- Spec 19 Layer B exists on the architectures the generated
+  [arch-status](../generated/arch-status.md) table marks for Tier-2 admission. No installer
+  exists; when one does, `18b-cell-admission-consent-adr.md` §5 governs its Tier-1/Tier-2 choice.
 - Secure boot remains required to anchor the kernel and its embedded trust key.
 - `GrantShare` to/from a Tier-2 cell maps the grant into the domain's table explicitly;
   `DataPtr`-style raw pointers (`GetFile`) are unrepresentable across the tier boundary
   — consistent with their planned removal (midori-lessons phase 06).
-- Scheduler context-switch path becomes tier-aware (`satp` swap only when crossing
-  domains; SAS→SAS switches stay as cheap as today).
-- Spec 02 (memory) and Spec 17 (IPC wire contract) need addenda when Tier 2 lands.
+- The scheduler's context-switch path is tier-aware: `sched::domain_switch::RootDecision`
+  writes a root only when crossing domains; SAS→SAS switches keep the no-root-write path.
+- Spec 02 §6 and Spec 17 §12 carry the Tier-2 memory and IPC addenda.
 - WASM crates are still present in the workspace. Their retain-vs-remove disposition and
   Tier-2/runtime qualification remain unresolved; do not describe removal as landed.
 

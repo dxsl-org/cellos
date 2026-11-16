@@ -92,10 +92,11 @@ mitigation in SAS.
 Rust's lifetime rules, combined with the `async` borrow checker, ensure no reference
 escapes the scope of its owner across `.await` yield points.
 
-**Why load-bearing**: See **Law 2** (Owned Buffers for Async). Cellos IPC passes owned
-`Box<[u8]>` across cell boundaries for async paths precisely because a borrowed `&[u8]`
-would violate this guarantee if the owning future were dropped before the async IPC
-completes.
+**Why load-bearing**: See **Law 2** (Owned Buffers for Async). Within a Cell, an async
+operation owns its buffer (`Box<[u8]>`, `GrantHandle`) because a borrowed `&[u8]` would
+violate this guarantee if the owning future were dropped before the operation completes.
+Across cells no Rust reference or `Box` moves at all: IPC bytes are kernel-copied and bulk
+data moves through grants under a kernel lease (Spec 03 §1–§2, amended 2026-11-16).
 
 ---
 

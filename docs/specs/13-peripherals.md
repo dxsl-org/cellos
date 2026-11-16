@@ -225,13 +225,13 @@ pub enum PeriphResponse { Ok, Level(bool), Data(Box<[u8]>), Err(ViError) }
 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
 5. ✅ ELF-manifest cap gating (gpio/uart).
 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
-7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest cap; pins 0=SCL/1=SDA.
-8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap; pins 2=MOSI/3=MISO/4=SCK/5=CS; Mode 0 MSB-first.
+7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/demos/sensor-demo`) — gated by `gpio` manifest cap; pins 0=SCL/1=SDA.
+8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/demos/spi-demo`) — gated by `gpio` manifest cap; pins 2=MOSI/3=MISO/4=SCK/5=CS; Mode 0 MSB-first.
    - QEMU note: MISO floats → `transfer()` reads 0x00 (expected); `write()` fully validates TX path.
 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
-10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest cap; channel N = pin N; counter-based tick(); sweeps duty 0→100% on pin 6.
-11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-wave ramp with optional deterministic noise; 3 channels, 5 iterations.
-12. ✅ **CAN loopback** (`hal/traits/can`, `cells/drivers/can-loopback`, `cells/apps/can-demo`) — no MMIO, no cap; fixed 32-frame ring buffer; `CanFrame` (11/29-bit); validates round-trip TX→RX of 5 frames at 500 kbps.
+10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/demos/pwm-demo`) — gated by `gpio` manifest cap; channel N = pin N; counter-based tick(); sweeps duty 0→100% on pin 6.
+11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/demos/adc-demo`) — no MMIO, no cap; triangle-wave ramp with optional deterministic noise; 3 channels, 5 iterations.
+12. ✅ **CAN loopback** (`hal/traits/can`, `cells/drivers/can-loopback`, `cells/demos/can-demo`) — no MMIO, no cap; fixed 32-frame ring buffer; `CanFrame` (11/29-bit); validates round-trip TX→RX of 5 frames at 500 kbps.
 13. ✅ Integration test `tests/integration/tests/periph-can-pwm-adc.rs` — asserts PWM duty + ADC ch0 + CAN RX probes.
 
 **Defer (v2+, real board)**: hardware SPI controller (PL022), hardware I2C controller (DW I2C); MMIO CAN controller (SJA1000/STM32 bxCAN); hardware ADC (SAR); SSIP-preempt; ZST cap; DTB discovery; per-pin granularity; multi-Cell shared-bus IPC broker.

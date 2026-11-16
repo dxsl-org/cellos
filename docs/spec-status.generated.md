@@ -84,51 +84,51 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/01-core.md:36` — 4. The Gatekeeper & Security
 - `docs/specs/01-core.md:42` — 5. Fault Tolerance (Terminate and Supervise)
 - `docs/specs/01-core.md:51` — 6. Lifecycle Integrity
-- `docs/specs/02-memory.md:7` — 1. Universal SAS Layout (Trait-Based)
-- `docs/specs/02-memory.md:10` — Layout Segments
-- `docs/specs/02-memory.md:18` — 2. Global Allocator & Resource Governance
-- `docs/specs/02-memory.md:21` — Quota-based Allocation (Chống "Tham")
-- `docs/specs/02-memory.md:47` — Real-Time Pool (TLSF)
-- `docs/specs/02-memory.md:53` — 3. Focused ownership authorities
-- `docs/specs/02-memory.md:81` — 3.1 Hợp đồng release của `FrameRun`
-- `docs/specs/02-memory.md:112` — 3.2 Giới hạn quarantine
-- `docs/specs/02-memory.md:121` — 4. Stack Safety (Guard Pages)
-- `docs/specs/02-memory.md:125` — 5. Protection Policy (W^X)
-- `docs/specs/02-memory.md:138` — Bảo đảm này KHÔNG bao gồm
-- `docs/specs/02-memory.md:166` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
-- `docs/specs/03-runtime.md:7` — 1. IPC: Direct Method Calls
-- `docs/specs/03-runtime.md:14` — 2. Async/Await & Safety (Owned Buffers)
-- `docs/specs/03-runtime.md:17` — Quy tắc "Owned Buffers ONLY"
-- `docs/specs/03-runtime.md:22` — Async Pinning Registry (Lá chắn Unload)
-- `docs/specs/03-runtime.md:27` — 3. Hot-Swap & State Transfer
-- `docs/specs/03-runtime.md:54` — 4. Boot Optimization (Snapshot)
-- `docs/specs/03-runtime.md:64` — 4.1 Mục tiêu
-- `docs/specs/03-runtime.md:70` — 4.2 Cơ chế hoạt động
-- `docs/specs/03-runtime.md:96` — 4.3 Snapshot Format (internal v2)
-- `docs/specs/03-runtime.md:148` — 4.4 Ràng buộc triển khai
-- `docs/specs/03-runtime.md:160` — 4.5 Prerequisites trước khi bật
-- `docs/specs/03-runtime.md:174` — 5. Tooling: `ostd` & `cargo-Cellos`
+- `docs/specs/02-memory.md:9` — 1. SAS Layout
+- `docs/specs/02-memory.md:13` — Layout Segments (kernel 64-bit)
+- `docs/specs/02-memory.md:24` — 2. Global Allocator & Resource Governance
+- `docs/specs/02-memory.md:27` — Quota-based Allocation (Chống "Tham")
+- `docs/specs/02-memory.md:53` — Real-Time Pool (TLSF)
+- `docs/specs/02-memory.md:59` — 3. Focused ownership authorities
+- `docs/specs/02-memory.md:87` — 3.1 Hợp đồng release của `FrameRun`
+- `docs/specs/02-memory.md:118` — 3.2 Giới hạn quarantine
+- `docs/specs/02-memory.md:127` — 4. Stack Safety (Guard Pages)
+- `docs/specs/02-memory.md:131` — 5. Protection Policy (W^X)
+- `docs/specs/02-memory.md:144` — Bảo đảm này KHÔNG bao gồm
+- `docs/specs/02-memory.md:172` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
+- `docs/specs/03-runtime.md:8` — 1. IPC: kernel-mediated message passing
+- `docs/specs/03-runtime.md:29` — 2. Async/Await & Safety (Owned Buffers)
+- `docs/specs/03-runtime.md:33` — Quy tắc "Owned Buffers ONLY"
+- `docs/specs/03-runtime.md:40` — Async Pinning Registry (Lá chắn Unload)
+- `docs/specs/03-runtime.md:48` — 3. Hot-Swap & State Transfer
+- `docs/specs/03-runtime.md:75` — 4. Boot Optimization (Snapshot)
+- `docs/specs/03-runtime.md:87` — 4.1 Mục tiêu
+- `docs/specs/03-runtime.md:93` — 4.2 Cơ chế hoạt động
+- `docs/specs/03-runtime.md:119` — 4.3 Snapshot Format (internal v2)
+- `docs/specs/03-runtime.md:171` — 4.4 Ràng buộc triển khai
+- `docs/specs/03-runtime.md:183` — 4.5 Prerequisites trước khi bật
+- `docs/specs/03-runtime.md:197` — 5. Tooling: `ostd` & build
 - `docs/specs/04-hardware.md:12` — Kernel seam
 - `docs/specs/04-hardware.md:23` — HAL traits
 - `docs/specs/04-hardware.md:32` — 2. Platform HAL vs. Device Driver Cells
 - `docs/specs/04-hardware.md:36` — C Driver Integration via Tier 1 `ffi-posix` runtime profile
-- `docs/specs/04-hardware.md:41` — 3. Interrupt Model: "Async Waker Dispatch"
+- `docs/specs/04-hardware.md:41` — 3. Interrupt Model: `WaitIrq`
 - `docs/specs/04-hardware.md:46` — 4. Resource Registry (MMIO Isolation)
 - `docs/specs/04-hardware.md:51` — 5. SMP & Real-Time Affinity
-- `docs/specs/04-hardware.md:77` — 6. Hang detection
-- `docs/specs/04-hardware.md:85` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
-- `docs/specs/04-hardware.md:89` — Target platforms
-- `docs/specs/04-hardware.md:102` — G1 peripheral driver priority (cells/drivers/)
-- `docs/specs/04-hardware.md:114` — G2 server driver priority (strict order — each prerequisite for next)
-- `docs/specs/04-hardware.md:126` — x86_64 PC class driver priority (planned — no physical qualification)
-- `docs/specs/04-hardware.md:154` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
-- `docs/specs/04-hardware.md:156` — PCIe ECAM host controller
-- `docs/specs/04-hardware.md:169` — RISC-V IOMMU (non-optional before NIC)
-- `docs/specs/04-hardware.md:179` — 9. G3: NPU Driver Path
-- `docs/specs/04-hardware.md:184` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
-- `docs/specs/04-hardware.md:190` — Level B — Kernel NPU scheduler (G3)
-- `docs/specs/04-hardware.md:198` — Level B+ — SiFive X390 VCIX (second impl)
-- `docs/specs/04-hardware.md:206` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
+- `docs/specs/04-hardware.md:80` — 6. Hang detection
+- `docs/specs/04-hardware.md:88` — 7. Hardware Support Matrix — Chipsets & Drivers by Stage
+- `docs/specs/04-hardware.md:92` — Target platforms
+- `docs/specs/04-hardware.md:105` — G1 peripheral driver priority (cells/drivers/)
+- `docs/specs/04-hardware.md:117` — G2 server driver priority (strict order — each prerequisite for next)
+- `docs/specs/04-hardware.md:129` — x86_64 PC class driver priority (planned — no physical qualification)
+- `docs/specs/04-hardware.md:158` — 8. G2: PCIe ECAM + RISC-V IOMMU Strategy
+- `docs/specs/04-hardware.md:160` — PCIe ECAM host controller
+- `docs/specs/04-hardware.md:173` — RISC-V IOMMU (non-optional before NIC)
+- `docs/specs/04-hardware.md:183` — 9. G3: NPU Driver Path
+- `docs/specs/04-hardware.md:188` — Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
+- `docs/specs/04-hardware.md:194` — Level B — Kernel NPU scheduler (G3)
+- `docs/specs/04-hardware.md:202` — Level B+ — SiFive X390 VCIX (second impl)
+- `docs/specs/04-hardware.md:210` — Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
 - `docs/specs/05-application.md:7` — 1. Application tier taxonomy
 - `docs/specs/05-application.md:35` — 2. Tier 1: Trusted SAS Cells
 - `docs/specs/05-application.md:46` — 2.1 Hardware-Assisted Infrastructure Used by Tier 1 Services
@@ -155,17 +155,17 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/06-graphics.md:29` — 3. Chế độ vận hành (Profiles)
 - `docs/specs/06-graphics.md:38` — 4. UI Toolkit: ViUI (Custom, Cellos-native)
 - `docs/specs/06-graphics.md:51` — 5. Bảo mật đồ họa trong SAS
-- `docs/specs/07-networking.md:7` — 1. Triết lý: User-space Stack trong SAS
-- `docs/specs/07-networking.md:13` — 2. Các thành phần chính
-- `docs/specs/07-networking.md:22` — 3. Luồng gói tin Zero-Copy (Bảo hiểm cho SAS)
-- `docs/specs/07-networking.md:33` — 4. Socket API & ostd Integration
-- `docs/specs/07-networking.md:46` — 5. Bảo mật & Cô lập mạng
-- `docs/specs/07-networking.md:54` — 6. TLS Server Authentication (G14)
-- `docs/specs/07-networking.md:56` — 6.1 Tổng quan
-- `docs/specs/07-networking.md:59` — 6.2 Những gì được xác minh (build mặc định `tls-roots-embedded`)
-- `docs/specs/07-networking.md:65` — 6.3 Build flavors (chọn tại OS-image build time)
-- `docs/specs/07-networking.md:78` — 6.4 Xử lý kết nối thất bại
-- `docs/specs/07-networking.md:82` — 6.5 Rủi ro còn lại (đã chấp nhận)
+- `docs/specs/07-networking.md:8` — 1. Triết lý: User-space Stack trong một Service Cell
+- `docs/specs/07-networking.md:17` — 2. Các thành phần chính
+- `docs/specs/07-networking.md:28` — 3. Luồng gói tin (copy qua IPC)
+- `docs/specs/07-networking.md:40` — 4. Socket API & ostd Integration
+- `docs/specs/07-networking.md:49` — 5. Bảo mật & Cô lập mạng
+- `docs/specs/07-networking.md:62` — 6. TLS Server Authentication (G14)
+- `docs/specs/07-networking.md:64` — 6.1 Tổng quan
+- `docs/specs/07-networking.md:67` — 6.2 Những gì được xác minh (build mặc định `tls-roots-embedded`)
+- `docs/specs/07-networking.md:73` — 6.3 Build flavors (chọn tại OS-image build time)
+- `docs/specs/07-networking.md:86` — 6.4 Xử lý kết nối thất bại
+- `docs/specs/07-networking.md:90` — 6.5 Rủi ro còn lại (đã chấp nhận)
 - `docs/specs/08-power.md:7` — 1. CPU Power Governance
 - `docs/specs/08-power.md:10` — Tickless Idle (Ngủ thông minh)
 - `docs/specs/08-power.md:15` — DvFS (Governor Cell)
@@ -173,16 +173,16 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/08-power.md:31` — 3. System States & The Pointer Challenge
 - `docs/specs/08-power.md:45` — 4. Tối ưu cho Robot Nano (RV32)
 - `docs/specs/08-power.md:52` — 5. Thermal Awareness
-- `docs/specs/09-vfs.md:8` — 1. VFS Contract (The Interface)
-- `docs/specs/09-vfs.md:30` — 2. Mount-Table Layered Backends
-- `docs/specs/09-vfs.md:43` — Vai trò từng backend
-- `docs/specs/09-vfs.md:54` — Quyết định đã chốt (2026-06-10)
-- `docs/specs/09-vfs.md:61` — 2b. Directory capabilities (2026-07-31)
-- `docs/specs/09-vfs.md:108` — 2c. File handles (2026-08-09)
-- `docs/specs/09-vfs.md:135` — 3. Cơ chế Direct I/O & Zero-Copy
-- `docs/specs/09-vfs.md:144` — 4. Global Page Cache & SAS Optimization
-- `docs/specs/09-vfs.md:153` — 5. Large File Support (LFS) trên Multi-Arch
-- `docs/specs/09-vfs.md:160` — 6. Fault Isolation (Luật 4 & Panic Recovery)
+- `docs/specs/09-vfs.md:9` — 1. VFS Contract (The Interface)
+- `docs/specs/09-vfs.md:26` — 2. Mount-Table Layered Backends
+- `docs/specs/09-vfs.md:39` — Vai trò từng backend
+- `docs/specs/09-vfs.md:50` — Quyết định đã chốt (2026-06-10)
+- `docs/specs/09-vfs.md:57` — 2b. Directory capabilities (2026-07-31)
+- `docs/specs/09-vfs.md:104` — 2c. File handles (2026-08-09)
+- `docs/specs/09-vfs.md:131` — 3. Đường dữ liệu: copy và grant
+- `docs/specs/09-vfs.md:149` — 4. Page Cache
+- `docs/specs/09-vfs.md:159` — 5. Large File Support (LFS)
+- `docs/specs/09-vfs.md:165` — 6. Fault Isolation (Luật 4 & Panic Recovery)
 - `docs/specs/10-testing.md:7` — 1. Triết lý: Test trong "Nồi lẩu" SAS
 - `docs/specs/10-testing.md:10` — 2. Các tầng Testing
 - `docs/specs/10-testing.md:22` — 3. Fault Injection Cell (Kẻ phá hoại)
@@ -191,12 +191,12 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/10-testing.md:43` — Test layers
 - `docs/specs/10-testing.md:65` — Host Unit Tests
 - `docs/specs/10-testing.md:81` — Boot-time Kernel Tests
-- `docs/specs/10-testing.md:99` — QEMU Integration Tests
-- `docs/specs/10-testing.md:120` — Coverage Measurement
-- `docs/specs/10-testing.md:136` — 6. Hardware Security Tests
-- `docs/specs/10-testing.md:155` — Test locations
-- `docs/specs/10-testing.md:163` — Running Layer-2 tests
-- `docs/specs/10-testing.md:196` — Test availability and SKIP behaviour
+- `docs/specs/10-testing.md:111` — QEMU Integration Tests
+- `docs/specs/10-testing.md:132` — Coverage Measurement
+- `docs/specs/10-testing.md:148` — 6. Hardware Security Tests
+- `docs/specs/10-testing.md:167` — Test locations
+- `docs/specs/10-testing.md:175` — Running Layer-2 tests
+- `docs/specs/10-testing.md:208` — Test availability and SKIP behaviour
 - `docs/specs/12-reliability.md:14` — 1. What "Never-Die" Means — Six Independent Axes
 - `docs/specs/12-reliability.md:46` — 2. Isolation Strategy Decision (2026-06-05)
 - `docs/specs/12-reliability.md:91` — 3. Current Status — Scored per Axis
@@ -225,22 +225,22 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/15-kernel-boundary.md:44` — 1.2 What LBI Can and Cannot Eliminate
 - `docs/specs/15-kernel-boundary.md:71` — 1.3 The Confused Deputy Problem
 - `docs/specs/15-kernel-boundary.md:86` — 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
-- `docs/specs/15-kernel-boundary.md:135` — 2. Kernel Whitelist — What BELONGS in the Kernel
-- `docs/specs/15-kernel-boundary.md:137` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
-- `docs/specs/15-kernel-boundary.md:151` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
-- `docs/specs/15-kernel-boundary.md:163` — Category C: Bootstrap Chicken-and-Egg
-- `docs/specs/15-kernel-boundary.md:188` — Category D: Hardware Exclusivity Arbiter
-- `docs/specs/15-kernel-boundary.md:200` — 2.5 Resident manifest
-- `docs/specs/15-kernel-boundary.md:212` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
-- `docs/specs/15-kernel-boundary.md:217` — 3.1 Device Drivers (all of them)
-- `docs/specs/15-kernel-boundary.md:267` — 3.2 Orchestration Policy
-- `docs/specs/15-kernel-boundary.md:287` — 3.3 Platform Enumeration
-- `docs/specs/15-kernel-boundary.md:295` — 3.4 Scheduling Policy
-- `docs/specs/15-kernel-boundary.md:306` — 3.5 Test/Debug Code
-- `docs/specs/15-kernel-boundary.md:320` — 4. The Boundary Decision Test (quick reference)
-- `docs/specs/15-kernel-boundary.md:344` — 5. Kernel Size Budget
-- `docs/specs/15-kernel-boundary.md:358` — 6. Comparison Table — Where Cellos Fits
-- `docs/specs/15-kernel-boundary.md:377` — 7. References
+- `docs/specs/15-kernel-boundary.md:136` — 2. Kernel Whitelist — What BELONGS in the Kernel
+- `docs/specs/15-kernel-boundary.md:138` — Category A: Hardware-Mandated (ISA forces EL1/ring-0)
+- `docs/specs/15-kernel-boundary.md:152` — Category B: Security Root-of-Trust (LBI insufficient — see §1.2, §1.3)
+- `docs/specs/15-kernel-boundary.md:164` — Category C: Bootstrap Chicken-and-Egg
+- `docs/specs/15-kernel-boundary.md:189` — Category D: Hardware Exclusivity Arbiter
+- `docs/specs/15-kernel-boundary.md:201` — 2.5 Resident manifest
+- `docs/specs/15-kernel-boundary.md:213` — 3. Kernel Blacklist — What MUST NOT be in the Kernel
+- `docs/specs/15-kernel-boundary.md:218` — 3.1 Device Drivers (all of them)
+- `docs/specs/15-kernel-boundary.md:268` — 3.2 Orchestration Policy
+- `docs/specs/15-kernel-boundary.md:288` — 3.3 Platform Enumeration
+- `docs/specs/15-kernel-boundary.md:296` — 3.4 Scheduling Policy
+- `docs/specs/15-kernel-boundary.md:307` — 3.5 Test/Debug Code
+- `docs/specs/15-kernel-boundary.md:321` — 4. The Boundary Decision Test (quick reference)
+- `docs/specs/15-kernel-boundary.md:345` — 5. Kernel Size Budget
+- `docs/specs/15-kernel-boundary.md:359` — 6. Comparison Table — Where Cellos Fits
+- `docs/specs/15-kernel-boundary.md:378` — 7. References
 - `docs/specs/16-rustc-tcb.md:14` — 1. What "TCB" Means for Cellos
 - `docs/specs/16-rustc-tcb.md:40` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
 - `docs/specs/16-rustc-tcb.md:42` — 2.1 `#![forbid(unsafe_code)]` enforcement
@@ -248,22 +248,22 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/16-rustc-tcb.md:71` — 2.3 Type Safety (No Transmute Across Cell Boundaries)
 - `docs/specs/16-rustc-tcb.md:80` — 2.4 `Send + Sync` Enforcement (Concurrency Safety)
 - `docs/specs/16-rustc-tcb.md:90` — 2.5 Lifetime Validity (No Dangling References Across Async Await Points)
-- `docs/specs/16-rustc-tcb.md:102` — 3. What rustc Does NOT Guarantee
-- `docs/specs/16-rustc-tcb.md:107` — 3.1 Capability Revocation
-- `docs/specs/16-rustc-tcb.md:115` — 3.2 Time and Scheduling
-- `docs/specs/16-rustc-tcb.md:121` — 3.3 Side Channels (Spectre / Meltdown)
-- `docs/specs/16-rustc-tcb.md:134` — 3.4 Supply Chain / Compiler Compromise
-- `docs/specs/16-rustc-tcb.md:140` — 3.5 Trusted I/O Path
-- `docs/specs/16-rustc-tcb.md:149` — 4. TCB Component Inventory (smallest → largest)
-- `docs/specs/16-rustc-tcb.md:182` — 5. Risk Mitigations for rustc-as-TCB
-- `docs/specs/16-rustc-tcb.md:184` — 5.1 Open Source Auditability
-- `docs/specs/16-rustc-tcb.md:189` — 5.2 Ferrocene qualification lane
-- `docs/specs/16-rustc-tcb.md:209` — 5.3 miri: MIR Interpreter for Unsoundness Detection
-- `docs/specs/16-rustc-tcb.md:220` — 5.4 Reproducible Builds + Toolchain Pin
-- `docs/specs/16-rustc-tcb.md:226` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
-- `docs/specs/16-rustc-tcb.md:242` — 6. Policies Derived from This Spec
-- `docs/specs/16-rustc-tcb.md:261` — 7. Comparison with Prior Art
-- `docs/specs/16-rustc-tcb.md:277` — 8. Cross-References
+- `docs/specs/16-rustc-tcb.md:103` — 3. What rustc Does NOT Guarantee
+- `docs/specs/16-rustc-tcb.md:108` — 3.1 Capability Revocation
+- `docs/specs/16-rustc-tcb.md:116` — 3.2 Time and Scheduling
+- `docs/specs/16-rustc-tcb.md:122` — 3.3 Side Channels (Spectre / Meltdown)
+- `docs/specs/16-rustc-tcb.md:135` — 3.4 Supply Chain / Compiler Compromise
+- `docs/specs/16-rustc-tcb.md:141` — 3.5 Trusted I/O Path
+- `docs/specs/16-rustc-tcb.md:150` — 4. TCB Component Inventory (smallest → largest)
+- `docs/specs/16-rustc-tcb.md:183` — 5. Risk Mitigations for rustc-as-TCB
+- `docs/specs/16-rustc-tcb.md:185` — 5.1 Open Source Auditability
+- `docs/specs/16-rustc-tcb.md:190` — 5.2 Ferrocene qualification lane
+- `docs/specs/16-rustc-tcb.md:210` — 5.3 miri: MIR Interpreter for Unsoundness Detection
+- `docs/specs/16-rustc-tcb.md:221` — 5.4 Reproducible Builds + Toolchain Pin
+- `docs/specs/16-rustc-tcb.md:227` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
+- `docs/specs/16-rustc-tcb.md:243` — 6. Policies Derived from This Spec
+- `docs/specs/16-rustc-tcb.md:262` — 7. Comparison with Prior Art
+- `docs/specs/16-rustc-tcb.md:278` — 8. Cross-References
 - `docs/specs/17-ipc-wire-contract.md:20` — 1. Scope & model
 - `docs/specs/17-ipc-wire-contract.md:63` — 2. The recv-mask rule (most important)
 - `docs/specs/17-ipc-wire-contract.md:110` — 3. Byte-0 discriminant registry
@@ -290,14 +290,14 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/17-ipc-wire-contract.md:646` — 12.1 Copied IPC across Domain Boundaries
 - `docs/specs/17-ipc-wire-contract.md:656` — 12.2 Inter-Domain Zero-Copy Grants
 - `docs/specs/17-ipc-wire-contract.md:663` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
-- `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
-- `docs/specs/18-cell-trust-tiers.md:33` — 2. Decision
-- `docs/specs/18-cell-trust-tiers.md:92` — 2.1 Tier 1 admission — `cellos-sign`
-- `docs/specs/18-cell-trust-tiers.md:155` — 2.2 Tier 2 admission — nothing
-- `docs/specs/18-cell-trust-tiers.md:171` — 2.3 Upgrade path (G2+, optional)
-- `docs/specs/18-cell-trust-tiers.md:181` — 3. Rejected alternatives
-- `docs/specs/18-cell-trust-tiers.md:193` — 4. Consequences
-- `docs/specs/18-cell-trust-tiers.md:222` — 5. Cross-references
+- `docs/specs/18-cell-trust-tiers.md:12` — 1. Context
+- `docs/specs/18-cell-trust-tiers.md:36` — 2. Decision
+- `docs/specs/18-cell-trust-tiers.md:98` — 2.1 Tier 1 admission — `cellos-sign`
+- `docs/specs/18-cell-trust-tiers.md:166` — 2.2 Tier 2 admission — nothing
+- `docs/specs/18-cell-trust-tiers.md:182` — 2.3 Upgrade path (G2+, optional)
+- `docs/specs/18-cell-trust-tiers.md:192` — 3. Rejected alternatives
+- `docs/specs/18-cell-trust-tiers.md:204` — 4. Consequences
+- `docs/specs/18-cell-trust-tiers.md:235` — 5. Cross-references
 - `docs/specs/18c-publisher-provenance-envelope.md:5` — Purpose and scope
 - `docs/specs/18c-publisher-provenance-envelope.md:13` — Terms
 - `docs/specs/18c-publisher-provenance-envelope.md:21` — Canonical envelope encoding, version 1
@@ -359,7 +359,7 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for safety, not hardware MMU
 - `docs/specs/00-context.md:196` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
 - `docs/specs/00-context.md:198` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
-- `docs/specs/04-hardware.md:124` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
+- `docs/specs/04-hardware.md:127` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
 - `docs/specs/05-application.md:152` — `✅` in: | Strings | `memcpy/memmove/memset/strlen/strcpy/strcmp` | ✅ Done |
@@ -386,7 +386,7 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/05-application.md:524` — `✅` in: 1. **Type-1 hypervisor**: Tier 3 phải chạy ON TOP of Cellos, không phải thay thế kernel. Cellos kernel = Type-2 host. ✅ 
 - `docs/specs/05-application.md:525` — `LOC` in: 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
 - `docs/specs/05-application.md:526` — `✅` in: 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM 
-- `docs/specs/09-vfs.md:56` — `LOC` in: * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI
+- `docs/specs/09-vfs.md:52` — `LOC` in: * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI
 - `docs/specs/09b-vfs-native-fs-adr.md:16` — `LOC` in: Use **RedoxFS** (MIT licence, approximately 10 K LOC Rust) as the `/srv` backend. Do not
 - `docs/specs/09b-vfs-native-fs-adr.md:44` — `LOC` in: | Option | LOC | Licence | CoW | Checksum | `no_std` | Verdict |
 - `docs/specs/12-reliability.md:267` — `✅` in: specialize. Scoring the strongest contenders (✅ strong · 🟡 partial/conditional · ❌ weak/delegated):
@@ -410,9 +410,9 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/13-peripherals.md:225` — `✅` in: 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
 - `docs/specs/13-peripherals.md:226` — `✅` in: 5. ✅ ELF-manifest cap gating (gpio/uart).
 - `docs/specs/13-peripherals.md:227` — `✅` in: 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
-- `docs/specs/13-peripherals.md:228` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest 
-- `docs/specs/13-peripherals.md:229` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap
+- `docs/specs/13-peripherals.md:228` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/demos/sensor-demo`) — gated by `gpio` manifest
+- `docs/specs/13-peripherals.md:229` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/demos/spi-demo`) — gated by `gpio` manifest ca
 - `docs/specs/13-peripherals.md:231` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
-- `docs/specs/13-peripherals.md:232` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
-- `docs/specs/13-peripherals.md:233` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
+- `docs/specs/13-peripherals.md:232` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/demos/pwm-demo`) — gated by `gpio` manifest c
+- `docs/specs/13-peripherals.md:233` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/demos/adc-demo`) — no MMIO, no cap; triangle
 - … 21 more

@@ -1,55 +1,63 @@
 # Cellos Architecture: Networking Stack
-**Version**: 0.3 (Zero-Copy User-space Stack)
+**Version**: 0.4 (user-space stack Cell, copied frames)
 **Status**: Definitive
+**Amended 2026-11-16** (architecture remediation Phase 19): §1–§5 được sửa cho khớp code; §6 không đổi.
 
 ---
 
-## 1. Triết lý: User-space Stack trong SAS
-Trong Cellos, Network Stack không nằm trong nhân (Kernel) mà là một **Service Cell** (`service-net.o`) chạy trực tiếp trong Single Address Space (SAS).
+## 1. Triết lý: User-space Stack trong một Service Cell
+Network Stack không nằm trong nhân (Kernel) mà là một **Service Cell** (`cells/services/net`).
+Net Cell, NIC Driver Cell và App Cell là các Cell riêng; chúng chỉ nói chuyện qua IPC của kernel
+([Spec 17](17-ipc-wire-contract.md)), nên mỗi bước qua ranh giới Cell là một lần chuyển ngữ cảnh.
 
-* **Hiệu năng**: Loại bỏ chi phí chuyển đổi ngữ cảnh (Context Switch) giữa User-space và Kernel-space của OS truyền thống.
-* **Thư viện**: Sử dụng **smoltcp** (Native Rust, `no_std`) — ngăn xếp TCP/IP hướng sự kiện, không cần cấp phát bộ nhớ động (Heap-less).
+* **Thư viện**: **smoltcp 0.11** (Native Rust, `no_std`) — `cells/services/net/Cargo.toml:73`.
+* **Bộ nhớ**: Net Cell có heap riêng cố định 8 MiB (`ostd::declare_custom_heap!`,
+  `cells/services/net/src/main.rs:31-34`) cho socket buffer, TLS và frame.
 
 ## 2. Các thành phần chính
-1. **Driver Cell** (e.g., `driver-virtio-net`):
-    * Quản lý các vòng đệm phần cứng (RX/TX Rings).
-    * Thực thi Trait `PHY` để giao tiếp với Stack.
-2. **Stack Cell** (`service-net`):
-    * Quản lý máy trạng thái TCP, xử lý IP/UDP/ICMP.
-    * Quản lý các cổng (Ports) và điều phối gói tin.
-    * Expose Trait `TcpStack` cho các App Cells khác.
+1. **NIC Driver Cell** (`cells/drivers/<chip>/`, ví dụ `virtio-net`, `e1000`, `igb`):
+    * Quản lý vòng đệm phần cứng (RX/TX ring) và DMA.
+    * Đăng ký là provider `service::NIC_DRIVER` và phục vụ giao thức `wire::proto::nic`
+      (`OP_TX`, `OP_RX`, `OP_GETMAC`; `libs/wire/src/proto/nic.rs`).
+2. **Stack Cell** (`net`):
+    * Chạy smoltcp: máy trạng thái TCP, IP/UDP/ICMP, ARP, DHCP, DNS, link-local.
+    * Quản lý socket và port theo owner (`cells/services/net/src/socket_table.rs`).
+    * Phục vụ socket IPC kiểu BSD qua message postcard `NetRequest`/`NetResponse`
+      (`libs/wire/src/ipc.rs:777`).
 
-## 3. Luồng gói tin Zero-Copy (Bảo hiểm cho SAS)
-Tận dụng cơ chế **Owned Buffers** từ File 03 để đảm bảo an toàn tuyệt đối mà không cần sao chép:
+## 3. Luồng gói tin (copy qua IPC)
+1. **NIC -> RAM**: Phần cứng DMA ghi gói tin vào ring buffer của Driver Cell.
+2. **Driver <-> Stack**: Net Cell gửi lệnh `OP_TX` (frame được copy vào request) hoặc `OP_RX`
+   bằng `sys_try_send` có hạn rồi `sys_recv_timeout` chờ đúng driver đó; mỗi lúc chỉ có một
+   request tới driver (`cells/services/net/src/interface.rs:430-489`, `:518-527`). Frame nhận
+   được copy vào buffer từ pool của Net Cell (`interface.rs:266-276`).
+3. **Stack -> App**: Payload đi trong reply `NetResponse`, giới hạn inline bởi
+   `NET_TCP_INLINE_DATA_MAX` mỗi lần gọi; client copy vào buffer của App
+   (`libs/ostd/src/clients/net.rs:272-296`).
 
-1. **NIC -> RAM**: Phần cứng DMA ghi gói tin trực tiếp vào `PacketBuffer` (RAM).
-2. **Driver -> Stack**: Chuyển quyền sở hữu con trỏ `Box<PacketBuffer>` qua một lời gọi hàm trực tiếp. **Không `memcpy`**.
-3. **Stack -> App**:
-    * Stack xử lý các Header tại chỗ trên buffer đó.
-    * App sử dụng cơ chế **Peek** hoặc **Take** để lấy dữ liệu Payload trực tiếp. Quyền sở hữu buffer được trả lại Driver sau khi App dùng xong hoặc theo chu kỳ xoay vòng.
-
-
+Không có bước nào chuyển quyền sở hữu buffer qua ranh giới Cell mà không copy.
 
 ## 4. Socket API & ostd Integration
-App Cell không cần biết sự phức tạp bên dưới, chỉ cần dùng API chuẩn thông qua `ostd`.
+App Cell dùng client của `ostd` (`libs/ostd/src/clients/net.rs`): `TcpStream::connect(addr, port)`
+trả về một `TcpStream` cài `embedded_io::Read`/`Write` (`net.rs:246-260`); TLS là
+`ostd::clients::tls_stream`. API là đồng bộ: `read` gọi lại và `yield` khi chưa có dữ liệu, không trả
+về `Future`. Không có trait `TcpStack`.
 
-```rust
-pub trait TcpStack {
-    fn connect(&self, addr: IpEndpoint) -> Result<Box<dyn TcpStream>>;
-    fn listen(&self, port: u16) -> Result<Box<dyn TcpListener>>;
-}
-```
-**Async Ready**: Các hàm trả về Future, cho phép hàng ngàn kết nối đồng thời với bộ nhớ tối thiểu.
-
-**Multi-Arch**: Code của service-net là 100% Rust no_std, biên dịch chung cho cả RV32 (Nano Robot) và RV64 (Jarvis).
+**Multi-Arch**: Net Cell là Rust `no_std`; kiến trúc nào có lane là bảng
+[`docs/generated/arch-status.md`](../generated/arch-status.md). Code 32-bit không được build.
 
 ## 5. Bảo mật & Cô lập mạng
 **Port Ownership**: Mỗi port/socket khi mở được gán owner trong Net Cell's
 owner-scoped socket/port table; đây là authority của networking lifecycle.
 
-**Capability Check**: Chỉ các Cell có NetworkCap mới được phép khởi tạo kết nối ra ngoài hoặc mở Port lắng nghe.
+**Capability Check**: Kernel ghi quyền mạng đã review của Cell gửi thành các bit `CALLER_FLAG_NET_*`
+trong caller trailer có attestation; Net Cell kiểm quyền tương ứng trước mọi tác động (tra tên,
+socket egress, port inbound, raw frame) và từ chối bằng `NetError::Denied`
+(`cells/services/net/src/rights.rs:1-13`).
 
-**Fault Recovery**: Nếu Stack Cell bị panic, Kernel thực hiện Reload Cell đó. Các App Cell sẽ nhận lỗi ConnectionReset và có thể tự động kết nối lại sau khi Stack hồi sinh.
+**Fault Recovery**: Kernel không reload Cell. Khi Net Cell chết, init khởi động lại nó theo
+`RestartPolicy` của cấu hình boot (`cells/tools/init/src/service_table.rs`); socket thuộc instance
+cũ mất theo nó, và App phải mở lại kết nối [INFERENCE: hành vi phía App không được kiểm trong lần sửa này].
 
 ## 6. TLS Server Authentication (G14)
 

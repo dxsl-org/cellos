@@ -73,7 +73,7 @@ event** instead of the service reply. The client decodes garbage (→ a bogus
 "operation failed"), and the real reply arrives later and poisons the *next*
 exchange. This desynced every VFS conversation for a day (§8.2).
 
-Kernel guarantee (`kernel/src/task/syscall.rs`, Recv & RecvTimeout): the
+Kernel guarantee (`kernel/src/task/syscall/ipc.rs:316`, `:732`; Recv & RecvTimeout): the
 `pending_msgs` drain **honours the mask** — a masked recv skips non-matching
 queued messages and leaves them for the wildcard loop that wants them. Client
 code must still pass the right mask.
@@ -236,7 +236,7 @@ Prohibited:
   caller expects delivery (input relay drop → char loss).
 - **Silent fallback to a weaker mechanism** — e.g. predictable-PRNG entropy when
   the real source is absent (now fail-closed behind `dev-weak-rng`,
-  `kernel/src/task/syscall.rs`). Degrade paths must log or fail closed.
+  `kernel/src/task/syscall/ipc.rs:1458-1481`). Degrade paths must log or fail closed.
 
 ---
 

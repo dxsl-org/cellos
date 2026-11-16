@@ -1,19 +1,25 @@
 # Cellos Architecture: Memory Model
 **Version**: 0.3 (Universal SAS & Resource Governance)
 **Status**: Definitive
+**Amended 2026-11-16** (architecture remediation Phase 19): §1, §4 và §6 được sửa cho khớp code;
+trạng thái theo kiến trúc nằm ở bảng sinh tự động [`docs/generated/arch-status.md`](../generated/arch-status.md).
 
 ---
 
-## 1. Universal SAS Layout (Trait-Based)
-Thay vì hardcode địa chỉ 64-bit, Cellos dùng bộ khung **Virtual Memory Layout** trừu tượng thông qua `hal-core`.
+## 1. SAS Layout
+Không có trait layout trong `hal-core`. Bố cục là hằng số của kernel
+(`kernel/src/loader/va_alloc.rs`) cộng với alias RAM của HAL từng kiến trúc.
 
-### Layout Segments
-| Segment | RV32 (Sv32) | RV64 (Sv39/48) | Đặc điểm |
-| :--- | :--- | :--- | :--- |
-| **Trap Zone** | Low 4KB | Low 4KB | Unmapped để bắt lỗi NULL pointers. |
-| **HHDM** | Offset-based | High-half | Ánh xạ trực tiếp RAM vật lý. |
-| **Kernel Static** | Fixed High | Fixed High | Code/Data của Nano Kernel. |
-| **Global Heap** | Remaining | Dynamic | Vùng nhớ cấp phát cho các Cell. |
+### Layout Segments (kernel 64-bit)
+| Segment | Ở đâu | Đặc điểm |
+| :--- | :--- | :--- |
+| **RAM alias của kernel** | `hal::paging::phys_to_virt` | Identity (VA = PA) hoặc HHDM tùy kiến trúc: cột "Kernel RAM alias" của [arch-status](../generated/arch-status.md). Kernel ghi vào bộ nhớ Cell qua alias này. |
+| **RAM được quản lý** | dưới `IDENTITY_RAM_END = CELL_VA_START` (`va_alloc.rs:107`) | RAM từ 64 GiB trở lên không được dùng và được log (`memory::frame::plan_managed_ranges`). |
+| **Cell slots** | từ `CELL_VA_START = 0x10_0000_0000` (64 GiB), bước `CELL_VA_STRIDE` 32 MiB (256 MiB với `large-cell-va`), `MAX_SLOTS = 512` (`va_alloc.rs:76-96`) | Code, data và heap riêng của một Cell; heap được trừ quota (§2). |
+| **Stack arena** | `STACK_VA_START = CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE` (`va_alloc.rs:385`) | User stack có guard page không có frame (§4). |
+| **Kernel image** | ảnh của kernel | Nơi duy nhất kernel fetch lệnh (§3.1 bước 6). |
+
+Kernel 32-bit (RV32, x86, arm) nằm ở `kernel/src/arch/legacy` và không được build.
 
 ## 2. Global Allocator & Resource Governance
 Hệ thống sử dụng **Hybrid Allocator** để cân bằng giữa tốc độ và chống phân mảnh.
@@ -119,7 +125,7 @@ xuống cấp chứ không hỏng. Pin hold và `AliasUnrestored` không đượ
 panic.
 
 ## 4. Stack Safety (Guard Pages)
-* **Cơ chế**: Mọi Stack của Task/Cell được bao bọc bởi một trang **Unmapped 4KB (Guard Page)**.
+* **Cơ chế**: Đáy mỗi stack kernel và user có `STACK_GUARD_PAGES = 2` trang guard (`kernel/src/task/stack.rs:26-27`); guard của user stack trong stack arena không có frame (`kernel/src/loader/va_alloc.rs:387`).
 * **Hành vi**: Stack Overflow sẽ kích hoạt `Page Fault` ngay lập tức. Kernel sẽ cô lập Task đó thay vì để nó phá nát dữ liệu Cell lân cận.
 
 ## 5. Protection Policy (W^X)
@@ -159,21 +165,21 @@ thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
   - `AArch64`: HAL đã phát `dsb ishst; tlbi vaae1is; [vae2is nếu EL2]; dsb ish; isb`, nên stage-1
     invalidate là broadcast trong inner-shareable domain theo code hiện tại. Tuy vậy repo vẫn thiếu
     witness runtime 2 PE, nên chưa được tuyên bố là D7 hoàn tất.
-* **Arch bare-physical không enforce.** riscv32 Nano, x86_32, arm32 chạy không page table;
-  `wx::enforce` ghi log khoảng trống thay vì áp đặt. Câu "protection vẫn được bật" chỉ đúng
-  với các arch có MMU.
+* **Arch 32-bit không có page table.** `wx::enforce` của riscv32, x86_32 và arm32 chỉ ghi log khoảng
+  trống (`kernel/src/loader/wx.rs:213-227`); các target này không được build
+  ([arch-status](../generated/arch-status.md)). Câu "protection vẫn được bật" chỉ đúng với các arch có MMU.
 
 ## 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
 
-**Amended 2026-09-19** (ADR-0015 & Spec 22 Gate):
-Tier 2 cung cấp ranh giới cô lập phần cứng hoàn toàn (Hardware MMU Isolation) cho mã không tin cậy (C/C++ FFI, mlibc, Lua, hoặc unsigned binaries):
+**Amended 2026-09-19** (ADR-0015 & Spec 22 Gate); sửa 2026-11-16 cho khớp code:
+Tier 2 cung cấp ranh giới cô lập phần cứng hoàn toàn (Hardware MMU Isolation) cho mã không tin cậy (C/C++ FFI, mlibc, Lua, hoặc unsigned binaries). Kiến trúc nào admit Tier 2 là bảng [arch-status](../generated/arch-status.md):
 
 1. **Bảng trang riêng (`AddressSpace`)**:
-   - Mỗi Tier 2 Cell sở hữu một gốc bảng trang Sv39 (`satp`) riêng biệt, được gán ASID độc lập từ pool `PRIVATE_ASIDS` (`memory::tag_pool`, tối đa 1 tag mỗi incarnation; tag chỉ được cấp lại khi có bằng chứng `Invalidated` rằng mọi hart đã invalidate tag đó).
-   - **User space**: Chỉ ánh xạ private ELF segments, stack và heap của chính cell đó. Toàn bộ không gian bộ nhớ của các Cell khác (bao gồm cả Tier 1 SAS) đều **unmapped**; bất kỳ hành vi đọc/ghi/thực thi trái phép nào ra ngoài đều kích hoạt Store/Load/Instruction Page Fault (`scause = 0xd, 0xf, 0xc`) và cell bị terminate an toàn mà không ảnh hưởng tới kernel.
-   - **Kernel space**: Ánh xạ supervisor-only (không có cờ `USER`). U-mode không thể truy cập HHDM hay kernel text/data.
+   - Mỗi Tier 2 Cell sở hữu một gốc bảng trang riêng (`satp` Sv39 trên RV64, `TTBR0_EL1` trên AArch64, `CR3` trên x86_64), được gán tag (ASID/PCID) độc lập từ pool `PRIVATE_ASIDS` (`kernel/src/memory/tag_pool.rs`, `address_space.rs:353`; tối đa 1 tag mỗi incarnation; tag chỉ được cấp lại khi có bằng chứng `Invalidated` rằng mọi hart đã invalidate tag đó).
+   - **User space**: Chỉ ánh xạ private ELF segments, stack, heap và grant của chính cell đó; mọi leaf user là non-global (`address_space.rs:1553-1571`). Toàn bộ không gian bộ nhớ của các Cell khác (bao gồm cả Tier 1 SAS) đều **unmapped**; bất kỳ hành vi đọc/ghi/thực thi trái phép nào ra ngoài đều gây page fault (RV64: `scause = 0xd, 0xf, 0xc`) và cell bị terminate an toàn mà không ảnh hưởng tới kernel.
+   - **Kernel space**: Ánh xạ supervisor-only (không có cờ `USER`). U-mode không thể truy cập RAM alias hay kernel text/data.
 2. **Quản lý Vòng đời & Teardown**:
    - Chuyển trạng thái `Live` → `Dying` theo thế hệ (`generation`).
    - Thu hồi toàn bộ khung trang trung gian và trang lá khi cell kết thúc.
 3. **Cơ chế Grant liên Domain (Domain Grants)**:
-   - Zero-copy grant pages (`Syscall::GrantRegister` / `Syscall::GrantSlice`) được ánh xạ trực tiếp vào bảng trang riêng của domain qua `map_grant_page` với cờ `USER+RW` và được thu hồi qua `unmap_grant_page` khi gọi `Syscall::GrantUnregister`.
+   - Grant page (`Syscall::GrantRegister` / `Syscall::GrantSlice`) được ánh xạ vào bảng trang riêng của domain qua `map_grant_page` theo quyền của grant (`ReadOnly` → R+NX, `ReadWrite` → RW+NX) và được thu hồi qua `unmap_grant_page`, với invalidation tag được xác nhận trước khi frame được dùng lại ([Spec 22](22-native-domain-cell-implementation-gate.md) §2.5).

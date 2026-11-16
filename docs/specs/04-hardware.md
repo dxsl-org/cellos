@@ -38,21 +38,22 @@ C driver integration uses the trusted Tier 1 `ffi-posix` runtime profile
 (legacy alias: Tier 1b FFI, Newlib/POSIX shim) — see
 [specs/05-application.md §3](05-application.md).
 
-## 3. Interrupt Model: "Async Waker Dispatch"
-Cellos sử dụng mô hình ngắt bất đồng bộ để tối ưu độ trễ.
-1. **Top-Half (Kernel)**: Nhận ngắt cứng, Ack IRQ nhanh nhất có thể và gọi `waker.wake()` tương ứng.
-2. **Bottom-Half (Cell)**: Driver Cell xử lý ngắt trong một `async task`. Việc chuyển ngữ cảnh (Context Switch) được tối ưu hóa bằng cách chạy trực tiếp trong SAS.
+## 3. Interrupt Model: `WaitIrq`
+Cellos dùng mô hình ngắt chia hai nửa (amended 2026-11-16 cho khớp code):
+1. **Top-Half (Kernel)**: ISR ack IRQ và đặt `IRQ_PENDING[irq]` (atomic, không lock); không có `Waker` trong kernel.
+2. **Bottom-Half (Cell)**: Driver Cell chặn trong syscall `WaitIrq { irq }`; một lượt quét của scheduler đánh thức nó, và nó xử lý ngắt trong task của chính nó sau một context switch bình thường (`kernel/src/task/syscall/decode.rs:751-756`).
 
 ## 4. Resource Registry (MMIO Isolation)
 Trong SAS, việc hai driver cùng ghi vào một địa chỉ phần cứng là thảm họa.
-* **Registry**: Kernel quản lý danh sách MMIO dựa trên **Device Tree (DTB)**.
-* **Exclusive Access**: Driver phải gọi `kernel.request_mmio(base, size)`. Nếu vùng nhớ đã bị chiếm, Kernel sẽ từ chối cấp phát.
+* **Registry**: `kernel/src/resource_registry.rs`. Cửa sổ MMIO hợp lệ là allowlist cố định theo target; DTB discovery chưa có (`resource_registry.rs:1-27`).
+* **Exclusive Access**: Driver gọi `sys_request_mmio(base, size)` (syscall `RequestMmio`). Vùng ngoài allowlist bị từ chối; vùng đã có chủ trả `AlreadyExists`. Khi task thoát, cửa sổ được hạ về kernel-only trên mọi hart rồi mới được cấp lại.
 
 ## 5. SMP & Real-Time Affinity
 * **Harts**: logical hart 0 is the boot hart and logical hart 1 the RealTime hart on
-  every architecture. riscv64 and aarch64 run at most two harts (`MAX_HARTS = 2`).
-  x86_64 brings every firmware-reported CPU online up to `MAX_HARTS = 64`; logical
-  2..N are additional normal harts. A CPU beyond 64 is logged `cpu N ignored:
+  every architecture. `MAX_HARTS` per architecture is the generated
+  [arch-status](../generated/arch-status.md) table (`kernel/src/sched/smp.rs:28-43`).
+  x86_64 brings every firmware-reported CPU online up to `MAX_HARTS`; logical
+  2..N are additional normal harts. A CPU beyond the limit is logged `cpu N ignored:
   MAX_HARTS`; a LAPIC ID above 255 stays offline until interrupt remapping exists.
   APs come up one at a time, and the first AP that cannot be started or refuses root
   operation ends bring-up, so the online set is always `0..online`. An AP that was
@@ -68,8 +69,10 @@ Trong SAS, việc hai driver cùng ghi vào một địa chỉ phần cứng là
   work, as on two harts.
 * **Cross-hart invalidation**: a TLB shootdown publishes a fresh epoch for, and sends an
   IPI to, every other online hart first, then waits over that set under one deadline.
-  An unconfirmed hart is fail-stop: a shared-mapping flush panics and a tag release
-  defers its frames; nothing proceeds as if it had been acknowledged. Retirement-switch
+  An unconfirmed hart never counts as acknowledged and never panics the kernel: the flush
+  returns `Unconfirmed`, the frames its translations named are quarantined
+  (`SharedUnconfirmed`, `TagUnconfirmed`) and a permission lowering fails closed
+  (`kernel/src/memory/tlb_shootdown.rs:425-440`; Spec 02 §3.1). Retirement-switch
   waits are per-hart epochs over all hart slots.
 * **Affinity**: RT routing is policy over scheduler mechanisms; it does not grant
   exclusive ownership of a core unless an explicit isolation policy proves that property.
@@ -125,22 +128,23 @@ the prevention layer.
 
 ### x86_64 PC class driver priority (planned — no physical qualification)
 
-Nothing below is implemented or qualified, it does not change the RISC-V G2
-order above, and `q35-x86_64` remains the only **qualified** x86 target — a
-generic `x86_64-pc` descriptor exists (phase 01) but no machine is qualified. It
-records the prerequisites for the x86_64 PC/server lane
-([hardware-tracks.md](../roadmap/hardware-tracks.md)).
+This list does not change the RISC-V G2 order above, and `q35-x86_64` remains the only
+**qualified** x86 target — a generic `x86_64-pc` descriptor exists (phase 01) but no machine
+is qualified. It records the prerequisites for the x86_64 PC/server lane
+([hardware-tracks.md](../roadmap/hardware-tracks.md)). Code exists for items 1, 3 and 4
+(`cells/drivers/ahci`, `cells/drivers/igb`, `kernel/src/acpi/dmar.rs`); none is physically
+qualified.
 
 ```
 1. AHCI/SATA storage cell     — **landed** (`.agents/261004-1957-x86-pc-lane/` 02a/02b; `ahci-x86` 5/5, two-boot persistence)
 2. xHCI + HID                 — **reopened 2026-10-05** for the x86_64 PC lane (phase 03); previously frozen out by decision (item 5 of the G1-G3 driver plan phase 01)
-3. Intel igb NIC (i210/i211)  — first real NIC family; e1000 today binds 82540EM only and fail-closes all others
+3. Intel igb NIC (i210/i211)  — first real NIC family; e1000 today binds 82540EM and 82545EM only (`cells/drivers/e1000/src/identity.rs:5`) and fail-closes all others
 4. ACPI DMAR discovery        — replaces the hardcoded q35 IOMMU base
 5. Multi-port COM / RS232-485 — industrial peripherals, scheduled only after the boot path
 ```
 
-> Prerequisite before any of the above is scheduled: an `x86_64-pc` board
-> descriptor plus a published HCL, and an exact Intel/AMD board pair. On x86 the
+> Prerequisite before any of the above is scheduled: a published HCL for the `x86_64-pc`
+> board descriptor (`boards/pc/x86_64-pc/board.rs`), and an exact Intel/AMD board pair. On x86 the
 > only working log and input path is a 16550-compatible UART at COM1 (`0x3F8`,
 > IRQ 4) — `hal/soc/x86/src/lib.rs`, `kernel/src/arch/x86_64/boot.rs` (`early`) — so treat it as a
 > must-have HCL row, including BMC serial-over-LAN on servers. Boards whose

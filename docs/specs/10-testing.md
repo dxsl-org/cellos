@@ -80,21 +80,33 @@ remain bare-metal.
 
 ### Boot-time Kernel Tests
 
-These tests run inside the kernel at boot (Ring 0, no MMU isolation required).
-They are `pub fn run_all()` functions called from `kernel/src/main.rs`:
+Kernel self-tests run at boot, inside the kernel. They are fixtures: compiled only
+with `test-hooks` (or, for the trust-model fixtures, outside the release posture) and
+never into a release kernel (Spec 15 §3.5; architecture remediation Phase 09). The
+boot sequence calls them at fixed points:
 
 ```rust
-// kernel/src/main.rs (boot sequence)
-memory::tests::run_all();
-task::tests::run_scheduler_tests();
-loader::elf_tests::run_all();
+// kernel/src/main.rs (boot sequence, abridged)
+arch::boot::fixtures_after_policy();        // after policy::load_from_vifs1
+arch::boot::fixtures_after_task_init();     // after task::init
+#[cfg(feature = "test-hooks")]
+crate::loader::elf_tests::run_all();        // loader corpus, boot-fatal on failure
+arch::boot::fixtures_after_loader_corpus();
 ```
+
+Shared fixtures live next to their module as `*_selftest.rs` or `*_tests.rs`
+(`kernel/src/task/grant_reclaim_selftest.rs`, `kernel/src/loader/elf_tests.rs`, …);
+single-arch fixtures live under `kernel/src/arch/<arch>/` and are called from that
+arch's `fixtures_after_*` hook (`kernel/src/arch/<arch>/boot.rs`). Each file is a `test`
+row in `kernel/residents.toml`.
 
 Add a new boot-time test:
 
-1. Create `kernel/src/<module>/my_tests.rs` with a `pub fn run_all()` function
-2. Add `pub mod my_tests;` to `kernel/src/<module>.rs`
-3. Call `<module>::my_tests::run_all()` from `kernel/src/main.rs`
+1. Create the fixture next to the module it tests (`<module>/my_selftest.rs`, or
+   `kernel/src/arch/<arch>/` for one architecture), gated `#[cfg(feature = "test-hooks")]`.
+2. Call it from `kernel/src/main.rs` or the arch's `fixtures_after_*` hook, and print a
+   `[selftest] <NAME>: PASS|FAIL` marker a QEMU lane asserts.
+3. Add the file to `kernel/residents.toml` with `category = "test"`.
 
 ### QEMU Integration Tests
 
@@ -157,8 +169,8 @@ remains pending alongside PTE-key and shared/grant-page semantics (Spec 19 Layer
 | Test | Location | Trigger |
 |------|----------|---------|
 | CFI violation cell | `cells/demos/cfi-test/` | Spawned from shell: `cfi-test`; aarch64 lane (builds it opted in, embeds it, judges the log): `scripts/qemu-cfi-test.sh` |
-| MTE self-test | `kernel/src/layer2_selftest.rs` | Auto at boot with `test-hooks` feature |
-| PKU self-test | `kernel/src/layer2_selftest.rs` | Auto at boot with `test-hooks` feature |
+| MTE self-test | `kernel/src/arch/aarch64/layer2_selftest.rs` (`run_mte_selftest`, called from `kernel/src/arch/aarch64/boot.rs:220`) | Auto at boot with `test-hooks` feature |
+| PKU self-test | `kernel/src/arch/x86_64/layer2_selftest.rs` (`run_pku_selftest`, called from `kernel/src/arch/x86_64/boot.rs:765`) | Auto at boot with `test-hooks` feature |
 
 ### Running Layer-2 tests
 

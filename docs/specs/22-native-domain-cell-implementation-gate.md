@@ -1,22 +1,27 @@
 # Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)
 
-> **Status**: Implemented; **AArch64 production admission and domain grants, and warm
-> snapshot, are gated off** (phase-01 containment, 2026-09-27; x86_64 reopened in
-> architecture remediation Phase 15, 2026-11-14).
-> RV64 Tier-2 launch, copied IPC and hardware Page-Fault containment are verified
+> **Status**: Implemented. Which architectures admit Tier-2 domains and run the private-root
+> grant lifecycle is the generated table [`docs/generated/arch-status.md`](../generated/arch-status.md)
+> (columns "Tier-2 admission" and "Private-root domain grants"); it replaces the per-architecture
+> status this header used to restate (amended 2026-11-16, architecture remediation Phase 19).
+> On a build the table does not mark, the kernel refuses every `Grant*` call that names a
+> private-root task (§2.5) and keeps Tier-2 admission closed (§2.2). Warm snapshot capture/restore
+> stays off: the internal format v2 and its state machine are implemented and unit-tested, but
+> quiescence, closure and the board witness are not, and the `snapshot-qualified` gate is off in
+> every shipping image (see `docs/specs/03-runtime.md` §4).
+> Evidence: RV64 Tier-2 launch, copied IPC and hardware Page-Fault containment are verified
 > (`tests/integration/tests/tier2_fault_isolation.rs`, `scripts/qemu-native-domain-test.sh`
-> including the `--case grant-gate` and `--case grant-pair` witnesses). x86_64 Tier-2 entry,
-> fault containment and the private-root grant lifecycle are verified by
-> `scripts/x86/qemu-domain-test.sh` (`S22-X86-*`, QEMU TCG and KVM at 1, 2 and 4 CPUs; §2.5).
-> Since 2026-09-27 the kernel refuses every `Grant*` call that names a private-root task on a
-> target without the lifecycle (§2.5; today AArch64 production) and keeps AArch64 production
-> Tier-2 admission closed (§2.2, whose AArch64 row records why). It also refuses warm
-> snapshot capture/restore: the internal format v2 and its state machine are implemented and
-> unit-tested, but quiescence, closure and the board witness are not, and the
-> `snapshot-qualified` gate is off in every shipping image (see `docs/specs/03-runtime.md` §4).
-> RV64 and x86_64 have Tier-2 admission today; AArch64 admits only in `test-hooks` images, and
-> its §2.2 row is a feasibility statement with its current disposition, not an enablement claim.
+> including the `--case grant-gate` and `--case grant-pair` witnesses); x86_64 Tier-2 entry,
+> fault containment and the private-root grant lifecycle by `scripts/x86/qemu-domain-test.sh`
+> (`S22-X86-*`, QEMU TCG and KVM at 1, 2 and 4 CPUs; §2.5).
+
 ## 1. Context and current truth
+
+> **Historical (2026-11-16).** This section describes the tree before Tier 2 was built: one
+> CPU root, no address-space field in the scheduler, and an absent signature admitted to the
+> SAS. Later phases changed all three on purpose (ADR-0015 Phase 02, ADR-0019 phase 01,
+> architecture remediation Phases 15–16). Current truth: §2.2–§2.5 and §4 below,
+> [Spec 18](18-cell-trust-tiers.md) §2 and the [arch-status](../generated/arch-status.md) table.
 
 Tier 1 Cells share the SAS page-table view and rely on Rust LBI. The native loader has
 one CPU root, `memory::paging::KERNEL_ROOT`; ordinary mappings and grants are inserted
@@ -41,6 +46,12 @@ No Tier-2 loader branch, installer choice, or claim of native containment may sh
 all required design and negative-test gates below are approved in a separate implementation
 plan. The first implementation must be feature-gated, default-off, and leave every
 Tier-1-to-Tier-1 switch on the current no-MMU-switch fast path.
+
+> **Historical (2026-11-16).** "Default-off" held for the first implementation only.
+> Architecture remediation Phase 04 made `native-domains` part of the default feature set and
+> required by every bootable 64-bit kernel, because without it the user-copy boundary is a raw
+> `memcpy` (`kernel/src/posture.rs::derive`, `kernel/Cargo.toml` `default` and `release-posture`).
+> The feature still selects only a backend; admission is the separate boot policy of §4.
 
 ### 2.1 CPU page-table ownership and lifetime
 
@@ -82,9 +93,9 @@ user mapping ledger. The system must fail closed on a mapping request it cannot 
 
 | Architecture | Feasible control | Required implementation proof | Limitation / disposition |
 |---|---|---|---|
-| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | **Admission open** (as on x86_64; AArch64 admits in `test-hooks` images only): a real Tier-2 Cell is admitted into a private `satp` root, with copied IPC and hardware page-fault containment verified. RV32 bare-physical targets cannot implement Tier 2. |
-| AArch64 | Write `TTBR0_EL1` with a private root and nonzero ASID; use `TLBI` plus required DSB/ISB ordering. | ASID generation/reuse protocol, multi-PE shootdown witness, and MAIR/TCR compatibility with the root. | **Admission refused.** No AArch64 image has entered a real domain task, and private-root leaves are composed without `PTE_nG` (`hal/arch/arm/src/aarch64/paging.rs`), so they are global: ASID-targeted `tlbi aside1is` cannot reach them and a stale entry of one private root stays usable under another ASID. Release currently uses a full `vmalle1is` stopgap. |
-| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | **Admission open** (`loader/domain_admission.rs` `switch_ordering_qualified`, production included). Real domain tasks run under a private PML4 and are witnessed from inside the domain (`S22-X86-DOMAIN-LIVE` reports the live CR3, root and PCID; `scripts/x86/qemu-domain-test.sh`). Since architecture remediation Phase 15 the private-root grant lifecycle (§2.5) is open too: revoke flushes the receiver tag locally (`INVPCID` type 1, or a CR3 reload without PCID), confirms every online CPU through the IPI epoch, and defers to the reaper when an acknowledgement is missing (`S22-X86-GRANT-DEFERRED`). The runtime gate probes `CPUID.07H:EBX[10]` and requires INVPCID before any nonzero PCID (TCG boots PCID-off, KVM PCID-on). PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
+| RISC-V RV64 | Write `satp` with an Sv39 root PPN and allocated ASID; execute the architecture-required `sfence.vma` sequence. | ASID allocator with wrap generation, remote invalidation protocol, and a test that stale translations cannot cross a recycled ASID. | Admission: [arch-status](../generated/arch-status.md). A real Tier-2 Cell runs in a private `satp` root, with copied IPC and hardware page-fault containment verified. The 32-bit legacy targets have no page tables and cannot implement Tier 2. |
+| AArch64 | Write `TTBR0_EL1` with a private root and nonzero ASID; use `TLBI` plus required DSB/ISB ordering. | ASID generation/reuse protocol, multi-PE shootdown witness, and MAIR/TCR compatibility with the root. | Admission: [arch-status](../generated/arch-status.md) (test images only; `kernel/src/loader/domain_admission.rs:146-162` refuses a production build at compile time). A domain cell runs at EL0 under its own root in test images (`S22-AARCH64-ROOT-SWITCH`, `S22-AARCH64-DOMAIN-LIVE`). Every private-root user leaf is non-global (`kernel/src/memory/address_space.rs:1553-1571`; `PTE_nG` in `hal/arch/arm/src/aarch64/paging.rs:135-137`), so ASID-targeted `tlbi aside1is` reaches it. The ASID-invalidation witness cannot pass on QEMU 8.2.2, whose `tlbi aside1is` also retires unrelated tags, and reports `UNPROVEN` there (`kernel/src/sched/domain_switch_tests.rs:1140-1162`). Admission does not open at EL2 (`domain_admission.rs::enable_for_boot`). |
+| x86_64 | Write `CR3` with a private PML4 and PCID when CPUID supports PCID; invalidate with `INVPCID`/CR3 semantics as appropriate. | CPUID-gated PCID allocation/reuse and a correct non-PCID full-flush fallback. | Admission: [arch-status](../generated/arch-status.md) (`loader/domain_admission.rs` `switch_ordering_qualified`, production builds included). Real domain tasks run under a private PML4 and are witnessed from inside the domain (`S22-X86-DOMAIN-LIVE` reports the live CR3, root and PCID; `scripts/x86/qemu-domain-test.sh`). Since architecture remediation Phase 15 the private-root grant lifecycle (§2.5) runs too: revoke flushes the receiver tag locally (`INVPCID` type 1, or a CR3 reload without PCID), confirms every online CPU through the IPI epoch, and defers to the reaper when an acknowledgement is missing (`S22-X86-GRANT-DEFERRED`). The runtime gate probes `CPUID.07H:EBX[10]` and requires INVPCID before any nonzero PCID (TCG boots PCID-off, KVM PCID-on). PCID is an optimization, not a prerequisite; no-PCID mode must remain correct. |
 
 An architecture backend that lacks a safe private-root activation and invalidation protocol
 does not advertise Tier 2. It must retain Tier-1/Tier-3 behaviour; it may not label an
@@ -151,7 +162,7 @@ Pinned DMA frames remain quarantined until the device/IOMMU teardown acknowledge
 revoke does not authorize recycling DMA-visible memory. The initial implementation should
 prefer copied IPC and defer grants until this state machine and its race tests pass.
 
-**Containment gate (2026-09-27, phase 01) — superseded on RV64 by the phase-03
+**Containment gate (2026-09-27, phase 01) — superseded by the phase-03
 lifecycle below.** While the state machine was unimplemented the kernel refused every grant
 entry point that named a private-root task — `GrantAlloc`, `GrantRegister`, `GrantShare`,
 `GrantSlice`, `GrantFree`, `GrantUnregister`, `GrantDma` — at the common syscall gate,
@@ -160,17 +171,18 @@ alloc-safe sentinel: `GrantAlloc`/`GrantRegister` return `0`, `GrantSlice` retur
 `usize::MAX`, and share/free/unregister return the established nonzero failure —
 `libs/ostd/src/syscall.rs` decodes *any* nonzero `GrantAlloc`/`GrantRegister` return as a
 grant id, so a generic error sentinel would be published as a grant. SAS→SAS Tier-1 grants
-and copied IPC keep their exact behaviour. Tier-2 admission itself stays closed on AArch64
-production until §2.2's ordered switch completion is proven there; RV64 and x86_64 keep
-launch, copied IPC and fault containment.
+and copied IPC keep their exact behaviour. Tier-2 admission stays closed wherever
+§2.2's ordered switch completion is not proven; which builds that is, is the
+[arch-status](../generated/arch-status.md) table.
 
 **Private-root grant lifecycle (2026-09-28, phase 03 on RV64; x86_64 since 2026-11-14).** The
 gate above is now a capability check rather than a blanket refusal wherever the build-script
-cfg `cellos_domain_grants` holds: `native-domains` on RV64 and on x86_64 (production
-included), and on AArch64 only with `test-hooks`. It admits exactly one shape — a **live**
-task whose address space is a **live** private root — and every other shape keeps the
-phase-01 sentinel byte-for-byte: AArch64 production, an unknown or retired tid, a root already
-marked dying, a mixed `SAS↔private-root` pair, and an unsupported permission. The contract is:
+cfg `cellos_domain_grants` holds (`kernel/src/posture.rs::domain_grants`; per architecture: the
+[arch-status](../generated/arch-status.md) "Private-root domain grants" column). It admits exactly
+one shape — a **live** task whose address space is a **live** private root — and every other shape
+keeps the phase-01 sentinel byte-for-byte: a build without the cfg, an unknown or retired tid, a
+root already marked dying, a mixed `SAS↔private-root` pair, and an unsupported permission. The
+contract is:
 
 1. **One kernel-owned record.** `kernel/src/task/domain_grant.rs`'s `DomainGrant` is the
    single record behind both grant tables (`kernel/src/task/syscall/mod.rs`
@@ -437,9 +449,20 @@ requires a separate release decision.
 - An IOMMU domain does not grant or restrict MMIO by itself; CPU page-table mappings and
   resource ownership remain separate checks.
 - A valid signature does not create a domain, and a missing signature does not create one.
-  Until this mechanism ships, unsigned native code in the SAS is not contained.
+  The governed spawn routes an absent signature to Tier 2 or denies it (release posture), so
+  unsigned native code never runs in the SAS (`kernel/src/loader/governed_spawn.rs:102-119`;
+  Spec 18 §2); trusted `init` is the stated exception.
 
 ## 6. Evidence and follow-on owners
+
+> **Historical (2026-11-16).** The table and paragraph below are the pre-implementation census
+> (2026-09). The cited lines predate the Tier-2 backends, the syscall-file split
+> (`kernel/src/task/syscall/`) and the IOMMU move to `kernel/src/arch/<arch>/dev/iommu_*.rs`, so they no
+> longer resolve. Since then: domain-aware ownership (`memory/address_space.rs`), the scheduler
+> root decision (`sched/domain_switch.rs`), tier-to-root selection (`loader/domain_admission.rs`),
+> the domain-aware user copy (`task/user_copy/`), private-root grants (`task/domain_grant.rs`), and
+> the Spec 02 §6 and Spec 17 §12 addenda. MMIO still has no domain mapping path; device and DMA
+> authority is refused at admission instead (`loader/domain_admission.rs::unenforceable_authority`).
 
 | Current evidence | Consequence for Tier 2 |
 |---|---|

@@ -12,6 +12,8 @@ a source file, never from prose:
     domain grants      kernel/src/posture.rs::domain_grants (cfg cellos_domain_grants)
     Tier-3 hypervisor  kernel/src/arch/<dir>/hypervisor/ exists
     MAX_HARTS          kernel/src/sched/smp.rs::MAX_HARTS (cfg per arch)
+    kernel RAM alias   hal/arch/<hal>/src/<arch>/paging.rs::phys_to_virt
+                       (returns `phys` = identity map, adds an offset = HHDM)
     toolchain target   rust-toolchain.toml `targets`
     workflow lines     .github/workflows/*.yml lines naming the arch's target
     lanes              scripts/lanes.toml rows per arch and tier; `default`
@@ -49,17 +51,32 @@ WORKFLOWS = ".github/workflows"
 BOARDS = "boards"
 
 # Row key, kernel `target_arch` values, arch module directory, workflow regex
-# for the kernel target triple(s), board `Architecture` variant.
+# for the kernel target triple(s), board `Architecture` variant, HAL paging file.
 ROWS = (
-    ("x86_64", ("x86_64",), "x86_64", r"\bx86_64-unknown-none\b", "X86_64"),
-    ("riscv64", ("riscv64",), "riscv64", r"\briscv64gc-unknown-none-elf\b", "Riscv64"),
-    ("aarch64", ("aarch64",), "aarch64", r"\baarch64-unknown-none(?:-softfloat)?\b", "Aarch64"),
+    ("x86_64", ("x86_64",), "x86_64", r"\bx86_64-unknown-none\b", "X86_64", "hal/arch/x86/src/x86_64/paging.rs"),
+    (
+        "riscv64",
+        ("riscv64",),
+        "riscv64",
+        r"\briscv64gc-unknown-none-elf\b",
+        "Riscv64",
+        "hal/arch/riscv/src/rv64/paging.rs",
+    ),
+    (
+        "aarch64",
+        ("aarch64",),
+        "aarch64",
+        r"\baarch64-unknown-none(?:-softfloat)?\b",
+        "Aarch64",
+        "hal/arch/arm/src/aarch64/paging.rs",
+    ),
     (
         "32-bit legacy",
         ("riscv32", "x86", "arm"),
         "legacy",
         r"\briscv32\w*-unknown-none\w*|\bx86_32-unknown-none\b|\bi[3-6]86-unknown-none\b"
         r"|\barmv7\w*-none\w*|\bthumbv\w+-none\w*",
+        None,
         None,
     ),
 )
@@ -99,7 +116,7 @@ def probe_arch_modules() -> dict[str, str]:
         m = re.match(r"\s*mod\s+(\w+)\s*;", line)
         if m and i and lines[i - 1].strip().startswith("#[cfg("):
             found[m.group(1)] = lines[i - 1].strip()[len("#[cfg(") : -2]
-    for _, _, d, _, _ in ROWS:
+    for _, _, d, _, _, _ in ROWS:
         if d not in found:
             raise ProbeError(f"{ARCH_MOD}: no cfg-gated `mod {d};`")
     return found
@@ -168,6 +185,16 @@ def probe_max_harts() -> tuple[dict[str, str], str]:
     if default is None or not per_arch:
         raise ProbeError(f"{SMP}: MAX_HARTS cfg blocks not recognised")
     return per_arch, default
+
+
+def probe_kernel_alias(rel: str) -> str:
+    """`identity` when `phys_to_virt` returns its argument, `HHDM` when it adds an offset."""
+    body = fn_body(rel, "phys_to_virt").strip()
+    if re.fullmatch(r"phys", body):
+        return "identity (VA = PA)"
+    if re.fullmatch(r"phys\s*\+\s*\w+.*", body):
+        return "HHDM (PA + offset)"
+    raise ProbeError(f"{rel}: phys_to_virt body not recognised")
 
 
 def probe_toolchain() -> list[str]:
@@ -257,12 +284,13 @@ def render() -> str:
         "",
         "| Architecture | Kernel arch module | 64-bit set (`cellos_wide`) | Tier-2 admission "
         "(`switch_ordering_qualified`) | Private-root domain grants (`cellos_domain_grants`) "
-        "| Tier-3 hypervisor module | `MAX_HARTS` | Toolchain target | Workflow lines naming "
+        "| Tier-3 hypervisor module | `MAX_HARTS` | Kernel RAM alias (`phys_to_virt`) "
+        "| Toolchain target | Workflow lines naming "
         "the target | Lane rows pr / nightly / manual | Board descriptors |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
 
-    for name, arches, mod_dir, wf_pattern, board_arch in ROWS:
+    for name, arches, mod_dir, wf_pattern, board_arch, hal_paging in ROWS:
         arch_dir = ROOT / "kernel/src/arch" / mod_dir
         files = sum(1 for _ in arch_dir.rglob("*.rs"))
         module = f"{code(f'kernel/src/arch/{mod_dir}/')} ({files} files) under {code(mods[mod_dir])}"
@@ -290,6 +318,8 @@ def render() -> str:
             hart_cell = harts.get(arches[0], harts_default)
         else:
             hart_cell = harts_default
+
+        alias = probe_kernel_alias(hal_paging) if hal_paging else "—"
 
         wf_rx = re.compile(wf_pattern)
         targets = [t for t in toolchain if wf_rx.search(t)]
@@ -326,7 +356,7 @@ def render() -> str:
 
         lines.append(
             f"| {name} | {module} | {wide_cell} | {adm} | {grants} | {hv} | {hart_cell} "
-            f"| {tc} | {wf_cell} | {lane_cell} | {board_cell} |"
+            f"| {alias} | {tc} | {wf_cell} | {lane_cell} | {board_cell} |"
         )
 
     lines += [
@@ -353,6 +383,8 @@ def render() -> str:
         f"| Domain grants | {code(POSTURE + '::domain_grants')} |",
         "| Tier-3 hypervisor module | `kernel/src/arch/<arch>/hypervisor/` exists |",
         f"| `MAX_HARTS` | {code(SMP + '::MAX_HARTS')} |",
+        "| Kernel RAM alias | `hal::paging::phys_to_virt` in each arch's HAL paging file "
+        "(returns `phys`: identity; adds an offset: HHDM) |",
         f"| Toolchain target | {code(TOOLCHAIN)} `targets` |",
         f"| Workflow lines | {code(WORKFLOWS + '/*.yml')} lines naming the kernel target |",
         f"| Lane rows | {code(LANES)} `arch` and `tier` |",

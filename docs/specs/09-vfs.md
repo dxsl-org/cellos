@@ -3,33 +3,29 @@
 **Status**: Definitive
 **Changed 2026-06-10**: Bỏ chiến lược Dual-VFS (viFS1 RedoxFS fork / viFS2 TFS — TFS upstream đã ngừng phát triển từ ~2018). Thay bằng mô hình MountTable một VFS service + nhiều backend cắm song song. Plan chi tiết: `.agents/260610-1202-vfs-mount-table-backends/`.
 **Amended 2026-08-01**: D10 giữ RedoxFS-on-VirtIO làm G1 proof-of-function và tách riêng các gate G2 production theo ADR 0002.
+**Amended 2026-11-16** (architecture remediation Phase 19): §1, §2, §3, §4, §5 và §6 được sửa cho khớp code.
 
 
 ## 1. VFS Contract (The Interface)
 
-Trong Cellos, VFS là một bộ các **Traits** định nghĩa trong `libs/abi` (`abi::fs`) để đảm bảo tính hoán đổi giữa các bản Implementation.
+Có hai hợp đồng, và không cái nào là `Future` trên ranh giới Cell:
 
-* **Stable ABI**: Các Trait được bọc trong `#[repr(C)]` để đảm bảo ứng dụng không bị vỡ khi nâng cấp Cell hệ thống.
-* **Async by Design**: Mọi thao tác I/O đều trả về `Future`, tận dụng tối đa mô hình phi tập trung của Cellos.
+* **Giữa các Cell**: VFS là một Service Cell; App gọi nó bằng IPC message `VfsRequest`/
+  `VfsResponse` (`libs/wire/src/ipc.rs`, lỗi ở `libs/wire/src/proto/vfs.rs`), qua directory/file
+  handle (§2b, §2c). Không có trait object nào đi qua ranh giới Cell.
+* **Trong VFS Cell**: mỗi backend cài trait `FsBackend` (`cells/services/vfs/src/backend.rs:85`), đồng
+  bộ, mọi method trả `Result<_, FsError>`; `MountTable` giữ `Vec<Box<dyn FsBackend>>`
+  (`cells/services/vfs/src/mount.rs:19-21`).
 
-```rust
-pub trait ViFileSystem: Send + Sync {
-    fn open(&self, path: &str) -> ViResult<Box<dyn ViFile>>;
-    fn mount(&self, target: &str) -> ViResult<()>;
-}
-
-pub trait ViFile: Send + Sync {
-    // Quy tắc "Owned Buffers ONLY": Quyền sở hữu buffer chuyển giao hoàn toàn qua SAS
-    fn read(&mut self, buf: Box<[u8]>) -> Future<ViResult<(usize, Box<[u8]>)>>;
-    fn write(&mut self, buf: Box<[u8]>) -> Future<ViResult<(usize, Box<[u8]>)>>;
-}
-
-```
+`abi::fs` (`libs/abi/src/fs.rs`) định nghĩa `ViFileSystem`/`ViFile` đồng bộ (`read(&mut [u8])`,
+`write(&[u8])`, `seek`), cộng một `read_async` trả `BoxFuture` (`fs.rs:130-134`). Người dùng duy nhất
+là kernel: BootFS `VIFS1` (`kernel/src/fs.rs:18`, `kernel/src/fs/fat.rs`) và file trong cap registry
+(`kernel/src/cell/cap_registry.rs`). Trait không `#[repr(C)]`; chỉ struct dữ liệu như `Stat` mới là.
 
 
 ## 2. Mount-Table Layered Backends
 
-Một VFS service duy nhất (`cells/services/vfs/`) sở hữu một **MountTable** (longest-prefix match, `mount.rs`). Mỗi backend phụ trách một prefix, **ngang hàng** chứ không xếp chồng. Backend mới cắm thêm qua `Arc<dyn ViFileSystem>` mà không đụng các backend hiện có.
+Một VFS service duy nhất (`cells/services/vfs/`) sở hữu một **MountTable** (longest-prefix match, `mount.rs`). Mỗi backend phụ trách một prefix, **ngang hàng** chứ không xếp chồng. Backend mới cắm thêm qua `MountTable::add_backend(Box<dyn FsBackend>)` mà không đụng các backend hiện có.
 
 ```
 VFS service (MountTable, longest-prefix match)
@@ -55,7 +51,7 @@ VFS service (MountTable, longest-prefix match)
 
 * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI).
 * ⚠️ **Xung đột tên đã gỡ**: thuật ngữ "viFS1" trong spec cũ (= RedoxFS fork) bị bỏ; `VIFS1` trong kernel (`kernel/src/fs.rs`) từ nay hiểu là **BootFS/initramfs**.
-* 🔧 **Tech debt ghi nhận**: VFS service hiện `include_bytes!` lại các ELF `/bin` (nhúng trùng lặp với `kernel_fs.img`) — sẽ thay bằng proxy qua syscall kernel (xem plan).
+* 🔧 **Tech debt đã trả**: VFS từng `include_bytes!` lại các ELF `/bin` (nhúng trùng lặp với `kernel_fs.img`). Nay backend BootFS đọc `/bin` qua syscall FD của kernel trên `VIFS1` (`cells/services/vfs/src/backend_bootfs.rs:1-13`).
 
 
 ## 2b. Directory capabilities (2026-07-31)
@@ -132,36 +128,47 @@ Semantics that matter for the ABI:
 - No async, grant, or raw-pointer lifetime is introduced by this phase.
 
 
-## 3. Cơ chế Direct I/O & Zero-Copy
-Nhờ lợi thế của Single Address Space (SAS), Cellos đạt được tốc độ đọc/ghi dữ liệu ở mức vật lý mà không cần memcpy.
+## 3. Đường dữ liệu: copy và grant
+Dữ liệu file đi qua ba bước, mỗi bước là một copy:
 
-1. **Cấp phát**: App Cell cấp phát một buffer (`Box<[u8]>`) từ Global Heap.
-2. **Chuyển giao**: Khi gọi `read()`, quyền sở hữu buffer chuyển từ App sang VFS Cell, sau đó sang Disk Driver Cell thông qua cơ chế **Grant** trong Task TCB.
-3. **DMA**: Disk Driver dịch địa chỉ ảo của buffer sang địa chỉ vật lý và ra lệnh cho phần cứng ghi dữ liệu trực tiếp.
-4. **Hoàn tất**: Driver trả lại quyền sở hữu buffer cho App kèm theo số lượng byte đã đọc.
+1. **Block driver -> VFS**: mỗi sector đi qua `blk_router` tới block Driver Cell bằng một exact
+   operation có hạn (§6) và vào sector cache của VFS (`cells/services/vfs/src/block_stream.rs`,
+   `page_cache.rs`).
+2. **VFS -> App, inline**: reply ngắn nằm trong IPC message, tối đa 4000 byte `Data` (§2c).
+3. **VFS -> App, grant**: với `ReadHandleGrant`/`ReadGrant`, App chia sẻ một grant nó sở hữu cho
+   VFS; VFS copy byte vào đó qua `sys_grant_copy_from_slice`, tối đa `VFS_GRANT_CHUNK` = 64 KiB mỗi
+   lần (`libs/wire/src/ipc.rs:26-33`). Trong lúc copy, VFS giữ một lease trên grant: `GrantFree`/
+   `GrantUnregister` của chủ bị từ chối và chủ chết thì frame bị quarantine
+   (`cells/services/vfs/src/grant_read.rs:1-13`). Ghi theo chiều ngược lại (`WriteHandleGrant`).
+
+Quyền sở hữu buffer không chuyển sang VFS hay Driver Cell, và Driver không DMA vào buffer của App.
+Ngoại lệ là `GetFile` trên backend trong RAM: VFS trả con trỏ thô `DataPtr` vào bộ nhớ của chính
+nó cho Cell Tier 1 cùng SAS (`cells/services/vfs/src/dispatch_paths.rs:20-24`, `backend.rs:89-92`).
 
 
-## 4. Global Page Cache & SAS Optimization
+## 4. Page Cache
 
-Thay vì mỗi FS Cell tự giữ cache, Cellos dùng một Unified Page Cache nằm trong vùng nhớ dùng chung của SAS.
+Cache là sector cache LRU nằm hoàn toàn trong VFS Cell, một chủ, không lock dùng chung; ngân sách
+là một phần tư heap của Cell (`cells/services/vfs/src/page_cache.rs:1-30`). Không có page cache
+dùng chung trong SAS, và không backend nào trả con trỏ metadata cho App.
 
-* **Zero-copy Metadata**: backend native (G2) có thể trả về con trỏ trực tiếp đến cấu trúc metadata trong RAM, cho phép App đọc Metadata mà không cần syscall trung gian.
 * **LRU & OOM**: VFS Cell owns page-cache replacement/eviction policy. Kernel supplies
   quota and reclaim mechanisms but does not choose filesystem eviction policy.
 
 
-## 5. Large File Support (LFS) trên Multi-Arch
-Mặc dù hỗ trợ cả RV32, nhưng VFS của Cellos mặc định dùng 64-bit offsets (`u64`).
-
-* **RV32 (Robot Nano)**: Sử dụng các cặp thanh ghi (Register Pairs) để xử lý offsets > 4GB, đảm bảo robot có thể ghi video vào thẻ exFAT dung lượng lớn.
-* **RV64/RV128 (Jarvis)**: Tận dụng trực tiếp độ rộng thanh ghi tự nhiên cho hiệu suất tối đa.
+## 5. Large File Support (LFS)
+Offset trên wire và trong `FsBackend` là `u64` (`read_at`/`write_at`, `backend.rs`). Code 32-bit
+(RV32) không được build; kiến trúc nào có lane là bảng
+[`docs/generated/arch-status.md`](../generated/arch-status.md).
 
 
 ## 6. Fault Isolation (Luật 4 & Panic Recovery)
 Mỗi FS Cell được bao bọc bởi cơ chế an toàn của Kernel:
 
-* **Isolation**: Nếu một FS backend bị panic, chỉ các App đang truy cập phân vùng đó bị ảnh hưởng.
-* **Recovery**: Kernel thực hiện reload FS Cell. Nhờ SAS, các cấu trúc dữ liệu trong Page Cache vẫn có thể được giữ lại để Cell mới tái sử dụng (Warm Reboot).
+* **Isolation**: Mọi backend chạy trong một VFS Cell; backend panic làm chết cả VFS Cell, nên mọi
+  App đang dùng VFS đều thấy lỗi cho tới khi VFS được khởi động lại.
+* **Recovery**: Kernel không reload Cell. Init khởi động lại VFS theo cấu hình boot; cache và mọi
+  handle của instance cũ mất theo nó (handle gắn với `(CellId, generation)`, §2b, §2c).
 * **Bounded block driver (Phase 12, 2026-11-13)**: mỗi request tới block Driver Cell là một exact operation có hạn `BLOCK_REPLY_TICKS = 3_500` (35 s = budget 30 s của driver + 5 s). Driver đã nhận mà không trả lời → `Indeterminate` (write không bao giờ replay); chưa nhận → `NotIssued`. Sau một lần hết hạn, device bị đánh dấu *stalled* và mọi request tới nó bị từ chối ngay cho đến khi route trỏ sang provider khác, nên một driver bị treo chỉ tốn đúng một hạn. Witness: `a_frozen_block_driver_does_not_hang_vfs_x86` (`tests/integration/tests/nvme-x86.rs`, fault hook `F12-FREEZE`).
 * **Heartbeat**: VFS chạy trên `ostd::service::serve` với heartbeat 60 s (`liveness::VFS_HEARTBEAT_TICKS`), re-arm mỗi vòng và trước mỗi block request; VFS treo thật (lock cycle, chờ vô hạn) bị kernel kill và init restart.
 * **Typed backend errors**: mọi method của `FsBackend` trả `Result<_, FsError>`; lỗi thiết bị giữa chừng một FAT read là `FsError::Io`, không còn là short read trông như thành công. Wire byte không đổi (`Unsupported` → 6, còn lại → 1).
