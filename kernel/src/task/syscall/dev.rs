@@ -780,6 +780,11 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
 }
 
 /// Handler for `Syscall::RegisterPcieBar` (extracted from the dispatcher).
+///
+/// A BDF outside the admitted ECAM bus range names no function the Platform
+/// Cell can have scanned and is refused (`FileNotFound`, as 236 answers an
+/// absent function) before any record exists, so the device table grows only
+/// with real functions; a repeated registration adds nothing.
 pub(super) fn register_pcie_bar(
     caller_id: usize,
     bdf: u32,
@@ -789,10 +794,16 @@ pub(super) fn register_pcie_bar(
     if !caller_has_platform(caller_id) {
         return Err(SyscallError::PermissionDenied);
     }
-    crate::dev::ownership::register_pci_bar(bdf, base, len);
     // Any RegisterPcieBar call from the Platform Cell marks it as active;
     // Phase 08 uses this to gate out the kernel ECAM scan.
     crate::dev::pcie_ecam::mark_platform_registered();
+    if !crate::dev::pcie_ecam::bdf_admitted(bdf) {
+        log::warn!(
+            "[pcie] BAR {base:#x}+{len:#x} for bdf={bdf:#x} outside the ECAM window; refused"
+        );
+        return Err(SyscallError::FileNotFound);
+    }
+    crate::dev::ownership::register_pci_bar(bdf, base, len);
     Ok(0)
 }
 

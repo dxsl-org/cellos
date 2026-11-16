@@ -709,6 +709,32 @@ mod tests {
         assert!(devices_of(TID).is_empty());
     }
 
+    /// A repeated function or BAR registration (a Platform Cell rescan, 235
+    /// after 236) adds no record and no window.
+    #[test]
+    fn repeated_registrations_add_nothing() {
+        const BDF: u32 = 0xB300;
+        let key = pci_key(BDF).unwrap();
+        let records_of = || {
+            let devices = DEVICES.lock();
+            let mut records = devices.records.iter().filter(|record| record.key == key);
+            (
+                records.clone().count(),
+                records.next().map(|record| record.bars),
+            )
+        };
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register_pci_function(BDF, 0x01_08_02);
+        register_pci_bar(BDF, 0xFD00_0000, 0x4000);
+        let (count, windows) = records_of();
+        assert_eq!(count, 1);
+        for _ in 0..3 {
+            register_pci_function(BDF, 0x01_08_02);
+            register_pci_bar(BDF, 0xFD00_0000, 0x4000);
+        }
+        assert_eq!(records_of(), (1, windows));
+    }
+
     /// A `PcieDriverCap` revoke frees what that capability claimed and
     /// leaves the DWC2 aperture, which `UsbDriverCap` claimed.
     #[test]

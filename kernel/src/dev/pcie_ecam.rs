@@ -753,6 +753,17 @@ fn split_bdf(bdf: u32) -> (u8, u8, u8) {
     )
 }
 
+/// Whether canonical `bdf` names a function on a bus of the admitted ECAM
+/// window: the gate of a Platform Cell BAR registration (235), so device
+/// records grow only for functions that can exist. Without a window none does.
+pub fn bdf_admitted(bdf: u32) -> bool {
+    bdf_in_window(bdf, ecam_window())
+}
+
+fn bdf_in_window(bdf: u32, (base, bus_start, bus_end): (usize, u8, u8)) -> bool {
+    base != 0 && bdf <= 0xFFFF && (bus_start..=bus_end).contains(&split_bdf(bdf).0)
+}
+
 /// Enable MMIO decoding and bus mastering after the caller has established
 /// exclusive BDF ownership and an IOMMU mapping. Also clears the INTx Disable
 /// bit that [`quiesce_function`] set when a previous owner retired, so a new
@@ -1380,6 +1391,17 @@ mod tests {
         assert_eq!(ecam_window_size(64, 65), Some(2 * ECAM_BYTES_PER_BUS));
         assert_eq!(ecam_window_size(2, 1), None);
         assert_eq!(ecam_window_size(0, u8::MAX), Some(0x1000_0000));
+    }
+
+    #[test]
+    fn only_a_bdf_on_an_admitted_bus_is_admitted() {
+        let window = (0xE000_0000, 2, 3);
+        assert!(bdf_in_window(0x0200, window), "first bus, function 0");
+        assert!(bdf_in_window(0x03FF, window), "last bus, last function");
+        assert!(!bdf_in_window(0x01FF, window), "below the window");
+        assert!(!bdf_in_window(0x0400, window), "above the window");
+        assert!(!bdf_in_window(0x1_0200, window), "not a BDF");
+        assert!(!bdf_in_window(0x0200, (0, 2, 3)), "no window");
     }
 
     #[test]
