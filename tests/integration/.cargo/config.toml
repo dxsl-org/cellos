@@ -1,6 +1,9 @@
 [build]
 # Integration tests are host binaries (they spawn QEMU as a subprocess).
-# Override the riscv64gc-unknown-none-elf default set in ../../.cargo/config.toml.
-# Without this, `cargo test --manifest-path tests/integration/Cargo.toml` would
-# try to compile host deps (tempfile, once_cell, ...) for the RISC-V target.
-target = "x86_64-pc-windows-msvc"
+# Override the riscv64gc-unknown-none-elf default set in ../../.cargo/config.toml,
+# which would otherwise compile host deps (tempfile, once_cell, ...) for RISC-V.
+# Cargo reads this file only when invoked from tests/integration/ (config is
+# found from the working directory, not from --manifest-path); from the repo
+# root pass `--target x86_64-unknown-linux-gnu`, as CI does. Linux/WSL2 is the
+# supported host (scripts/dev-setup.sh).
+target = "x86_64-unknown-linux-gnu"

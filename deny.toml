@@ -1,7 +1,7 @@
 [graph]
 targets = [
   { triple = "riscv64gc-unknown-none-elf" },
-  { triple = "aarch64-unknown-none" },
+  { triple = "aarch64-unknown-none-softfloat" },
   { triple = "x86_64-unknown-none" },
 ]
 
