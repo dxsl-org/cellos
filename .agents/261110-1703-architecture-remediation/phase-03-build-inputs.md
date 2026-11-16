@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Explicit build inputs and single image recipe"
-status: in-progress
+status: residual
 priority: P1
 effort: "6–9d"
 dependencies: [2]
@@ -139,6 +139,7 @@ Phase 04 adds a release-posture boot lane on top of this recipe.
   Why: those rows embedded a stub or a tracked image; no job downloads `kernel-aarch64`/`kernel-x86_64`.
   Impact: `ci.yml` build job.
   Revert: restore the two upload steps and drop the feature.
+- Decision (owner, 2026-11-16, Phase 19): the plan closes with this phase as a residual. Binaries stay tracked until one pushed CI cycle has run; the release ISO stays blocked on release signing. Both items are in the [closure matrix](reports/closure-matrix.md) and the hand-back list in `docs/roadmap/current-focus.md`.
 
 ## Evidence
 

@@ -1,7 +1,7 @@
 ---
 phase: 3b
 title: "Single image recipe per architecture (RV64, AArch64)"
-status: pending
+status: residual
 priority: P3
 effort: "4–6d"
 dependencies: [3]
@@ -75,4 +75,4 @@ None; independent of later slices.
 
 ## Deviation Log
 
-None.
+- Decision (owner, 2026-11-16, Phase 19): the plan closes with this phase not started, recorded as a residual and handed back to the portfolio ([closure matrix](reports/closure-matrix.md)).
