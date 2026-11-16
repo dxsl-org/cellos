@@ -149,6 +149,25 @@ fn a_device_window_goes_only_to_the_owner_of_its_device() {
     assert!(!ownership::irq_owned_by(OWNER, LINE));
 }
 
+/// A claim overlapping another owner's window reads owner liveness without
+/// holding RESOURCE_REGISTRY (SCHEDULER ranks above it); the overlap is refused
+/// and the holder keeps its window.
+#[test]
+fn a_claim_over_a_held_window_is_refused_without_a_rank_inversion() {
+    use super::{lookup_mmio_owner, release_mmio_for, request_mmio_unchecked};
+    const WIN: usize = 0x7D20_0000;
+    const HOLDER: usize = 0x7D11;
+    const OTHER: usize = 0x7D12;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    assert_eq!(request_mmio_unchecked(HOLDER, WIN, 0x2000), Ok(()));
+    assert_eq!(
+        request_mmio_unchecked(OTHER, WIN + 0x1000, 0x1000),
+        Err(ViError::AlreadyExists)
+    );
+    assert_eq!(lookup_mmio_owner(WIN), Some(HOLDER));
+    release_mmio_for(HOLDER);
+}
+
 /// Phase 16: a released window whose lowering is not confirmed on every hart
 /// stays registered, owned by nobody, and no later claim or release frees it;
 /// the confirmed window of the same release is freed. Only a retry the timer

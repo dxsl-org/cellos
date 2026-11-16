@@ -420,7 +420,21 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
 
 /// Record `[base, end)` as `tid`'s window of `class` unless it overlaps a
 /// window another live task holds, or one being released or quarantined.
+///
+/// Lock order: SCHEDULER ranks above RESOURCE_REGISTRY, so owner liveness is
+/// read with the registry lock dropped. That is sound because tids are never
+/// re-issued (`task::task_id_selftest`) and a dead task never revives: an owner
+/// seen dead stays dead. A colliding owner not in that set, including one
+/// that claimed in between, is treated as live and refuses the grant.
 fn grant_window(tid: usize, base: usize, len: usize, end: usize, class: MmioClass) -> ViResult<()> {
+    let colliders: alloc::vec::Vec<usize> = REGISTRY
+        .lock()
+        .iter()
+        .filter(|&(&eb, region)| region.owner_tid != tid && claim_collides(eb, region, base, end))
+        .map(|(_, region)| region.owner_tid)
+        .collect();
+    let dead = dead_owners(&colliders);
+
     // 2. Overlap check — no two live cells may share a byte
     let mut reg = REGISTRY.lock();
     reg.retain(|&eb, region| {
@@ -437,14 +451,8 @@ fn grant_window(tid: usize, base: usize, len: usize, end: usize, class: MmioClas
             if region.owner_tid == QUARANTINED_OWNER || region.owner_tid == RELEASING_OWNER {
                 return Err(ViError::AlreadyExists);
             }
-            if let Some(sched) = crate::task::SCHEDULER.lock().as_ref() {
-                if let Some(task) = sched.tasks.get(&region.owner_tid) {
-                    if matches!(task.state, crate::task::tcb::TaskState::Terminated) {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
+            if dead.contains(&region.owner_tid) {
+                continue;
             }
             return Err(ViError::AlreadyExists);
         }
@@ -463,6 +471,26 @@ fn grant_window(tid: usize, base: usize, len: usize, end: usize, class: MmioClas
         },
     );
     Ok(())
+}
+
+/// Owners among `tids` that are terminated or gone. Before the scheduler
+/// exists, nobody counts as dead, which keeps every overlap refused as the
+/// previous code did.
+fn dead_owners(tids: &[usize]) -> alloc::vec::Vec<usize> {
+    if tids.is_empty() {
+        return alloc::vec::Vec::new();
+    }
+    let guard = crate::task::SCHEDULER.lock();
+    let Some(sched) = guard.as_ref() else {
+        return alloc::vec::Vec::new();
+    };
+    tids.iter()
+        .copied()
+        .filter(|t| match sched.tasks.get(t) {
+            Some(task) => matches!(task.state, crate::task::tcb::TaskState::Terminated),
+            None => true,
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
