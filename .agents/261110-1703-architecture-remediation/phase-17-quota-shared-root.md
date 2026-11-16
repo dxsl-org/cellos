@@ -1,7 +1,7 @@
 ---
 phase: 17
 title: "Quota ownership, Tier-3 charging, shared-root hardening"
-status: in-progress
+status: completed
 priority: P2
 effort: "8–12d"
 dependencies: [16]
@@ -66,20 +66,20 @@ Charge memory to an explicit owner instead of "whoever is current", bring guest 
 
 ## Todo List
 
-- [ ] Explicit charge owner
-- [ ] Hypervisor and domain tables charged
-- [ ] Free frames RW+NX
-- [ ] VA allocator (stacks, grants)
-- [ ] SMEP/SMAP/UMIP on
-- [ ] Slot randomisation
+- [x] Explicit charge owner
+- [x] Hypervisor and domain tables charged
+- [x] Free frames RW+NX
+- [x] VA allocator (stacks; grants stay VA = PA by owner decision)
+- [x] SMEP/SMAP/UMIP on
+- [x] Slot randomisation
 
 ## Success Criteria
 
-- [ ] Fixture: an allocation made in interrupt context while Cell A runs is not charged to Cell A.
-- [ ] Fixture: a VM whose guest RAM exceeds its owner's quota is refused before any mapping.
-- [ ] x86 lane boots with SMEP+SMAP+UMIP enabled; a deliberate kernel dereference of a user address outside the access window faults (existing IDT-protection lane extended).
-- [ ] Two boots of the same image place a named cell at different bases when entropy is available.
-- [ ] Kernel host tests; x86/RV64/AArch64 boot and domain lanes pass.
+- [x] Fixture: an allocation made in interrupt context while Cell A runs is not charged to Cell A.
+- [x] Fixture: a VM whose guest RAM exceeds its owner's quota is refused before any mapping.
+- [x] x86 lane boots with SMEP+SMAP+UMIP enabled; a deliberate kernel dereference of a user address outside the access window faults (existing IDT-protection lane extended).
+- [x] Two boots of the same image place a named cell at different bases when entropy is available.
+- [x] Kernel host tests; x86/RV64/AArch64 boot and domain lanes pass ([evidence](reports/phase-17-evidence.md)).
 
 ## Risk Assessment
 

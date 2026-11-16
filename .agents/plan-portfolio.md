@@ -169,6 +169,8 @@ Scope supports Intel Cellos operations only. No IDE/build environment, general L
 
 **Progress 2026-11-15.** S5b (Phase 11) closed 2026-11-12; S6 (Phases 12–13) closed 2026-11-13; S7 (Phase 14 `arch/` seam, Phase 15 x86-64 Tier-2 parity, Phase 16 frame ownership and shootdown contract) closed 2026-11-15 ([Phase 16 evidence](261110-1703-architecture-remediation/reports/phase-16-evidence.md)). Phase 16 replaced the x86 shared-root shootdown panic with quarantine, put every frame owner on `FrameRun`, and put the grant, SHM and export tables behind one `Region` record, with no ABI change. The Intel WIP lane is free. Next: S8 (Phase 17, quota ownership and shared-root hardening) needs its own handoff.
 
+**Progress 2026-11-16.** S8 Phase 17 (quota ownership and shared-root hardening) is closed ([evidence](261110-1703-architecture-remediation/reports/phase-17-evidence.md)): explicit charging, a guest-memory budget, one tag pool, RW+NX free frames, user stacks off VA = PA, SMEP/SMAP/UMIP enabled when present, and slot randomisation. There was no ABI change. The Intel WIP lane is free. Next: S8 Phase 18 (driver model and Tier-1 TCB perimeter) needs its own handoff.
+
 ## Registered — platform image families (ADR-0029), not yet admitted
 
 **Recorded 2026-10-31:** the maintainer accepted [ADR-0029](../docs/decisions/0029-platform-image-families-and-runtime-detection.md)
