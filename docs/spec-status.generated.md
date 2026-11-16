@@ -291,13 +291,13 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/17-ipc-wire-contract.md:656` — 12.2 Inter-Domain Zero-Copy Grants
 - `docs/specs/17-ipc-wire-contract.md:663` — 12.3 Private-root grant lifecycle — Ratified 2026-09-28
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
-- `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
-- `docs/specs/18-cell-trust-tiers.md:91` — 2.1 Tier 1 admission — `cellos-sign`
-- `docs/specs/18-cell-trust-tiers.md:146` — 2.2 Tier 2 admission — nothing
-- `docs/specs/18-cell-trust-tiers.md:162` — 2.3 Upgrade path (G2+, optional)
-- `docs/specs/18-cell-trust-tiers.md:172` — 3. Rejected alternatives
-- `docs/specs/18-cell-trust-tiers.md:184` — 4. Consequences
-- `docs/specs/18-cell-trust-tiers.md:213` — 5. Cross-references
+- `docs/specs/18-cell-trust-tiers.md:33` — 2. Decision
+- `docs/specs/18-cell-trust-tiers.md:92` — 2.1 Tier 1 admission — `cellos-sign`
+- `docs/specs/18-cell-trust-tiers.md:155` — 2.2 Tier 2 admission — nothing
+- `docs/specs/18-cell-trust-tiers.md:171` — 2.3 Upgrade path (G2+, optional)
+- `docs/specs/18-cell-trust-tiers.md:181` — 3. Rejected alternatives
+- `docs/specs/18-cell-trust-tiers.md:193` — 4. Consequences
+- `docs/specs/18-cell-trust-tiers.md:222` — 5. Cross-references
 - `docs/specs/18c-publisher-provenance-envelope.md:5` — Purpose and scope
 - `docs/specs/18c-publisher-provenance-envelope.md:13` — Terms
 - `docs/specs/18c-publisher-provenance-envelope.md:21` — Canonical envelope encoding, version 1

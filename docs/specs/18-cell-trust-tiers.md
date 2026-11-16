@@ -15,9 +15,10 @@ contains no `unsafe`. Two facts broke the previous story:
 1. **A signature proves only possession of its key.** `scripts/sign-cell.py` signs
    PT_LOAD segments + manifest with Ed25519. The normal `cellos-sign` route now checks
    F1/F5 before signing, but that meaning depends on a controlled pipeline and key:
-   the scan covers `cells/` (with a reviewed allowlist), not every dependency; the CLI
-   accepts target ELFs after checking the source tree rather than proving they came from
-   that build; and the reproducible dev seed is public and forgeable.
+   the `forbid` scan covers `cells/` (with a reviewed allowlist), and the code cells link
+   is held to reviewed ceilings and pins, not proven safe; the CLI reads each target
+   ELF's manifest but does not prove the ELF came from the checked build; and the
+   reproducible dev seed is public and forgeable.
 2. **There is no algorithm that verifies memory-safety of a compiled ELF.** Midori
    could verify at install time because apps shipped as typed bytecode (MSIL). Native
    ELF cannot be verified after the fact — safety must be checked at *build* time
@@ -112,14 +113,22 @@ unless its repository checks pass:
 - Cell crate roots and tracked Rust files under `cells/` satisfy the F1 attribute/token
   checks outside `scripts/unsafe-allowlist.toml`;
 - every file of an in-tree crate in the Tier-1 dependency closure (`libs/ostd`, `libs/wire`,
-  the vendored `virtio-drivers`, … — `scripts/tier1-closure.generated.toml`) stays within its
-  reviewed ceilings of `unsafe` tokens and unsafe attributes in
+  the vendored `virtio-drivers`, … — `scripts/tier1-closure.generated.toml`, resolved by
+  `cargo metadata --all-features` on the three bare-metal targets) stays within its
+  reviewed ceilings of `unsafe` tokens and unsafe attributes (`global_asm!` included) in
   `scripts/tcb-unsafe-baseline.toml`, and so does the Tier-1 total of cells plus closure;
-  third-party crates are pinned at `name@version` in the generated file, which CI
-  regenerates and diffs (Spec 16 F1b);
+  third-party crates and proc-macros are pinned by name, version and full source string (a
+  git dependency's revision included) in the generated file, which CI regenerates and diffs
+  (Spec 16 F1b);
 - a crate whose allowlist entries include `c-ffi` or `legacy-raw-ptr` declares manifest
   class FFI or UNTRUSTED, so it loads in Tier 2, unless a signed `[[tier_exception]]` names
-  it and the manifest class it accepts (tier-class gate, Spec 16 F1c);
+  it and the manifest class it accepts (tier-class gate, Spec 16 F1c). The class is read
+  from source on every run and, before signing, from each target ELF's
+  `__ViCell_manifest` exactly as the loader reads it: the binary decides, so a
+  `#[cfg]`-gated or never-expanded manifest, or a binary target without one, is refused.
+  A target is attributed to its crate by file name (a `cells/` crate's binary target); a
+  renamed copy (such as `init`) cannot be attributed and is only reported, a documented
+  residual;
 - the toolchain matches the pinned `rust-toolchain.toml` (policy F5);
 - the controlled CI job binds the target ELF to the checked build before releasing the
   production signing key. The CLI itself accepts target paths and does not establish
