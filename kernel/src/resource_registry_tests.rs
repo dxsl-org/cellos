@@ -102,6 +102,71 @@ fn unproven_quiescence_retains_the_bdf_against_a_replacement() {
     release_bdfs_for(DEAD_TID);
 }
 
+/// X1: a PCIe BAR goes only to the owner of its function, and a VirtIO slot's
+/// first claim is undone when its window is refused.
+#[test]
+fn a_device_window_goes_only_to_the_owner_of_its_device() {
+    use super::{
+        lookup_mmio_owner, release_mmio_for, release_windows, request_mmio, request_mmio_unchecked,
+        retry_quarantined_windows, DEV_PCIE, RETRY_ARMED,
+    };
+    use crate::dev::ownership::{self, DeviceKind};
+    use crate::memory::paging::PageTableError;
+    use core::sync::atomic::Ordering;
+    const BDF: u32 = 0x00_D1;
+    const BAR: usize = 0xFD10_0000;
+    const SLOT: usize = 0x7D10_0000;
+    const LINE: u8 = 0x3D;
+    const OWNER: usize = 0x7D01;
+    const OTHER: usize = 0x7D02;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    ownership::register_pci_bar(BDF, BAR, 0x4000);
+
+    // Before: any PcieDriverCap cell could claim a BAR it was never handed.
+    assert_eq!(
+        request_mmio(OWNER, BAR, 0x4000, DEV_PCIE),
+        Err(ViError::PermissionDenied)
+    );
+    assert!(claim_bdf_owner(BDF, OTHER));
+    assert_eq!(
+        request_mmio(OWNER, BAR, 0x4000, DEV_PCIE),
+        Err(ViError::PermissionDenied)
+    );
+    release_bdfs_for(OTHER);
+    assert!(claim_bdf_owner(BDF, OWNER));
+    assert_eq!(request_mmio(OWNER, BAR, 0x4000, DEV_PCIE), Ok(()));
+    assert_eq!(lookup_mmio_owner(BAR), Some(OWNER));
+    release_mmio_for(OWNER);
+    release_bdfs_for(OWNER);
+
+    // A free slot whose window is still quarantined: the claim is refused and
+    // the record is left free.
+    ownership::register_mmio_device(SLOT, 0x1000, DeviceKind::VirtioSlot, Some(LINE));
+    assert_eq!(request_mmio_unchecked(OTHER, SLOT, 0x1000), Ok(()));
+    let _ = release_windows(OTHER, |start, _| {
+        Err((start, PageTableError::InvalidationUnconfirmed))
+    });
+    assert_eq!(
+        request_mmio(OWNER, SLOT, 0x1000, DEV_PCIE),
+        Err(ViError::AlreadyExists)
+    );
+    assert!(
+        !ownership::irq_owned_by(OWNER, LINE),
+        "refused claim rolled back"
+    );
+    RETRY_ARMED.store(true, Ordering::Release);
+    retry_quarantined_windows();
+
+    assert_eq!(request_mmio(OWNER, SLOT, 0x1000, DEV_PCIE), Ok(()));
+    assert!(ownership::irq_owned_by(OWNER, LINE));
+    assert_eq!(
+        request_mmio(OTHER, SLOT, 0x1000, DEV_PCIE),
+        Err(ViError::AlreadyExists)
+    );
+    release_mmio_for(OWNER);
+    assert!(!ownership::irq_owned_by(OWNER, LINE));
+}
+
 /// Phase 16: a released window whose lowering is not confirmed on every hart
 /// stays registered, owned by nobody, and no later claim or release frees it;
 /// the confirmed window of the same release is freed. Only a retry the timer

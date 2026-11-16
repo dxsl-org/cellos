@@ -319,8 +319,8 @@ pub(crate) fn release_pci_for(tid: usize) {
     }
 }
 
-/// Whether `[base, base + len)` is a window of some device record (the
-/// `RequestMmio` PCIe path).
+/// Whether `[base, base + len)` is a window of a PCI function or VirtIO slot
+/// record (the `RequestMmio` PCIe path).
 pub(crate) fn is_device_window(base: usize, len: usize) -> bool {
     DEVICES
         .lock()
@@ -330,12 +330,60 @@ pub(crate) fn is_device_window(base: usize, len: usize) -> bool {
         .any(|record| record.kind != DeviceKind::Dwc2 && record.has_window(base, len))
 }
 
-/// Record `tid` as the owner of the MMIO device whose window `[base, base +
-/// len)` it was just granted.
-pub(crate) fn note_mmio_claim(tid: usize, base: usize, len: usize) {
-    for record in DEVICES.lock().records.iter_mut().flatten() {
-        if record.key.kind == BLOCK_DEVICE_MMIO && record.has_window(base, len) {
+/// What a `RequestMmio` claim found in the device records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WindowClaim {
+    /// No record of the path holds the window.
+    NoDevice,
+    /// The caller already owns the window's device.
+    Owned,
+    /// The caller now owns the window's MMIO device (its first claim of a
+    /// VirtIO slot or the DWC2 aperture); [`unclaim`] undoes it when the
+    /// window grant then fails.
+    Claimed(DeviceKey),
+    /// The window is a BAR of a PCI function the caller has not claimed
+    /// through 418/424 (free, or another task's).
+    NotOwner,
+    /// The window's MMIO device is another task's, live or awaiting its
+    /// teardown.
+    Held,
+}
+
+/// Claim the device whose window `[base, base + len)` is, for `tid`, before
+/// the window is granted: a PCI function's BAR only for its owner, a VirtIO
+/// slot (`dwc2 == false`) or the DWC2 aperture (`dwc2 == true`) for its owner
+/// or, when free, for its first claimant.
+pub(crate) fn claim_window(tid: usize, base: usize, len: usize, dwc2: bool) -> WindowClaim {
+    let mut devices = DEVICES.lock();
+    let mut matching =
+        devices.records.iter_mut().flatten().filter(|record| {
+            (record.kind == DeviceKind::Dwc2) == dwc2 && record.has_window(base, len)
+        });
+    let Some(record) = matching.next() else {
+        return WindowClaim::NoDevice;
+    };
+    // Two records naming one window (a 235 registration repeating a scanned
+    // BAR under another BDF) answer for whichever the caller owns.
+    if !record.owned_by(tid) && matching.any(|other| other.owned_by(tid)) {
+        return WindowClaim::Owned;
+    }
+    match (record.owner, record.kind) {
+        (Some(owner), _) if owner == tid => WindowClaim::Owned,
+        (_, DeviceKind::Pci { .. }) => WindowClaim::NotOwner,
+        (Some(_), _) => WindowClaim::Held,
+        (None, _) => {
             record.owner = Some(tid);
+            WindowClaim::Claimed(record.key)
+        }
+    }
+}
+
+/// Undo a [`WindowClaim::Claimed`] whose window grant failed: free `key`'s
+/// record if `tid` still owns it.
+pub(crate) fn unclaim(tid: usize, key: DeviceKey) {
+    if let Some(record) = DEVICES.lock().find(key) {
+        if record.owned_by(tid) {
+            record.owner = None;
         }
     }
 }

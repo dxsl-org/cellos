@@ -336,33 +336,67 @@ pub fn dwc2_aperture_owned_by(tid: usize) -> Option<usize> {
         .then_some(base)
 }
 
-/// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding `UsbDriverCap`.
+/// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding
+/// `UsbDriverCap`: the aperture's device record is claimed first (its owner,
+/// or its first claimant while free), and a first claim is undone when the
+/// window is refused.
 pub fn request_dwc2_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
     if !is_dwc2_mmio(base, len) {
         return Err(ViError::PermissionDenied);
     }
     let end = checked_mmio_end(base, len)?;
-    let mut reg = REGISTRY.lock();
-    if reg
-        .iter()
-        .any(|(&window_base, region)| claim_collides(window_base, region, base, end))
-    {
-        return Err(ViError::AlreadyExists);
+    claim_device_then(tid, base, len, true, || {
+        let mut reg = REGISTRY.lock();
+        if reg
+            .iter()
+            .any(|(&window_base, region)| claim_collides(window_base, region, base, end))
+        {
+            return Err(ViError::AlreadyExists);
+        }
+        #[cfg(feature = "p01-trace")]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::DRIVER_SHARED,
+        );
+        reg.insert(
+            base,
+            MmioRegion {
+                len,
+                owner_tid: tid,
+                class: CLASS_DWC2,
+            },
+        );
+        Ok(())
+    })
+}
+
+/// Claim the device record holding window `[base, base + len)` for `tid`, then
+/// run `grant`; a first claim of an MMIO device is undone when `grant` fails.
+///
+/// A PCI function's BAR is granted only to the function's owner (the 418/424
+/// claimant), so no driver can map, reset or reprogram a device it was not
+/// handed. A VirtIO slot or the DWC2 aperture is claimed by its first
+/// requester and refused to everyone else until its owner is reaped. Lock
+/// order: `DEVICES` is released before `grant` takes `REGISTRY`.
+fn claim_device_then(
+    tid: usize,
+    base: usize,
+    len: usize,
+    dwc2: bool,
+    grant: impl FnOnce() -> ViResult<()>,
+) -> ViResult<()> {
+    use crate::dev::ownership::{claim_window, unclaim, WindowClaim};
+    let claim = claim_window(tid, base, len, dwc2);
+    match claim {
+        WindowClaim::NoDevice | WindowClaim::NotOwner => return Err(ViError::PermissionDenied),
+        WindowClaim::Held => return Err(ViError::AlreadyExists),
+        WindowClaim::Owned | WindowClaim::Claimed(_) => {}
     }
-    #[cfg(feature = "p01-trace")]
-    let _semantic = crate::memory::heap::p01_owner::creation(
-        None,
-        crate::memory::heap::p01_owner::DRIVER_SHARED,
-    );
-    reg.insert(
-        base,
-        MmioRegion {
-            len,
-            owner_tid: tid,
-            class: CLASS_DWC2,
-        },
-    );
-    Ok(())
+    let granted = grant();
+    if let (Err(_), WindowClaim::Claimed(key)) = (&granted, claim) {
+        unclaim(tid, key);
+    }
+    granted
 }
 
 /// Request exclusive ownership of `[base, base+len)` for task `tid`.
@@ -371,8 +405,10 @@ pub fn request_dwc2_mmio(tid: usize, base: usize, len: usize) -> ViResult<()> {
 /// - `Ok(())` — range is now owned by the caller; construct `MmioRegion` and
 ///   hand it to the Cell.
 /// - `Err(PermissionDenied)` — range not in allowlist, or its device class is
-///   not among `allowed_devices` (the cell's declared `mmio_devices`).
-/// - `Err(AlreadyExists)` — range overlaps an already-granted region.
+///   not among `allowed_devices` (the cell's declared `mmio_devices`), or it is
+///   the BAR of a PCI function the caller does not own.
+/// - `Err(AlreadyExists)` — range overlaps an already-granted region, or is a
+///   VirtIO slot another task owns.
 /// - `Err(InvalidInput)` — zero length or arithmetic overflow in `base + len`.
 pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) -> ViResult<()> {
     // 1. Allowlist check — the range must fall inside a known device window
@@ -380,20 +416,22 @@ pub fn request_mmio(tid: usize, base: usize, len: usize, allowed_devices: u8) ->
     let end = checked_mmio_end(base, len)?;
 
     // PCIe path: the window must be one a device record holds (a scanned or
-    // registered BAR, or a VirtIO slot).
-    let class: MmioClass = if allowed_devices & DEV_PCIE != 0 {
-        if !crate::dev::ownership::is_device_window(base, len) {
-            return Err(ViError::PermissionDenied);
-        }
-        DEV_PCIE as MmioClass
-    } else {
-        // SoC peripheral path: static per-arch allowlist.
-        match static_range_class(ALLOWED, base, end, allowed_devices) {
-            Some(class) => class as MmioClass,
-            None => return Err(ViError::PermissionDenied),
-        }
-    };
+    // registered BAR, or a VirtIO slot), and the caller must own that device.
+    if allowed_devices & DEV_PCIE != 0 {
+        return claim_device_then(tid, base, len, false, || {
+            grant_window(tid, base, len, end, DEV_PCIE as MmioClass)
+        });
+    }
+    // SoC peripheral path: static per-arch allowlist.
+    match static_range_class(ALLOWED, base, end, allowed_devices) {
+        Some(class) => grant_window(tid, base, len, end, class as MmioClass),
+        None => Err(ViError::PermissionDenied),
+    }
+}
 
+/// Record `[base, end)` as `tid`'s window of `class` unless it overlaps a
+/// window another live task holds, or one being released or quarantined.
+fn grant_window(tid: usize, base: usize, len: usize, end: usize, class: MmioClass) -> ViResult<()> {
     // 2. Overlap check — no two live cells may share a byte
     let mut reg = REGISTRY.lock();
     reg.retain(|&eb, region| {

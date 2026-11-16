@@ -1130,7 +1130,8 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
         };
     }
     // PCIe BAR path: cells with PcieDriverCap may claim a window of a device
-    // record (a BAR found by the ECAM scan or registered, or a VirtIO slot).
+    // record they own (a BAR of the function 418/424 handed them), or a
+    // VirtIO slot no other task owns (`request_mmio` claims it first).
     if caller_has_pcie_driver(caller_id) && crate::dev::ownership::is_device_window(base, len) {
         return match crate::resource_registry::request_mmio(
             caller_id,
@@ -1139,7 +1140,6 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
             crate::resource_registry::DEV_PCIE,
         ) {
             Ok(()) => {
-                crate::dev::ownership::note_mmio_claim(caller_id, base, len);
                 user_map_pcie_bar(base, len);
                 Ok(0)
             }
@@ -1152,7 +1152,6 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     if caller_has_usb_driver(caller_id) && crate::resource_registry::is_dwc2_mmio(base, len) {
         return match crate::resource_registry::request_dwc2_mmio(caller_id, base, len) {
             Ok(()) => {
-                crate::dev::ownership::note_mmio_claim(caller_id, base, len);
                 user_map(base, len);
                 Ok(0)
             }
