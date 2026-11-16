@@ -558,23 +558,28 @@ mod tests {
 **Rules**:
 - Test critical logic (allocators, scheduler, IPC)
 - Use `expect()` with clear messages, not `unwrap()`
-- No integration tests in kernel (use architecture tests in `tests/`)
+- No integration tests in the kernel crate; put them in `tests/integration/` (below)
 - Self-test and fixture code compiled into the kernel stays behind `test-hooks` and is
   categorised `test` in `kernel/residents.toml`; a release kernel carries no self-test symbol.
 
 ### Integration Tests
 
-Located in `tests/architecture-validation/`:
-```
-tests/
-├── step1_spec_verification.md
-├── step2_dependency_analysis.md
-└── (20+ checks)
-```
+**Corrected 2026-11-16.** This section used to point at `tests/architecture-validation/` and
+`cargo test --test '*' --release`. That directory holds early design-validation notes (`*.md`)
+and loose `*.rs` files with no `Cargo.toml`. It is in no workspace and no CI job or lane builds
+it, so it is not a test suite. The `step1_spec_verification.md` it listed does not exist.
 
-**Run**:
+Integration tests are the host crate `tests/integration/` (`vicell-integration-tests`). It is
+standalone, outside the root workspace, because the tests are host binaries that boot QEMU and
+drive the guest over serial (`tests/integration/Cargo.toml:1-11`). There is one `[[test]]`
+target per scenario, and every target needs a tier row in `scripts/lanes.toml`
+(`scripts/check-lanes.py`).
+
+**Run** (from the repository root, with an explicit host target as CI does; the target needs
+the ISO or image named by its environment variable):
 ```bash
-cargo test --test '*' --release
+cargo test --manifest-path tests/integration/Cargo.toml --test x86_64-boot \
+    --target x86_64-unknown-linux-gnu -- --nocapture
 ```
 
 ### Definition of Done (runtime evidence, not checkboxes)
