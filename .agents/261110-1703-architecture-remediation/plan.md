@@ -1,7 +1,7 @@
 ---
 title: "Architecture remediation — review 2026-11-10"
 description: "Close the 2 Critical, 14 High, 22 Medium and 8 Low findings of the whole-architecture review without changing the ADR-0022 direction."
-status: in-progress
+status: completed
 priority: P1
 effort: "~110–150 working days, single WIP lane (rough; per-phase ranges in phase files)"
 branch: main
@@ -44,7 +44,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 16 | [Frame ownership and shootdown contract](phase-16-frame-ownership.md) — completed 2026-11-15 ([evidence](reports/phase-16-evidence.md)); the S7c handoff is closed and S7 closes | S7 | 15 | — | ✓ |
 | 17 | [Quota ownership, Tier-3 charging, shared-root hardening](phase-17-quota-shared-root.md) — completed 2026-11-16 ([evidence](reports/phase-17-evidence.md)); the S8 handoff for Phase 17 is closed | S8 hardening | 16 | — | |
 | 18 | [Driver model and Tier-1 TCB perimeter](phase-18-driver-model-tcb.md) — completed 2026-11-16 ([evidence](reports/phase-18-evidence.md)); the S8b handoff is closed | S8 | 05, 12 | — | |
-| 19 | [Spec reconciliation, hygiene and closure](phase-19-closure.md) — in progress ([S8c handoff](s8c-handoff-approval.md) approved 2026-11-16) | S8 | all | — | ✓ |
+| 19 | [Spec reconciliation, hygiene and closure](phase-19-closure.md) — completed 2026-11-16 ([evidence](reports/phase-19-evidence.md), [closure matrix](reports/closure-matrix.md)); the owner closed the plan, with 03/03b and the matrix residuals handed back to the portfolio | S8 | all | — | ✓ |
 
 ## Dependencies and order
 

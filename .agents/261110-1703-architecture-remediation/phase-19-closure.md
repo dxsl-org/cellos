@@ -1,7 +1,7 @@
 ---
 phase: 19
 title: "Spec reconciliation, hygiene and closure"
-status: in-progress
+status: completed
 priority: P3
 effort: "5–7d"
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
@@ -68,21 +68,21 @@ Bring the specs in line with the code the earlier phases produced, remove the re
 
 ## Todo List
 
-- [ ] Closure matrix
-- [ ] Spec sweep + generated arch status
-- [ ] Spec numbering
-- [ ] Residue removed
-- [ ] Contributor docs fixed
-- [ ] Retention decision
-- [ ] Living docs
-- [ ] Owner closure
+- [x] Closure matrix
+- [x] Spec sweep + generated arch status
+- [x] Spec numbering
+- [x] Residue removed
+- [x] Contributor docs fixed
+- [x] Retention decision (report only, owner)
+- [x] Living docs
+- [x] Owner closure
 
 ## Success Criteria
 
-- [ ] Every Critical and High row in the closure matrix is `closed` with an evidence link, or `residual` with the owner's written acceptance; no row is `closed` on prose alone.
-- [ ] `python3 scripts/check-spec-anchors.py` and `python3 scripts/check-plan-status.py` exit 0.
-- [ ] Review re-check numbers recorded beside the originals (e.g. `target_arch` outside `arch/`, path literals in kernel, `sys_send` in services, tracked binaries >1 MB).
-- [ ] Checkpoint: all `pr` and `nightly` lanes in `lanes.toml` green on the closing commit; independent end-to-end review (haily-reviewer) recorded.
+- [x] Every Critical and High row in the closure matrix is `closed` with an evidence link, or `residual` with the owner's written acceptance; no row is `closed` on prose alone.
+- [x] `python3 scripts/check-spec-anchors.py` and `python3 scripts/check-plan-status.py` exit 0.
+- [x] Review re-check numbers recorded beside the originals (e.g. `target_arch` outside `arch/`, path literals in kernel, `sys_send` in services, tracked binaries >1 MB).
+- [x] Checkpoint: all `pr` and `nightly` lanes in `lanes.toml` green on the closing commit; independent end-to-end review (haily-reviewer) recorded. Met except `c2c-broker-oracle` (N-8) and six `bootsuite` tests (N-9), pre-existing and accepted by the owner as residuals (Deviation Log).
 
 ## Risk Assessment
 
@@ -117,3 +117,4 @@ Hand back to the portfolio: remaining open items of the 2026-11-05 security audi
 - **Deviation.** The closure matrix is not read by `check-plan-status.py`, contrary to § Architecture. The guard checks frontmatter and checkboxes only; the matrix is evidence, not a guard input.
 - **Surprise.** The spec sweep bannered Spec 00 Law 5 (no `mod.rs`) and Law 6 (`Vi` traits support ownership transfer) as historical, although no earlier phase changed that behaviour on purpose; the code never followed them. The `mod.rs` ban was also removed from `CONTRIBUTING.md`, `PATTERNS.md` and `code-standards.md` (`6d4219819e`). This is recorded as finding N-4 for the owner's closure decision.
 - **Surprise.** `generate-code-metrics.py --check` went stale with `f25c02f7c8` (kernel nLOC 72,004 → 72,002), which would fail CI `lint` on the closing commit; regenerated in `73f0215eed`. The end-to-end review also found that the `rust-std` re-pin dropped `syscall/grant.rs`, whose locks order GetRandom's final write against grant teardown; it is re-pinned with that file.
+- **Decision (2026-11-16, owner, closure).** The owner accepted in writing the thirteen residuals M-K2, M-K3, M-A2, M-A4, M-W5 and N-2 to N-9, and acknowledged H-9 as closed against Phase 14's amended criterion. The checkpoint's "all `pr` lanes green" holds except `c2c-broker-oracle` (N-8) and six `bootsuite` tests (N-9), which also fail before Phase 18 and are among the accepted residuals. The owner closed the plan ([evidence](reports/phase-19-evidence.md), [closure matrix](reports/closure-matrix.md)).

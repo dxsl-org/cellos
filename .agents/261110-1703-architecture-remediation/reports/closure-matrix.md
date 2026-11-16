@@ -212,9 +212,9 @@ These came from the Phase 19 allowlist re-review wave (`708b80877b`, `fef6f2ff93
 | N-8 | `c2c-broker-oracle` fails: `oracle passed without proving interrupt-driven NET_RX completion` (`tests/integration/tests/c2c-broker-oracle.rs:376`), log shows `[net-bridge] NIC driver reply timeout`. Root cause not traced. It fails the same way on `1d13abd68e` (pre-Phase 18). | closing lane run (§ Closing lane run) | residual; owner acceptance pending |
 | N-9 | `bootsuite` (RV64 `gen_disk.ps1` image): six tests fail, all pre-existing (same on `1d13abd68e`). `http-smoke`: `/bin/http-smoke` has no network right (`kernel/src/catalog.rs:530`), and net refuses `Connect` since `8fe158478a`. `ocel-browser` and `ocel-quickjs`: reader mode is the default and disables scripts since `4994602b55` (`cells/apps/ocel/src/main.rs:206,286`). `ocel-static`: the serial shell refuses a `&` background launch since `5043e2cf59` (`cells/tools/cellbox/src/executor.rs:4276`). `window-policy`: a typed command is delivered to the focused window [INFERENCE]. `viui-managed-surface`: fixed decoration coordinates [INFERENCE]. Each needs a product or test decision. | closing lane run (§ Closing lane run) | residual; owner decision pending |
 
-## For owner closure
+## Owner closure (2026-11-16)
 
-These are recorded but have no written owner acceptance yet. Every other residual is accepted (§ Owner decisions).
+The owner accepted every residual below in writing on 2026-11-16 and acknowledged H-9; the plan is closed (phase-19-closure.md Deviation Log). With § Owner decisions, every residual in this matrix now has written acceptance.
 
 | ID | Residual | Recorded in |
 |---|---|---|

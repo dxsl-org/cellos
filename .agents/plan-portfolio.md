@@ -161,7 +161,7 @@ A signature proves neither qualification nor permission to deploy. Physical Inte
 
 Scope supports Intel Cellos operations only. No IDE/build environment, general Linux command inventory or independent application ecosystem is selected.
 
-## Admitted — architecture remediation (review 2026-11-10); slice S0 closed 2026-11-10, S1 needs a handoff
+## Done — architecture remediation (review 2026-11-10); closed by the owner 2026-11-16
 
 **Recorded 2026-11-10.** [Plan](261110-1703-architecture-remediation/plan.md) closes the 2 Critical / 14 High / 22 Medium / 8 Low findings of the [architecture review](reports/architecture-review-261110.md) as measured-defect work serving Intel C2C (ADR-0022). Owner [approval](261110-1703-architecture-remediation/admission-approval.md): all slices S0–S8 in order, decisions D1–D4 at their defaults. Only S0 (Phase 01, docs + workspace members + status guard) is effective; S1–S8 each need their own handoff and, for `libs/api`/`libs/types` changes, Law-1 CP1/CP2. Single-WIP rule applies; this plan never takes files from an active Intel slice.
 
@@ -178,6 +178,14 @@ Scope supports Intel Cellos operations only. No IDE/build environment, general L
 - a signer tier-class gate that reads the ELF manifest, and an unsafe ratchet over the Tier-1 dependency closure.
 
 There was no ABI change. The Intel WIP lane is free. Next: S8 Phase 19 (closure) needs its own handoff. The allowlist re-review wave is due before 2027-02-03.
+
+**Closed 2026-11-16.** S8c Phase 19 closed the plan ([evidence](261110-1703-architecture-remediation/reports/phase-19-evidence.md), [closure matrix](261110-1703-architecture-remediation/reports/closure-matrix.md)).
+- Critical 2/2 and 9 of 14 Highs are closed. The other 5 Highs and every Medium, Low and Phase 19 finding residual have the owner's written acceptance.
+- Phases 03 and 03b are residuals tied to one pushed CI cycle and release signing.
+- Handed back to the portfolio (`docs/roadmap/current-focus.md`): the accepted residuals, the Phase 16–19 carried items, the open items of the 2026-11-05 security audit, and physical qualification.
+- The next allowlist review wave falls due 2027-05-14/21/28.
+
+The Intel WIP lane is free. This plan holds no lock exception any more.
 
 ## Registered — platform image families (ADR-0029), not yet admitted
 

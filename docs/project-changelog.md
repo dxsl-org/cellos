@@ -4,6 +4,23 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-16 — Specs match the code again, and the architecture remediation plan closes (Phase 19).**
+  - **Specs.**
+    - Eighteen specs are reconciled with the code; sections an earlier phase deliberately changed carry a dated "historical" banner.
+    - Per-arch status lives in one generated table, `docs/generated/arch-status.md` from `scripts/generate-arch-status.py`, checked in CI.
+    - Duplicate spec numbers are gone: `00-fork.md` is now `27-fork.md` and `14-viui.md` is now `28-viui.md`.
+  - **Docs.**
+    - `security-model.md` describes the enforced authority rule, postures, Tier-1 perimeter, device ownership and `CapRevoke`.
+    - `system-architecture.md`, `codebase-summary.md`, `project-roadmap.md`, `code-standards.md` and `current-focus.md` match the tree; `current-focus.md` holds the hand-back list.
+    - The false "`mod.rs` is forbidden" rule is gone from seven docs.
+  - **Hygiene.**
+    - Root junk files, dead kernel items and a stale bootstrap script that would overwrite seven files are deleted.
+    - The `Dockerfile` builds Cellos, and `.dockerignore` cuts the build context from 5 GB to 196 MB.
+    - aarch64 target names are `aarch64-unknown-none-softfloat` everywhere, so the aarch64 handoff tests run instead of silently skipping.
+  - **Allowlist.** Every entry due before 2027-03-01 was re-read site by site; the next review dates are 2027-05-14/21/28.
+  - **Lanes fixed.** `vfs-quota`, `x86hv-iso`, the EL2 test-hooks lane (root-entering self-tests skip on an EL2 host, which must report Tier 2 admission disabled), `shellutils`, both AI oracles and `rust-std-promotion` (owner-approved re-pin of its approval package) pass again.
+  - **virtio-blk.** On x86, the driver now latches `poisoned` after a stall and refuses later requests instead of leaking bounce slots until an assert.
+  - **Verified.** See `.agents/261110-1703-architecture-remediation/reports/phase-19-evidence.md` and `reports/closure-matrix.md`. Every `pr` and `nightly` lane passes except the C2C broker oracle's NET_RX proof and six RV64 bootsuite tests. Both also fail before Phase 18 and are owner-accepted residuals. No syscall number, ABI byte or wire byte changes.
 - **2026-11-16 — One NIC driver library, one device-ownership record, and a checked Tier-1 perimeter in the signer (architecture remediation Phase 18).**
   - **NIC drivers.** The nine NIC cells (igc, ixgbe, i40e, r8169, bcm57xx, e1000, e1000e, igb, vmxnet3) now build on `libs/nic-driver`. It holds bring-up, the serve loop, the sender gate, dispatch, the DMA layout and the MSI-X wait behind one `NicDevice` trait. NIC `unsafe` lines dropped from 102 to 16, and eight cells now forbid `unsafe`. The wire protocol and bind lines are unchanged.
   - **Two NICs.** NIC routes are keyed by the device each driver owns. When the primary driver dies or loses its device, the next live route becomes primary. Two service-less boot-config entries may share a driver `path`, so two NICs of the same model each get a driver. The new `nic2-x86` lane checks both pairs and failover. Only the primary carries traffic.
