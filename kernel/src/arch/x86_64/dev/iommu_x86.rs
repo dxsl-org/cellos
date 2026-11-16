@@ -16,7 +16,7 @@ use crate::sync::Spinlock;
 use alloc::vec::Vec;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};
 
-use crate::dev::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu::{DmaIsolationInput, DmaMapResult};
 use crate::dev::iommu_pt::VtdSlpt;
 use context::{
     canonical_bdf, clear_ctx_slot, context_entry, context_slot, read_ctx_slot, write_ctx_entry,
@@ -183,11 +183,11 @@ pub fn map_window_for_cell(
 /// Clear export window `[iova, iova + size)` from Cell `tid`'s domain on every
 /// unit and drain that domain's IOTLB (drain-read/drain-write).
 ///
-/// Unlike [`unmap_range_for_cell`], the invalidation is issued even when the
-/// leaves are already zero: a retry after a timed-out drain must re-drain, not
-/// conclude "nothing mapped". A unit without a domain for `tid` has nothing to
-/// drain (its teardown was acknowledged, or it never held one). Returns `true`
-/// only when every drain was acknowledged.
+/// The invalidation is issued even when the leaves are already zero: a retry
+/// after a timed-out drain must re-drain, not conclude "nothing mapped". A unit
+/// without a domain for `tid` has nothing to drain (its teardown was
+/// acknowledged, or it never held one). Returns `true` only when every drain
+/// was acknowledged.
 pub fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
     let units = UNITS.lock();
     let mut confirmed = true;
@@ -387,32 +387,6 @@ pub fn unmap_cell_domain(tid: u64) -> bool {
         }
     }
     all_ok
-}
-
-pub fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    let units = UNITS.lock();
-    let mut total_pages = 0;
-    let mut confirmed = true;
-
-    for u in units.iter() {
-        let domains = u.domains.lock();
-        let Some(domain) = domains.get(&tid) else {
-            continue;
-        };
-        let pages = domain.slpt.unmap_range(iova, size);
-        if pages == 0 {
-            continue;
-        }
-        total_pages += pages;
-        // Publish the zeroed leaves before the invalidation command.
-        fence(Ordering::SeqCst);
-        confirmed &= u.invalidate_iotlb(Scope::Domain(domain.did));
-    }
-    match (total_pages, confirmed) {
-        (0, _) => DmaUnmapResult::NothingMapped,
-        (pages, true) => DmaUnmapResult::Unmapped { pages },
-        (pages, false) => DmaUnmapResult::PublishedUnconfirmed { pages },
-    }
 }
 
 /// Enable DMA translation on every unit, then interrupt remapping where the

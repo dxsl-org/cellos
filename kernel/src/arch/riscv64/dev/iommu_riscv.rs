@@ -21,7 +21,7 @@ use alloc::{
 use super::iommu_riscv_cmd::{
     encode_cqb, encode_iodir_inval_ddt, encode_iofence_c, encode_iotinval_vma,
 };
-use crate::dev::iommu::{classify_dma_publication, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu::{classify_dma_publication, DmaMapResult};
 use crate::dev::iommu_pt::Sv39IommuPt;
 use crate::dev::pcie_ecam;
 use crate::sync::Spinlock;
@@ -456,12 +456,6 @@ pub(crate) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> 
     DmaMapResult::Mapped(phys)
 }
 
-/// Backward-compat: register a DMA range for the kernel domain (tid=0) without a BDF.
-#[allow(dead_code)] // reason: kept for API parity with iommu_x86; no caller wired up yet
-pub(crate) fn map_range(phys: u64, size: usize) {
-    let _ = map_range_for_cell(0, 0, phys, size);
-}
-
 // ── Cell exit DMA cleanup ─────────────────────────────────────────────────────
 
 /// Flush IOTLB and invalidate DDT contexts for `tid`.
@@ -512,57 +506,6 @@ pub(crate) fn unmap_cell(tid: u64) -> bool {
         domain.pscid
     );
     true
-}
-
-/// Zero Cell `tid`'s Sv39 leaves for `[iova, iova+size)` and invalidate its
-/// first-stage translations. Runtime-revoke counterpart of `unmap_cell`: same
-/// PSCID, but the Cell keeps running and keeps its other ranges.
-///
-/// One IOFENCE acknowledges the whole batch, mirroring the map path: the leaves
-/// are zeroed before the command is enqueued, and a fence that never drains
-/// leaves the range unlinked but not yet unreachable.
-pub(crate) fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    let bar0 = BAR0.load(Ordering::Relaxed);
-    let cq_virt = CQ_VIRT.load(Ordering::Relaxed);
-
-    // Lock order: RISCV_DOMAINS → CQ_TRANSACTION (same as map_range_for_cell).
-    let domains = RISCV_DOMAINS.lock();
-    let Some(domain) = domains.get(&tid) else {
-        return DmaUnmapResult::NothingMapped;
-    };
-
-    let pages = domain.pt.unmap_range(iova, size);
-    if pages == 0 {
-        return DmaUnmapResult::NothingMapped;
-    }
-    // No remapping hardware: no cached translation can exist for the leaves.
-    if bar0 == 0 {
-        return DmaUnmapResult::Unmapped { pages };
-    }
-    if cq_virt == 0 {
-        return DmaUnmapResult::PublishedUnconfirmed { pages };
-    }
-
-    let acknowledged = {
-        let _transaction = CQ_TRANSACTION.lock();
-        invalidate_pscid_tlb(bar0, cq_virt, domain.pscid) && issue_iofence(bar0, cq_virt)
-    };
-    if acknowledged {
-        log::info!(
-            "[iommu] Cell {} PSCID={} unlinked {pages} page(s) at {iova:#x}",
-            tid,
-            domain.pscid
-        );
-        DmaUnmapResult::Unmapped { pages }
-    } else {
-        log::warn!(
-            "[iommu] Cell {} PSCID={} unlinked {pages} page(s) at {iova:#x} but the IOFENCE \
-             never drained",
-            tid,
-            domain.pscid
-        );
-        DmaUnmapResult::PublishedUnconfirmed { pages }
-    }
 }
 
 /// `init_hw` found the IOMMU and set up its DDT and command queue.

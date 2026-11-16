@@ -5,7 +5,7 @@ use hal_soc_bcm27xx::BCM2711;
 
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
-    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoVcpuExt, PlatformFacts, SdhciFacts,
     SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
@@ -16,8 +16,6 @@ use crate::aarch64::{timer, uart_pl011};
 pub struct Bcm2711;
 
 impl ArmPlatform for Bcm2711 {
-    type Iommu = NoIommu;
-
     const PL011_BASE: usize = BCM2711.mmio.uart_base;
     /// The VideoCore firmware's armstub (and QEMU `raspi4b`) parks cores 1–3
     /// on the DTB's `cpu-release-addr` words (0xd8/0xe0/0xe8/0xf0,

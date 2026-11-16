@@ -11,7 +11,7 @@ use hal_arch_trait::{vi_ipi_service, vi_timer_tick};
 
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
-    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoVcpuExt, PlatformFacts, SdhciFacts,
     SecondaryStart, VgicWindows,
 };
 use crate::aarch64::trap::TrapFrame;
@@ -61,8 +61,6 @@ const fn timer_firing(ctl: u64) -> bool {
 pub struct AppleT8103;
 
 impl ArmPlatform for AppleT8103 {
-    type Iommu = NoIommu;
-
     const PL011_BASE: usize = 0;
     const SECONDARY_START: SecondaryStart = SecondaryStart::SpinTable;
     const CONSOLE_RX_IRQ: bool = false;

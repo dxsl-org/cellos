@@ -1,13 +1,13 @@
 //! IOMMU common API — three-phase DMA isolation.
 //!
 //! Phase 1 `init()`             — probe hardware, allocate page tables, stay passthrough.
-//! Phase 2 `map_dma()`          — drivers register each DMA buffer's physical range.
-//! Phase 3 `activate_isolation()` — switch from passthrough to enforced page-table mode.
+//! Phase 2 `activate_isolation()` — switch from passthrough to enforced page-table mode.
+//! Then `map_dma_for_cell()` publishes each granted DMA buffer in its Cell's domain.
 //!
 //! Call order in the arch boot (x86_64) and `try_deferred_init` (riscv64),
 //! enforced by tokens: `init` returns a [`Probed`] that `activate_isolation`
 //! consumes, and its [`Isolation`] result is what `IommuReady` carries:
-//!   `iommu::init(firmware)` → driver DMA allocs (call `map_dma()`) → `iommu::activate_isolation(probed)`
+//!   `iommu::init(firmware)` → `iommu::activate_isolation(probed)`
 
 use cellos_boards::DmaIsolation;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -58,21 +58,6 @@ pub enum DmaMapResult {
     PublishedUnconfirmed,
 }
 
-/// Outcome of a per-range DMA teardown.
-///
-/// Mirrors [`DmaMapResult`]: a teardown that zeroed leaves the hardware may
-/// still translate is reported as unconfirmed, never as done — the caller must
-/// keep the frames quarantined until the invalidation is retried.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DmaUnmapResult {
-    /// Nothing was mapped in the range: no teardown was needed.
-    NothingMapped,
-    /// Every cleared leaf's translation is gone from hardware.
-    Unmapped { pages: usize },
-    /// Leaves were zeroed but the IOMMU did not acknowledge the invalidation.
-    PublishedUnconfirmed { pages: usize },
-}
-
 /// Classify a mapping whose device context was written before invalidation.
 ///
 /// Either a command-queue publication failure or a missing IOFENCE
@@ -112,16 +97,6 @@ pub struct Probed {
     _private: (),
 }
 
-/// Register a DMA physical range or authorize identity DMA when x86 has no
-/// remapping hardware. A present-but-inactive remapper rejects the request.
-#[inline]
-pub fn map_dma(phys: u64, size: usize) -> Option<u64> {
-    match map_dma_for_cell(0, 0, phys, size) {
-        DmaMapResult::Mapped(iova) => Some(iova),
-        DmaMapResult::Rejected | DmaMapResult::PublishedUnconfirmed => None,
-    }
-}
-
 /// Register `[phys, phys+size)` for Cell `tid` owning device `bdf`.
 ///
 /// Distinguishes a clean rejection from a mapping that was published before an
@@ -134,17 +109,6 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapRes
         return crate::arch::iommu::map_inactive(tid, bdf, phys, size);
     }
     crate::arch::iommu::map_range_for_cell(tid, bdf, phys, size)
-}
-
-/// Tear down `[iova, iova+size)` from Cell `tid`'s DMA domain.
-///
-/// Zeros the leaf entries and invalidates the translations covering them, so a
-/// device the Cell authorised faults on its next access to the range. Cell-death
-/// teardown uses [`revoke_dma_for_cell`] instead: same invalidation, but it also
-/// drops the requester entries and the domain itself.
-#[inline]
-pub fn unmap_dma(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    crate::arch::iommu::unmap_range_for_cell(tid, iova, size)
 }
 
 /// Tear down `tid`'s whole DMA domain: clear its requester entries, zero its
@@ -193,8 +157,8 @@ pub enum Remapper {
 ///   IOVA not in a registered DMA range.
 /// On x86_64: fills VT-d context entries with TT=TRANSLATED+SLPT, enables TE.
 ///
-/// Call after all driver DMA buffers are registered via `map_dma()`, with the
-/// token of the [`init`] that probed the hardware.
+/// Call with the token of the [`init`] that probed the hardware, before any
+/// Driver Cell can request DMA.
 pub fn activate_isolation(probed: Probed) -> Isolation {
     let Probed { _private: () } = probed;
     crate::arch::iommu::activate();

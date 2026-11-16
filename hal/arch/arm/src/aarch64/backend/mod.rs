@@ -80,8 +80,6 @@ pub type El2Monitor = <Board as ArmPlatform>::El2Monitor;
 /// path, so implementations stay allocation-free and forward straight to the
 /// board's UART driver.
 pub trait ArmPlatform: ArmIrqController + ArmTimer + ArmResources {
-    /// DMA remapping unit in front of the board's bus masters.
-    type Iommu: ArmIommu;
     /// Alignment and padding granule for DMA buffers (4 KiB default, 16 KiB on Apple DART).
     const DMA_GRANULE: usize = 4096;
 
@@ -619,18 +617,4 @@ impl ArmEl2Monitor for NoEl2Monitor {
     fn restore_host_tick() {
         unreachable!("no EL2 monitor")
     }
-}
-
-/// Design hook for group 2/3 boards: a DMA remapping unit (SMMU) the kernel
-/// would program. Shape only; no current backend has one.
-pub trait ArmIommu {
-    /// Whether the board has a DMA remapping unit.
-    const PRESENT: bool;
-}
-
-/// No DMA remapping unit. Every current backend uses it.
-pub struct NoIommu;
-
-impl ArmIommu for NoIommu {
-    const PRESENT: bool = false;
 }

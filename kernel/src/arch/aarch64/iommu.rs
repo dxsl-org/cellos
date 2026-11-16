@@ -3,7 +3,7 @@
 //! translation on aarch64, which has no kernel IOMMU backend (VirtIO DMA runs
 //! untranslated).
 
-use crate::dev::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu::{DmaIsolationInput, DmaMapResult};
 
 /// Phase 1 of [`crate::dev::iommu::init`].
 pub fn init(dma: DmaIsolationInput) {
@@ -20,12 +20,6 @@ pub fn map_inactive(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult 
 pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     let _ = (tid, bdf, phys, size);
     DmaMapResult::Rejected
-}
-
-/// [`crate::dev::iommu::unmap_dma`].
-pub fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    let _ = (tid, iova, size);
-    DmaUnmapResult::NothingMapped
 }
 
 /// [`crate::dev::iommu::revoke_dma_for_cell`].

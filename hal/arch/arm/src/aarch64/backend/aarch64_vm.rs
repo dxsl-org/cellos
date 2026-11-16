@@ -19,8 +19,8 @@ use hal_soc_arm_virt::QEMU_ARM_VIRT;
 use super::qemu_virt::{self, QemuVirt};
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
-    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformAnnounce,
-    PlatformFacts, SdhciFacts, SecondaryStart, VgicWindows,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoVcpuExt, PlatformAnnounce, PlatformFacts,
+    SdhciFacts, SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::GicV2Layout;
 use crate::aarch64::gicv3::{self, GicV3Layout};
@@ -32,8 +32,6 @@ use crate::aarch64::{timer, uart_pl011};
 pub struct Aarch64Vm;
 
 impl ArmPlatform for Aarch64Vm {
-    type Iommu = NoIommu;
-
     const PL011_BASE: usize = <QemuVirt as ArmPlatform>::PL011_BASE;
     const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;

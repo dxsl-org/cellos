@@ -2,7 +2,7 @@
 //! `iommu`: the riscv64 arms of `crate::dev::iommu`'s dispatch (RISC-V IOMMU)
 //! and of `crate::dev::iommu_pt`'s address translation.
 
-use crate::dev::iommu::{DmaIsolationInput, DmaMapResult, DmaUnmapResult};
+use crate::dev::iommu::{DmaIsolationInput, DmaMapResult};
 
 /// Phase 1 of [`crate::dev::iommu::init`].
 pub fn init(dma: DmaIsolationInput) {
@@ -19,11 +19,6 @@ pub fn map_inactive(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult 
 /// [`crate::dev::iommu::map_dma_for_cell`] once isolation is active.
 pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     crate::arch::dev::iommu_riscv::map_range_for_cell(tid, bdf, phys, size)
-}
-
-/// [`crate::dev::iommu::unmap_dma`].
-pub fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    crate::arch::dev::iommu_riscv::unmap_range_for_cell(tid, iova, size)
 }
 
 /// [`crate::dev::iommu::revoke_dma_for_cell`].

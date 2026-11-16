@@ -3,7 +3,7 @@
 //! of `crate::dev::iommu_pt`'s address translation.
 
 use crate::dev::iommu::{
-    dma_without_remapper, DmaIsolationInput, DmaMapResult, DmaUnmapResult, DmaWithoutRemapper,
+    dma_without_remapper, DmaIsolationInput, DmaMapResult, DmaWithoutRemapper,
 };
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -54,11 +54,6 @@ pub fn map_inactive(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult 
 /// [`crate::dev::iommu::map_dma_for_cell`] once isolation is active.
 pub fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResult {
     crate::arch::dev::iommu_x86::map_range_for_cell(tid, bdf, phys, size)
-}
-
-/// [`crate::dev::iommu::unmap_dma`].
-pub fn unmap_range_for_cell(tid: u64, iova: u64, size: usize) -> DmaUnmapResult {
-    crate::arch::dev::iommu_x86::unmap_range_for_cell(tid, iova, size)
 }
 
 /// [`crate::dev::iommu::revoke_dma_for_cell`].

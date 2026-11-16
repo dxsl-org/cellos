@@ -6,7 +6,7 @@ use hal_soc_arm_virt::{ArmVirtProfile, QEMU_ARM_VIRT};
 
 use super::{
     ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware, DtbPolicy,
-    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoIommu, NoVcpuExt, PlatformFacts, SdhciFacts,
+    MmioMap, MmioSpan, MmioWindow, NoEl2Monitor, NoVcpuExt, PlatformFacts, SdhciFacts,
     SecondaryStart, VgicWindows,
 };
 use crate::aarch64::gic::{self, GicV2Layout};
@@ -17,8 +17,6 @@ use crate::aarch64::{timer, uart_pl011};
 pub struct QemuVirt;
 
 impl ArmPlatform for QemuVirt {
-    type Iommu = NoIommu;
-
     const PL011_BASE: usize = QEMU_ARM_VIRT.uart.mmio.base;
     const SECONDARY_START: SecondaryStart = SecondaryStart::Psci;
     const CONSOLE_RX_IRQ: bool = false;

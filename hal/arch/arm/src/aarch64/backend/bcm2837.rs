@@ -15,8 +15,8 @@ use hal_soc_bcm27xx::BCM2837;
 
 use super::{
     ArmEl2Monitor, ArmIrqController, ArmPlatform, ArmResources, ArmSoc, ArmTimer, DisplayFirmware,
-    DtbPolicy, GuestRunProbe, MmioMap, MmioSpan, MmioWindow, NoIommu, PlatformAnnounce,
-    PlatformFacts, SdhciFacts, SecondaryStart, VgicWindows,
+    DtbPolicy, GuestRunProbe, MmioMap, MmioSpan, MmioWindow, PlatformAnnounce, PlatformFacts,
+    SdhciFacts, SecondaryStart, VgicWindows,
 };
 use crate::aarch64::trap::TrapFrame;
 use crate::aarch64::vcpu::AArch64Vcpu;
@@ -27,8 +27,6 @@ pub use vcpu_ext::PiVcpuExt;
 pub struct Bcm2837;
 
 impl ArmPlatform for Bcm2837 {
-    type Iommu = NoIommu;
-
     /// The console is the mini UART, so no RPi3 path routes output through the
     /// PL011 driver; it keeps the QEMU `virt` address it has always had here.
     const PL011_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base;
