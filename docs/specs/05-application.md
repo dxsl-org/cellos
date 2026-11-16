@@ -442,18 +442,25 @@ kernel/src/syscall/hypervisor.rs  (~300 LOC)
 
 **Không đụng**: scheduler, IPC, memory quota, normal cell lifecycle.
 
-### 4.5 Multi-arch HAL trait
+### 4.5 Multi-arch hypervisor dispatch
+
+> **Updated 2026-11-16 to match code.** There is no common HAL hypervisor trait. The former
+> `ViHypervisor` trait was implemented only by unused ENOSYS stubs and was deleted with them in
+> `4f55b58125` (2026-11-14). `hal-hypervisor` (`hal/traits/hypervisor/src/lib.rs`) now holds only
+> `ViVmExit`, the exit reason every VMM backend returns. Each architecture provides the same set of
+> free functions in `kernel/src/arch/<arch>/vm.rs` (`create_vm`, `create_vcpu`,
+> `map_guest_memory`, `run_vcpu`, `vcpu_regs`, `inject_irq`, guest memory read/write, reaper);
+> `kernel/src/hypervisor/registry.rs` forwards to `crate::arch::vm` and returns the ABI exit
+> record `abi::hypervisor::ViVmExit` (`libs/abi/src/hypervisor.rs:36`).
 
 ```rust
-/// Hardware virtualization interface — one impl per arch (hal/traits/hypervisor/).
-pub trait ViHypervisor {
-    type Vm; type Vcpu; type Stage2Table;
-    fn create_vm(&self) -> ViResult<Self::Vm>;
-    fn create_vcpu(&self, vm: &mut Self::Vm) -> ViResult<Self::Vcpu>;
-    fn map_guest(&self, table: &mut Self::Stage2Table,
-                 ipa: u64, hpa: u64, pages: usize, writable: bool) -> ViResult<()>;
-    fn run_vcpu(&self, vcpu: &mut Self::Vcpu) -> ViResult<ViVmExit>;
-    fn inject_irq(&self, vcpu: &mut Self::Vcpu, intid: u32) -> ViResult<()>;
+// kernel/src/hypervisor/registry.rs (abridged)
+pub(crate) fn create_vm(owner: Charge, guest_pages: usize) -> Result<usize, VmCreateError> {
+    crate::arch::vm::create_vm(owner, guest_pages)
+}
+pub(crate) fn run_vcpu(owner: Charge, vm_id: usize, vcpu_id: usize, _budget_ns: u64)
+    -> ViResult<abi::hypervisor::ViVmExit> {
+    crate::arch::vm::run_vcpu(owner, vm_id, vcpu_id, _budget_ns)
 }
 ```
 
@@ -464,8 +471,10 @@ pub trait ViHypervisor {
 | x86_64 AMD | SVM (VMCB, NPT) | `hal-x86` + owner-scoped kernel registry | 🚧 Implemented MVP; production hardware qualification pending |
 | x86_64 Intel | VMX | `hal-x86` root-operation plumbing | 🚧 VMXON implemented; VMCS/EPT/guest execution pending |
 
-Kernel syscall dispatch (`kernel/src/hypervisor/registry.rs`) selects the ARM64 registry
-or the x86 SVM registry by target. Unsupported architectures return `NotSupported`.
+Kernel syscall dispatch (`kernel/src/hypervisor/registry.rs`) forwards to the per-target
+backend: `kernel/src/arch/aarch64/vm.rs` (ARM64 EL2) or `kernel/src/arch/x86_64/vm.rs` (x86 SVM,
+`kernel/src/arch/x86_64/hypervisor/svm_registry.rs`). The RISC-V and legacy 32-bit backends
+(`kernel/src/arch/riscv64/vm.rs`, `kernel/src/arch/legacy/vm.rs`) return `NotSupported`.
 The x86 label must remain backend-specific: AMD guest execution exists; Intel guest
 execution does not.
 
@@ -475,6 +484,7 @@ execution does not.
 ```
 Phases 01–10 shipped in cells/services/hypervisor/:
   P01: HAL ViHypervisor trait + ARM64 stay-at-EL2 boot + EL2 MMU/vectors
+       (trait deleted 2026-11-14, 4f55b58125; see §4.5)
   P02: Stage-2 builder + guest-RAM carve (128 MiB) + VTTBR/VTCR
   P03: vCPU world-switch + trap decode + bare-metal guest smoke
   P04: Syscalls 220-227 (CreateVm/CreateVcpu/MapGuest/RunVcpu/VcpuRegs/InjectIrq/WriteGuest/ReadGuest)
@@ -489,7 +499,8 @@ Phases 01–10 shipped in cells/services/hypervisor/:
 **RISC-V H-extension — ⏳ Pending**
 ```
 Current RISC-V boards (SG2042, SG2044, K230) lack H-extension.
-ENOSYS stubs in hal-riscv/src/hypervisor.rs + registry.rs are in place.
+kernel/src/arch/riscv64/vm.rs returns NotSupported for every VM operation
+(the former hal-riscv ENOSYS stubs were deleted in 4f55b58125, 2026-11-14).
 Impl unblocks when H-ext hardware is available.
 ```
 
