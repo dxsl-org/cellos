@@ -443,12 +443,22 @@ delegation · monotonic downgrade · revocable).
 **Planned** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
 for the full design + capability-OS / mobile-OS references): evolve through (1) **parameterized capabilities**
 (`__Cellos_cap_args` ELF section — e.g. "GPIO pins 14-17" not "all GPIO"; additive, no Law 1 bump), (2)
-**spawn-time intersection** (a Cell can only delegate caps it holds — kills confused-deputy), (3) **runtime
-revocation** (`CapHandle` + `sys_cap_revoke`), (4) **operator-signed policy** for headless G1 fleets (consent =
+**spawn-time intersection** (a Cell can only delegate caps it holds — kills confused-deputy), (3) ~~runtime
+revocation~~ **shipped** (below), (4) **operator-signed policy** for headless G1 fleets (consent =
 signed policy, NOT a dialog — see the headless-robot caveat) and an optional **TCC-style consent-broker Cell**
 for G2 HMI (sensitive caps only). Hard invariant: the manifest is a **ceiling, not a floor**, and **only the
 kernel enforces** (consent feeds the syscall-boundary check). LBI already closes the TCC "permission-laundering
 via code injection" hole that produced repeated macOS/iOS TCC CVEs.
+
+**Status of (3), 2026-11-16:** runtime revocation exists as `CapRevoke` (syscall 219,
+`libs/abi/abi/syscalls.toml:1044-1046`). The handler is `cap_revoke`
+(`kernel/src/task/syscall/authority.rs:432`), behind the gate `cap_revoke_gate` (`:355-372`).
+The gate requires the caller to hold `SpawnCap`, refuses the ambient `HYPERVISOR` bit, and
+refuses a system service Cell (block I/O or network). It runs again before the record is
+cleared. The call takes a capability mask rather than a `CapHandle`. It narrows the target
+incarnation's single rights record and tears down the MMIO, DMA and grant authority of every
+task of that incarnation. A caller cannot revoke itself or a sibling. One revoke runs at a time,
+and a concurrent one returns `TryAgain`. (1) and the delegation rule of (2) are not implemented.
 
 The per-incarnation rights record (remediation Phase 07, 2026-11-11) and launch by measured identity
 (Phase 06, 2026-11-10) are described with their code in § Current enforcement → Authority.
