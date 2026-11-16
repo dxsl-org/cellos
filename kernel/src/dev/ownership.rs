@@ -23,6 +23,7 @@
 use crate::sync::Spinlock;
 use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Windows one record may hold: a PCI function's six BARs.
 const MAX_BARS: usize = 6;
@@ -90,6 +91,10 @@ pub(crate) struct DeviceRecord {
     /// registration; on x86_64 a PCI function's MSI vectors once 435
     /// allocated them to its owner.
     irq: Option<IrqLines>,
+    /// The tid of the NIC route bound to this device, while it has a
+    /// provider ([`set_nic_route`]); its lines are NIC lines while that tid
+    /// also owns the device.
+    nic_route: Option<usize>,
 }
 
 impl DeviceRecord {
@@ -100,6 +105,7 @@ impl DeviceRecord {
             owner: None,
             bars: [(0, 0); MAX_BARS],
             irq: None,
+            nic_route: None,
         }
     }
 
@@ -176,16 +182,47 @@ impl Devices {
         };
         self.records.get_mut(index)
     }
+
+    /// Rewrite [`NIC_LINES`] from the records: every line of a device whose
+    /// owner is the provider of its NIC route. Called, under `DEVICES`, by
+    /// every change of an owner, a line or a NIC route provider, so the
+    /// words always describe the records. Never allocates (teardown may run
+    /// in an ISR).
+    fn publish_nic_lines(&self) {
+        let mut words = [0u64; NIC_LINE_WORDS];
+        for record in &self.records {
+            let Some(lines) = record.irq else {
+                continue;
+            };
+            if record.owner.is_some() && record.owner == record.nic_route {
+                lines
+                    .lines()
+                    .for_each(|line| words[usize::from(line / 64)] |= 1 << (line % 64));
+            }
+        }
+        for (word, bits) in NIC_LINES.iter().zip(words) {
+            word.store(bits, Ordering::Release);
+        }
+    }
 }
 
-/// Every device record. Lock order: after `SCHEDULER`, the grant tables and
-/// `ROLE_PUBLICATION`, before `RESOURCE_REGISTRY` and `PCIE_MSI_STATE`.
+/// Every device record. Lock order: after `SCHEDULER`, the grant tables,
+/// `ROLE_PUBLICATION` and `NIC_ROUTES`, before `RESOURCE_REGISTRY` and
+/// `PCIE_MSI_STATE`.
 static DEVICES: Spinlock<Devices> = Spinlock::ranked(
     Devices {
         records: Vec::new(),
     },
     crate::sync::rank::DEVICES,
 );
+
+const NIC_LINE_WORDS: usize = 256 / 64;
+
+/// The interrupt lines (x86_64 MSI vectors, riscv64/aarch64 VirtIO lines) of
+/// the devices behind a live NIC route, one bit per `u8` line: written only
+/// by [`Devices::publish_nic_lines`] under `DEVICES`, read lock-free by the
+/// MSI and VirtIO ISRs ([`is_nic_line`]).
+static NIC_LINES: [AtomicU64; NIC_LINE_WORDS] = [const { AtomicU64::new(0) }; NIC_LINE_WORDS];
 
 fn pci_key(bdf: u32) -> Option<DeviceKey> {
     DeviceKey::new(BLOCK_DEVICE_PCI, bdf as u64)
@@ -261,13 +298,15 @@ pub(crate) fn register_mmio_device(base: usize, len: usize, kind: DeviceKind, li
     };
     let recorded = {
         let mut devices = DEVICES.lock();
-        devices
+        let recorded = devices
             .find_or_insert(key, kind)
             .map(|record| {
                 record.add_window(base, len);
                 record.irq = line.map(IrqLines::Line);
             })
-            .is_some()
+            .is_some();
+        devices.publish_nic_lines();
+        recorded
     };
     if !recorded {
         no_record(key);
@@ -281,16 +320,20 @@ pub(crate) fn claim_pci(bdf: u32, tid: usize) -> bool {
     let Some(key) = pci_key(bdf) else {
         return false;
     };
-    let claimed = DEVICES
-        .lock()
-        .find_or_insert(key, DeviceKind::Pci { class: None })
-        .map(|record| match record.owner {
-            Some(owner) => owner == tid,
-            None => {
-                record.owner = Some(tid);
-                true
-            }
-        });
+    let claimed = {
+        let mut devices = DEVICES.lock();
+        let claimed = devices
+            .find_or_insert(key, DeviceKind::Pci { class: None })
+            .map(|record| match record.owner {
+                Some(owner) => owner == tid,
+                None => {
+                    record.owner = Some(tid);
+                    true
+                }
+            });
+        devices.publish_nic_lines();
+        claimed
+    };
     claimed.unwrap_or_else(|| {
         no_record(key);
         false
@@ -365,24 +408,34 @@ pub(crate) enum WindowClaim {
 /// or, when free, for its first claimant.
 pub(crate) fn claim_window(tid: usize, base: usize, len: usize, dwc2: bool) -> WindowClaim {
     let mut devices = DEVICES.lock();
-    let mut matching = devices.records.iter_mut().filter(|record| {
-        (record.kind == DeviceKind::Dwc2) == dwc2 && record.has_window(base, len)
-    });
-    let Some(record) = matching.next() else {
-        return WindowClaim::NoDevice;
-    };
-    // Two records naming one window (a 235 registration repeating a scanned
-    // BAR under another BDF) answer for whichever the caller owns.
-    if !record.owned_by(tid) && matching.any(|other| other.owned_by(tid)) {
-        return WindowClaim::Owned;
+    let claim = devices.claim_window(tid, base, len, dwc2);
+    if matches!(claim, WindowClaim::Claimed(_)) {
+        devices.publish_nic_lines();
     }
-    match (record.owner, record.kind) {
-        (Some(owner), _) if owner == tid => WindowClaim::Owned,
-        (_, DeviceKind::Pci { .. }) => WindowClaim::NotOwner,
-        (Some(_), _) => WindowClaim::Held,
-        (None, _) => {
-            record.owner = Some(tid);
-            WindowClaim::Claimed(record.key)
+    claim
+}
+
+impl Devices {
+    fn claim_window(&mut self, tid: usize, base: usize, len: usize, dwc2: bool) -> WindowClaim {
+        let mut matching = self.records.iter_mut().filter(|record| {
+            (record.kind == DeviceKind::Dwc2) == dwc2 && record.has_window(base, len)
+        });
+        let Some(record) = matching.next() else {
+            return WindowClaim::NoDevice;
+        };
+        // Two records naming one window (a 235 registration repeating a
+        // scanned BAR under another BDF) answer for whichever the caller owns.
+        if !record.owned_by(tid) && matching.any(|other| other.owned_by(tid)) {
+            return WindowClaim::Owned;
+        }
+        match (record.owner, record.kind) {
+            (Some(owner), _) if owner == tid => WindowClaim::Owned,
+            (_, DeviceKind::Pci { .. }) => WindowClaim::NotOwner,
+            (Some(_), _) => WindowClaim::Held,
+            (None, _) => {
+                record.owner = Some(tid);
+                WindowClaim::Claimed(record.key)
+            }
         }
     }
 }
@@ -390,10 +443,10 @@ pub(crate) fn claim_window(tid: usize, base: usize, len: usize, dwc2: bool) -> W
 /// Undo a [`WindowClaim::Claimed`] whose window grant failed: free `key`'s
 /// record if `tid` still owns it.
 pub(crate) fn unclaim(tid: usize, key: DeviceKey) {
-    if let Some(record) = DEVICES.lock().find(key) {
-        if record.owned_by(tid) {
-            record.owner = None;
-        }
+    let mut devices = DEVICES.lock();
+    if let Some(record) = devices.find(key).filter(|record| record.owned_by(tid)) {
+        record.owner = None;
+        devices.publish_nic_lines();
     }
 }
 
@@ -413,17 +466,20 @@ pub(crate) enum Scope {
 /// ownership. A freed record keeps its windows and fixed line for the next
 /// claimant; MSI vectors were already taken out by [`release_msis`].
 pub(crate) fn release_for(tid: usize, scope: Scope) {
-    for record in DEVICES.lock().records.iter_mut() {
+    let mut devices = DEVICES.lock();
+    for record in devices.records.iter_mut() {
         if record.owned_by(tid) && (scope == Scope::Retired || record.kind != DeviceKind::Dwc2) {
             record.owner = None;
         }
     }
+    devices.publish_nic_lines();
 }
 
 /// Free the MMIO devices `tid` owns through one of the released `windows`
 /// (a capability revoke releases windows by class while the task lives).
 pub(crate) fn release_mmio_devices_in(tid: usize, windows: &[(usize, usize)]) {
-    for record in DEVICES.lock().records.iter_mut() {
+    let mut devices = DEVICES.lock();
+    for record in devices.records.iter_mut() {
         if record.key.kind == BLOCK_DEVICE_MMIO
             && record.owner == Some(tid)
             && windows
@@ -433,6 +489,7 @@ pub(crate) fn release_mmio_devices_in(tid: usize, windows: &[(usize, usize)]) {
             record.owner = None;
         }
     }
+    devices.publish_nic_lines();
 }
 
 /// Whether `irq` is a line of a device `tid` owns: an MSI vector 435
@@ -446,13 +503,34 @@ pub(crate) fn irq_owned_by(tid: usize, irq: u8) -> bool {
         .any(|record| record.owned_by(tid) && record.holds_irq(irq))
 }
 
-/// Whether `irq` is a line of device `key` and `tid` owns it: the per-route
-/// proof of a NIC route's interrupts (MSI and VirtIO ISRs).
-pub(crate) fn irq_owned_for(tid: usize, irq: u8, key: DeviceKey) -> bool {
-    DEVICES
-        .lock()
-        .find(key)
-        .is_some_and(|record| record.owned_by(tid) && record.holds_irq(irq))
+/// Name `provider` the tid of the NIC route bound to device `key`, or `None`
+/// when the route lost its provider: the route half of [`NIC_LINES`]. Called
+/// under `NIC_ROUTES` by every bind and clear of a route provider. A key
+/// without a record proves no line and is left alone.
+pub(crate) fn set_nic_route(key: DeviceKey, provider: Option<usize>) {
+    let mut devices = DEVICES.lock();
+    if let Some(record) = devices.find(key) {
+        record.nic_route = provider;
+        devices.publish_nic_lines();
+    }
+}
+
+/// Whether `irq` is a line of the device of a live NIC route, owned by that
+/// route's provider: the proof the MSI and VirtIO ISRs signal `NET_RX` on.
+/// Lock-free: one atomic load.
+pub(crate) fn is_nic_line(irq: u8) -> bool {
+    NIC_LINES[usize::from(irq / 64)].load(Ordering::Acquire) & (1 << (irq % 64)) != 0
+}
+
+/// Unbind every device from its NIC route; host tests only, under
+/// `TEST_STATE_LOCK`, with the route table reset.
+#[cfg(test)]
+pub(crate) fn test_clear_nic_routes() {
+    let mut devices = DEVICES.lock();
+    for record in devices.records.iter_mut() {
+        record.nic_route = None;
+    }
+    devices.publish_nic_lines();
 }
 
 /// Every line of every device `tid` owns: the snapshot a
@@ -517,6 +595,7 @@ pub(crate) fn with_owned_msi<R>(
     };
     let result = allocate(&mut msi);
     record.irq = msi.map(IrqLines::Msi);
+    devices.publish_nic_lines();
     Some(result)
 }
 
@@ -530,7 +609,8 @@ pub(crate) fn release_msis(
     mut free: impl FnMut(abi::pcie_function::PcieIrqAlloc),
 ) -> usize {
     let mut released = 0;
-    for record in DEVICES.lock().records.iter_mut() {
+    let mut devices = DEVICES.lock();
+    for record in devices.records.iter_mut() {
         if !record.owned_by(tid) {
             continue;
         }
@@ -543,6 +623,7 @@ pub(crate) fn release_msis(
             released += 1;
         }
     }
+    devices.publish_nic_lines();
     released
 }
 
@@ -557,6 +638,7 @@ pub(crate) fn test_own_mmio(tid: usize, base: usize, line: u8) {
     record.add_window(base, 0x200);
     record.owner = Some(tid);
     record.irq = Some(IrqLines::Line(line));
+    devices.publish_nic_lines();
 }
 
 /// Make `tid` the owner of PCI function `bdf` holding `msi`, displacing any
@@ -572,6 +654,7 @@ pub(crate) fn test_own_msi(tid: usize, bdf: u32, msi: abi::pcie_function::PcieIr
         .expect("heap for a test record");
     record.owner = Some(tid);
     record.irq = Some(IrqLines::Msi(msi));
+    devices.publish_nic_lines();
 }
 
 #[cfg(test)]
@@ -662,10 +745,59 @@ mod tests {
         assert!(irq_owned_by(0x7A01, 0x2A));
         assert!(!irq_owned_by(0x7A02, 0x2A), "another driver's line");
         assert!(!irq_owned_by(0x7A01, 0x2B));
-        assert!(irq_owned_for(0x7A01, 0x2A, mmio_key(0x7A00_0000).unwrap()));
         assert!(lines_owned_by(0x7A01).contains(0x2A));
         release_for(0x7A01, Scope::Retired);
         assert!(!irq_owned_by(0x7A01, 0x2A), "released with the device");
+    }
+
+    /// The lock-free NIC line set follows every input under `DEVICES`: a line
+    /// is set only while its device's owner is its NIC route's provider, and
+    /// clears with the route, the owner or (x86_64) the MSI allocation.
+    #[test]
+    fn nic_lines_follow_the_route_the_owner_and_the_lines() {
+        const SLOT: usize = 0x7B00_0000;
+        const LINE: u8 = 0xC3;
+        const TID: usize = 0x7B01;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let key = mmio_key(SLOT).unwrap();
+        test_own_mmio(TID, SLOT, LINE);
+        assert!(!is_nic_line(LINE), "owned, no route");
+        set_nic_route(key, Some(TID + 1));
+        assert!(!is_nic_line(LINE), "route of a task that does not own it");
+        set_nic_route(key, Some(TID));
+        assert!(is_nic_line(LINE));
+        assert!(!is_nic_line(LINE - 1) && !is_nic_line(LINE + 1));
+        set_nic_route(key, None);
+        assert!(!is_nic_line(LINE), "route lost its provider");
+        set_nic_route(key, Some(TID));
+        release_for(TID, Scope::PcieDriver);
+        assert!(!is_nic_line(LINE), "device released");
+        assert_eq!(
+            claim_window(TID, SLOT, 0x200, false),
+            WindowClaim::Claimed(key)
+        );
+        assert!(is_nic_line(LINE), "reclaimed by the route's provider");
+        set_nic_route(key, None);
+        release_for(TID, Scope::Retired);
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            const BDF: u32 = 0x7B0;
+            let msi = abi::pcie_function::PcieIrqAlloc {
+                first_irq: 0x90,
+                count: 2,
+                kind: abi::pcie_function::IRQ_KIND_MSIX,
+            };
+            assert!(claim_pci(BDF, TID));
+            set_nic_route(pci_key(BDF).unwrap(), Some(TID));
+            assert!(!is_nic_line(0x90), "no vector yet");
+            assert_eq!(with_owned_msi(TID, BDF, |held| *held = Some(msi)), Some(()));
+            assert!(is_nic_line(0x90) && is_nic_line(0x91) && !is_nic_line(0x92));
+            assert_eq!(release_msis(TID, |_| {}), 1);
+            assert!(!is_nic_line(0x90), "vectors freed");
+            set_nic_route(pci_key(BDF).unwrap(), None);
+            release_for(TID, Scope::Retired);
+        }
     }
 
     #[test]

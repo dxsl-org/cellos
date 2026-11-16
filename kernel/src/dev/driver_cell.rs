@@ -344,6 +344,7 @@ pub(crate) fn publish_nic_route(
         match slot {
             Ok(index) => {
                 routes.slots[index] = bound;
+                crate::dev::ownership::set_nic_route(key, Some(tid));
                 let primary = routes.primary.is_none_or(|primary| primary == index);
                 if primary {
                     routes.primary = Some(index);
@@ -357,11 +358,14 @@ pub(crate) fn publish_nic_route(
     match outcome {
         Bind::Bound { index, primary } => {
             if primary && !publish_primary() {
-                let mut routes = NIC_ROUTES.lock();
-                if let Some(route) = routes.slots[index].as_mut() {
-                    route.provider = None;
+                {
+                    let mut routes = NIC_ROUTES.lock();
+                    if let Some(route) = routes.slots[index].as_mut() {
+                        route.provider = None;
+                    }
+                    crate::dev::ownership::set_nic_route(key, None);
+                    routes.primary = None;
                 }
-                routes.primary = None;
                 log::warn!(
                     "[driver_cell] NIC route {} device {} not published; tid={} refused",
                     index,
@@ -428,6 +432,7 @@ fn clear_nic_route_provider(tid: usize) {
             };
             if route.provider.is_some_and(|(holder, _, _)| holder == tid) {
                 route.provider = None;
+                crate::dev::ownership::set_nic_route(route.key, None);
                 if *primary == Some(index) {
                     *primary = None;
                     lost_primary = true;
@@ -472,6 +477,7 @@ pub(crate) fn reset_nic_routes() {
     let mut routes = NIC_ROUTES.lock();
     routes.slots = [None; MAX_NIC_ROUTES];
     routes.primary = None;
+    crate::dev::ownership::test_clear_nic_routes();
 }
 
 /// Whether `irq` belongs to the device of a live NIC route: a line of the
@@ -480,21 +486,11 @@ pub(crate) fn reset_nic_routes() {
 /// route proves its own lines, so a provider's interrupt for any other device
 /// never signals `NET_RX`.
 ///
-/// ISR-safe: the route table is copied out under its lock, and each live
-/// route takes the device table once; neither allocates.
+/// ISR-safe and lock-free: one atomic load of the NIC line set, which
+/// `dev::ownership` rewrites under `DEVICES` whenever a route provider, an
+/// owner or a line changes ([`ownership::is_nic_line`](crate::dev::ownership::is_nic_line)).
 pub fn owns_registered_nic_irq(irq: u32) -> bool {
-    let Ok(irq) = u8::try_from(irq) else {
-        return false;
-    };
-    if irq == 0 {
-        return false;
-    }
-    let routes = NIC_ROUTES.lock().slots;
-    routes.iter().flatten().any(|route| {
-        route
-            .provider
-            .is_some_and(|(tid, _, _)| crate::dev::ownership::irq_owned_for(tid, irq, route.key))
-    })
+    u8::try_from(irq).is_ok_and(|irq| irq != 0 && crate::dev::ownership::is_nic_line(irq))
 }
 
 /// Record `tid` as the active GPU driver.  Overwrites any previous registration.
