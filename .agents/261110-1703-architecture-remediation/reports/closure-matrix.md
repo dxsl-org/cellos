@@ -170,7 +170,7 @@ Taken from the evidence reports' residual sections. "Today" is this step's check
 | P18 §6 | `nic2-x86` CI cost not measured in CI | unchanged (nothing pushed) |
 | P18 §6 | aarch64 `IOMMU-TEARDOWN: SKIP`, unchecked by any lane | unchanged |
 | P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | `x86hv-iso` rollout guard fails on `main` | fixed by `a2d77056e1`: the hypervisor kernel is staged off the guard's default path |
-| P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | 2 `rust-std-promotion` tests fail on `main` (frozen artifact digests) | fixed, pending SHA: the owner-approved re-pin of the approval package is Phase 19's last commit (phase-19 Deviation Log) |
+| P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | 2 `rust-std-promotion` tests fail on `main` (frozen artifact digests) | fixed by `bd7bc7f4c4`: the owner-approved re-pin of the approval package remaps the moved paths (inventory 6 → 10 entries, manifest 106 → 110 inputs, digest `d12eac3b…`); 33/33 pass. Any later change to a pinned input needs another re-pin. |
 | P14 §6, P18 §4 | `check-lanes.py`: no rows for `qemu-tier3-{chrome,display}-x86.sh` | fixed by `c6714a5aab` (check passes at `f923f4e322`) |
 | P14 §6 | Old HAL-trait text in `docs/specs/00-context.md`, `05-application.md`, `docs/code-standards.md` | fixed: `00-context.md` and `code-standards.md` no longer name the deleted traits, and Spec 05 states `ViHypervisor` was deleted (`bb74b7a810`; `05-application.md:448`). Line 486 keeps it only in the historical phase list |
 | All | Evidence ceiling: host and QEMU (TCG, KVM); no physical hardware | plan scope |
