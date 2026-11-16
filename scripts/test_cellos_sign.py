@@ -27,7 +27,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cellos_sign import allowlist, cli, policy, scan, signing, tcb, toolchain  # noqa: E402
+from cellos_sign import allowlist, cli, elf_manifest, policy, scan, signing, tcb, toolchain  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -195,6 +195,7 @@ def tier_exception(klass: str = "c-ffi", manifest: str = "LEGACY", review_by: st
 
 
 FFI_CALL = 'extern "C" { fn c_entry() -> i32; }\nfn call() -> i32 { unsafe { c_entry() } }\n'
+RAW_PTR = "fn read(p: *const u8) -> u8 { unsafe { *p } }\n"
 TIER_LESS = "abi::declare_manifest!(block_io = false, network = false, spawn = false);\n"
 TIER_FFI = ("abi::declare_manifest!(block_io = false, network = false, spawn = false,\n"
             "    tier = abi::manifest::PROTECTION_CLASS_FFI);\n")
@@ -241,12 +242,48 @@ class TierClassTests(unittest.TestCase):
 
     def test_legacy_raw_ptr_without_a_manifest_is_refused(self):
         # The compositor case: no manifest at all loads as Tier 1.
-        result = self.check(FFI_CALL, ffi_allowlist("legacy-raw-ptr"))
+        result = self.check(RAW_PTR, ffi_allowlist("legacy-raw-ptr"))
         self.assertEqual(len(self.tier_violations(result)), 1)
         self.assertIn("reads ABSENT", result.violations[0].detail)
 
     def test_other_classes_are_not_gated(self):
-        self.assertTrue(self.check(TIER_LESS + FFI_CALL, ffi_allowlist("driver-mmio")).ok)
+        self.assertTrue(self.check(TIER_LESS + RAW_PTR, ffi_allowlist("driver-mmio")).ok)
+
+    def test_an_extern_block_needs_the_c_ffi_class(self):
+        # P18 review LOW: a C import cannot hide behind a class the gate does not read.
+        for klass in ("driver-mmio", "legacy-raw-ptr", "hypervisor"):
+            with self.subTest(klass=klass):
+                result = self.check(TIER_FFI + FFI_CALL, ffi_allowlist(klass))
+                self.assertEqual([(v.layer, v.path) for v in result.violations],
+                                 [("tier-class", "cells/x/src/main.rs")])
+                self.assertIn(f"class `{klass}`", result.violations[0].detail)
+        for klass in ("c-ffi", "test-harness", "test-violation"):
+            with self.subTest(klass=klass):
+                self.assertTrue(self.check(TIER_FFI + FFI_CALL, ffi_allowlist(klass)).ok)
+
+    def test_an_extern_block_without_any_entry_is_refused(self):
+        # A forbid-clean file can declare the import; another file calls it.
+        result = self.check("#![forbid(unsafe_code)]\n" + TIER_FFI +
+                            'extern "C" { fn c_entry() -> i32; }\nfn main() {}\n',
+                            "version = 1\n")
+        self.assertEqual([v.path for v in self.tier_violations(result)], ["cells/x/src/main.rs"])
+        self.assertIn("no [[file]] entry", result.violations[0].detail)
+
+    def test_extern_fn_and_extern_crate_are_not_blocks(self):
+        src = ("#![forbid(unsafe_code)]\n" + TIER_LESS + "extern crate alloc;\n"
+               'pub extern "C" fn f() {}\nfn main() {}\n')
+        self.assertTrue(self.check(src, "version = 1\n").ok)
+
+    def test_two_cells_crates_sharing_a_package_name_fail(self):
+        # P18 review LOW: records are keyed by name, so a Tier-1 c-ffi crate could
+        # merge into an FFI crate of the same name.
+        result = self.check(TIER_LESS + FFI_CALL, ffi_allowlist(), extra={
+            "cells/y/Cargo.toml": '[package]\nname = "x"\nversion = "0.1.0"\n',
+            "cells/y/src/main.rs": "#![forbid(unsafe_code)]\n" + TIER_FFI + "fn main() {}\n",
+        })
+        self.assertTrue(any(v.layer == "tier-class" and v.path == "cells/x, cells/y"
+                            and "share this package name" in v.detail
+                            for v in result.violations), [str(v) for v in result.violations])
 
     def test_tier_through_a_local_constant_reads_as_tier_one(self):
         # Fail closed: only the literal abi::manifest path is believed.
@@ -321,10 +358,13 @@ class SignRefusesTierMismatchTests(unittest.TestCase):
     Only F5 and the signing call are replaced; `policy.check` is the real one.
     """
 
-    def sign(self, main_rs: str, tier1: bool) -> tuple[int, list, str]:
+    def sign(self, main_rs: str, tier1: bool, elf_class: int | None = None
+             ) -> tuple[int, list, str]:
         signed: list = []
         out = __import__("io").StringIO()
         verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
+        if elf_class is None:
+            elf_class = 0xFF if tier1 else 2  # the class the source declares
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
@@ -333,9 +373,12 @@ class SignRefusesTierMismatchTests(unittest.TestCase):
             # The closure the generator would write for each variant, so the
             # tier-class gate is the only layer that can differ.
             write_tcb(root, roots=["x"] if tier1 else [], total=(1, 0) if tier1 else (0, 0))
+            target = root / "build/x"
+            target.parent.mkdir()
+            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(elf_class)))
             args = argparse.Namespace(
                 repo=root, allowlist="a.toml", quiet=True, strict=False,
-                targets=["cell.elf"], objcopy="objcopy", seed_hex=None,
+                targets=[str(target)], objcopy="objcopy", seed_hex=None,
             )
             with mock.patch.object(cli.toolchain, "check", return_value=verified), \
                  mock.patch.object(cli.signing, "sign_and_verify",
@@ -390,7 +433,7 @@ class TcbClosureTests(unittest.TestCase):
               extra_files: dict[str, str] | None = None, roots: list[str] = ("x",),
               total: tuple[int, int] = (2, 1), sites: dict | None = None,
               packages: dict | None = None, allow_text: str = "version = 1\n",
-              extra: dict[str, str] | None = None) -> policy.Result:
+              extra: dict[str, str] | None = None, signing: bool = False) -> policy.Result:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
@@ -406,7 +449,7 @@ class TcbClosureTests(unittest.TestCase):
                       sites={"libs/lib1/src/lib.rs": (2, 1)} if sites is None else sites)
             return policy.check(root, allowlist.load(root, "a.toml"), strict=strict,
                                 closure=tcb.load_closure(root),
-                                baseline=tcb.load_baseline(root), extra=extra)
+                                baseline=tcb.load_baseline(root), extra=extra, signing=signing)
 
     def tcb_violations(self, result: policy.Result) -> list[str]:
         return [f"{v.path}: {v.detail}" for v in result.violations if v.layer == "tcb"]
@@ -446,6 +489,17 @@ class TcbClosureTests(unittest.TestCase):
         strict = self.check(lib_src=lower)
         self.assertEqual(len(self.tcb_violations(strict)), 2)  # the file row and the total
 
+    def test_a_drop_does_not_block_signing(self):
+        # P18 review MED: `--sign` is strict, but a lower count never weakens what
+        # the signature attests; CI's `--check --strict` still fails on it.
+        lower = "#[no_mangle]\npub extern \"C\" fn f() { unsafe { g() } }\n"
+        signing = self.check(lib_src=lower, signing=True)
+        self.assertTrue(signing.ok, [str(v) for v in signing.violations])
+        self.assertEqual(len(signing.tcb_notes), 2)
+        # A rise still fails the signing run.
+        rise = self.check(lib_src=self.LIB_SRC + "fn k() { unsafe { } }\n", signing=True)
+        self.assertFalse(rise.ok)
+
     def test_unlinked_files_and_nested_packages_are_not_counted(self):
         result = self.check(extra_files={
             "libs/lib1/tests/it.rs": "fn t() { unsafe { } }\n",
@@ -473,9 +527,13 @@ class TcbClosureTests(unittest.TestCase):
         moved = self.check(cell_extra=cell, allow_text=allow_text, total=(3, 1))
         self.assertTrue(moved.ok, [str(v) for v in moved.violations])
 
-    def test_a_tier_one_cell_missing_from_the_closure_roots_fails(self):
-        result = self.check(roots=[], strict=False)
-        self.assertTrue(any("not a root" in v for v in self.tcb_violations(result)))
+    def test_a_tier_one_cell_missing_from_the_closure_roots_fails_ci_only(self):
+        # A new cell crate: CI fails until the closure file is regenerated, signing
+        # notes it (P18 review MED).
+        self.assertTrue(any("not a root" in v for v in self.tcb_violations(self.check(roots=[]))))
+        for relaxed in (self.check(roots=[], strict=False), self.check(roots=[], signing=True)):
+            self.assertTrue(relaxed.ok, [str(v) for v in relaxed.violations])
+            self.assertTrue(any("not a root" in n for n in relaxed.tcb_notes))
 
     def test_a_stale_root_is_a_strict_violation(self):
         self.assertTrue(self.check(roots=["x", "gone"], strict=False).ok)
@@ -667,6 +725,407 @@ class ScannerLiteralTests(unittest.TestCase):
             self.assertEqual(strict_res.violations[0].crate, "old-crate")
 
 
+NC_CARGO = '[package]\nname = "nc"\nversion = "0.1.0"\n'
+
+
+def sign_tree(files: dict[str, str], allow_text: str, targets: dict[str, bytes | None],
+              total: tuple[int, int] = (100, 100)) -> tuple[int, list, str]:
+    """The real `cellos-sign --sign` path on a throwaway tree; only F5 and the
+    signing call are replaced. Each target is a minimal ELF carrying the given
+    manifest record (None: no section). The generous total keeps the closure
+    layer quiet (a drop is only a NOTE on --sign), so the tier gates decide."""
+    signed: list = []
+    out = __import__("io").StringIO()
+    verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for rel, text in files.items():
+            write(root, rel, text)
+        write(root, "a.toml", allow_text)
+        write_tcb(root, total=total)
+        paths = []
+        for name, record in targets.items():
+            path = root / "build" / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(elf_manifest.minimal_elf(record))
+            paths.append(str(path))
+        args = argparse.Namespace(repo=root, allowlist="a.toml", quiet=True, strict=False,
+                                  targets=paths, objcopy="objcopy", seed_hex=None)
+        with mock.patch.object(cli.toolchain, "check", return_value=verified), \
+             mock.patch.object(cli.signing, "sign_and_verify",
+                               side_effect=lambda *a, **k: signed.append(a)), \
+             mock.patch("sys.stdout", out), mock.patch("sys.stderr", out):
+            return cli.run_sign(args), signed, out.getvalue()
+
+
+class ElfTierGateTests(unittest.TestCase):
+    """P18 review HIGH 1: the class the kernel reads is the one in the ELF.
+
+    Repros (a)–(d) each signed before the fix; the source reading alone could
+    not see that the FFI manifest never reached the binary.
+    """
+
+    FFI = elf_manifest.manifest_record(2)
+    LEGACY = elf_manifest.manifest_record(0xFF)
+
+    def refused_by_binary(self, code, signed, output, klass="ABSENT"):
+        self.assertEqual(code, cli.EXIT_POLICY, output)
+        self.assertEqual(signed, [])
+        self.assertIn("FAIL: tier class (binary)", output)
+        self.assertIn(f"binary of `nc` carries manifest {klass}", output)
+
+    def test_a_cfg_gated_ffi_manifest_is_refused(self):
+        main = "#![no_std]\n#[cfg(any())]\n" + TIER_FFI + FFI_CALL
+        result = sign_tree({"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+                           ffi_allowlist(crate="nc"), {"nc": None})
+        self.refused_by_binary(*result)
+        self.assertNotIn("[tier-class]", result[2])  # the source alone reads FFI
+
+    def test_b_an_ffi_manifest_in_a_never_expanded_macro_is_refused(self):
+        main = "#![no_std]\nmacro_rules! unused { () => { " + TIER_FFI + " } }\n" + FFI_CALL
+        self.refused_by_binary(*sign_tree(
+            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+            ffi_allowlist(crate="nc"), {"nc": None}))
+
+    def test_c_an_autobin_without_a_manifest_is_refused(self):
+        allow_text = ("version = 1\n"
+                      '[[file]]\npath = "cells/nc/src/bin/evil/main.rs"\nclass = "c-ffi"\n'
+                      'reason = "r"\napprover = "a"\ndate = "2026-11-16"\n'
+                      '[[crate]]\nname = "nc"\nclass = "c-ffi"\nreason = "r"\napprover = "a"\n'
+                      'date = "2026-11-16"\n')
+        files = {"cells/nc/Cargo.toml": NC_CARGO,
+                 "cells/nc/src/main.rs": "#![no_std]\n" + TIER_FFI,
+                 "cells/nc/src/bin/evil/main.rs": "#![no_std]\n" + FFI_CALL}
+        code, signed, output = sign_tree(files, allow_text, {"evil": None})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        # The autobin is a root now, so the source reading already adds ABSENT.
+        self.assertIn("[tier-class] nc :: cells/nc", output)
+        self.assertIn("reads ABSENT+FFI", output)
+
+    def test_d_a_manifest_hidden_in_a_digit_prefixed_string_is_refused(self):
+        main = ('#![no_std]\nmacro_rules! eat { ($($t:tt)*) => {} }\neat!(0" '
+                + TIER_FFI.replace("\n", " ") + ' ");\n' + FFI_CALL)
+        code, signed, output = sign_tree(
+            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+            ffi_allowlist(crate="nc"), {"nc": None})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        self.assertIn("reads ABSENT", output)
+
+    def test_control_a_plain_tier_one_manifest_is_refused(self):
+        main = "#![no_std]\n" + TIER_LESS + FFI_CALL
+        code, signed, output = sign_tree(
+            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+            ffi_allowlist(crate="nc"), {"nc": self.LEGACY})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+
+    def test_an_ffi_binary_of_an_ffi_crate_signs(self):
+        main = "#![no_std]\n" + TIER_FFI + FFI_CALL
+        for name in ("nc", "nc.elf"):
+            with self.subTest(name=name):
+                code, signed, output = sign_tree(
+                    {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+                    ffi_allowlist(crate="nc"), {name: self.FFI})
+                self.assertEqual((code, len(signed)), (cli.EXIT_OK, 1), output)
+
+    def test_a_tier_one_binary_is_held_to_its_exception_class(self):
+        files = {"cells/nc/Cargo.toml": NC_CARGO,
+                 "cells/nc/src/main.rs": "#![no_std]\n" + TIER_LESS + RAW_PTR}
+        allow_text = ffi_allowlist("legacy-raw-ptr", crate="nc") + tier_exception(
+            "legacy-raw-ptr", "LEGACY", crate="nc")
+        code, signed, output = sign_tree(files, allow_text, {"nc": self.LEGACY})
+        self.assertEqual((code, len(signed)), (cli.EXIT_OK, 1), output)
+        standard = elf_manifest.manifest_record(1)
+        self.refused_by_binary(*sign_tree(files, allow_text, {"nc": standard}), klass="STANDARD")
+
+    def test_a_malformed_manifest_is_refused(self):
+        main = "#![no_std]\n#![forbid(unsafe_code)]\n" + TIER_LESS
+        code, signed, output = sign_tree(
+            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+            "version = 1\n", {"nc": elf_manifest.manifest_record(9)})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        self.assertIn("`__ViCell_manifest` is malformed", output)
+
+    def test_an_unattributable_tier_one_binary_is_noted_and_signed(self):
+        main = "#![no_std]\n" + TIER_FFI + FFI_CALL
+        code, signed, output = sign_tree(
+            {"cells/nc/Cargo.toml": NC_CARGO, "cells/nc/src/main.rs": main},
+            ffi_allowlist(crate="nc"), {"init": self.LEGACY})
+        self.assertEqual((code, len(signed)), (cli.EXIT_OK, 1), output)
+        self.assertIn("is no binary target of a cells/ crate", output)
+
+    def test_a_shared_package_name_is_refused_on_the_sign_path(self):
+        files = {"cells/a/Cargo.toml": NC_CARGO,
+                 "cells/a/src/main.rs": "#![no_std]\n" + TIER_LESS + FFI_CALL,
+                 "cells/b/Cargo.toml": NC_CARGO,
+                 "cells/b/src/main.rs": "#![no_std]\n#![forbid(unsafe_code)]\n" + TIER_FFI}
+        allow_text = ('version = 1\n[[file]]\npath = "cells/a/src/main.rs"\nclass = "c-ffi"\n'
+                      'reason = "r"\napprover = "a"\ndate = "2026-11-16"\n'
+                      '[[crate]]\nname = "nc"\nclass = "c-ffi"\nreason = "r"\napprover = "a"\n'
+                      'date = "2026-11-16"\n')
+        code, signed, output = sign_tree(files, allow_text, {"nc": self.FFI})
+        self.assertEqual((code, signed), (cli.EXIT_POLICY, []), output)
+        self.assertIn("share this package name", output)
+
+
+class ElfManifestTests(unittest.TestCase):
+    """`elf_manifest.classify` agrees with the kernel's `manifest_section::classify`."""
+
+    def test_classes(self):
+        self.assertEqual(elf_manifest.classify(elf_manifest.minimal_elf(None)), "ABSENT")
+        for byte, name in ((0, "TRUSTED_CORE"), (1, "STANDARD"), (2, "FFI"), (3, "UNTRUSTED"),
+                           (0xFF, "LEGACY")):
+            record = elf_manifest.manifest_record(byte)
+            self.assertEqual(elf_manifest.classify(elf_manifest.minimal_elf(record)), name)
+
+    def test_a_v1_record_upcasts_to_legacy(self):
+        v1 = (0x5649_4345).to_bytes(4, "little") + bytes([1, 0x03, 0, 0])
+        self.assertEqual(elf_manifest.classify(elf_manifest.minimal_elf(v1)), "LEGACY")
+
+    def test_malformed_records_and_files(self):
+        good = elf_manifest.manifest_record(2)
+        bad_records = {
+            "unknown class": elf_manifest.manifest_record(4),
+            "unknown flag": elf_manifest.manifest_record(2, flags=0x1000),
+            "reserved": good[:12] + b"\x01\0\0\0",
+            "bad magic": b"\0" * 4 + good[4:],
+            "v2 version in 8 bytes": good[:8],
+            "trailing byte": good + b"\0",
+        }
+        for label, record in bad_records.items():
+            with self.subTest(label):
+                self.assertEqual(elf_manifest.classify(elf_manifest.minimal_elf(record)),
+                                 "MALFORMED")
+        self.assertEqual(elf_manifest.classify(b"not an elf"), "MALFORMED")
+
+    def test_two_manifest_sections_are_malformed(self):
+        import struct
+        elf = bytearray(elf_manifest.minimal_elf(elf_manifest.manifest_record(2)))
+        shoff = struct.unpack_from("<Q", elf, 40)[0]
+        elf += elf[shoff + 2 * 64: shoff + 3 * 64]  # a second copy of the manifest header
+        struct.pack_into("<H", elf, 60, 4)
+        self.assertEqual(elf_manifest.classify(bytes(elf)), "MALFORMED")
+
+    def test_a_built_cell_if_present(self):
+        built = REPO_ROOT / "target/x86_64-unknown-none/release/cellbox"
+        if not built.is_file():
+            self.skipTest("no built x86_64 cellbox")
+        self.assertEqual(elf_manifest.classify(built.read_bytes()), "LEGACY")
+
+
+class RootDiscoveryTests(unittest.TestCase):
+    """Bin roots follow cargo: autobins stay on beside an explicit `[[bin]] path`."""
+
+    def crate(self, cargo_extra: str, files: dict[str, str], recorded=None) -> scan.Crate:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            write(root, "cells/nc/Cargo.toml", NC_CARGO + cargo_extra)
+            for rel, text in files.items():
+                write(root, f"cells/nc/{rel}", text)
+            (crate,) = scan.discover_crates(root, ["cells"], recorded)
+            crate.bins = {n: p.relative_to(root / "cells/nc").as_posix()
+                          for n, p in crate.bins.items()}
+            return crate
+
+    def test_explicit_bin_path_keeps_main_and_autobins(self):
+        crate = self.crate('[[bin]]\nname = "x"\npath = "src/x.rs"\n', {
+            "src/main.rs": "", "src/x.rs": "", "src/bin/tool.rs": "", "src/bin/evil/main.rs": ""})
+        self.assertEqual(crate.bins, {"nc": "src/main.rs", "x": "src/x.rs",
+                                      "tool": "src/bin/tool.rs", "evil": "src/bin/evil/main.rs"})
+
+    def test_an_explicit_bin_without_a_path_is_found(self):
+        crate = self.crate('[[bin]]\nname = "deep"\n', {"src/bin/deep/main.rs": ""})
+        self.assertEqual(crate.bins, {"deep": "src/bin/deep/main.rs"})
+
+    def test_recorded_metadata_bins_are_merged(self):
+        crate = self.crate("", {"src/main.rs": "", "odd/entry.rs": ""},
+                           recorded={"cells/nc": {"odd": "cells/nc/odd/entry.rs"}})
+        self.assertEqual(crate.bins, {"nc": "src/main.rs", "odd": "odd/entry.rs"})
+
+    def test_every_bin_root_must_forbid(self):
+        # P18 review: the F1 forbid check skipped `main.rs` beside an explicit bin.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/nc/Cargo.toml", NC_CARGO + '[[bin]]\nname = "x"\npath = "src/x.rs"\n')
+            write(root, "cells/nc/src/x.rs", "#![forbid(unsafe_code)]\nfn main() {}\n")
+            write(root, "cells/nc/src/main.rs", "fn main() {}\n")
+            write(root, "cells/nc/src/bin/evil/main.rs", "fn main() {}\n")
+            write(root, "a.toml", "version = 1\n")
+            result = policy.check(root, allowlist.load(root, "a.toml"))
+            self.assertEqual(sorted(v.path for v in result.violations if v.layer == "attribute"),
+                             ["cells/nc/src/bin/evil/main.rs", "cells/nc/src/main.rs"])
+
+
+class GlobalAsmTests(unittest.TestCase):
+    def test_global_asm_counts_as_an_attribute_and_asm_does_not(self):
+        # P18 review MED: rustc rejects global_asm! under forbid(unsafe_code).
+        code = scan.strip_noncode('core::arch::global_asm!(".globl x\\nx: ret");\n'
+                                  "global_asm!(\"nop\");\nfn f() { unsafe { core::arch::asm!(\"nop\") } }\n")
+        self.assertEqual(tcb.count(code), tcb.Counts(1, 2))
+
+
+class BaselineWriterTests(unittest.TestCase):
+    """`--write-baseline` lowers ceilings mechanically and never raises one."""
+
+    TEXT = ("# header\nversion = 1\n\n[total]\nunsafe = 10\nattrs = 5\n\n"
+            '# ── lib ──\n\n[[site]]\npath = "a.rs"\nunsafe = 3\nattrs = 1\n\n'
+            '[[site]]\npath = "b.rs"\nunsafe = 2\nattrs = 0\n\n'
+            '[[site]]\npath = "c.rs"\nunsafe = 1\nattrs = 0\n\n'
+            '[[site]]\npath = "d.rs"\nunsafe = 3\nattrs = 0\n')
+
+    def test_lowers_drops_and_never_raises(self):
+        report = tcb.Report(per_file={"a.rs": tcb.Counts(2, 1), "c.rs": tcb.Counts(4, 0),
+                                      "d.rs": tcb.Counts(0, 1)},
+                            cells=tcb.Counts(1, 0), closure=tcb.Counts(4, 7))
+        out = tcb.lowered_baseline(self.TEXT, report)
+        self.assertEqual(out, (
+            "# header\nversion = 1\n\n[total]\nunsafe = 5\nattrs = 5\n\n"
+            '# ── lib ──\n\n[[site]]\npath = "a.rs"\nunsafe = 2\nattrs = 1\n\n'
+            '[[site]]\npath = "c.rs"\nunsafe = 1\nattrs = 0\n\n'))
+
+    def test_cli_write_baseline_makes_a_dropped_tree_pass_strict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
+            write(root, "cells/x/src/main.rs", "#![forbid(unsafe_code)]\n" + TIER_LESS)
+            write(root, "libs/l/Cargo.toml", '[package]\nname = "l"\nversion = "0.1.0"\n')
+            write(root, "libs/l/src/lib.rs", "fn f() { unsafe { } }\n")
+            write(root, "a.toml", "version = 1\n")
+            write_tcb(root, roots=["x"], total=(3, 0), packages={"l": "libs/l"},
+                      sites={"libs/l/src/lib.rs": (2, 0), "libs/l/src/gone.rs": (1, 0)})
+            load = lambda: policy.check(root, allowlist.load(root, "a.toml"), strict=True,  # noqa: E731
+                                        closure=tcb.load_closure(root),
+                                        baseline=tcb.load_baseline(root))
+            self.assertFalse(load().ok)
+            with mock.patch("sys.stdout", new_callable=__import__("io").StringIO):
+                self.assertEqual(cli.main(["--repo", str(root), "--allowlist", "a.toml",
+                                           "--write-baseline"]), cli.EXIT_OK)
+            self.assertTrue(load().ok, [str(v) for v in load().violations])
+            baseline = tcb.load_baseline(root)
+            self.assertEqual(baseline.total, tcb.Counts(1, 0))
+            self.assertEqual(baseline.sites, {"libs/l/src/lib.rs": tcb.Counts(1, 0)})
+
+
+class ClosureFileTests(unittest.TestCase):
+    BASE = 'version = 1\ntargets = []\ntier1_roots = []\n'
+
+    def load(self, text: str) -> tcb.Closure:
+        with tempfile.TemporaryDirectory() as tmp:
+            write(Path(tmp), tcb.CLOSURE_PATH, self.BASE + text)
+            return tcb.load_closure(Path(tmp))
+
+    def test_pins_are_keyed_by_the_full_source(self):
+        pin = '[[thirdparty]]\nname = "f"\nversion = "1"\nsource = "{}"\nunsafe = 0\nattrs = 0\n'
+        git_a = "git+https://x/f?rev=a#aaaa"
+        both = self.load(pin.format(git_a) + pin.format("registry+https://r"))
+        self.assertEqual(len(both.thirdparty), 2)
+        with self.assertRaises(tcb.TcbError):
+            self.load(pin.format(git_a) + pin.format(git_a))
+
+    def test_proc_macro_and_bin_tables(self):
+        closure = self.load('[[proc_macro]]\nname = "m"\nversion = "1"\nsource = "registry+r"\n'
+                            '[[bin]]\nname = "b"\npackage = "p"\ndir = "cells/p"\nsrc = "cells/p/src/main.rs"\n')
+        self.assertEqual(closure.bins, {"cells/p": {"b": "cells/p/src/main.rs"}})
+        self.assertEqual(len(closure.proc_macros), 1)
+        for bad in ('[[proc_macro]]\nname = "m"\nversion = "1"\n',
+                    '[[bin]]\nname = "b"\npackage = "p"\ndir = "cells/p"\n'):
+            with self.subTest(bad=bad), self.assertRaises(tcb.TcbError):
+                self.load(bad)
+
+    def test_the_real_closure_pins_proc_macros_and_softfloat(self):
+        closure = tcb.load_closure(REPO_ROOT)
+        names = {m["name"] for m in closure.proc_macros}
+        self.assertLessEqual({"zerocopy-derive", "defmt-macros", "serde_derive", "enumn"}, names)
+        self.assertEqual(closure.packages.get("viui-macros"), "libs/viui-macros")
+        targets = tomllib_load(REPO_ROOT / tcb.CLOSURE_PATH)["targets"]
+        self.assertIn("aarch64-unknown-none-softfloat", targets)
+        fatfs = [t for t in closure.thirdparty if t["name"] == "fatfs"]
+        self.assertTrue(fatfs and all("rev=" in t["source"] and "#" in t["source"] for t in fatfs))
+
+
+def tomllib_load(path: Path) -> dict:
+    import tomllib
+    return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+class GeneratorTests(unittest.TestCase):
+    """`gen-tier1-closure.py` refusals, driven with a fake `cargo metadata`."""
+
+    def generator(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "gen_tier1_closure", REPO_ROOT / "scripts/gen-tier1-closure.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def build(self, files: dict[str, str], packages: list[dict], edges: dict[str, list[str]]):
+        import copy
+        gen = self.generator()
+        packages = copy.deepcopy(packages)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            for rel, text in files.items():
+                write(root, rel, text)
+            for pkg in packages:
+                pkg.setdefault("version", "0.1.0")
+                pkg.setdefault("source", None)
+                pkg["manifest_path"] = str(root / pkg.pop("dir") / "Cargo.toml")
+                for target in pkg.setdefault("targets", []):
+                    target["src_path"] = str(root / target["src_path"])
+            meta = {"packages": packages,
+                    "workspace_members": [p["id"] for p in packages if p["source"] is None],
+                    "resolve": {"nodes": [{"id": p["id"], "deps": [
+                        {"pkg": d, "dep_kinds": [{"kind": None}]} for d in edges.get(p["id"], [])]}
+                        for p in packages]}}
+            with mock.patch.object(gen, "REPO", root), \
+                 mock.patch.object(gen, "metadata", return_value=meta), \
+                 mock.patch.object(gen, "NON_MEMBER_CELLS", {}):
+                return gen.build()
+
+    CELL_A = {"cells/a/Cargo.toml": '[package]\nname = "a"\nversion = "0.1.0"\n',
+              "cells/a/src/main.rs": "#![forbid(unsafe_code)]\n" + TIER_LESS}
+    PKG_A = {"id": "a", "name": "a", "dir": "cells/a",
+             "targets": [{"kind": ["bin"], "name": "a", "src_path": "cells/a/src/main.rs"}]}
+
+    def test_a_tier_two_cells_dependency_of_a_tier_one_root_fails(self):
+        files = dict(self.CELL_A, **{
+            "cells/b/Cargo.toml": '[package]\nname = "b"\nversion = "0.1.0"\n',
+            "cells/b/src/lib.rs": TIER_FFI + "pub fn f() { unsafe { } }\n"})
+        packages = [dict(self.PKG_A), {"id": "b", "name": "b", "dir": "cells/b", "targets": [
+            {"kind": ["lib"], "name": "b", "src_path": "cells/b/src/lib.rs"}]}]
+        with self.assertRaises(SystemExit) as raised:
+            self.build(files, packages, {"a": ["b"]})
+        self.assertIn("cells/b (b) reads as Tier 2", str(raised.exception))
+
+    def test_an_out_dir_include_with_unsafe_in_the_build_script_fails(self):
+        files = dict(self.CELL_A, **{
+            "libs/l/Cargo.toml": '[package]\nname = "l"\nversion = "0.1.0"\n',
+            "libs/l/src/lib.rs": 'include!(concat!(env!("OUT_DIR"), "/gen.rs"));\n',
+            "libs/l/build.rs": 'fn main() { write("pub unsafe fn g() {}"); }\n'})
+        packages = [dict(self.PKG_A), {"id": "l", "name": "l", "dir": "libs/l", "targets": [
+            {"kind": ["lib"], "name": "l", "src_path": "libs/l/src/lib.rs"},
+            {"kind": ["custom-build"], "name": "build-script-build", "src_path": "libs/l/build.rs"}]}]
+        with self.assertRaises(SystemExit) as raised:
+            self.build(files, packages, {"a": ["l"]})
+        self.assertIn("l@0.1.0 include!s OUT_DIR output", str(raised.exception))
+
+    def test_clean_closure_records_bins_pins_and_proc_macros(self):
+        files = dict(self.CELL_A, **{"reg/dep/src/lib.rs": "pub fn d() { unsafe { } }\n",
+                                     "reg/mac/src/lib.rs": ""})
+        registry = "registry+https://github.com/rust-lang/crates.io-index"
+        packages = [dict(self.PKG_A),
+                    {"id": "dep", "name": "dep", "dir": "reg/dep", "source": registry},
+                    {"id": "mac", "name": "mac", "dir": "reg/mac", "source": registry,
+                     "targets": [{"kind": ["proc-macro"], "name": "mac",
+                                  "src_path": "reg/mac/src/lib.rs"}]}]
+        text = self.build(files, packages, {"a": ["dep", "mac"]})
+        self.assertIn('[[thirdparty]]\nname = "dep"\nversion = "0.1.0"\n'
+                      f'source = "{registry}"\nunsafe = 1\nattrs = 0', text)
+        self.assertIn(f'[[proc_macro]]\nname = "mac"\nversion = "0.1.0"\nsource = "{registry}"', text)
+        self.assertIn('[[bin]]\nname = "a"\npackage = "a"\ndir = "cells/a"\n'
+                      'src = "cells/a/src/main.rs"', text)
+
+
 class ToolchainTests(unittest.TestCase):
     def test_reads_the_pin_from_disk(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -789,9 +1248,11 @@ class SignPathStrictnessTests(unittest.TestCase):
             root = Path(tmp)
             write(root, "a.toml", "version = 1\n")
             write_tcb(root)
+            target = root / "cell"
+            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(0xFF)))
             args = argparse.Namespace(
                 repo=root, allowlist="a.toml", quiet=True, strict=False,
-                targets=["cell.elf"], objcopy="objcopy", seed_hex=None,
+                targets=[str(target)], objcopy="objcopy", seed_hex=None,
             )
             with mock.patch.object(cli.policy, "check", return_value=policy.Result()), \
                  mock.patch.object(cli.toolchain, "check", return_value=status), \
@@ -1212,6 +1673,8 @@ class CandidateRouteTests(unittest.TestCase):
 
     def test_sign_route_runs_the_f1_f5_check_first(self):
         targets = self.batch("cellbox")
+        for target in targets:  # the ELF tier gate reads the manifest before any route rule
+            target.write_bytes(elf_manifest.minimal_elf(elf_manifest.manifest_record(0xFF)))
         failed = policy.Result()
         failed.violations.append(policy.Violation("token", "x", "cells/x/src/lib.rs", "unsafe"))
         verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")

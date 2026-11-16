@@ -2,6 +2,10 @@
 
 Exit codes: 0 ok · 1 policy violation (F1, tier class, Tier-1 closure or F5) ·
 2 usage/config error · 3 signing refused or signature invalid.
+
+Modes: `--check` (CI runs `--check --strict`), `--sign ELF...` (always strict,
+plus the ELF tier gate; tightening findings are NOTEs) and `--write-baseline`
+(lower the closure ceilings to the tree; never raises one).
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import sys
 from pathlib import Path
 
 from . import allowlist as allowlist_mod
-from . import policy, signing, tcb, toolchain
+from . import policy, signing, tcb, tier_class, toolchain
 
 EXIT_OK, EXIT_POLICY, EXIT_USAGE, EXIT_SIGNING = 0, 1, 2, 3
 
@@ -61,7 +65,8 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
     if tier:
         print("FAIL: tier class — a crate with a `c-ffi` or `legacy-raw-ptr` allowlist entry")
         print("      must declare manifest class FFI or UNTRUSTED (Tier 2), or carry a")
-        print("      reviewed [[tier_exception]] in scripts/unsafe-allowlist.toml:")
+        print("      reviewed [[tier_exception]] in scripts/unsafe-allowlist.toml; a file")
+        print("      with an `extern` block needs class `c-ffi`; cells/ package names are unique:")
         for violation in sorted(tier, key=lambda v: (v.crate, v.detail)):
             print(f"  {violation}")
     elif not quiet and result.tier is not None:
@@ -72,7 +77,8 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
     if closure:
         print("FAIL: Tier-1 closure — code linked into Tier-1 cells exceeds or no longer")
         print(f"      matches its reviewed ceilings in {tcb.BASELINE_PATH} /")
-        print(f"      {tcb.CLOSURE_PATH} (regenerate with scripts/gen-tier1-closure.py):")
+        print(f"      {tcb.CLOSURE_PATH} (regenerate with scripts/gen-tier1-closure.py;")
+        print("      lower ceilings with `cellos-sign --write-baseline`):")
         for violation in sorted(closure, key=lambda v: (v.crate, v.path)):
             print(f"  {violation}")
     elif not quiet and result.tcb is not None:
@@ -84,41 +90,47 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
               f"{r.thirdparty_pins} third-party pins")
 
 
-def run_check(args: argparse.Namespace) -> int:
-    """F1, tier class, closure and F5 with no signing. Pure source parsing: no
-    build, no network (the closure file is generated and drift-checked in CI)."""
+def _check(args: argparse.Namespace, signing_run: bool = False
+           ) -> tuple[int, policy.Result | None, allowlist_mod.Allowlist | None]:
+    """F1, tier class, closure and F5. Pure source parsing: no build, no network
+    (the closure file is generated and drift-checked in CI)."""
     repo = args.repo
     try:
         allow = allowlist_mod.load(repo, args.allowlist)
     except allowlist_mod.AllowlistError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
-        return EXIT_USAGE
+        return EXIT_USAGE, None, None
     try:
         closure = tcb.load_closure(repo)
         baseline = tcb.load_baseline(repo)
     except tcb.TcbError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
-        return EXIT_USAGE
+        return EXIT_USAGE, None, None
 
     result = policy.check(repo, allow, today=_dt.date.today(),
                           strict=getattr(args, "strict", False),
-                          closure=closure, baseline=baseline)
+                          closure=closure, baseline=baseline, signing=signing_run)
     status = toolchain.check(repo)
     _report(result, status, args.quiet)
 
     if not result.ok:
-        return EXIT_POLICY
+        return EXIT_POLICY, result, allow
     if not status.ok:
-        return EXIT_POLICY
+        return EXIT_POLICY, result, allow
     if status.skipped and args.strict:
         print("FAIL: --strict requires F5 to be verified, but it was skipped",
               file=sys.stderr)
-        return EXIT_POLICY
-    return EXIT_OK
+        return EXIT_POLICY, result, allow
+    return EXIT_OK, result, allow
 
 
-def run_sign(args: argparse.Namespace) -> int:
-    """Check, then sign. There is no path to the signing call that skips the check.
+def run_check(args: argparse.Namespace) -> int:
+    """F1, tier class, closure and F5 with no signing."""
+    return _check(args)[0]
+
+
+def _check_before_signing(args: argparse.Namespace, targets: list[Path]) -> int:
+    """The strict tree check, then the tier gate on each target's own manifest.
 
     Strictness is imposed here rather than left to the caller: the signature is
     defined as attesting that the pipeline enforced F1 *and* F5, so a host that
@@ -126,15 +138,31 @@ def run_sign(args: argparse.Namespace) -> int:
     anyway. A build script cannot forget a flag it does not have to pass.
     """
     args.strict = True
-    check_code = run_check(args)
-    if check_code != EXIT_OK:
+    code, result, allow = _check(args, signing_run=True)
+    if code == EXIT_OK:
+        refusals, notes = tier_class.elf_gate(targets, result.crates, result.tier, allow)
+        for note in notes:
+            print(f"NOTE: tier class (binary): {note}")
+        if refusals:
+            print("FAIL: tier class (binary) — the manifest in the ELF, which the kernel "
+                  "reads, puts a gated crate in Tier 1:")
+            for refusal in refusals:
+                print(f"  {refusal}")
+            code = EXIT_POLICY
+    if code != EXIT_OK:
         sys.stdout.flush()  # keep the refusal below the findings it refers to
         print("REFUSED: not signing — the F1/F5 check above did not pass.", file=sys.stderr)
+    return code
+
+
+def run_sign(args: argparse.Namespace) -> int:
+    """Check, then sign. There is no path to the signing call that skips the check."""
+    targets = [Path(p) for p in args.targets]
+    check_code = _check_before_signing(args, targets)
+    if check_code != EXIT_OK:
         return check_code
     try:
-        signing.sign_and_verify(
-            args.repo, [Path(p) for p in args.targets], args.objcopy, args.seed_hex
-        )
+        signing.sign_and_verify(args.repo, targets, args.objcopy, args.seed_hex)
     except signing.SigningRefused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return EXIT_SIGNING
@@ -151,18 +179,18 @@ def sign_route(repo: Path, route: str, candidate_root: Path, targets: list[Path]
     """Check, then dev-key sign a batch on a named candidate route (Phase 10 S10-2a).
 
     Python API only: the command line has no route option, so the CLI cannot reach
-    a route. The same strict F1/F5 check as `run_sign` runs first; the route itself
-    is authenticated by `signing.route_admits` (table, recipe binding, pin, root).
+    a route. The same strict check and ELF tier gate as `run_sign` run first; the
+    route itself is authenticated by `signing.route_admits` (table, recipe binding,
+    pin, root).
     """
     args = argparse.Namespace(repo=repo, allowlist=allowlist_mod.DEFAULT_PATH, quiet=True,
                               strict=True)
-    check_code = run_check(args)
+    targets = [Path(t) for t in targets]
+    check_code = _check_before_signing(args, targets)
     if check_code != EXIT_OK:
-        sys.stdout.flush()
-        print("REFUSED: not signing — the F1/F5 check above did not pass.", file=sys.stderr)
         return check_code
     try:
-        signing.sign_and_verify(repo, [Path(t) for t in targets], objcopy, None,
+        signing.sign_and_verify(repo, targets, objcopy, None,
                                 route=signing.Route(route, Path(candidate_root)))
     except signing.SigningRefused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
@@ -172,6 +200,29 @@ def sign_route(repo: Path, route: str, candidate_root: Path, targets: list[Path]
         return EXIT_SIGNING
     print(f"OK:   signed {len(targets)} cell(s) with the dev key on route {route} "
           "after a passing F1/F5 check")
+    return EXIT_OK
+
+
+def run_write_baseline(args: argparse.Namespace) -> int:
+    """Lower every closure ceiling that sits above the tree; never raise one."""
+    repo = args.repo
+    try:
+        allow = allowlist_mod.load(repo, args.allowlist)
+        closure = tcb.load_closure(repo)
+        baseline = tcb.load_baseline(repo)
+    except (allowlist_mod.AllowlistError, tcb.TcbError) as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    result = policy.check(repo, allow, closure=closure, baseline=baseline)
+    path = repo / tcb.BASELINE_PATH
+    before = path.read_text(encoding="utf-8")
+    after = tcb.lowered_baseline(before, result.tcb)
+    if after == before:
+        print(f"{tcb.BASELINE_PATH}: no ceiling is above the tree; nothing to lower")
+        return EXIT_OK
+    path.write_text(after, encoding="utf-8")
+    tcb.load_baseline(repo)  # the rewrite must still parse
+    print(f"wrote {tcb.BASELINE_PATH}: ceilings lowered to the tree; review and commit the diff")
     return EXIT_OK
 
 
@@ -196,6 +247,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="run the F1 + F5 check and exit without signing")
     parser.add_argument("--sign", dest="targets", nargs="+", metavar="ELF",
                         help="check, then sign these ELFs in place and re-verify")
+    parser.add_argument("--write-baseline", action="store_true",
+                        help=f"lower the ceilings in {tcb.BASELINE_PATH} to the tree "
+                             "(never raises one) and exit")
     parser.add_argument("--objcopy", default=os.environ.get("OBJCOPY", "objcopy"),
                         help="cross objcopy for the target architecture ($OBJCOPY)")
     parser.add_argument("--seed-hex", default=None,
@@ -206,7 +260,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if bool(args.check) == bool(args.targets):
-        print("error: pass exactly one of --check or --sign ELF...", file=sys.stderr)
+    if [bool(args.check), bool(args.targets), args.write_baseline].count(True) != 1:
+        print("error: pass exactly one of --check, --sign ELF... or --write-baseline",
+              file=sys.stderr)
         return EXIT_USAGE
+    if args.write_baseline:
+        return run_write_baseline(args)
     return run_check(args) if args.check else run_sign(args)

@@ -9,14 +9,20 @@ evidence and review:
     python3 scripts/check-tier-class.py --all      # every allowlisted crate
     python3 scripts/check-tier-class.py --negative-control
 
-`--negative-control` builds a throwaway tree outside the repository with one
-cell crate that holds `c-ffi` allowlist entries and a Tier-1 (tier-less)
-manifest, and drives it through the real `cellos-sign --sign` path with F5
-reported verified and the signing call replaced by a recorder. It exits 0 only
-if signing is refused with a policy failure, nothing reaches the signer, and
-the same tree with `tier = abi::manifest::PROTECTION_CLASS_FFI` is admitted —
-so the refusal is the tier-class gate and nothing else. Nothing is written
-under `cells/`.
+`--negative-control` builds throwaway git repositories outside this one, each
+with one cell crate that holds `c-ffi` allowlist entries, and drives them
+through the real `cellos-sign --sign` path with F5 reported verified and the
+signing call replaced by a recorder. The target is a minimal ELF named after
+the crate's binary, carrying the manifest the kernel would read. Three runs:
+  * Tier-1 (tier-less) source, LEGACY binary: refused by the source gate;
+  * FFI source, FFI binary: admitted, one target signed;
+  * FFI source, binary without a manifest (what a `#[cfg]`-gated or never
+    expanded `declare_manifest!` builds): refused by the binary gate.
+It exits 0 only if all three behave so, nothing refused reaches the signer,
+and each repository leaves an untracked scratch file with `unsafe` in the
+crate that only a filesystem walk would see — so the admitted run proves the
+`git ls-files` path CI uses is the one exercised. Nothing is written under
+`cells/` of this repository.
 
 Exit 0 when the gate passes (or the control behaves as designed), 1 otherwise.
 """
@@ -26,6 +32,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -33,7 +40,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cellos_sign import allowlist, cli, policy, tcb, toolchain  # noqa: E402
+from cellos_sign import allowlist, cli, elf_manifest, policy, tcb, toolchain  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CONTROL_CRATE = "tier-class-negative-control"
@@ -72,8 +79,12 @@ date = "{today}"
 """
 
 
-def write_control_tree(root: Path, tier: str, today: str) -> None:
-    """One c-ffi cell crate; `tier` is the extra `declare_manifest!` argument."""
+def write_control_tree(root: Path, tier: str, today: str, manifest: bytes | None) -> Path:
+    """One c-ffi cell crate in a fresh git repository; returns its binary.
+
+    `tier` is the extra `declare_manifest!` argument and `manifest` the record
+    in the binary (None: no `__ViCell_manifest` section).
+    """
 
     def put(rel: str, text: str) -> None:
         path = root / rel
@@ -86,7 +97,7 @@ def write_control_tree(root: Path, tier: str, today: str) -> None:
     put(allowlist.DEFAULT_PATH, _CONTROL_ALLOWLIST.format(today=today, crate=CONTROL_CRATE))
     # The closure ratchet sees the crate as a Tier-1 root only in the Tier-1
     # variant; give each variant the closure and baseline it would generate so
-    # the only difference between the two runs is the manifest class.
+    # the only difference between the runs is the manifest class.
     tier1 = not tier
     roots = f'"{CONTROL_CRATE}"' if tier1 else ""
     put(tcb.CLOSURE_PATH,
@@ -94,9 +105,17 @@ def write_control_tree(root: Path, tier: str, today: str) -> None:
         "package = []\nthirdparty = []\nunresolved = []\n")
     put(tcb.BASELINE_PATH,
         f"version = 1\nsite = []\n[total]\nunsafe = {1 if tier1 else 0}\nattrs = 0\n")
+    for command in (["init", "-q"], ["add", "-A"]):
+        subprocess.run(["git", "-C", str(root), *command], check=True, capture_output=True)
+    # Untracked after `git add`: only a filesystem walk would scan it.
+    put("cells/negative-control/src/scratch.rs", "fn scratch() { unsafe {} }\n")
+    binary = root / "build" / CONTROL_CRATE
+    binary.parent.mkdir()
+    binary.write_bytes(elf_manifest.minimal_elf(manifest))
+    return binary
 
 
-def run_sign(root: Path) -> tuple[int, list, str]:
+def run_sign(root: Path, target: Path) -> tuple[int, list, str]:
     """`cellos-sign --sign` on `root` with F5 verified and signing recorded."""
     signed: list = []
     out = io.StringIO()
@@ -105,7 +124,7 @@ def run_sign(root: Path) -> tuple[int, list, str]:
          mock.patch.object(cli.signing, "sign_and_verify",
                            side_effect=lambda *a, **k: signed.append(a)), \
          contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-        code = cli.main(["--repo", str(root), "--sign", str(root / "cell.elf")])
+        code = cli.main(["--repo", str(root), "--sign", str(target)])
     return code, signed, out.getvalue()
 
 
@@ -113,28 +132,34 @@ def negative_control() -> int:
     import datetime as _dt
 
     today = _dt.date.today().isoformat()
+    ffi_tier = ", tier = abi::manifest::PROTECTION_CLASS_FFI"
+    legacy = elf_manifest.manifest_record(0xFF)
+    ffi = elf_manifest.manifest_record(2)
+    cases = (
+        ("Tier-1 source, LEGACY binary", "", legacy, False,
+         (f"[tier-class] {CONTROL_CRATE}", "allowlist class `c-ffi`")),
+        ("FFI source, FFI binary", ffi_tier, ffi, True, ()),
+        ("FFI source, binary without a manifest", ffi_tier, None, False,
+         ("FAIL: tier class (binary)", f"binary of `{CONTROL_CRATE}` carries manifest ABSENT")),
+    )
+    failures = []
     with tempfile.TemporaryDirectory(prefix="tier-class-nc-") as tmp:
-        tier1 = Path(tmp) / "tier1"
-        write_control_tree(tier1, "", today)
-        code, signed, output = run_sign(tier1)
-        refused = (
-            code == cli.EXIT_POLICY
-            and not signed
-            and f"[tier-class] {CONTROL_CRATE}" in output
-            and "allowlist class `c-ffi`" in output
-        )
-        tier2 = Path(tmp) / "tier2"
-        write_control_tree(tier2, ", tier = abi::manifest::PROTECTION_CLASS_FFI", today)
-        code2, signed2, output2 = run_sign(tier2)
-        admitted = code2 == cli.EXIT_OK and len(signed2) == 1
-    if refused and admitted:
-        print("tier-class negative control: OK (c-ffi entry + Tier-1 manifest refused with "
-              f"exit {code}, nothing signed; the same crate with PROTECTION_CLASS_FFI is "
-              "admitted)")
+        for index, (label, tier, manifest, admit, expected) in enumerate(cases):
+            root = Path(tmp) / str(index)
+            target = write_control_tree(root, tier, today, manifest)
+            code, signed, output = run_sign(root, target)
+            ok = (code == cli.EXIT_OK and len(signed) == 1) if admit else (
+                code == cli.EXIT_POLICY and not signed and all(e in output for e in expected))
+            if not ok:
+                failures.append(f"  {label}: exit {code}, signed {len(signed)}\n{output}")
+    if not failures:
+        print("tier-class negative control: OK (c-ffi entry + Tier-1 source refused; the same "
+              "crate with PROTECTION_CLASS_FFI admitted through git ls-files; an FFI source "
+              "whose binary carries no manifest refused by the binary gate; nothing refused "
+              "was signed)")
         return 0
     print("tier-class negative control: FAIL", file=sys.stderr)
-    print(f"  Tier-1 variant: exit {code}, signed {len(signed)}\n{output}", file=sys.stderr)
-    print(f"  FFI variant: exit {code2}, signed {len(signed2)}\n{output2}", file=sys.stderr)
+    print("\n".join(failures), file=sys.stderr)
     return 1
 
 

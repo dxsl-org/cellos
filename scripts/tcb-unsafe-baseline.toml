@@ -8,31 +8,36 @@
 #
 #   [[site]]  one file of an in-tree closure package that uses `unsafe` or an
 #             unsafe attribute. Two ceilings: `unsafe` (keyword tokens, the F1
-#             token rule) and `attrs` (`no_mangle`, `export_name`, `link_section`:
-#             the attributes rustc's `unsafe_code` lint rejects without the
-#             keyword). Same lexer as the cell scan: comments and literals do not
-#             count; `#[cfg(test)]` modules inside src/ do.
+#             token rule) and `attrs` (`no_mangle`, `export_name`, `link_section`
+#             and `global_asm!`: what rustc's `unsafe_code` lint rejects without
+#             the keyword). Same lexer as the cell scan: comments and literals do
+#             not count; `#[cfg(test)]` modules inside src/ do.
 #   [total]   ceiling on the Tier-1 total: tokens and attributes in cells/ crates
 #             whose manifest leaves them in Tier 1, plus the closure. Moving
 #             `unsafe` from cells into a library passes only if the sum does not
 #             grow.
 #
 # Ratchet: a count above a ceiling, or a closure file with a count and no row,
-# fails. A count below a ceiling, or a row for a file that is gone, is a NOTE and
-# fails under --strict (CI and signing), so a ceiling is lowered in the same
-# commit that removes the unsafe. Raising a ceiling or adding a row is reviewed
-# like an allowlist entry: this file *is* the hole.
+# fails. A count below a ceiling, or a row for a file that is gone, is a NOTE; it
+# fails CI (`cellos-sign --check --strict`) but not signing, so a ceiling is
+# lowered in the same commit that removes the unsafe — `cellos-sign
+# --write-baseline` does it mechanically and never raises one. Raising a ceiling
+# or adding a row is reviewed like an allowlist entry: this file *is* the hole.
 #
 # Baseline taken 2026-11-16 (Phase 18, owner decision: combined total of cells
 # plus closure; attributes as a second per-file ceiling), approver dmin. At that
 # point: cells 178 unsafe / 7 attrs + closure 411 / 23 = 589 / 30. libs/posix-shim
 # (160 / 136) left the closure when app-c-math-smoke declared PROTECTION_CLASS_FFI.
+# 2026-11-16, P18 review: `global_asm!` now counts as an attribute (rustc rejects
+# it under forbid(unsafe_code)); no code changed. Cells +4 (cfi-test 2, silo-guest
+# 2) and libs/ostd/src/startup/libc_hook.rs 3: 589 / 37. The closure now resolves
+# --all-features: 19 more third-party pins, no new in-tree crate with a count.
 
 version = 1
 
 [total]
 unsafe = 589
-attrs = 30
+attrs = 37
 
 # ── kernel/third_party/virtio_drivers (vendored virtio-drivers 0.7.5 fork) ───────
 
@@ -247,6 +252,11 @@ attrs = 0
 [[site]]
 path = "libs/ostd/src/startup.rs"
 unsafe = 4
+attrs = 3
+
+[[site]]
+path = "libs/ostd/src/startup/libc_hook.rs"
+unsafe = 0
 attrs = 3
 
 [[site]]

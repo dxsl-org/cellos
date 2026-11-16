@@ -9,29 +9,49 @@ type system cannot vouch for, so its manifest must ask for Tier 2. A Tier-1
 crate may keep such an entry only through a reviewed `[[tier_exception]]` that
 names the manifest class it accepts.
 
-The manifest class is read from source, and the reading fails closed. A crate
-reads FFI or UNTRUSTED only when
+The class is read twice, and a crate passes only if both readings agree with
+its entries.
+
+From source (every `--check`, and before every `--sign`). The reading fails
+closed: a crate reads FFI or UNTRUSTED only when
   * every `declare_manifest!` / `app_entry!` invocation in its tracked sources
     passes `tier = abi::manifest::<FFI or UNTRUSTED constant>` literally, and
-  * every binary root carries at least one such invocation.
+  * every binary root carries at least one such invocation. Binary roots are
+    cargo's: the `[[bin]]` targets `cargo metadata` recorded in the closure
+    file, merged with the superset `scan._bin_roots` infers from disk.
 A tier spelt any other way (a local `const`, a re-export) reads as
 `UNRECOGNISED`, a hand-written `__ViCell_manifest` section likewise, and a
 binary root without an invocation adds `ABSENT`. All of these leave the crate
-in Tier 1: a false positive, never a false negative.
+in Tier 1. What the source reading cannot see is whether an invocation reaches
+the binary at all: a `#[cfg]`-gated one, one inside a `macro_rules!` that is
+never expanded, or an `abi` that is shadowed or renamed reads FFI here.
 
-Like the rest of `cellos-sign`, this is a check on the tree, not on an ELF. The
-signature covers the manifest byte, so nothing after signing can change the
-class (Spec 18 §2.1).
+From the binary (before every `--sign`, `elf_gate`). Each target's
+`__ViCell_manifest` is read exactly as the loader reads it
+(`elf_manifest.py`). A target that loads in Tier 1 and is named after a
+binary target of a `cells/` crate holding a `c-ffi` or `legacy-raw-ptr`
+entry is refused unless a `[[tier_exception]]` for that crate and class names
+the class the binary carries (`ABSENT` when it has no section). A malformed
+manifest is refused (the loader would refuse it too). A target whose file
+name is no binary target of any `cells/` crate (a renamed copy such as
+`init`, or a cell built outside `cells/`) cannot be attributed and is only
+reported.
+
+Crate records are keyed by package name, so two crates under `cells/` that
+share one fail the check. A file that declares an `extern { … }` block must
+carry a `c-ffi` entry (or `test-harness` / `test-violation`), so a C import
+cannot sit behind a class the gate does not read.
 """
 
 from __future__ import annotations
 
+import os
 import re
-import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import scan
+from . import elf_manifest, scan
 from .allowlist import TIER2_CLASSES, Allowlist
 
 TIER2_MANIFESTS = frozenset({"FFI", "UNTRUSTED"})
@@ -102,16 +122,6 @@ def invocation_classes(code: str) -> list[str]:
     return classes
 
 
-def _lib_root(crate: scan.Crate) -> Path | None:
-    try:
-        manifest = tomllib.loads((crate.directory / "Cargo.toml").read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
-    lib = manifest.get("lib", {})
-    path = crate.directory / lib.get("path", "src/lib.rs")
-    return path.resolve() if path.is_file() else None
-
-
 def manifest_class(crate: scan.Crate, tracked: set[Path]) -> str:
     """Read a crate's manifest class from its tracked sources (fail closed).
 
@@ -130,8 +140,7 @@ def manifest_class(crate: scan.Crate, tracked: set[Path]) -> str:
         if classes:
             found.update(classes)
             with_invocation.add(resolved)
-    lib = _lib_root(crate)
-    bins = [r.resolve() for r in crate.roots if r.resolve() != lib and r.resolve() in tracked]
+    bins = [root for root in crate.bins.values() if root != crate.lib and root in tracked]
     if not found or any(root not in with_invocation for root in bins):
         found.add("ABSENT")
     return "+".join(sorted(found))
@@ -166,6 +175,8 @@ class Outcome:
     mismatches: list[tuple[str, str, str]] = field(default_factory=list)
     used_exceptions: set[tuple[str, str]] = field(default_factory=set)
     unused_exceptions: list[str] = field(default_factory=list)
+    # Package name → every directory under `cells/` that uses it, when > 1.
+    duplicates: dict[str, list[str]] = field(default_factory=dict)
 
 
 def evaluate(
@@ -181,13 +192,17 @@ def evaluate(
     the same deepest-directory rule the token layer uses.
     """
     out = Outcome()
+    directories: dict[str, list[str]] = {}
     for crate in crates:
+        directory = crate.directory.relative_to(repo).as_posix()
+        directories.setdefault(crate.name, []).append(directory)
         out.records[crate.name] = Record(
             crate=crate.name,
-            directory=crate.directory.relative_to(repo).as_posix(),
+            directory=directory,
             classes=set(),
             manifest=manifest_class(crate, tracked),
         )
+    out.duplicates = {name: dirs for name, dirs in directories.items() if len(dirs) > 1}
     for name, entry in allow.crates.items():
         if name in out.records:
             out.records[name].classes.add(entry.klass)
@@ -224,3 +239,54 @@ def evaluate(
         if key not in out.used_exceptions
     )
     return out
+
+
+def exception_admits(allow: Allowlist, crate: str, klass: str, manifest: str) -> bool:
+    exception = allow.tier_exceptions.get((crate, klass))
+    return exception is not None and exception.manifest == manifest
+
+
+def elf_gate(
+    targets: Iterable[Path], crates: list[scan.Crate], outcome: Outcome, allow: Allowlist,
+) -> tuple[list[str], list[str]]:
+    """Hold each target ELF's own manifest to its crate's entries (see module doc).
+
+    Returns (refusals, notes). A target is attributed by file name to every
+    `cells/` crate with a binary target of that name (a trailing `.elf` is
+    ignored); a name shared by several crates is held to all of them.
+    """
+    by_bin: dict[str, list[str]] = {}
+    for crate in crates:
+        for name in crate.bins:
+            by_bin.setdefault(name, []).append(crate.name)
+    refusals: list[str] = []
+    notes: list[str] = []
+    for target in targets:
+        try:
+            klass = elf_manifest.classify(Path(target).read_bytes())
+        except OSError as exc:
+            refusals.append(f"{target}: cannot read the ELF ({exc.strerror or exc})")
+            continue
+        if klass == elf_manifest.MALFORMED:
+            refusals.append(f"{target}: `__ViCell_manifest` is malformed — the loader refuses it")
+            continue
+        if klass in elf_manifest.TIER2_CLASSES:
+            continue
+        name = os.path.basename(target)
+        owners = by_bin.get(name) or by_bin.get(name.removesuffix(".elf")) or []
+        if not owners:
+            notes.append(f"{target}: loads in Tier 1 (manifest {klass}) and is no binary "
+                         "target of a cells/ crate, so the tier-class gate cannot attribute it")
+            continue
+        for crate in sorted(set(owners)):
+            record = outcome.records.get(crate)
+            for trigger in sorted(record.triggers if record else ()):
+                if exception_admits(allow, crate, trigger, klass):
+                    continue
+                refusals.append(
+                    f"{target}: binary of `{crate}` carries manifest {klass} and loads in "
+                    f"Tier 1, but the crate holds allowlist class `{trigger}` (its source "
+                    f"reads {record.manifest}). The binary, not the source, decides the "
+                    "tier: make the FFI/UNTRUSTED manifest reach this binary, or add a "
+                    "[[tier_exception]] that names manifest " + klass)
+    return refusals, notes

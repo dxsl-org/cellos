@@ -36,16 +36,20 @@ Tier class (Spec 18 §2.1) — a crate under `cells/` whose allowlist entries
 include class `c-ffi` or `legacy-raw-ptr` must declare manifest class FFI or
 UNTRUSTED, which the kernel loads in Tier 2, unless a reviewed
 `[[tier_exception]]` names it and the manifest class it accepts. The class is
-read from source and fails closed (`tier_class.py`).
+read from source and fails closed, and before signing it is read again from
+each target ELF exactly as the loader reads it (`tier_class.py`,
+`elf_manifest.py`). A file with an `extern` block must be classed `c-ffi` (or
+`test-harness` / `test-violation`).
 
 Tier-1 closure (Spec 16 §6, F1b) — every file of an in-tree crate linked into a
 Tier-1 cell (`libs/ostd`, `libs/wire`, the vendored `virtio-drivers`, …, listed
 in `scripts/tier1-closure.generated.toml`) is held to reviewed ceilings of
 `unsafe` tokens and unsafe attributes (`no_mangle`, `export_name`,
-`link_section`) in `scripts/tcb-unsafe-baseline.toml`, and so is the combined
-Tier-1 total of cells plus closure. A rise fails; a drop fails under `--strict`
-until the ceiling is lowered. Third-party crates are pinned at `name@version`
-in the generated file, which CI regenerates and diffs (`tcb.py`).
+`link_section`, `global_asm!`) in `scripts/tcb-unsafe-baseline.toml`, and so is
+the combined Tier-1 total of cells plus closure. A rise fails; a drop fails CI
+(`--check --strict`) and is a NOTE on `--sign` until `--write-baseline` lowers
+the ceiling. Third-party crates and proc-macros are pinned by name, version and
+full source in the generated file, which CI regenerates and diffs (`tcb.py`).
 
 False positives are accepted; false negatives are not. The allowlist is the
 escape hatch, and every entry carries a reason, an approver and a date — it is
@@ -54,4 +58,5 @@ an approved hole in the LBI wall and is reviewed as such.
 F5 (Spec 16) — the running toolchain matches `rust-toolchain.toml`.
 """
 
-__all__ = ["allowlist", "lexer", "policy", "scan", "signing", "tcb", "tier_class", "toolchain"]
+__all__ = ["allowlist", "elf_manifest", "lexer", "policy", "scan", "signing", "tcb", "tier_class",
+           "toolchain"]

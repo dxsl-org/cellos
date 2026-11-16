@@ -31,12 +31,20 @@ in-tree crates of the Tier-1 dependency closure are not Cells — their job is
 the `unsafe` a Cell must not write — so they are not in CELL_ROOTS. Instead the
 closure layer (`tcb.py`) holds every one of their files to a per-file ceiling
 of `unsafe` tokens and unsafe attributes, plus a combined total over the Tier-1
-cells and the closure. Third-party crates are pinned at `name@version` in the
-generated closure file, whose drift CI checks.
+cells and the closure. Third-party crates are pinned by name, version and
+full source string in the generated closure file, whose drift CI checks.
 
 The tier-class layer (`tier_class.py`) refuses a crate whose allowlist entries
 include `c-ffi` or `legacy-raw-ptr` unless its manifest class puts it in Tier 2
-or a reviewed `[[tier_exception]]` names it.
+or a reviewed `[[tier_exception]]` names it; before signing, the CLI repeats
+that rule on each target ELF's own manifest (`tier_class.elf_gate`).
+
+Strictness. `strict` makes F5-unverifiable, stale allowlist entries and the
+tightening findings (a ceiling above the tree, an unused tier exception, a
+closure file that misses or over-lists a Tier-1 root) fatal. `signing`
+(`--sign`, which is always strict) keeps the stale entries fatal but reports
+the tightening findings as NOTEs: they never admit more `unsafe` than the
+reviewed ceilings already do, and CI's `--check --strict` fails on them.
 """
 
 from __future__ import annotations
@@ -50,6 +58,9 @@ from .allowlist import Allowlist
 
 # Directories whose crates are Cells subject to F1.
 CELL_ROOTS = ["cells"]
+# Classes a file declaring an `extern { … }` block may carry: `c-ffi`, which the
+# tier-class gate reads, or a deliberate test.
+EXTERN_BLOCK_CLASSES = frozenset({"c-ffi", "test-harness", "test-violation"})
 
 
 @dataclass(frozen=True)
@@ -76,8 +87,9 @@ class Result:
     stale_entries: list[str] = field(default_factory=list)
     tier: tier_class.Outcome | None = None
     tcb: tcb.Report | None = None
-    # NOTEs from the closure layer that are violations only under --strict.
+    # NOTEs from the closure layer that are violations only under --check --strict.
     tcb_notes: list[str] = field(default_factory=list)
+    crates: list[scan.Crate] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -100,6 +112,7 @@ def check(
     closure: tcb.Closure | None = None,
     baseline: tcb.Baseline | None = None,
     extra: dict[str, str] | None = None,
+    signing: bool = False,
 ) -> Result:
     """Run both F1 layers, the tier-class gate and the Tier-1 closure ratchet.
 
@@ -107,8 +120,10 @@ def check(
     `closure` and `baseline` are given; the CLI always loads and passes them
     (`tcb.load_closure` / `tcb.load_baseline`), so a signing run cannot skip
     it. `extra` appends code to repo-relative closure files without writing
-    them (negative controls only).
+    them (negative controls only). `signing` demotes the tightening findings
+    to NOTEs (module docstring).
     """
+    tighten = strict and not signing
     today = today or _dt.date.today()
     repo = repo.resolve()
     result = Result()
@@ -122,9 +137,10 @@ def check(
 
     crates = [
         crate
-        for crate in scan.discover_crates(repo, CELL_ROOTS)
+        for crate in scan.discover_crates(repo, CELL_ROOTS, closure.bins if closure else None)
         if any(root.resolve() in tracked for root in crate.roots)
     ]
+    result.crates = crates
     result.crates_scanned = len(crates)
     owners = sorted(
         ((c.directory.relative_to(repo).as_posix(), c.name) for c in crates),
@@ -161,9 +177,21 @@ def check(
         absolute = repo / rel
         if not absolute.is_file():
             continue  # tracked but deleted in the working tree
-        counts = tcb.count(scan.read_code(absolute))
+        code = scan.read_code(absolute)
+        counts = tcb.count(code)
         if counts:
             cell_counts[posix] = counts
+        # A C import must carry the class the tier gate reads (or a test class).
+        if scan.has_extern_block(code):
+            entry = allow.files.get(posix)
+            if entry is None or entry.klass not in EXTERN_BLOCK_CLASSES:
+                found = f"class `{entry.klass}`" if entry else "no [[file]] entry"
+                result.violations.append(Violation(
+                    layer="tier-class", crate=_crate_of(posix, owners), path=posix,
+                    detail=f"declares an `extern {{ … }}` block (a C-ABI import) but has "
+                    f"{found}; it needs class `c-ffi` (or `test-harness` / "
+                    "`test-violation` for a deliberate test)",
+                ))
         if counts.unsafe == 0:
             continue
         seen_unsafe.add(posix)
@@ -193,7 +221,13 @@ def check(
                 detail=detail,
             )
         )
-    if strict:
+    for crate_name, directories in sorted(tier.duplicates.items()):
+        result.violations.append(Violation(
+            layer="tier-class", crate=crate_name, path=", ".join(directories),
+            detail="several crates under cells/ share this package name; the tier-class "
+            "join and the ELF gate are keyed by it — rename one",
+        ))
+    if tighten:
         for label in tier.unused_exceptions:
             result.violations.append(
                 Violation(
@@ -219,7 +253,7 @@ def check(
         for finding in report.findings:
             if finding.strict_only:
                 result.tcb_notes.append(f"{finding.crate} :: {finding.path} — {finding.detail}")
-                if not strict:
+                if not tighten:
                     continue
             result.violations.append(
                 Violation(layer="tcb", crate=finding.crate, path=finding.path,

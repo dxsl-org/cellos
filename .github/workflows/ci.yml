@@ -2265,22 +2265,26 @@ jobs:
       - name: Unit-test the gate itself
         run: python3 scripts/test_cellos_sign.py
 
+      # --strict here is the one place a ceiling above the tree, a stale or missing
+      # Tier-1 root, or an unused tier exception fails; `--sign` only notes them.
       - name: Check F1 (forbid + no unsafe outside the allowlist), tier class, Tier-1 closure and F5 (toolchain pin)
         run: python3 scripts/cellos-sign --check --strict
 
       # The tier-class gate must refuse to sign a crate holding a `c-ffi` entry
-      # with a Tier-1 manifest (Phase 18). Throwaway tree; nothing under cells/.
+      # with a Tier-1 manifest, read from source and from the binary (Phase 18).
+      # Throwaway git repositories; nothing under cells/.
       - name: Tier-class negative control
         run: python3 scripts/check-tier-class.py --negative-control
 
-      # The generator reads `cargo metadata --locked --offline`, so the registry
-      # sources are fetched first. Any new crate, version bump or changed count of
-      # a third-party crate, and any Tier-1 root change, fails here until
+      # The generator reads `cargo metadata --locked --offline --all-features`, so
+      # the registry sources are fetched first. Any new crate or proc-macro, version
+      # or git-revision bump, changed count of a third-party crate, new cell binary
+      # and any Tier-1 root change fails here until
       # scripts/tier1-closure.generated.toml is regenerated and reviewed.
       - name: Fetch dependency sources for the closure generator
         run: cargo fetch --locked
 
-      - name: Tier-1 closure file is current (third-party pins, roots, in-tree packages)
+      - name: Tier-1 closure file is current (third-party pins, roots, in-tree packages, cell binaries)
         run: python3 scripts/gen-tier1-closure.py --check
 
       # A new unlisted `unsafe` (or unsafe attribute) in libs/ostd must fail the

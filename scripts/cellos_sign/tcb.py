@@ -7,34 +7,44 @@ for every Tier-1 cell. This module holds that code to reviewed ceilings.
 
 Inputs, both committed:
   * `scripts/tier1-closure.generated.toml` — written by
-    `scripts/gen-tier1-closure.py` from `cargo metadata --locked --offline`
-    (three bare-metal targets, normal edges, proc-macros excluded). It lists the
-    Tier-1 roots, the in-tree packages they link and every third-party
-    `name@version` with its counts. CI regenerates it and fails on any drift, so
-    a new dependency, a version bump or a changed count of a third-party crate
-    needs a reviewed diff. The signer reads only the committed file and so needs
-    no cargo, build or network.
+    `scripts/gen-tier1-closure.py` from `cargo metadata --locked --offline
+    --all-features` (three bare-metal targets, normal edges). It lists the
+    Tier-1 roots, the in-tree packages they link (in-tree proc-macros among
+    them), every third-party package pinned by name, version and full source
+    string with its counts, every third-party proc-macro pinned the same way,
+    and the `[[bin]]` targets of every `cells/` workspace member. CI regenerates
+    it and fails on any drift, so a new dependency, a version or git-revision
+    bump or a changed count of a third-party crate needs a reviewed diff. The
+    signer reads only the committed file and so needs no cargo, build or
+    network.
   * `scripts/tcb-unsafe-baseline.toml` — one `[[site]]` row per in-tree closure
-    file that uses `unsafe` or an unsafe attribute, with two ceilings
-    (`unsafe` tokens, `attrs`), and a `[total]` ceiling over the Tier-1 cells
-    plus the closure.
+    file that uses `unsafe`, an unsafe attribute or `global_asm!`, with two
+    ceilings (`unsafe` tokens, `attrs`), and a `[total]` ceiling over the
+    Tier-1 cells plus the closure.
 
 Rules (same lexer and token rule as the F1 cell scan):
   * a closure file above either ceiling, or with a count and no row: violation;
-  * a closure file below a ceiling, a row for a file that is gone or outside the
-    closure, or a total below its ceiling: NOTE, and a violation under
-    `--strict` (always on for signing), so a ceiling is lowered in the commit
-    that removes the `unsafe`;
   * a combined total above its ceiling: violation. The total counts the Tier-1
     cells too, so `unsafe` moved from cells into a library passes only when the
     sum does not grow;
-  * a Tier-1 cell missing from the closure file's roots: violation (the file is
-    stale and may miss that cell's dependencies).
+  * tightening findings — a closure file or the total below its ceiling, a row
+    for a file that is gone or outside the closure, a Tier-1 root that is no
+    longer one, and a Tier-1 cell missing from the closure file's roots (a new
+    cell crate, until the file is regenerated): NOTE, and a violation under
+    `--check --strict` (CI), a NOTE on `--sign`. A drop never lets more
+    `unsafe` into a signed cell than the ceilings admit. A missing root is the
+    one gap: the new cell's own files count in the Tier-1 total at once, but an
+    in-tree crate only it links is unceilinged until the closure file is
+    regenerated, which CI enforces before merge. `cellos-sign --write-baseline`
+    lowers the ceilings to the tree (never raises one).
 
 Counting: every git-tracked `.rs` file the package owns (deepest package
 directory wins), except the package's top-level `tests/`, `benches/`,
 `examples/` and `build.rs`, which never link into a cell. `#[cfg(test)]`
-modules inside `src/` are counted: the rule cannot see `cfg`.
+modules inside `src/` are counted: the rule cannot see `cfg`. Code a build
+script writes to `OUT_DIR` is not on disk to count; the generator fails if a
+closure crate `include!`s `OUT_DIR` output while its build script (or an
+in-tree build-dependency) spells any counted token.
 """
 
 from __future__ import annotations
@@ -72,6 +82,9 @@ class Closure:
     packages: dict[str, str]  # in-tree package name → repo-relative directory
     unresolved: dict[str, str]  # repo-relative cell directory → reason
     thirdparty: list[dict]
+    # Repo-relative `cells/` crate directory → {bin target name: repo-relative root}.
+    bins: dict[str, dict[str, str]] = field(default_factory=dict)
+    proc_macros: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -133,10 +146,10 @@ def load_closure(repo: Path, relative: str = CLOSURE_PATH) -> Closure:
     if data.get("version") != 1:
         raise TcbError(f"{relative}: unsupported `version` {data.get('version')!r}")
     _keys(data, {"version", "targets", "tier1_roots"}, relative,
-          optional=frozenset({"package", "thirdparty", "unresolved"}))
+          optional=frozenset({"package", "thirdparty", "proc_macro", "bin", "unresolved"}))
     packages: dict[str, str] = {}
     for raw in data.get("package", []):
-        _keys(raw, {"name", "path"}, f"{relative} [[package]]")
+        _keys(raw, {"name", "path"}, f"{relative} [[package]]", optional=frozenset({"kind"}))
         if raw["name"] in packages:
             raise TcbError(f"{relative}: duplicate [[package]] {raw['name']}")
         packages[raw["name"]] = raw["path"]
@@ -144,21 +157,33 @@ def load_closure(repo: Path, relative: str = CLOSURE_PATH) -> Closure:
     for raw in data.get("unresolved", []):
         _keys(raw, {"path", "reason"}, f"{relative} [[unresolved]]")
         unresolved[raw["path"]] = raw["reason"]
-    pins: set[str] = set()
-    for raw in data.get("thirdparty", []):
-        where = f"{relative} [[thirdparty]] {raw.get('name')}@{raw.get('version')}"
-        _keys(raw, {"name", "version", "source", "unsafe", "attrs"}, where)
-        _int(raw["unsafe"], where)
-        _int(raw["attrs"], where)
-        pin = f"{raw['name']}@{raw['version']}"
-        if pin in pins:
-            raise TcbError(f"{where}: duplicate pin")
-        pins.add(pin)
+    bins: dict[str, dict[str, str]] = {}
+    for raw in data.get("bin", []):
+        where = f"{relative} [[bin]] {raw.get('name')}"
+        _keys(raw, {"name", "package", "dir", "src"}, where)
+        if raw["name"] in bins.setdefault(raw["dir"], {}):
+            raise TcbError(f"{where}: duplicate bin in {raw['dir']}")
+        bins[raw["dir"]][raw["name"]] = raw["src"]
+    pins: set[tuple[str, str, str]] = set()
+    for table, counted in (("thirdparty", True), ("proc_macro", False)):
+        for raw in data.get(table, []):
+            where = f"{relative} [[{table}]] {raw.get('name')}@{raw.get('version')}"
+            required = {"name", "version", "source"} | ({"unsafe", "attrs"} if counted else set())
+            _keys(raw, required, where)
+            if counted:
+                _int(raw["unsafe"], where)
+                _int(raw["attrs"], where)
+            pin = (raw["name"], raw["version"], raw["source"])
+            if pin in pins:
+                raise TcbError(f"{where}: duplicate pin")
+            pins.add(pin)
     return Closure(
         tier1_roots=set(data["tier1_roots"]),
         packages=packages,
         unresolved=unresolved,
         thirdparty=list(data.get("thirdparty", [])),
+        bins=bins,
+        proc_macros=list(data.get("proc_macro", [])),
     )
 
 
@@ -246,8 +271,9 @@ def check(
         if name not in closure.tier1_roots and directory not in closure.unresolved:
             report.findings.append(Finding(
                 name, directory,
-                f"Tier-1 cell is not a root in {CLOSURE_PATH}; its dependencies are "
-                "unscanned — run scripts/gen-tier1-closure.py",
+                f"Tier-1 cell is not a root in {CLOSURE_PATH}; in-tree crates only it "
+                "links are unceilinged — run scripts/gen-tier1-closure.py",
+                strict_only=True,
             ))
     for name in sorted(closure.tier1_roots - set(tier1_cells)):
         report.findings.append(Finding(
@@ -328,3 +354,53 @@ def check(
     for raw in closure.thirdparty:
         report.thirdparty = report.thirdparty + Counts(raw["unsafe"], raw["attrs"])
     return report
+
+
+def lowered_baseline(text: str, report: Report) -> str:
+    """`text` (the baseline file) with every ceiling lowered to the tree.
+
+    Mechanical and one-way: each `[[site]]` ceiling and each `[total]` ceiling
+    becomes min(ceiling, current count); a row whose file now counts 0/0 (gone,
+    clean or outside the closure) is deleted with the blank line after it. A
+    count above its ceiling keeps the ceiling, and a file without a row gets
+    none, so the check still fails for those: raising a ceiling stays a
+    reviewed hand edit. Comments and layout are kept.
+    """
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    table, current = None, Counts()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped == "[[site]]":
+            block = [line]
+            j = i + 1
+            while j < len(lines) and lines[j].strip() and not lines[j].lstrip().startswith("["):
+                block.append(lines[j])
+                j += 1
+            fields = {ln.split("=", 1)[0].strip(): ln.split("=", 1)[1].split("#", 1)[0].strip()
+                      for ln in block[1:] if "=" in ln}
+            path = fields.get("path", "").strip('"')
+            current = report.per_file.get(path, Counts())
+            cap = Counts(int(fields.get("unsafe", 0)), int(fields.get("attrs", 0)))
+            if not Counts(min(cap.unsafe, current.unsafe), min(cap.attrs, current.attrs)):
+                if j < len(lines) and not lines[j].strip():
+                    j += 1  # the separating blank line
+                i = j
+                continue
+            table = "site"
+            out.append(line)
+            i += 1
+            continue
+        if stripped.startswith("["):
+            table = "total" if stripped == "[total]" else None
+            current = report.total
+        key, sep, value = line.partition("=")
+        if sep and table and key.strip() in ("unsafe", "attrs"):
+            cap = int(value.split("#", 1)[0])
+            lowered = min(cap, getattr(current, key.strip()))
+            line = f"{key}= {lowered}\n"
+        out.append(line)
+        i += 1
+    return "".join(out)
