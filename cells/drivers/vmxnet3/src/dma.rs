@@ -5,7 +5,8 @@
 //! The allocation is owned for the cell's lifetime (the device may hold its
 //! addresses until reset), it is authorized for the controller's BDF before
 //! any of its addresses is programmed, and every access is bounds-checked
-//! against its length; multi-byte fields are naturally aligned by the layout.
+//! against its length; a multi-byte field is aligned by the layout and checked
+//! against its type's alignment before it is touched.
 
 use ostd::dma::DmaBuf;
 
@@ -49,6 +50,14 @@ impl DmaArea {
         self.buf.virt().wrapping_add(offset)
     }
 
+    /// The `T` at `offset`: in bounds and aligned for `T`, or a panic, so a
+    /// layout bug never reaches device memory as a misaligned access.
+    fn field<T>(&self, offset: usize) -> *mut T {
+        let field = self.at(offset, core::mem::size_of::<T>()).cast::<T>();
+        assert!(field.is_aligned(), "DMA field at {offset:#x} misaligned");
+        field
+    }
+
     pub(crate) fn zero(&self, offset: usize, len: usize) {
         // SAFETY: inside this allocation (checked by `at`).
         unsafe { core::ptr::write_bytes(self.at(offset, len), 0, len) };
@@ -60,8 +69,8 @@ impl DmaArea {
     }
 
     pub(crate) fn read32(&self, offset: usize) -> u32 {
-        // SAFETY: in bounds (checked by `at`); the layout aligns 4-byte fields.
-        u32::from_le(unsafe { self.at(offset, 4).cast::<u32>().read_volatile() })
+        // SAFETY: in bounds and aligned (checked by `field`).
+        u32::from_le(unsafe { self.field::<u32>(offset).read_volatile() })
     }
 
     /// Copy `bytes` to `offset` (frame data, not device-polled).
@@ -86,29 +95,17 @@ impl Sink for DmaArea {
     }
 
     fn put16(&mut self, offset: usize, value: u16) {
-        // SAFETY: in bounds (checked by `at`); the layout aligns 2-byte fields.
-        unsafe {
-            self.at(offset, 2)
-                .cast::<u16>()
-                .write_volatile(value.to_le())
-        };
+        // SAFETY: in bounds and aligned (checked by `field`).
+        unsafe { self.field::<u16>(offset).write_volatile(value.to_le()) };
     }
 
     fn put32(&mut self, offset: usize, value: u32) {
-        // SAFETY: in bounds (checked by `at`); the layout aligns 4-byte fields.
-        unsafe {
-            self.at(offset, 4)
-                .cast::<u32>()
-                .write_volatile(value.to_le())
-        };
+        // SAFETY: in bounds and aligned (checked by `field`).
+        unsafe { self.field::<u32>(offset).write_volatile(value.to_le()) };
     }
 
     fn put64(&mut self, offset: usize, value: u64) {
-        // SAFETY: in bounds (checked by `at`); the layout aligns 8-byte fields.
-        unsafe {
-            self.at(offset, 8)
-                .cast::<u64>()
-                .write_volatile(value.to_le())
-        };
+        // SAFETY: in bounds and aligned (checked by `field`).
+        unsafe { self.field::<u64>(offset).write_volatile(value.to_le()) };
     }
 }

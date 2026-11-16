@@ -4,7 +4,8 @@
 use super::*;
 use std::cell::RefCell;
 
-/// A byte vector with the order of its 32/64-bit writes.
+/// A byte vector with the order of its 32/64-bit writes. Like
+/// `DmaArea::field`, it refuses a multi-byte write the layout misaligned.
 struct Area {
     bytes: Vec<u8>,
     order: RefCell<Vec<usize>>,
@@ -30,13 +31,16 @@ impl Sink for Area {
         self.bytes[offset] = value;
     }
     fn put16(&mut self, offset: usize, value: u16) {
+        assert_eq!(offset % 2, 0, "misaligned u16 at {offset:#x}");
         self.bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
     }
     fn put32(&mut self, offset: usize, value: u32) {
+        assert_eq!(offset % 4, 0, "misaligned u32 at {offset:#x}");
         self.order.borrow_mut().push(offset);
         self.set32(offset, value);
     }
     fn put64(&mut self, offset: usize, value: u64) {
+        assert_eq!(offset % 8, 0, "misaligned u64 at {offset:#x}");
         self.order.borrow_mut().push(offset);
         self.bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
     }
