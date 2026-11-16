@@ -1,7 +1,5 @@
 //! Memory management interfaces.
 
-use crate::*;
-
 #[cfg(all(feature = "native-domains", cellos_wide))]
 pub mod address_space;
 pub mod cell_quota;
@@ -40,25 +38,3 @@ pub mod tests;
 /// Completion boundary for changed translations before execution or memory reuse.
 pub mod tlb_shootdown;
 pub mod vma;
-
-/// Ownership registry entry.
-pub struct AllocationInfo {
-    /// Address of allocation.
-    pub address: VAddr,
-    /// Size in bytes.
-    pub size: usize,
-    /// Owning Cell ID.
-    pub owner: CellId,
-}
-
-/// Global memory management trait (to be implemented).
-pub trait ViGlobalMemoryManager {
-    /// Allocate memory for a Cell.
-    fn alloc(&self, size: usize, owner: CellId) -> ViResult<VAddr>;
-
-    /// Free memory owned by a Cell.
-    fn free(&self, addr: VAddr) -> ViResult<()>;
-
-    /// Transfer ownership of an allocation.
-    fn transfer_ownership(&self, addr: VAddr, new_owner: CellId) -> ViResult<()>;
-}

@@ -2015,48 +2015,6 @@ fn elf_is_pie(data: &[u8]) -> bool {
     data.len() >= 18 && u16::from_le_bytes([data[16], data[17]]) == 3
 }
 
-pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
-    // 1. Request file from VFS (Cell 3)
-    let path_bytes = path.as_bytes();
-    if path_bytes.len() > 250 {
-        return Err(ViError::InvalidInput);
-    }
-
-    let mut req = [0u8; 256];
-    req[0] = 1; // OpCode: GetFile
-    req[1] = path_bytes.len() as u8;
-    req[2..2 + path_bytes.len()].copy_from_slice(path_bytes);
-
-    // Caller ID? We are in kernel context.
-    // We impersonate the current task? Or use Kernel ID (0)?
-    // Protocol expects Sender ID.
-    // If we use `ipc_send` directly, we can specify caller.
-    // VFS replies to Sender.
-    // If we say Sender is CurrentTask, VFS replies to CurrentTask.
-    // CurrentTask needs to be in Recv state?
-    // BUT we are in a Syscall Handler! CurrentTask is Running.
-    // We cannot block in Syscall Handler waiting for IPC easily unless we yield/sleep.
-    // BUT syscalls must be atomic-ish or handle blocking.
-    // If we block, we set state to Waiting/Recv?
-
-    // Simpler approach: Use "Synchronous" IPC via busy-wait or special kernel privilege?
-    // Or just spawn from memory in `init` and avoid this complexity in kernel.
-    // But `shell` needs it.
-
-    // Let's rely on standard IPC mechanisms.
-    // We need to send, then wait for reply.
-    // This is hard inside a syscall handler without async/await or state machine.
-
-    // Hack: Busy loop/Yield loop waiting for VFS reply?
-    // Since VFS is on another core or time-sliced, we must yield.
-
-    // For now, let's implement a blocking IPC exchange using polling?
-    // We can't easily pollute the task state machine.
-
-    log::error!("spawn_from_file: Kernel-side VFS request not fully implemented due to blocking complexity.");
-    Err(ViError::NotSupported)
-}
-
 pub fn current_task_id() -> usize {
     crate::sched::hart_local::ready::current_task_id_for(crate::sched::hart_local::current_hart_id())
 }
