@@ -230,7 +230,7 @@ fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> DmaMapResul
 /// Refused ([`DmaMapResult::Rejected`]) before any change when a leaf in the
 /// window is already present: a window never overwrites an identity or RMRR
 /// translation. Publication and invalidation are exactly `GrantDma`'s.
-pub fn map_window_for_cell(
+fn map_window_for_cell(
     tid: u64,
     bdf: u32,
     iova: u64,
@@ -255,7 +255,7 @@ pub fn map_window_for_cell(
 /// without a domain for `tid` has nothing to drain (its teardown was
 /// acknowledged, or it never held one). Returns `true` only when every drain
 /// was acknowledged.
-pub fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
+fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
     let units = UNITS.lock();
     let mut confirmed = true;
     for u in units.iter() {
@@ -273,7 +273,7 @@ pub fn unmap_window_for_cell(tid: u64, iova: u64, size: usize) -> bool {
 
 /// Whether the unit covering `bdf` (segment in bits 31:16) has DMA
 /// translation enabled.
-pub fn bdf_translating(bdf: u32) -> bool {
+fn bdf_translating(bdf: u32) -> bool {
     let (canonical, segment) = split_bdf(bdf);
     let units = UNITS.lock();
     unit_index_for_bdf(&units, canonical, segment)
