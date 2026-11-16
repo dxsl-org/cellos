@@ -159,9 +159,11 @@ Both cell files use the same schema: `name`, `path`, `args`, `enabled`,
 it is not proof that the application's initialization has completed.
 `registration = "self-ready"` instead waits for the exact spawned instance to
 register its service ID. Applications using this mode must actually register
-themselves. `after = ["net"]` orders a cell after a successful dependency; names,
-paths and service IDs must be unique across both files. Services cannot depend
-on autoload cells. Disabled, missing and cyclic dependencies are rejected.
+themselves. `after = ["net"]` orders a cell after a successful dependency; names
+and service IDs must be unique across both files, and so must paths, except that
+entries without a `service_id` may share one (one driver instance per device).
+Services cannot depend on autoload cells. Disabled, missing and cyclic
+dependencies are rejected.
 Each file is limited to 16 KiB, with at most 32 configured cells across both
 cell files. Structured arguments must fit the existing 512-byte launch channel.
 

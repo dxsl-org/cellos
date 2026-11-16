@@ -32,6 +32,8 @@
 
 mod cell;
 pub mod dma;
+#[cfg(feature = "fault-inject")]
+mod fault_inject;
 pub mod irq;
 mod probe;
 pub mod regs;

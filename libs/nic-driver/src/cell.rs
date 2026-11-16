@@ -108,6 +108,8 @@ fn bring_up<D: NicDevice>(state: &State<D>) {
         D::identity_name(&identity),
         BindDetail(&dev)
     ));
+    #[cfg(feature = "fault-inject")]
+    crate::fault_inject::bound(probe.bdf());
     *state.0.lock() = Some(dev);
     if let Err(error) = sys_register_nic_driver() {
         // Dropping the device lets a chip quiesce it on the way out.
@@ -181,7 +183,10 @@ fn handle<D: NicDevice>(dev: &mut D, data: &[u8], out: &mut [u8; REPLY_CAP]) -> 
             if len == 0 || len > D::MAX_TX || 3 + len > data.len() {
                 return status(out, NicStatus::Failed);
             }
-            match dev.send(&data[3..3 + len]) {
+            let frame = &data[3..3 + len];
+            #[cfg(feature = "fault-inject")]
+            crate::fault_inject::before_tx(D::TAG, frame);
+            match dev.send(frame) {
                 Ok(()) => status(out, NicStatus::Ok),
                 Err(_) => status(out, NicStatus::Failed),
             }
