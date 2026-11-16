@@ -185,10 +185,12 @@ pub(crate) fn publish_role_or_rollback(
 ///
 /// The caller holds `SCHEDULER` and has proven that `provider` owns `key`, so
 /// publication shares the role transaction with exit teardown. A key already
-/// in the table keeps its slot: an empty provider or the same tid is (re)bound,
-/// a different live provider is refused. A new key takes the next free slot.
-/// `None` means refused (live foreign provider or full table) and leaves the
-/// table unchanged.
+/// in the table keeps its slot: an empty provider, the same tid, or a holder
+/// that no longer owns `key` (a revoke freed the device before its route was
+/// cleared) is rebound; a holder that still owns it, live or awaiting its
+/// teardown, is refused. A new key takes the next free slot. `None` means
+/// refused (owning foreign holder or full table) and leaves the table
+/// unchanged.
 ///
 /// Logged at `warn!` for the same reason as `set_input_cell`: Driver Cells are
 /// spawned by init AFTER the kernel drops its log level to Warn, and the
@@ -212,7 +214,7 @@ pub(crate) fn publish_block_route(key: DeviceKey, provider: Provider) -> Option<
             .position(|slot| slot.is_some_and(|slot| slot.key == key))
         {
             Some(index) => match routes[index].and_then(|slot| slot.provider) {
-                Some((holder, _, _)) if holder != tid => Bind::Held(index, holder),
+                Some((holder, _, _)) if holds(holder, tid, key) => Bind::Held(index, holder),
                 _ => {
                     routes[index] = bound;
                     Bind::Bound(index)
@@ -295,17 +297,26 @@ pub(crate) fn reset_block_routes() {
     *BLOCK_ROUTES.lock() = [None; MAX_BLOCK_ROUTES];
 }
 
+/// Whether route holder `holder` keeps `key`'s route against `tid`: another
+/// task that still owns the device (live, or dead and quarantined until its
+/// teardown). A holder whose device a revoke already freed does not.
+fn holds(holder: usize, tid: usize, key: DeviceKey) -> bool {
+    holder != tid && crate::dev::ownership::owns(holder, key)
+}
+
 /// Bind the NIC route of `key` to `provider`.
 ///
 /// The caller holds `SCHEDULER` and has proven that `provider` owns `key`
 /// ([`owned_network_device`]). The slot rules are those of
 /// [`publish_block_route`]: a known key keeps its slot and rebinds an empty
-/// provider or the same tid, a live foreign provider is refused, a new key
-/// takes the next free slot. The bound route becomes the primary when no
-/// other route is (`NIC_ROUTES.primary`), and only then is
-/// `publish_primary` — the `service::NIC_DRIVER` publication — called; if it
-/// fails, the bind is rolled back. A secondary route is bound without touching
-/// the service. `None` means refused, with the table unchanged.
+/// provider, the same tid or a holder that no longer owns `key`; a holder
+/// that still owns it is refused; a new key takes the next free slot. The
+/// bound route becomes the primary when no other route is
+/// (`NIC_ROUTES.primary`) or when it already was (a rebound stale primary),
+/// and only then is `publish_primary` — the `service::NIC_DRIVER`
+/// publication — called; if it fails, the bind is rolled back. A secondary
+/// route is bound without touching the service. `None` means refused, with
+/// the table unchanged.
 ///
 /// `warn!` — see `publish_block_route`. The line keeps the prefix the NIC
 /// lanes match and gains the device and route.
@@ -333,7 +344,7 @@ pub(crate) fn publish_nic_route(
             .position(|slot| slot.is_some_and(|slot| slot.key == key))
         {
             Some(index) => match routes.slots[index].and_then(|slot| slot.provider) {
-                Some((holder, _, _)) if holder != tid => Err(Bind::Held(index, holder)),
+                Some((holder, _, _)) if holds(holder, tid, key) => Err(Bind::Held(index, holder)),
                 _ => Ok(index),
             },
             None => routes
@@ -713,15 +724,16 @@ mod tests {
             }
         };
         let second = owned_slot(32, 0x1000_9000, 7);
+        assert!(crate::dev::ownership::claim_pci(0x5B8, 31));
         assert_eq!(
-            publish_nic_route(pci(0x18), (31, 3, 1), publish(31)),
+            publish_nic_route(pci(0x5B8), (31, 3, 1), publish(31)),
             Some(0)
         );
         assert_eq!(publish_nic_route(second, (32, 4, 1), publish(32)), Some(1));
         assert_eq!(published.get(), 31, "a secondary does not take the service");
         assert_eq!(nic_primary(), Some(0));
         assert_eq!(
-            publish_nic_route(pci(0x18), (33, 5, 1), publish(33)),
+            publish_nic_route(pci(0x5B8), (33, 5, 1), publish(33)),
             None,
             "live foreign provider"
         );
@@ -739,7 +751,7 @@ mod tests {
         );
 
         assert_eq!(
-            publish_nic_route(pci(0x18), (34, 3, 2), publish(34)),
+            publish_nic_route(pci(0x5B8), (34, 3, 2), publish(34)),
             Some(0),
             "the replacement regains its own route"
         );
@@ -749,6 +761,7 @@ mod tests {
 
         deregister_all_for(34);
         deregister_all_for(32);
+        crate::dev::ownership::release_for(31, crate::dev::ownership::Scope::Retired);
         reset_nic_routes();
     }
 
@@ -873,6 +886,7 @@ mod tests {
         let _guard = crate::TEST_STATE_LOCK.lock();
         reset_block_routes();
         let mmio = DeviceKey::new(BLOCK_DEVICE_MMIO, 0x1000_1000).expect("valid base");
+        assert!(crate::dev::ownership::claim_pci(0xF8, 5));
         assert_eq!(publish_block_route(pci(0xF8), (5, 50, 1)), Some(0));
         assert_eq!(publish_block_route(mmio, (6, 60, 1)), Some(1));
         assert_eq!(
@@ -889,6 +903,7 @@ mod tests {
         assert_eq!(provider_of(0), Some((5, 50, 1)));
 
         deregister_all_for(5);
+        crate::dev::ownership::release_for(5, crate::dev::ownership::Scope::Retired);
         assert_eq!(
             publish_block_route(pci(0xF8), (7, 70, 2)),
             Some(0),
@@ -1053,6 +1068,56 @@ mod tests {
         );
 
         for (tid, _, _) in [A, B, C, D] {
+            deregister_all_for(tid);
+            release_for(tid, Scope::Retired);
+        }
+        reset_nic_routes();
+        reset_block_routes();
+    }
+
+    /// A replacement's 416/417 that lands after a revoke freed the device
+    /// (`release_for`) but before the revoke cleared the routes binds them:
+    /// a holder that no longer owns the device does not hold its route. The
+    /// later clearing then leaves the replacement alone. A holder that still
+    /// owns its device keeps refusing.
+    #[test]
+    fn a_holder_that_no_longer_owns_the_device_does_not_hold_its_route() {
+        use super::release_unowned_routes;
+        use crate::cell::service_registry::{lookup_bound, register};
+        use crate::dev::ownership::{claim_pci, release_for, Scope};
+        use abi::syscall::service::NIC_DRIVER;
+        const A: Provider = (0x5E11, 71, 1);
+        const C: Provider = (0x5E13, 73, 1);
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        reset_nic_routes();
+        reset_block_routes();
+        let publish =
+            |(tid, cell, generation): Provider| move || register(NIC_DRIVER, tid, cell, generation);
+        assert!(claim_pci(0x5E1, A.0) && claim_pci(0x5E2, A.0));
+        assert_eq!(publish_nic_route(pci(0x5E1), A, publish(A)), Some(0));
+        assert_eq!(publish_block_route(pci(0x5E2), A), Some(0));
+        assert_eq!(
+            publish_nic_route(pci(0x5E1), C, publish(C)),
+            None,
+            "A still owns the NIC"
+        );
+        assert_eq!(publish_block_route(pci(0x5E2), C), None, "nor the disk");
+
+        release_for(A.0, Scope::PcieDriver);
+        assert!(claim_pci(0x5E1, C.0) && claim_pci(0x5E2, C.0));
+        assert_eq!(publish_nic_route(pci(0x5E1), C, publish(C)), Some(0));
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(0), Some(C))
+        );
+        assert_eq!(publish_block_route(pci(0x5E2), C), Some(0));
+
+        release_unowned_routes(A.0);
+        assert_eq!(nic_route(0), Some(C), "the late clearing spares C");
+        assert_eq!(lookup_bound(NIC_DRIVER), Some(C));
+        assert_eq!(provider_of(0), Some((C.0 as u64, C.1, C.2)));
+
+        for (tid, _, _) in [A, C] {
             deregister_all_for(tid);
             release_for(tid, Scope::Retired);
         }
