@@ -13,11 +13,14 @@ Two candidate diagnoses were considered.
 
 **"Specs live too far from the code."** Partly true, but insufficient as a cure. Comments
 drift too, and they drift *silently* because nothing reads them systematically. Worked
-example in this repo: `cells/services/vfs/src/handle_table.rs:2` declares *"Per-cell open
-file handle table"* and `:12` labels `owner` as *"for quota accounting"*, while `get_mut`
-at `:54` looks up by `cap.0` alone and never compares `owner` — so the table is **not**
-per-cell and one cell can read another's handle. The false claim sat 52 lines above the
-code that refutes it, and only an adversarial review found it.
+example in this repo, when this ADR was written: the VFS service's former handle table
+declared on line 2 *"Per-cell open file handle table"* and on line 12 labelled `owner` as
+*"for quota accounting"*, while `get_mut` on line 54 looked up by `cap.0` alone and never
+compared `owner` — so the table was **not** per-cell and one cell could read another's
+handle. The false claim sat 52 lines above the code that refuted it, and only an
+adversarial review found it. (That table was deleted in `93bdf1227a`, 2026-11-10; its
+successor, `cells/services/vfs/src/file_handles.rs`, keys every entry to one attested
+caller generation.)
 
 **"Nothing verifies the claim."** This is the operative cause. The invariants in this repo
 that have *not* drifted are the ones a CI job checks: the cell-unsafe allowlist has never
@@ -25,12 +28,14 @@ grown silently, because a CI gate fails the build when it does. Everything unche
 drifted, in `docs/` and in comments alike.
 
 That same example also shows why a *reference* is not a verification. The gate described
-above was `scripts/check-cells-unsafe-ratchet.py` when this ADR's first draft was written;
-within the hour it was deleted and replaced by `scripts/cellos-sign --check --strict`, with
-its rule and allowlist moved to `scripts/unsafe-allowlist.toml`. The **invariant** survived
-the rewrite untouched — because CI enforced it — while this document's **prose** was stale
-in under an hour. Anchors exist so that the second half of that sentence becomes a build
-failure instead of a discovery.
+above was a standalone ratchet script when this ADR's first draft was written; within the
+hour it was deleted and replaced by `scripts/cellos-sign --check --strict` (`8f9e3a1604`),
+with its rule and allowlist moved to `scripts/unsafe-allowlist.toml`. Today the F1 cell
+scan lives in `scripts/cellos_sign/scan.py` and the Tier-1 closure ratchet in
+`scripts/cellos_sign/tcb.py` (baseline `scripts/tcb-unsafe-baseline.toml`). The
+**invariant** survived the rewrite untouched — because CI enforced it — while this
+document's **prose** was stale in under an hour. Anchors exist so that the second half of
+that sentence becomes a build failure instead of a discovery.
 
 Decisive against "move all specs into comments": **the worst drift is about things that do
 not exist**, and absence has no line number to comment on. The Metadata Registry
@@ -73,7 +78,7 @@ ordering, `// SAFETY:`. One rule added by this ADR:
 
 > A doc comment that asserts a *security or isolation property* MUST name the function or
 > check that enforces it. If no such enforcement exists, the comment states the gap
-> instead. `handle_table.rs:2` is the canonical violation.
+> instead. The former VFS handle table (§1) is the canonical violation.
 
 ### Layer 3 — Status, **generated, never hand-written**
 
@@ -177,7 +182,7 @@ Anchor: design
 
 - **Move all specs into code comments.** Cannot express absent mechanisms, rejected
   alternatives, cross-file invariants, or hardware constraints; and comments drift
-  silently, as `handle_table.rs:2` demonstrates. It would have addressed roughly a fifth of
+  silently, as the former VFS handle table (§1) demonstrates. It would have addressed roughly a fifth of
   the observed drift while hiding the worst class.
 - **Keep specs as they are and rely on review discipline.** Already the status quo; it
   produced 39 findings across 21 specs.
