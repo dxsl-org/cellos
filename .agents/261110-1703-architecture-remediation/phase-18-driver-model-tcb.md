@@ -98,4 +98,21 @@ Phase 19 closure.
 
 ## Deviation Log
 
-None.
+- **Decision (2026-11-16, owner, census defaults).** The census is in [research/p18-census-drivers.md](research/p18-census-drivers.md) and [research/p18-census-tcb.md](research/p18-census-tcb.md).
+  - The two-NIC criterion is narrowed: both NICs register on routes keyed by their own device, the primary carries traffic, and restarting one leaves the other bound. Multi-interface networking (a read-only route-list syscall and a multi-interface net service) is a residual; the ABI is unchanged.
+  - `libs/boot-config` accepts two cells with the same `path`, so the fixture covers two NICs of the same model.
+  - The three authority holes close through `DeviceRecord`:
+    - only the device owner may register a NIC route;
+    - `RequestMmio` grants a PCIe BAR only to the device owner;
+    - `WaitIrq` checks IRQ ownership on every architecture.
+  - The device owner stays the claiming thread.
+  - TCB scan:
+    - third-party crates are pinned at `name@version`;
+    - the baseline is the combined total of cells plus the closure;
+    - `#[no_mangle]`/`#[export_name]`/`#[link_section]` are counted as a second ceiling per file;
+    - `app-c-math-smoke` declares `PROTECTION_CLASS_FFI`.
+  - `service-net` and `service-compositor` become signed tier exceptions.
+- **Deviation.** The criterion "unsafe scan reports `libs/ostd` and `libs/api`" names a crate removed in `077909a812`. It is read as "`libs/ostd` and the other in-tree crates of the Tier-1 closure".
+- **Deviation.** `vmxnet3` keeps its own DMA area and its 9 `unsafe` lines; `libs/nic-driver` holds the shared ring layout used by the other eight.
+- **Surprise.** The five physical-only NICs (igc, ixgbe, i40e, r8169, bcm57xx) cannot bind on any machine today: no catalog grant, no `services.toml` entry, no kernel Ethernet ID row, and empty device ID lists. Binding them is outside Phase 18 and is recorded as a residual for the S5 captures.
+- **Surprise.** A 610-line RISC-V IOMMU backend shares the remapper interface with VT-d, so VT-d is not the only implementation. Both go behind `DmaRemapper`. The kernel's `AppleDartPt`, used only by its own tests, is a second empty ARM design and is removed with `ArmIommu`.
