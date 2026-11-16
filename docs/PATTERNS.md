@@ -19,7 +19,7 @@ Detailed content lives in `docs/patterns/` sub-files — this file is the index.
 | **API Design** | [patterns/api-design.md](patterns/api-design.md) | Builder, Newtype, Facade, typed IPC channels, ZST capabilities |
 | **Initialization** | [patterns/initialization.md](patterns/initialization.md) | Two-phase init, init-per-module, panic recovery per cell |
 | **Testing** | [patterns/testing.md](patterns/testing.md) | Unit mocks, arch validation tests, QEMU integration, fault injection |
-| **Anti-Patterns** | [patterns/anti-patterns.md](patterns/anti-patterns.md) | Unsafe in cells, mod.rs, hardcoded sizes, borrowed async buffers |
+| **Anti-Patterns** | [patterns/anti-patterns.md](patterns/anti-patterns.md) | Unsafe in cells, module-file form, hardcoded sizes, borrowed async buffers |
 | **Research Learnings** | [patterns/research-learnings.md](patterns/research-learnings.md) | Tock, Hubris, RTIC, RustyHermit, RedLeaf, Singularity, Midori — with repos & papers |
 
 ---

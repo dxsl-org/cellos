@@ -4,7 +4,7 @@
 ## Unsafe Code in Cells
 
 ```rust
-// ❌ Missing #![forbid(unsafe_code)] — CI gate (cargo-geiger) will reject
+// ❌ Missing #![forbid(unsafe_code)] — the signer's F1 gate will reject
 fn main() {
     unsafe { *(0x8000_0000 as *mut u8) = 0; }  // violates LBI
 }
@@ -14,16 +14,18 @@ fn main() {
 fn main() { ostd::println!("Hello"); }
 ```
 
-**Enforcement**: `cargo-geiger` CI gate on every PR. No exceptions for Cell crates.
+**Enforcement**: `scripts/cellos-sign --check --strict` (F1) in CI and before every `--sign`. A cell may hold `unsafe` only in files listed in `scripts/unsafe-allowlist.toml`; `cargo-geiger` was replaced because it cannot analyse `-Z build-std` targets (`.github/workflows/security.yml:51`). (Corrected 2026-11-16.)
 
-## mod.rs Files (Cellos Law 5)
+## Module files (Cellos Law 5)
+
+Both forms exist in the tree, and no lint checks them (corrected 2026-11-16; see [code-standards Law 5](../code-standards.md)). Prefer the `foo.rs` + `foo/` form for new modules:
 
 ```
-❌ memory/mod.rs       (old Rust style)
-
 ✅ memory.rs           (module root)
    memory/frame.rs     (submodule)
    memory/paging.rs    (submodule)
+
+⚠️ memory/mod.rs       (still present in 41 tracked files; not an error)
 ```
 
 ## Hardcoded Pointer Sizes (Cellos Law 3)
