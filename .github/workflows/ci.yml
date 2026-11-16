@@ -2073,7 +2073,7 @@ jobs:
           # phase 09: vmxnet3 layout/ring/command and PVSCSI layout/LUN/completion tests.
           # These bins gate `no_std`/`no_main` on `not(test)`, so the hosted test build
           # gets libtest's entry; before that, neither crate's tests ever linked.
-          cargo test -p driver-nvme -p app-init -p service-machine-pin -p service-activator -p driver-e1000e -p driver-vmxnet3 -p driver-pvscsi -p nic-driver -p driver-igc -p driver-r8169 -p driver-ixgbe -p driver-i40e -p driver-bcm57xx --target x86_64-unknown-linux-gnu
+          cargo test -p driver-nvme -p app-init -p service-machine-pin -p service-activator -p driver-e1000e -p driver-vmxnet3 -p driver-pvscsi -p nic-driver -p driver-igc -p driver-r8169 -p driver-ixgbe -p driver-i40e -p driver-bcm57xx -p driver-igb --target x86_64-unknown-linux-gnu
           # `app-net-tools` and `app-wasm` are bin-only crates whose entry comes
           # from `ostd::cell_main!`: the macro now emits `#[no_mangle]` only for
           # the bare-metal target and their headers gate `no_std`/`no_main` the

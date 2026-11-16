@@ -11,10 +11,10 @@
 //! * `ICR` reports the per-queue MSI-X causes `RXQ0`/`TXQ0` and the summary
 //!   `OTHER` cause (bits 20, 22, 24).
 //!
-//! [`RegisterFile`] is the only path to the device: [`MmioRegion`] implements it
-//! for the cell, and the host tests implement it with a fake register file.
+//! [`RegisterFile`] (`nic_driver::regs`) is the only path to the device:
+//! `MmioRegion` implements it for the cell, and the host tests implement it
+//! with a fake register file.
 
-use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
 // ── Offsets (BAR0, 128 KiB) ──────────────────────────────────────────────────
@@ -88,22 +88,7 @@ const IVAR_OTHER_SHIFT: u32 = 16;
 const NVM_POLLS: u32 = 100_000;
 
 /// The cell's only path to device registers.
-pub(crate) trait RegisterFile {
-    fn rd32(&self, offset: usize) -> ViResult<u32>;
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()>;
-}
-
-impl RegisterFile for MmioRegion {
-    #[inline]
-    fn rd32(&self, offset: usize) -> ViResult<u32> {
-        self.read_u32(offset)
-    }
-
-    #[inline]
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()> {
-        self.write_u32(offset, value)
-    }
-}
+pub(crate) use nic_driver::regs::RegisterFile;
 
 /// The `EERD` command that reads NVM word `word` (82574 layout).
 pub(crate) const fn eerd_command(word: u16) -> u32 {

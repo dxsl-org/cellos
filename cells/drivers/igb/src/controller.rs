@@ -14,21 +14,23 @@
 //! Every one of those differences is the reason this is a separate cell rather
 //! than a re-run of the e1000 controller.
 //!
-//! Law 4 exception: `unsafe` is used for DMA descriptor and buffer access. Every
-//! `unsafe` block carries a `// SAFETY:` comment. MMIO goes through the
-//! bounds-checked [`MmioRegion`], so a bad offset returns `Err`, never a stray
-//! access.
+//! DMA rings and frame buffers live in `nic_driver::{dma, ring}`, so this file
+//! holds no `unsafe`. MMIO goes through the bounds-checked [`MmioRegion`], so a
+//! bad offset returns `Err`, never a stray access.
 
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
-};
-use crate::identity::IgbSku;
+use crate::identity::{self, sku_name, IgbSku, QUERY_DEVICE_IDS, VENDOR_INTEL};
 use crate::sync;
 use core::sync::atomic::{compiler_fence, Ordering};
-use ostd::dma::DmaBuf;
+use nic_driver::dma::{DmaSet, Layout};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
+
+/// BAR0 window — every igb part exposes a 128 KiB register aperture (QEMU `igb`:
+/// `E1000E_MMIO_SIZE = 128 KiB`).
+const IGB_BAR0_LEN: usize = 0x2_0000;
+/// Highest register this cell touches (`TDWBAH0`) plus one word.
+const IGB_MMIO_MIN: usize = 0x0_E040;
 
 // ── Register offsets (BAR0, 128 KiB window) ──────────────────────────────────
 
@@ -129,8 +131,8 @@ const TX_POLLS: u32 = 1_000_000;
 /// times that so the wait is bounded but comfortably covers it.
 const LINK_POLLS: u32 = 6_000_000;
 
-const N_TX: usize = TX_SLOTS;
-const N_RX: usize = RX_SLOTS;
+const N_TX: usize = 16;
+const N_RX: usize = 16;
 
 /// Largest frame this cell moves in one descriptor (Ethernet MTU + headers).
 pub const BUF_SIZE: usize = 2048;
@@ -140,6 +142,7 @@ pub const BUF_SIZE: usize = 2048;
 /// Advanced transmit descriptor. `status` shares offset 12 with
 /// `olinfo_status`: the model writes `TXD_STAT_DD` there after `RS`.
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct TxDesc {
     buf_addr: u64,
     cmd_type_len: u32,
@@ -149,11 +152,25 @@ struct TxDesc {
 /// Advanced receive descriptor. Programming uses `buf_addr` (offset 0); a
 /// completion writes `status_error` (offset 8) and `length` (offset 12).
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct RxDesc {
     buf_addr: u64,
     status_error: u32,
     length: u16,
     vlan: u16,
+}
+
+impl RxDesc {
+    /// A descriptor handed to the controller with buffer `iova`, completion
+    /// fields cleared.
+    const fn posted(iova: u64) -> Self {
+        Self {
+            buf_addr: iova,
+            status_error: 0,
+            length: 0,
+            vlan: 0,
+        }
+    }
 }
 
 const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
@@ -206,23 +223,57 @@ fn restart_phy_autoneg(mmio: &MmioRegion) -> ViResult<()> {
 
 pub struct IgbController {
     mmio: MmioRegion,
-    tx_ring: DmaBuf,
-    rx_ring: DmaBuf,
-    tx_bufs: [DmaBuf; N_TX],
-    rx_bufs: [DmaBuf; N_RX],
-    dma_iovas: DmaIovas,
+    dma: DmaSet<TxDesc, RxDesc, N_TX, N_RX, 0>,
     tx_next: usize,
     rx_head: usize,
     /// MAC read from the NVM (words 0..3).
-    pub mac: [u8; 6],
+    mac: [u8; 6],
     /// Whether `STATUS.LU` was observed up before RX was enabled.
-    pub link_up: bool,
+    link_up: bool,
     #[allow(dead_code)]
-    pub sku: IgbSku,
+    sku: IgbSku,
 }
 
-// SAFETY: IgbController is only accessed from the single-threaded Cell event loop.
-unsafe impl Send for IgbController {}
+impl NicDevice for IgbController {
+    const TAG: &'static str = "[igb]";
+    const VENDOR: u16 = VENDOR_INTEL;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    const ABSENT_LINE: Option<&'static str> = Some("no igb controller present; driver cell idle");
+    type Identity = IgbSku;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<IgbSku> {
+        match identity::classify(vendor, device) {
+            IgbSku::Unsupported => None,
+            sku => Some(sku),
+        }
+    }
+
+    fn identity_name(sku: &IgbSku) -> &'static str {
+        sku_name(*sku)
+    }
+
+    fn init(probe: &Probe, sku: IgbSku) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(IGB_BAR0_LEN, IGB_MMIO_MIN);
+        Self::new(mmio, probe.bdf(), sku)
+    }
+
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "link_up={} mac={}", self.link_up, MacFmt(self.mac))
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.recv_frame(out)
+    }
+}
 
 impl IgbController {
     fn rd32(&self, off: usize) -> ViResult<u32> {
@@ -234,7 +285,7 @@ impl IgbController {
     }
 
     /// Bring the controller up on `mmio` (BAR0) for the PCIe device at `bdf`.
-    pub fn new(mmio: MmioRegion, bdf: u32, sku: IgbSku) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32, sku: IgbSku) -> ViResult<Self> {
         // 1. Quiesce inherited state. A restarted driver may otherwise inherit an
         //    enabled RX/TX pair and stale ring addresses.
         wr(&mmio, CTRL, CTRL_RST)?;
@@ -306,101 +357,62 @@ impl IgbController {
             wr(&mmio, MTA + index * 4, 0)?;
         }
 
-        // 4. Allocate every DMA object before authorization. No device-visible
-        //    address is programmed until every object has an approved IOVA.
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // 16 × TxDesc
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // 16 × RxDesc
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
+        // 4. Allocate and authorize every DMA object. No device-visible address
+        //    is programmed until every object has an approved IOVA.
+        let dma = DmaSet::alloc_authorized(&Layout::PLAIN, bdf)?;
+        let mut ctrl = IgbController {
+            mmio,
+            dma,
+            tx_next: 0,
+            rx_head: 0,
+            mac,
+            link_up: false,
+            sku,
+        };
+        ctrl.program_rings();
+        Ok(ctrl)
+    }
 
-        with_authorized_dma_layout(
-            (mmio, tx_ring, rx_ring, tx_bufs, rx_bufs),
-            |resources, slot| {
-                let result = match slot {
-                    DmaSlot::TxRing => resources.1.authorize(bdf),
-                    DmaSlot::TxBuffer(index) => resources.3[index].authorize(bdf),
-                    DmaSlot::RxRing => resources.2.authorize(bdf),
-                    DmaSlot::RxBuffer(index) => resources.4[index].authorize(bdf),
-                };
-                result.map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, tx_ring, rx_ring, tx_bufs, rx_bufs), dma_iovas| {
-                // SAFETY: both ring allocations cover one writable DMA page.
-                unsafe {
-                    core::ptr::write_bytes(tx_ring.virt(), 0, tx_ring.size());
-                    core::ptr::write_bytes(rx_ring.virt(), 0, rx_ring.size());
-                }
+    /// Initial DMA-address programming and TX/RX enablement, in order: TX ring
+    /// base, every RX descriptor, RX ring base, enable. Every address is an
+    /// authorized IOVA.
+    fn program_rings(&mut self) {
+        let iovas = self.dma.iovas;
+        let _ = self.wr32(TDBAL0, iovas.tx_ring as u32);
+        let _ = self.wr32(TDBAH0, (iovas.tx_ring >> 32) as u32);
+        let _ = self.wr32(TDLEN0, (N_TX * 16) as u32);
+        let _ = self.wr32(TDH0, 0);
+        let _ = self.wr32(TDT0, 0);
+        // Descriptor write-back, not head-index write-back: the model writes DD
+        // into the descriptor only when TDWBAL0.0 is clear.
+        let _ = self.wr32(TDWBAL0, 0);
+        let _ = self.wr32(TDWBAH0, 0);
+        let _ = self.wr32(TXDCTL0, TXDCTL_QUEUE_ENABLE);
 
-                let mut ctrl = IgbController {
-                    mmio,
-                    tx_ring,
-                    rx_ring,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    mac,
-                    link_up: false,
-                    sku,
-                };
+        for (slot, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.dma.rx_ring.write(slot, RxDesc::posted(iova));
+        }
 
-                let layout = ctrl.dma_iovas;
-                for_each_initial_dma_program(&layout, |program| match program {
-                    InitialDmaProgram::TxRingBase(iova) => {
-                        let _ = ctrl.wr32(TDBAL0, iova as u32);
-                        let _ = ctrl.wr32(TDBAH0, (iova >> 32) as u32);
-                        let _ = ctrl.wr32(TDLEN0, (N_TX * 16) as u32);
-                        let _ = ctrl.wr32(TDH0, 0);
-                        let _ = ctrl.wr32(TDT0, 0);
-                        // Descriptor write-back, not head-index write-back: the
-                        // model writes DD into the descriptor only when
-                        // TDWBAL0.0 is clear.
-                        let _ = ctrl.wr32(TDWBAL0, 0);
-                        let _ = ctrl.wr32(TDWBAH0, 0);
-                        let _ = ctrl.wr32(TXDCTL0, TXDCTL_QUEUE_ENABLE);
-                    }
-                    InitialDmaProgram::RxDescriptor { slot, iova } => {
-                        // SAFETY: rx_ring covers N_RX × RxDesc; slot < N_RX.
-                        unsafe {
-                            let desc = (ctrl.rx_ring.virt() as *mut RxDesc).add(slot);
-                            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-                            core::ptr::write_volatile(&mut (*desc).status_error, 0);
-                            core::ptr::write_volatile(&mut (*desc).length, 0);
-                            core::ptr::write_volatile(&mut (*desc).vlan, 0);
-                        }
-                    }
-                    InitialDmaProgram::RxRingBase(iova) => {
-                        let _ =
-                            ctrl.wr32(SRRCTL0, SRRCTL_DESCTYPE_ADV_ONEBUF | SRRCTL_BSIZEPKT_2048);
-                        let _ = ctrl.wr32(RDBAL0, iova as u32);
-                        let _ = ctrl.wr32(RDBAH0, (iova >> 32) as u32);
-                        let _ = ctrl.wr32(RDLEN0, (N_RX * 16) as u32);
-                        let _ = ctrl.wr32(RDH0, 0);
-                        let _ = ctrl.wr32(RXDCTL0, RXDCTL_QUEUE_ENABLE);
-                        let _ = ctrl.wr32(RDT0, (N_RX - 1) as u32);
-                    }
-                    InitialDmaProgram::Enable => {
-                        let _ = ctrl.wr32(TIPG, 0x0060_200A);
-                        let _ = ctrl.wr32(TCTL, TCTL_EN | TCTL_PSP | TCTL_CT | TCTL_COLD);
-                        // Link must be up before RCTL_EN means anything to the
-                        // model (`e1000x_rx_ready` requires STATUS.LU).
-                        let link = ctrl.wait_link_up().unwrap_or(false);
-                        ctrl.link_up = link;
-                        let _ =
-                            ctrl.wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC);
-                    }
-                });
+        let _ = self.wr32(SRRCTL0, SRRCTL_DESCTYPE_ADV_ONEBUF | SRRCTL_BSIZEPKT_2048);
+        let _ = self.wr32(RDBAL0, iovas.rx_ring as u32);
+        let _ = self.wr32(RDBAH0, (iovas.rx_ring >> 32) as u32);
+        let _ = self.wr32(RDLEN0, (N_RX * 16) as u32);
+        let _ = self.wr32(RDH0, 0);
+        let _ = self.wr32(RXDCTL0, RXDCTL_QUEUE_ENABLE);
+        let _ = self.wr32(RDT0, (N_RX - 1) as u32);
 
-                Ok(ctrl)
-            },
-        )?
+        let _ = self.wr32(TIPG, 0x0060_200A);
+        let _ = self.wr32(TCTL, TCTL_EN | TCTL_PSP | TCTL_CT | TCTL_COLD);
+        // Link must be up before RCTL_EN means anything to the model
+        // (`e1000x_rx_ready` requires STATUS.LU).
+        self.link_up = self.wait_link_up().unwrap_or(false);
+        let _ = self.wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC);
     }
 
     /// Poll `STATUS.LU` for a bounded window. Returns whether link is up; a
     /// timeout is not fatal (the model brings link up on its own schedule) but
     /// the caller reports it.
-    pub fn wait_link_up(&self) -> ViResult<bool> {
+    fn wait_link_up(&self) -> ViResult<bool> {
         for _ in 0..LINK_POLLS {
             if self.rd32(STATUS)? & STATUS_LU != 0 {
                 return Ok(true);
@@ -412,45 +424,35 @@ impl IgbController {
 
     /// Transmit `frame` (Ethernet frame without FCS), polled until the
     /// descriptor reports done.
-    pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
+    fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidInput);
         }
 
         let slot = self.tx_next;
+        self.dma.tx_bufs.copy_in(slot, frame)?;
         self.tx_next = (slot + 1) % N_TX;
 
-        // SAFETY: tx_bufs[slot].virt() is valid DMA memory of size BUF_SIZE, and
-        // frame.len() <= BUF_SIZE.
-        unsafe {
-            core::ptr::copy_nonoverlapping(frame.as_ptr(), self.tx_bufs[slot].virt(), frame.len());
-        }
-        let iova = self.dma_iovas.tx_descriptor_iova(slot);
+        let iova = self.dma.iovas.tx_bufs[slot];
         let cmd = ADVTXD_DCMD_DEXT
             | ADVTXD_DTYP_DATA
             | TXD_CMD_EOP
             | TXD_CMD_IFCS
             | TXD_CMD_RS
             | frame.len() as u32;
-
-        // SAFETY: tx_ring covers N_TX × TxDesc; slot < N_TX.
-        unsafe {
-            let desc = (self.tx_ring.virt() as *mut TxDesc).add(slot);
-            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-            core::ptr::write_volatile(&mut (*desc).cmd_type_len, cmd);
-            core::ptr::write_volatile(&mut (*desc).status, 0);
-        }
+        self.dma.tx_ring.write(
+            slot,
+            TxDesc {
+                buf_addr: iova,
+                cmd_type_len: cmd,
+                status: 0,
+            },
+        );
         compiler_fence(Ordering::Release);
         self.wr32(TDT0, self.tx_next as u32)?;
 
         for _ in 0..TX_POLLS {
-            // SAFETY: tx_ring[slot] is valid DMA memory.
-            let status = unsafe {
-                core::ptr::read_volatile(
-                    &(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status,
-                )
-            };
-            if status & TXD_STAT_DD != 0 {
+            if self.dma.tx_ring.read(slot).status & TXD_STAT_DD != 0 {
                 return Ok(());
             }
             core::hint::spin_loop();
@@ -460,41 +462,21 @@ impl IgbController {
 
     /// Poll for a received frame; copies into `out_buf`. Returns the number of
     /// bytes written, or 0 when nothing is ready.
-    pub fn recv_frame(&mut self, out_buf: &mut [u8]) -> usize {
+    fn recv_frame(&mut self, out_buf: &mut [u8]) -> usize {
         let head = self.rx_head;
-        // SAFETY: rx_ring[head] is valid DMA memory.
-        let (done, length) = unsafe {
-            let desc = (self.rx_ring.virt() as *const RxDesc).add(head);
-            let status_error = core::ptr::read_volatile(&(*desc).status_error);
-            let length = core::ptr::read_volatile(&(*desc).length);
-            (status_error & RXD_STAT_DD != 0, length as usize)
-        };
-        if !done {
+        let desc = self.dma.rx_ring.read(head);
+        if desc.status_error & RXD_STAT_DD == 0 {
             return 0;
         }
 
-        let copy_len = length.min(out_buf.len()).min(BUF_SIZE);
-        // SAFETY: rx_bufs[head].virt() holds the received frame, and copy_len is
-        // bounded by both the frame length and the caller's slice.
-        unsafe {
-            core::ptr::copy_nonoverlapping(
-                self.rx_bufs[head].virt(),
-                out_buf.as_mut_ptr(),
-                copy_len,
-            );
-        }
+        let length = (desc.length as usize).min(BUF_SIZE);
+        let copy_len = self.dma.rx_bufs.copy_out(head, out_buf, length);
 
         // Recycle the descriptor: restore the buffer address, clear the
         // completion fields, and hand the slot back to the controller.
-        let iova = self.dma_iovas.rx_descriptor_iova(head);
-        // SAFETY: rx_ring[head] and rx_bufs[head] are valid DMA memory.
-        unsafe {
-            let desc = (self.rx_ring.virt() as *mut RxDesc).add(head);
-            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-            core::ptr::write_volatile(&mut (*desc).status_error, 0);
-            core::ptr::write_volatile(&mut (*desc).length, 0);
-            core::ptr::write_volatile(&mut (*desc).vlan, 0);
-        }
+        self.dma
+            .rx_ring
+            .write(head, RxDesc::posted(self.dma.iovas.rx_bufs[head]));
         self.rx_head = (head + 1) % N_RX;
         let _ = self.wr32(RDT0, head as u32);
         copy_len

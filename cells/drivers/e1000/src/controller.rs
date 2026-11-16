@@ -1,14 +1,12 @@
 //! Intel e1000 (82540EM / 82545EM) NIC controller logic ported from nic_e1000.rs.
 //!
-//! Law 4 exception: Driver Cells may use `unsafe` for MMIO register access.
-//! Every `unsafe` block carries a `// SAFETY:` comment.
+//! MMIO goes through the bounds-checked [`MmioRegion`] and DMA rings and frame
+//! buffers through `nic_driver::{dma, ring}`, so this file holds no `unsafe`.
 
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
-};
+use crate::identity::{self, sku_name, E1000Sku, QUERY_DEVICE_IDS, VENDOR_INTEL};
 use core::sync::atomic::{compiler_fence, Ordering};
-use ostd::dma::DmaBuf;
+use nic_driver::dma::{DmaSet, Layout};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
@@ -35,7 +33,12 @@ const RAH0: usize = 0x5404;
 const MTA: usize = 0x5200;
 const EERD: usize = 0x0014;
 
-// ── Register constants ────────────────────────────────────────────────────────
+/// BAR0 window — e1000 register space is 128 KiB.
+const E1000_BAR0_LEN: usize = 0x2_0000;
+/// Highest register this cell touches (`RAH0`) plus one word.
+const E1000_MMIO_MIN: usize = RAH0 + 4;
+
+// ── Register constants ──────────────────── ────────────────────────────────────
 
 const CTRL_RST: u32 = 1 << 26;
 const CTRL_SLU: u32 = 1 << 6;
@@ -57,13 +60,14 @@ const EERD_START: u32 = 1;
 const EERD_DONE: u32 = 1 << 4;
 const RAH_AV: u32 = 1 << 31;
 
-const N_TX: usize = TX_SLOTS;
-const N_RX: usize = RX_SLOTS;
-pub const BUF_SIZE: usize = 2048;
+const N_TX: usize = 16;
+const N_RX: usize = 16;
+const BUF_SIZE: usize = 2048;
 
 // ── Descriptor types ──────────────────────────────────────────────────────────
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct TxDesc {
     buf_addr: u64,
     length: u16,
@@ -75,6 +79,7 @@ struct TxDesc {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 struct RxDesc {
     buf_addr: u64,
     length: u16,
@@ -84,6 +89,20 @@ struct RxDesc {
     special: u16,
 }
 
+impl RxDesc {
+    /// A descriptor handed to the controller with buffer `iova`.
+    const fn posted(iova: u64) -> Self {
+        Self {
+            buf_addr: iova,
+            length: 0,
+            checksum: 0,
+            status: 0,
+            errors: 0,
+            special: 0,
+        }
+    }
+}
+
 const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
 const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
 
@@ -91,37 +110,79 @@ const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
 
 pub struct E1000Controller {
     mmio: MmioRegion,
-    tx_ring: DmaBuf,
-    rx_ring: DmaBuf,
-    tx_bufs: [DmaBuf; N_TX],
-    rx_bufs: [DmaBuf; N_RX],
-    dma_iovas: DmaIovas,
+    dma: DmaSet<TxDesc, RxDesc, N_TX, N_RX, 0>,
     tx_next: usize,
     rx_head: usize,
-    pub mac: [u8; 6],
+    mac: [u8; 6],
 }
 
-// SAFETY: E1000Controller is only accessed from the single-threaded Cell event loop.
-unsafe impl Send for E1000Controller {}
+impl NicDevice for E1000Controller {
+    const TAG: &'static str = "[e1000]";
+    const VENDOR: u16 = VENDOR_INTEL;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    /// No 8254x on this platform: exit silently. The `[e1000]` tag stays
+    /// reserved for this cell's own device, so sibling NIC lanes can assert
+    /// that it never touched theirs.
+    const ABSENT_LINE: Option<&'static str> = None;
+    type Identity = E1000Sku;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<E1000Sku> {
+        match identity::classify(vendor, device) {
+            E1000Sku::Unsupported => None,
+            sku => Some(sku),
+        }
+    }
+
+    fn identity_name(sku: &E1000Sku) -> &'static str {
+        sku_name(*sku)
+    }
+
+    fn init(probe: &Probe, _sku: E1000Sku) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(E1000_BAR0_LEN, E1000_MMIO_MIN);
+        Self::new(mmio, probe.bdf())
+    }
+
+    /// RX is request-driven (the net service asks for frames), so the cell
+    /// stays polled.
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "mac={} irq=polled reason=request-driven",
+            MacFmt(self.mac)
+        )
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.recv_frame(out)
+    }
+}
 
 impl E1000Controller {
-    fn rd32(&self, off: usize) -> u32 {
-        // SAFETY: mmio region was granted by kernel; volatile prevents register caching.
-        unsafe { core::ptr::read_volatile((self.mmio.base() + off) as *const u32) }
+    fn rd32(&self, off: usize) -> ViResult<u32> {
+        self.mmio.read_u32(off)
     }
 
-    fn wr32(&self, off: usize, val: u32) {
-        // SAFETY: same contract as rd32.
-        unsafe { core::ptr::write_volatile((self.mmio.base() + off) as *mut u32, val) };
+    fn wr32(&self, off: usize, val: u32) -> ViResult<()> {
+        self.mmio.write_u32(off, val)
     }
 
-    fn eeprom_read(&self, addr: u8) -> u16 {
-        self.wr32(EERD, ((addr as u32) << 8) | EERD_START);
+    /// One EEPROM word; 0 when the read never completes.
+    fn eeprom_read(&self, addr: u8) -> ViResult<u16> {
+        self.wr32(EERD, ((addr as u32) << 8) | EERD_START)?;
         let mut n = 0u32;
         loop {
-            let v = self.rd32(EERD);
+            let v = self.rd32(EERD)?;
             if v & EERD_DONE != 0 {
-                return (v >> 16) as u16;
+                return Ok((v >> 16) as u16);
             }
             n += 1;
             if n > 1_000_000 {
@@ -129,24 +190,20 @@ impl E1000Controller {
             }
             core::hint::spin_loop();
         }
-        0
+        Ok(0)
     }
 
     /// Initialise the e1000 controller reachable via `mmio` (BAR0).
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
         // Quiesce inherited device state before publishing fresh DMA mappings.
         // A restarted driver may otherwise inherit enabled TX/RX and stale rings.
-        // SAFETY: CTRL is at offset 0 in the granted BAR0 MMIO region.
-        unsafe { core::ptr::write_volatile((mmio.base() + CTRL) as *mut u32, CTRL_RST) };
+        mmio.write_u32(CTRL, CTRL_RST)?;
         for _ in 0..10_000 {
             core::hint::spin_loop();
         }
         let mut n = 0u32;
         loop {
-            // SAFETY: CTRL is within the granted BAR0 region.
-            if unsafe { core::ptr::read_volatile((mmio.base() + CTRL) as *const u32) } & CTRL_RST
-                == 0
-            {
+            if mmio.read_u32(CTRL)? & CTRL_RST == 0 {
                 break;
             }
             n += 1;
@@ -156,153 +213,105 @@ impl E1000Controller {
             core::hint::spin_loop();
         }
 
-        // Allocate all DMA objects before authorization. No device-visible DMA
+        // Allocate and authorize every DMA object. No device-visible DMA
         // address is programmed until every object has an approved IOVA.
-        // Any error from this constructor is terminal in main: DmaBuf has no
-        // Drop cleanup, so task teardown deliberately reclaims the Cell's grants.
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?; // holds 16×TxDesc = 256B
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
+        // Any error from this constructor is terminal: DmaBuf has no Drop
+        // cleanup, so task teardown deliberately reclaims the Cell's grants.
+        let dma = DmaSet::alloc_authorized(&Layout::PLAIN, bdf)?;
+        let mut ctrl = E1000Controller {
+            mmio,
+            dma,
+            tx_next: 0,
+            rx_head: 0,
+            mac: [0u8; 6],
+        };
 
-        with_authorized_dma_layout(
-            (mmio, tx_ring, rx_ring, tx_bufs, rx_bufs),
-            |resources, slot| {
-                let result = match slot {
-                    DmaSlot::TxRing => resources.1.authorize(bdf),
-                    DmaSlot::TxBuffer(index) => resources.3[index].authorize(bdf),
-                    DmaSlot::RxRing => resources.2.authorize(bdf),
-                    DmaSlot::RxBuffer(index) => resources.4[index].authorize(bdf),
-                };
-                result.map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, tx_ring, rx_ring, tx_bufs, rx_bufs), dma_iovas| {
-                // Initial DMA-address descriptor/register writes and TX/RX
-                // enablement stay behind successful authorization.
+        // Link-up + disable interrupts.
+        ctrl.wr32(CTRL, CTRL_SLU | CTRL_ASDE)?;
+        ctrl.wr32(IMC, 0xFFFF_FFFF)?;
+        let _ = ctrl.rd32(ICR)?;
 
-                // SAFETY: both ring allocations cover one writable DMA page.
-                unsafe {
-                    core::ptr::write_bytes(tx_ring.virt(), 0, tx_ring.size());
-                    core::ptr::write_bytes(rx_ring.virt(), 0, rx_ring.size());
-                }
+        // Read MAC from EEPROM.
+        let mac_lo = ctrl.eeprom_read(0)?;
+        let mac_hi = ctrl.eeprom_read(1)?;
+        let mac_ex = ctrl.eeprom_read(2)?;
+        ctrl.mac = [
+            mac_lo as u8,
+            (mac_lo >> 8) as u8,
+            mac_hi as u8,
+            (mac_hi >> 8) as u8,
+            mac_ex as u8,
+            (mac_ex >> 8) as u8,
+        ];
+        ctrl.wr32(RAL0, (mac_hi as u32) << 16 | mac_lo as u32)?;
+        ctrl.wr32(RAH0, RAH_AV | mac_ex as u32)?;
 
-                let mut ctrl = E1000Controller {
-                    mmio,
-                    tx_ring,
-                    rx_ring,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    mac: [0u8; 6],
-                };
+        // Zero multicast table.
+        for i in 0..128 {
+            ctrl.wr32(MTA + i * 4, 0)?;
+        }
 
-                // Link-up + disable interrupts.
-                ctrl.wr32(CTRL, CTRL_SLU | CTRL_ASDE);
-                ctrl.wr32(IMC, 0xFFFF_FFFF);
-                let _ = ctrl.rd32(ICR);
+        ctrl.program_rings()?;
+        Ok(ctrl)
+    }
 
-                // Read MAC from EEPROM.
-                let mac_lo = ctrl.eeprom_read(0);
-                let mac_hi = ctrl.eeprom_read(1);
-                let mac_ex = ctrl.eeprom_read(2);
-                ctrl.mac = [
-                    mac_lo as u8,
-                    (mac_lo >> 8) as u8,
-                    mac_hi as u8,
-                    (mac_hi >> 8) as u8,
-                    mac_ex as u8,
-                    (mac_ex >> 8) as u8,
-                ];
-                ctrl.wr32(RAL0, (mac_hi as u32) << 16 | mac_lo as u32);
-                ctrl.wr32(RAH0, RAH_AV | mac_ex as u32);
+    /// The sole initial device-address and TX/RX-enablement path, in order:
+    /// TX ring base, every RX descriptor, RX ring base, enable. Every address
+    /// is an authorized IOVA.
+    fn program_rings(&mut self) -> ViResult<()> {
+        let iovas = self.dma.iovas;
+        self.wr32(TDBAL, iovas.tx_ring as u32)?;
+        self.wr32(TDBAH, (iovas.tx_ring >> 32) as u32)?;
+        self.wr32(TDLEN, (N_TX * 16) as u32)?;
+        self.wr32(TDH, 0)?;
+        self.wr32(TDT, 0)?;
 
-                // Zero multicast table.
-                for i in 0..128 {
-                    ctrl.wr32(MTA + i * 4, 0);
-                }
+        for (slot, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.dma.rx_ring.write(slot, RxDesc::posted(iova));
+        }
 
-                // This shared plan is the sole initial device-address and
-                // TX/RX-enablement path; host tests exercise the same outputs.
-                let layout = ctrl.dma_iovas;
-                for_each_initial_dma_program(&layout, |program| match program {
-                    InitialDmaProgram::TxRingBase(iova) => {
-                        ctrl.wr32(TDBAL, iova as u32);
-                        ctrl.wr32(TDBAH, (iova >> 32) as u32);
-                        ctrl.wr32(TDLEN, (N_TX * 16) as u32);
-                        ctrl.wr32(TDH, 0);
-                        ctrl.wr32(TDT, 0);
-                    }
-                    InitialDmaProgram::RxDescriptor { slot, iova } => {
-                        // SAFETY: rx_ring covers N_RX×16 bytes; slot < N_RX.
-                        unsafe {
-                            let desc = (ctrl.rx_ring.virt() as *mut RxDesc).add(slot);
-                            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-                            core::ptr::write_volatile(&mut (*desc).status, 0);
-                        }
-                    }
-                    InitialDmaProgram::RxRingBase(iova) => {
-                        ctrl.wr32(RDBAL, iova as u32);
-                        ctrl.wr32(RDBAH, (iova >> 32) as u32);
-                        ctrl.wr32(RDLEN, (N_RX * 16) as u32);
-                        ctrl.wr32(RDH, 0);
-                        ctrl.wr32(RDT, (N_RX - 1) as u32);
-                    }
-                    InitialDmaProgram::Enable => {
-                        ctrl.wr32(TIPG, 0x0060_200A);
-                        ctrl.wr32(TCTL, TCTL_EN | TCTL_PSP | TCTL_CT | TCTL_COLD);
-                        ctrl.wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC);
-                    }
-                });
+        self.wr32(RDBAL, iovas.rx_ring as u32)?;
+        self.wr32(RDBAH, (iovas.rx_ring >> 32) as u32)?;
+        self.wr32(RDLEN, (N_RX * 16) as u32)?;
+        self.wr32(RDH, 0)?;
+        self.wr32(RDT, (N_RX - 1) as u32)?;
 
-                Ok(ctrl)
-            },
-        )?
+        self.wr32(TIPG, 0x0060_200A)?;
+        self.wr32(TCTL, TCTL_EN | TCTL_PSP | TCTL_CT | TCTL_COLD)?;
+        self.wr32(RCTL, RCTL_EN | RCTL_UPE | RCTL_MPE | RCTL_BAM | RCTL_SECRC)
     }
 
     /// Transmit `frame` (Ethernet + payload, no FCS).
     ///
     /// Blocks (polled) until the descriptor's DD bit is set.
-    pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
+    fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.len() > BUF_SIZE {
             return Err(ViError::InvalidInput);
         }
 
         let slot = self.tx_next;
+        self.dma.tx_bufs.copy_in(slot, frame)?;
         self.tx_next = (slot + 1) % N_TX;
 
-        // Copy into DMA buffer.
-        // SAFETY: tx_bufs[slot].virt() is valid DMA memory of size BUF_SIZE.
-        unsafe {
-            core::ptr::copy_nonoverlapping(frame.as_ptr(), self.tx_bufs[slot].virt(), frame.len());
-        }
-        let iova = self.dma_iovas.tx_descriptor_iova(slot);
-
-        // SAFETY: tx_ring covers N_TX×TxDesc; slot < N_TX.
-        unsafe {
-            let desc = (self.tx_ring.virt() as *mut TxDesc).add(slot);
-            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-            core::ptr::write_volatile(&mut (*desc).length, frame.len() as u16);
-            core::ptr::write_volatile(&mut (*desc).cso, 0);
-            core::ptr::write_volatile(&mut (*desc).cmd, CMD_EOP | CMD_IFCS | CMD_RS);
-            core::ptr::write_volatile(&mut (*desc).status, 0);
-            core::ptr::write_volatile(&mut (*desc).css, 0);
-            core::ptr::write_volatile(&mut (*desc).special, 0);
-        }
+        self.dma.tx_ring.write(
+            slot,
+            TxDesc {
+                buf_addr: self.dma.iovas.tx_bufs[slot],
+                length: frame.len() as u16,
+                cso: 0,
+                cmd: CMD_EOP | CMD_IFCS | CMD_RS,
+                status: 0,
+                css: 0,
+                special: 0,
+            },
+        );
         compiler_fence(Ordering::Release);
-        self.wr32(TDT, self.tx_next as u32);
+        self.wr32(TDT, self.tx_next as u32)?;
 
         // Poll for completion (DD bit in descriptor status).
         let mut iters = 0u32;
         loop {
-            // SAFETY: tx_ring[slot] is valid DMA memory.
-            let dd = unsafe {
-                core::ptr::read_volatile(
-                    &(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status,
-                )
-            };
-            if dd & STATUS_DD != 0 {
+            if self.dma.tx_ring.read(slot).status & STATUS_DD != 0 {
                 break;
             }
             iters += 1;
@@ -317,39 +326,22 @@ impl E1000Controller {
     /// Poll for a received frame; copies into `out_buf`.
     ///
     /// Returns the number of bytes written, or 0 if no frame is ready.
-    pub fn recv_frame(&mut self, out_buf: &mut [u8]) -> usize {
+    fn recv_frame(&mut self, out_buf: &mut [u8]) -> usize {
         let head = self.rx_head;
-        // SAFETY: rx_ring[head] is valid DMA memory.
-        let (dd, len) = unsafe {
-            let desc = (self.rx_ring.virt() as *const RxDesc).add(head);
-            let status = core::ptr::read_volatile(&(*desc).status);
-            let length = core::ptr::read_volatile(&(*desc).length);
-            (status & STATUS_DD != 0, length as usize)
-        };
-        if !dd {
+        let desc = self.dma.rx_ring.read(head);
+        if desc.status & STATUS_DD == 0 {
             return 0;
         }
 
-        let copy_len = len.min(out_buf.len()).min(BUF_SIZE);
-        // SAFETY: rx_bufs[head].virt() holds `len` bytes of received frame data.
-        unsafe {
-            core::ptr::copy_nonoverlapping(
-                self.rx_bufs[head].virt(),
-                out_buf.as_mut_ptr(),
-                copy_len,
-            );
-        }
+        let len = (desc.length as usize).min(BUF_SIZE);
+        let copy_len = self.dma.rx_bufs.copy_out(head, out_buf, len);
 
         // Recycle descriptor: clear status, give back to hardware.
-        // SAFETY: rx_ring[head] and rx_bufs[head] are valid DMA memory.
-        unsafe {
-            let desc = (self.rx_ring.virt() as *mut RxDesc).add(head);
-            let iova = self.dma_iovas.rx_descriptor_iova(head);
-            core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-            core::ptr::write_volatile(&mut (*desc).status, 0);
-        }
+        self.dma
+            .rx_ring
+            .write(head, RxDesc::posted(self.dma.iovas.rx_bufs[head]));
         self.rx_head = (head + 1) % N_RX;
-        self.wr32(RDT, head as u32); // give the slot back to hardware
+        let _ = self.wr32(RDT, head as u32); // give the slot back to hardware
         copy_len
     }
 }

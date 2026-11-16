@@ -3,18 +3,24 @@
 //! The 82574 keeps the 8254x **legacy** descriptor formats (datasheet §7.1.4
 //! receive, §7.2.10 transmit), selected by `RFCTL.EXSTEN = 0` and
 //! `RCTL.DTYP = 00` (both reset defaults). Each descriptor is 16 bytes; one
-//! 4 KiB ring page holds every slot this cell uses.
-//!
-//! Law 4 exception: the volatile accesses below touch device-visible DMA memory.
-//! Every ring and buffer is a whole `DmaBuf` page that the cell owns for its
-//! lifetime, and every index is bounded by the slot count before the access.
+//! 4 KiB ring page holds every slot this cell uses. Volatile access to the
+//! rings goes through `nic_driver::ring::DescRing`, which bounds every slot.
 
 use core::mem::size_of;
 use core::sync::atomic::{fence, Ordering};
-use ostd::dma::DmaBuf;
+use nic_driver::ring::DescRing;
+
+/// TX descriptors (and TX buffers) in use.
+pub(crate) const TX_SLOTS: usize = 16;
+/// RX descriptors (and RX buffers) in use.
+pub(crate) const RX_SLOTS: usize = 16;
+
+pub(crate) type TxRing = DescRing<TxDesc, TX_SLOTS>;
+pub(crate) type RxRing = DescRing<RxDesc, RX_SLOTS>;
 
 /// Legacy transmit descriptor.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub(crate) struct TxDesc {
     pub buf_addr: u64,
     pub length: u16,
@@ -27,6 +33,7 @@ pub(crate) struct TxDesc {
 
 /// Legacy receive descriptor; the controller writes everything after `buf_addr`.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub(crate) struct RxDesc {
     pub buf_addr: u64,
     pub length: u16,
@@ -57,25 +64,19 @@ pub(crate) const fn ring_bytes(slots: usize) -> u32 {
     (slots * size_of::<TxDesc>()) as u32
 }
 
-/// Zero a ring page before its base is programmed.
-pub(crate) fn clear(ring: &DmaBuf) {
-    // SAFETY: `ring` is one owned, writable DMA page of `ring.size()` bytes.
-    unsafe { core::ptr::write_bytes(ring.virt(), 0, ring.size()) };
-}
-
-/// Hand RX slot `slot` (< ring capacity) to the controller with buffer `iova`.
-pub(crate) fn post_rx(ring: &DmaBuf, slot: usize, iova: u64) {
-    assert!((slot + 1) * size_of::<RxDesc>() <= ring.size());
-    // SAFETY: the slot lies inside the owned ring page (asserted above).
-    unsafe {
-        let desc = (ring.virt() as *mut RxDesc).add(slot);
-        core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-        core::ptr::write_volatile(&mut (*desc).length, 0);
-        core::ptr::write_volatile(&mut (*desc).checksum, 0);
-        core::ptr::write_volatile(&mut (*desc).status, 0);
-        core::ptr::write_volatile(&mut (*desc).errors, 0);
-        core::ptr::write_volatile(&mut (*desc).special, 0);
-    }
+/// Hand RX slot `slot` to the controller with buffer `iova`.
+pub(crate) fn post_rx(ring: &RxRing, slot: usize, iova: u64) {
+    ring.write(
+        slot,
+        RxDesc {
+            buf_addr: iova,
+            length: 0,
+            checksum: 0,
+            status: 0,
+            errors: 0,
+            special: 0,
+        },
+    );
 }
 
 /// A written-back RX descriptor, as [`rx_completed`] classifies it.
@@ -92,26 +93,17 @@ pub(crate) enum RxCompletion {
 
 /// RX slot `slot`'s completion. `in_fragment` is true while the descriptors
 /// of a multi-descriptor frame are being dropped; it is updated here.
-pub(crate) fn rx_completed(ring: &DmaBuf, slot: usize, in_fragment: &mut bool) -> RxCompletion {
-    assert!((slot + 1) * size_of::<RxDesc>() <= ring.size());
-    // SAFETY: the slot lies inside the owned ring page (asserted above).
-    let desc = unsafe { (ring.virt() as *const RxDesc).add(slot) };
-    // SAFETY: as above.
-    let status = unsafe { core::ptr::read_volatile(&(*desc).status) };
+pub(crate) fn rx_completed(ring: &RxRing, slot: usize, in_fragment: &mut bool) -> RxCompletion {
+    let status = ring.read(slot).status;
     if status & DESC_STATUS_DD == 0 {
         return RxCompletion::Pending;
     }
     // The rest of the write-back and the frame bytes are valid only once DD
-    // is seen: no read of them may move above the DD read.
+    // is seen: no read of them may move above the DD read, so the descriptor
+    // is read again after the fence.
     fence(Ordering::Acquire);
-    // SAFETY: as above.
-    let (errors, length) = unsafe {
-        (
-            core::ptr::read_volatile(&(*desc).errors),
-            core::ptr::read_volatile(&(*desc).length),
-        )
-    };
-    rx_written_back(status, errors, length, in_fragment)
+    let desc = ring.read(slot);
+    rx_written_back(status, desc.errors, desc.length, in_fragment)
 }
 
 /// Classify a descriptor whose DD bit is set. A frame is delivered only when
@@ -134,23 +126,23 @@ pub(crate) fn rx_written_back(
 }
 
 /// Fill TX slot `slot` for one frame of `len` bytes at `iova`.
-pub(crate) fn post_tx(ring: &DmaBuf, slot: usize, iova: u64, len: u16) {
-    assert!((slot + 1) * size_of::<TxDesc>() <= ring.size());
-    // SAFETY: the slot lies inside the owned ring page (asserted above).
-    unsafe {
-        let desc = (ring.virt() as *mut TxDesc).add(slot);
-        core::ptr::write_volatile(&mut (*desc).buf_addr, iova);
-        core::ptr::write_volatile(&mut (*desc).length, len);
-        core::ptr::write_volatile(&mut (*desc).cso, 0);
-        core::ptr::write_volatile(&mut (*desc).cmd, TXD_CMD_FRAME);
-        core::ptr::write_volatile(&mut (*desc).status, 0);
-        core::ptr::write_volatile(&mut (*desc).css, 0);
-        core::ptr::write_volatile(&mut (*desc).special, 0);
-    }
+pub(crate) fn post_tx(ring: &TxRing, slot: usize, iova: u64, len: u16) {
+    ring.write(
+        slot,
+        TxDesc {
+            buf_addr: iova,
+            length: len,
+            cso: 0,
+            cmd: TXD_CMD_FRAME,
+            status: 0,
+            css: 0,
+            special: 0,
+        },
+    );
 }
 
 /// Whether the controller wrote back DD for TX slot `slot`.
-pub(crate) fn tx_done(ring: &DmaBuf, slot: usize) -> bool {
+pub(crate) fn tx_done(ring: &TxRing, slot: usize) -> bool {
     tx_status(ring, slot).1 & DESC_STATUS_DD != 0
 }
 
@@ -158,7 +150,7 @@ pub(crate) fn tx_done(ring: &DmaBuf, slot: usize) -> bool {
 /// slot after it are both free. One slot always stays empty, so the tail
 /// written after this post (`TDT = slot + 1`) never lands on a descriptor the
 /// controller still owns — `TDT == TDH` would read as an empty ring.
-pub(crate) fn tx_has_room(ring: &DmaBuf, slot: usize, slots: usize) -> bool {
+pub(crate) fn tx_has_room(ring: &TxRing, slot: usize, slots: usize) -> bool {
     tx_room(slot, slots, |s| tx_status(ring, s))
 }
 
@@ -177,30 +169,9 @@ fn tx_slot_reusable(cmd: u8, status: u8) -> bool {
 }
 
 /// `(cmd, status)` of TX slot `slot`.
-fn tx_status(ring: &DmaBuf, slot: usize) -> (u8, u8) {
-    assert!((slot + 1) * size_of::<TxDesc>() <= ring.size());
-    // SAFETY: the slot lies inside the owned ring page (asserted above).
-    unsafe {
-        let desc = (ring.virt() as *const TxDesc).add(slot);
-        (
-            core::ptr::read_volatile(&(*desc).cmd),
-            core::ptr::read_volatile(&(*desc).status),
-        )
-    }
-}
-
-/// Copy `frame` (≤ the buffer page) into the TX buffer `buf`.
-pub(crate) fn copy_in(buf: &DmaBuf, frame: &[u8]) {
-    assert!(frame.len() <= buf.size());
-    // SAFETY: `buf` is an owned DMA page at least `frame.len()` bytes long.
-    unsafe { core::ptr::copy_nonoverlapping(frame.as_ptr(), buf.virt(), frame.len()) };
-}
-
-/// Copy `len` received bytes (≤ the buffer page) from `buf` into `out`.
-pub(crate) fn copy_out(buf: &DmaBuf, out: &mut [u8], len: usize) {
-    assert!(len <= buf.size() && len <= out.len());
-    // SAFETY: both ranges are `len` bytes inside their owners (asserted above).
-    unsafe { core::ptr::copy_nonoverlapping(buf.virt(), out.as_mut_ptr(), len) };
+fn tx_status(ring: &TxRing, slot: usize) -> (u8, u8) {
+    let desc = ring.read(slot);
+    (desc.cmd, desc.status)
 }
 
 #[cfg(test)]
@@ -233,11 +204,11 @@ mod tests {
 
     #[test]
     fn ring_fits_one_page_and_lengths_are_128_byte_multiples() {
-        let bytes = ring_bytes(crate::dma_layout::TX_SLOTS);
+        let bytes = ring_bytes(TX_SLOTS);
         assert!(bytes as usize <= 4096);
         // TDLEN/RDLEN must be 128-byte aligned (datasheet §10.2.6/§10.2.7).
         assert_eq!(bytes % 128, 0);
-        assert_eq!(ring_bytes(crate::dma_layout::RX_SLOTS) % 128, 0);
+        assert_eq!(ring_bytes(RX_SLOTS) % 128, 0);
     }
 
     #[test]
@@ -299,7 +270,7 @@ mod tests {
     #[test]
     fn a_full_tx_ring_keeps_one_slot_empty() {
         use core::cell::RefCell;
-        const SLOTS: usize = crate::dma_layout::TX_SLOTS;
+        const SLOTS: usize = TX_SLOTS;
         let ring = RefCell::new([(0u8, 0u8); SLOTS]);
         let room = |slot| tx_room(slot, SLOTS, |s| ring.borrow()[s]);
         let mut next = 0;

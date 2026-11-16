@@ -36,7 +36,7 @@ driver-e1000e ci
 driver-hid untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-i2c-bcm ci
 driver-i40e ci
-driver-igb untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-igb ci
 driver-igc ci
 driver-intel-gpu untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-ixgbe ci
