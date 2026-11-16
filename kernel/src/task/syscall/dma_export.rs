@@ -954,20 +954,17 @@ impl Platform for KernelPlatform {
     }
 
     fn exports_enabled(&self) -> bool {
-        #[cfg(target_arch = "x86_64")]
-        {
-            if !crate::dev::iommu::is_active() {
-                return false;
-            }
-            let top = crate::memory::frame::with(|a| a.memory_end()).unwrap_or(usize::MAX);
-            if top as u64 > WINDOW_BASE {
-                log::warn!("[export] RAM reaches {top:#x} >= 2^38: export windows could alias identity leaves");
-                return false;
-            }
-            true
+        if !crate::dev::iommu::export_windows_active() {
+            return false;
         }
-        #[cfg(not(target_arch = "x86_64"))]
-        false
+        let top = crate::memory::frame::with(|a| a.memory_end()).unwrap_or(usize::MAX);
+        if top as u64 > WINDOW_BASE {
+            log::warn!(
+                "[export] RAM reaches {top:#x} >= 2^38: export windows could alias identity leaves"
+            );
+            return false;
+        }
+        true
     }
 
     fn provider(&self, service: u16) -> Option<Provider> {
@@ -1006,15 +1003,7 @@ impl Platform for KernelPlatform {
     }
 
     fn translating(&self, bdf: u32) -> bool {
-        #[cfg(target_arch = "x86_64")]
-        {
-            crate::arch::dev::iommu_x86::bdf_translating(bdf)
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            let _ = bdf;
-            false
-        }
+        crate::dev::iommu::bdf_translating(bdf)
     }
 
     fn reserve_quota(&mut self, holder: Incarnation, bytes: usize) -> bool {
@@ -1036,39 +1025,23 @@ impl Platform for KernelPlatform {
     }
 
     fn map_window(&mut self, w: &WindowMap) -> MapOutcome {
-        #[cfg(target_arch = "x86_64")]
-        {
-            use crate::dev::iommu::DmaMapResult;
-            match crate::arch::dev::iommu_x86::map_window_for_cell(
-                w.holder_tid as u64,
-                w.bdf,
-                w.iova,
-                w.phys,
-                w.len,
-                w.writable,
-            ) {
-                DmaMapResult::Mapped(_) => MapOutcome::Mapped,
-                DmaMapResult::PublishedUnconfirmed => MapOutcome::Unconfirmed,
-                DmaMapResult::Rejected => MapOutcome::Rejected,
-            }
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            let _ = w;
-            MapOutcome::Rejected
+        use crate::dev::iommu::DmaMapResult;
+        match crate::dev::iommu::map_window_for_cell(
+            w.holder_tid as u64,
+            w.bdf,
+            w.iova,
+            w.phys,
+            w.len,
+            w.writable,
+        ) {
+            DmaMapResult::Mapped(_) => MapOutcome::Mapped,
+            DmaMapResult::PublishedUnconfirmed => MapOutcome::Unconfirmed,
+            DmaMapResult::Rejected => MapOutcome::Rejected,
         }
     }
 
     fn unmap_window(&mut self, holder_tid: usize, iova: u64, len: usize) -> bool {
-        #[cfg(target_arch = "x86_64")]
-        {
-            crate::arch::dev::iommu_x86::unmap_window_for_cell(holder_tid as u64, iova, len)
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            let _ = (holder_tid, iova, len);
-            true
-        }
+        crate::dev::iommu::unmap_window_for_cell(holder_tid as u64, iova, len)
     }
 
     fn enable_bus_master(&mut self, bdf: u32) {

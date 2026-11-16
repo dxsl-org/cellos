@@ -1022,15 +1022,15 @@ retirement = "never: lives for the whole run"
 rationale = "Spinlock protecting cursor position and character rendering to screen"
 review = "kernel/src/arch/x86_64/dev/fb_console.rs"
 [[global]]
-key = "kernel::arch::x86_64::iommu::IDENTITY_DMA_LOGGED @cfg(target_arch = \"x86_64\")"
+key = "kernel::dev::iommu::IDENTITY_DMA_LOGGED"
 lifetime = "global"
 mutation = "once"
-owner = "arch::x86_64::iommu; log-once latch set by map_inactive (dev::iommu::map_dma_for_cell) when a board without a remapper is allowed identity DMA"
+owner = "dev::iommu; log-once latch set by map_inactive (map_dma_for_cell) when the remapper allows untranslated DMA (VT-d), found no unit, and the board allows identity DMA"
 contexts = ["normal"]
 seal = "set on the first identity-DMA grant; never cleared"
 retirement = "never: lives for the whole run"
 rationale = "swap(true, Relaxed) only deduplicates a warning and publishes no data; the sole caller is the GrantDma syscall path, never an ISR."
-review = "kernel/src/arch/x86_64/iommu.rs:map_inactive; kernel/src/dev/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
+review = "kernel/src/dev/iommu.rs:map_inactive; kernel/src/dev/iommu.rs:map_dma_for_cell; kernel/src/task/syscall/mod.rs:7023"
 
 [[global]]
 key = "kernel::dev::iommu::IOMMU_ISOLATED"
