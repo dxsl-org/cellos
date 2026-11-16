@@ -753,15 +753,27 @@ fn split_bdf(bdf: u32) -> (u8, u8, u8) {
     )
 }
 
-/// Whether canonical `bdf` names a function on a bus of the admitted ECAM
-/// window: the gate of a Platform Cell BAR registration (235), so device
-/// records grow only for functions that can exist. Without a window none does.
-pub fn bdf_admitted(bdf: u32) -> bool {
-    bdf_in_window(bdf, ecam_window())
+/// Whether canonical `bdf` names a function that answers in the admitted
+/// ECAM window (its vendor ID is not `0xFFFF`), the check 236 makes before it
+/// records one: the gate of a Platform Cell BAR registration (235) for a
+/// function without a device record. Without a window none answers.
+pub fn function_answers(bdf: u32) -> bool {
+    // SAFETY: the admitted ECAM window is mapped for the kernel for its life.
+    unsafe { answers_in_window(bdf, ecam_window()) }
 }
 
-fn bdf_in_window(bdf: u32, (base, bus_start, bus_end): (usize, u8, u8)) -> bool {
-    base != 0 && bdf <= 0xFFFF && (bus_start..=bus_end).contains(&split_bdf(bdf).0)
+/// [`function_answers`] against the window `(base, bus_start, bus_end)`.
+///
+/// # Safety
+/// A nonzero `base` must map config space for buses `bus_start..=bus_end`.
+unsafe fn answers_in_window(bdf: u32, (base, bus_start, bus_end): (usize, u8, u8)) -> bool {
+    if base == 0 || bdf > 0xFFFF {
+        return false;
+    }
+    let (bus, dev, fun) = split_bdf(bdf);
+    // SAFETY: the caller's window contract; the read is bounded to that window.
+    unsafe { read_identity_in_range(base, bus_start, bus_end, bus, dev, fun) }
+        .is_some_and(|(vendor, _)| vendor != 0xFFFF)
 }
 
 /// Enable MMIO decoding and bus mastering after the caller has established
@@ -1394,14 +1406,26 @@ mod tests {
     }
 
     #[test]
-    fn only_a_bdf_on_an_admitted_bus_is_admitted() {
-        let window = (0xE000_0000, 2, 3);
-        assert!(bdf_in_window(0x0200, window), "first bus, function 0");
-        assert!(bdf_in_window(0x03FF, window), "last bus, last function");
-        assert!(!bdf_in_window(0x01FF, window), "below the window");
-        assert!(!bdf_in_window(0x0400, window), "above the window");
-        assert!(!bdf_in_window(0x1_0200, window), "not a BDF");
-        assert!(!bdf_in_window(0x0200, (0, 2, 3)), "no window");
+    fn only_a_function_that_answers_in_the_window_answers() {
+        let mut ecam = alloc::vec![0xFFu8; 2 * ECAM_BYTES_PER_BUS];
+        let function_offset = ECAM_BYTES_PER_BUS + (1usize << 15) + (2usize << 12);
+        ecam[function_offset..function_offset + 2].copy_from_slice(&0x8086u16.to_ne_bytes());
+        let window = (ecam.as_ptr() as usize, 2, 3);
+        let answers = |bdf| {
+            // SAFETY: the test owns a live in-memory stand-in for buses 2..=3.
+            unsafe { answers_in_window(bdf, window) }
+        };
+        assert!(answers(0x030A), "bus 3, device 1, function 2 answers");
+        assert!(!answers(0x0309), "an empty function reads 0xFFFF");
+        assert!(!answers(0x020A), "an empty bus");
+        assert!(!answers(0x010A), "below the window");
+        assert!(!answers(0x040A), "above the window");
+        assert!(!answers(0x1_030A), "not a BDF");
+        // SAFETY: a zero base is refused before any read.
+        assert!(
+            !unsafe { answers_in_window(0x030A, (0, 2, 3)) },
+            "no window"
+        );
     }
 
     #[test]

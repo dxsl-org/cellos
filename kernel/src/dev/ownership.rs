@@ -258,7 +258,8 @@ pub(crate) fn register_pci_function(bdf: u32, class: u32) {
 }
 
 /// Add BAR window `[base, base + len)` to PCI function `bdf`'s record (boot
-/// scan, 235, 236). Only a bounded conventional BAR is admitted
+/// scan, 236; 235 through [`register_platform_bar`]). Only a bounded
+/// conventional BAR is admitted
 /// ([`valid_pcie_bar_window`](crate::resource_registry::valid_pcie_bar_window)).
 pub(crate) fn register_pci_bar(bdf: u32, base: usize, len: usize) {
     if !crate::resource_registry::valid_pcie_bar_window(base, len) {
@@ -285,6 +286,28 @@ pub(crate) fn register_pci_bar(bdf: u32, base: usize, len: usize) {
         ),
         None => no_record(key),
     }
+}
+
+/// A Platform Cell BAR registration (235): the window goes to `bdf`'s record
+/// when it has one, and creates a record only when `answers()` reports that
+/// the function answers in config space, so records track real functions.
+/// `false`, with nothing recorded, otherwise. Records are never removed, so a
+/// record found here is still there when the window is added.
+pub(crate) fn register_platform_bar(
+    bdf: u32,
+    base: usize,
+    len: usize,
+    answers: impl FnOnce() -> bool,
+) -> bool {
+    let Some(key) = pci_key(bdf) else {
+        return false;
+    };
+    let known = DEVICES.lock().find(key).is_some();
+    if !known && !answers() {
+        return false;
+    }
+    register_pci_bar(bdf, base, len);
+    true
 }
 
 /// Record the MMIO device at `base` (a VirtIO slot or the DWC2 aperture)
@@ -734,6 +757,37 @@ mod tests {
             register_pci_bar(BDF, 0xFD00_0000, 0x4000);
         }
         assert_eq!(records_of(), (1, windows));
+    }
+
+    /// 235 creates a record only for a function that answers; a function
+    /// that already has one gains the window without a config-space probe.
+    #[test]
+    fn a_platform_bar_records_only_a_function_that_answers() {
+        const SILENT: u32 = 0xB410;
+        const ANSWERS: u32 = 0xB418;
+        const KNOWN: u32 = 0xB420;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let has_record = |bdf| DEVICES.lock().find(pci_key(bdf).unwrap()).is_some();
+        assert!(!register_platform_bar(SILENT, 0xFD10_0000, 0x1000, || {
+            false
+        }));
+        assert!(!has_record(SILENT), "a silent function gets no record");
+        assert!(register_platform_bar(ANSWERS, 0xFD11_0000, 0x1000, || true));
+        assert!(has_record(ANSWERS));
+        assert!(is_device_window(0xFD11_0000, 0x1000));
+
+        register_pci_function(KNOWN, 0x02_00_00);
+        let probed = core::cell::Cell::new(false);
+        assert!(register_platform_bar(KNOWN, 0xFD12_0000, 0x1000, || {
+            probed.set(true);
+            false
+        }));
+        assert!(!probed.get(), "a known function is not probed");
+        assert!(is_device_window(0xFD12_0000, 0x1000));
+        assert!(
+            !register_platform_bar(0x1_0000, 0xFD13_0000, 0x1000, || true),
+            "not a BDF"
+        );
     }
 
     /// A `PcieDriverCap` revoke frees what that capability claimed and

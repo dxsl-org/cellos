@@ -781,10 +781,11 @@ pub(super) fn wait_irq(caller_id: usize, irq: u8, mmio_base: usize) -> SyscallRe
 
 /// Handler for `Syscall::RegisterPcieBar` (extracted from the dispatcher).
 ///
-/// A BDF outside the admitted ECAM bus range names no function the Platform
-/// Cell can have scanned and is refused (`FileNotFound`, as 236 answers an
-/// absent function) before any record exists, so the device table grows only
-/// with real functions; a repeated registration adds nothing.
+/// A BAR is added to its function's device record, or to a new one only when
+/// the function answers in config space, as 236 checks before it records one;
+/// otherwise the call is refused (`FileNotFound`, as 236 answers an absent
+/// function), so device records track real functions. A repeated
+/// registration adds nothing.
 pub(super) fn register_pcie_bar(
     caller_id: usize,
     bdf: u32,
@@ -797,13 +798,12 @@ pub(super) fn register_pcie_bar(
     // Any RegisterPcieBar call from the Platform Cell marks it as active;
     // Phase 08 uses this to gate out the kernel ECAM scan.
     crate::dev::pcie_ecam::mark_platform_registered();
-    if !crate::dev::pcie_ecam::bdf_admitted(bdf) {
-        log::warn!(
-            "[pcie] BAR {base:#x}+{len:#x} for bdf={bdf:#x} outside the ECAM window; refused"
-        );
+    if !crate::dev::ownership::register_platform_bar(bdf, base, len, || {
+        crate::dev::pcie_ecam::function_answers(bdf)
+    }) {
+        log::warn!("[pcie] BAR {base:#x}+{len:#x}: no function answers at bdf={bdf:#x}; refused");
         return Err(SyscallError::FileNotFound);
     }
-    crate::dev::ownership::register_pci_bar(bdf, base, len);
     Ok(0)
 }
 
