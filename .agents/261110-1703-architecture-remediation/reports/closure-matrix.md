@@ -6,23 +6,24 @@
 
 - **Base:** `8a005f998`, the review's HEAD. **Today:** code trees `612eea42b4` (= Phase 18 close `0e16f59f32` plus plan docs). Items that Phase 19 commits changed were re-checked on the worktree at `8d8ae5f55f`.
 - **Update (2026-11-16, at `f923f4e322`):** the re-check numbers and guards were re-run on that commit. Rows now carry the owner's decisions ([phase-19-closure.md](../phase-19-closure.md) Deviation Log, `ea771d0131`) and the Phase 19 commits since `8d8ae5f55f`.
+- **Final (2026-11-16, at `70cf9502e3`):** the re-check numbers and guards were re-run on that commit. Between `f923f4e322` and it, code-side changes are limited to deleting `scripts/write-phase19-docs.py` and one CI step (`32e5a942f8`). Every code count is unchanged; only the `.agents/` and commit-history numbers moved.
 - Each check ran on both trees with the same command, so the base number calibrates the command against the review's number. Where the base number differs from the review's, both are shown.
 - Guards were re-run on the worktree (§ Re-check numbers).
 - The review does not number its Medium findings. Its §3 lists 8 groups of semicolon-separated clauses, 37 clauses in all, and counts them as 22 "after merging cross-slice duplicates". Each clause gets its own row here, so none is dropped. The IDs are this matrix's own: `M-<group><n>`, with groups K kernel shape, A authority, I IPC/sched, T memory/tiers, W hardware, U userspace, B build/repo, D docs/governance. Lows use `L-1`…`L-8` in the review's order.
 
-**Status key.** `closed`: an evidence file or commit plus today's re-run shows the cited symptom is gone. `residual`: part of the finding remains; the row says where that part is recorded and why. The Owner column says whether the owner accepted it in writing. `open`: still true and not yet accepted. `in-progress`: a Phase 19 step is still working on it.
+**Status key.** `closed`: an evidence file or commit plus today's re-run shows the cited symptom is gone. `residual`: part of the finding remains; the row says where that part is recorded and why. The Owner column says whether the owner accepted it in writing. `open`: still true and not yet accepted.
 
 ## Summary
 
-| Severity | Rows | closed | residual | open | in-progress |
-|---|---|---|---|---|---|
-| Critical | 2 | 2 | 0 | 0 | 0 |
-| High | 14 | 9 | 5 | 0 | 0 |
-| Medium (37 clauses) | 37 | 19 | 17 | 0 | 1 |
-| Low | 8 | 5 | 3 | 0 | 0 |
-| New (Phase 19) | 3 | 1 | 1 | 1 | 0 |
+| Severity | Rows | closed | residual | open |
+|---|---|---|---|---|
+| Critical | 2 | 2 | 0 | 0 |
+| High | 14 | 9 | 5 | 0 |
+| Medium (37 clauses) | 37 | 20 | 17 | 0 |
+| Low | 8 | 5 | 3 | 0 |
+| New (Phase 19) | 3 | 1 | 2 | 0 |
 
-Every Critical and High row is `closed` or `residual`. The owner accepted the five High residuals in writing on 2026-11-16 ([phase-19-closure.md](../phase-19-closure.md) Deviation Log, `ea771d0131`). The nine former open rows with no Phase 19 step are owner-accepted residuals, handed back to the portfolio. M-D2 stays `in-progress` until the living-docs step ends.
+Every Critical and High row is `closed` or `residual`. The owner accepted the five High residuals in writing on 2026-11-16 ([phase-19-closure.md](../phase-19-closure.md) Deviation Log, `ea771d0131`). The nine former open rows with no Phase 19 step are owner-accepted residuals, handed back to the portfolio. No row is `open`. Seven residuals still need written acceptance (§ For owner closure).
 
 ## Critical
 
@@ -48,7 +49,7 @@ Every Critical and High row is `closed` or `residual`. The owner accepted the fi
 | H-11 | Frame lifetime is nine protocols; x86 shootdown panics on a silent CPU | 16 | [phase-16-evidence.md](phase-16-evidence.md) (`c305f38637`, `a3de92d6f1`; checkpoint `c49a67eae5`) | `panic!` in `memory/tlb_shootdown.rs`: **2 → 0**. `memory/frame_run.rs` exists; `S22-X86-QUARANTINE-SILENT-CPU: PASS` on TCG and KVM (evidence §4). | closed | Re-review Lows carried (§ Carried residuals). |
 | H-12 | Tier-1 perimeter is a convention; scan covers `cells/` only | 18 | [phase-18-evidence.md](phase-18-evidence.md) (`2288da9685`, `5505096470`, `a1d327b822`, `024208bc5c`) | `check-tier-class.py --negative-control`: OK. `check-tcb-closure.py --negative-control`: OK (3 refusals). `check-tcb-closure.py`: Tier-1 total 589 tokens / 37 attributes. `libs/ostd` `unsafe` lines: 231 → 225; `libs/api` 164 → crate removed. | closed | — |
 | H-13 | Services re-implement the platform: loops, five wire styles, VFS unbounded wait, init SPOF, dead hot-swap | 12, 13 | [cp2-service-wire.md](../cp2-service-wire.md) (`e676d0ca9`, `75d015d22`, `17bd2db19`); [cp2-api-split.md](../cp2-api-split.md) (`9141b2724`; `4ff7ad9f78`, `064732582e`) | `libs/ostd/src/dispatch.rs`: 1 → 0. Services on `ostd::service::serve`: 0 → 7. `check-service-wire-literals.py`: OK (2,227 files at `f923f4e322`; guard did not exist). Services with a hand-rolled `sys_recv` loop: ai, ocel-js, ocel-pdf, ocel-quickjs, vfs → ocel-js, ocel-pdf, ocel-quickjs. | residual | Input, net-broker and silo keep their own loops (owner decision, cp2-service-wire §6). The init boot-stop halt path is host-tested only (cp2-api-split §6). Owner: accepted 2026-11-16 (`ea771d0131`). |
-| H-14 | No per-commit x86 gate; kernel binary not a function of HEAD; duplicated recipe; local ≠ remote | 02, 03, 03b, 11 | [phase-02-evidence.md](phase-02-evidence.md) (`d32492e157`); [phase-03-evidence.md](phase-03-evidence.md) (`d17c658542`, `374658ac8b`) | `x86-c2c` job: 0 → 1; two-node/domain scripts in `ci.yml`: 0 → 3. `check-lanes.py`: OK (77 scripts; did not exist; review: 53 of 71 unreferenced, today 53 `manual` rows). Tracked `kernel/src/embedded*/{init,kernel_fs.img}`: 7 → 7. `gen_disk.ps1` and `gen-disk-ci.sh`: both present; the "byte-for-byte in sync" comment: 1 → 1. `release.yml` `riscv64gc` refs: 3 → 4. `RemoteEndpoint::call` → `NotSupported` (`libs/ostd/src/cluster_endpoint.rs:160-167`). | residual | The x86 gate part is closed. Left: (a) untracking waits for one pushed CI cycle ([untrack-after-ci.md](../untrack-after-ci.md):3; nothing in this plan is pushed); (b) one recipe per arch is Phase 03b; (c) the release ISO is blocked on release signing (phase-03 evidence §Not done); (d) the remote adapter is deferred, with typed outcomes in place ([cp1-ipc-model.md](../cp1-ipc-model.md):53). Owner: accepted 2026-11-16 (`ea771d0131`). Phases 03 and 03b close as residuals tied to the pushed-CI condition; their frontmatter still reads `in-progress` and `pending` at `f923f4e322`. |
+| H-14 | No per-commit x86 gate; kernel binary not a function of HEAD; duplicated recipe; local ≠ remote | 02, 03, 03b, 11 | [phase-02-evidence.md](phase-02-evidence.md) (`d32492e157`); [phase-03-evidence.md](phase-03-evidence.md) (`d17c658542`, `374658ac8b`) | `x86-c2c` job: 0 → 1; two-node/domain scripts in `ci.yml`: 0 → 3. `check-lanes.py`: OK (77 scripts; did not exist; review: 53 of 71 unreferenced, today 53 `manual` rows). Tracked `kernel/src/embedded*/{init,kernel_fs.img}`: 7 → 7. `gen_disk.ps1` and `gen-disk-ci.sh`: both present; the "byte-for-byte in sync" comment: 1 → 1. `release.yml` `riscv64gc` refs: 3 → 4. `RemoteEndpoint::call` → `NotSupported` (`libs/ostd/src/cluster_endpoint.rs:160-167`). | residual | The x86 gate part is closed. Left: (a) untracking waits for one pushed CI cycle ([untrack-after-ci.md](../untrack-after-ci.md):3; nothing in this plan is pushed); (b) one recipe per arch is Phase 03b; (c) the release ISO is blocked on release signing (phase-03 evidence §Not done); (d) the remote adapter is deferred, with typed outcomes in place ([cp1-ipc-model.md](../cp1-ipc-model.md):53). Owner: accepted 2026-11-16 (`ea771d0131`). Phases 03 and 03b are `status: residual` (`49cf531481`), tied to the pushed-CI condition. |
 
 ## Medium
 
@@ -87,9 +88,9 @@ Every Critical and High row is `closed` or `residual`. The owner accepted the fi
 | M-B4 | `ci.yml` is a 27-job, 2,447-line monolith with no `concurrency` | 02 | [phase-02-evidence.md](phase-02-evidence.md) | `concurrency:` 0 → 1 (`ci.yml:11`). Jobs 27 → 28; lines 2,447 → 2,721. | residual | The concurrency part is closed. Owner: the split was accepted 2026-11-16 and handed back to the portfolio (`ea771d0131`). |
 | M-B5a | Git stores artifacts: `kernel/src/embedded*` binaries, `gh` (49.9 MB), `limine/` objects | 03 | [phase-03-evidence.md](phase-03-evidence.md):24; [untrack-after-ci.md](../untrack-after-ci.md):3,14-16 | `gh_2.55.0_linux_amd64/` files: 194 → 194 (47.6 MiB `bin/gh`). `limine/` files: 2,455 → 2,455. Embedded binaries: 7 → 7. | residual | Untracking is gated on the owner's condition: one pushed CI cycle on `374658ac8`. The plan pushes nothing. Owner: accepted 2026-11-16 as a residual tied to that condition (`ea771d0131`). |
 | M-B5b | Git stores artifacts: 271 files under `build/`, 28.8 MB WAD | 03 | [phase-03](../phase-03-build-inputs.md) Deviation Log | `build/` files: 271 → 271. `doom1.wad`: tracked → tracked (27.5 MiB). Tracked blobs > 1 MB: 17 → 19 (same at `f923f4e322`). | residual | `build/` was to stay tracked "until Phase 19" (phase-03 Deviation Log); the S8c file set has no untrack step. The WAD was in no plan. Owner: accepted 2026-11-16 and handed back to the portfolio (`ea771d0131`). |
-| M-D1 | 193k lines of tracked Markdown under `.agents/` (7,346 files); 186 of 566 commits docs-only | 19 step 7 | [s8c-handoff-approval.md](../s8c-handoff-approval.md) | `.agents/` Markdown lines: 193,186 → 204,504; files: 7,346 → 7,445 (`f923f4e322`). Docs-only commits in the 30 days before the revision: 188 of 566 → 265 of 879. | residual | Owner decision: report sizes only; nothing moved (S8c approval). Owner: decided. |
-| M-D2 | `system-architecture.md` and `current-focus.md` stale | 01, 19 step 8 | `dd72d78b92` (system-architecture), `164b0d7e7a` (security-model) | `docs/roadmap/current-focus.md:3` "Last updated: 2026-10-19" → "2026-11-16". `system-architecture.md:4` "Updated: 2026-11-10" → "2026-11-16" (at `f923f4e322`). | in-progress | Phase 19 step 8 is still running; the final status is set when it ends. |
-| M-D3 | Specs 02/03/04/07/09/10/15/18/19/22 contradict code | 13–18, 19 step 2 | `db9b0aa38a`, `e27189e855`…`4222b57ce7`, follow-ups `5ec3d9a913`, `edf9e9a3d1` | All ten listed specs were edited in Phase 19 (`git log 8d8ae5f55f..f923f4e322 -- docs/specs`; 22 spec files touched in all). Per-arch status comes from the generated `docs/generated/arch-status.md`, and CI checks it (`9dc1e2151d`). `check-spec-anchors.py --check`: OK at `f923f4e322`. | closed | Section-by-section correctness rests on the step 2 commits and their review; it was not re-read here [INFERENCE]. Spec 05, which is not in the review's list, still shows the deleted `ViHypervisor` trait with no banner (`docs/specs/05-application.md:449,477`); carried below. |
+| M-D1 | 193k lines of tracked Markdown under `.agents/` (7,346 files); 186 of 566 commits docs-only | 19 step 7 | [s8c-handoff-approval.md](../s8c-handoff-approval.md) | `.agents/` Markdown lines: 193,186 → 204,514; files: 7,346 → 7,445 (`70cf9502e3`). Docs-only commits in the 30 days before the revision: 188 of 566 → 279 of 895. | residual | Owner decision: report sizes only; nothing moved (S8c approval). Owner: decided. |
+| M-D2 | `system-architecture.md` and `current-focus.md` stale | 01, 19 step 8 | `164b0d7e7a`, `dd72d78b92`, `805fd50ee6`, `09794bf309`, `ca94ced5f1`, `da47be525d`, `6d4219819e`, `f43abb4ca5`, `f053ff4d99`, `70cf9502e3` | `docs/roadmap/current-focus.md:3` "Last updated: 2026-10-19" → "2026-11-16". `system-architecture.md:4` "Updated: 2026-11-10" → "2026-11-16". `security-model.md`, `codebase-summary.md`, `project-roadmap.md` and `code-standards.md` were rewritten for the post-remediation state (commits listed). | closed | — |
+| M-D3 | Specs 02/03/04/07/09/10/15/18/19/22 contradict code | 13–18, 19 step 2 | `db9b0aa38a`, `e27189e855`…`4222b57ce7`; follow-ups `ecc8972d92`…`cddb03faa7`, `bb74b7a810`, `93a4c4586b` | All ten listed specs were edited in Phase 19 (`git log 8d8ae5f55f..f923f4e322 -- docs/specs`; 22 spec files touched in all). Per-arch status comes from the generated `docs/generated/arch-status.md`, and CI checks it (`9dc1e2151d`). `check-spec-anchors.py --check`: OK at `70cf9502e3`. | closed | Section-by-section correctness rests on the step 2 commits and their review; it was not re-read here [INFERENCE]. Spec 05 (not in the review's list) now describes `ViHypervisor` as deleted (`bb74b7a810`; `docs/specs/05-application.md:448`). |
 | M-D4 | Spec number 14 used twice (00 too) | 19 step 3 | `e94bc96802` | Duplicate number prefixes in `docs/specs/`: `00`, `14` → none (`00-fork.md` → `27-fork.md`, `14-viui.md` → `28-viui.md`). | closed | `14-distributed.md` keeps its number because net-broker code cites it (phase-19 Deviation Log). |
 
 ## Low
@@ -99,7 +100,7 @@ Every Critical and High row is `closed` or `residual`. The owner accepted the fi
 | L-1 | Dead residue: `CELL_REGISTRY`, `Spawner::User`, `ViGlobalMemoryManager`, `spawn_from_file` stub, `force_unlock_locks` | 06, 07, 10, 19 | `246acddad7` (P07, [evidence](phase-07-evidence.md)); `7dc57d730b` (P06); `4f84b29d2a` (P10); `e8cb852c80` (P19 step 4) | Word matches in `kernel/src`, `libs`, `cells`, `hal`: 1, 1, 1, 3, 10 → 0, 0, 0, 0, 0 (at `8d8ae5f55f`). The uncalled `memory::tests` allocator runner was also deleted (`f25c02f7c8`). | closed | — |
 | L-2 | `async-trait` unused in kernel | 09 | `8306ba3bb2` (2026-11-11, S4b) | `async-trait` in `kernel/Cargo.toml`: 1 → 0. | closed | Phase attribution by date [INFERENCE]. |
 | L-3 | `PAGE_SIZE` redefined in four files | none | — | File-level `const PAGE_SIZE` in non-test kernel files: 4 → 4 (`boot/dtb_memory.rs:7`, `memory/frame.rs:11`, `memory/paging.rs:18`, `memory/pin.rs:63`). Every `const PAGE_SIZE` in `kernel/src`, `hal`, `libs`: 24 → 27 (same at `f923f4e322`). | residual | All definitions are used. Merging them is a code change, not a dead-item deletion, so it is outside the S8c rule. Owner: recorded as residual (`ea771d0131`). |
-| L-4 | Root junk tracked | 19 step 4 | `c4a2040950` | Tracked root files `invalid.json`, `dummy.jsonl`, `sha256:…jsonl`, `__build*`, `do_build.bat`, `doom_build_debug.txt`, `test_*.py`: 9 → 0. `cells/services/compositor/kernel-graphics-legacy.rs`: 1 → 0. | closed | — |
+| L-4 | Root junk tracked | 19 step 4 | `c4a2040950`; `32e5a942f8` | Tracked root files `invalid.json`, `dummy.jsonl`, `sha256:…jsonl`, `__build*`, `do_build.bat`, `doom_build_debug.txt`, `test_*.py`: 9 → 0. `cells/services/compositor/kernel-graphics-legacy.rs`: 1 → 0. | closed | `32e5a942f8` also removed the dead `llms.txt` step from `docs.yml` and the stale `scripts/write-phase19-docs.py` bootstrap. |
 | L-5 | `Dockerfile` references nonexistent paths | 19 step 5 | `a727b9bcc4` | Referenced scripts missing at base: `scripts/download-arm-toolchain.sh`, `build-deps.sh`, `create-image.sh` (base `Dockerfile:19,30,31`) → 0 missing. | closed | The commit body records a completed `docker build`. Not re-run here. |
 | L-6 | "Supervisor" names three things | none | — | Paths named `*supervisor*` in `cells`, `kernel/src`, `libs`: init's `supervisor.rs`, `cells/services/supervisor`, `libs/ostd/src/actor/supervisor.rs`, `memory/domain-supervisor-registry.rs` and others → same, plus `libs/abi/src/supervisor_power.rs` and `libs/wire/src/proto/supervisor.rs`. | residual | A rename is a code change. Owner: accepted 2026-11-16 and handed back to the portfolio (`ea771d0131`). |
 | L-7 | `CONTRIBUTING.md:118` points at an absent directory | 19 step 5 | `70b096c26a` | Missing repo paths named in `CONTRIBUTING.md`: 1 at base (`cells/apps/shell/src/commands.rs`, line 125) → 0 at `f923f4e322`; `docs/specs/28-viui.md` exists since `e94bc96802`. | closed | — |
@@ -107,9 +108,9 @@ Every Critical and High row is `closed` or `residual`. The owner accepted the fi
 
 ## Re-check numbers
 
-Each command ran on base `8a005f998` and on today's tree `f923f4e322` (`git archive` of each commit). Where `612eea42b4`, the matrix's first measurement, differed, its number is in brackets.
+Each command ran on base `8a005f998` and on today's tree `70cf9502e3` (`git archive` of each commit). Code counts are identical at `f923f4e322`. Where `612eea42b4`, the matrix's first measurement, differed, its number is in brackets.
 
-| Check | Review | Base (same command) | Today (`f923f4e322`) | Command |
+| Check | Review | Base (same command) | Today (`70cf9502e3`) | Command |
 |---|---|---|---|---|
 | `target_arch` lines in `kernel/src` outside `kernel/src/arch/` | 1,807 | 1,807 | **692** [691] (ceiling `arch_cfg_max=692`, `scripts/check-hal-boundaries.sh:69`; PASS at the ceiling; +1 from `268db39da4`) | `grep -RIn --include='*.rs' target_arch kernel/src \| grep -v '^kernel/src/arch/' \| wc -l` |
 | `target_arch = "riscv64"` / `"x86_64"` lines (kernel) | 667 / 630 | 667 / 630 | 272 / 284 | same grep with the literal |
@@ -130,12 +131,12 @@ Each command ran on base `8a005f998` and on today's tree `f923f4e322` (`git arch
 | `SCHEDULER.lock()` sites / "lock order" comments | 336+ / 51 | 336 / 48 | 373 / 54 (now rank-asserted) | `grep -RIo` / `grep -RIin 'lock order'` |
 | Non-test `crate::task::` in `kernel/src/memory` | — | 60 | 25 | `grep -RIn 'crate::task::' kernel/src/memory \| grep -v test` |
 | `const PAGE_SIZE`: file-level non-test kernel / all in `kernel/src`, `hal`, `libs` | 4 files | 4 / 24 | 4 / 27 | `grep -RIn -E 'const PAGE_SIZE\b'` |
-| `.agents/` tracked Markdown lines / files | 193k / 7,346 | 193,186 / 7,346 | 204,504 / 7,445 [204,306 / 7,444] | `git archive <rev> .agents` then `wc -l` |
-| Docs-only commits, 30 days before the revision | 186 of 566 | 188 of 566 | 265 of 879 [251 of 842] | `git log --since`, commits touching only `*.md`, `.agents/`, `docs/` |
+| `.agents/` tracked Markdown lines / files | 193k / 7,346 | 193,186 / 7,346 | 204,514 / 7,445 [204,306 / 7,444] | `git archive <rev> .agents` then `wc -l` |
+| Docs-only commits, 30 days before the revision | 186 of 566 | 188 of 566 | 279 of 895 [251 of 842] | `git log --since`, commits touching only `*.md`, `.agents/`, `docs/` |
 | Unsafe-allowlist entries with `review_by` before 2027-03-01 | — | — | **0 of 118** [91 of 97] | `grep -oE 'review_by…' scripts/unsafe-allowlist.toml` |
 | Duplicate spec number prefixes | 14 | `00`, `14` | none | `ls docs/specs \| grep -oE '^[0-9]+-' \| sort \| uniq -d` |
 
-Guards re-run on the worktree at `f923f4e322` (every one exited 0): `check-hal-boundaries.sh` PASS; `check-plan-status.py` OK; `check-lanes.py` OK (77 scripts, 72 targets; it failed at `612eea42b4` on the two tier3 scripts, fixed by `c6714a5aab`); `check-kernel-residents.py` OK (406 files); `check-catalog.py` OK (118 rows); `check-service-wire-literals.py` OK (2,227 files); `check-disk-layout-literals.py` OK (47 sites); `check-host-test-crates.py` OK; `check-cell-va-layout.py` OK; `check-spec-anchors.py --check` OK; `gen-syscall-headers.py --check` OK (3 headers); `check-tier-class.py --negative-control` OK; `check-tcb-closure.py --negative-control` OK; `check-tcb-closure.py` OK (589/37).
+Guards re-run on the worktree at `70cf9502e3` (every one exited 0): `check-hal-boundaries.sh` PASS (692 of 692); `check-plan-status.py` OK; `check-lanes.py` OK (77 scripts, 72 targets; it failed at `612eea42b4` on the two tier3 scripts, fixed by `c6714a5aab`); `check-kernel-residents.py` OK (406 files); `check-catalog.py` OK (118 rows); `check-service-wire-literals.py` OK (2,227 files); `check-disk-layout-literals.py` OK (47 sites); `check-host-test-crates.py` OK; `check-cell-va-layout.py` OK; `check-spec-anchors.py --check` OK; `gen-syscall-headers.py --check` OK (3 headers); `check-tier-class.py --negative-control` OK; `check-tcb-closure.py --negative-control` OK; `check-tcb-closure.py` OK (589/37).
 
 ## Residuals carried from Phases 16–18
 
@@ -169,9 +170,9 @@ Taken from the evidence reports' residual sections. "Today" is this step's check
 | P18 §6 | `nic2-x86` CI cost not measured in CI | unchanged (nothing pushed) |
 | P18 §6 | aarch64 `IOMMU-TEARDOWN: SKIP`, unchecked by any lane | unchanged |
 | P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | `x86hv-iso` rollout guard fails on `main` | fixed by `a2d77056e1`: the hypervisor kernel is staged off the guard's default path |
-| P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | 2 `rust-std-promotion` tests fail on `main` (frozen artifact digests) | re-pin pending as Phase 19's last commit; the owner approves the re-bound digest (phase-19 Deviation Log) |
+| P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | 2 `rust-std-promotion` tests fail on `main` (frozen artifact digests) | fixed, pending SHA: the owner-approved re-pin of the approval package is Phase 19's last commit (phase-19 Deviation Log) |
 | P14 §6, P18 §4 | `check-lanes.py`: no rows for `qemu-tier3-{chrome,display}-x86.sh` | fixed by `c6714a5aab` (check passes at `f923f4e322`) |
-| P14 §6 | Old HAL-trait text in `docs/specs/00-context.md`, `05-application.md`, `docs/code-standards.md` | `00-context.md` and `code-standards.md` no longer name the deleted traits. `05-application.md:449,477` still shows `pub trait ViHypervisor` with no banner at `f923f4e322`; this is Phase 19 step 2 or 8 work |
+| P14 §6 | Old HAL-trait text in `docs/specs/00-context.md`, `05-application.md`, `docs/code-standards.md` | fixed: `00-context.md` and `code-standards.md` no longer name the deleted traits, and Spec 05 states `ViHypervisor` was deleted (`bb74b7a810`; `05-application.md:448`). Line 486 keeps it only in the historical phase list |
 | All | Evidence ceiling: host and QEMU (TCG, KVM); no physical hardware | plan scope |
 
 ## Owner decisions (2026-11-16)
@@ -179,10 +180,8 @@ Taken from the evidence reports' residual sections. "Today" is this step's check
 Recorded in [phase-19-closure.md](../phase-19-closure.md) Deviation Log (`ea771d0131`):
 
 1. **High residuals accepted in writing:** H-2, H-5, H-8, H-13, H-14.
-2. **Phases 03 and 03b** close as residuals tied to the one-pushed-CI-cycle condition (H-14, M-B5a). At `f923f4e322` their frontmatter still reads `in-progress` and `pending`.
+2. **Phases 03 and 03b** are residuals tied to the one-pushed-CI-cycle condition (H-14, M-B5a); both frontmatters read `status: residual` (`49cf531481`).
 3. **Accepted residuals handed back to the portfolio:** M-K4, M-A1, M-I4, M-U3, M-U4, M-B2, M-B4, M-B5b, L-6. L-3 is recorded as residual.
-4. **Still without a written owner acceptance:** the phase-recorded residuals M-K2, M-K3, M-A2, M-A4 and M-W5. Each one's evidence report records it; the 2026-11-16 decision does not name them.
-5. **In progress:** M-D2 (Phase 19 step 8). Its final status is set when that step ends.
 
 ## New findings (Phase 19)
 
@@ -191,5 +190,19 @@ These came from the Phase 19 allowlist re-review wave (`708b80877b`, `fef6f2ff93
 | ID | Finding | Evidence | Status |
 |---|---|---|---|
 | N-1 | virtio-blk (x86) never latched its poisoned state. `poison()` only printed, `poisoned` was only ever set `false`, and the refusal gate never fired. Repeated stalls leaked bounce slots until the `claim_slot` assert panicked the cell (`hal_x86.rs:86`). A liveness defect, not a memory-safety one. | `c7a36575d2`: `poisoned` is now a `Poison` latch (`device.rs:41`, `pci_x86.rs:152`). `poison()` sets it and prints once (`io_x86.rs:70-71`). `read_sectors`, `write_sector` and `flush` refuse a poisoned device as `NotIssued` before publishing a request. A build-time `const` block checks the latch (`io_x86.rs:57-65`), since the cell has no host-test harness. Re-read at `f923f4e322`. | closed |
-| N-2 | Allowlist items re-read by the wave that are still open (not new): `bindings_net.rs` `push_ip` is a safe fn accepting any `L`; doom `DG_ScreenBuffer` has no null check; nvme takes `&` references to device-written CQ memory (`controller.rs:444,445,565`, `queue.rs:201,207`); net TLS `sockets()`/`poll_network()` have no `# Safety` docs; silo-guest `publish_response` takes an unbounded length (`mailbox.rs:93-110`). | wave commits `1420ea6984`, `708b80877b`, `fef6f2ff93` | open; owner decision pending |
+| N-2 | Allowlist items re-read by the wave that are still open (not new): `bindings_net.rs` `push_ip` is a safe fn accepting any `L`; doom `DG_ScreenBuffer` has no null check; nvme takes `&` references to device-written CQ memory (`controller.rs:444,445,565`, `queue.rs:201,207`); net TLS `sockets()`/`poll_network()` have no `# Safety` docs; silo-guest `publish_response` takes an unbounded length (`mailbox.rs:93-110`). | wave commits `1420ea6984`, `708b80877b`, `fef6f2ff93`; recorded in the entries' reasons in `scripts/unsafe-allowlist.toml` | residual; owner acceptance pending |
 | N-3 | virtio-blk on riscv64/aarch64 calls the blocking `virtio-drivers` `read_blocks`/`write_blocks`/`flush` with no deadline (`cells/drivers/virtio-blk/src/device.rs:70-80`), so a stalled device hangs the cell while it holds `STATE`. On x86 `flush()` is still unbounded after N-1 (`io_x86.rs:148`ff, comment at `:155`), because `virtio-drivers` 0.7.5 (`Cargo.lock`) has no non-blocking flush. virtio-blk has no host-test seam. | found while fixing N-1 (`c7a36575d2`) | residual; owner acceptance pending |
+
+## For owner closure
+
+These residuals are recorded but have no written owner acceptance yet. Every other residual is accepted (§ Owner decisions).
+
+| ID | Residual | Recorded in |
+|---|---|---|
+| M-K2 | `Task` keeps about 55 flat fields (242-line struct); three groups were extracted. | [phase-09-evidence.md](phase-09-evidence.md) §Residual |
+| M-K3 | `p01-trace`/`g1-cpu-accounting` cfgs are features now, but 504 lines in 76 files are not confined to a tracing facade. | [phase-09-evidence.md](phase-09-evidence.md) §Residual |
+| M-A2 | Device, BDF and service ownership stay keyed by tid (`DeviceRecord.owner: Option<usize>`, `kernel/src/dev/ownership.rs:87`). | [phase-07-evidence.md](phase-07-evidence.md) §Residual |
+| M-A4 | Domain-admission `CellSpawnDenied` keeps its 8-byte payload with no incarnation subject (`loader/domain_admission.rs:253,282`). | [phase-07-evidence.md](phase-07-evidence.md) §Residual |
+| M-W5 | igc, ixgbe, i40e, r8169 and bcm57xx ship empty `QUERY_DEVICE_IDS` and cannot bind; needs physical captures. | [phase-18-evidence.md](phase-18-evidence.md) §6 |
+| N-2 | Five allowlist items stay open: `push_ip`, doom `DG_ScreenBuffer`, nvme CQ references, net TLS `# Safety` docs, silo-guest `publish_response` length. | allowlist wave commits; this matrix |
+| N-3 | virtio-blk riscv64/aarch64 I/O and x86 `flush()` block without a deadline; no host-test seam. | this matrix (found during `c7a36575d2`) |
