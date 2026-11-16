@@ -1,32 +1,34 @@
+# Cellos build environment: the packages and pinned toolchain of
+# scripts/dev-setup.sh, which mirrors .github/workflows/ci.yml. The image build
+# assembles the boot ramdisk and builds the riscv64 kernel as a smoke check.
+#
+#   docker build -t cellos-dev .
+#   docker run --rm -it -v "$PWD":/cellos cellos-dev bash
 FROM ubuntu:24.04
 
-# Install dependencies
-RUN apt update
-RUN apt install -y build-essential curl git wget
-RUN apt install -y qemu-system-aarch64 dosfstools mtools
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates curl git make python3 python3-cryptography \
+      mtools dosfstools xorriso \
+      qemu-system-misc qemu-system-arm qemu-system-x86 \
+      gcc-riscv64-unknown-elf gcc-aarch64-linux-gnu clang libclang-dev \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh && \
-    sh /tmp/rustup.sh -y && \
-    rm /tmp/rustup.sh
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --profile minimal --default-toolchain none
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Copy just ./scripts/
-RUN mkdir /moss
-WORKDIR /moss
-RUN mkdir /moss/scripts
-COPY ./scripts /moss/scripts
-RUN ./scripts/download-arm-toolchain.sh /tmp/arm-toolchain.tar.xz
-RUN mkdir -p /opt/arm-toolchain
-RUN tar -xf /tmp/arm-toolchain.tar.xz -C /opt/arm-toolchain --strip-components=1
+WORKDIR /cellos
+# Install the pinned toolchain, components and targets before copying the tree,
+# so a source change does not invalidate this layer.
+COPY rust-toolchain.toml ./
+RUN rustup toolchain install && cargo --version
 
-# Copy the current directory contents into the container at /moss
-COPY . /moss
-
-# Install ARM toolchain
-ENV PATH="/opt/arm-toolchain/bin:${PATH}"
-
-# Install dependencies
-RUN ./scripts/build-deps.sh
-RUN ./scripts/create-image.sh
-RUN cargo build --release
+COPY . .
+# .cargo/config.toml is gitignored; generate it as scripts/dev-setup.sh does.
+RUN mkdir -p .cargo \
+ && sed "s|@REPO_ROOT@|/cellos|g" scripts/cargo-config-linux.toml > .cargo/config.toml
+RUN bash scripts/build-boot-ramdisk-ci.sh \
+ && cargo build --release -p cellos-kernel \
+      --target riscv64gc-unknown-none-elf -Z build-std=core,alloc
