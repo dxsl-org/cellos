@@ -214,7 +214,9 @@ echo "[ai-oracle] signing cells (dev key, F1/F5 checked)"
 sign_cells "${CELL_BINARIES[@]}"
 
 echo "[ai-oracle] assembling VIFS1"
-"$PYTHON_BIN" tools/mkfat32.py \
+# `ai` selects /bin/config and /bin/ai in the generated services.toml; without it
+# init never starts the AI service and ai-test reports "service::AI is not registered".
+"$PYTHON_BIN" tools/mkfat32.py --config-features ai \
     "$EMBEDDED/kernel_fs.img" \
     "$REL/app-init"            /bin/init \
     "$REL/cellbox"           /bin/cellbox \
