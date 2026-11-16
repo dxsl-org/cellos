@@ -54,8 +54,8 @@ static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 
 /// ISR: the pending flag first, then the early-sweep hint (one atomic store
 /// each), so a sweep that takes the hint sees the flag. A vector of a live NIC
-/// route's function also signals NET_RX; that check copies the NIC routes and
-/// takes the allocation lock once per live route.
+/// route's function also signals NET_RX; that check is one atomic load of the
+/// NIC line set (`ownership::NIC_LINES`), with no lock taken.
 pub(crate) fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
     irq_wait::hint_msi_wake();

@@ -207,7 +207,8 @@ impl Devices {
 }
 
 /// Every device record. Lock order: after `SCHEDULER`, the grant tables,
-/// `ROLE_PUBLICATION` and `NIC_ROUTES`, before `RESOURCE_REGISTRY` and
+/// `ROLE_PUBLICATION`, `NIC_ROUTES` and `BLOCK_ROUTES` (route publication and
+/// clearing check ownership under them), before `RESOURCE_REGISTRY` and
 /// `PCIE_MSI_STATE`.
 static DEVICES: Spinlock<Devices> = Spinlock::ranked(
     Devices {
