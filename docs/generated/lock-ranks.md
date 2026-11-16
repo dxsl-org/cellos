@@ -53,7 +53,7 @@ Acquisition order of every static `Spinlock`, outermost first: a hart may take a
 | 46 | `NEXT_PIPE_ID` | `kernel::ipc::pipe::NEXT_PIPE_ID` (kernel/src/ipc/pipe.rs) |
 | 47 | `NEXT_FREEZE_NONCE` | `kernel::cell::hotswap::NEXT_FREEZE_NONCE` (kernel/src/cell/hotswap.rs) |
 | 48 | `PIPES` | `kernel::ipc::pipe::PIPES` (kernel/src/ipc/pipe.rs) |
-| 49 | `NIC_DRIVER_STATE` | `kernel::dev::driver_cell::NIC_DRIVER_STATE` (kernel/src/dev/driver_cell.rs) |
+| 49 | `NIC_ROUTES` | `kernel::dev::driver_cell::NIC_ROUTES` (kernel/src/dev/driver_cell.rs) |
 | 50 | `RETIREMENT_VERDICTS` | `kernel::cell::retirement_verdict::TABLE` (kernel/src/cell/retirement_verdict.rs) |
 | 51 | `BLOCK_ROUTES` | `kernel::dev::driver_cell::BLOCK_ROUTES` (kernel/src/dev/driver_cell.rs) |
 | 52 | `CSPACE_FILES` | `kernel::cell::cap_registry::CSPACE_FILES` (kernel/src/cell/cap_registry.rs) |

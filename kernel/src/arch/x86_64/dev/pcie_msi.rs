@@ -58,9 +58,9 @@ static READY: AtomicBool = AtomicBool::new(false);
 static FIRMWARE_FORBIDS_MSI: AtomicBool = AtomicBool::new(false);
 
 /// ISR: the pending flag first, then the early-sweep hint (one atomic store
-/// each), so a sweep that takes the hint sees the flag. A vector held by the
-/// registered NIC driver also signals NET_RX; that check takes the NIC and
-/// allocation locks, and only once a NIC driver is registered.
+/// each), so a sweep that takes the hint sees the flag. A vector of a live NIC
+/// route's function also signals NET_RX; that check copies the NIC routes and
+/// takes the allocation lock once per live route.
 pub(crate) fn on_msi(vector: u8) {
     irq_wait::signal_irq(vector);
     irq_wait::hint_msi_wake();
@@ -267,6 +267,17 @@ pub fn irq_owned_by(irq: u8, owner: usize) -> bool {
     holds(&STATE.lock(), owner, irq)
 }
 
+/// Whether `irq` belongs to the allocation `owner` holds for function `bdf`:
+/// the per-route proof of a NIC route's interrupts.
+pub fn irq_owned_for(irq: u8, owner: usize, bdf: u32) -> bool {
+    STATE.lock().allocations.iter().any(|a| {
+        a.owner == owner
+            && a.bdf == bdf
+            && irq >= a.irq.first_irq
+            && irq < a.irq.first_irq + a.irq.count
+    })
+}
+
 fn holds(state: &State, owner: usize, irq: u8) -> bool {
     state
         .allocations
@@ -426,8 +437,13 @@ mod tests {
             0
         );
 
-        // Register NIC driver.
-        crate::dev::driver_cell::register_nic_driver(NIC_TID);
+        // Bind the NIC route of the function the vector belongs to.
+        crate::dev::driver_cell::reset_nic_routes();
+        let key = abi::block_route::DeviceKey::new(abi::block_route::BLOCK_DEVICE_PCI, 0x0010)
+            .expect("valid BDF");
+        assert!(
+            crate::dev::driver_cell::publish_nic_route(key, (NIC_TID, 1, 1), 0, || true).is_some()
+        );
 
         // MSI for NIC driver: signals IRQ AND signals NET_RX.
         on_msi(nic_alloc.first_irq);
@@ -437,8 +453,9 @@ mod tests {
             abi::syscall::events::NET_RX
         );
 
-        // Deregister NIC driver.
-        crate::dev::driver_cell::deregister_nic_driver(NIC_TID);
+        // Clear the NIC route.
+        crate::dev::driver_cell::deregister_all_for(NIC_TID);
+        crate::dev::driver_cell::reset_nic_routes();
         release_for(NIC_TID);
         release_for(OTHER_TID);
     }

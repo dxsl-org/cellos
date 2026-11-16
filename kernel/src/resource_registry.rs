@@ -343,20 +343,37 @@ fn ecam_claim_admitted(
     inside && !ram.any(|(start, ram_end)| base < ram_end && start < end)
 }
 
-/// Check if `[base, base + len)` falls inside the platform's DWC2 host controller MMIO window.
-pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
+/// The platform's DWC2 host controller aperture `(base, size)`, if it has one.
+fn dwc2_aperture() -> Option<(usize, usize)> {
     #[cfg(target_arch = "aarch64")]
     if let Some(dwc2) =
         <hal::aarch64::backend::Board as hal::aarch64::backend::ArmResources>::DWC2_WINDOW
     {
-        return len > 0
-            && base >= dwc2.base
+        return Some((dwc2.base, dwc2.size));
+    }
+    None
+}
+
+/// Check if `[base, base + len)` falls inside the platform's DWC2 host controller MMIO window.
+pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
+    dwc2_aperture().is_some_and(|(dwc2_base, dwc2_size)| {
+        len > 0
+            && base >= dwc2_base
             && base
                 .checked_add(len)
-                .is_some_and(|end| end <= dwc2.base + dwc2.size);
-    }
-    let _ = (base, len);
-    false
+                .is_some_and(|end| end <= dwc2_base + dwc2_size)
+    })
+}
+
+/// Base of the DWC2 aperture when task `tid` owns a window inside it: the
+/// one device the aperture is, whatever sub-window its driver claimed.
+pub fn dwc2_aperture_owned_by(tid: usize) -> Option<usize> {
+    let (base, _) = dwc2_aperture()?;
+    REGISTRY
+        .lock()
+        .values()
+        .any(|region| region.owner_tid == tid && region.class == CLASS_DWC2)
+        .then_some(base)
 }
 
 /// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding `UsbDriverCap`.

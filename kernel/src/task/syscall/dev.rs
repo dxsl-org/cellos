@@ -98,11 +98,11 @@ pub(super) fn caller_has_mmio_device(caller_id: usize, device: u8) -> bool {
 
 /// 423: authorize and publish the USB HID event producer role.
 ///
-/// Deliberately separate from [`register_driver_service`]: that helper accepts
-/// either `PcieDriverCap` or `UsbDriverCap` and publishes the singleton NIC
-/// role. A USB host cell on a PC that already has e1000/virtio-net must hold
-/// only `UsbDriverCap` and must never overwrite `service::NIC_DRIVER`, so this
-/// path checks `usb_driver_cap` alone and publishes `service::USB_HID_PRODUCER`.
+/// Deliberately separate from [`register_nic_driver`]: that path accepts
+/// either `PcieDriverCap` or `UsbDriverCap` and binds a NIC route. A USB host
+/// cell on a PC that already has e1000/virtio-net must hold only
+/// `UsbDriverCap` and must never take `service::NIC_DRIVER`, so this path
+/// checks `usb_driver_cap` alone and publishes `service::USB_HID_PRODUCER`.
 pub(super) fn register_usb_hid_producer_role(caller_id: usize) -> Result<usize, SyscallError> {
     let scheduler = crate::task::SCHEDULER.lock();
     let authorized = scheduler
@@ -233,54 +233,65 @@ pub(super) fn system_power(_caller_id: usize, action: usize) -> SyscallResult {
     }
 }
 
-pub(super) fn register_driver_service(
-    caller_id: usize,
-    service_id: u16,
-    publish_role: fn(usize),
-    rollback_role: fn(usize),
-) -> Result<usize, SyscallError> {
-    let scheduler = crate::task::SCHEDULER.lock();
-    let authorized = scheduler
-        .as_ref()
-        .and_then(|scheduler| {
+/// 417: bind the NIC route of the one network device the caller owns.
+///
+/// Checks in order, each before any effect: a live PcieDriverCap/UsbDriverCap
+/// caller (`PermissionDenied`), then exactly one owned network device
+/// ([`owned_network_device`](crate::dev::driver_cell::owned_network_device):
+/// none or several is `PermissionDenied`), then the route slot under
+/// `ROLE_PUBLICATION` (a refusal is `PermissionDenied`). The route's key is
+/// that device, so 417 keeps no arguments. Only the primary route publishes
+/// `service::NIC_DRIVER`.
+///
+/// Ownership is read without SCHEDULER held, as in
+/// [`register_block_device_route`], and the caller's `(cell, generation)` is
+/// read under SCHEDULER held through the publication.
+pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
+    let live_driver = |scheduler: &Option<crate::task::Scheduler>| {
+        scheduler.as_ref().and_then(|scheduler| {
             let rights = scheduler.cell_rights(caller_id);
-            Some((scheduler.tasks.get(&caller_id)?, rights))
+            let task = scheduler.tasks.get(&caller_id)?;
+            ((rights.pcie_driver || rights.usb_driver)
+                && !matches!(&task.state, TaskState::Retiring | TaskState::Terminated))
+            .then_some((task.cell_id.0, task.cell_generation))
         })
-        .is_some_and(|(task, rights)| {
-            (rights.pcie_driver || rights.usb_driver)
-                && !matches!(
-                    &task.state,
-                    crate::task::tcb::TaskState::Retiring | crate::task::tcb::TaskState::Terminated
-                )
-        });
-    if !authorized {
+    };
+    if live_driver(&crate::task::SCHEDULER.lock()).is_none() {
         return Err(SyscallError::PermissionDenied);
     }
 
-    // The identity is read under the same scheduler lock that authorized the
-    // caller, so the published binding names an incarnation the kernel can stand
-    // behind. A task with no live Cell identity is refused rather than recorded
-    // as an unbindable route.
-    let Some((cell_id, generation)) = scheduler
-        .as_ref()
-        .and_then(|s| s.tasks.get(&caller_id))
-        .map(|task| (task.cell_id.0, task.cell_generation))
-    else {
-        return Err(SyscallError::InvalidInput);
-    };
+    let (key, virtio_irq) =
+        crate::dev::driver_cell::owned_network_device(caller_id).map_err(|error| {
+            log::warn!(
+                "[driver_cell] NIC registration refused: tid={} owns {} network device",
+                caller_id,
+                match error {
+                    crate::dev::driver_cell::NicDeviceError::None => "no",
+                    crate::dev::driver_cell::NicDeviceError::Several => "more than one",
+                }
+            );
+            SyscallError::PermissionDenied
+        })?;
 
-    let published = crate::dev::driver_cell::publish_role_or_rollback(
-        caller_id,
-        publish_role,
-        || crate::cell::service_registry::register(service_id, caller_id, cell_id, generation),
-        rollback_role,
+    let scheduler = crate::task::SCHEDULER.lock();
+    let Some((cell_id, generation)) = live_driver(&scheduler) else {
+        return Err(SyscallError::PermissionDenied);
+    };
+    let published = crate::dev::driver_cell::publish_nic_route(
+        key,
+        (caller_id, cell_id, generation),
+        virtio_irq,
+        || {
+            crate::cell::service_registry::register(
+                abi::syscall::service::NIC_DRIVER,
+                caller_id,
+                cell_id,
+                generation,
+            )
+        },
     );
     drop(scheduler);
-    if published {
-        Ok(0)
-    } else {
-        Err(SyscallError::InvalidInput)
-    }
+    published.map(|_| 0).ok_or(SyscallError::PermissionDenied)
 }
 
 /// 416: bind the route of the block device the caller owns.
@@ -538,16 +549,6 @@ pub(super) fn register_block_driver(
     reserved: (usize, usize),
 ) -> SyscallResult {
     register_block_device_route(caller_id, kind, id, reserved)
-}
-
-/// Handler for `Syscall::RegisterNicDriver` (extracted from the dispatcher).
-pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
-    register_driver_service(
-        caller_id,
-        abi::syscall::service::NIC_DRIVER,
-        crate::dev::driver_cell::register_nic_driver,
-        crate::dev::driver_cell::deregister_nic_driver,
-    )
 }
 
 /// Handler for `Syscall::RegisterUsbHidProducer` (extracted from the dispatcher).

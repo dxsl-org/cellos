@@ -836,15 +836,15 @@ rationale = "Fixed array of MAX_BLOCK_ROUTES slots under one IRQ-masking spinloc
 review = "kernel/src/dev/driver_cell.rs:publish_block_route; kernel/src/dev/driver_cell.rs:block_route_record; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/task/syscall/mod.rs:register_block_device_route; kernel/src/sched/scheduler.rs:exit_task"
 
 [[global]]
-key = "kernel::dev::driver_cell::NIC_DRIVER_STATE"
+key = "kernel::dev::driver_cell::NIC_ROUTES"
 lifetime = "per-cell"
 mutation = "spinlock"
-owner = "dev::driver_cell; (owner_tid, proven virtio IRQ) pair written by the RegisterNicDriver syscall, cleared by deregister_all_for, read by owns_registered_nic_irq from vi_handle_virtio_irq"
+owner = "dev::driver_cell; per-device NIC routes (key = the caller's one owned network device, provider (tid, cell, generation), proven VirtIO line) and the primary index, written by the RegisterNicDriver syscall (publish_nic_route), cleared by deregister_all_for, read by owns_registered_nic_irq from the x86 MSI and riscv64/aarch64 VirtIO ISRs"
 contexts = ["normal", "irq"]
-seal = "none: replaced on every RegisterNicDriver"
-retirement = "Scheduler::exit_task -> deregister_all_for -> deregister_nic_driver empties it when owner_tid matches the dead tid"
-rationale = "The owner and IRQ are published together under one IRQ-masking spinlock, so a reader sees both or neither (fail closed during replacement), and the ISR reader on aarch64/riscv64 cannot deadlock against a same-CPU holder. On x86_64 the ISR reader is unreachable; accessors are the syscall (under SCHEDULER -> ROLE_PUBLICATION) and exit_task teardown, which can run in the timer/IPI ISR via yield_cpu."
-review = "kernel/src/dev/driver_cell.rs:register_nic_driver; kernel/src/dev/driver_cell.rs:deregister_nic_driver; kernel/src/dev/driver_cell.rs:owns_registered_nic_irq; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:exit_task"
+seal = "none: a route is rebound on every RegisterNicDriver of its device"
+retirement = "Scheduler::exit_task -> deregister_all_for -> clear_nic_route_provider clears the provider, line and primary of every route naming the dead tid; keys stay for the boot"
+rationale = "Fixed array of MAX_NIC_ROUTES slots under one IRQ-masking spinlock, no allocation, so the ISR reader copies it out and checks each route's own lines after releasing it. A route's provider and proven line are written together, so a reader sees both or neither (fail closed during replacement). Lock order SCHEDULER -> ROLE_PUBLICATION -> NIC_ROUTES, released before the primary's service-registry publication and re-taken only for its rollback; teardown takes it under ROLE_PUBLICATION and can run in the timer/IPI ISR via yield_cpu."
+review = "kernel/src/dev/driver_cell.rs:publish_nic_route; kernel/src/dev/driver_cell.rs:clear_nic_route_provider; kernel/src/dev/driver_cell.rs:owns_registered_nic_irq; kernel/src/arch/x86_64/dev/pcie_msi.rs:on_msi; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:exit_task"
 
 [[global]]
 key = "kernel::dev::driver_cell::GPU_DRIVER_CELL"
@@ -876,7 +876,7 @@ owner = "dev::driver_cell; serializes role-state publication (publish_role_or_ro
 contexts = ["normal", "irq"]
 seal = "none: taken on every registration and every task exit for the whole run"
 retirement = "never: lives for the whole run; it is the lock the retirement path itself takes"
-rationale = "Fixed order SCHEDULER -> ROLE_PUBLICATION -> service registry / role leaves on both sides; because Spinlock::lock masks interrupts, exit_task reached from the timer/IPI ISR via yield_cpu cannot self-deadlock. Work under it is bounded (one MMIO device-id read and a log line in register_nic_driver)."
+rationale = "Fixed order SCHEDULER -> ROLE_PUBLICATION -> service registry / role leaves on both sides; because Spinlock::lock masks interrupts, exit_task reached from the timer/IPI ISR via yield_cpu cannot self-deadlock. Work under it is bounded (route-table updates, one service-registry publication and log lines in publish_nic_route)."
 review = "kernel/src/dev/driver_cell.rs:publish_role_or_rollback; kernel/src/dev/driver_cell.rs:deregister_all_for; kernel/src/sched/scheduler.rs:1620; kernel/src/sync.rs:Spinlock::lock"
 
 [[global]]
