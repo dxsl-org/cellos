@@ -1378,8 +1378,8 @@
   "kernel_security_backing_inventory": {
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
-    "entry_count": 10,
-    "inventory_digest": "1c8f586bfae2a1120308fc0ffaa68209a4c1cf573f796175d290ea1907c16953",
+    "entry_count": 11,
+    "inventory_digest": "58f2436748e2886cd171897fdec6d2a1e127585a34324edc6c477c19500c28df",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1417,6 +1417,13 @@
           "user-buffer validation primitives"
         ],
         "sha256": "256c25961bf2a403be68f4bb364be132df727817be17f898811afbfa45f9de07"
+      },
+      {
+        "path": "kernel/src/task/syscall/grant.rs",
+        "roles": [
+          "grant-teardown lock ordering for the GetRandom write"
+        ],
+        "sha256": "b3d4d8a302bd81a878dae83d5e6c48a4bfd015188a9f0e6e74c35015f393416d"
       },
       {
         "path": "kernel/src/task/syscall/ipc.rs",
@@ -1462,6 +1469,7 @@
       "kernel/src/dev/virtio_rng.rs",
       "kernel/src/task/syscall/decode.rs",
       "kernel/src/task/syscall/fs.rs",
+      "kernel/src/task/syscall/grant.rs",
       "kernel/src/task/syscall/ipc.rs",
       "kernel/src/task/syscall/misc.rs",
       "kernel/src/task/syscall/mod.rs",

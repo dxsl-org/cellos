@@ -23,6 +23,7 @@ REQUIRED_KERNEL_SECURITY_PATHS = {
     "kernel/src/dev/virtio_rng.rs",
     "kernel/src/task/syscall/decode.rs",
     "kernel/src/task/syscall/fs.rs",
+    "kernel/src/task/syscall/grant.rs",
     "kernel/src/task/syscall/ipc.rs",
     "kernel/src/task/syscall/misc.rs",
     "kernel/src/task/syscall/mod.rs",
