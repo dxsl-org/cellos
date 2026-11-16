@@ -1,7 +1,7 @@
 ---
 phase: 18
 title: "Driver model and Tier-1 TCB perimeter"
-status: pending
+status: in-progress
 priority: P2
 effort: "8–12d"
 dependencies: [5, 12]

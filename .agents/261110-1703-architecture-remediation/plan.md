@@ -43,7 +43,7 @@ lock: CELL-CONTRACT-0024 (file-bounded exception required per slice)
 | 15 | [x86-64 Tier-2 parity](phase-15-x86-tier2-parity.md) — completed 2026-11-14 ([evidence](reports/phase-15-evidence.md)); the S7b handoff is closed | S7 | 14 | — | |
 | 16 | [Frame ownership and shootdown contract](phase-16-frame-ownership.md) — completed 2026-11-15 ([evidence](reports/phase-16-evidence.md)); the S7c handoff is closed and S7 closes | S7 | 15 | — | ✓ |
 | 17 | [Quota ownership, Tier-3 charging, shared-root hardening](phase-17-quota-shared-root.md) — completed 2026-11-16 ([evidence](reports/phase-17-evidence.md)); the S8 handoff for Phase 17 is closed | S8 hardening | 16 | — | |
-| 18 | [Driver model and Tier-1 TCB perimeter](phase-18-driver-model-tcb.md) | S8 | 05, 12 | — | |
+| 18 | [Driver model and Tier-1 TCB perimeter](phase-18-driver-model-tcb.md) — in progress ([S8b handoff](s8b-handoff-approval.md) approved 2026-11-16) | S8 | 05, 12 | — | |
 | 19 | [Spec reconciliation, hygiene and closure](phase-19-closure.md) | S8 | all | — | ✓ |
 
 ## Dependencies and order
