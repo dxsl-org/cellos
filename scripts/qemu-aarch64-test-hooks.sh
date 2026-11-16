@@ -521,6 +521,10 @@ if [[ "$DEVELOPMENT_SILO" != "1" ]]; then
 fi
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     REQUIRED_MARKERS+=(
+        # The EL2 host cannot program a private root, so `enable_for_boot` must
+        # refuse the posture (`kernel/src/loader/domain_admission.rs`, EL2 branch)
+        # and the boot must say so (`kernel/src/main.rs`).
+        "Tier 2 admission: DISABLED (development profile, phase-02 switch-ordering gate)"
         "[silo] DEV_REFERENCE ready and registered; accepting only live KMS"
         "[kms] DEV_REFERENCE Silo TLS signature self-verified"
         "[silo-test] PASS: direct live Silo purpose frame denied"
