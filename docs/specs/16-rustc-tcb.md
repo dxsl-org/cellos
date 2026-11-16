@@ -167,7 +167,7 @@ current per-crate tally. Do not restate the tally here (Spec 21 §2, Layer 3).
 
 - Cell code outside the reviewed allowlist (`#![forbid(unsafe_code)]`) — verified *by* the
   TCB, not *part of* it. Allowlisted `unsafe` in Tier-1 Cells (driver MMIO/DMA, the
-  hypervisor service, test witnesses, the two tier exceptions) is a reviewed hole, counted
+  hypervisor service, test witnesses, the signed tier exceptions) is a reviewed hole, counted
   in the Tier-1 total of the closure baseline.
 - C/C++/Zig code runs in Tier 2 (manifest class FFI or UNTRUSTED, Spec 18): the tier-class
   gate (F1c) refuses to sign a crate with a `c-ffi` or `legacy-raw-ptr` allowlist entry

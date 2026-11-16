@@ -348,8 +348,11 @@ class TierClassTests(unittest.TestCase):
         allow = allowlist.load(REPO_ROOT)
         self.assertEqual(
             set(allow.tier_exceptions),
-            {("service-net", "legacy-raw-ptr"), ("service-compositor", "legacy-raw-ptr")},
+            {("service-net", "legacy-raw-ptr"), ("service-compositor", "legacy-raw-ptr"),
+             ("driver-bcm-display", "legacy-raw-ptr")},
         )
+        for exception in allow.tier_exceptions.values():
+            self.assertEqual(exception.entry.approver, "lungmat8 (owner, S8b approval 2026-11-16)")
 
 
 class SignRefusesTierMismatchTests(unittest.TestCase):

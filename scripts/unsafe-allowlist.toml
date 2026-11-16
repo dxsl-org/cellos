@@ -433,12 +433,12 @@ tracking = "P18 review 2026-11-16 (HIGH 3): 90-day re-review"
 
 [[file]]
 path = "cells/drivers/bcm-display/src/main.rs"
-class = "driver-mmio"
-reason = "Driver Cell: construct slice from GpuFlush raw pointer payload in single address space. Re-reviewed 2026-11-16: one `unsafe` site (main.rs:107), `slice::from_raw_parts(data_ptr, data_len)` over a pointer and length read from an OP_FLUSH IPC message that the kernel sends on the compositor's behalf as sender TID 0; the handler checks only non-null and that ptr+len does not overflow, so mapping and lifetime rest on the Tier-1 shared-address-space contract with the compositor. This is a cross-cell raw pointer, the same shape the compositor's Grant blit is classed `legacy-raw-ptr` for; kept `driver-mmio` pending an owner decision (P18 review follow-up)."
+class = "legacy-raw-ptr"
+reason = "Driver Cell: construct slice from GpuFlush raw pointer payload in single address space. Re-reviewed 2026-11-16: one `unsafe` site (main.rs:107), `slice::from_raw_parts(data_ptr, data_len)` over a pointer and length read from an OP_FLUSH IPC message that the kernel sends on the compositor's behalf as sender TID 0; the handler checks only non-null and that ptr+len does not overflow, so mapping and lifetime rest on the Tier-1 shared-address-space contract with the compositor. A cross-cell raw pointer, not MMIO: reclassified from `driver-mmio` to `legacy-raw-ptr` (owner, 2026-11-16); the crate's Tier-1 placement is the [[tier_exception]] below."
 approver = "cellos-maintainers"
 date = "2026-08-23"
 review_by = "2027-02-14"
-tracking = "P18 review 2026-11-16 (HIGH 3): 90-day re-review"
+tracking = "P18 review 2026-11-16 (HIGH 3): 90-day re-review; class corrected 2026-11-16"
 
 [[file]]
 path = "cells/guests/silo-guest/src/mailbox.rs"
@@ -781,7 +781,7 @@ date = "2026-09-21"
 [[crate]]
 name = "driver-bcm-display"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/bcm-display/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-16: the crate root cannot forbid unsafe because mailbox.rs (2 DmaBuf word copies), lib.rs (1 volatile framebuffer pixel write) and main.rs (1 slice over the GpuFlush pointer) hold the crate's 4 `unsafe` sites; no other module has any."
+reason = "Owns allowlisted unsafe under cells/drivers/bcm-display/ — see the [[file]] entries (mailbox.rs and lib.rs `driver-mmio`, main.rs `legacy-raw-ptr`) for the justification. Re-reviewed 2026-11-16: the crate root cannot forbid unsafe because mailbox.rs (2 DmaBuf word copies), lib.rs (1 volatile framebuffer pixel write) and main.rs (1 slice over the GpuFlush pointer) hold the crate's 4 `unsafe` sites; no other module has any."
 approver = "cellos-maintainers"
 date = "2026-08-23"
 review_by = "2027-02-14"
@@ -954,3 +954,13 @@ approver = "lungmat8 (owner, S8b approval 2026-11-16)"
 date = "2026-11-16"
 review_by = "2027-02-14"
 tracking = "Phase 18 Deviation Log 2026-11-16 (owner): signed tier exception"
+
+[[tier_exception]]
+crate = "driver-bcm-display"
+class = "legacy-raw-ptr"
+manifest = "LEGACY"
+reason = "Raspberry Pi 3 VideoCore display driver, shipped in the Pi 3 desktop image (scripts/make-hypervisor-fs-rpi3.sh) beside service-compositor; its tier-less manifest loads it in Tier 1. main.rs:107 forms a slice with `slice::from_raw_parts` over the pointer and length of a GpuFlush (OP_FLUSH) message that the kernel relays from the compositor as sender TID 0; the handler checks only non-null and no overflow, so the mapping and its lifetime are the compositor's, trusted through the Tier-1 shared address space. Exit: receive the frame as a leased Grant (as the compositor's own blit does) or a bounded copy, then drop the class."
+approver = "lungmat8 (owner, S8b approval 2026-11-16)"
+date = "2026-11-16"
+review_by = "2027-02-14"
+tracking = "Phase 18 Deviation Log 2026-11-16 (owner): signed tier exception (S8b: tier mismatches become signed exceptions)"
