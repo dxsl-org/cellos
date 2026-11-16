@@ -357,8 +357,8 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 - `docs/specs/00-context.md:10` — `✅` in: - ✅ **YES** Cellular architecture with bounded, kernel-copied IPC messages; zero-copy only through page-level Grants
 - `docs/specs/00-context.md:11` — `✅` in: - ✅ **YES** Rust type system for Tier 1 isolation; Tier 2 private roots and Tier 3 VMs add hardware isolation ([ADR-0015
-- `docs/specs/00-context.md:176` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
-- `docs/specs/00-context.md:178` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
+- `docs/specs/00-context.md:177` — `LOC` in: | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
+- `docs/specs/00-context.md:179` — `LOC` in: | `libs/abi` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 - `docs/specs/04-hardware.md:127` — `LOC` in: > Not planned: Mellanox mlx5 (100K+ LOC), Bluetooth/WiFi, USB xHCI before G2, full ACPI, audio.
 - `docs/specs/05-application.md:113` — `LOC` in: - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
 - `docs/specs/05-application.md:151` — `✅` in: | Memory | `malloc/free/realloc/calloc` | ✅ Done (AllocHeader, 16-byte align) |
