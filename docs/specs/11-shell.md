@@ -47,7 +47,7 @@ Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file
 
 ### 🛠️ Chiến thuật cho dev và Agent (Áp dụng các Luật)
 
-1. **Luật 5 (No `mod.rs`)**: Shell phải nằm trong `cells\apps\shell`. *(Cập nhật 2026-11-16: shell hiện là Cellbox tại `cells/tools/cellbox`; Luật 5 đã là historical, xem Spec 00.)*
+1. ~~**Luật 5 (No `mod.rs`)**: Shell phải nằm trong `cells\apps\shell`.~~ *(Cập nhật 2026-11-16: không có lệnh cấm `mod.rs` — git track 41 file `mod.rs` của dự án (ngoài `third_party/`) và không có CI lint, clippy lint hay script nào kiểm tra; module mới nên dùng `foo.rs` + `foo/` nhưng đó chỉ là guideline ([code-standards Law 5](../code-standards.md), Spec 00 Luật 5). Shell hiện là Cellbox tại `cells/tools/cellbox`.)*
 2. **Luật 6 (Naming)**: Mọi interface giao tiếp với Kernel phải dùng tiền tố `Vi` (ví dụ: `ViSyscall`).
 3. **Luật 8 (Resource)**: Cấm dùng `String` hay `Vec` vô tội vạ cho việc parse lệnh. Hãy dùng `&str` và split bằng iterator để giảm áp lực cho Heap của robot nano.
 4. ~~**Luật 8 (Borrowing)**: Khi Shell thực hiện lệnh cat, nó sẽ nhận về một Box<[u8]> từ VFS. Theo Luật 8, Shell nên mượn (borrow) dữ liệu này để in ra UART thay vì copy sang một buffer trung gian, tận dụng tối đa lợi thế của Single Address Space (SAS).~~ *(Historical 2026-11-16: một `Box` không thể đi từ VFS sang Cellbox vì mỗi Cell có heap riêng; Cellbox nhận byte do kernel copy vào buffer của chính nó, xem §1 và Spec 00 Luật 2.)*
