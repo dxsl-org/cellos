@@ -8,14 +8,16 @@ and the [Cellbox CLI design](../cellbox-cli.md); its
 ceilings with deferred items. The shell is now Cellbox at `cells/tools/cellbox` (`5043e2cf59`).
 The old tiny-shell recommendations below do not override that accepted design.
 
-**Code check (2026-11-16):** the "no copy" claims below (§1 borrowing from the VFS page cache,
-§3 zero-copy loading, the `Box<[u8]>` borrow in strategy item 4, and the `ls` flow) do not
-match the code. Shell, VFS and drivers are separate Cells with separate heaps; data crosses
-them as kernel-copied IPC messages (Spec 00 Law 2, Spec 17). The `ls` flow section is
-corrected; the rest is kept as the historical sketch.
+**Code check (2026-11-16):** the "no copy" claims in this sketch (§1 borrowing from the VFS
+page cache, §3 zero-copy loading, the `Box<[u8]>` borrow in strategy item 4, and the `ls`
+flow) do not match the code. Shell, VFS and drivers are separate Cells with separate heaps;
+data crosses them as kernel-copied IPC messages (Spec 00 Law 2, Spec 17). §1, §3, item 4
+and the `ls` flow carry dated notes on what the code does; the rest is the historical sketch.
 
 
 ### 1. Giai đoạn 1: Built-in Commands (Tier 1 Cell)
+
+> **Historical (2026-11-16).** Shell hiện là Cellbox (`cells/tools/cellbox`): một Tier 1 Cell (manifest LEGACY, `scripts/unsafe-allowlist.toml` entry `app-cellbox`) là một file ELF riêng, được `init` khởi chạy (`cells/tools/init/src/pin_gate.rs:22`), không phải code nạp thẳng vào kernel. Nó có bộ lệnh multicall lớn hơn nhiều so với 4 lệnh dưới đây (`cells/tools/cellbox/src/executor.rs`). `cat` **không** mượn Page Cache của VFS: dữ liệu đến qua reply IPC hoặc `sys_read_cap` (`libs/ostd/src/fs.rs:110-111`), cả hai đều do kernel copy vào buffer của Cellbox (Spec 00 Luật 2).
 
 Mày đừng coi Shell là một file ELF nằm trên đĩa vội. Hãy để nó là một **Tier 1 Native Cell** được nạp thẳng vào SAS.
 
@@ -35,10 +37,12 @@ Biến Shell thành công cụ "hành hạ" Trap Handler mày vừa viết.
 
 ### 3. Giai đoạn 3: External ELF Execution (The Real Test)
 
+> **Cập nhật 2026-11-16 theo code.** Cellbox chạy chương trình ngoài bằng `sys_spawn_from_path` (`cells/tools/cellbox/src/executor.rs:2902-2932`, `libs/ostd/src/syscall.rs:576`), không qua `ViVmRuntime` — trait đó (`libs/abi/src/vm.rs:99`) là giao diện VM Tier 3 và chỉ có implementor trong test. Việc nạp **có copy**: sau khi VFS lên, ELF được đọc từ VFS vào một Grant (`libs/ostd/src/syscall.rs:577-584`), rồi loader copy từng segment `PT_LOAD` vào frame mới (`kernel/src/loader/elf.rs:369-373`); không ánh xạ trực tiếp file từ RAM Disk.
+
 Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file ELF từ `/bin/`.
 
-* **Sức mạnh của `Vi` prefix**: Lúc này Shell sẽ gọi `ViVmRuntime` để yêu cầu Kernel tạo một không gian thực thi mới cho ứng dụng.
-* **Zero-copy Loading**: Nhờ SAS, Shell chỉ cần gửi đường dẫn file, Kernel (Loader) sẽ ánh xạ (map) trực tiếp file đó từ RAM Disk vào vùng thực thi mà không cần copy dữ liệu.
+* ~~**Sức mạnh của `Vi` prefix**: Lúc này Shell sẽ gọi `ViVmRuntime` để yêu cầu Kernel tạo một không gian thực thi mới cho ứng dụng.~~
+* ~~**Zero-copy Loading**: Nhờ SAS, Shell chỉ cần gửi đường dẫn file, Kernel (Loader) sẽ ánh xạ (map) trực tiếp file đó từ RAM Disk vào vùng thực thi mà không cần copy dữ liệu.~~
 
 
 ### 🛠️ Chiến thuật cho dev và Agent (Áp dụng các Luật)
@@ -46,7 +50,7 @@ Khi cái Shell nội bộ đã ổn, lúc đó mới làm tính năng nạp file
 1. **Luật 5 (No `mod.rs`)**: Shell phải nằm trong `cells\apps\shell`. *(Cập nhật 2026-11-16: shell hiện là Cellbox tại `cells/tools/cellbox`; Luật 5 đã là historical, xem Spec 00.)*
 2. **Luật 6 (Naming)**: Mọi interface giao tiếp với Kernel phải dùng tiền tố `Vi` (ví dụ: `ViSyscall`).
 3. **Luật 8 (Resource)**: Cấm dùng `String` hay `Vec` vô tội vạ cho việc parse lệnh. Hãy dùng `&str` và split bằng iterator để giảm áp lực cho Heap của robot nano.
-4. **Luật 8 (Borrowing)**: Khi Shell thực hiện lệnh cat, nó sẽ nhận về một Box<[u8]> từ VFS. Theo Luật 8, Shell nên mượn (borrow) dữ liệu này để in ra UART thay vì copy sang một buffer trung gian, tận dụng tối đa lợi thế của Single Address Space (SAS).
+4. ~~**Luật 8 (Borrowing)**: Khi Shell thực hiện lệnh cat, nó sẽ nhận về một Box<[u8]> từ VFS. Theo Luật 8, Shell nên mượn (borrow) dữ liệu này để in ra UART thay vì copy sang một buffer trung gian, tận dụng tối đa lợi thế của Single Address Space (SAS).~~ *(Historical 2026-11-16: một `Box` không thể đi từ VFS sang Cellbox vì mỗi Cell có heap riêng; Cellbox nhận byte do kernel copy vào buffer của chính nó, xem §1 và Spec 00 Luật 2.)*
 
 
 ### Luồng chạy của lệnh `ls` trong Shell (Kết nối 3 khu vực)
