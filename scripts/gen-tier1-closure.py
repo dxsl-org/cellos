@@ -27,10 +27,14 @@ Refusals (the generator exits non-zero):
   * a `cells/` crate reached from a Tier-1 root reads as Tier 2: the tier gate
     exempts it and the cells total leaves it out, so its `unsafe` would reach a
     Tier-1 cell unseen;
-  * a closure crate `include!`s build-script output from `OUT_DIR` while its
-    build script, or any in-tree build-dependency, spells a counted token
-    (`unsafe`, `no_mangle`, `export_name`, `link_section`, `global_asm`)
-    anywhere, string literals included: generated code is not on disk to count;
+  * a closure crate has a build script and an `include!` whose argument is not
+    a plain string literal (`concat!(env!("OUT_DIR"), …)`, `env!("GEN_RS")`, a
+    macro variable: a computed path can name build output that is not on disk
+    to count), while its build script or any build-dependency, in-tree or
+    third-party (with their normal deps), spells a counted token (`unsafe`,
+    `no_mangle`, `export_name`, `link_section`, `global_asm`) anywhere, string
+    literals included — unless REVIEWED_GENERATED_INCLUDES records a review of
+    that exact build script (sha256);
   * a Tier-1 cell outside the workspace and outside NON_MEMBER_CELLS.
 
 Output: the Tier-1 roots, the in-tree non-cell packages they link (the signer
@@ -52,6 +56,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import functools
+import hashlib
 import json
 import re
 import subprocess
@@ -79,8 +84,24 @@ NON_MEMBER_CELLS = {
     "2026-11-10): not wired, never packaged",
 }
 
-_OUT_DIR_INCLUDE = re.compile(r"\binclude!\s*\([^;]*?\bOUT_DIR\b", re.DOTALL)
+# `include!` with any argument: the argument is a literal exactly when it reduces
+# to whitespace once strings are blanked (`include!("x.rs")` → `include!( )`).
+_INCLUDE = re.compile(r"\binclude\s*!\s*([(\[{])")
 _COUNTED_WORD = re.compile(r"\b(?:unsafe|no_mangle|export_name|link_section|global_asm)\b")
+
+# Closure crates whose build inputs spell a counted token although the code they
+# `include!` from the build script cannot hold one: name@version → (sha256 of the
+# build script as reviewed, what was checked). An edit of the build script, a new
+# version, or an entry that no longer matches a flagged crate fails the generator.
+REVIEWED_GENERATED_INCLUDES: dict[str, tuple[str, str]] = {
+    "service-silo@0.1.0": (
+        "10e1f7a08eb23c0a8f6355c10d44b889d1bdcc6a67bf15e2909e2a1952aa1395",
+        "P18 re-review 2026-11-16: build.rs writes silo-guest.bin (include_bytes!, data) and "
+        "one generated line, `pub const GUEST_SHA256: [u8; 32] = {digest:?};`, formatted from "
+        "a [u8; 32]; build.rs spells no counted token. The hits are the host-side SIMD code of "
+        "its build-dependency sha2, which computes the digest and emits nothing.",
+    ),
+}
 
 
 def metadata(target: str) -> dict:
@@ -114,10 +135,19 @@ def registry_counts(package_dir: Path) -> tcb.Counts:
 
 
 @functools.cache
-def _includes_out_dir(package_dir: Path) -> list[Path]:
-    files = tcb.linked_sources(package_dir, list(package_dir.rglob("*.rs")))
-    return [p for p in files
-            if _OUT_DIR_INCLUDE.search(p.read_text(encoding="utf-8", errors="replace"))]
+def _nonliteral_includes(package_dir: Path) -> tuple[str, ...]:
+    """`file: argument` for every `include!` in the package's linked sources whose
+    argument is not a plain string literal (`concat!(env!("OUT_DIR"), …)`,
+    `env!("GEN_RS")`, a macro variable): its path is computed, so it can name
+    build-script output that is not on disk to count."""
+    hits = []
+    for path in tcb.linked_sources(package_dir, list(package_dir.rglob("*.rs"))):
+        code = scan.read_code(path)
+        for match in _INCLUDE.finditer(code):
+            argument = tier_class._arguments(code, match.start(1)).strip().rstrip(",").strip()
+            if argument:
+                hits.append(f"{path.name}: include!({' '.join(argument.split())})")
+    return tuple(hits)
 
 
 def _spelt_tokens(files: list[Path]) -> list[str]:
@@ -170,7 +200,8 @@ def build() -> str:
     third: dict[tuple[str, str, str], Path] = {}
     macros: set[tuple[str, str, str]] = set()
     errors: list[str] = []
-    out_dir_users: dict[str, tuple[Path, list[Path]]] = {}  # label → (package dir, build files)
+    # label → (non-literal includes, build script files, all build inputs)
+    generated_includes: dict[str, tuple[tuple[str, ...], list[Path], list[Path]]] = {}
 
     for target, meta in metas.items():
         packages = {p["id"]: p for p in meta["packages"]}
@@ -179,23 +210,32 @@ def build() -> str:
         def directory_of(pkg: dict) -> str | None:
             return _rel(Path(pkg["manifest_path"]).parent, repo)
 
-        def build_inputs(pid: str) -> list[Path]:
-            """The package's build.rs plus the sources of its in-tree build-dependencies."""
+        def build_inputs(pid: str) -> tuple[list[Path], list[Path]]:
+            """(the package's build script files, those plus the linked sources of
+            every build-dependency, in-tree or third-party, and of their normal deps)."""
             pkg = packages[pid]
-            files = [Path(t["src_path"]) for t in pkg["targets"] if "custom-build" in t["kind"]]
+            scripts: list[Path] = []
+            for build_target in pkg["targets"]:
+                if "custom-build" in build_target["kind"]:
+                    script = Path(build_target["src_path"])
+                    # A build script in its own directory may have modules there.
+                    root = Path(pkg["manifest_path"]).parent
+                    scripts += [script] if script.parent == root else sorted(
+                        script.parent.rglob("*.rs"))
+            files = list(scripts)
             stack = [d["pkg"] for d in nodes[pid]["deps"]
                      if any(k["kind"] == "build" for k in d["dep_kinds"])]
             seen: set[str] = set()
             while stack:
                 dep = stack.pop()
-                if dep in seen or packages[dep]["source"] is not None:
+                if dep in seen:
                     continue
                 seen.add(dep)
                 dep_dir = Path(packages[dep]["manifest_path"]).parent
-                files += [p for p in dep_dir.rglob("*.rs") if "target" not in p.parts]
+                files += tcb.linked_sources(dep_dir, list(dep_dir.rglob("*.rs")))
                 stack += [d["pkg"] for d in nodes[dep]["deps"]
                           if any(k["kind"] is None for k in d["dep_kinds"])]
-            return files
+            return scripts, files
 
         stack = []
         root_ids = set()
@@ -232,17 +272,32 @@ def build() -> str:
                 source = pkg["source"] or f"path+{Path(pkg['manifest_path']).parent}"
                 third[(pkg["name"], pkg["version"], source)] = Path(pkg["manifest_path"]).parent
             package_dir = Path(pkg["manifest_path"]).parent
-            if _includes_out_dir(package_dir):
-                out_dir_users[f"{pkg['name']}@{pkg['version']}"] = (package_dir, build_inputs(pid))
+            has_build_script = any("custom-build" in t["kind"] for t in pkg["targets"])
+            if has_build_script and _nonliteral_includes(package_dir):
+                generated_includes[f"{pkg['name']}@{pkg['version']}"] = (
+                    _nonliteral_includes(package_dir), *build_inputs(pid))
             for dep in nodes[pid]["deps"]:
                 if any(k["kind"] is None for k in dep["dep_kinds"]):
                     stack.append(dep["pkg"])
 
-    for label, (package_dir, inputs) in sorted(out_dir_users.items()):
+    needed: set[str] = set()
+    for label, (includes, scripts, inputs) in sorted(generated_includes.items()):
         spelt = _spelt_tokens(inputs)
-        if spelt:
-            errors.append(f"{label} include!s OUT_DIR output, and its build inputs spell counted "
-                          f"tokens the scan cannot see in the generated code: {spelt[:5]}")
+        if not spelt:
+            continue
+        needed.add(label)
+        reviewed = REVIEWED_GENERATED_INCLUDES.get(label)
+        digest = hashlib.sha256(b"".join(p.read_bytes() for p in scripts)).hexdigest()
+        if reviewed is None:
+            errors.append(f"{label} has a build script and include!s a computed path "
+                          f"({includes[0]}), and its build inputs spell counted tokens the "
+                          f"scan cannot see in generated code: {spelt[:5]} — make the include a "
+                          "literal path, or review it into REVIEWED_GENERATED_INCLUDES")
+        elif reviewed[0] != digest:
+            errors.append(f"{label}: its build script changed since the review in "
+                          f"REVIEWED_GENERATED_INCLUDES (sha256 now {digest}) — re-review it")
+    for label in sorted(set(REVIEWED_GENERATED_INCLUDES) - needed):
+        errors.append(f"REVIEWED_GENERATED_INCLUDES lists {label}, which no longer needs it")
 
     unresolved = dict(NON_MEMBER_CELLS)
     for name, directory in sorted(cells.items()):

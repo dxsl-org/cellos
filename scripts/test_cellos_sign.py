@@ -1089,10 +1089,12 @@ class GeneratorTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def build(self, files: dict[str, str], packages: list[dict], edges: dict[str, list[str]]):
+    def build(self, files: dict[str, str], packages: list[dict], edges: dict[str, list[str]],
+              build_edges: dict[str, list[str]] | None = None, reviewed: dict | None = None):
         import copy
         gen = self.generator()
         packages = copy.deepcopy(packages)
+        build_edges = build_edges or {}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             for rel, text in files.items():
@@ -1106,11 +1108,13 @@ class GeneratorTests(unittest.TestCase):
             meta = {"packages": packages,
                     "workspace_members": [p["id"] for p in packages if p["source"] is None],
                     "resolve": {"nodes": [{"id": p["id"], "deps": [
-                        {"pkg": d, "dep_kinds": [{"kind": None}]} for d in edges.get(p["id"], [])]}
-                        for p in packages]}}
+                        {"pkg": d, "dep_kinds": [{"kind": None}]} for d in edges.get(p["id"], [])
+                    ] + [{"pkg": d, "dep_kinds": [{"kind": "build"}]}
+                         for d in build_edges.get(p["id"], [])]} for p in packages]}}
             with mock.patch.object(gen, "REPO", root), \
                  mock.patch.object(gen, "metadata", return_value=meta), \
-                 mock.patch.object(gen, "NON_MEMBER_CELLS", {}):
+                 mock.patch.object(gen, "NON_MEMBER_CELLS", {}), \
+                 mock.patch.object(gen, "REVIEWED_GENERATED_INCLUDES", reviewed or {}):
                 return gen.build()
 
     CELL_A = {"cells/a/Cargo.toml": '[package]\nname = "a"\nversion = "0.1.0"\n',
@@ -1128,17 +1132,69 @@ class GeneratorTests(unittest.TestCase):
             self.build(files, packages, {"a": ["b"]})
         self.assertIn("cells/b (b) reads as Tier 2", str(raised.exception))
 
-    def test_an_out_dir_include_with_unsafe_in_the_build_script_fails(self):
+    BUILD_RS = 'fn main() { write("pub unsafe fn g() {}"); }\n'
+
+    def lib_l(self, lib_rs: str, build_rs: str = BUILD_RS) -> tuple[dict, list]:
         files = dict(self.CELL_A, **{
             "libs/l/Cargo.toml": '[package]\nname = "l"\nversion = "0.1.0"\n',
-            "libs/l/src/lib.rs": 'include!(concat!(env!("OUT_DIR"), "/gen.rs"));\n',
-            "libs/l/build.rs": 'fn main() { write("pub unsafe fn g() {}"); }\n'})
+            "libs/l/src/lib.rs": lib_rs, "libs/l/build.rs": build_rs})
         packages = [dict(self.PKG_A), {"id": "l", "name": "l", "dir": "libs/l", "targets": [
             {"kind": ["lib"], "name": "l", "src_path": "libs/l/src/lib.rs"},
             {"kind": ["custom-build"], "name": "build-script-build", "src_path": "libs/l/build.rs"}]}]
+        return files, packages
+
+    def test_a_computed_include_with_unsafe_in_the_build_script_fails(self):
+        # P18 re-review LOW: any non-literal include! argument, not only OUT_DIR.
+        for include in ('include!(concat!(env!("OUT_DIR"), "/gen.rs"));',
+                        'include!(env!("GEN_RS"));',
+                        'macro_rules! inc { ($p:expr) => { include!($p); } }\ninc!("x.rs");'):
+            with self.subTest(include=include):
+                files, packages = self.lib_l(include + "\n")
+                with self.assertRaises(SystemExit) as raised:
+                    self.build(files, packages, {"a": ["l"]})
+                self.assertIn("l@0.1.0 has a build script and include!s a computed path",
+                              str(raised.exception))
+
+    def test_a_literal_include_or_no_build_script_is_not_flagged(self):
+        files, packages = self.lib_l('include!("gen.rs");\n')
+        files["libs/l/src/gen.rs"] = ""
+        self.assertIn('[[package]]\nname = "l"', self.build(files, packages, {"a": ["l"]}))
+        files, packages = self.lib_l('include!(concat!(env!("CARGO_MANIFEST_DIR"), "/x.rs"));\n')
+        packages[1]["targets"].pop()  # no build script: nothing can be generated
+        self.assertIn('[[package]]\nname = "l"', self.build(files, packages, {"a": ["l"]}))
+
+    def test_a_third_party_build_dependency_counts_as_a_build_input(self):
+        files, packages = self.lib_l('include!(concat!(env!("OUT_DIR"), "/gen.rs"));\n',
+                                     build_rs="fn main() { gen::emit(); }\n")
+        files["reg/gen/src/lib.rs"] = 'pub fn emit() { out("#[no_mangle] fn x() {}"); }\n'
+        packages.append({"id": "gen", "name": "gen", "dir": "reg/gen",
+                         "source": "registry+https://github.com/rust-lang/crates.io-index"})
         with self.assertRaises(SystemExit) as raised:
-            self.build(files, packages, {"a": ["l"]})
-        self.assertIn("l@0.1.0 include!s OUT_DIR output", str(raised.exception))
+            self.build(files, packages, {"a": ["l"]}, build_edges={"l": ["gen"]})
+        self.assertIn("reg/gen/src/lib.rs: no_mangle", str(raised.exception))
+
+    def test_a_reviewed_generated_include_is_pinned_to_its_build_script(self):
+        import hashlib
+        files, packages = self.lib_l('include!(concat!(env!("OUT_DIR"), "/gen.rs"));\n')
+        digest = hashlib.sha256(self.BUILD_RS.encode()).hexdigest()
+        text = self.build(files, packages, {"a": ["l"]}, reviewed={"l@0.1.0": (digest, "ok")})
+        self.assertIn('[[package]]\nname = "l"', text)
+        with self.assertRaises(SystemExit) as raised:
+            self.build(files, packages, {"a": ["l"]}, reviewed={"l@0.1.0": ("0" * 64, "old")})
+        self.assertIn("l@0.1.0: its build script changed since the review", str(raised.exception))
+        files, packages = self.lib_l('include!("gen.rs");\n')
+        files["libs/l/src/gen.rs"] = ""
+        with self.assertRaises(SystemExit) as raised:
+            self.build(files, packages, {"a": ["l"]}, reviewed={"l@0.1.0": (digest, "ok")})
+        self.assertIn("REVIEWED_GENERATED_INCLUDES lists l@0.1.0, which no longer needs it",
+                      str(raised.exception))
+
+    def test_the_real_reviewed_entries_match_their_build_scripts(self):
+        import hashlib
+        gen = self.generator()
+        silo = REPO_ROOT / "cells/services/silo/build.rs"
+        self.assertEqual(gen.REVIEWED_GENERATED_INCLUDES["service-silo@0.1.0"][0],
+                         hashlib.sha256(silo.read_bytes()).hexdigest())
 
     def test_clean_closure_records_bins_pins_and_proc_macros(self):
         files = dict(self.CELL_A, **{"reg/dep/src/lib.rs": "pub fn d() { unsafe { } }\n",

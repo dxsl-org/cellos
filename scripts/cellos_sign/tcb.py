@@ -42,9 +42,10 @@ Counting: every git-tracked `.rs` file the package owns (deepest package
 directory wins), except the package's top-level `tests/`, `benches/`,
 `examples/` and `build.rs`, which never link into a cell. `#[cfg(test)]`
 modules inside `src/` are counted: the rule cannot see `cfg`. Code a build
-script writes to `OUT_DIR` is not on disk to count; the generator fails if a
-closure crate `include!`s `OUT_DIR` output while its build script (or an
-in-tree build-dependency) spells any counted token.
+script writes is not on disk to count; the generator fails if a closure crate
+with a build script `include!`s a computed (non-literal) path while its build
+script or any build-dependency, in-tree or third-party, spells a counted token,
+unless a review of that exact build script is recorded in the generator.
 """
 
 from __future__ import annotations
