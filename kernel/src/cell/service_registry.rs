@@ -359,33 +359,39 @@ pub fn clear_tid(tid: usize) {
 }
 
 /// Re-point `service_id` from provider `from_tid` to `to = (tid, cell_id,
-/// generation)` in place: only a row that still names `from_tid` changes, so a
-/// racing re-registration is never overwritten. The row keeps its map slot,
-/// so nothing is allocated (exit teardown, which may run in an ISR, calls
-/// it); it takes `to`'s identity with no flags and no pause, as
+/// generation)` in place: only an active row that still names `from_tid`
+/// changes, so a racing re-registration is never overwritten. The row keeps
+/// its map slot, so nothing is allocated (exit teardown, which may run in an
+/// ISR, calls it); it takes `to`'s identity with no flags and no pause, as
 /// [`register`] would write it. `false`, with nothing changed, when no row of
-/// `service_id` names `from_tid` or `to` names tid 0.
+/// `service_id` names `from_tid`, the row is paused, or `to` names tid 0.
+///
+/// A paused row belongs to a hot swap in flight: only [`commit_paused`] moves
+/// it, and [`clear_tid`] removes it when its provider dies, so the swap's
+/// commit then fails instead of publishing over a re-pointed row.
 pub(crate) fn repoint(service_id: u16, from_tid: usize, to: (usize, u64, u64)) -> bool {
     let (tid, cell_id, generation) = to;
     if tid == 0 {
         return false;
     }
-    let mut map = REGISTRY.lock();
-    let Some(entry) = map
-        .get_mut(&service_id)
-        .filter(|entry| entry.tid == from_tid)
-    else {
-        return false;
-    };
-    *entry = ServiceEntry {
-        tid,
-        cell_id,
-        generation,
-        flags: 0,
-        paused: false,
-    };
+    {
+        let mut map = REGISTRY.lock();
+        let Some(entry) = map
+            .get_mut(&service_id)
+            .filter(|entry| entry.tid == from_tid && !entry.paused)
+        else {
+            return false;
+        };
+        *entry = ServiceEntry {
+            tid,
+            cell_id,
+            generation,
+            flags: 0,
+            paused: false,
+        };
+    }
     log::info!(
-        "[service-registry] {} -> tid {} (cell {} gen {}), re-pointed from dead tid {}",
+        "[service-registry] {} -> tid {} (cell {} gen {}), re-pointed from tid {}",
         service_id,
         tid,
         cell_id,
@@ -393,6 +399,28 @@ pub(crate) fn repoint(service_id: u16, from_tid: usize, to: (usize, u64, u64)) -
         from_tid
     );
     true
+}
+
+/// Remove `service_id`'s row while it is active and names `tid`: a live
+/// provider that lost the authority behind the row (a runtime capability
+/// revoke). A paused row is left for its hot swap, as in [`repoint`]. Frees
+/// at most one map node, never allocates. `false` when nothing was removed.
+pub(crate) fn remove_active(service_id: u16, tid: usize) -> bool {
+    let removed = {
+        let mut map = REGISTRY.lock();
+        let named = map
+            .get(&service_id)
+            .is_some_and(|entry| entry.tid == tid && !entry.paused);
+        named && map.remove(&service_id).is_some()
+    };
+    if removed {
+        log::info!(
+            "[service-registry] {} removed: tid {} lost its authority",
+            service_id,
+            tid
+        );
+    }
+    removed
 }
 
 /// `(service_id, tid, paused, flags)` for every row.
@@ -463,6 +491,33 @@ mod tests {
             "the old tid's teardown misses it"
         );
         clear_tid(NEW);
+    }
+
+    /// A paused row is mid hot-swap: neither re-pointed nor removed by the
+    /// NIC route paths, so `commit_paused` still finds it at the source; its
+    /// provider's death still removes it.
+    #[test]
+    fn a_paused_row_is_neither_repointed_nor_removed() {
+        const TEST_SERVICE: u16 = 60_021;
+        const OLD: usize = 0x6_0211;
+        const NEW: usize = 0x6_0212;
+        const SWAP: usize = 0x6_0213;
+        register(TEST_SERVICE, OLD, CELL, GEN);
+        assert!(pause(TEST_SERVICE, OLD));
+        assert!(!repoint(TEST_SERVICE, OLD, (NEW, CELL, GEN)));
+        assert!(!remove_active(TEST_SERVICE, OLD));
+        assert!(paused_matches(TEST_SERVICE, OLD), "still paused at OLD");
+        assert!(commit_paused(TEST_SERVICE, OLD, SWAP, CELL, GEN + 1));
+        assert_eq!(lookup_bound(TEST_SERVICE), Some((SWAP, CELL, GEN + 1)));
+
+        assert!(!remove_active(TEST_SERVICE, OLD), "another provider");
+        assert!(remove_active(TEST_SERVICE, SWAP));
+        assert_eq!(lookup(TEST_SERVICE), None);
+
+        register(TEST_SERVICE, OLD, CELL, GEN);
+        assert!(pause(TEST_SERVICE, OLD));
+        clear_tid(OLD);
+        assert!(!paused_matches(TEST_SERVICE, OLD), "death removes it");
     }
 
     #[test]
