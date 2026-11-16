@@ -1,7 +1,7 @@
 ---
 phase: 19
 title: "Spec reconciliation, hygiene and closure"
-status: pending
+status: in-progress
 priority: P3
 effort: "5–7d"
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
@@ -99,4 +99,5 @@ Hand back to the portfolio: remaining open items of the 2026-11-05 security audi
 
 ## Deviation Log
 
-None.
+- **Decision (2026-11-16, owner, S8c defaults).** [Approval](s8c-handoff-approval.md): staged and continuing; failing `main` lanes are diagnosed, fixed if a small local fix resolves them, otherwise recorded as residuals for written acceptance; `.agents/` retention is report-only; the allowlist re-review wave (every entry due before 2027-03-01) is in this phase.
+- **Surprise.** Spec number 00 is also duplicated (`00-context.md`, `00-fork.md`), not only 14. Tracked `.agents/` Markdown has grown to 204,227 lines (193k at review).
