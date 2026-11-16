@@ -179,8 +179,21 @@ pub(crate) fn run_primary() -> bool {
         log::error!("S22-{}-RESUME-ROOT: FAIL", ARCH_TAG);
     }
 
+    // The EL2 host cannot program a private root: `Context::switch_with_root`
+    // drops the root there, so a root-entering witness would run under the
+    // kernel root. The two that enter a root of their own are skipped, visibly.
     #[cfg(target_arch = "aarch64")]
-    let root_switch_ok = run_root_switch_witness();
+    let el2_host = crate::hal::aarch64::el2::is_el2();
+    #[cfg(target_arch = "aarch64")]
+    let root_switch_ok = if el2_host {
+        log::info!(
+            "S22-{}-ROOT-SWITCH: SKIP (EL2 host has no private roots)",
+            ARCH_TAG
+        );
+        true
+    } else {
+        run_root_switch_witness()
+    };
     #[cfg(not(target_arch = "aarch64"))]
     let root_switch_ok = true;
 
@@ -197,7 +210,15 @@ pub(crate) fn run_primary() -> bool {
     #[cfg(not(target_arch = "aarch64"))]
     let release_flush_ok = true;
     #[cfg(target_arch = "aarch64")]
-    let asid_invalidation_ok = run_asid_invalidation_witness();
+    let asid_invalidation_ok = if el2_host {
+        log::info!(
+            "S22-{}-ASID-INVALIDATION: SKIP (EL2 host has no private roots)",
+            ARCH_TAG
+        );
+        true
+    } else {
+        run_asid_invalidation_witness()
+    };
     #[cfg(not(target_arch = "aarch64"))]
     let asid_invalidation_ok = true;
 

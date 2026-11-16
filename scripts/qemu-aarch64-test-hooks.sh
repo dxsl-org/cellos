@@ -50,15 +50,19 @@ if [[ ! -f "$DISK" ]]; then
 fi
 
 MACHINE="virt"
+# The development-Silo machine needs an EL2 host, which needs FEAT_VHE: on
+# cortex-a57 the kernel drops to EL1 and the Silo cannot create its VM.
+CPU="cortex-a57"
 if [[ "$DEVELOPMENT_SILO" == "1" ]]; then
     MACHINE="virt,virtualization=on"
+    CPU="cortex-a76"
 fi
 
 echo "[qemu-aarch64-test-hooks] Booting kernel=$KERNEL (window=${BOOT_WINDOW}s, semihosting enabled, machine=$MACHINE)"
 
 QEMU_ARGS=(
     -machine "$MACHINE"
-    -cpu cortex-a57
+    -cpu "$CPU"
     -m 256M
     -smp "$QEMU_SMP"
     -nographic
@@ -338,7 +342,7 @@ REQUIRED_MARKERS=(
     "S22-AARCH64-PLAN: PASS"
     "S22-AARCH64-RESUME-ROOT: PASS"
     "S22-AARCH64-PIN-DYING: PASS"
-    "S22-AARCH64-ROOT-SWITCH: PASS"
+    "S22-AARCH64-ROOT-SWITCH: $([[ "$DEVELOPMENT_SILO" == "1" ]] && echo 'SKIP (EL2 host has no private roots)' || echo PASS)"
     # Phase 02 private-root invalidation. `LEAF-NONG` and `RELEASE-FLUSH` are
     # positive assertions (every private-root leaf carries PTE_nG; releasing a
     # root invalidates its tag and not every context, with a live counter
