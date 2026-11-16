@@ -401,18 +401,18 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/13-peripherals.md:78` — `✅` in: - ✅ **`ViPwm`** (`hal/traits/pwm/src/lib.rs`) — `set_frequency`/`set_duty`/`enable`/`disable`/`tick`. Bit-bang over GPIO
 - `docs/specs/13-peripherals.md:79` — `✅` in: - ✅ **`ViAdc`** (`hal/traits/adc/src/lib.rs`) — `read_raw`/`max_value`/`num_channels`/`to_millivolts`. Simulation driver
 - `docs/specs/13-peripherals.md:80` — `✅` in: - ✅ **`ViCan`** (`hal/traits/can/src/lib.rs`) — `configure`/`send_frame`/`recv_frame` + `CanFrame` type. Loopback driver
-- `docs/specs/13-peripherals.md:171` — `✅` in: | **Soft-RT** | UART RX, sensor định kỳ, telemetry | **Async Waker Dispatch** (spec 04 §3): kernel top-half ack+`wake()`
-- `docs/specs/13-peripherals.md:172` — `✅` in: | **Hard-RT chu kỳ** | PID loop, software PWM, bit-bang, quadrature | **Pinned-poll**: `spawn_pinned` Cell đọc data regi
-- `docs/specs/13-peripherals.md:210` — `✅` in: - **v1 gate tạm qua ELF manifest (Phase 30 ✅ đã xong)**: Cell khai báo cap `gpio`/`uart` trong
-- `docs/specs/13-peripherals.md:219` — `✅` in: 1. ✅ `ostd::mmio::MmioRegion` + bounds-check.
-- `docs/specs/13-peripherals.md:220` — `✅` in: 2. ✅ Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
-- `docs/specs/13-peripherals.md:221` — `✅` in: 3. ✅ Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), `cells/drivers/serial` (PL011).
-- `docs/specs/13-peripherals.md:222` — `✅` in: 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
-- `docs/specs/13-peripherals.md:223` — `✅` in: 5. ✅ ELF-manifest cap gating (gpio/uart).
-- `docs/specs/13-peripherals.md:224` — `✅` in: 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
-- `docs/specs/13-peripherals.md:225` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest 
-- `docs/specs/13-peripherals.md:226` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap
-- `docs/specs/13-peripherals.md:228` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
-- `docs/specs/13-peripherals.md:229` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
-- `docs/specs/13-peripherals.md:230` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
+- `docs/specs/13-peripherals.md:174` — `✅` in: | **Soft-RT** | UART RX, sensor định kỳ, telemetry | **Async Waker Dispatch** (spec 04 §3): kernel top-half ack+`wake()`
+- `docs/specs/13-peripherals.md:175` — `✅` in: | **Hard-RT chu kỳ** | PID loop, software PWM, bit-bang, quadrature | **Pinned-poll**: `spawn_pinned` Cell đọc data regi
+- `docs/specs/13-peripherals.md:213` — `✅` in: - **v1 gate tạm qua ELF manifest (Phase 30 ✅ đã xong)**: Cell khai báo cap `gpio`/`uart` trong
+- `docs/specs/13-peripherals.md:222` — `✅` in: 1. ✅ `ostd::mmio::MmioRegion` + bounds-check.
+- `docs/specs/13-peripherals.md:223` — `✅` in: 2. ✅ Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
+- `docs/specs/13-peripherals.md:224` — `✅` in: 3. ✅ Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), `cells/drivers/serial` (PL011).
+- `docs/specs/13-peripherals.md:225` — `✅` in: 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
+- `docs/specs/13-peripherals.md:226` — `✅` in: 5. ✅ ELF-manifest cap gating (gpio/uart).
+- `docs/specs/13-peripherals.md:227` — `✅` in: 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
+- `docs/specs/13-peripherals.md:228` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest 
+- `docs/specs/13-peripherals.md:229` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap
+- `docs/specs/13-peripherals.md:231` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
+- `docs/specs/13-peripherals.md:232` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
+- `docs/specs/13-peripherals.md:233` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
 - … 21 more

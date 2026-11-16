@@ -115,8 +115,11 @@ impl MmioRegion {
 - Mọi kiểm tra hỏi cùng một bản ghi:
   - `RequestMmio` chỉ cấp BAR của PCI function cho **owner** của function đó (`claim_window`);
     slot VirtIO/DWC2 cấp cho owner, hoặc cho người claim đầu tiên khi còn trống;
-  - `WaitIrq` (mọi kiến trúc), MSI/MSI-X (435) và ISR VirtIO chỉ chấp nhận line thuộc thiết bị
-    mà caller sở hữu (`irq_owned_by`, `irq_owned_for`);
+  - `WaitIrq` (mọi kiến trúc) và MSI/MSI-X (435) chỉ chấp nhận line thuộc thiết bị mà caller
+    sở hữu (`irq_owned_by`); ISR MSI và VirtIO chỉ báo `NET_RX` cho line của thiết bị đứng sau
+    một route NIC còn sống, do provider của route đó sở hữu (`is_nic_line`: bitmap `NIC_LINES`
+    được ghi lại dưới `DEVICES` mỗi khi provider, owner hay line đổi, và đọc lock-free bằng
+    một atomic load qua `driver_cell::owns_registered_nic_irq`);
   - `GrantDma`, DMA export, 434 và 435 cần caller sở hữu PCI function (`owns_pci`);
   - route block (416) và route NIC (417) cần caller sở hữu thiết bị (`owns`, §5.1).
 - **Release-on-exit (đã implement)**: khi Cell exit/bị kill, `release_mmio_for` hạ các cửa sổ
