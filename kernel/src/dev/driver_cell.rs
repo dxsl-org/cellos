@@ -1016,7 +1016,10 @@ mod tests {
         release_for(A.0, Scope::PcieDriver);
         release_unowned_routes(A.0);
         assert_eq!(nic_route(0), None, "freed device's route unbound");
-        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(1), Some(B)));
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(1), Some(B))
+        );
         assert_eq!(provider_of(0), None, "freed block device unbound");
         assert_eq!(provider_of(1), Some((A.0 as u64, A.1, A.2)), "DWC2 kept");
 
@@ -1030,7 +1033,10 @@ mod tests {
 
         release_for(B.0, Scope::PcieDriver);
         release_unowned_routes(B.0);
-        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(0), Some(C)));
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(0), Some(C))
+        );
         release_for(C.0, Scope::PcieDriver);
         release_unowned_routes(C.0);
         assert_eq!(
@@ -1041,7 +1047,10 @@ mod tests {
 
         assert!(claim_pci(0x5D1, D.0));
         assert_eq!(publish_nic_route(pci(0x5D1), D, publish(D)), Some(1));
-        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(1), Some(D)));
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(1), Some(D))
+        );
 
         for (tid, _, _) in [A, B, C, D] {
             deregister_all_for(tid);
