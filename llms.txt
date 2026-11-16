@@ -155,5 +155,8 @@ The index below retains technical and historical references. Older proposals, ma
 - [Spec 22 — Tier 2 Native Domain Cell Implementation Gate (ADR)](docs/specs/22-native-domain-cell-implementation-gate.md)
 - [Spec 23 — Native SDK Contract](docs/specs/23-native-sdk-contract.md)
 - [Spec 24 — Unified Native AI Inference Architecture](docs/specs/24-ai-inference-architecture.md)
+- [Spec 25 — Cell, Kernel Cell and authority contract](docs/specs/25-cell-kernel-authority-contract.md)
+- [ADR: Signed Canonical Boot Manifest for Root Authority Ceilings](docs/specs/25b-signed-boot-manifest-adr.md)
+- [Spec 26 — Workload placement, load balancing and autoscaling](docs/specs/26-workload-placement-scaling-contract.md)
 - [🛸 Cellos - FORK & REFERENCE STRATEGY](docs/specs/27-fork.md)
 - [Cellos UI Toolkit: ViUI v2](docs/specs/28-viui.md)
