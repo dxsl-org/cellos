@@ -33,6 +33,9 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
         print(f"NOTE: [[file]] {key} no longer contains unsafe — tighten the allowlist")
     for key in result.unused_crate_entries:
         print(f"NOTE: [[crate]] {key} is no longer needed — tighten the allowlist")
+    if result.tier is not None:
+        for label in result.tier.unused_exceptions:
+            print(f"NOTE: [[tier_exception]] {label} covers no mismatch — delete or correct it")
 
     if status.skipped:
         print(f"SKIP: F5 — {status.detail}")
@@ -41,15 +44,28 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
     elif not quiet:
         print(f"OK:   F5 — {status.detail}")
 
-    if result.violations:
+    f1 = [v for v in result.violations if v.layer != "tier-class"]
+    tier = [v for v in result.violations if v.layer == "tier-class"]
+    if f1:
         print("FAIL: F1 — Cells must be #![forbid(unsafe_code)] (Spec 16 §6). Either")
         print("      remove the unsafe / add the attribute, or add a reviewed entry to")
         print("      scripts/unsafe-allowlist.toml with reason, approver and date:")
-        for violation in sorted(result.violations, key=lambda v: (v.layer, v.path)):
+        for violation in sorted(f1, key=lambda v: (v.layer, v.path)):
             print(f"  {violation}")
     elif not quiet:
         print(f"OK:   F1 — {result.crates_scanned} crates and {result.files_scanned} files "
               f"scanned; unsafe confined to {len(result.unsafe_files)} allowlisted files")
+    if tier:
+        print("FAIL: tier class — a crate with a `c-ffi` or `legacy-raw-ptr` allowlist entry")
+        print("      must declare manifest class FFI or UNTRUSTED (Tier 2), or carry a")
+        print("      reviewed [[tier_exception]] in scripts/unsafe-allowlist.toml:")
+        for violation in sorted(tier, key=lambda v: (v.crate, v.detail)):
+            print(f"  {violation}")
+    elif not quiet and result.tier is not None:
+        gated = [r for r in result.tier.records.values() if r.triggers]
+        print(f"OK:   tier class — {len(gated)} crates hold c-ffi/legacy-raw-ptr entries: "
+              f"{sum(r.tier == 2 for r in gated)} Tier 2, "
+              f"{len(result.tier.used_exceptions)} signed tier exception(s)")
 
 
 def run_check(args: argparse.Namespace) -> int:

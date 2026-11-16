@@ -37,7 +37,7 @@ import datetime as _dt
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import scan
+from . import scan, tier_class
 from .allowlist import Allowlist
 
 # Directories whose crates are Cells subject to F1.
@@ -48,7 +48,7 @@ CELL_ROOTS = ["cells"]
 class Violation:
     """One F1 failure, addressed to the developer who must fix it."""
 
-    layer: str  # "attribute" | "token" | "stale" (strict only)
+    layer: str  # "attribute" | "token" | "tier-class" | "stale" (strict only)
     crate: str
     path: str
     detail: str
@@ -66,6 +66,7 @@ class Result:
     unused_file_entries: list[str] = field(default_factory=list)
     unused_crate_entries: list[str] = field(default_factory=list)
     stale_entries: list[str] = field(default_factory=list)
+    tier: tier_class.Outcome | None = None
 
     @property
     def ok(self) -> bool:
@@ -81,7 +82,10 @@ def _crate_of(path: str, owners: list[tuple[str, str]]) -> str:
 
 
 def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: bool = False) -> Result:
-    """Run both F1 layers over `cells/`. Pure source parsing — no build, no network."""
+    """Run both F1 layers and the tier-class gate over `cells/`.
+
+    Pure source parsing — no build, no network.
+    """
     today = today or _dt.date.today()
     repo = repo.resolve()
     result = Result()
@@ -148,6 +152,31 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
             )
     result.unsafe_files = sorted(seen_unsafe)
 
+    # ── Layer 3: tier class ───────────────────────────────────────────────────
+    # A crate with a `c-ffi` or `legacy-raw-ptr` entry must declare a Tier-2
+    # manifest class, or carry a reviewed [[tier_exception]] (tier_class.py).
+    tier = tier_class.evaluate(repo, crates, tracked, allow, lambda p: _crate_of(p, owners))
+    result.tier = tier
+    for crate_name, _klass, detail in tier.mismatches:
+        result.violations.append(
+            Violation(
+                layer="tier-class",
+                crate=crate_name,
+                path=tier.records[crate_name].directory,
+                detail=detail,
+            )
+        )
+    if strict:
+        for label in tier.unused_exceptions:
+            result.violations.append(
+                Violation(
+                    layer="tier-class",
+                    crate=label.split(" ", 1)[0],
+                    path="[[tier_exception]]",
+                    detail=f"{label} covers no mismatch — delete or correct it",
+                )
+            )
+
     # ── Ratchet hygiene (reported, fatal only under --strict for stale entries —
     # the ratchet never loosens itself, but a shrinking list must be visible so
     # it can be tightened) ────
@@ -169,6 +198,23 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
                     # is a path owned by some crate.
                     crate=e.key if e.key in allow.crates else _crate_of(e.key, owners),
                     path=e.key,
+                    detail=f"overdue for re-review: {desc}",
+                )
+            )
+    for x in allow.stale_exceptions(today):
+        desc = (
+            f"[[tier_exception]] {x.label} (approved {x.entry.date}, review_by "
+            f"{x.entry.review_by}"
+            + (f", tracking {x.entry.tracking}" if x.entry.tracking else "")
+            + ")"
+        )
+        result.stale_entries.append(desc)
+        if strict:
+            result.violations.append(
+                Violation(
+                    layer="stale",
+                    crate=x.crate,
+                    path="[[tier_exception]]",
                     detail=f"overdue for re-review: {desc}",
                 )
             )

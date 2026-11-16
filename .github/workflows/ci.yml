@@ -2242,8 +2242,13 @@ jobs:
       - name: Unit-test the gate itself
         run: python3 scripts/test_cellos_sign.py
 
-      - name: Check F1 (forbid + no unsafe outside the allowlist) and F5 (toolchain pin)
+      - name: Check F1 (forbid + no unsafe outside the allowlist), the tier-class gate and F5 (toolchain pin)
         run: python3 scripts/cellos-sign --check --strict
+
+      # The tier-class gate must refuse to sign a crate holding a `c-ffi` entry
+      # with a Tier-1 manifest (Phase 18). Throwaway tree; nothing under cells/.
+      - name: Tier-class negative control
+        run: python3 scripts/check-tier-class.py --negative-control
 
   shell-utils:
     name: Shell Utilities Integration Test (Phase E)

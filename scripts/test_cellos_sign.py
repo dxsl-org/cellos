@@ -80,7 +80,17 @@ class AllowlistTests(unittest.TestCase):
     def test_unknown_field_is_fatal(self):
         with self.assertRaises(allowlist.AllowlistError):
             self.load(GOOD_ENTRY + '\nexpires = "never"\n[[file]]\npath = "p"\n'
-                      'class = "c"\nreason = "r"\napprover = "a"\ndate = "2026-07-01"\n')
+                      'class = "driver-mmio"\nreason = "r"\napprover = "a"\ndate = "2026-07-01"\n')
+
+    def test_unknown_class_is_fatal(self):
+        # A misspelt class would otherwise evade the class-keyed tier gate.
+        with self.assertRaisesRegex(allowlist.AllowlistError, "unknown class"):
+            self.load(GOOD_ENTRY.replace('class = "driver-mmio"', 'class = "c_ffi"', 1))
+
+    def test_every_class_in_the_real_allowlist_is_known(self):
+        allow = allowlist.load(REPO_ROOT)
+        used = {e.klass for e in [*allow.files.values(), *allow.crates.values()]}
+        self.assertLessEqual(used, allowlist.CLASSES)
 
     def test_duplicate_path_is_fatal(self):
         with self.assertRaises(allowlist.AllowlistError):
@@ -153,16 +163,200 @@ class PolicyTests(unittest.TestCase):
             root = self.build(tmp, "fn main() { unsafe { } }\n")
             allow_text = (
                 'version = 1\n'
-                '[[file]]\npath = "cells/x/src/main.rs"\nclass = "c"\nreason = "r"\n'
+                '[[file]]\npath = "cells/x/src/main.rs"\nclass = "driver-mmio"\nreason = "r"\n'
                 'approver = "a"\ndate = "2026-07-01"\n'
-                '[[crate]]\nname = "x"\nclass = "c"\nreason = "r"\n'
+                '[[crate]]\nname = "x"\nclass = "driver-mmio"\nreason = "r"\n'
                 'approver = "a"\ndate = "2026-07-01"\n'
-                '[[file]]\npath = "cells/x/src/gone.rs"\nclass = "c"\nreason = "r"\n'
+                '[[file]]\npath = "cells/x/src/gone.rs"\nclass = "driver-mmio"\nreason = "r"\n'
                 'approver = "a"\ndate = "2026-07-01"\n'
             )
             result = self.check(root, allow_text)
             self.assertTrue(result.ok)
             self.assertEqual(result.unused_file_entries, ["cells/x/src/gone.rs"])
+
+
+def ffi_allowlist(klass: str = "c-ffi", crate: str = "x", extra: str = "") -> str:
+    return (
+        "version = 1\n"
+        f'[[file]]\npath = "cells/{crate}/src/main.rs"\nclass = "{klass}"\nreason = "r"\n'
+        'approver = "a"\ndate = "2026-11-16"\n'
+        f'[[crate]]\nname = "{crate}"\nclass = "{klass}"\nreason = "r"\n'
+        'approver = "a"\ndate = "2026-11-16"\n' + extra
+    )
+
+
+def tier_exception(klass: str = "c-ffi", manifest: str = "LEGACY", review_by: str = "2027-02-14",
+                   crate: str = "x") -> str:
+    return (
+        f'[[tier_exception]]\ncrate = "{crate}"\nclass = "{klass}"\nmanifest = "{manifest}"\n'
+        'reason = "r"\napprover = "a"\ndate = "2026-11-16"\n'
+        + (f'review_by = "{review_by}"\n' if review_by else "")
+    )
+
+
+FFI_CALL = 'extern "C" { fn c_entry() -> i32; }\nfn call() -> i32 { unsafe { c_entry() } }\n'
+TIER_LESS = "abi::declare_manifest!(block_io = false, network = false, spawn = false);\n"
+TIER_FFI = ("abi::declare_manifest!(block_io = false, network = false, spawn = false,\n"
+            "    tier = abi::manifest::PROTECTION_CLASS_FFI);\n")
+
+
+class TierClassTests(unittest.TestCase):
+    """A crate with a c-ffi / legacy-raw-ptr entry must declare a Tier-2 manifest."""
+
+    TODAY = _dt.date(2026, 11, 16)
+
+    def check(self, main_rs: str, allow_text: str, strict: bool = False,
+              extra: dict[str, str] | None = None, cargo: str = "") -> policy.Result:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/x/Cargo.toml",
+                  '[package]\nname = "x"\nversion = "0.1.0"\n' + cargo)
+            write(root, "cells/x/src/main.rs", main_rs)
+            for rel, text in (extra or {}).items():
+                write(root, rel, text)
+            write(root, "a.toml", allow_text)
+            return policy.check(root, allowlist.load(root, "a.toml"), today=self.TODAY,
+                                strict=strict)
+
+    def tier_violations(self, result: policy.Result) -> list[policy.Violation]:
+        return [v for v in result.violations if v.layer == "tier-class"]
+
+    def test_c_ffi_with_a_tier_one_manifest_is_refused(self):
+        result = self.check(TIER_LESS + FFI_CALL, ffi_allowlist())
+        self.assertEqual([(v.crate, v.path) for v in result.violations], [("x", "cells/x")])
+        self.assertIn("reads LEGACY", result.violations[0].detail)
+
+    def test_ffi_and_untrusted_manifests_pass(self):
+        self.assertTrue(self.check(TIER_FFI + FFI_CALL, ffi_allowlist()).ok)
+        untrusted = TIER_FFI.replace("PROTECTION_CLASS_FFI", "PROTECTION_CLASS_UNTRUSTED")
+        self.assertTrue(self.check(untrusted + FFI_CALL, ffi_allowlist()).ok)
+        alias = TIER_FFI.replace("PROTECTION_CLASS_FFI", "TIER_TIER1B_FFI")
+        self.assertTrue(self.check(alias + FFI_CALL, ffi_allowlist()).ok)
+
+    def test_app_entry_tier_is_read(self):
+        main_rs = ("ostd::app_entry!(block_io = false, network = false, spawn = false,\n"
+                   "    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED,\n"
+                   "    handler = |ev, rt| { let _ = (ev, rt); });\n" + FFI_CALL)
+        self.assertTrue(self.check(main_rs, ffi_allowlist()).ok)
+
+    def test_legacy_raw_ptr_without_a_manifest_is_refused(self):
+        # The compositor case: no manifest at all loads as Tier 1.
+        result = self.check(FFI_CALL, ffi_allowlist("legacy-raw-ptr"))
+        self.assertEqual(len(self.tier_violations(result)), 1)
+        self.assertIn("reads ABSENT", result.violations[0].detail)
+
+    def test_other_classes_are_not_gated(self):
+        self.assertTrue(self.check(TIER_LESS + FFI_CALL, ffi_allowlist("driver-mmio")).ok)
+
+    def test_tier_through_a_local_constant_reads_as_tier_one(self):
+        # Fail closed: only the literal abi::manifest path is believed.
+        main_rs = ("const T: u8 = abi::manifest::PROTECTION_CLASS_FFI;\n"
+                   "abi::declare_manifest!(block_io = false, network = false, spawn = false,"
+                   " tier = T);\n" + FFI_CALL)
+        result = self.check(main_rs, ffi_allowlist())
+        self.assertIn("reads UNRECOGNISED", self.tier_violations(result)[0].detail)
+
+    def test_tier_spelled_in_a_comment_or_string_does_not_count(self):
+        main_rs = ("// tier = abi::manifest::PROTECTION_CLASS_FFI\n"
+                   'const S: &str = "declare_manifest!(tier = abi::manifest::PROTECTION_CLASS_FFI)";\n'
+                   + TIER_LESS + FFI_CALL)
+        self.assertEqual(len(self.tier_violations(self.check(main_rs, ffi_allowlist()))), 1)
+
+    def test_a_second_binary_without_a_manifest_keeps_the_crate_in_tier_one(self):
+        result = self.check(TIER_FFI + FFI_CALL, ffi_allowlist(),
+                            extra={"cells/x/src/bin/helper.rs": "fn main() {}\n"})
+        self.assertIn("reads ABSENT+FFI", self.tier_violations(result)[0].detail)
+
+    def test_a_hand_written_manifest_section_reads_as_tier_one(self):
+        main_rs = (TIER_FFI + '#[link_section = "__ViCell_manifest"]\n'
+                   "static M: [u8; 8] = [0; 8];\n" + FFI_CALL)
+        result = self.check(main_rs, ffi_allowlist())
+        self.assertIn("UNRECOGNISED", self.tier_violations(result)[0].detail)
+
+    def test_a_matching_exception_admits_the_crate(self):
+        result = self.check(TIER_LESS + FFI_CALL, ffi_allowlist(extra=tier_exception()),
+                            strict=True)
+        self.assertTrue(result.ok, [str(v) for v in result.violations])
+        self.assertEqual(result.tier.used_exceptions, {("x", "c-ffi")})
+
+    def test_an_exception_for_another_manifest_class_reopens_review(self):
+        result = self.check(FFI_CALL, ffi_allowlist(extra=tier_exception(manifest="LEGACY")))
+        self.assertIn("now reads ABSENT", self.tier_violations(result)[0].detail)
+
+    def test_an_unused_exception_is_a_note_then_a_strict_violation(self):
+        allow_text = ffi_allowlist(extra=tier_exception())
+        relaxed = self.check(TIER_FFI + FFI_CALL, allow_text)
+        self.assertTrue(relaxed.ok)
+        self.assertEqual(relaxed.tier.unused_exceptions, ["x [c-ffi, manifest LEGACY]"])
+        strict = self.check(TIER_FFI + FFI_CALL, allow_text, strict=True)
+        self.assertEqual([v.layer for v in strict.violations], ["tier-class"])
+
+    def test_an_overdue_exception_fails_under_strict(self):
+        allow_text = ffi_allowlist(extra=tier_exception(review_by="2026-11-01"))
+        self.assertTrue(self.check(TIER_LESS + FFI_CALL, allow_text).ok)
+        strict = self.check(TIER_LESS + FFI_CALL, allow_text, strict=True)
+        self.assertEqual([v.layer for v in strict.violations], ["stale"])
+
+    def test_exception_schema_is_strict(self):
+        for bad in (tier_exception(klass="driver-mmio"),
+                    tier_exception(manifest="FFI"),
+                    tier_exception(review_by=""),
+                    tier_exception() + tier_exception()):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as tmp:
+                write(Path(tmp), "a.toml", "version = 1\n" + bad)
+                with self.assertRaises(allowlist.AllowlistError):
+                    allowlist.load(Path(tmp), "a.toml")
+
+    def test_real_tree_exceptions_are_exactly_the_owner_triage(self):
+        allow = allowlist.load(REPO_ROOT)
+        self.assertEqual(
+            set(allow.tier_exceptions),
+            {("service-net", "legacy-raw-ptr"), ("service-compositor", "legacy-raw-ptr")},
+        )
+
+
+class SignRefusesTierMismatchTests(unittest.TestCase):
+    """The real `--sign` path refuses a c-ffi crate with a Tier-1 manifest.
+
+    Only F5 and the signing call are replaced; `policy.check` is the real one.
+    """
+
+    def sign(self, main_rs: str) -> tuple[int, list]:
+        signed: list = []
+        verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
+            write(root, "cells/x/src/main.rs", main_rs)
+            write(root, "a.toml", ffi_allowlist())
+            args = argparse.Namespace(
+                repo=root, allowlist="a.toml", quiet=True, strict=False,
+                targets=["cell.elf"], objcopy="objcopy", seed_hex=None,
+            )
+            with mock.patch.object(cli.toolchain, "check", return_value=verified), \
+                 mock.patch.object(cli.signing, "sign_and_verify",
+                                   side_effect=lambda *a, **k: signed.append(a)), \
+                 mock.patch("sys.stdout", new_callable=__import__("io").StringIO), \
+                 mock.patch("sys.stderr", new_callable=__import__("io").StringIO):
+                return cli.run_sign(args), signed
+
+    def test_tier_one_c_ffi_crate_is_refused_and_nothing_is_signed(self):
+        code, signed = self.sign(TIER_LESS + FFI_CALL)
+        self.assertEqual(code, cli.EXIT_POLICY)
+        self.assertEqual(signed, [])
+
+    def test_the_same_crate_with_an_ffi_manifest_signs(self):
+        code, signed = self.sign(TIER_FFI + FFI_CALL)
+        self.assertEqual(code, cli.EXIT_OK)
+        self.assertEqual(len(signed), 1)
+
+    def test_check_tier_class_negative_control_passes(self):
+        import subprocess
+        run = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts/check-tier-class.py"), "--negative-control"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
 
 class ScannerLiteralTests(unittest.TestCase):

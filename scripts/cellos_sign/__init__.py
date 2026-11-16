@@ -31,6 +31,12 @@ to code (comments and string/char literals removed):
 F1 covers `cells/` only: `libs/*` is trusted TCB, reviewed rather than ratcheted
 (see `policy.py` for the exact boundary and for what `forbid` does not catch).
 
+Tier class (Spec 18 §2.1) — a crate under `cells/` whose allowlist entries
+include class `c-ffi` or `legacy-raw-ptr` must declare manifest class FFI or
+UNTRUSTED, which the kernel loads in Tier 2, unless a reviewed
+`[[tier_exception]]` names it and the manifest class it accepts. The class is
+read from source and fails closed (`tier_class.py`).
+
 False positives are accepted; false negatives are not. The allowlist is the
 escape hatch, and every entry carries a reason, an approver and a date — it is
 an approved hole in the LBI wall and is reviewed as such.
@@ -38,4 +44,4 @@ an approved hole in the LBI wall and is reviewed as such.
 F5 (Spec 16) — the running toolchain matches `rust-toolchain.toml`.
 """
 
-__all__ = ["allowlist", "lexer", "policy", "scan", "signing", "toolchain"]
+__all__ = ["allowlist", "lexer", "policy", "scan", "signing", "tier_class", "toolchain"]

@@ -16,7 +16,14 @@ use ostd::syscall::sys_exit;
 
 use core::ffi::c_void;
 
-abi::declare_manifest!(block_io = false, network = false, spawn = false);
+// Tier 2 like the other C cells: the crate's `c-ffi` allowlist entries require
+// it (cellos-sign tier-class gate).
+abi::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    tier = abi::manifest::PROTECTION_CLASS_FFI
+);
 abi::declare_syscalls![Write, Log, Exit];
 
 // ---------------------------------------------------------------------------

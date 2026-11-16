@@ -1,11 +1,19 @@
 # F1 unsafe allowlist — approved holes in the language-based isolation wall.
 #
 # Consumed by `scripts/cellos-sign` (see `scripts/cellos_sign/__init__.py` for the
-# threat model). Two exemption kinds, checked independently:
+# threat model). Three exemption kinds, checked independently:
 #
-#   [[file]]   this .rs file may contain the `unsafe` keyword (token layer)
-#   [[crate]]  this crate's roots need not carry #![forbid(unsafe_code)]
-#              (attribute layer)
+#   [[file]]            this .rs file may contain the `unsafe` keyword (token layer)
+#   [[crate]]           this crate's roots need not carry #![forbid(unsafe_code)]
+#                       (attribute layer)
+#   [[tier_exception]]  this crate may keep a `c-ffi` / `legacy-raw-ptr` entry while
+#                       its manifest class leaves it in Tier 1 (tier-class gate)
+#
+# `class` is one of: driver-mmio, c-ffi, legacy-raw-ptr, hypervisor, test-harness,
+# test-violation (`scripts/cellos_sign/allowlist.py` CLASSES); any other value is
+# a hard error. A crate whose entries include `c-ffi` or `legacy-raw-ptr` must
+# declare manifest class FFI or UNTRUSTED (Tier 2) unless a [[tier_exception]]
+# names it.
 #
 # Every entry needs `class`, `reason`, `approver`, `date`. Entries that are meant
 # to expire also carry `review_by` and `tracking`; `--check` reports any entry
@@ -908,3 +916,31 @@ class = "test-harness"
 reason = "Host-only (`#[cfg(test)]`, declared in repl_session.rs) regression tests for the REPL's load-error classification: they open a lua_State, run try_eval/is_incomplete on incomplete and malformed chunks and check the outcome and the stack depth. Every call is Lua C API FFI and needs `unsafe`; the tests stay off the printing paths (ostd::io issues a CellOS syscall) and the file is never compiled into a Cell image."
 approver = "cellos-maintainers"
 date = "2026-11-10"
+
+# ── Tier exceptions: Tier-1 crates that keep a c-ffi / legacy-raw-ptr entry ────
+#
+# Each one is a signed triage item: `crate` and `class` name the entry it covers,
+# `manifest` the manifest class it accepts (a change of class re-opens review),
+# and `review_by` is required. An exception that covers no mismatch is reported,
+# and is a violation under --strict, so the list cannot rot. An exception changes
+# nothing in the kernel: the crate keeps its Tier-1 placement and its authority.
+
+[[tier_exception]]
+crate = "service-net"
+class = "legacy-raw-ptr"
+manifest = "LEGACY"
+reason = "Boot network service, shipped in every x86, RISC-V and AArch64 image; holds the network capability (x86 PKU floor TRUSTED_CORE). tls/{dispatch,socket,transport}.rs erase a SocketSet borrow into task-local raw pointers for one poll_future call. Tier 2 needs a domain backend (native-domains + cellos_wide, kernel/src/loader/domain_admission.rs architecture_covered); without one a signed FFI/UNTRUSTED cell is refused, so a reclassification would stop networking on those configurations. Exit: replace the pointer bridge with an owned poll context, then drop the class."
+approver = "dmin"
+date = "2026-11-16"
+review_by = "2027-02-14"
+tracking = "Phase 18 Deviation Log 2026-11-16 (owner): signed tier exception"
+
+[[tier_exception]]
+crate = "service-compositor"
+class = "legacy-raw-ptr"
+manifest = "ABSENT"
+reason = "Desktop compositor, shipped in the x86 desktop and the RISC-V, AArch64 and Pi 3 desktop images; it declares no manifest, so it loads as Tier 1. surface_table/pixels.rs blits from a client Grant through a slice formed right after GrantSlice (leased) resolves it; zero-copy shared-address-space grants are a Tier-1 IPC mechanism (Spec 18). Exit: a safe bounded-copy accessor in ostd, then drop the class."
+approver = "dmin"
+date = "2026-11-16"
+review_by = "2027-02-14"
+tracking = "Phase 18 Deviation Log 2026-11-16 (owner): signed tier exception"
