@@ -1,6 +1,6 @@
 # Cellos Security Model
 
-**Updated:** 2026-10-11 — architecture precedence clarified; dated threat rows below are historical assessments, not fresh security verification.
+**Updated:** 2026-11-16 — § Current enforcement re-read against the code at the close of the architecture remediation plan (`.agents/261110-1703-architecture-remediation/`, Phases 04, 06, 07, 17 and 18). The dated threat rows below remain historical assessments, not fresh security verification.
 
 ## Design Philosophy
 
@@ -28,6 +28,164 @@ The STRIDE tables retain earlier observations and code references. Their status
 labels must be revalidated at the applicable source/profile/runtime ceiling before
 release; they are not a current all-tier or production security PASS.
 
+## Current enforcement (2026-11-16)
+
+This section states the rules the kernel and the signer enforce today, with the code that
+enforces each. The evidence ceiling is host tests plus QEMU (TCG, KVM); nothing here has run
+on physical hardware. The plan's evidence reports are in
+`.agents/261110-1703-architecture-remediation/reports/`.
+
+### Authority: one rights record per Cell incarnation
+
+- **The record.** A Cell's rights are its root task's `Task::rights`
+  (`kernel/src/task/tcb.rs:370`). Every gate reads them through `Scheduler::cell_rights`
+  (`kernel/src/sched/scheduler.rs:572-585`), so all threads of the incarnation see one set.
+  The function returns `CapSet::EMPTY` when the task or its root is gone, or when the root's
+  `(cell_id, cell_generation)` differs from the task's, so a gate fails closed while an
+  incarnation retires. Threads hold no copy.
+- **The incarnation.** Each launch mints a generation with `next_cell_generation`
+  (`kernel/src/task/tcb.rs:534-541`); the counter stops the kernel rather than wrap.
+  `CellAuthority` (`kernel/src/cell/cspace.rs:385-392`) is the CSpace slot arena of one
+  `(CellId, generation)`: BootFS file tickets and the revoke/quiesce flags. It does not hold the
+  rights (`cspace.rs:382-384`). The plan's design put the rights there; Phase 07 kept them on the
+  root TCB instead (phase-07 evidence, § Residual).
+- **Revoke.** `CapRevoke` (syscall 219) narrows the root's record, so a revoke aimed at any thread
+  removes the right from the whole incarnation, and the MMIO, DMA and grant teardown runs for
+  every task of it. While the teardown runs, the mask is already withheld through
+  `Task::revoke_pending` (`tcb.rs:375`, read at `scheduler.rs:584`). One `CapRevoke` runs at a
+  time; a concurrent one is refused and may be retried.
+- **Audit subject.** Authority records (`SyscallDenied`, `CapRevoked`, `CellSpawnDenied` from
+  governed spawn) name the actor as `audit::Subject { cell_id, generation, tid }`
+  (`kernel/src/audit.rs:181-185`). Domain-admission `CellSpawnDenied` still carries no subject.
+- **The catalog.** `kernel/src/catalog.rs` holds one `Cell` row per install path
+  (`catalog.rs:29-40`): the authority the path requests beyond its manifest, its boot ceiling,
+  its child ceiling on a reviewed launch edge, the `trusted_core` flag and a kernel-only
+  guest-memory budget. Every ceiling is per path, never a union. An unknown path has no boot
+  row and gets `CapSet::EMPTY` (`catalog.rs:19-22`). A host test (`kernel/src/catalog_export.rs`)
+  exports the rows to `scripts/catalog.generated.json`, which `scripts/sign-policy.py` reads.
+  `scripts/check-catalog.py` (CI, `.github/workflows/ci.yml:123`) fails when a `/bin` path in
+  `config/services.toml` or a committed image manifest has no row and no stated reason.
+- **Launch edges.** `loader::launch_profile::authorize`
+  (`kernel/src/loader/launch_profile/mod.rs:59`) matches the caller's *launch identity*, and the
+  child's ceiling comes from the edge, not from the caller's own rights. The edges themselves
+  are code in `kernel/src/loader/launch_profile/profiles.rs`, not catalog rows.
+- **Launch identity.** `launch_identity_in` (`kernel/src/task/syscall/spawn.rs:299-317`) returns
+  `"init"` for the trusted init incarnation (`TRUSTED_INIT_TID`,
+  `kernel/src/task/syscall/mod.rs:455`). For any other caller it returns the signed
+  `__ViCell_image` program name of a root whose `launch_named` flag is set
+  (`tcb.rs:306`), else the empty string. The flag is set only when the kernel itself resolved a
+  `/bin/` install path (`catalog::names_launch_identity`, `catalog.rs:705-707`). The alias
+  `/bin/cellbox-ssh` is excluded (`catalog.rs:698`). A task name is never the identity.
+  The same identity gates raw opcode 502 (`RAW_SHUTDOWN_CALLERS`,
+  `kernel/src/task/syscall/dev.rs:53-67`). `/bin/supervisor` checks it for `OP_POWER` and
+  `OP_HOTSWAP` through syscall 441 `ResolveCellImage`.
+- **PCI handout.** Holding `PcieDriverCap` is not enough to claim a function: 418/424 refuse an ID
+  or class outside the caller program's row in `catalog::PCI_DRIVERS` (`catalog.rs:762`,
+  `pci_class_allowed`/`pci_id_allowed` at `catalog.rs:812,820`).
+- **Residuals, owner-accepted.** Launch edges stay code (closure matrix H-2).
+  Device, BDF and service ownership stay keyed by tid (`DeviceRecord.owner`,
+  `kernel/src/dev/ownership.rs:87`); revoking tears down every member of the incarnation, so a
+  thread cannot keep a revoked right. `IDENTITY_ALIASES` is a deny-list. Under the dev posture
+  the signing seed is public, so anyone can sign any program name.
+
+### Posture: one per kernel, refused combinations fail the build
+
+`kernel/src/posture.rs:74-96` derives exactly one posture from the target and the feature set.
+`kernel/build.rs` enforces it, emits `cfg(cellos_posture = "dev" | "test" | "release")`, and
+stops the build with "kernel feature set refused: …" (`kernel/build.rs:434`).
+
+| Posture | Selected by | Cell / policy / owner anchors | Unsigned cell | Bad signature | Absent policy | Owner admission |
+|---|---|---|---|---|---|---|
+| `dev` | the default features (`kernel/Cargo.toml:81`: dev keys, `dev-weak-rng`, `signing-required`, `native-domains`) | public dev seeds | Tier 2 | denied | dev-permissive | permissive |
+| `test` | any set with `test-hooks` and no release anchor | as dev | Tier 2 | denied | dev-permissive | permissive |
+| `release` | `release-posture` (`kernel/Cargo.toml:119`) or `production-relay-image` (`:124`); both carry `release-signing-key` | `CELLOS_RELEASE_{CELL,POLICY,OWNER}_PUBLIC_KEY`, private halves held outside the repository | **denied** (`kernel/src/signing.rs:93-95`) | denied | fail-closed | **enforced** (`kernel/src/admission/gate.rs:24-27`) |
+
+The build refuses:
+
+- a release kernel that also carries any feature in `FORBIDDEN_IN_RELEASE`
+  (`posture.rs:18-34`): dev keys, `dev-weak-rng`, `test-hooks`, `maintenance-mode`,
+  `qemu-dev-https`, private fixture profiles, and measurement features such as `ipc-trace` and
+  `bench-counters`;
+- a release kernel without `signing-required` and `policy-required` (`posture.rs:92-94`);
+- a release kernel whose `CELLOS_RELEASE_{CELL,POLICY,OWNER}_PUBLIC_KEY` is missing, not 32
+  bytes, zero or equal to the dev key (`kernel/build.rs:128-166,402-420`);
+- any bootable 64-bit kernel without `native-domains`, the guarded user-copy boundary; only
+  `compile-only` builds are exempt (`posture.rs:75-80`).
+
+No qualified backend installs an admitted owner slot yet, so a release kernel refuses every
+spawn after init and stops at VFS bootstrap (`scripts/x86/qemu-release-posture-test.sh`). Release
+kernels carry no self-test symbol; `scripts/check-kernel-residents.py` lists every kernel file
+and its Spec 15 category, `test` included (`kernel/residents.toml`).
+`.github/workflows/release.yml` fails when any of the three release-key secrets is empty, and
+`scripts/check-production-relay-image.py` requires `release-signing-key` for relay candidates.
+
+### Tier-1 perimeter
+
+The signer is `scripts/cellos-sign` (package `scripts/cellos_sign/`). CI runs it as
+`--check --strict` (`.github/workflows/ci.yml:2277`), and every `--sign` runs the same checks
+first. It defends against mistakes by trusted developers, not against a hostile holder of the
+signing key (`scripts/cellos_sign/__init__.py:7-19`).
+
+- **F1.** Every crate root under `cells/` carries `#![forbid(unsafe_code)]`, and no `.rs` file
+  there contains `unsafe`, unless `scripts/unsafe-allowlist.toml` lists it. Each entry carries a
+  reason, an approver, a date, a `review_by` date and a class. A stale entry stops `--sign`. The
+  classes are closed to six: `driver-mmio`, `c-ffi`, `legacy-raw-ptr`, `hypervisor`,
+  `test-harness` and `test-violation` (`scripts/cellos_sign/allowlist.py:45-47`).
+- **Tier class.** A crate with a `c-ffi` or `legacy-raw-ptr` entry (`allowlist.py:50`) must
+  declare manifest class FFI or UNTRUSTED, which the kernel loads in Tier 2. The class is read
+  from source (`scripts/cellos_sign/tier_class.py:125`). Before signing, it is read again from
+  each target ELF's `__ViCell_manifest` with the loader's rules (`tier_class.py:249`,
+  `scripts/cellos_sign/elf_manifest.py`). A file with an `extern` block must be classed `c-ffi`,
+  `test-harness` or `test-violation`. `scripts/check-tier-class.py --negative-control` runs the
+  real `--sign` path in CI (`ci.yml:2283`).
+- **Signed tier exceptions.** Three Tier-1 crates may keep a `legacy-raw-ptr` entry, each a
+  `[[tier_exception]]` approved by the owner in the S8b approval and re-confirmed in the Phase 19
+  allowlist wave (`scripts/unsafe-allowlist.toml:1054-1082`):
+  - `service-net` (manifest LEGACY, `review_by` 2027-05-21);
+  - `service-compositor` (no manifest, 2027-05-21);
+  - `driver-bcm-display` (LEGACY, 2027-05-14).
+
+  Each entry names its exit condition.
+- **Closure ratchet.** `scripts/gen-tier1-closure.py` resolves every crate linked into a Tier-1
+  cell with `cargo metadata --all-features` for x86_64, riscv64 and aarch64-softfloat, into
+  `scripts/tier1-closure.generated.toml`. CI checks it for drift (`ci.yml:2294`). Third-party
+  crates and proc-macros are pinned by name, version and source.
+  `scripts/tcb-unsafe-baseline.toml` holds per-file ceilings on `unsafe` tokens and on unsafe
+  attributes (`no_mangle`, `export_name`, `link_section`, `global_asm!`). It also caps the
+  Tier-1 total of cells plus closure: 589 tokens and 37 attributes
+  (`tcb-unsafe-baseline.toml:38-40`). A rise fails. A drop fails CI strict and is a NOTE on
+  `--sign`, until `cellos-sign --write-baseline` (`scripts/cellos_sign/cli.py:206`) lowers the
+  ceiling; it never raises one. `scripts/check-tcb-closure.py --negative-control` runs in CI
+  (`ci.yml:2299`).
+- **Known hole.** A Tier-1 ELF signed under a name that is no `cells/` binary gets only a NOTE
+  from the ELF check; the source gate still checks its crate (Spec 16 F1c,
+  [Spec 18 §2.1](specs/18-cell-trust-tiers.md)).
+
+### Devices, interrupts and DMA
+
+- **One record per device.** `DeviceRecord` (`kernel/src/dev/ownership.rs:83-95`, table
+  `DEVICES` at `:213`) describes a PCI function, a VirtIO MMIO slot or the DWC2 aperture: its
+  owner tid, claimable windows, interrupt lines and DMA domain. MMIO (`RequestMmio`), IRQ (435,
+  `WaitIrq`, the MSI and VirtIO ISRs), DMA (`GrantDma`, DMA export) and route (416/417) checks
+  read it. One `release_for` (`ownership.rs:492`) frees it. A dead owner's records stay owned
+  until its DMA teardown is acknowledged, so no replacement can claim the device while hardware
+  may still reach the old domain (`ownership.rs:11-15`).
+- **Closed in Phase 18.** Only the task that claimed a function through 418/424 can map its BARs.
+  Only a line's device owner can wait on it on riscv64 and aarch64. Only a cell owning exactly one
+  network device can register a NIC route (417). The interrupt-time NIC check is one atomic load
+  of `NIC_LINES` (`ownership.rs:226,545-547`).
+- **NIC routes.** `NIC_ROUTES` (`kernel/src/dev/driver_cell.rs:66-93`) keeps one route per network
+  device. The first live registration is primary; when its provider dies, the next live route is
+  promoted. Only the primary carries traffic (owner decision; concurrent traffic needs an ABI
+  change).
+- **DMA remapper.** One trait, `DmaRemapper` (`kernel/src/dev/iommu.rs:32`), implemented by VT-d
+  (`kernel/src/arch/x86_64/dev/iommu_x86.rs:45`) and the RISC-V IOMMU
+  (`kernel/src/arch/riscv64/dev/iommu_riscv.rs:43`). aarch64 and the 32-bit targets use
+  `NoRemapper` (`iommu.rs:89`, `kernel/src/arch/aarch64/iommu.rs:6`), which refuses every
+  mapping. Teardown quiesces each owned function, revokes and fences its translations, and only
+  then releases frames. An unacknowledged teardown keeps the authority and the frames
+  (`teardown_dma_authority`, `kernel/src/task.rs:1820-1880`).
+
 ## STRIDE Threat Model
 
 ### Spoofing
@@ -35,7 +193,7 @@ release; they are not a current all-tier or production security PASS.
 |--------|-----------|--------|
 | Cell forges another Cell's CellId in IPC | Kernel verifies sender ID from TCB on every message; user cannot inject arbitrary sender values | ✅ Mitigated |
 | Cell guesses a service-local socket CapId | The net service currently allocates predictable CapIds without binding lookup to the caller, so another network-capable Cell may address a live socket owned by a peer | ❌ Open — see [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
-| Malformed ELF binary spawns as a different Cell | ELF header validated before execution; Cell registry assigns IDs monotonically | ✅ Mitigated |
+| Malformed ELF binary spawns as a different Cell | ELF header validated before execution; each launch mints a fresh, never-reused incarnation generation (`next_cell_generation`, `kernel/src/task/tcb.rs:534`) | ✅ Mitigated |
 | Network peer logs in to `/bin/sshd` without a key, or impersonates its host key | `publickey` (`ssh-ed25519`) only, verified over the RFC 4252 §7 input against `/srv/sshd/authorized_keys`; phases enforced per message (anything out of phase disconnects); 5 failures disconnect; 60 s login grace. Host key: a seed persisted at `/srv/sshd/host_ed25519.seed`, generated from kernel entropy on first start; x25519 scalar and KEXINIT cookie fresh per connection; no entropy → no start / no handshake; non-contributory DH refused | 🔶 Partial — key files bound to the measured sshd image (below); spoofable under the dev posture (see Known Limitations) |
 | Another Cell reads the sshd host seed or adds itself to `authorized_keys` | `/srv/sshd/**` is admitted only to a Cell whose **kernel-measured image** is signature-verified and named `sshd` (`cells/services/vfs/src/access/srv-owner.rs`). The kernel records per incarnation the SHA-256 of the admitted bytes, the verifying anchor and the program name from the signed `__ViCell_image` section, which the signer assigns from the artifact name (`service-sshd` → `sshd`); an unsigned image carries no name. VFS asks the kernel (`ResolveCellImage`, syscall 441, registered VFS Cell only) for the exact `(cell, generation)` of each request — never a cached tid, so a stale or respawned generation does not match. Accepted anchors: release, and dev (only a dev-anchor kernel can report it; a release kernel reporting dev does not build). Every other caller is refused read, stat, list, write, append, mkdir, rename (either end), unlink, D03 save and handle traversal; nobody removes the namespace or an ancestor; the interrupt-disabled fast path refuses it outright | ✅ Mitigated under the release anchor; 🔶 dev posture: the dev seed is public, so a Cell that can spawn from bytes can sign an image named `sshd` |
 | Cell drives a NIC driver directly to inject or read raw frames; off-path peer predicts TCP ISNs, DNS ids/source ports or IPv4 ids | The virtio-net, e1000, igb and DWC2 NIC Driver Cells serve Tx/Rx/GetMac only to the tid the kernel's registry names as the live `service::NET` provider, asked per request (`ostd::service::sender_is_live_provider`), and answer anyone else with the failure byte; the LAN9514 front-end attaches only to the registered `NIC_DRIVER` host. service-net seeds smoltcp's `Config::random_seed` and a random-increment ephemeral-port cursor from `GetRandom` at start and refuses to start without entropy (audit H-20/H-21, 2026-11-05) | ✅ Mitigated — a `dev-weak-rng` kernel without hardware entropy serves predictable xorshift bytes |
@@ -80,7 +238,7 @@ release; they are not a current all-tier or production security PASS.
 |--------|-----------|--------|
 | Cell executes privileged instruction (e.g., `wfi`) | Cells run in EL0/Ring3; trap dispatched to kernel | ✅ Mitigated |
 | AArch64 EL0 Cell runs untranslated under an EL2 host (`HCR_EL2.{E2H,TGE} = {0,1}` makes EL0 ignore `SCTLR_EL1.M`) | The QEMU `virt` EL2 host is VHE-only (`{1,1}`, EL2&0 regime with AP/UXN enforced); boot writes `E2H` and reads it back before setting `TGE`, a CPU without FEAT_VHE drops the host to EL1 (EL2 keeps only an SMCCC stub, no hypervisor), and `el2_mmu_init` re-reads `HCR_EL2` before the first Cell (2026-11-05) | ✅ Mitigated — QEMU TCG never showed the flaw (it translates EL0 under `{0,1}`); it applies on silicon/KVM |
-| `#[allow(unsafe_code)]` in a Cell | `scripts/cellos-sign --check --strict` fails CI when a Cell file contains `unsafe` and is not in the reviewed allowlist, and refuses to sign; allowlist entries carry reason/approver/date and are reported once past `review_by` | ✅ Mitigated, with a bounded hole — see `docs/specs/18-cell-trust-tiers.md` §2.1 |
+| `#[allow(unsafe_code)]` in a Cell, or a Tier-1 crate linking new `unsafe` | `scripts/cellos-sign --check --strict` fails CI and refuses to sign when a Cell file contains `unsafe` outside the reviewed allowlist, when a crate with a `c-ffi`/`legacy-raw-ptr` entry would load in Tier 1 without a signed `[[tier_exception]]` (read from source and from the target ELF), or when the Tier-1 closure's `unsafe` count rises above `scripts/tcb-unsafe-baseline.toml` (§ Current enforcement, Tier-1 perimeter) | ✅ Mitigated, with bounded holes — see `docs/specs/18-cell-trust-tiers.md` §2.1 |
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 | Driver/service cell reaches kernel memory or a foreign service id through a narrow cap (`PlatformCap` `RequestMmio`, `SpawnCap` `RegisterService`, `GpuFlush`/`GpuCursor` source pointers) | `RequestMmio`'s PlatformCap path claims only inside the kernel-admitted ECAM window and never over managed RAM; well-known service ids are bound only by trusted init or SupervisorCap holders, a spawn-only cell publishes only a private id it owns; scanout is compositor-only, and the kernel copies the source through the caller's copy view into a pinned GPU-Cell-owned Grant before the hand-off (2026-11-10), so the GPU Cell never reads compositor memory; the framebuffer fallback stages through the view | ✅ Mitigated |
 | Cell programs a Raspberry Pi peripheral it was not granted (DMA engine to kernel RAM, IRQ controller or system timer to stop the tick, EMMC/EMMC2) | Every Pi boot MMIO map is kernel-only (compile-time asserted); `RequestMmio` sets USER on exactly the whole pages inside a granted allowlist window and retirement restores kernel-only; the VideoCore mailbox (0x40 bytes sharing a page with the IRQ controller) is never USER-mapped — the kernel decodes and performs its owner's plain LDR/STR to those bytes (2026-11-06) | ✅ Mitigated — a `DEV_UART` grant on Pi 3 is the whole AUX page, which also holds the kernel's mini-UART console. QEMU virt (riscv64/aarch64) boot MMIO is kernel-only too since 2026-11-08; VirtIO Cells identify their slot through `ProbeVirtioMmio` (442) and claim only it |
@@ -163,8 +321,8 @@ there, wrapping. The boot log says which order is in force: `[va] slot order: ra
   learns another cell's address (from an IPC pointer, a grant, a leak) can reach it. It only
   makes a blind guess likely to land on an unmapped page, which faults and kills the guesser.
 
-### x86-64 Privileged Entry — Hardened (2026-10-31)
-**Severity: Resolved for the entry paths listed; SMAP open**
+### x86-64 Privileged Entry and Supervisor Protections — Hardened (2026-10-31; SMEP/SMAP/UMIP 2026-11-16)
+**Severity: Resolved for the entry paths listed; SMAP scope limited (below)**
 
 Applies to every tier: LBI does not make hardware exception delivery safe.
 
@@ -177,14 +335,23 @@ Applies to every tier: LBI does not make hardware exception delivery safe.
   so a caller's DF reached Rust code. SYSRET restores the caller's flags.
 - **Frame decode.** 64-bit delivery always pushes SS:RSP; the saved RSP is now read for kernel-origin
   entries too.
-- **Opt-in SMEP/UMIP** (`x86-smep`, `x86-umip` features): off by default; a requested protection the
-  CPU lacks refuses boot or AP admission. **SMAP** (`x86-smap`) has the mechanism (CLAC on IDT entry,
-  AC cleared on SYSCALL, `protect::user_access` windows) but no qualifying kernel profile: the SAS
-  kernel writes U=1 pages directly (first site: user-stack zeroing in
-  `Scheduler::spawn_with_stacks_configured`). Enabling it requires migrating those accesses into
-  bounded windows without adding copies.
+- **SMEP, SMAP and UMIP** (2026-11-16, remediation Phase 17). Each bit is set whenever the CPU
+  enumerates it. `x86-<bit>` makes it required, so a CPU without it is refused at boot or AP
+  admission. `x86-no-<bit>` keeps it off (`kernel/Cargo.toml:180-189`). The boot CPU logs
+  `[x86] protection: smep=<s> smap=<s> umip=<s>` (`kernel/src/arch/x86_64/boot.rs:34-57`). The
+  kernel's only STAC is `protect::open_user_access` (`hal/arch/x86/src/x86_64.rs:271-285`),
+  opened with interrupts masked by the user-copy window (`kernel/src/arch/x86_64/user_access.rs:70-74`).
+  Every other kernel access to user memory goes through the kernel alias. Kernel MMIO goes
+  through a supervisor-only uncached alias window
+  (`kernel/src/arch/x86_64/memory/mmio_alias.rs:28-40`), never through a leaf a cell's
+  `RequestMmio` made USER. Limits: SMAP stops the kernel touching user pages outside the window;
+  it does nothing between cells, which share the SAS. `RequestMmio` refuses any window that reaches
+  LAPIC, IOAPIC, HPET or VT-d registers. Foreign binaries (mlibc, Tier-2 C) were not audited for
+  `sgdt`/`sidt`/`sldt`/`smsw` under UMIP.
 - Evidence: `scripts/qemu-x86_64-idt-test.sh` and `scripts/x86/qemu-idt-protection-test.sh`
-  (QEMU/TCG only; no physical Intel or real machine-check evidence).
+  (`smap=on read=pf window=ok`, `smep=on exec=pf`, `umip=on sgdt=gp`), plus the `SMAP-WINDOW` and
+  `SMAP-GRANT-SLICE` self-tests on the x86 domain lane (QEMU TCG and KVM only; no physical Intel
+  or real machine-check evidence).
 
 ### Per-Cell DMA Isolation — Shipped (2026-06-22)
 **Severity: Resolved (residual gap for untrusted FFI/native code — see below)**
@@ -192,28 +359,32 @@ Applies to every tier: LBI does not make hardware exception delivery safe.
 The IOMMU was upgraded from bare passthrough (`DDTP.MODE=1` / VT-d single shared passthrough domain,
 IOVA==PA, no permission table) to **per-Cell translate mode** on both architectures:
 
-- **RISC-V** (`kernel/src/task/drivers/iommu_riscv.rs`): 3-level DDT (`DDTP.MODE=3LVL`), a per-Cell Sv39
+- **RISC-V** (`kernel/src/arch/riscv64/dev/iommu_riscv.rs`): 3-level DDT (`DDTP.MODE=3LVL`), a per-Cell Sv39
   translation domain, a unique **PSCID** per Cell (with a free-list to survive Cell restarts), and
   `IOTINVAL.VMA` / `IOFENCE.C` / `IODIR.INVAL_DDT` invalidation.
-- **x86** (`kernel/src/task/drivers/iommu_x86.rs`): a per-Cell VT-d second-level page table (`VtdSlpt`) with
+- **x86** (`kernel/src/arch/x86_64/dev/iommu_x86.rs`): a per-Cell VT-d second-level page table (`VtdSlpt`) with
   its own DID, one lazily initialized context table per PCI bus, exact canonical BDF tracking, ECAP-computed
   IOTLB offsets, and context-cache plus PSI/DSI IOTLB invalidation. Publishing a new bus context while
   translation is active requires acknowledged global context-cache invalidation followed by acknowledged
   global IOTLB invalidation with read/write drains before `GrantDma` succeeds. If invalidation is not
   acknowledged, authorization fails and the newly pinned frames remain quarantined rather than reclaimed.
 
-DMA authorization is now a first-class capability: the new **`sys_grant_dma` (233)** syscall grants a Cell a
-BDF plus a DMA-mapping quota (1× its memory quota, page-aligned), enforced by `can_map_dma()` +
-`record_dma_mapped/unmapped()`. On Cell exit, `cleanup_cell()` (Exit / ForceExit / watchdog paths) clears every
-exact BDF context, then invalidates the context cache, invalidates and drains the IOTLB, and only then permits
-frame reclaim. Peripherals default to the kernel domain; a userspace Driver Cell must explicitly request
-authorization. This closes the Thunderclap (NDSS 2019) class
-of attack for PCIe DMA-capable devices — the blast radius of a compromised Driver Cell is now confined to its
-own granted pages, not all of physical memory.
+DMA authorization is a first-class capability. `GrantDma` (syscall 233,
+`kernel/src/task/syscall/grant.rs:2032`) publishes a range only when the caller owns the BDF's
+`DeviceRecord` and the range lies in a live Grant the caller owns. It is charged to the Cell's DMA
+account, bounded by its memory limit (`kernel/src/memory/cell_quota.rs:110-111,163-165`). A
+private-root (Tier 2) caller is refused. Both remappers sit behind one `DmaRemapper` trait; aarch64
+has none and refuses every mapping (§ Current enforcement, Devices). Teardown
+(`teardown_dma_authority`, `kernel/src/task.rs:1820-1880`) quiesces each owned function (bus
+master off, MSI off, MSI-X masked) and revokes and fences its translations. Only then does it
+release the acknowledged frames; an unacknowledged teardown keeps them. Peripherals default to the
+kernel domain; a userspace Driver Cell must explicitly request authorization. This closes the
+Thunderclap (NDSS 2019) class of attack for PCIe DMA-capable devices: the blast radius of a
+compromised Driver Cell is confined to its own granted pages, not all of physical memory.
 
-**Key distinction preserved**: MMIO ownership ≠ DMA authorization. The Resource Registry enforces exclusive
-MMIO ownership; DMA capability is tracked **separately** via `sys_grant_dma` and per-device, per-Cell IOMMU
-translation entries.
+**Key distinction preserved**: MMIO ownership ≠ DMA authorization. One `DeviceRecord` per device
+(`kernel/src/dev/ownership.rs:83`) names the owner both checks read, but each check is separate:
+claiming a window does not authorize DMA, and `GrantDma` maps only the caller's own Grant pages.
 
 > ⚠️ **Residual gap (honest):** the IOMMU fronts only the **PCIe root complex**. **virtio-mmio** devices are
 > **not** behind the IOMMU (see [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) §1.4). A native
@@ -261,11 +432,13 @@ analysis after an incident.
 ### Capability Token System — Implementation Gap
 **Severity: Medium**
 
-Spec (01-core.md) describes unforgeable Zero-Sized Type capability tokens. Current implementation uses an ELF
-manifest of one `flags: u8` (8 boolean flags, **all used**) plus a `can_block_io` TCB flag — coarse, granted
-all-at-spawn, with **no scoping, no delegation, no revocation, no user/operator consent**. This is effectively
-the **Android pre-6.0 install-time permission model**, and violates all four capability-OS invariants (no
-ambient authority · explicit delegation · monotonic downgrade · revocable).
+Spec (01-core.md) describes unforgeable Zero-Sized Type capability tokens. The implementation uses an ELF
+manifest `flags: u16` (`libs/abi/src/manifest.rs:57-58`), intersected at spawn with the catalog row and the
+operator policy into one `CapSet` per incarnation. Rights are revocable at runtime (`CapRevoke`, syscall 219;
+§ Current enforcement). They are still coarse: **no scoping** (the `cap_args` offset is reserved,
+`manifest.rs:59-62`), **no delegation** and **no user consent**. That is close to the **Android pre-6.0
+install-time permission model** and short of the capability-OS invariants (no ambient authority · explicit
+delegation · monotonic downgrade · revocable).
 
 **Planned** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
 for the full design + capability-OS / mobile-OS references): evolve through (1) **parameterized capabilities**
@@ -277,32 +450,8 @@ for G2 HMI (sensitive caps only). Hard invariant: the manifest is a **ceiling, n
 kernel enforces** (consent feeds the syscall-boundary check). LBI already closes the TCC "permission-laundering
 via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 
-**One rights record per Cell incarnation (2026-11-11, architecture remediation Phase 07).** Every capability
-gate, caller-trailer attestation, launch ceiling and hot-swap ceiling reads the Cell's rights from one record,
-the root task's `Task::rights` (`Scheduler::cell_rights`); threads hold no copy. `CapRevoke` narrows that record,
-so a revoke aimed at any thread removes the right from the whole incarnation, and the MMIO/DMA/grant teardown
-runs for every task of it. Revoking a sibling of the caller is refused like revoking oneself. Authority audit
-records (`SyscallDenied`, `CapRevoked`, `CellSpawnDenied` from governed spawn) name the acting task as
-`(cell, generation, tid)`. Device, BDF and service ownership remain keyed by tid. While a revoke's teardown
-runs, its mask is already withheld from every task of the Cell (`Task::revoke_pending`), so nothing can be
-re-claimed mid-teardown; one `CapRevoke` runs at a time (a concurrent one is refused and may be retried).
-
-**Launch and device authority key on measured identity (2026-11-10, architecture remediation Phase 06).**
-A child's ceiling on a reviewed launch edge comes from the edge row, not from the caller's own caps,
-so the edge key is load-bearing. It used to be the caller's **task name** — the basename of a path its
-spawner chose — so any capability-free cell launched as `…/cellbox` or `…/shutdown` inherited the shell's
-edges or the raw power-off gate. The key is now the caller Cell's **measured program name** (the
-`__ViCell_image` name inside a verified signature), and only when the kernel itself resolved the Cell's
-`/bin/` install path (boot, Path, Pinned or replacement route, or ELF bytes trusted init read from `/bin`;
-`catalog::names_launch_identity`); or the kernel's trusted-init latch, published before init is runnable. Unsigned images, other callers' ELF/Mem
-bytes (their path is advisory), sandbox paths and the alias `/bin/cellbox-ssh` (the signed shell file run
-as the SSH client) carry no identity and match no row. The same identity gates shell argv staging and
-raw opcode 502. Holding `PcieDriverCap` is no longer sufficient to claim a PCI function: 418/424 refuse
-a query outside the caller program's row in `catalog::PCI_DRIVERS`. `/bin/supervisor` applies the same
-rule to `OP_POWER`/`OP_HOTSWAP` (2026-11-11, CP1 option A): it receives with a kernel caller trailer and
-asks 441 `ResolveCellImage` for the sender Cell's image, which the kernel answers a `SupervisorCap` holder
-only for a launch-named Cell, so a sandbox cell named `shutdown` is refused. Under the dev posture
-anyone with the public dev seed can sign any program name; the release posture closes that.
+The per-incarnation rights record (remediation Phase 07, 2026-11-11) and launch by measured identity
+(Phase 06, 2026-11-10) are described with their code in § Current enforcement → Authority.
 
 ### Boot Trust Chain + Attestation — Partial (measurement + signing shipped)
 **Severity: Medium (High for fleet deployment)**
@@ -314,21 +463,9 @@ anyone with the public dev seed can sign any program name; the release posture c
 - **Ed25519 cell-signing verify-at-spawn (2026-06-23; key separation 2026-10-31; postures 2026-11-05; single derived posture 2026-11-10)** —
   the loader extracts the `__ViCell_sig` section and verifies it against the kernel's single trust anchor.
 
-  | Posture (derived by `kernel/build.rs` from the features, `kernel/src/posture.rs`) | Cell / policy / owner anchors | Unsigned cell | Bad signature | Absent policy | Owner admission |
-  |---|---|---|---|---|---|
-  | `dev` — `default` (`dev-signing-key`, `dev-policy-key`, `dev-weak-rng`) | public dev seeds | Tier 2 | denied | dev-permissive | permissive |
-  | `test` — any set with `test-hooks` (no release anchor) | as dev | Tier 2 | denied | dev-permissive | permissive |
-  | `release` — `release-posture` or `production-relay-image` | `CELLOS_RELEASE_{CELL,POLICY,OWNER}_PUBLIC_KEY` (private halves held outside the repository) | **denied** | denied | fail-closed | **enforced** |
-
-  The build refuses any mix: a release kernel cannot also carry `dev-*` keys, `dev-weak-rng`,
-  `test-hooks`, `maintenance-mode`, `qemu-dev-https`, private fixture profiles or measurement-only
-  features, and must keep `signing-required` and `policy-required`. All three release anchors must be
-  provisioned; a missing, zero or dev key is a build error. Every bootable 64-bit kernel requires
-  `native-domains` (the guarded user-copy boundary); only `compile-only` builds are exempt.
-  Owner admission is enforced in the release posture, and no qualified backend installs an admitted
-  A/B slot yet, so a release kernel refuses every spawn (fail-closed) until that backend exists.
-  `.github/workflows/release.yml` fails when any of the three release-key secrets is empty;
-  `scripts/check-production-relay-image.py` requires `release-signing-key` for relay candidates.
+  The anchor and the unsigned-cell rule depend on the kernel's posture; the posture table, the
+  refused feature combinations and the release fail-closed state are in § Current enforcement →
+  Posture.
 
   Images from caller memory (`SpawnFromElf`, `CellSessionV1` route 2, `SpawnFromMem`) are copied into a
   kernel-owned buffer before hashing, verification, manifest classification and loading (2026-11-05).
@@ -448,10 +585,12 @@ Bước 4: Kernel unsafe blocks
    (kernel built PIE, `KASLR=yes`).
 
 3. **Trusted Cells:** All installed Tier 1 Cells are fully trusted (now enforced by
-   Ed25519 verify-at-spawn + SHA-256 measurement). Untrusted third-party code belongs
-   in **Tier 3 (Linux VM / hypervisor)** today. Tier 2 is the accepted native private-
-   MMU-domain class but is not implemented; an unsigned or unverified artifact is an
-   admission input, not the definition of Tier 2. See
+   Ed25519 verify-at-spawn + SHA-256 measurement). Tier 2 (private hardware page-table
+   domain) admission exists per architecture as recorded in the generated
+   [per-architecture status table](generated/arch-status.md): x86_64 and riscv64 with
+   `native-domains`, aarch64 only with `test-hooks`; a boot still enables it only in a
+   development profile. Where it is unavailable, a cell that requires it is refused, not
+   downgraded. Untrusted whole-OS stacks belong in **Tier 3 (Linux VM / hypervisor)**. See
    [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). See Phase 23 for
    community submission review gates.
 
@@ -484,11 +623,11 @@ Bước 4: Kernel unsafe blocks
 | Language | `#![forbid(unsafe_code)]` on all Cell crates |
 | Compile-time | Rust ownership, borrow checker, lifetimes |
 | Kernel | Capability table, syscall argument validation, frame zeroing |
-| CI | `cellos-sign --check --strict` (F1/F5 admission), `cargo-audit`, `cargo-deny` on every PR |
+| CI | `cellos-sign --check --strict` (F1, tier class, Tier-1 closure ratchet, F5), `check-tier-class.py` and `check-tcb-closure.py` negative controls, `gen-tier1-closure.py --check`, `check-catalog.py`, `check-kernel-residents.py`, `cargo-audit`, `cargo-deny` on every PR |
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
 | HW — spatial | MTE hardening is available on Armv8.5+/QEMU, **not RK3588**; x86 PKU register/return-path plumbing exists but keys remain all-zero and enforcement is absent; PMP needs a future M-mode owner |
 | HW — control-flow | ✅ **Shipped**: PAC-RET (ARM), kernel CET-IBT (x86); Cell forward-edge BTI (ARM) / CPL3 IBT (x86) **per Cell via the GNU property opt-in** (no shipped cell opts in yet); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
-| HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell with per-bus context tables) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
+| HW — DMA | ✅ **Shipped**: one `DmaRemapper` trait — RISC-V IOMMU 3LVL DDT and x86 VT-d per-Cell domains with per-bus context tables; aarch64 has no remapper and refuses DMA mappings. Per-Cell `GrantDma` over owned devices and owned Grants (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
 | HW — VM-grade _(roadmap)_ | Stage-2/EPT (Tier 3); TDX/SEV-SNP/ARM CCA for attested multi-tenant |
 
 > Spec 19 owns the Layer A/B/C hardware-isolation taxonomy. The research document rates
