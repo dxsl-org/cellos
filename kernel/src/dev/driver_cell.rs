@@ -279,10 +279,11 @@ pub(crate) fn block_route_record(index: usize) -> Option<ViBlockRouteV1> {
     })
 }
 
-/// Clear the provider of every block route naming exactly `tid`; keys stay.
-fn clear_block_route_provider(tid: usize) {
+/// Clear the provider of every block route naming exactly `tid` whose device
+/// `released` names; keys stay.
+fn clear_block_route_provider(tid: usize, released: impl Fn(DeviceKey) -> bool) {
     for slot in BLOCK_ROUTES.lock().iter_mut().flatten() {
-        if slot.provider.is_some_and(|(holder, _, _)| holder == tid) {
+        if slot.provider.is_some_and(|(holder, _, _)| holder == tid) && released(slot.key) {
             slot.provider = None;
         }
     }
@@ -408,7 +409,8 @@ pub(crate) fn publish_nic_route(
     }
 }
 
-/// Clear the provider of every NIC route naming exactly `tid`; keys stay.
+/// Clear the provider of every NIC route naming exactly `tid` whose device
+/// `released` names; keys stay.
 ///
 /// When the primary route's provider is cleared, the lowest-index route that
 /// still has a provider becomes the primary, and `service::NIC_DRIVER` is
@@ -416,13 +418,14 @@ pub(crate) fn publish_nic_route(
 /// `service_registry::clear_tid` would remove the row. Nothing is allocated
 /// (exit teardown may run in an ISR), and no authority is granted: the
 /// successor already registered its own route. If the row no longer names
-/// `tid`, or no route is live, the primary is left vacant and the next
-/// registration takes it.
+/// `tid` (or is paused for a hot swap), or no route is live, the primary is
+/// left vacant and the next registration takes it; `true` then reports that
+/// the primary was lost without a hand-over.
 ///
 /// Caller holds `ROLE_PUBLICATION`; `NIC_ROUTES` is released before the
 /// service registry is written, as in [`publish_nic_route`].
-fn clear_nic_route_provider(tid: usize) {
-    let promoted = {
+fn clear_nic_route_provider(tid: usize, released: impl Fn(DeviceKey) -> bool) -> bool {
+    let (lost_primary, promoted) = {
         let mut routes = NIC_ROUTES.lock();
         let NicRoutes { slots, primary } = &mut *routes;
         let mut lost_primary = false;
@@ -430,7 +433,7 @@ fn clear_nic_route_provider(tid: usize) {
             let Some(route) = route.as_mut() else {
                 continue;
             };
-            if route.provider.is_some_and(|(holder, _, _)| holder == tid) {
+            if route.provider.is_some_and(|(holder, _, _)| holder == tid) && released(route.key) {
                 route.provider = None;
                 crate::dev::ownership::set_nic_route(route.key, None);
                 if *primary == Some(index) {
@@ -451,10 +454,10 @@ fn clear_nic_route_provider(tid: usize) {
         if let Some((index, _, _)) = successor {
             *primary = Some(index);
         }
-        successor
+        (lost_primary, successor)
     };
     let Some((index, key, provider)) = promoted else {
-        return;
+        return lost_primary;
     };
     if crate::cell::service_registry::repoint(abi::syscall::service::NIC_DRIVER, tid, provider) {
         log::warn!(
@@ -463,12 +466,36 @@ fn clear_nic_route_provider(tid: usize) {
             provider.0,
             DeviceName(key)
         );
+        false
     } else {
         let mut routes = NIC_ROUTES.lock();
         if routes.primary == Some(index) {
             routes.primary = None;
         }
+        true
     }
+}
+
+/// Unbind the NIC and block routes of `tid` whose device it no longer owns:
+/// a runtime capability revoke freed those devices
+/// ([`ownership::release_for`](crate::dev::ownership::release_for),
+/// [`ownership::release_mmio_devices_in`](crate::dev::ownership::release_mmio_devices_in))
+/// while the task lives on, so a replacement's 416/417 must find the route
+/// vacant. A route on a device it still owns (the DWC2 aperture, held by
+/// `UsbDriverCap`) stays. A lost NIC primary passes to the next live route as
+/// at exit; with none, the active `service::NIC_DRIVER` row naming `tid` is
+/// removed, so the net service does not keep resolving to a driver without
+/// a device, and the next registration takes the primary.
+///
+/// Syscall context, without `SCHEDULER` held; same `ROLE_PUBLICATION`
+/// transaction as registration and exit teardown.
+pub(crate) fn release_unowned_routes(tid: usize) {
+    let _publication = ROLE_PUBLICATION.lock();
+    let released = |key| !crate::dev::ownership::owns(tid, key);
+    if clear_nic_route_provider(tid, released) {
+        crate::cell::service_registry::remove_active(abi::syscall::service::NIC_DRIVER, tid);
+    }
+    clear_block_route_provider(tid, released);
 }
 
 /// Empty the NIC route table; host tests only, under `TEST_STATE_LOCK`.
@@ -562,10 +589,10 @@ pub fn deregister_all_for(tid: usize) {
     let _publication = ROLE_PUBLICATION.lock();
     // First: a NIC primary is re-pointed while its service row still names
     // `tid`, so `clear_tid` below leaves the successor's row.
-    clear_nic_route_provider(tid);
+    clear_nic_route_provider(tid, |_| true);
     crate::cell::service_registry::clear_tid(tid);
     clear_input_cell_if(tid);
-    clear_block_route_provider(tid);
+    clear_block_route_provider(tid, |_| true);
     deregister_gpu_driver(tid);
     deregister_usb_hid_producer(tid);
 }
@@ -946,5 +973,81 @@ mod tests {
             52,
             "rollback must not erase a concurrently published replacement"
         );
+    }
+
+    /// Review finding: a runtime `PcieDriverCap` revoke frees the device, so
+    /// the (live) revoked task's NIC and block routes on it are unbound — the
+    /// replacement's 417 is not refused as Held — while a route on a device
+    /// it still owns stays. The lost primary passes to the next live route;
+    /// with none, the `NIC_DRIVER` row naming the revoked task is removed and
+    /// the next registration takes the primary.
+    #[test]
+    fn a_revoke_unbinds_the_routes_of_the_devices_it_freed() {
+        use super::release_unowned_routes;
+        use crate::cell::service_registry::{lookup_bound, register};
+        use crate::dev::ownership::{
+            claim_pci, claim_window, register_mmio_device, release_for, DeviceKind, Scope,
+            WindowClaim,
+        };
+        use abi::syscall::service::NIC_DRIVER;
+        const A: Provider = (0x5D01, 61, 1);
+        const B: Provider = (0x5D02, 62, 1);
+        const C: Provider = (0x5D03, 63, 1);
+        const D: Provider = (0x5D04, 64, 1);
+        const DWC2: usize = 0x5D00_0000;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        reset_nic_routes();
+        reset_block_routes();
+        let publish =
+            |(tid, cell, generation): Provider| move || register(NIC_DRIVER, tid, cell, generation);
+        assert!(claim_pci(0x5D0, A.0) && claim_pci(0x5D2, A.0));
+        register_mmio_device(DWC2, 0x1_0000, DeviceKind::Dwc2, None);
+        assert_eq!(
+            claim_window(A.0, DWC2, 0x1000, true),
+            WindowClaim::Claimed(mmio(DWC2 as u64))
+        );
+        assert!(claim_pci(0x5D1, B.0));
+        assert_eq!(publish_nic_route(pci(0x5D0), A, publish(A)), Some(0));
+        assert_eq!(publish_nic_route(pci(0x5D1), B, publish(B)), Some(1));
+        assert_eq!(publish_block_route(pci(0x5D2), A), Some(0));
+        assert_eq!(publish_block_route(mmio(DWC2 as u64), A), Some(1));
+        assert_eq!(lookup_bound(NIC_DRIVER), Some(A));
+
+        release_for(A.0, Scope::PcieDriver);
+        release_unowned_routes(A.0);
+        assert_eq!(nic_route(0), None, "freed device's route unbound");
+        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(1), Some(B)));
+        assert_eq!(provider_of(0), None, "freed block device unbound");
+        assert_eq!(provider_of(1), Some((A.0 as u64, A.1, A.2)), "DWC2 kept");
+
+        assert!(claim_pci(0x5D0, C.0));
+        assert_eq!(
+            publish_nic_route(pci(0x5D0), C, publish(C)),
+            Some(0),
+            "the replacement is not refused as Held"
+        );
+        assert_eq!(lookup_bound(NIC_DRIVER), Some(B), "a secondary");
+
+        release_for(B.0, Scope::PcieDriver);
+        release_unowned_routes(B.0);
+        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(0), Some(C)));
+        release_for(C.0, Scope::PcieDriver);
+        release_unowned_routes(C.0);
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (None, None),
+            "no live route: the revoked task's row is removed"
+        );
+
+        assert!(claim_pci(0x5D1, D.0));
+        assert_eq!(publish_nic_route(pci(0x5D1), D, publish(D)), Some(1));
+        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (Some(1), Some(D)));
+
+        for (tid, _, _) in [A, B, C, D] {
+            deregister_all_for(tid);
+            release_for(tid, Scope::Retired);
+        }
+        reset_nic_routes();
+        reset_block_routes();
     }
 }

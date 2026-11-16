@@ -530,6 +530,13 @@ pub(super) fn cap_revoke(caller_id: usize, target_tid: usize, cap_mask: u32) -> 
             // The Platform Cell's ECAM config-space window.
             revoke_mmio_classes(tid, crate::resource_registry::CLASS_ECAM)?;
         }
+
+        if mmio_revoke != 0 || cap_mask & CM::PCIE_DRIVER != 0 {
+            // A NIC or block route on a device just freed above is no longer
+            // this task's while it lives on: unbind it, so a replacement's
+            // 416/417 finds it vacant, and hand a NIC primary on as at exit.
+            crate::dev::driver_cell::release_unowned_routes(tid);
+        }
     }
 
     let target_present = commit_cap_revoke(
