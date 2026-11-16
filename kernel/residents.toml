@@ -149,6 +149,7 @@
 "kernel/src/arch/x86_64/dev/iommu_x86/rmrr.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/x86_64/dev/iommu_x86/slpt.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/x86_64/dev/iommu_x86/unit.rs" = { category = "D", owner = "dev" }
+"kernel/src/arch/x86_64/dev/ownership.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/x86_64/dev/pcie_ecam.rs" = { category = "exception", owner = "dev", target = "Platform Cell (Spec 15 §3.1 remaining exceptions)" }
 "kernel/src/arch/x86_64/dev/pcie_msi.rs" = { category = "D", owner = "dev" }
 "kernel/src/arch/x86_64/dev/pcie_msi/config.rs" = { category = "D", owner = "dev" }

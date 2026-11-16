@@ -161,7 +161,7 @@ pub fn allocate(
             }
         }
     }
-    crate::dev::ownership::with_owned_msi(owner, bdf, |held| {
+    crate::dev::ownership::x86::with_owned_msi(owner, bdf, |held| {
         if let Some(existing) = *held {
             return Ok(existing);
         }
@@ -269,7 +269,7 @@ pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrq
     for line in first..first + count as u8 {
         let _ = irq_wait::take_pending(line);
     }
-    crate::dev::ownership::test_own_msi(owner, bdf, irq);
+    crate::dev::ownership::x86::test_own_msi(owner, bdf, irq);
     irq
 }
 
@@ -277,7 +277,7 @@ pub(crate) fn allocate_for_test(owner: usize, bdf: u32, count: usize) -> PcieIrq
 /// owner's functions were quiesced. Pending flags are dropped so the next
 /// owner of a reused vector never sees the dead owner's interrupt.
 pub fn release_for(owner: usize) -> usize {
-    crate::dev::ownership::release_msis(owner, |irq| {
+    crate::dev::ownership::x86::release_msis(owner, |irq| {
         STATE.lock().pool.free(irq.first_irq, irq.count as usize);
     })
 }
