@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-11-01
+**Last Updated**: 2026-11-16 (patterns from the architecture remediation plan: arch seam, lock ranks, residents, allowlist classes and tier exceptions, Tier-1 closure baseline, posture; module-file rule corrected)
 
 ---
 ## Solo-First Development and Independent Promotion
@@ -239,7 +239,19 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 **Rules**:
 - Never hardcode pointer sizes (`usize`, `u64`)
 - Always use `VAddr` for virtual addresses, `PAddr` for physical
-- Test on RV32, RV64, and ARM targets (compile checks at minimum)
+- The bootable targets are `x86_64-unknown-none`, `riscv64gc-unknown-none-elf` and
+  `aarch64-unknown-none-softfloat`; a shared kernel change compiles on all three. The 32-bit
+  targets are quarantined in `kernel/src/arch/legacy/` and do not build
+  ([per-architecture status](generated/arch-status.md)).
+- **New architecture code goes under `kernel/src/arch/<arch>/`** (2026-11-14, remediation
+  Phase 14). Each arch module exports the same function sets, and shared code calls
+  `crate::arch::<set>::<fn>()` without naming an architecture (`kernel/src/arch/mod.rs:1-16`).
+  Existing `target_arch` lines outside it are capped, not gone: `scripts/check-hal-boundaries.sh`
+  (run by `scripts/check-board-configs.sh`) fails above 692 such lines or any `asm!` outside
+  `kernel/src/arch/` (`check-hal-boundaries.sh:64-80`). The ceilings only go down: lower them in
+  the commit that moves code, never raise them. Do not add
+  `cfg_attr(not(target_arch = …), allow(dead_code))` to hide per-arch code.
+- Read board data through `board::active()` only.
 
 ### Hardware Platform Ownership
 
@@ -261,7 +273,7 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 - Cargo board features select integration data. They must not fork UART, SDHCI,
   DesignWare I2C/SPI, GIC/PLIC, VirtIO, or PCIe mechanisms.
 - Run `bash scripts/check-board-configs.sh` after changing a board, SoC profile,
-  driver-selection boundary, or build feature.
+  driver-selection boundary, build feature, or any `target_arch` line in the kernel.
 
 ### Law 4: Unsafe Code Management
 
@@ -273,6 +285,29 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 Driver, runtime, shim, and FFI cells may carry reviewed unsafe only when listed
 in the unsafe allowlist / signing policy checks. Do not describe Cellos as
 "every Cell forbids unsafe" without that exception.
+
+**Allowlist and Tier-1 perimeter** (2026-11-16, remediation Phase 18; enforced by
+`scripts/cellos-sign --check --strict` in CI and before every `--sign`):
+
+- Every `scripts/unsafe-allowlist.toml` entry carries `reason`, `approver`, `date`,
+  `review_by` and one of six classes: `driver-mmio`, `c-ffi`, `legacy-raw-ptr`, `hypervisor`,
+  `test-harness`, `test-violation` (`scripts/cellos_sign/allowlist.py:37-47`). A stale entry
+  stops signing, so re-review entries before their `review_by`.
+- A file with an `extern` block is classed `c-ffi`, `test-harness` or `test-violation`.
+- A crate with a `c-ffi` or `legacy-raw-ptr` entry must declare manifest class FFI or UNTRUSTED
+  (Tier 2). Keeping it in Tier 1 needs a `[[tier_exception]]` naming crate, class and manifest,
+  approved by the owner, with an exit condition (`scripts/unsafe-allowlist.toml:1054-1082`).
+  The signer reads the class from source and again from the built ELF's manifest.
+- Code linked into a Tier-1 cell from outside `cells/` (`libs/ostd`, `libs/wire`, vendored
+  crates, …; `scripts/tier1-closure.generated.toml`) is held to per-file ceilings on `unsafe`
+  tokens and unsafe attributes (`no_mangle`, `export_name`, `link_section`, `global_asm!`) in
+  `scripts/tcb-unsafe-baseline.toml`, plus a combined Tier-1 total. A new file with `unsafe` or
+  a higher count fails.
+- When you remove `unsafe`, run `scripts/cellos-sign --write-baseline` in the same commit. It
+  lowers ceilings and never raises them; a lower count left unrecorded fails CI strict. Raising
+  a ceiling or adding a row is a reviewed change, like an allowlist entry.
+- A dependency change that alters the Tier-1 closure needs
+  `python3 scripts/gen-tier1-closure.py` (CI runs `--check`).
 
 **Kernel & HAL**:
 - Unsafe only for hardware I/O (CSRs, MMIO)
@@ -324,36 +359,39 @@ unsafe { riscv::register::mepc::write(func as usize); }
   after its named human approvals and implementation/production gates are
   explicitly granted.
 
-### Law 5: Modern Module Structure
+### Law 5: Module Structure
 
-**Forbidden**:
-```
-foo/
-├── mod.rs      ❌ BANNED
-└── bar.rs
-```
+**Correction (2026-11-16):** this law used to say `foo/mod.rs` is banned and enforced by a CI
+lint. Neither was true: the tree holds 41 tracked first-party `mod.rs` files (outside vendored
+`third_party/` code; for example `kernel/src/loader/launch_profile/mod.rs`,
+`kernel/src/acpi/mod.rs`), and no CI job, clippy lint or script checks the form.
 
-**Required**:
+**Convention**: both forms exist.
+
 ```
-foo.rs          ✅ REQUIRED (parallel file + folder)
+foo.rs          parallel file + folder (182 first-party pairs; the more common form)
 foo/
 ├── bar.rs
 └── baz.rs
+
+foo/mod.rs      also present in the tree
 ```
 
 **Rules**:
-- Declare module in parent: `mod foo;`
-- Module file: `foo.rs` (re-exports what's in `foo/` folder)
+- Declare the module in its parent: `mod foo;`
+- Prefer `foo.rs` beside `foo/` for new modules, and match the form already used in the
+  directory you edit. Do not convert an existing module between the forms in an unrelated
+  change.
 - Submodules: `foo/bar.rs`, `foo/baz.rs`
 - Use snake_case: `file_system.rs`, not `FileSystem.rs`
-
-**Why**: Clearer file tree, easier IDE navigation, prevents accidental circular imports.
+- A new kernel file needs a `kernel/residents.toml` row with its Spec 15 category;
+  `scripts/check-kernel-residents.py` fails on an unlisted or removed file.
 
 ### Law 6: Cellos Naming Convention
 
 | Category | Rule | Examples |
 |----------|------|----------|
-| **Public Traits** | `Vi` prefix (Vi-something) | `ViFileSystem`, `ViDriver`, `ViBlockDevice`, `ViNetTcpStack` |
+| **Public Traits** | `Vi` prefix (Vi-something) | `ViFileSystem`, `ViDriver`, `ViBlockDevice`, `ViAsyncFileSystem` |
 | **Error Types** | `Vi` prefix | `ViError`, `ViResult<T>` |
 | **Core Structs** | `Vi` prefix (or generic) | `ViConfig`, `ViBenchmark` |
 | **Address Types** | `V` or `P` prefix | `VAddr`, `PAddr` |
@@ -473,7 +511,8 @@ pub async fn read_file(path: &str) -> ViResult<Vec<u8>> {
 ### Spinlocks for Synchronization
 
 ```rust
-static REGISTRY: Spinlock<HashMap<CellId, Cell>> = Spinlock::new(HashMap::new());
+static REGISTRY: Spinlock<Registry> =
+    Spinlock::ranked(Registry::new(), crate::sync::rank::SERVICE_REGISTRY);
 
 fn register(id: CellId, cell: Cell) {
     let mut map = REGISTRY.lock();
@@ -482,6 +521,19 @@ fn register(id: CellId, cell: Cell) {
 ```
 
 **Why**: Spinlock handles interrupt safety automatically (disables on lock, re-enables on drop).
+
+**Lock ranks** (2026-11-11, remediation Phase 10). Every kernel `static Spinlock` is built with
+`Spinlock::ranked` and a rank from the `lock_ranks!` table in `kernel/src/sync/rank.rs`. A hart
+may only take a ranked lock whose rank is greater than every ranked lock it holds, so the table
+order is the lock order. Instance locks inside per-object structs stay unranked
+(`Spinlock::new`).
+
+- Test-hooks kernels and host tests panic on an out-of-order acquisition, naming both locks;
+  dev and release kernels carry no check.
+- A new static lock needs a rank in that table and an entry in `scripts/mutable-globals.toml`.
+  `tools/mutable-globals --check` (CI) fails on a static spinlock without a rank, an unknown
+  rank, or a stale [generated rank table](generated/lock-ranks.md).
+- Do not justify an order with a comment; the rank is the contract.
 
 ---
 
@@ -507,6 +559,8 @@ mod tests {
 - Test critical logic (allocators, scheduler, IPC)
 - Use `expect()` with clear messages, not `unwrap()`
 - No integration tests in kernel (use architecture tests in `tests/`)
+- Self-test and fixture code compiled into the kernel stays behind `test-hooks` and is
+  categorised `test` in `kernel/residents.toml`; a release kernel carries no self-test symbol.
 
 ### Integration Tests
 
@@ -690,14 +744,19 @@ pub trait ViFileSystem {
 
 ### Cargo Features
 
-```toml
-[features]
-default = ["riscv64"]
-riscv32 = []
-riscv64 = []  # Primary target
-arm64 = []
-x86_64 = []
-```
+Architecture is selected by the target triple, not by a Cargo feature. Kernel features select
+the **posture** (2026-11-10, remediation Phase 04): `kernel/src/posture.rs` derives exactly one of
+`dev`, `test` or `release` from the feature set, and `kernel/build.rs` refuses a mixed set at
+build time ("kernel feature set refused: …").
+
+- The default features are the dev posture (`kernel/Cargo.toml:81`). `test-hooks` makes the
+  test posture. A release kernel is `--no-default-features --features release-posture`.
+- Never add a development, test, fixture or measurement feature without listing it in
+  `FORBIDDEN_IN_RELEASE` (`kernel/src/posture.rs:18-34`) when it must not reach a release kernel.
+- Every bootable 64-bit kernel needs `native-domains`; `compile-only` is for builds that never
+  boot.
+- Trace and accounting switches are Cargo features (`p01-trace`, `g1-cpu-accounting`), not raw
+  `--cfg` flags from the environment.
 
 Production-relay feature selection is deny-by-default. The named production
 image checker must accept exactly one approved hardware provider with verified
@@ -706,13 +765,13 @@ relay paths, and K1 fallback. The image builder must not bypass a blocked
 checker or turn a missing provider, qualification record, or provenance input
 into a development artifact.
 
-**Conditional Code**:
-```rust
-#[cfg(target_arch = "riscv64")]
-pub fn init_paging() { /* SV39 */ }
+**Conditional Code**: per-architecture code goes under `kernel/src/arch/<arch>/` (Law 3), so
+shared kernel code calls one function and names no architecture
+(`kernel/src/memory/paging.rs:108`):
 
-#[cfg(target_arch = "arm")]
-pub fn init_paging() { /* ARMv8 */ }
+```rust
+// kernel/src/arch/{x86_64,riscv64,aarch64}/tlb.rs each export `flush_all`.
+crate::arch::tlb::flush_all();
 ```
 
 ### Cell Signing: Test Key vs Release Key
@@ -755,13 +814,13 @@ opt-level = "z"        # Size + speed tradeoff
 ### Global State (Kernel)
 
 ```rust
-static SCHEDULER: Spinlock<RoundRobin> = Spinlock::new(RoundRobin::new());
-
-pub fn schedule() {
-    let mut sched = SCHEDULER.lock();
-    sched.next_task();
-}
+// kernel/src/task.rs:487-488
+pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> =
+    Spinlock::ranked(None, crate::sync::rank::SCHEDULER);
 ```
+
+Every writable kernel global needs an entry in `scripts/mutable-globals.toml` (lifetime,
+mutation mechanism, owner, contexts, retirement); `tools/mutable-globals --check` runs in CI.
 
 ### Capability Object (Syscall)
 
@@ -935,7 +994,12 @@ pub trait ViAsyncFileSystem {
 
 | Rule | Status | Enforcement |
 |------|--------|-------------|
-| No mod.rs | ❌ FORBIDDEN | CI lint |
+| `foo.rs` + `foo/` for new modules (`mod.rs` also exists) | ✅ GUIDELINE | Code review (no lint) |
+| Static kernel locks are ranked | ✅ REQUIRED | `tools/mutable-globals --check`; run-time check in `test-hooks` |
+| `target_arch` outside `kernel/src/arch/` ≤ 692 lines; no `asm!` outside it | ✅ REQUIRED | `scripts/check-hal-boundaries.sh` ceilings |
+| rustfmt-clean | ✅ REQUIRED | `cargo fmt --all --check` (`.github/workflows/ci.yml:199`) |
+| Kernel files listed in `kernel/residents.toml` | ✅ REQUIRED | `scripts/check-kernel-residents.py` |
+| Tier-1 closure `unsafe` within baseline | ✅ REQUIRED | `cellos-sign --check --strict`; lower with `--write-baseline` |
 | Owned buffers in async | ❌ FORBIDDEN | Compiler error |
 | Unsafe requires SAFETY comment | ❌ FORBIDDEN | Code review |
 | Ordinary Rust Cells can't use unsafe | ❌ FORBIDDEN | `#![forbid(unsafe_code)]`; audited FFI/runtime/driver exceptions only |
