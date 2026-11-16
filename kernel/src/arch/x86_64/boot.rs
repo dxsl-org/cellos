@@ -492,6 +492,15 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
         }
     }
 
+    // An admitted ECAM window the kernel could not alias stays closed:
+    // `init_kernel_paging_x86` logged why, and the kernel never reaches config
+    // space through the identity window instead.
+    let x86_ecam_base = if memory::paging::mmio_alias::ecam_kernel_alias() == 0 {
+        0
+    } else {
+        x86_ecam_base
+    };
+
     EarlyPlatform {
         boot_info,
         acpi_info,

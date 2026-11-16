@@ -14,11 +14,12 @@
 //! VT-d units) is recorded, and no grant may reach it.
 
 use super::{
-    map_page_unflushed, mmio_page_window, Batch, Flags, PageTable, PageTableError, PageTableTrait,
-    PagingResult, PAGE_SIZE, SAS_TABLES,
+    map_page_unflushed, mmio_page_window, refusal_to_log, Batch, Flags, PageTable, PageTableError,
+    PageTableTrait, PagingResult, PAGE_SIZE, SAS_TABLES,
 };
 use crate::sync::Spinlock;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use hal::paging::{PTE_ADDR_MASK, PTE_PRESENT};
 
 /// First VA of the alias window: PML4 slot 511, PDPT slot 0. Limine keeps the
 /// kernel image in the top 2 GiB of slot 511 (PDPT slots 510-511). Every root
@@ -40,8 +41,14 @@ pub(crate) const MMIO_ALIAS_X86: Flags =
     Flags(Flags::VALID | Flags::READ | Flags::WRITE | Flags::UNCACHED);
 
 /// Aliases [`kernel_mmio_alias`] can hold: one per MSI-X table and virtio
-/// common-configuration page the kernel touches, so a few per PCI function.
-const MMIO_ALIAS_SLOTS: usize = 64;
+/// common-configuration page the kernel touches, a few per PCI function, so
+/// some 500 functions. A slot is 32 bytes; the table is static, so taking one
+/// never allocates under the lock.
+const MMIO_ALIAS_SLOTS: usize = 1024;
+
+/// Slots in use at which [`kernel_mmio_alias`] logs the table's high-water
+/// mark, once per boot.
+const MMIO_ALIAS_WARN_AT: usize = MMIO_ALIAS_SLOTS * 3 / 4;
 
 /// Kernel-driven identity windows [`KernelMmio::own`] can hold: the boot
 /// LAPIC, I/O APIC and HPET pages, every further I/O APIC and every VT-d unit.
@@ -76,6 +83,8 @@ struct KernelMmio {
     aliases: [Option<MmioAlias>; MMIO_ALIAS_SLOTS],
     /// Windows the kernel drives through the identity map.
     owned: [Option<(usize, usize)>; KERNEL_WINDOW_SLOTS],
+    /// The high-water mark at [`MMIO_ALIAS_WARN_AT`] was reported.
+    warned: bool,
 }
 
 impl KernelMmio {
@@ -84,6 +93,7 @@ impl KernelMmio {
             next: MMIO_ALIAS_BASE + ECAM_ALIAS_SPAN,
             aliases: [None; MMIO_ALIAS_SLOTS],
             owned: [None; KERNEL_WINDOW_SLOTS],
+            warned: false,
         }
     }
 
@@ -96,9 +106,11 @@ impl KernelMmio {
             .map(|alias| alias.va + (start - alias.start))
     }
 
-    /// A slot and fresh VA for `[start, end)`, not yet usable: `(slot, va)`,
-    /// or `None` when no slot or not enough VA is left.
-    fn reserve(&mut self, start: usize, end: usize) -> Option<(usize, usize)> {
+    /// A slot and fresh VA for `[start, end)`, not yet usable: `(slot, va,
+    /// used)`, with `used` the slots now in use when this reservation first
+    /// reaches [`MMIO_ALIAS_WARN_AT`] (else 0); `None` when no slot or not
+    /// enough VA is left.
+    fn reserve(&mut self, start: usize, end: usize) -> Option<(usize, usize, usize)> {
         let slot = self.aliases.iter().position(Option::is_none)?;
         let va = self.next;
         if MMIO_ALIAS_END - va < end - start {
@@ -111,7 +123,10 @@ impl KernelMmio {
             va,
             mapped: false,
         });
-        Some((slot, va))
+        let used = self.aliases.iter().flatten().count();
+        let crossed = used >= MMIO_ALIAS_WARN_AT && !self.warned;
+        self.warned |= crossed;
+        Some((slot, va, if crossed { used } else { 0 }))
     }
 
     /// End a reservation: usable once every page is mapped, otherwise the slot
@@ -152,17 +167,42 @@ impl KernelMmio {
     }
 }
 
-/// Never held while logging, mapping or flushing: each user takes it for one
-/// lookup or update and drops it.
+/// Never held while logging, mapping, flushing or allocating: each user takes
+/// it for one lookup or update and drops it.
 static KERNEL_MMIO: Spinlock<KernelMmio> =
     Spinlock::ranked(KernelMmio::new(), crate::sync::rank::KERNEL_MMIO);
+
+/// Refusals [`kernel_mmio_refused`] has counted (diagnostic, Relaxed).
+static KERNEL_MMIO_REFUSALS: AtomicUsize = AtomicUsize::new(0);
+
+/// Whether the alias window is unmapped in `pml4`: no PDPT behind slot 511,
+/// or its PDPT entry 0 (the window's whole 1 GiB) not present, so no page,
+/// table or huge page of it exists that `map_with` could overwrite.
+fn alias_window_unmapped(pml4: &PageTable) -> bool {
+    const PML4_SLOT: usize = (MMIO_ALIAS_BASE >> 39) & 0x1FF;
+    const PDPT_SLOT: usize = (MMIO_ALIAS_BASE >> 30) & 0x1FF;
+    // SAFETY: a `PageTable` is 512 `u64` entries (`repr(C, align(4096))`),
+    // read here with volatile loads as the walker reads them; the PDPT a
+    // present entry names is a live table frame reached through the HHDM.
+    unsafe {
+        let pml4e =
+            core::ptr::read_volatile((pml4 as *const PageTable as *const u64).add(PML4_SLOT));
+        if pml4e & PTE_PRESENT == 0 {
+            return true;
+        }
+        let pdpt =
+            crate::memory::frame::phys_to_virt((pml4e & PTE_ADDR_MASK) as usize) as *const u64;
+        core::ptr::read_volatile(pdpt.add(PDPT_SLOT)) & PTE_PRESENT == 0
+    }
+}
 
 /// Map the kernel's alias of the ECAM allocation `[ecam_base, ecam_base +
 /// ecam_len)` into `pml4`, the kernel root `init_kernel_paging_x86` is
 /// building, at the start of the window; `alloc(va)` gives each new table.
 /// `Err(InvalidAddress)`, logged: the allocation is larger than the ECAM span,
-/// or the window is already mapped (Limine put something in slot 511 below the
-/// kernel image). `Err(OutOfMemory)`: a page table could not be allocated.
+/// or the window's PDPT entry is already present (Limine put something in slot
+/// 511 below the kernel image). `Err(OutOfMemory)`: a page table could not be
+/// allocated. On `Err` the alias stays 0 and the caller boots with PCIe closed.
 pub(super) fn map_ecam_alias(
     pml4: &mut PageTable,
     ecam_base: usize,
@@ -170,8 +210,7 @@ pub(super) fn map_ecam_alias(
     alloc: &mut dyn FnMut(usize) -> Option<usize>,
 ) -> PagingResult<()> {
     let (start, end) = mmio_page_window(ecam_base, ecam_len);
-    let window_free = pml4.translate(MMIO_ALIAS_BASE).is_none()
-        && pml4.translate(MMIO_ALIAS_END - PAGE_SIZE).is_none();
+    let window_free = alias_window_unmapped(pml4);
     if end - start > ECAM_ALIAS_SPAN || !window_free {
         log::error!(
             "[paging] ECAM {ecam_base:#x} (+{ecam_len:#x}): no kernel alias (window {}, span {:#x} of {ECAM_ALIAS_SPAN:#x})",
@@ -233,12 +272,17 @@ pub fn kernel_mmio_alias(phys: usize, size: usize) -> PagingResult<usize> {
         }
         mmio.reserve(start, end)
     };
-    let Some((slot, va)) = reserved else {
+    let Some((slot, va, used)) = reserved else {
         log::error!(
             "[paging] kernel MMIO alias of {phys:#x} (+{size:#x}) refused: the alias window is full"
         );
         return Err(PageTableError::OutOfMemory);
     };
+    if used != 0 {
+        log::warn!(
+            "[paging] kernel MMIO alias table high-water mark: {used} of {MMIO_ALIAS_SLOTS} slots in use"
+        );
+    }
     let mut batch = Batch::new();
     let mapped = crate::memory::frame::with(|allocator| {
         let mut offset = 0;
@@ -269,16 +313,19 @@ pub fn kernel_mmio_alias(phys: usize, size: usize) -> PagingResult<usize> {
 /// the kernel drives through its identity map (the boot LAPIC, I/O APIC and
 /// HPET pages, and every `map_mmio_x86` window): the grant would turn those
 /// leaves USER, and the kernel's next access through them would fault under
-/// SMAP. Logs the refusal; `true` means refused.
+/// SMAP. Logs the refusal, rate-limited (`refusal_to_log`); `true` means
+/// refused.
 pub(crate) fn kernel_mmio_refused(base: usize, len: usize) -> bool {
     let page_mask = PAGE_SIZE - 1;
     let start = base & !page_mask;
     let end = base.saturating_add(len).saturating_add(page_mask) & !page_mask;
     let refused = KERNEL_MMIO.lock().reaches_owned(start, end);
     if refused {
-        log::error!(
-            "[paging] RequestMmio: {base:#x} (+{len:#x}) refused: it reaches MMIO the kernel drives (LAPIC, I/O APIC, HPET or VT-d)"
-        );
+        if let Some(count) = refusal_to_log(&KERNEL_MMIO_REFUSALS) {
+            log::error!(
+                "[paging] RequestMmio: {base:#x} (+{len:#x}) refused: it reaches MMIO the kernel drives (LAPIC, I/O APIC, HPET or VT-d) ({count} so far)"
+            );
+        }
     }
     refused
 }
@@ -293,7 +340,7 @@ mod tests {
     #[test]
     fn kernel_mmio_aliases_are_reused_and_bounded() {
         let mut mmio = KernelMmio::new();
-        let (slot, va) = mmio.reserve(0xFEBF_1000, 0xFEBF_3000).expect("first alias");
+        let (slot, va, _) = mmio.reserve(0xFEBF_1000, 0xFEBF_3000).expect("first alias");
         assert_eq!(va, MMIO_ALIAS_BASE + ECAM_ALIAS_SPAN);
         // Not usable until every page is mapped.
         assert_eq!(mmio.alias_of(0xFEBF_1000, 0xFEBF_3000), None);
@@ -305,18 +352,23 @@ mod tests {
         );
         assert_eq!(mmio.alias_of(0xFEBF_2000, 0xFEBF_4000), None);
         // A failed map frees the slot but not its VA.
-        let (failed, failed_va) = mmio.reserve(0xFEBF_8000, 0xFEBF_A000).expect("second");
+        let (failed, failed_va, _) = mmio.reserve(0xFEBF_8000, 0xFEBF_A000).expect("second");
         assert_eq!(failed_va, va + 2 * PAGE_SIZE);
         mmio.settle(failed, false);
         assert_eq!(mmio.alias_of(0xFEBF_8000, 0xFEBF_9000), None);
-        let (_, next_va) = mmio.reserve(0xFEBF_8000, 0xFEBF_9000).expect("third");
+        let (_, next_va, _) = mmio.reserve(0xFEBF_8000, 0xFEBF_9000).expect("third");
         assert_eq!(next_va, failed_va + 2 * PAGE_SIZE);
-        // Slots run out.
+        // Slots run out; the high-water mark is reported once, at the threshold.
         let mut mmio = KernelMmio::new();
+        let mut reported = alloc::vec::Vec::new();
         for page in 0..MMIO_ALIAS_SLOTS {
             let start = 0xC000_0000 + page * PAGE_SIZE;
-            assert!(mmio.reserve(start, start + PAGE_SIZE).is_some());
+            let (_, _, used) = mmio.reserve(start, start + PAGE_SIZE).expect("slot");
+            if used != 0 {
+                reported.push(used);
+            }
         }
+        assert_eq!(reported, [MMIO_ALIAS_WARN_AT]);
         assert_eq!(mmio.reserve(0xD000_0000, 0xD000_1000), None);
         // VA runs out: the window above the ECAM span holds 768 MiB.
         let mut mmio = KernelMmio::new();

@@ -124,6 +124,8 @@ pub fn allocate(
     }
     let cfg = Config::new(bdf);
     let msi_cap = cfg.find_capability(CAP_ID_MSI);
+    // Plain MSI is the fallback whenever MSI-X cannot be used.
+    let msi_allowed = mode & IRQ_MODE_ALLOW_MSI != 0 && msi_cap.is_some();
     let mut msix = record::carved_layout(&dev, &cfg)
         .filter(|_| mode & IRQ_MODE_ALLOW_MSIX != 0)
         .and_then(|(cap, layout)| {
@@ -146,19 +148,18 @@ pub fn allocate(
         ) {
             Ok(table) => msix = Some((cap, layout, table)),
             Err(error) => {
-                let fallback = mode & IRQ_MODE_ALLOW_MSI != 0 && msi_cap.is_some();
                 log::error!(
                     "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?}); {}",
                     bdf >> 8,
                     (bdf >> 3) & 0x1F,
                     bdf & 7,
-                    if fallback {
+                    if msi_allowed {
                         "trying MSI"
                     } else {
                         "no interrupts"
                     },
                 );
-                if !fallback {
+                if !msi_allowed {
                     return Err(PcieFunctionError::NotSupported);
                 }
                 msix = None;
@@ -173,7 +174,8 @@ pub fn allocate(
     {
         return Ok(existing.irq);
     }
-    let irq = if let Some((cap, layout, table)) = msix {
+    let mut irq = None;
+    if let Some((cap, layout, table)) = msix {
         let count = want.min(layout.table_size as usize);
         let first = state
             .pool
@@ -184,41 +186,60 @@ pub fn allocate(
                 .read16(at as usize + 2)
                 .map(|c| cfg.write16(at as usize + 2, c & !1));
         }
-        if program::program_msix(&cfg, cap, &layout, table, first, count).is_none() {
+        if program::program_msix(&cfg, cap, &layout, table, first, count).is_some() {
+            irq = Some(PcieIrqAlloc {
+                first_irq: first,
+                count: count as u8,
+                kind: IRQ_KIND_MSIX,
+            });
+        } else {
+            // A block that failed partway leaves MSI-X enabled and
+            // function-masked: turn it off, so the function is never left
+            // with every vector masked and MSI disabled, then fall back to
+            // MSI when the caller allowed it.
             state.pool.free(first, count);
-            return Err(PcieFunctionError::NotSupported);
+            program::disable_msix(&cfg, cap);
+            log::warn!(
+                "[msi] {:02x}:{:02x}.{} MSI-X programming failed; {}",
+                bdf >> 8,
+                (bdf >> 3) & 0x1F,
+                bdf & 7,
+                if msi_allowed {
+                    "trying MSI"
+                } else {
+                    "no interrupts"
+                },
+            );
         }
-        PcieIrqAlloc {
-            first_irq: first,
-            count: count as u8,
-            kind: IRQ_KIND_MSIX,
+    }
+    let irq = match (irq, msi_cap) {
+        (Some(irq), _) => irq,
+        (None, Some(cap)) if msi_allowed => {
+            let control = cfg
+                .read16(cap as usize + 2)
+                .ok_or(PcieFunctionError::NotSupported)?;
+            let count = program::msi_count(want, control);
+            let first = state
+                .pool
+                .alloc(count, count)
+                .ok_or(PcieFunctionError::NoVectors)?;
+            if let Some(at) = cfg.find_capability(CAP_ID_MSIX) {
+                let off = at as usize + 2;
+                let _ = cfg
+                    .read16(off)
+                    .map(|c| cfg.write16(off, (c & !(1 << 15)) | (1 << 14)));
+            }
+            if program::program_msi(&cfg, cap, first, count).is_none() {
+                state.pool.free(first, count);
+                return Err(PcieFunctionError::NotSupported);
+            }
+            PcieIrqAlloc {
+                first_irq: first,
+                count: count as u8,
+                kind: IRQ_KIND_MSI,
+            }
         }
-    } else if let Some(cap) = msi_cap.filter(|_| mode & IRQ_MODE_ALLOW_MSI != 0) {
-        let control = cfg
-            .read16(cap as usize + 2)
-            .ok_or(PcieFunctionError::NotSupported)?;
-        let count = program::msi_count(want, control);
-        let first = state
-            .pool
-            .alloc(count, count)
-            .ok_or(PcieFunctionError::NoVectors)?;
-        if let Some(at) = cfg.find_capability(CAP_ID_MSIX) {
-            let off = at as usize + 2;
-            let _ = cfg
-                .read16(off)
-                .map(|c| cfg.write16(off, (c & !(1 << 15)) | (1 << 14)));
-        }
-        if program::program_msi(&cfg, cap, first, count).is_none() {
-            state.pool.free(first, count);
-            return Err(PcieFunctionError::NotSupported);
-        }
-        PcieIrqAlloc {
-            first_irq: first,
-            count: count as u8,
-            kind: IRQ_KIND_MSI,
-        }
-    } else {
-        return Err(PcieFunctionError::NotSupported);
+        _ => return Err(PcieFunctionError::NotSupported),
     };
     for line in irq.first_irq..irq.first_irq + irq.count {
         let _ = irq_wait::take_pending(line);

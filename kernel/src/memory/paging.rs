@@ -608,16 +608,22 @@ pub fn init_kernel_paging_x86(
     //    at the start of the alias window. The Platform Cell's `RequestMmio`
     //    claim turns the identity leaves above USER, and under SMAP a
     //    supervisor access through a USER leaf faults; the kernel reaches
-    //    config space only through this alias (`mmio_alias`).
+    //    config space only through this alias (`mmio_alias`). A window that
+    //    cannot be aliased leaves the alias 0: PCIe stays closed, boot goes on.
     if ecam_base_usize != 0 {
-        mmio_alias::map_ecam_alias(pml4, ecam_base_usize, ecam_len, &mut |va| {
+        let aliased = mmio_alias::map_ecam_alias(pml4, ecam_base_usize, ecam_len, &mut |va| {
             let frame = allocator.allocate_frame_uncapped()?;
             #[cfg(feature = "p01-trace")]
             crate::p01_retained::physical_table_created(frame, pml4_phys, va);
             #[cfg(not(feature = "p01-trace"))]
             let _ = va;
             Some(frame)
-        })?;
+        });
+        if let Err(error) = aliased {
+            log::error!(
+                "[paging] ECAM {ecam_base_usize:#x} (+{ecam_len:#x}) has no kernel alias ({error:?}): PCIe stays closed"
+            );
+        }
     }
     // The LAPIC, I/O APIC and HPET pages are the kernel's own: no grant may
     // turn their identity leaves USER (`mmio_alias::kernel_mmio_refused`).
@@ -740,19 +746,34 @@ fn map_page_unflushed(
     Ok(())
 }
 
+/// Refusals [`identity_map_refused`] has counted (diagnostic, Relaxed).
+static IDENTITY_MAP_REFUSALS: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
+
+/// Count one refusal in `counter`: `Some(n)` when the `n`th is to be logged,
+/// the first and then each power of two, so a cell repeating a refused call
+/// cannot flood the console.
+pub(crate) fn refusal_to_log(counter: &core::sync::atomic::AtomicUsize) -> Option<usize> {
+    let count = counter.fetch_add(1, core::sync::atomic::Ordering::Relaxed) + 1;
+    count.is_power_of_two().then_some(count)
+}
+
 /// Refuse an identity (VA == PA) map of physical `[start, start + len)` when
 /// it reaches the VA the kernel allocates (`va_alloc::overlaps_allocated_va`:
 /// the cell slots and the stack arena), whose leaves it would overwrite or
-/// alias. Logs the refusal once, naming `what`; `true` means refused, and the
-/// caller maps nothing and fails with its own error (or, for a boot window,
-/// treats the device as absent). RAM never reaches the slots: the frame
-/// allocator manages none there (`va_alloc::IDENTITY_RAM_END`).
+/// alias. Logs the refusal, naming `what`, rate-limited ([`refusal_to_log`]);
+/// `true` means refused, and the caller maps nothing and fails with its own
+/// error (or, for a boot window, treats the device as absent). RAM never
+/// reaches the slots: the frame allocator manages none there
+/// (`va_alloc::IDENTITY_RAM_END`).
 pub(crate) fn identity_map_refused(what: &str, start: usize, len: usize) -> bool {
     let refused = crate::loader::va_alloc::overlaps_allocated_va(start, len);
     if refused {
-        log::error!(
-            "[paging] {what}: identity map of {start:#x} (+{len:#x}) refused: it overlaps the cell slots or the stack arena"
-        );
+        if let Some(count) = refusal_to_log(&IDENTITY_MAP_REFUSALS) {
+            log::error!(
+                "[paging] {what}: identity map of {start:#x} (+{len:#x}) refused: it overlaps the cell slots or the stack arena ({count} so far)"
+            );
+        }
     }
     refused
 }

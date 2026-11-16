@@ -79,6 +79,21 @@ impl VtdUnit {
         let ecap = unsafe { core::ptr::read_volatile((base + VTD_ECAP) as *const u64) };
         let iro = ((ecap >> 8) & 0x3FF) as usize;
         let iva_off = iro * 16;
+        // The IOTLB registers (IVA, then IOTLB: 16 bytes at `iva_off`) may lie
+        // past the first page: map, and record as kernel-driven, the whole
+        // `max(0x1000, iva_off + 16)` window, or fail this unit like an
+        // unmapped register page.
+        let window = (iva_off + 16).max(0x1000);
+        if window > 0x1000 {
+            if let Err(error) = crate::memory::paging::map_mmio_x86(base, window) {
+                log::warn!(
+                    "[vtd] unit at {:#x} skipped: IOTLB registers at +{:#x} not mapped ({error:?})",
+                    base,
+                    iva_off
+                );
+                return None;
+            }
+        }
         let ir_supported = ecap & ECAP_IR != 0;
 
         let (root_virt, root_phys) = alloc_table(TABLE_KIND_ROOT);

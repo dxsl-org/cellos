@@ -98,6 +98,16 @@ pub fn program_msix(
     cfg.write16(control_at, (control | MSIX_ENABLE) & !MSIX_FUNCTION_MASK)
 }
 
+/// Turn MSI-X off after [`program_msix`] failed partway: Enable clear and
+/// Function Mask set, so the function is not left MSI-X-enabled with every
+/// vector masked and can use MSI (or INTx) instead.
+pub fn disable_msix(cfg: &Config, cap: u8) {
+    let control_at = cap as usize + 2;
+    if let Some(control) = cfg.read16(control_at) {
+        let _ = cfg.write16(control_at, (control & !MSIX_ENABLE) | MSIX_FUNCTION_MASK);
+    }
+}
+
 /// Program an MSI block of `count` (a power of two) vectors starting at the
 /// `count`-aligned `first`, then enable MSI with INTx disabled.
 pub fn program_msi(cfg: &Config, cap: u8, first: u8, count: usize) -> Option<()> {

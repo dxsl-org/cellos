@@ -1953,6 +1953,28 @@ rationale = "Each user takes the lock for one lookup or update and drops it befo
 review = "kernel/src/arch/x86_64/memory/mmio_alias.rs:kernel_mmio_alias; kernel/src/arch/x86_64/memory/mmio_alias.rs:kernel_mmio_refused; kernel/src/arch/x86_64/memory/mmio_alias.rs:own_kernel_window; kernel/src/memory/paging.rs:map_mmio_x86; kernel/src/memory/paging.rs:init_kernel_paging_x86"
 
 [[global]]
+key = "kernel::memory::paging::mmio_alias::KERNEL_MMIO_REFUSALS @cfg(target_arch = \"x86_64\")"
+lifetime = "global"
+mutation = "atomic"
+owner = "memory::paging::mmio_alias: RequestMmio refusals counted by kernel_mmio_refused"
+contexts = ["normal"]
+seal = "none: incremented on every refused RequestMmio that reaches kernel-driven MMIO"
+retirement = "never: lives for the whole run"
+rationale = "A Relaxed AtomicUsize diagnostic counter (refusal_to_log): it only decides which refusal is logged (the first, then each power of two) and is read into that log line; it publishes no other state"
+review = "kernel/src/arch/x86_64/memory/mmio_alias.rs:kernel_mmio_refused; kernel/src/memory/paging.rs:refusal_to_log"
+
+[[global]]
+key = "kernel::memory::paging::IDENTITY_MAP_REFUSALS"
+lifetime = "global"
+mutation = "atomic"
+owner = "memory::paging: identity-map refusals counted by identity_map_refused (RequestMmio, map_mmio_x86, grant_mmio_user, the framebuffer map, boot windows)"
+contexts = ["boot", "normal"]
+seal = "none: incremented on every refused identity map"
+retirement = "never: lives for the whole run"
+rationale = "A Relaxed AtomicUsize diagnostic counter (refusal_to_log): it only decides which refusal is logged (the first, then each power of two) and is read into that log line; it publishes no other state"
+review = "kernel/src/memory/paging.rs:identity_map_refused; kernel/src/memory/paging.rs:refusal_to_log"
+
+[[global]]
 key = "kernel::memory::heap::NULL_FROM_QUOTA"
 lifetime = "global"
 mutation = "atomic"
