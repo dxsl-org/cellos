@@ -322,6 +322,11 @@ pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
         .is_some_and(|entry| entry.paused && entry.tid == expected_tid)
 }
 
+/// Whether `service_id` has a row, active or paused.
+pub(crate) fn has_entry(service_id: u16) -> bool {
+    REGISTRY.lock().contains_key(&service_id)
+}
+
 /// Return whether `tid` is hidden behind any paused service mapping.
 ///
 /// IPC admission uses this as the quiesce barrier for callers that cached the

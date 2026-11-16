@@ -600,12 +600,69 @@ pub fn deregister_all_for(tid: usize) {
     let _publication = ROLE_PUBLICATION.lock();
     // First: a NIC primary is re-pointed while its service row still names
     // `tid`, so `clear_tid` below leaves the successor's row.
-    clear_nic_route_provider(tid, |_| true);
+    let primary_vacated = clear_nic_route_provider(tid, |_| true);
     crate::cell::service_registry::clear_tid(tid);
+    if primary_vacated {
+        promote_vacant_primary();
+    }
     clear_input_cell_if(tid);
     clear_block_route_provider(tid, |_| true);
     deregister_gpu_driver(tid);
     deregister_usb_hid_producer(tid);
+}
+
+/// After a dead primary's route was cleared without a hand-over — its
+/// `service::NIC_DRIVER` row was paused for a hot swap, so it could not be
+/// re-pointed, and `clear_tid` has now removed it — make the lowest live route
+/// the primary and register its provider, so networking survives as on the
+/// re-point path. Nothing happens while any `NIC_DRIVER` row exists (another
+/// registration owns the service) or a primary is set.
+///
+/// The new row is one heap node, charged to the kernel; the heap masks
+/// interrupts, so exit teardown inside the timer/IPI ISR may allocate it.
+/// Caller holds `ROLE_PUBLICATION`.
+fn promote_vacant_primary() {
+    use abi::syscall::service::NIC_DRIVER;
+    if crate::cell::service_registry::has_entry(NIC_DRIVER) {
+        return;
+    }
+    let promoted = {
+        let mut routes = NIC_ROUTES.lock();
+        let successor = routes
+            .slots
+            .iter()
+            .enumerate()
+            .filter(|_| routes.primary.is_none())
+            .find_map(|(index, route)| {
+                let route = (*route)?;
+                Some((index, route.key, route.provider?))
+            });
+        if let Some((index, _, _)) = successor {
+            routes.primary = Some(index);
+        }
+        successor
+    };
+    let Some((index, key, (tid, cell_id, generation))) = promoted else {
+        return;
+    };
+    let registered = {
+        let _kernel =
+            crate::memory::heap::ChargeScope::enter(crate::memory::cell_quota::Charge::KERNEL);
+        crate::cell::service_registry::register(NIC_DRIVER, tid, cell_id, generation)
+    };
+    if registered {
+        log::warn!(
+            "[driver_cell] NIC route {} promoted to primary: tid={} device={}",
+            index,
+            tid,
+            DeviceName(key)
+        );
+    } else {
+        let mut routes = NIC_ROUTES.lock();
+        if routes.primary == Some(index) {
+            routes.primary = None;
+        }
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -740,6 +797,15 @@ mod tests {
         assert_eq!(nic_route(0), Some((31, 3, 1)));
         assert!(owns_registered_nic_irq(7), "the secondary's line is proven");
 
+        // The service row names a foreign tid, so nothing re-points or
+        // promotes and the next registration takes the primary.
+        const FOREIGN: usize = 0x5B99;
+        assert!(crate::cell::service_registry::register(
+            abi::syscall::service::NIC_DRIVER,
+            FOREIGN,
+            9,
+            1
+        ));
         deregister_all_for(31);
         assert_eq!(nic_route(0), None);
         assert_eq!(nic_route(1), Some((32, 4, 1)), "the other NIC stays bound");
@@ -760,6 +826,7 @@ mod tests {
         assert_eq!(nic_route(1), Some((32, 4, 1)));
 
         deregister_all_for(34);
+        crate::cell::service_registry::clear_tid(FOREIGN);
         deregister_all_for(32);
         crate::dev::ownership::release_for(31, crate::dev::ownership::Scope::Retired);
         reset_nic_routes();
@@ -1123,5 +1190,40 @@ mod tests {
         }
         reset_nic_routes();
         reset_block_routes();
+    }
+
+    /// A primary that dies while its `NIC_DRIVER` row is paused for a hot
+    /// swap cannot be re-pointed; `clear_tid` removes the row, and the lowest
+    /// live route is then promoted and registered, so networking survives.
+    #[test]
+    fn a_dead_primary_with_a_paused_row_still_hands_on_the_service() {
+        use crate::cell::service_registry::{lookup_bound, pause, register};
+        use abi::syscall::service::NIC_DRIVER;
+        const A: Provider = (0x5F01, 81, 1);
+        const B: Provider = (0x5F02, 82, 1);
+        const C: Provider = (0x5F03, 83, 1);
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        reset_nic_routes();
+        let publish =
+            |(tid, cell, generation): Provider| move || register(NIC_DRIVER, tid, cell, generation);
+        assert_eq!(publish_nic_route(pci(0x5F0), A, publish(A)), Some(0));
+        assert_eq!(publish_nic_route(pci(0x5F1), B, publish(B)), Some(1));
+        assert_eq!(publish_nic_route(pci(0x5F2), C, publish(C)), Some(2));
+        assert!(pause(NIC_DRIVER, A.0));
+
+        deregister_all_for(A.0);
+        assert_eq!(nic_route(0), None);
+        assert_eq!(nic_primary(), Some(1), "the lowest live route");
+        assert_eq!(lookup_bound(NIC_DRIVER), Some(B), "registered for it");
+
+        deregister_all_for(B.0);
+        assert_eq!(
+            (nic_primary(), lookup_bound(NIC_DRIVER)),
+            (Some(2), Some(C)),
+            "an active row is re-pointed as before"
+        );
+        deregister_all_for(C.0);
+        assert_eq!((nic_primary(), lookup_bound(NIC_DRIVER)), (None, None));
+        reset_nic_routes();
     }
 }
