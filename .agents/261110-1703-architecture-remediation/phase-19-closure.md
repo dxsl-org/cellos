@@ -101,3 +101,15 @@ Hand back to the portfolio: remaining open items of the 2026-11-05 security audi
 
 - **Decision (2026-11-16, owner, S8c defaults).** [Approval](s8c-handoff-approval.md): staged and continuing; failing `main` lanes are diagnosed, fixed if a small local fix resolves them, otherwise recorded as residuals for written acceptance; `.agents/` retention is report-only; the allowlist re-review wave (every entry due before 2027-03-01) is in this phase.
 - **Surprise.** Spec number 00 is also duplicated (`00-context.md`, `00-fork.md`), not only 14. Tracked `.agents/` Markdown has grown to 204,227 lines (193k at review).
+- **Decision (2026-11-16, owner, closure-matrix answers).** On the matrix (`d22c9694ab`) and the lane diagnosis:
+  - The five High residuals H-2, H-5, H-8, H-13 and H-14 are accepted in writing.
+  - Phases 03/03b are closed as residuals tied to the one-pushed-CI-cycle condition.
+  - The nine open findings with no Phase 19 step (M-K4, M-A1, M-I4, M-U3, M-U4, M-B2, M-B4, M-B5b, L-6) are owner-accepted residuals handed back to the portfolio.
+  - New finding N-1 (virtio-blk never sets `poisoned`) is fixed in this phase.
+  - The `rust-std-promotion` approval package is re-pinned as the last commit, with re-bind notes; the owner approves the re-bound digest.
+  - The EL2 test-hooks self-test gating (a kernel test-hooks change) is taken.
+- **Deviation.** Two of the four failing `main` lanes were fixed in scripts and tests only:
+  - `vfs-quota` (`d4610efa6b`): `/bin/input` added to the RV64 test-hooks image; the shell's baseline is named `cellbox`.
+  - `x86hv-iso` (`a2d77056e1`): the hypervisor kernel is staged off the rollout guard's default path.
+- **Surprise.** The aarch64 handoff tests had silently skipped since the kernel target became `aarch64-unknown-none-softfloat`. With the path fixed (`8d8ae5f55f`) they run and pass. The `iommu-publication` host test had stopped compiling after Phase 18's `DmaRemapper` change; it is fixed in `e8d50f89d0`.
+- **Deviation.** Spec renames: `00-fork.md` → `27-fork.md` and `14-viui.md` → `28-viui.md`. `14-distributed.md` keeps its number because net-broker code cites it.
