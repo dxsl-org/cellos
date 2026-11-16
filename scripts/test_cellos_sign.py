@@ -27,7 +27,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cellos_sign import allowlist, cli, policy, scan, signing, toolchain  # noqa: E402
+from cellos_sign import allowlist, cli, policy, scan, signing, tcb, toolchain  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -321,14 +321,18 @@ class SignRefusesTierMismatchTests(unittest.TestCase):
     Only F5 and the signing call are replaced; `policy.check` is the real one.
     """
 
-    def sign(self, main_rs: str) -> tuple[int, list]:
+    def sign(self, main_rs: str, tier1: bool) -> tuple[int, list, str]:
         signed: list = []
+        out = __import__("io").StringIO()
         verified = toolchain.ToolchainStatus(ok=True, skipped=False, detail="pinned")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
             write(root, "cells/x/src/main.rs", main_rs)
             write(root, "a.toml", ffi_allowlist())
+            # The closure the generator would write for each variant, so the
+            # tier-class gate is the only layer that can differ.
+            write_tcb(root, roots=["x"] if tier1 else [], total=(1, 0) if tier1 else (0, 0))
             args = argparse.Namespace(
                 repo=root, allowlist="a.toml", quiet=True, strict=False,
                 targets=["cell.elf"], objcopy="objcopy", seed_hex=None,
@@ -336,24 +340,189 @@ class SignRefusesTierMismatchTests(unittest.TestCase):
             with mock.patch.object(cli.toolchain, "check", return_value=verified), \
                  mock.patch.object(cli.signing, "sign_and_verify",
                                    side_effect=lambda *a, **k: signed.append(a)), \
-                 mock.patch("sys.stdout", new_callable=__import__("io").StringIO), \
-                 mock.patch("sys.stderr", new_callable=__import__("io").StringIO):
-                return cli.run_sign(args), signed
+                 mock.patch("sys.stdout", out), mock.patch("sys.stderr", out):
+                return cli.run_sign(args), signed, out.getvalue()
 
     def test_tier_one_c_ffi_crate_is_refused_and_nothing_is_signed(self):
-        code, signed = self.sign(TIER_LESS + FFI_CALL)
+        code, signed, output = self.sign(TIER_LESS + FFI_CALL, tier1=True)
         self.assertEqual(code, cli.EXIT_POLICY)
         self.assertEqual(signed, [])
+        self.assertIn("[tier-class] x :: cells/x", output)
+        self.assertNotIn("[tcb]", output)
 
     def test_the_same_crate_with_an_ffi_manifest_signs(self):
-        code, signed = self.sign(TIER_FFI + FFI_CALL)
-        self.assertEqual(code, cli.EXIT_OK)
+        code, signed, output = self.sign(TIER_FFI + FFI_CALL, tier1=False)
+        self.assertEqual(code, cli.EXIT_OK, output)
         self.assertEqual(len(signed), 1)
 
     def test_check_tier_class_negative_control_passes(self):
         import subprocess
         run = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts/check-tier-class.py"), "--negative-control"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+
+
+def write_tcb(root: Path, roots: list[str] = (), total: tuple[int, int] = (0, 0),
+              packages: dict[str, str] | None = None, sites: dict[str, tuple[int, int]] | None = None,
+              unresolved: dict[str, str] | None = None) -> None:
+    """A closure file and a baseline, in the shape the generator and a reviewer write."""
+    closure = ["version = 1", "targets = []",
+               "tier1_roots = [" + ", ".join(f'"{r}"' for r in roots) + "]"]
+    for name, path in (packages or {}).items():
+        closure += ["[[package]]", f'name = "{name}"', f'path = "{path}"']
+    for path, reason in (unresolved or {}).items():
+        closure += ["[[unresolved]]", f'path = "{path}"', f'reason = "{reason}"']
+    write(root, tcb.CLOSURE_PATH, "\n".join(closure) + "\n")
+    baseline = ["version = 1", "[total]", f"unsafe = {total[0]}", f"attrs = {total[1]}"]
+    for path, (unsafe, attrs) in (sites or {}).items():
+        baseline += ["[[site]]", f'path = "{path}"', f"unsafe = {unsafe}", f"attrs = {attrs}"]
+    write(root, tcb.BASELINE_PATH, "\n".join(baseline) + "\n")
+
+
+class TcbClosureTests(unittest.TestCase):
+    """The Tier-1 closure ratchet: per-file ceilings plus the Tier-1 total."""
+
+    LIB_SRC = "#[no_mangle]\npub extern \"C\" fn f() { unsafe { g() } }\nfn h() { unsafe { } }\n"
+
+    def check(self, strict: bool = True, lib_src: str = LIB_SRC, cell_extra: str = "",
+              extra_files: dict[str, str] | None = None, roots: list[str] = ("x",),
+              total: tuple[int, int] = (2, 1), sites: dict | None = None,
+              packages: dict | None = None, allow_text: str = "version = 1\n",
+              extra: dict[str, str] | None = None) -> policy.Result:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "cells/x/Cargo.toml", '[package]\nname = "x"\nversion = "0.1.0"\n')
+            write(root, "cells/x/src/main.rs",
+                  "#![forbid(unsafe_code)]\n" + TIER_LESS + "fn main() {}\n" + cell_extra)
+            write(root, "libs/lib1/Cargo.toml", '[package]\nname = "lib1"\nversion = "0.1.0"\n')
+            write(root, "libs/lib1/src/lib.rs", lib_src)
+            for rel, text in (extra_files or {}).items():
+                write(root, rel, text)
+            write(root, "a.toml", allow_text)
+            write_tcb(root, roots=list(roots), total=total,
+                      packages={"lib1": "libs/lib1"} if packages is None else packages,
+                      sites={"libs/lib1/src/lib.rs": (2, 1)} if sites is None else sites)
+            return policy.check(root, allowlist.load(root, "a.toml"), strict=strict,
+                                closure=tcb.load_closure(root),
+                                baseline=tcb.load_baseline(root), extra=extra)
+
+    def tcb_violations(self, result: policy.Result) -> list[str]:
+        return [f"{v.path}: {v.detail}" for v in result.violations if v.layer == "tcb"]
+
+    def test_tree_at_its_ceilings_passes_strict(self):
+        result = self.check()
+        self.assertTrue(result.ok, [str(v) for v in result.violations])
+        self.assertEqual(result.tcb.total, tcb.Counts(2, 1))
+
+    def test_one_more_unsafe_in_a_listed_file_fails(self):
+        result = self.check(lib_src=self.LIB_SRC + "fn k() { unsafe { } }\n", strict=False)
+        self.assertTrue(any("3 `unsafe` site(s) exceed the ceiling of 2" in v
+                            for v in self.tcb_violations(result)))
+
+    def test_one_more_unsafe_attribute_fails(self):
+        result = self.check(lib_src=self.LIB_SRC + "#[export_name = \"k\"]\nfn k() {}\n",
+                            strict=False)
+        self.assertTrue(any("2 unsafe attribute site(s) exceed the ceiling of 1" in v
+                            for v in self.tcb_violations(result)))
+
+    def test_unsafe_in_a_new_file_without_a_row_fails(self):
+        result = self.check(extra_files={"libs/lib1/src/new.rs": "fn n() { unsafe { } }\n"},
+                            total=(3, 1), strict=False)
+        self.assertEqual(self.tcb_violations(result),
+                         ["libs/lib1/src/new.rs: Tier-1 closure file has 1 `unsafe` and 0 "
+                          f"unsafe attribute(s) and no row in {tcb.BASELINE_PATH}"])
+
+    def test_extra_code_reaches_the_scan_without_writing(self):
+        result = self.check(extra={"libs/lib1/src/new.rs": "fn n() { unsafe { } }"})
+        self.assertTrue(any(v.startswith("libs/lib1/src/new.rs") for v in self.tcb_violations(result)))
+
+    def test_a_drop_is_a_note_then_a_strict_violation(self):
+        lower = "#[no_mangle]\npub extern \"C\" fn f() { unsafe { g() } }\n"
+        relaxed = self.check(lib_src=lower, strict=False)
+        self.assertTrue(relaxed.ok)
+        self.assertTrue(any("below the ceiling of 2" in n for n in relaxed.tcb_notes))
+        strict = self.check(lib_src=lower)
+        self.assertEqual(len(self.tcb_violations(strict)), 2)  # the file row and the total
+
+    def test_unlinked_files_and_nested_packages_are_not_counted(self):
+        result = self.check(extra_files={
+            "libs/lib1/tests/it.rs": "fn t() { unsafe { } }\n",
+            "libs/lib1/build.rs": "fn main() { unsafe { } }\n",
+            "libs/lib1/sub/Cargo.toml": '[package]\nname = "sub"\nversion = "0.1.0"\n',
+            "libs/lib1/sub/src/lib.rs": "fn s() { unsafe { } }\n",
+        })
+        self.assertTrue(result.ok, [str(v) for v in result.violations])
+
+    def test_cfg_test_modules_in_src_are_counted(self):
+        result = self.check(extra_files={
+            "libs/lib1/src/tests.rs": "#[cfg(test)]\nfn t() { unsafe { } }\n"}, strict=False)
+        self.assertTrue(any(v.startswith("libs/lib1/src/tests.rs")
+                            for v in self.tcb_violations(result)))
+
+    def test_the_total_counts_tier_one_cells(self):
+        allow_text = ('version = 1\n[[file]]\npath = "cells/x/src/main.rs"\nclass = "driver-mmio"\n'
+                      'reason = "r"\napprover = "a"\ndate = "2026-11-16"\n')
+        cell = "fn c() { unsafe { } }\n"
+        rise = self.check(cell_extra=cell, allow_text=allow_text)
+        self.assertTrue(any("total 3 (cells 1 + closure 2) exceeds 2" in v
+                            for v in self.tcb_violations(rise)))
+        # Moving the site from the cell into the library keeps the total: passes
+        # once the library's own ceiling is raised in the same change.
+        moved = self.check(cell_extra=cell, allow_text=allow_text, total=(3, 1))
+        self.assertTrue(moved.ok, [str(v) for v in moved.violations])
+
+    def test_a_tier_one_cell_missing_from_the_closure_roots_fails(self):
+        result = self.check(roots=[], strict=False)
+        self.assertTrue(any("not a root" in v for v in self.tcb_violations(result)))
+
+    def test_a_stale_root_is_a_strict_violation(self):
+        self.assertTrue(self.check(roots=["x", "gone"], strict=False).ok)
+        self.assertTrue(any("no longer a Tier-1 cell" in v
+                            for v in self.tcb_violations(self.check(roots=["x", "gone"]))))
+
+    def test_a_listed_package_that_is_gone_fails(self):
+        result = self.check(packages={"lib1": "libs/lib1", "old": "libs/old"}, strict=False)
+        self.assertTrue(any(v.startswith("libs/old") for v in self.tcb_violations(result)))
+
+    def test_a_row_for_a_clean_or_missing_file_is_a_strict_violation(self):
+        sites = {"libs/lib1/src/lib.rs": (2, 1), "libs/lib1/src/gone.rs": (1, 0)}
+        self.assertTrue(self.check(sites=sites, strict=False).ok)
+        self.assertEqual(len(self.tcb_violations(self.check(sites=sites))), 1)
+
+    def test_baseline_schema_is_strict(self):
+        for bad in ('version = 1\n[total]\nunsafe = 0\nattrs = 0\n'
+                    '[[site]]\npath = "p"\nunsafe = 0\nattrs = 0\n',
+                    'version = 1\n[total]\nunsafe = -1\nattrs = 0\n',
+                    'version = 1\n[total]\nunsafe = 0\nattrs = 0\nceiling = 3\n',
+                    'version = 1\n[total]\nunsafe = 0\n'):
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as tmp:
+                write(Path(tmp), tcb.BASELINE_PATH, bad)
+                with self.assertRaises(tcb.TcbError):
+                    tcb.load_baseline(Path(tmp))
+
+    def test_missing_closure_file_refuses_to_sign(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, "a.toml", "version = 1\n")
+            args = argparse.Namespace(repo=root, allowlist="a.toml", quiet=True, strict=False,
+                                      targets=["cell.elf"], objcopy="objcopy", seed_hex=None)
+            with mock.patch.object(cli.signing, "sign_and_verify") as signer, \
+                 mock.patch("sys.stdout", new_callable=__import__("io").StringIO), \
+                 mock.patch("sys.stderr", new_callable=__import__("io").StringIO):
+                self.assertEqual(cli.run_sign(args), cli.EXIT_USAGE)
+            signer.assert_not_called()
+
+    def test_real_baseline_lists_the_nic_driver_sites(self):
+        baseline = tcb.load_baseline(REPO_ROOT)
+        self.assertEqual(baseline.sites["libs/nic-driver/src/dma.rs"], tcb.Counts(2, 0))
+        self.assertEqual(baseline.sites["libs/nic-driver/src/ring.rs"], tcb.Counts(5, 0))
+
+    def test_check_tcb_closure_negative_control_passes(self):
+        import subprocess
+        run = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts/check-tcb-closure.py"), "--negative-control"],
             capture_output=True, text=True,
         )
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
@@ -588,6 +757,7 @@ class SignPathStrictnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, "a.toml", "version = 1\n")
+            write_tcb(root)
             args = argparse.Namespace(
                 repo=root, allowlist="a.toml", quiet=True, strict=False,
                 targets=["cell.elf"], objcopy="objcopy", seed_hex=None,

@@ -1,4 +1,4 @@
-"""The F1 policy check: attribute layer + token layer, over one allowlist.
+"""The F1 policy check: attribute and token layers, tier class, Tier-1 closure.
 
 This is the *only* implementation of the "no unsafe in cells/" rule in the repo.
 It replaced `scripts/check-cells-unsafe-ratchet.py`, whose token rule and 49-entry
@@ -25,10 +25,18 @@ not there (both verified against the pinned toolchain):
   * `forbid` is per-crate, so it says nothing about a dependency, path or
     registry.
 
-The boundary this check therefore enforces: **Cells are forbid-clean; `libs/*`
-is trusted TCB and out of F1 scope.** `libs/ostd` is deliberately absent from
-CELL_ROOTS — it is the supervisor-side runtime whose whole job is the `unsafe`
-a Cell must not write, and it is reviewed as TCB, not ratcheted as a Cell.
+The boundary this check therefore enforces: **Cells are forbid-clean, and the
+code they link is held to reviewed ceilings.** `libs/ostd` and the other
+in-tree crates of the Tier-1 dependency closure are not Cells — their job is
+the `unsafe` a Cell must not write — so they are not in CELL_ROOTS. Instead the
+closure layer (`tcb.py`) holds every one of their files to a per-file ceiling
+of `unsafe` tokens and unsafe attributes, plus a combined total over the Tier-1
+cells and the closure. Third-party crates are pinned at `name@version` in the
+generated closure file, whose drift CI checks.
+
+The tier-class layer (`tier_class.py`) refuses a crate whose allowlist entries
+include `c-ffi` or `legacy-raw-ptr` unless its manifest class puts it in Tier 2
+or a reviewed `[[tier_exception]]` names it.
 """
 
 from __future__ import annotations
@@ -37,7 +45,7 @@ import datetime as _dt
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import scan, tier_class
+from . import scan, tcb, tier_class
 from .allowlist import Allowlist
 
 # Directories whose crates are Cells subject to F1.
@@ -48,7 +56,7 @@ CELL_ROOTS = ["cells"]
 class Violation:
     """One F1 failure, addressed to the developer who must fix it."""
 
-    layer: str  # "attribute" | "token" | "tier-class" | "stale" (strict only)
+    layer: str  # "attribute" | "token" | "tier-class" | "tcb" | "stale" (strict only)
     crate: str
     path: str
     detail: str
@@ -67,6 +75,9 @@ class Result:
     unused_crate_entries: list[str] = field(default_factory=list)
     stale_entries: list[str] = field(default_factory=list)
     tier: tier_class.Outcome | None = None
+    tcb: tcb.Report | None = None
+    # NOTEs from the closure layer that are violations only under --strict.
+    tcb_notes: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -81,10 +92,22 @@ def _crate_of(path: str, owners: list[tuple[str, str]]) -> str:
     return "<no crate>"
 
 
-def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: bool = False) -> Result:
-    """Run both F1 layers and the tier-class gate over `cells/`.
+def check(
+    repo: Path,
+    allow: Allowlist,
+    today: _dt.date | None = None,
+    strict: bool = False,
+    closure: tcb.Closure | None = None,
+    baseline: tcb.Baseline | None = None,
+    extra: dict[str, str] | None = None,
+) -> Result:
+    """Run both F1 layers, the tier-class gate and the Tier-1 closure ratchet.
 
-    Pure source parsing — no build, no network.
+    Pure source parsing — no build, no network. The closure layer runs when
+    `closure` and `baseline` are given; the CLI always loads and passes them
+    (`tcb.load_closure` / `tcb.load_baseline`), so a signing run cannot skip
+    it. `extra` appends code to repo-relative closure files without writing
+    them (negative controls only).
     """
     today = today or _dt.date.today()
     repo = repo.resolve()
@@ -132,12 +155,16 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
     # ── Layer 2: token ────────────────────────────────────────────────────────
     result.files_scanned = len(sources)
     seen_unsafe: set[str] = set()
+    cell_counts: dict[str, tcb.Counts] = {}
     for rel in sources:
         posix = rel.as_posix()
         absolute = repo / rel
         if not absolute.is_file():
             continue  # tracked but deleted in the working tree
-        if scan.count_unsafe(scan.read_code(absolute)) == 0:
+        counts = tcb.count(scan.read_code(absolute))
+        if counts:
+            cell_counts[posix] = counts
+        if counts.unsafe == 0:
             continue
         seen_unsafe.add(posix)
         if posix not in allow.files:
@@ -175,6 +202,28 @@ def check(repo: Path, allow: Allowlist, today: _dt.date | None = None, strict: b
                     path="[[tier_exception]]",
                     detail=f"{label} covers no mismatch — delete or correct it",
                 )
+            )
+
+    # ── Layer 4: Tier-1 closure ───────────────────────────────────────────────
+    # The code Tier-1 cells link from outside cells/ is held to per-file
+    # ceilings, and the Tier-1 total (cells plus closure) to one more (tcb.py).
+    if closure is not None and baseline is not None:
+        tier1 = {name: r.directory for name, r in tier.records.items() if r.tier == 1}
+        cells_total = tcb.Counts()
+        for posix, counts in cell_counts.items():
+            owner = tier.records.get(_crate_of(posix, owners))
+            if owner is None or owner.tier == 1:
+                cells_total = cells_total + counts
+        report = tcb.check(repo, closure, baseline, tier1, cells_total, extra)
+        result.tcb = report
+        for finding in report.findings:
+            if finding.strict_only:
+                result.tcb_notes.append(f"{finding.crate} :: {finding.path} — {finding.detail}")
+                if not strict:
+                    continue
+            result.violations.append(
+                Violation(layer="tcb", crate=finding.crate, path=finding.path,
+                          detail=finding.detail)
             )
 
     # ── Ratchet hygiene (reported, fatal only under --strict for stale entries —

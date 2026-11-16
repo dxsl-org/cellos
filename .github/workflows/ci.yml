@@ -2245,6 +2245,10 @@ jobs:
     #
     # The toolchain is installed so F5 is genuinely exercised here; --strict makes
     # a missing rustup a failure rather than a silently skipped check.
+    #
+    # Phase 18 adds the tier-class gate and the Tier-1 closure ratchet to the same
+    # check. The closure file the signer reads is generated from `cargo metadata`;
+    # this job regenerates it and fails on drift, so the signer itself needs no cargo.
     name: F1/F5 admission check (cellos-sign --check)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -2261,13 +2265,28 @@ jobs:
       - name: Unit-test the gate itself
         run: python3 scripts/test_cellos_sign.py
 
-      - name: Check F1 (forbid + no unsafe outside the allowlist), the tier-class gate and F5 (toolchain pin)
+      - name: Check F1 (forbid + no unsafe outside the allowlist), tier class, Tier-1 closure and F5 (toolchain pin)
         run: python3 scripts/cellos-sign --check --strict
 
       # The tier-class gate must refuse to sign a crate holding a `c-ffi` entry
       # with a Tier-1 manifest (Phase 18). Throwaway tree; nothing under cells/.
       - name: Tier-class negative control
         run: python3 scripts/check-tier-class.py --negative-control
+
+      # The generator reads `cargo metadata --locked --offline`, so the registry
+      # sources are fetched first. Any new crate, version bump or changed count of
+      # a third-party crate, and any Tier-1 root change, fails here until
+      # scripts/tier1-closure.generated.toml is regenerated and reviewed.
+      - name: Fetch dependency sources for the closure generator
+        run: cargo fetch --locked
+
+      - name: Tier-1 closure file is current (third-party pins, roots, in-tree packages)
+        run: python3 scripts/gen-tier1-closure.py --check
+
+      # A new unlisted `unsafe` (or unsafe attribute) in libs/ostd must fail the
+      # closure ratchet. In-memory additions only; nothing is written.
+      - name: Tier-1 closure negative control
+        run: python3 scripts/check-tcb-closure.py --negative-control
 
   shell-utils:
     name: Shell Utilities Integration Test (Phase E)

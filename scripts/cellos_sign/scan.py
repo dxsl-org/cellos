@@ -1,13 +1,15 @@
 """Source-level scanning primitives for the F1 (no-unsafe) policy check.
 
 F1 (Spec 16 §6) says every Cell crate carries `#![forbid(unsafe_code)]`. This
-module answers the two questions the checker needs, using nothing but the source
+module answers the questions the checker needs, using nothing but the source
 tree — no cargo invocation, no network, no build:
 
   * does a crate root source carry the `#![forbid(unsafe_code)]` attribute?
   * which `.rs` files under a crate contain the `unsafe` keyword?
+  * how many unsafe attributes (`no_mangle`, `export_name`, `link_section`) does
+    a file use? rustc's `unsafe_code` lint fires on them without the keyword.
 
-Both answers are computed on text reduced to code by `lexer.strip_noncode`:
+All answers are computed on text reduced to code by `lexer.strip_noncode`:
 comments and string/char literals are gone, so neither the word "unsafe" in
 prose nor a `/*` or a counterfeit attribute inside a string literal can steer
 the verdict (Spec 18 §2.1: false positives are acceptable, false negatives are
@@ -26,6 +28,10 @@ from .lexer import strip_noncode
 
 # `unsafe` as a word, but not the `unsafe_code` lint name.
 UNSAFE_RE = re.compile(r"\bunsafe\b(?!_)")
+# Attributes the `unsafe_code` lint treats as unsafe, bare, inside `unsafe(..)`
+# or inside `cfg_attr(..)`. Counted as words, so a macro matcher that names one
+# counts too: a false positive, never a false negative.
+UNSAFE_ATTR_RE = re.compile(r"\b(?:no_mangle|export_name|link_section)\b")
 # Inner attribute `#![forbid(..., unsafe_code, ...)]`, whitespace-tolerant.
 # Anchored to the start of a line: a crate-root attribute always begins one, and
 # refusing to accept it mid-line keeps anything embedded in surrounding text from
@@ -43,6 +49,11 @@ def read_code(path: Path) -> str:
 def count_unsafe(code: str) -> int:
     """Number of `unsafe` keyword occurrences in reduced source."""
     return len(UNSAFE_RE.findall(code))
+
+
+def count_unsafe_attrs(code: str) -> int:
+    """Number of `no_mangle` / `export_name` / `link_section` uses in reduced source."""
+    return len(UNSAFE_ATTR_RE.findall(code))
 
 
 def has_forbid(code: str) -> bool:

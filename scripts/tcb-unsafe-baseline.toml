@@ -1,0 +1,306 @@
+# Tier-1 closure baseline — reviewed ceilings on the `unsafe` linked into Tier-1 cells.
+#
+# Consumed by `scripts/cellos-sign` (scripts/cellos_sign/tcb.py) in every --check
+# and before every --sign. The closure is scripts/tier1-closure.generated.toml
+# (generated from `cargo metadata`, drift-checked in CI): these rows cover the
+# in-tree packages it lists. Third-party crates are not counted here; they are
+# pinned at name@version in the generated file.
+#
+#   [[site]]  one file of an in-tree closure package that uses `unsafe` or an
+#             unsafe attribute. Two ceilings: `unsafe` (keyword tokens, the F1
+#             token rule) and `attrs` (`no_mangle`, `export_name`, `link_section`:
+#             the attributes rustc's `unsafe_code` lint rejects without the
+#             keyword). Same lexer as the cell scan: comments and literals do not
+#             count; `#[cfg(test)]` modules inside src/ do.
+#   [total]   ceiling on the Tier-1 total: tokens and attributes in cells/ crates
+#             whose manifest leaves them in Tier 1, plus the closure. Moving
+#             `unsafe` from cells into a library passes only if the sum does not
+#             grow.
+#
+# Ratchet: a count above a ceiling, or a closure file with a count and no row,
+# fails. A count below a ceiling, or a row for a file that is gone, is a NOTE and
+# fails under --strict (CI and signing), so a ceiling is lowered in the same
+# commit that removes the unsafe. Raising a ceiling or adding a row is reviewed
+# like an allowlist entry: this file *is* the hole.
+#
+# Baseline taken 2026-11-16 (Phase 18, owner decision: combined total of cells
+# plus closure; attributes as a second per-file ceiling), approver dmin. At that
+# point: cells 178 unsafe / 7 attrs + closure 411 / 23 = 589 / 30. libs/posix-shim
+# (160 / 136) left the closure when app-c-math-smoke declared PROTECTION_CLASS_FFI.
+
+version = 1
+
+[total]
+unsafe = 589
+attrs = 30
+
+# ── kernel/third_party/virtio_drivers (vendored virtio-drivers 0.7.5 fork) ───────
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/blk.rs"
+unsafe = 5
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/console.rs"
+unsafe = 5
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/gpu.rs"
+unsafe = 5
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/input.rs"
+unsafe = 7
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/net/dev.rs"
+unsafe = 3
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/net/dev_raw.rs"
+unsafe = 7
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/net/net_buf.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/socket/vsock.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/device/sound.rs"
+unsafe = 5
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/hal.rs"
+unsafe = 8
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/hal/fake.rs"
+unsafe = 10
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/queue.rs"
+unsafe = 49
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/queue/owning.rs"
+unsafe = 9
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/transport/mmio.rs"
+unsafe = 18
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/transport/pci.rs"
+unsafe = 14
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/transport/pci/bus.rs"
+unsafe = 7
+attrs = 0
+
+[[site]]
+path = "kernel/third_party/virtio_drivers/src/volatile.rs"
+unsafe = 6
+attrs = 0
+
+# ── libs/abi (no `unsafe`; the manifest and syscall-allowlist sections) ─────────
+
+[[site]]
+path = "libs/abi/src/manifest_macro.rs"
+unsafe = 0
+attrs = 4
+
+[[site]]
+path = "libs/abi/src/syscall.rs"
+unsafe = 0
+attrs = 2
+
+# ── libs/cellos-fs (g2-cow-experiment, hosted only) ───────────────────────────
+
+[[site]]
+path = "libs/cellos-fs/src/cow_experiment.rs"
+unsafe = 2
+attrs = 0
+
+# ── libs/nic-driver (shared NIC DMA ring layout, Phase 18) ────────────────────
+
+[[site]]
+path = "libs/nic-driver/src/dma.rs"
+unsafe = 2
+attrs = 0
+
+[[site]]
+path = "libs/nic-driver/src/ring.rs"
+unsafe = 5
+attrs = 0
+
+# ── libs/ostd (cell runtime: syscalls, heap, executor, grants) ────────────────
+
+[[site]]
+path = "libs/ostd/src/clients/kms/ssh.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/display/surface.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/dma.rs"
+unsafe = 2
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/entry.rs"
+unsafe = 0
+attrs = 2
+
+[[site]]
+path = "libs/ostd/src/executor.rs"
+unsafe = 10
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/fs.rs"
+unsafe = 2
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/grant.rs"
+unsafe = 8
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/heap.rs"
+unsafe = 6
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/ipc.rs"
+unsafe = 1
+attrs = 1
+
+[[site]]
+path = "libs/ostd/src/lib.rs"
+unsafe = 0
+attrs = 1
+
+[[site]]
+path = "libs/ostd/src/locked-heap-tests.rs"
+unsafe = 9
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/locked-heap.rs"
+unsafe = 6
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/mmio.rs"
+unsafe = 2
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/repl.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/ring-channel-tests.rs"
+unsafe = 2
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/ring_channel.rs"
+unsafe = 3
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/runtime.rs"
+unsafe = 0
+attrs = 9
+
+[[site]]
+path = "libs/ostd/src/session.rs"
+unsafe = 9
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/startup.rs"
+unsafe = 4
+attrs = 3
+
+[[site]]
+path = "libs/ostd/src/syscall.rs"
+unsafe = 145
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/task.rs"
+unsafe = 1
+attrs = 0
+
+[[site]]
+path = "libs/ostd/src/vmm.rs"
+unsafe = 12
+attrs = 0
+
+# ── libs/tensor-math (AArch64 NEON kernels) ───────────────────────────────────
+
+[[site]]
+path = "libs/tensor-math/src/neon.rs"
+unsafe = 2
+attrs = 0
+
+# ── libs/virtio-pci-transport ─────────────────────────────────────────────────
+
+[[site]]
+path = "libs/virtio-pci-transport/src/regs.rs"
+unsafe = 3
+attrs = 0
+
+[[site]]
+path = "libs/virtio-pci-transport/src/tests/fake.rs"
+unsafe = 3
+attrs = 0
+
+[[site]]
+path = "libs/virtio-pci-transport/src/transport/mod.rs"
+unsafe = 4
+attrs = 0
+
+[[site]]
+path = "libs/virtio-pci-transport/src/transport/ops.rs"
+unsafe = 2
+attrs = 0
+
+# ── libs/wire ─────────────────────────────────────────────────────────────────
+
+[[site]]
+path = "libs/wire/src/allocator.rs"
+unsafe = 3
+attrs = 0
+
+[[site]]
+path = "libs/wire/src/cluster.rs"
+unsafe = 0
+attrs = 1

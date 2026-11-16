@@ -1,7 +1,7 @@
 """Command line for `cellos-sign`. See the package docstring for the threat model.
 
-Exit codes: 0 ok · 1 policy violation (F1 or F5) · 2 usage/config error ·
-3 signing refused or signature invalid.
+Exit codes: 0 ok · 1 policy violation (F1, tier class, Tier-1 closure or F5) ·
+2 usage/config error · 3 signing refused or signature invalid.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from . import allowlist as allowlist_mod
-from . import policy, signing, toolchain
+from . import policy, signing, tcb, toolchain
 
 EXIT_OK, EXIT_POLICY, EXIT_USAGE, EXIT_SIGNING = 0, 1, 2, 3
 
@@ -36,6 +36,8 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
     if result.tier is not None:
         for label in result.tier.unused_exceptions:
             print(f"NOTE: [[tier_exception]] {label} covers no mismatch — delete or correct it")
+    for note in result.tcb_notes:
+        print(f"NOTE: Tier-1 closure: {note}")
 
     if status.skipped:
         print(f"SKIP: F5 — {status.detail}")
@@ -44,8 +46,9 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
     elif not quiet:
         print(f"OK:   F5 — {status.detail}")
 
-    f1 = [v for v in result.violations if v.layer != "tier-class"]
+    f1 = [v for v in result.violations if v.layer not in ("tier-class", "tcb")]
     tier = [v for v in result.violations if v.layer == "tier-class"]
+    closure = [v for v in result.violations if v.layer == "tcb"]
     if f1:
         print("FAIL: F1 — Cells must be #![forbid(unsafe_code)] (Spec 16 §6). Either")
         print("      remove the unsafe / add the attribute, or add a reviewed entry to")
@@ -66,18 +69,40 @@ def _report(result: policy.Result, status: toolchain.ToolchainStatus, quiet: boo
         print(f"OK:   tier class — {len(gated)} crates hold c-ffi/legacy-raw-ptr entries: "
               f"{sum(r.tier == 2 for r in gated)} Tier 2, "
               f"{len(result.tier.used_exceptions)} signed tier exception(s)")
+    if closure:
+        print("FAIL: Tier-1 closure — code linked into Tier-1 cells exceeds or no longer")
+        print(f"      matches its reviewed ceilings in {tcb.BASELINE_PATH} /")
+        print(f"      {tcb.CLOSURE_PATH} (regenerate with scripts/gen-tier1-closure.py):")
+        for violation in sorted(closure, key=lambda v: (v.crate, v.path)):
+            print(f"  {violation}")
+    elif not quiet and result.tcb is not None:
+        r = result.tcb
+        print(f"OK:   Tier-1 closure — {len(r.per_package)} in-tree crates, "
+              f"{len(r.per_file)} files at their ceilings; Tier-1 total "
+              f"{r.total.unsafe} unsafe / {r.total.attrs} attrs (cells {r.cells.unsafe}/"
+              f"{r.cells.attrs} + closure {r.closure.unsafe}/{r.closure.attrs}); "
+              f"{r.thirdparty_pins} third-party pins")
 
 
 def run_check(args: argparse.Namespace) -> int:
-    """F1 + F5 with no signing. Pure source parsing: no build, no network."""
+    """F1, tier class, closure and F5 with no signing. Pure source parsing: no
+    build, no network (the closure file is generated and drift-checked in CI)."""
     repo = args.repo
     try:
         allow = allowlist_mod.load(repo, args.allowlist)
     except allowlist_mod.AllowlistError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    try:
+        closure = tcb.load_closure(repo)
+        baseline = tcb.load_baseline(repo)
+    except tcb.TcbError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        return EXIT_USAGE
 
-    result = policy.check(repo, allow, today=_dt.date.today(), strict=getattr(args, "strict", False))
+    result = policy.check(repo, allow, today=_dt.date.today(),
+                          strict=getattr(args, "strict", False),
+                          closure=closure, baseline=baseline)
     status = toolchain.check(repo)
     _report(result, status, args.quiet)
 

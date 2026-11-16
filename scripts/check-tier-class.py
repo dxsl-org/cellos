@@ -33,7 +33,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from cellos_sign import allowlist, cli, policy, toolchain  # noqa: E402
+from cellos_sign import allowlist, cli, policy, tcb, toolchain  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 CONTROL_CRATE = "tier-class-negative-control"
@@ -84,6 +84,16 @@ def write_control_tree(root: Path, tier: str, today: str) -> None:
         f'[package]\nname = "{CONTROL_CRATE}"\nversion = "0.1.0"\n')
     put("cells/negative-control/src/main.rs", _CONTROL_MAIN.format(tier=tier))
     put(allowlist.DEFAULT_PATH, _CONTROL_ALLOWLIST.format(today=today, crate=CONTROL_CRATE))
+    # The closure ratchet sees the crate as a Tier-1 root only in the Tier-1
+    # variant; give each variant the closure and baseline it would generate so
+    # the only difference between the two runs is the manifest class.
+    tier1 = not tier
+    roots = f'"{CONTROL_CRATE}"' if tier1 else ""
+    put(tcb.CLOSURE_PATH,
+        f"version = 1\ntargets = []\ntier1_roots = [{roots}]\n"
+        "package = []\nthirdparty = []\nunresolved = []\n")
+    put(tcb.BASELINE_PATH,
+        f"version = 1\nsite = []\n[total]\nunsafe = {1 if tier1 else 0}\nattrs = 0\n")
 
 
 def run_sign(root: Path) -> tuple[int, list, str]:
