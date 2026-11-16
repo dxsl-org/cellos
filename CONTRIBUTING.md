@@ -118,11 +118,12 @@ git checkout -b feat/shell-my-command   # or fix/, docs/, test/, refactor/
 
 ### 4 — Implement
 
-Follow the patterns already in the file you are editing.  For a shell command:
+Follow the patterns already in the file you are editing.  For a shell command
+(the shell is the `cellbox` cell):
 
 ```bash
 # find the command dispatch table
-grep -n '"ls"' cells/apps/shell/src/commands.rs
+grep -n '"ls" =>' cells/tools/cellbox/src/executor.rs
 ```
 
 Add your implementation next to a similar existing command.
@@ -229,7 +230,7 @@ phase), not direct GPU hardware calls. `CpuExecutor` replays commands via the CP
 rasterizer. A hardware `HwGpuExecutor` for embedded 2D GPUs (Mali DE, PowerVR) is deferred
 to G2. On QEMU VirtIO GPU, CPU rasterization is the only supported path.
 
-Key files: `libs/viui/` · Spec: `docs/specs/14-viui.md` · Phases: `.agents/260608-*/`
+Key files: `libs/viui/` · Spec: `docs/specs/28-viui.md` · Phases: `.agents/260608-*/`
 
 ---
 
