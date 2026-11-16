@@ -2,9 +2,6 @@
 
 #![allow(dead_code)]
 
-use ostd::mmio::MmioRegion;
-use types::ViResult;
-
 pub(crate) const MAC_MODE: usize = 0x0400;
 pub(crate) const MAC_STATUS: usize = 0x0404;
 pub(crate) const MAC_ADDR1_LO: usize = 0x0410;
@@ -32,17 +29,4 @@ pub(crate) const MICOMM_CMD_READ: u32 = 0x0800_0000;
 pub(crate) const MICOMM_BUSY: u32 = 0x2000_0000;
 pub(crate) const MICOMM_READFAIL: u32 = 0x1000_0000;
 
-pub(crate) trait RegisterFile {
-    fn rd32(&self, offset: usize) -> ViResult<u32>;
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()>;
-}
-
-impl RegisterFile for MmioRegion {
-    fn rd32(&self, offset: usize) -> ViResult<u32> {
-        self.read_u32(offset)
-    }
-
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()> {
-        self.write_u32(offset, value)
-    }
-}
+pub(crate) use nic_driver::regs::RegisterFile;

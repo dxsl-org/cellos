@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use crate::regs::{RegisterFile, PF_ATQT};
+use nic_driver::ring::DescRing;
 use types::{ViError, ViResult};
 
 pub(crate) const OPC_GET_VERSION: u16 = 0x0001;
@@ -18,6 +19,8 @@ pub(crate) const I40E_AQ_FLAG_ERR: u16 = 0x0004;
 pub(crate) const I40E_AQ_FLAG_BUF: u16 = 0x1000;
 
 const AQ_POLLS: u32 = 100_000;
+/// Admin queue depth (send and receive).
+pub(crate) const AQ_SLOTS: usize = 16;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -73,21 +76,21 @@ pub(crate) fn format_get_link_status() -> AqDesc {
     }
 }
 
+/// Admin send queue: [`AQ_SLOTS`] descriptors in one authorized DMA page.
+pub(crate) type AdminQueue = DescRing<AqDesc, AQ_SLOTS>;
+
 pub(crate) fn post_aq_command(
     regs: &impl RegisterFile,
-    ring: &ostd::dma::DmaBuf,
+    ring: &AdminQueue,
     head: usize,
     desc: AqDesc,
 ) -> ViResult<AqDesc> {
-    let ptr = (ring.virt() as *mut AqDesc).wrapping_add(head);
-    unsafe {
-        core::ptr::write_volatile(ptr, desc);
-    }
-    let next = (head + 1) % 16;
+    ring.write(head, desc);
+    let next = (head + 1) % AQ_SLOTS;
     regs.wr32(PF_ATQT, next as u32)?;
 
     for _ in 0..AQ_POLLS {
-        let resp = unsafe { core::ptr::read_volatile(ptr) };
+        let resp = ring.read(head);
         if resp.flags & I40E_AQ_FLAG_DD != 0 {
             if resp.retval != 0 {
                 return Err(ViError::IO);

@@ -34,12 +34,12 @@ impl RegisterFile for FakeRegs {
     fn wr32(&self, offset: usize, value: u32) -> ViResult<()> {
         self.writes.borrow_mut().push((offset, value));
         let stored = match offset {
-            o if o >= APE_PER_LOCK_REQ && o < APE_PER_LOCK_REQ + 32 && self.responsive => {
+            o if (APE_PER_LOCK_REQ..APE_PER_LOCK_REQ + 32).contains(&o) && self.responsive => {
                 let grant_off = o - APE_PER_LOCK_REQ + APE_PER_LOCK_GRANT;
                 self.regs.borrow_mut().insert(grant_off, value);
                 value
             }
-            o if o >= APE_PER_LOCK_GRANT && o < APE_PER_LOCK_GRANT + 32 && self.responsive => {
+            o if (APE_PER_LOCK_GRANT..APE_PER_LOCK_GRANT + 32).contains(&o) && self.responsive => {
                 // Unlock clears grant
                 0
             }

@@ -1,39 +1,32 @@
 //! Broadcom BCM57xx controller bring-up, APE handshake, and data path.
 
 use crate::ape::{self, with_ape_lock};
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
-};
+use crate::identity::{self, Identity, QUERY_DEVICE_IDS, VENDOR_BROADCOM};
 use crate::phy;
 use crate::regs::*;
-use crate::rings::{self, BcmRxDesc, BcmTxDesc};
+use crate::rings::{self, BcmRxDesc, BcmTxDesc, BUF_SIZE, RX_SLOTS, TX_SLOTS};
 use core::sync::atomic::{compiler_fence, Ordering};
-use ostd::dma::DmaBuf;
+use nic_driver::dma::{DmaSet, Layout, Position};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
-pub use crate::rings::BUF_SIZE;
-
+const BCM_BAR0_LEN: usize = 0x1_0000;
+const BCM_MMIO_MIN: usize = 0x6808;
 const RESET_POLLS: u32 = 1_000_000;
+
+/// One extra DMA slot, authorized after the rings: the status block.
+const LAYOUT: Layout<1> = Layout::new([Position::After]);
 
 pub struct BcmController {
     mmio: MmioRegion,
-    tx_ring: DmaBuf,
-    rx_ring: DmaBuf,
-    #[allow(dead_code)]
-    status_block: DmaBuf,
-    tx_bufs: [DmaBuf; TX_SLOTS],
-    rx_bufs: [DmaBuf; RX_SLOTS],
-    dma_iovas: DmaIovas,
+    dma: DmaSet<BcmTxDesc, BcmRxDesc, TX_SLOTS, RX_SLOTS, 1>,
     tx_next: usize,
     rx_head: usize,
-    pub mac: [u8; 6],
-    pub link_up: bool,
-    pub func: u8,
+    mac: [u8; 6],
+    link_up: bool,
+    func: u8,
 }
-
-unsafe impl Send for BcmController {}
 
 impl Drop for BcmController {
     fn drop(&mut self) {
@@ -42,8 +35,47 @@ impl Drop for BcmController {
     }
 }
 
+impl NicDevice for BcmController {
+    const TAG: &'static str = "[bcm57xx]";
+    const VENDOR: u16 = VENDOR_BROADCOM;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    const ABSENT_LINE: Option<&'static str> =
+        Some("no BCM5719/BCM5720 controller present; driver cell idle");
+    type Identity = Identity;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<Identity> {
+        identity::classify(vendor, device)
+    }
+
+    fn identity_name(id: &Identity) -> &'static str {
+        id.name
+    }
+
+    fn init(probe: &Probe, _id: Identity) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(BCM_BAR0_LEN, BCM_MMIO_MIN);
+        Self::new(mmio, probe.bdf())
+    }
+
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "link_up={} mac={}", self.link_up, MacFmt(self.mac))
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.poll_rx(out).unwrap_or_default()
+    }
+}
+
 impl BcmController {
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
         let func = (bdf & 0x07) as u8;
         // 1. Notify APE processor that driver is starting.
         ape::notify_driver_state(&mmio, func, ape::APE_HOST_DRVR_STATE_START)?;
@@ -81,71 +113,38 @@ impl BcmController {
         // 4. Restart PHY autonegotiation under PHY lock.
         phy::restart_autoneg(&mmio, func)?;
 
-        // 5. Allocate and authorize DMA.
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let status_block = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-
-        with_authorized_dma_layout(
-            (mmio, tx_ring, rx_ring, status_block, tx_bufs, rx_bufs),
-            |r, s| {
-                match s {
-                    DmaSlot::TxRing => r.1.authorize(bdf),
-                    DmaSlot::RxRing => r.2.authorize(bdf),
-                    DmaSlot::StatusBlock => r.3.authorize(bdf),
-                    DmaSlot::TxBuffer(i) => r.4[i].authorize(bdf),
-                    DmaSlot::RxBuffer(i) => r.5[i].authorize(bdf),
-                }
-                .map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, tx_ring, rx_ring, status_block, tx_bufs, rx_bufs), dma_iovas| {
-                rings::clear(&tx_ring);
-                rings::clear(&rx_ring);
-                rings::clear(&status_block);
-                let mut ctrl = BcmController {
-                    mmio,
-                    tx_ring,
-                    rx_ring,
-                    status_block,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    mac,
-                    link_up: false,
-                    func,
-                };
-                for_each_initial_dma_program(&dma_iovas, |p| {
-                    let _ = ctrl.apply(p);
-                });
-                ctrl.finish_init();
-                Ok(ctrl)
-            },
-        )?
+        // 5. Allocate and authorize DMA (status block last); nothing is
+        //    programmed before this returns.
+        let dma = DmaSet::alloc_authorized(&LAYOUT, bdf)?;
+        let mut ctrl = BcmController {
+            mmio,
+            dma,
+            tx_next: 0,
+            rx_head: 0,
+            mac,
+            link_up: false,
+            func,
+        };
+        ctrl.program_rings();
+        ctrl.finish_init();
+        Ok(ctrl)
     }
 
-    fn apply(&mut self, program: InitialDmaProgram) -> ViResult<()> {
-        match program {
-            InitialDmaProgram::TxRingBase(_) => {}
-            InitialDmaProgram::RxRingBase(_) => {}
-            InitialDmaProgram::StatusBlockBase(_) => {}
-            InitialDmaProgram::RxBuffer { index, iova } => {
-                rings::write_rx_desc(
-                    &self.rx_ring,
-                    index,
-                    BcmRxDesc {
-                        addr_hi: (iova >> 32) as u32,
-                        addr_lo: iova as u32,
-                        idx_len: (index as u32) << 16 | (BUF_SIZE as u32),
-                        type_flags: 0,
-                    },
-                );
-            }
+    /// Initial DMA programming: every RX descriptor, from authorized IOVAs.
+    /// The ring and status-block bases are not programmed yet.
+    fn program_rings(&mut self) {
+        let iovas = self.dma.iovas;
+        for (index, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.dma.rx_ring.write(
+                index,
+                BcmRxDesc {
+                    addr_hi: (iova >> 32) as u32,
+                    addr_lo: iova as u32,
+                    idx_len: (index as u32) << 16 | (BUF_SIZE as u32),
+                    type_flags: 0,
+                },
+            );
         }
-        Ok(())
     }
 
     fn finish_init(&mut self) {
@@ -153,20 +152,16 @@ impl BcmController {
         self.link_up = true;
     }
 
-    pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
+    fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidArgument);
         }
         let slot = self.tx_next;
-        let buf = &self.tx_bufs[slot];
-        unsafe {
-            core::ptr::copy_nonoverlapping(frame.as_ptr(), buf.virt(), frame.len());
-        }
+        self.dma.tx_bufs.copy_in(slot, frame)?;
         compiler_fence(Ordering::Release);
 
-        let iova = self.dma_iovas.tx_bufs[slot];
-        rings::write_tx_desc(
-            &self.tx_ring,
+        let iova = self.dma.iovas.tx_bufs[slot];
+        self.dma.tx_ring.write(
             slot,
             BcmTxDesc {
                 addr_hi: (iova >> 32) as u32,
@@ -186,13 +181,9 @@ impl BcmController {
         Ok(())
     }
 
-    pub fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
+    fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
         let slot = self.rx_head;
-        let buf = &self.rx_bufs[slot];
-        let len = BUF_SIZE.min(target.len());
-        unsafe {
-            core::ptr::copy_nonoverlapping(buf.virt() as *const u8, target.as_mut_ptr(), len);
-        }
+        let len = self.dma.rx_bufs.copy_out(slot, target, BUF_SIZE);
         self.rx_head = (slot + 1) % RX_SLOTS;
         self.mmio
             .write_u32(RX_STD_PRODIDX_REG, self.rx_head as u32)?;

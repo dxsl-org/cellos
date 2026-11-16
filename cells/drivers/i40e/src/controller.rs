@@ -1,43 +1,88 @@
 //! Intel X710/XL710 controller initialization and Tx/Rx data path.
 
-use crate::aq::{self, post_aq_command};
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, AQ_SLOTS, RX_SLOTS, TX_SLOTS,
-};
+use crate::aq::{self, post_aq_command, AdminQueue, AQ_SLOTS};
+use crate::identity::{self, Identity, QUERY_DEVICE_IDS, VENDOR_INTEL};
 use crate::regs::*;
-use crate::rings::{self, RxDesc, TxDesc};
+use crate::rings::{self, RxDesc, TxDesc, BUF_SIZE, RX_SLOTS, TX_SLOTS};
 use core::sync::atomic::{compiler_fence, Ordering};
+use nic_driver::dma::{DmaSet, Iovas, Layout, Position};
+use nic_driver::ring::{DescRing, FrameBufs};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::dma::DmaBuf;
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
-pub use crate::rings::BUF_SIZE;
-
+const I40E_BAR0_LEN: usize = 0x20_0000;
+const I40E_MMIO_MIN: usize = 0x0013_0000;
 const RESET_POLLS: u32 = 1_000_000;
 
-#[allow(dead_code)]
+/// Extra DMA slots, authorized before the rings: admin send queue, admin
+/// receive queue, admin command buffer.
+const ATQ: usize = 0;
+const ARQ: usize = 1;
+const AQ_BUFFER: usize = 2;
+const LAYOUT: Layout<3> = Layout::new([Position::Before; 3]);
+
 pub struct I40eController {
-    pub(crate) mmio: MmioRegion,
-    pub(crate) atq_ring: DmaBuf,
-    pub(crate) arq_ring: DmaBuf,
-    pub(crate) aq_buffer: DmaBuf,
-    pub(crate) tx_ring: DmaBuf,
-    pub(crate) rx_ring: DmaBuf,
-    pub(crate) tx_bufs: [DmaBuf; TX_SLOTS],
-    pub(crate) rx_bufs: [DmaBuf; RX_SLOTS],
-    pub(crate) dma_iovas: DmaIovas,
-    pub(crate) tx_next: usize,
-    pub(crate) rx_head: usize,
-    pub(crate) atq_head: usize,
-    pub mac: [u8; 6],
-    pub link_up: bool,
+    mmio: MmioRegion,
+    atq: AdminQueue,
+    /// Programmed into `PF_ARQ*`; the cell does not consume events yet.
+    #[allow(dead_code)]
+    arq: DmaBuf,
+    aq_buffer: DmaBuf,
+    tx_ring: DescRing<TxDesc, TX_SLOTS>,
+    tx_bufs: FrameBufs<TX_SLOTS>,
+    rx_ring: DescRing<RxDesc, RX_SLOTS>,
+    rx_bufs: FrameBufs<RX_SLOTS>,
+    iovas: Iovas<TX_SLOTS, RX_SLOTS, 3>,
+    tx_next: usize,
+    rx_head: usize,
+    atq_head: usize,
+    mac: [u8; 6],
+    link_up: bool,
 }
 
-unsafe impl Send for I40eController {}
+impl NicDevice for I40eController {
+    const TAG: &'static str = "[i40e]";
+    const VENDOR: u16 = VENDOR_INTEL;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    const ABSENT_LINE: Option<&'static str> =
+        Some("no X710/XL710 controller present; driver cell idle");
+    type Identity = Identity;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<Identity> {
+        identity::classify(vendor, device)
+    }
+
+    fn identity_name(id: &Identity) -> &'static str {
+        id.name
+    }
+
+    fn init(probe: &Probe, _id: Identity) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(I40E_BAR0_LEN, I40E_MMIO_MIN);
+        Self::new(mmio, probe.bdf())
+    }
+
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "link_up={} mac={}", self.link_up, MacFmt(self.mac))
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.poll_rx(out).unwrap_or_default()
+    }
+}
 
 impl I40eController {
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
         // 1. Quiesce & reset controller.
         mmio.write_u32(GLGEN_RST, GLGEN_RST_DEV_ARM)?;
         for _ in 0..RESET_POLLS {
@@ -47,102 +92,70 @@ impl I40eController {
             core::hint::spin_loop();
         }
 
-        // 2. Allocate DMA objects.
-        let atq_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let arq_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let aq_buffer = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-
-        with_authorized_dma_layout(
-            (
-                mmio, atq_ring, arq_ring, aq_buffer, tx_ring, rx_ring, tx_bufs, rx_bufs,
-            ),
-            |r, s| {
-                match s {
-                    DmaSlot::AtqRing => r.1.authorize(bdf),
-                    DmaSlot::ArqRing => r.2.authorize(bdf),
-                    DmaSlot::AqBuffer => r.3.authorize(bdf),
-                    DmaSlot::TxRing => r.4.authorize(bdf),
-                    DmaSlot::RxRing => r.5.authorize(bdf),
-                    DmaSlot::TxBuffer(i) => r.6[i].authorize(bdf),
-                    DmaSlot::RxBuffer(i) => r.7[i].authorize(bdf),
-                }
-                .map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, atq_ring, arq_ring, aq_buffer, tx_ring, rx_ring, tx_bufs, rx_bufs),
-             dma_iovas| {
-                rings::clear(&atq_ring);
-                rings::clear(&arq_ring);
-                rings::clear(&aq_buffer);
-                rings::clear(&tx_ring);
-                rings::clear(&rx_ring);
-
-                let mut ctrl = I40eController {
-                    mmio,
-                    atq_ring,
-                    arq_ring,
-                    aq_buffer,
-                    tx_ring,
-                    rx_ring,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    atq_head: 0,
-                    mac: [0; 6],
-                    link_up: false,
-                };
-                for_each_initial_dma_program(&dma_iovas, |p| {
-                    let _ = ctrl.apply(p);
-                });
-                ctrl.init_admin_queue()?;
-                ctrl.query_mac_and_link()?;
-                Ok(ctrl)
-            },
-        )?
+        // 2. Allocate and authorize every DMA object (admin queues first);
+        //    nothing is programmed before this returns.
+        let DmaSet {
+            tx_ring,
+            tx_bufs,
+            rx_ring,
+            rx_bufs,
+            extra: [atq, arq, aq_buffer],
+            iovas,
+        } = DmaSet::alloc_authorized(&LAYOUT, bdf)?;
+        let mut ctrl = I40eController {
+            mmio,
+            atq: DescRing::new(atq)?,
+            arq,
+            aq_buffer,
+            tx_ring,
+            tx_bufs,
+            rx_ring,
+            rx_bufs,
+            iovas,
+            tx_next: 0,
+            rx_head: 0,
+            atq_head: 0,
+            mac: [0; 6],
+            link_up: false,
+        };
+        ctrl.program_rings()?;
+        ctrl.init_admin_queue()?;
+        ctrl.query_mac_and_link()?;
+        Ok(ctrl)
     }
 
-    fn apply(&mut self, program: InitialDmaProgram) -> ViResult<()> {
-        match program {
-            InitialDmaProgram::AtqBase(iova) => {
-                self.mmio.write_u32(PF_ATQBAL, iova as u32)?;
-                self.mmio.write_u32(PF_ATQBAH, (iova >> 32) as u32)?;
-                self.mmio
-                    .write_u32(PF_ATQLEN, (AQ_SLOTS as u32) | PF_ATQLEN_ENABLE)?;
-                self.mmio.write_u32(PF_ATQH, 0)?;
-                self.mmio.write_u32(PF_ATQT, 0)?;
-            }
-            InitialDmaProgram::ArqBase(iova) => {
-                self.mmio.write_u32(PF_ARQBAL, iova as u32)?;
-                self.mmio.write_u32(PF_ARQBAH, (iova >> 32) as u32)?;
-                self.mmio
-                    .write_u32(PF_ARQLEN, (AQ_SLOTS as u32) | PF_ARQLEN_ENABLE)?;
-                self.mmio.write_u32(PF_ARQH, 0)?;
-                self.mmio.write_u32(PF_ARQT, 0)?;
-            }
-            InitialDmaProgram::TxRingBase(_) => {}
-            InitialDmaProgram::RxRingBase(_) => {}
-            InitialDmaProgram::RxBuffer { index, iova } => {
-                rings::write_rx_desc(
-                    &self.rx_ring,
-                    index,
-                    RxDesc {
-                        pkt_addr: iova,
-                        hdr_addr: 0,
-                    },
-                );
-            }
+    /// Initial DMA programming: admin send queue, admin receive queue, then
+    /// every RX descriptor, all from authorized IOVAs.
+    fn program_rings(&mut self) -> ViResult<()> {
+        let iovas = self.iovas;
+        let m = &self.mmio;
+        let atq = iovas.extra[ATQ];
+        m.write_u32(PF_ATQBAL, atq as u32)?;
+        m.write_u32(PF_ATQBAH, (atq >> 32) as u32)?;
+        m.write_u32(PF_ATQLEN, (AQ_SLOTS as u32) | PF_ATQLEN_ENABLE)?;
+        m.write_u32(PF_ATQH, 0)?;
+        m.write_u32(PF_ATQT, 0)?;
+        let arq = iovas.extra[ARQ];
+        m.write_u32(PF_ARQBAL, arq as u32)?;
+        m.write_u32(PF_ARQBAH, (arq >> 32) as u32)?;
+        m.write_u32(PF_ARQLEN, (AQ_SLOTS as u32) | PF_ARQLEN_ENABLE)?;
+        m.write_u32(PF_ARQH, 0)?;
+        m.write_u32(PF_ARQT, 0)?;
+        for (index, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.rx_ring.write(
+                index,
+                RxDesc {
+                    pkt_addr: iova,
+                    hdr_addr: 0,
+                },
+            );
         }
         Ok(())
     }
 
     fn init_admin_queue(&mut self) -> ViResult<()> {
         let cmd = aq::format_get_version();
-        let resp = post_aq_command(&self.mmio, &self.atq_ring, self.atq_head, cmd)?;
+        let resp = post_aq_command(&self.mmio, &self.atq, self.atq_head, cmd)?;
         self.atq_head = (self.atq_head + 1) % AQ_SLOTS;
         // Verify API major version is 1.
         let api_major = (resp.addr_high >> 16) as u16;
@@ -153,42 +166,35 @@ impl I40eController {
     }
 
     fn query_mac_and_link(&mut self) -> ViResult<()> {
-        let iova = self.dma_iovas.aq_buffer;
+        let iova = self.iovas.extra[AQ_BUFFER];
         let cmd = aq::format_mac_read(iova, 24);
-        let _ = post_aq_command(&self.mmio, &self.atq_ring, self.atq_head, cmd)?;
+        let _ = post_aq_command(&self.mmio, &self.atq, self.atq_head, cmd)?;
         self.atq_head = (self.atq_head + 1) % AQ_SLOTS;
 
-        let ptr = self.aq_buffer.virt() as *const u8;
         let mut mac = [0u8; 6];
-        unsafe {
-            core::ptr::copy_nonoverlapping(ptr, mac.as_mut_ptr(), 6);
-        }
+        self.aq_buffer.read_bytes(0, &mut mac);
         if mac == [0u8; 6] {
             return Err(ViError::IO);
         }
         self.mac = mac;
 
         let cmd = aq::format_get_link_status();
-        let resp = post_aq_command(&self.mmio, &self.atq_ring, self.atq_head, cmd)?;
+        let resp = post_aq_command(&self.mmio, &self.atq, self.atq_head, cmd)?;
         self.atq_head = (self.atq_head + 1) % AQ_SLOTS;
         self.link_up = resp.param0 & 1 != 0;
         Ok(())
     }
 
-    pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
+    fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidArgument);
         }
         let slot = self.tx_next;
-        let buf = &self.tx_bufs[slot];
-        unsafe {
-            core::ptr::copy_nonoverlapping(frame.as_ptr(), buf.virt(), frame.len());
-        }
+        self.tx_bufs.copy_in(slot, frame)?;
         compiler_fence(Ordering::Release);
 
-        let iova = self.dma_iovas.tx_bufs[slot];
-        rings::write_tx_desc(
-            &self.tx_ring,
+        let iova = self.iovas.tx_bufs[slot];
+        self.tx_ring.write(
             slot,
             TxDesc {
                 buffer_addr: iova,
@@ -202,13 +208,9 @@ impl I40eController {
         Ok(())
     }
 
-    pub fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
+    fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
         let slot = self.rx_head;
-        let buf = &self.rx_bufs[slot];
-        let len = BUF_SIZE.min(target.len());
-        unsafe {
-            core::ptr::copy_nonoverlapping(buf.virt() as *const u8, target.as_mut_ptr(), len);
-        }
+        let len = self.rx_bufs.copy_out(slot, target, BUF_SIZE);
         self.rx_head = (slot + 1) % RX_SLOTS;
         self.mmio.write_u32(QRX_TAIL, self.rx_head as u32)?;
         Ok(len)

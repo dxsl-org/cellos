@@ -30,16 +30,16 @@ cellos-kernel ci
 desktop untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 dom-arena untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-bcm-display ci
-driver-bcm57xx untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-bcm57xx ci
 driver-dwc2-usb ci
 driver-e1000e ci
 driver-hid untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-i2c-bcm ci
-driver-i40e untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-i40e ci
 driver-igb untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-igc ci
 driver-intel-gpu untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
-driver-ixgbe untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-ixgbe ci
 driver-nvme ci
 driver-pvscsi ci
 driver-r8169 ci

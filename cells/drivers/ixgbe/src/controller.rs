@@ -1,41 +1,71 @@
-//! Intel 82599/X540/X550 controller initialization and Tx/Rx data path.
+//! Intel 82599/X540/X550 controller initialization.
 
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
-};
-use crate::identity::IxgbeMac;
+use crate::identity::{self, Identity, IxgbeMac, QUERY_DEVICE_IDS, VENDOR_INTEL};
 use crate::regs::*;
-use crate::rings::{self, RxDesc};
+use crate::rings::{RxDesc, TxDesc, RX_SLOTS, TX_SLOTS};
 use crate::sfp;
-use ostd::dma::DmaBuf;
+use nic_driver::dma::{DmaSet, Layout};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
-pub use crate::rings::BUF_SIZE;
-
+const IXGBE_BAR0_LEN: usize = 0x2_0000;
+const IXGBE_MMIO_MIN: usize = 0x1_0018;
 const RESET_POLLS: u32 = 1_000_000;
 const LINK_POLLS: u32 = 6_000_000;
 
 pub struct IxgbeController {
     pub(crate) mmio: MmioRegion,
-    pub(crate) tx_ring: DmaBuf,
-    pub(crate) rx_ring: DmaBuf,
-    pub(crate) tx_bufs: [DmaBuf; TX_SLOTS],
-    pub(crate) rx_bufs: [DmaBuf; RX_SLOTS],
-    pub(crate) dma_iovas: DmaIovas,
+    pub(crate) dma: DmaSet<TxDesc, RxDesc, TX_SLOTS, RX_SLOTS, 0>,
     pub(crate) tx_next: usize,
     pub(crate) rx_head: usize,
-    pub mac: [u8; 6],
-    pub link_up: bool,
+    mac: [u8; 6],
+    link_up: bool,
     #[allow(dead_code)]
-    pub mac_type: IxgbeMac,
+    mac_type: IxgbeMac,
 }
 
-unsafe impl Send for IxgbeController {}
+impl NicDevice for IxgbeController {
+    const TAG: &'static str = "[ixgbe]";
+    const VENDOR: u16 = VENDOR_INTEL;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    const ABSENT_LINE: Option<&'static str> =
+        Some("no 82599/X540/X550 controller present; driver cell idle");
+    type Identity = Identity;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<Identity> {
+        identity::classify(vendor, device)
+    }
+
+    fn identity_name(id: &Identity) -> &'static str {
+        id.name
+    }
+
+    fn init(probe: &Probe, id: Identity) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(IXGBE_BAR0_LEN, IXGBE_MMIO_MIN);
+        Self::new(mmio, probe.bdf(), id.mac)
+    }
+
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "link_up={} mac={}", self.link_up, MacFmt(self.mac))
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.poll_rx(out).unwrap_or_default()
+    }
+}
 
 impl IxgbeController {
-    pub fn new(mmio: MmioRegion, bdf: u32, mac_type: IxgbeMac) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32, mac_type: IxgbeMac) -> ViResult<Self> {
         // 1. Quiesce & reset controller.
         mmio.write_u32(CTRL, CTRL_RST)?;
         let mut polls = 0u32;
@@ -84,73 +114,40 @@ impl IxgbeController {
         mmio.write_u32(RAL0, u32::from_le_bytes([mac[0], mac[1], mac[2], mac[3]]))?;
         mmio.write_u32(RAH0, RAH_AV | (u16::from_le_bytes([mac[4], mac[5]]) as u32))?;
 
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-
-        with_authorized_dma_layout(
-            (mmio, tx_ring, rx_ring, tx_bufs, rx_bufs),
-            |r, s| {
-                match s {
-                    DmaSlot::TxRing => r.1.authorize(bdf),
-                    DmaSlot::TxBuffer(i) => r.3[i].authorize(bdf),
-                    DmaSlot::RxRing => r.2.authorize(bdf),
-                    DmaSlot::RxBuffer(i) => r.4[i].authorize(bdf),
-                }
-                .map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, tx_ring, rx_ring, tx_bufs, rx_bufs), dma_iovas| {
-                rings::clear(&tx_ring);
-                rings::clear(&rx_ring);
-                let mut ctrl = IxgbeController {
-                    mmio,
-                    tx_ring,
-                    rx_ring,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    mac,
-                    link_up: false,
-                    mac_type,
-                };
-                for_each_initial_dma_program(&dma_iovas, |p| {
-                    let _ = ctrl.apply(p);
-                });
-                let _ = ctrl.finish_init();
-                Ok(ctrl)
-            },
-        )?
+        // Every ring and buffer is authorized before any address below is
+        // programmed into the controller.
+        let dma = DmaSet::alloc_authorized(&Layout::PLAIN, bdf)?;
+        let mut ctrl = IxgbeController {
+            mmio,
+            dma,
+            tx_next: 0,
+            rx_head: 0,
+            mac,
+            link_up: false,
+            mac_type,
+        };
+        ctrl.program_rings()?;
+        ctrl.finish_init()?;
+        Ok(ctrl)
     }
 
-    fn apply(&mut self, program: InitialDmaProgram) -> ViResult<()> {
-        match program {
-            InitialDmaProgram::TxRingBase(iova) => {
-                self.mmio.write_u32(TDBAL0, iova as u32)?;
-                self.mmio.write_u32(TDBAH0, (iova >> 32) as u32)?;
-                self.mmio.write_u32(TDLEN0, (TX_SLOTS * 16) as u32)?;
-                self.mmio.write_u32(TDH0, 0)?;
-                self.mmio.write_u32(TDT0, 0)?;
-            }
-            InitialDmaProgram::RxRingBase(iova) => {
-                self.mmio.write_u32(RDBAL0, iova as u32)?;
-                self.mmio.write_u32(RDBAH0, (iova >> 32) as u32)?;
-                self.mmio.write_u32(RDLEN0, (RX_SLOTS * 16) as u32)?;
-                self.mmio.write_u32(RDH0, 0)?;
-                self.mmio.write_u32(RDT0, 0)?;
-            }
-            InitialDmaProgram::RxBuffer { index, iova } => rings::write_rx_desc(
-                &self.rx_ring,
-                index,
-                RxDesc {
-                    buffer_addr: iova,
-                    status_error: 0,
-                    length: 0,
-                    vlan: 0,
-                },
-            ),
+    /// Initial DMA programming: TX ring base, RX ring base, then every RX
+    /// descriptor, all from authorized IOVAs.
+    fn program_rings(&mut self) -> ViResult<()> {
+        let iovas = self.dma.iovas;
+        let m = &self.mmio;
+        m.write_u32(TDBAL0, iovas.tx_ring as u32)?;
+        m.write_u32(TDBAH0, (iovas.tx_ring >> 32) as u32)?;
+        m.write_u32(TDLEN0, (TX_SLOTS * 16) as u32)?;
+        m.write_u32(TDH0, 0)?;
+        m.write_u32(TDT0, 0)?;
+        m.write_u32(RDBAL0, iovas.rx_ring as u32)?;
+        m.write_u32(RDBAH0, (iovas.rx_ring >> 32) as u32)?;
+        m.write_u32(RDLEN0, (RX_SLOTS * 16) as u32)?;
+        m.write_u32(RDH0, 0)?;
+        m.write_u32(RDT0, 0)?;
+        for (index, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.dma.rx_ring.write(index, RxDesc::posted(iova));
         }
         Ok(())
     }

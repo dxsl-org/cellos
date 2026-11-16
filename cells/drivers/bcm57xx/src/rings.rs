@@ -1,10 +1,10 @@
-//! Broadcom BCM57xx descriptor formats and ring operations.
+//! Broadcom BCM57xx descriptor formats.
 
 #![allow(dead_code)]
 
-use ostd::dma::DmaBuf;
-
 pub const BUF_SIZE: usize = 2048;
+pub(crate) const TX_SLOTS: usize = 16;
+pub(crate) const RX_SLOTS: usize = 16;
 
 pub(crate) const BCMD_FLAGS_END: u32 = 0x0004_0000;
 pub(crate) const BCMD_FLAGS_PACKET_END: u32 = 0x0008_0000;
@@ -29,22 +29,6 @@ pub(crate) struct BcmRxDesc {
 
 const _: () = assert!(core::mem::size_of::<BcmTxDesc>() == 16);
 const _: () = assert!(core::mem::size_of::<BcmRxDesc>() == 16);
-
-pub(crate) fn clear(buf: &DmaBuf) {
-    unsafe {
-        core::ptr::write_bytes(buf.virt(), 0, buf.size());
-    }
-}
-
-pub(crate) fn write_tx_desc(buf: &DmaBuf, index: usize, desc: BcmTxDesc) {
-    let ptr = (buf.virt() as *mut BcmTxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
-
-pub(crate) fn write_rx_desc(buf: &DmaBuf, index: usize, desc: BcmRxDesc) {
-    let ptr = (buf.virt() as *mut BcmRxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
 
 #[cfg(test)]
 mod tests {

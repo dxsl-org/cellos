@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-//! Intel i40e descriptor formats and ring operations.
-
-use ostd::dma::DmaBuf;
+//! Intel i40e descriptor formats.
 
 pub const BUF_SIZE: usize = 2048;
+pub(crate) const TX_SLOTS: usize = 16;
+pub(crate) const RX_SLOTS: usize = 16;
 
 pub(crate) const I40E_TXD_QW1_CMD_EOP: u64 = 1 << 28;
 pub(crate) const I40E_TXD_QW1_CMD_RS: u64 = 1 << 29;
@@ -25,27 +25,6 @@ pub(crate) struct RxDesc {
 
 const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
 const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
-
-pub(crate) fn clear(buf: &DmaBuf) {
-    unsafe {
-        core::ptr::write_bytes(buf.virt(), 0, buf.size());
-    }
-}
-
-pub(crate) fn write_tx_desc(buf: &DmaBuf, index: usize, desc: TxDesc) {
-    let ptr = (buf.virt() as *mut TxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
-
-pub(crate) fn write_rx_desc(buf: &DmaBuf, index: usize, desc: RxDesc) {
-    let ptr = (buf.virt() as *mut RxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
-
-pub(crate) fn read_rx_desc(buf: &DmaBuf, index: usize) -> RxDesc {
-    let ptr = (buf.virt() as *const RxDesc).wrapping_add(index);
-    unsafe { core::ptr::read_volatile(ptr) }
-}
 
 #[cfg(test)]
 mod tests {

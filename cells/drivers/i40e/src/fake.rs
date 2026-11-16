@@ -1,8 +1,5 @@
 //! Host tests only: fake Intel X710 register file with Admin Queue responder.
 
-use crate::aq::{
-    AqDesc, I40E_AQ_FLAG_DD, OPC_GET_LINK_STATUS, OPC_GET_VERSION, OPC_MAC_ADDRESS_READ,
-};
 use crate::regs::{RegisterFile, GLGEN_RST, GLGEN_RST_DEV_ARM, PF_ATQH, PF_ATQT};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
