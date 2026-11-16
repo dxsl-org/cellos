@@ -11,10 +11,11 @@
 //! A command is a 32-bit write of its code to `VD_CMD`; a query command's
 //! result is the following read of `VD_CMD`.
 //!
-//! [`RegisterFile`] is the only path to the device: [`MmioRegion`] implements
-//! it for the cell, and the host tests implement it with a fake.
+//! [`RegisterFile`] (`nic_driver::regs`) is the only path to the device:
+//! `MmioRegion` implements it for the cell, and the host tests implement it
+//! with a fake.
 
-use ostd::mmio::MmioRegion;
+pub(crate) use nic_driver::regs::RegisterFile;
 use types::ViResult;
 
 // ── BAR0 (PT) ────────────────────────────────────────────────────────────────
@@ -71,24 +72,6 @@ pub(crate) const LINK_UP: u32 = 1 << 0;
 /// Event causes in `DriverShared.event` (acknowledged through [`VD_ECR`]).
 pub(crate) const EVENT_RQERROR: u32 = 0x01;
 pub(crate) const EVENT_TQERROR: u32 = 0x02;
-
-/// Register access seam.
-pub(crate) trait RegisterFile {
-    fn rd32(&self, offset: usize) -> ViResult<u32>;
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()>;
-}
-
-impl RegisterFile for MmioRegion {
-    #[inline]
-    fn rd32(&self, offset: usize) -> ViResult<u32> {
-        self.read_u32(offset)
-    }
-
-    #[inline]
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()> {
-        self.write_u32(offset, value)
-    }
-}
 
 /// Why the device cannot be driven.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

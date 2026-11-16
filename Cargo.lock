@@ -1857,9 +1857,9 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "cell-build",
+ "nic-driver",
  "ostd",
  "types",
- "wire",
 ]
 
 [[package]]

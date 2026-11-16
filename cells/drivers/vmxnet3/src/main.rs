@@ -1,7 +1,7 @@
 //! VMware vmxnet3 NIC Driver Cell — Tier-1 Privileged Driver Cell (S3 phase 09).
 //!
 //! vmxnet3 (`15AD:07B0`) is the paravirtual NIC VMware recommends; QEMU models
-//! it as `-device vmxnet3`. The cell:
+//! it as `-device vmxnet3`. Through the shared `nic_driver` skeleton the cell:
 //!   1. Names its controller exactly with `sys_find_pcie_device_by_vendor`
 //!      (424) over `identity::QUERY_DEVICE_IDS` and repeats the identity check
 //!      (`identity::classify`) before touching MMIO.
@@ -30,7 +30,6 @@ extern crate alloc;
 
 mod controller;
 mod datapath;
-mod dispatch;
 mod dma;
 mod identity;
 mod irq;
@@ -38,119 +37,7 @@ mod regs;
 mod rings;
 mod shared;
 
-use abi::pcie_function::{PcieBar, BAR_KIND_MEM32, BAR_KIND_MEM64};
-use controller::Vmxnet3;
-use identity::{classify, QUERY_DEVICE_IDS, VENDOR_VMWARE};
-use ostd::app::{AppContext, AppEvent};
-use ostd::io::print_fmt;
-use ostd::mmio::{self, MmioRegion};
-use ostd::sync::Mutex;
-use ostd::syscall::{
-    sys_find_pcie_device_by_vendor, sys_query_pcie_function, sys_register_nic_driver,
-    PcieDeviceInfo,
-};
-
-/// Bounded wait for the PCI scan to publish the device table (as `/bin/igb`).
-const FIND_ATTEMPTS: usize = 200;
-
-static STATE: Mutex<Option<Vmxnet3>> = Mutex::new(None);
-
-fn fail(what: core::fmt::Arguments<'_>) -> ! {
-    let _ = print_fmt(format_args!("[vmxnet3] {what}\n"));
-    ostd::syscall::sys_exit(1)
-}
-
-/// Claim memory BAR `bar` when it holds at least `min` bytes.
-fn claim(index: usize, bar: &PcieBar, min: usize) -> MmioRegion {
-    let memory = bar.kind == BAR_KIND_MEM32 || bar.kind == BAR_KIND_MEM64;
-    let len = usize::try_from(bar.len).unwrap_or(0);
-    if !memory || bar.base == 0 || len < min {
-        fail(format_args!(
-            "BAR{index} unusable (kind={} base={:#x} len={:#x})",
-            bar.kind, bar.base, bar.len
-        ));
-    }
-    match mmio::request_region(bar.base as usize, len) {
-        Ok(region) => region,
-        Err(error) => fail(format_args!("BAR{index} claim failed: {error:?}")),
-    }
-}
-
-fn bring_up() {
-    let mut info = PcieDeviceInfo::zeroed();
-    let mut found = false;
-    'attempts: for _ in 0..FIND_ATTEMPTS {
-        for &device_id in QUERY_DEVICE_IDS.iter() {
-            if let Ok(true) = sys_find_pcie_device_by_vendor(VENDOR_VMWARE, device_id, &mut info) {
-                found = true;
-                break 'attempts;
-            }
-        }
-        ostd::task::yield_now();
-    }
-    if !found {
-        let _ = print_fmt(format_args!(
-            "[vmxnet3] no vmxnet3 controller present; driver cell idle\n"
-        ));
-        ostd::syscall::sys_exit(0);
-    }
-
-    // Defense in depth behind the kernel's family gate.
-    let Some(identity) = classify(info.vendor_id, info.device_id) else {
-        let _ = print_fmt(format_args!(
-            "[vmxnet3] unsupported Ethernet {:04x}:{:04x}; driver gate closed\n",
-            info.vendor_id, info.device_id
-        ));
-        ostd::syscall::sys_exit(0);
-    };
-    let record = match sys_query_pcie_function(info.bdf) {
-        Ok(record) => record,
-        Err(error) => fail(format_args!("query {:#x} failed: {error:?}", info.bdf)),
-    };
-    let pt = claim(0, &record.bars[0], regs::PT_MIN);
-    let vd = claim(1, &record.bars[1], regs::VD_MIN);
-
-    let ctrl = match Vmxnet3::new(pt, vd, info.bdf) {
-        Ok(ctrl) => ctrl,
-        Err(error) => fail(format_args!("controller initialization failed: {error}")),
-    };
-
-    let (mac, link_up, mbps) = (ctrl.mac, ctrl.link_up, ctrl.link_mbps);
-    let (vectors, reason, wakes, expiries) = ctrl.irq_state();
-    // Publish state before registration: the kernel may route requests as soon
-    // as the syscall succeeds.
-    *STATE.lock() = Some(ctrl);
-    let (irq, why) = if vectors > 0 {
-        ("msix", "")
-    } else {
-        ("polled reason=", reason)
-    };
-    let _ = print_fmt(format_args!(
-        "[vmxnet3] controller bound {:04x}:{:04x} {} rev=1 link_up={} speed={}Mb/s mac={} irq={}{} rx=request-driven vectors={} irq_wakes={} park_expiries={}\n",
-        info.vendor_id, info.device_id, identity.name, link_up, mbps, dispatch::MacFmt(mac),
-        irq, why, vectors, wakes, expiries
-    ));
-    if let Err(error) = sys_register_nic_driver() {
-        let ctrl = STATE.lock().take();
-        drop(ctrl); // quiesces the device
-        fail(format_args!("NIC driver registration failed: {error:?}"));
-    }
-}
-
-fn handler(_ctx: &mut AppContext, event: AppEvent) {
-    match event {
-        AppEvent::Init => bring_up(),
-        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
-            dispatch::serve(&STATE, sender_tid, data.as_ref());
-        }
-        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => {
-            ostd::syscall::sys_exit(0);
-        }
-        _ => {}
-    }
-}
-
-ostd::run_app!(handler);
+nic_driver::cell!(controller::Vmxnet3);
 
 // PcieDriverCap comes from the reviewed launch edge; no privileged manifest flag.
 abi::declare_manifest!(
