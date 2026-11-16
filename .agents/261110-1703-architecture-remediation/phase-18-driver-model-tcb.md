@@ -1,7 +1,7 @@
 ---
 phase: 18
 title: "Driver model and Tier-1 TCB perimeter"
-status: in-progress
+status: completed
 priority: P2
 effort: "8–12d"
 dependencies: [5, 12]
@@ -69,19 +69,19 @@ signer:  allowlist class × manifest class matrix ─► refuse on mismatch
 
 ## Todo List
 
-- [ ] `libs/nic-driver`, cells migrated
-- [ ] Per-BDF NIC routes
-- [ ] Device ownership record
-- [ ] `DmaRemapper`
-- [ ] Tier-class gate in signer
-- [ ] TCB closure scanned
+- [x] `libs/nic-driver`, cells migrated
+- [x] Per-BDF NIC routes
+- [x] Device ownership record
+- [x] `DmaRemapper`
+- [x] Tier-class gate in signer
+- [x] TCB closure scanned
 
 ## Success Criteria
 
-- [ ] x86 QEMU with two NICs of the same and of different models: both registered, traffic on each; restarting one driver does not unbind the other.
-- [ ] Signing a crate with a `c-ffi` allowlist entry and a Tier-1 manifest fails (negative control fixture).
-- [ ] Unsafe scan reports `libs/ostd` and `libs/api` entries and fails on a new unlisted `unsafe` block there.
-- [ ] NIC lanes (e1000, e1000e, igb, vmxnet3, virtio-net) pass on x86; `x86-c2c` passes.
+- [x] x86 QEMU with two NICs of the same and of different models: both registered, traffic on each; restarting one driver does not unbind the other. Narrowed by the owner to traffic on the primary (Deviation Log); `nic2-x86` passes both pairs.
+- [x] Signing a crate with a `c-ffi` allowlist entry and a Tier-1 manifest fails (negative control fixture).
+- [x] Unsafe scan reports `libs/ostd` and `libs/api` entries and fails on a new unlisted `unsafe` block there. `libs/api` no longer exists; the scan covers the whole in-tree Tier-1 closure.
+- [x] NIC lanes (e1000, e1000e, igb, vmxnet3, virtio-net) pass on x86; `x86-c2c` passes.
 
 ## Risk Assessment
 
@@ -126,3 +126,11 @@ Phase 19 closure.
   - the probe treated an absent device as found;
   - Shutdown was ignored.
 - **Surprise.** 417 also let `/bin/ahci`, `/bin/xhci` and `/bin/intel-gpu` take the NIC route. It now needs exactly one owned network device. On riscv64/aarch64, `WaitIrq` and the USB one-shot unmask let any driver capability wait on or drain another driver's line; both now need the line's device owner (`d1092034dc`).
+- **Surprise.** `grant_window` took `SCHEDULER` while holding `RESOURCE_REGISTRY`, against the rank table, so a claim overlapping a live owner's window panicked under rank checks. Liveness is now read with the registry dropped (`978c801353`).
+- **Deviation.** The device table grows instead of holding a fixed 256 records, and records are never removed. Interrupt paths only read the `NIC_LINES` atomic set, never the table (`5ee8848e4e`, `f4914b8c63`). Syscall 235 creates a record only for a function that answers in ECAM (`82fde87197`).
+- **Decision (parent, under the staged approval).** A runtime device-capability revoke releases the revoked task's NIC and block routes on the devices it lost, and a route holder that no longer owns its device never blocks a new owner (`3ecff4b457`, `a7fcf9ee0a`). This narrows authority only.
+- **Surprise.** The steps 6–7 review found that the signer trusted the source manifest. Four inputs signed while their ELF loaded Tier 1, and a pre-existing lexer gap hid `unsafe` inside macro calls. The gate now reads each target ELF's `__ViCell_manifest` the way the kernel does (`5505096470`, `a1d327b822`).
+- **Decision (parent, under the owner's tier-exception rule).** `driver-bcm-display` builds a slice from a pointer another cell sends, so its entry is `legacy-raw-ptr` under a third signed tier exception (`3c42aa8034`).
+- **Deviation.** A ceiling drop or a new cell crate fails CI strict but is only a NOTE on `--sign`; `--write-baseline` lowers ceilings and never raises them. Stale allowlist entries stay fatal on `--sign`.
+- **Surprise.** 38 allowlist entries would have gone stale before February and stopped every image signing, the first on 2026-11-22. They were re-read site by site and given `review_by` 2027-02-14 (`4b51fbf2b9`, `8fc0424b53`). The next review wave is due before 2027-02-03.
+- **Deviation.** `scripts/check-hal-boundaries.sh` reached 694 against its 692 ceiling. The x86 MSI ownership code moved under `kernel/src/arch/x86_64/dev/ownership.rs`, giving 691 with the ceiling unchanged (`9a0f969185`).

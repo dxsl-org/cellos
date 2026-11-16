@@ -171,6 +171,14 @@ Scope supports Intel Cellos operations only. No IDE/build environment, general L
 
 **Progress 2026-11-16.** S8 Phase 17 (quota ownership and shared-root hardening) is closed ([evidence](261110-1703-architecture-remediation/reports/phase-17-evidence.md)): explicit charging, a guest-memory budget, one tag pool, RW+NX free frames, user stacks off VA = PA, SMEP/SMAP/UMIP enabled when present, and slot randomisation. There was no ABI change. The Intel WIP lane is free. Next: S8 Phase 18 (driver model and Tier-1 TCB perimeter) needs its own handoff.
 
+**Progress 2026-11-16 (later).** S8b Phase 18 (driver model and Tier-1 TCB perimeter) is closed ([evidence](261110-1703-architecture-remediation/reports/phase-18-evidence.md)):
+- `libs/nic-driver` for nine NIC cells, and NIC routes per device with primary failover;
+- one `DeviceRecord`, which closes three driver-authority holes;
+- one `DmaRemapper`;
+- a signer tier-class gate that reads the ELF manifest, and an unsafe ratchet over the Tier-1 dependency closure.
+
+There was no ABI change. The Intel WIP lane is free. Next: S8 Phase 19 (closure) needs its own handoff. The allowlist re-review wave is due before 2027-02-03.
+
 ## Registered — platform image families (ADR-0029), not yet admitted
 
 **Recorded 2026-10-31:** the maintainer accepted [ADR-0029](../docs/decisions/0029-platform-image-families-and-runtime-detection.md)
