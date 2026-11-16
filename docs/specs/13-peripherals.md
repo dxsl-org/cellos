@@ -1,6 +1,6 @@
 # 13 — Peripheral Driver Bus (HAL + Driver Cells)
 
-**Version**: 1.2 (Updated 2026-06-15 — CAN loopback + PWM bit-bang + ADC simulation added)
+**Version**: 1.3 (Updated 2026-11-16 — Phase 18: per-device ownership record, per-device NIC routes, `DmaRemapper`; 1.2 2026-06-15 — CAN loopback + PWM bit-bang + ADC simulation added)
 **Status**: 🚧 PARTIAL — GPIO+UART+I2C+SPI+PWM bit-bang + ADC sim + CAN loopback done (QEMU ARM virt); hardware controllers deferred
 **Stage**: G1 (Robot & Embedded) — defining requirement for "complete for robots"
 **Design source**: `.agents/reports/brainstorm-260606-0730-peripheral-driver-track.md`
@@ -13,8 +13,13 @@
 Robot/embedded điều khiển **sensor & actuator** qua bus phần cứng (GPIO/UART/I2C/SPI/CAN/PWM/ADC).
 Cellos hiện chỉ có VirtIO (block/input/net/gpu) — **thiếu hoàn toàn** lớp bus ngoại vi.
 
-**Quyết định kiến trúc (đúng triết lý Cellos):** driver ngoại vi là **true Driver Cells**
-(`#![forbid(unsafe_code)]`), KHÔNG nhồi vào kernel. Lý do:
+**Quyết định kiến trúc (đúng triết lý Cellos):** driver ngoại vi là **Driver Cells**, KHÔNG nhồi
+vào kernel. Driver bus (GPIO, UART, I2C/SPI/PWM bit-bang, ADC sim, CAN loopback) là
+`#![forbid(unsafe_code)]` hoàn toàn: MMIO đi qua `ostd::mmio`. Driver có MMIO/DMA phức tạp
+(storage, GPU, USB, một số NIC) còn `unsafe` được duyệt với class `driver-mmio` trong
+`scripts/unsafe-allowlist.toml`; tám NIC cell đã chuyển sang `libs/nic-driver` thì
+`#![forbid(unsafe_code)]`, và `unsafe` của thư viện đó nằm trong trần của closure Tier-1
+(`scripts/tcb-unsafe-baseline.toml`, Spec 16 F1b). Lý do:
 - **Nano-kernel**: driver policy không làm phình TCB; theo dõi bằng [generated nLOC](../code-metrics.generated.md) và boundary law của Spec 15.
 - **LBI**: bug driver bị cô lập trong Cell, không deref được con trỏ ngoài vùng được cấp.
 - **Never-die**: driver Cell sập → supervisor restart, kernel sống (xem [12-reliability.md](12-reliability.md)).
@@ -29,7 +34,7 @@ thư viện tin cậy) + **Resource Registry** cấp vùng MMIO độc quyền c
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Driver Cell (cells/drivers/gpio, uart, …)                 │  #![forbid(unsafe_code)]
+│ Driver Cell (cells/drivers/gpio, uart, …)                 │  #![forbid(unsafe_code)] (bus)
 │  - impl ViGpio / ViUart …                                 │
 │  - sở hữu MmioRegion (cấp qua grant)                      │
 │  - exclusive RT: poll/đọc trực tiếp; shared: phục vụ IPC  │
@@ -42,10 +47,11 @@ thư viện tin cậy) + **Resource Registry** cấp vùng MMIO độc quyền c
 │    ẩn trong ostd           │
 └───────────────┬────────────┘
 ┌───────────────▼─────────────────────────────────────────┐
-│ Kernel: Resource Registry (kernel/src/resource_registry) │
-│  - request_mmio(base,size,cap) → MmioRegion | Rejected   │
-│  - BTreeMap<MmioRange, CellId> độc quyền                 │
-│  - release-on-exit (hook vào Cell-exit cleanup)          │
+│ Kernel: device ownership record (kernel/src/dev/ownership.rs)│
+│  - DeviceRecord / thiết bị: owner, BARs, IRQ, DMA domain │
+│  - RequestMmio, WaitIrq/MSI, GrantDma, route 416/417     │
+│  - một release_for khi Cell exit (giữ cách ly tới khi    │
+│    DMA teardown được xác nhận)                           │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -95,12 +101,64 @@ impl MmioRegion {
 
 ---
 
-## 5. Resource Registry (kernel)
+## 5. Quyền sở hữu thiết bị (kernel) — Resource Registry + DeviceRecord
 
-- `request_mmio(base, size) -> ViResult<MmioRegion>`: cấp **độc quyền**. Nếu range đã bị chiếm → `Rejected`.
-- Lưu `BTreeMap<MmioRange, CellId>`. Chống 2 driver ghi cùng thanh ghi (thảm họa SAS — spec [04-hardware.md](04-hardware.md) §4).
-- **Release-on-exit**: khi Cell exit/bị kill → giải phóng range. Thiết kế dạng **hook** gọi từ Cell-exit cleanup, KHÔNG sửa trực tiếp exit path (tránh chồng never-die ForceExit/`terminate` đang sửa).
+- `RequestMmio(base, size) -> ViResult<MmioRegion>`: cấp **độc quyền**. Nếu range đã bị chiếm → `Rejected`.
+  Cửa sổ đã cấp nằm trong `kernel/src/resource_registry.rs` (`BTreeMap<usize, MmioRegion>`,
+  khóa theo base, mỗi region mang `len`, `owner_tid`, `class`). Chống 2 driver ghi cùng thanh ghi
+  (thảm họa SAS — spec [04-hardware.md](04-hardware.md) §4).
+- **Một bản ghi sở hữu cho mỗi thiết bị** (Phase 18, `kernel/src/dev/ownership.rs`): mỗi PCI
+  function, mỗi slot VirtIO MMIO và aperture DWC2 có một `DeviceRecord { key, kind, owner, bars,
+  irq }`. `key` dùng lại `abi::block_route::DeviceKey` (BDF không segment, hoặc base MMIO) — không
+  đổi byte ABI nào. `owner` là tid của thread đã claim thiết bị (418/424 cho PCI; `RequestMmio`
+  cho slot VirtIO/DWC2). DMA domain của thiết bị là domain của owner, không lưu riêng.
+- Mọi kiểm tra hỏi cùng một bản ghi:
+  - `RequestMmio` chỉ cấp BAR của PCI function cho **owner** của function đó (`claim_window`);
+    slot VirtIO/DWC2 cấp cho owner, hoặc cho người claim đầu tiên khi còn trống;
+  - `WaitIrq` (mọi kiến trúc), MSI/MSI-X (435) và ISR VirtIO chỉ chấp nhận line thuộc thiết bị
+    mà caller sở hữu (`irq_owned_by`, `irq_owned_for`);
+  - `GrantDma`, DMA export, 434 và 435 cần caller sở hữu PCI function (`owns_pci`);
+  - route block (416) và route NIC (417) cần caller sở hữu thiết bị (`owns`, §5.1).
+- **Release-on-exit (đã implement)**: khi Cell exit/bị kill, `release_mmio_for` hạ các cửa sổ
+  MMIO và `ownership::release_for` giải phóng bản ghi. Bản ghi của owner đã chết vẫn **bị giữ**
+  (quarantine) cho tới khi DMA teardown của nó được xác nhận và cửa sổ đã được hạ, nên không
+  Cell thay thế nào claim được thiết bị, cửa sổ hay vector khi phần cứng còn có thể DMA vào domain
+  cũ. Một cửa sổ mà việc hạ không được xác nhận trên mọi hart thì giữ ở `QUARANTINED_OWNER`.
+  Không có trạng thái `Releasing`/`Quarantined` riêng (Phase 18 Deviation Log).
 - **v1**: range **hardcode** cho QEMU ARM virt (PL061 GPIO @0x0903_0000, PL011 UART @0x0900_0000). **DTB discovery** để v2.
+
+### 5.1 Route NIC theo từng thiết bị
+
+- `sys_register_nic_driver` (417) không có tham số: kernel suy ra key của route từ **thiết bị mạng
+  duy nhất** mà caller sở hữu (`owned_network_device`): PCI function class `02:00:00`, slot VirtIO
+  có `device_id` là net, hoặc aperture DWC2 (LAN9514 trên RPi3). Không sở hữu, hoặc sở hữu nhiều
+  hơn một, thiết bị mạng → bị từ chối; vì vậy `/bin/ahci`, `/bin/xhci`, `/bin/intel-gpu` không
+  còn lấy được route NIC.
+- Route NIC nằm trong bảng slot cố định giống route block (`kernel/src/dev/driver_cell.rs`): key
+  của slot cố định từ lần bind đầu, chỉ provider thay đổi; provider sống khác tid → từ chối.
+- **Primary**: route đầu tiên được bind khi chưa có primary trở thành primary, và chỉ khi đó
+  `service::NIC_DRIVER` được publish. Route khác là secondary, bind mà không đụng service mạng.
+  Khi provider của primary bị teardown, route có index thấp nhất còn provider trở thành primary
+  và `service::NIC_DRIVER` được trỏ lại tại chỗ sang provider đó (không cấp thêm quyền: driver
+  đó đã tự đăng ký route của nó). Không còn route sống → primary để trống cho lần đăng ký sau.
+- Hai NIC (cùng hoặc khác model) đều đăng ký được; restart một driver không gỡ route của driver
+  kia. Mạng nhiều interface (syscall đọc danh sách route, net service nhiều interface) là
+  residual; ABI không đổi.
+
+### 5.2 DMA remapping — `DmaRemapper`
+
+- `kernel/src/dev/iommu.rs` định nghĩa một trait `DmaRemapper` (probe, activate, map vào domain
+  của owner, export window, revoke, `translating`). Mỗi kiến trúc khai báo
+  `crate::arch::iommu::Backend`:
+  - x86_64: **VT-d** (`kernel/src/arch/x86_64/dev/iommu_x86.rs`); khi không có unit, board quyết
+    định giữa từ chối và DMA identity (`dma_isolation`);
+  - riscv64: **RISC-V IOMMU** (`kernel/src/arch/riscv64/dev/iommu_riscv.rs`, DDT 3 cấp +
+    Sv39 first-stage, mỗi Cell một domain); không có unit → từ chối;
+  - aarch64 (và legacy): `NoRemapper` — **mọi DMA grant bị từ chối**; DMA của VirtIO chạy không
+    dịch. Thiết kế `ArmIommu` rỗng và `AppleDartPt` (chỉ dùng trong test) đã bị xóa cho tới khi
+    có backend thật.
+- Gọi theo thứ tự `iommu::init` → `iommu::activate_isolation`, ép bằng token (`Probed` →
+  `Isolation`); sau đó `map_dma_for_cell` publish từng buffer DMA đã cấp vào domain của Cell.
 
 ---
 
@@ -190,8 +248,8 @@ pub enum PeriphResponse { Ok, Level(bool), Data(Box<[u8]>), Err(ViError) }
 | Vùng | Trạng thái |
 |---|---|
 | `ostd::mmio` safe-MMIO | ✅ Không đụng kernel — an toàn song song |
-| Resource Registry (module mới) | ✅ Module riêng `kernel/src/resource_registry.rs` — ít đụng |
-| Release-on-exit hook | ⚠️ Đụng Cell-exit cleanup (never-die ForceExit) → **thiết kế hook, implement sau** |
+| Resource Registry (module mới) | ✅ Module riêng `kernel/src/resource_registry.rs`; quyền sở hữu thiết bị ở `kernel/src/dev/ownership.rs` (§5) |
+| Release-on-exit hook | ✅ Đã implement: `release_mmio_for` + `ownership::release_for` từ teardown của task (§5) |
 | SSIP-preempt (IRQ path) | ⚠️ Đụng trap/IRQ dispatch → **defer tới khi never-die ổn** |
 | ZST cap gating | ⚠️ Phụ thuộc Phase 26 → **v1 dùng ELF manifest, chuyển sau** |
 

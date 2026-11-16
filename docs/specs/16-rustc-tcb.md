@@ -1,6 +1,8 @@
 # Spec 16 — rustc as Cellos Trusted Computing Base
 
-> **Status**: Ratified 2026-06-29; amended 2026-08-01 by the approved D12 architectural review.
+> **Status**: Ratified 2026-06-29; amended 2026-08-01 by the approved D12 architectural review;
+> amended 2026-11-16 (Phase 18) — the TCB includes the Tier-1 dependency closure, which the
+> signing gate now ratchets, and the tier-class gate.
 >
 > This document specifies the role of `rustc` as Cellos's load-bearing TCB, the guarantees
 > it provides, its limits, risk mitigations, and the operational policies that follow.
@@ -26,10 +28,12 @@ type system at compile time. This shifts the TCB:
 |--------------------|------------|
 | Kernel (ring-0 code) | `rustc` (compiler) |
 | Hardware MMU | Cellos kernel (scheduler, IPC, cap enforcement) |
-| CPU privilege model | `libs/abi` + `libs/types` (stable ABI) |
+| CPU privilege model | Tier-1 dependency closure: `libs/ostd`, `libs/wire`, the vendored `virtio-drivers`, `virtio-pci-transport`, `libs/nic-driver` and the rest of `scripts/tier1-closure.generated.toml`, including `libs/abi` + `libs/types` (stable ABI) |
 
 `rustc` becomes load-bearing because every Cell isolation invariant is enforced by the
 compiler, not hardware. If `rustc` is wrong, the whole Cell boundary model collapses.
+The same holds for the `unsafe` code every Tier-1 Cell links: `rustc` checks the Cell,
+not the libraries under it, so their `unsafe` is assumed correct and belongs to the TCB.
 
 ---
 
@@ -37,13 +41,20 @@ compiler, not hardware. If `rustc` is wrong, the whole Cell boundary model colla
 
 ### 2.1 `#![forbid(unsafe_code)]` enforcement
 
-Every Cell crate carries `#![forbid(unsafe_code)]`. This is a **compile-time hard gate**:
-rustc refuses to compile a Cell if any `unsafe` block exists anywhere in its dependency
-tree (excluding explicitly excepted crates).
+Every Cell crate carries `#![forbid(unsafe_code)]`, outside the reviewed allowlist. This
+is a **compile-time hard gate for the Cell crate only**: rustc refuses to compile `unsafe`
+written in that crate. `forbid` is per crate, so it says nothing about the Cell's
+dependencies, and `unsafe` expanded from a macro defined in another crate
+(`ostd::declare_custom_heap!`, `ostd::cell_main!`'s `#[no_mangle]`) compiles inside a
+forbidding Cell. The dependency closure is covered instead by the signing gate's closure
+ratchet (§6, F1b): every in-tree crate a Tier-1 Cell links is held to per-file ceilings,
+and third-party crates are pinned at `name@version`.
 
 **Why load-bearing**: without this guarantee, any Cell author could write a raw pointer
-cast and break out of the SAS boundary undetected. The kernel has no way to verify Cell
-binaries at load time — it trusts rustc.
+cast and break out of the SAS boundary undetected. The kernel does not inspect Cell code
+at load time: it verifies the Ed25519 signature and reads the signed manifest class
+(`kernel/src/loader/governed_spawn.rs`), and trusts the signing pipeline (F1, F1b, F1c,
+F5) for the rest.
 
 ### 2.2 Ownership and Borrow Check (Memory Safety)
 
@@ -140,16 +151,30 @@ layers outside `rustc`'s purview.
 |---|---|---|---|
 | `rustc` (nightly Rust compiler + LLVM backend) | Enforce all LBI invariants listed in §2 | ~3–5M (compiler) + ~1M (LLVM) | Open-source; Ferrocene-audited subset for ARM64/x86 |
 | Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | [generated nLOC](../code-metrics.generated.md) | Only privileged code; strict boundary law per Spec 15 |
-| `libs/abi` | Frozen ABI — syscall numbers, capability types (IPC encoding lives in `libs/wire`) | ~2K | Law 1: any change requires 2× user confirmation |
-| `libs/types` | Primitive types shared by kernel and Cells (`VAddr`, `PAddr`, `ViError`) | ~800 | Law 1: same change protocol |
+| `libs/abi` | Frozen ABI — syscall numbers, capability types (IPC encoding lives in `libs/wire`) | ~2K | Law 1: any change requires 2× user confirmation. No `unsafe`; its manifest and syscall-allowlist macros emit `#[link_section]`/`#[export_name]` into every Cell, ceilinged in the closure baseline |
+| `libs/types` | Primitive types shared by kernel and Cells (`VAddr`, `PAddr`, `ViError`) | ~800 | Law 1: same change protocol. `#![forbid(unsafe_code)]` via `[lints]` |
+| `libs/ostd` | Cell runtime linked by almost every Tier-1 Cell: raw syscalls, heap, executor, grants, MMIO/DMA helpers, `cell_main!`/`declare_custom_heap!` | — | Holds most of the in-tree closure `unsafe`, `syscall.rs` above all |
+| `libs/wire`, `libs/nic-driver`, `libs/virtio-pci-transport`, vendored `kernel/third_party/virtio_drivers`, `libs/cellos-fs`, `libs/tensor-math` | IPC encoding; shared NIC DMA ring layout; virtio transports for the virtio driver Cells; filesystem; NEON kernels | — | The other in-tree closure crates with `unsafe` or unsafe attributes |
+| Third-party crates linked into Tier-1 Cells | `memchr`, `hashbrown`, `lock_api`, `heapless`, `spin`, … | — | Pinned at `name@version` with their counts in `scripts/tier1-closure.generated.toml`; any new crate, version or count is a reviewed diff |
+
+The in-tree closure is the generated `scripts/tier1-closure.generated.toml` (`[[package]]`),
+not this table. Every file of it that uses `unsafe` or an unsafe attribute has a ceiling in
+`scripts/tcb-unsafe-baseline.toml`; `python3 scripts/check-tcb-closure.py` prints the
+current per-crate tally. Do not restate the tally here (Spec 21 §2, Layer 3).
 
 **Outside the TCB by design:**
 
-- Cell code (`#![forbid(unsafe_code)]`) — verified *by* the TCB, not *part of* it.
-- Trusted C/Zig libraries via the Tier 1 `ffi-posix` profile — bounded by the
-  `unsafe` boundary and grant/IPC validation.
+- Cell code outside the reviewed allowlist (`#![forbid(unsafe_code)]`) — verified *by* the
+  TCB, not *part of* it. Allowlisted `unsafe` in Tier-1 Cells (driver MMIO/DMA, the
+  hypervisor service, test witnesses, the two tier exceptions) is a reviewed hole, counted
+  in the Tier-1 total of the closure baseline.
+- C/C++/Zig code runs in Tier 2 (manifest class FFI or UNTRUSTED, Spec 18): the tier-class
+  gate (F1c) refuses to sign a crate with a `c-ffi` or `legacy-raw-ptr` allowlist entry and
+  a Tier-1 manifest, unless a signed `[[tier_exception]]` in `scripts/unsafe-allowlist.toml`
+  names it.
 - Lua/VM guests — sandboxed by interpreter manifest restrictions or hypervisor Stage-2 paging.
-- `std` / `alloc` — Cell-visible only via `libs/ostd`; TCB does not extend to `std` internals.
+- `core` / `alloc` internals — Cells link them directly; they are outside the scanned
+  closure and trusted with `rustc` itself.
 
 ---
 
@@ -186,7 +211,8 @@ the primary reference build independently; do not wait for a speculative qualifi
 unsoundness in `unsafe` code — that rustc's static analysis would miss. Run `miri`
 in CI on:
 - All kernel `unsafe` blocks (layout assumptions, raw pointer arithmetic, interrupt handlers)
-- `libs/types` and `libs/abi` FFI boundary code
+- The Tier-1 closure's boundary code: `libs/ostd` (raw syscalls in `syscall.rs`, heap,
+  executor, grants) — `libs/types` and `libs/abi` hold no `unsafe`
 
 This catches a class of bugs that would silently corrupt the TCB.
 
@@ -220,6 +246,8 @@ the safety argument in §2.
 | Policy | Rule | Rationale |
 |---|---|---|
 | **F1** | Every Cell crate MUST carry `#![forbid(unsafe_code)]`, **absolute outside a reviewed allowlist** (`scripts/unsafe-allowlist.toml`). Enforced at the signing gate by `scripts/cellos-sign --check`, which refuses to sign and fails CI on any `unsafe` outside the list. Each entry carries `class`/`reason`/`approver`/`date`, and is reported once past `review_by` (or `max_age_days`), so a temporary exemption cannot become permanent by silence. | Compiler cannot verify isolation if unsafe is permitted anywhere. Driver Cells need `unsafe` for MMIO/DMA, so the allowlist is unavoidable — but it **is** the hole in the LBI wall, and every entry must be reviewed as the unsafe itself would be. Review the current tally with `cellos-sign --check`; do not restate it in prose (Spec 21 §2, Layer 3). |
+| **F1b** | The `unsafe` linked into Tier-1 Cells from outside `cells/` MUST stay within reviewed ceilings. `scripts/gen-tier1-closure.py` derives the Tier-1 dependency closure from `cargo metadata` (Tier-1 roots, normal edges, proc-macros excluded) into `scripts/tier1-closure.generated.toml`; CI regenerates it and fails on drift. `cellos-sign` holds every file of an in-tree closure crate to two ceilings in `scripts/tcb-unsafe-baseline.toml` — `unsafe` tokens and unsafe attributes (`#[no_mangle]`, `#[export_name]`, `#[link_section]`) — and the Tier-1 total (both counts over the Tier-1 Cells' own sources plus the closure) to one more. A rise fails; a drop fails under `--strict` (CI and every signing run) until the ceiling is lowered in the same commit. Third-party crates are pinned at `name@version` with their counts; a new crate, a version bump or a changed count fails CI until the generated file is reviewed and committed. | `forbid` is per crate (§2.1): a memory bug in `libs/ostd` or a registry crate defeats language isolation for every Tier-1 Cell. The total lets reviewed code move from Cells into a shared library without loosening anything. |
+| **F1c** | A crate whose allowlist entries include class `c-ffi` or `legacy-raw-ptr` MUST declare manifest class FFI or UNTRUSTED (Tier 2), unless a signed `[[tier_exception]]` (crate, class, accepted manifest class, reason, approver, `review_by`) names it. `cellos-sign` reads the class from source and fails closed: any spelling other than the literal `abi::manifest` constant, or a binary root without a manifest, reads as Tier 1. Allowlist classes are restricted to six known values. | The kernel picks the tier from the signed manifest byte. C-ABI and raw-pointer `unsafe` is exactly what the type system cannot vouch for, so it belongs behind a page-table wall; an exception keeps that decision visible and dated. |
 | **F2** | `unsafe` in kernel/HAL MUST be documented with `// SAFETY:` explaining the invariant | Undocumented unsafe = unaudited TCB hole |
 | **F3** | Async IPC/Grant paths MUST use owned buffers (`Box<[u8]>`) not borrows | Rust lifetime rules do not cover borrows across `.await` yield points in SAS |
 | **F4** | `static mut` in kernel is only permitted inside `Spinlock<Option<T>>` | Mutable statics are "ambient authority" (Duffy 2013); raw `static mut` = type safety bypass in kernel code |

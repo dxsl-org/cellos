@@ -223,7 +223,7 @@ categories to `kernel/src/` must be rejected at review.
 | Driver category | Correct home |
 |----------------|--------------|
 | NVMe, MMC/SDHCI (storage) | `cells/drivers/nvme/`, `cells/drivers/mmc/` |
-| e1000, RTL8168 (NIC) | `cells/drivers/e1000/`, `cells/drivers/nic-*/` |
+| NIC (e1000, e1000e, igb, igc, ixgbe, i40e, r8169, bcm57xx, vmxnet3) | `cells/drivers/<chip>/`, one cell per chip; bring-up, dispatch, sender authentication and the DMA ring layout shared in `libs/nic-driver` (Phase 18; `vmxnet3` keeps its own DMA area) |
 | VirtIO block, PCI transport | `cells/drivers/virtio-blk/` — **DONE (G2 loader redesign, 2026-07-07)**; ramdisk boot dissolved the bootstrap chicken-and-egg |
 | VirtIO net, GPU, input, sound | `cells/drivers/virtio-*/` — **DONE (P06/02/03/04)** |
 | PCIe ECAM enumeration | Platform Cell — **done (P01)**; kernel retains `register_bar`/`find_class` store |

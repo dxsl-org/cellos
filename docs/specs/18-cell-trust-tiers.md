@@ -110,8 +110,16 @@ by a pipeline that enforced F1/F5"**. The normal `cellos-sign` route refuses to 
 unless its repository checks pass:
 
 - Cell crate roots and tracked Rust files under `cells/` satisfy the F1 attribute/token
-  checks outside `scripts/unsafe-allowlist.toml`; `libs/*` remains reviewed TCB rather
-  than part of this ratchet;
+  checks outside `scripts/unsafe-allowlist.toml`;
+- every file of an in-tree crate in the Tier-1 dependency closure (`libs/ostd`, `libs/wire`,
+  the vendored `virtio-drivers`, … — `scripts/tier1-closure.generated.toml`) stays within its
+  reviewed ceilings of `unsafe` tokens and unsafe attributes in
+  `scripts/tcb-unsafe-baseline.toml`, and so does the Tier-1 total of cells plus closure;
+  third-party crates are pinned at `name@version` in the generated file, which CI
+  regenerates and diffs (Spec 16 F1b);
+- a crate whose allowlist entries include `c-ffi` or `legacy-raw-ptr` declares manifest
+  class FFI or UNTRUSTED, so it loads in Tier 2, unless a signed `[[tier_exception]]` names
+  it and the manifest class it accepts (tier-class gate, Spec 16 F1c);
 - the toolchain matches the pinned `rust-toolchain.toml` (policy F5);
 - the controlled CI job binds the target ELF to the checked build before releasing the
   production signing key. The CLI itself accepts target paths and does not establish

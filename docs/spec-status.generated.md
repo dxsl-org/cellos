@@ -6,13 +6,13 @@ Layer 3 of [Spec 21](specs/21-documentation-architecture.md). `Anchor:` lines in
 
 | Metric | Value |
 |---|---:|
-| Sections scanned | 437 |
+| Sections scanned | 439 |
 | Sections with an anchor | 20 |
 | Ratified/Accepted sections | 298 |
 | …of those, anchored | 20 |
 | Anchor violations | 0 |
 | Coverage gaps (ratified, unanchored) | 278 |
-| Status-prose hits | 80 |
+| Status-prose hits | 81 |
 | Plans linked from status docs | 14 |
 | Structural errors (plan frontmatter, doc links) | 0 |
 
@@ -55,19 +55,19 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 
 | Plan | Frontmatter status | Linked from |
 |---|---|---|
-| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:274` |
-| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:507` |
+| `.agents/260927-1100-c2c-anywhere-tier-aware/plan.md` | `pending` | `.agents/plan-portfolio.md:278` |
+| `.agents/261004-1957-x86-pc-lane/plan.md` | `in-progress` | `.agents/plan-portfolio.md:511` |
 | `.agents/261011-1200-cell-contract-authority/plan.md` | `in-progress` | `.agents/plan-portfolio.md:19`, `.agents/plan-portfolio.md:29`, `README.md:76`, `README.md:100`, `docs/README.md:13` |
 | `.agents/261019-1310-unified-desktop/plan.md` | `completed` | `.agents/plan-portfolio.md:98` |
-| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:258` |
+| `.agents/261019-1534-vfs-storage-search-research/plan.md` | `in-progress` | `.agents/plan-portfolio.md:262` |
 | `.agents/261020-1750-cellbox-cli/plan.md` | `closed-at-stated-ceilings-with-deferred-items` | `.agents/plan-portfolio.md:110`, `.agents/plan-portfolio.md:112`, `.agents/plan-portfolio.md:129`, `docs/README.md:21` |
 | `.agents/261030-1945-ginux-lessons-hardening/plan.md` | `closed` | `.agents/plan-portfolio.md:150` |
-| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:180` |
-| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:179` |
-| `.agents/261103-2218-x86-platform-breadth/plan.md` | `pending` | `.agents/plan-portfolio.md:191` |
-| `.agents/261104-0711-apple-silicon-group/plan.md` | `pending` | `.agents/plan-portfolio.md:220` |
-| `.agents/261104-0801-x86-igpu-compute/plan.md` | `pending` | `.agents/plan-portfolio.md:205` |
-| `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:214` |
+| `.agents/261031-1241-aarch64-core-backend-split/plan.md` | — | `.agents/plan-portfolio.md:184` |
+| `.agents/261031-1241-x86-runtime-board-selection/plan.md` | — | `.agents/plan-portfolio.md:183` |
+| `.agents/261103-2218-x86-platform-breadth/plan.md` | `pending` | `.agents/plan-portfolio.md:195` |
+| `.agents/261104-0711-apple-silicon-group/plan.md` | `pending` | `.agents/plan-portfolio.md:224` |
+| `.agents/261104-0801-x86-igpu-compute/plan.md` | `pending` | `.agents/plan-portfolio.md:209` |
+| `.agents/261104-0802-x86-tier2-gpu-runtime/plan.md` | `pending` | `.agents/plan-portfolio.md:218` |
 | `.agents/261110-1703-architecture-remediation/plan.md` | `in-progress` | `.agents/plan-portfolio.md:166` |
 
 ## Open findings
@@ -88,14 +88,14 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/02-memory.md:10` — Layout Segments
 - `docs/specs/02-memory.md:18` — 2. Global Allocator & Resource Governance
 - `docs/specs/02-memory.md:21` — Quota-based Allocation (Chống "Tham")
-- `docs/specs/02-memory.md:26` — Real-Time Pool (TLSF)
-- `docs/specs/02-memory.md:32` — 3. Focused ownership authorities
-- `docs/specs/02-memory.md:60` — 3.1 Hợp đồng release của `FrameRun`
-- `docs/specs/02-memory.md:88` — 3.2 Giới hạn quarantine
-- `docs/specs/02-memory.md:97` — 4. Stack Safety (Guard Pages)
-- `docs/specs/02-memory.md:101` — 5. Protection Policy (W^X)
-- `docs/specs/02-memory.md:114` — Bảo đảm này KHÔNG bao gồm
-- `docs/specs/02-memory.md:138` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
+- `docs/specs/02-memory.md:47` — Real-Time Pool (TLSF)
+- `docs/specs/02-memory.md:53` — 3. Focused ownership authorities
+- `docs/specs/02-memory.md:81` — 3.1 Hợp đồng release của `FrameRun`
+- `docs/specs/02-memory.md:112` — 3.2 Giới hạn quarantine
+- `docs/specs/02-memory.md:121` — 4. Stack Safety (Guard Pages)
+- `docs/specs/02-memory.md:125` — 5. Protection Policy (W^X)
+- `docs/specs/02-memory.md:138` — Bảo đảm này KHÔNG bao gồm
+- `docs/specs/02-memory.md:166` — 6. Addendum: Tier 2 Paged Domain Memory Architecture (Layer B)
 - `docs/specs/03-runtime.md:7` — 1. IPC: Direct Method Calls
 - `docs/specs/03-runtime.md:14` — 2. Async/Await & Safety (Owned Buffers)
 - `docs/specs/03-runtime.md:17` — Quy tắc "Owned Buffers ONLY"
@@ -241,29 +241,29 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/15-kernel-boundary.md:344` — 5. Kernel Size Budget
 - `docs/specs/15-kernel-boundary.md:358` — 6. Comparison Table — Where Cellos Fits
 - `docs/specs/15-kernel-boundary.md:377` — 7. References
-- `docs/specs/16-rustc-tcb.md:12` — 1. What "TCB" Means for Cellos
-- `docs/specs/16-rustc-tcb.md:36` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
-- `docs/specs/16-rustc-tcb.md:38` — 2.1 `#![forbid(unsafe_code)]` enforcement
-- `docs/specs/16-rustc-tcb.md:48` — 2.2 Ownership and Borrow Check (Memory Safety)
-- `docs/specs/16-rustc-tcb.md:59` — 2.3 Type Safety (No Transmute Across Cell Boundaries)
-- `docs/specs/16-rustc-tcb.md:68` — 2.4 `Send + Sync` Enforcement (Concurrency Safety)
-- `docs/specs/16-rustc-tcb.md:78` — 2.5 Lifetime Validity (No Dangling References Across Async Await Points)
-- `docs/specs/16-rustc-tcb.md:90` — 3. What rustc Does NOT Guarantee
-- `docs/specs/16-rustc-tcb.md:95` — 3.1 Capability Revocation
-- `docs/specs/16-rustc-tcb.md:103` — 3.2 Time and Scheduling
-- `docs/specs/16-rustc-tcb.md:109` — 3.3 Side Channels (Spectre / Meltdown)
-- `docs/specs/16-rustc-tcb.md:122` — 3.4 Supply Chain / Compiler Compromise
-- `docs/specs/16-rustc-tcb.md:128` — 3.5 Trusted I/O Path
-- `docs/specs/16-rustc-tcb.md:137` — 4. TCB Component Inventory (smallest → largest)
-- `docs/specs/16-rustc-tcb.md:156` — 5. Risk Mitigations for rustc-as-TCB
-- `docs/specs/16-rustc-tcb.md:158` — 5.1 Open Source Auditability
-- `docs/specs/16-rustc-tcb.md:163` — 5.2 Ferrocene qualification lane
-- `docs/specs/16-rustc-tcb.md:183` — 5.3 miri: MIR Interpreter for Unsoundness Detection
-- `docs/specs/16-rustc-tcb.md:193` — 5.4 Reproducible Builds + Toolchain Pin
-- `docs/specs/16-rustc-tcb.md:199` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
-- `docs/specs/16-rustc-tcb.md:215` — 6. Policies Derived from This Spec
-- `docs/specs/16-rustc-tcb.md:232` — 7. Comparison with Prior Art
-- `docs/specs/16-rustc-tcb.md:248` — 8. Cross-References
+- `docs/specs/16-rustc-tcb.md:14` — 1. What "TCB" Means for Cellos
+- `docs/specs/16-rustc-tcb.md:40` — 2. What rustc Guarantees (and Why Cellos Depends on Each)
+- `docs/specs/16-rustc-tcb.md:42` — 2.1 `#![forbid(unsafe_code)]` enforcement
+- `docs/specs/16-rustc-tcb.md:59` — 2.2 Ownership and Borrow Check (Memory Safety)
+- `docs/specs/16-rustc-tcb.md:70` — 2.3 Type Safety (No Transmute Across Cell Boundaries)
+- `docs/specs/16-rustc-tcb.md:79` — 2.4 `Send + Sync` Enforcement (Concurrency Safety)
+- `docs/specs/16-rustc-tcb.md:89` — 2.5 Lifetime Validity (No Dangling References Across Async Await Points)
+- `docs/specs/16-rustc-tcb.md:101` — 3. What rustc Does NOT Guarantee
+- `docs/specs/16-rustc-tcb.md:106` — 3.1 Capability Revocation
+- `docs/specs/16-rustc-tcb.md:114` — 3.2 Time and Scheduling
+- `docs/specs/16-rustc-tcb.md:120` — 3.3 Side Channels (Spectre / Meltdown)
+- `docs/specs/16-rustc-tcb.md:133` — 3.4 Supply Chain / Compiler Compromise
+- `docs/specs/16-rustc-tcb.md:139` — 3.5 Trusted I/O Path
+- `docs/specs/16-rustc-tcb.md:148` — 4. TCB Component Inventory (smallest → largest)
+- `docs/specs/16-rustc-tcb.md:181` — 5. Risk Mitigations for rustc-as-TCB
+- `docs/specs/16-rustc-tcb.md:183` — 5.1 Open Source Auditability
+- `docs/specs/16-rustc-tcb.md:188` — 5.2 Ferrocene qualification lane
+- `docs/specs/16-rustc-tcb.md:208` — 5.3 miri: MIR Interpreter for Unsoundness Detection
+- `docs/specs/16-rustc-tcb.md:219` — 5.4 Reproducible Builds + Toolchain Pin
+- `docs/specs/16-rustc-tcb.md:225` — 5.5 P0 Incident Protocol: Soundness Hole in rustc
+- `docs/specs/16-rustc-tcb.md:241` — 6. Policies Derived from This Spec
+- `docs/specs/16-rustc-tcb.md:260` — 7. Comparison with Prior Art
+- `docs/specs/16-rustc-tcb.md:276` — 8. Cross-References
 - `docs/specs/17-ipc-wire-contract.md:20` — 1. Scope & model
 - `docs/specs/17-ipc-wire-contract.md:63` — 2. The recv-mask rule (most important)
 - `docs/specs/17-ipc-wire-contract.md:110` — 3. Byte-0 discriminant registry
@@ -293,11 +293,11 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/18-cell-trust-tiers.md:9` — 1. Context
 - `docs/specs/18-cell-trust-tiers.md:32` — 2. Decision
 - `docs/specs/18-cell-trust-tiers.md:91` — 2.1 Tier 1 admission — `cellos-sign`
-- `docs/specs/18-cell-trust-tiers.md:138` — 2.2 Tier 2 admission — nothing
-- `docs/specs/18-cell-trust-tiers.md:154` — 2.3 Upgrade path (G2+, optional)
-- `docs/specs/18-cell-trust-tiers.md:164` — 3. Rejected alternatives
-- `docs/specs/18-cell-trust-tiers.md:176` — 4. Consequences
-- `docs/specs/18-cell-trust-tiers.md:205` — 5. Cross-references
+- `docs/specs/18-cell-trust-tiers.md:146` — 2.2 Tier 2 admission — nothing
+- `docs/specs/18-cell-trust-tiers.md:162` — 2.3 Upgrade path (G2+, optional)
+- `docs/specs/18-cell-trust-tiers.md:172` — 3. Rejected alternatives
+- `docs/specs/18-cell-trust-tiers.md:184` — 4. Consequences
+- `docs/specs/18-cell-trust-tiers.md:213` — 5. Cross-references
 - `docs/specs/18c-publisher-provenance-envelope.md:5` — Purpose and scope
 - `docs/specs/18c-publisher-provenance-envelope.md:13` — Terms
 - `docs/specs/18c-publisher-provenance-envelope.md:21` — Canonical envelope encoding, version 1
@@ -396,23 +396,23 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/12-reliability.md:274` — `✅` in: | **Erlang/OTP** (BEAM) | 🟡 in-VM only | ✅ | ✅ supervision tree | ❌ soft RT (GC) | ✅ hot code load | 🟡 via distribution 
 - `docs/specs/12-reliability.md:275` — `✅` in: | **HP NonStop** (Tandem) | ✅ | ✅ | ✅ process-pairs | ❌ not RT | ✅ online upgrade | ✅ lockstep HW |
 - `docs/specs/12-reliability.md:276` — `✅` in: | **VxWorks** | 🟡 | ✅ watchdog | 🟡 | ✅ hard RT | 🟡 remote patch | 🟡 redundant configs |
-- `docs/specs/13-peripherals.md:70` — `✅` in: - ✅ **`ViI2c`** (`hal/traits/i2c/src/lib.rs`) — synchronous master, `write`/`read`/`write_read`. Implemented 2026-06.
-- `docs/specs/13-peripherals.md:71` — `✅` in: - ✅ **`ViSpi`** (`hal/traits/spi/src/lib.rs`) — synchronous master Mode 0, `cs_select`/`cs_deselect`/`transfer`/`write`.
-- `docs/specs/13-peripherals.md:72` — `✅` in: - ✅ **`ViPwm`** (`hal/traits/pwm/src/lib.rs`) — `set_frequency`/`set_duty`/`enable`/`disable`/`tick`. Bit-bang over GPIO
-- `docs/specs/13-peripherals.md:73` — `✅` in: - ✅ **`ViAdc`** (`hal/traits/adc/src/lib.rs`) — `read_raw`/`max_value`/`num_channels`/`to_millivolts`. Simulation driver
-- `docs/specs/13-peripherals.md:74` — `✅` in: - ✅ **`ViCan`** (`hal/traits/can/src/lib.rs`) — `configure`/`send_frame`/`recv_frame` + `CanFrame` type. Loopback driver
-- `docs/specs/13-peripherals.md:113` — `✅` in: | **Soft-RT** | UART RX, sensor định kỳ, telemetry | **Async Waker Dispatch** (spec 04 §3): kernel top-half ack+`wake()`
-- `docs/specs/13-peripherals.md:114` — `✅` in: | **Hard-RT chu kỳ** | PID loop, software PWM, bit-bang, quadrature | **Pinned-poll**: `spawn_pinned` Cell đọc data regi
-- `docs/specs/13-peripherals.md:152` — `✅` in: - **v1 gate tạm qua ELF manifest (Phase 30 ✅ đã xong)**: Cell khai báo cap `gpio`/`uart` trong
-- `docs/specs/13-peripherals.md:161` — `✅` in: 1. ✅ `ostd::mmio::MmioRegion` + bounds-check.
-- `docs/specs/13-peripherals.md:162` — `✅` in: 2. ✅ Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
-- `docs/specs/13-peripherals.md:163` — `✅` in: 3. ✅ Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), `cells/drivers/serial` (PL011).
-- `docs/specs/13-peripherals.md:164` — `✅` in: 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
-- `docs/specs/13-peripherals.md:165` — `✅` in: 5. ✅ ELF-manifest cap gating (gpio/uart).
-- `docs/specs/13-peripherals.md:166` — `✅` in: 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
-- `docs/specs/13-peripherals.md:167` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest 
-- `docs/specs/13-peripherals.md:168` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap
-- `docs/specs/13-peripherals.md:170` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
-- `docs/specs/13-peripherals.md:171` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
-- `docs/specs/13-peripherals.md:172` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
-- … 20 more
+- `docs/specs/13-peripherals.md:76` — `✅` in: - ✅ **`ViI2c`** (`hal/traits/i2c/src/lib.rs`) — synchronous master, `write`/`read`/`write_read`. Implemented 2026-06.
+- `docs/specs/13-peripherals.md:77` — `✅` in: - ✅ **`ViSpi`** (`hal/traits/spi/src/lib.rs`) — synchronous master Mode 0, `cs_select`/`cs_deselect`/`transfer`/`write`.
+- `docs/specs/13-peripherals.md:78` — `✅` in: - ✅ **`ViPwm`** (`hal/traits/pwm/src/lib.rs`) — `set_frequency`/`set_duty`/`enable`/`disable`/`tick`. Bit-bang over GPIO
+- `docs/specs/13-peripherals.md:79` — `✅` in: - ✅ **`ViAdc`** (`hal/traits/adc/src/lib.rs`) — `read_raw`/`max_value`/`num_channels`/`to_millivolts`. Simulation driver
+- `docs/specs/13-peripherals.md:80` — `✅` in: - ✅ **`ViCan`** (`hal/traits/can/src/lib.rs`) — `configure`/`send_frame`/`recv_frame` + `CanFrame` type. Loopback driver
+- `docs/specs/13-peripherals.md:171` — `✅` in: | **Soft-RT** | UART RX, sensor định kỳ, telemetry | **Async Waker Dispatch** (spec 04 §3): kernel top-half ack+`wake()`
+- `docs/specs/13-peripherals.md:172` — `✅` in: | **Hard-RT chu kỳ** | PID loop, software PWM, bit-bang, quadrature | **Pinned-poll**: `spawn_pinned` Cell đọc data regi
+- `docs/specs/13-peripherals.md:210` — `✅` in: - **v1 gate tạm qua ELF manifest (Phase 30 ✅ đã xong)**: Cell khai báo cap `gpio`/`uart` trong
+- `docs/specs/13-peripherals.md:219` — `✅` in: 1. ✅ `ostd::mmio::MmioRegion` + bounds-check.
+- `docs/specs/13-peripherals.md:220` — `✅` in: 2. ✅ Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
+- `docs/specs/13-peripherals.md:221` — `✅` in: 3. ✅ Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), `cells/drivers/serial` (PL011).
+- `docs/specs/13-peripherals.md:222` — `✅` in: 4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
+- `docs/specs/13-peripherals.md:223` — `✅` in: 5. ✅ ELF-manifest cap gating (gpio/uart).
+- `docs/specs/13-peripherals.md:224` — `✅` in: 6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
+- `docs/specs/13-peripherals.md:225` — `✅` in: 7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest 
+- `docs/specs/13-peripherals.md:226` — `✅` in: 8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap
+- `docs/specs/13-peripherals.md:228` — `✅` in: 9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
+- `docs/specs/13-peripherals.md:229` — `✅` in: 10. ✅ **PWM bit-bang** (`hal/traits/pwm`, `cells/drivers/pwm-gpio`, `cells/apps/pwm-demo`) — gated by `gpio` manifest ca
+- `docs/specs/13-peripherals.md:230` — `✅` in: 11. ✅ **ADC simulation** (`hal/traits/adc`, `cells/drivers/adc-sim`, `cells/apps/adc-demo`) — no MMIO, no cap; triangle-
+- … 21 more
