@@ -1210,7 +1210,7 @@ pub(super) fn reserve_authorized_dma_publication(
     base: usize,
     size: usize,
 ) -> Result<DmaPublicationGuard, DmaGrantError> {
-    if crate::resource_registry::owner_of_bdf(bdf) != Some(caller_id) {
+    if !crate::dev::ownership::owns_pci(caller_id, bdf) {
         return Err(DmaGrantError::BdfNotOwned);
     }
     #[cfg(target_arch = "x86_64")]

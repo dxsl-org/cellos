@@ -88,7 +88,7 @@ fn owned_device(owner: usize, bdf: u32) -> Result<pcie_ecam::PciDevice, PcieFunc
     if bdf > 0xFFFF {
         return Err(PcieFunctionError::InvalidInput);
     }
-    if crate::resource_registry::owner_of_bdf(bdf) != Some(owner) {
+    if !crate::dev::ownership::owns_pci(owner, bdf) {
         return Err(PcieFunctionError::PermissionDenied);
     }
     pcie_ecam::device(bdf).ok_or(PcieFunctionError::NotFound)

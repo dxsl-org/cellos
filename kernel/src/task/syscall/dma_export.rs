@@ -1002,7 +1002,7 @@ impl Platform for KernelPlatform {
     }
 
     fn owns_bdf(&self, tid: usize, bdf: u32) -> bool {
-        crate::resource_registry::owner_of_bdf(bdf) == Some(tid)
+        crate::dev::ownership::owns_pci(tid, bdf)
     }
 
     fn translating(&self, bdf: u32) -> bool {

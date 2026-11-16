@@ -243,6 +243,12 @@ pub(crate) fn pci_owner(bdf: u32) -> Option<usize> {
     DEVICES.lock().find(key).and_then(|record| record.owner)
 }
 
+/// Whether `tid` owns PCI function `bdf`: the gate of DMA grants (`GrantDma`,
+/// DMA export), 434 and 435. The function's DMA domain is its owner's.
+pub(crate) fn owns_pci(tid: usize, bdf: u32) -> bool {
+    pci_owner(bdf) == Some(tid)
+}
+
 /// Every PCI function `tid` owns.
 pub(crate) fn pci_functions_of(tid: usize) -> alloc::vec::Vec<u32> {
     DEVICES
