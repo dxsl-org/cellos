@@ -84,7 +84,7 @@ pub(super) unsafe fn decode_function_in_window(
 /// and the insert one step per BDF.
 ///
 /// # Safety
-/// The admitted ECAM window must be identity-mapped and remain live.
+/// The admitted ECAM window must be mapped for the kernel and remain live.
 pub(super) unsafe fn record_in_window(
     ecam_base: usize,
     bus_start: u8,
@@ -187,7 +187,7 @@ pub(super) fn ethernet_without_driver(
 /// register dword at 0x08 (revision ID, prog IF, subclass, class code).
 ///
 /// # Safety
-/// The admitted ECAM window must be identity-mapped and remain live.
+/// The admitted ECAM window must be mapped for the kernel and remain live.
 pub(super) unsafe fn class_code_in_range(
     ecam_base: usize,
     bus_start: u8,
@@ -228,7 +228,7 @@ pub fn fingerprint_functions() -> Option<Vec<abi::machine_facts::PciFunctionId>>
 /// registered (registration reads it through the same window) and is skipped.
 ///
 /// # Safety
-/// The admitted ECAM window must be identity-mapped and remain live.
+/// The admitted ECAM window must be mapped for the kernel and remain live.
 pub(super) unsafe fn fingerprint_in_window(
     ecam_base: usize,
     bus_start: u8,
@@ -255,8 +255,10 @@ pub(super) unsafe fn fingerprint_in_window(
 }
 
 /// Range-checked pointer to config byte `off` of canonical `bdf` inside the
-/// admitted ECAM window; `None` outside it. The window is identity-mapped for
-/// the kernel's lifetime, so the pointer stays valid; accesses must be volatile.
+/// admitted ECAM window; `None` outside it. The pointer is into the kernel's
+/// supervisor-only alias of the window (`paging::mmio_alias`), never
+/// the identity window a Platform Cell claim makes USER, and stays valid for
+/// the kernel's lifetime; accesses must be volatile.
 pub(crate) fn config_ptr(bdf: u32, off: usize) -> Option<*mut u8> {
     if bdf > 0xFFFF {
         return None;

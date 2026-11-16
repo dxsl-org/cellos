@@ -57,14 +57,14 @@ fn msi_message(bdf: u32, first: u8, count: usize) -> Option<(u64, u32)> {
 }
 
 /// Program `count` MSI-X entries starting at `first`, mask the rest of the
-/// table, then enable MSI-X with INTx disabled. `table_phys` is the table's
-/// physical address (BAR base + table offset), already identity-mapped
-/// kernel-only for `table_size` entries.
+/// table, then enable MSI-X with INTx disabled. `table` is the kernel's alias
+/// of the table (`paging::mmio_alias::kernel_mmio_alias` of BAR base + table offset), for
+/// `table_size` entries.
 pub fn program_msix(
     cfg: &Config,
     cap: u8,
     layout: &MsixLayout,
-    table_phys: usize,
+    table: usize,
     first: u8,
     count: usize,
 ) -> Option<()> {
@@ -75,7 +75,7 @@ pub fn program_msix(
     enable_function(cfg, CMD_INTX_DISABLE)?;
     let entries = layout.table_size as usize;
     for index in 0..entries {
-        let entry = (table_phys + index * MSIX_ENTRY_BYTES) as *mut u32;
+        let entry = (table + index * MSIX_ENTRY_BYTES) as *mut u32;
         // A vector without a deliverable message fails the whole block; the
         // function stays masked.
         let message = if index < count {
@@ -84,7 +84,7 @@ pub fn program_msix(
             None
         };
         // SAFETY: the table lies inside the function's BAR (checked by the carve
-        // rule) and the caller identity-mapped it kernel-only.
+        // rule) and the caller aliased it for the kernel.
         unsafe {
             core::ptr::write_volatile(entry.add(3), MSIX_VECTOR_MASKED);
             if let Some((address, data)) = message {

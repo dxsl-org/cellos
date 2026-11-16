@@ -905,12 +905,12 @@ review = "kernel/src/dev/virtio_rng.rs:x86_rng::features; kernel/src/dev/virtio_
 key = "kernel::dev::pcie_ecam::x86::X86_ECAM_BASE @cfg(target_arch = \"x86_64\")"
 lifetime = "boot"
 mutation = "once"
-owner = "dev::pcie_ecam; stored once by kmain from validated ACPI MCFG (set_ecam_base_x86); read by pcie_ecam::init, register_device, enable_bus_master and quiesce_function via ecam_base_x86/ecam_window"
-contexts = ["boot", "normal", "irq"]
+owner = "dev::pcie_ecam; stored once by kmain from validated ACPI MCFG (set_ecam_base_x86); read by admitted_ecam_range (the physical window a Platform Cell may claim) via ecam_base_x86. Kernel config-space accesses use paging::mmio_alias::ecam_kernel_alias instead"
+contexts = ["boot", "normal"]
 seal = "written once in kmain (main.rs x86_64 block before init_kernel_paging_x86) on the BSP, before pcie_ecam::init and start_secondaries"
 retirement = "never: lives for the whole run"
-rationale = "Single Relaxed store on the BSP before APs or any cell exist; start_secondaries and task dispatch give later readers happens-before, so Relaxed is sufficient. Readers include quiesce_function in teardown_dma_authority, reached from the yield_cpu retirement funnel, which can run in the timer/IPI ISR; the read is lock-free."
-review = "kernel/src/arch/x86_64/dev/pcie_ecam.rs:set_ecam_base_x86; kernel/src/dev/pcie_ecam.rs:ecam_window; kernel/src/dev/pcie_ecam.rs:quiesce_function; kernel/src/main.rs:535; kernel/src/task.rs:teardown_dma_authority"
+rationale = "Single Relaxed store on the BSP before APs or any cell exist; start_secondaries and task dispatch give later readers happens-before, so Relaxed is sufficient. The one reader is the RequestMmio syscall's ECAM claim check; the read is lock-free."
+review = "kernel/src/arch/x86_64/dev/pcie_ecam.rs:set_ecam_base_x86; kernel/src/dev/pcie_ecam.rs:admitted_ecam_range; kernel/src/main.rs:535"
 
 [[global]]
 key = "kernel::dev::pcie_ecam::x86::X86_ECAM_BUS_START @cfg(target_arch = \"x86_64\")"
@@ -1929,6 +1929,28 @@ seal = "Option<PhysAddr> written once in init_kernel_paging_x86 (paging.rs:669) 
 retirement = "never: lives for the whole run"
 rationale = "Taken from the #PF demand path (vi_handle_page_fault -> map_page while holding FRAME_ALLOCATOR, matching the documented FRAME_ALLOCATOR -> KERNEL_ROOT order), from Stack drop/unmap in the yield_cpu funnel reachable from timer/IPI ISRs, and on the BSP during AP bring-up (Stack::new_kernel in smp::start_secondaries); the crate Spinlock masks IRQs so same-hart re-entry cannot occur."
 review = "kernel/src/memory/paging.rs:init_kernel_paging_x86; kernel/src/memory/paging.rs:map_page; kernel/src/memory/paging.rs:vi_handle_page_fault; kernel/src/task/stack.rs:223; kernel/src/sched/smp.rs:837"
+
+[[global]]
+key = "kernel::memory::paging::mmio_alias::ECAM_ALIAS @cfg(target_arch = \"x86_64\")"
+lifetime = "boot"
+mutation = "once"
+owner = "memory::paging::mmio_alias: the kernel VA of the ECAM allocation base in the kernel-only MMIO alias window; stored once by map_ecam_alias (from init_kernel_paging_x86) after it mapped the alias; read by pcie_ecam::ecam_window through ecam_kernel_alias"
+contexts = ["boot", "normal", "irq"]
+seal = "written once in init_kernel_paging_x86 on the BSP, before the CR3 switch, pcie_ecam::init and start_secondaries; 0 when no ECAM window was admitted"
+retirement = "never: lives for the whole run"
+rationale = "Release store on the BSP before APs or any cell exist, Acquire loads; start_secondaries and task dispatch give later readers happens-before as well. Readers include quiesce_function in teardown_dma_authority, reached from the yield_cpu retirement funnel, which can run in the timer/IPI ISR; the read is lock-free."
+review = "kernel/src/arch/x86_64/memory/mmio_alias.rs:map_ecam_alias; kernel/src/arch/x86_64/memory/mmio_alias.rs:ecam_kernel_alias; kernel/src/dev/pcie_ecam.rs:ecam_window"
+
+[[global]]
+key = "kernel::memory::paging::mmio_alias::KERNEL_MMIO @cfg(target_arch = \"x86_64\")"
+lifetime = "global"
+mutation = "spinlock"
+owner = "memory::paging::mmio_alias: the kernel-only MMIO alias window's bump cursor and alias slots (kernel_mmio_alias) and the kernel-driven identity windows (own_kernel_window, from init_kernel_paging_x86 and map_mmio_x86) that kernel_mmio_refused keeps out of RequestMmio grants"
+contexts = ["boot", "normal"]
+seal = "none: aliases and kernel-driven windows are added for the whole run, never removed except a reservation whose mapping failed"
+retirement = "never: lives for the whole run"
+rationale = "Each user takes the lock for one lookup or update and drops it before logging, mapping or flushing, so it is never held across FRAME_ALLOCATOR, KERNEL_ROOT or a TLB shootdown; init_kernel_paging_x86 takes it under FRAME_ALLOCATOR, and register_x86_ioapics under ACPI_TOPOLOGY, both ranked below it. Callers are boot code and syscalls (MSI allocation, the virtio bypass probe, RequestMmio); no interrupt or exception path."
+review = "kernel/src/arch/x86_64/memory/mmio_alias.rs:kernel_mmio_alias; kernel/src/arch/x86_64/memory/mmio_alias.rs:kernel_mmio_refused; kernel/src/arch/x86_64/memory/mmio_alias.rs:own_kernel_window; kernel/src/memory/paging.rs:map_mmio_x86; kernel/src/memory/paging.rs:init_kernel_paging_x86"
 
 [[global]]
 key = "kernel::memory::heap::NULL_FROM_QUOTA"

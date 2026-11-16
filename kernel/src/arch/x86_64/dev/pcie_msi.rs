@@ -130,32 +130,39 @@ pub fn allocate(
             let base = dev.bars[layout.table_bar as usize].base_addr();
             (base != 0).then_some((cap, layout, base as usize + layout.table_offset as usize))
         });
-    // Map the table kernel-only before taking STATE: mapping may issue a TLB
-    // shootdown, which must not wait on CPUs spinning for STATE. Carved pages
-    // are never user-mapped, so an early (or repeated) mapping is harmless. A
-    // table that cannot be mapped is never touched: this call falls back to
-    // plain MSI when the caller allowed it, and otherwise fails with nothing
-    // programmed.
-    if let Some((_, layout, table_phys)) = msix {
-        if let Err(error) =
-            crate::memory::paging::map_mmio_x86(table_phys, layout.table_size as usize * 16)
-        {
-            let fallback = mode & IRQ_MODE_ALLOW_MSI != 0 && msi_cap.is_some();
-            log::error!(
-                "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?}); {}",
-                bdf >> 8,
-                (bdf >> 3) & 0x1F,
-                bdf & 7,
-                if fallback {
-                    "trying MSI"
-                } else {
-                    "no interrupts"
-                },
-            );
-            if !fallback {
-                return Err(PcieFunctionError::NotSupported);
+    // The kernel writes the table through its own alias of it
+    // (`paging::mmio_alias::kernel_mmio_alias`: supervisor-only, uncached), never through
+    // the identity leaves a `RequestMmio` grant of the BAR may have made USER,
+    // where SMAP would fault the write. Carved pages are not user-mapped, but
+    // the table write does not rely on that. Alias before taking STATE: the
+    // first alias of a table may issue a TLB shootdown, which must not wait on
+    // CPUs spinning for STATE; later calls reuse it. A table that cannot be
+    // aliased is never touched: this call falls back to plain MSI when the
+    // caller allowed it, and otherwise fails with nothing programmed.
+    if let Some((cap, layout, table_phys)) = msix {
+        match crate::memory::paging::mmio_alias::kernel_mmio_alias(
+            table_phys,
+            layout.table_size as usize * 16,
+        ) {
+            Ok(table) => msix = Some((cap, layout, table)),
+            Err(error) => {
+                let fallback = mode & IRQ_MODE_ALLOW_MSI != 0 && msi_cap.is_some();
+                log::error!(
+                    "[msi] {:02x}:{:02x}.{} MSI-X table {table_phys:#x} not mapped ({error:?}); {}",
+                    bdf >> 8,
+                    (bdf >> 3) & 0x1F,
+                    bdf & 7,
+                    if fallback {
+                        "trying MSI"
+                    } else {
+                        "no interrupts"
+                    },
+                );
+                if !fallback {
+                    return Err(PcieFunctionError::NotSupported);
+                }
+                msix = None;
             }
-            msix = None;
         }
     }
     let mut state = STATE.lock();
@@ -166,7 +173,7 @@ pub fn allocate(
     {
         return Ok(existing.irq);
     }
-    let irq = if let Some((cap, layout, table_phys)) = msix {
+    let irq = if let Some((cap, layout, table)) = msix {
         let count = want.min(layout.table_size as usize);
         let first = state
             .pool
@@ -177,7 +184,7 @@ pub fn allocate(
                 .read16(at as usize + 2)
                 .map(|c| cfg.write16(at as usize + 2, c & !1));
         }
-        if program::program_msix(&cfg, cap, &layout, table_phys, first, count).is_none() {
+        if program::program_msix(&cfg, cap, &layout, table, first, count).is_none() {
             state.pool.free(first, count);
             return Err(PcieFunctionError::NotSupported);
         }

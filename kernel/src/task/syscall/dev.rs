@@ -401,8 +401,8 @@ pub(super) fn offer_pcie_device(
     // Under VT-d, a virtio function without ACCESS_PLATFORM or a PVSCSI
     // adapter would DMA around the translation; no cell may own it (ADR-0031
     // phase 05 review HIGH; H-S3-13). Judged only before the first claim: the
-    // virtio probe remaps the common-config page kernel-only, which must not
-    // happen under a live owner's mapping.
+    // virtio probe writes the function's `device_feature_select`, which must
+    // not happen under a live owner's driver.
     #[cfg(target_arch = "x86_64")]
     if crate::resource_registry::owner_of_bdf(bdf).is_none()
         && crate::arch::dev::pcie_msi::dma_bypasses_iommu(&dev)
@@ -1054,7 +1054,9 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
     // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
     // it. BAR windows may not be mapped at all yet — this also creates
-    // the identity mapping.
+    // the identity mapping. The kernel never reaches a granted window
+    // through these USER leaves (SMAP would fault it): it uses its own
+    // alias (`paging::mmio_alias`).
     #[cfg(target_arch = "x86_64")]
     fn user_map(base: usize, len: usize) {
         crate::memory::paging::map_mmio_user_x86(base, len);
@@ -1106,6 +1108,13 @@ pub(super) fn request_mmio(caller_id: usize, base: usize, len: usize) -> Syscall
     // would alias a cell image or a stack: refused before any claim, with the
     // registry-refusal code every path below returns for `Err(_)`.
     if crate::memory::paging::identity_map_refused("RequestMmio", base, len) {
+        return Ok(3);
+    }
+    // x86: the kernel drives the LAPIC, I/O APICs, HPET and VT-d units through
+    // their identity leaves. A grant would turn those USER, and the kernel's
+    // next access would fault under SMAP, so no window may reach them.
+    #[cfg(target_arch = "x86_64")]
+    if crate::memory::paging::mmio_alias::kernel_mmio_refused(base, len) {
         return Ok(3);
     }
 

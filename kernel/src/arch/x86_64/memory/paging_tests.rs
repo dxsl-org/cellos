@@ -126,6 +126,20 @@ fn shared_root_edits_write_the_raw_paths_entries() {
     ] {
         root.map_identity(va, pages, paging::MMIO_KERNEL_X86, P | RW | PCD);
     }
+    // init_kernel_paging_x86's ECAM alias and kernel_mmio_alias: the same
+    // frames again, supervisor-only in the alias window, with the identity
+    // MMIO leaves' cache attribute (PCD) but NX.
+    for page in 0..16 {
+        let va = paging::mmio_alias::MMIO_ALIAS_BASE + page * PAGE;
+        let pa = 0xB000_0000 + page * PAGE;
+        root.map(va, pa, paging::mmio_alias::MMIO_ALIAS_X86)
+            .expect("alias");
+        assert_eq!(
+            root.leaf(va),
+            Some(pa as u64 | P | RW | PCD | NX),
+            "{va:#x}"
+        );
+    }
     // map_mmio_x86: a BAR window, then the same pages again (overwrite).
     for _ in 0..2 {
         root.map_identity(0xFEBF_0000, 4, paging::MMIO_KERNEL_X86, P | RW | PCD);

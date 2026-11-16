@@ -164,6 +164,7 @@
 "kernel/src/arch/x86_64/layer2_selftest.rs" = { category = "test", owner = "layer2" }
 "kernel/src/arch/x86_64/memory/ept.rs" = { category = "A", owner = "memory" }
 "kernel/src/arch/x86_64/memory/ept_tests.rs" = { category = "test", owner = "memory" }
+"kernel/src/arch/x86_64/memory/mmio_alias.rs" = { category = "A", owner = "memory" }
 "kernel/src/arch/x86_64/memory/paging_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/arch/x86_64/mod.rs" = { category = "A", owner = "arch" }
 "kernel/src/arch/x86_64/page_probe.rs" = { category = "A", owner = "arch" }

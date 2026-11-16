@@ -481,7 +481,9 @@ pub fn unmap_page(batch: &mut Batch, vaddr: VAddr) -> PagingResult<()> {
 //   1. Allocate a new PML4 frame and zero it.
 //   2. Copy PML4 entries [256..512] from Limine's CR3 — preserves kernel+HHDM.
 //   3. Identity-map validated ACPI MMIO (VA = PA) for timer/APIC access.
-//   4. Store root in KERNEL_ROOT and return phys address.
+//   4. Map the kernel-only ECAM alias (`mmio_alias`) and record the LAPIC,
+//      I/O APIC and HPET pages as kernel-driven.
+//   5. Store root in KERNEL_ROOT and return phys address.
 //
 // Every edit goes through the HAL `PageTable` trait on the HHDM alias of the
 // root (`table_at`), with `SAS_TABLES` for the intermediate tables; the HAL
@@ -601,6 +603,29 @@ pub fn init_kernel_paging_x86(
     debug_assert!(mmio_regions.iter().all(|&(start, end)| start == 0
         || !crate::loader::va_alloc::overlaps_allocated_va(start, end - start)));
     crate::loader::va_alloc::assert_identity_ram_below_cells(allocator.memory_end());
+
+    // 4. The kernel's own view of the ECAM window: a second, kernel-only map
+    //    at the start of the alias window. The Platform Cell's `RequestMmio`
+    //    claim turns the identity leaves above USER, and under SMAP a
+    //    supervisor access through a USER leaf faults; the kernel reaches
+    //    config space only through this alias (`mmio_alias`).
+    if ecam_base_usize != 0 {
+        mmio_alias::map_ecam_alias(pml4, ecam_base_usize, ecam_len, &mut |va| {
+            let frame = allocator.allocate_frame_uncapped()?;
+            #[cfg(feature = "p01-trace")]
+            crate::p01_retained::physical_table_created(frame, pml4_phys, va);
+            #[cfg(not(feature = "p01-trace"))]
+            let _ = va;
+            Some(frame)
+        })?;
+    }
+    // The LAPIC, I/O APIC and HPET pages are the kernel's own: no grant may
+    // turn their identity leaves USER (`mmio_alias::kernel_mmio_refused`).
+    for &(start, end) in &mmio_regions[..3] {
+        if start != 0 && !mmio_alias::own_kernel_window(start, end) {
+            return Err(PageTableError::OutOfMemory);
+        }
+    }
 
     // Sanity: verify the IOAPIC PTE was written correctly.
     // Uses the runtime ioapic_base parsed from validated ACPI.
@@ -732,21 +757,33 @@ pub(crate) fn identity_map_refused(what: &str, start: usize, len: usize) -> bool
     refused
 }
 
-/// Identity-map a MMIO BAR region [phys, phys+size) at VA == PA (x86_64).
+/// Identity-map MMIO the kernel itself drives, [phys, phys+size) at VA == PA
+/// (x86_64).
 ///
-/// Called by kernel device code (VT-d units, I/O APICs, MSI-X tables, the
-/// virtio bypass probe) to reach a window at VA == PA. Each page in the range
-/// is mapped with MMIO cache-disabling flags; existing mappings are silently
-/// overwritten. `Err(InvalidAddress)`: the window reaches the cell slots or
-/// the stack arena and nothing was mapped ([`identity_map_refused`], logged).
-/// `Err(OutOfMemory)`: a page table could not be allocated for some page; the
-/// others are mapped (harmless MMIO leaves). On `Err` the caller must not
-/// touch the window: it fails that unit or device.
+/// Called by kernel device code (VT-d units, I/O APICs) to reach a window at
+/// VA == PA. The window is first recorded as kernel-driven, so no
+/// `RequestMmio` grant can later turn its leaves USER
+/// ([`mmio_alias::kernel_mmio_refused`]). Each page in the range is mapped with MMIO
+/// cache-disabling flags; existing mappings are silently overwritten.
+/// `Err(InvalidAddress)`: the window reaches the cell slots or the stack arena
+/// and nothing was mapped ([`identity_map_refused`], logged).
+/// `Err(OutOfMemory)`: no slot is left to record the window (nothing mapped),
+/// or a page table could not be allocated for some page (the others are
+/// mapped: harmless MMIO leaves); logged. On `Err` the caller must not touch
+/// the window: it fails that unit or device. MMIO a cell may be granted (ECAM,
+/// PCIe BARs) is never reached this way: see [`mmio_alias::kernel_mmio_alias`].
 ///
 /// Panics if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
 #[must_use = "a refused or partial window must not be accessed"]
 pub fn map_mmio_x86(phys: usize, size: usize) -> PagingResult<()> {
+    let (start, end) = mmio_page_window(phys, size);
+    if !mmio_alias::own_kernel_window(start, end) {
+        log::error!(
+            "[paging] map_mmio_x86: {phys:#x} (+{size:#x}) refused: no slot left to record a kernel-driven window"
+        );
+        return Err(PageTableError::OutOfMemory);
+    }
     map_mmio_x86_flags(phys, size, MMIO_KERNEL_X86)
 }
 
@@ -773,6 +810,13 @@ fn mmio_page_window(phys: usize, size: usize) -> (usize, usize) {
     let page_mask = PAGE_SIZE - 1;
     (phys & !page_mask, (phys + size + page_mask) & !page_mask)
 }
+
+/// The kernel-only MMIO alias window: how the kernel reaches MMIO a cell may
+/// be granted (ECAM, pieces of PCIe BARs) without touching USER identity
+/// leaves, and the record of MMIO the kernel drives through the identity map.
+#[cfg(target_arch = "x86_64")]
+#[path = "../arch/x86_64/memory/mmio_alias.rs"]
+pub(crate) mod mmio_alias;
 
 /// Write every leaf of the window first, then invalidate the whole window on
 /// every online CPU with ONE shared flush (phase 07b), after the frame

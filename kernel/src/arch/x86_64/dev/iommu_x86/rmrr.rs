@@ -14,7 +14,7 @@ const CFG_SUBORDINATE_BUS: usize = 0x1A;
 fn bridge_bus(bus: u8, dev: u8, func: u8, off: usize) -> Option<u8> {
     let bdf = canonical_bdf(bus, dev, func) as u32;
     let ptr = crate::dev::pcie_ecam::config_ptr(bdf, off)?;
-    // SAFETY: `config_ptr` returns an address inside the identity-mapped ECAM window.
+    // SAFETY: `config_ptr` returns an address inside the kernel's ECAM alias.
     Some(unsafe { core::ptr::read_volatile(ptr) })
 }
 

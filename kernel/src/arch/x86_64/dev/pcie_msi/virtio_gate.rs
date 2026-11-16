@@ -46,8 +46,8 @@ fn common_cfg(cfg: &Config) -> Option<(u8, u32)> {
 /// bypasses unless it offers `ACCESS_PLATFORM`, and one without a usable common
 /// configuration (legacy-only, or a BAR the scan did not size) counts as
 /// bypassing: legacy virtio has no `ACCESS_PLATFORM`. Call only for a function
-/// no task owns: the first virtio probe maps the common-config page
-/// kernel-only and writes `device_feature_select`. A refusal is cached per BDF
+/// no task owns: the virtio probe writes `device_feature_select`, through the
+/// kernel's alias of the common-config page. A refusal is cached per BDF
 /// (a device's offer is fixed for the boot) and logged once, so a driver
 /// retrying discovery neither re-probes nor floods the console.
 pub fn dma_bypasses_iommu(dev: &PciDevice) -> bool {
@@ -113,14 +113,19 @@ fn probe_bypasses(dev: &PciDevice) -> bool {
         let _ = cfg.write16(0x04, command | CMD_MEM_SPACE);
     }
     let common = (base + offset as u64) as usize;
-    // A window that cannot be mapped is treated as bypassing: fail closed, so
+    // Through the kernel's alias of the page, never its identity leaf, which a
+    // `RequestMmio` grant of the BAR makes USER (SMAP would fault the access).
+    // A page that cannot be aliased is treated as bypassing: fail closed, so
     // the function is refused under VT-d rather than read unmapped.
-    if let Err(error) = crate::memory::paging::map_mmio_x86(common, 8) {
-        log::warn!("[virtio-gate] common config {common:#x} not mapped ({error:?})");
-        return true;
-    }
-    // SAFETY: `common` lies inside the function's memory BAR (checked above)
-    // and was just identity-mapped kernel-only.
+    let common = match crate::memory::paging::mmio_alias::kernel_mmio_alias(common, 8) {
+        Ok(alias) => alias,
+        Err(error) => {
+            log::warn!("[virtio-gate] common config {common:#x} not mapped ({error:?})");
+            return true;
+        }
+    };
+    // SAFETY: `common` is the kernel's alias of 8 bytes inside the function's
+    // memory BAR (checked above).
     let high = unsafe {
         core::ptr::write_volatile((common + DEVICE_FEATURE_SELECT) as *mut u32, 1);
         core::ptr::read_volatile((common + DEVICE_FEATURE) as *const u32)

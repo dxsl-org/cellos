@@ -264,7 +264,7 @@ fn config_addr_in_range(
 /// Read vendor/device identity from one checked ECAM function.
 ///
 /// # Safety
-/// The admitted ECAM window must be identity-mapped and remain live.
+/// The admitted ECAM window must be mapped for the kernel and remain live.
 #[allow(dead_code)]
 unsafe fn read_identity_in_range(
     ecam_base: usize,
@@ -292,11 +292,11 @@ fn config_addr(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> *mut 
 /// Read a u32 from PCI config space via ECAM MMIO.
 ///
 /// # Safety
-/// `config_addr(ecam_base, bus, dev, fun, off)` must point into the identity-
-/// mapped ECAM window established by `init_kernel_paging*()`.  `off` must be
+/// `config_addr(ecam_base, bus, dev, fun, off)` must point into the ECAM window
+/// as the kernel maps it ([`ecam_window`]).  `off` must be
 /// 4-byte-aligned.
 unsafe fn read32(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u32 {
-    // SAFETY: caller guarantees the ECAM window is identity-mapped.
+    // SAFETY: caller guarantees the ECAM window is mapped for the kernel.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *const u32;
     // SAFETY: volatile prevents the compiler from optimising away hardware reads.
     unsafe { core::ptr::read_volatile(ptr) }
@@ -307,7 +307,7 @@ unsafe fn read32(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u32
 /// # Safety
 /// Same contract as `read32`; `off` must be 2-byte-aligned.
 unsafe fn read16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u16 {
-    // SAFETY: caller guarantees the ECAM window is identity-mapped.
+    // SAFETY: caller guarantees the ECAM window is mapped for the kernel.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *const u16;
     // SAFETY: volatile prevents optimisation of hardware register reads.
     unsafe { core::ptr::read_volatile(ptr) }
@@ -318,7 +318,7 @@ unsafe fn read16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u16
 /// # Safety
 /// Same contract as `read32`.
 unsafe fn read8(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u8 {
-    // SAFETY: caller guarantees the ECAM window is identity-mapped.
+    // SAFETY: caller guarantees the ECAM window is mapped for the kernel.
     let ptr = config_addr(ecam_base, bus, dev, fun, off);
     // SAFETY: volatile prevents optimisation of hardware register reads.
     unsafe { core::ptr::read_volatile(ptr) }
@@ -330,7 +330,7 @@ unsafe fn read8(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> u8 {
 /// Same contract as `read32`; used only for BAR size-probe writes which are
 /// bounded to the currently scanned function and immediately restored.
 unsafe fn write32(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: u32) {
-    // SAFETY: caller guarantees the ECAM window is identity-mapped.
+    // SAFETY: caller guarantees the ECAM window is mapped for the kernel.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *mut u32;
     // SAFETY: volatile ensures the write reaches the MMIO register.
     unsafe {
@@ -343,7 +343,7 @@ unsafe fn write32(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: 
 /// # Safety
 /// Same contract as `write32`.
 unsafe fn write16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: u16) {
-    // SAFETY: caller guarantees the ECAM window is identity-mapped.
+    // SAFETY: caller guarantees the ECAM window is mapped for the kernel.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *mut u16;
     // SAFETY: volatile ensures the write reaches the MMIO register.
     unsafe {
@@ -360,13 +360,13 @@ unsafe fn write16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: 
 /// the device from responding to MMIO accesses during the transient probe window.
 ///
 /// # Safety
-/// `ecam_base` must be the identity-mapped ECAM window base.
+/// `ecam_base` must be the kernel's ECAM window base ([`ecam_window`]).
 unsafe fn decode_bars(ecam_base: usize, bus: u8, dev: u8, fun: u8) -> [Bar; 6] {
     let mut bars = [Bar::None; 6];
     let mut i = 0usize;
     while i < 6 {
         let off = CFG_BAR0 + i * 4;
-        // SAFETY: ECAM window is identity-mapped; off is within type-0 header.
+        // SAFETY: ECAM window is mapped for the kernel; off is within type-0 header.
         let raw = unsafe { read32(ecam_base, bus, dev, fun, off) };
         if raw & 1 == 1 {
             // I/O BAR — skip.
@@ -385,7 +385,7 @@ unsafe fn decode_bars(ecam_base: usize, bus: u8, dev: u8, fun: u8) -> [Bar; 6] {
                 continue;
             }
             let off_hi = CFG_BAR0 + (i + 1) * 4;
-            // SAFETY: ECAM window is identity-mapped.
+            // SAFETY: ECAM window is mapped for the kernel.
             let raw_hi = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
             let addr64 = (addr32 as u64) | ((raw_hi as u64) << 32);
             let size64 = unsafe { probe_bar_size64(ecam_base, bus, dev, fun, i) };
@@ -414,13 +414,13 @@ unsafe fn decode_bars(ecam_base: usize, bus: u8, dev: u8, fun: u8) -> [Bar; 6] {
 /// probe) and the BAR value so the device is left in its original state.
 ///
 /// # Safety
-/// `ecam_base` must be the identity-mapped ECAM window base.
+/// `ecam_base` must be the kernel's ECAM window base ([`ecam_window`]).
 unsafe fn probe_bar_size32(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx: usize) -> u32 {
     let off = CFG_BAR0 + bar_idx * 4;
     // Save original values.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let orig_cmd = unsafe { read16(ecam_base, bus, dev, fun, CFG_COMMAND) };
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let orig_bar = unsafe { read32(ecam_base, bus, dev, fun, off) };
 
     // Disable memory decode before writing all-ones to BAR.
@@ -438,15 +438,15 @@ unsafe fn probe_bar_size32(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx:
     }
 
     // Write all-ones to BAR.
-    // SAFETY: ECAM window is identity-mapped; BAR write is bounded to this function.
+    // SAFETY: ECAM window is mapped for the kernel; BAR write is bounded to this function.
     unsafe {
         write32(ecam_base, bus, dev, fun, off, 0xFFFF_FFFF);
     }
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let readback = unsafe { read32(ecam_base, bus, dev, fun, off) };
 
     // Restore BAR and command register.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     unsafe {
         write32(ecam_base, bus, dev, fun, off, orig_bar);
     }
@@ -465,20 +465,20 @@ unsafe fn probe_bar_size32(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx:
 /// Probe size of a 64-bit MMIO BAR (both low and high dwords).
 ///
 /// # Safety
-/// `ecam_base` must be the identity-mapped ECAM window base.
+/// `ecam_base` must be the kernel's ECAM window base ([`ecam_window`]).
 unsafe fn probe_bar_size64(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     let off_lo = CFG_BAR0 + bar_idx * 4;
     let off_hi = CFG_BAR0 + (bar_idx + 1) * 4;
 
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let orig_cmd = unsafe { read16(ecam_base, bus, dev, fun, CFG_COMMAND) };
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let orig_lo = unsafe { read32(ecam_base, bus, dev, fun, off_lo) };
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let orig_hi = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
 
     // Disable memory decode during probe.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     unsafe {
         write16(
             ecam_base,
@@ -491,7 +491,7 @@ unsafe fn probe_bar_size64(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx:
     }
 
     // Write all-ones to both halves.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     unsafe {
         write32(ecam_base, bus, dev, fun, off_lo, 0xFFFF_FFFF);
     }
@@ -499,13 +499,13 @@ unsafe fn probe_bar_size64(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx:
         write32(ecam_base, bus, dev, fun, off_hi, 0xFFFF_FFFF);
     }
 
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let rb_lo = unsafe { read32(ecam_base, bus, dev, fun, off_lo) };
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let rb_hi = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
 
     // Restore.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     unsafe {
         write32(ecam_base, bus, dev, fun, off_lo, orig_lo);
     }
@@ -528,7 +528,7 @@ unsafe fn probe_bar_size64(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx:
 /// Walk the capability list for a type-0 function; return MSI-X and PM caps.
 ///
 /// # Safety
-/// `ecam_base` must be the identity-mapped ECAM window base.
+/// `ecam_base` must be the kernel's ECAM window base ([`ecam_window`]).
 unsafe fn walk_caps(
     ecam_base: usize,
     bus: u8,
@@ -539,26 +539,26 @@ unsafe fn walk_caps(
     let mut pm = None;
 
     // Capability list is present only when status bit 4 is set.
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let status = unsafe { read16(ecam_base, bus, dev, fun, CFG_STATUS) };
     if status & (1 << 4) == 0 {
         return (None, None);
     }
 
-    // SAFETY: ECAM window is identity-mapped.
+    // SAFETY: ECAM window is mapped for the kernel.
     let mut cap_ptr = unsafe { read8(ecam_base, bus, dev, fun, CFG_CAP_PTR) } & 0xFC;
     let mut budget = 64u8; // guard against malformed circular lists
 
     while cap_ptr != 0 && budget > 0 {
         budget -= 1;
-        // SAFETY: ECAM window is identity-mapped.
+        // SAFETY: ECAM window is mapped for the kernel.
         let cap_id = unsafe { read8(ecam_base, bus, dev, fun, cap_ptr as usize) };
-        // SAFETY: ECAM window is identity-mapped.
+        // SAFETY: ECAM window is mapped for the kernel.
         let next = unsafe { read8(ecam_base, bus, dev, fun, cap_ptr as usize + 1) } & 0xFC;
 
         match cap_id {
             CAP_ID_MSIX => {
-                // SAFETY: ECAM window is identity-mapped.
+                // SAFETY: ECAM window is mapped for the kernel.
                 let msg_ctrl = unsafe { read16(ecam_base, bus, dev, fun, cap_ptr as usize + 2) };
                 msix = Some(MsixCap {
                     cap_offset: cap_ptr,
@@ -607,37 +607,37 @@ unsafe fn decode_function(
 /// Scan one bus of the ECAM window and populate the global device list.
 ///
 /// # Safety
-/// `ecam_base + (config_bus << 20)` must point to the identity-mapped ECAM
+/// `ecam_base + (config_bus << 20)` must point to the kernel's ECAM
 /// window for `reported_bus`. Nonzero-start allocations use `config_bus = 0`
 /// because their allocation base already denotes the first admitted bus.
 unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
     let mut devices = PCI_DEVICES.lock();
 
     for dev in 0u8..32 {
-        // SAFETY: the selected ECAM bus window is identity-mapped.
+        // SAFETY: the selected ECAM bus window is mapped for the kernel.
         let vendor = unsafe { read16(ecam_base, config_bus, dev, 0, CFG_VENDOR_ID) };
         if vendor == 0xFFFF {
             continue;
         }
 
-        // SAFETY: the selected ECAM bus window is identity-mapped.
+        // SAFETY: the selected ECAM bus window is mapped for the kernel.
         let hdr_type = unsafe { read8(ecam_base, config_bus, dev, 0, CFG_HEADER_TYPE) };
         let max_fun: u8 = if hdr_type & 0x80 != 0 { 8 } else { 1 };
 
         for fun in 0u8..max_fun {
-            // SAFETY: the selected ECAM bus window is identity-mapped.
+            // SAFETY: the selected ECAM bus window is mapped for the kernel.
             let vid = unsafe { read16(ecam_base, config_bus, dev, fun, CFG_VENDOR_ID) };
             if vid == 0xFFFF {
                 continue;
             }
 
-            // SAFETY: the selected ECAM bus window is identity-mapped.
+            // SAFETY: the selected ECAM bus window is mapped for the kernel.
             let did = unsafe { read16(ecam_base, config_bus, dev, fun, CFG_DEVICE_ID) };
             let prog_if = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_PROG) };
             let subclass = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_SUBCLASS) };
             let class = unsafe { read8(ecam_base, config_bus, dev, fun, CFG_CLASS_CODE) };
 
-            // SAFETY: the selected ECAM bus window is identity-mapped.
+            // SAFETY: the selected ECAM bus window is mapped for the kernel.
             let (bars, msix, pm) = unsafe { decode_function(ecam_base, config_bus, dev, fun) };
 
             let bar0_addr = bars[0].base_addr();
@@ -686,7 +686,14 @@ unsafe fn scan(ecam_base: usize, config_bus: u8, reported_bus: u8) {
     }
 }
 
-/// The admitted ECAM window: `(base, first bus, last bus)`; base 0 = none.
+/// The admitted ECAM window as the kernel reaches it: `(base, first bus, last
+/// bus)`; base 0 = none. Every kernel config-space access goes through this
+/// base.
+///
+/// On x86_64 the base is the kernel's own alias of the MCFG allocation
+/// (`paging::mmio_alias::ecam_kernel_alias`), never its identity window: the Platform
+/// Cell's claim turns those identity leaves USER, and under SMAP a supervisor
+/// access through a USER leaf faults.
 ///
 /// Only a window the kernel maps and knows to be backed counts. AArch64 has none:
 /// QEMU `virt` moves ECAM above 4 GiB whenever highmem ECAM is on (the default for
@@ -697,7 +704,11 @@ fn ecam_window() -> (usize, u8, u8) {
     #[cfg(target_arch = "x86_64")]
     let window = {
         let (start, end) = ecam_bus_range_x86();
-        (ecam_base_x86(), start, end)
+        (
+            crate::memory::paging::mmio_alias::ecam_kernel_alias(),
+            start,
+            end,
+        )
     };
     #[cfg(target_arch = "riscv64")]
     let window = (ECAM_BASE_RISCV, 0u8, 0u8);
@@ -712,14 +723,19 @@ pub fn config_space_admitted() -> bool {
     ecam_window().0 != 0
 }
 
-/// The admitted ECAM window as a byte range `(base, len)`, or `None` when the
-/// kernel has none. This is the only physical range the Platform Cell's
-/// `RequestMmio` bypass may claim.
+/// The admitted ECAM window as a physical byte range `(base, len)`, or `None`
+/// when the kernel has none. This is the only physical range the Platform
+/// Cell's `RequestMmio` bypass may claim.
 pub fn admitted_ecam_range() -> Option<(usize, usize)> {
-    let (base, bus_start, bus_end) = ecam_window();
-    if base == 0 {
+    let (kernel_base, bus_start, bus_end) = ecam_window();
+    if kernel_base == 0 {
         return None;
     }
+    // x86_64 reaches the window through an alias; the claim names the MCFG base.
+    #[cfg(target_arch = "x86_64")]
+    let base = ecam_base_x86();
+    #[cfg(not(target_arch = "x86_64"))]
+    let base = kernel_base;
     let len = ecam_window_size(bus_start, bus_end)?;
     base.checked_add(len).map(|_| (base, len))
 }
@@ -754,8 +770,9 @@ pub fn enable_bus_master(bdf: u32) {
         return;
     };
 
-    // SAFETY: the complete admitted ECAM window is identity-mapped before
-    // Driver Cells run, and command_ptr was checked against that exact range.
+    // SAFETY: the complete admitted ECAM window is mapped for the kernel
+    // ([`ecam_window`]) before Driver Cells run, and command_ptr was checked
+    // against that exact range.
     unsafe {
         let command = core::ptr::read_volatile(command_ptr as *const u16);
         core::ptr::write_volatile(
@@ -781,7 +798,7 @@ pub fn enable_memory_decode(bdf: u32) {
     if ecam_base == 0 {
         return;
     }
-    // SAFETY: the admitted ECAM window is identity-mapped for the kernel's life.
+    // SAFETY: the admitted ECAM window is mapped for the kernel for its life.
     if !unsafe { enable_memory_decode_in_window(ecam_base, bus_start, bus_end, bdf) } {
         let (bus, dev, fun) = split_bdf(bdf);
         log::warn!(
@@ -876,7 +893,7 @@ pub fn quiesce_function(bdf: u32) -> Result<Quiesced, QuiesceError> {
     if ecam_base == 0 {
         return Err(QuiesceError::OutOfRange);
     }
-    // SAFETY: the admitted ECAM window is identity-mapped for the kernel's life.
+    // SAFETY: the admitted ECAM window is mapped for the kernel for its life.
     unsafe { quiesce_in_window(ecam_base, bus_start, bus_end, bdf) }
 }
 
@@ -994,20 +1011,14 @@ pub fn ecam_base_aarch64() -> usize {
 /// Driver Cells are spawned (they call sys_find_pcie_device to discover their
 /// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
 pub fn init() {
-    // Determine ECAM base for the current architecture.
-    // x86_64: use only the runtime value from validated ACPI MCFG.
-    #[cfg(target_arch = "x86_64")]
-    let ecam_base = ecam_base_x86();
-    #[cfg(target_arch = "riscv64")]
-    let ecam_base = ECAM_BASE_RISCV;
+    // The admitted window as the kernel reaches it (`ecam_window`: the alias
+    // of the validated ACPI MCFG window on x86_64, whose base denotes its
+    // first bus; the identity window on RV64). AArch64 admits no window there
+    // but scans the FDT-recorded base. The log shows the kernel's address.
     #[cfg(target_arch = "aarch64")]
-    let ecam_base = ecam_base_aarch64();
-    #[cfg(not(cellos_wide))]
-    let ecam_base = 0usize;
-    #[cfg(target_arch = "x86_64")]
-    let scan_bus = ecam_bus_range_x86().0;
-    #[cfg(not(target_arch = "x86_64"))]
-    let scan_bus = 0u8;
+    let (ecam_base, scan_bus) = (ecam_base_aarch64(), 0u8);
+    #[cfg(not(target_arch = "aarch64"))]
+    let (ecam_base, scan_bus, _) = ecam_window();
 
     if ecam_base == 0 {
         log::info!("[pcie] ECAM: no PCIe on this architecture");
@@ -1025,9 +1036,10 @@ pub fn init() {
         ecam_base
     );
 
-    // SAFETY: the first admitted ECAM bus window is identity-mapped before this
-    // function is called. The MCFG allocation base denotes `scan_bus`, so
-    // config-space access is relative to local bus offset zero.
+    // SAFETY: the first admitted ECAM bus window is mapped for the kernel
+    // (identity on RV64, the kernel alias on x86_64) before this function is
+    // called. The MCFG allocation base denotes `scan_bus`, so config-space
+    // access is relative to local bus offset zero.
     unsafe {
         scan(ecam_base, 0, scan_bus);
     }

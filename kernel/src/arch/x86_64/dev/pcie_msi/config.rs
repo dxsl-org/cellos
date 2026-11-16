@@ -40,7 +40,7 @@ impl Config {
 
     pub fn read8(&self, off: usize) -> Option<u8> {
         let ptr = config_ptr(self.bdf, off)?;
-        // SAFETY: `config_ptr` returns an address inside the identity-mapped ECAM window.
+        // SAFETY: `config_ptr` returns an address inside the kernel's ECAM alias.
         Some(unsafe { core::ptr::read_volatile(ptr) })
     }
 
