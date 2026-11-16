@@ -182,8 +182,8 @@ Each failure below also fails on `1d13abd68e`, before Phase 18, so none is a reg
 
 | Lane | Failure | Disposition |
 |---|---|---|
-| `shellutils` | `build-shell-test-ci.sh` still checked for `SFN SHELL`, which no longer exists after the cellbox rename (`e053cdca62`). | fixed by a script change (P19Diag; SHA pending) |
-| `aioracle` (riscv64, aarch64) | The oracle image was built without `--config-features ai` since `cb1d636714`. | fixed by a script change (P19Diag; SHA pending) |
+| `shellutils` | `build-shell-test-ci.sh` still checked for `SFN SHELL`, which no longer exists after the cellbox rename (`e053cdca62`). | fixed by `961cb9ca4f`; passes on `1c7fbecd8c` |
+| `aioracle` (riscv64, aarch64) | The oracle image was built without `--config-features ai` since `cb1d636714`. | fixed by `299c23e083`; both pass on `1c7fbecd8c` |
 | `c2c-broker-oracle` | `oracle passed without proving interrupt-driven NET_RX completion` (`tests/integration/tests/c2c-broker-oracle.rs:376`), with `[net-bridge] NIC driver reply timeout` in the log. It fails after the input-service fix and the same way on `1d13abd68e`. | residual N-8 |
 | `bootsuite` (RV64 `gen_disk.ps1` image) | Six tests fail; see N-9. | residual N-9 |
 | `x86hvfull`, `tier3py`, `tier3e2e`, `tier3hostile` | Environment-only failures in the first closing run: the Alpine download returned HTTP 429, and the snapshot lacked `.alpine-cache-x86`. | cleared on rerun; all four pass |
