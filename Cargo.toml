@@ -63,6 +63,7 @@ members = [
     "libs/vigrep",
     "libs/vissh",
     "libs/virtio-pci-transport",
+    "libs/nic-driver",
     "libs/scsi-block",
     "libs/apple-rtkit",
     "libs/intel-gpu-core",

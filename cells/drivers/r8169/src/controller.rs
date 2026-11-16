@@ -1,43 +1,73 @@
 //! Realtek RTL8168/8125 controller bring-up and Tx/Rx data path.
 
-use crate::dma_layout::{
-    for_each_initial_dma_program, try_init_array, with_authorized_dma_layout, DmaIovas, DmaSlot,
-    InitialDmaProgram, RX_SLOTS, TX_SLOTS,
-};
-use crate::identity::{decode_xid, RtlXid};
+use crate::identity::{self, decode_xid, Identity, RtlXid, QUERY_DEVICE_IDS, VENDOR_REALTEK};
 use crate::phy;
 use crate::regs::*;
-use crate::rings::{self, RtlDesc};
+use crate::rings::{self, RtlDesc, BUF_SIZE, RX_SLOTS, TX_SLOTS};
 use core::sync::atomic::{compiler_fence, Ordering};
-use ostd::dma::DmaBuf;
+use nic_driver::dma::{DmaSet, Layout};
+use nic_driver::{MacFmt, NicDevice, Probe};
 use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
-pub use crate::rings::BUF_SIZE;
-
+const RTL_BAR0_LEN: usize = 0x1000;
+const RTL_MMIO_MIN: usize = 0x0100;
 const RESET_POLLS: u32 = 1_000_000;
 const TX_POLLS: u32 = 1_000_000;
 const LINK_POLLS: u32 = 6_000_000;
 
 pub struct RtlController {
     mmio: MmioRegion,
-    tx_ring: DmaBuf,
-    rx_ring: DmaBuf,
-    tx_bufs: [DmaBuf; TX_SLOTS],
-    rx_bufs: [DmaBuf; RX_SLOTS],
-    dma_iovas: DmaIovas,
+    dma: DmaSet<RtlDesc, RtlDesc, TX_SLOTS, RX_SLOTS, 0>,
     tx_next: usize,
     rx_head: usize,
-    pub mac: [u8; 6],
-    pub link_up: bool,
+    mac: [u8; 6],
+    link_up: bool,
     #[allow(dead_code)]
-    pub xid: RtlXid,
+    xid: RtlXid,
 }
 
-unsafe impl Send for RtlController {}
+impl NicDevice for RtlController {
+    const TAG: &'static str = "[r8169]";
+    const VENDOR: u16 = VENDOR_REALTEK;
+    const QUERY_IDS: &'static [u16] = &QUERY_DEVICE_IDS;
+    const ABSENT_LINE: Option<&'static str> =
+        Some("no RTL8168/8125 controller present; driver cell idle");
+    type Identity = Identity;
+    type Error = ViError;
+
+    fn classify(vendor: u16, device: u16) -> Option<Identity> {
+        identity::classify(vendor, device)
+    }
+
+    fn identity_name(id: &Identity) -> &'static str {
+        id.name
+    }
+
+    fn init(probe: &Probe, _id: Identity) -> ViResult<Self> {
+        let mmio = probe.claim_bar0(RTL_BAR0_LEN, RTL_MMIO_MIN);
+        Self::new(mmio, probe.bdf())
+    }
+
+    fn bind_detail(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "link_up={} mac={}", self.link_up, MacFmt(self.mac))
+    }
+
+    fn mac(&self) -> [u8; 6] {
+        self.mac
+    }
+
+    fn send(&mut self, frame: &[u8]) -> ViResult<()> {
+        self.send_frame(frame)
+    }
+
+    fn recv(&mut self, out: &mut [u8]) -> usize {
+        self.poll_rx(out).unwrap_or_default()
+    }
+}
 
 impl RtlController {
-    pub fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
+    fn new(mmio: MmioRegion, bdf: u32) -> ViResult<Self> {
         // 1. Quiesce & reset controller.
         mmio.write_u8(COMMAND, CR_RST)?;
         let mut polls = 0u32;
@@ -69,74 +99,36 @@ impl RtlController {
         mmio.write::<u16>(ISR, u16::MAX)?;
         phy::restart_autoneg(&mmio)?;
 
-        // 4. Allocate and authorize DMA.
-        let tx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let tx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-        let rx_ring = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
-        let rx_bufs = try_init_array(|_| DmaBuf::alloc(1).ok_or(ViError::OutOfMemory))?;
-
-        with_authorized_dma_layout(
-            (mmio, tx_ring, rx_ring, tx_bufs, rx_bufs),
-            |r, s| {
-                match s {
-                    DmaSlot::TxRing => r.1.authorize(bdf),
-                    DmaSlot::TxBuffer(i) => r.3[i].authorize(bdf),
-                    DmaSlot::RxRing => r.2.authorize(bdf),
-                    DmaSlot::RxBuffer(i) => r.4[i].authorize(bdf),
-                }
-                .map_err(|_| ViError::PermissionDenied)
-            },
-            |(mmio, tx_ring, rx_ring, tx_bufs, rx_bufs), dma_iovas| {
-                rings::clear(&tx_ring);
-                rings::clear(&rx_ring);
-                let mut ctrl = RtlController {
-                    mmio,
-                    tx_ring,
-                    rx_ring,
-                    tx_bufs,
-                    rx_bufs,
-                    dma_iovas,
-                    tx_next: 0,
-                    rx_head: 0,
-                    mac,
-                    link_up: false,
-                    xid,
-                };
-                for_each_initial_dma_program(&dma_iovas, |p| {
-                    let _ = ctrl.apply(p);
-                });
-                let _ = ctrl.finish_init();
-                Ok(ctrl)
-            },
-        )?
+        // 4. Allocate and authorize DMA; nothing is programmed before this.
+        let dma = DmaSet::alloc_authorized(&Layout::PLAIN, bdf)?;
+        let mut ctrl = RtlController {
+            mmio,
+            dma,
+            tx_next: 0,
+            rx_head: 0,
+            mac,
+            link_up: false,
+            xid,
+        };
+        ctrl.program_rings()?;
+        ctrl.finish_init()?;
+        Ok(ctrl)
     }
 
-    fn apply(&mut self, program: InitialDmaProgram) -> ViResult<()> {
-        match program {
-            InitialDmaProgram::TxRingBase(iova) => {
-                self.mmio.write_u32(TXLIST_ADDR_LO, iova as u32)?;
-                self.mmio.write_u32(TXLIST_ADDR_HI, (iova >> 32) as u32)?;
-            }
-            InitialDmaProgram::RxRingBase(iova) => {
-                self.mmio.write_u32(RXLIST_ADDR_LO, iova as u32)?;
-                self.mmio.write_u32(RXLIST_ADDR_HI, (iova >> 32) as u32)?;
-            }
-            InitialDmaProgram::RxBuffer { index, iova } => {
-                let mut opts = rings::DESC_OWN | (BUF_SIZE as u32);
-                if index == RX_SLOTS - 1 {
-                    opts |= rings::DESC_RING_END;
-                }
-                rings::write_desc(
-                    &self.rx_ring,
-                    index,
-                    RtlDesc {
-                        opts1: opts,
-                        opts2: 0,
-                        addr_lo: iova as u32,
-                        addr_hi: (iova >> 32) as u32,
-                    },
-                );
-            }
+    /// Initial DMA programming: TX list, RX list, then every RX descriptor,
+    /// all from authorized IOVAs.
+    fn program_rings(&mut self) -> ViResult<()> {
+        let iovas = self.dma.iovas;
+        self.mmio.write_u32(TXLIST_ADDR_LO, iovas.tx_ring as u32)?;
+        self.mmio
+            .write_u32(TXLIST_ADDR_HI, (iovas.tx_ring >> 32) as u32)?;
+        self.mmio.write_u32(RXLIST_ADDR_LO, iovas.rx_ring as u32)?;
+        self.mmio
+            .write_u32(RXLIST_ADDR_HI, (iovas.rx_ring >> 32) as u32)?;
+        for (index, &iova) in iovas.rx_bufs.iter().enumerate() {
+            self.dma
+                .rx_ring
+                .write(index, RtlDesc::rx_posted(index, iova));
         }
         Ok(())
     }
@@ -161,24 +153,20 @@ impl RtlController {
         Ok(())
     }
 
-    pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
+    fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
         if frame.is_empty() || frame.len() > BUF_SIZE {
             return Err(ViError::InvalidArgument);
         }
         let slot = self.tx_next;
-        let buf = &self.tx_bufs[slot];
-        unsafe {
-            core::ptr::copy_nonoverlapping(frame.as_ptr(), buf.virt(), frame.len());
-        }
+        self.dma.tx_bufs.copy_in(slot, frame)?;
         compiler_fence(Ordering::Release);
 
-        let iova = self.dma_iovas.tx_bufs[slot];
+        let iova = self.dma.iovas.tx_bufs[slot];
         let mut opts = rings::DESC_OWN | rings::DESC_FS | rings::DESC_LS | (frame.len() as u32);
         if slot == TX_SLOTS - 1 {
             opts |= rings::DESC_RING_END;
         }
-        rings::write_desc(
-            &self.tx_ring,
+        self.dma.tx_ring.write(
             slot,
             RtlDesc {
                 opts1: opts,
@@ -194,7 +182,7 @@ impl RtlController {
 
         for _ in 0..TX_POLLS {
             compiler_fence(Ordering::Acquire);
-            if rings::read_desc(&self.tx_ring, slot).opts1 & rings::DESC_OWN == 0 {
+            if self.dma.tx_ring.read(slot).opts1 & rings::DESC_OWN == 0 {
                 return Ok(());
             }
             core::hint::spin_loop();
@@ -202,33 +190,21 @@ impl RtlController {
         Err(ViError::IO)
     }
 
-    pub fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
+    fn poll_rx(&mut self, target: &mut [u8]) -> ViResult<usize> {
         let slot = self.rx_head;
         compiler_fence(Ordering::Acquire);
-        let desc = rings::read_desc(&self.rx_ring, slot);
+        let desc = self.dma.rx_ring.read(slot);
         if desc.opts1 & rings::DESC_OWN != 0 {
             return Ok(0);
         }
-        let len = ((desc.opts1 & 0x3FFF) as usize).min(target.len());
-        let buf = &self.rx_bufs[slot];
-        unsafe {
-            core::ptr::copy_nonoverlapping(buf.virt() as *const u8, target.as_mut_ptr(), len);
-        }
+        let len = self
+            .dma
+            .rx_bufs
+            .copy_out(slot, target, (desc.opts1 & 0x3FFF) as usize);
 
-        let mut opts = rings::DESC_OWN | (BUF_SIZE as u32);
-        if slot == RX_SLOTS - 1 {
-            opts |= rings::DESC_RING_END;
-        }
-        rings::write_desc(
-            &self.rx_ring,
-            slot,
-            RtlDesc {
-                opts1: opts,
-                opts2: 0,
-                addr_lo: self.dma_iovas.rx_bufs[slot] as u32,
-                addr_hi: (self.dma_iovas.rx_bufs[slot] >> 32) as u32,
-            },
-        );
+        self.dma
+            .rx_ring
+            .write(slot, RtlDesc::rx_posted(slot, self.dma.iovas.rx_bufs[slot]));
         compiler_fence(Ordering::Release);
         self.rx_head = (slot + 1) % RX_SLOTS;
         Ok(len)

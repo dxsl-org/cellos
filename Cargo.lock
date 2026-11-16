@@ -1680,9 +1680,9 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "cell-build",
+ "nic-driver",
  "ostd",
  "types",
- "wire",
 ]
 
 [[package]]
@@ -1756,9 +1756,9 @@ version = "0.1.0"
 dependencies = [
  "abi",
  "cell-build",
+ "nic-driver",
  "ostd",
  "types",
- "wire",
 ]
 
 [[package]]
@@ -2811,6 +2811,16 @@ dependencies = [
 [[package]]
 name = "mlibc-shim"
 version = "0.1.0"
+
+[[package]]
+name = "nic-driver"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "ostd",
+ "types",
+ "wire",
+]
 
 [[package]]
 name = "no_std_io"

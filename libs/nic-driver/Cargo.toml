@@ -1,0 +1,12 @@
+[package]
+name = "nic-driver"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Shared bring-up, NIC wire dispatch, sender gate and DMA ring layout for the Ethernet driver cells"
+
+[dependencies]
+types = { path = "../types", version = "0.1.0" }
+abi   = { path = "../abi", version = "0.1.0" }
+wire  = { path = "../wire", version = "0.1.0" }
+ostd  = { path = "../ostd", version = "0.2.0" }

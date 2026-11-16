@@ -1,8 +1,8 @@
 //! Advanced 16-byte descriptor ring layout for I225/I226.
 
-use ostd::dma::DmaBuf;
-
 pub const BUF_SIZE: usize = 2048;
+pub(crate) const TX_SLOTS: usize = 16;
+pub(crate) const RX_SLOTS: usize = 16;
 
 pub(crate) const ADVTXD_DCMD_DEXT: u32 = 1 << 29;
 pub(crate) const ADVTXD_DTYP_DATA: u32 = 0x0030_0000;
@@ -29,34 +29,20 @@ pub(crate) struct RxDesc {
     pub(crate) vlan: u16,
 }
 
-const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
-const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
-
-pub(crate) fn clear(buf: &DmaBuf) {
-    unsafe {
-        core::ptr::write_bytes(buf.virt(), 0, buf.size());
+impl RxDesc {
+    /// A descriptor handed to the controller with buffer `iova`.
+    pub(crate) const fn posted(iova: u64) -> Self {
+        Self {
+            buffer_addr: iova,
+            status_error: 0,
+            length: 0,
+            vlan: 0,
+        }
     }
 }
 
-pub(crate) fn read_rx_desc(buf: &DmaBuf, index: usize) -> RxDesc {
-    let ptr = (buf.virt() as *const RxDesc).wrapping_add(index);
-    unsafe { core::ptr::read_volatile(ptr) }
-}
-
-pub(crate) fn write_rx_desc(buf: &DmaBuf, index: usize, desc: RxDesc) {
-    let ptr = (buf.virt() as *mut RxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
-
-pub(crate) fn read_tx_desc(buf: &DmaBuf, index: usize) -> TxDesc {
-    let ptr = (buf.virt() as *const TxDesc).wrapping_add(index);
-    unsafe { core::ptr::read_volatile(ptr) }
-}
-
-pub(crate) fn write_tx_desc(buf: &DmaBuf, index: usize, desc: TxDesc) {
-    let ptr = (buf.virt() as *mut TxDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
+const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
+const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
 
 #[cfg(test)]
 mod tests {

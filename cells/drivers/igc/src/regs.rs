@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
 pub(crate) const CTRL: usize = 0x0_0000;
@@ -78,20 +77,7 @@ pub(crate) const SWFW_EEP_SM: u32 = 1 << 0;
 
 const NVM_POLLS: u32 = 100_000;
 
-pub(crate) trait RegisterFile {
-    fn rd32(&self, offset: usize) -> ViResult<u32>;
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()>;
-}
-
-impl RegisterFile for MmioRegion {
-    fn rd32(&self, offset: usize) -> ViResult<u32> {
-        self.read_u32(offset)
-    }
-
-    fn wr32(&self, offset: usize, value: u32) -> ViResult<()> {
-        self.write_u32(offset, value)
-    }
-}
+pub(crate) use nic_driver::regs::RegisterFile;
 
 pub(crate) fn nvm_read(regs: &impl RegisterFile, word: u16) -> ViResult<u16> {
     let cmd = ((word as u32) << EERD_ADDR_SHIFT) | EERD_START;

@@ -37,12 +37,12 @@ driver-hid untested no ci.yml step runs it as of 2026-11-10; host build not yet 
 driver-i2c-bcm ci
 driver-i40e untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-igb untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
-driver-igc untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-igc ci
 driver-intel-gpu untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-ixgbe untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-nvme ci
 driver-pvscsi ci
-driver-r8169 untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+driver-r8169 ci
 driver-spi-bcm ci
 driver-virtio-scsi untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 driver-vmxnet3 ci
@@ -66,6 +66,7 @@ intel-gpu-core untested no ci.yml step runs it as of 2026-11-10; host build not 
 kms-codec ci
 lua ci
 mesa-anv-shim untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
+nic-driver ci
 ocel untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 ocel-pdf-proto untested no ci.yml step runs it as of 2026-11-10; host build not yet tried
 ocel-quickjs untested no ci.yml step runs it as of 2026-11-10; host build not yet tried

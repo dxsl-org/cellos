@@ -340,46 +340,6 @@ reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX D
 approver = "dmin"
 date = "2026-10-05"
 [[file]]
-path = "cells/drivers/igc/src/controller.rs"
-class = "driver-mmio"
-reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the advanced-format TX/RX descriptor rings and DMA buffers the controller reads and writes. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
-approver = "dmin"
-date = "2026-11-07"
-
-[[file]]
-path = "cells/drivers/igc/src/dma_layout.rs"
-class = "driver-mmio"
-reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX DMA buffer tables, with a drop guard so a partial authorization releases only the constructed prefix."
-approver = "dmin"
-date = "2026-11-07"
-
-[[file]]
-path = "cells/drivers/igc/src/rings.rs"
-class = "driver-mmio"
-reason = "Driver Cell: volatile read/write access to advanced 16-byte descriptors and buffer zeroing."
-approver = "dmin"
-date = "2026-11-07"
-[[file]]
-path = "cells/drivers/r8169/src/controller.rs"
-class = "driver-mmio"
-reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the Realtek 16-byte TX/RX descriptor rings and DMA buffers the controller reads and writes. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
-approver = "dmin"
-date = "2026-11-07"
-
-[[file]]
-path = "cells/drivers/r8169/src/dma_layout.rs"
-class = "driver-mmio"
-reason = "Driver Cell: MaybeUninit array construction for the fixed-size TX/RX DMA buffer tables, with a drop guard so a partial authorization releases only the constructed prefix."
-approver = "dmin"
-date = "2026-11-07"
-
-[[file]]
-path = "cells/drivers/r8169/src/rings.rs"
-class = "driver-mmio"
-reason = "Driver Cell: volatile read/write access to Realtek 16-byte descriptors and buffer zeroing."
-approver = "dmin"
-date = "2026-11-07"
-[[file]]
 path = "cells/drivers/bcm57xx/src/controller.rs"
 class = "driver-mmio"
 reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile access to the Broadcom 16-byte TX/RX descriptor rings and DMA buffers the controller reads and writes. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
@@ -868,18 +828,6 @@ class = "driver-mmio"
 reason = "Owns allowlisted unsafe under cells/drivers/igb/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
 approver = "dmin"
 date = "2026-10-05"
-[[crate]]
-name = "driver-igc"
-class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/igc/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
-approver = "dmin"
-date = "2026-11-07"
-[[crate]]
-name = "driver-r8169"
-class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/r8169/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
-approver = "dmin"
-date = "2026-11-07"
 [[crate]]
 name = "driver-bcm57xx"
 class = "driver-mmio"

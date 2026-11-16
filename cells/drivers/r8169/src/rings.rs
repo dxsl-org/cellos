@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-//! Realtek 16-byte descriptor layout and accessors.
-
-use ostd::dma::DmaBuf;
+//! Realtek 16-byte descriptor layout.
 
 pub const BUF_SIZE: usize = 2048;
+pub(crate) const TX_SLOTS: usize = 16;
+pub(crate) const RX_SLOTS: usize = 16;
 
 pub(crate) const DESC_OWN: u32 = 1 << 31;
 pub(crate) const DESC_EOP: u32 = 1 << 30;
@@ -20,23 +20,24 @@ pub(crate) struct RtlDesc {
     pub(crate) addr_hi: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<RtlDesc>() == 16);
-
-pub(crate) fn clear(buf: &DmaBuf) {
-    unsafe {
-        core::ptr::write_bytes(buf.virt(), 0, buf.size());
+impl RtlDesc {
+    /// RX slot `index` of a `RX_SLOTS` ring handed to the controller with
+    /// buffer `iova`; the last slot carries the ring-end mark.
+    pub(crate) const fn rx_posted(index: usize, iova: u64) -> Self {
+        let mut opts1 = DESC_OWN | (BUF_SIZE as u32);
+        if index == RX_SLOTS - 1 {
+            opts1 |= DESC_RING_END;
+        }
+        Self {
+            opts1,
+            opts2: 0,
+            addr_lo: iova as u32,
+            addr_hi: (iova >> 32) as u32,
+        }
     }
 }
 
-pub(crate) fn read_desc(buf: &DmaBuf, index: usize) -> RtlDesc {
-    let ptr = (buf.virt() as *const RtlDesc).wrapping_add(index);
-    unsafe { core::ptr::read_volatile(ptr) }
-}
-
-pub(crate) fn write_desc(buf: &DmaBuf, index: usize, desc: RtlDesc) {
-    let ptr = (buf.virt() as *mut RtlDesc).wrapping_add(index);
-    unsafe { core::ptr::write_volatile(ptr, desc) }
-}
+const _: () = assert!(core::mem::size_of::<RtlDesc>() == 16);
 
 #[cfg(test)]
 mod tests {

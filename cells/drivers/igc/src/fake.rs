@@ -1,6 +1,6 @@
 //! Host tests only: fake I225/I226 register file with EERD and MDIC emulation.
 
-use crate::phy::{MDIC_DATA_MASK, MDIC_OP_WRITE, MDIC_READY};
+use crate::phy::MDIC_READY;
 use crate::regs::{
     RegisterFile, CTRL, CTRL_RST, EERD, EERD_ADDR_SHIFT, EERD_DATA_SHIFT, EERD_DONE, EERD_START,
     MDIC, SWSM, SWSM_SMBI, SW_FW_SYNC,

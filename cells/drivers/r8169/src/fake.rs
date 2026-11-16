@@ -1,6 +1,7 @@
 //! Host tests only: fake Realtek register file with PHYAR emulation.
 
 use crate::regs::{RegisterFile, COMMAND, CR_RST, PHYAR, PHYAR_BUSY};
+use nic_driver::regs::NarrowRegisterFile;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use types::ViResult;
@@ -25,7 +26,7 @@ impl FakeRegs {
     }
 }
 
-impl RegisterFile for FakeRegs {
+impl NarrowRegisterFile for FakeRegs {
     fn rd8(&self, offset: usize) -> ViResult<u8> {
         Ok((self.get(offset & !3) >> ((offset & 3) * 8)) as u8)
     }
@@ -56,7 +57,9 @@ impl RegisterFile for FakeRegs {
         self.regs.borrow_mut().insert(base, cur);
         Ok(())
     }
+}
 
+impl RegisterFile for FakeRegs {
     fn rd32(&self, offset: usize) -> ViResult<u32> {
         Ok(self.get(offset))
     }
