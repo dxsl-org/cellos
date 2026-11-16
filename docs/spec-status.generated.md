@@ -212,14 +212,6 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/12-reliability.md:291` — The two never-die regimes — and why "scalable systems look closest to 6"
 - `docs/specs/12-reliability.md:315` — The unifying insight (Cellos-relevant)
 - `docs/specs/12-reliability.md:336` — 6. Cross-References
-- `docs/specs/14-viui.md:9` — 1. Decision
-- `docs/specs/14-viui.md:20` — 2. Runtime architecture
-- `docs/specs/14-viui.md:47` — 3. Dual authoring layer
-- `docs/specs/14-viui.md:62` — 4. Shipped component surface
-- `docs/specs/14-viui.md:79` — 5. Rendering and text
-- `docs/specs/14-viui.md:89` — 6. Non-goals
-- `docs/specs/14-viui.md:100` — 7. Verification gates
-- `docs/specs/14-viui.md:110` — See also
 - `docs/specs/15-kernel-boundary.md:23` — 1. Theoretical Basis
 - `docs/specs/15-kernel-boundary.md:25` — 1.1 Liedtke's Minimality Principle (1995)
 - `docs/specs/15-kernel-boundary.md:44` — 1.2 What LBI Can and Cannot Eliminate
@@ -352,6 +344,14 @@ Plans linked from `.agents/plan-portfolio.md`, `README.md`, `docs/README.md` wit
 - `docs/specs/24-ai-inference-architecture.md:172` — 5.2 Boundaries Retained Outside G4 `std`
 - `docs/specs/24-ai-inference-architecture.md:181` — 6. Law 1 Public Interface Contract
 - `docs/specs/24-ai-inference-architecture.md:213` — 7. Implementation Checkpoints
+- `docs/specs/28-viui.md:10` — 1. Decision
+- `docs/specs/28-viui.md:21` — 2. Runtime architecture
+- `docs/specs/28-viui.md:48` — 3. Dual authoring layer
+- `docs/specs/28-viui.md:63` — 4. Shipped component surface
+- `docs/specs/28-viui.md:80` — 5. Rendering and text
+- `docs/specs/28-viui.md:90` — 6. Non-goals
+- `docs/specs/28-viui.md:101` — 7. Verification gates
+- `docs/specs/28-viui.md:111` — See also
 
 ### Status prose in specs (Spec 21 §2 Layer 3)
 

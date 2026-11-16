@@ -2,6 +2,7 @@
 
 **Status**: Non-normative reference strategy. Binding subsystem architecture lives in
 the owning numbered specs; for filesystems, Spec 09 supersedes §6 below.
+**Renumbered 2026-11-16**: was `00-fork.md`; number 00 was used twice (architecture remediation Phase 19).
 
 File này định hướng việc tái sử dụng mã nguồn và ý tưởng từ các dự án Open Source để tối ưu hóa thời gian phát triển Cellos.
 

@@ -12,7 +12,7 @@
 ## Context Links
 
 - [libs/ostd/src/font.rs](../../libs/ostd/src/font.rs) — Bitmap 8×8 (giữ nguyên)
-- [docs/specs/14-viui.md](../../docs/specs/14-viui.md) §6 Text Rendering
+- [docs/specs/28-viui.md](../../docs/specs/28-viui.md) §6 Text Rendering
 
 ---
 

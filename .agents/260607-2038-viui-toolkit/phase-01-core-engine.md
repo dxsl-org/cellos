@@ -10,7 +10,7 @@
 
 ## Context Links
 
-- [docs/specs/14-viui.md](../../docs/specs/14-viui.md) — Full ViUI spec
+- [docs/specs/28-viui.md](../../docs/specs/28-viui.md) — Full ViUI spec
 - [libs/ostd/src/display.rs](../../libs/ostd/src/display.rs) — ViSurface (dùng để render)
 - [libs/api/src/display.rs](../../libs/api/src/display.rs) — DamageNotify protocol
 

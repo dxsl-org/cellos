@@ -6,7 +6,7 @@
 
 > Historical phase provenance only. Later plans/source completed the overlapping DSL,
 > FlexBox, virtual-list, accessibility, and widget work. GPU remains separately gated;
-> current normative architecture and qualification live in `docs/specs/14-viui.md`.
+> current normative architecture and qualification live in `docs/specs/28-viui.md`.
 
 ---
 

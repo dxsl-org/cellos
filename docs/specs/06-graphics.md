@@ -37,7 +37,7 @@ Cellos cho phép cấu hình linh hoạt tùy theo mục đích sử dụng:
 
 ## 4. UI Toolkit: ViUI (Custom, Cellos-native)
 
-> **Quyết định 2026-06-07**: Slint bị loại do GPL-3 viral / $1+/device commercial license không phù hợp cho một OS platform. iced bị loại do `iced_runtime` cần std. egui bị loại do tessellation pipeline không phù hợp với software renderer. ViUI được xây dựng từ đầu. Xem chi tiết: [specs/14-viui.md](14-viui.md).
+> **Quyết định 2026-06-07**: Slint bị loại do GPL-3 viral / $1+/device commercial license không phù hợp cho một OS platform. iced bị loại do `iced_runtime` cần std. egui bị loại do tessellation pipeline không phù hợp với software renderer. ViUI được xây dựng từ đầu. Xem chi tiết: [specs/28-viui.md](28-viui.md).
 
 ViUI là UI toolkit `no_std`-native của Cellos với:
 * **Dual authoring layer**: Rust `ViNode` API + declarative `.vi` DSL (`vi_design!` inline hoặc `viui-build` lúc build), cùng tạo một Reactive Signal Tree.

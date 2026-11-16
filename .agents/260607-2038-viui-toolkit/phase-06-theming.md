@@ -10,7 +10,7 @@
 
 ## Context Links
 
-- [docs/specs/14-viui.md](../../docs/specs/14-viui.md) §10 Phân tầng theo profile
+- [docs/specs/28-viui.md](../../docs/specs/28-viui.md) §10 Phân tầng theo profile
 
 ---
 

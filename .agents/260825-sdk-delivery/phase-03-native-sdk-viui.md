@@ -1,7 +1,7 @@
 # Phase 03 — Native SDK and ViUI
 
 ## Context Links
-`docs/specs/23-native-sdk-contract.md`; `docs/specs/14-viui.md`; `docs/guides/viui-guide.md`; `libs/viui/src/{signal,app_runner,surface_renderer}.rs`.
+`docs/specs/23-native-sdk-contract.md`; `docs/specs/28-viui.md`; `docs/guides/viui-guide.md`; `libs/viui/src/{signal,app_runner,surface_renderer}.rs`.
 
 ## Overview
 Make the existing Native SDK and reactive-v2 ViUI developer contract accurate and behaviorally covered.

@@ -131,22 +131,20 @@ Internal design docs — read before implementing a subsystem.
 | File | Topic |
 |------|-------|
 | [specs/00-context.md](specs/00-context.md) | Prime directive, coding laws, workflow |
-| [specs/00-fork.md](specs/00-fork.md) | Strategy for forking external code |
 | [specs/01-core.md](specs/01-core.md) | Cellular model, symbol table, security |
-| [specs/02-memory.md](specs/02-memory.md) | SAS layout, quota, metadata registry |
+| [specs/02-memory.md](specs/02-memory.md) | SAS layout, quota, frame ownership, W^X |
 | [specs/03-runtime.md](specs/03-runtime.md) | IPC, async/await, hot-swap, boot optimization |
 | [specs/04-hardware.md](specs/04-hardware.md) | Multi-arch HAL, SMP |
 | [specs/05-application.md](specs/05-application.md) | Application tiers, runtime profiles, and SDK modules |
 | [specs/06-graphics.md](specs/06-graphics.md) | Compositor, framebuffer, input dispatch |
-| [specs/07-networking.md](specs/07-networking.md) | Network stack, smoltcp, zero-copy |
+| [specs/07-networking.md](specs/07-networking.md) | Network stack Cell, smoltcp, copied frames, TLS |
 | [specs/08-power.md](specs/08-power.md) | Power states, hibernation, thermal |
-| [specs/09-vfs.md](specs/09-vfs.md) | VFS traits, dual-filesystem, direct I/O |
+| [specs/09-vfs.md](specs/09-vfs.md) | VFS IPC contract, mount-table backends, handles, grant reads |
 | [specs/10-testing.md](specs/10-testing.md) | Test strategy, QEMU harness, coverage |
 | [specs/11-shell.md](specs/11-shell.md) | Shell design, ELF execution, zero-copy ls |
 | [specs/12-reliability.md](specs/12-reliability.md) | Never-die axes, supervisor restart, RT bounds |
 | [specs/13-peripherals.md](specs/13-peripherals.md) | GPIO/I2C/SPI/UART/CAN driver cells |
 | [specs/14-distributed.md](specs/14-distributed.md) | Swarm/cluster lifecycle, lease, split-brain |
-| [specs/14-viui.md](specs/14-viui.md) | ViUI reactive Signal Tree + .vi DSL |
 | [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) | Kernel whitelist/blacklist law + theory |
 | [specs/16-rustc-tcb.md](specs/16-rustc-tcb.md) | rustc as TCB — LBI guarantees, limits, policies |
 | [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
@@ -154,3 +152,5 @@ Internal design docs — read before implementing a subsystem.
 | [specs/24-ai-inference-architecture.md](specs/24-ai-inference-architecture.md) | Ratified AI Inference & Small Language Model Architecture |
 | [specs/25-cell-kernel-authority-contract.md](specs/25-cell-kernel-authority-contract.md) | Selected Cell/Kernel/authority contract v1.3; independent budget enforcement and AC-01..AC-50; implementation/ABI gates remain |
 | [specs/26-workload-placement-scaling-contract.md](specs/26-workload-placement-scaling-contract.md) | v1.1: placement, bounded routing, Budget Authority/genesis/live claims, challenge freshness and homogeneous-domain autoscaling; runtime pending |
+| [specs/27-fork.md](specs/27-fork.md) | Strategy for forking external code |
+| [specs/28-viui.md](specs/28-viui.md) | ViUI reactive Signal Tree + .vi DSL |

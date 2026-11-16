@@ -4,7 +4,7 @@
 **Stage**: G2  
 **Priority**: P1 — blocking desktop GUI experience  
 **Created**: 2026-06-07  
-**Spec**: [docs/specs/14-viui.md](../../docs/specs/14-viui.md)
+**Spec**: [docs/specs/28-viui.md](../../docs/specs/28-viui.md)
 
 ---
 

@@ -6,7 +6,7 @@
 
 > `260616-0755-viui-completion` is the canonical closed implementation record. The
 > unimplemented GPU backend must be re-opened only as its own hardware/benchmark-gated
-> plan. See `docs/specs/14-viui.md`.
+> plan. See `docs/specs/28-viui.md`.
 
 ---
 

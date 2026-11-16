@@ -3,6 +3,7 @@
 **Version**: 2.0 (Reactive Signal Tree + dual-layer DSL)
 **Status**: Definitive — library architecture shipped; product qualification remains evidence-gated
 **Last Updated**: 2026-08-01 (D26)
+**Renumbered 2026-11-16**: was `14-viui.md`; number 14 was used twice (architecture remediation Phase 19).
 
 ---
 

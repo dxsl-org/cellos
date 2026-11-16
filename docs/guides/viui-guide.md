@@ -193,6 +193,6 @@ All three standard palettes are verified by an automated mathematical relative l
 
 ## Further reading
 
-- [ViUI contract](../specs/14-viui.md) — normative architecture, non-goals, and verification gates.
+- [ViUI contract](../specs/28-viui.md) — normative architecture, non-goals, and verification gates.
 - [`cells/apps/robot-dashboard/src/main.rs`](../../cells/apps/robot-dashboard/src/main.rs) — reactive-v2 Cell with an app-owned display surface, explicit input collection, signal ownership, and frame driving.
 - `libs/viui/src/signal.rs` — signal and computed-value lifetime details.

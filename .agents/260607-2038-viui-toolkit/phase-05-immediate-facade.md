@@ -10,7 +10,7 @@
 
 ## Context Links
 
-- [docs/specs/14-viui.md](../../docs/specs/14-viui.md) §5 Dual-Facade API
+- [docs/specs/28-viui.md](../../docs/specs/28-viui.md) §5 Dual-Facade API
 
 ---
 

@@ -11,7 +11,7 @@
 ## Context Links
 
 - [libs/ostd/src/display.rs](../../libs/ostd/src/display.rs) — ViSurface (pixel buffer owner)
-- [docs/specs/14-viui.md](../../docs/specs/14-viui.md) §4 ViCanvas
+- [docs/specs/28-viui.md](../../docs/specs/28-viui.md) §4 ViCanvas
 
 ---
 

@@ -17,17 +17,17 @@
 Trước khi code bất kỳ module nào, Agent **BẮT BUỘC** phải đọc file đặc tả tương ứng:
 | Nếu nhiệm vụ liên quan đến... | Hãy đọc file này |
 | --- | --- |
-| Lấy code từ các dự án khác | `design/00-fork.md` |
-| Triết lý Cellular & Linker Linker | `design/01-core.md` |
-| SAS layout, HHDM & focused ownership authorities | `design/02-memory.md` |
-| Async Safety & Owned Buffers Rule | `design/03-runtime.md` |
-| Multi-Arch Trait (RV32/64/128) | `design/04-hardware.md` |
-| Native vs Virtualization | `design/05-application.md` |
-| Zero-copy Compositing & Input | `design/06-graphics.md` |
-| User-space Stack (smoltcp) | `design/07-networking.md` |
-| Tickless Idle & Pointer Swizzling | `design/08-power.md` |
-| Pluggable FS & Direct I/O | `design/09-vfs.md` |
-| KUnit & Fault Injection | `design/10-testing.md` |
+| Lấy code từ các dự án khác | [`27-fork.md`](27-fork.md) |
+| Triết lý Cellular & Linker Linker | [`01-core.md`](01-core.md) |
+| SAS layout, HHDM & focused ownership authorities | [`02-memory.md`](02-memory.md) |
+| Async Safety & Owned Buffers Rule | [`03-runtime.md`](03-runtime.md) |
+| Multi-Arch Trait (RV32/64/128) | [`04-hardware.md`](04-hardware.md) |
+| Native vs Virtualization | [`05-application.md`](05-application.md) |
+| Zero-copy Compositing & Input | [`06-graphics.md`](06-graphics.md) |
+| User-space Stack (smoltcp) | [`07-networking.md`](07-networking.md) |
+| Tickless Idle & Pointer Swizzling | [`08-power.md`](08-power.md) |
+| Pluggable FS & Direct I/O | [`09-vfs.md`](09-vfs.md) |
+| KUnit & Fault Injection | [`10-testing.md`](10-testing.md) |
 
 
 ## 2. Cấu trúc thư mục chuẩn
