@@ -45,38 +45,48 @@ max_age_days = 90
 
 [[file]]
 path = "cells/tests/tier2-exploit/src/main.rs"
-class = "test-harness"
-reason = "Negative exploit test: deliberate NULL write to prove hardware Page Fault containment in Tier 2"
+class = "test-violation"
+reason = "Negative exploit test: deliberate NULL write to prove hardware Page Fault containment in Tier 2. Re-reviewed 2026-11-16: three `unsafe` sites, each a `write_volatile` of 0xDEAD_BEEF through a forged pointer chosen by argument (peer cell 0x0800_0000, kernel 0x8020_0000, or NULL); the page fault that ends the cell is the witness. Class corrected from `test-harness` to `test-violation`, matching the crate entry: a deliberate Tier-2 violation witness. The crate is UNTRUSTED (Tier 2)."
 approver = "dmin"
 date = "2026-09-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/tier2-grant-owner/src/main.rs"
 class = "test-harness"
-reason = "Phase-03 Tier-2 grant owner: volatile read/write of the owner mapping GrantAlloc/GrantSlice return is the property under test (the returned pointer must be writable by its owner)."
+reason = "Phase-03 Tier-2 grant owner: volatile read/write of the owner mapping GrantAlloc/GrantSlice return is the property under test (the returned pointer must be writable by its owner). Re-reviewed 2026-11-16: one `unsafe` site (main.rs:145), a one-byte `write_volatile` then `read_volatile` at the owner mapping of a grant this cell owns (at least one page). The crate is UNTRUSTED (Tier 2)."
 approver = "dmin"
 date = "2026-09-28"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/tier2-grant-receiver/src/main.rs"
-class = "test-harness"
-reason = "Phase-03 Tier-2 grant receiver: reads and deliberately stores through the receiver mapping GrantSlice returns, so a revoked or read-only receiver PTE faults in the cell where the runner can attribute it."
+class = "test-violation"
+reason = "Phase-03 Tier-2 grant receiver: reads and deliberately stores through the receiver mapping GrantSlice returns, so a revoked or read-only receiver PTE faults in the cell where the runner can attribute it. Re-reviewed 2026-11-16: seven `unsafe` sites, all one-byte `read_volatile`/`write_volatile` through the receiver mapping GrantSlice returned (the RW and read-only legs, the downgrade and unregister legs, and the probe at main.rs:232 that stores into a revoked mapping so the fault is the witness). Class corrected from `test-harness` to `test-violation`, matching the crate entry. The crate is UNTRUSTED (Tier 2)."
 approver = "dmin"
 date = "2026-09-28"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/tier2-rpc-driver/src/main.rs"
-class = "test-harness"
-reason = "Phase-02 cross-tier exchange: deliberate invalid user buffer passed to sys_send to prove kernel TaskCopyView copy_from_user validation refuses it before delivery."
+class = "test-violation"
+reason = "Phase-02 cross-tier exchange: deliberate invalid user buffer passed to sys_send to prove kernel TaskCopyView copy_from_user validation refuses it before delivery. Re-reviewed 2026-11-16: one `unsafe` site (main.rs:141), `slice::from_raw_parts(0xDEAD_0000, 64)` over an unmapped address that is only handed to sys_send and never read in the cell. Class corrected from `test-harness` to `test-violation`, matching the crate entry; neither class is gated, so the crate (LEGACY manifest, Tier 1) is unaffected."
 approver = "dmin"
 date = "2026-10-09"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/demos/recovery-demo/src/bin/worker/fault.rs"
 class = "test-harness"
-reason = "Phase 09B fault-inject witness (feature fault-inject only): a deliberate load from an unmapped user address makes the kernel retire the whole worker incarnation exactly as for a real crash."
+reason = "Phase 09B fault-inject witness (feature fault-inject only): a deliberate load from an unmapped user address makes the kernel retire the whole worker incarnation exactly as for a real crash. Re-reviewed 2026-11-16: one `unsafe` site (fault.rs:18), a `read_volatile` from 0x10 that traps before any value exists; worker/main.rs declares the module only under `#[cfg(feature = \"fault-inject\")]`."
 approver = "dmin"
 date = "2026-11-01"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/demos/doom/src/main.rs"
@@ -171,44 +181,56 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[file]]
 path = "cells/services/ocel-quickjs/src/engine.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): the QuickJS driver calls the vendored engine across the C ABI (JS_NewRuntime/JS_Eval/JS_ToCString ...) and owns the runtime/context lifetimes; the C side is outside the Rust type system entirely."
+reason = "C FFI (Tier 2): the QuickJS driver calls the vendored engine across the C ABI (JS_NewRuntime/JS_Eval/JS_ToCString ...) and owns the runtime/context lifetimes; the C side is outside the Rust type system entirely. Re-reviewed 2026-11-16: 13 `unsafe` tokens, all calls into the QuickJS C API declared in ffi.rs (runtime and context create/free, eval under the interrupt-budget guard, exception and string conversion, GC) plus the `interrupt_budget` callback and the `unsafe fn` helpers that take raw JS handles. The crate is UNTRUSTED (Tier 2)."
 approver = "dmin"
 date = "2026-10-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/services/ocel-quickjs/src/ffi.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): engine declarations plus the three clock shims the engine expects from an OS (gettimeofday/clock_gettime/localtime_r); pointer work is confined to the extern \"C\" bodies."
+reason = "C FFI (Tier 2): engine declarations plus the three clock shims the engine expects from an OS (gettimeofday/clock_gettime/localtime_r); pointer work is confined to the extern \"C\" bodies. Re-reviewed 2026-11-16: five `unsafe` tokens, the two callback types in the extern block's signatures and the three `#[no_mangle] unsafe extern \"C\"` clock shims, each of which null-checks its out-pointers before writing them."
 approver = "dmin"
 date = "2026-10-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 
 [[file]]
 path = "cells/services/ocel-quickjs/src/native_layout.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 2): QuickJS native layout callbacks and C string marshalling for synchronous layout measurements."
+reason = "C FFI (Tier 2): QuickJS native layout callbacks and C string marshalling for synchronous layout measurements. Re-reviewed 2026-11-16: three `unsafe` tokens, the call that installs the layout callback on a context, the `unsafe extern \"C\"` callback itself, and the `throw` helper that raises a JS error on a raw context."
 approver = "dmin"
 date = "2026-10-19"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 [[file]]
 path = "cells/services/ocel-pdf/src/engine.rs"
 class = "c-ffi"
-reason = "Isolated Tier 2 MuPDF FFI: this wrapper owns the native document and keeps borrowed input alive; all C exceptions are caught in C before returning to Rust."
+reason = "Isolated Tier 2 MuPDF FFI: this wrapper owns the native document and keeps borrowed input alive; all C exceptions are caught in C before returning to Rust. Re-reviewed 2026-11-16: five `unsafe` sites, one per C entry point (set_clock, open, render, read_pixels, close); `Document` owns the native pointer and closes it exactly once in Drop. The crate is UNTRUSTED (Tier 2)."
 approver = "dmin"
 date = "2026-10-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/tls-test/src/regs.rs"
 class = "test-harness"
-reason = "Per-task TLS base test: reading the user thread pointer register (tp / TPIDR_EL0) and touching the thread's own TLS block through it are exactly what the test proves; both are confined to this file behind safe wrappers."
+reason = "Per-task TLS base test: reading the user thread pointer register (tp / TPIDR_EL0) and touching the thread's own TLS block through it are exactly what the test proves; both are confined to this file behind safe wrappers. Re-reviewed 2026-11-16: six `unsafe` tokens, the two per-architecture `asm!` register reads (nomem, nostack), the two `unsafe fn` volatile accessors of the calling thread's own block, and the two calls to them from their safe wrappers. The crate is FFI (Tier 2)."
 approver = "dmin"
 date = "2026-09-22"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/cpp-smoke/src/cpp.rs"
 class = "c-ffi"
-reason = "C++ FFI (cpp-freestanding profile): extern \"C\" calls into the cell's C++ translation units are unsafe by construction; the C++ side is outside the Rust type system entirely. All unsafe in this crate is confined to this file behind safe wrappers."
+reason = "C++ FFI (cpp-freestanding profile): extern \"C\" calls into the cell's C++ translation units are unsafe by construction; the C++ side is outside the Rust type system entirely. All unsafe in this crate is confined to this file behind safe wrappers. Re-reviewed 2026-11-16: seven `unsafe` sites, one call per safe wrapper; `read_file` passes a slice's pointer with that slice's own length. The crate is FFI (Tier 2)."
 approver = "dmin"
 date = "2026-09-22"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/c-math-smoke/src/main.rs"
@@ -261,9 +283,11 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[file]]
 path = "cells/tests/posix-shim-test/src/fstat.rs"
 class = "c-ffi"
-reason = "C FFI (Tier 1b): extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely."
+reason = "C FFI: extern \"C\" calls across the mlibc boundary are unsafe by construction; the C side is outside the Rust type system entirely. Re-reviewed 2026-11-16: 53 `unsafe` tokens in the stat, fstat, unlink, mkdir/rmdir, rename and raw-rename witnesses: calls into the POSIX shim (including the null, invalid-fd and missing-path arguments it must refuse) and `MaybeUninit<Stat>` byte fill and read-back that prove the shim writes exactly the fields it should. The crate is FFI (Tier 2)."
 approver = "cellos-maintainers"
 date = "2026-09-03"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/drivers/nvme/src/controller.rs"
@@ -295,16 +319,20 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[file]]
 path = "cells/drivers/ahci/src/controller.rs"
 class = "driver-mmio"
-reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile DMA structure access. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI."
+reason = "Driver Cell: bounds-checked MMIO register access via MmioRegion plus volatile DMA structure access. The Kernel Boundary Law moved drivers out of the kernel, so the wall around this unsafe is the IOMMU, not LBI. Re-reviewed 2026-11-16: six `unsafe` sites, one `write_bytes` that zeroes each page-sized command-list/FIS/command-table/identify DmaBuf over exactly its size, and five fixed-offset volatile accessors (u8/u32/u64 write, u16/u32 read) into those buffers; register MMIO itself goes through MmioRegion without `unsafe`."
 approver = "dmin"
 date = "2026-10-05"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/drivers/ahci/src/dispatch.rs"
 class = "driver-mmio"
-reason = "Driver Cell: copies one sector between the DrvRequest IPC buffer and the authorized DMA buffer. The wall around this unsafe is the DMA authorization, not LBI."
+reason = "Driver Cell: copies one sector between the DrvRequest IPC buffer and the authorized DMA buffer. The wall around this unsafe is the DMA authorization, not LBI. Re-reviewed 2026-11-16: three `copy_nonoverlapping` sites over the one-page authorized buffer, two out of it after `read_sectors` completed and one 512-byte sector into it before submit; every length is a sector run within that page."
 approver = "dmin"
 date = "2026-10-05"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 
 
@@ -314,9 +342,11 @@ date = "2026-10-05"
 [[file]]
 path = "cells/drivers/xhci/src/dma.rs"
 class = "driver-mmio"
-reason = "Driver Cell: bounds-checked volatile access to the xHCI rings, contexts and payload buffers the controller fetches by DMA. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI."
+reason = "Driver Cell: bounds-checked volatile access to the xHCI rings, contexts and payload buffers the controller fetches by DMA. Every region is allocated through DmaBuf and authorized for the controller BDF before its IOVA is programmed; the wall around this unsafe is the DMA authorization, not LBI. Re-reviewed 2026-11-16: six `unsafe` sites in `DmaRegion`, `zero` (write_bytes over the grant's own length), u32/u64 volatile read and write, and `read_bytes`; every accessor asserts `off + width <= len()` first."
 approver = "dmin"
 date = "2026-10-05"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/drivers/virtio-blk/src/hal_x86.rs"
@@ -409,9 +439,11 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[file]]
 path = "cells/drivers/dwc2-usb/src/usb_channel.rs"
 class = "driver-mmio"
-reason = "Driver Cell: stages payloads into and collects them out of the cell-owned per-channel DmaBuf slots that the DWC2 core reads and writes directly in DMA mode -- the mode Linux uses for this SoC, and the only one that completes a data-phase transfer on the board. The grant region is owned by this cell for its lifetime, every copy length is bounded by DMA_SLOT_BYTES and the caller's slice, and exact cache-sync tokens pin each range across device access."
+reason = "Driver Cell: stages payloads into and collects them out of the cell-owned per-channel DmaBuf slots that the DWC2 core reads and writes directly in DMA mode -- the mode Linux uses for this SoC, and the only one that completes a data-phase transfer on the board. The grant region is owned by this cell for its lifetime, every copy length is bounded by DMA_SLOT_BYTES and the caller's slice, and exact cache-sync tokens pin each range across device access. Re-reviewed 2026-11-16: two `copy_nonoverlapping` sites (usb_channel.rs:717 into, :743 out of the slot at `ch * DMA_SLOT_BYTES + offset`), each bounded by the slot remainder and the caller's slice."
 approver = "cellos-maintainers"
 date = "2026-09-21"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/drivers/bcm-display/src/mailbox.rs"
@@ -516,9 +548,11 @@ tracking = "P18 review 2026-11-16: 90-day re-review (would have gone stale 2026-
 [[file]]
 path = "cells/services/net/src/tls/dispatch.rs"
 class = "legacy-raw-ptr"
-reason = "`poll_future` erases the `SocketSet<'_>` borrow into a task-local TLS context slot that the transport callbacks read for the duration of one poll; the context is cleared on the same stack frame before returning."
+reason = "`poll_future` erases the `SocketSet<'_>` borrow into a task-local TLS context slot that the transport callbacks read for the duration of one poll; the context is cleared on the same stack frame before returning. Re-reviewed 2026-11-16: one `unsafe` site (dispatch.rs:529), `set_tls_context` with the SocketSet cast to `*mut ()`; `clear_tls_context` runs on the line after the single poll. The crate's Tier-1 placement is the owner's [[tier_exception]] for service-net."
 approver = "cellos-maintainers"
 date = "2026-10-08"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/services/net/src/tls/socket.rs"
@@ -541,23 +575,29 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[file]]
 path = "cells/tests/c-pthread/src/main.rs"
 class = "c-ffi"
-reason = "C FFI witness for the port-platform pthread runtime: the `unsafe extern \"C\"` block is the only way to call `cellos_pthread_witness` in the linked C runtime, which is outside the Rust type system entirely."
+reason = "C FFI witness for the port-platform pthread runtime: the `unsafe extern \"C\"` block is the only way to call `cellos_pthread_witness` in the linked C runtime, which is outside the Rust type system entirely. Re-reviewed 2026-11-16: two `unsafe` tokens, the extern block and the one argument-less call. The crate is FFI (Tier 2)."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/c-spawn/src/main.rs"
 class = "c-ffi"
-reason = "C FFI witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_witness` in the linked C runtime, which is outside the Rust type system entirely."
+reason = "C FFI witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_witness` in the linked C runtime, which is outside the Rust type system entirely. Re-reviewed 2026-11-16: two `unsafe` tokens, the extern block and one call passing the ELF grant handle and its length; the grant is freed after the call returns. The crate is FFI (Tier 2)."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tests/c-spawn-child/src/main.rs"
 class = "c-ffi"
-reason = "C FFI child witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_child_witness` in the linked C runtime, which is outside the Rust type system entirely."
+reason = "C FFI child witness for the port-platform spawn adapter: the `unsafe extern \"C\"` block is the only way to call `cellos_spawn_child_witness` in the linked C runtime, which is outside the Rust type system entirely. Re-reviewed 2026-11-16: two `unsafe` tokens, the extern block and the one argument-less call. The crate is FFI (Tier 2)."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 # ── Crate exemptions from the attribute rule ─────────────────────────────────────
 #
@@ -569,23 +609,29 @@ date = "2026-09-25"
 [[crate]]
 name = "recovery-demo"
 class = "test-harness"
-reason = "The recovery-worker root cannot carry #![forbid(unsafe_code)] because its fault-inject module allows the allowlisted deliberate fault — see the [[file]] entry for cells/demos/recovery-demo/src/bin/worker/fault.rs. The authority and client roots forbid unsafe."
+reason = "The recovery-worker root cannot carry #![forbid(unsafe_code)] because its fault-inject module allows the allowlisted deliberate fault — see the [[file]] entry for cells/demos/recovery-demo/src/bin/worker/fault.rs. The authority and client roots forbid unsafe. Re-reviewed 2026-11-16: fault.rs (1) is still the crate's only `unsafe`."
 approver = "dmin"
 date = "2026-11-01"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "app-tls-test"
 class = "test-harness"
-reason = "Owns allowlisted unsafe under cells/tests/tls-test/ — see the [[file]] entry for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/tls-test/ — see the [[file]] entry for the justification. Re-reviewed 2026-11-16: regs.rs holds all six of the crate's `unsafe` tokens; the rest uses its safe wrappers."
 approver = "dmin"
 date = "2026-09-22"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "app-cpp-smoke"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/cpp-smoke/ — see the [[file]] entry of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/cpp-smoke/ — see the [[file]] entry of class \"c-ffi\" for the justification. Re-reviewed 2026-11-16: cpp.rs holds all seven of the crate's `unsafe` tokens."
 approver = "dmin"
 date = "2026-09-22"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "app-c-math-smoke"
@@ -656,16 +702,20 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[crate]]
 name = "ocel-quickjs"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/services/ocel-quickjs/ — see the [[file]] entries of class \"c-ffi\" for the justification."
+reason = "Owns allowlisted unsafe under cells/services/ocel-quickjs/ — see the [[file]] entries of class \"c-ffi\" for the justification. Re-reviewed 2026-11-16: engine.rs (13), ffi.rs (5) and native_layout.rs (3) hold all of the crate's `unsafe`."
 approver = "dmin"
 date = "2026-10-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "ocel-pdf"
 class = "c-ffi"
-reason = "Native PDF renderer behind the explicitly approved capability-free Tier 2 launch edge; unsafe is confined to engine.rs."
+reason = "Native PDF renderer behind the explicitly approved capability-free Tier 2 launch edge; unsafe is confined to engine.rs. Re-reviewed 2026-11-16: still only engine.rs (5)."
 approver = "dmin"
 date = "2026-10-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "tetris-c"
@@ -697,16 +747,20 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[crate]]
 name = "driver-ahci"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/ahci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/ahci/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-16: controller.rs (6) and dispatch.rs (3) hold all of the crate's `unsafe`."
 approver = "dmin"
 date = "2026-10-05"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "driver-xhci"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/xhci/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+reason = "Owns allowlisted unsafe under cells/drivers/xhci/ — see the [[file]] entries of class \"driver-mmio\" for the justification. Re-reviewed 2026-11-16: dma.rs (6) holds all of the crate's `unsafe`; every other module goes through `DmaRegion`."
 approver = "dmin"
 date = "2026-10-05"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 
 
@@ -774,9 +828,11 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[crate]]
 name = "driver-dwc2-usb"
 class = "driver-mmio"
-reason = "Owns allowlisted unsafe under cells/drivers/dwc2-usb/ -- see the [[file]] entry for cells/drivers/dwc2-usb/src/usb_channel.rs, which needs a bounded copy into and out of the DMA payload slots the controller accesses directly."
+reason = "Owns allowlisted unsafe under cells/drivers/dwc2-usb/ -- see the [[file]] entry for cells/drivers/dwc2-usb/src/usb_channel.rs, which needs a bounded copy into and out of the DMA payload slots the controller accesses directly. Re-reviewed 2026-11-16: usb_channel.rs (2) holds all of the crate's `unsafe`."
 approver = "cellos-maintainers"
 date = "2026-09-21"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "driver-bcm-display"
@@ -826,29 +882,37 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[crate]]
 name = "tier2-exploit"
 class = "test-violation"
-reason = "Owns deliberate NULL write in cells/tests/tier2-exploit/ to prove Tier 2 hardware Page Fault containment"
+reason = "Owns the deliberate forged-pointer writes (peer cell, kernel, NULL) in cells/tests/tier2-exploit/ that prove Tier 2 hardware Page Fault containment. Re-reviewed 2026-11-16: main.rs (3) holds all of the crate's `unsafe`, now classed `test-violation` like this entry."
 approver = "dmin"
 date = "2026-09-06"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "tier2-grant-owner"
 class = "test-violation"
-reason = "Phase-03 Tier-2 grant pair producer: the crate root must dereference the raw pointer GrantAlloc/GrantSlice return to prove the owner mapping is writable; see its [[file]] entry."
+reason = "Phase-03 Tier-2 grant pair producer: the crate root must dereference the raw pointer GrantAlloc/GrantSlice return to prove the owner mapping is writable; see its [[file]] entry. Re-reviewed 2026-11-16: main.rs (1) holds the crate's only `unsafe`."
 approver = "dmin"
 date = "2026-09-28"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "tier2-grant-receiver"
 class = "test-violation"
-reason = "Phase-03 Tier-2 grant pair consumer: the crate root must store through the raw pointer GrantSlice returns, since that store is the fault witness; see its [[file]] entry."
+reason = "Phase-03 Tier-2 grant pair consumer: the crate root must store through the raw pointer GrantSlice returns, since that store is the fault witness; see its [[file]] entry. Re-reviewed 2026-11-16: main.rs (7) holds all of the crate's `unsafe`, now classed `test-violation` like this entry."
 approver = "dmin"
 date = "2026-09-28"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 [[crate]]
 name = "tier2-rpc-driver"
 class = "test-violation"
-reason = "Phase-02 cross-tier exchange driver exercises raw-pointer syscall copy-path validation — see [[file]] entry."
+reason = "Phase-02 cross-tier exchange driver exercises raw-pointer syscall copy-path validation — see [[file]] entry. Re-reviewed 2026-11-16: main.rs (1) holds the crate's only `unsafe`, now classed `test-violation` like this entry."
 approver = "dmin"
 date = "2026-10-09"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 
 [[crate]]
@@ -881,37 +945,47 @@ tracking = "unsafe-allowlist 90-day re-review 2026-11-10"
 [[crate]]
 name = "c-pthread"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/c-pthread/ — see the [[file]] entry for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/c-pthread/ — see the [[file]] entry for the justification. Re-reviewed 2026-11-16: main.rs (2) holds all of the crate's `unsafe`."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "app-c-spawn"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/c-spawn/ — see the [[file]] entry for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn/ — see the [[file]] entry for the justification. Re-reviewed 2026-11-16: main.rs (2) holds all of the crate's `unsafe`."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[crate]]
 name = "app-c-spawn-child"
 class = "c-ffi"
-reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification."
+reason = "Owns allowlisted unsafe under cells/tests/c-spawn-child/ — see the [[file]] entry for the justification. Re-reviewed 2026-11-16: main.rs (2) holds all of the crate's `unsafe`."
 approver = "dmin"
 date = "2026-09-25"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/tools/cellbox/src/rg/tests.rs"
 class = "test-harness"
-reason = "Host-only (`#[cfg(test)] mod tests;`, rg.rs:25-26) heap-peak measurement for the D76-3 M2 `rg` arena target: `unsafe impl GlobalAlloc for Counting` forwards every call unchanged to `System` and only counts live bytes per thread. `GlobalAlloc` is an unsafe trait, so the counting allocator cannot be written without the keyword; the file holds no other unsafe and is never compiled into a Cell image."
+reason = "Host-only (`#[cfg(test)] mod tests;`, rg.rs:25-26) heap-peak measurement for the D76-3 M2 `rg` arena target: `unsafe impl GlobalAlloc for Counting` forwards every call unchanged to `System` and only counts live bytes per thread. `GlobalAlloc` is an unsafe trait, so the counting allocator cannot be written without the keyword; the file holds no other unsafe and is never compiled into a Cell image. Re-reviewed 2026-11-16: still seven `unsafe` tokens, all in `Counting` (the `unsafe impl`, its three `unsafe fn` and their three forwarding calls to `System`)."
 approver = "dmin"
 date = "2026-10-30"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/services/input/src/session_zeroize_tests.rs"
 class = "test-harness"
-reason = "Host-only (`#[cfg(test)]`, declared in session.rs) read-back of wiped heap buffers: after `Secret`/`Event`/`Paste::wipe` the test reads the whole retained allocation through a raw pointer to prove every byte, spare capacity included, is zero. Observing memory behind a cleared Vec is not possible without `unsafe`. The file holds exactly that one test and is never compiled into a Cell image; it was split out of session.rs so the secret-handling session code stays under the token rule."
+reason = "Host-only (`#[cfg(test)]`, declared in session.rs) read-back of wiped heap buffers: after `Secret`/`Event`/`Paste::wipe` the test reads the whole retained allocation through a raw pointer to prove every byte, spare capacity included, is zero. Observing memory behind a cleared Vec is not possible without `unsafe`. The file holds exactly that one test and is never compiled into a Cell image; it was split out of session.rs so the secret-handling session code stays under the token rule. Re-reviewed 2026-11-16: three `unsafe` sites, each `slice::from_raw_parts(pointer, capacity)` read back after one wipe while the owning value still holds the allocation."
 approver = "dmin"
 date = "2026-10-30"
+review_by = "2027-02-14"
+tracking = "Allowlist re-review 2026-11-16 (P18 follow-up): 90-day review"
 
 [[file]]
 path = "cells/runtimes/lua/src/ffi_tests.rs"
