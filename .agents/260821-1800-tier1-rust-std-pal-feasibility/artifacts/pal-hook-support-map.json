@@ -1378,8 +1378,8 @@
   "kernel_security_backing_inventory": {
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
-    "entry_count": 6,
-    "inventory_digest": "da119cd4536b8afa8c3b830b30ba904e153160a6303f85a88a0f40f4512eb744",
+    "entry_count": 10,
+    "inventory_digest": "1c8f586bfae2a1120308fc0ffaa68209a4c1cf573f796175d290ea1907c16953",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1387,56 +1387,85 @@
           "kernel feature defaults",
           "production dev-weak-rng exclusion"
         ],
-        "sha256": "057c83cdef0b0d862c6fa1f7085fafaeda18dfd1aff0b8be800ac5d64142772f"
+        "sha256": "f014dd0ed927c85e88d6ecc72875aaf6fc152873bbba06407ea839caf68c1ee1"
       },
       {
-        "path": "kernel/src/task/drivers.rs",
+        "path": "kernel/src/dev.rs",
         "roles": [
           "VirtIO RNG module wiring"
         ],
-        "sha256": "91d42efb24257e86ee5be941472aa3d2de5c62a643f2589f86d4c1172d2687b5"
+        "sha256": "e98661d6c29af9080d2f38a9ad68e84e882b924acf8af61f580d685fbfa62b8e"
       },
       {
-        "path": "kernel/src/task/drivers/virtio_rng.rs",
+        "path": "kernel/src/dev/virtio_rng.rs",
         "roles": [
           "current entropy source implementation",
           "zero-byte unavailable behavior"
         ],
-        "sha256": "7334551f927d79336f9722c799eb5d06c48c88d76efe6fd4150d1a0d58e92465"
+        "sha256": "16f43c1ee5f1424d863f142ccb0b140d44ff6eeb9cc55d5a13c802d6ab5aaaf7"
       },
       {
-        "path": "kernel/src/task/syscall.rs",
+        "path": "kernel/src/task/syscall/decode.rs",
         "roles": [
-          "kernel syscall ABI decoder",
-          "allowlist gate",
-          "architecture dispatch",
-          "GetRandom handler",
+          "kernel syscall ABI decoder"
+        ],
+        "sha256": "f99eab58f9649c658498fadaf2d60c22d043ca7346af4e9eb9fee20c044e05be"
+      },
+      {
+        "path": "kernel/src/task/syscall/fs.rs",
+        "roles": [
           "user-buffer validation primitives"
         ],
-        "sha256": "7e7f8d6c8a8bd507889b6ee1fd13646b117dc2d0a6003c94fd77ddf7f4976986"
+        "sha256": "256c25961bf2a403be68f4bb364be132df727817be17f898811afbfa45f9de07"
       },
       {
-        "path": "libs/api/src/abi/syscall.rs",
+        "path": "kernel/src/task/syscall/ipc.rs",
+        "roles": [
+          "GetRandom handler"
+        ],
+        "sha256": "0ebc8c9648922e8ac999e21d178fd44a606ef787ef2efc6f802c175b9772acf6"
+      },
+      {
+        "path": "kernel/src/task/syscall/misc.rs",
+        "roles": [
+          "GetRandom output write"
+        ],
+        "sha256": "080a985e488fb363e31c1814ae703ef88a51cc005fd681a5fbf3bd4197448aa6"
+      },
+      {
+        "path": "kernel/src/task/syscall/mod.rs",
+        "roles": [
+          "allowlist gate",
+          "architecture dispatch"
+        ],
+        "sha256": "38fdc74a62e3c3886fa3cc948bad1d53da538445043deecc188ad5d1c2bc5983"
+      },
+      {
+        "path": "libs/abi/src/syscall.rs",
         "roles": [
           "frozen syscall opcode decoder",
           "GetRandom allowlist-bit mapping"
         ],
-        "sha256": "d44616336fb2a18b7320586b7edf85b726cf157b8e2af19861e4fbac74c7d474"
+        "sha256": "034c045fa8b0cea80e6b838e062b38fb2c71f59ab3c661004fbc784cfbce705a"
       },
       {
         "path": "libs/ostd/src/syscall.rs",
         "roles": [
           "typed GetRandom caller wrapper"
         ],
-        "sha256": "2765ff2c5b14c4d7d46ddeca0ce0b16b55f37d9a5b718fa6e4cb42df3acf2a0a"
+        "sha256": "43dc8e3c65d01b886954bac7d15dff04d11cadf37254420efeeee5182c1953cb"
       }
     ],
     "required_paths": [
       "kernel/Cargo.toml",
-      "kernel/src/task/drivers.rs",
-      "kernel/src/task/drivers/virtio_rng.rs",
-      "kernel/src/task/syscall.rs",
-      "libs/api/src/abi/syscall.rs",
+      "kernel/src/dev.rs",
+      "kernel/src/dev/virtio_rng.rs",
+      "kernel/src/task/syscall/decode.rs",
+      "kernel/src/task/syscall/fs.rs",
+      "kernel/src/task/syscall/ipc.rs",
+      "kernel/src/task/syscall/misc.rs",
+      "kernel/src/task/syscall/mod.rs",
+      "libs/abi/src/syscall.rs",
       "libs/ostd/src/syscall.rs"
     ]
   },

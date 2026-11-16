@@ -19,10 +19,14 @@ CLI = ROOT / "scripts/validate-rust-std-promotion.py"
 SCHEMA_DIGEST = hashlib.sha256((ROOT / "scripts/rust_std_promotion/benchmark-run.schema.json").read_bytes()).hexdigest()
 REQUIRED_KERNEL_SECURITY_PATHS = {
     "kernel/Cargo.toml",
-    "kernel/src/task/drivers.rs",
-    "kernel/src/task/drivers/virtio_rng.rs",
-    "kernel/src/task/syscall.rs",
-    "libs/api/src/abi/syscall.rs",
+    "kernel/src/dev.rs",
+    "kernel/src/dev/virtio_rng.rs",
+    "kernel/src/task/syscall/decode.rs",
+    "kernel/src/task/syscall/fs.rs",
+    "kernel/src/task/syscall/ipc.rs",
+    "kernel/src/task/syscall/misc.rs",
+    "kernel/src/task/syscall/mod.rs",
+    "libs/abi/src/syscall.rs",
     "libs/ostd/src/syscall.rs",
 }
 
