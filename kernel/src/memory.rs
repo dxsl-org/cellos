@@ -32,9 +32,6 @@ pub mod stage2;
 /// One allocator for architectural tags (private-root ASIDs, VMIDs, SVM
 /// ASIDs) with a per-owner limit.
 pub(crate) mod tag_pool;
-// Uncalled allocator test runner; never compiled into a release kernel.
-#[cfg(not(cellos_posture = "release"))]
-pub mod tests;
 /// Completion boundary for changed translations before execution or memory reuse.
 pub mod tlb_shootdown;
 pub mod vma;

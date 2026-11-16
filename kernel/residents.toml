@@ -354,7 +354,6 @@
 "kernel/src/memory/stage2.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/stage2_tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/tag_pool.rs" = { category = "A", owner = "memory" }
-"kernel/src/memory/tests.rs" = { category = "test", owner = "memory" }
 "kernel/src/memory/tlb_shootdown.rs" = { category = "A", owner = "memory" }
 "kernel/src/memory/vma.rs" = { category = "A", owner = "memory" }
 
