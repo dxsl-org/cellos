@@ -10,3 +10,8 @@ types = { path = "../types", version = "0.1.0" }
 abi   = { path = "../abi", version = "0.1.0" }
 wire  = { path = "../wire", version = "0.1.0" }
 ostd  = { path = "../ostd", version = "0.2.0" }
+
+[features]
+# Test images only (scripts/x86/make-nic2-iso.sh): a transmitted frame carrying
+# `F18-DIE-pci-BB-DD-F` for the cell's own function makes it exit 1 unquiesced.
+fault-inject = []
