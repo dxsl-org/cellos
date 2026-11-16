@@ -116,3 +116,13 @@ Phase 19 closure.
 - **Deviation.** `vmxnet3` keeps its own DMA area and its 9 `unsafe` lines; `libs/nic-driver` holds the shared ring layout used by the other eight.
 - **Surprise.** The five physical-only NICs (igc, ixgbe, i40e, r8169, bcm57xx) cannot bind on any machine today: no catalog grant, no `services.toml` entry, no kernel Ethernet ID row, and empty device ID lists. Binding them is outside Phase 18 and is recorded as a residual for the S5 captures.
 - **Surprise.** A 610-line RISC-V IOMMU backend shares the remapper interface with VT-d, so VT-d is not the only implementation. Both go behind `DmaRemapper`. The kernel's `AppleDartPt`, used only by its own tests, is a second empty ARM design and is removed with `ArmIommu`.
+- **Decision (2026-11-16, parent).** When the primary NIC route's owner is torn down, `service::NIC_DRIVER` is re-pointed in place to the next live route. Under the first-registration rule alone (`be7240ee0e`), a dead primary that is never restarted (NIC cells are `restart = "never"`) would leave the service unset while another NIC stays bound. Re-pointing only moves the existing row to a driver that already registered, so no authority is granted.
+- **Deviation.** `DeviceRecord` has no `Releasing`/`Quarantined` states. A dead owner's PCI record stays owned until its DMA teardown is acknowledged, which refuses new claims the same way. The DMA domain is the owner tid, not a stored field. Keys reuse `abi::block_route::DeviceKey` (a BDF without a segment); no ABI bytes change.
+- **Deviation.** `libs/nic-driver` sites are not listed in `scripts/unsafe-allowlist.toml`, because F1 scans `cells/` only (`scripts/cellos_sign/policy.py:44`). They go into the step-7 closure baseline: `dma.rs` 2 and `ring.rs` 5 `unsafe` tokens, and no unsafe attributes.
+- **Surprise.** Within `cells/`, NIC `unsafe` falls from 102 to 9 lines, all in vmxnet3's `dma.rs`; 7 more now sit in `libs/nic-driver`. The seven `unsafe impl Send` controllers were unnecessary, because `DmaBuf` and `MmioRegion` hold only integers. The eight migrated cells now carry `#![forbid(unsafe_code)]`.
+- **Surprise.** The migration also fixed latent bugs in the physical-only five:
+  - an RX copy bounded by the device-written length could overrun its page (igc, ixgbe, r8169);
+  - ring-programming errors were ignored (igc, ixgbe, i40e, r8169);
+  - the probe treated an absent device as found;
+  - Shutdown was ignored.
+- **Surprise.** 417 also let `/bin/ahci`, `/bin/xhci` and `/bin/intel-gpu` take the NIC route. It now needs exactly one owned network device. On riscv64/aarch64, `WaitIrq` and the USB one-shot unmask let any driver capability wait on or drain another driver's line; both now need the line's device owner (`d1092034dc`).
