@@ -109,7 +109,7 @@ static REGISTRY: Spinlock<BTreeMap<usize, MmioRegion>> =
     Spinlock::ranked(BTreeMap::new(), crate::sync::rank::RESOURCE_REGISTRY);
 
 /// One owned MMIO window. `owner_tid` is the claiming task: every query
-/// (`lookup_mmio_owner`, WaitIrq, block-route ownership) compares task ids.
+/// (`lookup_mmio_owner`, the `WaitIrq` base check) compares task ids.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct MmioRegion {
     len: usize,
@@ -323,17 +323,6 @@ pub fn is_dwc2_mmio(base: usize, len: usize) -> bool {
                 .checked_add(len)
                 .is_some_and(|end| end <= dwc2_base + dwc2_size)
     })
-}
-
-/// Base of the DWC2 aperture when task `tid` owns a window inside it: the
-/// one device the aperture is, whatever sub-window its driver claimed.
-pub fn dwc2_aperture_owned_by(tid: usize) -> Option<usize> {
-    let (base, _) = dwc2_aperture()?;
-    REGISTRY
-        .lock()
-        .values()
-        .any(|region| region.owner_tid == tid && region.class == CLASS_DWC2)
-        .then_some(base)
 }
 
 /// Request exclusive ownership of a DWC2 MMIO region for a driver cell holding

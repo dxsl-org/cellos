@@ -256,15 +256,6 @@ pub(crate) fn register_mmio_device(base: usize, len: usize, kind: DeviceKind, li
     }
 }
 
-/// PCI function `bdf`'s class code, once the scan or a registration reported it.
-pub(crate) fn pci_class(bdf: u32) -> Option<u32> {
-    let key = pci_key(bdf)?;
-    match DEVICES.lock().find(key)?.kind {
-        DeviceKind::Pci { class } => class,
-        DeviceKind::VirtioSlot | DeviceKind::Dwc2 => None,
-    }
-}
-
 /// Claim PCI function `bdf` for `tid` (the 418/424 handout). Repeated claims
 /// by the owner are idempotent; a live or quarantined owner is never
 /// displaced. A function without a record gets one.
@@ -295,6 +286,28 @@ pub(crate) fn pci_owner(bdf: u32) -> Option<usize> {
 /// DMA export), 434 and 435. The function's DMA domain is its owner's.
 pub(crate) fn owns_pci(tid: usize, bdf: u32) -> bool {
     pci_owner(bdf) == Some(tid)
+}
+
+/// Whether `tid` owns device `key`: a PCI function it claimed through 418/424,
+/// or a VirtIO slot or the DWC2 aperture it claimed through `RequestMmio`.
+/// The ownership proof of a block route (416).
+pub(crate) fn owns(tid: usize, key: DeviceKey) -> bool {
+    DEVICES
+        .lock()
+        .find(key)
+        .is_some_and(|record| record.owned_by(tid))
+}
+
+/// Every device `tid` owns, with its kind.
+pub(crate) fn devices_of(tid: usize) -> alloc::vec::Vec<(DeviceKey, DeviceKind)> {
+    DEVICES
+        .lock()
+        .records
+        .iter()
+        .flatten()
+        .filter(|record| record.owned_by(tid))
+        .map(|record| (record.key, record.kind))
+        .collect()
 }
 
 /// Every PCI function `tid` owns.

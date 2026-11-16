@@ -296,12 +296,12 @@ pub(super) fn register_nic_driver(caller_id: usize) -> SyscallResult {
 /// ownership of the named device (`NotOwner` → `FileNotFound`), then the route
 /// slot under `ROLE_PUBLICATION` (a refusal is `PermissionDenied`).
 ///
-/// Ownership is read without SCHEDULER held: `request_mmio` takes the MMIO
-/// registry before SCHEDULER, so the opposite order here could deadlock. Both
-/// owner tables key the claim by the claiming task id (`RequestMmio` records
-/// `CellId(tid)`), and a claim is released only at that task's retirement, so
-/// it still holds when the caller is found live again under SCHEDULER, where
-/// its `(cell, generation)` is read and the slot is published so exit teardown
+/// Ownership is read from the device record without SCHEDULER held. Both
+/// kinds key the claim by the claiming task
+/// id (418/424 for a PCI function, `RequestMmio` for a VirtIO slot), and a
+/// claim is released only at that task's retirement, so it still holds when
+/// the caller is found live again under SCHEDULER, where its
+/// `(cell, generation)` is read and the slot is published so exit teardown
 /// cannot interleave. No service-registry entry is written.
 pub(super) fn register_block_device_route(
     caller_id: usize,
@@ -309,7 +309,7 @@ pub(super) fn register_block_device_route(
     id: usize,
     reserved: (usize, usize),
 ) -> Result<usize, SyscallError> {
-    use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    use abi::block_route::DeviceKey;
     let key = u16::try_from(kind)
         .ok()
         .filter(|_| reserved == (0, 0))
@@ -329,16 +329,7 @@ pub(super) fn register_block_device_route(
         return Err(SyscallError::PermissionDenied);
     }
 
-    let owned = match key.kind {
-        BLOCK_DEVICE_PCI => {
-            crate::resource_registry::owner_of_bdf(key.id as u32) == Some(caller_id)
-        }
-        BLOCK_DEVICE_MMIO => {
-            crate::resource_registry::lookup_mmio_owner(key.id as usize) == Some(caller_id)
-        }
-        _ => false,
-    };
-    if !owned {
+    if !crate::dev::ownership::owns(caller_id, key) {
         return Err(SyscallError::FileNotFound);
     }
 

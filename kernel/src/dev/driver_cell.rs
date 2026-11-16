@@ -17,8 +17,8 @@
 
 use crate::sync::Spinlock;
 use abi::block_route::{
-    DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION,
-    FLAG_PROVIDER_LIVE, MAX_BLOCK_ROUTES,
+    DeviceKey, ViBlockRouteV1, BLOCK_DEVICE_PCI, BLOCK_ROUTE_VERSION, FLAG_PROVIDER_LIVE,
+    MAX_BLOCK_ROUTES,
 };
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -122,43 +122,35 @@ pub(crate) enum NicDeviceError {
 /// The one network device `tid` owns, as a route key: a PCI function of
 /// class `02:00:00` it claimed through 418/424, a VirtIO MMIO slot it claimed
 /// whose `device_id` is network, or the DWC2 aperture (the RPi3 LAN9514 sits
-/// behind it).
+/// behind it). Read from the device records.
 ///
-/// Syscall context only, without `SCHEDULER` held (the ownership tables are
-/// taken here; `request_mmio` takes the MMIO registry before `SCHEDULER`).
+/// Syscall context only, without `SCHEDULER` held (`DEVICES` ranks after it).
 pub(crate) fn owned_network_device(tid: usize) -> Result<DeviceKey, NicDeviceError> {
+    use crate::dev::ownership::DeviceKind;
     let mut found = None;
     let mut count = 0usize;
-    let mut note = |key: Option<DeviceKey>| {
-        if let Some(key) = key {
+    for (key, kind) in crate::dev::ownership::devices_of(tid) {
+        let network = match kind {
+            DeviceKind::Pci { class } => class == Some(CLASS_ETHERNET),
+            // SAFETY: syscall context, never an ISR. A VirtIO slot record is
+            // keyed by one of the kernel's enumerated, identity-mapped VirtIO
+            // MMIO bases (`dev::init`), and this TID owns it, so it claimed
+            // the slot via `RequestMmio` before we read the read-only
+            // `device_id` register at offset 0x8.
+            DeviceKind::VirtioSlot => {
+                let device_id = unsafe {
+                    core::ptr::read_volatile(
+                        (key.id as usize + VIRTIO_DEVICE_ID_OFFSET) as *const u32,
+                    )
+                };
+                device_id == VIRTIO_DEVICE_ID_NETWORK
+            }
+            DeviceKind::Dwc2 => true,
+        };
+        if network {
             count += 1;
             found.get_or_insert(key);
         }
-    };
-    for bdf in crate::resource_registry::bdfs_owned_by(tid) {
-        let network = crate::dev::ownership::pci_class(bdf) == Some(CLASS_ETHERNET);
-        if network {
-            note(DeviceKey::new(BLOCK_DEVICE_PCI, bdf as u64));
-        }
-    }
-    for slot in crate::dev::virtio_common::virtio_slots() {
-        if crate::resource_registry::lookup_mmio_owner(slot.base) != Some(tid) {
-            continue;
-        }
-        // SAFETY: syscall context, never an ISR. `virtio_slots()` yields the
-        // kernel's enumerated, identity-mapped VirtIO MMIO bases, and the
-        // ownership check above proves this TID already claimed the slot via
-        // `RequestMmio` before we inspect the read-only `device_id` register
-        // at offset 0x8.
-        let device_id = unsafe {
-            core::ptr::read_volatile((slot.base + VIRTIO_DEVICE_ID_OFFSET) as *const u32)
-        };
-        if device_id == VIRTIO_DEVICE_ID_NETWORK {
-            note(DeviceKey::new(BLOCK_DEVICE_MMIO, slot.base as u64));
-        }
-    }
-    if let Some(base) = crate::resource_registry::dwc2_aperture_owned_by(tid) {
-        note(DeviceKey::new(BLOCK_DEVICE_MMIO, base as u64));
     }
     match (count, found) {
         (1, Some(device)) => Ok(device),
@@ -806,6 +798,28 @@ mod tests {
             alloc::format!("{}", DeviceName(mmio(0x1000_1000))),
             "mmio-10001000"
         );
+    }
+
+    /// 417's key is the caller's one owned network device, from its record:
+    /// a non-network function does not count, a second network one refuses.
+    #[test]
+    fn the_nic_route_key_is_the_one_owned_network_device() {
+        use super::{owned_network_device, NicDeviceError, CLASS_ETHERNET};
+        use crate::dev::ownership::{claim_pci, register_pci_function, release_pci_for};
+        const TID: usize = 0x5E01;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        register_pci_function(0x5E0, CLASS_ETHERNET);
+        register_pci_function(0x5E1, 0x01_06_01);
+        register_pci_function(0x5E2, CLASS_ETHERNET);
+        assert_eq!(owned_network_device(TID), Err(NicDeviceError::None));
+        assert!(claim_pci(0x5E1, TID));
+        assert_eq!(owned_network_device(TID), Err(NicDeviceError::None));
+        assert!(claim_pci(0x5E0, TID));
+        assert_eq!(owned_network_device(TID), Ok(pci(0x5E0)));
+        assert!(claim_pci(0x5E2, TID));
+        assert_eq!(owned_network_device(TID), Err(NicDeviceError::Several));
+        release_pci_for(TID);
+        assert_eq!(owned_network_device(TID), Err(NicDeviceError::None));
     }
 
     #[test]

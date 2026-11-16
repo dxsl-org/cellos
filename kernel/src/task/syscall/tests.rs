@@ -876,8 +876,8 @@ fn register_block_driver_binds_only_the_callers_owned_device_route() {
         );
         assert!(claim_bdf_owner(BDF as u32, tid));
         assert!(claim_bdf_owner(FOREIGN_BDF as u32, 2));
-        // `RequestMmio` records the claiming task id as the window owner.
-        assert!(crate::resource_registry::request_mmio_unchecked(4, BASE, 0x1000).is_ok());
+        // `RequestMmio` records the claiming task id as the slot's owner.
+        crate::dev::ownership::test_own_mmio(4, BASE, 0x2E);
         let empty = block_routes_snapshot();
 
         for (kind, id, reserved) in [
