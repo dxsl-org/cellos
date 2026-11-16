@@ -139,10 +139,33 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 
 // ─── Device init ──────────────────────────────────────────────────────────────
 
+/// Discovery rounds (one yield apart) while a network slot is still held,
+/// before concluding none is free: a restarted cell can probe before its
+/// predecessor's claim is reaped. The bound the PCI driver cells use.
+const FIND_ATTEMPTS: usize = 200;
+
 /// Probe all VirtIO MMIO slots and initialise the first Network device found.
 ///
-/// Returns `None` if no VirtIO NIC is present (graceful exit on non-VirtIO platforms).
+/// A network slot another Cell still holds is retried, a yield apart, for at
+/// most [`FIND_ATTEMPTS`] rounds; with no network slot at all the scan ends
+/// after one round. Returns `None` if no VirtIO NIC is claimable (graceful
+/// exit on non-VirtIO platforms).
 pub fn find_and_init_net() -> Option<NetDevice> {
+    for _ in 0..FIND_ATTEMPTS {
+        let mut held = false;
+        if let Some(device) = init_first_free(&mut held) {
+            return Some(device);
+        }
+        if !held {
+            break;
+        }
+        ostd::task::yield_now();
+    }
+    None
+}
+
+/// One pass over the slots; sets `held` when a network slot's claim failed.
+fn init_first_free(held: &mut bool) -> Option<NetDevice> {
     for (base, irq) in virtio_slot_iter() {
         // VirtIO device of another type — never claim it (the claim is
         // exclusive) nor create an MmioTransport on it (that resets it).
@@ -153,7 +176,8 @@ pub fn find_and_init_net() -> Option<NetDevice> {
 
         // Claim exclusive MMIO ownership via the kernel resource registry.
         if ostd::mmio::request_region(base, MMIO_SLOT_SIZE).is_err() {
-            // Already owned by another Cell — skip.
+            // Owned by another Cell, live or awaiting reap.
+            *held = true;
             continue;
         }
 

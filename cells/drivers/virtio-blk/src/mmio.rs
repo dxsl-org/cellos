@@ -129,13 +129,35 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 
 // ─── Device init ──────────────────────────────────────────────────────────────
 
+/// Discovery rounds (one yield apart) while a free-looking block slot is still
+/// held, before concluding none is free: a restarted cell can probe before its
+/// predecessor's claim is reaped. The bound the PCI driver cells use.
+const FIND_ATTEMPTS: usize = 200;
+
 /// Probe all VirtIO MMIO slots and initialise the first FREE Block device.
 ///
 /// A block device already showing `DRIVER_OK` is owned by the in-kernel
 /// virtio_blk driver (boot disk) — it is skipped so this cell never resets the
-/// live device during the migration window (phase 02). Returns `None` when no
+/// live device during the migration window (phase 02). A block slot another
+/// Cell still holds is retried, a yield apart, for at most [`FIND_ATTEMPTS`]
+/// rounds; otherwise the scan ends after one round. Returns `None` when no
 /// free block device is present (graceful exit).
 pub fn find_and_init_blk() -> Option<BlkDevice> {
+    for _ in 0..FIND_ATTEMPTS {
+        let mut held = false;
+        if let Some(device) = init_first_free(&mut held) {
+            return Some(device);
+        }
+        if !held {
+            break;
+        }
+        ostd::task::yield_now();
+    }
+    None
+}
+
+/// One pass over the slots; sets `held` when a block slot's claim failed.
+fn init_first_free(held: &mut bool) -> Option<BlkDevice> {
     for (base, _irq) in virtio_slot_iter() {
         let Ok(identity) = sys_probe_virtio_mmio(base) else {
             continue;
@@ -152,6 +174,8 @@ pub fn find_and_init_blk() -> Option<BlkDevice> {
 
         // Claim exclusive MMIO ownership via the kernel resource registry.
         if ostd::mmio::request_region(base, MMIO_SLOT_SIZE).is_err() {
+            // Owned by another Cell, live or awaiting reap.
+            *held = true;
             continue;
         }
 
