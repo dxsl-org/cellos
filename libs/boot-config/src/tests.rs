@@ -256,12 +256,37 @@ fn structured_argv_exact_boundary_includes_framing() {
 fn duplicate_names_paths_and_service_ids_within_file_are_rejected() {
     for body in [
         entry("a") + &entry("a"),
-        entry("a") + "[[cells]]\nname='b'\npath='/bin/A'",
+        entry("a") + "service_id=2\n[[cells]]\nname='b'\npath='/bin/A'",
+        entry("a") + "[[cells]]\nname='b'\npath='/bin/A'\nservice_id=2",
         entry("a") + "service_id=2\n" + &entry("b") + "service_id=2",
     ] {
         assert!(matches!(cells(&body), Err(ConfigError::Duplicate { .. })));
     }
     assert!(cells(&(entry("a") + &entry("b"))).is_ok());
+}
+
+#[test]
+fn one_program_may_run_once_per_device_when_it_publishes_no_service() {
+    // Two NICs of one model: one driver instance per function.
+    let body = "[[cells]]\nname='nic0'\npath='/bin/e1000e'\nrestart='on-failure'\n\
+                [[cells]]\nname='nic1'\npath='/bin/E1000E'\nrestart='on-failure'";
+    let config = valid(body);
+    assert_eq!(config.cells.len(), 2);
+    assert_eq!(
+        ordered_indices(&config, &CellConfig::default()).unwrap(),
+        vec![0, 1]
+    );
+    // Across stages too, and names stay unique.
+    let autoload = valid("[[cells]]\nname='nic2'\npath='/bin/e1000e'");
+    assert!(validate_plan(&config, &autoload).is_ok());
+    let renamed = valid("[[cells]]\nname='nic0'\npath='/bin/e1000e'");
+    assert_eq!(
+        validate_plan(&config, &renamed),
+        Err(ConfigError::Duplicate {
+            field: "name",
+            name: String::from("nic0")
+        })
+    );
 }
 
 #[test]

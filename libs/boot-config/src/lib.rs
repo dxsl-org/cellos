@@ -353,10 +353,16 @@ fn validate_local(config: &CellConfig) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Names and service IDs identify one entry each. A program path may repeat
+/// only between entries that publish no service, so one driver program can run
+/// one instance per device (each instance claims a different function); a
+/// service has one provider, so its program stays unique.
 fn check_unique(earlier: &CellSpec, cell: &CellSpec) -> Result<(), ConfigError> {
     let field = if earlier.name == cell.name {
         "name"
-    } else if earlier.path.eq_ignore_ascii_case(&cell.path) {
+    } else if earlier.path.eq_ignore_ascii_case(&cell.path)
+        && (earlier.service_id.is_some() || cell.service_id.is_some())
+    {
         // BootFS is FAT: case differences cannot create independent binaries.
         "path"
     } else if earlier.service_id.is_some() && earlier.service_id == cell.service_id {
