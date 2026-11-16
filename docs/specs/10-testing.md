@@ -20,13 +20,20 @@ Trong mô hình Single Address Space, một lỗi nhỏ có thể phá hủy to�
       Không có công cụ "SASan" độc lập; mọi negative test phải gắn với cơ chế enforcement thật.
 
 ## 3. Fault Injection Cell (Kẻ phá hoại)
+
+> **Trạng thái (2026-11-16): chưa triển khai.** Không có Fault Injection Cell chung nào trong cây. Những gì đang có là các feature `fault-inject` riêng từng crate, không bật trong image production: `cells/drivers/ahci` (`src/fault_inject.rs`, witness block-outcome và driver-death), `cells/drivers/nvme` (feature trong `Cargo.toml`), `libs/nic-driver` (`src/fault_inject.rs`, witness hai NIC cho `tests/integration/tests/nic2-x86.rs`) và `cells/demos/recovery-demo` (witness crash/restore của Phase 09B, build trong `scripts/gen-disk-ci.sh`). Quota được kiểm bởi self-test kernel (ví dụ `kernel/src/task/thread_quota_selftest.rs`) và lane `vfs-quota`, không bởi một Cell chiếm 99% RAM. Watchdog của scheduler (`kernel/src/sched/scheduler.rs:47-64`) chỉ giết task chiếm CPU quá ngân sách; không có watchdog phát hiện deadlock và không có Cell nào gây deadlock để thử nó.
+
 Một Cell đặc biệt được thiết kế để:
 * Gây fault/panic trong Cell để kiểm tra terminate → reap → notify → supervisor policy.
 * Chiếm dụng 99% RAM để test cơ chế **Memory Quota**.
 * Gây ra **Deadlock** để test bộ phận giám sát (Watchdog).
 
 ## 4. Hardware-in-the-loop (HITL)
+
+> **Trạng thái (2026-11-16): chưa triển khai.** Không có phép đo độ trễ từ IRQ thật đến `Waker` của Driver Cell, và không có phép đo năng lượng Tickless Idle. Trần bằng chứng hiện tại là host và QEMU (TCG, KVM); không có phần cứng vật lý. Gần nhất là `kernel/src/task/rt_wake_selftest.rs`: nó kiểm quyết định preemption khi đánh thức sender RT trên đúng hart đích, một cách chính xác chứ không đo thời gian.
+
 Đặc biệt quan trọng cho Robot:
+
 * Kiểm tra độ trễ phản hồi (Latency) từ lúc có IRQ thực tế đến khi Driver Cell nhận được `Waker`.
 * Kiểm tra việc tiêu thụ năng lượng của các Task trong trạng thái **Tickless Idle**.
 
