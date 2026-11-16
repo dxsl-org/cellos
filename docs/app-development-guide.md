@@ -115,7 +115,7 @@ All Cells (regardless of tier) must respect the **8 Coding Laws** in [code-stand
 |-----|------|
 | **Law 2** | Owned buffers (`Box<[u8]>`) across async; never `&mut [u8]`. |
 | **Law 4** | Cells forbid `unsafe` (no exceptions for `#[no_mangle] main` in app_entry!). |
-| **Law 5** | No `mod.rs` files — use `foo.rs` parallel to `foo/`. |
+| **Law 5** | Module files: prefer `foo.rs` beside `foo/` for new modules; `foo/mod.rs` also exists and no lint checks it (corrected 2026-11-16). |
 | **Law 8** | Implement `Drop` for all resources; no process cleanup. |
 
 ---

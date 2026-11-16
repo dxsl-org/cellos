@@ -75,7 +75,10 @@ For detailed setup help — including a **Common Errors table** — see
    never hard-code 32/64-bit pointer sizes.
 4. **No `unsafe` in Cells** — `#![forbid(unsafe_code)]` in every Cell crate.
    Kernel and HAL `unsafe` must have `// SAFETY:` comments.
-5. **No `mod.rs`** — use `foo.rs` parallel to `foo/` directory.
+5. **Module files** — both `foo.rs` beside `foo/` and `foo/mod.rs` exist in the tree, and no
+   lint checks the form (corrected 2026-11-16; the old "No `mod.rs`" rule was never enforced).
+   Prefer `foo.rs` for new modules and match the form already used in the directory
+   ([code-standards Law 5](docs/code-standards.md#law-5-module-structure)).
 6. **`Vi` prefix for public types** — `ViFileSystem`, `ViDriver`, `ViError`.
 7. **`dyn Trait` at boundaries** — `Arc<dyn ViDriver + Send + Sync>` for shared
    resources; `Box` for single-owner.
@@ -210,7 +213,7 @@ Reviewers check these before approving:
 - [ ] `cargo check --workspace` clean
 - [ ] `cargo clippy` clean (no new warnings)
 - [ ] Tests added or reason given
-- [ ] No `mod.rs` files introduced
+- [ ] New modules follow the directory's existing module-file form (`foo.rs` preferred)
 - [ ] Law 2 (no `&mut [u8]` across async boundaries) obeyed
 
 ---

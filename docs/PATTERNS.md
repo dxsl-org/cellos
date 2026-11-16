@@ -35,7 +35,7 @@ See [code-standards.md](code-standards.md) for full enforcement rules.
 | 2 | No `&mut [u8]` across async boundaries — use `Box<[u8]>` |
 | 3 | Use `VAddr`/`PAddr`, never raw `u64` for addresses |
 | 4 | `#![forbid(unsafe_code)]` in all Cells |
-| 5 | No `mod.rs` — use `foo.rs` parallel to `foo/` |
+| 5 | Module files: `foo.rs` beside `foo/` preferred for new modules; `foo/mod.rs` also exists and no lint checks it (corrected 2026-11-16) |
 | 6 | `Vi` prefix for public traits and core types |
 | 7 | `dyn Trait + Send + Sync` for polymorphism |
 | 8 | Implement `Drop` for all resources |

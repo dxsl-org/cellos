@@ -513,7 +513,7 @@ GOLDEN RULES (read CLAUDE.md)
 2. Owned buffers for async (not &mut [u8])
 3. Multi-arch aware (use VAddr, PAddr, not u64)
 4. Cells forbid unsafe (except kernel)
-5. No mod.rs files (use foo.rs + foo/ dir)
+5. Module files: prefer foo.rs + foo/ dir; foo/mod.rs also exists, no lint (2026-11-16)
 6. Vi prefix for traits (ViFileSystem, ViDriver)
 7. Trait objects for polymorphism (dyn Trait)
 8. Implement Drop for resources
