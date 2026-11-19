@@ -98,9 +98,22 @@ fn quickjs_engine_cell_runs_real_javascript_in_tier2() {
             panic!("Ocel failed to start: {e}\n--- serial output ---\n{}", qemu.dump())
         });
     settle();
-    require_marker(&qemu,
+    // A first navigation installs in Reader mode, which runs no scripts (Ocel's
+    // reader fast path, 3471028bc8). Ctrl+R leaves it and F5 reloads as a web page.
+    assert!(qemu.send_qemu_chord("ctrl", "r"), "Ctrl+R not delivered");
+    settle();
+    assert!(qemu.send_qemu_key("f5"), "F5 not delivered");
+    qemu.wait_for(
         "[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)",
-        "demand-loaded QuickJS must execute in a private address space");
+        EVENT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "demand-loaded QuickJS must execute in a private address space: {e}\n--- serial output ---\n{}",
+            qemu.dump()
+        )
+    });
+    let _ = qemu.wait_for(COMPUTED_TITLE, EVENT_TIMEOUT);
     require_marker(
         &qemu,
         "[ocel-quickjs] quickjs ",

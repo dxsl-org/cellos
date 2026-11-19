@@ -135,11 +135,22 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
         assert!(!qemu.output_contains("[domain] admitted cell 'ocel-js'"),
             "Missing QuickJS must never activate a statement matcher:\n{}", qemu.dump());
     } else {
-        require_marker(
-            &qemu,
+        // A first navigation installs in Reader mode, which runs no scripts (Ocel's
+        // reader fast path, 3471028bc8). Ctrl+R leaves it and F5 reloads as a web page.
+        assert!(qemu.send_qemu_chord("ctrl", "r"), "Ctrl+R not delivered");
+        settle();
+        assert!(qemu.send_qemu_key("f5"), "F5 not delivered");
+        qemu.wait_for(
             "[domain] admitted cell 'ocel-quickjs' to Tier 2 Paged Domain (SATP isolation)",
-            "script parsing must execute in an isolated Tier 2 engine",
-        );
+            EVENT_TIMEOUT,
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "script parsing must execute in an isolated Tier 2 engine: {e}\n--- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+        let _ = qemu.wait_for("[ocel] dom title: sum=10 doubled=2, 4, 6", EVENT_TIMEOUT);
         require_marker(
             &qemu,
             "[ocel] dom title: sum=10 doubled=2, 4, 6",
@@ -161,7 +172,9 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
     let wx = win_x as usize;
     let wy = win_y as usize;
     assert_region_not_black(&qemu, frame_path, "toolbar", [wx + 10, wy + 20, wx + 300, wy + 21]);
-    assert_region_not_black(&qemu, frame_path, "tab bar", [wx + 10, wy + 50, wx + 200, wy + 51]);
+    // Ocel's own tab strip is gone (TABBAR_HEIGHT = 0): its tabs are the
+    // compositor's Cell Tab, 28px above the content.
+    assert_region_not_black(&qemu, frame_path, "Cell Tab", [wx + 10, wy - 14, wx + 200, wy - 13]);
     assert_region_not_black(
         &qemu,
         frame_path,
@@ -194,18 +207,13 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
     settle();
     require_marker(&qemu, "[ocel] search next: ", "Enter must cycle to the next match");
 
-    // ── 7. Pointer: click the tab bar's [+] button ──────────────────────────
-    // Window-local (166, 58) is inside the [+] hit box (plus_x = 156, y = 44..72).
-    // The virtio-tablet path passes the injected coordinates through unscaled
-    // (cells/services/input/src/mouse_state.rs `apply_abs`), and the compositor
-    // routes pointer events in those same units, so the value to inject is the
-    // screen pixel of the target — the same convention the ViUI pointer lanes use.
-    qemu.send_qemu_mouse_abs((wx + 166) as u32, (wy + 58) as u32);
-    settle();
-    qemu.send_qemu_mouse_click();
+    // ── 7. Keyboard: Ctrl+T opens a second document tab ─────────────────────
+    // Ocel's tabs are compositor-native session tabs (ADR-0027 Phase 06), so its
+    // window has no [+] button of its own; Ctrl+T is the viewer's new-tab command.
+    assert!(qemu.send_qemu_chord("ctrl", "t"), "Ctrl+T not delivered");
     qemu.wait_for("[ocel] tab 2 active: ", EVENT_TIMEOUT).unwrap_or_else(|e| {
         panic!(
-            "clicking [+] did not open a tab: {e}\n--- serial output ---\n{}",
+            "Ctrl+T did not open a tab: {e}\n--- serial output ---\n{}",
             qemu.dump()
         )
     });
@@ -218,6 +226,6 @@ fn ocel_viewer_runs_scripts_in_tier2_and_answers_input() {
 
     println!(
         "[ocel-browser test] the Tier 2 engine cell served the fixture script, search found \
-         {matches} match(es) for {FIXTURE_TERM:?}, and the tab bar answered a click."
+         {matches} match(es) for {FIXTURE_TERM:?}, and Ctrl+T opened a second tab."
     );
 }

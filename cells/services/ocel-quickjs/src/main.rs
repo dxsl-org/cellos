@@ -67,6 +67,8 @@ extern "C" fn main() -> usize {
 fn cell_main() {
     #[cfg(target_os = "none")]
     init_custom_heap();
+    // `[ocel-quickjs] quickjs <version>` is the lanes' runtime-created marker.
+    ostd::io::print("[ocel-quickjs] ");
     ostd::io::print(&engine::engine_identity());
     ostd::io::println(" engine ready (Tier 2)");
 

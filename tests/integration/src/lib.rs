@@ -2637,6 +2637,29 @@ impl QemuRunner {
         true
     }
 
+    /// Inject `modifier`+`key` (qcodes, e.g. `"ctrl"`, `"r"`) as one QMP event batch:
+    /// modifier down, key down, key up, modifier up.
+    pub fn send_qemu_chord(&mut self, modifier: &str, key: &str) -> bool {
+        let event = |code: &str, down: bool| {
+            format!(
+                r#"{{"type":"key","data":{{"down":{down},"key":{{"type":"qcode","data":"{code}"}}}}}}"#
+            )
+        };
+        let command = format!(
+            r#"{{"execute":"input-send-event","arguments":{{"events":[{},{},{},{}]}}}}"#,
+            event(modifier, true),
+            event(key, true),
+            event(key, false),
+            event(modifier, false),
+        );
+        eprintln!("[test] QMP input-send-event chord={modifier}+{key}");
+        let ok = self.send_qmp_command(&command);
+        if !ok {
+            eprintln!("[test] WARNING: QMP chord event dropped");
+        }
+        ok
+    }
+
     /// Wait for QEMU to exit on its own (e.g. after a guest `shutdown` command).
     ///
     /// Returns `true` if the process exited within `timeout_secs`. On timeout the

@@ -81,7 +81,7 @@ impl Tab {
                 self.doc.apply_mutations_checked(mutations)?;
                 for mutation in mutations {
                     if let dom_arena::DomMutation::SetDocumentTitle { title } = mutation {
-                        self.title = title.clone();
+                        self.set_script_title(title.clone());
                     }
                 }
             }
@@ -173,7 +173,7 @@ impl Tab {
             });
             for mutation in mutations {
                 if let dom_arena::DomMutation::SetDocumentTitle { title } = mutation {
-                    self.title = title;
+                    self.set_script_title(title);
                 }
             }
             if layout_changed {
@@ -211,6 +211,16 @@ impl Tab {
             }
         }
         Ok(changed)
+    }
+
+    /// Install a title the script engine set. The serial line is the evidence the
+    /// Ocel QEMU lanes read (tests/fixtures/ocel-js-demo.html): the mutation crossed
+    /// the Tier 2 IPC boundary and reached the viewer.
+    fn set_script_title(&mut self, title: String) {
+        if !title.is_empty() {
+            ostd::io::println(&alloc::format!("[ocel] dom title: {title}"));
+        }
+        self.title = title;
     }
 
     pub(crate) fn pump_browser_frame(
