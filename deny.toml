@@ -35,6 +35,22 @@ ignore = [
   # workspace on p256 0.14 and is checked by its own CI step. Remove this entry
   # once embedded-tls moves to p256 0.14. Review by 2027-01-31.
   { id = "RUSTSEC-2026-0387", reason = "workspace p256 is verify-only plus ephemeral TLS ECDHE in embedded-tls 0.19 (no p256 0.14 release); long-term signer silo-guest is on the patched line" },
+  # heapless 0.8.0 (ostd, service-net, and smoltcp 0.11, whose 0.13+ releases move to
+  # heapless 0.9); the 0.9 line is on the patched 0.9.4. Each advisory below is in an
+  # API nothing in the workspace calls: the workspace and smoltcp 0.11 use only Vec,
+  # String, Deque (no try_from, no make_contiguous) and LinearMap. 0577 needs a
+  # panicking element Drop to unwind through Deque::clear or vec::IntoIter::drop;
+  # every profile and Cellos target is panic = "abort". Remove all nine once smoltcp
+  # (0.13+) and ostd/service-net move to heapless 0.9. Review by 2027-01-31.
+  { id = "RUSTSEC-2026-0574", reason = "heapless 0.8 SortedLinkedList::FindMutView unused in the workspace" },
+  { id = "RUSTSEC-2026-0575", reason = "heapless 0.8 spsc unused in the workspace" },
+  { id = "RUSTSEC-2026-0576", reason = "heapless 0.8 IndexMap unused in the workspace" },
+  { id = "RUSTSEC-2026-0577", reason = "heapless 0.8 unwinding-drop paths unreachable: every profile and target is panic=abort" },
+  { id = "RUSTSEC-2026-0578", reason = "heapless 0.8 SortedLinkedList unused in the workspace" },
+  { id = "RUSTSEC-2026-0579", reason = "heapless 0.8 Deque TryFrom unused (smoltcp 0.11 and the workspace never call it)" },
+  { id = "RUSTSEC-2026-0580", reason = "heapless 0.8 pool/treiber stack unused in the workspace" },
+  { id = "RUSTSEC-2026-0581", reason = "heapless 0.8 Deque::make_contiguous unused (smoltcp 0.11 and the workspace never call it)" },
+  { id = "RUSTSEC-2026-0582", reason = "heapless 0.8 IndexMap unused in the workspace" },
 ]
 
 [licenses]

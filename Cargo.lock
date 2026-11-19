@@ -1351,7 +1351,7 @@ checksum = "a69dedd701da44b0536442edf09c81a64b0ab97a7a4a5e3d1971f00027cbc63d"
 dependencies = [
  "const-oid 0.10.2",
  "der_derive",
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "time",
 ]
 
@@ -2042,7 +2042,7 @@ dependencies = [
  "embedded-io 0.7.1",
  "embedded-io-async",
  "generic-array",
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "hkdf",
  "hmac 0.12.1",
  "p256",
@@ -2456,9 +2456,9 @@ dependencies = [
 
 [[package]]
 name = "heapless"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
+checksum = "411fdef4df93751117bd9ef8caa0e7f99c65dafec5bd84313eb8e2fdd75e32f2"
 dependencies = [
  "hash32",
  "stable_deref_trait",
@@ -4104,7 +4104,7 @@ dependencies = [
  "ctr 0.10.1",
  "digest 0.11.3",
  "ed25519-dalek 3.0.0",
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "hmac 0.13.0",
  "log",
  "poly1305 0.9.1",
@@ -4654,7 +4654,7 @@ checksum = "7302ac74a033bf17b6e609ceec0f891ca9200d502d31f02dc7908d3d98767c9d"
 name = "vissh"
 version = "0.1.0"
 dependencies = [
- "heapless 0.9.3",
+ "heapless 0.9.4",
  "sha2 0.11.1",
  "sunset",
  "zeroize",

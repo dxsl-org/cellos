@@ -16,4 +16,15 @@ ignore = [
     # release); the long-term signer silo-guest is on the patched line. Same entry
     # and review date (2027-01-31) as deny.toml.
     "RUSTSEC-2026-0387",
+    # heapless 0.8.0 unsound advisories: same entries, analysis and review date as
+    # deny.toml (unused APIs; panic = "abort" everywhere for 0577).
+    "RUSTSEC-2026-0574",
+    "RUSTSEC-2026-0575",
+    "RUSTSEC-2026-0576",
+    "RUSTSEC-2026-0577",
+    "RUSTSEC-2026-0578",
+    "RUSTSEC-2026-0579",
+    "RUSTSEC-2026-0580",
+    "RUSTSEC-2026-0581",
+    "RUSTSEC-2026-0582",
 ]
