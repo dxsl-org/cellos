@@ -963,9 +963,9 @@ attrs = 0
 
 [[thirdparty]]
 name = "heapless"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-unsafe = 283
+unsafe = 334
 attrs = 0
 
 [[thirdparty]]
