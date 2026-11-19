@@ -43,6 +43,8 @@ Thumbs.db
 
 # Logs
 *.log
+# Ledger and spec anchors cite these by path; CI must see them.
+!docs/evidence/*.log
 *_log.txt
 *_error.txt
 check_*.txt
