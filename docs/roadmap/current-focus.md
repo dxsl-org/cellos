@@ -96,6 +96,13 @@ under the rules below; this list admits nothing by itself.
 7. **Physical qualification.** No result above has run on physical hardware. The
    [HCL](../hardware-compatibility-list.md) has no physical x86 row, and every promotion stays
    gated on exact-device evidence (see § Evidence and security).
+8. **Pushed CI cycle (2026-11-19).** `main` was pushed and its CI run failed 12 jobs. The CI
+   repair entry in the [changelog](../project-changelog.md) records the fixes. Owner items left:
+   - `B-AARCH64-SEMHOSTING` passed under Issue #47, but its resolution expired on 2026-10-15
+     (30-day TTL), so `validate-app-tier-acceptance.py` fails. Renewing it needs a fresh
+     `scripts/qemu-aarch64-test-hooks.sh` raw log and a new `blocker_resolution` event approved
+     by the reviewer on GitHub.
+   - Jobs that `needs: build` were skipped in that run, so their results arrive with the next run.
 
 ### Current admission: contract cutover and execution freeze
 
