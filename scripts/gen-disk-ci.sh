@@ -371,6 +371,8 @@ add_kfs "$REL/bench"                "/bin/bench"
 add_kfs "$REL/bench-probe"          "/bin/bench-probe"
 add_kfs "$REL/hypha-core"           "/bin/hypha"
 add_kfs "$REL/hypha-tool-spawn"     "/bin/tool-spawn"
+# Hypha's llm-gateway child edge carries NET_CLIENT, so the ELF-route fallback refuses it.
+add_kfs "$REL/hypha-llm-gateway"    "/bin/llm-gateway"
 # The cellbox foreground launch (`PrepareChild`, path route) resolves only
 # through the kernel loader: VIFS1 and the P2 cell table, which the kernel cannot
 # read on QEMU (no kernel block device). A disk-only program therefore fails with

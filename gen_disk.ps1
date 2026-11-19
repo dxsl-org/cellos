@@ -574,6 +574,8 @@ if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/b
 # down, on Hypha's own child edge.
 if (Test-Path $hypha_core_bin)        { $kfs_args += @($hypha_core_bin,  "/bin/hypha") }
 if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/bin/tool-spawn") }
+# Hypha's llm-gateway child edge carries NET_CLIENT, so the ELF-route fallback refuses it.
+if (Test-Path $hypha_llm_bin)         { $kfs_args += @($hypha_llm_bin,   "/bin/llm-gateway") }
 # Shell foreground launches resolve only through the kernel loader (VIFS1/P2),
 # so a disk-only program fails with "foreground preparation failed: Io". httpd's
 # edge carries NET_LISTENER, so the ELF-route fallback refuses it and VIFS1 is its
