@@ -245,7 +245,7 @@
 <a href=#245 id=245 data-nosnippet>245</a>    /// co-grant `data | (lfs&lt;&lt;1) | (lfs&lt;&lt;2)` (NOT a 1:1 copy) so the VFS service
 <a href=#246 id=246 data-nosnippet>246</a>    /// keeps its P5 range after intersection. The H-ext gate is baked in here so
 <a href=#247 id=247 data-nosnippet>247</a>    /// `hypervisor` can never be held on a CPU lacking H-ext.
-<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">pub fn </span>from_manifest(m: <span class="kw-2">&amp;</span>api::manifest::CellManifest) -&gt; CapSet {
+<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">pub fn </span>from_manifest(m: <span class="kw-2">&amp;</span>abi::manifest::CellManifest) -&gt; CapSet {
 <a href=#249 id=249 data-nosnippet>249</a>        <span class="kw">let </span>hv = m.has_hypervisor()
 <a href=#250 id=250 data-nosnippet>250</a>            &amp;&amp; (<span class="kw">crate</span>::cpu_features::has_h_ext()
 <a href=#251 id=251 data-nosnippet>251</a>                || <span class="kw">crate</span>::cpu_features::has_el2()
@@ -392,10 +392,10 @@
 <a href=#392 id=392 data-nosnippet>392</a>    }
 <a href=#393 id=393 data-nosnippet>393</a>
 <a href=#394 id=394 data-nosnippet>394</a>    <span class="doccomment">/// The attested caller-trailer flags for this Cell's network rights
-<a href=#395 id=395 data-nosnippet>395</a>    /// (`api::caller_identity::CALLER_FLAG_NET_*`). Only these four bits; the
+<a href=#395 id=395 data-nosnippet>395</a>    /// (`abi::caller_identity::CALLER_FLAG_NET_*`). Only these four bits; the
 <a href=#396 id=396 data-nosnippet>396</a>    /// caller ORs in any other flag it owns.
 <a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">pub fn </span>net_caller_flags(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">use </span>api::caller_identity::{
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">use </span>abi::caller_identity::{
 <a href=#399 id=399 data-nosnippet>399</a>            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
 <a href=#400 id=400 data-nosnippet>400</a>            CALLER_FLAG_NET_RESOLVE,
 <a href=#401 id=401 data-nosnippet>401</a>        };
@@ -411,21 +411,21 @@
 <a href=#411 id=411 data-nosnippet>411</a>    }
 <a href=#412 id=412 data-nosnippet>412</a>
 <a href=#413 id=413 data-nosnippet>413</a>    <span class="doccomment">/// The attested caller-trailer flag for this Cell's Q right
-<a href=#414 id=414 data-nosnippet>414</a>    /// (`api::caller_identity::CALLER_FLAG_CONFIG_WRITE`), or 0.
+<a href=#414 id=414 data-nosnippet>414</a>    /// (`abi::caller_identity::CALLER_FLAG_CONFIG_WRITE`), or 0.
 <a href=#415 id=415 data-nosnippet>415</a>    </span><span class="kw">pub fn </span>config_caller_flags(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
 <a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">if </span><span class="self">self</span>.config_write {
-<a href=#417 id=417 data-nosnippet>417</a>            api::caller_identity::CALLER_FLAG_CONFIG_WRITE
+<a href=#417 id=417 data-nosnippet>417</a>            abi::caller_identity::CALLER_FLAG_CONFIG_WRITE
 <a href=#418 id=418 data-nosnippet>418</a>        } <span class="kw">else </span>{
 <a href=#419 id=419 data-nosnippet>419</a>            <span class="number">0
 <a href=#420 id=420 data-nosnippet>420</a>        </span>}
 <a href=#421 id=421 data-nosnippet>421</a>    }
 <a href=#422 id=422 data-nosnippet>422</a>
 <a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// The attested caller-trailer flags for this Cell's KMS SSH rights
-<a href=#424 id=424 data-nosnippet>424</a>    /// (`api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN` /
+<a href=#424 id=424 data-nosnippet>424</a>    /// (`abi::caller_identity::CALLER_FLAG_KMS_SSH_SIGN` /
 <a href=#425 id=425 data-nosnippet>425</a>    /// `CALLER_FLAG_KMS_SSH_ADMIN`), or 0. Only these two bits; the caller ORs in
 <a href=#426 id=426 data-nosnippet>426</a>    /// any other flag it owns.
 <a href=#427 id=427 data-nosnippet>427</a>    </span><span class="kw">pub fn </span>kms_caller_flags(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">use </span>api::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">use </span>abi::caller_identity::{CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN};
 <a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span><span class="kw-2">mut </span>flags = <span class="number">0</span>;
 <a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">if </span><span class="self">self</span>.kms_ssh_sign {
 <a href=#431 id=431 data-nosnippet>431</a>            flags |= CALLER_FLAG_KMS_SSH_SIGN;
@@ -437,10 +437,10 @@
 <a href=#437 id=437 data-nosnippet>437</a>    }
 <a href=#438 id=438 data-nosnippet>438</a>
 <a href=#439 id=439 data-nosnippet>439</a>    <span class="doccomment">/// This set minus the rights named by a `CapRevoke` mask
-<a href=#440 id=440 data-nosnippet>440</a>    /// (`api::syscall::cap_mask`): the boolean caps it names, and the MMIO-class
+<a href=#440 id=440 data-nosnippet>440</a>    /// (`abi::syscall::cap_mask`): the boolean caps it names, and the MMIO-class
 <a href=#441 id=441 data-nosnippet>441</a>    /// and block-region bits in its parameterised fields.
 <a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">pub fn </span>without_revoke_mask(<span class="self">self</span>, cap_mask: u32) -&gt; CapSet {
-<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">use </span>api::syscall::cap_mask <span class="kw">as </span>CM;
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">use </span>abi::syscall::cap_mask <span class="kw">as </span>CM;
 <a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">let </span>keep = |bit: u32| cap_mask &amp; bit == <span class="number">0</span>;
 <a href=#445 id=445 data-nosnippet>445</a>        CapSet {
 <a href=#446 id=446 data-nosnippet>446</a>            block_io: <span class="self">self</span>.block_io &amp;&amp; keep(CM::BLOCK_IO),
@@ -491,7 +491,7 @@
 <a href=#491 id=491 data-nosnippet>491</a>/// reproducing the pre-v2 behaviour byte-for-byte (NOT `max(0xFF, floor)`,
 <a href=#492 id=492 data-nosnippet>492</a>/// which would wrongly force every such cell to the most-isolated class).
 <a href=#493 id=493 data-nosnippet>493</a></span><span class="kw">pub fn </span>granted_protection_class(granted: <span class="kw-2">&amp;</span>CapSet, requested_protection_class: u8) -&gt; u8 {
-<a href=#494 id=494 data-nosnippet>494</a>    <span class="kw">use </span>api::manifest::{
+<a href=#494 id=494 data-nosnippet>494</a>    <span class="kw">use </span>abi::manifest::{
 <a href=#495 id=495 data-nosnippet>495</a>        PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_STANDARD, PROTECTION_CLASS_TRUSTED_CORE,
 <a href=#496 id=496 data-nosnippet>496</a>    };
 <a href=#497 id=497 data-nosnippet>497</a>    <span class="kw">let </span>is_trusted = granted.block_io || granted.network || granted.spawn || granted.hypervisor;
@@ -531,7 +531,7 @@
 <a href=#531 id=531 data-nosnippet>531</a>
 <a href=#532 id=532 data-nosnippet>532</a>    <span class="attr">#[test]
 <a href=#533 id=533 data-nosnippet>533</a>    </span><span class="kw">fn </span>manifest_maps_i2c_and_spi_to_distinct_mmio_classes() {
-<a href=#534 id=534 data-nosnippet>534</a>        <span class="kw">let </span>i2c = api::manifest::CellManifest::with_all(
+<a href=#534 id=534 data-nosnippet>534</a>        <span class="kw">let </span>i2c = abi::manifest::CellManifest::with_all(
 <a href=#535 id=535 data-nosnippet>535</a>            <span class="bool-val">false</span>,
 <a href=#536 id=536 data-nosnippet>536</a>            <span class="bool-val">false</span>,
 <a href=#537 id=537 data-nosnippet>537</a>            <span class="bool-val">false</span>,
@@ -544,9 +544,9 @@
 <a href=#544 id=544 data-nosnippet>544</a>            <span class="bool-val">false</span>,
 <a href=#545 id=545 data-nosnippet>545</a>            <span class="bool-val">true</span>,
 <a href=#546 id=546 data-nosnippet>546</a>            <span class="bool-val">false</span>,
-<a href=#547 id=547 data-nosnippet>547</a>            api::manifest::TIER_LEGACY,
+<a href=#547 id=547 data-nosnippet>547</a>            abi::manifest::TIER_LEGACY,
 <a href=#548 id=548 data-nosnippet>548</a>        );
-<a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">let </span>spi = api::manifest::CellManifest::with_all(
+<a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">let </span>spi = abi::manifest::CellManifest::with_all(
 <a href=#550 id=550 data-nosnippet>550</a>            <span class="bool-val">false</span>,
 <a href=#551 id=551 data-nosnippet>551</a>            <span class="bool-val">false</span>,
 <a href=#552 id=552 data-nosnippet>552</a>            <span class="bool-val">false</span>,
@@ -559,7 +559,7 @@
 <a href=#559 id=559 data-nosnippet>559</a>            <span class="bool-val">false</span>,
 <a href=#560 id=560 data-nosnippet>560</a>            <span class="bool-val">false</span>,
 <a href=#561 id=561 data-nosnippet>561</a>            <span class="bool-val">true</span>,
-<a href=#562 id=562 data-nosnippet>562</a>            api::manifest::TIER_LEGACY,
+<a href=#562 id=562 data-nosnippet>562</a>            abi::manifest::TIER_LEGACY,
 <a href=#563 id=563 data-nosnippet>563</a>        );
 <a href=#564 id=564 data-nosnippet>564</a>        <span class="macro">assert_eq!</span>(
 <a href=#565 id=565 data-nosnippet>565</a>            CapSet::from_manifest(<span class="kw-2">&amp;</span>i2c).mmio_devices,
@@ -665,7 +665,7 @@
 <a href=#665 id=665 data-nosnippet>665</a>    </span><span class="kw">fn </span>manifest_never_requests_network_rights() {
 <a href=#666 id=666 data-nosnippet>666</a>        <span class="comment">// Every manifest flag set: still no net right, because the install path —
 <a href=#667 id=667 data-nosnippet>667</a>        // not the manifest — is the request signal.
-<a href=#668 id=668 data-nosnippet>668</a>        </span><span class="kw">let </span>all = api::manifest::CellManifest::with_all(
+<a href=#668 id=668 data-nosnippet>668</a>        </span><span class="kw">let </span>all = abi::manifest::CellManifest::with_all(
 <a href=#669 id=669 data-nosnippet>669</a>            <span class="bool-val">true</span>,
 <a href=#670 id=670 data-nosnippet>670</a>            <span class="bool-val">true</span>,
 <a href=#671 id=671 data-nosnippet>671</a>            <span class="bool-val">true</span>,
@@ -678,7 +678,7 @@
 <a href=#678 id=678 data-nosnippet>678</a>            <span class="bool-val">true</span>,
 <a href=#679 id=679 data-nosnippet>679</a>            <span class="bool-val">true</span>,
 <a href=#680 id=680 data-nosnippet>680</a>            <span class="bool-val">true</span>,
-<a href=#681 id=681 data-nosnippet>681</a>            api::manifest::TIER_LEGACY,
+<a href=#681 id=681 data-nosnippet>681</a>            abi::manifest::TIER_LEGACY,
 <a href=#682 id=682 data-nosnippet>682</a>        );
 <a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>caps = CapSet::from_manifest(<span class="kw-2">&amp;</span>all);
 <a href=#684 id=684 data-nosnippet>684</a>        <span class="macro">assert!</span>(caps.network, <span class="string">"fixture must be a fully-flagged manifest"</span>);
@@ -793,7 +793,7 @@
 <a href=#793 id=793 data-nosnippet>793</a>
 <a href=#794 id=794 data-nosnippet>794</a>    <span class="attr">#[test]
 <a href=#795 id=795 data-nosnippet>795</a>    </span><span class="kw">fn </span>network_rights_map_to_exact_trailer_flags() {
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">use </span>api::caller_identity::{
+<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">use </span>abi::caller_identity::{
 <a href=#797 id=797 data-nosnippet>797</a>            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_L2, CALLER_FLAG_NET_LISTEN,
 <a href=#798 id=798 data-nosnippet>798</a>            CALLER_FLAG_NET_RESOLVE, CALLER_FLAG_NET_RIGHTS_MASK,
 <a href=#799 id=799 data-nosnippet>799</a>        };
@@ -848,7 +848,7 @@
 <a href=#848 id=848 data-nosnippet>848</a>
 <a href=#849 id=849 data-nosnippet>849</a>    <span class="attr">#[test]
 <a href=#850 id=850 data-nosnippet>850</a>    </span><span class="kw">fn </span>manifest_never_requests_observe_mutate_rights() {
-<a href=#851 id=851 data-nosnippet>851</a>        <span class="kw">let </span>all = api::manifest::CellManifest::with_all(
+<a href=#851 id=851 data-nosnippet>851</a>        <span class="kw">let </span>all = abi::manifest::CellManifest::with_all(
 <a href=#852 id=852 data-nosnippet>852</a>            <span class="bool-val">true</span>,
 <a href=#853 id=853 data-nosnippet>853</a>            <span class="bool-val">true</span>,
 <a href=#854 id=854 data-nosnippet>854</a>            <span class="bool-val">true</span>,
@@ -861,7 +861,7 @@
 <a href=#861 id=861 data-nosnippet>861</a>            <span class="bool-val">true</span>,
 <a href=#862 id=862 data-nosnippet>862</a>            <span class="bool-val">true</span>,
 <a href=#863 id=863 data-nosnippet>863</a>            <span class="bool-val">true</span>,
-<a href=#864 id=864 data-nosnippet>864</a>            api::manifest::TIER_LEGACY,
+<a href=#864 id=864 data-nosnippet>864</a>            abi::manifest::TIER_LEGACY,
 <a href=#865 id=865 data-nosnippet>865</a>        );
 <a href=#866 id=866 data-nosnippet>866</a>        <span class="macro">assert_eq!</span>(
 <a href=#867 id=867 data-nosnippet>867</a>            observe_mutate(CapSet::from_manifest(<span class="kw-2">&amp;</span>all)),
@@ -969,21 +969,21 @@
 <a href=#969 id=969 data-nosnippet>969</a>        <span class="macro">assert_eq!</span>(
 <a href=#970 id=970 data-nosnippet>970</a>            granted_protection_class(
 <a href=#971 id=971 data-nosnippet>971</a>                <span class="kw-2">&amp;</span>untrusted_caps,
-<a href=#972 id=972 data-nosnippet>972</a>                api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+<a href=#972 id=972 data-nosnippet>972</a>                abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
 <a href=#973 id=973 data-nosnippet>973</a>            ),
-<a href=#974 id=974 data-nosnippet>974</a>            api::manifest::PROTECTION_CLASS_STANDARD
+<a href=#974 id=974 data-nosnippet>974</a>            abi::manifest::PROTECTION_CLASS_STANDARD
 <a href=#975 id=975 data-nosnippet>975</a>        );
 <a href=#976 id=976 data-nosnippet>976</a>        <span class="macro">assert_eq!</span>(
-<a href=#977 id=977 data-nosnippet>977</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, api::manifest::PROTECTION_CLASS_TRUSTED_CORE),
-<a href=#978 id=978 data-nosnippet>978</a>            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+<a href=#977 id=977 data-nosnippet>977</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, abi::manifest::PROTECTION_CLASS_TRUSTED_CORE),
+<a href=#978 id=978 data-nosnippet>978</a>            abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
 <a href=#979 id=979 data-nosnippet>979</a>        );
 <a href=#980 id=980 data-nosnippet>980</a>        <span class="macro">assert_eq!</span>(
-<a href=#981 id=981 data-nosnippet>981</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, api::manifest::PROTECTION_CLASS_UNTRUSTED),
-<a href=#982 id=982 data-nosnippet>982</a>            api::manifest::PROTECTION_CLASS_UNTRUSTED
+<a href=#981 id=981 data-nosnippet>981</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, abi::manifest::PROTECTION_CLASS_UNTRUSTED),
+<a href=#982 id=982 data-nosnippet>982</a>            abi::manifest::PROTECTION_CLASS_UNTRUSTED
 <a href=#983 id=983 data-nosnippet>983</a>        );
 <a href=#984 id=984 data-nosnippet>984</a>        <span class="macro">assert_eq!</span>(
-<a href=#985 id=985 data-nosnippet>985</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, api::manifest::PROTECTION_CLASS_LEGACY),
-<a href=#986 id=986 data-nosnippet>986</a>            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+<a href=#985 id=985 data-nosnippet>985</a>            granted_protection_class(<span class="kw-2">&amp;</span>trusted_caps, abi::manifest::PROTECTION_CLASS_LEGACY),
+<a href=#986 id=986 data-nosnippet>986</a>            abi::manifest::PROTECTION_CLASS_TRUSTED_CORE
 <a href=#987 id=987 data-nosnippet>987</a>        );
 <a href=#988 id=988 data-nosnippet>988</a>    }
 <a href=#989 id=989 data-nosnippet>989</a>
@@ -992,8 +992,8 @@
 <a href=#992 id=992 data-nosnippet>992</a>    /// exactly `CALLER_FLAG_CONFIG_WRITE`.
 <a href=#993 id=993 data-nosnippet>993</a>    </span><span class="attr">#[test]
 <a href=#994 id=994 data-nosnippet>994</a>    </span><span class="kw">fn </span>config_write_is_requested_by_the_shell_path_only() {
-<a href=#995 id=995 data-nosnippet>995</a>        <span class="kw">use </span>api::caller_identity::CALLER_FLAG_CONFIG_WRITE;
-<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let </span>all = api::manifest::CellManifest::with_all(
+<a href=#995 id=995 data-nosnippet>995</a>        <span class="kw">use </span>abi::caller_identity::CALLER_FLAG_CONFIG_WRITE;
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let </span>all = abi::manifest::CellManifest::with_all(
 <a href=#997 id=997 data-nosnippet>997</a>            <span class="bool-val">true</span>,
 <a href=#998 id=998 data-nosnippet>998</a>            <span class="bool-val">true</span>,
 <a href=#999 id=999 data-nosnippet>999</a>            <span class="bool-val">true</span>,
@@ -1006,7 +1006,7 @@
 <a href=#1006 id=1006 data-nosnippet>1006</a>            <span class="bool-val">true</span>,
 <a href=#1007 id=1007 data-nosnippet>1007</a>            <span class="bool-val">true</span>,
 <a href=#1008 id=1008 data-nosnippet>1008</a>            <span class="bool-val">true</span>,
-<a href=#1009 id=1009 data-nosnippet>1009</a>            api::manifest::TIER_LEGACY,
+<a href=#1009 id=1009 data-nosnippet>1009</a>            abi::manifest::TIER_LEGACY,
 <a href=#1010 id=1010 data-nosnippet>1010</a>        );
 <a href=#1011 id=1011 data-nosnippet>1011</a>        <span class="macro">assert!</span>(!CapSet::from_manifest(<span class="kw-2">&amp;</span>all).config_write);
 <a href=#1012 id=1012 data-nosnippet>1012</a>        <span class="macro">assert!</span>(CapSet::EMPTY.with_path_caps(<span class="string">"/bin/cellbox"</span>).config_write);
@@ -1055,11 +1055,11 @@
 <a href=#1055 id=1055 data-nosnippet>1055</a>    /// carries both, and each maps to exactly its own trailer flag.
 <a href=#1056 id=1056 data-nosnippet>1056</a>    </span><span class="attr">#[test]
 <a href=#1057 id=1057 data-nosnippet>1057</a>    </span><span class="kw">fn </span>kms_ssh_sign_is_requested_by_the_ssh_path_only() {
-<a href=#1058 id=1058 data-nosnippet>1058</a>        <span class="kw">use </span>api::caller_identity::{
+<a href=#1058 id=1058 data-nosnippet>1058</a>        <span class="kw">use </span>abi::caller_identity::{
 <a href=#1059 id=1059 data-nosnippet>1059</a>            CALLER_FLAG_CONFIG_WRITE, CALLER_FLAG_KMS_SSH_ADMIN, CALLER_FLAG_KMS_SSH_SIGN,
 <a href=#1060 id=1060 data-nosnippet>1060</a>            CALLER_FLAG_NET_CONNECT, CALLER_FLAG_NET_RESOLVE,
 <a href=#1061 id=1061 data-nosnippet>1061</a>        };
-<a href=#1062 id=1062 data-nosnippet>1062</a>        <span class="kw">let </span>all = api::manifest::CellManifest::with_all(
+<a href=#1062 id=1062 data-nosnippet>1062</a>        <span class="kw">let </span>all = abi::manifest::CellManifest::with_all(
 <a href=#1063 id=1063 data-nosnippet>1063</a>            <span class="bool-val">true</span>,
 <a href=#1064 id=1064 data-nosnippet>1064</a>            <span class="bool-val">true</span>,
 <a href=#1065 id=1065 data-nosnippet>1065</a>            <span class="bool-val">true</span>,
@@ -1072,7 +1072,7 @@
 <a href=#1072 id=1072 data-nosnippet>1072</a>            <span class="bool-val">true</span>,
 <a href=#1073 id=1073 data-nosnippet>1073</a>            <span class="bool-val">true</span>,
 <a href=#1074 id=1074 data-nosnippet>1074</a>            <span class="bool-val">true</span>,
-<a href=#1075 id=1075 data-nosnippet>1075</a>            api::manifest::TIER_LEGACY,
+<a href=#1075 id=1075 data-nosnippet>1075</a>            abi::manifest::TIER_LEGACY,
 <a href=#1076 id=1076 data-nosnippet>1076</a>        );
 <a href=#1077 id=1077 data-nosnippet>1077</a>        <span class="kw">let </span>from_manifest = CapSet::from_manifest(<span class="kw-2">&amp;</span>all);
 <a href=#1078 id=1078 data-nosnippet>1078</a>        <span class="macro">assert!</span>(!from_manifest.kms_ssh_sign &amp;&amp; !from_manifest.kms_ssh_admin);

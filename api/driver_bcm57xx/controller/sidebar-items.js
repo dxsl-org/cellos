@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["RESET_POLLS"],"struct":["BcmController"]};
+window.SIDEBAR_ITEMS = {"constant":["BCM_BAR0_LEN","BCM_MMIO_MIN","LAYOUT","RESET_POLLS"],"struct":["BcmController"]};

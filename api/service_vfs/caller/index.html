@@ -3,7 +3,7 @@
 thread reports its own tid while belonging to its parent cell, so its quota
 and its handles landed under a <code>CellId</code> matching no cell at all; and it made
 identity a property of the transport rather than something vouched for. Both
-disappear once the kernel states the identity — see <code>api::caller_identity</code>.</p>
+disappear once the kernel states the identity — see <code>abi::caller_identity</code>.</p>
 <p>Every authorization decision and every quota charge in this cell reads a
 <a href="struct.Caller.html" title="struct service_vfs::caller::Caller"><code>Caller</code></a>, and a <a href="struct.Caller.html" title="struct service_vfs::caller::Caller"><code>Caller</code></a> can only be built from an attested identity.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Caller.html" title="struct service_vfs::caller::Caller">Caller</a></dt><dd>A caller VFS is willing to act for.</dd></dl></section></div></main></body></html>

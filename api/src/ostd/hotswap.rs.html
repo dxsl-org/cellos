@@ -2,120 +2,120 @@
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="doccomment">//! Hot-migration state helpers for Cells.
 <a href=#3 id=3 data-nosnippet>3</a>//!
 <a href=#4 id=4 data-nosnippet>4</a>//! Provides safe wrappers over the kernel's state-stash primitives (syscalls
-<a href=#5 id=5 data-nosnippet>5</a>//! 410/411/412) and the [`ViStateTransfer`] opt-in trait for cells that want
-<a href=#6 id=6 data-nosnippet>6</a>//! to serialize across a live hot-swap or supervisor-triggered respawn.
+<a href=#5 id=5 data-nosnippet>5</a>//! 410/411/412) and the [`ViStateTransfer`] opt-in trait for cells whose state
+<a href=#6 id=6 data-nosnippet>6</a>//! survives a supervisor-orchestrated hot-swap.
 <a href=#7 id=7 data-nosnippet>7</a>//!
 <a href=#8 id=8 data-nosnippet>8</a>//! # Sequence contract
-<a href=#9 id=9 data-nosnippet>9</a>//! 1. **Old cell** — receives `AppEvent::Snapshot` → calls `stash(key, bytes)`.
-<a href=#10 id=10 data-nosnippet>10</a>//! 2. **Kernel** — keeps the bytes until the replacement is live.
-<a href=#11 id=11 data-nosnippet>11</a>//! 3. **New cell** — calls `restore(key)` on startup → gets bytes, then calls
-<a href=#12 id=12 data-nosnippet>12</a>//!    `clear(key)` to release the kernel slot.
-<a href=#13 id=13 data-nosnippet>13</a>//!
-<a href=#14 id=14 data-nosnippet>14</a>//! `stash` and `restore` are independent of each other's call site — the kernel
-<a href=#15 id=15 data-nosnippet>15</a>//! is the rendezvous point. Multiple calls to `stash` under the same key
-<a href=#16 id=16 data-nosnippet>16</a>//! overwrite the previous value; `restore` leaves the entry in place for retry.
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">extern crate </span>alloc;
-<a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::syscall;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>alloc::boxed::Box;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>alloc::format;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>alloc::string::String;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::ViError;
-<a href=#25 id=25 data-nosnippet>25</a>
-<a href=#26 id=26 data-nosnippet>26</a><span class="comment">// ── Public error type ─────────────────────────────────────────────────────────
-<a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="doccomment">/// Errors returned by hotswap stash/restore operations.
-<a href=#29 id=29 data-nosnippet>29</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub enum </span>HotswapError {
-<a href=#31 id=31 data-nosnippet>31</a>    <span class="doccomment">/// Stash returned 0 bytes written — kernel stash is full (MAX_ENTRIES reached)
-<a href=#32 id=32 data-nosnippet>32</a>    /// or the data exceeds MAX_STASH_LEN (1 MB).
-<a href=#33 id=33 data-nosnippet>33</a>    </span>StashFull,
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Restore returned 0 bytes — no state is stashed under this key.
-<a href=#35 id=35 data-nosnippet>35</a>    /// The cell may be starting cold (not after a hot-swap) or the key is wrong.
-<a href=#36 id=36 data-nosnippet>36</a>    </span>NoState,
-<a href=#37 id=37 data-nosnippet>37</a>    <span class="doccomment">/// The restored byte count does not match the allocation (should not happen;
-<a href=#38 id=38 data-nosnippet>38</a>    /// indicates a kernel or ABI bug).
-<a href=#39 id=39 data-nosnippet>39</a>    </span>SizeMismatch,
-<a href=#40 id=40 data-nosnippet>40</a>}
-<a href=#41 id=41 data-nosnippet>41</a>
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">impl </span>From&lt;HotswapError&gt; <span class="kw">for </span>ViError {
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="kw">fn </span>from(e: HotswapError) -&gt; ViError {
-<a href=#44 id=44 data-nosnippet>44</a>        <span class="kw">match </span>e {
-<a href=#45 id=45 data-nosnippet>45</a>            <span class="comment">// WouldBlock: caller should retry later or increase stash capacity.
-<a href=#46 id=46 data-nosnippet>46</a>            </span>HotswapError::StashFull =&gt; ViError::WouldBlock,
-<a href=#47 id=47 data-nosnippet>47</a>            <span class="comment">// NotFound: no state under this key — cell is starting cold.
-<a href=#48 id=48 data-nosnippet>48</a>            </span>HotswapError::NoState =&gt; ViError::NotFound,
-<a href=#49 id=49 data-nosnippet>49</a>            <span class="comment">// InvalidInput: restored payload is structurally malformed.
-<a href=#50 id=50 data-nosnippet>50</a>            </span>HotswapError::SizeMismatch =&gt; ViError::InvalidInput,
-<a href=#51 id=51 data-nosnippet>51</a>        }
-<a href=#52 id=52 data-nosnippet>52</a>    }
-<a href=#53 id=53 data-nosnippet>53</a>}
-<a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a><span class="comment">// ── stash() ───────────────────────────────────────────────────────────────────
-<a href=#56 id=56 data-nosnippet>56</a>
-<a href=#57 id=57 data-nosnippet>57</a></span><span class="doccomment">/// Store `data` in the kernel-managed stash under `key`.
-<a href=#58 id=58 data-nosnippet>58</a>///
-<a href=#59 id=59 data-nosnippet>59</a>/// Typically called from an `AppEvent::Snapshot` handler immediately before the
-<a href=#60 id=60 data-nosnippet>60</a>/// cell is replaced. The kernel retains the bytes until the replacement instance
-<a href=#61 id=61 data-nosnippet>61</a>/// calls [`restore`]. A second call with the same key overwrites the previous value.
-<a href=#62 id=62 data-nosnippet>62</a>///
-<a href=#63 id=63 data-nosnippet>63</a>/// # Errors
-<a href=#64 id=64 data-nosnippet>64</a>/// Returns [`HotswapError::StashFull`] when the kernel rejected the write (stash
-<a href=#65 id=65 data-nosnippet>65</a>/// at MAX_ENTRIES capacity with no existing entry for this key, or `data` exceeds
-<a href=#66 id=66 data-nosnippet>66</a>/// the 1 MB per-slot limit).
+<a href=#9 id=9 data-nosnippet>9</a>//! 1. **Old cell** — receives the supervisor's Snapshot envelope
+<a href=#10 id=10 data-nosnippet>10</a>//!    (`AppEvent::Snapshot`, or [`Handler::on_snapshot`] under `serve`) →
+<a href=#11 id=11 data-nosnippet>11</a>//!    stashes its bytes under [`hotswap_key`]`(swap_id)`.
+<a href=#12 id=12 data-nosnippet>12</a>//! 2. **Kernel** — keeps the bytes, readable only by the replacement.
+<a href=#13 id=13 data-nosnippet>13</a>//! 3. **New cell** — receives the Restore envelope → `restore(key)`, applies the
+<a href=#14 id=14 data-nosnippet>14</a>//!    bytes, `clear(key)`, then `sys_hotswap_ready`.
+<a href=#15 id=15 data-nosnippet>15</a>//!
+<a href=#16 id=16 data-nosnippet>16</a>//! [`Handler::on_snapshot`]: crate::service::Handler::on_snapshot
+<a href=#17 id=17 data-nosnippet>17</a>//!
+<a href=#18 id=18 data-nosnippet>18</a>//! `stash` and `restore` are independent of each other's call site — the kernel
+<a href=#19 id=19 data-nosnippet>19</a>//! is the rendezvous point. Multiple calls to `stash` under the same key
+<a href=#20 id=20 data-nosnippet>20</a>//! overwrite the previous value; `restore` leaves the entry in place for retry.
+<a href=#21 id=21 data-nosnippet>21</a>
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">extern crate </span>alloc;
+<a href=#23 id=23 data-nosnippet>23</a>
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::syscall;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>alloc::boxed::Box;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>alloc::format;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>alloc::string::String;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>types::ViError;
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="comment">// ── Public error type ─────────────────────────────────────────────────────────
+<a href=#32 id=32 data-nosnippet>32</a>
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="doccomment">/// Errors returned by hotswap stash/restore operations.
+<a href=#34 id=34 data-nosnippet>34</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub enum </span>HotswapError {
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="doccomment">/// Stash returned 0 bytes written — kernel stash is full (MAX_ENTRIES reached)
+<a href=#37 id=37 data-nosnippet>37</a>    /// or the data exceeds MAX_STASH_LEN (1 MB).
+<a href=#38 id=38 data-nosnippet>38</a>    </span>StashFull,
+<a href=#39 id=39 data-nosnippet>39</a>    <span class="doccomment">/// Restore returned 0 bytes — no state is stashed under this key.
+<a href=#40 id=40 data-nosnippet>40</a>    /// The cell may be starting cold (not after a hot-swap) or the key is wrong.
+<a href=#41 id=41 data-nosnippet>41</a>    </span>NoState,
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// The entry changed length between [`restore`]'s length probe and its
+<a href=#43 id=43 data-nosnippet>43</a>    /// read (its owner overwrote it meanwhile).
+<a href=#44 id=44 data-nosnippet>44</a>    </span>SizeMismatch,
+<a href=#45 id=45 data-nosnippet>45</a>}
+<a href=#46 id=46 data-nosnippet>46</a>
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">impl </span>From&lt;HotswapError&gt; <span class="kw">for </span>ViError {
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">fn </span>from(e: HotswapError) -&gt; ViError {
+<a href=#49 id=49 data-nosnippet>49</a>        <span class="kw">match </span>e {
+<a href=#50 id=50 data-nosnippet>50</a>            <span class="comment">// WouldBlock: caller should retry later or increase stash capacity.
+<a href=#51 id=51 data-nosnippet>51</a>            </span>HotswapError::StashFull =&gt; ViError::WouldBlock,
+<a href=#52 id=52 data-nosnippet>52</a>            <span class="comment">// NotFound: no state under this key — cell is starting cold.
+<a href=#53 id=53 data-nosnippet>53</a>            </span>HotswapError::NoState =&gt; ViError::NotFound,
+<a href=#54 id=54 data-nosnippet>54</a>            <span class="comment">// InvalidInput: restored payload is structurally malformed.
+<a href=#55 id=55 data-nosnippet>55</a>            </span>HotswapError::SizeMismatch =&gt; ViError::InvalidInput,
+<a href=#56 id=56 data-nosnippet>56</a>        }
+<a href=#57 id=57 data-nosnippet>57</a>    }
+<a href=#58 id=58 data-nosnippet>58</a>}
+<a href=#59 id=59 data-nosnippet>59</a>
+<a href=#60 id=60 data-nosnippet>60</a><span class="comment">// ── stash() ───────────────────────────────────────────────────────────────────
+<a href=#61 id=61 data-nosnippet>61</a>
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="doccomment">/// Store `data` in the kernel-managed stash under `key`.
+<a href=#63 id=63 data-nosnippet>63</a>///
+<a href=#64 id=64 data-nosnippet>64</a>/// Typically called from an `AppEvent::Snapshot` handler immediately before the
+<a href=#65 id=65 data-nosnippet>65</a>/// cell is replaced. The kernel retains the bytes until the replacement instance
+<a href=#66 id=66 data-nosnippet>66</a>/// calls [`restore`]. A second call with the same key overwrites the previous value.
 <a href=#67 id=67 data-nosnippet>67</a>///
-<a href=#68 id=68 data-nosnippet>68</a>/// # Panics
-<a href=#69 id=69 data-nosnippet>69</a>/// Never.
-<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub fn </span>stash(key: u64, data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), HotswapError&gt; {
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">let </span>written = syscall::sys_state_stash(key, data);
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">if </span>written == <span class="number">0 </span>&amp;&amp; !data.is_empty() {
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="prelude-val">Err</span>(HotswapError::StashFull)
-<a href=#74 id=74 data-nosnippet>74</a>    } <span class="kw">else </span>{
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="prelude-val">Ok</span>(())
-<a href=#76 id=76 data-nosnippet>76</a>    }
-<a href=#77 id=77 data-nosnippet>77</a>}
-<a href=#78 id=78 data-nosnippet>78</a>
-<a href=#79 id=79 data-nosnippet>79</a><span class="comment">// ── restore() ─────────────────────────────────────────────────────────────────
-<a href=#80 id=80 data-nosnippet>80</a>
-<a href=#81 id=81 data-nosnippet>81</a></span><span class="doccomment">/// Retrieve bytes from the stash by `key`, returning an owned buffer.
-<a href=#82 id=82 data-nosnippet>82</a>///
-<a href=#83 id=83 data-nosnippet>83</a>/// The stash entry remains in place after `restore`; call [`clear`] to release
-<a href=#84 id=84 data-nosnippet>84</a>/// the kernel slot once the state has been successfully applied.
-<a href=#85 id=85 data-nosnippet>85</a>///
-<a href=#86 id=86 data-nosnippet>86</a>/// # Two-step ABI note
-<a href=#87 id=87 data-nosnippet>87</a>/// The kernel does not provide a "query size" syscall, so this function uses a
-<a href=#88 id=88 data-nosnippet>88</a>/// conservative 1 MB buffer (the per-slot maximum) to avoid a two-round-trip
-<a href=#89 id=89 data-nosnippet>89</a>/// approach. The returned `Box&lt;[u8]&gt;` is exactly the byte count the kernel wrote,
-<a href=#90 id=90 data-nosnippet>90</a>/// not padded to the allocation size.
-<a href=#91 id=91 data-nosnippet>91</a>///
-<a href=#92 id=92 data-nosnippet>92</a>/// # Errors
-<a href=#93 id=93 data-nosnippet>93</a>/// Returns [`HotswapError::NoState`] when nothing is stashed under `key` (cold
-<a href=#94 id=94 data-nosnippet>94</a>/// start, wrong key, or the entry was already cleared).
-<a href=#95 id=95 data-nosnippet>95</a>///
-<a href=#96 id=96 data-nosnippet>96</a>/// # Panics
-<a href=#97 id=97 data-nosnippet>97</a>/// Never (OOM panics are handled by the cell allocator, not here).
-<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">pub fn </span>restore(key: u64) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;[u8]&gt;, HotswapError&gt; {
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="comment">// Use a stack buffer first to avoid heap fragmentation and allocation pressure.
-<a href=#100 id=100 data-nosnippet>100</a>    // Typical migration state (counter, small structs) is tens to hundreds of bytes.
-<a href=#101 id=101 data-nosnippet>101</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>stack_buf = [<span class="number">0u8</span>; <span class="number">4096</span>];
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">let </span>n = syscall::sys_state_restore(key, <span class="kw-2">&amp;mut </span>stack_buf);
-<a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(HotswapError::NoState);
-<a href=#105 id=105 data-nosnippet>105</a>    }
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">if </span>n &lt; stack_buf.len() {
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(Box::from(<span class="kw-2">&amp;</span>stack_buf[..n]));
-<a href=#108 id=108 data-nosnippet>108</a>    }
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="comment">// If the payload filled the entire stack buffer, dynamically allocate
-<a href=#110 id=110 data-nosnippet>110</a>    // only as much as needed up to 64 KiB.
-<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">const </span>MAX: usize = <span class="number">64 </span>* <span class="number">1024</span>;
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span><span class="kw-2">mut </span>big_buf = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; MAX];
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>n2 = syscall::sys_state_restore(key, <span class="kw-2">&amp;mut </span>big_buf);
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">if </span>n2 == <span class="number">0 </span>{
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(HotswapError::NoState);
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>    big_buf.truncate(n2);
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="prelude-val">Ok</span>(big_buf.into_boxed_slice())
+<a href=#68 id=68 data-nosnippet>68</a>/// # Errors
+<a href=#69 id=69 data-nosnippet>69</a>/// Returns [`HotswapError::StashFull`] when the kernel rejected the write (stash
+<a href=#70 id=70 data-nosnippet>70</a>/// at MAX_ENTRIES capacity with no existing entry for this key, or `data` exceeds
+<a href=#71 id=71 data-nosnippet>71</a>/// the 1 MB per-slot limit).
+<a href=#72 id=72 data-nosnippet>72</a>///
+<a href=#73 id=73 data-nosnippet>73</a>/// # Panics
+<a href=#74 id=74 data-nosnippet>74</a>/// Never.
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub fn </span>stash(key: u64, data: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), HotswapError&gt; {
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span>written = syscall::sys_state_stash(key, data);
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">if </span>written == <span class="number">0 </span>&amp;&amp; !data.is_empty() {
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="prelude-val">Err</span>(HotswapError::StashFull)
+<a href=#79 id=79 data-nosnippet>79</a>    } <span class="kw">else </span>{
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="prelude-val">Ok</span>(())
+<a href=#81 id=81 data-nosnippet>81</a>    }
+<a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="comment">// ── restore() ─────────────────────────────────────────────────────────────────
+<a href=#85 id=85 data-nosnippet>85</a>
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="doccomment">/// Retrieve bytes from the stash by `key`, returning an owned buffer.
+<a href=#87 id=87 data-nosnippet>87</a>///
+<a href=#88 id=88 data-nosnippet>88</a>/// The stash entry remains in place after `restore`; call [`clear`] to release
+<a href=#89 id=89 data-nosnippet>89</a>/// the kernel slot once the state has been successfully applied.
+<a href=#90 id=90 data-nosnippet>90</a>///
+<a href=#91 id=91 data-nosnippet>91</a>/// # Sizing
+<a href=#92 id=92 data-nosnippet>92</a>/// The buffer is sized to what the stash holds: an empty-buffer restore is the
+<a href=#93 id=93 data-nosnippet>93</a>/// kernel's length probe, so any entry [`stash`] could write (up to the
+<a href=#94 id=94 data-nosnippet>94</a>/// kernel's 1 MiB per-slot limit) is read whole, in one allocation of exactly
+<a href=#95 id=95 data-nosnippet>95</a>/// its length.
+<a href=#96 id=96 data-nosnippet>96</a>///
+<a href=#97 id=97 data-nosnippet>97</a>/// # Errors
+<a href=#98 id=98 data-nosnippet>98</a>/// Returns [`HotswapError::NoState`] when nothing is stashed under `key` (cold
+<a href=#99 id=99 data-nosnippet>99</a>/// start, wrong key, or the entry was already cleared), and
+<a href=#100 id=100 data-nosnippet>100</a>/// [`HotswapError::SizeMismatch`] when the entry changed length between the
+<a href=#101 id=101 data-nosnippet>101</a>/// probe and the read.
+<a href=#102 id=102 data-nosnippet>102</a>///
+<a href=#103 id=103 data-nosnippet>103</a>/// # Panics
+<a href=#104 id=104 data-nosnippet>104</a>/// Never (OOM panics are handled by the cell allocator, not here).
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="kw">pub fn </span>restore(key: u64) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;[u8]&gt;, HotswapError&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">let </span>len = syscall::sys_state_restore(key, <span class="kw-2">&amp;mut </span>[]);
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">if </span>len == <span class="number">0 </span>{
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(HotswapError::NoState);
+<a href=#109 id=109 data-nosnippet>109</a>    }
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; len];
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">match </span>syscall::sys_state_restore(key, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Err</span>(HotswapError::NoState),
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="comment">// A read that filled the buffer is whole only if the entry did not grow.
+<a href=#114 id=114 data-nosnippet>114</a>        </span>n <span class="kw">if </span>n == len &amp;&amp; syscall::sys_state_restore(key, <span class="kw-2">&amp;mut </span>[]) == len =&gt; {
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="prelude-val">Ok</span>(buf.into_boxed_slice())
+<a href=#116 id=116 data-nosnippet>116</a>        }
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(HotswapError::SizeMismatch),
+<a href=#118 id=118 data-nosnippet>118</a>    }
 <a href=#119 id=119 data-nosnippet>119</a>}
 <a href=#120 id=120 data-nosnippet>120</a>
 <a href=#121 id=121 data-nosnippet>121</a><span class="comment">// ── clear() ───────────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@
 <a href=#173 id=173 data-nosnippet>173</a>/// # Example
 <a href=#174 id=174 data-nosnippet>174</a>/// ```no_run
 <a href=#175 id=175 data-nosnippet>175</a>/// use ostd::hotswap::{ViStateTransfer, stash, restore, clear, hotswap_key};
-<a href=#176 id=176 data-nosnippet>176</a>/// use api::ViError;
+<a href=#176 id=176 data-nosnippet>176</a>/// use types::ViError;
 <a href=#177 id=177 data-nosnippet>177</a>///
 <a href=#178 id=178 data-nosnippet>178</a>/// struct MyState { counter: u64, name: [u8; 32] }
 <a href=#179 id=179 data-nosnippet>179</a>///
@@ -235,52 +235,100 @@
 <a href=#235 id=235 data-nosnippet>235</a>/// - `[4..8]`  = payload length in bytes (u32, ≤ MAX_STASH_LEN − 8)
 <a href=#236 id=236 data-nosnippet>236</a></span><span class="kw">const </span>HEADER_LEN: usize = <span class="number">8</span>;
 <a href=#237 id=237 data-nosnippet>237</a>
-<a href=#238 id=238 data-nosnippet>238</a><span class="doccomment">/// Serialize `state` and store it in the kernel stash under `key`.
-<a href=#239 id=239 data-nosnippet>239</a>///
-<a href=#240 id=240 data-nosnippet>240</a>/// A versioned 8-byte header is prepended so [`restore_transfer`] can detect
-<a href=#241 id=241 data-nosnippet>241</a>/// schema mismatches. Call this from `AppEvent::Snapshot`.
-<a href=#242 id=242 data-nosnippet>242</a>///
-<a href=#243 id=243 data-nosnippet>243</a>/// # Errors
-<a href=#244 id=244 data-nosnippet>244</a>/// - `ViError` propagated from `state.serialize()`
-<a href=#245 id=245 data-nosnippet>245</a>/// - `ViError::ResourceBusy` when the kernel stash is full ([`HotswapError::StashFull`])
-<a href=#246 id=246 data-nosnippet>246</a></span><span class="kw">pub fn </span>stash_transfer&lt;S: ViStateTransfer&gt;(key: u64, state: <span class="kw-2">&amp;</span>S) -&gt; <span class="prelude-ty">Result</span>&lt;(), ViError&gt; {
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span>payload = state.serialize()<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>    <span class="kw">let </span>payload_len = payload.len() <span class="kw">as </span>u32;
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="kw">let </span><span class="kw-2">mut </span>packet = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; HEADER_LEN + payload.len()];
-<a href=#251 id=251 data-nosnippet>251</a>    packet[..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span>S::SCHEMA_VERSION.to_le_bytes());
-<a href=#252 id=252 data-nosnippet>252</a>    packet[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>payload_len.to_le_bytes());
-<a href=#253 id=253 data-nosnippet>253</a>    packet[HEADER_LEN..].copy_from_slice(<span class="kw-2">&amp;</span>payload);
-<a href=#254 id=254 data-nosnippet>254</a>
-<a href=#255 id=255 data-nosnippet>255</a>    stash(key, <span class="kw-2">&amp;</span>packet).map_err(ViError::from)
-<a href=#256 id=256 data-nosnippet>256</a>}
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a><span class="doccomment">/// Retrieve and deserialize state from the kernel stash under `key`.
-<a href=#259 id=259 data-nosnippet>259</a>///
-<a href=#260 id=260 data-nosnippet>260</a>/// Reads the versioned header, validates length, and forwards to
-<a href=#261 id=261 data-nosnippet>261</a>/// `S::deserialize`. Clears the kernel slot on success so the entry does not
-<a href=#262 id=262 data-nosnippet>262</a>/// accumulate toward the MAX_ENTRIES cap.
-<a href=#263 id=263 data-nosnippet>263</a>///
-<a href=#264 id=264 data-nosnippet>264</a>/// # Errors
-<a href=#265 id=265 data-nosnippet>265</a>/// - `ViError::NotFound` when no state is stashed ([`HotswapError::NoState`])
-<a href=#266 id=266 data-nosnippet>266</a>/// - `ViError::InvalidInput` when the header is malformed or truncated
-<a href=#267 id=267 data-nosnippet>267</a>/// - `ViError` propagated from `S::deserialize`
-<a href=#268 id=268 data-nosnippet>268</a></span><span class="kw">pub fn </span>restore_transfer&lt;S: ViStateTransfer&gt;(key: u64) -&gt; <span class="prelude-ty">Result</span>&lt;S, ViError&gt; {
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="kw">let </span>packet = restore(key).map_err(ViError::from)<span class="question-mark">?</span>;
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">if </span>packet.len() &lt; HEADER_LEN {
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="kw">let </span>version = u32::from_le_bytes(packet[..<span class="number">4</span>].try_into().map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>);
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">let </span>declared_len =
-<a href=#275 id=275 data-nosnippet>275</a>        u32::from_le_bytes(packet[<span class="number">4</span>..<span class="number">8</span>].try_into().map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>) <span class="kw">as </span>usize;
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">let </span>payload = <span class="kw-2">&amp;</span>packet[HEADER_LEN..];
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">if </span>payload.len() != declared_len {
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
-<a href=#279 id=279 data-nosnippet>279</a>    }
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">let </span>state = S::deserialize(version, payload)<span class="question-mark">?</span>;
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="comment">// Release the slot only after successful deserialization so a retry can
-<a href=#282 id=282 data-nosnippet>282</a>    // recover if deserialization fails (e.g. the new binary is rolled back).
-<a href=#283 id=283 data-nosnippet>283</a>    </span>clear(key);
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="prelude-val">Ok</span>(state)
-<a href=#285 id=285 data-nosnippet>285</a>}
+<a href=#238 id=238 data-nosnippet>238</a><span class="doccomment">/// Serialize `state` behind the versioned 8-byte header: the bytes a stash
+<a href=#239 id=239 data-nosnippet>239</a>/// entry holds.
+<a href=#240 id=240 data-nosnippet>240</a>///
+<a href=#241 id=241 data-nosnippet>241</a>/// # Errors
+<a href=#242 id=242 data-nosnippet>242</a>/// - `ViError` propagated from `state.serialize()`
+<a href=#243 id=243 data-nosnippet>243</a>/// - `ViError::InvalidInput` when the payload does not fit the u32 length field
+<a href=#244 id=244 data-nosnippet>244</a></span><span class="kw">pub fn </span>encode_transfer&lt;S: ViStateTransfer&gt;(state: <span class="kw-2">&amp;</span>S) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, ViError&gt; {
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="kw">let </span>payload = state.serialize()<span class="question-mark">?</span>;
+<a href=#246 id=246 data-nosnippet>246</a>    <span class="kw">let </span>payload_len = u32::try_from(payload.len()).map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#247 id=247 data-nosnippet>247</a>    <span class="kw">let </span><span class="kw-2">mut </span>packet = Vec::with_capacity(HEADER_LEN + payload.len());
+<a href=#248 id=248 data-nosnippet>248</a>    packet.extend_from_slice(<span class="kw-2">&amp;</span>S::SCHEMA_VERSION.to_le_bytes());
+<a href=#249 id=249 data-nosnippet>249</a>    packet.extend_from_slice(<span class="kw-2">&amp;</span>payload_len.to_le_bytes());
+<a href=#250 id=250 data-nosnippet>250</a>    packet.extend_from_slice(<span class="kw-2">&amp;</span>payload);
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="prelude-val">Ok</span>(packet)
+<a href=#252 id=252 data-nosnippet>252</a>}
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a><span class="doccomment">/// Validate the header [`encode_transfer`] wrote and hand the payload to
+<a href=#255 id=255 data-nosnippet>255</a>/// `S::deserialize` with the serializer's schema version.
+<a href=#256 id=256 data-nosnippet>256</a>///
+<a href=#257 id=257 data-nosnippet>257</a>/// # Errors
+<a href=#258 id=258 data-nosnippet>258</a>/// - `ViError::InvalidInput` when the header is malformed or the length disagrees
+<a href=#259 id=259 data-nosnippet>259</a>/// - `ViError` propagated from `S::deserialize`
+<a href=#260 id=260 data-nosnippet>260</a></span><span class="kw">pub fn </span>decode_transfer&lt;S: ViStateTransfer&gt;(packet: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;S, ViError&gt; {
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">let </span>(header, payload) = packet
+<a href=#262 id=262 data-nosnippet>262</a>        .split_at_checked(HEADER_LEN)
+<a href=#263 id=263 data-nosnippet>263</a>        .ok_or(ViError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">let </span>version = u32::from_le_bytes([header[<span class="number">0</span>], header[<span class="number">1</span>], header[<span class="number">2</span>], header[<span class="number">3</span>]]);
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span>declared_len = u32::from_le_bytes([header[<span class="number">4</span>], header[<span class="number">5</span>], header[<span class="number">6</span>], header[<span class="number">7</span>]]) <span class="kw">as </span>usize;
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">if </span>payload.len() != declared_len {
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
+<a href=#268 id=268 data-nosnippet>268</a>    }
+<a href=#269 id=269 data-nosnippet>269</a>    S::deserialize(version, payload)
+<a href=#270 id=270 data-nosnippet>270</a>}
+<a href=#271 id=271 data-nosnippet>271</a>
+<a href=#272 id=272 data-nosnippet>272</a><span class="doccomment">/// Serialize `state` and store it in the kernel stash under `key`.
+<a href=#273 id=273 data-nosnippet>273</a>///
+<a href=#274 id=274 data-nosnippet>274</a>/// A versioned 8-byte header is prepended so [`restore_transfer`] can detect
+<a href=#275 id=275 data-nosnippet>275</a>/// schema mismatches. Call this from `AppEvent::Snapshot`.
+<a href=#276 id=276 data-nosnippet>276</a>///
+<a href=#277 id=277 data-nosnippet>277</a>/// # Errors
+<a href=#278 id=278 data-nosnippet>278</a>/// - `ViError` propagated from [`encode_transfer`]
+<a href=#279 id=279 data-nosnippet>279</a>/// - `ViError::WouldBlock` when the kernel stash is full ([`HotswapError::StashFull`])
+<a href=#280 id=280 data-nosnippet>280</a></span><span class="kw">pub fn </span>stash_transfer&lt;S: ViStateTransfer&gt;(key: u64, state: <span class="kw-2">&amp;</span>S) -&gt; <span class="prelude-ty">Result</span>&lt;(), ViError&gt; {
+<a href=#281 id=281 data-nosnippet>281</a>    stash(key, <span class="kw-2">&amp;</span>encode_transfer(state)<span class="question-mark">?</span>).map_err(ViError::from)
+<a href=#282 id=282 data-nosnippet>282</a>}
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a><span class="doccomment">/// Retrieve and deserialize state from the kernel stash under `key`.
+<a href=#285 id=285 data-nosnippet>285</a>///
+<a href=#286 id=286 data-nosnippet>286</a>/// Clears the kernel slot on success so the entry does not accumulate toward
+<a href=#287 id=287 data-nosnippet>287</a>/// the MAX_ENTRIES cap.
+<a href=#288 id=288 data-nosnippet>288</a>///
+<a href=#289 id=289 data-nosnippet>289</a>/// # Errors
+<a href=#290 id=290 data-nosnippet>290</a>/// - `ViError::NotFound` when no state is stashed ([`HotswapError::NoState`])
+<a href=#291 id=291 data-nosnippet>291</a>/// - `ViError` propagated from [`decode_transfer`]
+<a href=#292 id=292 data-nosnippet>292</a></span><span class="kw">pub fn </span>restore_transfer&lt;S: ViStateTransfer&gt;(key: u64) -&gt; <span class="prelude-ty">Result</span>&lt;S, ViError&gt; {
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>packet = restore(key).map_err(ViError::from)<span class="question-mark">?</span>;
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="kw">let </span>state = decode_transfer(<span class="kw-2">&amp;</span>packet)<span class="question-mark">?</span>;
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="comment">// Release the slot only after successful deserialization so a retry can
+<a href=#296 id=296 data-nosnippet>296</a>    // recover if deserialization fails (e.g. the new binary is rolled back).
+<a href=#297 id=297 data-nosnippet>297</a>    </span>clear(key);
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="prelude-val">Ok</span>(state)
+<a href=#299 id=299 data-nosnippet>299</a>}
+<a href=#300 id=300 data-nosnippet>300</a>
+<a href=#301 id=301 data-nosnippet>301</a><span class="doccomment">/// The swap id a restore envelope's 64-byte key field names: the decimal
+<a href=#302 id=302 data-nosnippet>302</a>/// digits up to the first NUL. `None` for an empty, non-decimal or
+<a href=#303 id=303 data-nosnippet>303</a>/// overflowing key.
+<a href=#304 id=304 data-nosnippet>304</a></span><span class="kw">pub fn </span>swap_id_from_restore_key(key: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>digits = key.split(|<span class="kw-2">&amp;</span>byte| byte == <span class="number">0</span>).next().unwrap_or_default();
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">if </span>digits.is_empty() {
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#308 id=308 data-nosnippet>308</a>    }
+<a href=#309 id=309 data-nosnippet>309</a>    digits.iter().try_fold(<span class="number">0u64</span>, |value, <span class="kw-2">&amp;</span>byte| {
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">if </span>!byte.is_ascii_digit() {
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#312 id=312 data-nosnippet>312</a>        }
+<a href=#313 id=313 data-nosnippet>313</a>        value.checked_mul(<span class="number">10</span>)<span class="question-mark">?</span>.checked_add(u64::from(byte - <span class="string">b'0'</span>))
+<a href=#314 id=314 data-nosnippet>314</a>    })
+<a href=#315 id=315 data-nosnippet>315</a>}
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a><span class="attr">#[cfg(test)]
+<a href=#318 id=318 data-nosnippet>318</a></span><span class="kw">mod </span>tests {
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="comment">// `encode_transfer`/`decode_transfer` are tested with their consumer's state
+<a href=#320 id=320 data-nosnippet>320</a>    // type (`cells/services/config`), so no test-only impl of the trait lives here.
+<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="kw">use </span><span class="kw">super</span>::swap_id_from_restore_key;
+<a href=#322 id=322 data-nosnippet>322</a>
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="attr">#[test]
+<a href=#324 id=324 data-nosnippet>324</a>    </span><span class="kw">fn </span>the_restore_key_is_the_decimal_swap_id() {
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span><span class="kw-2">mut </span>key = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#326 id=326 data-nosnippet>326</a>        key[..<span class="number">5</span>].copy_from_slice(<span class="string">b"12345"</span>);
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="macro">assert_eq!</span>(swap_id_from_restore_key(<span class="kw-2">&amp;</span>key), <span class="prelude-val">Some</span>(<span class="number">12345</span>));
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="macro">assert_eq!</span>(swap_id_from_restore_key(<span class="string">b"0"</span>), <span class="prelude-val">Some</span>(<span class="number">0</span>));
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="macro">assert_eq!</span>(swap_id_from_restore_key(<span class="kw-2">&amp;</span>[<span class="number">0u8</span>; <span class="number">64</span>]), <span class="prelude-val">None</span>);
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="macro">assert_eq!</span>(swap_id_from_restore_key(<span class="string">b"12a"</span>), <span class="prelude-val">None</span>);
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="macro">assert_eq!</span>(swap_id_from_restore_key(<span class="string">b"18446744073709551616"</span>), <span class="prelude-val">None</span>);
+<a href=#332 id=332 data-nosnippet>332</a>    }
+<a href=#333 id=333 data-nosnippet>333</a>}
 </code></pre></div></section></main></body></html>

@@ -82,7 +82,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">if </span>cached != <span class="number">0 </span>&amp;&amp; cached == sender_tid {
 <a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#84 id=84 data-nosnippet>84</a>    }
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(abi::syscall::service::VFS, sender_tid) {
 <a href=#86 id=86 data-nosnippet>86</a>        VFS_TID.store(sender_tid, Ordering::Relaxed);
 <a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#88 id=88 data-nosnippet>88</a>    }
@@ -261,7 +261,7 @@
 <a href=#261 id=261 data-nosnippet>261</a><span class="comment">// ── Capability manifest ───────────────────────────────────────────────────────
 <a href=#262 id=262 data-nosnippet>262</a>// PcieDriverCap is granted by init via the reviewed `/bin/ahci` launch edge
 <a href=#263 id=263 data-nosnippet>263</a>// (not a manifest flag). This manifest declares NO privileged flags.
-<a href=#264 id=264 data-nosnippet>264</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#264 id=264 data-nosnippet>264</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#265 id=265 data-nosnippet>265</a>    block_io = <span class="bool-val">false</span>,
 <a href=#266 id=266 data-nosnippet>266</a>    network = <span class="bool-val">false</span>,
 <a href=#267 id=267 data-nosnippet>267</a>    spawn = <span class="bool-val">false</span>,
@@ -285,7 +285,7 @@
 <a href=#285 id=285 data-nosnippet>285</a>// `F09C-DIE-SHM` seam only.
 <a href=#286 id=286 data-nosnippet>286</a></span><span class="macro">macro_rules!</span> ahci_syscalls {
 <a href=#287 id=287 data-nosnippet>287</a>    ($(<span class="macro-nonterminal">$extra</span>:ident),<span class="kw-2">*</span>) =&gt; {
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="macro">api::declare_syscalls!</span>[
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="macro">abi::declare_syscalls!</span>[
 <a href=#289 id=289 data-nosnippet>289</a>            <span class="comment">// AppContext event-loop base set.
 <a href=#290 id=290 data-nosnippet>290</a>            </span>Send,
 <a href=#291 id=291 data-nosnippet>291</a>            SendGather,

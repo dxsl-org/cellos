@@ -6,9 +6,9 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! order for [`super::poll_surface_events`] and [`crate::input::poll_events`],
 <a href=#7 id=7 data-nosnippet>7</a>//! which route every compositor frame.
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>api::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::services::proto::compositor::DESTROY_OK;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>types::{ViError, ViResult};
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>types::{ViError, ViResult};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>wire::display::{compositor_ops, AttachGrant, PixelFormat, SurfaceRole};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>wire::proto::compositor::DESTROY_OK;
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::ipc::{call_bytes, post, IpcError};
 <a href=#14 id=14 data-nosnippet>14</a>
@@ -70,7 +70,7 @@
 <a href=#70 id=70 data-nosnippet>70</a>}
 <a href=#71 id=71 data-nosnippet>71</a>
 <a href=#72 id=72 data-nosnippet>72</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>configure_ack(comp_tid: usize, cap: u32, serial: u32) -&gt; ViResult&lt;()&gt; {
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>ack = api::display::ConfigureAck::new(cap, serial)
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>ack = wire::display::ConfigureAck::new(cap, serial)
 <a href=#74 id=74 data-nosnippet>74</a>        .encode()
 <a href=#75 id=75 data-nosnippet>75</a>        .map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
 <a href=#76 id=76 data-nosnippet>76</a>    request_status(comp_tid, <span class="kw-2">&amp;</span>ack, <span class="number">0x01</span>, COMPOSITOR_CALL_TICKS)
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>}
 <a href=#86 id=86 data-nosnippet>86</a>
 <a href=#87 id=87 data-nosnippet>87</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>detach_replaced_grant(comp_tid: usize, cap: u32, old_reg_id: usize) -&gt; ViResult&lt;()&gt; {
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">let </span>request = api::display::DetachReplacedGrant::new(cap, old_reg_id <span class="kw">as </span>u64)
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="kw">let </span>request = wire::display::DetachReplacedGrant::new(cap, old_reg_id <span class="kw">as </span>u64)
 <a href=#89 id=89 data-nosnippet>89</a>        .encode()
 <a href=#90 id=90 data-nosnippet>90</a>        .map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
 <a href=#91 id=91 data-nosnippet>91</a>    request_status(comp_tid, <span class="kw-2">&amp;</span>request, <span class="number">0x01</span>, COMPOSITOR_CALL_TICKS)

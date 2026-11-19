@@ -9,10 +9,10 @@
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; FileReadPlan&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>parse(path: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; ViResult&lt;<span class="self">Self</span>&gt; {
-<a href=#12 id=12 data-nosnippet>12</a>        api::dir_name::validate_dir_path(path.as_bytes()).map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#12 id=12 data-nosnippet>12</a>        wire::dir_name::validate_dir_path(path.as_bytes()).map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
 <a href=#13 id=13 data-nosnippet>13</a>        <span class="kw">let </span><span class="kw-2">mut </span>components = path[<span class="number">1</span>..]
 <a href=#14 id=14 data-nosnippet>14</a>            .split(<span class="string">'/'</span>)
-<a href=#15 id=15 data-nosnippet>15</a>            .map(|part| api::dir_name::validate_dir_component(part.as_bytes()))
+<a href=#15 id=15 data-nosnippet>15</a>            .map(|part| wire::dir_name::validate_dir_component(part.as_bytes()))
 <a href=#16 id=16 data-nosnippet>16</a>            .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()
 <a href=#17 id=17 data-nosnippet>17</a>            .map_err(|<span class="kw">_</span>| ViError::InvalidInput)<span class="question-mark">?</span>;
 <a href=#18 id=18 data-nosnippet>18</a>        <span class="kw">let </span>file_name = components.pop().ok_or(ViError::InvalidInput)<span class="question-mark">?</span>;

@@ -54,7 +54,7 @@
 <a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">if </span>cached != <span class="number">0 </span>&amp;&amp; cached == sender_tid {
 <a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#56 id=56 data-nosnippet>56</a>    }
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(abi::syscall::service::VFS, sender_tid) {
 <a href=#58 id=58 data-nosnippet>58</a>        VFS_TID.store(sender_tid, Ordering::Relaxed);
 <a href=#59 id=59 data-nosnippet>59</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#60 id=60 data-nosnippet>60</a>    }
@@ -183,7 +183,7 @@
 <a href=#183 id=183 data-nosnippet>183</a>
 <a href=#184 id=184 data-nosnippet>184</a><span class="comment">// PcieDriverCap is granted by the loader at spawn; this manifest declares NO
 <a href=#185 id=185 data-nosnippet>185</a>// privileged flags.
-<a href=#186 id=186 data-nosnippet>186</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#186 id=186 data-nosnippet>186</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#187 id=187 data-nosnippet>187</a>    block_io = <span class="bool-val">false</span>,
 <a href=#188 id=188 data-nosnippet>188</a>    network = <span class="bool-val">false</span>,
 <a href=#189 id=189 data-nosnippet>189</a>    spawn = <span class="bool-val">false</span>,

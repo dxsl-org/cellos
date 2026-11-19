@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["FIND_ATTEMPTS","IGB_BAR0_LEN","IGB_MMIO_MIN"],"fn":["handler","main"],"mod":["controller","dispatch","dma_layout","identity","sync"],"static":["STATE","VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["NicState"]};
+window.SIDEBAR_ITEMS = {"fn":["main","nic_event"],"mod":["controller","identity","sync"],"static":["NIC_STATE","VICELL_MANIFEST","VICELL_SYSCALLS"]};

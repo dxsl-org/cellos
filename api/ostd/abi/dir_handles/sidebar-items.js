@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_SPAWN_DIR_HANDLES","SPAWN_DIR_HANDLES_VERSION"],"enum":["DirHandleSetError"],"struct":["DirHandleSet","InheritedDirHandles","ViDirHandle","ViSpawnDirHandles"]};

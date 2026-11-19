@@ -50,7 +50,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>    {
 <a href=#51 id=51 data-nosnippet>51</a>        task.state = TaskState::Blocked {
 <a href=#52 id=52 data-nosnippet>52</a>            wait: WaitKind::Completion {
-<a href=#53 id=53 data-nosnippet>53</a>                source: api::completion::source::NET_RX,
+<a href=#53 id=53 data-nosnippet>53</a>                source: abi::completion::source::NET_RX,
 <a href=#54 id=54 data-nosnippet>54</a>                delivery: Delivery::Queue,
 <a href=#55 id=55 data-nosnippet>55</a>            },
 <a href=#56 id=56 data-nosnippet>56</a>            deadline: <span class="prelude-val">None</span>,
@@ -277,7 +277,7 @@
 <a href=#277 id=277 data-nosnippet>277</a>                    task.state,
 <a href=#278 id=278 data-nosnippet>278</a>                    TaskState::Blocked {
 <a href=#279 id=279 data-nosnippet>279</a>                        wait: WaitKind::Completion {
-<a href=#280 id=280 data-nosnippet>280</a>                            source: api::completion::source::NET_RX,
+<a href=#280 id=280 data-nosnippet>280</a>                            source: abi::completion::source::NET_RX,
 <a href=#281 id=281 data-nosnippet>281</a>                            delivery: Delivery::Queue,
 <a href=#282 id=282 data-nosnippet>282</a>                            ..
 <a href=#283 id=283 data-nosnippet>283</a>                        },
@@ -335,7 +335,7 @@
 <a href=#335 id=335 data-nosnippet>335</a>                <span class="kw">super</span>::completion_wait::publish_wait_state_locked(
 <a href=#336 id=336 data-nosnippet>336</a>                    task,
 <a href=#337 id=337 data-nosnippet>337</a>                    RECEIVER,
-<a href=#338 id=338 data-nosnippet>338</a>                    api::completion::source::TIMER,
+<a href=#338 id=338 data-nosnippet>338</a>                    abi::completion::source::TIMER,
 <a href=#339 id=339 data-nosnippet>339</a>                    <span class="prelude-val">Some</span>(u64::MAX),
 <a href=#340 id=340 data-nosnippet>340</a>                )
 <a href=#341 id=341 data-nosnippet>341</a>            })
@@ -351,7 +351,7 @@
 <a href=#351 id=351 data-nosnippet>351</a>                    task.state,
 <a href=#352 id=352 data-nosnippet>352</a>                    TaskState::Blocked {
 <a href=#353 id=353 data-nosnippet>353</a>                        wait: WaitKind::Completion {
-<a href=#354 id=354 data-nosnippet>354</a>                            source: api::completion::source::TIMER,
+<a href=#354 id=354 data-nosnippet>354</a>                            source: abi::completion::source::TIMER,
 <a href=#355 id=355 data-nosnippet>355</a>                            delivery: Delivery::Queue,
 <a href=#356 id=356 data-nosnippet>356</a>                            ..
 <a href=#357 id=357 data-nosnippet>357</a>                        },
@@ -402,7 +402,7 @@
 <a href=#402 id=402 data-nosnippet>402</a>            task.state,
 <a href=#403 id=403 data-nosnippet>403</a>            TaskState::Blocked {
 <a href=#404 id=404 data-nosnippet>404</a>                wait: WaitKind::Completion {
-<a href=#405 id=405 data-nosnippet>405</a>                    source: api::completion::source::NET_RX,
+<a href=#405 id=405 data-nosnippet>405</a>                    source: abi::completion::source::NET_RX,
 <a href=#406 id=406 data-nosnippet>406</a>                    delivery: Delivery::Queue,
 <a href=#407 id=407 data-nosnippet>407</a>                    ..
 <a href=#408 id=408 data-nosnippet>408</a>                },
@@ -475,7 +475,7 @@
 <a href=#475 id=475 data-nosnippet>475</a>                <span class="kw">super</span>::completion_wait::publish_wait_state_locked(
 <a href=#476 id=476 data-nosnippet>476</a>                    task,
 <a href=#477 id=477 data-nosnippet>477</a>                    RECEIVER,
-<a href=#478 id=478 data-nosnippet>478</a>                    api::completion::source::NET_RX,
+<a href=#478 id=478 data-nosnippet>478</a>                    abi::completion::source::NET_RX,
 <a href=#479 id=479 data-nosnippet>479</a>                    <span class="prelude-val">None</span>,
 <a href=#480 id=480 data-nosnippet>480</a>                )
 <a href=#481 id=481 data-nosnippet>481</a>            })
@@ -512,7 +512,7 @@
 <a href=#512 id=512 data-nosnippet>512</a>        <span class="kw-2">&amp;</span>completions,
 <a href=#513 id=513 data-nosnippet>513</a>        RECEIVER,
 <a href=#514 id=514 data-nosnippet>514</a>        slot,
-<a href=#515 id=515 data-nosnippet>515</a>        api::completion::source::NET_RX,
+<a href=#515 id=515 data-nosnippet>515</a>        abi::completion::source::NET_RX,
 <a href=#516 id=516 data-nosnippet>516</a>    ) <span class="kw">else </span>{
 <a href=#517 id=517 data-nosnippet>517</a>        <span class="kw">let _ </span>= completions.release(slot);
 <a href=#518 id=518 data-nosnippet>518</a>        reset();
@@ -531,12 +531,12 @@
 <a href=#531 id=531 data-nosnippet>531</a>                <span class="kw">super</span>::completion_wait::publish_wait_state_locked(
 <a href=#532 id=532 data-nosnippet>532</a>                    task,
 <a href=#533 id=533 data-nosnippet>533</a>                    RECEIVER,
-<a href=#534 id=534 data-nosnippet>534</a>                    api::completion::source::NET_RX,
+<a href=#534 id=534 data-nosnippet>534</a>                    abi::completion::source::NET_RX,
 <a href=#535 id=535 data-nosnippet>535</a>                    <span class="prelude-val">None</span>,
 <a href=#536 id=536 data-nosnippet>536</a>                )
 <a href=#537 id=537 data-nosnippet>537</a>            })
 <a href=#538 id=538 data-nosnippet>538</a>    };
-<a href=#539 id=539 data-nosnippet>539</a>    <span class="kw">let </span><span class="kw-2">mut </span>untouched = [<span class="number">0xa5u8</span>; api::completion::COMPLETION_LEN];
+<a href=#539 id=539 data-nosnippet>539</a>    <span class="kw">let </span><span class="kw-2">mut </span>untouched = [<span class="number">0xa5u8</span>; abi::completion::COMPLETION_LEN];
 <a href=#540 id=540 data-nosnippet>540</a>    <span class="kw">let </span>outcome = <span class="kw">super</span>::completion_wait::finish_net_rx_wait(
 <a href=#541 id=541 data-nosnippet>541</a>        RECEIVER,
 <a href=#542 id=542 data-nosnippet>542</a>        untouched.as_mut_ptr() <span class="kw">as </span>usize,
@@ -561,7 +561,7 @@
 <a href=#561 id=561 data-nosnippet>561</a>    <span class="kw">let </span>ok = posted.is_ok()
 <a href=#562 id=562 data-nosnippet>562</a>        &amp;&amp; decision == <span class="prelude-val">Some</span>(<span class="kw">super</span>::completion_wait::CompletionParkDecision::MailboxPending)
 <a href=#563 id=563 data-nosnippet>563</a>        &amp;&amp; outcome == <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#564 id=564 data-nosnippet>564</a>        &amp;&amp; untouched == [<span class="number">0xa5u8</span>; api::completion::COMPLETION_LEN]
+<a href=#564 id=564 data-nosnippet>564</a>        &amp;&amp; untouched == [<span class="number">0xa5u8</span>; abi::completion::COMPLETION_LEN]
 <a href=#565 id=565 data-nosnippet>565</a>        &amp;&amp; completions.reserved() == <span class="number">0
 <a href=#566 id=566 data-nosnippet>566</a>        </span>&amp;&amp; completions.drainable() == <span class="number">0
 <a href=#567 id=567 data-nosnippet>567</a>        </span>&amp;&amp; !<span class="kw">super</span>::completion::wakes_pending()
@@ -616,413 +616,430 @@
 <a href=#616 id=616 data-nosnippet>616</a>
 <a href=#617 id=617 data-nosnippet>617</a><span class="kw">fn </span>quota_failure_is_fallible() -&gt; bool {
 <a href=#618 id=618 data-nosnippet>618</a>    <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">9330</span>, CellId(QUOTA_CELL), <span class="string">"ipc-quota-selftest"</span>, Vec::new());
-<a href=#619 id=619 data-nosnippet>619</a>    <span class="kw">crate</span>::memory::cell_quota::register(CellId(QUOTA_CELL), <span class="number">0</span>);
-<a href=#620 id=620 data-nosnippet>620</a>    <span class="kw">let </span>inline_ok =
-<a href=#621 id=621 data-nosnippet>621</a>        <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="string">b"x"</span>, HOTSWAP_MSG_QUEUE_DEPTH).is_ok();
-<a href=#622 id=622 data-nosnippet>622</a>    <span class="kw">if </span>inline_ok {
-<a href=#623 id=623 data-nosnippet>623</a>        drop(task.pending_msgs.remove(<span class="number">0</span>));
-<a href=#624 id=624 data-nosnippet>624</a>    }
-<a href=#625 id=625 data-nosnippet>625</a>    <span class="kw">let </span>heap_backed_payload = [<span class="number">0x5a</span>; <span class="number">33</span>];
-<a href=#626 id=626 data-nosnippet>626</a>    <span class="kw">let </span>result = <span class="kw">super</span>::queue_pending_msg(
-<a href=#627 id=627 data-nosnippet>627</a>        <span class="kw-2">&amp;mut </span>task,
-<a href=#628 id=628 data-nosnippet>628</a>        SENDER,
-<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw-2">&amp;</span>heap_backed_payload,
-<a href=#630 id=630 data-nosnippet>630</a>        HOTSWAP_MSG_QUEUE_DEPTH,
-<a href=#631 id=631 data-nosnippet>631</a>    );
-<a href=#632 id=632 data-nosnippet>632</a>    <span class="kw">crate</span>::memory::cell_quota::deregister(CellId(QUOTA_CELL));
-<a href=#633 id=633 data-nosnippet>633</a>
-<a href=#634 id=634 data-nosnippet>634</a>    <span class="kw">if </span>inline_ok &amp;&amp; result.is_err() &amp;&amp; task.pending_msgs.is_empty() {
-<a href=#635 id=635 data-nosnippet>635</a>        <span class="bool-val">true
-<a href=#636 id=636 data-nosnippet>636</a>    </span>} <span class="kw">else </span>{
-<a href=#637 id=637 data-nosnippet>637</a>        fail(<span class="string">"inline delivery allocated or heap quota failure mutated the mailbox"</span>)
-<a href=#638 id=638 data-nosnippet>638</a>    }
-<a href=#639 id=639 data-nosnippet>639</a>}
-<a href=#640 id=640 data-nosnippet>640</a>
-<a href=#641 id=641 data-nosnippet>641</a><span class="kw">fn </span>heap_payload_refunds_receiver_quota() -&gt; bool {
-<a href=#642 id=642 data-nosnippet>642</a>    <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">9331</span>, CellId(QUOTA_CELL), <span class="string">"ipc-refund-selftest"</span>, Vec::new());
-<a href=#643 id=643 data-nosnippet>643</a>    <span class="kw">crate</span>::memory::cell_quota::register(CellId(QUOTA_CELL), <span class="number">4096</span>);
-<a href=#644 id=644 data-nosnippet>644</a>    <span class="kw">let </span>payload = [<span class="number">0xa5</span>; <span class="number">33</span>];
-<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">let </span>queued = <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="kw-2">&amp;</span>payload, HOTSWAP_MSG_QUEUE_DEPTH);
-<a href=#646 id=646 data-nosnippet>646</a>    <span class="kw">let </span>charged = <span class="kw">crate</span>::memory::cell_quota::in_use(CellId(QUOTA_CELL));
-<a href=#647 id=647 data-nosnippet>647</a>    <span class="kw">if </span>queued.is_ok() {
-<a href=#648 id=648 data-nosnippet>648</a>        drop(task.pending_msgs.remove(<span class="number">0</span>));
-<a href=#649 id=649 data-nosnippet>649</a>    }
-<a href=#650 id=650 data-nosnippet>650</a>    <span class="kw">let </span>refunded = <span class="kw">crate</span>::memory::cell_quota::in_use(CellId(QUOTA_CELL));
-<a href=#651 id=651 data-nosnippet>651</a>    <span class="kw">crate</span>::memory::cell_quota::deregister(CellId(QUOTA_CELL));
-<a href=#652 id=652 data-nosnippet>652</a>    queued.is_ok() &amp;&amp; charged &gt;= payload.len() &amp;&amp; refunded == <span class="number">0
-<a href=#653 id=653 data-nosnippet>653</a>        </span>|| fail(<span class="string">"heap payload was not charged and refunded to the receiver"</span>)
-<a href=#654 id=654 data-nosnippet>654</a>}
-<a href=#655 id=655 data-nosnippet>655</a>
-<a href=#656 id=656 data-nosnippet>656</a><span class="kw">fn </span>death_wake_precedes_later_message() -&gt; bool {
-<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">9332</span>, CellId(<span class="number">1</span>), <span class="string">"ipc-death-selftest"</span>, Vec::new());
-<a href=#658 id=658 data-nosnippet>658</a>    task.caller.current = <span class="prelude-val">Some</span>(<span class="number">77</span>);
-<a href=#659 id=659 data-nosnippet>659</a>    task.pending_exit_reason = <span class="prelude-val">Some</span>(<span class="number">9</span>);
-<a href=#660 id=660 data-nosnippet>660</a>    <span class="kw">let _ </span>= <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="string">b"later"</span>, HOTSWAP_MSG_QUEUE_DEPTH);
-<a href=#661 id=661 data-nosnippet>661</a>    <span class="kw">let </span>first = <span class="kw">super</span>::syscall::take_resume_delivery(<span class="kw-2">&amp;mut </span>task, <span class="number">0</span>);
-<a href=#662 id=662 data-nosnippet>662</a>    <span class="kw">let </span>second = <span class="kw">super</span>::syscall::take_resume_delivery(<span class="kw-2">&amp;mut </span>task, <span class="number">0</span>);
-<a href=#663 id=663 data-nosnippet>663</a>    <span class="macro">matches!</span>(
-<a href=#664 id=664 data-nosnippet>664</a>        first,
-<a href=#665 id=665 data-nosnippet>665</a>        <span class="kw">super</span>::syscall::ResumeDelivery::Death {
-<a href=#666 id=666 data-nosnippet>666</a>            sender_tid: <span class="number">77</span>,
-<a href=#667 id=667 data-nosnippet>667</a>            reason: <span class="number">9
-<a href=#668 id=668 data-nosnippet>668</a>        </span>}
-<a href=#669 id=669 data-nosnippet>669</a>    ) &amp;&amp; <span class="macro">matches!</span>(second, <span class="kw">super</span>::syscall::ResumeDelivery::Message(<span class="kw">_</span>))
-<a href=#670 id=670 data-nosnippet>670</a>        || fail(<span class="string">"a later mailbox message displaced the death-owned wake"</span>)
+<a href=#619 id=619 data-nosnippet>619</a>    <span class="comment">// Mailbox growth is the kernel's, so a receiver at limit 0 still takes an
+<a href=#620 id=620 data-nosnippet>620</a>    // inline message and refuses only a heap-backed payload.
+<a href=#621 id=621 data-nosnippet>621</a>    </span><span class="kw">crate</span>::memory::cell_quota::register(
+<a href=#622 id=622 data-nosnippet>622</a>        CellId(QUOTA_CELL),
+<a href=#623 id=623 data-nosnippet>623</a>        task.cell_generation,
+<a href=#624 id=624 data-nosnippet>624</a>        <span class="kw">crate</span>::memory::cell_quota::Limits {
+<a href=#625 id=625 data-nosnippet>625</a>            memory: <span class="number">0</span>,
+<a href=#626 id=626 data-nosnippet>626</a>            guest: <span class="number">0</span>,
+<a href=#627 id=627 data-nosnippet>627</a>        },
+<a href=#628 id=628 data-nosnippet>628</a>    );
+<a href=#629 id=629 data-nosnippet>629</a>    <span class="kw">let </span>inline_ok =
+<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="string">b"x"</span>, HOTSWAP_MSG_QUEUE_DEPTH).is_ok();
+<a href=#631 id=631 data-nosnippet>631</a>    <span class="kw">if </span>inline_ok {
+<a href=#632 id=632 data-nosnippet>632</a>        drop(task.pending_msgs.remove(<span class="number">0</span>));
+<a href=#633 id=633 data-nosnippet>633</a>    }
+<a href=#634 id=634 data-nosnippet>634</a>    <span class="kw">let </span>heap_backed_payload = [<span class="number">0x5a</span>; <span class="number">33</span>];
+<a href=#635 id=635 data-nosnippet>635</a>    <span class="kw">let </span>result = <span class="kw">super</span>::queue_pending_msg(
+<a href=#636 id=636 data-nosnippet>636</a>        <span class="kw-2">&amp;mut </span>task,
+<a href=#637 id=637 data-nosnippet>637</a>        SENDER,
+<a href=#638 id=638 data-nosnippet>638</a>        <span class="kw-2">&amp;</span>heap_backed_payload,
+<a href=#639 id=639 data-nosnippet>639</a>        HOTSWAP_MSG_QUEUE_DEPTH,
+<a href=#640 id=640 data-nosnippet>640</a>    );
+<a href=#641 id=641 data-nosnippet>641</a>    <span class="kw">crate</span>::memory::cell_quota::deregister(CellId(QUOTA_CELL));
+<a href=#642 id=642 data-nosnippet>642</a>
+<a href=#643 id=643 data-nosnippet>643</a>    <span class="kw">if </span>inline_ok &amp;&amp; result.is_err() &amp;&amp; task.pending_msgs.is_empty() {
+<a href=#644 id=644 data-nosnippet>644</a>        <span class="bool-val">true
+<a href=#645 id=645 data-nosnippet>645</a>    </span>} <span class="kw">else </span>{
+<a href=#646 id=646 data-nosnippet>646</a>        fail(<span class="string">"inline delivery allocated or heap quota failure mutated the mailbox"</span>)
+<a href=#647 id=647 data-nosnippet>647</a>    }
+<a href=#648 id=648 data-nosnippet>648</a>}
+<a href=#649 id=649 data-nosnippet>649</a>
+<a href=#650 id=650 data-nosnippet>650</a><span class="kw">fn </span>heap_payload_refunds_receiver_quota() -&gt; bool {
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">9331</span>, CellId(QUOTA_CELL), <span class="string">"ipc-refund-selftest"</span>, Vec::new());
+<a href=#652 id=652 data-nosnippet>652</a>    <span class="kw">crate</span>::memory::cell_quota::register(
+<a href=#653 id=653 data-nosnippet>653</a>        CellId(QUOTA_CELL),
+<a href=#654 id=654 data-nosnippet>654</a>        task.cell_generation,
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="kw">crate</span>::memory::cell_quota::Limits {
+<a href=#656 id=656 data-nosnippet>656</a>            memory: <span class="number">4096</span>,
+<a href=#657 id=657 data-nosnippet>657</a>            guest: <span class="number">0</span>,
+<a href=#658 id=658 data-nosnippet>658</a>        },
+<a href=#659 id=659 data-nosnippet>659</a>    );
+<a href=#660 id=660 data-nosnippet>660</a>    <span class="kw">let </span>payload = [<span class="number">0xa5</span>; <span class="number">33</span>];
+<a href=#661 id=661 data-nosnippet>661</a>    <span class="kw">let </span>queued = <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="kw-2">&amp;</span>payload, HOTSWAP_MSG_QUEUE_DEPTH);
+<a href=#662 id=662 data-nosnippet>662</a>    <span class="kw">let </span>charged = <span class="kw">crate</span>::memory::cell_quota::in_use(CellId(QUOTA_CELL));
+<a href=#663 id=663 data-nosnippet>663</a>    <span class="kw">if </span>queued.is_ok() {
+<a href=#664 id=664 data-nosnippet>664</a>        drop(task.pending_msgs.remove(<span class="number">0</span>));
+<a href=#665 id=665 data-nosnippet>665</a>    }
+<a href=#666 id=666 data-nosnippet>666</a>    <span class="kw">let </span>refunded = <span class="kw">crate</span>::memory::cell_quota::in_use(CellId(QUOTA_CELL));
+<a href=#667 id=667 data-nosnippet>667</a>    <span class="kw">crate</span>::memory::cell_quota::deregister(CellId(QUOTA_CELL));
+<a href=#668 id=668 data-nosnippet>668</a>    <span class="comment">// Only the payload is the receiver's; the mailbox container is the kernel's.
+<a href=#669 id=669 data-nosnippet>669</a>    </span>queued.is_ok() &amp;&amp; charged == payload.len() &amp;&amp; refunded == <span class="number">0
+<a href=#670 id=670 data-nosnippet>670</a>        </span>|| fail(<span class="string">"heap payload was not charged and refunded to the receiver"</span>)
 <a href=#671 id=671 data-nosnippet>671</a>}
 <a href=#672 id=672 data-nosnippet>672</a>
-<a href=#673 id=673 data-nosnippet>673</a><span class="kw">fn </span>pending_drain_keeps_sender_context_without_relocking() -&gt; bool {
-<a href=#674 id=674 data-nosnippet>674</a>    insert(SENDER, TEST_CELL);
-<a href=#675 id=675 data-nosnippet>675</a>    insert(RECEIVER, TEST_CELL + <span class="number">1</span>);
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">let </span>payload = <span class="string">b"context"</span>;
-<a href=#677 id=677 data-nosnippet>677</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv_buf = [<span class="number">0u8</span>; <span class="number">16</span>];
-<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw">let </span>result = {
-<a href=#679 id=679 data-nosnippet>679</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sched) = guard.as_mut() <span class="kw">else </span>{
-<a href=#681 id=681 data-nosnippet>681</a>            <span class="kw">return </span>fail(<span class="string">"scheduler missing during IPC pending drain selftest"</span>);
-<a href=#682 id=682 data-nosnippet>682</a>        };
-<a href=#683 id=683 data-nosnippet>683</a>        <span class="kw">let </span>receiver = sched
-<a href=#684 id=684 data-nosnippet>684</a>            .tasks
-<a href=#685 id=685 data-nosnippet>685</a>            .get_mut(<span class="kw-2">&amp;</span>RECEIVER)
-<a href=#686 id=686 data-nosnippet>686</a>            .expect(<span class="string">"synthetic receiver exists"</span>);
-<a href=#687 id=687 data-nosnippet>687</a>        receiver.pending_msgs.try_push(<span class="kw">super</span>::tcb::PendingMsg {
-<a href=#688 id=688 data-nosnippet>688</a>            sender_tid: SENDER,
-<a href=#689 id=689 data-nosnippet>689</a>            data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
-<a href=#690 id=690 data-nosnippet>690</a>                payload,
-<a href=#691 id=691 data-nosnippet>691</a>                TEST_CELL <span class="kw">as </span>usize,
-<a href=#692 id=692 data-nosnippet>692</a>            )
-<a href=#693 id=693 data-nosnippet>693</a>            .expect(<span class="string">"inline payload copy must fit"</span>),
-<a href=#694 id=694 data-nosnippet>694</a>            wire: <span class="prelude-val">None</span>,
-<a href=#695 id=695 data-nosnippet>695</a>            enqueued_tick: <span class="number">0</span>,
-<a href=#696 id=696 data-nosnippet>696</a>        })
-<a href=#697 id=697 data-nosnippet>697</a>    };
-<a href=#698 id=698 data-nosnippet>698</a>    <span class="kw">if </span>result.is_err() {
-<a href=#699 id=699 data-nosnippet>699</a>        reset();
-<a href=#700 id=700 data-nosnippet>700</a>        <span class="kw">return </span>fail(<span class="string">"could not enqueue the synthetic pending IPC message"</span>);
-<a href=#701 id=701 data-nosnippet>701</a>    }
-<a href=#702 id=702 data-nosnippet>702</a>
-<a href=#703 id=703 data-nosnippet>703</a>    <span class="kw">let </span>sender_generation = {
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">let </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
-<a href=#705 id=705 data-nosnippet>705</a>        guard
-<a href=#706 id=706 data-nosnippet>706</a>            .as_ref()
-<a href=#707 id=707 data-nosnippet>707</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>SENDER))
-<a href=#708 id=708 data-nosnippet>708</a>            .map(|task| task.cell_generation)
-<a href=#709 id=709 data-nosnippet>709</a>            .unwrap_or(<span class="number">0</span>)
-<a href=#710 id=710 data-nosnippet>710</a>    };
-<a href=#711 id=711 data-nosnippet>711</a>    <span class="kw">let </span>delivered = <span class="kw">super</span>::syscall::handle_syscall(
-<a href=#712 id=712 data-nosnippet>712</a>        RECEIVER,
-<a href=#713 id=713 data-nosnippet>713</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
-<a href=#714 id=714 data-nosnippet>714</a>            mask: SENDER,
-<a href=#715 id=715 data-nosnippet>715</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#716 id=716 data-nosnippet>716</a>            buf_len: payload.len(),
-<a href=#717 id=717 data-nosnippet>717</a>            attest_caller: <span class="bool-val">false</span>,
-<a href=#718 id=718 data-nosnippet>718</a>        },
-<a href=#719 id=719 data-nosnippet>719</a>    );
-<a href=#720 id=720 data-nosnippet>720</a>    <span class="kw">let </span>preserved = {
+<a href=#673 id=673 data-nosnippet>673</a><span class="kw">fn </span>death_wake_precedes_later_message() -&gt; bool {
+<a href=#674 id=674 data-nosnippet>674</a>    <span class="kw">let </span><span class="kw-2">mut </span>task = Task::new(<span class="number">9332</span>, CellId(<span class="number">1</span>), <span class="string">"ipc-death-selftest"</span>, Vec::new());
+<a href=#675 id=675 data-nosnippet>675</a>    task.caller.current = <span class="prelude-val">Some</span>(<span class="number">77</span>);
+<a href=#676 id=676 data-nosnippet>676</a>    task.pending_exit_reason = <span class="prelude-val">Some</span>(<span class="number">9</span>);
+<a href=#677 id=677 data-nosnippet>677</a>    <span class="kw">let _ </span>= <span class="kw">super</span>::queue_pending_msg(<span class="kw-2">&amp;mut </span>task, SENDER, <span class="string">b"later"</span>, HOTSWAP_MSG_QUEUE_DEPTH);
+<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw">let </span>first = <span class="kw">super</span>::syscall::take_resume_delivery(<span class="kw-2">&amp;mut </span>task, <span class="number">0</span>);
+<a href=#679 id=679 data-nosnippet>679</a>    <span class="kw">let </span>second = <span class="kw">super</span>::syscall::take_resume_delivery(<span class="kw-2">&amp;mut </span>task, <span class="number">0</span>);
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="macro">matches!</span>(
+<a href=#681 id=681 data-nosnippet>681</a>        first,
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">super</span>::syscall::ResumeDelivery::Death {
+<a href=#683 id=683 data-nosnippet>683</a>            sender_tid: <span class="number">77</span>,
+<a href=#684 id=684 data-nosnippet>684</a>            reason: <span class="number">9
+<a href=#685 id=685 data-nosnippet>685</a>        </span>}
+<a href=#686 id=686 data-nosnippet>686</a>    ) &amp;&amp; <span class="macro">matches!</span>(second, <span class="kw">super</span>::syscall::ResumeDelivery::Message(<span class="kw">_</span>))
+<a href=#687 id=687 data-nosnippet>687</a>        || fail(<span class="string">"a later mailbox message displaced the death-owned wake"</span>)
+<a href=#688 id=688 data-nosnippet>688</a>}
+<a href=#689 id=689 data-nosnippet>689</a>
+<a href=#690 id=690 data-nosnippet>690</a><span class="kw">fn </span>pending_drain_keeps_sender_context_without_relocking() -&gt; bool {
+<a href=#691 id=691 data-nosnippet>691</a>    insert(SENDER, TEST_CELL);
+<a href=#692 id=692 data-nosnippet>692</a>    insert(RECEIVER, TEST_CELL + <span class="number">1</span>);
+<a href=#693 id=693 data-nosnippet>693</a>    <span class="kw">let </span>payload = <span class="string">b"context"</span>;
+<a href=#694 id=694 data-nosnippet>694</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv_buf = [<span class="number">0u8</span>; <span class="number">16</span>];
+<a href=#695 id=695 data-nosnippet>695</a>    <span class="kw">let </span>result = {
+<a href=#696 id=696 data-nosnippet>696</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
+<a href=#697 id=697 data-nosnippet>697</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sched) = guard.as_mut() <span class="kw">else </span>{
+<a href=#698 id=698 data-nosnippet>698</a>            <span class="kw">return </span>fail(<span class="string">"scheduler missing during IPC pending drain selftest"</span>);
+<a href=#699 id=699 data-nosnippet>699</a>        };
+<a href=#700 id=700 data-nosnippet>700</a>        <span class="kw">let </span>receiver = sched
+<a href=#701 id=701 data-nosnippet>701</a>            .tasks
+<a href=#702 id=702 data-nosnippet>702</a>            .get_mut(<span class="kw-2">&amp;</span>RECEIVER)
+<a href=#703 id=703 data-nosnippet>703</a>            .expect(<span class="string">"synthetic receiver exists"</span>);
+<a href=#704 id=704 data-nosnippet>704</a>        receiver.pending_msgs.try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#705 id=705 data-nosnippet>705</a>            sender_tid: SENDER,
+<a href=#706 id=706 data-nosnippet>706</a>            data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
+<a href=#707 id=707 data-nosnippet>707</a>                payload,
+<a href=#708 id=708 data-nosnippet>708</a>                <span class="kw">crate</span>::memory::cell_quota::Charge::KERNEL,
+<a href=#709 id=709 data-nosnippet>709</a>            )
+<a href=#710 id=710 data-nosnippet>710</a>            .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#711 id=711 data-nosnippet>711</a>            wire: <span class="prelude-val">None</span>,
+<a href=#712 id=712 data-nosnippet>712</a>            enqueued_tick: <span class="number">0</span>,
+<a href=#713 id=713 data-nosnippet>713</a>        })
+<a href=#714 id=714 data-nosnippet>714</a>    };
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">if </span>result.is_err() {
+<a href=#716 id=716 data-nosnippet>716</a>        reset();
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="kw">return </span>fail(<span class="string">"could not enqueue the synthetic pending IPC message"</span>);
+<a href=#718 id=718 data-nosnippet>718</a>    }
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a>    <span class="kw">let </span>sender_generation = {
 <a href=#721 id=721 data-nosnippet>721</a>        <span class="kw">let </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
 <a href=#722 id=722 data-nosnippet>722</a>        guard
 <a href=#723 id=723 data-nosnippet>723</a>            .as_ref()
-<a href=#724 id=724 data-nosnippet>724</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>RECEIVER))
-<a href=#725 id=725 data-nosnippet>725</a>            .is_some_and(|task| {
-<a href=#726 id=726 data-nosnippet>726</a>                task.caller.current == <span class="prelude-val">Some</span>(SENDER)
-<a href=#727 id=727 data-nosnippet>727</a>                    &amp;&amp; task.caller.cell_id == TEST_CELL
-<a href=#728 id=728 data-nosnippet>728</a>                    &amp;&amp; task.caller.cell_generation == sender_generation
-<a href=#729 id=729 data-nosnippet>729</a>                    &amp;&amp; task.pending_msgs.is_empty()
-<a href=#730 id=730 data-nosnippet>730</a>            })
-<a href=#731 id=731 data-nosnippet>731</a>    };
-<a href=#732 id=732 data-nosnippet>732</a>    reset();
-<a href=#733 id=733 data-nosnippet>733</a>    <span class="macro">matches!</span>(delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
-<a href=#734 id=734 data-nosnippet>734</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
-<a href=#735 id=735 data-nosnippet>735</a>        &amp;&amp; preserved
-<a href=#736 id=736 data-nosnippet>736</a>        || fail(<span class="string">"pending-message drain did not preserve sender context under one scheduler lock"</span>)
-<a href=#737 id=737 data-nosnippet>737</a>}
-<a href=#738 id=738 data-nosnippet>738</a>
-<a href=#739 id=739 data-nosnippet>739</a><span class="kw">fn </span>try_recv_attestation_writes_identity_trailer() -&gt; bool {
-<a href=#740 id=740 data-nosnippet>740</a>    prepare_receiver(<span class="number">0</span>);
-<a href=#741 id=741 data-nosnippet>741</a>    <span class="kw">let </span>payload = <span class="string">b"attested-try-recv"</span>;
-<a href=#742 id=742 data-nosnippet>742</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
-<a href=#743 id=743 data-nosnippet>743</a>    <span class="kw">let </span>result = {
-<a href=#744 id=744 data-nosnippet>744</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
-<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sched) = guard.as_mut() <span class="kw">else </span>{
-<a href=#746 id=746 data-nosnippet>746</a>            <span class="kw">return </span>fail(<span class="string">"scheduler missing during try_recv attestation selftest"</span>);
-<a href=#747 id=747 data-nosnippet>747</a>        };
-<a href=#748 id=748 data-nosnippet>748</a>        <span class="kw">let </span>receiver = sched
-<a href=#749 id=749 data-nosnippet>749</a>            .tasks
-<a href=#750 id=750 data-nosnippet>750</a>            .get_mut(<span class="kw-2">&amp;</span>RECEIVER)
-<a href=#751 id=751 data-nosnippet>751</a>            .expect(<span class="string">"synthetic receiver exists"</span>);
-<a href=#752 id=752 data-nosnippet>752</a>        receiver.pending_msgs.try_push(<span class="kw">super</span>::tcb::PendingMsg {
-<a href=#753 id=753 data-nosnippet>753</a>            sender_tid: SENDER,
-<a href=#754 id=754 data-nosnippet>754</a>            data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
-<a href=#755 id=755 data-nosnippet>755</a>                payload,
-<a href=#756 id=756 data-nosnippet>756</a>                TEST_CELL <span class="kw">as </span>usize,
-<a href=#757 id=757 data-nosnippet>757</a>            )
-<a href=#758 id=758 data-nosnippet>758</a>            .expect(<span class="string">"inline payload copy must fit"</span>),
-<a href=#759 id=759 data-nosnippet>759</a>            wire: <span class="prelude-val">None</span>,
-<a href=#760 id=760 data-nosnippet>760</a>            enqueued_tick: <span class="number">0</span>,
-<a href=#761 id=761 data-nosnippet>761</a>        })
-<a href=#762 id=762 data-nosnippet>762</a>    };
-<a href=#763 id=763 data-nosnippet>763</a>    <span class="kw">if </span>result.is_err() {
-<a href=#764 id=764 data-nosnippet>764</a>        reset();
-<a href=#765 id=765 data-nosnippet>765</a>        <span class="kw">return </span>fail(<span class="string">"could not enqueue pending message for try_recv attestation test"</span>);
-<a href=#766 id=766 data-nosnippet>766</a>    }
-<a href=#767 id=767 data-nosnippet>767</a>
-<a href=#768 id=768 data-nosnippet>768</a>    <span class="kw">let </span>sender_generation = {
-<a href=#769 id=769 data-nosnippet>769</a>        <span class="kw">let </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
-<a href=#770 id=770 data-nosnippet>770</a>        guard
-<a href=#771 id=771 data-nosnippet>771</a>            .as_ref()
-<a href=#772 id=772 data-nosnippet>772</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>SENDER))
-<a href=#773 id=773 data-nosnippet>773</a>            .map(|task| task.cell_generation)
-<a href=#774 id=774 data-nosnippet>774</a>            .unwrap_or(<span class="number">0</span>)
-<a href=#775 id=775 data-nosnippet>775</a>    };
-<a href=#776 id=776 data-nosnippet>776</a>
-<a href=#777 id=777 data-nosnippet>777</a>    <span class="comment">// Case 1: attest_caller = true
-<a href=#778 id=778 data-nosnippet>778</a>    </span><span class="kw">let </span>delivered = <span class="kw">super</span>::syscall::handle_syscall(
-<a href=#779 id=779 data-nosnippet>779</a>        RECEIVER,
-<a href=#780 id=780 data-nosnippet>780</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
-<a href=#781 id=781 data-nosnippet>781</a>            mask: SENDER,
-<a href=#782 id=782 data-nosnippet>782</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#783 id=783 data-nosnippet>783</a>            buf_len: recv_buf.len(),
-<a href=#784 id=784 data-nosnippet>784</a>            attest_caller: <span class="bool-val">true</span>,
-<a href=#785 id=785 data-nosnippet>785</a>        },
-<a href=#786 id=786 data-nosnippet>786</a>    );
-<a href=#787 id=787 data-nosnippet>787</a>    <span class="kw">let </span>identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
-<a href=#788 id=788 data-nosnippet>788</a>    <span class="kw">let </span>attested_ok = <span class="macro">matches!</span>(delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
-<a href=#789 id=789 data-nosnippet>789</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
-<a href=#790 id=790 data-nosnippet>790</a>        &amp;&amp; identity
-<a href=#791 id=791 data-nosnippet>791</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#792 id=792 data-nosnippet>792</a>                flags: <span class="number">0</span>,
-<a href=#793 id=793 data-nosnippet>793</a>                cell_id: TEST_CELL,
-<a href=#794 id=794 data-nosnippet>794</a>                generation: sender_generation,
-<a href=#795 id=795 data-nosnippet>795</a>                sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#796 id=796 data-nosnippet>796</a>            });
-<a href=#797 id=797 data-nosnippet>797</a>
-<a href=#798 id=798 data-nosnippet>798</a>    <span class="comment">// Case 2: Rename's bit 62 alone admits its syscall but does not attest
-<a href=#799 id=799 data-nosnippet>799</a>    // VfsMutate to the VFS service.
-<a href=#800 id=800 data-nosnippet>800</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#801 id=801 data-nosnippet>801</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
-<a href=#802 id=802 data-nosnippet>802</a>            task.syscall_allowlist = <span class="number">1u64 </span>&lt;&lt; <span class="number">62</span>;
-<a href=#803 id=803 data-nosnippet>803</a>        }
-<a href=#804 id=804 data-nosnippet>804</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
-<a href=#805 id=805 data-nosnippet>805</a>            receiver
-<a href=#806 id=806 data-nosnippet>806</a>                .pending_msgs
-<a href=#807 id=807 data-nosnippet>807</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
-<a href=#808 id=808 data-nosnippet>808</a>                    sender_tid: SENDER,
-<a href=#809 id=809 data-nosnippet>809</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
-<a href=#810 id=810 data-nosnippet>810</a>                        payload,
-<a href=#811 id=811 data-nosnippet>811</a>                        TEST_CELL <span class="kw">as </span>usize,
-<a href=#812 id=812 data-nosnippet>812</a>                    )
-<a href=#813 id=813 data-nosnippet>813</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
-<a href=#814 id=814 data-nosnippet>814</a>                    wire: <span class="prelude-val">None</span>,
-<a href=#815 id=815 data-nosnippet>815</a>                    enqueued_tick: <span class="number">0</span>,
-<a href=#816 id=816 data-nosnippet>816</a>                })
-<a href=#817 id=817 data-nosnippet>817</a>                .ok();
-<a href=#818 id=818 data-nosnippet>818</a>        }
-<a href=#819 id=819 data-nosnippet>819</a>    }
-<a href=#820 id=820 data-nosnippet>820</a>    recv_buf.fill(<span class="number">0</span>);
-<a href=#821 id=821 data-nosnippet>821</a>    <span class="kw">let </span>rename_only_delivered = <span class="kw">super</span>::syscall::handle_syscall(
-<a href=#822 id=822 data-nosnippet>822</a>        RECEIVER,
-<a href=#823 id=823 data-nosnippet>823</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
-<a href=#824 id=824 data-nosnippet>824</a>            mask: SENDER,
-<a href=#825 id=825 data-nosnippet>825</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#826 id=826 data-nosnippet>826</a>            buf_len: recv_buf.len(),
-<a href=#827 id=827 data-nosnippet>827</a>            attest_caller: <span class="bool-val">true</span>,
-<a href=#828 id=828 data-nosnippet>828</a>        },
-<a href=#829 id=829 data-nosnippet>829</a>    );
-<a href=#830 id=830 data-nosnippet>830</a>    <span class="kw">let </span>rename_only_identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
-<a href=#831 id=831 data-nosnippet>831</a>    <span class="kw">let </span>rename_only_ok = <span class="macro">matches!</span>(rename_only_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
-<a href=#832 id=832 data-nosnippet>832</a>        &amp;&amp; rename_only_identity
-<a href=#833 id=833 data-nosnippet>833</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#834 id=834 data-nosnippet>834</a>                flags: <span class="number">0</span>,
-<a href=#835 id=835 data-nosnippet>835</a>                cell_id: TEST_CELL,
-<a href=#836 id=836 data-nosnippet>836</a>                generation: sender_generation,
-<a href=#837 id=837 data-nosnippet>837</a>                sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#838 id=838 data-nosnippet>838</a>            });
-<a href=#839 id=839 data-nosnippet>839</a>
-<a href=#840 id=840 data-nosnippet>840</a>    <span class="comment">// Case 3: only the explicit combination, held with the S2-W `vfs_mutate`
-<a href=#841 id=841 data-nosnippet>841</a>    // right, attests VfsMutate.
-<a href=#842 id=842 data-nosnippet>842</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
-<a href=#844 id=844 data-nosnippet>844</a>            task.syscall_allowlist = (<span class="number">1u64 </span>&lt;&lt; <span class="number">62</span>) | (<span class="number">1u64 </span>&lt;&lt; <span class="number">63</span>);
-<a href=#845 id=845 data-nosnippet>845</a>            task.rights.vfs_mutate = <span class="bool-val">true</span>;
-<a href=#846 id=846 data-nosnippet>846</a>        }
-<a href=#847 id=847 data-nosnippet>847</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
-<a href=#848 id=848 data-nosnippet>848</a>            receiver
-<a href=#849 id=849 data-nosnippet>849</a>                .pending_msgs
-<a href=#850 id=850 data-nosnippet>850</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
-<a href=#851 id=851 data-nosnippet>851</a>                    sender_tid: SENDER,
-<a href=#852 id=852 data-nosnippet>852</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
-<a href=#853 id=853 data-nosnippet>853</a>                        payload,
-<a href=#854 id=854 data-nosnippet>854</a>                        TEST_CELL <span class="kw">as </span>usize,
-<a href=#855 id=855 data-nosnippet>855</a>                    )
-<a href=#856 id=856 data-nosnippet>856</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
-<a href=#857 id=857 data-nosnippet>857</a>                    wire: <span class="prelude-val">None</span>,
-<a href=#858 id=858 data-nosnippet>858</a>                    enqueued_tick: <span class="number">0</span>,
-<a href=#859 id=859 data-nosnippet>859</a>                })
-<a href=#860 id=860 data-nosnippet>860</a>                .expect(<span class="string">"pending mailbox has room"</span>);
-<a href=#861 id=861 data-nosnippet>861</a>        }
-<a href=#862 id=862 data-nosnippet>862</a>    }
-<a href=#863 id=863 data-nosnippet>863</a>    recv_buf.fill(<span class="number">0</span>);
-<a href=#864 id=864 data-nosnippet>864</a>    <span class="kw">let </span>mutate_delivered = <span class="kw">super</span>::syscall::handle_syscall(
-<a href=#865 id=865 data-nosnippet>865</a>        RECEIVER,
-<a href=#866 id=866 data-nosnippet>866</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
-<a href=#867 id=867 data-nosnippet>867</a>            mask: SENDER,
-<a href=#868 id=868 data-nosnippet>868</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#869 id=869 data-nosnippet>869</a>            buf_len: recv_buf.len(),
-<a href=#870 id=870 data-nosnippet>870</a>            attest_caller: <span class="bool-val">true</span>,
-<a href=#871 id=871 data-nosnippet>871</a>        },
-<a href=#872 id=872 data-nosnippet>872</a>    );
-<a href=#873 id=873 data-nosnippet>873</a>    <span class="kw">let </span>mutate_identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
-<a href=#874 id=874 data-nosnippet>874</a>    <span class="kw">let </span>mutate_ok = <span class="macro">matches!</span>(mutate_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
-<a href=#875 id=875 data-nosnippet>875</a>        &amp;&amp; mutate_identity
-<a href=#876 id=876 data-nosnippet>876</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#877 id=877 data-nosnippet>877</a>                flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
-<a href=#878 id=878 data-nosnippet>878</a>                cell_id: TEST_CELL,
-<a href=#879 id=879 data-nosnippet>879</a>                generation: sender_generation,
-<a href=#880 id=880 data-nosnippet>880</a>                sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#881 id=881 data-nosnippet>881</a>            });
-<a href=#882 id=882 data-nosnippet>882</a>
-<a href=#883 id=883 data-nosnippet>883</a>    <span class="comment">// Case 4: the same declaration without the `vfs_mutate` right (a sandbox
-<a href=#884 id=884 data-nosnippet>884</a>    // edge) attests nothing.
-<a href=#885 id=885 data-nosnippet>885</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#886 id=886 data-nosnippet>886</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
-<a href=#887 id=887 data-nosnippet>887</a>            task.rights.vfs_mutate = <span class="bool-val">false</span>;
-<a href=#888 id=888 data-nosnippet>888</a>        }
-<a href=#889 id=889 data-nosnippet>889</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
-<a href=#890 id=890 data-nosnippet>890</a>            receiver
-<a href=#891 id=891 data-nosnippet>891</a>                .pending_msgs
-<a href=#892 id=892 data-nosnippet>892</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
-<a href=#893 id=893 data-nosnippet>893</a>                    sender_tid: SENDER,
-<a href=#894 id=894 data-nosnippet>894</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
-<a href=#895 id=895 data-nosnippet>895</a>                        payload,
-<a href=#896 id=896 data-nosnippet>896</a>                        TEST_CELL <span class="kw">as </span>usize,
-<a href=#897 id=897 data-nosnippet>897</a>                    )
-<a href=#898 id=898 data-nosnippet>898</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
-<a href=#899 id=899 data-nosnippet>899</a>                    wire: <span class="prelude-val">None</span>,
-<a href=#900 id=900 data-nosnippet>900</a>                    enqueued_tick: <span class="number">0</span>,
-<a href=#901 id=901 data-nosnippet>901</a>                })
-<a href=#902 id=902 data-nosnippet>902</a>                .expect(<span class="string">"pending mailbox has room"</span>);
-<a href=#903 id=903 data-nosnippet>903</a>        }
-<a href=#904 id=904 data-nosnippet>904</a>    }
-<a href=#905 id=905 data-nosnippet>905</a>    recv_buf.fill(<span class="number">0</span>);
-<a href=#906 id=906 data-nosnippet>906</a>    <span class="kw">let </span>withheld_delivered = <span class="kw">super</span>::syscall::handle_syscall(
-<a href=#907 id=907 data-nosnippet>907</a>        RECEIVER,
-<a href=#908 id=908 data-nosnippet>908</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
-<a href=#909 id=909 data-nosnippet>909</a>            mask: SENDER,
-<a href=#910 id=910 data-nosnippet>910</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#911 id=911 data-nosnippet>911</a>            buf_len: recv_buf.len(),
-<a href=#912 id=912 data-nosnippet>912</a>            attest_caller: <span class="bool-val">true</span>,
-<a href=#913 id=913 data-nosnippet>913</a>        },
-<a href=#914 id=914 data-nosnippet>914</a>    );
-<a href=#915 id=915 data-nosnippet>915</a>    <span class="kw">let </span>withheld_identity = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
-<a href=#916 id=916 data-nosnippet>916</a>    <span class="kw">let </span>withheld_ok = <span class="macro">matches!</span>(withheld_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
-<a href=#917 id=917 data-nosnippet>917</a>        &amp;&amp; withheld_identity
-<a href=#918 id=918 data-nosnippet>918</a>            == <span class="prelude-val">Some</span>(api::caller_identity::CallerIdentity {
-<a href=#919 id=919 data-nosnippet>919</a>                flags: <span class="number">0</span>,
-<a href=#920 id=920 data-nosnippet>920</a>                cell_id: TEST_CELL,
-<a href=#921 id=921 data-nosnippet>921</a>                generation: sender_generation,
-<a href=#922 id=922 data-nosnippet>922</a>                sender_tid: SENDER <span class="kw">as </span>u64,
-<a href=#923 id=923 data-nosnippet>923</a>            });
-<a href=#924 id=924 data-nosnippet>924</a>
-<a href=#925 id=925 data-nosnippet>925</a>    reset();
-<a href=#926 id=926 data-nosnippet>926</a>    (attested_ok &amp;&amp; rename_only_ok &amp;&amp; mutate_ok &amp;&amp; withheld_ok)
-<a href=#927 id=927 data-nosnippet>927</a>        || fail(<span class="string">"try_recv did not preserve Rename/VfsMutate/vfs_mutate gate separation"</span>)
-<a href=#928 id=928 data-nosnippet>928</a>}
-<a href=#929 id=929 data-nosnippet>929</a>
-<a href=#930 id=930 data-nosnippet>930</a><span class="doccomment">/// Multi-source selection: one parked waiter sees NET_RX, an IPC terminal and
-<a href=#931 id=931 data-nosnippet>931</a>/// its deadline exactly once each within three selections.
-<a href=#932 id=932 data-nosnippet>932</a>///
-<a href=#933 id=933 data-nosnippet>933</a>/// This runs on production boots, so it never touches the global NET_RX
-<a href=#934 id=934 data-nosnippet>934</a>/// reservation or level flag: NET_RX readiness is a local value handed to the
-<a href=#935 id=935 data-nosnippet>935</a>/// selector, exactly where the wait loop passes its own observation. The IPC
-<a href=#936 id=936 data-nosnippet>936</a>/// terminal is a real peer-death transition on a seeded dispatched operation.
-<a href=#937 id=937 data-nosnippet>937</a>/// The syscall validator must accept the mixed mask only with a finite
-<a href=#938 id=938 data-nosnippet>938</a>/// deadline, and reject unknown bits next to IPC. The real reservation and
-<a href=#939 id=939 data-nosnippet>939</a>/// level-flag settlement is covered by the host tests in `completion_wait`.
-<a href=#940 id=940 data-nosnippet>940</a></span><span class="kw">fn </span>multi_source_wait_reports_each_source_once() -&gt; bool {
-<a href=#941 id=941 data-nosnippet>941</a>    <span class="kw">use </span><span class="kw">super</span>::completion_wait <span class="kw">as </span>cw;
-<a href=#942 id=942 data-nosnippet>942</a>    <span class="kw">const </span>NET_RX: u32 = api::completion::source::NET_RX;
-<a href=#943 id=943 data-nosnippet>943</a>    <span class="kw">const </span>TIMER: u32 = api::completion::source::TIMER;
-<a href=#944 id=944 data-nosnippet>944</a>    <span class="kw">const </span>IPC: u32 = api::completion::source::IPC;
-<a href=#945 id=945 data-nosnippet>945</a>    <span class="kw">let </span>mask = NET_RX | IPC | TIMER;
+<a href=#724 id=724 data-nosnippet>724</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>SENDER))
+<a href=#725 id=725 data-nosnippet>725</a>            .map(|task| task.cell_generation)
+<a href=#726 id=726 data-nosnippet>726</a>            .unwrap_or(<span class="number">0</span>)
+<a href=#727 id=727 data-nosnippet>727</a>    };
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">let </span>delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#729 id=729 data-nosnippet>729</a>        RECEIVER,
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#731 id=731 data-nosnippet>731</a>            mask: SENDER,
+<a href=#732 id=732 data-nosnippet>732</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#733 id=733 data-nosnippet>733</a>            buf_len: payload.len(),
+<a href=#734 id=734 data-nosnippet>734</a>            attest_caller: <span class="bool-val">false</span>,
+<a href=#735 id=735 data-nosnippet>735</a>        },
+<a href=#736 id=736 data-nosnippet>736</a>    );
+<a href=#737 id=737 data-nosnippet>737</a>    <span class="kw">let </span>preserved = {
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
+<a href=#739 id=739 data-nosnippet>739</a>        guard
+<a href=#740 id=740 data-nosnippet>740</a>            .as_ref()
+<a href=#741 id=741 data-nosnippet>741</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>RECEIVER))
+<a href=#742 id=742 data-nosnippet>742</a>            .is_some_and(|task| {
+<a href=#743 id=743 data-nosnippet>743</a>                task.caller.current == <span class="prelude-val">Some</span>(SENDER)
+<a href=#744 id=744 data-nosnippet>744</a>                    &amp;&amp; task.caller.cell_id == TEST_CELL
+<a href=#745 id=745 data-nosnippet>745</a>                    &amp;&amp; task.caller.cell_generation == sender_generation
+<a href=#746 id=746 data-nosnippet>746</a>                    &amp;&amp; task.pending_msgs.is_empty()
+<a href=#747 id=747 data-nosnippet>747</a>            })
+<a href=#748 id=748 data-nosnippet>748</a>    };
+<a href=#749 id=749 data-nosnippet>749</a>    reset();
+<a href=#750 id=750 data-nosnippet>750</a>    <span class="macro">matches!</span>(delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#751 id=751 data-nosnippet>751</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
+<a href=#752 id=752 data-nosnippet>752</a>        &amp;&amp; preserved
+<a href=#753 id=753 data-nosnippet>753</a>        || fail(<span class="string">"pending-message drain did not preserve sender context under one scheduler lock"</span>)
+<a href=#754 id=754 data-nosnippet>754</a>}
+<a href=#755 id=755 data-nosnippet>755</a>
+<a href=#756 id=756 data-nosnippet>756</a><span class="kw">fn </span>try_recv_attestation_writes_identity_trailer() -&gt; bool {
+<a href=#757 id=757 data-nosnippet>757</a>    prepare_receiver(<span class="number">0</span>);
+<a href=#758 id=758 data-nosnippet>758</a>    <span class="kw">let </span>payload = <span class="string">b"attested-try-recv"</span>;
+<a href=#759 id=759 data-nosnippet>759</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#760 id=760 data-nosnippet>760</a>    <span class="kw">let </span>result = {
+<a href=#761 id=761 data-nosnippet>761</a>        <span class="kw">let </span><span class="kw-2">mut </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
+<a href=#762 id=762 data-nosnippet>762</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(sched) = guard.as_mut() <span class="kw">else </span>{
+<a href=#763 id=763 data-nosnippet>763</a>            <span class="kw">return </span>fail(<span class="string">"scheduler missing during try_recv attestation selftest"</span>);
+<a href=#764 id=764 data-nosnippet>764</a>        };
+<a href=#765 id=765 data-nosnippet>765</a>        <span class="kw">let </span>receiver = sched
+<a href=#766 id=766 data-nosnippet>766</a>            .tasks
+<a href=#767 id=767 data-nosnippet>767</a>            .get_mut(<span class="kw-2">&amp;</span>RECEIVER)
+<a href=#768 id=768 data-nosnippet>768</a>            .expect(<span class="string">"synthetic receiver exists"</span>);
+<a href=#769 id=769 data-nosnippet>769</a>        receiver.pending_msgs.try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#770 id=770 data-nosnippet>770</a>            sender_tid: SENDER,
+<a href=#771 id=771 data-nosnippet>771</a>            data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
+<a href=#772 id=772 data-nosnippet>772</a>                payload,
+<a href=#773 id=773 data-nosnippet>773</a>                <span class="kw">crate</span>::memory::cell_quota::Charge::KERNEL,
+<a href=#774 id=774 data-nosnippet>774</a>            )
+<a href=#775 id=775 data-nosnippet>775</a>            .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#776 id=776 data-nosnippet>776</a>            wire: <span class="prelude-val">None</span>,
+<a href=#777 id=777 data-nosnippet>777</a>            enqueued_tick: <span class="number">0</span>,
+<a href=#778 id=778 data-nosnippet>778</a>        })
+<a href=#779 id=779 data-nosnippet>779</a>    };
+<a href=#780 id=780 data-nosnippet>780</a>    <span class="kw">if </span>result.is_err() {
+<a href=#781 id=781 data-nosnippet>781</a>        reset();
+<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw">return </span>fail(<span class="string">"could not enqueue pending message for try_recv attestation test"</span>);
+<a href=#783 id=783 data-nosnippet>783</a>    }
+<a href=#784 id=784 data-nosnippet>784</a>
+<a href=#785 id=785 data-nosnippet>785</a>    <span class="kw">let </span>sender_generation = {
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span>guard = <span class="kw">super</span>::SCHEDULER.lock();
+<a href=#787 id=787 data-nosnippet>787</a>        guard
+<a href=#788 id=788 data-nosnippet>788</a>            .as_ref()
+<a href=#789 id=789 data-nosnippet>789</a>            .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>SENDER))
+<a href=#790 id=790 data-nosnippet>790</a>            .map(|task| task.cell_generation)
+<a href=#791 id=791 data-nosnippet>791</a>            .unwrap_or(<span class="number">0</span>)
+<a href=#792 id=792 data-nosnippet>792</a>    };
+<a href=#793 id=793 data-nosnippet>793</a>
+<a href=#794 id=794 data-nosnippet>794</a>    <span class="comment">// Case 1: attest_caller = true
+<a href=#795 id=795 data-nosnippet>795</a>    </span><span class="kw">let </span>delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#796 id=796 data-nosnippet>796</a>        RECEIVER,
+<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#798 id=798 data-nosnippet>798</a>            mask: SENDER,
+<a href=#799 id=799 data-nosnippet>799</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#800 id=800 data-nosnippet>800</a>            buf_len: recv_buf.len(),
+<a href=#801 id=801 data-nosnippet>801</a>            attest_caller: <span class="bool-val">true</span>,
+<a href=#802 id=802 data-nosnippet>802</a>        },
+<a href=#803 id=803 data-nosnippet>803</a>    );
+<a href=#804 id=804 data-nosnippet>804</a>    <span class="kw">let </span>identity = abi::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
+<a href=#805 id=805 data-nosnippet>805</a>    <span class="kw">let </span>attested_ok = <span class="macro">matches!</span>(delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#806 id=806 data-nosnippet>806</a>        &amp;&amp; recv_buf[..payload.len()] == <span class="kw-2">*</span>payload
+<a href=#807 id=807 data-nosnippet>807</a>        &amp;&amp; identity
+<a href=#808 id=808 data-nosnippet>808</a>            == <span class="prelude-val">Some</span>(abi::caller_identity::CallerIdentity {
+<a href=#809 id=809 data-nosnippet>809</a>                flags: <span class="number">0</span>,
+<a href=#810 id=810 data-nosnippet>810</a>                cell_id: TEST_CELL,
+<a href=#811 id=811 data-nosnippet>811</a>                generation: sender_generation,
+<a href=#812 id=812 data-nosnippet>812</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#813 id=813 data-nosnippet>813</a>            });
+<a href=#814 id=814 data-nosnippet>814</a>
+<a href=#815 id=815 data-nosnippet>815</a>    <span class="comment">// Case 2: Rename's bit 62 alone admits its syscall but does not attest
+<a href=#816 id=816 data-nosnippet>816</a>    // VfsMutate to the VFS service.
+<a href=#817 id=817 data-nosnippet>817</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#818 id=818 data-nosnippet>818</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
+<a href=#819 id=819 data-nosnippet>819</a>            task.syscall_allowlist = <span class="number">1u64 </span>&lt;&lt; <span class="number">62</span>;
+<a href=#820 id=820 data-nosnippet>820</a>        }
+<a href=#821 id=821 data-nosnippet>821</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#822 id=822 data-nosnippet>822</a>            receiver
+<a href=#823 id=823 data-nosnippet>823</a>                .pending_msgs
+<a href=#824 id=824 data-nosnippet>824</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#825 id=825 data-nosnippet>825</a>                    sender_tid: SENDER,
+<a href=#826 id=826 data-nosnippet>826</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
+<a href=#827 id=827 data-nosnippet>827</a>                        payload,
+<a href=#828 id=828 data-nosnippet>828</a>                        <span class="kw">crate</span>::memory::cell_quota::Charge::KERNEL,
+<a href=#829 id=829 data-nosnippet>829</a>                    )
+<a href=#830 id=830 data-nosnippet>830</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#831 id=831 data-nosnippet>831</a>                    wire: <span class="prelude-val">None</span>,
+<a href=#832 id=832 data-nosnippet>832</a>                    enqueued_tick: <span class="number">0</span>,
+<a href=#833 id=833 data-nosnippet>833</a>                })
+<a href=#834 id=834 data-nosnippet>834</a>                .ok();
+<a href=#835 id=835 data-nosnippet>835</a>        }
+<a href=#836 id=836 data-nosnippet>836</a>    }
+<a href=#837 id=837 data-nosnippet>837</a>    recv_buf.fill(<span class="number">0</span>);
+<a href=#838 id=838 data-nosnippet>838</a>    <span class="kw">let </span>rename_only_delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#839 id=839 data-nosnippet>839</a>        RECEIVER,
+<a href=#840 id=840 data-nosnippet>840</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#841 id=841 data-nosnippet>841</a>            mask: SENDER,
+<a href=#842 id=842 data-nosnippet>842</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#843 id=843 data-nosnippet>843</a>            buf_len: recv_buf.len(),
+<a href=#844 id=844 data-nosnippet>844</a>            attest_caller: <span class="bool-val">true</span>,
+<a href=#845 id=845 data-nosnippet>845</a>        },
+<a href=#846 id=846 data-nosnippet>846</a>    );
+<a href=#847 id=847 data-nosnippet>847</a>    <span class="kw">let </span>rename_only_identity = abi::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
+<a href=#848 id=848 data-nosnippet>848</a>    <span class="kw">let </span>rename_only_ok = <span class="macro">matches!</span>(rename_only_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#849 id=849 data-nosnippet>849</a>        &amp;&amp; rename_only_identity
+<a href=#850 id=850 data-nosnippet>850</a>            == <span class="prelude-val">Some</span>(abi::caller_identity::CallerIdentity {
+<a href=#851 id=851 data-nosnippet>851</a>                flags: <span class="number">0</span>,
+<a href=#852 id=852 data-nosnippet>852</a>                cell_id: TEST_CELL,
+<a href=#853 id=853 data-nosnippet>853</a>                generation: sender_generation,
+<a href=#854 id=854 data-nosnippet>854</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#855 id=855 data-nosnippet>855</a>            });
+<a href=#856 id=856 data-nosnippet>856</a>
+<a href=#857 id=857 data-nosnippet>857</a>    <span class="comment">// Case 3: only the explicit combination, held with the S2-W `vfs_mutate`
+<a href=#858 id=858 data-nosnippet>858</a>    // right, attests VfsMutate.
+<a href=#859 id=859 data-nosnippet>859</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#860 id=860 data-nosnippet>860</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
+<a href=#861 id=861 data-nosnippet>861</a>            task.syscall_allowlist = (<span class="number">1u64 </span>&lt;&lt; <span class="number">62</span>) | (<span class="number">1u64 </span>&lt;&lt; <span class="number">63</span>);
+<a href=#862 id=862 data-nosnippet>862</a>            task.rights.vfs_mutate = <span class="bool-val">true</span>;
+<a href=#863 id=863 data-nosnippet>863</a>        }
+<a href=#864 id=864 data-nosnippet>864</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#865 id=865 data-nosnippet>865</a>            receiver
+<a href=#866 id=866 data-nosnippet>866</a>                .pending_msgs
+<a href=#867 id=867 data-nosnippet>867</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#868 id=868 data-nosnippet>868</a>                    sender_tid: SENDER,
+<a href=#869 id=869 data-nosnippet>869</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
+<a href=#870 id=870 data-nosnippet>870</a>                        payload,
+<a href=#871 id=871 data-nosnippet>871</a>                        <span class="kw">crate</span>::memory::cell_quota::Charge::KERNEL,
+<a href=#872 id=872 data-nosnippet>872</a>                    )
+<a href=#873 id=873 data-nosnippet>873</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#874 id=874 data-nosnippet>874</a>                    wire: <span class="prelude-val">None</span>,
+<a href=#875 id=875 data-nosnippet>875</a>                    enqueued_tick: <span class="number">0</span>,
+<a href=#876 id=876 data-nosnippet>876</a>                })
+<a href=#877 id=877 data-nosnippet>877</a>                .expect(<span class="string">"pending mailbox has room"</span>);
+<a href=#878 id=878 data-nosnippet>878</a>        }
+<a href=#879 id=879 data-nosnippet>879</a>    }
+<a href=#880 id=880 data-nosnippet>880</a>    recv_buf.fill(<span class="number">0</span>);
+<a href=#881 id=881 data-nosnippet>881</a>    <span class="kw">let </span>mutate_delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#882 id=882 data-nosnippet>882</a>        RECEIVER,
+<a href=#883 id=883 data-nosnippet>883</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#884 id=884 data-nosnippet>884</a>            mask: SENDER,
+<a href=#885 id=885 data-nosnippet>885</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#886 id=886 data-nosnippet>886</a>            buf_len: recv_buf.len(),
+<a href=#887 id=887 data-nosnippet>887</a>            attest_caller: <span class="bool-val">true</span>,
+<a href=#888 id=888 data-nosnippet>888</a>        },
+<a href=#889 id=889 data-nosnippet>889</a>    );
+<a href=#890 id=890 data-nosnippet>890</a>    <span class="kw">let </span>mutate_identity = abi::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
+<a href=#891 id=891 data-nosnippet>891</a>    <span class="kw">let </span>mutate_ok = <span class="macro">matches!</span>(mutate_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#892 id=892 data-nosnippet>892</a>        &amp;&amp; mutate_identity
+<a href=#893 id=893 data-nosnippet>893</a>            == <span class="prelude-val">Some</span>(abi::caller_identity::CallerIdentity {
+<a href=#894 id=894 data-nosnippet>894</a>                flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
+<a href=#895 id=895 data-nosnippet>895</a>                cell_id: TEST_CELL,
+<a href=#896 id=896 data-nosnippet>896</a>                generation: sender_generation,
+<a href=#897 id=897 data-nosnippet>897</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#898 id=898 data-nosnippet>898</a>            });
+<a href=#899 id=899 data-nosnippet>899</a>
+<a href=#900 id=900 data-nosnippet>900</a>    <span class="comment">// Case 4: the same declaration without the `vfs_mutate` right (a sandbox
+<a href=#901 id=901 data-nosnippet>901</a>    // edge) attests nothing.
+<a href=#902 id=902 data-nosnippet>902</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#903 id=903 data-nosnippet>903</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>SENDER) {
+<a href=#904 id=904 data-nosnippet>904</a>            task.rights.vfs_mutate = <span class="bool-val">false</span>;
+<a href=#905 id=905 data-nosnippet>905</a>        }
+<a href=#906 id=906 data-nosnippet>906</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(receiver) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#907 id=907 data-nosnippet>907</a>            receiver
+<a href=#908 id=908 data-nosnippet>908</a>                .pending_msgs
+<a href=#909 id=909 data-nosnippet>909</a>                .try_push(<span class="kw">super</span>::tcb::PendingMsg {
+<a href=#910 id=910 data-nosnippet>910</a>                    sender_tid: SENDER,
+<a href=#911 id=911 data-nosnippet>911</a>                    data: <span class="kw">crate</span>::ipc::pending_mailbox::PendingMsgData::try_copy(
+<a href=#912 id=912 data-nosnippet>912</a>                        payload,
+<a href=#913 id=913 data-nosnippet>913</a>                        <span class="kw">crate</span>::memory::cell_quota::Charge::KERNEL,
+<a href=#914 id=914 data-nosnippet>914</a>                    )
+<a href=#915 id=915 data-nosnippet>915</a>                    .expect(<span class="string">"inline payload copy must fit"</span>),
+<a href=#916 id=916 data-nosnippet>916</a>                    wire: <span class="prelude-val">None</span>,
+<a href=#917 id=917 data-nosnippet>917</a>                    enqueued_tick: <span class="number">0</span>,
+<a href=#918 id=918 data-nosnippet>918</a>                })
+<a href=#919 id=919 data-nosnippet>919</a>                .expect(<span class="string">"pending mailbox has room"</span>);
+<a href=#920 id=920 data-nosnippet>920</a>        }
+<a href=#921 id=921 data-nosnippet>921</a>    }
+<a href=#922 id=922 data-nosnippet>922</a>    recv_buf.fill(<span class="number">0</span>);
+<a href=#923 id=923 data-nosnippet>923</a>    <span class="kw">let </span>withheld_delivered = <span class="kw">super</span>::syscall::handle_syscall(
+<a href=#924 id=924 data-nosnippet>924</a>        RECEIVER,
+<a href=#925 id=925 data-nosnippet>925</a>        <span class="kw">super</span>::syscall::Syscall::TryRecv {
+<a href=#926 id=926 data-nosnippet>926</a>            mask: SENDER,
+<a href=#927 id=927 data-nosnippet>927</a>            buf_ptr: recv_buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#928 id=928 data-nosnippet>928</a>            buf_len: recv_buf.len(),
+<a href=#929 id=929 data-nosnippet>929</a>            attest_caller: <span class="bool-val">true</span>,
+<a href=#930 id=930 data-nosnippet>930</a>        },
+<a href=#931 id=931 data-nosnippet>931</a>    );
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="kw">let </span>withheld_identity = abi::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>recv_buf);
+<a href=#933 id=933 data-nosnippet>933</a>    <span class="kw">let </span>withheld_ok = <span class="macro">matches!</span>(withheld_delivered, <span class="prelude-val">Ok</span>(id) <span class="kw">if </span>id == SENDER)
+<a href=#934 id=934 data-nosnippet>934</a>        &amp;&amp; withheld_identity
+<a href=#935 id=935 data-nosnippet>935</a>            == <span class="prelude-val">Some</span>(abi::caller_identity::CallerIdentity {
+<a href=#936 id=936 data-nosnippet>936</a>                flags: <span class="number">0</span>,
+<a href=#937 id=937 data-nosnippet>937</a>                cell_id: TEST_CELL,
+<a href=#938 id=938 data-nosnippet>938</a>                generation: sender_generation,
+<a href=#939 id=939 data-nosnippet>939</a>                sender_tid: SENDER <span class="kw">as </span>u64,
+<a href=#940 id=940 data-nosnippet>940</a>            });
+<a href=#941 id=941 data-nosnippet>941</a>
+<a href=#942 id=942 data-nosnippet>942</a>    reset();
+<a href=#943 id=943 data-nosnippet>943</a>    (attested_ok &amp;&amp; rename_only_ok &amp;&amp; mutate_ok &amp;&amp; withheld_ok)
+<a href=#944 id=944 data-nosnippet>944</a>        || fail(<span class="string">"try_recv did not preserve Rename/VfsMutate/vfs_mutate gate separation"</span>)
+<a href=#945 id=945 data-nosnippet>945</a>}
 <a href=#946 id=946 data-nosnippet>946</a>
-<a href=#947 id=947 data-nosnippet>947</a>    <span class="kw">let </span>syscall_rule = cw::source_is_valid(IPC, <span class="prelude-val">None</span>)
-<a href=#948 id=948 data-nosnippet>948</a>        &amp;&amp; cw::source_is_valid(mask, <span class="prelude-val">Some</span>(<span class="number">1</span>))
-<a href=#949 id=949 data-nosnippet>949</a>        &amp;&amp; !cw::source_is_valid(mask, <span class="prelude-val">None</span>)
-<a href=#950 id=950 data-nosnippet>950</a>        &amp;&amp; !cw::source_is_valid(IPC | (<span class="number">1 </span>&lt;&lt; <span class="number">4</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
-<a href=#951 id=951 data-nosnippet>951</a>
-<a href=#952 id=952 data-nosnippet>952</a>    insert(SENDER, TEST_CELL);
-<a href=#953 id=953 data-nosnippet>953</a>    insert(RECEIVER, TEST_CELL + <span class="number">1</span>);
-<a href=#954 id=954 data-nosnippet>954</a>    <span class="comment">// A NET_RX observation, held locally: the selector consumes it once.
-<a href=#955 id=955 data-nosnippet>955</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>net_rx_level = <span class="bool-val">true</span>;
-<a href=#956 id=956 data-nosnippet>956</a>
-<a href=#957 id=957 data-nosnippet>957</a>    <span class="kw">let </span><span class="kw-2">mut </span>token = <span class="prelude-val">None</span>;
-<a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">let </span><span class="kw-2">mut </span>woke = <span class="bool-val">false</span>;
-<a href=#959 id=959 data-nosnippet>959</a>    <span class="kw">let </span><span class="kw-2">mut </span>gate = <span class="prelude-val">None</span>;
-<a href=#960 id=960 data-nosnippet>960</a>    <span class="kw">let </span><span class="kw-2">mut </span>records = [(<span class="number">0u32</span>, <span class="number">0isize</span>); <span class="number">4</span>];
-<a href=#961 id=961 data-nosnippet>961</a>    <span class="kw">let </span><span class="kw-2">mut </span>releveled = <span class="bool-val">false</span>;
-<a href=#962 id=962 data-nosnippet>962</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
-<a href=#963 id=963 data-nosnippet>963</a>        token = <span class="kw">super</span>::async_ipc::selftest_accept_dispatched(sched, RECEIVER, SENDER);
-<a href=#964 id=964 data-nosnippet>964</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
-<a href=#965 id=965 data-nosnippet>965</a>            task.state = TaskState::Blocked {
-<a href=#966 id=966 data-nosnippet>966</a>                wait: WaitKind::Completion {
-<a href=#967 id=967 data-nosnippet>967</a>                    source: mask,
-<a href=#968 id=968 data-nosnippet>968</a>                    delivery: Delivery::Queue,
-<a href=#969 id=969 data-nosnippet>969</a>                },
-<a href=#970 id=970 data-nosnippet>970</a>                deadline: <span class="prelude-val">None</span>,
-<a href=#971 id=971 data-nosnippet>971</a>            };
-<a href=#972 id=972 data-nosnippet>972</a>        }
-<a href=#973 id=973 data-nosnippet>973</a>        <span class="kw">super</span>::async_ipc::peer_died(sched, SENDER, TEST_CELL, <span class="number">1</span>);
-<a href=#974 id=974 data-nosnippet>974</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
-<a href=#975 id=975 data-nosnippet>975</a>            woke = task.state == TaskState::Ready;
-<a href=#976 id=976 data-nosnippet>976</a>            gate = <span class="prelude-val">Some</span>(cw::publish_wait_state_locked(task, RECEIVER, mask, <span class="prelude-val">Some</span>(<span class="number">1</span>)));
-<a href=#977 id=977 data-nosnippet>977</a>            <span class="kw">for </span>record <span class="kw">in </span><span class="kw-2">&amp;mut </span>records {
-<a href=#978 id=978 data-nosnippet>978</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(chosen) = cw::select_locked(task, mask, net_rx_level, <span class="bool-val">true</span>) {
-<a href=#979 id=979 data-nosnippet>979</a>                    <span class="kw-2">*</span>record = (chosen.source, chosen.result);
-<a href=#980 id=980 data-nosnippet>980</a>                    <span class="kw">if </span>chosen.source == NET_RX {
-<a href=#981 id=981 data-nosnippet>981</a>                        net_rx_level = <span class="bool-val">false</span>;
-<a href=#982 id=982 data-nosnippet>982</a>                    }
-<a href=#983 id=983 data-nosnippet>983</a>                    releveled |= chosen.relevel_net_rx;
-<a href=#984 id=984 data-nosnippet>984</a>                }
-<a href=#985 id=985 data-nosnippet>985</a>            }
-<a href=#986 id=986 data-nosnippet>986</a>        }
-<a href=#987 id=987 data-nosnippet>987</a>    }
-<a href=#988 id=988 data-nosnippet>988</a>    <span class="comment">// The NET_RX observation was reported first, so nothing had to be re-levelled.
-<a href=#989 id=989 data-nosnippet>989</a>    </span><span class="kw">let </span>not_relevelled = !releveled;
-<a href=#990 id=990 data-nosnippet>990</a>    reset();
-<a href=#991 id=991 data-nosnippet>991</a>
-<a href=#992 id=992 data-nosnippet>992</a>    <span class="kw">let </span>ipc_record = token.map(|token| (IPC, token <span class="kw">as </span>isize));
-<a href=#993 id=993 data-nosnippet>993</a>    <span class="kw">let </span>ok = syscall_rule
-<a href=#994 id=994 data-nosnippet>994</a>        &amp;&amp; not_relevelled
-<a href=#995 id=995 data-nosnippet>995</a>        &amp;&amp; token.is_some()
-<a href=#996 id=996 data-nosnippet>996</a>        &amp;&amp; woke
-<a href=#997 id=997 data-nosnippet>997</a>        &amp;&amp; gate == <span class="prelude-val">Some</span>(cw::CompletionParkDecision::IpcPending)
-<a href=#998 id=998 data-nosnippet>998</a>        &amp;&amp; records[<span class="number">0</span>] == (NET_RX, NET_RX <span class="kw">as </span>isize)
-<a href=#999 id=999 data-nosnippet>999</a>        &amp;&amp; <span class="prelude-val">Some</span>(records[<span class="number">1</span>]) == ipc_record
-<a href=#1000 id=1000 data-nosnippet>1000</a>        &amp;&amp; records[<span class="number">2</span>] == (TIMER, <span class="number">0</span>)
-<a href=#1001 id=1001 data-nosnippet>1001</a>        &amp;&amp; records[<span class="number">3</span>] == (TIMER, <span class="number">0</span>);
-<a href=#1002 id=1002 data-nosnippet>1002</a>    ok || fail(<span class="string">"multi-source wait did not deliver NET_RX, IPC and TIMER once each"</span>)
-<a href=#1003 id=1003 data-nosnippet>1003</a>}
-<a href=#1004 id=1004 data-nosnippet>1004</a>
-<a href=#1005 id=1005 data-nosnippet>1005</a><span class="doccomment">/// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
-<a href=#1006 id=1006 data-nosnippet>1006</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
-<a href=#1007 id=1007 data-nosnippet>1007</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
-<a href=#1008 id=1008 data-nosnippet>1008</a>        &amp; send_to_a_target_blocked_sending_to_us_queues()
-<a href=#1009 id=1009 data-nosnippet>1009</a>        &amp; kernel_send_respects_receiver_mask()
-<a href=#1010 id=1010 data-nosnippet>1010</a>        &amp; all_producers_wake_net_rx_completion_wait()
-<a href=#1011 id=1011 data-nosnippet>1011</a>        &amp; ready_receiver_is_not_enqueued_twice()
-<a href=#1012 id=1012 data-nosnippet>1012</a>        &amp; timer_completion_wait_remains_deadline_only()
-<a href=#1013 id=1013 data-nosnippet>1013</a>        &amp; full_completion_wait_mailbox_never_wakes()
-<a href=#1014 id=1014 data-nosnippet>1014</a>        &amp; completion_wait_publication_arms_existing_handoff()
-<a href=#1015 id=1015 data-nosnippet>1015</a>        &amp; ipc_before_park_returns_raw_zero()
-<a href=#1016 id=1016 data-nosnippet>1016</a>        &amp; full_mailbox_refuses_without_wake()
-<a href=#1017 id=1017 data-nosnippet>1017</a>        &amp; quota_failure_is_fallible()
-<a href=#1018 id=1018 data-nosnippet>1018</a>        &amp; heap_payload_refunds_receiver_quota()
-<a href=#1019 id=1019 data-nosnippet>1019</a>        &amp; death_wake_precedes_later_message()
-<a href=#1020 id=1020 data-nosnippet>1020</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
-<a href=#1021 id=1021 data-nosnippet>1021</a>        &amp; try_recv_attestation_writes_identity_trailer()
-<a href=#1022 id=1022 data-nosnippet>1022</a>        &amp; multi_source_wait_reports_each_source_once();
-<a href=#1023 id=1023 data-nosnippet>1023</a>    <span class="kw">if </span>ok {
-<a href=#1024 id=1024 data-nosnippet>1024</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)"</span>);
-<a href=#1025 id=1025 data-nosnippet>1025</a>    }
-<a href=#1026 id=1026 data-nosnippet>1026</a>    ok
-<a href=#1027 id=1027 data-nosnippet>1027</a>}
+<a href=#947 id=947 data-nosnippet>947</a><span class="doccomment">/// Multi-source selection: one parked waiter sees NET_RX, an IPC terminal and
+<a href=#948 id=948 data-nosnippet>948</a>/// its deadline exactly once each within three selections.
+<a href=#949 id=949 data-nosnippet>949</a>///
+<a href=#950 id=950 data-nosnippet>950</a>/// This runs on production boots, so it never touches the global NET_RX
+<a href=#951 id=951 data-nosnippet>951</a>/// reservation or level flag: NET_RX readiness is a local value handed to the
+<a href=#952 id=952 data-nosnippet>952</a>/// selector, exactly where the wait loop passes its own observation. The IPC
+<a href=#953 id=953 data-nosnippet>953</a>/// terminal is a real peer-death transition on a seeded dispatched operation.
+<a href=#954 id=954 data-nosnippet>954</a>/// The syscall validator must accept the mixed mask only with a finite
+<a href=#955 id=955 data-nosnippet>955</a>/// deadline, and reject unknown bits next to IPC. The real reservation and
+<a href=#956 id=956 data-nosnippet>956</a>/// level-flag settlement is covered by the host tests in `completion_wait`.
+<a href=#957 id=957 data-nosnippet>957</a></span><span class="kw">fn </span>multi_source_wait_reports_each_source_once() -&gt; bool {
+<a href=#958 id=958 data-nosnippet>958</a>    <span class="kw">use </span><span class="kw">super</span>::completion_wait <span class="kw">as </span>cw;
+<a href=#959 id=959 data-nosnippet>959</a>    <span class="kw">const </span>NET_RX: u32 = abi::completion::source::NET_RX;
+<a href=#960 id=960 data-nosnippet>960</a>    <span class="kw">const </span>TIMER: u32 = abi::completion::source::TIMER;
+<a href=#961 id=961 data-nosnippet>961</a>    <span class="kw">const </span>IPC: u32 = abi::completion::source::IPC;
+<a href=#962 id=962 data-nosnippet>962</a>    <span class="kw">let </span>mask = NET_RX | IPC | TIMER;
+<a href=#963 id=963 data-nosnippet>963</a>
+<a href=#964 id=964 data-nosnippet>964</a>    <span class="kw">let </span>syscall_rule = cw::source_is_valid(IPC, <span class="prelude-val">None</span>)
+<a href=#965 id=965 data-nosnippet>965</a>        &amp;&amp; cw::source_is_valid(mask, <span class="prelude-val">Some</span>(<span class="number">1</span>))
+<a href=#966 id=966 data-nosnippet>966</a>        &amp;&amp; !cw::source_is_valid(mask, <span class="prelude-val">None</span>)
+<a href=#967 id=967 data-nosnippet>967</a>        &amp;&amp; !cw::source_is_valid(IPC | (<span class="number">1 </span>&lt;&lt; <span class="number">4</span>), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#968 id=968 data-nosnippet>968</a>
+<a href=#969 id=969 data-nosnippet>969</a>    insert(SENDER, TEST_CELL);
+<a href=#970 id=970 data-nosnippet>970</a>    insert(RECEIVER, TEST_CELL + <span class="number">1</span>);
+<a href=#971 id=971 data-nosnippet>971</a>    <span class="comment">// A NET_RX observation, held locally: the selector consumes it once.
+<a href=#972 id=972 data-nosnippet>972</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>net_rx_level = <span class="bool-val">true</span>;
+<a href=#973 id=973 data-nosnippet>973</a>
+<a href=#974 id=974 data-nosnippet>974</a>    <span class="kw">let </span><span class="kw-2">mut </span>token = <span class="prelude-val">None</span>;
+<a href=#975 id=975 data-nosnippet>975</a>    <span class="kw">let </span><span class="kw-2">mut </span>woke = <span class="bool-val">false</span>;
+<a href=#976 id=976 data-nosnippet>976</a>    <span class="kw">let </span><span class="kw-2">mut </span>gate = <span class="prelude-val">None</span>;
+<a href=#977 id=977 data-nosnippet>977</a>    <span class="kw">let </span><span class="kw-2">mut </span>records = [(<span class="number">0u32</span>, <span class="number">0isize</span>); <span class="number">4</span>];
+<a href=#978 id=978 data-nosnippet>978</a>    <span class="kw">let </span><span class="kw-2">mut </span>releveled = <span class="bool-val">false</span>;
+<a href=#979 id=979 data-nosnippet>979</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">super</span>::SCHEDULER.lock().as_mut() {
+<a href=#980 id=980 data-nosnippet>980</a>        token = <span class="kw">super</span>::async_ipc::selftest_accept_dispatched(sched, RECEIVER, SENDER);
+<a href=#981 id=981 data-nosnippet>981</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#982 id=982 data-nosnippet>982</a>            task.state = TaskState::Blocked {
+<a href=#983 id=983 data-nosnippet>983</a>                wait: WaitKind::Completion {
+<a href=#984 id=984 data-nosnippet>984</a>                    source: mask,
+<a href=#985 id=985 data-nosnippet>985</a>                    delivery: Delivery::Queue,
+<a href=#986 id=986 data-nosnippet>986</a>                },
+<a href=#987 id=987 data-nosnippet>987</a>                deadline: <span class="prelude-val">None</span>,
+<a href=#988 id=988 data-nosnippet>988</a>            };
+<a href=#989 id=989 data-nosnippet>989</a>        }
+<a href=#990 id=990 data-nosnippet>990</a>        <span class="kw">super</span>::async_ipc::peer_died(sched, SENDER, TEST_CELL, <span class="number">1</span>);
+<a href=#991 id=991 data-nosnippet>991</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>RECEIVER) {
+<a href=#992 id=992 data-nosnippet>992</a>            woke = task.state == TaskState::Ready;
+<a href=#993 id=993 data-nosnippet>993</a>            gate = <span class="prelude-val">Some</span>(cw::publish_wait_state_locked(task, RECEIVER, mask, <span class="prelude-val">Some</span>(<span class="number">1</span>)));
+<a href=#994 id=994 data-nosnippet>994</a>            <span class="kw">for </span>record <span class="kw">in </span><span class="kw-2">&amp;mut </span>records {
+<a href=#995 id=995 data-nosnippet>995</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(chosen) = cw::select_locked(task, mask, net_rx_level, <span class="bool-val">true</span>) {
+<a href=#996 id=996 data-nosnippet>996</a>                    <span class="kw-2">*</span>record = (chosen.source, chosen.result);
+<a href=#997 id=997 data-nosnippet>997</a>                    <span class="kw">if </span>chosen.source == NET_RX {
+<a href=#998 id=998 data-nosnippet>998</a>                        net_rx_level = <span class="bool-val">false</span>;
+<a href=#999 id=999 data-nosnippet>999</a>                    }
+<a href=#1000 id=1000 data-nosnippet>1000</a>                    releveled |= chosen.relevel_net_rx;
+<a href=#1001 id=1001 data-nosnippet>1001</a>                }
+<a href=#1002 id=1002 data-nosnippet>1002</a>            }
+<a href=#1003 id=1003 data-nosnippet>1003</a>        }
+<a href=#1004 id=1004 data-nosnippet>1004</a>    }
+<a href=#1005 id=1005 data-nosnippet>1005</a>    <span class="comment">// The NET_RX observation was reported first, so nothing had to be re-levelled.
+<a href=#1006 id=1006 data-nosnippet>1006</a>    </span><span class="kw">let </span>not_relevelled = !releveled;
+<a href=#1007 id=1007 data-nosnippet>1007</a>    reset();
+<a href=#1008 id=1008 data-nosnippet>1008</a>
+<a href=#1009 id=1009 data-nosnippet>1009</a>    <span class="kw">let </span>ipc_record = token.map(|token| (IPC, token <span class="kw">as </span>isize));
+<a href=#1010 id=1010 data-nosnippet>1010</a>    <span class="kw">let </span>ok = syscall_rule
+<a href=#1011 id=1011 data-nosnippet>1011</a>        &amp;&amp; not_relevelled
+<a href=#1012 id=1012 data-nosnippet>1012</a>        &amp;&amp; token.is_some()
+<a href=#1013 id=1013 data-nosnippet>1013</a>        &amp;&amp; woke
+<a href=#1014 id=1014 data-nosnippet>1014</a>        &amp;&amp; gate == <span class="prelude-val">Some</span>(cw::CompletionParkDecision::IpcPending)
+<a href=#1015 id=1015 data-nosnippet>1015</a>        &amp;&amp; records[<span class="number">0</span>] == (NET_RX, NET_RX <span class="kw">as </span>isize)
+<a href=#1016 id=1016 data-nosnippet>1016</a>        &amp;&amp; <span class="prelude-val">Some</span>(records[<span class="number">1</span>]) == ipc_record
+<a href=#1017 id=1017 data-nosnippet>1017</a>        &amp;&amp; records[<span class="number">2</span>] == (TIMER, <span class="number">0</span>)
+<a href=#1018 id=1018 data-nosnippet>1018</a>        &amp;&amp; records[<span class="number">3</span>] == (TIMER, <span class="number">0</span>);
+<a href=#1019 id=1019 data-nosnippet>1019</a>    ok || fail(<span class="string">"multi-source wait did not deliver NET_RX, IPC and TIMER once each"</span>)
+<a href=#1020 id=1020 data-nosnippet>1020</a>}
+<a href=#1021 id=1021 data-nosnippet>1021</a>
+<a href=#1022 id=1022 data-nosnippet>1022</a><span class="doccomment">/// Returns true iff IPC publication is receiver-owned, bounded and wake-safe.
+<a href=#1023 id=1023 data-nosnippet>1023</a></span><span class="kw">pub fn </span>self_test() -&gt; bool {
+<a href=#1024 id=1024 data-nosnippet>1024</a>    <span class="kw">let </span>ok = all_producers_defer_foreign_writes()
+<a href=#1025 id=1025 data-nosnippet>1025</a>        &amp; send_to_a_target_blocked_sending_to_us_queues()
+<a href=#1026 id=1026 data-nosnippet>1026</a>        &amp; kernel_send_respects_receiver_mask()
+<a href=#1027 id=1027 data-nosnippet>1027</a>        &amp; all_producers_wake_net_rx_completion_wait()
+<a href=#1028 id=1028 data-nosnippet>1028</a>        &amp; ready_receiver_is_not_enqueued_twice()
+<a href=#1029 id=1029 data-nosnippet>1029</a>        &amp; timer_completion_wait_remains_deadline_only()
+<a href=#1030 id=1030 data-nosnippet>1030</a>        &amp; full_completion_wait_mailbox_never_wakes()
+<a href=#1031 id=1031 data-nosnippet>1031</a>        &amp; completion_wait_publication_arms_existing_handoff()
+<a href=#1032 id=1032 data-nosnippet>1032</a>        &amp; ipc_before_park_returns_raw_zero()
+<a href=#1033 id=1033 data-nosnippet>1033</a>        &amp; full_mailbox_refuses_without_wake()
+<a href=#1034 id=1034 data-nosnippet>1034</a>        &amp; quota_failure_is_fallible()
+<a href=#1035 id=1035 data-nosnippet>1035</a>        &amp; heap_payload_refunds_receiver_quota()
+<a href=#1036 id=1036 data-nosnippet>1036</a>        &amp; death_wake_precedes_later_message()
+<a href=#1037 id=1037 data-nosnippet>1037</a>        &amp; pending_drain_keeps_sender_context_without_relocking()
+<a href=#1038 id=1038 data-nosnippet>1038</a>        &amp; try_recv_attestation_writes_identity_trailer()
+<a href=#1039 id=1039 data-nosnippet>1039</a>        &amp; multi_source_wait_reports_each_source_once();
+<a href=#1040 id=1040 data-nosnippet>1040</a>    <span class="kw">if </span>ok {
+<a href=#1041 id=1041 data-nosnippet>1041</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)"</span>);
+<a href=#1042 id=1042 data-nosnippet>1042</a>    }
+<a href=#1043 id=1043 data-nosnippet>1043</a>    ok
+<a href=#1044 id=1044 data-nosnippet>1044</a>}
 </code></pre></div></section></main></body></html>

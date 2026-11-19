@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFERRED_MESSAGES","LEGACY_TICKS","MESSAGE_BYTES","PAYLOAD_BYTES","POLL_LIMIT","READY_TICKS"],"fn":["deliver","deliver_frame","orphaned_engines","readiness","service_id","stop_orphaned_engines","task_alive"],"struct":["Activator","Message"]};

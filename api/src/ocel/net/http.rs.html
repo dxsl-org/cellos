@@ -6,12 +6,12 @@
 <a href=#6 id=6 data-nosnippet>6</a>    string::{String, ToString},
 <a href=#7 id=7 data-nosnippet>7</a>    vec::Vec,
 <a href=#8 id=8 data-nosnippet>8</a>};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::services::proto::{net::NetError, tls};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>core::task::Poll;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::ipc::{<span class="self">self</span>, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>ostd::syscall::sys_get_time_ms;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>core::task::Poll;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::ipc::{<span class="self">self</span>, IpcOpId, IpcSubmitError, IpcTakeResult, IpcTerminal};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::syscall::sys_get_time_ms;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>wire::proto::{net::NetError, tls};
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">const </span>HEADER_LIMIT: usize = <span class="number">16 </span>* <span class="number">1024</span>;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">const </span>URL_LIMIT: usize = <span class="number">2048</span>;
@@ -549,7 +549,7 @@
 <a href=#549 id=549 data-nosnippet>549</a>        <span class="kw">if </span>closing_count() &gt;= CLOSE_LIMIT {
 <a href=#550 id=550 data-nosnippet>550</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#551 id=551 data-nosnippet>551</a>        }
-<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span>endpoint = provider_tid(api::syscall::service::NET)<span class="question-mark">?</span>;
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span>endpoint = provider_tid(abi::syscall::service::NET)<span class="question-mark">?</span>;
 <a href=#553 id=553 data-nosnippet>553</a>        <span class="kw">if </span>ACTIVE_JOBS
 <a href=#554 id=554 data-nosnippet>554</a>            .fetch_update(
 <a href=#555 id=555 data-nosnippet>555</a>                core::sync::atomic::Ordering::Relaxed,
@@ -880,7 +880,7 @@
 <a href=#880 id=880 data-nosnippet>880</a>            },
 <a href=#881 id=881 data-nosnippet>881</a>            Stage::Done =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Load already finished"</span>.into()),
 <a href=#882 id=882 data-nosnippet>882</a>        };
-<a href=#883 id=883 data-nosnippet>883</a>        api::ipc::encode(<span class="kw-2">&amp;</span>req, buf)
+<a href=#883 id=883 data-nosnippet>883</a>        wire::ipc::encode(<span class="kw-2">&amp;</span>req, buf)
 <a href=#884 id=884 data-nosnippet>884</a>            .map(|b| b.len())
 <a href=#885 id=885 data-nosnippet>885</a>            .map_err(|<span class="kw">_</span>| <span class="string">"Cannot encode network request"</span>.into())
 <a href=#886 id=886 data-nosnippet>886</a>    }
@@ -1005,7 +1005,7 @@
 <a href=#1005 id=1005 data-nosnippet>1005</a>                <span class="string">"[ocel/net] Resolve reply len={}"</span>,
 <a href=#1006 id=1006 data-nosnippet>1006</a>                bytes.len()
 <a href=#1007 id=1007 data-nosnippet>1007</a>            ));
-<a href=#1008 id=1008 data-nosnippet>1008</a>            <span class="kw">let </span>addr = <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(bytes) {
+<a href=#1008 id=1008 data-nosnippet>1008</a>            <span class="kw">let </span>addr = <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(bytes) {
 <a href=#1009 id=1009 data-nosnippet>1009</a>                <span class="prelude-val">Ok</span>(NetResponse::Addr(addr)) =&gt; {
 <a href=#1010 id=1010 data-nosnippet>1010</a>                    <span class="kw">crate</span>::trace::stamp(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
 <a href=#1011 id=1011 data-nosnippet>1011</a>                        <span class="string">"dns {} -&gt; {}.{}.{}.{}"</span>,
@@ -1039,7 +1039,7 @@
 <a href=#1039 id=1039 data-nosnippet>1039</a>                        .map_err(|<span class="kw">_</span>| <span class="string">"Malformed TLS connect reply"</span>)<span class="question-mark">?</span>,
 <a href=#1040 id=1040 data-nosnippet>1040</a>                )
 <a href=#1041 id=1041 data-nosnippet>1041</a>            } <span class="kw">else </span>{
-<a href=#1042 id=1042 data-nosnippet>1042</a>                <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(bytes) {
+<a href=#1042 id=1042 data-nosnippet>1042</a>                <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(bytes) {
 <a href=#1043 id=1043 data-nosnippet>1043</a>                    <span class="prelude-val">Ok</span>(NetResponse::CapId(cap)) =&gt; cap <span class="kw">as </span>u64,
 <a href=#1044 id=1044 data-nosnippet>1044</a>                    <span class="prelude-val">Ok</span>(NetResponse::Err(code)) <span class="kw">if </span>code == NetError::Denied <span class="kw">as </span>u8 =&gt; {
 <a href=#1045 id=1045 data-nosnippet>1045</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(NET_DENIED_MESSAGE.into())
@@ -1064,7 +1064,7 @@
 <a href=#1064 id=1064 data-nosnippet>1064</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#1065 id=1065 data-nosnippet>1065</a>        }
 <a href=#1066 id=1066 data-nosnippet>1066</a>        <span class="kw">if </span><span class="self">self</span>.stage == Stage::WaitConnect {
-<a href=#1067 id=1067 data-nosnippet>1067</a>            <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(bytes) {
+<a href=#1067 id=1067 data-nosnippet>1067</a>            <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(bytes) {
 <a href=#1068 id=1068 data-nosnippet>1068</a>                <span class="prelude-val">Ok</span>(NetResponse::State(<span class="number">0x03</span>)) =&gt; <span class="self">self</span>.stage = Stage::Send,
 <a href=#1069 id=1069 data-nosnippet>1069</a>                <span class="prelude-val">Ok</span>(NetResponse::State(<span class="number">0x01 </span>| <span class="number">0x02</span>)) | <span class="prelude-val">Ok</span>(NetResponse::NotReady) =&gt; {}
 <a href=#1070 id=1070 data-nosnippet>1070</a>                <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"TCP connection failed before establishment"</span>.into()),
@@ -1076,7 +1076,7 @@
 <a href=#1076 id=1076 data-nosnippet>1076</a>                u32::from_le_bytes(bytes.try_into().map_err(|<span class="kw">_</span>| <span class="string">"Malformed TLS send reply"</span>)<span class="question-mark">?</span>)
 <a href=#1077 id=1077 data-nosnippet>1077</a>                    <span class="kw">as </span>usize
 <a href=#1078 id=1078 data-nosnippet>1078</a>            } <span class="kw">else </span>{
-<a href=#1079 id=1079 data-nosnippet>1079</a>                <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(bytes) {
+<a href=#1079 id=1079 data-nosnippet>1079</a>                <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(bytes) {
 <a href=#1080 id=1080 data-nosnippet>1080</a>                    <span class="prelude-val">Ok</span>(NetResponse::WriteProgress(n)) =&gt; n <span class="kw">as </span>usize,
 <a href=#1081 id=1081 data-nosnippet>1081</a>                    <span class="prelude-val">Ok</span>(NetResponse::NotReady) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(()),
 <a href=#1082 id=1082 data-nosnippet>1082</a>                    <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"TCP write failed"</span>.into()),
@@ -1120,7 +1120,7 @@
 <a href=#1120 id=1120 data-nosnippet>1120</a>            <span class="kw">if </span><span class="self">self</span>.decoder.status == <span class="number">0 </span>{
 <a href=#1121 id=1121 data-nosnippet>1121</a>                <span class="self">self</span>.first_read_ms = <span class="self">self</span>.io.now();
 <a href=#1122 id=1122 data-nosnippet>1122</a>            }
-<a href=#1123 id=1123 data-nosnippet>1123</a>            <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(bytes) {
+<a href=#1123 id=1123 data-nosnippet>1123</a>            <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(bytes) {
 <a href=#1124 id=1124 data-nosnippet>1124</a>                <span class="prelude-val">Ok</span>(NetResponse::Data(data)) <span class="kw">if </span>!data.is_empty() =&gt; <span class="self">self</span>.decoder.feed(data),
 <a href=#1125 id=1125 data-nosnippet>1125</a>                <span class="prelude-val">Ok</span>(NetResponse::Eof) =&gt; <span class="self">self</span>.decoder.eof(),
 <a href=#1126 id=1126 data-nosnippet>1126</a>                <span class="prelude-val">Ok</span>(NetResponse::NotReady) =&gt; <span class="prelude-val">Ok</span>(()),
@@ -1151,7 +1151,7 @@
 <a href=#1151 id=1151 data-nosnippet>1151</a>                    <span class="kw">let </span>cap = <span class="kw">if </span><span class="self">self</span>.url.tls() {
 <a href=#1152 id=1152 data-nosnippet>1152</a>                        buf[..len].try_into().ok().map(u64::from_le_bytes)
 <a href=#1153 id=1153 data-nosnippet>1153</a>                    } <span class="kw">else </span>{
-<a href=#1154 id=1154 data-nosnippet>1154</a>                        <span class="kw">match </span>api::ipc::decode::&lt;NetResponse&gt;(<span class="kw-2">&amp;</span>buf[..len]) {
+<a href=#1154 id=1154 data-nosnippet>1154</a>                        <span class="kw">match </span>wire::ipc::decode::&lt;NetResponse&gt;(<span class="kw-2">&amp;</span>buf[..len]) {
 <a href=#1155 id=1155 data-nosnippet>1155</a>                            <span class="prelude-val">Ok</span>(NetResponse::CapId(cap)) =&gt; <span class="prelude-val">Some</span>(cap <span class="kw">as </span>u64),
 <a href=#1156 id=1156 data-nosnippet>1156</a>                            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
 <a href=#1157 id=1157 data-nosnippet>1157</a>                        }
@@ -1267,7 +1267,7 @@
 <a href=#1267 id=1267 data-nosnippet>1267</a>            bytes[<span class="number">1</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.cap.to_le_bytes());
 <a href=#1268 id=1268 data-nosnippet>1268</a>            tls::HEADER_LEN
 <a href=#1269 id=1269 data-nosnippet>1269</a>        } <span class="kw">else </span>{
-<a href=#1270 id=1270 data-nosnippet>1270</a>            <span class="kw">match </span>api::ipc::encode(
+<a href=#1270 id=1270 data-nosnippet>1270</a>            <span class="kw">match </span>wire::ipc::encode(
 <a href=#1271 id=1271 data-nosnippet>1271</a>                <span class="kw-2">&amp;</span>NetRequest::TcpClose {
 <a href=#1272 id=1272 data-nosnippet>1272</a>                    cap_id: <span class="self">self</span>.cap <span class="kw">as </span>u32,
 <a href=#1273 id=1273 data-nosnippet>1273</a>                },

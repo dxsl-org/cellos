@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["LINK_POLLS","RESET_POLLS","TX_POLLS"],"struct":["RtlController"]};
+window.SIDEBAR_ITEMS = {"constant":["LINK_POLLS","RESET_POLLS","RTL_BAR0_LEN","RTL_MMIO_MIN","TX_POLLS"],"struct":["RtlController"]};

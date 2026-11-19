@@ -27,8 +27,8 @@
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>dto::{HailyRequest, HailyResponse};
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>tools::ToolRouter;
 <a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">true</span>, spawn = <span class="bool-val">true</span>);
-<a href=#31 id=31 data-nosnippet>31</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#30 id=30 data-nosnippet>30</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">true</span>, spawn = <span class="bool-val">true</span>);
+<a href=#31 id=31 data-nosnippet>31</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#32 id=32 data-nosnippet>32</a>    Send,
 <a href=#33 id=33 data-nosnippet>33</a>    Recv,
 <a href=#34 id=34 data-nosnippet>34</a>    RecvTimeout,
@@ -79,7 +79,7 @@
 <a href=#79 id=79 data-nosnippet>79</a>    }
 <a href=#80 id=80 data-nosnippet>80</a>
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="comment">// 2. Discover C2C Network Broker &amp; HTTP Gateway
-<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(broker_tid) = provider_tid(api::syscall::service::NET_BROKER) {
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(broker_tid) = provider_tid(abi::syscall::service::NET_BROKER) {
 <a href=#83 id=83 data-nosnippet>83</a>        println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#84 id=84 data-nosnippet>84</a>            <span class="string">"[haily-agent] C2C Net Broker discovered at tid: {}"</span>,
 <a href=#85 id=85 data-nosnippet>85</a>            broker_tid

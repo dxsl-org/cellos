@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CHANGED","COMPLETE","ENTRY_HEADER_LEN"],"enum":["EntryKind"],"fn":["entries","push_entry"],"struct":["Entries","Entry","MalformedPage"]};

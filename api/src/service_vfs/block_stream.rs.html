@@ -59,7 +59,7 @@
 <a href=#59 id=59 data-nosnippet>59</a>    </span>pos: u64,
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="doccomment">/// Absolute base LBA of this volume's partition, added to the relative
 <a href=#61 id=61 data-nosnippet>61</a>    /// sector before the block syscall so fatfs and the page cache only ever
-<a href=#62 id=62 data-nosnippet>62</a>    /// see partition-relative sectors. `api::disk::PART_FAT32_BASE_LBA` for the
+<a href=#62 id=62 data-nosnippet>62</a>    /// see partition-relative sectors. `abi::disk::PART_FAT32_BASE_LBA` for the
 <a href=#63 id=63 data-nosnippet>63</a>    /// `/mnt/sd` volume; `PART_CELLSTORE_BASE_LBA` for the `/bin` cell-store.
 <a href=#64 id=64 data-nosnippet>64</a>    </span>base_lba: u64,
 <a href=#65 id=65 data-nosnippet>65</a>    <span class="doccomment">/// Partition length in sectors. fatfs derives sector numbers from the
@@ -415,7 +415,7 @@
 <a href=#415 id=415 data-nosnippet>415</a>    <span class="kw">use </span>super::{BlockStream, StreamError};
 <a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">use </span><span class="kw">crate</span>::blk_router::DeviceRef;
 <a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">use </span><span class="kw">crate</span>::page_cache::SectorDevice;
-<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">use </span>api::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">use </span>abi::disk::{PART_CELLTBL_BASE_LBA, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS};
 <a href=#419 id=419 data-nosnippet>419</a>    <span class="kw">use </span>types::block_wire::BlockOutcome;
 <a href=#420 id=420 data-nosnippet>420</a>
 <a href=#421 id=421 data-nosnippet>421</a>    <span class="attr">#[test]

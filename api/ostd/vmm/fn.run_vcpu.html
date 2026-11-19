@@ -2,7 +2,7 @@
     vm_id: usize,
     vcpu_id: usize,
     budget_ns: u64,
-    exit: &amp;mut <a class="enum" href="../abi/hypervisor/enum.ViVmExit.html" title="enum ostd::abi::hypervisor::ViVmExit">ViVmExit</a>,
+    exit: &amp;mut ViVmExit,
 ) -&gt; usize</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>World-switch into <code>vcpu_id</code> for at most <code>budget_ns</code> (0 = no budget); writes
 the exit reason to <code>*exit</code>. Returns 0 or an error.</p>
 </div></details></section></div></main></body></html>

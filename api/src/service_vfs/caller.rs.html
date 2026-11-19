@@ -4,12 +4,12 @@
 <a href=#4 id=4 data-nosnippet>4</a>//! thread reports its own tid while belonging to its parent cell, so its quota
 <a href=#5 id=5 data-nosnippet>5</a>//! and its handles landed under a `CellId` matching no cell at all; and it made
 <a href=#6 id=6 data-nosnippet>6</a>//! identity a property of the transport rather than something vouched for. Both
-<a href=#7 id=7 data-nosnippet>7</a>//! disappear once the kernel states the identity — see `api::caller_identity`.
+<a href=#7 id=7 data-nosnippet>7</a>//! disappear once the kernel states the identity — see `abi::caller_identity`.
 <a href=#8 id=8 data-nosnippet>8</a>//!
 <a href=#9 id=9 data-nosnippet>9</a>//! Every authorization decision and every quota charge in this cell reads a
 <a href=#10 id=10 data-nosnippet>10</a>//! [`Caller`], and a [`Caller`] can only be built from an attested identity.
 <a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span>api::caller_identity::CallerIdentity;
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">use </span>abi::caller_identity::CallerIdentity;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>types::CellId;
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="doccomment">/// A caller VFS is willing to act for.
@@ -78,7 +78,7 @@
 <a href=#78 id=78 data-nosnippet>78</a>
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Whether the caller declared VfsMutate authority.
 <a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">pub fn </span>may_mutate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#81 id=81 data-nosnippet>81</a>        (<span class="self">self</span>.flags &amp; api::caller_identity::CALLER_FLAG_VFS_MUTATE) != <span class="number">0
+<a href=#81 id=81 data-nosnippet>81</a>        (<span class="self">self</span>.flags &amp; abi::caller_identity::CALLER_FLAG_VFS_MUTATE) != <span class="number">0
 <a href=#82 id=82 data-nosnippet>82</a>    </span>}
 <a href=#83 id=83 data-nosnippet>83</a>}
 <a href=#84 id=84 data-nosnippet>84</a>
@@ -157,7 +157,7 @@
 <a href=#157 id=157 data-nosnippet>157</a>            cell: CellId(<span class="number">4</span>),
 <a href=#158 id=158 data-nosnippet>158</a>            generation: <span class="number">1</span>,
 <a href=#159 id=159 data-nosnippet>159</a>            sender_tid: <span class="number">77</span>,
-<a href=#160 id=160 data-nosnippet>160</a>            flags: api::caller_identity::CALLER_FLAG_VFS_MUTATE,
+<a href=#160 id=160 data-nosnippet>160</a>            flags: abi::caller_identity::CALLER_FLAG_VFS_MUTATE,
 <a href=#161 id=161 data-nosnippet>161</a>        };
 <a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert!</span>(mutator.may_mutate());
 <a href=#163 id=163 data-nosnippet>163</a>    }

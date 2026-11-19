@@ -66,7 +66,7 @@
 <a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">pub </span>width: u32,
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">pub </span>height: u32,
 <a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">pub </span>quick_look: QuickLookState,
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">pub </span>pending_intent: <span class="prelude-ty">Option</span>&lt;api::services::mime::LaunchIntent&gt;,
+<a href=#69 id=69 data-nosnippet>69</a>    <span class="kw">pub </span>pending_intent: <span class="prelude-ty">Option</span>&lt;wire::mime::LaunchIntent&gt;,
 <a href=#70 id=70 data-nosnippet>70</a>    <span class="kw">pub </span>trash_stack: Vec&lt;TrashRecord&gt;,
 <a href=#71 id=71 data-nosnippet>71</a>    <span class="kw">pub </span>active_pane: ActivePane,
 <a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">pub </span>secondary_pane: <span class="prelude-ty">Option</span>&lt;PaneState&gt;,
@@ -189,7 +189,7 @@
 <a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">if </span>item.is_dir {
 <a href=#190 id=190 data-nosnippet>190</a>            <span class="self">self</span>.load_directory(<span class="kw-2">&amp;</span>item.path);
 <a href=#191 id=191 data-nosnippet>191</a>        } <span class="kw">else </span>{
-<a href=#192 id=192 data-nosnippet>192</a>            <span class="kw">let </span>intent = api::services::mime::AssociationRegistry::resolve_intent(<span class="kw-2">&amp;</span>item.path, <span class="prelude-val">None</span>);
+<a href=#192 id=192 data-nosnippet>192</a>            <span class="kw">let </span>intent = wire::mime::AssociationRegistry::resolve_intent(<span class="kw-2">&amp;</span>item.path, <span class="prelude-val">None</span>);
 <a href=#193 id=193 data-nosnippet>193</a>            <span class="self">self</span>.status_message = <span class="macro">format!</span>(
 <a href=#194 id=194 data-nosnippet>194</a>                <span class="string">"{} {} with {}"</span>,
 <a href=#195 id=195 data-nosnippet>195</a>                intent.action.as_str(),
@@ -206,7 +206,7 @@
 <a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">return</span>;
 <a href=#207 id=207 data-nosnippet>207</a>        };
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">if </span>!item.is_dir {
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(intent) = api::services::mime::AssociationRegistry::resolve_intent_with_app(
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(intent) = wire::mime::AssociationRegistry::resolve_intent_with_app(
 <a href=#210 id=210 data-nosnippet>210</a>                <span class="kw-2">&amp;</span>item.path, app_id, <span class="prelude-val">None</span>,
 <a href=#211 id=211 data-nosnippet>211</a>            ) {
 <a href=#212 id=212 data-nosnippet>212</a>                <span class="self">self</span>.status_message = <span class="macro">format!</span>(
@@ -220,7 +220,7 @@
 <a href=#220 id=220 data-nosnippet>220</a>        }
 <a href=#221 id=221 data-nosnippet>221</a>    }
 <a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">pub fn </span>take_launch_intent(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;api::services::mime::LaunchIntent&gt; {
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">pub fn </span>take_launch_intent(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;wire::mime::LaunchIntent&gt; {
 <a href=#224 id=224 data-nosnippet>224</a>        <span class="self">self</span>.pending_intent.take()
 <a href=#225 id=225 data-nosnippet>225</a>    }
 <a href=#226 id=226 data-nosnippet>226</a>
@@ -710,7 +710,7 @@
 <a href=#710 id=710 data-nosnippet>710</a>        app.open_selected();
 <a href=#711 id=711 data-nosnippet>711</a>        <span class="kw">let </span>intent = app.take_launch_intent().expect(<span class="string">"staged launch intent"</span>);
 <a href=#712 id=712 data-nosnippet>712</a>        <span class="macro">assert_eq!</span>(intent.target_path, <span class="string">"/tmp/c5dir/a.txt"</span>);
-<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">assert_eq!</span>(intent.action, api::services::mime::FileAction::Open);
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">assert_eq!</span>(intent.action, wire::mime::FileAction::Open);
 <a href=#714 id=714 data-nosnippet>714</a>        <span class="macro">assert_eq!</span>(intent.app_id, <span class="string">"terminal"</span>);
 <a href=#715 id=715 data-nosnippet>715</a>    }
 <a href=#716 id=716 data-nosnippet>716</a>    <span class="attr">#[test]

@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="comment">// No network, no spawn, no block I/O, no peripherals, no hypervisor. The right this cell
 <a href=#23 id=23 data-nosnippet>23</a>// holds comes from the kernel launch edge, never from a manifest bit.
-<a href=#24 id=24 data-nosnippet>24</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#25 id=25 data-nosnippet>25</a>    block_io = <span class="bool-val">false</span>,
 <a href=#26 id=26 data-nosnippet>26</a>    network = <span class="bool-val">false</span>,
 <a href=#27 id=27 data-nosnippet>27</a>    spawn = <span class="bool-val">false</span>,
@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>// launch syscall): IPC to the session owner and to the key service, logging, the clock and
 <a href=#35 id=35 data-nosnippet>35</a>// the one-tick timer. Deliberately absent: GetRandom, every net and spawn call, VFS and
 <a href=#36 id=36 data-nosnippet>36</a>// grants. `Exit` and `Yield` are always permitted by the allowlist layer.
-<a href=#37 id=37 data-nosnippet>37</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#38 id=38 data-nosnippet>38</a>    Send,
 <a href=#39 id=39 data-nosnippet>39</a>    Recv,
 <a href=#40 id=40 data-nosnippet>40</a>    TryRecv,

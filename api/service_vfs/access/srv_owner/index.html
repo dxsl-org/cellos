@@ -7,7 +7,7 @@ or an ancestor of it.</p>
 bound by whoever registers it, and the path a Cell was spawned from is
 chosen by its spawner, so neither says which <em>program</em> is calling. The
 kernel measures the image at admission and reports, per live <code>(cell, generation)</code>, the anchor that verified its signature and the name in its
-signed <code>__ViCell_image</code> section (<code>api::cell_image</code>). An unsigned image
+signed <code>__ViCell_image</code> section (<code>abi::cell_image</code>). An unsigned image
 carries no name, so it never matches, whatever path it came from.</p>
 <p>Anchors: the release anchor always qualifies; the dev anchor qualifies
 because only a dev-anchor kernel can report it (<code>kernel/src/signing.rs</code>

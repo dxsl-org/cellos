@@ -61,7 +61,7 @@
 <a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">const </span>REPLY_TIMEOUT_TICKS: u64 = <span class="number">3_000</span>;
 <a href=#62 id=62 data-nosnippet>62</a>
 <a href=#63 id=63 data-nosnippet>63</a><span class="doccomment">/// Send the supervisor-private `PowerRequest`
-<a href=#64 id=64 data-nosnippet>64</a>/// ([`api::services::proto::supervisor`]) in the App SDK envelope and wait; the
+<a href=#64 id=64 data-nosnippet>64</a>/// ([`wire::proto::supervisor`]) in the App SDK envelope and wait; the
 <a href=#65 id=65 data-nosnippet>65</a>/// action byte is the 436 a0 value. A successful request freezes this worker
 <a href=#66 id=66 data-nosnippet>66</a>/// and resets or powers off the machine, so any return here is a failure.
 <a href=#67 id=67 data-nosnippet>67</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
@@ -70,15 +70,15 @@
 <a href=#70 id=70 data-nosnippet>70</a>    output: <span class="kw-2">&amp;</span>ostd::io::ProcessOutput,
 <a href=#71 id=71 data-nosnippet>71</a>    deadline: u64,
 <a href=#72 id=72 data-nosnippet>72</a>) -&gt; ! {
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">use </span>api::services::proto::app_envelope::{KIND_MESSAGE, MAGIC};
-<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">use </span>api::services::proto::supervisor::{OP_POWER, OP_STATUS, STATUS_REPLY_LEN};
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">use </span>ostd::ipc::IpcError;
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(supervisor) = ostd::service::provider_tid(api::syscall::service::SUPERVISOR) <span class="kw">else </span>{
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">use </span>ostd::ipc::IpcError;
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">use </span>wire::proto::app_envelope::{KIND_MESSAGE, MAGIC};
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">use </span>wire::proto::supervisor::{OP_POWER, OP_STATUS, STATUS_REPLY_LEN};
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(supervisor) = ostd::service::provider_tid(abi::syscall::service::SUPERVISOR) <span class="kw">else </span>{
 <a href=#77 id=77 data-nosnippet>77</a>        exit_with(output, <span class="string">b"shutdown: supervisor unavailable\n"</span>, deadline);
 <a href=#78 id=78 data-nosnippet>78</a>    };
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">let </span>action = <span class="kw">match </span>action {
-<a href=#80 id=80 data-nosnippet>80</a>        ostd::syscall::SystemPowerAction::Reboot =&gt; api::syscall::system_power::ACTION_REBOOT,
-<a href=#81 id=81 data-nosnippet>81</a>        ostd::syscall::SystemPowerAction::PowerOff =&gt; api::syscall::system_power::ACTION_POWEROFF,
+<a href=#80 id=80 data-nosnippet>80</a>        ostd::syscall::SystemPowerAction::Reboot =&gt; abi::syscall::system_power::ACTION_REBOOT,
+<a href=#81 id=81 data-nosnippet>81</a>        ostd::syscall::SystemPowerAction::PowerOff =&gt; abi::syscall::system_power::ACTION_POWEROFF,
 <a href=#82 id=82 data-nosnippet>82</a>    };
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>request = [MAGIC, KIND_MESSAGE, OP_POWER, action <span class="kw">as </span>u8];
 <a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">let </span><span class="kw-2">mut </span>status = [<span class="number">0u8</span>; STATUS_REPLY_LEN];

@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span>alloc::string::String;
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::ipc::{Observation, SaveExpect, SaveOutcome};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>wire::ipc::{Observation, SaveExpect, SaveOutcome};
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::fs_error::FsError;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::manager::VfsManager;
@@ -53,7 +53,7 @@
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">let </span>created = <span class="self">self</span>.would_create(dst);
 <a href=#54 id=54 data-nosnippet>54</a>        <span class="kw">let </span>outcome = <span class="kw">match </span><span class="self">self</span>.mounts.backend_mut(dst) {
 <a href=#55 id=55 data-nosnippet>55</a>            <span class="prelude-val">Some</span>(backend) =&gt; backend.publish_if(stage, sealed, dst, expect),
-<a href=#56 id=56 data-nosnippet>56</a>            <span class="prelude-val">None </span>=&gt; SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED),
+<a href=#56 id=56 data-nosnippet>56</a>            <span class="prelude-val">None </span>=&gt; SaveOutcome::NotPublished(wire::ipc::save_refusal::REFUSED),
 <a href=#57 id=57 data-nosnippet>57</a>        };
 <a href=#58 id=58 data-nosnippet>58</a>        <span class="comment">// An indeterminate publication may have reached storage, so it marks too.
 <a href=#59 id=59 data-nosnippet>59</a>        </span><span class="kw">if </span>outcome.published().is_some() || outcome == SaveOutcome::Indeterminate {

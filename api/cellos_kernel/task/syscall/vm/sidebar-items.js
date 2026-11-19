@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GUEST_COPY_CHUNK"],"fn":["caller_has_hypervisor","check_guest_range","create_vcpu","create_vm","guest_copy_staging","inject_irq","map_guest_memory","read_guest_memory","run_vcpu","vcpu_regs","write_guest_memory"]};
+window.SIDEBAR_ITEMS = {"constant":["GUEST_COPY_CHUNK"],"fn":["caller_has_hypervisor","check_guest_range","create_vcpu","create_vm","guest_copy_staging","inject_irq","map_guest_memory","read_guest_memory","run_vcpu","vcpu_regs","vm_owner","write_guest_memory"]};

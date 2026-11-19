@@ -2,7 +2,7 @@
 <a href=#2 id=2 data-nosnippet>2</a>    decode_posted, decode_ready, decode_summary, encode_config, ClientConfig, ClientSummary,
 <a href=#3 id=3 data-nosnippet>3</a>    CONFIG_BYTES, POSTED_BYTES, READY_BYTES, SUMMARY_BYTES,
 <a href=#4 id=4 data-nosnippet>4</a>};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>api::task::TaskPriority;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>abi::task::TaskPriority;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>ostd::service::provider_tid;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::syscall::{
 <a href=#8 id=8 data-nosnippet>8</a>    sys_force_exit, sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
@@ -13,7 +13,7 @@
 <a href=#13 id=13 data-nosnippet>13</a>};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>service_net_broker::local_ingress::ReplyStatus;
 <a href=#15 id=15 data-nosnippet>15</a>
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">const </span>IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">const </span>IPC_BUF_SIZE: usize = wire::ipc::IPC_BUF_SIZE;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">const </span>PROBE_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/bin/bench-probe"</span>;
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">pub fn </span>spawn_and_ready(config: ClientConfig) -&gt; (usize, usize) {
@@ -56,7 +56,7 @@
 <a href=#56 id=56 data-nosnippet>56</a>}
 <a href=#57 id=57 data-nosnippet>57</a>
 <a href=#58 id=58 data-nosnippet>58</a><span class="kw">pub fn </span>broker_snapshot(sequence: u64) -&gt; <span class="prelude-ty">Option</span>&lt;OracleSnapshot&gt; {
-<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>broker_tid = provider_tid(api::syscall::service::NET_BROKER)<span class="question-mark">?</span>;
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="kw">let </span>broker_tid = provider_tid(abi::syscall::service::NET_BROKER)<span class="question-mark">?</span>;
 <a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">let </span><span class="kw-2">mut </span>tx = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span><span class="kw-2">mut </span>rx = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>len = encode_snapshot_request(sequence, <span class="kw-2">&amp;mut </span>tx).ok()<span class="question-mark">?</span>;

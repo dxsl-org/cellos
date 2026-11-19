@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["create_vcpu","create_vm","guest_window","inject_irq","map_guest_memory","read_guest_memory","reap_vms_for_task","run_vcpu","vcpu_regs","write_guest_memory"],"mod":["vmm_wire"]};
+window.SIDEBAR_ITEMS = {"enum":["VmCreateError"],"fn":["create_vcpu","create_vm","guest_window","inject_irq","map_guest_memory","next_vm_id","read_guest_memory","reap_vms_for","run_vcpu","vcpu_regs","write_guest_memory"],"mod":["vmm_wire"],"static":["NEXT_VM_ID"],"struct":["VmKey"]};

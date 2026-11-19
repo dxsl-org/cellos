@@ -18,21 +18,21 @@
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">mod </span>session;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">mod </span>sink;
 <a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>api::display::PixelFormat;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>ostd::display::linear::icons::LineIcon;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::input::{InputEvent, KeyState, MouseButton};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::syscall::{sys_get_resolution, sys_set_timer, sys_yield};
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>ostd::typography::{FontFace, TextFonts};
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>viui::canvas::Color;
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>viui::surface::fill_rect;
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>viui::theme::{<span class="self">self</span>, ViTheme};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>ostd::display::linear::icons::LineIcon;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::input::{InputEvent, KeyState, MouseButton};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::syscall::{sys_get_resolution, sys_set_timer, sys_yield};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::typography::{FontFace, TextFonts};
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>viui::canvas::Color;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>viui::surface::fill_rect;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>viui::theme::{<span class="self">self</span>, ViTheme};
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>wire::display::PixelFormat;
 <a href=#30 id=30 data-nosnippet>30</a>
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span><span class="kw">crate</span>::grid::{Color <span class="kw">as </span>GridColor, TerminalCell, Width};
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span><span class="kw">crate</span>::session::{TerminalSession, MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS};
 <a href=#33 id=33 data-nosnippet>33</a>
-<a href=#34 id=34 data-nosnippet>34</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
-<a href=#35 id=35 data-nosnippet>35</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#34 id=34 data-nosnippet>34</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
+<a href=#35 id=35 data-nosnippet>35</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#36 id=36 data-nosnippet>36</a>    Log,
 <a href=#37 id=37 data-nosnippet>37</a>    SpawnFromPath,
 <a href=#38 id=38 data-nosnippet>38</a>    GrantAlloc,
@@ -434,7 +434,7 @@
 <a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert_eq!</span>(grid_dims(<span class="number">4096</span>, <span class="number">4096</span>, <span class="number">9.0</span>, <span class="number">18.0</span>), (<span class="number">454</span>, <span class="number">227</span>));
 <a href=#435 id=435 data-nosnippet>435</a>        <span class="macro">assert_eq!</span>(grid_dims(<span class="number">60_000</span>, <span class="number">60_000</span>, <span class="number">9.0</span>, <span class="number">18.0</span>), (MAX_COLS, MAX_ROWS));
 <a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span>(cols, rows) = grid_dims(<span class="number">60_000</span>, <span class="number">60_000</span>, <span class="number">9.0</span>, <span class="number">18.0</span>);
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">assert!</span>(api::services::session::validate_dimensions(rows <span class="kw">as </span>u16, cols <span class="kw">as </span>u16).is_ok());
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">assert!</span>(wire::session::validate_dimensions(rows <span class="kw">as </span>u16, cols <span class="kw">as </span>u16).is_ok());
 <a href=#438 id=438 data-nosnippet>438</a>    }
 <a href=#439 id=439 data-nosnippet>439</a>
 <a href=#440 id=440 data-nosnippet>440</a>    <span class="attr">#[test]

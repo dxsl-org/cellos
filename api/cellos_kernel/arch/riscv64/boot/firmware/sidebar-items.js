@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SELECTED_RISCV64_BOARD"],"fn":["fallback_boot_info"],"static":["FALLBACK_BOOT_INFO","FALLBACK_MEMORY_MAP"]};

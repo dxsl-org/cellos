@@ -20,12 +20,12 @@
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">extern crate </span>alloc;
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>alloc::format;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::services::hostile_backend_recovery::{
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>wire::hostile_backend_recovery::{
 <a href=#25 id=25 data-nosnippet>25</a>    encode_kill_request, parse_kill_response, KILL_STATUS_OK,
 <a href=#26 id=26 data-nosnippet>26</a>};
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>api::syscall::service;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>abi::syscall::service;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>ostd::io::println;
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>ostd::service::provider_tid;
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>ostd::syscall::{
@@ -198,7 +198,7 @@
 <a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span>role = <span class="macro">format!</span>(<span class="string">"native-stateful-cached-inc:{old_tid}"</span>);
 <a href=#199 id=199 data-nosnippet>199</a>    sys_set_spawn_args(<span class="kw-2">&amp;</span>role);
 <a href=#200 id=200 data-nosnippet>200</a>    <span class="macro">matches!</span>(
-<a href=#201 id=201 data-nosnippet>201</a>        sys_spawn_pinned(<span class="string">"/bin/bench-probe"</span>, api::task::TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>),
+<a href=#201 id=201 data-nosnippet>201</a>        sys_spawn_pinned(<span class="string">"/bin/bench-probe"</span>, abi::task::TaskPriority::Normal <span class="kw">as </span>u8, <span class="number">0</span>),
 <a href=#202 id=202 data-nosnippet>202</a>        SyscallResult::Ok(<span class="kw">_</span>)
 <a href=#203 id=203 data-nosnippet>203</a>    )
 <a href=#204 id=204 data-nosnippet>204</a>}

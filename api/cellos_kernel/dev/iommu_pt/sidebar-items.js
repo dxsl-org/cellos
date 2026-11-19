@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DART1_PTE_SP_DIS","DART_ENTRIES_PER_TABLE","DART_IOVA_LIMIT","DART_PAGE_MASK","DART_PAGE_SIZE","DART_PTE_ADDR_MASK","DART_PTE_SUBPAGE_FULL","DART_PTE_VALID","PTE_DMA","SV39_A","SV39_D","SV39_R","SV39_V","SV39_W","VTD_R","VTD_RW"],"enum":["DartError"],"fn":["alloc_dart_page","alloc_page","dart_span","ensure_sv39_child","lookup_sv39_child","lookup_vtd_child","phys_to_virt_inner","virt_to_phys"],"struct":["AppleDartPt","Sv39IommuPt","VtdSlpt"]};
+window.SIDEBAR_ITEMS = {"fn":["alloc_page","phys_to_virt_inner","virt_to_phys"]};

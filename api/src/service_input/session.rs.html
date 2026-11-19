@@ -1,15 +1,15 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/input/src/session.rs`."><title>session.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_input" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_input/</div>session.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// SPDX-License-Identifier: MPL-2.0
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="doccomment">//! SessionV1 input authority. All identities enter through the attested receive
 <a href=#3 id=3 data-nosnippet>3</a>//! trailer; kernel endpoints, prepared children and publication remain kernel owned.
-<a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span>alloc::{collections::VecDeque, vec::Vec};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>api::cell_session::{
-<a href=#6 id=6 data-nosnippet>6</a>    frontend <span class="kw">as </span>fe, FRONTEND_SEAL_LEN, GRANT_KIND_INPUT_FRONTEND, SLOT_FRONTEND,
-<a href=#7 id=7 data-nosnippet>7</a>};
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::cell_session::{
-<a href=#9 id=9 data-nosnippet>9</a>    ChildRefV1, KernelOp, ObjectRefV1 <span class="kw">as </span>Ref, PrincipalV1 <span class="kw">as </span>Principal, Reader, RequestHeaderV1,
-<a href=#10 id=10 data-nosnippet>10</a>    ResultHeaderV1, Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
-<a href=#11 id=11 data-nosnippet>11</a>};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::{caller_identity::CallerIdentity, service_binding::ServiceBinding};
+<a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">use </span>abi::cell_session::{
+<a href=#5 id=5 data-nosnippet>5</a>    frontend <span class="kw">as </span>fe, FRONTEND_SEAL_LEN, GRANT_KIND_INPUT_FRONTEND, SLOT_FRONTEND,
+<a href=#6 id=6 data-nosnippet>6</a>};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>abi::cell_session::{
+<a href=#8 id=8 data-nosnippet>8</a>    ChildRefV1, KernelOp, ObjectRefV1 <span class="kw">as </span>Ref, PrincipalV1 <span class="kw">as </span>Principal, Reader, RequestHeaderV1,
+<a href=#9 id=9 data-nosnippet>9</a>    ResultHeaderV1, Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
+<a href=#10 id=10 data-nosnippet>10</a>};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>abi::{caller_identity::CallerIdentity, service_binding::ServiceBinding};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>alloc::{collections::VecDeque, vec::Vec};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>sys::{
 <a href=#14 id=14 data-nosnippet>14</a>    provider_tid, sys_get_time_ms, sys_ipc_current, sys_ipc_reply, sys_lookup_service_bound,
 <a href=#15 id=15 data-nosnippet>15</a>    sys_try_send,
@@ -58,7 +58,7 @@
 <a href=#58 id=58 data-nosnippet>58</a>/// the designated serial shell from another cell. Images that run untrusted cells without a
 <a href=#59 id=59 data-nosnippet>59</a>/// compositor therefore must not expose SessionV1 to them.
 <a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">fn </span>compositor_registered() -&gt; bool {
-<a href=#61 id=61 data-nosnippet>61</a>    provider_tid(api::syscall::service::COMPOSITOR).is_some()
+<a href=#61 id=61 data-nosnippet>61</a>    provider_tid(abi::syscall::service::COMPOSITOR).is_some()
 <a href=#62 id=62 data-nosnippet>62</a>}
 <a href=#63 id=63 data-nosnippet>63</a><span class="kw">fn </span>principal(c: CallerIdentity) -&gt; Principal {
 <a href=#64 id=64 data-nosnippet>64</a>    Principal {
@@ -220,7 +220,7 @@
 <a href=#220 id=220 data-nosnippet>220</a>    frozen: bool,
 <a href=#221 id=221 data-nosnippet>221</a>    closed: bool,
 <a href=#222 id=222 data-nosnippet>222</a>    input_failure: <span class="prelude-ty">Option</span>&lt;Status&gt;,
-<a href=#223 id=223 data-nosnippet>223</a>    decoder: api::services::session::SerialDecoder,
+<a href=#223 id=223 data-nosnippet>223</a>    decoder: wire::session::SerialDecoder,
 <a href=#224 id=224 data-nosnippet>224</a>    physical_paste: <span class="prelude-ty">Option</span>&lt;Secret&gt;,
 <a href=#225 id=225 data-nosnippet>225</a>    physical_paste_expires: u64,
 <a href=#226 id=226 data-nosnippet>226</a>    physical_paste_complete: bool,
@@ -377,7 +377,7 @@
 <a href=#377 id=377 data-nosnippet>377</a>    }
 <a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">fn </span>binding(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;ServiceBinding, Status&gt; {
 <a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0</span>; <span class="number">24</span>];
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span>binding = sys_lookup_service_bound(api::syscall::service::INPUT, <span class="kw-2">&amp;mut </span>bytes)
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span>binding = sys_lookup_service_bound(abi::syscall::service::INPUT, <span class="kw-2">&amp;mut </span>bytes)
 <a href=#381 id=381 data-nosnippet>381</a>            .ok_or(Status::Revoked)<span class="question-mark">?</span>;
 <a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(old) = <span class="self">self</span>.issuer {
 <a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">if </span>old != binding {
@@ -850,9 +850,9 @@
 <a href=#850 id=850 data-nosnippet>850</a>        o.pending = <span class="bool-val">false</span>;
 <a href=#851 id=851 data-nosnippet>851</a>    }
 <a href=#852 id=852 data-nosnippet>852</a>    <span class="kw">fn </span>send(bytes: <span class="kw-2">&amp;</span>[u8], sender: usize, token: usize) -&gt; bool {
-<a href=#853 id=853 data-nosnippet>853</a>        <span class="kw">let </span><span class="kw-2">mut </span>envelope = Scrub::&lt;{ api::ipc::IPC_BUF_SIZE }&gt;::new();
+<a href=#853 id=853 data-nosnippet>853</a>        <span class="kw">let </span><span class="kw-2">mut </span>envelope = Scrub::&lt;{ wire::ipc::IPC_BUF_SIZE }&gt;::new();
 <a href=#854 id=854 data-nosnippet>854</a>        <span class="kw">let </span><span class="prelude-val">Ok</span>(encoded) =
-<a href=#855 id=855 data-nosnippet>855</a>            api::ipc::encode(<span class="kw-2">&amp;</span>api::ipc::InputResponse::SessionV1(bytes), <span class="kw-2">&amp;mut </span>envelope)
+<a href=#855 id=855 data-nosnippet>855</a>            wire::ipc::encode(<span class="kw-2">&amp;</span>wire::ipc::InputResponse::SessionV1(bytes), <span class="kw-2">&amp;mut </span>envelope)
 <a href=#856 id=856 data-nosnippet>856</a>        <span class="kw">else </span>{
 <a href=#857 id=857 data-nosnippet>857</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#858 id=858 data-nosnippet>858</a>        };
@@ -1573,7 +1573,7 @@
 <a href=#1573 id=1573 data-nosnippet>1573</a>                <span class="comment">// Input ends: no answer to a trust prompt can arrive any more.
 <a href=#1574 id=1574 data-nosnippet>1574</a>                </span><span class="self">self</span>.end_capture(
 <a href=#1575 id=1575 data-nosnippet>1575</a>                    i,
-<a href=#1576 id=1576 data-nosnippet>1576</a>                    api::cell_session::trust::DECISION_CANCELLED,
+<a href=#1576 id=1576 data-nosnippet>1576</a>                    abi::cell_session::trust::DECISION_CANCELLED,
 <a href=#1577 id=1577 data-nosnippet>1577</a>                    trust::End::Release,
 <a href=#1578 id=1578 data-nosnippet>1578</a>                );
 <a href=#1579 id=1579 data-nosnippet>1579</a>                <span class="self">self</span>.sessions[i].draining = <span class="bool-val">true</span>;
@@ -1709,7 +1709,7 @@
 <a href=#1709 id=1709 data-nosnippet>1709</a>            frozen: <span class="bool-val">false</span>,
 <a href=#1710 id=1710 data-nosnippet>1710</a>            closed: <span class="bool-val">false</span>,
 <a href=#1711 id=1711 data-nosnippet>1711</a>            input_failure: <span class="prelude-val">None</span>,
-<a href=#1712 id=1712 data-nosnippet>1712</a>            decoder: api::services::session::SerialDecoder::new(),
+<a href=#1712 id=1712 data-nosnippet>1712</a>            decoder: wire::session::SerialDecoder::new(),
 <a href=#1713 id=1713 data-nosnippet>1713</a>            physical_paste: <span class="prelude-val">None</span>,
 <a href=#1714 id=1714 data-nosnippet>1714</a>            physical_paste_expires: <span class="number">0</span>,
 <a href=#1715 id=1715 data-nosnippet>1715</a>            physical_paste_complete: <span class="bool-val">false</span>,
@@ -1886,7 +1886,7 @@
 <a href=#1886 id=1886 data-nosnippet>1886</a>            || slot != SLOT_FRONTEND
 <a href=#1887 id=1887 data-nosnippet>1887</a>            || rights != <span class="number">0
 <a href=#1888 id=1888 data-nosnippet>1888</a>            </span>|| tail != <span class="number">0
-<a href=#1889 id=1889 data-nosnippet>1889</a>            </span>|| owner_service != api::syscall::service::INPUT <span class="kw">as </span>u64
+<a href=#1889 id=1889 data-nosnippet>1889</a>            </span>|| owner_service != abi::syscall::service::INPUT <span class="kw">as </span>u64
 <a href=#1890 id=1890 data-nosnippet>1890</a>            || object != frontend
 <a href=#1891 id=1891 data-nosnippet>1891</a>        {
 <a href=#1892 id=1892 data-nosnippet>1892</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::InvalidChild);
@@ -2067,7 +2067,7 @@
 <a href=#2067 id=2067 data-nosnippet>2067</a>        <span class="comment">// No frontend can type the answer any more: the trust capture ends cancelled.
 <a href=#2068 id=2068 data-nosnippet>2068</a>        </span><span class="self">self</span>.end_capture(
 <a href=#2069 id=2069 data-nosnippet>2069</a>            i,
-<a href=#2070 id=2070 data-nosnippet>2070</a>            api::cell_session::trust::DECISION_CANCELLED,
+<a href=#2070 id=2070 data-nosnippet>2070</a>            abi::cell_session::trust::DECISION_CANCELLED,
 <a href=#2071 id=2071 data-nosnippet>2071</a>            trust::End::Release,
 <a href=#2072 id=2072 data-nosnippet>2072</a>        );
 <a href=#2073 id=2073 data-nosnippet>2073</a>        <span class="kw">let _ </span>= <span class="self">self</span>.control(i, <span class="number">8</span>, <span class="kw-2">&amp;</span>fe::LOST_FRONTEND.to_le_bytes());
@@ -2323,7 +2323,7 @@
 <a href=#2323 id=2323 data-nosnippet>2323</a>                zeroize_deque(<span class="kw-2">&amp;mut </span>s.raw);
 <a href=#2324 id=2324 data-nosnippet>2324</a>                s.paste = <span class="prelude-val">None</span>;
 <a href=#2325 id=2325 data-nosnippet>2325</a>                s.physical_paste = <span class="prelude-val">None</span>;
-<a href=#2326 id=2326 data-nosnippet>2326</a>                s.decoder = api::services::session::SerialDecoder::new();
+<a href=#2326 id=2326 data-nosnippet>2326</a>                s.decoder = wire::session::SerialDecoder::new();
 <a href=#2327 id=2327 data-nosnippet>2327</a>                s.delivered_cursor = <span class="number">0</span>;
 <a href=#2328 id=2328 data-nosnippet>2328</a>                s.physical_paste_complete = <span class="bool-val">false</span>;
 <a href=#2329 id=2329 data-nosnippet>2329</a>                s.physical_paste_discard = <span class="bool-val">false</span>;
@@ -2413,7 +2413,7 @@
 <a href=#2413 id=2413 data-nosnippet>2413</a>        // cancelled and unsent owner notices are dropped (the controller ends its prompt).
 <a href=#2414 id=2414 data-nosnippet>2414</a>        </span><span class="self">self</span>.end_capture(
 <a href=#2415 id=2415 data-nosnippet>2415</a>            i,
-<a href=#2416 id=2416 data-nosnippet>2416</a>            api::cell_session::trust::DECISION_CANCELLED,
+<a href=#2416 id=2416 data-nosnippet>2416</a>            abi::cell_session::trust::DECISION_CANCELLED,
 <a href=#2417 id=2417 data-nosnippet>2417</a>            trust::End::Silent,
 <a href=#2418 id=2418 data-nosnippet>2418</a>        );
 <a href=#2419 id=2419 data-nosnippet>2419</a>        <span class="self">self</span>.sessions[i].notices.clear();
@@ -2424,7 +2424,7 @@
 <a href=#2424 id=2424 data-nosnippet>2424</a>        zeroize_deque(<span class="kw-2">&amp;mut </span>s.raw);
 <a href=#2425 id=2425 data-nosnippet>2425</a>        s.paste = <span class="prelude-val">None</span>;
 <a href=#2426 id=2426 data-nosnippet>2426</a>        s.physical_paste = <span class="prelude-val">None</span>;
-<a href=#2427 id=2427 data-nosnippet>2427</a>        s.decoder = api::services::session::SerialDecoder::new();
+<a href=#2427 id=2427 data-nosnippet>2427</a>        s.decoder = wire::session::SerialDecoder::new();
 <a href=#2428 id=2428 data-nosnippet>2428</a>        s.delivered_cursor = <span class="number">0</span>;
 <a href=#2429 id=2429 data-nosnippet>2429</a>        s.modes.clear();
 <a href=#2430 id=2430 data-nosnippet>2430</a>        s.mode = <span class="number">2</span>;
@@ -2485,7 +2485,7 @@
 <a href=#2485 id=2485 data-nosnippet>2485</a>        }
 <a href=#2486 id=2486 data-nosnippet>2486</a>        <span class="self">self</span>.end_capture(
 <a href=#2487 id=2487 data-nosnippet>2487</a>            i,
-<a href=#2488 id=2488 data-nosnippet>2488</a>            api::cell_session::trust::DECISION_CANCELLED,
+<a href=#2488 id=2488 data-nosnippet>2488</a>            abi::cell_session::trust::DECISION_CANCELLED,
 <a href=#2489 id=2489 data-nosnippet>2489</a>            trust::End::Silent,
 <a href=#2490 id=2490 data-nosnippet>2490</a>        );
 <a href=#2491 id=2491 data-nosnippet>2491</a>        <span class="self">self</span>.sessions[i].notices.clear();
@@ -2497,7 +2497,7 @@
 <a href=#2497 id=2497 data-nosnippet>2497</a>        zeroize_deque(<span class="kw-2">&amp;mut </span>s.raw);
 <a href=#2498 id=2498 data-nosnippet>2498</a>        s.paste = <span class="prelude-val">None</span>;
 <a href=#2499 id=2499 data-nosnippet>2499</a>        s.physical_paste = <span class="prelude-val">None</span>;
-<a href=#2500 id=2500 data-nosnippet>2500</a>        s.decoder = api::services::session::SerialDecoder::new();
+<a href=#2500 id=2500 data-nosnippet>2500</a>        s.decoder = wire::session::SerialDecoder::new();
 <a href=#2501 id=2501 data-nosnippet>2501</a>        s.modes.clear();
 <a href=#2502 id=2502 data-nosnippet>2502</a>        s.attachment = <span class="prelude-val">None</span>;
 <a href=#2503 id=2503 data-nosnippet>2503</a>        <span class="kw">if </span><span class="self">self</span>.serial == <span class="prelude-val">Some</span>(s.reference) {
@@ -2638,9 +2638,9 @@
 <a href=#2638 id=2638 data-nosnippet>2638</a>            <span class="kw">let </span>payload = bytes
 <a href=#2639 id=2639 data-nosnippet>2639</a>                .get(offset + <span class="number">24</span>..offset + <span class="number">24 </span>+ length)
 <a href=#2640 id=2640 data-nosnippet>2640</a>                .ok_or(Status::Malformed)<span class="question-mark">?</span>;
-<a href=#2641 id=2641 data-nosnippet>2641</a>            api::services::session::validate_event(kind, payload)<span class="question-mark">?</span>;
+<a href=#2641 id=2641 data-nosnippet>2641</a>            wire::session::validate_event(kind, payload)<span class="question-mark">?</span>;
 <a href=#2642 id=2642 data-nosnippet>2642</a>            <span class="kw">if </span>kind == <span class="number">2 </span>{
-<a href=#2643 id=2643 data-nosnippet>2643</a>                api::services::session::validate_text(payload)<span class="question-mark">?</span>;
+<a href=#2643 id=2643 data-nosnippet>2643</a>                wire::session::validate_text(payload)<span class="question-mark">?</span>;
 <a href=#2644 id=2644 data-nosnippet>2644</a>            }
 <a href=#2645 id=2645 data-nosnippet>2645</a>            <span class="kw">let </span>ctrl_c = kind == <span class="number">1
 <a href=#2646 id=2646 data-nosnippet>2646</a>                </span>&amp;&amp; payload[<span class="number">4</span>..<span class="number">8</span>] == <span class="number">2u32</span>.to_le_bytes()
@@ -2657,7 +2657,7 @@
 <a href=#2657 id=2657 data-nosnippet>2657</a>            <span class="kw">let </span>interrupt = ctrl_c;
 <a href=#2658 id=2658 data-nosnippet>2658</a>            <span class="kw">let </span><span class="kw-2">mut </span>encoded = Scrub::&lt;<span class="number">512</span>&gt;::new();
 <a href=#2659 id=2659 data-nosnippet>2659</a>            <span class="kw">let </span>encoded_len = <span class="kw">if </span>kind == <span class="number">1 </span>{
-<a href=#2660 id=2660 data-nosnippet>2660</a>                api::services::session::encode_key(
+<a href=#2660 id=2660 data-nosnippet>2660</a>                wire::session::encode_key(
 <a href=#2661 id=2661 data-nosnippet>2661</a>                    u32::from_le_bytes(payload[..<span class="number">4</span>].try_into().map_err(|<span class="kw">_</span>| Status::Malformed)<span class="question-mark">?</span>),
 <a href=#2662 id=2662 data-nosnippet>2662</a>                    u32::from_le_bytes(payload[<span class="number">4</span>..<span class="number">8</span>].try_into().map_err(|<span class="kw">_</span>| Status::Malformed)<span class="question-mark">?</span>),
 <a href=#2663 id=2663 data-nosnippet>2663</a>                    payload[<span class="number">8</span>],
@@ -2799,7 +2799,7 @@
 <a href=#2799 id=2799 data-nosnippet>2799</a>        }
 <a href=#2800 id=2800 data-nosnippet>2800</a>    }
 <a href=#2801 id=2801 data-nosnippet>2801</a>    <span class="kw">fn </span>admit_paste(<span class="kw-2">&amp;mut </span><span class="self">self</span>, i: usize, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;u64, Status&gt; {
-<a href=#2802 id=2802 data-nosnippet>2802</a>        api::services::session::validate_paste(bytes)<span class="question-mark">?</span>;
+<a href=#2802 id=2802 data-nosnippet>2802</a>        wire::session::validate_paste(bytes)<span class="question-mark">?</span>;
 <a href=#2803 id=2803 data-nosnippet>2803</a>        <span class="kw">let </span>text = core::str::from_utf8(bytes).map_err(|<span class="kw">_</span>| Status::UnsupportedInput)<span class="question-mark">?</span>;
 <a href=#2804 id=2804 data-nosnippet>2804</a>        <span class="kw">let </span><span class="kw-2">mut </span>chunks = [(<span class="number">0usize</span>, <span class="number">0usize</span>); <span class="number">130</span>];
 <a href=#2805 id=2805 data-nosnippet>2805</a>        <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0</span>;
@@ -3279,14 +3279,14 @@
 <a href=#3279 id=3279 data-nosnippet>3279</a>        }
 <a href=#3280 id=3280 data-nosnippet>3280</a>        <span class="prelude-val">Ok</span>(())
 <a href=#3281 id=3281 data-nosnippet>3281</a>    }
-<a href=#3282 id=3282 data-nosnippet>3282</a>    <span class="kw">pub fn </span>keyboard(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>api::input::KeyEvent) -&gt; bool {
+<a href=#3282 id=3282 data-nosnippet>3282</a>    <span class="kw">pub fn </span>keyboard(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>wire::input::KeyEvent) -&gt; bool {
 <a href=#3283 id=3283 data-nosnippet>3283</a>        <span class="kw">if </span>!<span class="self">self</span>.physical_active() {
 <a href=#3284 id=3284 data-nosnippet>3284</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#3285 id=3285 data-nosnippet>3285</a>        }
 <a href=#3286 id=3286 data-nosnippet>3286</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(i) = <span class="self">self</span>.physical_index() <span class="kw">else </span>{
 <a href=#3287 id=3287 data-nosnippet>3287</a>            <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#3288 id=3288 data-nosnippet>3288</a>        };
-<a href=#3289 id=3289 data-nosnippet>3289</a>        <span class="kw">use </span>api::input::{KeyState, KeySym <span class="kw">as </span>K};
+<a href=#3289 id=3289 data-nosnippet>3289</a>        <span class="kw">use </span>wire::input::{KeyState, KeySym <span class="kw">as </span>K};
 <a href=#3290 id=3290 data-nosnippet>3290</a>        <span class="kw">if </span>key.modifiers.<span class="number">0 </span>&amp; <span class="number">8 </span>!= <span class="number">0 </span>{
 <a href=#3291 id=3291 data-nosnippet>3291</a>            <span class="self">self</span>.physical_loss(i, <span class="number">3</span>);
 <a href=#3292 id=3292 data-nosnippet>3292</a>            <span class="kw">return </span><span class="bool-val">true</span>;

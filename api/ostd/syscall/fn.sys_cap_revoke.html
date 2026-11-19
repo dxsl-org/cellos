@@ -3,7 +3,7 @@
     cap_mask: u32,
 ) -&gt; Result&lt;(), <a class="enum" href="enum.SyscallError.html" title="enum ostd::syscall::SyscallError">SyscallError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Strip capabilities from a live running cell (runtime revocation).</p>
 <p><code>cap_mask</code> selects which capability classes to revoke — use the constants in
-<code>api::syscall::cap_mask</code> (e.g. <code>SPAWN</code>, <code>NETWORK</code>, <code>MMIO_MASK</code>).</p>
+<code>abi::syscall::cap_mask</code> (e.g. <code>SPAWN</code>, <code>NETWORK</code>, <code>MMIO_MASK</code>).</p>
 <p>The revoke applies to the target’s whole Cell incarnation (root and every
 thread), whichever of its tasks <code>target_tid</code> names.</p>
 <h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>

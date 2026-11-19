@@ -8,17 +8,17 @@
 <a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">extern crate </span>alloc;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::{boxed::Box, collections::VecDeque};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::services::proto::nic::{NicStatus, MIN_FRAME, OP_GETMAC, OP_RX, OP_TX};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>ostd::{
-<a href=#15 id=15 data-nosnippet>15</a>    io::println,
-<a href=#16 id=16 data-nosnippet>16</a>    syscall::{sys_recv_timeout, sys_try_send, SyscallResult},
-<a href=#17 id=17 data-nosnippet>17</a>};
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>smoltcp::{
-<a href=#19 id=19 data-nosnippet>19</a>    phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
-<a href=#20 id=20 data-nosnippet>20</a>    time::Instant,
-<a href=#21 id=21 data-nosnippet>21</a>};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::{
+<a href=#14 id=14 data-nosnippet>14</a>    io::println,
+<a href=#15 id=15 data-nosnippet>15</a>    syscall::{sys_recv_timeout, sys_try_send, SyscallResult},
+<a href=#16 id=16 data-nosnippet>16</a>};
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>smoltcp::{
+<a href=#18 id=18 data-nosnippet>18</a>    phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
+<a href=#19 id=19 data-nosnippet>19</a>    time::Instant,
+<a href=#20 id=20 data-nosnippet>20</a>};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>wire::proto::nic::{NicStatus, MIN_FRAME, OP_GETMAC, OP_RX, OP_TX};
 <a href=#22 id=22 data-nosnippet>22</a>
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::bridge_ports::{Bridge, PortError};
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::socket_table::SocketOwner;
@@ -91,7 +91,7 @@
 <a href=#91 id=91 data-nosnippet>91</a><span class="doccomment">/// Returns the active NIC Driver Cell TID, re-probing after absence or failure.
 <a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">fn </span>nic_driver_tid() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
 <a href=#93 id=93 data-nosnippet>93</a>    resolve_cached_nic_driver(<span class="kw-2">&amp;</span>NIC_DRIVER_TID, || {
-<a href=#94 id=94 data-nosnippet>94</a>        provider_tid(api::syscall::service::NIC_DRIVER)
+<a href=#94 id=94 data-nosnippet>94</a>        provider_tid(abi::syscall::service::NIC_DRIVER)
 <a href=#95 id=95 data-nosnippet>95</a>    })
 <a href=#96 id=96 data-nosnippet>96</a>}
 <a href=#97 id=97 data-nosnippet>97</a>
@@ -691,11 +691,11 @@
 <a href=#691 id=691 data-nosnippet>691</a>            }
 <a href=#692 id=692 data-nosnippet>692</a>            <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; <span class="number">8</span>];
 <a href=#693 id=693 data-nosnippet>693</a>            <span class="kw">let </span>response = <span class="kw">if </span>accepted {
-<a href=#694 id=694 data-nosnippet>694</a>                api::ipc::NetResponse::Ok
+<a href=#694 id=694 data-nosnippet>694</a>                wire::ipc::NetResponse::Ok
 <a href=#695 id=695 data-nosnippet>695</a>            } <span class="kw">else </span>{
-<a href=#696 id=696 data-nosnippet>696</a>                api::ipc::NetResponse::Err(status)
+<a href=#696 id=696 data-nosnippet>696</a>                wire::ipc::NetResponse::Err(status)
 <a href=#697 id=697 data-nosnippet>697</a>            };
-<a href=#698 id=698 data-nosnippet>698</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(bytes) = api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded) <span class="kw">else </span>{
+<a href=#698 id=698 data-nosnippet>698</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(bytes) = wire::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded) <span class="kw">else </span>{
 <a href=#699 id=699 data-nosnippet>699</a>                <span class="kw">break</span>;
 <a href=#700 id=700 data-nosnippet>700</a>            };
 <a href=#701 id=701 data-nosnippet>701</a>            <span class="kw">let </span>delivered = <span class="kw">match </span>target {

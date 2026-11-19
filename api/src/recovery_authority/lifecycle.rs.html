@@ -2,8 +2,8 @@
 <a href=#2 id=2 data-nosnippet>2</a>//! on death, wait for the kernel's retirement verdict (K1, syscall 431), and
 <a href=#3 id=3 data-nosnippet>3</a>//! restart only a contained or explicitly quarantined incarnation.
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>alloc::format;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
+<a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span>abi::retirement::{reason, RetirementState, ViRetirementV1, RETIREMENT_RECORD_LEN};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>alloc::format;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::io::println;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>ostd::ipc::Incoming;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ostd::syscall::{<span class="self">self</span>, SyscallResult};

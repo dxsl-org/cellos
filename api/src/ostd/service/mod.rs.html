@@ -18,10 +18,10 @@
 <a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use </span><span class="kw">crate</span>::call_outcome::Uncertainty;
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::call_outcome::{<span class="self">self</span>, CallOutcome, Refusal};
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>crate::{syscall, ViError, ViResult};
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>api::ipc::IPC_BUF_SIZE;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>abi::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>wire::ipc::IPC_BUF_SIZE;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub use </span>api::syscall::service;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub use </span>abi::syscall::service;
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">pub mod </span>owners;
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">pub mod </span>serve;
@@ -52,7 +52,7 @@
 <a href=#52 id=52 data-nosnippet>52</a>    lookup(service_id).map(|binding| binding.tid <span class="kw">as </span>usize)
 <a href=#53 id=53 data-nosnippet>53</a>}
 <a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// The [`api::syscall::service_flags`] the namespace owner (init, and the
+<a href=#55 id=55 data-nosnippet>55</a><span class="doccomment">/// The [`abi::syscall::service_flags`] the namespace owner (init, and the
 <a href=#56 id=56 data-nosnippet>56</a>/// supervisor when it rolls a hot swap back) registers `service_id` with.
 <a href=#57 id=57 data-nosnippet>57</a>///
 <a href=#58 id=58 data-nosnippet>58</a>/// VFS keeps its outer caller across nested IPC and watches the owners it
@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>/// resources they reclaim. Each entry is an owner decision with its own reclaim
 <a href=#61 id=61 data-nosnippet>61</a>/// consumer.
 <a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">pub const fn </span>namespace_flags(service_id: u16) -&gt; usize {
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">use </span>api::syscall::service_flags::{ALL, OWNER_WATCH};
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">use </span>abi::syscall::service_flags::{ALL, OWNER_WATCH};
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">match </span>service_id {
 <a href=#65 id=65 data-nosnippet>65</a>        service::VFS =&gt; ALL,
 <a href=#66 id=66 data-nosnippet>66</a>        service::NET | service::COMPOSITOR | service::XE_GPU =&gt; OWNER_WATCH,
@@ -98,7 +98,7 @@
 <a href=#98 id=98 data-nosnippet>98</a>/// # Usage
 <a href=#99 id=99 data-nosnippet>99</a>/// ```no_run
 <a href=#100 id=100 data-nosnippet>100</a>/// use ostd::service::{service, ServiceRef};
-<a href=#101 id=101 data-nosnippet>101</a>/// use ostd::services::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+<a href=#101 id=101 data-nosnippet>101</a>/// use wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 <a href=#102 id=102 data-nosnippet>102</a>/// use ostd::ViResult;
 <a href=#103 id=103 data-nosnippet>103</a>///
 <a href=#104 id=104 data-nosnippet>104</a>/// # fn stat() -&gt; ViResult&lt;()&gt; {
@@ -295,7 +295,7 @@
 <a href=#295 id=295 data-nosnippet>295</a><span class="attr">#[cfg(test)]
 <a href=#296 id=296 data-nosnippet>296</a></span><span class="kw">mod </span>tests {
 <a href=#297 id=297 data-nosnippet>297</a>    <span class="kw">use </span>super::{namespace_flags, service};
-<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">use </span>api::syscall::service_flags::{ALL, OWNER_WATCH};
+<a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">use </span>abi::syscall::service_flags::{ALL, OWNER_WATCH};
 <a href=#299 id=299 data-nosnippet>299</a>
 <a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Tripwire: which services the namespace owner flags is an owner decision.
 <a href=#301 id=301 data-nosnippet>301</a>    /// Adding one is a reviewed change with its own reclaim consumer and kernel

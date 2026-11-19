@@ -77,8 +77,8 @@
 <a href=#77 id=77 data-nosnippet>77</a>                    <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(<span class="number">0</span>, <span class="number">0</span>),
 <a href=#78 id=78 data-nosnippet>78</a>                );
 <a href=#79 id=79 data-nosnippet>79</a>                manifest.as_ref().is_some_and(|m| {
-<a href=#80 id=80 data-nosnippet>80</a>                    m.protection_class() == api::manifest::PROTECTION_CLASS_FFI
-<a href=#81 id=81 data-nosnippet>81</a>                        || m.protection_class() == api::manifest::PROTECTION_CLASS_UNTRUSTED
+<a href=#80 id=80 data-nosnippet>80</a>                    m.protection_class() == abi::manifest::PROTECTION_CLASS_FFI
+<a href=#81 id=81 data-nosnippet>81</a>                        || m.protection_class() == abi::manifest::PROTECTION_CLASS_UNTRUSTED
 <a href=#82 id=82 data-nosnippet>82</a>                })
 <a href=#83 id=83 data-nosnippet>83</a>            }
 <a href=#84 id=84 data-nosnippet>84</a>            <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>) =&gt; {
@@ -173,8 +173,8 @@
 <a href=#173 id=173 data-nosnippet>173</a>
 <a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">let </span>allowlist = section_u64(elf, <span class="string">"__ViCell_syscalls"</span>);
 <a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">let </span>cluster_mode = cluster_mode(elf);
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>request.priority &gt; api::TaskPriority::RealTime <span class="kw">as </span>u8
-<a href=#177 id=177 data-nosnippet>177</a>        || (request.priority == api::TaskPriority::RealTime <span class="kw">as </span>u8 &amp;&amp; cluster_mode != <span class="number">0</span>)
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">if </span>request.priority &gt; abi::TaskPriority::RealTime <span class="kw">as </span>u8
+<a href=#177 id=177 data-nosnippet>177</a>        || (request.priority == abi::TaskPriority::RealTime <span class="kw">as </span>u8 &amp;&amp; cluster_mode != <span class="number">0</span>)
 <a href=#178 id=178 data-nosnippet>178</a>    {
 <a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">super</span>::atomic_checkpoint(<span class="string">"AP-10"</span>)<span class="question-mark">?</span>;
 <a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::PermissionDenied);
@@ -191,7 +191,7 @@
 <a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">let </span>requested_class = manifest
 <a href=#192 id=192 data-nosnippet>192</a>        .as_ref()
 <a href=#193 id=193 data-nosnippet>193</a>        .map(|m| m.protection_class())
-<a href=#194 id=194 data-nosnippet>194</a>        .unwrap_or(api::manifest::PROTECTION_CLASS_LEGACY);
+<a href=#194 id=194 data-nosnippet>194</a>        .unwrap_or(abi::manifest::PROTECTION_CLASS_LEGACY);
 <a href=#195 id=195 data-nosnippet>195</a>    <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#196 id=196 data-nosnippet>196</a>    </span><span class="kw">let </span>(pku_key, pku_value) = {
 <a href=#197 id=197 data-nosnippet>197</a>        <span class="kw">let </span>key = <span class="kw">crate</span>::task::cap::granted_protection_class(<span class="kw-2">&amp;</span>granted, requested_class);
@@ -216,137 +216,145 @@
 <a href=#216 id=216 data-nosnippet>216</a>        platform,
 <a href=#217 id=217 data-nosnippet>217</a>        request.replacement.take(),
 <a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">crate</span>::memory::cell_quota::default_quota_bytes(),
-<a href=#219 id=219 data-nosnippet>219</a>        allowlist,
-<a href=#220 id=220 data-nosnippet>220</a>        request.priority,
-<a href=#221 id=221 data-nosnippet>221</a>        pku_key,
-<a href=#222 id=222 data-nosnippet>222</a>        pku_value,
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="bool-val">false</span>,
-<a href=#224 id=224 data-nosnippet>224</a>        request.inherit_from,
-<a href=#225 id=225 data-nosnippet>225</a>        request.argv.take(),
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">crate</span>::task::LaunchRoutes {
-<a href=#227 id=227 data-nosnippet>227</a>            block_io: granted.block_io,
-<a href=#228 id=228 data-nosnippet>228</a>            input: path.ends_with(<span class="string">"/bin/input"</span>),
-<a href=#229 id=229 data-nosnippet>229</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#230 id=230 data-nosnippet>230</a>            </span>development_silo: path == <span class="string">"/bin/silo" </span>&amp;&amp; granted.hypervisor,
-<a href=#231 id=231 data-nosnippet>231</a>        },
-<a href=#232 id=232 data-nosnippet>232</a>        <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::StagedMeasurement {
-<a href=#233 id=233 data-nosnippet>233</a>            path: path.to_string(),
-<a href=#234 id=234 data-nosnippet>234</a>            digest: elf_digest,
-<a href=#235 id=235 data-nosnippet>235</a>            image,
-<a href=#236 id=236 data-nosnippet>236</a>            launch_named: request.kernel_resolved_path
-<a href=#237 id=237 data-nosnippet>237</a>                &amp;&amp; <span class="kw">crate</span>::catalog::names_launch_identity(path),
-<a href=#238 id=238 data-nosnippet>238</a>        }),
-<a href=#239 id=239 data-nosnippet>239</a>        is_domain,
-<a href=#240 id=240 data-nosnippet>240</a>    );
-<a href=#241 id=241 data-nosnippet>241</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#242 id=242 data-nosnippet>242</a>    </span><span class="kw">let </span>state = {
-<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = state;
-<a href=#244 id=244 data-nosnippet>244</a>        state.trace = request.trace;
-<a href=#245 id=245 data-nosnippet>245</a>        state
-<a href=#246 id=246 data-nosnippet>246</a>    };
-<a href=#247 id=247 data-nosnippet>247</a>    <span class="prelude-val">Ok</span>((prepared, state))
-<a href=#248 id=248 data-nosnippet>248</a>}
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_gated(elf: <span class="kw-2">&amp;</span>[u8], path: <span class="kw-2">&amp;</span>str, request: <span class="kw">super</span>::SpawnRequest) -&gt; ViResult&lt;usize&gt; {
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">let </span>(prepared, state) = prepare_gated(elf, path, request)<span class="question-mark">?</span>;
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">crate</span>::task::publish_prepared(prepared, state).map(|(tid, <span class="kw">_</span>)| tid)
-<a href=#253 id=253 data-nosnippet>253</a>}
-<a href=#254 id=254 data-nosnippet>254</a>
-<a href=#255 id=255 data-nosnippet>255</a><span class="kw">impl </span><span class="kw">super</span>::SpawnRequest {
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// Admit the exact artifact bytes once: the prepared image, digest and
-<a href=#257 id=257 data-nosnippet>257</a>    /// staged measurement all derive from this single read, so commit never
-<a href=#258 id=258 data-nosnippet>258</a>    /// rereads a replaceable path. Nothing is published: no owner, task,
-<a href=#259 id=259 data-nosnippet>259</a>    /// route, measurement, CSpace, or runnable queue entry.
-<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>prepare_session_path(
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="self">self</span>,
-<a href=#262 id=262 data-nosnippet>262</a>        path: <span class="kw-2">&amp;</span>str,
-<a href=#263 id=263 data-nosnippet>263</a>    ) -&gt; ViResult&lt;(<span class="kw">crate</span>::task::PreparedElfTask, <span class="kw">crate</span>::task::TaskLaunchState)&gt; {
-<a href=#264 id=264 data-nosnippet>264</a>        session_path_valid(path)<span class="question-mark">?</span>;
-<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">let </span>bytes = <span class="kw">super</span>::early::EarlyLoader::read_file(path)<span class="question-mark">?</span>;
-<a href=#266 id=266 data-nosnippet>266</a>        prepare_gated(<span class="kw-2">&amp;</span>bytes, path, <span class="self">self</span>)
-<a href=#267 id=267 data-nosnippet>267</a>    }
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// Route 2: the same admission over caller-supplied bytes (`path` is the
-<a href=#270 id=270 data-nosnippet>270</a>    /// advisory edge/measurement name). Signature, manifest, measurement and
-<a href=#271 id=271 data-nosnippet>271</a>    /// domain classification are exactly route 1's; the edge was authorized as
-<a href=#272 id=272 data-nosnippet>272</a>    /// `LaunchRoute::Elf` by the caller of this function.
-<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>prepare_session_elf(
-<a href=#274 id=274 data-nosnippet>274</a>        <span class="self">self</span>,
-<a href=#275 id=275 data-nosnippet>275</a>        elf: <span class="kw-2">&amp;</span>[u8],
-<a href=#276 id=276 data-nosnippet>276</a>        path: <span class="kw-2">&amp;</span>str,
-<a href=#277 id=277 data-nosnippet>277</a>    ) -&gt; ViResult&lt;(<span class="kw">crate</span>::task::PreparedElfTask, <span class="kw">crate</span>::task::TaskLaunchState)&gt; {
-<a href=#278 id=278 data-nosnippet>278</a>        session_path_valid(path)<span class="question-mark">?</span>;
-<a href=#279 id=279 data-nosnippet>279</a>        prepare_gated(elf, path, <span class="self">self</span>)
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>}
-<a href=#282 id=282 data-nosnippet>282</a>
-<a href=#283 id=283 data-nosnippet>283</a><span class="kw">fn </span>session_path_valid(path: <span class="kw-2">&amp;</span>str) -&gt; ViResult&lt;()&gt; {
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">if </span>path.is_empty()
-<a href=#285 id=285 data-nosnippet>285</a>        || !path.starts_with(<span class="string">'/'</span>)
-<a href=#286 id=286 data-nosnippet>286</a>        || path.len() &gt; <span class="number">4096
-<a href=#287 id=287 data-nosnippet>287</a>        </span>|| path.as_bytes().contains(<span class="kw-2">&amp;</span><span class="number">0</span>)
-<a href=#288 id=288 data-nosnippet>288</a>    {
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
-<a href=#290 id=290 data-nosnippet>290</a>    }
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="prelude-val">Ok</span>(())
-<a href=#292 id=292 data-nosnippet>292</a>}
-<a href=#293 id=293 data-nosnippet>293</a>
-<a href=#294 id=294 data-nosnippet>294</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_trusted_init(elf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;usize&gt; {
-<a href=#295 id=295 data-nosnippet>295</a>    spawn_init(
-<a href=#296 id=296 data-nosnippet>296</a>        elf,
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#298 id=298 data-nosnippet>298</a>        </span><span class="bool-val">false</span>,
-<a href=#299 id=299 data-nosnippet>299</a>    )
-<a href=#300 id=300 data-nosnippet>300</a>}
-<a href=#301 id=301 data-nosnippet>301</a>
-<a href=#302 id=302 data-nosnippet>302</a><span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#303 id=303 data-nosnippet>303</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_bootstrap_init(elf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;usize&gt; {
-<a href=#304 id=304 data-nosnippet>304</a>    spawn_init(elf, <span class="bool-val">true</span>)
-<a href=#305 id=305 data-nosnippet>305</a>}
-<a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a><span class="kw">fn </span>spawn_init(elf: <span class="kw-2">&amp;</span>[u8], <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)] </span>bootstrap_init: bool) -&gt; ViResult&lt;usize&gt; {
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">let </span>granted = <span class="kw">super</span>::boot_ceiling::boot_ceiling(<span class="string">"/bin/init"</span>);
-<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span>prepared = <span class="kw">crate</span>::task::prepare_elf_task(elf, <span class="string">"init"</span>, CellId(<span class="number">0</span>), alloc::vec::Vec::new())<span class="question-mark">?</span>;
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>init_digest = <span class="kw">crate</span>::sha256::sha256(elf);
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>state = <span class="kw">crate</span>::task::TaskLaunchState::complete(
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="prelude-val">None</span>,
-<a href=#313 id=313 data-nosnippet>313</a>        granted,
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="comment">// Kernel-resolved path: a `/mem/` label matches no row and gets 0.
+<a href=#220 id=220 data-nosnippet>220</a>        </span><span class="kw">crate</span>::catalog::find(path).map_or(<span class="number">0</span>, |row| row.guest_memory),
+<a href=#221 id=221 data-nosnippet>221</a>        allowlist,
+<a href=#222 id=222 data-nosnippet>222</a>        request.priority,
+<a href=#223 id=223 data-nosnippet>223</a>        pku_key,
+<a href=#224 id=224 data-nosnippet>224</a>        pku_value,
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="bool-val">false</span>,
+<a href=#226 id=226 data-nosnippet>226</a>        request.inherit_from,
+<a href=#227 id=227 data-nosnippet>227</a>        request.argv.take(),
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">crate</span>::task::LaunchRoutes {
+<a href=#229 id=229 data-nosnippet>229</a>            block_io: granted.block_io,
+<a href=#230 id=230 data-nosnippet>230</a>            input: path.ends_with(<span class="string">"/bin/input"</span>),
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#232 id=232 data-nosnippet>232</a>            </span>development_silo: path == <span class="string">"/bin/silo" </span>&amp;&amp; granted.hypervisor,
+<a href=#233 id=233 data-nosnippet>233</a>        },
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::StagedMeasurement {
+<a href=#235 id=235 data-nosnippet>235</a>            path: path.to_string(),
+<a href=#236 id=236 data-nosnippet>236</a>            digest: elf_digest,
+<a href=#237 id=237 data-nosnippet>237</a>            image,
+<a href=#238 id=238 data-nosnippet>238</a>            launch_named: request.kernel_resolved_path
+<a href=#239 id=239 data-nosnippet>239</a>                &amp;&amp; <span class="kw">crate</span>::catalog::names_launch_identity(path),
+<a href=#240 id=240 data-nosnippet>240</a>        }),
+<a href=#241 id=241 data-nosnippet>241</a>        is_domain,
+<a href=#242 id=242 data-nosnippet>242</a>    );
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">let </span>state = {
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = state;
+<a href=#246 id=246 data-nosnippet>246</a>        state.trace = request.trace;
+<a href=#247 id=247 data-nosnippet>247</a>        state
+<a href=#248 id=248 data-nosnippet>248</a>    };
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="prelude-val">Ok</span>((prepared, state))
+<a href=#250 id=250 data-nosnippet>250</a>}
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_gated(elf: <span class="kw-2">&amp;</span>[u8], path: <span class="kw-2">&amp;</span>str, request: <span class="kw">super</span>::SpawnRequest) -&gt; ViResult&lt;usize&gt; {
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">let </span>(prepared, state) = prepare_gated(elf, path, request)<span class="question-mark">?</span>;
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">crate</span>::task::publish_prepared(prepared, state).map(|(tid, <span class="kw">_</span>)| tid)
+<a href=#255 id=255 data-nosnippet>255</a>}
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a><span class="kw">impl </span><span class="kw">super</span>::SpawnRequest {
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="doccomment">/// Admit the exact artifact bytes once: the prepared image, digest and
+<a href=#259 id=259 data-nosnippet>259</a>    /// staged measurement all derive from this single read, so commit never
+<a href=#260 id=260 data-nosnippet>260</a>    /// rereads a replaceable path. Nothing is published: no owner, task,
+<a href=#261 id=261 data-nosnippet>261</a>    /// route, measurement, CSpace, or runnable queue entry.
+<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>prepare_session_path(
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="self">self</span>,
+<a href=#264 id=264 data-nosnippet>264</a>        path: <span class="kw-2">&amp;</span>str,
+<a href=#265 id=265 data-nosnippet>265</a>    ) -&gt; ViResult&lt;(<span class="kw">crate</span>::task::PreparedElfTask, <span class="kw">crate</span>::task::TaskLaunchState)&gt; {
+<a href=#266 id=266 data-nosnippet>266</a>        session_path_valid(path)<span class="question-mark">?</span>;
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>bytes = <span class="kw">super</span>::early::EarlyLoader::read_file(path)<span class="question-mark">?</span>;
+<a href=#268 id=268 data-nosnippet>268</a>        prepare_gated(<span class="kw-2">&amp;</span>bytes, path, <span class="self">self</span>)
+<a href=#269 id=269 data-nosnippet>269</a>    }
+<a href=#270 id=270 data-nosnippet>270</a>
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="doccomment">/// Route 2: the same admission over caller-supplied bytes (`path` is the
+<a href=#272 id=272 data-nosnippet>272</a>    /// advisory edge/measurement name). Signature, manifest, measurement and
+<a href=#273 id=273 data-nosnippet>273</a>    /// domain classification are exactly route 1's; the edge was authorized as
+<a href=#274 id=274 data-nosnippet>274</a>    /// `LaunchRoute::Elf` by the caller of this function.
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>prepare_session_elf(
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="self">self</span>,
+<a href=#277 id=277 data-nosnippet>277</a>        elf: <span class="kw-2">&amp;</span>[u8],
+<a href=#278 id=278 data-nosnippet>278</a>        path: <span class="kw-2">&amp;</span>str,
+<a href=#279 id=279 data-nosnippet>279</a>    ) -&gt; ViResult&lt;(<span class="kw">crate</span>::task::PreparedElfTask, <span class="kw">crate</span>::task::TaskLaunchState)&gt; {
+<a href=#280 id=280 data-nosnippet>280</a>        session_path_valid(path)<span class="question-mark">?</span>;
+<a href=#281 id=281 data-nosnippet>281</a>        prepare_gated(elf, path, <span class="self">self</span>)
+<a href=#282 id=282 data-nosnippet>282</a>    }
+<a href=#283 id=283 data-nosnippet>283</a>}
+<a href=#284 id=284 data-nosnippet>284</a>
+<a href=#285 id=285 data-nosnippet>285</a><span class="kw">fn </span>session_path_valid(path: <span class="kw-2">&amp;</span>str) -&gt; ViResult&lt;()&gt; {
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="kw">if </span>path.is_empty()
+<a href=#287 id=287 data-nosnippet>287</a>        || !path.starts_with(<span class="string">'/'</span>)
+<a href=#288 id=288 data-nosnippet>288</a>        || path.len() &gt; <span class="number">4096
+<a href=#289 id=289 data-nosnippet>289</a>        </span>|| path.as_bytes().contains(<span class="kw-2">&amp;</span><span class="number">0</span>)
+<a href=#290 id=290 data-nosnippet>290</a>    {
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::InvalidInput);
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="prelude-val">Ok</span>(())
+<a href=#294 id=294 data-nosnippet>294</a>}
+<a href=#295 id=295 data-nosnippet>295</a>
+<a href=#296 id=296 data-nosnippet>296</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_trusted_init(elf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;usize&gt; {
+<a href=#297 id=297 data-nosnippet>297</a>    spawn_init(
+<a href=#298 id=298 data-nosnippet>298</a>        elf,
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#300 id=300 data-nosnippet>300</a>        </span><span class="bool-val">false</span>,
+<a href=#301 id=301 data-nosnippet>301</a>    )
+<a href=#302 id=302 data-nosnippet>302</a>}
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a><span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#305 id=305 data-nosnippet>305</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>spawn_bootstrap_init(elf: <span class="kw-2">&amp;</span>[u8]) -&gt; ViResult&lt;usize&gt; {
+<a href=#306 id=306 data-nosnippet>306</a>    spawn_init(elf, <span class="bool-val">true</span>)
+<a href=#307 id=307 data-nosnippet>307</a>}
+<a href=#308 id=308 data-nosnippet>308</a>
+<a href=#309 id=309 data-nosnippet>309</a><span class="kw">fn </span>spawn_init(elf: <span class="kw-2">&amp;</span>[u8], <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)] </span>bootstrap_init: bool) -&gt; ViResult&lt;usize&gt; {
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span>granted = <span class="kw">super</span>::boot_ceiling::boot_ceiling(<span class="string">"/bin/init"</span>);
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>prepared = <span class="kw">crate</span>::task::prepare_elf_task(elf, <span class="string">"init"</span>, CellId(<span class="number">0</span>), alloc::vec::Vec::new())<span class="question-mark">?</span>;
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>init_digest = <span class="kw">crate</span>::sha256::sha256(elf);
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>state = <span class="kw">crate</span>::task::TaskLaunchState::complete(
 <a href=#314 id=314 data-nosnippet>314</a>        <span class="prelude-val">None</span>,
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="prelude-val">None</span>,
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="kw">crate</span>::memory::cell_quota::default_quota_bytes(),
-<a href=#317 id=317 data-nosnippet>317</a>        u64::MAX,
-<a href=#318 id=318 data-nosnippet>318</a>        api::TaskPriority::Normal <span class="kw">as </span>u8,
+<a href=#315 id=315 data-nosnippet>315</a>        granted,
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="prelude-val">None</span>,
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="prelude-val">None</span>,
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">crate</span>::memory::cell_quota::default_quota_bytes(),
 <a href=#319 id=319 data-nosnippet>319</a>        <span class="number">0</span>,
-<a href=#320 id=320 data-nosnippet>320</a>        <span class="number">0</span>,
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="bool-val">true</span>,
+<a href=#320 id=320 data-nosnippet>320</a>        u64::MAX,
+<a href=#321 id=321 data-nosnippet>321</a>        abi::TaskPriority::Normal <span class="kw">as </span>u8,
 <a href=#322 id=322 data-nosnippet>322</a>        <span class="number">0</span>,
-<a href=#323 id=323 data-nosnippet>323</a>        <span class="prelude-val">None</span>,
-<a href=#324 id=324 data-nosnippet>324</a>        <span class="kw">crate</span>::task::LaunchRoutes {
-<a href=#325 id=325 data-nosnippet>325</a>            block_io: <span class="bool-val">false</span>,
-<a href=#326 id=326 data-nosnippet>326</a>            input: <span class="bool-val">false</span>,
-<a href=#327 id=327 data-nosnippet>327</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#328 id=328 data-nosnippet>328</a>            </span>development_silo: <span class="bool-val">false</span>,
-<a href=#329 id=329 data-nosnippet>329</a>        },
-<a href=#330 id=330 data-nosnippet>330</a>        <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::StagedMeasurement {
-<a href=#331 id=331 data-nosnippet>331</a>            path: <span class="string">"/bin/init"</span>.to_string(),
-<a href=#332 id=332 data-nosnippet>332</a>            digest: init_digest,
-<a href=#333 id=333 data-nosnippet>333</a>            <span class="comment">// Trusted init is embedded in the kernel image, not admitted
-<a href=#334 id=334 data-nosnippet>334</a>            // through signature verification, so it states a digest only.
-<a href=#335 id=335 data-nosnippet>335</a>            </span>image: api::cell_image::ImageIdentity::unsigned(init_digest),
-<a href=#336 id=336 data-nosnippet>336</a>            <span class="comment">// Init is named by the trusted-init latch, not by an image.
-<a href=#337 id=337 data-nosnippet>337</a>            </span>launch_named: <span class="bool-val">false</span>,
-<a href=#338 id=338 data-nosnippet>338</a>        }),
-<a href=#339 id=339 data-nosnippet>339</a>        <span class="bool-val">false</span>,
-<a href=#340 id=340 data-nosnippet>340</a>    );
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="kw">let </span><span class="kw-2">mut </span>state = state;
-<a href=#342 id=342 data-nosnippet>342</a>    state.trusted_init = <span class="bool-val">true</span>;
-<a href=#343 id=343 data-nosnippet>343</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="kw">let </span>state = {
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = state;
-<a href=#346 id=346 data-nosnippet>346</a>        state.bootstrap_init = bootstrap_init;
-<a href=#347 id=347 data-nosnippet>347</a>        state
-<a href=#348 id=348 data-nosnippet>348</a>    };
-<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">let </span>tid = <span class="kw">crate</span>::task::publish_prepared(prepared, state).map(|(tid, <span class="kw">_</span>)| tid)<span class="question-mark">?</span>;
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="prelude-val">Ok</span>(tid)
-<a href=#351 id=351 data-nosnippet>351</a>}
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="number">0</span>,
+<a href=#324 id=324 data-nosnippet>324</a>        <span class="bool-val">true</span>,
+<a href=#325 id=325 data-nosnippet>325</a>        <span class="number">0</span>,
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="prelude-val">None</span>,
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">crate</span>::task::LaunchRoutes {
+<a href=#328 id=328 data-nosnippet>328</a>            block_io: <span class="bool-val">false</span>,
+<a href=#329 id=329 data-nosnippet>329</a>            input: <span class="bool-val">false</span>,
+<a href=#330 id=330 data-nosnippet>330</a>            <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#331 id=331 data-nosnippet>331</a>            </span>development_silo: <span class="bool-val">false</span>,
+<a href=#332 id=332 data-nosnippet>332</a>        },
+<a href=#333 id=333 data-nosnippet>333</a>        <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::StagedMeasurement {
+<a href=#334 id=334 data-nosnippet>334</a>            path: <span class="string">"/bin/init"</span>.to_string(),
+<a href=#335 id=335 data-nosnippet>335</a>            digest: init_digest,
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="comment">// Trusted init is embedded in the kernel image, not admitted
+<a href=#337 id=337 data-nosnippet>337</a>            // through signature verification, so it states a digest only.
+<a href=#338 id=338 data-nosnippet>338</a>            </span>image: abi::cell_image::ImageIdentity::unsigned(init_digest),
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="comment">// Init is named by the trusted-init latch, not by an image.
+<a href=#340 id=340 data-nosnippet>340</a>            </span>launch_named: <span class="bool-val">false</span>,
+<a href=#341 id=341 data-nosnippet>341</a>        }),
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="bool-val">false</span>,
+<a href=#343 id=343 data-nosnippet>343</a>    );
+<a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">let </span><span class="kw-2">mut </span>state = state;
+<a href=#345 id=345 data-nosnippet>345</a>    state.trusted_init = <span class="bool-val">true</span>;
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#347 id=347 data-nosnippet>347</a>    </span><span class="kw">let </span>state = {
+<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span><span class="kw-2">mut </span>state = state;
+<a href=#349 id=349 data-nosnippet>349</a>        state.bootstrap_init = bootstrap_init;
+<a href=#350 id=350 data-nosnippet>350</a>        state
+<a href=#351 id=351 data-nosnippet>351</a>    };
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span>(image, stack) = prepared.placement();
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">let </span>tid = <span class="kw">crate</span>::task::publish_prepared(prepared, state).map(|(tid, <span class="kw">_</span>)| tid)<span class="question-mark">?</span>;
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="comment">// One line per boot to compare placements across boots: under `[va] slot
+<a href=#355 id=355 data-nosnippet>355</a>    // order: randomised` both bases differ between boots (barring a chance
+<a href=#356 id=356 data-nosnippet>356</a>    // repeat of one slot); under `deterministic` they are the same every boot.
+<a href=#357 id=357 data-nosnippet>357</a>    </span><span class="macro">log::info!</span>(<span class="string">"[va] init: image base {image:#x}, user stack {stack:#x}"</span>);
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="prelude-val">Ok</span>(tid)
+<a href=#359 id=359 data-nosnippet>359</a>}
 </code></pre></div></section></main></body></html>

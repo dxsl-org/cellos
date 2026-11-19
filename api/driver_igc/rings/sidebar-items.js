@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ADVTXD_DCMD_DEXT","ADVTXD_DTYP_DATA","BUF_SIZE","RXD_STAT_DD","TXD_CMD_EOP","TXD_CMD_IFCS","TXD_CMD_RS","TXD_STAT_DD"],"fn":["clear","read_rx_desc","read_tx_desc","write_rx_desc","write_tx_desc"],"struct":["RxDesc","TxDesc"]};
+window.SIDEBAR_ITEMS = {"constant":["ADVTXD_DCMD_DEXT","ADVTXD_DTYP_DATA","BUF_SIZE","RXD_STAT_DD","RX_SLOTS","TXD_CMD_EOP","TXD_CMD_IFCS","TXD_CMD_RS","TXD_STAT_DD","TX_SLOTS"],"struct":["RxDesc","TxDesc"]};

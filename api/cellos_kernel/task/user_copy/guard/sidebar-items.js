@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["clear_guard_for_context_switch","commit_guarded","guarded_byte_copy"],"struct":["GuardWindow"]};
+window.SIDEBAR_ITEMS = {"fn":["clear_guard_for_context_switch","commit_guarded"],"struct":["GuardWindow"]};

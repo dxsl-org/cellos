@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ViVmExit"],"struct":["ViStage2TableStub","ViVcpuStub","ViVmStub"],"trait":["ViHypervisor"]};
+window.SIDEBAR_ITEMS = {"enum":["ViVmExit"]};

@@ -1664,11 +1664,11 @@
 <a href=#1664 id=1664 data-nosnippet>1664</a>/// the last stage decides the pipeline status. `Cancelled` for the last stage, and
 <a href=#1665 id=1665 data-nosnippet>1665</a>/// every other spawn error, remains a failure.
 <a href=#1666 id=1666 data-nosnippet>1666</a></span><span class="kw">pub fn </span>spawn_cancel_means_consumer_finished(
-<a href=#1667 id=1667 data-nosnippet>1667</a>    status: api::cell_session::Status,
+<a href=#1667 id=1667 data-nosnippet>1667</a>    status: abi::cell_session::Status,
 <a href=#1668 id=1668 data-nosnippet>1668</a>    index: usize,
 <a href=#1669 id=1669 data-nosnippet>1669</a>    stages: usize,
 <a href=#1670 id=1670 data-nosnippet>1670</a>) -&gt; bool {
-<a href=#1671 id=1671 data-nosnippet>1671</a>    status == api::cell_session::Status::Cancelled &amp;&amp; index + <span class="number">1 </span>&lt; stages
+<a href=#1671 id=1671 data-nosnippet>1671</a>    status == abi::cell_session::Status::Cancelled &amp;&amp; index + <span class="number">1 </span>&lt; stages
 <a href=#1672 id=1672 data-nosnippet>1672</a>}
 <a href=#1673 id=1673 data-nosnippet>1673</a>
 <a href=#1674 id=1674 data-nosnippet>1674</a><span class="doccomment">/// Non-final stage diagnostics: one `NAME exited with status N` line per failed
@@ -2630,7 +2630,7 @@
 <a href=#2630 id=2630 data-nosnippet>2630</a>
 <a href=#2631 id=2631 data-nosnippet>2631</a>    <span class="attr">#[test]
 <a href=#2632 id=2632 data-nosnippet>2632</a>    </span><span class="kw">fn </span>upstream_cancel_at_spawn_is_a_finished_consumer() {
-<a href=#2633 id=2633 data-nosnippet>2633</a>        <span class="kw">use </span>api::cell_session::Status;
+<a href=#2633 id=2633 data-nosnippet>2633</a>        <span class="kw">use </span>abi::cell_session::Status;
 <a href=#2634 id=2634 data-nosnippet>2634</a>        <span class="macro">assert!</span>(spawn_cancel_means_consumer_finished(
 <a href=#2635 id=2635 data-nosnippet>2635</a>            Status::Cancelled,
 <a href=#2636 id=2636 data-nosnippet>2636</a>            <span class="number">0</span>,

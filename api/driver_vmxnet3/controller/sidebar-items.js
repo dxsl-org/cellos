@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["LINK_PARKS","LINK_POLLS"],"enum":["InitError"],"struct":["Vmxnet3"]};
+window.SIDEBAR_ITEMS = {"constant":["LINK_PARKS","LINK_POLLS"],"enum":["InitError"],"fn":["claim"],"struct":["Vmxnet3"]};

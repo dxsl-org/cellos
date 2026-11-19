@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["KNOWN_FLAGS","LEASE","MAX_LEASES_PER_HOLDER"]};

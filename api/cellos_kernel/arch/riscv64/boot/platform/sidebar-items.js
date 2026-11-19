@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RISCV_PLIC_IRQ_CAPACITY"],"fn":["apply_riscv_soc_access_policy","collect_virtio","from_dtb","init","irq_first","push_irq","reg_base","reg_base_size","required_riscv_mmio","riscv_plic_context_for_current_hart","riscv_plic_init_data","riscv_virtio_slots","rtc_fallback_base","virtio_mmio_base_for_irq","virtio_mmio_entries_for_profile"]};

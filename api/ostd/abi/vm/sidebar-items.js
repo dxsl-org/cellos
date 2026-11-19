@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DebugEvent","VmTrap"],"struct":["VmState"],"trait":["ViVmRuntime"]};

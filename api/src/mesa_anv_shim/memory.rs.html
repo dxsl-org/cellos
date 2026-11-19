@@ -62,7 +62,7 @@
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">fn </span>export(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>ClientBuffer, device_write: bool) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
 <a href=#63 id=63 data-nosnippet>63</a>        <span class="self">self</span>.buffers
 <a href=#64 id=64 data-nosnippet>64</a>            .get(<span class="kw-2">&amp;</span>buf.id)<span class="question-mark">?
-<a href=#65 id=65 data-nosnippet>65</a>            </span>.export(<span class="number">0</span>, buf.size, api::syscall::service::XE_GPU, device_write)
+<a href=#65 id=65 data-nosnippet>65</a>            </span>.export(<span class="number">0</span>, buf.size, abi::syscall::service::XE_GPU, device_write)
 <a href=#66 id=66 data-nosnippet>66</a>            .ok()
 <a href=#67 id=67 data-nosnippet>67</a>    }
 <a href=#68 id=68 data-nosnippet>68</a>

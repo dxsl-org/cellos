@@ -33,8 +33,8 @@
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span>ostd::io::{print, print_usize, println};
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>ostd::syscall::sys_exit;
 <a href=#35 id=35 data-nosnippet>35</a>
-<a href=#36 id=36 data-nosnippet>36</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
-<a href=#37 id=37 data-nosnippet>37</a><span class="macro">api::declare_syscalls!</span>[Send, Recv, TryRecv, Log, LookupServiceBound, GetTime, Yield];
+<a href=#36 id=36 data-nosnippet>36</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#37 id=37 data-nosnippet>37</a><span class="macro">abi::declare_syscalls!</span>[Send, Recv, TryRecv, Log, LookupServiceBound, GetTime, Yield];
 <a href=#38 id=38 data-nosnippet>38</a>
 <a href=#39 id=39 data-nosnippet>39</a><span class="macro">ostd::declare_custom_heap!</span>(<span class="number">2 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
 <a href=#40 id=40 data-nosnippet>40</a>

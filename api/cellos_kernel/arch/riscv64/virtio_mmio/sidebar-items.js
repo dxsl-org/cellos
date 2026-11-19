@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["slot_base_for_irq","slots","with_ack_access"]};

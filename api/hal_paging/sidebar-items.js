@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["PageFlags"],"trait":["PageTableTrait"]};
+window.SIDEBAR_ITEMS = {"enum":["TablePolicy"],"struct":["Leaf","PageFlags"],"trait":["PageTableTrait"]};

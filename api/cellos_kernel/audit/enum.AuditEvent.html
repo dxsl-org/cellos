@@ -67,7 +67,7 @@ bit16 config_write, bit17 kms_ssh_sign, bit18 kms_ssh_admin).</p>
 Cell incarnation (or was refused for HYPERVISOR). Payload:
 <a href="fn.encode_subject.html" title="fn cellos_kernel::audit::encode_subject"><code>encode_subject</code></a> with the <strong>caller</strong> as subject, <code>d0</code> = target tid,
 <code>d1</code> = <code>cap_mask</code>, where <code>cap_mask</code> matches
-<code>api::syscall::cap_mask</code> constants (bit0=block_io, bit1=network, bit2=spawn,
+<code>abi::syscall::cap_mask</code> constants (bit0=block_io, bit1=network, bit2=spawn,
 bit3=hypervisor, bits8-15=mmio_devices, bits16-23=block_regions).</p>
 </div><section id="variant.CellSignatureVerified" class="variant"><a href="#variant.CellSignatureVerified" class="anchor">§</a><h3 class="code-header">CellSignatureVerified = 21</h3></section><div class="docblock"><p>Cell binary signature verified at spawn (binary integrity gate).
 Payload: <code>encode_u32x2(tid, 0)</code>.</p>

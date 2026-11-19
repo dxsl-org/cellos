@@ -1,10 +1,10 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/ostd/src/syscall.rs`."><title>syscall.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="ostd" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">ostd/</div>syscall.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="attr">#![allow(unsafe_code)]
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>api::cell_image::{CellImage, CELL_IMAGE_LEN};
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>api::cell_owner::{CellOwner, CELL_OWNER_LEN};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::completion::{ViCompletion, COMPLETION_LEN};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>api::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>abi::cell_image::{CellImage, CELL_IMAGE_LEN};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>abi::cell_owner::{CellOwner, CELL_OWNER_LEN};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>abi::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>abi::completion::{ViCompletion, COMPLETION_LEN};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>abi::syscall::{ViFstatV1, ViMemInfoV1, ViSpawnArgs, ViSyscall, VI_FSTAT_V1_LEN};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>core::arch::asm;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="attr">#[derive(Debug, Copy, Clone)]
@@ -39,11 +39,11 @@
 <a href=#39 id=39 data-nosnippet>39</a>    OutOfMemory,
 <a href=#40 id=40 data-nosnippet>40</a>}
 <a href=#41 id=41 data-nosnippet>41</a>
-<a href=#42 id=42 data-nosnippet>42</a><span class="comment">// Shared with the kernel encoder: `api::syscall::result_sentinel`.
-<a href=#43 id=43 data-nosnippet>43</a></span><span class="kw">const </span>SYSCALL_DENIED: isize = -<span class="number">1 </span>- api::syscall::result_sentinel::GENERIC <span class="kw">as </span>isize;
-<a href=#44 id=44 data-nosnippet>44</a><span class="kw">const </span>SYSCALL_OOM: isize = -<span class="number">1 </span>- api::syscall::result_sentinel::OUT_OF_MEMORY <span class="kw">as </span>isize;
+<a href=#42 id=42 data-nosnippet>42</a><span class="comment">// Shared with the kernel encoder: `abi::syscall::result_sentinel`.
+<a href=#43 id=43 data-nosnippet>43</a></span><span class="kw">const </span>SYSCALL_DENIED: isize = -<span class="number">1 </span>- abi::syscall::result_sentinel::GENERIC <span class="kw">as </span>isize;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">const </span>SYSCALL_OOM: isize = -<span class="number">1 </span>- abi::syscall::result_sentinel::OUT_OF_MEMORY <span class="kw">as </span>isize;
 <a href=#45 id=45 data-nosnippet>45</a><span class="doccomment">/// A stream write with no reader end left.
-<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">const </span>SYSCALL_BROKEN_PIPE: isize = -<span class="number">1 </span>- api::syscall::result_sentinel::BROKEN_PIPE <span class="kw">as </span>isize;
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">const </span>SYSCALL_BROKEN_PIPE: isize = -<span class="number">1 </span>- abi::syscall::result_sentinel::BROKEN_PIPE <span class="kw">as </span>isize;
 <a href=#47 id=47 data-nosnippet>47</a>
 <a href=#48 id=48 data-nosnippet>48</a><span class="kw">fn </span>decode_spawn_result(ret: isize) -&gt; SyscallResult {
 <a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">if </span>ret &gt; <span class="number">0 </span>{
@@ -155,7 +155,7 @@
 <a href=#155 id=155 data-nosnippet>155</a><span class="doccomment">/// Invoke a syscall by raw numeric id (bypasses the `ViSyscall` enum).
 <a href=#156 id=156 data-nosnippet>156</a>///
 <a href=#157 id=157 data-nosnippet>157</a>/// Used for block I/O (ids 500/501) which intentionally have no `ViSyscall`
-<a href=#158 id=158 data-nosnippet>158</a>/// entry — keeping them out of `libs/api` avoids the Interface-is-Sacred
+<a href=#158 id=158 data-nosnippet>158</a>/// entry — keeping them out of `libs/abi` avoids the Interface-is-Sacred
 <a href=#159 id=159 data-nosnippet>159</a>/// 2x-confirmation gate. The kernel dispatches them via the numeric fallback
 <a href=#160 id=160 data-nosnippet>160</a>/// in `ViCell_syscall_dispatch`.
 <a href=#161 id=161 data-nosnippet>161</a></span><span class="attr">#[inline(always)]
@@ -200,7 +200,7 @@
 <a href=#200 id=200 data-nosnippet>200</a>
 <a href=#201 id=201 data-nosnippet>201</a><span class="doccomment">/// Read one 512-byte sector from the VirtIO block device. Returns `true` on success.
 <a href=#202 id=202 data-nosnippet>202</a>///
-<a href=#203 id=203 data-nosnippet>203</a>/// Raw syscall 500 — has no `ViSyscall` entry to preserve `libs/api` stability.
+<a href=#203 id=203 data-nosnippet>203</a>/// Raw syscall 500 — has no `ViSyscall` entry to preserve `libs/abi` stability.
 <a href=#204 id=204 data-nosnippet>204</a>/// `buf` is filled only when this returns `true`.
 <a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">pub fn </span>sys_blk_read(sector: u64, buf: <span class="kw-2">&amp;mut </span>[u8; <span class="number">512</span>]) -&gt; bool {
 <a href=#206 id=206 data-nosnippet>206</a>    <span class="comment">// SAFETY: buf is a fixed 512-byte stack array; the kernel validates the
@@ -223,7 +223,7 @@
 <a href=#223 id=223 data-nosnippet>223</a><span class="doccomment">/// Request a clean system shutdown via the kernel's SBI SRST path. Never returns when the
 <a href=#224 id=224 data-nosnippet>224</a>/// kernel accepts it.
 <a href=#225 id=225 data-nosnippet>225</a>///
-<a href=#226 id=226 data-nosnippet>226</a>/// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/api` to avoid the
+<a href=#226 id=226 data-nosnippet>226</a>/// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/abi` to avoid the
 <a href=#227 id=227 data-nosnippet>227</a>/// ABI 2x-confirm gate (same pattern as `sys_blk_read`/`sys_blk_write` above). The kernel
 <a href=#228 id=228 data-nosnippet>228</a>/// accepts it only from the reviewed `shutdown` worker.
 <a href=#229 id=229 data-nosnippet>229</a></span><span class="kw">pub fn </span>sys_shutdown() -&gt; ! {
@@ -939,13 +939,13 @@
 <a href=#939 id=939 data-nosnippet>939</a>}
 <a href=#940 id=940 data-nosnippet>940</a>
 <a href=#941 id=941 data-nosnippet>941</a><span class="doccomment">/// Register `tid` as the current provider of a well-known `service_id`
-<a href=#942 id=942 data-nosnippet>942</a>/// (see [`api::syscall::service`]).
+<a href=#942 id=942 data-nosnippet>942</a>/// (see [`abi::syscall::service`]).
 <a href=#943 id=943 data-nosnippet>943</a>///
 <a href=#944 id=944 data-nosnippet>944</a>/// Well-known ids need trusted init or SupervisorCap; a SpawnCap-only caller may
 <a href=#945 id=945 data-nosnippet>945</a>/// publish only a private id (`&gt;= 0x100`) that no other live registrar owns. A
 <a href=#946 id=946 data-nosnippet>946</a>/// kernel-defined narrow capability may instead authorize one fixed service ID
 <a href=#947 id=947 data-nosnippet>947</a>/// with `tid=0` self-registration.
-<a href=#948 id=948 data-nosnippet>948</a>/// `flags` ([`api::syscall::service_flags`]) are the namespace owner's: any other
+<a href=#948 id=948 data-nosnippet>948</a>/// `flags` ([`abi::syscall::service_flags`]) are the namespace owner's: any other
 <a href=#949 id=949 data-nosnippet>949</a>/// caller passes 0. [`crate::service::namespace_flags`] is init's policy for them.
 <a href=#950 id=950 data-nosnippet>950</a>/// Returns `Ok(0)` on success and `Err` when authority is absent, the target is
 <a href=#951 id=951 data-nosnippet>951</a>/// invalid, or the registry is full.
@@ -979,14 +979,14 @@
 <a href=#979 id=979 data-nosnippet>979</a>/// a cell asking about itself.
 <a href=#980 id=980 data-nosnippet>980</a>///
 <a href=#981 id=981 data-nosnippet>981</a>/// Returns `None` when the call was refused, `buf` is shorter than
-<a href=#982 id=982 data-nosnippet>982</a>/// [`api::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
+<a href=#982 id=982 data-nosnippet>982</a>/// [`abi::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
 <a href=#983 id=983 data-nosnippet>983</a>/// or the record does not parse. Every one of those means "no attested set", and
 <a href=#984 id=984 data-nosnippet>984</a>/// the only correct response to that is to bind nothing.
 <a href=#985 id=985 data-nosnippet>985</a></span><span class="kw">pub fn </span>sys_query_dir_handles(
 <a href=#986 id=986 data-nosnippet>986</a>    cell_id: u64,
 <a href=#987 id=987 data-nosnippet>987</a>    buf: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#988 id=988 data-nosnippet>988</a>) -&gt; <span class="prelude-ty">Option</span>&lt;api::dir_attestation::ViDirHandleAttestation&gt; {
-<a href=#989 id=989 data-nosnippet>989</a>    <span class="kw">if </span>buf.len() &lt; api::dir_attestation::DIR_ATTESTATION_LEN {
+<a href=#988 id=988 data-nosnippet>988</a>) -&gt; <span class="prelude-ty">Option</span>&lt;abi::dir_attestation::ViDirHandleAttestation&gt; {
+<a href=#989 id=989 data-nosnippet>989</a>    <span class="kw">if </span>buf.len() &lt; abi::dir_attestation::DIR_ATTESTATION_LEN {
 <a href=#990 id=990 data-nosnippet>990</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#991 id=991 data-nosnippet>991</a>    }
 <a href=#992 id=992 data-nosnippet>992</a>    <span class="comment">// SAFETY: `buf` is a live writable slice for the whole call and its length
@@ -1001,10 +1001,10 @@
 <a href=#1001 id=1001 data-nosnippet>1001</a>            <span class="number">0</span>,
 <a href=#1002 id=1002 data-nosnippet>1002</a>        )
 <a href=#1003 id=1003 data-nosnippet>1003</a>    };
-<a href=#1004 id=1004 data-nosnippet>1004</a>    <span class="kw">if </span>(ret <span class="kw">as </span>usize) != api::dir_attestation::DIR_ATTESTATION_LEN {
+<a href=#1004 id=1004 data-nosnippet>1004</a>    <span class="kw">if </span>(ret <span class="kw">as </span>usize) != abi::dir_attestation::DIR_ATTESTATION_LEN {
 <a href=#1005 id=1005 data-nosnippet>1005</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#1006 id=1006 data-nosnippet>1006</a>    }
-<a href=#1007 id=1007 data-nosnippet>1007</a>    api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
+<a href=#1007 id=1007 data-nosnippet>1007</a>    abi::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
 <a href=#1008 id=1008 data-nosnippet>1008</a>}
 <a href=#1009 id=1009 data-nosnippet>1009</a>
 <a href=#1010 id=1010 data-nosnippet>1010</a><span class="doccomment">/// Resolve the live root endpoint for the current VFS receive principal or a
@@ -1132,8 +1132,8 @@
 <a href=#1132 id=1132 data-nosnippet>1132</a></span><span class="kw">pub fn </span>sys_lookup_service_bound(
 <a href=#1133 id=1133 data-nosnippet>1133</a>    service_id: u16,
 <a href=#1134 id=1134 data-nosnippet>1134</a>    buf: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#1135 id=1135 data-nosnippet>1135</a>) -&gt; <span class="prelude-ty">Option</span>&lt;api::service_binding::ServiceBinding&gt; {
-<a href=#1136 id=1136 data-nosnippet>1136</a>    <span class="kw">if </span>buf.len() &lt; api::service_binding::SERVICE_BINDING_LEN {
+<a href=#1135 id=1135 data-nosnippet>1135</a>) -&gt; <span class="prelude-ty">Option</span>&lt;abi::service_binding::ServiceBinding&gt; {
+<a href=#1136 id=1136 data-nosnippet>1136</a>    <span class="kw">if </span>buf.len() &lt; abi::service_binding::SERVICE_BINDING_LEN {
 <a href=#1137 id=1137 data-nosnippet>1137</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#1138 id=1138 data-nosnippet>1138</a>    }
 <a href=#1139 id=1139 data-nosnippet>1139</a>    <span class="comment">// SAFETY: `buf` is a live writable slice for the whole call and its length is
@@ -1148,10 +1148,10 @@
 <a href=#1148 id=1148 data-nosnippet>1148</a>            <span class="number">0</span>,
 <a href=#1149 id=1149 data-nosnippet>1149</a>        )
 <a href=#1150 id=1150 data-nosnippet>1150</a>    };
-<a href=#1151 id=1151 data-nosnippet>1151</a>    <span class="kw">if </span>(ret <span class="kw">as </span>usize) != api::service_binding::SERVICE_BINDING_LEN {
+<a href=#1151 id=1151 data-nosnippet>1151</a>    <span class="kw">if </span>(ret <span class="kw">as </span>usize) != abi::service_binding::SERVICE_BINDING_LEN {
 <a href=#1152 id=1152 data-nosnippet>1152</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#1153 id=1153 data-nosnippet>1153</a>    }
-<a href=#1154 id=1154 data-nosnippet>1154</a>    api::service_binding::ServiceBinding::from_bytes(buf)
+<a href=#1154 id=1154 data-nosnippet>1154</a>    abi::service_binding::ServiceBinding::from_bytes(buf)
 <a href=#1155 id=1155 data-nosnippet>1155</a>}
 <a href=#1156 id=1156 data-nosnippet>1156</a>
 <a href=#1157 id=1157 data-nosnippet>1157</a><span class="kw">pub fn </span>sys_shm_alloc(size: usize) -&gt; SyscallResult {
@@ -1359,7 +1359,7 @@
 <a href=#1359 id=1359 data-nosnippet>1359</a></span><span class="kw">pub fn </span>sys_ipc_take(
 <a href=#1360 id=1360 data-nosnippet>1360</a>    token: usize,
 <a href=#1361 id=1361 data-nosnippet>1361</a>    reply: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#1362 id=1362 data-nosnippet>1362</a>    status: <span class="kw-2">&amp;mut </span>[u8; api::syscall::IPC_STATUS_LEN],
+<a href=#1362 id=1362 data-nosnippet>1362</a>    status: <span class="kw-2">&amp;mut </span>[u8; abi::syscall::IPC_STATUS_LEN],
 <a href=#1363 id=1363 data-nosnippet>1363</a>) -&gt; isize {
 <a href=#1364 id=1364 data-nosnippet>1364</a>    <span class="comment">// SAFETY: both output buffers remain exclusively borrowed for this syscall.
 <a href=#1365 id=1365 data-nosnippet>1365</a>    </span><span class="kw">unsafe </span>{
@@ -1532,7 +1532,7 @@
 <a href=#1532 id=1532 data-nosnippet>1532</a><span class="doccomment">/// Blocking receive that also asks the kernel to attest who sent the message.
 <a href=#1533 id=1533 data-nosnippet>1533</a>///
 <a href=#1534 id=1534 data-nosnippet>1534</a>/// Identical to [`sys_recv`] except that the kernel writes a
-<a href=#1535 id=1535 data-nosnippet>1535</a>/// `api::caller_identity::CallerIdentity` into the **last
+<a href=#1535 id=1535 data-nosnippet>1535</a>/// `abi::caller_identity::CallerIdentity` into the **last
 <a href=#1536 id=1536 data-nosnippet>1536</a>/// `CALLER_IDENTITY_LEN` bytes of `buf`** once the payload is in place. Read it
 <a href=#1537 id=1537 data-nosnippet>1537</a>/// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
 <a href=#1538 id=1538 data-nosnippet>1538</a>/// and the request must be denied, never handled on a guessed identity.
@@ -1549,7 +1549,7 @@
 <a href=#1549 id=1549 data-nosnippet>1549</a>            mask,
 <a href=#1550 id=1550 data-nosnippet>1550</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
 <a href=#1551 id=1551 data-nosnippet>1551</a>            buf.len(),
-<a href=#1552 id=1552 data-nosnippet>1552</a>            api::caller_identity::RECV_ATTEST_CALLER,
+<a href=#1552 id=1552 data-nosnippet>1552</a>            abi::caller_identity::RECV_ATTEST_CALLER,
 <a href=#1553 id=1553 data-nosnippet>1553</a>        )
 <a href=#1554 id=1554 data-nosnippet>1554</a>    };
 <a href=#1555 id=1555 data-nosnippet>1555</a>    SyscallResult::Ok(ret <span class="kw">as </span>usize)
@@ -1570,7 +1570,7 @@
 <a href=#1570 id=1570 data-nosnippet>1570</a>            mask,
 <a href=#1571 id=1571 data-nosnippet>1571</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
 <a href=#1572 id=1572 data-nosnippet>1572</a>            buf.len(),
-<a href=#1573 id=1573 data-nosnippet>1573</a>            api::caller_identity::recv_flags(<span class="bool-val">true</span>, timeout_ticks),
+<a href=#1573 id=1573 data-nosnippet>1573</a>            abi::caller_identity::recv_flags(<span class="bool-val">true</span>, timeout_ticks),
 <a href=#1574 id=1574 data-nosnippet>1574</a>        )
 <a href=#1575 id=1575 data-nosnippet>1575</a>    };
 <a href=#1576 id=1576 data-nosnippet>1576</a>    <span class="kw">if </span>ret &gt;= <span class="number">0 </span>{
@@ -1603,7 +1603,7 @@
 <a href=#1603 id=1603 data-nosnippet>1603</a><span class="doccomment">/// Non-blocking receive with kernel-attested caller identity.
 <a href=#1604 id=1604 data-nosnippet>1604</a>///
 <a href=#1605 id=1605 data-nosnippet>1605</a>/// Identical to [`sys_try_recv`] except that the kernel writes a
-<a href=#1606 id=1606 data-nosnippet>1606</a>/// `api::caller_identity::CallerIdentity` into the **last
+<a href=#1606 id=1606 data-nosnippet>1606</a>/// `abi::caller_identity::CallerIdentity` into the **last
 <a href=#1607 id=1607 data-nosnippet>1607</a>/// `CALLER_IDENTITY_LEN` bytes of `buf`** when a message is returned. Read it
 <a href=#1608 id=1608 data-nosnippet>1608</a>/// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
 <a href=#1609 id=1609 data-nosnippet>1609</a>/// and the request must be denied.
@@ -1614,7 +1614,7 @@
 <a href=#1614 id=1614 data-nosnippet>1614</a>            mask,
 <a href=#1615 id=1615 data-nosnippet>1615</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
 <a href=#1616 id=1616 data-nosnippet>1616</a>            buf.len(),
-<a href=#1617 id=1617 data-nosnippet>1617</a>            api::caller_identity::RECV_ATTEST_CALLER,
+<a href=#1617 id=1617 data-nosnippet>1617</a>            abi::caller_identity::RECV_ATTEST_CALLER,
 <a href=#1618 id=1618 data-nosnippet>1618</a>        )
 <a href=#1619 id=1619 data-nosnippet>1619</a>    };
 <a href=#1620 id=1620 data-nosnippet>1620</a>    SyscallResult::Ok(ret <span class="kw">as </span>usize)
@@ -1664,7 +1664,7 @@
 <a href=#1664 id=1664 data-nosnippet>1664</a>    }
 <a href=#1665 id=1665 data-nosnippet>1665</a>}
 <a href=#1666 id=1666 data-nosnippet>1666</a>
-<a href=#1667 id=1667 data-nosnippet>1667</a><span class="kw">pub fn </span>sys_get_procs(buffer: <span class="kw-2">&amp;mut </span>[api::syscall::ProcessInfo]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
+<a href=#1667 id=1667 data-nosnippet>1667</a><span class="kw">pub fn </span>sys_get_procs(buffer: <span class="kw-2">&amp;mut </span>[abi::syscall::ProcessInfo]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
 <a href=#1668 id=1668 data-nosnippet>1668</a>    <span class="kw">unsafe </span>{
 <a href=#1669 id=1669 data-nosnippet>1669</a>        <span class="kw">let </span>ret = syscall(
 <a href=#1670 id=1670 data-nosnippet>1670</a>            ViSyscall::GetProcs,
@@ -1686,7 +1686,7 @@
 <a href=#1686 id=1686 data-nosnippet>1686</a>/// Each row reports a scheduler-tick sample timestamp, cumulative CPU run ticks,
 <a href=#1687 id=1687 data-nosnippet>1687</a>/// heap bytes, and owned bytes for one live task. Requires the `GetProcs2`
 <a href=#1688 id=1688 data-nosnippet>1688</a>/// syscall permission in the caller's embedded allowlist.
-<a href=#1689 id=1689 data-nosnippet>1689</a></span><span class="kw">pub fn </span>sys_get_procs2(buffer: <span class="kw-2">&amp;mut </span>[api::syscall::ProcessInfoV2]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
+<a href=#1689 id=1689 data-nosnippet>1689</a></span><span class="kw">pub fn </span>sys_get_procs2(buffer: <span class="kw-2">&amp;mut </span>[abi::syscall::ProcessInfoV2]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
 <a href=#1690 id=1690 data-nosnippet>1690</a>    <span class="kw">unsafe </span>{
 <a href=#1691 id=1691 data-nosnippet>1691</a>        <span class="kw">let </span>ret = syscall(
 <a href=#1692 id=1692 data-nosnippet>1692</a>            ViSyscall::GetProcs2,
@@ -1705,9 +1705,9 @@
 <a href=#1705 id=1705 data-nosnippet>1705</a>
 <a href=#1706 id=1706 data-nosnippet>1706</a><span class="doccomment">/// Capture one Cell-aware telemetry snapshot (Phase 06 S6-1).
 <a href=#1707 id=1707 data-nosnippet>1707</a>///
-<a href=#1708 id=1708 data-nosnippet>1708</a>/// `out` is 8-byte aligned by type; `flags` are [`api::telemetry::request`] bits.
+<a href=#1708 id=1708 data-nosnippet>1708</a>/// `out` is 8-byte aligned by type; `flags` are [`abi::telemetry::request`] bits.
 <a href=#1709 id=1709 data-nosnippet>1709</a>/// Returns the bytes written into `out` — decode them with
-<a href=#1710 id=1710 data-nosnippet>1710</a>/// [`api::telemetry::TelemetrySnapshot::parse`]. Requires a `GetProcs2` or
+<a href=#1710 id=1710 data-nosnippet>1710</a>/// [`abi::telemetry::TelemetrySnapshot::parse`]. Requires a `GetProcs2` or
 <a href=#1711 id=1711 data-nosnippet>1711</a>/// `TelemetrySnapshot` declaration (shared bit 55) and the caller's
 <a href=#1712 id=1712 data-nosnippet>1712</a>/// `observe_tasks` right.
 <a href=#1713 id=1713 data-nosnippet>1713</a>///
@@ -1719,10 +1719,10 @@
 <a href=#1719 id=1719 data-nosnippet>1719</a>/// - `OutOfMemory`: the kernel could not allocate the transient capture.
 <a href=#1720 id=1720 data-nosnippet>1720</a></span><span class="kw">pub fn </span>sys_telemetry_snapshot(out: <span class="kw-2">&amp;mut </span>[u64], flags: usize) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
 <a href=#1721 id=1721 data-nosnippet>1721</a>    <span class="kw">let </span>len = core::mem::size_of_val(out);
-<a href=#1722 id=1722 data-nosnippet>1722</a>    <span class="kw">if </span>len &lt; api::telemetry::HEADER_LEN {
+<a href=#1722 id=1722 data-nosnippet>1722</a>    <span class="kw">if </span>len &lt; abi::telemetry::HEADER_LEN {
 <a href=#1723 id=1723 data-nosnippet>1723</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::BufferTooSmall);
 <a href=#1724 id=1724 data-nosnippet>1724</a>    }
-<a href=#1725 id=1725 data-nosnippet>1725</a>    <span class="kw">if </span>flags &amp; !api::telemetry::request::ALL != <span class="number">0 </span>{
+<a href=#1725 id=1725 data-nosnippet>1725</a>    <span class="kw">if </span>flags &amp; !abi::telemetry::request::ALL != <span class="number">0 </span>{
 <a href=#1726 id=1726 data-nosnippet>1726</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidCommand);
 <a href=#1727 id=1727 data-nosnippet>1727</a>    }
 <a href=#1728 id=1728 data-nosnippet>1728</a>    <span class="comment">// SAFETY: `out` is a live, aligned, writable slice of `len` bytes and the
@@ -1745,7 +1745,7 @@
 <a href=#1745 id=1745 data-nosnippet>1745</a>}
 <a href=#1746 id=1746 data-nosnippet>1746</a>
 <a href=#1747 id=1747 data-nosnippet>1747</a><span class="doccomment">/// The first `written` bytes of a [`sys_telemetry_snapshot`] buffer, ready for
-<a href=#1748 id=1748 data-nosnippet>1748</a>/// [`api::telemetry::TelemetrySnapshot::parse`]. `written` past the buffer is
+<a href=#1748 id=1748 data-nosnippet>1748</a>/// [`abi::telemetry::TelemetrySnapshot::parse`]. `written` past the buffer is
 <a href=#1749 id=1749 data-nosnippet>1749</a>/// clamped to it.
 <a href=#1750 id=1750 data-nosnippet>1750</a></span><span class="kw">pub fn </span>telemetry_bytes(out: <span class="kw-2">&amp;</span>[u64], written: usize) -&gt; <span class="kw-2">&amp;</span>[u8] {
 <a href=#1751 id=1751 data-nosnippet>1751</a>    <span class="kw">let </span>len = written.min(core::mem::size_of_val(out));
@@ -1761,15 +1761,15 @@
 <a href=#1761 id=1761 data-nosnippet>1761</a>///
 <a href=#1762 id=1762 data-nosnippet>1762</a>/// # Errors
 <a href=#1763 id=1763 data-nosnippet>1763</a>/// - `FileNotFound`: no record (unknown or evicted root); treat as
-<a href=#1764 id=1764 data-nosnippet>1764</a>///   [`api::retirement::RetirementState::Unproven`].
+<a href=#1764 id=1764 data-nosnippet>1764</a>///   [`abi::retirement::RetirementState::Unproven`].
 <a href=#1765 id=1765 data-nosnippet>1765</a>/// - `Unknown`: the kernel refused the length or the buffer (`InvalidInput`), or
 <a href=#1766 id=1766 data-nosnippet>1766</a>///   wrote bytes that are not a valid V1 record.
 <a href=#1767 id=1767 data-nosnippet>1767</a>/// - `PermissionDenied`: every other refusal: not a watcher of that root and no
 <a href=#1768 id=1768 data-nosnippet>1768</a>///   `SupervisorCap`.
 <a href=#1769 id=1769 data-nosnippet>1769</a></span><span class="kw">pub fn </span>sys_query_retirement(
 <a href=#1770 id=1770 data-nosnippet>1770</a>    root_tid: usize,
-<a href=#1771 id=1771 data-nosnippet>1771</a>) -&gt; <span class="prelude-ty">Result</span>&lt;api::retirement::ViRetirementV1, SyscallError&gt; {
-<a href=#1772 id=1772 data-nosnippet>1772</a>    <span class="kw">use </span>api::retirement::{ViRetirementV1, RETIREMENT_RECORD_LEN};
+<a href=#1771 id=1771 data-nosnippet>1771</a>) -&gt; <span class="prelude-ty">Result</span>&lt;abi::retirement::ViRetirementV1, SyscallError&gt; {
+<a href=#1772 id=1772 data-nosnippet>1772</a>    <span class="kw">use </span>abi::retirement::{ViRetirementV1, RETIREMENT_RECORD_LEN};
 <a href=#1773 id=1773 data-nosnippet>1773</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; RETIREMENT_RECORD_LEN];
 <a href=#1774 id=1774 data-nosnippet>1774</a>    <span class="comment">// SAFETY: `out` is a live, writable buffer of exactly `RETIREMENT_RECORD_LEN`
 <a href=#1775 id=1775 data-nosnippet>1775</a>    // bytes and the kernel writes at most that many.
@@ -2145,7 +2145,7 @@
 <a href=#2145 id=2145 data-nosnippet>2145</a>    <span class="kw">if </span>owner_tid == <span class="number">0 </span>{
 <a href=#2146 id=2146 data-nosnippet>2146</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#2147 id=2147 data-nosnippet>2147</a>    }
-<a href=#2148 id=2148 data-nosnippet>2148</a>    grant_slice_with_len(grant_id, owner_tid, api::syscall::grant_slice::LEASE)
+<a href=#2148 id=2148 data-nosnippet>2148</a>    grant_slice_with_len(grant_id, owner_tid, abi::syscall::grant_slice::LEASE)
 <a href=#2149 id=2149 data-nosnippet>2149</a>}
 <a href=#2150 id=2150 data-nosnippet>2150</a>
 <a href=#2151 id=2151 data-nosnippet>2151</a><span class="kw">fn </span>grant_slice_with_len(
@@ -2411,7 +2411,7 @@
 <a href=#2411 id=2411 data-nosnippet>2411</a>///   (x86_64).
 <a href=#2412 id=2412 data-nosnippet>2412</a></span><span class="kw">pub fn </span>sys_probe_virtio_mmio(
 <a href=#2413 id=2413 data-nosnippet>2413</a>    base: usize,
-<a href=#2414 id=2414 data-nosnippet>2414</a>) -&gt; <span class="prelude-ty">Result</span>&lt;api::syscall::virtio_probe::SlotIdentity, SyscallError&gt; {
+<a href=#2414 id=2414 data-nosnippet>2414</a>) -&gt; <span class="prelude-ty">Result</span>&lt;abi::syscall::virtio_probe::SlotIdentity, SyscallError&gt; {
 <a href=#2415 id=2415 data-nosnippet>2415</a>    <span class="comment">// SAFETY: no pointer crosses the boundary; the kernel validates `base`
 <a href=#2416 id=2416 data-nosnippet>2416</a>    // against its own slot list and the caller's capability at dispatch.
 <a href=#2417 id=2417 data-nosnippet>2417</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::ProbeVirtioMmio, base, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
@@ -2420,7 +2420,7 @@
 <a href=#2420 id=2420 data-nosnippet>2420</a>        </span>-<span class="number">3 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::FileNotFound),
 <a href=#2421 id=2421 data-nosnippet>2421</a>        -<span class="number">4 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::InvalidCommand),
 <a href=#2422 id=2422 data-nosnippet>2422</a>        ret =&gt; {
-<a href=#2423 id=2423 data-nosnippet>2423</a>            api::syscall::virtio_probe::decode(ret <span class="kw">as </span>usize).ok_or(SyscallError::PermissionDenied)
+<a href=#2423 id=2423 data-nosnippet>2423</a>            abi::syscall::virtio_probe::decode(ret <span class="kw">as </span>usize).ok_or(SyscallError::PermissionDenied)
 <a href=#2424 id=2424 data-nosnippet>2424</a>        }
 <a href=#2425 id=2425 data-nosnippet>2425</a>    }
 <a href=#2426 id=2426 data-nosnippet>2426</a>}
@@ -2525,7 +2525,7 @@
 <a href=#2525 id=2525 data-nosnippet>2525</a><span class="doccomment">/// Strip capabilities from a live running cell (runtime revocation).
 <a href=#2526 id=2526 data-nosnippet>2526</a>///
 <a href=#2527 id=2527 data-nosnippet>2527</a>/// `cap_mask` selects which capability classes to revoke — use the constants in
-<a href=#2528 id=2528 data-nosnippet>2528</a>/// `api::syscall::cap_mask` (e.g. `SPAWN`, `NETWORK`, `MMIO_MASK`).
+<a href=#2528 id=2528 data-nosnippet>2528</a>/// `abi::syscall::cap_mask` (e.g. `SPAWN`, `NETWORK`, `MMIO_MASK`).
 <a href=#2529 id=2529 data-nosnippet>2529</a>///
 <a href=#2530 id=2530 data-nosnippet>2530</a>/// The revoke applies to the target's whole Cell incarnation (root and every
 <a href=#2531 id=2531 data-nosnippet>2531</a>/// thread), whichever of its tasks `target_tid` names.
@@ -2553,7 +2553,7 @@
 <a href=#2553 id=2553 data-nosnippet>2553</a><span class="doccomment">/// Block until one or more bits in `mask` fire, or `timeout_ticks` 10ms ticks elapse.
 <a href=#2554 id=2554 data-nosnippet>2554</a>///
 <a href=#2555 id=2555 data-nosnippet>2555</a>/// `timeout_ticks = 0` blocks indefinitely.  Returns the fired event bits (&gt; 0) on
-<a href=#2556 id=2556 data-nosnippet>2556</a>/// wake, or 0 on timeout.  See `api::syscall::events` for bit definitions.
+<a href=#2556 id=2556 data-nosnippet>2556</a>/// wake, or 0 on timeout.  See `abi::syscall::events` for bit definitions.
 <a href=#2557 id=2557 data-nosnippet>2557</a>///
 <a href=#2558 id=2558 data-nosnippet>2558</a>/// Requires `WaitForEvent` in the cell's `declare_syscalls!` list.
 <a href=#2559 id=2559 data-nosnippet>2559</a></span><span class="kw">pub fn </span>sys_wait_for_event(mask: u32, timeout_ticks: u64) -&gt; u32 {
@@ -2583,7 +2583,7 @@
 <a href=#2583 id=2583 data-nosnippet>2583</a>/// `IRQ` completion (x86_64) reports one fired MSI/MSI-X line this task holds
 <a href=#2584 id=2584 data-nosnippet>2584</a>/// from [`sys_alloc_pcie_irq`]; `result` is the line.
 <a href=#2585 id=2585 data-nosnippet>2585</a>///
-<a href=#2586 id=2586 data-nosnippet>2586</a>/// `mask` is a non-empty set of `api::completion::source` bits; the record
+<a href=#2586 id=2586 data-nosnippet>2586</a>/// `mask` is a non-empty set of `abi::completion::source` bits; the record
 <a href=#2587 id=2587 data-nosnippet>2587</a>/// names exactly one of them.
 <a href=#2588 id=2588 data-nosnippet>2588</a>///
 <a href=#2589 id=2589 data-nosnippet>2589</a>/// # Errors
@@ -2764,7 +2764,7 @@
 <a href=#2764 id=2764 data-nosnippet>2764</a>/// same device again (a restarted driver) takes its route back, and no caller can
 <a href=#2765 id=2765 data-nosnippet>2765</a>/// publish another device's route. VFS finds routes with [`sys_lookup_block_route`].
 <a href=#2766 id=2766 data-nosnippet>2766</a></span><span class="kw">pub fn </span>sys_register_block_device(device: BlockDevice) -&gt; <span class="prelude-ty">Result</span>&lt;(), BlockRegisterError&gt; {
-<a href=#2767 id=2767 data-nosnippet>2767</a>    <span class="kw">use </span>api::block_route::{BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+<a href=#2767 id=2767 data-nosnippet>2767</a>    <span class="kw">use </span>abi::block_route::{BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
 <a href=#2768 id=2768 data-nosnippet>2768</a>    <span class="kw">let </span>(kind, id) = <span class="kw">match </span>device {
 <a href=#2769 id=2769 data-nosnippet>2769</a>        BlockDevice::Pci { bdf } =&gt; (BLOCK_DEVICE_PCI, bdf <span class="kw">as </span>usize),
 <a href=#2770 id=2770 data-nosnippet>2770</a>        BlockDevice::Mmio { base } =&gt; (BLOCK_DEVICE_MMIO, base <span class="kw">as </span>usize),
@@ -2791,8 +2791,8 @@
 <a href=#2791 id=2791 data-nosnippet>2791</a>/// - `PermissionDenied`: the caller holds neither capability.
 <a href=#2792 id=2792 data-nosnippet>2792</a></span><span class="kw">pub fn </span>sys_lookup_block_route(
 <a href=#2793 id=2793 data-nosnippet>2793</a>    index: u32,
-<a href=#2794 id=2794 data-nosnippet>2794</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;api::block_route::ViBlockRouteV1&gt;, SyscallError&gt; {
-<a href=#2795 id=2795 data-nosnippet>2795</a>    <span class="kw">use </span>api::block_route::{ViBlockRouteV1, BLOCK_ROUTE_RECORD_LEN};
+<a href=#2794 id=2794 data-nosnippet>2794</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;abi::block_route::ViBlockRouteV1&gt;, SyscallError&gt; {
+<a href=#2795 id=2795 data-nosnippet>2795</a>    <span class="kw">use </span>abi::block_route::{ViBlockRouteV1, BLOCK_ROUTE_RECORD_LEN};
 <a href=#2796 id=2796 data-nosnippet>2796</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = [<span class="number">0u8</span>; BLOCK_ROUTE_RECORD_LEN];
 <a href=#2797 id=2797 data-nosnippet>2797</a>    <span class="comment">// SAFETY: `out` is a live, writable buffer of exactly `BLOCK_ROUTE_RECORD_LEN`
 <a href=#2798 id=2798 data-nosnippet>2798</a>    // bytes and the kernel writes at most that many.
@@ -2815,697 +2815,698 @@
 <a href=#2815 id=2815 data-nosnippet>2815</a>    }
 <a href=#2816 id=2816 data-nosnippet>2816</a>}
 <a href=#2817 id=2817 data-nosnippet>2817</a>
-<a href=#2818 id=2818 data-nosnippet>2818</a><span class="doccomment">/// Read the machine facts record (syscall 433). Requires SpawnCap.
-<a href=#2819 id=2819 data-nosnippet>2819</a>///
-<a href=#2820 id=2820 data-nosnippet>2820</a>/// The record is decoded and fully validated before it is returned; the
-<a href=#2821 id=2821 data-nosnippet>2821</a>/// returned value keeps the exact bytes the kernel wrote.
-<a href=#2822 id=2822 data-nosnippet>2822</a>///
-<a href=#2823 id=2823 data-nosnippet>2823</a>/// # Errors
-<a href=#2824 id=2824 data-nosnippet>2824</a>/// - `FileNotFound`: the kernel has no facts (not x86, no profile bound, or
-<a href=#2825 id=2825 data-nosnippet>2825</a>///   more than `MACHINE_FACTS_PCI_MAX` PCI functions).
-<a href=#2826 id=2826 data-nosnippet>2826</a>/// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a
-<a href=#2827 id=2827 data-nosnippet>2827</a>///   valid V1 record.
-<a href=#2828 id=2828 data-nosnippet>2828</a>/// - `PermissionDenied`: the caller holds no SpawnCap.
-<a href=#2829 id=2829 data-nosnippet>2829</a></span><span class="kw">pub fn </span>sys_query_machine_facts() -&gt; <span class="prelude-ty">Result</span>&lt;api::machine_facts::MachineFactsRecord, SyscallError&gt; {
-<a href=#2830 id=2830 data-nosnippet>2830</a>    <span class="kw">use </span>api::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
-<a href=#2831 id=2831 data-nosnippet>2831</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; MACHINE_FACTS_CAPACITY];
-<a href=#2832 id=2832 data-nosnippet>2832</a>    <span class="comment">// SAFETY: `out` is a live, writable heap buffer of exactly
-<a href=#2833 id=2833 data-nosnippet>2833</a>    // `MACHINE_FACTS_CAPACITY` bytes and the kernel writes at most that many.
-<a href=#2834 id=2834 data-nosnippet>2834</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#2835 id=2835 data-nosnippet>2835</a>        syscall(
-<a href=#2836 id=2836 data-nosnippet>2836</a>            ViSyscall::QueryMachineFacts,
-<a href=#2837 id=2837 data-nosnippet>2837</a>            out.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#2838 id=2838 data-nosnippet>2838</a>            out.len(),
-<a href=#2839 id=2839 data-nosnippet>2839</a>            <span class="number">0</span>,
+<a href=#2818 id=2818 data-nosnippet>2818</a><span class="doccomment">/// Read the machine facts record (syscall 433). Answers only the live
+<a href=#2819 id=2819 data-nosnippet>2819</a>/// `MACHINE_PIN` provider.
+<a href=#2820 id=2820 data-nosnippet>2820</a>///
+<a href=#2821 id=2821 data-nosnippet>2821</a>/// The record is decoded and fully validated before it is returned; the
+<a href=#2822 id=2822 data-nosnippet>2822</a>/// returned value keeps the exact bytes the kernel wrote.
+<a href=#2823 id=2823 data-nosnippet>2823</a>///
+<a href=#2824 id=2824 data-nosnippet>2824</a>/// # Errors
+<a href=#2825 id=2825 data-nosnippet>2825</a>/// - `FileNotFound`: the kernel has no facts (not x86, no profile bound, or
+<a href=#2826 id=2826 data-nosnippet>2826</a>///   more than `MACHINE_FACTS_PCI_MAX` PCI functions).
+<a href=#2827 id=2827 data-nosnippet>2827</a>/// - `Unknown`: the kernel refused the buffer, or wrote bytes that are not a
+<a href=#2828 id=2828 data-nosnippet>2828</a>///   valid V1 record.
+<a href=#2829 id=2829 data-nosnippet>2829</a>/// - `PermissionDenied`: the caller is not the live `MACHINE_PIN` provider.
+<a href=#2830 id=2830 data-nosnippet>2830</a></span><span class="kw">pub fn </span>sys_query_machine_facts() -&gt; <span class="prelude-ty">Result</span>&lt;abi::machine_facts::MachineFactsRecord, SyscallError&gt; {
+<a href=#2831 id=2831 data-nosnippet>2831</a>    <span class="kw">use </span>abi::machine_facts::{MachineFactsRecord, MACHINE_FACTS_CAPACITY};
+<a href=#2832 id=2832 data-nosnippet>2832</a>    <span class="kw">let </span><span class="kw-2">mut </span>out = <span class="macro">alloc::vec!</span>[<span class="number">0u8</span>; MACHINE_FACTS_CAPACITY];
+<a href=#2833 id=2833 data-nosnippet>2833</a>    <span class="comment">// SAFETY: `out` is a live, writable heap buffer of exactly
+<a href=#2834 id=2834 data-nosnippet>2834</a>    // `MACHINE_FACTS_CAPACITY` bytes and the kernel writes at most that many.
+<a href=#2835 id=2835 data-nosnippet>2835</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#2836 id=2836 data-nosnippet>2836</a>        syscall(
+<a href=#2837 id=2837 data-nosnippet>2837</a>            ViSyscall::QueryMachineFacts,
+<a href=#2838 id=2838 data-nosnippet>2838</a>            out.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#2839 id=2839 data-nosnippet>2839</a>            out.len(),
 <a href=#2840 id=2840 data-nosnippet>2840</a>            <span class="number">0</span>,
-<a href=#2841 id=2841 data-nosnippet>2841</a>        )
-<a href=#2842 id=2842 data-nosnippet>2842</a>    };
-<a href=#2843 id=2843 data-nosnippet>2843</a>    <span class="kw">match </span>ret {
-<a href=#2844 id=2844 data-nosnippet>2844</a>        n <span class="kw">if </span>n &gt; <span class="number">0 </span>&amp;&amp; n <span class="kw">as </span>usize &lt;= MACHINE_FACTS_CAPACITY =&gt; {
-<a href=#2845 id=2845 data-nosnippet>2845</a>            MachineFactsRecord::decode(<span class="kw-2">&amp;</span>out[..n <span class="kw">as </span>usize]).map_err(|<span class="kw">_</span>| SyscallError::Unknown)
-<a href=#2846 id=2846 data-nosnippet>2846</a>        }
-<a href=#2847 id=2847 data-nosnippet>2847</a>        -<span class="number">3 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::FileNotFound),
-<a href=#2848 id=2848 data-nosnippet>2848</a>        -<span class="number">1 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
-<a href=#2849 id=2849 data-nosnippet>2849</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::Unknown),
-<a href=#2850 id=2850 data-nosnippet>2850</a>    }
-<a href=#2851 id=2851 data-nosnippet>2851</a>}
-<a href=#2852 id=2852 data-nosnippet>2852</a>
-<a href=#2853 id=2853 data-nosnippet>2853</a><span class="doccomment">/// Register the calling cell as the active NIC driver.
-<a href=#2854 id=2854 data-nosnippet>2854</a>///
-<a href=#2855 id=2855 data-nosnippet>2855</a>/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
-<a href=#2856 id=2856 data-nosnippet>2856</a></span><span class="kw">pub fn </span>sys_register_nic_driver() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
-<a href=#2857 id=2857 data-nosnippet>2857</a>    <span class="comment">// SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
-<a href=#2858 id=2858 data-nosnippet>2858</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RegisterNicDriver, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
-<a href=#2859 id=2859 data-nosnippet>2859</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
-<a href=#2860 id=2860 data-nosnippet>2860</a>        <span class="prelude-val">Ok</span>(())
-<a href=#2861 id=2861 data-nosnippet>2861</a>    } <span class="kw">else </span>{
-<a href=#2862 id=2862 data-nosnippet>2862</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
-<a href=#2863 id=2863 data-nosnippet>2863</a>    }
-<a href=#2864 id=2864 data-nosnippet>2864</a>}
-<a href=#2865 id=2865 data-nosnippet>2865</a>
-<a href=#2866 id=2866 data-nosnippet>2866</a><span class="doccomment">/// Register the calling cell as the USB HID event producer.
-<a href=#2867 id=2867 data-nosnippet>2867</a>///
-<a href=#2868 id=2868 data-nosnippet>2868</a>/// Publishes the caller's TID under `service::USB_HID_PRODUCER`, the identity the
-<a href=#2869 id=2869 data-nosnippet>2869</a>/// input service's producer gate verifies before accepting raw `USB_HID_HOST`
-<a href=#2870 id=2870 data-nosnippet>2870</a>/// events. Requires `UsbDriverCap` (the `usb_driver` launch ceiling).
-<a href=#2871 id=2871 data-nosnippet>2871</a>///
-<a href=#2872 id=2872 data-nosnippet>2872</a>/// This is deliberately **not** `sys_register_nic_driver()`: the NIC role is a
-<a href=#2873 id=2873 data-nosnippet>2873</a>/// singleton, and a USB host cell (e.g. `/bin/xhci` on a PC that already has
-<a href=#2874 id=2874 data-nosnippet>2874</a>/// e1000/virtio-net) must not overwrite it or it would steal the network route.
-<a href=#2875 id=2875 data-nosnippet>2875</a></span><span class="kw">pub fn </span>sys_register_usb_hid_producer() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
-<a href=#2876 id=2876 data-nosnippet>2876</a>    <span class="comment">// SAFETY: pure register syscall; kernel validates UsbDriverCap at dispatch.
-<a href=#2877 id=2877 data-nosnippet>2877</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RegisterUsbHidProducer, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
-<a href=#2878 id=2878 data-nosnippet>2878</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
-<a href=#2879 id=2879 data-nosnippet>2879</a>        <span class="prelude-val">Ok</span>(())
-<a href=#2880 id=2880 data-nosnippet>2880</a>    } <span class="kw">else </span>{
-<a href=#2881 id=2881 data-nosnippet>2881</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
-<a href=#2882 id=2882 data-nosnippet>2882</a>    }
-<a href=#2883 id=2883 data-nosnippet>2883</a>}
-<a href=#2884 id=2884 data-nosnippet>2884</a>
-<a href=#2885 id=2885 data-nosnippet>2885</a><span class="doccomment">/// Register the calling cell as the active GPU driver.
-<a href=#2886 id=2886 data-nosnippet>2886</a>///
-<a href=#2887 id=2887 data-nosnippet>2887</a>/// Uses `RegisterService` with `service::GPU_DRIVER` + `tid=0` (self-registration).
-<a href=#2888 id=2888 data-nosnippet>2888</a>/// The kernel `RegisterService` handler allows this for `PcieDriverCap` holders.
-<a href=#2889 id=2889 data-nosnippet>2889</a>/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
-<a href=#2890 id=2890 data-nosnippet>2890</a></span><span class="kw">pub fn </span>sys_register_gpu_driver() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
-<a href=#2891 id=2891 data-nosnippet>2891</a>    <span class="comment">// SAFETY: RegisterService always-permitted past allowlist; kernel validates
-<a href=#2892 id=2892 data-nosnippet>2892</a>    // PcieDriverCap + GPU_DRIVER + tid=0 at dispatch.
-<a href=#2893 id=2893 data-nosnippet>2893</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#2894 id=2894 data-nosnippet>2894</a>        syscall(
-<a href=#2895 id=2895 data-nosnippet>2895</a>            ViSyscall::RegisterService,
-<a href=#2896 id=2896 data-nosnippet>2896</a>            api::syscall::service::GPU_DRIVER <span class="kw">as </span>usize,
-<a href=#2897 id=2897 data-nosnippet>2897</a>            <span class="number">0</span>, <span class="comment">// tid=0 means "register the caller itself"
-<a href=#2898 id=2898 data-nosnippet>2898</a>            </span><span class="number">0</span>,
-<a href=#2899 id=2899 data-nosnippet>2899</a>            <span class="number">0</span>,
-<a href=#2900 id=2900 data-nosnippet>2900</a>        )
-<a href=#2901 id=2901 data-nosnippet>2901</a>    };
-<a href=#2902 id=2902 data-nosnippet>2902</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
-<a href=#2903 id=2903 data-nosnippet>2903</a>        <span class="prelude-val">Ok</span>(())
-<a href=#2904 id=2904 data-nosnippet>2904</a>    } <span class="kw">else </span>{
-<a href=#2905 id=2905 data-nosnippet>2905</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
-<a href=#2906 id=2906 data-nosnippet>2906</a>    }
-<a href=#2907 id=2907 data-nosnippet>2907</a>}
-<a href=#2908 id=2908 data-nosnippet>2908</a>
-<a href=#2909 id=2909 data-nosnippet>2909</a><span class="doccomment">/// PCIe device descriptor written by `sys_find_pcie_device`.
-<a href=#2910 id=2910 data-nosnippet>2910</a>///
-<a href=#2911 id=2911 data-nosnippet>2911</a>/// Layout is `#[repr(C)]` to match the kernel's byte-wise write sequence:
-<a href=#2912 id=2912 data-nosnippet>2912</a>/// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64) + bar_mem_base(u64)
-<a href=#2913 id=2913 data-nosnippet>2913</a>/// + bar_mem_len(u64) + vendor_id(u16) + device_id(u16)` = 44 bytes padded to
-<a href=#2914 id=2914 data-nosnippet>2914</a>/// 48 by the trailing `u64` alignment.
-<a href=#2915 id=2915 data-nosnippet>2915</a>///
-<a href=#2916 id=2916 data-nosnippet>2916</a>/// `bar_mem_*` were **appended** so the first-BAR fields keep their exact
-<a href=#2917 id=2917 data-nosnippet>2917</a>/// meaning: a device whose BAR0 is I/O (ICH9 AHCI, whose ABAR is BAR5) reports
-<a href=#2918 id=2918 data-nosnippet>2918</a>/// zero `bar0_base` and its MMIO window in `bar_mem_base`. Every cell that
-<a href=#2919 id=2919 data-nosnippet>2919</a>/// reads this record is rebuilt by the same packaging pass, so no stale 24-byte
-<a href=#2920 id=2920 data-nosnippet>2920</a>/// reader survives a rebuild.
-<a href=#2921 id=2921 data-nosnippet>2921</a>///
-<a href=#2922 id=2922 data-nosnippet>2922</a>/// `vendor_id`/`device_id` were appended the same way (phase 04a of the x86 PC
-<a href=#2923 id=2923 data-nosnippet>2923</a>/// lane) so a NIC cell can confirm the device the kernel matched by Ethernet
-<a href=#2924 id=2924 data-nosnippet>2924</a>/// class triple is actually its own family before it programs a register model.
-<a href=#2925 id=2925 data-nosnippet>2925</a>/// A device with no identity reads `0:0`, which matches no family.
-<a href=#2926 id=2926 data-nosnippet>2926</a></span><span class="attr">#[repr(C)]
-<a href=#2927 id=2927 data-nosnippet>2927</a></span><span class="kw">pub struct </span>PcieDeviceInfo {
-<a href=#2928 id=2928 data-nosnippet>2928</a>    <span class="doccomment">/// PCIe Requester ID: `bus&lt;&lt;8 | dev&lt;&lt;3 | fn`. Zero means not populated.
-<a href=#2929 id=2929 data-nosnippet>2929</a>    </span><span class="kw">pub </span>bdf: u32,
-<a href=#2930 id=2930 data-nosnippet>2930</a>    <span class="doccomment">/// 1 if the device was found, 0 otherwise.
-<a href=#2931 id=2931 data-nosnippet>2931</a>    </span><span class="kw">pub </span>found: u32,
-<a href=#2932 id=2932 data-nosnippet>2932</a>    <span class="doccomment">/// BAR0 physical base address (= virtual address in SAS); 0 when BAR0 is I/O.
-<a href=#2933 id=2933 data-nosnippet>2933</a>    </span><span class="kw">pub </span>bar0_base: u64,
-<a href=#2934 id=2934 data-nosnippet>2934</a>    <span class="doccomment">/// BAR0 size in bytes.  At least 0x4000 (16 KiB) for NVMe controllers.
-<a href=#2935 id=2935 data-nosnippet>2935</a>    </span><span class="kw">pub </span>bar0_len: u64,
-<a href=#2936 id=2936 data-nosnippet>2936</a>    <span class="doccomment">/// First *memory* BAR physical base address; equals `bar0_base` when BAR0 is
-<a href=#2937 id=2937 data-nosnippet>2937</a>    /// memory. ICH9 AHCI exposes its ABAR at BAR5, so this is the only field a
-<a href=#2938 id=2938 data-nosnippet>2938</a>    /// SATA driver can use for MMIO.
-<a href=#2939 id=2939 data-nosnippet>2939</a>    </span><span class="kw">pub </span>bar_mem_base: u64,
-<a href=#2940 id=2940 data-nosnippet>2940</a>    <span class="doccomment">/// First memory BAR size in bytes (0x4000 fallback when the size is unknown).
-<a href=#2941 id=2941 data-nosnippet>2941</a>    </span><span class="kw">pub </span>bar_mem_len: u64,
-<a href=#2942 id=2942 data-nosnippet>2942</a>    <span class="doccomment">/// PCI vendor ID (0 when the kernel could not read the identity).
-<a href=#2943 id=2943 data-nosnippet>2943</a>    </span><span class="kw">pub </span>vendor_id: u16,
-<a href=#2944 id=2944 data-nosnippet>2944</a>    <span class="doccomment">/// PCI device ID (0 when the kernel could not read the identity).
-<a href=#2945 id=2945 data-nosnippet>2945</a>    </span><span class="kw">pub </span>device_id: u16,
-<a href=#2946 id=2946 data-nosnippet>2946</a>}
-<a href=#2947 id=2947 data-nosnippet>2947</a>
-<a href=#2948 id=2948 data-nosnippet>2948</a><span class="kw">impl </span>PcieDeviceInfo {
-<a href=#2949 id=2949 data-nosnippet>2949</a>    <span class="doccomment">/// Returns a zeroed-out placeholder; pass `&amp;mut info` to `sys_find_pcie_device`.
-<a href=#2950 id=2950 data-nosnippet>2950</a>    </span><span class="kw">pub const fn </span>zeroed() -&gt; <span class="self">Self </span>{
-<a href=#2951 id=2951 data-nosnippet>2951</a>        <span class="self">Self </span>{
-<a href=#2952 id=2952 data-nosnippet>2952</a>            bdf: <span class="number">0</span>,
-<a href=#2953 id=2953 data-nosnippet>2953</a>            found: <span class="number">0</span>,
-<a href=#2954 id=2954 data-nosnippet>2954</a>            bar0_base: <span class="number">0</span>,
-<a href=#2955 id=2955 data-nosnippet>2955</a>            bar0_len: <span class="number">0</span>,
-<a href=#2956 id=2956 data-nosnippet>2956</a>            bar_mem_base: <span class="number">0</span>,
-<a href=#2957 id=2957 data-nosnippet>2957</a>            bar_mem_len: <span class="number">0</span>,
-<a href=#2958 id=2958 data-nosnippet>2958</a>            vendor_id: <span class="number">0</span>,
-<a href=#2959 id=2959 data-nosnippet>2959</a>            device_id: <span class="number">0</span>,
-<a href=#2960 id=2960 data-nosnippet>2960</a>        }
-<a href=#2961 id=2961 data-nosnippet>2961</a>    }
-<a href=#2962 id=2962 data-nosnippet>2962</a>}
-<a href=#2963 id=2963 data-nosnippet>2963</a>
-<a href=#2964 id=2964 data-nosnippet>2964</a><span class="doccomment">/// One declared serial port, as reported by [`sys_serial_port_info`].
-<a href=#2965 id=2965 data-nosnippet>2965</a>///
-<a href=#2966 id=2966 data-nosnippet>2966</a>/// 4 bytes, `repr(C)`: the kernel writes exactly this much, and every field is
-<a href=#2967 id=2967 data-nosnippet>2967</a>/// filled even when the port is not usable (a caller can name the port it is
-<a href=#2968 id=2968 data-nosnippet>2968</a>/// missing instead of reporting a zeroed struct).
-<a href=#2969 id=2969 data-nosnippet>2969</a></span><span class="attr">#[repr(C)]
-<a href=#2970 id=2970 data-nosnippet>2970</a>#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-<a href=#2971 id=2971 data-nosnippet>2971</a></span><span class="kw">pub struct </span>SerialPortInfo {
-<a href=#2972 id=2972 data-nosnippet>2972</a>    <span class="doccomment">/// Port-I/O base the profile declares.
-<a href=#2973 id=2973 data-nosnippet>2973</a>    </span><span class="kw">pub </span>base: u16,
-<a href=#2974 id=2974 data-nosnippet>2974</a>    <span class="doccomment">/// Legacy ISA IRQ the profile declares.
-<a href=#2975 id=2975 data-nosnippet>2975</a>    </span><span class="kw">pub </span>irq: u8,
-<a href=#2976 id=2976 data-nosnippet>2976</a>    <span class="doccomment">/// 1 when the kernel probed a 16550 register set here and offers the port.
-<a href=#2977 id=2977 data-nosnippet>2977</a>    </span><span class="kw">pub </span>present: u8,
-<a href=#2978 id=2978 data-nosnippet>2978</a>}
-<a href=#2979 id=2979 data-nosnippet>2979</a>
-<a href=#2980 id=2980 data-nosnippet>2980</a><span class="kw">impl </span>SerialPortInfo {
-<a href=#2981 id=2981 data-nosnippet>2981</a>    <span class="doccomment">/// Returns a zeroed placeholder; pass `&amp;mut info` to [`sys_serial_port_info`].
-<a href=#2982 id=2982 data-nosnippet>2982</a>    </span><span class="kw">pub const fn </span>zeroed() -&gt; <span class="self">Self </span>{
-<a href=#2983 id=2983 data-nosnippet>2983</a>        <span class="self">Self </span>{
-<a href=#2984 id=2984 data-nosnippet>2984</a>            base: <span class="number">0</span>,
-<a href=#2985 id=2985 data-nosnippet>2985</a>            irq: <span class="number">0</span>,
-<a href=#2986 id=2986 data-nosnippet>2986</a>            present: <span class="number">0</span>,
-<a href=#2987 id=2987 data-nosnippet>2987</a>        }
-<a href=#2988 id=2988 data-nosnippet>2988</a>    }
-<a href=#2989 id=2989 data-nosnippet>2989</a>
-<a href=#2990 id=2990 data-nosnippet>2990</a>    <span class="doccomment">/// Whether the kernel offers this port to cells.
-<a href=#2991 id=2991 data-nosnippet>2991</a>    </span><span class="kw">pub const fn </span>is_present(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#2992 id=2992 data-nosnippet>2992</a>        <span class="self">self</span>.present == <span class="number">1
-<a href=#2993 id=2993 data-nosnippet>2993</a>    </span>}
-<a href=#2994 id=2994 data-nosnippet>2994</a>}
-<a href=#2995 id=2995 data-nosnippet>2995</a>
-<a href=#2996 id=2996 data-nosnippet>2996</a><span class="doccomment">/// Report the serial port at `index` (index 0 is the console).
-<a href=#2997 id=2997 data-nosnippet>2997</a>///
-<a href=#2998 id=2998 data-nosnippet>2998</a>/// Returns `Ok(true)` when the port is registered and usable, `Ok(false)` when
-<a href=#2999 id=2999 data-nosnippet>2999</a>/// the index is out of range or the machine did not answer the 16550 probe —
-<a href=#3000 id=3000 data-nosnippet>3000</a>/// in both cases `info` carries what the profile declared, so a cell can log the
-<a href=#3001 id=3001 data-nosnippet>3001</a>/// port it could not open. Requires the `serial_port` capability.
-<a href=#3002 id=3002 data-nosnippet>3002</a></span><span class="kw">pub fn </span>sys_serial_port_info(index: u32, info: <span class="kw-2">&amp;mut </span>SerialPortInfo) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
-<a href=#3003 id=3003 data-nosnippet>3003</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; the kernel writes exactly 4 bytes.
-<a href=#3004 id=3004 data-nosnippet>3004</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
-<a href=#3005 id=3005 data-nosnippet>3005</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3006 id=3006 data-nosnippet>3006</a>        syscall(
-<a href=#3007 id=3007 data-nosnippet>3007</a>            ViSyscall::SerialPortInfo,
-<a href=#3008 id=3008 data-nosnippet>3008</a>            index <span class="kw">as </span>usize,
-<a href=#3009 id=3009 data-nosnippet>3009</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>SerialPortInfo <span class="kw">as </span>usize,
-<a href=#3010 id=3010 data-nosnippet>3010</a>            <span class="number">0</span>,
+<a href=#2841 id=2841 data-nosnippet>2841</a>            <span class="number">0</span>,
+<a href=#2842 id=2842 data-nosnippet>2842</a>        )
+<a href=#2843 id=2843 data-nosnippet>2843</a>    };
+<a href=#2844 id=2844 data-nosnippet>2844</a>    <span class="kw">match </span>ret {
+<a href=#2845 id=2845 data-nosnippet>2845</a>        n <span class="kw">if </span>n &gt; <span class="number">0 </span>&amp;&amp; n <span class="kw">as </span>usize &lt;= MACHINE_FACTS_CAPACITY =&gt; {
+<a href=#2846 id=2846 data-nosnippet>2846</a>            MachineFactsRecord::decode(<span class="kw-2">&amp;</span>out[..n <span class="kw">as </span>usize]).map_err(|<span class="kw">_</span>| SyscallError::Unknown)
+<a href=#2847 id=2847 data-nosnippet>2847</a>        }
+<a href=#2848 id=2848 data-nosnippet>2848</a>        -<span class="number">3 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::FileNotFound),
+<a href=#2849 id=2849 data-nosnippet>2849</a>        -<span class="number">1 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
+<a href=#2850 id=2850 data-nosnippet>2850</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::Unknown),
+<a href=#2851 id=2851 data-nosnippet>2851</a>    }
+<a href=#2852 id=2852 data-nosnippet>2852</a>}
+<a href=#2853 id=2853 data-nosnippet>2853</a>
+<a href=#2854 id=2854 data-nosnippet>2854</a><span class="doccomment">/// Register the calling cell as the active NIC driver.
+<a href=#2855 id=2855 data-nosnippet>2855</a>///
+<a href=#2856 id=2856 data-nosnippet>2856</a>/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
+<a href=#2857 id=2857 data-nosnippet>2857</a></span><span class="kw">pub fn </span>sys_register_nic_driver() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
+<a href=#2858 id=2858 data-nosnippet>2858</a>    <span class="comment">// SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
+<a href=#2859 id=2859 data-nosnippet>2859</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RegisterNicDriver, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
+<a href=#2860 id=2860 data-nosnippet>2860</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
+<a href=#2861 id=2861 data-nosnippet>2861</a>        <span class="prelude-val">Ok</span>(())
+<a href=#2862 id=2862 data-nosnippet>2862</a>    } <span class="kw">else </span>{
+<a href=#2863 id=2863 data-nosnippet>2863</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
+<a href=#2864 id=2864 data-nosnippet>2864</a>    }
+<a href=#2865 id=2865 data-nosnippet>2865</a>}
+<a href=#2866 id=2866 data-nosnippet>2866</a>
+<a href=#2867 id=2867 data-nosnippet>2867</a><span class="doccomment">/// Register the calling cell as the USB HID event producer.
+<a href=#2868 id=2868 data-nosnippet>2868</a>///
+<a href=#2869 id=2869 data-nosnippet>2869</a>/// Publishes the caller's TID under `service::USB_HID_PRODUCER`, the identity the
+<a href=#2870 id=2870 data-nosnippet>2870</a>/// input service's producer gate verifies before accepting raw `USB_HID_HOST`
+<a href=#2871 id=2871 data-nosnippet>2871</a>/// events. Requires `UsbDriverCap` (the `usb_driver` launch ceiling).
+<a href=#2872 id=2872 data-nosnippet>2872</a>///
+<a href=#2873 id=2873 data-nosnippet>2873</a>/// This is deliberately **not** `sys_register_nic_driver()`: the NIC role is a
+<a href=#2874 id=2874 data-nosnippet>2874</a>/// singleton, and a USB host cell (e.g. `/bin/xhci` on a PC that already has
+<a href=#2875 id=2875 data-nosnippet>2875</a>/// e1000/virtio-net) must not overwrite it or it would steal the network route.
+<a href=#2876 id=2876 data-nosnippet>2876</a></span><span class="kw">pub fn </span>sys_register_usb_hid_producer() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
+<a href=#2877 id=2877 data-nosnippet>2877</a>    <span class="comment">// SAFETY: pure register syscall; kernel validates UsbDriverCap at dispatch.
+<a href=#2878 id=2878 data-nosnippet>2878</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RegisterUsbHidProducer, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
+<a href=#2879 id=2879 data-nosnippet>2879</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
+<a href=#2880 id=2880 data-nosnippet>2880</a>        <span class="prelude-val">Ok</span>(())
+<a href=#2881 id=2881 data-nosnippet>2881</a>    } <span class="kw">else </span>{
+<a href=#2882 id=2882 data-nosnippet>2882</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
+<a href=#2883 id=2883 data-nosnippet>2883</a>    }
+<a href=#2884 id=2884 data-nosnippet>2884</a>}
+<a href=#2885 id=2885 data-nosnippet>2885</a>
+<a href=#2886 id=2886 data-nosnippet>2886</a><span class="doccomment">/// Register the calling cell as the active GPU driver.
+<a href=#2887 id=2887 data-nosnippet>2887</a>///
+<a href=#2888 id=2888 data-nosnippet>2888</a>/// Uses `RegisterService` with `service::GPU_DRIVER` + `tid=0` (self-registration).
+<a href=#2889 id=2889 data-nosnippet>2889</a>/// The kernel `RegisterService` handler allows this for `PcieDriverCap` holders.
+<a href=#2890 id=2890 data-nosnippet>2890</a>/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
+<a href=#2891 id=2891 data-nosnippet>2891</a></span><span class="kw">pub fn </span>sys_register_gpu_driver() -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
+<a href=#2892 id=2892 data-nosnippet>2892</a>    <span class="comment">// SAFETY: RegisterService always-permitted past allowlist; kernel validates
+<a href=#2893 id=2893 data-nosnippet>2893</a>    // PcieDriverCap + GPU_DRIVER + tid=0 at dispatch.
+<a href=#2894 id=2894 data-nosnippet>2894</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#2895 id=2895 data-nosnippet>2895</a>        syscall(
+<a href=#2896 id=2896 data-nosnippet>2896</a>            ViSyscall::RegisterService,
+<a href=#2897 id=2897 data-nosnippet>2897</a>            abi::syscall::service::GPU_DRIVER <span class="kw">as </span>usize,
+<a href=#2898 id=2898 data-nosnippet>2898</a>            <span class="number">0</span>, <span class="comment">// tid=0 means "register the caller itself"
+<a href=#2899 id=2899 data-nosnippet>2899</a>            </span><span class="number">0</span>,
+<a href=#2900 id=2900 data-nosnippet>2900</a>            <span class="number">0</span>,
+<a href=#2901 id=2901 data-nosnippet>2901</a>        )
+<a href=#2902 id=2902 data-nosnippet>2902</a>    };
+<a href=#2903 id=2903 data-nosnippet>2903</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
+<a href=#2904 id=2904 data-nosnippet>2904</a>        <span class="prelude-val">Ok</span>(())
+<a href=#2905 id=2905 data-nosnippet>2905</a>    } <span class="kw">else </span>{
+<a href=#2906 id=2906 data-nosnippet>2906</a>        <span class="prelude-val">Err</span>(SyscallError::PermissionDenied)
+<a href=#2907 id=2907 data-nosnippet>2907</a>    }
+<a href=#2908 id=2908 data-nosnippet>2908</a>}
+<a href=#2909 id=2909 data-nosnippet>2909</a>
+<a href=#2910 id=2910 data-nosnippet>2910</a><span class="doccomment">/// PCIe device descriptor written by `sys_find_pcie_device`.
+<a href=#2911 id=2911 data-nosnippet>2911</a>///
+<a href=#2912 id=2912 data-nosnippet>2912</a>/// Layout is `#[repr(C)]` to match the kernel's byte-wise write sequence:
+<a href=#2913 id=2913 data-nosnippet>2913</a>/// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64) + bar_mem_base(u64)
+<a href=#2914 id=2914 data-nosnippet>2914</a>/// + bar_mem_len(u64) + vendor_id(u16) + device_id(u16)` = 44 bytes padded to
+<a href=#2915 id=2915 data-nosnippet>2915</a>/// 48 by the trailing `u64` alignment.
+<a href=#2916 id=2916 data-nosnippet>2916</a>///
+<a href=#2917 id=2917 data-nosnippet>2917</a>/// `bar_mem_*` were **appended** so the first-BAR fields keep their exact
+<a href=#2918 id=2918 data-nosnippet>2918</a>/// meaning: a device whose BAR0 is I/O (ICH9 AHCI, whose ABAR is BAR5) reports
+<a href=#2919 id=2919 data-nosnippet>2919</a>/// zero `bar0_base` and its MMIO window in `bar_mem_base`. Every cell that
+<a href=#2920 id=2920 data-nosnippet>2920</a>/// reads this record is rebuilt by the same packaging pass, so no stale 24-byte
+<a href=#2921 id=2921 data-nosnippet>2921</a>/// reader survives a rebuild.
+<a href=#2922 id=2922 data-nosnippet>2922</a>///
+<a href=#2923 id=2923 data-nosnippet>2923</a>/// `vendor_id`/`device_id` were appended the same way (phase 04a of the x86 PC
+<a href=#2924 id=2924 data-nosnippet>2924</a>/// lane) so a NIC cell can confirm the device the kernel matched by Ethernet
+<a href=#2925 id=2925 data-nosnippet>2925</a>/// class triple is actually its own family before it programs a register model.
+<a href=#2926 id=2926 data-nosnippet>2926</a>/// A device with no identity reads `0:0`, which matches no family.
+<a href=#2927 id=2927 data-nosnippet>2927</a></span><span class="attr">#[repr(C)]
+<a href=#2928 id=2928 data-nosnippet>2928</a></span><span class="kw">pub struct </span>PcieDeviceInfo {
+<a href=#2929 id=2929 data-nosnippet>2929</a>    <span class="doccomment">/// PCIe Requester ID: `bus&lt;&lt;8 | dev&lt;&lt;3 | fn`. Zero means not populated.
+<a href=#2930 id=2930 data-nosnippet>2930</a>    </span><span class="kw">pub </span>bdf: u32,
+<a href=#2931 id=2931 data-nosnippet>2931</a>    <span class="doccomment">/// 1 if the device was found, 0 otherwise.
+<a href=#2932 id=2932 data-nosnippet>2932</a>    </span><span class="kw">pub </span>found: u32,
+<a href=#2933 id=2933 data-nosnippet>2933</a>    <span class="doccomment">/// BAR0 physical base address (= virtual address in SAS); 0 when BAR0 is I/O.
+<a href=#2934 id=2934 data-nosnippet>2934</a>    </span><span class="kw">pub </span>bar0_base: u64,
+<a href=#2935 id=2935 data-nosnippet>2935</a>    <span class="doccomment">/// BAR0 size in bytes.  At least 0x4000 (16 KiB) for NVMe controllers.
+<a href=#2936 id=2936 data-nosnippet>2936</a>    </span><span class="kw">pub </span>bar0_len: u64,
+<a href=#2937 id=2937 data-nosnippet>2937</a>    <span class="doccomment">/// First *memory* BAR physical base address; equals `bar0_base` when BAR0 is
+<a href=#2938 id=2938 data-nosnippet>2938</a>    /// memory. ICH9 AHCI exposes its ABAR at BAR5, so this is the only field a
+<a href=#2939 id=2939 data-nosnippet>2939</a>    /// SATA driver can use for MMIO.
+<a href=#2940 id=2940 data-nosnippet>2940</a>    </span><span class="kw">pub </span>bar_mem_base: u64,
+<a href=#2941 id=2941 data-nosnippet>2941</a>    <span class="doccomment">/// First memory BAR size in bytes (0x4000 fallback when the size is unknown).
+<a href=#2942 id=2942 data-nosnippet>2942</a>    </span><span class="kw">pub </span>bar_mem_len: u64,
+<a href=#2943 id=2943 data-nosnippet>2943</a>    <span class="doccomment">/// PCI vendor ID (0 when the kernel could not read the identity).
+<a href=#2944 id=2944 data-nosnippet>2944</a>    </span><span class="kw">pub </span>vendor_id: u16,
+<a href=#2945 id=2945 data-nosnippet>2945</a>    <span class="doccomment">/// PCI device ID (0 when the kernel could not read the identity).
+<a href=#2946 id=2946 data-nosnippet>2946</a>    </span><span class="kw">pub </span>device_id: u16,
+<a href=#2947 id=2947 data-nosnippet>2947</a>}
+<a href=#2948 id=2948 data-nosnippet>2948</a>
+<a href=#2949 id=2949 data-nosnippet>2949</a><span class="kw">impl </span>PcieDeviceInfo {
+<a href=#2950 id=2950 data-nosnippet>2950</a>    <span class="doccomment">/// Returns a zeroed-out placeholder; pass `&amp;mut info` to `sys_find_pcie_device`.
+<a href=#2951 id=2951 data-nosnippet>2951</a>    </span><span class="kw">pub const fn </span>zeroed() -&gt; <span class="self">Self </span>{
+<a href=#2952 id=2952 data-nosnippet>2952</a>        <span class="self">Self </span>{
+<a href=#2953 id=2953 data-nosnippet>2953</a>            bdf: <span class="number">0</span>,
+<a href=#2954 id=2954 data-nosnippet>2954</a>            found: <span class="number">0</span>,
+<a href=#2955 id=2955 data-nosnippet>2955</a>            bar0_base: <span class="number">0</span>,
+<a href=#2956 id=2956 data-nosnippet>2956</a>            bar0_len: <span class="number">0</span>,
+<a href=#2957 id=2957 data-nosnippet>2957</a>            bar_mem_base: <span class="number">0</span>,
+<a href=#2958 id=2958 data-nosnippet>2958</a>            bar_mem_len: <span class="number">0</span>,
+<a href=#2959 id=2959 data-nosnippet>2959</a>            vendor_id: <span class="number">0</span>,
+<a href=#2960 id=2960 data-nosnippet>2960</a>            device_id: <span class="number">0</span>,
+<a href=#2961 id=2961 data-nosnippet>2961</a>        }
+<a href=#2962 id=2962 data-nosnippet>2962</a>    }
+<a href=#2963 id=2963 data-nosnippet>2963</a>}
+<a href=#2964 id=2964 data-nosnippet>2964</a>
+<a href=#2965 id=2965 data-nosnippet>2965</a><span class="doccomment">/// One declared serial port, as reported by [`sys_serial_port_info`].
+<a href=#2966 id=2966 data-nosnippet>2966</a>///
+<a href=#2967 id=2967 data-nosnippet>2967</a>/// 4 bytes, `repr(C)`: the kernel writes exactly this much, and every field is
+<a href=#2968 id=2968 data-nosnippet>2968</a>/// filled even when the port is not usable (a caller can name the port it is
+<a href=#2969 id=2969 data-nosnippet>2969</a>/// missing instead of reporting a zeroed struct).
+<a href=#2970 id=2970 data-nosnippet>2970</a></span><span class="attr">#[repr(C)]
+<a href=#2971 id=2971 data-nosnippet>2971</a>#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+<a href=#2972 id=2972 data-nosnippet>2972</a></span><span class="kw">pub struct </span>SerialPortInfo {
+<a href=#2973 id=2973 data-nosnippet>2973</a>    <span class="doccomment">/// Port-I/O base the profile declares.
+<a href=#2974 id=2974 data-nosnippet>2974</a>    </span><span class="kw">pub </span>base: u16,
+<a href=#2975 id=2975 data-nosnippet>2975</a>    <span class="doccomment">/// Legacy ISA IRQ the profile declares.
+<a href=#2976 id=2976 data-nosnippet>2976</a>    </span><span class="kw">pub </span>irq: u8,
+<a href=#2977 id=2977 data-nosnippet>2977</a>    <span class="doccomment">/// 1 when the kernel probed a 16550 register set here and offers the port.
+<a href=#2978 id=2978 data-nosnippet>2978</a>    </span><span class="kw">pub </span>present: u8,
+<a href=#2979 id=2979 data-nosnippet>2979</a>}
+<a href=#2980 id=2980 data-nosnippet>2980</a>
+<a href=#2981 id=2981 data-nosnippet>2981</a><span class="kw">impl </span>SerialPortInfo {
+<a href=#2982 id=2982 data-nosnippet>2982</a>    <span class="doccomment">/// Returns a zeroed placeholder; pass `&amp;mut info` to [`sys_serial_port_info`].
+<a href=#2983 id=2983 data-nosnippet>2983</a>    </span><span class="kw">pub const fn </span>zeroed() -&gt; <span class="self">Self </span>{
+<a href=#2984 id=2984 data-nosnippet>2984</a>        <span class="self">Self </span>{
+<a href=#2985 id=2985 data-nosnippet>2985</a>            base: <span class="number">0</span>,
+<a href=#2986 id=2986 data-nosnippet>2986</a>            irq: <span class="number">0</span>,
+<a href=#2987 id=2987 data-nosnippet>2987</a>            present: <span class="number">0</span>,
+<a href=#2988 id=2988 data-nosnippet>2988</a>        }
+<a href=#2989 id=2989 data-nosnippet>2989</a>    }
+<a href=#2990 id=2990 data-nosnippet>2990</a>
+<a href=#2991 id=2991 data-nosnippet>2991</a>    <span class="doccomment">/// Whether the kernel offers this port to cells.
+<a href=#2992 id=2992 data-nosnippet>2992</a>    </span><span class="kw">pub const fn </span>is_present(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#2993 id=2993 data-nosnippet>2993</a>        <span class="self">self</span>.present == <span class="number">1
+<a href=#2994 id=2994 data-nosnippet>2994</a>    </span>}
+<a href=#2995 id=2995 data-nosnippet>2995</a>}
+<a href=#2996 id=2996 data-nosnippet>2996</a>
+<a href=#2997 id=2997 data-nosnippet>2997</a><span class="doccomment">/// Report the serial port at `index` (index 0 is the console).
+<a href=#2998 id=2998 data-nosnippet>2998</a>///
+<a href=#2999 id=2999 data-nosnippet>2999</a>/// Returns `Ok(true)` when the port is registered and usable, `Ok(false)` when
+<a href=#3000 id=3000 data-nosnippet>3000</a>/// the index is out of range or the machine did not answer the 16550 probe —
+<a href=#3001 id=3001 data-nosnippet>3001</a>/// in both cases `info` carries what the profile declared, so a cell can log the
+<a href=#3002 id=3002 data-nosnippet>3002</a>/// port it could not open. Requires the `serial_port` capability.
+<a href=#3003 id=3003 data-nosnippet>3003</a></span><span class="kw">pub fn </span>sys_serial_port_info(index: u32, info: <span class="kw-2">&amp;mut </span>SerialPortInfo) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
+<a href=#3004 id=3004 data-nosnippet>3004</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; the kernel writes exactly 4 bytes.
+<a href=#3005 id=3005 data-nosnippet>3005</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+<a href=#3006 id=3006 data-nosnippet>3006</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3007 id=3007 data-nosnippet>3007</a>        syscall(
+<a href=#3008 id=3008 data-nosnippet>3008</a>            ViSyscall::SerialPortInfo,
+<a href=#3009 id=3009 data-nosnippet>3009</a>            index <span class="kw">as </span>usize,
+<a href=#3010 id=3010 data-nosnippet>3010</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>SerialPortInfo <span class="kw">as </span>usize,
 <a href=#3011 id=3011 data-nosnippet>3011</a>            <span class="number">0</span>,
-<a href=#3012 id=3012 data-nosnippet>3012</a>        )
-<a href=#3013 id=3013 data-nosnippet>3013</a>    };
-<a href=#3014 id=3014 data-nosnippet>3014</a>    <span class="kw">match </span>ret {
-<a href=#3015 id=3015 data-nosnippet>3015</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
-<a href=#3016 id=3016 data-nosnippet>3016</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
-<a href=#3017 id=3017 data-nosnippet>3017</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
-<a href=#3018 id=3018 data-nosnippet>3018</a>    }
-<a href=#3019 id=3019 data-nosnippet>3019</a>}
-<a href=#3020 id=3020 data-nosnippet>3020</a>
-<a href=#3021 id=3021 data-nosnippet>3021</a><span class="doccomment">/// Write `bytes` to the serial port at `index`.
-<a href=#3022 id=3022 data-nosnippet>3022</a>///
-<a href=#3023 id=3023 data-nosnippet>3023</a>/// Returns the number of bytes written. Requires the `serial_port` capability;
-<a href=#3024 id=3024 data-nosnippet>3024</a>/// an unusable index or a denied capability is an error, never a silent zero.
-<a href=#3025 id=3025 data-nosnippet>3025</a></span><span class="kw">pub fn </span>sys_serial_write(index: u32, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
-<a href=#3026 id=3026 data-nosnippet>3026</a>    <span class="comment">// SAFETY: `bytes` is a valid immutable slice for its whole length.
-<a href=#3027 id=3027 data-nosnippet>3027</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3028 id=3028 data-nosnippet>3028</a>        syscall(
-<a href=#3029 id=3029 data-nosnippet>3029</a>            ViSyscall::SerialWrite,
-<a href=#3030 id=3030 data-nosnippet>3030</a>            index <span class="kw">as </span>usize,
-<a href=#3031 id=3031 data-nosnippet>3031</a>            bytes.as_ptr() <span class="kw">as </span>usize,
-<a href=#3032 id=3032 data-nosnippet>3032</a>            bytes.len(),
-<a href=#3033 id=3033 data-nosnippet>3033</a>            <span class="number">0</span>,
-<a href=#3034 id=3034 data-nosnippet>3034</a>        )
-<a href=#3035 id=3035 data-nosnippet>3035</a>    };
-<a href=#3036 id=3036 data-nosnippet>3036</a>    <span class="kw">if </span>ret &lt; <span class="number">0 </span>{
-<a href=#3037 id=3037 data-nosnippet>3037</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
-<a href=#3038 id=3038 data-nosnippet>3038</a>    }
-<a href=#3039 id=3039 data-nosnippet>3039</a>    <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>usize)
-<a href=#3040 id=3040 data-nosnippet>3040</a>}
-<a href=#3041 id=3041 data-nosnippet>3041</a>
-<a href=#3042 id=3042 data-nosnippet>3042</a><span class="doccomment">/// Poll up to `buf.len()` bytes from the serial port at `index`.
-<a href=#3043 id=3043 data-nosnippet>3043</a>///
-<a href=#3044 id=3044 data-nosnippet>3044</a>/// Returns the number of bytes read (0 when nothing is pending). Polled by
-<a href=#3045 id=3045 data-nosnippet>3045</a>/// design: the extra ports carry no interrupt vector in this phase.
-<a href=#3046 id=3046 data-nosnippet>3046</a></span><span class="kw">pub fn </span>sys_serial_read(index: u32, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
-<a href=#3047 id=3047 data-nosnippet>3047</a>    <span class="comment">// SAFETY: `buf` is a valid mutable slice for its whole length.
-<a href=#3048 id=3048 data-nosnippet>3048</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3049 id=3049 data-nosnippet>3049</a>        syscall(
-<a href=#3050 id=3050 data-nosnippet>3050</a>            ViSyscall::SerialRead,
-<a href=#3051 id=3051 data-nosnippet>3051</a>            index <span class="kw">as </span>usize,
-<a href=#3052 id=3052 data-nosnippet>3052</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#3053 id=3053 data-nosnippet>3053</a>            buf.len(),
-<a href=#3054 id=3054 data-nosnippet>3054</a>            <span class="number">0</span>,
-<a href=#3055 id=3055 data-nosnippet>3055</a>        )
-<a href=#3056 id=3056 data-nosnippet>3056</a>    };
-<a href=#3057 id=3057 data-nosnippet>3057</a>    <span class="kw">if </span>ret &lt; <span class="number">0 </span>{
-<a href=#3058 id=3058 data-nosnippet>3058</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
-<a href=#3059 id=3059 data-nosnippet>3059</a>    }
-<a href=#3060 id=3060 data-nosnippet>3060</a>    <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>usize)
-<a href=#3061 id=3061 data-nosnippet>3061</a>}
-<a href=#3062 id=3062 data-nosnippet>3062</a>
-<a href=#3063 id=3063 data-nosnippet>3063</a><span class="doccomment">/// Set the serial port's baud rate, keeping 8N1.
-<a href=#3064 id=3064 data-nosnippet>3064</a>///
-<a href=#3065 id=3065 data-nosnippet>3065</a>/// Requires the `serial_port` capability. An unsupported rate is refused rather
-<a href=#3066 id=3066 data-nosnippet>3066</a>/// than rounded to a rate the caller did not ask for.
-<a href=#3067 id=3067 data-nosnippet>3067</a></span><span class="kw">pub fn </span>sys_serial_configure(index: u32, baud: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
-<a href=#3068 id=3068 data-nosnippet>3068</a>    <span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3069 id=3069 data-nosnippet>3069</a>        syscall(
-<a href=#3070 id=3070 data-nosnippet>3070</a>            ViSyscall::SerialConfigure,
-<a href=#3071 id=3071 data-nosnippet>3071</a>            index <span class="kw">as </span>usize,
-<a href=#3072 id=3072 data-nosnippet>3072</a>            baud <span class="kw">as </span>usize,
-<a href=#3073 id=3073 data-nosnippet>3073</a>            <span class="number">0</span>,
+<a href=#3012 id=3012 data-nosnippet>3012</a>            <span class="number">0</span>,
+<a href=#3013 id=3013 data-nosnippet>3013</a>        )
+<a href=#3014 id=3014 data-nosnippet>3014</a>    };
+<a href=#3015 id=3015 data-nosnippet>3015</a>    <span class="kw">match </span>ret {
+<a href=#3016 id=3016 data-nosnippet>3016</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
+<a href=#3017 id=3017 data-nosnippet>3017</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
+<a href=#3018 id=3018 data-nosnippet>3018</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
+<a href=#3019 id=3019 data-nosnippet>3019</a>    }
+<a href=#3020 id=3020 data-nosnippet>3020</a>}
+<a href=#3021 id=3021 data-nosnippet>3021</a>
+<a href=#3022 id=3022 data-nosnippet>3022</a><span class="doccomment">/// Write `bytes` to the serial port at `index`.
+<a href=#3023 id=3023 data-nosnippet>3023</a>///
+<a href=#3024 id=3024 data-nosnippet>3024</a>/// Returns the number of bytes written. Requires the `serial_port` capability;
+<a href=#3025 id=3025 data-nosnippet>3025</a>/// an unusable index or a denied capability is an error, never a silent zero.
+<a href=#3026 id=3026 data-nosnippet>3026</a></span><span class="kw">pub fn </span>sys_serial_write(index: u32, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
+<a href=#3027 id=3027 data-nosnippet>3027</a>    <span class="comment">// SAFETY: `bytes` is a valid immutable slice for its whole length.
+<a href=#3028 id=3028 data-nosnippet>3028</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3029 id=3029 data-nosnippet>3029</a>        syscall(
+<a href=#3030 id=3030 data-nosnippet>3030</a>            ViSyscall::SerialWrite,
+<a href=#3031 id=3031 data-nosnippet>3031</a>            index <span class="kw">as </span>usize,
+<a href=#3032 id=3032 data-nosnippet>3032</a>            bytes.as_ptr() <span class="kw">as </span>usize,
+<a href=#3033 id=3033 data-nosnippet>3033</a>            bytes.len(),
+<a href=#3034 id=3034 data-nosnippet>3034</a>            <span class="number">0</span>,
+<a href=#3035 id=3035 data-nosnippet>3035</a>        )
+<a href=#3036 id=3036 data-nosnippet>3036</a>    };
+<a href=#3037 id=3037 data-nosnippet>3037</a>    <span class="kw">if </span>ret &lt; <span class="number">0 </span>{
+<a href=#3038 id=3038 data-nosnippet>3038</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
+<a href=#3039 id=3039 data-nosnippet>3039</a>    }
+<a href=#3040 id=3040 data-nosnippet>3040</a>    <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>usize)
+<a href=#3041 id=3041 data-nosnippet>3041</a>}
+<a href=#3042 id=3042 data-nosnippet>3042</a>
+<a href=#3043 id=3043 data-nosnippet>3043</a><span class="doccomment">/// Poll up to `buf.len()` bytes from the serial port at `index`.
+<a href=#3044 id=3044 data-nosnippet>3044</a>///
+<a href=#3045 id=3045 data-nosnippet>3045</a>/// Returns the number of bytes read (0 when nothing is pending). Polled by
+<a href=#3046 id=3046 data-nosnippet>3046</a>/// design: the extra ports carry no interrupt vector in this phase.
+<a href=#3047 id=3047 data-nosnippet>3047</a></span><span class="kw">pub fn </span>sys_serial_read(index: u32, buf: <span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, SyscallError&gt; {
+<a href=#3048 id=3048 data-nosnippet>3048</a>    <span class="comment">// SAFETY: `buf` is a valid mutable slice for its whole length.
+<a href=#3049 id=3049 data-nosnippet>3049</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3050 id=3050 data-nosnippet>3050</a>        syscall(
+<a href=#3051 id=3051 data-nosnippet>3051</a>            ViSyscall::SerialRead,
+<a href=#3052 id=3052 data-nosnippet>3052</a>            index <span class="kw">as </span>usize,
+<a href=#3053 id=3053 data-nosnippet>3053</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#3054 id=3054 data-nosnippet>3054</a>            buf.len(),
+<a href=#3055 id=3055 data-nosnippet>3055</a>            <span class="number">0</span>,
+<a href=#3056 id=3056 data-nosnippet>3056</a>        )
+<a href=#3057 id=3057 data-nosnippet>3057</a>    };
+<a href=#3058 id=3058 data-nosnippet>3058</a>    <span class="kw">if </span>ret &lt; <span class="number">0 </span>{
+<a href=#3059 id=3059 data-nosnippet>3059</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
+<a href=#3060 id=3060 data-nosnippet>3060</a>    }
+<a href=#3061 id=3061 data-nosnippet>3061</a>    <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>usize)
+<a href=#3062 id=3062 data-nosnippet>3062</a>}
+<a href=#3063 id=3063 data-nosnippet>3063</a>
+<a href=#3064 id=3064 data-nosnippet>3064</a><span class="doccomment">/// Set the serial port's baud rate, keeping 8N1.
+<a href=#3065 id=3065 data-nosnippet>3065</a>///
+<a href=#3066 id=3066 data-nosnippet>3066</a>/// Requires the `serial_port` capability. An unsupported rate is refused rather
+<a href=#3067 id=3067 data-nosnippet>3067</a>/// than rounded to a rate the caller did not ask for.
+<a href=#3068 id=3068 data-nosnippet>3068</a></span><span class="kw">pub fn </span>sys_serial_configure(index: u32, baud: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), SyscallError&gt; {
+<a href=#3069 id=3069 data-nosnippet>3069</a>    <span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3070 id=3070 data-nosnippet>3070</a>        syscall(
+<a href=#3071 id=3071 data-nosnippet>3071</a>            ViSyscall::SerialConfigure,
+<a href=#3072 id=3072 data-nosnippet>3072</a>            index <span class="kw">as </span>usize,
+<a href=#3073 id=3073 data-nosnippet>3073</a>            baud <span class="kw">as </span>usize,
 <a href=#3074 id=3074 data-nosnippet>3074</a>            <span class="number">0</span>,
-<a href=#3075 id=3075 data-nosnippet>3075</a>        )
-<a href=#3076 id=3076 data-nosnippet>3076</a>    };
-<a href=#3077 id=3077 data-nosnippet>3077</a>    <span class="kw">match </span>ret {
-<a href=#3078 id=3078 data-nosnippet>3078</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#3079 id=3079 data-nosnippet>3079</a>        <span class="comment">// Unusable index or unsupported rate: the call did not apply.
-<a href=#3080 id=3080 data-nosnippet>3080</a>        </span>-<span class="number">2 </span>| -<span class="number">3 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::InvalidCommand),
-<a href=#3081 id=3081 data-nosnippet>3081</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
-<a href=#3082 id=3082 data-nosnippet>3082</a>    }
-<a href=#3083 id=3083 data-nosnippet>3083</a>}
-<a href=#3084 id=3084 data-nosnippet>3084</a>
-<a href=#3085 id=3085 data-nosnippet>3085</a><span class="doccomment">/// Find the first PCIe device matching `(class, subclass, prog_if)`.
-<a href=#3086 id=3086 data-nosnippet>3086</a>///
-<a href=#3087 id=3087 data-nosnippet>3087</a>/// On success (`Ok(true)`), `info` is populated with the BDF and BAR0 address.
-<a href=#3088 id=3088 data-nosnippet>3088</a>/// The kernel also records BDF → caller ownership in the Resource Registry for
-<a href=#3089 id=3089 data-nosnippet>3089</a>/// subsequent IOMMU authorization.
-<a href=#3090 id=3090 data-nosnippet>3090</a>///
-<a href=#3091 id=3091 data-nosnippet>3091</a>/// Requires `PcieDriverCap` (kernel-granted ZST — init grants it to Driver Cells
-<a href=#3092 id=3092 data-nosnippet>3092</a>/// at spawn via direct TCB write, not via manifest).
-<a href=#3093 id=3093 data-nosnippet>3093</a>///
-<a href=#3094 id=3094 data-nosnippet>3094</a>/// Returns `Ok(false)` if no matching device is present (VirtIO fallback case).
-<a href=#3095 id=3095 data-nosnippet>3095</a>///
-<a href=#3096 id=3096 data-nosnippet>3096</a>/// Two Driver Cells that share a class (the two Ethernet cells on `02:00:00`)
-<a href=#3097 id=3097 data-nosnippet>3097</a>/// cannot each name their controller through this query; they use
-<a href=#3098 id=3098 data-nosnippet>3098</a>/// [`sys_find_pcie_device_by_vendor`] instead.
-<a href=#3099 id=3099 data-nosnippet>3099</a></span><span class="kw">pub fn </span>sys_find_pcie_device(
-<a href=#3100 id=3100 data-nosnippet>3100</a>    class: u8,
-<a href=#3101 id=3101 data-nosnippet>3101</a>    subclass: u8,
-<a href=#3102 id=3102 data-nosnippet>3102</a>    prog_if: u8,
-<a href=#3103 id=3103 data-nosnippet>3103</a>    info: <span class="kw-2">&amp;mut </span>PcieDeviceInfo,
-<a href=#3104 id=3104 data-nosnippet>3104</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
-<a href=#3105 id=3105 data-nosnippet>3105</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
-<a href=#3106 id=3106 data-nosnippet>3106</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
-<a href=#3107 id=3107 data-nosnippet>3107</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3108 id=3108 data-nosnippet>3108</a>        syscall(
-<a href=#3109 id=3109 data-nosnippet>3109</a>            ViSyscall::FindPcieDevice,
-<a href=#3110 id=3110 data-nosnippet>3110</a>            class <span class="kw">as </span>usize,
-<a href=#3111 id=3111 data-nosnippet>3111</a>            subclass <span class="kw">as </span>usize,
-<a href=#3112 id=3112 data-nosnippet>3112</a>            prog_if <span class="kw">as </span>usize,
-<a href=#3113 id=3113 data-nosnippet>3113</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>PcieDeviceInfo <span class="kw">as </span>usize,
-<a href=#3114 id=3114 data-nosnippet>3114</a>        )
-<a href=#3115 id=3115 data-nosnippet>3115</a>    };
-<a href=#3116 id=3116 data-nosnippet>3116</a>    <span class="kw">match </span>ret {
-<a href=#3117 id=3117 data-nosnippet>3117</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
-<a href=#3118 id=3118 data-nosnippet>3118</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
-<a href=#3119 id=3119 data-nosnippet>3119</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
-<a href=#3120 id=3120 data-nosnippet>3120</a>    }
-<a href=#3121 id=3121 data-nosnippet>3121</a>}
-<a href=#3122 id=3122 data-nosnippet>3122</a>
-<a href=#3123 id=3123 data-nosnippet>3123</a><span class="doccomment">/// Find the first PCIe device with an exact `(vendor_id, device_id)`.
-<a href=#3124 id=3124 data-nosnippet>3124</a>///
-<a href=#3125 id=3125 data-nosnippet>3125</a>/// Populates `info` exactly like [`sys_find_pcie_device`]; the difference is the
-<a href=#3126 id=3126 data-nosnippet>3126</a>/// match — an exact identity instead of a class triple. This is how a Driver
-<a href=#3127 id=3127 data-nosnippet>3127</a>/// Cell claims its controller when another cell drives a different family in the
-<a href=#3128 id=3128 data-nosnippet>3128</a>/// same class: each names its own vendor:device, so neither depends on the other
-<a href=#3129 id=3129 data-nosnippet>3129</a>/// releasing the device.
-<a href=#3130 id=3130 data-nosnippet>3130</a>///
-<a href=#3131 id=3131 data-nosnippet>3131</a>/// Requires `PcieDriverCap`. Returns `Ok(false)` when the device is absent or
-<a href=#3132 id=3132 data-nosnippet>3132</a>/// when no Driver Cell in this image drives that Ethernet ID (the family gate).
-<a href=#3133 id=3133 data-nosnippet>3133</a></span><span class="kw">pub fn </span>sys_find_pcie_device_by_vendor(
-<a href=#3134 id=3134 data-nosnippet>3134</a>    vendor_id: u16,
-<a href=#3135 id=3135 data-nosnippet>3135</a>    device_id: u16,
-<a href=#3136 id=3136 data-nosnippet>3136</a>    info: <span class="kw-2">&amp;mut </span>PcieDeviceInfo,
-<a href=#3137 id=3137 data-nosnippet>3137</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
-<a href=#3138 id=3138 data-nosnippet>3138</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
-<a href=#3139 id=3139 data-nosnippet>3139</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
-<a href=#3140 id=3140 data-nosnippet>3140</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3141 id=3141 data-nosnippet>3141</a>        syscall(
-<a href=#3142 id=3142 data-nosnippet>3142</a>            ViSyscall::FindPcieDeviceByVendor,
-<a href=#3143 id=3143 data-nosnippet>3143</a>            vendor_id <span class="kw">as </span>usize,
-<a href=#3144 id=3144 data-nosnippet>3144</a>            device_id <span class="kw">as </span>usize,
-<a href=#3145 id=3145 data-nosnippet>3145</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>PcieDeviceInfo <span class="kw">as </span>usize,
-<a href=#3146 id=3146 data-nosnippet>3146</a>            <span class="number">0</span>,
-<a href=#3147 id=3147 data-nosnippet>3147</a>        )
-<a href=#3148 id=3148 data-nosnippet>3148</a>    };
-<a href=#3149 id=3149 data-nosnippet>3149</a>    <span class="kw">match </span>ret {
-<a href=#3150 id=3150 data-nosnippet>3150</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
-<a href=#3151 id=3151 data-nosnippet>3151</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
-<a href=#3152 id=3152 data-nosnippet>3152</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
-<a href=#3153 id=3153 data-nosnippet>3153</a>    }
-<a href=#3154 id=3154 data-nosnippet>3154</a>}
-<a href=#3155 id=3155 data-nosnippet>3155</a>
-<a href=#3156 id=3156 data-nosnippet>3156</a><span class="doccomment">/// Why `QueryPcieFunction` (434) or `AllocPcieIrq` (435) refused.
-<a href=#3157 id=3157 data-nosnippet>3157</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#3158 id=3158 data-nosnippet>3158</a></span><span class="kw">pub enum </span>PcieFunctionError {
-<a href=#3159 id=3159 data-nosnippet>3159</a>    <span class="doccomment">/// No `PcieDriverCap`, or the caller does not own the BDF (418/424).
-<a href=#3160 id=3160 data-nosnippet>3160</a>    </span>PermissionDenied,
-<a href=#3161 id=3161 data-nosnippet>3161</a>    <span class="doccomment">/// 434: no such function.
-<a href=#3162 id=3162 data-nosnippet>3162</a>    </span>NotFound,
-<a href=#3163 id=3163 data-nosnippet>3163</a>    InvalidInput,
-<a href=#3164 id=3164 data-nosnippet>3164</a>    <span class="doccomment">/// 435: no allowed capability, firmware forbids MSI, or not x86. Keep polling.
-<a href=#3165 id=3165 data-nosnippet>3165</a>    </span>NotSupported,
-<a href=#3166 id=3166 data-nosnippet>3166</a>    <span class="doccomment">/// 435: vector space exhausted. Keep polling.
-<a href=#3167 id=3167 data-nosnippet>3167</a>    </span>NoVectors,
-<a href=#3168 id=3168 data-nosnippet>3168</a>    <span class="doccomment">/// The kernel wrote a record this v1 decoder refuses.
-<a href=#3169 id=3169 data-nosnippet>3169</a>    </span>Malformed,
-<a href=#3170 id=3170 data-nosnippet>3170</a>}
-<a href=#3171 id=3171 data-nosnippet>3171</a>
-<a href=#3172 id=3172 data-nosnippet>3172</a><span class="kw">fn </span>pcie_function_error(ret: usize) -&gt; PcieFunctionError {
-<a href=#3173 id=3173 data-nosnippet>3173</a>    <span class="kw">use </span>api::pcie_function <span class="kw">as </span>pf;
-<a href=#3174 id=3174 data-nosnippet>3174</a>    <span class="kw">match </span>ret {
-<a href=#3175 id=3175 data-nosnippet>3175</a>        pf::ERR_NOT_FOUND =&gt; PcieFunctionError::NotFound,
-<a href=#3176 id=3176 data-nosnippet>3176</a>        pf::ERR_INVALID_INPUT =&gt; PcieFunctionError::InvalidInput,
-<a href=#3177 id=3177 data-nosnippet>3177</a>        pf::ERR_NOT_SUPPORTED =&gt; PcieFunctionError::NotSupported,
-<a href=#3178 id=3178 data-nosnippet>3178</a>        pf::ERR_NO_VECTORS =&gt; PcieFunctionError::NoVectors,
-<a href=#3179 id=3179 data-nosnippet>3179</a>        <span class="kw">_ </span>=&gt; PcieFunctionError::PermissionDenied,
-<a href=#3180 id=3180 data-nosnippet>3180</a>    }
-<a href=#3181 id=3181 data-nosnippet>3181</a>}
-<a href=#3182 id=3182 data-nosnippet>3182</a>
-<a href=#3183 id=3183 data-nosnippet>3183</a><span class="doccomment">/// 434: read the record of the PCIe function at `bdf`, which the caller must
-<a href=#3184 id=3184 data-nosnippet>3184</a>/// own through `sys_find_pcie_device*`. The record carries every BAR, the
-<a href=#3185 id=3185 data-nosnippet>3185</a>/// MSI/MSI-X summary and up to 16 standard capabilities with their bytes.
-<a href=#3186 id=3186 data-nosnippet>3186</a></span><span class="kw">pub fn </span>sys_query_pcie_function(
-<a href=#3187 id=3187 data-nosnippet>3187</a>    bdf: u32,
-<a href=#3188 id=3188 data-nosnippet>3188</a>) -&gt; <span class="prelude-ty">Result</span>&lt;api::pcie_function::ViPcieFunctionV1, PcieFunctionError&gt; {
-<a href=#3189 id=3189 data-nosnippet>3189</a>    <span class="kw">use </span>api::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_RECORD_LEN};
-<a href=#3190 id=3190 data-nosnippet>3190</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; PCIE_FUNCTION_RECORD_LEN];
-<a href=#3191 id=3191 data-nosnippet>3191</a>    <span class="comment">// SAFETY: `buf` is a live, writable buffer of exactly the length passed.
-<a href=#3192 id=3192 data-nosnippet>3192</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3193 id=3193 data-nosnippet>3193</a>        syscall(
-<a href=#3194 id=3194 data-nosnippet>3194</a>            ViSyscall::QueryPcieFunction,
-<a href=#3195 id=3195 data-nosnippet>3195</a>            bdf <span class="kw">as </span>usize,
-<a href=#3196 id=3196 data-nosnippet>3196</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#3197 id=3197 data-nosnippet>3197</a>            buf.len(),
-<a href=#3198 id=3198 data-nosnippet>3198</a>            <span class="number">0</span>,
-<a href=#3199 id=3199 data-nosnippet>3199</a>        )
-<a href=#3200 id=3200 data-nosnippet>3200</a>    } <span class="kw">as </span>usize;
-<a href=#3201 id=3201 data-nosnippet>3201</a>    <span class="kw">if </span>ret != <span class="number">0 </span>{
-<a href=#3202 id=3202 data-nosnippet>3202</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(pcie_function_error(ret));
-<a href=#3203 id=3203 data-nosnippet>3203</a>    }
-<a href=#3204 id=3204 data-nosnippet>3204</a>    ViPcieFunctionV1::decode(<span class="kw-2">&amp;</span>buf).ok_or(PcieFunctionError::Malformed)
-<a href=#3205 id=3205 data-nosnippet>3205</a>}
-<a href=#3206 id=3206 data-nosnippet>3206</a>
-<a href=#3207 id=3207 data-nosnippet>3207</a><span class="doccomment">/// 435: allocate up to `want` (1..=32) MSI-X or MSI interrupts for the owned
-<a href=#3208 id=3208 data-nosnippet>3208</a>/// function at `bdf`; `mode` holds `api::pcie_function::IRQ_MODE_*` bits.
-<a href=#3209 id=3209 data-nosnippet>3209</a>/// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`,
-<a href=#3210 id=3210 data-nosnippet>3210</a>/// or on every held line at once with `ipc::wait_any(source::IRQ, ticks)`.
-<a href=#3211 id=3211 data-nosnippet>3211</a>/// A repeat call returns the same allocation; it lives until the caller dies.
-<a href=#3212 id=3212 data-nosnippet>3212</a></span><span class="kw">pub fn </span>sys_alloc_pcie_irq(
-<a href=#3213 id=3213 data-nosnippet>3213</a>    bdf: u32,
-<a href=#3214 id=3214 data-nosnippet>3214</a>    want: usize,
-<a href=#3215 id=3215 data-nosnippet>3215</a>    mode: usize,
-<a href=#3216 id=3216 data-nosnippet>3216</a>) -&gt; <span class="prelude-ty">Result</span>&lt;api::pcie_function::PcieIrqAlloc, PcieFunctionError&gt; {
-<a href=#3217 id=3217 data-nosnippet>3217</a>    <span class="comment">// SAFETY: scalar arguments only.
-<a href=#3218 id=3218 data-nosnippet>3218</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::AllocPcieIrq, bdf <span class="kw">as </span>usize, want, mode, <span class="number">0</span>) } <span class="kw">as </span>usize;
-<a href=#3219 id=3219 data-nosnippet>3219</a>    api::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
-<a href=#3220 id=3220 data-nosnippet>3220</a>}
-<a href=#3221 id=3221 data-nosnippet>3221</a>
-<a href=#3222 id=3222 data-nosnippet>3222</a><span class="doccomment">/// The `SystemPower` (436) action.
-<a href=#3223 id=3223 data-nosnippet>3223</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#3224 id=3224 data-nosnippet>3224</a></span><span class="kw">pub enum </span>SystemPowerAction {
-<a href=#3225 id=3225 data-nosnippet>3225</a>    Reboot,
-<a href=#3226 id=3226 data-nosnippet>3226</a>    PowerOff,
-<a href=#3227 id=3227 data-nosnippet>3227</a>}
-<a href=#3228 id=3228 data-nosnippet>3228</a>
-<a href=#3229 id=3229 data-nosnippet>3229</a><span class="doccomment">/// Why `SystemPower` (436) returned.
-<a href=#3230 id=3230 data-nosnippet>3230</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#3231 id=3231 data-nosnippet>3231</a></span><span class="kw">pub enum </span>SystemPowerError {
-<a href=#3232 id=3232 data-nosnippet>3232</a>    <span class="doccomment">/// No `SupervisorCap`, or the allowlist omits bit 49.
-<a href=#3233 id=3233 data-nosnippet>3233</a>    </span>PermissionDenied,
-<a href=#3234 id=3234 data-nosnippet>3234</a>    InvalidInput,
-<a href=#3235 id=3235 data-nosnippet>3235</a>    <span class="doccomment">/// Not x86_64, no static `\_S5_` or usable PM1 control block, or the
-<a href=#3236 id=3236 data-nosnippet>3236</a>    /// machine still ran after the sleep write.
-<a href=#3237 id=3237 data-nosnippet>3237</a>    </span>NotSupported,
-<a href=#3238 id=3238 data-nosnippet>3238</a>}
-<a href=#3239 id=3239 data-nosnippet>3239</a>
-<a href=#3240 id=3240 data-nosnippet>3240</a><span class="kw">fn </span>system_power_error(ret: usize) -&gt; SystemPowerError {
-<a href=#3241 id=3241 data-nosnippet>3241</a>    <span class="kw">use </span>api::syscall::system_power <span class="kw">as </span>sp;
-<a href=#3242 id=3242 data-nosnippet>3242</a>    <span class="kw">match </span>ret {
-<a href=#3243 id=3243 data-nosnippet>3243</a>        sp::ERR_INVALID_INPUT =&gt; SystemPowerError::InvalidInput,
-<a href=#3244 id=3244 data-nosnippet>3244</a>        sp::ERR_NOT_SUPPORTED =&gt; SystemPowerError::NotSupported,
-<a href=#3245 id=3245 data-nosnippet>3245</a>        <span class="kw">_ </span>=&gt; SystemPowerError::PermissionDenied,
-<a href=#3246 id=3246 data-nosnippet>3246</a>    }
-<a href=#3247 id=3247 data-nosnippet>3247</a>}
-<a href=#3248 id=3248 data-nosnippet>3248</a>
-<a href=#3249 id=3249 data-nosnippet>3249</a><span class="doccomment">/// 436: reset or power off the machine. Requires `SupervisorCap`; orderly
-<a href=#3250 id=3250 data-nosnippet>3250</a>/// shutdown is the caller's job before this call. Returns only when the kernel
-<a href=#3251 id=3251 data-nosnippet>3251</a>/// refused or the action did not take effect.
-<a href=#3252 id=3252 data-nosnippet>3252</a></span><span class="kw">pub fn </span>sys_system_power(action: SystemPowerAction) -&gt; SystemPowerError {
-<a href=#3253 id=3253 data-nosnippet>3253</a>    <span class="kw">use </span>api::syscall::system_power <span class="kw">as </span>sp;
-<a href=#3254 id=3254 data-nosnippet>3254</a>    <span class="kw">let </span>a0 = <span class="kw">match </span>action {
-<a href=#3255 id=3255 data-nosnippet>3255</a>        SystemPowerAction::Reboot =&gt; sp::ACTION_REBOOT,
-<a href=#3256 id=3256 data-nosnippet>3256</a>        SystemPowerAction::PowerOff =&gt; sp::ACTION_POWEROFF,
-<a href=#3257 id=3257 data-nosnippet>3257</a>    };
-<a href=#3258 id=3258 data-nosnippet>3258</a>    <span class="comment">// SAFETY: scalar arguments only.
-<a href=#3259 id=3259 data-nosnippet>3259</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::SystemPower, a0, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) } <span class="kw">as </span>usize;
-<a href=#3260 id=3260 data-nosnippet>3260</a>    system_power_error(ret)
-<a href=#3261 id=3261 data-nosnippet>3261</a>}
-<a href=#3262 id=3262 data-nosnippet>3262</a>
-<a href=#3263 id=3263 data-nosnippet>3263</a><span class="doccomment">/// Why a DMA export call (437-439) was refused ([`api::dma_export`]).
-<a href=#3264 id=3264 data-nosnippet>3264</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-<a href=#3265 id=3265 data-nosnippet>3265</a></span><span class="kw">pub enum </span>DmaExportError {
-<a href=#3266 id=3266 data-nosnippet>3266</a>    <span class="doccomment">/// Holder not eligible, range not owned, not the lease holder, or no
-<a href=#3267 id=3267 data-nosnippet>3267</a>    /// `PcieDriverCap` / BDF ownership / allowlist bit 48 (438).
-<a href=#3268 id=3268 data-nosnippet>3268</a>    </span>PermissionDenied,
-<a href=#3269 id=3269 data-nosnippet>3269</a>    <span class="doccomment">/// No live provider (437); unknown, revoked or owner-dead export (438/439).
-<a href=#3270 id=3270 data-nosnippet>3270</a>    </span>NotFound,
-<a href=#3271 id=3271 data-nosnippet>3271</a>    InvalidInput,
-<a href=#3272 id=3272 data-nosnippet>3272</a>    <span class="doccomment">/// No translating remapper: exports never fall back to identity DMA.
-<a href=#3273 id=3273 data-nosnippet>3273</a>    </span>NotSupported,
-<a href=#3274 id=3274 data-nosnippet>3274</a>    <span class="doccomment">/// Lease table, window space, page tables or the holder's DMA quota.
-<a href=#3275 id=3275 data-nosnippet>3275</a>    </span>OutOfMemory,
-<a href=#3276 id=3276 data-nosnippet>3276</a>    <span class="doccomment">/// 439: invalidation unacknowledged; the kernel retries, call again.
-<a href=#3277 id=3277 data-nosnippet>3277</a>    </span>TryAgain,
-<a href=#3278 id=3278 data-nosnippet>3278</a>    <span class="doccomment">/// 438: window published but its invalidation unacknowledged.
-<a href=#3279 id=3279 data-nosnippet>3279</a>    </span>Unconfirmed,
-<a href=#3280 id=3280 data-nosnippet>3280</a>    <span class="doccomment">/// The kernel wrote a record this v1 decoder refuses.
-<a href=#3281 id=3281 data-nosnippet>3281</a>    </span>Malformed,
-<a href=#3282 id=3282 data-nosnippet>3282</a>}
-<a href=#3283 id=3283 data-nosnippet>3283</a>
-<a href=#3284 id=3284 data-nosnippet>3284</a><span class="kw">fn </span>dma_export_error(ret: usize) -&gt; DmaExportError {
-<a href=#3285 id=3285 data-nosnippet>3285</a>    <span class="kw">use </span>api::dma_export <span class="kw">as </span>de;
-<a href=#3286 id=3286 data-nosnippet>3286</a>    <span class="kw">match </span>ret {
-<a href=#3287 id=3287 data-nosnippet>3287</a>        de::ERR_FILE_NOT_FOUND =&gt; DmaExportError::NotFound,
-<a href=#3288 id=3288 data-nosnippet>3288</a>        de::ERR_INVALID_INPUT | de::ERR_BUFFER_TOO_SMALL =&gt; DmaExportError::InvalidInput,
-<a href=#3289 id=3289 data-nosnippet>3289</a>        de::ERR_NOT_SUPPORTED =&gt; DmaExportError::NotSupported,
-<a href=#3290 id=3290 data-nosnippet>3290</a>        de::ERR_OUT_OF_MEMORY =&gt; DmaExportError::OutOfMemory,
-<a href=#3291 id=3291 data-nosnippet>3291</a>        de::ERR_TRY_AGAIN =&gt; DmaExportError::TryAgain,
-<a href=#3292 id=3292 data-nosnippet>3292</a>        de::ERR_UNKNOWN =&gt; DmaExportError::Unconfirmed,
-<a href=#3293 id=3293 data-nosnippet>3293</a>        <span class="kw">_ </span>=&gt; DmaExportError::PermissionDenied,
-<a href=#3294 id=3294 data-nosnippet>3294</a>    }
-<a href=#3295 id=3295 data-nosnippet>3295</a>}
-<a href=#3296 id=3296 data-nosnippet>3296</a>
-<a href=#3297 id=3297 data-nosnippet>3297</a><span class="doccomment">/// Decode a 437 return: an export id (`1..=isize::MAX`) or a sentinel.
-<a href=#3298 id=3298 data-nosnippet>3298</a></span><span class="kw">fn </span>decode_export_id(ret: usize) -&gt; <span class="prelude-ty">Result</span>&lt;u64, DmaExportError&gt; {
-<a href=#3299 id=3299 data-nosnippet>3299</a>    <span class="kw">if </span>ret == <span class="number">0 </span>|| ret &gt; isize::MAX <span class="kw">as </span>usize {
-<a href=#3300 id=3300 data-nosnippet>3300</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
-<a href=#3301 id=3301 data-nosnippet>3301</a>    } <span class="kw">else </span>{
-<a href=#3302 id=3302 data-nosnippet>3302</a>        <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>u64)
-<a href=#3303 id=3303 data-nosnippet>3303</a>    }
-<a href=#3304 id=3304 data-nosnippet>3304</a>}
-<a href=#3305 id=3305 data-nosnippet>3305</a>
-<a href=#3306 id=3306 data-nosnippet>3306</a><span class="doccomment">/// 437: export `[va, va + len)` of this Cell's own memory (inside a Grant it
-<a href=#3307 id=3307 data-nosnippet>3307</a>/// owns) to the live provider of `holder_service`; `flags` may carry
-<a href=#3308 id=3308 data-nosnippet>3308</a>/// [`api::dma_export::EXPORT_DEVICE_WRITE`]. The range stays locked (it cannot
-<a href=#3309 id=3309 data-nosnippet>3309</a>/// be freed) until the lease is revoked. Returns the export id to send to the
-<a href=#3310 id=3310 data-nosnippet>3310</a>/// holder beside the request it backs.
-<a href=#3311 id=3311 data-nosnippet>3311</a></span><span class="kw">pub fn </span>sys_export_dma_range(
-<a href=#3312 id=3312 data-nosnippet>3312</a>    va: usize,
-<a href=#3313 id=3313 data-nosnippet>3313</a>    len: usize,
-<a href=#3314 id=3314 data-nosnippet>3314</a>    holder_service: u16,
-<a href=#3315 id=3315 data-nosnippet>3315</a>    flags: u16,
-<a href=#3316 id=3316 data-nosnippet>3316</a>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, DmaExportError&gt; {
-<a href=#3317 id=3317 data-nosnippet>3317</a>    <span class="comment">// SAFETY: scalar arguments only; the kernel validates the range itself.
-<a href=#3318 id=3318 data-nosnippet>3318</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3319 id=3319 data-nosnippet>3319</a>        syscall(
-<a href=#3320 id=3320 data-nosnippet>3320</a>            ViSyscall::ExportDmaRange,
-<a href=#3321 id=3321 data-nosnippet>3321</a>            va,
-<a href=#3322 id=3322 data-nosnippet>3322</a>            len,
-<a href=#3323 id=3323 data-nosnippet>3323</a>            holder_service <span class="kw">as </span>usize,
-<a href=#3324 id=3324 data-nosnippet>3324</a>            flags <span class="kw">as </span>usize,
-<a href=#3325 id=3325 data-nosnippet>3325</a>        )
-<a href=#3326 id=3326 data-nosnippet>3326</a>    } <span class="kw">as </span>usize;
-<a href=#3327 id=3327 data-nosnippet>3327</a>    decode_export_id(ret)
-<a href=#3328 id=3328 data-nosnippet>3328</a>}
-<a href=#3329 id=3329 data-nosnippet>3329</a>
-<a href=#3330 id=3330 data-nosnippet>3330</a><span class="doccomment">/// 438: map export `export_id` into the caller's VT-d domain for the owned
-<a href=#3331 id=3331 data-nosnippet>3331</a>/// function at `bdf` and return its record (window IOVA and owner identity).
-<a href=#3332 id=3332 data-nosnippet>3332</a>/// The holder must check `owner_cell_id`/`owner_generation` against the client
-<a href=#3333 id=3333 data-nosnippet>3333</a>/// that sent the id. A repeat call returns the same record.
-<a href=#3334 id=3334 data-nosnippet>3334</a></span><span class="kw">pub fn </span>sys_map_dma_export(
-<a href=#3335 id=3335 data-nosnippet>3335</a>    export_id: u64,
-<a href=#3336 id=3336 data-nosnippet>3336</a>    bdf: u32,
-<a href=#3337 id=3337 data-nosnippet>3337</a>) -&gt; <span class="prelude-ty">Result</span>&lt;api::dma_export::ViDmaExportV1, DmaExportError&gt; {
-<a href=#3338 id=3338 data-nosnippet>3338</a>    <span class="kw">use </span>api::dma_export::{ViDmaExportV1, DMA_EXPORT_RECORD_LEN};
-<a href=#3339 id=3339 data-nosnippet>3339</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; DMA_EXPORT_RECORD_LEN];
-<a href=#3340 id=3340 data-nosnippet>3340</a>    sys_map_dma_export_into(export_id, bdf, <span class="kw-2">&amp;mut </span>buf)<span class="question-mark">?</span>;
-<a href=#3341 id=3341 data-nosnippet>3341</a>    ViDmaExportV1::decode(<span class="kw-2">&amp;</span>buf).map_err(|<span class="kw">_</span>| DmaExportError::Malformed)
-<a href=#3342 id=3342 data-nosnippet>3342</a>}
-<a href=#3343 id=3343 data-nosnippet>3343</a>
-<a href=#3344 id=3344 data-nosnippet>3344</a><span class="doccomment">/// 438 with a caller-chosen output buffer, passed with its own length. The
-<a href=#3345 id=3345 data-nosnippet>3345</a>/// kernel accepts exactly [`api::dma_export::DMA_EXPORT_RECORD_LEN`] bytes and
-<a href=#3346 id=3346 data-nosnippet>3346</a>/// refuses any other length with [`DmaExportError::InvalidInput`] before any
-<a href=#3347 id=3347 data-nosnippet>3347</a>/// effect; prefer [`sys_map_dma_export`], which decodes the record.
-<a href=#3348 id=3348 data-nosnippet>3348</a></span><span class="kw">pub fn </span>sys_map_dma_export_into(
-<a href=#3349 id=3349 data-nosnippet>3349</a>    export_id: u64,
-<a href=#3350 id=3350 data-nosnippet>3350</a>    bdf: u32,
-<a href=#3351 id=3351 data-nosnippet>3351</a>    out: <span class="kw-2">&amp;mut </span>[u8],
-<a href=#3352 id=3352 data-nosnippet>3352</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), DmaExportError&gt; {
-<a href=#3353 id=3353 data-nosnippet>3353</a>    <span class="comment">// SAFETY: `out` is a live, exclusively borrowed buffer of exactly the
-<a href=#3354 id=3354 data-nosnippet>3354</a>    // length passed; the kernel writes at most that many bytes.
-<a href=#3355 id=3355 data-nosnippet>3355</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
-<a href=#3356 id=3356 data-nosnippet>3356</a>        syscall(
-<a href=#3357 id=3357 data-nosnippet>3357</a>            ViSyscall::MapDmaExport,
-<a href=#3358 id=3358 data-nosnippet>3358</a>            export_id <span class="kw">as </span>usize,
-<a href=#3359 id=3359 data-nosnippet>3359</a>            bdf <span class="kw">as </span>usize,
-<a href=#3360 id=3360 data-nosnippet>3360</a>            out.as_mut_ptr() <span class="kw">as </span>usize,
-<a href=#3361 id=3361 data-nosnippet>3361</a>            out.len(),
-<a href=#3362 id=3362 data-nosnippet>3362</a>        )
-<a href=#3363 id=3363 data-nosnippet>3363</a>    } <span class="kw">as </span>usize;
-<a href=#3364 id=3364 data-nosnippet>3364</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
-<a href=#3365 id=3365 data-nosnippet>3365</a>        <span class="prelude-val">Ok</span>(())
-<a href=#3366 id=3366 data-nosnippet>3366</a>    } <span class="kw">else </span>{
-<a href=#3367 id=3367 data-nosnippet>3367</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
-<a href=#3368 id=3368 data-nosnippet>3368</a>    }
-<a href=#3369 id=3369 data-nosnippet>3369</a>}
-<a href=#3370 id=3370 data-nosnippet>3370</a>
-<a href=#3371 id=3371 data-nosnippet>3371</a><span class="doccomment">/// 439: revoke export `export_id` (owner or holder). `Ok` once the device can
-<a href=#3372 id=3372 data-nosnippet>3372</a>/// no longer reach the memory; [`DmaExportError::TryAgain`] while the window
-<a href=#3373 id=3373 data-nosnippet>3373</a>/// drain is unacknowledged (the range stays locked; the kernel also retries).
-<a href=#3374 id=3374 data-nosnippet>3374</a></span><span class="kw">pub fn </span>sys_revoke_dma_export(export_id: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), DmaExportError&gt; {
-<a href=#3375 id=3375 data-nosnippet>3375</a>    <span class="comment">// SAFETY: scalar arguments only.
-<a href=#3376 id=3376 data-nosnippet>3376</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RevokeDmaExport, export_id <span class="kw">as </span>usize, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) } <span class="kw">as </span>usize;
-<a href=#3377 id=3377 data-nosnippet>3377</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
-<a href=#3378 id=3378 data-nosnippet>3378</a>        <span class="prelude-val">Ok</span>(())
-<a href=#3379 id=3379 data-nosnippet>3379</a>    } <span class="kw">else </span>{
-<a href=#3380 id=3380 data-nosnippet>3380</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
-<a href=#3381 id=3381 data-nosnippet>3381</a>    }
-<a href=#3382 id=3382 data-nosnippet>3382</a>}
-<a href=#3383 id=3383 data-nosnippet>3383</a>
-<a href=#3384 id=3384 data-nosnippet>3384</a><span class="doccomment">/// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
-<a href=#3385 id=3385 data-nosnippet>3385</a>///
-<a href=#3386 id=3386 data-nosnippet>3386</a>/// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,
-<a href=#3387 id=3387 data-nosnippet>3387</a>/// `Err(PermissionDenied)` when the caller lacks `SupervisorCap`, and
-<a href=#3388 id=3388 data-nosnippet>3388</a>/// `Err(Unknown)` when `target_tid` is not a live task.
-<a href=#3389 id=3389 data-nosnippet>3389</a>///
-<a href=#3390 id=3390 data-nosnippet>3390</a>/// Requires `SupervisorCap` (kernel-granted — same gate as FreezeCell/ResumeCell/KillCell).
-<a href=#3391 id=3391 data-nosnippet>3391</a></span><span class="kw">pub fn </span>sys_query_hotswap_ready(target_tid: usize) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
-<a href=#3392 id=3392 data-nosnippet>3392</a>    <span class="comment">// SAFETY: pure register syscall; kernel reads task.hotswap_ready under the SCHEDULER lock.
-<a href=#3393 id=3393 data-nosnippet>3393</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::QueryHotswapReady, target_tid, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
-<a href=#3394 id=3394 data-nosnippet>3394</a>    <span class="kw">match </span>ret {
-<a href=#3395 id=3395 data-nosnippet>3395</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
-<a href=#3396 id=3396 data-nosnippet>3396</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
-<a href=#3397 id=3397 data-nosnippet>3397</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied), <span class="comment">// PermissionDenied or unknown tid (FileNotFound)
-<a href=#3398 id=3398 data-nosnippet>3398</a>    </span>}
-<a href=#3399 id=3399 data-nosnippet>3399</a>}
-<a href=#3400 id=3400 data-nosnippet>3400</a>
-<a href=#3401 id=3401 data-nosnippet>3401</a><span class="attr">#[cfg(test)]
-<a href=#3402 id=3402 data-nosnippet>3402</a></span><span class="kw">mod </span>tests {
-<a href=#3403 id=3403 data-nosnippet>3403</a>    <span class="kw">use </span>super::{
-<a href=#3404 id=3404 data-nosnippet>3404</a>        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result,
-<a href=#3405 id=3405 data-nosnippet>3405</a>        system_power_error, SyscallError, SyscallResult, SystemPowerError, WaitCompletionResult,
-<a href=#3406 id=3406 data-nosnippet>3406</a>    };
-<a href=#3407 id=3407 data-nosnippet>3407</a>    <span class="kw">use </span>api::completion::{source, ViCompletion, COMPLETION_LEN};
-<a href=#3408 id=3408 data-nosnippet>3408</a>
-<a href=#3409 id=3409 data-nosnippet>3409</a>    <span class="attr">#[test]
-<a href=#3410 id=3410 data-nosnippet>3410</a>    </span><span class="kw">fn </span>spawn_result_decoder_preserves_additive_oom() {
-<a href=#3411 id=3411 data-nosnippet>3411</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_spawn_result(<span class="number">7</span>), SyscallResult::Ok(<span class="number">7</span>)));
-<a href=#3412 id=3412 data-nosnippet>3412</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#3413 id=3413 data-nosnippet>3413</a>            decode_spawn_result(-<span class="number">1</span>),
-<a href=#3414 id=3414 data-nosnippet>3414</a>            SyscallResult::Err(SyscallError::Unknown)
-<a href=#3415 id=3415 data-nosnippet>3415</a>        ));
-<a href=#3416 id=3416 data-nosnippet>3416</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#3417 id=3417 data-nosnippet>3417</a>            decode_spawn_result(-<span class="number">2</span>),
-<a href=#3418 id=3418 data-nosnippet>3418</a>            SyscallResult::Err(SyscallError::OutOfMemory)
-<a href=#3419 id=3419 data-nosnippet>3419</a>        ));
-<a href=#3420 id=3420 data-nosnippet>3420</a>    }
-<a href=#3421 id=3421 data-nosnippet>3421</a>
-<a href=#3422 id=3422 data-nosnippet>3422</a>    <span class="attr">#[test]
-<a href=#3423 id=3423 data-nosnippet>3423</a>    </span><span class="kw">fn </span>snapshot_result_decoder_preserves_denial_and_oom() {
-<a href=#3424 id=3424 data-nosnippet>3424</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_snapshot_result(<span class="number">0</span>), SyscallResult::Ok(<span class="number">0</span>)));
-<a href=#3425 id=3425 data-nosnippet>3425</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_snapshot_result(<span class="number">17</span>), SyscallResult::Ok(<span class="number">17</span>)));
-<a href=#3426 id=3426 data-nosnippet>3426</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#3427 id=3427 data-nosnippet>3427</a>            decode_snapshot_result(-<span class="number">1</span>),
-<a href=#3428 id=3428 data-nosnippet>3428</a>            SyscallResult::Err(SyscallError::PermissionDenied)
-<a href=#3429 id=3429 data-nosnippet>3429</a>        ));
-<a href=#3430 id=3430 data-nosnippet>3430</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#3431 id=3431 data-nosnippet>3431</a>            decode_snapshot_result(-<span class="number">2</span>),
-<a href=#3432 id=3432 data-nosnippet>3432</a>            SyscallResult::Err(SyscallError::OutOfMemory)
-<a href=#3433 id=3433 data-nosnippet>3433</a>        ));
-<a href=#3434 id=3434 data-nosnippet>3434</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#3435 id=3435 data-nosnippet>3435</a>            decode_snapshot_result(-<span class="number">9</span>),
-<a href=#3436 id=3436 data-nosnippet>3436</a>            SyscallResult::Err(SyscallError::Unknown)
-<a href=#3437 id=3437 data-nosnippet>3437</a>        ));
-<a href=#3438 id=3438 data-nosnippet>3438</a>    }
-<a href=#3439 id=3439 data-nosnippet>3439</a>
-<a href=#3440 id=3440 data-nosnippet>3440</a>    <span class="attr">#[test]
-<a href=#3441 id=3441 data-nosnippet>3441</a>    </span><span class="kw">fn </span>wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results() {
-<a href=#3442 id=3442 data-nosnippet>3442</a>        <span class="kw">let </span>completion = ViCompletion {
-<a href=#3443 id=3443 data-nosnippet>3443</a>            slot: <span class="number">7</span>,
-<a href=#3444 id=3444 data-nosnippet>3444</a>            source: source::NET_RX,
-<a href=#3445 id=3445 data-nosnippet>3445</a>            result: source::NET_RX <span class="kw">as </span>i64,
-<a href=#3446 id=3446 data-nosnippet>3446</a>        };
-<a href=#3447 id=3447 data-nosnippet>3447</a>        <span class="kw">let </span>record = completion.to_bytes();
-<a href=#3448 id=3448 data-nosnippet>3448</a>
-<a href=#3449 id=3449 data-nosnippet>3449</a>        <span class="macro">assert_eq!</span>(
-<a href=#3450 id=3450 data-nosnippet>3450</a>            decode_wait_completion_result(<span class="number">0</span>, <span class="kw-2">&amp;</span>record),
-<a href=#3451 id=3451 data-nosnippet>3451</a>            WaitCompletionResult::NoRecord
-<a href=#3452 id=3452 data-nosnippet>3452</a>        );
-<a href=#3453 id=3453 data-nosnippet>3453</a>        <span class="macro">assert_eq!</span>(
-<a href=#3454 id=3454 data-nosnippet>3454</a>            decode_wait_completion_result(<span class="number">1</span>, <span class="kw-2">&amp;</span>record),
-<a href=#3455 id=3455 data-nosnippet>3455</a>            WaitCompletionResult::Completion(completion)
-<a href=#3456 id=3456 data-nosnippet>3456</a>        );
-<a href=#3457 id=3457 data-nosnippet>3457</a>        <span class="macro">assert_eq!</span>(
-<a href=#3458 id=3458 data-nosnippet>3458</a>            decode_wait_completion_result(-<span class="number">1</span>, <span class="kw-2">&amp;</span>record),
-<a href=#3459 id=3459 data-nosnippet>3459</a>            WaitCompletionResult::ErrorOrInvalid(-<span class="number">1</span>)
-<a href=#3460 id=3460 data-nosnippet>3460</a>        );
-<a href=#3461 id=3461 data-nosnippet>3461</a>        <span class="macro">assert_eq!</span>(
-<a href=#3462 id=3462 data-nosnippet>3462</a>            decode_wait_completion_result(<span class="number">2</span>, <span class="kw-2">&amp;</span>record),
-<a href=#3463 id=3463 data-nosnippet>3463</a>            WaitCompletionResult::ErrorOrInvalid(<span class="number">2</span>)
-<a href=#3464 id=3464 data-nosnippet>3464</a>        );
-<a href=#3465 id=3465 data-nosnippet>3465</a>        <span class="macro">assert_eq!</span>(
-<a href=#3466 id=3466 data-nosnippet>3466</a>            decode_wait_completion_result(<span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">0u8</span>; COMPLETION_LEN]),
-<a href=#3467 id=3467 data-nosnippet>3467</a>            WaitCompletionResult::ErrorOrInvalid(<span class="number">1</span>)
-<a href=#3468 id=3468 data-nosnippet>3468</a>        );
-<a href=#3469 id=3469 data-nosnippet>3469</a>    }
-<a href=#3470 id=3470 data-nosnippet>3470</a>
-<a href=#3471 id=3471 data-nosnippet>3471</a>    <span class="attr">#[test]
-<a href=#3472 id=3472 data-nosnippet>3472</a>    </span><span class="kw">fn </span>system_power_decoder_names_each_sentinel() {
-<a href=#3473 id=3473 data-nosnippet>3473</a>        <span class="kw">use </span>api::syscall::system_power <span class="kw">as </span>sp;
-<a href=#3474 id=3474 data-nosnippet>3474</a>        <span class="macro">assert_eq!</span>(
-<a href=#3475 id=3475 data-nosnippet>3475</a>            system_power_error(sp::ERR_INVALID_INPUT),
-<a href=#3476 id=3476 data-nosnippet>3476</a>            SystemPowerError::InvalidInput
-<a href=#3477 id=3477 data-nosnippet>3477</a>        );
-<a href=#3478 id=3478 data-nosnippet>3478</a>        <span class="macro">assert_eq!</span>(
-<a href=#3479 id=3479 data-nosnippet>3479</a>            system_power_error(sp::ERR_NOT_SUPPORTED),
-<a href=#3480 id=3480 data-nosnippet>3480</a>            SystemPowerError::NotSupported
-<a href=#3481 id=3481 data-nosnippet>3481</a>        );
-<a href=#3482 id=3482 data-nosnippet>3482</a>        <span class="macro">assert_eq!</span>(
-<a href=#3483 id=3483 data-nosnippet>3483</a>            system_power_error(sp::ERR_PERMISSION_DENIED),
-<a href=#3484 id=3484 data-nosnippet>3484</a>            SystemPowerError::PermissionDenied
-<a href=#3485 id=3485 data-nosnippet>3485</a>        );
-<a href=#3486 id=3486 data-nosnippet>3486</a>        <span class="macro">assert_eq!</span>(system_power_error(<span class="number">0</span>), SystemPowerError::PermissionDenied);
-<a href=#3487 id=3487 data-nosnippet>3487</a>    }
-<a href=#3488 id=3488 data-nosnippet>3488</a>
-<a href=#3489 id=3489 data-nosnippet>3489</a>    <span class="doccomment">/// 437-439: an id is any value in `1..=isize::MAX`; every sentinel decodes
-<a href=#3490 id=3490 data-nosnippet>3490</a>    /// to its own error.
-<a href=#3491 id=3491 data-nosnippet>3491</a>    </span><span class="attr">#[test]
-<a href=#3492 id=3492 data-nosnippet>3492</a>    </span><span class="kw">fn </span>dma_export_decoder_names_each_sentinel() {
-<a href=#3493 id=3493 data-nosnippet>3493</a>        <span class="kw">use </span>super::{decode_export_id, DmaExportError <span class="kw">as </span>E};
-<a href=#3494 id=3494 data-nosnippet>3494</a>        <span class="kw">use </span>api::dma_export <span class="kw">as </span>de;
-<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="macro">assert_eq!</span>(decode_export_id(<span class="number">1</span>), <span class="prelude-val">Ok</span>(<span class="number">1</span>));
-<a href=#3496 id=3496 data-nosnippet>3496</a>        <span class="macro">assert_eq!</span>(decode_export_id(isize::MAX <span class="kw">as </span>usize), <span class="prelude-val">Ok</span>(isize::MAX <span class="kw">as </span>u64));
-<a href=#3497 id=3497 data-nosnippet>3497</a>        <span class="kw">for </span>(ret, want) <span class="kw">in </span>[
-<a href=#3498 id=3498 data-nosnippet>3498</a>            (de::ERR_PERMISSION_DENIED, E::PermissionDenied),
-<a href=#3499 id=3499 data-nosnippet>3499</a>            (de::ERR_TRY_AGAIN, E::TryAgain),
-<a href=#3500 id=3500 data-nosnippet>3500</a>            (de::ERR_FILE_NOT_FOUND, E::NotFound),
-<a href=#3501 id=3501 data-nosnippet>3501</a>            (de::ERR_INVALID_INPUT, E::InvalidInput),
-<a href=#3502 id=3502 data-nosnippet>3502</a>            (de::ERR_NOT_SUPPORTED, E::NotSupported),
-<a href=#3503 id=3503 data-nosnippet>3503</a>            (de::ERR_OUT_OF_MEMORY, E::OutOfMemory),
-<a href=#3504 id=3504 data-nosnippet>3504</a>            (de::ERR_UNKNOWN, E::Unconfirmed),
-<a href=#3505 id=3505 data-nosnippet>3505</a>            (<span class="number">0</span>, E::PermissionDenied),
-<a href=#3506 id=3506 data-nosnippet>3506</a>        ] {
-<a href=#3507 id=3507 data-nosnippet>3507</a>            <span class="macro">assert_eq!</span>(decode_export_id(ret), <span class="prelude-val">Err</span>(want), <span class="string">"{ret:#x}"</span>);
-<a href=#3508 id=3508 data-nosnippet>3508</a>        }
-<a href=#3509 id=3509 data-nosnippet>3509</a>    }
-<a href=#3510 id=3510 data-nosnippet>3510</a>}
+<a href=#3075 id=3075 data-nosnippet>3075</a>            <span class="number">0</span>,
+<a href=#3076 id=3076 data-nosnippet>3076</a>        )
+<a href=#3077 id=3077 data-nosnippet>3077</a>    };
+<a href=#3078 id=3078 data-nosnippet>3078</a>    <span class="kw">match </span>ret {
+<a href=#3079 id=3079 data-nosnippet>3079</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#3080 id=3080 data-nosnippet>3080</a>        <span class="comment">// Unusable index or unsupported rate: the call did not apply.
+<a href=#3081 id=3081 data-nosnippet>3081</a>        </span>-<span class="number">2 </span>| -<span class="number">3 </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::InvalidCommand),
+<a href=#3082 id=3082 data-nosnippet>3082</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
+<a href=#3083 id=3083 data-nosnippet>3083</a>    }
+<a href=#3084 id=3084 data-nosnippet>3084</a>}
+<a href=#3085 id=3085 data-nosnippet>3085</a>
+<a href=#3086 id=3086 data-nosnippet>3086</a><span class="doccomment">/// Find the first PCIe device matching `(class, subclass, prog_if)`.
+<a href=#3087 id=3087 data-nosnippet>3087</a>///
+<a href=#3088 id=3088 data-nosnippet>3088</a>/// On success (`Ok(true)`), `info` is populated with the BDF and BAR0 address.
+<a href=#3089 id=3089 data-nosnippet>3089</a>/// The kernel also records BDF → caller ownership in the Resource Registry for
+<a href=#3090 id=3090 data-nosnippet>3090</a>/// subsequent IOMMU authorization.
+<a href=#3091 id=3091 data-nosnippet>3091</a>///
+<a href=#3092 id=3092 data-nosnippet>3092</a>/// Requires `PcieDriverCap` (kernel-granted ZST — init grants it to Driver Cells
+<a href=#3093 id=3093 data-nosnippet>3093</a>/// at spawn via direct TCB write, not via manifest).
+<a href=#3094 id=3094 data-nosnippet>3094</a>///
+<a href=#3095 id=3095 data-nosnippet>3095</a>/// Returns `Ok(false)` if no matching device is present (VirtIO fallback case).
+<a href=#3096 id=3096 data-nosnippet>3096</a>///
+<a href=#3097 id=3097 data-nosnippet>3097</a>/// Two Driver Cells that share a class (the two Ethernet cells on `02:00:00`)
+<a href=#3098 id=3098 data-nosnippet>3098</a>/// cannot each name their controller through this query; they use
+<a href=#3099 id=3099 data-nosnippet>3099</a>/// [`sys_find_pcie_device_by_vendor`] instead.
+<a href=#3100 id=3100 data-nosnippet>3100</a></span><span class="kw">pub fn </span>sys_find_pcie_device(
+<a href=#3101 id=3101 data-nosnippet>3101</a>    class: u8,
+<a href=#3102 id=3102 data-nosnippet>3102</a>    subclass: u8,
+<a href=#3103 id=3103 data-nosnippet>3103</a>    prog_if: u8,
+<a href=#3104 id=3104 data-nosnippet>3104</a>    info: <span class="kw-2">&amp;mut </span>PcieDeviceInfo,
+<a href=#3105 id=3105 data-nosnippet>3105</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
+<a href=#3106 id=3106 data-nosnippet>3106</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
+<a href=#3107 id=3107 data-nosnippet>3107</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+<a href=#3108 id=3108 data-nosnippet>3108</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3109 id=3109 data-nosnippet>3109</a>        syscall(
+<a href=#3110 id=3110 data-nosnippet>3110</a>            ViSyscall::FindPcieDevice,
+<a href=#3111 id=3111 data-nosnippet>3111</a>            class <span class="kw">as </span>usize,
+<a href=#3112 id=3112 data-nosnippet>3112</a>            subclass <span class="kw">as </span>usize,
+<a href=#3113 id=3113 data-nosnippet>3113</a>            prog_if <span class="kw">as </span>usize,
+<a href=#3114 id=3114 data-nosnippet>3114</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>PcieDeviceInfo <span class="kw">as </span>usize,
+<a href=#3115 id=3115 data-nosnippet>3115</a>        )
+<a href=#3116 id=3116 data-nosnippet>3116</a>    };
+<a href=#3117 id=3117 data-nosnippet>3117</a>    <span class="kw">match </span>ret {
+<a href=#3118 id=3118 data-nosnippet>3118</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
+<a href=#3119 id=3119 data-nosnippet>3119</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
+<a href=#3120 id=3120 data-nosnippet>3120</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
+<a href=#3121 id=3121 data-nosnippet>3121</a>    }
+<a href=#3122 id=3122 data-nosnippet>3122</a>}
+<a href=#3123 id=3123 data-nosnippet>3123</a>
+<a href=#3124 id=3124 data-nosnippet>3124</a><span class="doccomment">/// Find the first PCIe device with an exact `(vendor_id, device_id)`.
+<a href=#3125 id=3125 data-nosnippet>3125</a>///
+<a href=#3126 id=3126 data-nosnippet>3126</a>/// Populates `info` exactly like [`sys_find_pcie_device`]; the difference is the
+<a href=#3127 id=3127 data-nosnippet>3127</a>/// match — an exact identity instead of a class triple. This is how a Driver
+<a href=#3128 id=3128 data-nosnippet>3128</a>/// Cell claims its controller when another cell drives a different family in the
+<a href=#3129 id=3129 data-nosnippet>3129</a>/// same class: each names its own vendor:device, so neither depends on the other
+<a href=#3130 id=3130 data-nosnippet>3130</a>/// releasing the device.
+<a href=#3131 id=3131 data-nosnippet>3131</a>///
+<a href=#3132 id=3132 data-nosnippet>3132</a>/// Requires `PcieDriverCap`. Returns `Ok(false)` when the device is absent or
+<a href=#3133 id=3133 data-nosnippet>3133</a>/// when no Driver Cell in this image drives that Ethernet ID (the family gate).
+<a href=#3134 id=3134 data-nosnippet>3134</a></span><span class="kw">pub fn </span>sys_find_pcie_device_by_vendor(
+<a href=#3135 id=3135 data-nosnippet>3135</a>    vendor_id: u16,
+<a href=#3136 id=3136 data-nosnippet>3136</a>    device_id: u16,
+<a href=#3137 id=3137 data-nosnippet>3137</a>    info: <span class="kw-2">&amp;mut </span>PcieDeviceInfo,
+<a href=#3138 id=3138 data-nosnippet>3138</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
+<a href=#3139 id=3139 data-nosnippet>3139</a>    <span class="comment">// SAFETY: `info` is a valid mutable reference; kernel writes exactly 48 bytes.
+<a href=#3140 id=3140 data-nosnippet>3140</a>    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+<a href=#3141 id=3141 data-nosnippet>3141</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3142 id=3142 data-nosnippet>3142</a>        syscall(
+<a href=#3143 id=3143 data-nosnippet>3143</a>            ViSyscall::FindPcieDeviceByVendor,
+<a href=#3144 id=3144 data-nosnippet>3144</a>            vendor_id <span class="kw">as </span>usize,
+<a href=#3145 id=3145 data-nosnippet>3145</a>            device_id <span class="kw">as </span>usize,
+<a href=#3146 id=3146 data-nosnippet>3146</a>            info <span class="kw">as </span><span class="kw-2">*mut </span>PcieDeviceInfo <span class="kw">as </span>usize,
+<a href=#3147 id=3147 data-nosnippet>3147</a>            <span class="number">0</span>,
+<a href=#3148 id=3148 data-nosnippet>3148</a>        )
+<a href=#3149 id=3149 data-nosnippet>3149</a>    };
+<a href=#3150 id=3150 data-nosnippet>3150</a>    <span class="kw">match </span>ret {
+<a href=#3151 id=3151 data-nosnippet>3151</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
+<a href=#3152 id=3152 data-nosnippet>3152</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
+<a href=#3153 id=3153 data-nosnippet>3153</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied),
+<a href=#3154 id=3154 data-nosnippet>3154</a>    }
+<a href=#3155 id=3155 data-nosnippet>3155</a>}
+<a href=#3156 id=3156 data-nosnippet>3156</a>
+<a href=#3157 id=3157 data-nosnippet>3157</a><span class="doccomment">/// Why `QueryPcieFunction` (434) or `AllocPcieIrq` (435) refused.
+<a href=#3158 id=3158 data-nosnippet>3158</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#3159 id=3159 data-nosnippet>3159</a></span><span class="kw">pub enum </span>PcieFunctionError {
+<a href=#3160 id=3160 data-nosnippet>3160</a>    <span class="doccomment">/// No `PcieDriverCap`, or the caller does not own the BDF (418/424).
+<a href=#3161 id=3161 data-nosnippet>3161</a>    </span>PermissionDenied,
+<a href=#3162 id=3162 data-nosnippet>3162</a>    <span class="doccomment">/// 434: no such function.
+<a href=#3163 id=3163 data-nosnippet>3163</a>    </span>NotFound,
+<a href=#3164 id=3164 data-nosnippet>3164</a>    InvalidInput,
+<a href=#3165 id=3165 data-nosnippet>3165</a>    <span class="doccomment">/// 435: no allowed capability, firmware forbids MSI, or not x86. Keep polling.
+<a href=#3166 id=3166 data-nosnippet>3166</a>    </span>NotSupported,
+<a href=#3167 id=3167 data-nosnippet>3167</a>    <span class="doccomment">/// 435: vector space exhausted. Keep polling.
+<a href=#3168 id=3168 data-nosnippet>3168</a>    </span>NoVectors,
+<a href=#3169 id=3169 data-nosnippet>3169</a>    <span class="doccomment">/// The kernel wrote a record this v1 decoder refuses.
+<a href=#3170 id=3170 data-nosnippet>3170</a>    </span>Malformed,
+<a href=#3171 id=3171 data-nosnippet>3171</a>}
+<a href=#3172 id=3172 data-nosnippet>3172</a>
+<a href=#3173 id=3173 data-nosnippet>3173</a><span class="kw">fn </span>pcie_function_error(ret: usize) -&gt; PcieFunctionError {
+<a href=#3174 id=3174 data-nosnippet>3174</a>    <span class="kw">use </span>abi::pcie_function <span class="kw">as </span>pf;
+<a href=#3175 id=3175 data-nosnippet>3175</a>    <span class="kw">match </span>ret {
+<a href=#3176 id=3176 data-nosnippet>3176</a>        pf::ERR_NOT_FOUND =&gt; PcieFunctionError::NotFound,
+<a href=#3177 id=3177 data-nosnippet>3177</a>        pf::ERR_INVALID_INPUT =&gt; PcieFunctionError::InvalidInput,
+<a href=#3178 id=3178 data-nosnippet>3178</a>        pf::ERR_NOT_SUPPORTED =&gt; PcieFunctionError::NotSupported,
+<a href=#3179 id=3179 data-nosnippet>3179</a>        pf::ERR_NO_VECTORS =&gt; PcieFunctionError::NoVectors,
+<a href=#3180 id=3180 data-nosnippet>3180</a>        <span class="kw">_ </span>=&gt; PcieFunctionError::PermissionDenied,
+<a href=#3181 id=3181 data-nosnippet>3181</a>    }
+<a href=#3182 id=3182 data-nosnippet>3182</a>}
+<a href=#3183 id=3183 data-nosnippet>3183</a>
+<a href=#3184 id=3184 data-nosnippet>3184</a><span class="doccomment">/// 434: read the record of the PCIe function at `bdf`, which the caller must
+<a href=#3185 id=3185 data-nosnippet>3185</a>/// own through `sys_find_pcie_device*`. The record carries every BAR, the
+<a href=#3186 id=3186 data-nosnippet>3186</a>/// MSI/MSI-X summary and up to 16 standard capabilities with their bytes.
+<a href=#3187 id=3187 data-nosnippet>3187</a></span><span class="kw">pub fn </span>sys_query_pcie_function(
+<a href=#3188 id=3188 data-nosnippet>3188</a>    bdf: u32,
+<a href=#3189 id=3189 data-nosnippet>3189</a>) -&gt; <span class="prelude-ty">Result</span>&lt;abi::pcie_function::ViPcieFunctionV1, PcieFunctionError&gt; {
+<a href=#3190 id=3190 data-nosnippet>3190</a>    <span class="kw">use </span>abi::pcie_function::{ViPcieFunctionV1, PCIE_FUNCTION_RECORD_LEN};
+<a href=#3191 id=3191 data-nosnippet>3191</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; PCIE_FUNCTION_RECORD_LEN];
+<a href=#3192 id=3192 data-nosnippet>3192</a>    <span class="comment">// SAFETY: `buf` is a live, writable buffer of exactly the length passed.
+<a href=#3193 id=3193 data-nosnippet>3193</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3194 id=3194 data-nosnippet>3194</a>        syscall(
+<a href=#3195 id=3195 data-nosnippet>3195</a>            ViSyscall::QueryPcieFunction,
+<a href=#3196 id=3196 data-nosnippet>3196</a>            bdf <span class="kw">as </span>usize,
+<a href=#3197 id=3197 data-nosnippet>3197</a>            buf.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#3198 id=3198 data-nosnippet>3198</a>            buf.len(),
+<a href=#3199 id=3199 data-nosnippet>3199</a>            <span class="number">0</span>,
+<a href=#3200 id=3200 data-nosnippet>3200</a>        )
+<a href=#3201 id=3201 data-nosnippet>3201</a>    } <span class="kw">as </span>usize;
+<a href=#3202 id=3202 data-nosnippet>3202</a>    <span class="kw">if </span>ret != <span class="number">0 </span>{
+<a href=#3203 id=3203 data-nosnippet>3203</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(pcie_function_error(ret));
+<a href=#3204 id=3204 data-nosnippet>3204</a>    }
+<a href=#3205 id=3205 data-nosnippet>3205</a>    ViPcieFunctionV1::decode(<span class="kw-2">&amp;</span>buf).ok_or(PcieFunctionError::Malformed)
+<a href=#3206 id=3206 data-nosnippet>3206</a>}
+<a href=#3207 id=3207 data-nosnippet>3207</a>
+<a href=#3208 id=3208 data-nosnippet>3208</a><span class="doccomment">/// 435: allocate up to `want` (1..=32) MSI-X or MSI interrupts for the owned
+<a href=#3209 id=3209 data-nosnippet>3209</a>/// function at `bdf`; `mode` holds `abi::pcie_function::IRQ_MODE_*` bits.
+<a href=#3210 id=3210 data-nosnippet>3210</a>/// MSI-X is preferred. Wait on line `i` with `sys_wait_irq(first_irq + i, 0)`,
+<a href=#3211 id=3211 data-nosnippet>3211</a>/// or on every held line at once with `ipc::wait_any(source::IRQ, ticks)`.
+<a href=#3212 id=3212 data-nosnippet>3212</a>/// A repeat call returns the same allocation; it lives until the caller dies.
+<a href=#3213 id=3213 data-nosnippet>3213</a></span><span class="kw">pub fn </span>sys_alloc_pcie_irq(
+<a href=#3214 id=3214 data-nosnippet>3214</a>    bdf: u32,
+<a href=#3215 id=3215 data-nosnippet>3215</a>    want: usize,
+<a href=#3216 id=3216 data-nosnippet>3216</a>    mode: usize,
+<a href=#3217 id=3217 data-nosnippet>3217</a>) -&gt; <span class="prelude-ty">Result</span>&lt;abi::pcie_function::PcieIrqAlloc, PcieFunctionError&gt; {
+<a href=#3218 id=3218 data-nosnippet>3218</a>    <span class="comment">// SAFETY: scalar arguments only.
+<a href=#3219 id=3219 data-nosnippet>3219</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::AllocPcieIrq, bdf <span class="kw">as </span>usize, want, mode, <span class="number">0</span>) } <span class="kw">as </span>usize;
+<a href=#3220 id=3220 data-nosnippet>3220</a>    abi::pcie_function::PcieIrqAlloc::unpack(ret).ok_or_else(|| pcie_function_error(ret))
+<a href=#3221 id=3221 data-nosnippet>3221</a>}
+<a href=#3222 id=3222 data-nosnippet>3222</a>
+<a href=#3223 id=3223 data-nosnippet>3223</a><span class="doccomment">/// The `SystemPower` (436) action.
+<a href=#3224 id=3224 data-nosnippet>3224</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#3225 id=3225 data-nosnippet>3225</a></span><span class="kw">pub enum </span>SystemPowerAction {
+<a href=#3226 id=3226 data-nosnippet>3226</a>    Reboot,
+<a href=#3227 id=3227 data-nosnippet>3227</a>    PowerOff,
+<a href=#3228 id=3228 data-nosnippet>3228</a>}
+<a href=#3229 id=3229 data-nosnippet>3229</a>
+<a href=#3230 id=3230 data-nosnippet>3230</a><span class="doccomment">/// Why `SystemPower` (436) returned.
+<a href=#3231 id=3231 data-nosnippet>3231</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#3232 id=3232 data-nosnippet>3232</a></span><span class="kw">pub enum </span>SystemPowerError {
+<a href=#3233 id=3233 data-nosnippet>3233</a>    <span class="doccomment">/// No `SupervisorCap`, or the allowlist omits bit 49.
+<a href=#3234 id=3234 data-nosnippet>3234</a>    </span>PermissionDenied,
+<a href=#3235 id=3235 data-nosnippet>3235</a>    InvalidInput,
+<a href=#3236 id=3236 data-nosnippet>3236</a>    <span class="doccomment">/// Not x86_64, no static `\_S5_` or usable PM1 control block, or the
+<a href=#3237 id=3237 data-nosnippet>3237</a>    /// machine still ran after the sleep write.
+<a href=#3238 id=3238 data-nosnippet>3238</a>    </span>NotSupported,
+<a href=#3239 id=3239 data-nosnippet>3239</a>}
+<a href=#3240 id=3240 data-nosnippet>3240</a>
+<a href=#3241 id=3241 data-nosnippet>3241</a><span class="kw">fn </span>system_power_error(ret: usize) -&gt; SystemPowerError {
+<a href=#3242 id=3242 data-nosnippet>3242</a>    <span class="kw">use </span>abi::syscall::system_power <span class="kw">as </span>sp;
+<a href=#3243 id=3243 data-nosnippet>3243</a>    <span class="kw">match </span>ret {
+<a href=#3244 id=3244 data-nosnippet>3244</a>        sp::ERR_INVALID_INPUT =&gt; SystemPowerError::InvalidInput,
+<a href=#3245 id=3245 data-nosnippet>3245</a>        sp::ERR_NOT_SUPPORTED =&gt; SystemPowerError::NotSupported,
+<a href=#3246 id=3246 data-nosnippet>3246</a>        <span class="kw">_ </span>=&gt; SystemPowerError::PermissionDenied,
+<a href=#3247 id=3247 data-nosnippet>3247</a>    }
+<a href=#3248 id=3248 data-nosnippet>3248</a>}
+<a href=#3249 id=3249 data-nosnippet>3249</a>
+<a href=#3250 id=3250 data-nosnippet>3250</a><span class="doccomment">/// 436: reset or power off the machine. Requires `SupervisorCap`; orderly
+<a href=#3251 id=3251 data-nosnippet>3251</a>/// shutdown is the caller's job before this call. Returns only when the kernel
+<a href=#3252 id=3252 data-nosnippet>3252</a>/// refused or the action did not take effect.
+<a href=#3253 id=3253 data-nosnippet>3253</a></span><span class="kw">pub fn </span>sys_system_power(action: SystemPowerAction) -&gt; SystemPowerError {
+<a href=#3254 id=3254 data-nosnippet>3254</a>    <span class="kw">use </span>abi::syscall::system_power <span class="kw">as </span>sp;
+<a href=#3255 id=3255 data-nosnippet>3255</a>    <span class="kw">let </span>a0 = <span class="kw">match </span>action {
+<a href=#3256 id=3256 data-nosnippet>3256</a>        SystemPowerAction::Reboot =&gt; sp::ACTION_REBOOT,
+<a href=#3257 id=3257 data-nosnippet>3257</a>        SystemPowerAction::PowerOff =&gt; sp::ACTION_POWEROFF,
+<a href=#3258 id=3258 data-nosnippet>3258</a>    };
+<a href=#3259 id=3259 data-nosnippet>3259</a>    <span class="comment">// SAFETY: scalar arguments only.
+<a href=#3260 id=3260 data-nosnippet>3260</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::SystemPower, a0, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) } <span class="kw">as </span>usize;
+<a href=#3261 id=3261 data-nosnippet>3261</a>    system_power_error(ret)
+<a href=#3262 id=3262 data-nosnippet>3262</a>}
+<a href=#3263 id=3263 data-nosnippet>3263</a>
+<a href=#3264 id=3264 data-nosnippet>3264</a><span class="doccomment">/// Why a DMA export call (437-439) was refused ([`abi::dma_export`]).
+<a href=#3265 id=3265 data-nosnippet>3265</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+<a href=#3266 id=3266 data-nosnippet>3266</a></span><span class="kw">pub enum </span>DmaExportError {
+<a href=#3267 id=3267 data-nosnippet>3267</a>    <span class="doccomment">/// Holder not eligible, range not owned, not the lease holder, or no
+<a href=#3268 id=3268 data-nosnippet>3268</a>    /// `PcieDriverCap` / BDF ownership / allowlist bit 48 (438).
+<a href=#3269 id=3269 data-nosnippet>3269</a>    </span>PermissionDenied,
+<a href=#3270 id=3270 data-nosnippet>3270</a>    <span class="doccomment">/// No live provider (437); unknown, revoked or owner-dead export (438/439).
+<a href=#3271 id=3271 data-nosnippet>3271</a>    </span>NotFound,
+<a href=#3272 id=3272 data-nosnippet>3272</a>    InvalidInput,
+<a href=#3273 id=3273 data-nosnippet>3273</a>    <span class="doccomment">/// No translating remapper: exports never fall back to identity DMA.
+<a href=#3274 id=3274 data-nosnippet>3274</a>    </span>NotSupported,
+<a href=#3275 id=3275 data-nosnippet>3275</a>    <span class="doccomment">/// Lease table, window space, page tables or the holder's DMA quota.
+<a href=#3276 id=3276 data-nosnippet>3276</a>    </span>OutOfMemory,
+<a href=#3277 id=3277 data-nosnippet>3277</a>    <span class="doccomment">/// 439: invalidation unacknowledged; the kernel retries, call again.
+<a href=#3278 id=3278 data-nosnippet>3278</a>    </span>TryAgain,
+<a href=#3279 id=3279 data-nosnippet>3279</a>    <span class="doccomment">/// 438: window published but its invalidation unacknowledged.
+<a href=#3280 id=3280 data-nosnippet>3280</a>    </span>Unconfirmed,
+<a href=#3281 id=3281 data-nosnippet>3281</a>    <span class="doccomment">/// The kernel wrote a record this v1 decoder refuses.
+<a href=#3282 id=3282 data-nosnippet>3282</a>    </span>Malformed,
+<a href=#3283 id=3283 data-nosnippet>3283</a>}
+<a href=#3284 id=3284 data-nosnippet>3284</a>
+<a href=#3285 id=3285 data-nosnippet>3285</a><span class="kw">fn </span>dma_export_error(ret: usize) -&gt; DmaExportError {
+<a href=#3286 id=3286 data-nosnippet>3286</a>    <span class="kw">use </span>abi::dma_export <span class="kw">as </span>de;
+<a href=#3287 id=3287 data-nosnippet>3287</a>    <span class="kw">match </span>ret {
+<a href=#3288 id=3288 data-nosnippet>3288</a>        de::ERR_FILE_NOT_FOUND =&gt; DmaExportError::NotFound,
+<a href=#3289 id=3289 data-nosnippet>3289</a>        de::ERR_INVALID_INPUT | de::ERR_BUFFER_TOO_SMALL =&gt; DmaExportError::InvalidInput,
+<a href=#3290 id=3290 data-nosnippet>3290</a>        de::ERR_NOT_SUPPORTED =&gt; DmaExportError::NotSupported,
+<a href=#3291 id=3291 data-nosnippet>3291</a>        de::ERR_OUT_OF_MEMORY =&gt; DmaExportError::OutOfMemory,
+<a href=#3292 id=3292 data-nosnippet>3292</a>        de::ERR_TRY_AGAIN =&gt; DmaExportError::TryAgain,
+<a href=#3293 id=3293 data-nosnippet>3293</a>        de::ERR_UNKNOWN =&gt; DmaExportError::Unconfirmed,
+<a href=#3294 id=3294 data-nosnippet>3294</a>        <span class="kw">_ </span>=&gt; DmaExportError::PermissionDenied,
+<a href=#3295 id=3295 data-nosnippet>3295</a>    }
+<a href=#3296 id=3296 data-nosnippet>3296</a>}
+<a href=#3297 id=3297 data-nosnippet>3297</a>
+<a href=#3298 id=3298 data-nosnippet>3298</a><span class="doccomment">/// Decode a 437 return: an export id (`1..=isize::MAX`) or a sentinel.
+<a href=#3299 id=3299 data-nosnippet>3299</a></span><span class="kw">fn </span>decode_export_id(ret: usize) -&gt; <span class="prelude-ty">Result</span>&lt;u64, DmaExportError&gt; {
+<a href=#3300 id=3300 data-nosnippet>3300</a>    <span class="kw">if </span>ret == <span class="number">0 </span>|| ret &gt; isize::MAX <span class="kw">as </span>usize {
+<a href=#3301 id=3301 data-nosnippet>3301</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
+<a href=#3302 id=3302 data-nosnippet>3302</a>    } <span class="kw">else </span>{
+<a href=#3303 id=3303 data-nosnippet>3303</a>        <span class="prelude-val">Ok</span>(ret <span class="kw">as </span>u64)
+<a href=#3304 id=3304 data-nosnippet>3304</a>    }
+<a href=#3305 id=3305 data-nosnippet>3305</a>}
+<a href=#3306 id=3306 data-nosnippet>3306</a>
+<a href=#3307 id=3307 data-nosnippet>3307</a><span class="doccomment">/// 437: export `[va, va + len)` of this Cell's own memory (inside a Grant it
+<a href=#3308 id=3308 data-nosnippet>3308</a>/// owns) to the live provider of `holder_service`; `flags` may carry
+<a href=#3309 id=3309 data-nosnippet>3309</a>/// [`abi::dma_export::EXPORT_DEVICE_WRITE`]. The range stays locked (it cannot
+<a href=#3310 id=3310 data-nosnippet>3310</a>/// be freed) until the lease is revoked. Returns the export id to send to the
+<a href=#3311 id=3311 data-nosnippet>3311</a>/// holder beside the request it backs.
+<a href=#3312 id=3312 data-nosnippet>3312</a></span><span class="kw">pub fn </span>sys_export_dma_range(
+<a href=#3313 id=3313 data-nosnippet>3313</a>    va: usize,
+<a href=#3314 id=3314 data-nosnippet>3314</a>    len: usize,
+<a href=#3315 id=3315 data-nosnippet>3315</a>    holder_service: u16,
+<a href=#3316 id=3316 data-nosnippet>3316</a>    flags: u16,
+<a href=#3317 id=3317 data-nosnippet>3317</a>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, DmaExportError&gt; {
+<a href=#3318 id=3318 data-nosnippet>3318</a>    <span class="comment">// SAFETY: scalar arguments only; the kernel validates the range itself.
+<a href=#3319 id=3319 data-nosnippet>3319</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3320 id=3320 data-nosnippet>3320</a>        syscall(
+<a href=#3321 id=3321 data-nosnippet>3321</a>            ViSyscall::ExportDmaRange,
+<a href=#3322 id=3322 data-nosnippet>3322</a>            va,
+<a href=#3323 id=3323 data-nosnippet>3323</a>            len,
+<a href=#3324 id=3324 data-nosnippet>3324</a>            holder_service <span class="kw">as </span>usize,
+<a href=#3325 id=3325 data-nosnippet>3325</a>            flags <span class="kw">as </span>usize,
+<a href=#3326 id=3326 data-nosnippet>3326</a>        )
+<a href=#3327 id=3327 data-nosnippet>3327</a>    } <span class="kw">as </span>usize;
+<a href=#3328 id=3328 data-nosnippet>3328</a>    decode_export_id(ret)
+<a href=#3329 id=3329 data-nosnippet>3329</a>}
+<a href=#3330 id=3330 data-nosnippet>3330</a>
+<a href=#3331 id=3331 data-nosnippet>3331</a><span class="doccomment">/// 438: map export `export_id` into the caller's VT-d domain for the owned
+<a href=#3332 id=3332 data-nosnippet>3332</a>/// function at `bdf` and return its record (window IOVA and owner identity).
+<a href=#3333 id=3333 data-nosnippet>3333</a>/// The holder must check `owner_cell_id`/`owner_generation` against the client
+<a href=#3334 id=3334 data-nosnippet>3334</a>/// that sent the id. A repeat call returns the same record.
+<a href=#3335 id=3335 data-nosnippet>3335</a></span><span class="kw">pub fn </span>sys_map_dma_export(
+<a href=#3336 id=3336 data-nosnippet>3336</a>    export_id: u64,
+<a href=#3337 id=3337 data-nosnippet>3337</a>    bdf: u32,
+<a href=#3338 id=3338 data-nosnippet>3338</a>) -&gt; <span class="prelude-ty">Result</span>&lt;abi::dma_export::ViDmaExportV1, DmaExportError&gt; {
+<a href=#3339 id=3339 data-nosnippet>3339</a>    <span class="kw">use </span>abi::dma_export::{ViDmaExportV1, DMA_EXPORT_RECORD_LEN};
+<a href=#3340 id=3340 data-nosnippet>3340</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; DMA_EXPORT_RECORD_LEN];
+<a href=#3341 id=3341 data-nosnippet>3341</a>    sys_map_dma_export_into(export_id, bdf, <span class="kw-2">&amp;mut </span>buf)<span class="question-mark">?</span>;
+<a href=#3342 id=3342 data-nosnippet>3342</a>    ViDmaExportV1::decode(<span class="kw-2">&amp;</span>buf).map_err(|<span class="kw">_</span>| DmaExportError::Malformed)
+<a href=#3343 id=3343 data-nosnippet>3343</a>}
+<a href=#3344 id=3344 data-nosnippet>3344</a>
+<a href=#3345 id=3345 data-nosnippet>3345</a><span class="doccomment">/// 438 with a caller-chosen output buffer, passed with its own length. The
+<a href=#3346 id=3346 data-nosnippet>3346</a>/// kernel accepts exactly [`abi::dma_export::DMA_EXPORT_RECORD_LEN`] bytes and
+<a href=#3347 id=3347 data-nosnippet>3347</a>/// refuses any other length with [`DmaExportError::InvalidInput`] before any
+<a href=#3348 id=3348 data-nosnippet>3348</a>/// effect; prefer [`sys_map_dma_export`], which decodes the record.
+<a href=#3349 id=3349 data-nosnippet>3349</a></span><span class="kw">pub fn </span>sys_map_dma_export_into(
+<a href=#3350 id=3350 data-nosnippet>3350</a>    export_id: u64,
+<a href=#3351 id=3351 data-nosnippet>3351</a>    bdf: u32,
+<a href=#3352 id=3352 data-nosnippet>3352</a>    out: <span class="kw-2">&amp;mut </span>[u8],
+<a href=#3353 id=3353 data-nosnippet>3353</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), DmaExportError&gt; {
+<a href=#3354 id=3354 data-nosnippet>3354</a>    <span class="comment">// SAFETY: `out` is a live, exclusively borrowed buffer of exactly the
+<a href=#3355 id=3355 data-nosnippet>3355</a>    // length passed; the kernel writes at most that many bytes.
+<a href=#3356 id=3356 data-nosnippet>3356</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{
+<a href=#3357 id=3357 data-nosnippet>3357</a>        syscall(
+<a href=#3358 id=3358 data-nosnippet>3358</a>            ViSyscall::MapDmaExport,
+<a href=#3359 id=3359 data-nosnippet>3359</a>            export_id <span class="kw">as </span>usize,
+<a href=#3360 id=3360 data-nosnippet>3360</a>            bdf <span class="kw">as </span>usize,
+<a href=#3361 id=3361 data-nosnippet>3361</a>            out.as_mut_ptr() <span class="kw">as </span>usize,
+<a href=#3362 id=3362 data-nosnippet>3362</a>            out.len(),
+<a href=#3363 id=3363 data-nosnippet>3363</a>        )
+<a href=#3364 id=3364 data-nosnippet>3364</a>    } <span class="kw">as </span>usize;
+<a href=#3365 id=3365 data-nosnippet>3365</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
+<a href=#3366 id=3366 data-nosnippet>3366</a>        <span class="prelude-val">Ok</span>(())
+<a href=#3367 id=3367 data-nosnippet>3367</a>    } <span class="kw">else </span>{
+<a href=#3368 id=3368 data-nosnippet>3368</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
+<a href=#3369 id=3369 data-nosnippet>3369</a>    }
+<a href=#3370 id=3370 data-nosnippet>3370</a>}
+<a href=#3371 id=3371 data-nosnippet>3371</a>
+<a href=#3372 id=3372 data-nosnippet>3372</a><span class="doccomment">/// 439: revoke export `export_id` (owner or holder). `Ok` once the device can
+<a href=#3373 id=3373 data-nosnippet>3373</a>/// no longer reach the memory; [`DmaExportError::TryAgain`] while the window
+<a href=#3374 id=3374 data-nosnippet>3374</a>/// drain is unacknowledged (the range stays locked; the kernel also retries).
+<a href=#3375 id=3375 data-nosnippet>3375</a></span><span class="kw">pub fn </span>sys_revoke_dma_export(export_id: u64) -&gt; <span class="prelude-ty">Result</span>&lt;(), DmaExportError&gt; {
+<a href=#3376 id=3376 data-nosnippet>3376</a>    <span class="comment">// SAFETY: scalar arguments only.
+<a href=#3377 id=3377 data-nosnippet>3377</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::RevokeDmaExport, export_id <span class="kw">as </span>usize, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) } <span class="kw">as </span>usize;
+<a href=#3378 id=3378 data-nosnippet>3378</a>    <span class="kw">if </span>ret == <span class="number">0 </span>{
+<a href=#3379 id=3379 data-nosnippet>3379</a>        <span class="prelude-val">Ok</span>(())
+<a href=#3380 id=3380 data-nosnippet>3380</a>    } <span class="kw">else </span>{
+<a href=#3381 id=3381 data-nosnippet>3381</a>        <span class="prelude-val">Err</span>(dma_export_error(ret))
+<a href=#3382 id=3382 data-nosnippet>3382</a>    }
+<a href=#3383 id=3383 data-nosnippet>3383</a>}
+<a href=#3384 id=3384 data-nosnippet>3384</a>
+<a href=#3385 id=3385 data-nosnippet>3385</a><span class="doccomment">/// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
+<a href=#3386 id=3386 data-nosnippet>3386</a>///
+<a href=#3387 id=3387 data-nosnippet>3387</a>/// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,
+<a href=#3388 id=3388 data-nosnippet>3388</a>/// `Err(PermissionDenied)` when the caller lacks `SupervisorCap`, and
+<a href=#3389 id=3389 data-nosnippet>3389</a>/// `Err(Unknown)` when `target_tid` is not a live task.
+<a href=#3390 id=3390 data-nosnippet>3390</a>///
+<a href=#3391 id=3391 data-nosnippet>3391</a>/// Requires `SupervisorCap` (kernel-granted — same gate as FreezeCell/ResumeCell/KillCell).
+<a href=#3392 id=3392 data-nosnippet>3392</a></span><span class="kw">pub fn </span>sys_query_hotswap_ready(target_tid: usize) -&gt; <span class="prelude-ty">Result</span>&lt;bool, SyscallError&gt; {
+<a href=#3393 id=3393 data-nosnippet>3393</a>    <span class="comment">// SAFETY: pure register syscall; kernel reads task.hotswap_ready under the SCHEDULER lock.
+<a href=#3394 id=3394 data-nosnippet>3394</a>    </span><span class="kw">let </span>ret = <span class="kw">unsafe </span>{ syscall(ViSyscall::QueryHotswapReady, target_tid, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>) };
+<a href=#3395 id=3395 data-nosnippet>3395</a>    <span class="kw">match </span>ret {
+<a href=#3396 id=3396 data-nosnippet>3396</a>        <span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>),
+<a href=#3397 id=3397 data-nosnippet>3397</a>        <span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>),
+<a href=#3398 id=3398 data-nosnippet>3398</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(SyscallError::PermissionDenied), <span class="comment">// PermissionDenied or unknown tid (FileNotFound)
+<a href=#3399 id=3399 data-nosnippet>3399</a>    </span>}
+<a href=#3400 id=3400 data-nosnippet>3400</a>}
+<a href=#3401 id=3401 data-nosnippet>3401</a>
+<a href=#3402 id=3402 data-nosnippet>3402</a><span class="attr">#[cfg(test)]
+<a href=#3403 id=3403 data-nosnippet>3403</a></span><span class="kw">mod </span>tests {
+<a href=#3404 id=3404 data-nosnippet>3404</a>    <span class="kw">use </span>super::{
+<a href=#3405 id=3405 data-nosnippet>3405</a>        decode_snapshot_result, decode_spawn_result, decode_wait_completion_result,
+<a href=#3406 id=3406 data-nosnippet>3406</a>        system_power_error, SyscallError, SyscallResult, SystemPowerError, WaitCompletionResult,
+<a href=#3407 id=3407 data-nosnippet>3407</a>    };
+<a href=#3408 id=3408 data-nosnippet>3408</a>    <span class="kw">use </span>abi::completion::{source, ViCompletion, COMPLETION_LEN};
+<a href=#3409 id=3409 data-nosnippet>3409</a>
+<a href=#3410 id=3410 data-nosnippet>3410</a>    <span class="attr">#[test]
+<a href=#3411 id=3411 data-nosnippet>3411</a>    </span><span class="kw">fn </span>spawn_result_decoder_preserves_additive_oom() {
+<a href=#3412 id=3412 data-nosnippet>3412</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_spawn_result(<span class="number">7</span>), SyscallResult::Ok(<span class="number">7</span>)));
+<a href=#3413 id=3413 data-nosnippet>3413</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#3414 id=3414 data-nosnippet>3414</a>            decode_spawn_result(-<span class="number">1</span>),
+<a href=#3415 id=3415 data-nosnippet>3415</a>            SyscallResult::Err(SyscallError::Unknown)
+<a href=#3416 id=3416 data-nosnippet>3416</a>        ));
+<a href=#3417 id=3417 data-nosnippet>3417</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#3418 id=3418 data-nosnippet>3418</a>            decode_spawn_result(-<span class="number">2</span>),
+<a href=#3419 id=3419 data-nosnippet>3419</a>            SyscallResult::Err(SyscallError::OutOfMemory)
+<a href=#3420 id=3420 data-nosnippet>3420</a>        ));
+<a href=#3421 id=3421 data-nosnippet>3421</a>    }
+<a href=#3422 id=3422 data-nosnippet>3422</a>
+<a href=#3423 id=3423 data-nosnippet>3423</a>    <span class="attr">#[test]
+<a href=#3424 id=3424 data-nosnippet>3424</a>    </span><span class="kw">fn </span>snapshot_result_decoder_preserves_denial_and_oom() {
+<a href=#3425 id=3425 data-nosnippet>3425</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_snapshot_result(<span class="number">0</span>), SyscallResult::Ok(<span class="number">0</span>)));
+<a href=#3426 id=3426 data-nosnippet>3426</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(decode_snapshot_result(<span class="number">17</span>), SyscallResult::Ok(<span class="number">17</span>)));
+<a href=#3427 id=3427 data-nosnippet>3427</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#3428 id=3428 data-nosnippet>3428</a>            decode_snapshot_result(-<span class="number">1</span>),
+<a href=#3429 id=3429 data-nosnippet>3429</a>            SyscallResult::Err(SyscallError::PermissionDenied)
+<a href=#3430 id=3430 data-nosnippet>3430</a>        ));
+<a href=#3431 id=3431 data-nosnippet>3431</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#3432 id=3432 data-nosnippet>3432</a>            decode_snapshot_result(-<span class="number">2</span>),
+<a href=#3433 id=3433 data-nosnippet>3433</a>            SyscallResult::Err(SyscallError::OutOfMemory)
+<a href=#3434 id=3434 data-nosnippet>3434</a>        ));
+<a href=#3435 id=3435 data-nosnippet>3435</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#3436 id=3436 data-nosnippet>3436</a>            decode_snapshot_result(-<span class="number">9</span>),
+<a href=#3437 id=3437 data-nosnippet>3437</a>            SyscallResult::Err(SyscallError::Unknown)
+<a href=#3438 id=3438 data-nosnippet>3438</a>        ));
+<a href=#3439 id=3439 data-nosnippet>3439</a>    }
+<a href=#3440 id=3440 data-nosnippet>3440</a>
+<a href=#3441 id=3441 data-nosnippet>3441</a>    <span class="attr">#[test]
+<a href=#3442 id=3442 data-nosnippet>3442</a>    </span><span class="kw">fn </span>wait_completion_decoder_distinguishes_raw_zero_record_and_invalid_results() {
+<a href=#3443 id=3443 data-nosnippet>3443</a>        <span class="kw">let </span>completion = ViCompletion {
+<a href=#3444 id=3444 data-nosnippet>3444</a>            slot: <span class="number">7</span>,
+<a href=#3445 id=3445 data-nosnippet>3445</a>            source: source::NET_RX,
+<a href=#3446 id=3446 data-nosnippet>3446</a>            result: source::NET_RX <span class="kw">as </span>i64,
+<a href=#3447 id=3447 data-nosnippet>3447</a>        };
+<a href=#3448 id=3448 data-nosnippet>3448</a>        <span class="kw">let </span>record = completion.to_bytes();
+<a href=#3449 id=3449 data-nosnippet>3449</a>
+<a href=#3450 id=3450 data-nosnippet>3450</a>        <span class="macro">assert_eq!</span>(
+<a href=#3451 id=3451 data-nosnippet>3451</a>            decode_wait_completion_result(<span class="number">0</span>, <span class="kw-2">&amp;</span>record),
+<a href=#3452 id=3452 data-nosnippet>3452</a>            WaitCompletionResult::NoRecord
+<a href=#3453 id=3453 data-nosnippet>3453</a>        );
+<a href=#3454 id=3454 data-nosnippet>3454</a>        <span class="macro">assert_eq!</span>(
+<a href=#3455 id=3455 data-nosnippet>3455</a>            decode_wait_completion_result(<span class="number">1</span>, <span class="kw-2">&amp;</span>record),
+<a href=#3456 id=3456 data-nosnippet>3456</a>            WaitCompletionResult::Completion(completion)
+<a href=#3457 id=3457 data-nosnippet>3457</a>        );
+<a href=#3458 id=3458 data-nosnippet>3458</a>        <span class="macro">assert_eq!</span>(
+<a href=#3459 id=3459 data-nosnippet>3459</a>            decode_wait_completion_result(-<span class="number">1</span>, <span class="kw-2">&amp;</span>record),
+<a href=#3460 id=3460 data-nosnippet>3460</a>            WaitCompletionResult::ErrorOrInvalid(-<span class="number">1</span>)
+<a href=#3461 id=3461 data-nosnippet>3461</a>        );
+<a href=#3462 id=3462 data-nosnippet>3462</a>        <span class="macro">assert_eq!</span>(
+<a href=#3463 id=3463 data-nosnippet>3463</a>            decode_wait_completion_result(<span class="number">2</span>, <span class="kw-2">&amp;</span>record),
+<a href=#3464 id=3464 data-nosnippet>3464</a>            WaitCompletionResult::ErrorOrInvalid(<span class="number">2</span>)
+<a href=#3465 id=3465 data-nosnippet>3465</a>        );
+<a href=#3466 id=3466 data-nosnippet>3466</a>        <span class="macro">assert_eq!</span>(
+<a href=#3467 id=3467 data-nosnippet>3467</a>            decode_wait_completion_result(<span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">0u8</span>; COMPLETION_LEN]),
+<a href=#3468 id=3468 data-nosnippet>3468</a>            WaitCompletionResult::ErrorOrInvalid(<span class="number">1</span>)
+<a href=#3469 id=3469 data-nosnippet>3469</a>        );
+<a href=#3470 id=3470 data-nosnippet>3470</a>    }
+<a href=#3471 id=3471 data-nosnippet>3471</a>
+<a href=#3472 id=3472 data-nosnippet>3472</a>    <span class="attr">#[test]
+<a href=#3473 id=3473 data-nosnippet>3473</a>    </span><span class="kw">fn </span>system_power_decoder_names_each_sentinel() {
+<a href=#3474 id=3474 data-nosnippet>3474</a>        <span class="kw">use </span>abi::syscall::system_power <span class="kw">as </span>sp;
+<a href=#3475 id=3475 data-nosnippet>3475</a>        <span class="macro">assert_eq!</span>(
+<a href=#3476 id=3476 data-nosnippet>3476</a>            system_power_error(sp::ERR_INVALID_INPUT),
+<a href=#3477 id=3477 data-nosnippet>3477</a>            SystemPowerError::InvalidInput
+<a href=#3478 id=3478 data-nosnippet>3478</a>        );
+<a href=#3479 id=3479 data-nosnippet>3479</a>        <span class="macro">assert_eq!</span>(
+<a href=#3480 id=3480 data-nosnippet>3480</a>            system_power_error(sp::ERR_NOT_SUPPORTED),
+<a href=#3481 id=3481 data-nosnippet>3481</a>            SystemPowerError::NotSupported
+<a href=#3482 id=3482 data-nosnippet>3482</a>        );
+<a href=#3483 id=3483 data-nosnippet>3483</a>        <span class="macro">assert_eq!</span>(
+<a href=#3484 id=3484 data-nosnippet>3484</a>            system_power_error(sp::ERR_PERMISSION_DENIED),
+<a href=#3485 id=3485 data-nosnippet>3485</a>            SystemPowerError::PermissionDenied
+<a href=#3486 id=3486 data-nosnippet>3486</a>        );
+<a href=#3487 id=3487 data-nosnippet>3487</a>        <span class="macro">assert_eq!</span>(system_power_error(<span class="number">0</span>), SystemPowerError::PermissionDenied);
+<a href=#3488 id=3488 data-nosnippet>3488</a>    }
+<a href=#3489 id=3489 data-nosnippet>3489</a>
+<a href=#3490 id=3490 data-nosnippet>3490</a>    <span class="doccomment">/// 437-439: an id is any value in `1..=isize::MAX`; every sentinel decodes
+<a href=#3491 id=3491 data-nosnippet>3491</a>    /// to its own error.
+<a href=#3492 id=3492 data-nosnippet>3492</a>    </span><span class="attr">#[test]
+<a href=#3493 id=3493 data-nosnippet>3493</a>    </span><span class="kw">fn </span>dma_export_decoder_names_each_sentinel() {
+<a href=#3494 id=3494 data-nosnippet>3494</a>        <span class="kw">use </span>super::{decode_export_id, DmaExportError <span class="kw">as </span>E};
+<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="kw">use </span>abi::dma_export <span class="kw">as </span>de;
+<a href=#3496 id=3496 data-nosnippet>3496</a>        <span class="macro">assert_eq!</span>(decode_export_id(<span class="number">1</span>), <span class="prelude-val">Ok</span>(<span class="number">1</span>));
+<a href=#3497 id=3497 data-nosnippet>3497</a>        <span class="macro">assert_eq!</span>(decode_export_id(isize::MAX <span class="kw">as </span>usize), <span class="prelude-val">Ok</span>(isize::MAX <span class="kw">as </span>u64));
+<a href=#3498 id=3498 data-nosnippet>3498</a>        <span class="kw">for </span>(ret, want) <span class="kw">in </span>[
+<a href=#3499 id=3499 data-nosnippet>3499</a>            (de::ERR_PERMISSION_DENIED, E::PermissionDenied),
+<a href=#3500 id=3500 data-nosnippet>3500</a>            (de::ERR_TRY_AGAIN, E::TryAgain),
+<a href=#3501 id=3501 data-nosnippet>3501</a>            (de::ERR_FILE_NOT_FOUND, E::NotFound),
+<a href=#3502 id=3502 data-nosnippet>3502</a>            (de::ERR_INVALID_INPUT, E::InvalidInput),
+<a href=#3503 id=3503 data-nosnippet>3503</a>            (de::ERR_NOT_SUPPORTED, E::NotSupported),
+<a href=#3504 id=3504 data-nosnippet>3504</a>            (de::ERR_OUT_OF_MEMORY, E::OutOfMemory),
+<a href=#3505 id=3505 data-nosnippet>3505</a>            (de::ERR_UNKNOWN, E::Unconfirmed),
+<a href=#3506 id=3506 data-nosnippet>3506</a>            (<span class="number">0</span>, E::PermissionDenied),
+<a href=#3507 id=3507 data-nosnippet>3507</a>        ] {
+<a href=#3508 id=3508 data-nosnippet>3508</a>            <span class="macro">assert_eq!</span>(decode_export_id(ret), <span class="prelude-val">Err</span>(want), <span class="string">"{ret:#x}"</span>);
+<a href=#3509 id=3509 data-nosnippet>3509</a>        }
+<a href=#3510 id=3510 data-nosnippet>3510</a>    }
+<a href=#3511 id=3511 data-nosnippet>3511</a>}
 </code></pre></div></section></main></body></html>

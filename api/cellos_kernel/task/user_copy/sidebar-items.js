@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["copy","guard","range","sas_lease","scatter","sv39_probe"]};
+window.SIDEBAR_ITEMS = {"mod":["copy","guard","page_probe","range","sas_lease","scatter"]};

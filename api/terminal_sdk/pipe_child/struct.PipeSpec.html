@@ -3,12 +3,12 @@
     pub argv: &amp;'a [&amp;'a str],
     pub cwd: &amp;'a [u8],
     pub environment: &amp;'a [(&amp;'a str, &amp;'a str)],
-    pub cwd_source: Option&lt;<a class="struct" href="../../api/abi/cell_session/struct.ObjectRefV1.html" title="struct api::abi::cell_session::ObjectRefV1">ObjectRefV1</a>&gt;,
+    pub cwd_source: Option&lt;ObjectRefV1&gt;,
     pub completion: bool,
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Everything needed to launch one pipeline stage.</p>
 </div></details><h2 id="fields" class="fields section-header">Fields<a href="#fields" class="anchor">§</a></h2><span id="structfield.path" class="structfield section-header"><a href="#structfield.path" class="anchor field">§</a><code>path: &amp;'a str</code></span><span id="structfield.argv" class="structfield section-header"><a href="#structfield.argv" class="anchor field">§</a><code>argv: &amp;'a [&amp;'a str]</code></span><span id="structfield.cwd" class="structfield section-header"><a href="#structfield.cwd" class="anchor field">§</a><code>cwd: &amp;'a [u8]</code></span><div class="docblock"><p>Raw cwd bytes; empty means no cwd grant. Non-empty requires either
 <code>cwd_source</code> or a UTF-8 path the VFS can open.</p>
-</div><span id="structfield.environment" class="structfield section-header"><a href="#structfield.environment" class="anchor field">§</a><code>environment: &amp;'a [(&amp;'a str, &amp;'a str)]</code></span><span id="structfield.cwd_source" class="structfield section-header"><a href="#structfield.cwd_source" class="anchor field">§</a><code>cwd_source: Option&lt;<a class="struct" href="../../api/abi/cell_session/struct.ObjectRefV1.html" title="struct api::abi::cell_session::ObjectRefV1">ObjectRefV1</a>&gt;</code></span><div class="docblock"><p>Existing VFS directory grant to derive the child’s cwd from (never an
+</div><span id="structfield.environment" class="structfield section-header"><a href="#structfield.environment" class="anchor field">§</a><code>environment: &amp;'a [(&amp;'a str, &amp;'a str)]</code></span><span id="structfield.cwd_source" class="structfield section-header"><a href="#structfield.cwd_source" class="anchor field">§</a><code>cwd_source: Option&lt;ObjectRefV1&gt;</code></span><div class="docblock"><p>Existing VFS directory grant to derive the child’s cwd from (never an
 ambient path lookup when present).</p>
 </div><span id="structfield.completion" class="structfield section-header"><a href="#structfield.completion" class="anchor field">§</a><code>completion: bool</code></span><div class="docblock"><p>Give the stage a write-only completion-record stream in slot 5 (what a foreground
 child gets from <code>spawn_foreground_with_completion</code>): the stream is created in the

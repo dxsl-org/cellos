@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span>super::{KmsClient, KmsClientError, Wiped};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::session::{sha256, zeroize};
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>types::kms::{
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>kms_codec::{
 <a href=#18 id=18 data-nosnippet>18</a>    ssh_chunk_len, validate_ssh_key_name, validate_ssh_username, KmsOpcode, SshAbortRequestPayload,
 <a href=#19 id=19 data-nosnippet>19</a>    SshChunkAckPayload, SshChunkRequestPayload, SshDeleteRequestPayload,
 <a href=#20 id=20 data-nosnippet>20</a>    SshImportBeginRequestPayload, SshImportCommitRequestPayload, SshKeyStatusPayload,
@@ -344,7 +344,7 @@
 <a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">use </span>alloc::rc::Rc;
 <a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">use </span>alloc::vec::Vec;
 <a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">use </span>core::cell::{Cell, RefCell};
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">use </span>types::kms::{
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">use </span>kms_codec::{
 <a href=#348 id=348 data-nosnippet>348</a>        KmsCapabilityReadiness, KmsCustodyPosture, KmsErrorCode, KmsKeyAlgorithm, KmsProviderKind,
 <a href=#349 id=349 data-nosnippet>349</a>        KmsRequestV1, KmsResponseV1, KmsSshKeyCustody, KmsWireError, KMS_MESSAGE_LEN,
 <a href=#350 id=350 data-nosnippet>350</a>    };

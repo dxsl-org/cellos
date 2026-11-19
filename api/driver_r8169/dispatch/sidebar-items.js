@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["REPLY_BUF"],"enum":["NicReply"],"fn":["handle"]};

@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">use </span>alloc::string::String;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#18 id=18 data-nosnippet>18</a>
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>api::display::{compositor_ops, Rect};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>wire::display::{compositor_ops, Rect};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::input_handler::InputState;
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::surface_table::{FrameRegistry, SurfaceTable};
@@ -82,9 +82,9 @@
 <a href=#82 id=82 data-nosnippet>82</a></span><span class="kw">mod </span>tests {
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">extern crate </span>std;
 <a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">use </span>api::display::SurfaceRole;
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">use </span>api::display::{CreateViewRequest, ViewOpResult};
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">use </span>api::services::proto::compositor::OWNER_EXITED_RELAY;
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">use </span>wire::display::SurfaceRole;
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">use </span>wire::display::{CreateViewRequest, ViewOpResult};
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">use </span>wire::proto::compositor::OWNER_EXITED_RELAY;
 <a href=#88 id=88 data-nosnippet>88</a>
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="attr">#[test]
 <a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">fn </span>only_create_requests_need_a_watch() {

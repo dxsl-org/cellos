@@ -24,8 +24,8 @@
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::syscall::{sys_grant_alloc, sys_recv};
 <a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="macro">api::declare_syscalls!</span>[GrantAlloc, Recv, Log, Exit];
-<a href=#28 id=28 data-nosnippet>28</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#27 id=27 data-nosnippet>27</a><span class="macro">abi::declare_syscalls!</span>[GrantAlloc, Recv, Log, Exit];
+<a href=#28 id=28 data-nosnippet>28</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Resident heap arena. Every page is touched, so this is frames, not slack.
 <a href=#31 id=31 data-nosnippet>31</a>///

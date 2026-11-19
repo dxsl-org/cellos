@@ -215,9 +215,9 @@
 <a href=#215 id=215 data-nosnippet>215</a>
 <a href=#216 id=216 data-nosnippet>216</a><span class="doccomment">/// `ifconfig` / `ip` — query and print the network interface IP address from service-net.
 <a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">pub fn </span>cmd_ifconfig(_args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">use </span>api::ipc::{NetRequest, NetResponse};
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">use </span>wire::ipc::{NetRequest, NetResponse};
 <a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(net_tid) = provider_tid(api::syscall::service::NET) <span class="kw">else </span>{
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(net_tid) = provider_tid(abi::syscall::service::NET) <span class="kw">else </span>{
 <a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">crate</span>::executor::shell_println(<span class="string">"ifconfig: network service (/bin/net) is not running"</span>);
 <a href=#222 id=222 data-nosnippet>222</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#223 id=223 data-nosnippet>223</a>    };

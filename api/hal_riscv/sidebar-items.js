@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["common","hypervisor","rv64"]};
+window.SIDEBAR_ITEMS = {"mod":["common","rv64"]};

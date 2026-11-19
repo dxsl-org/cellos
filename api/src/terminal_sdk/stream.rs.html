@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/terminal/src/stream.rs`."><title>stream.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="terminal_sdk" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">terminal_sdk/</div>stream.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// SPDX-License-Identifier: Apache-2.0 OR MIT
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="doccomment">//! Typed handles over the canonical kernel pipe owner, never a local authority table.
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>api::cell_session::{ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, Status, Writer};
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>abi::cell_session::{ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, Status, Writer};
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="macro">macro_rules!</span> reference {
 <a href=#6 id=6 data-nosnippet>6</a>    (<span class="macro-nonterminal">$name</span>:ident) =&gt; {
@@ -159,7 +159,7 @@
 <a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.prepare(path, context_len, <span class="prelude-val">None</span>)
 <a href=#160 id=160 data-nosnippet>160</a>    }
 <a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Route 2: launch `path` from ELF bytes the caller supplies in a grant it owns
-<a href=#162 id=162 data-nosnippet>162</a>    /// (`api::cell_session::PREPARE_ROUTE_ELF`). The kernel authorizes the edge as an
+<a href=#162 id=162 data-nosnippet>162</a>    /// (`abi::cell_session::PREPARE_ROUTE_ELF`). The kernel authorizes the edge as an
 <a href=#163 id=163 data-nosnippet>163</a>    /// ELF launch, which never carries a capability-bearing ceiling.
 <a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">pub fn </span>prepare_child_elf(
 <a href=#165 id=165 data-nosnippet>165</a>        <span class="self">self</span>,
@@ -184,7 +184,7 @@
 <a href=#184 id=184 data-nosnippet>184</a>            other =&gt; <span class="kw">return </span>other,
 <a href=#185 id=185 data-nosnippet>185</a>        }
 <a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">let </span>vfs =
-<a href=#187 id=187 data-nosnippet>187</a>            ostd::service::provider_tid(api::syscall::service::VFS).ok_or(Status::NotFound)<span class="question-mark">?</span>;
+<a href=#187 id=187 data-nosnippet>187</a>            ostd::service::provider_tid(abi::syscall::service::VFS).ok_or(Status::NotFound)<span class="question-mark">?</span>;
 <a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>(grant, len) =
 <a href=#189 id=189 data-nosnippet>189</a>            ostd::fs::read_full_via_grant(path, vfs).map_err(|<span class="kw">_</span>| Status::NotFound)<span class="question-mark">?</span>;
 <a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>prepared = <span class="self">self</span>.prepare_child_elf(path, grant, len, context_len);
@@ -200,15 +200,15 @@
 <a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">if </span>path.is_empty()
 <a href=#201 id=201 data-nosnippet>201</a>            || path.len() &gt; <span class="number">4096
 <a href=#202 id=202 data-nosnippet>202</a>            </span>|| path.as_bytes().contains(<span class="kw-2">&amp;</span><span class="number">0</span>)
-<a href=#203 id=203 data-nosnippet>203</a>            || !(api::cell_session::CONTEXT_HEADER_LEN..=api::cell_session::CONTEXT_MAX)
+<a href=#203 id=203 data-nosnippet>203</a>            || !(abi::cell_session::CONTEXT_HEADER_LEN..=abi::cell_session::CONTEXT_MAX)
 <a href=#204 id=204 data-nosnippet>204</a>                .contains(<span class="kw-2">&amp;</span>context_len)
 <a href=#205 id=205 data-nosnippet>205</a>        {
 <a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed);
 <a href=#207 id=207 data-nosnippet>207</a>        }
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span>route = <span class="kw">if </span>elf.is_some() {
-<a href=#209 id=209 data-nosnippet>209</a>            api::cell_session::PREPARE_ROUTE_ELF
+<a href=#209 id=209 data-nosnippet>209</a>            abi::cell_session::PREPARE_ROUTE_ELF
 <a href=#210 id=210 data-nosnippet>210</a>        } <span class="kw">else </span>{
-<a href=#211 id=211 data-nosnippet>211</a>            api::cell_session::PREPARE_ROUTE_PATH
+<a href=#211 id=211 data-nosnippet>211</a>            abi::cell_session::PREPARE_ROUTE_PATH
 <a href=#212 id=212 data-nosnippet>212</a>        };
 <a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = [<span class="number">0u8</span>; <span class="number">4144</span>];
 <a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span><span class="kw-2">mut </span>w = Writer::new(<span class="kw-2">&amp;mut </span>body);
@@ -468,7 +468,7 @@
 <a href=#468 id=468 data-nosnippet>468</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#469 id=469 data-nosnippet>469</a>        kind: u16,
 <a href=#470 id=470 data-nosnippet>470</a>        slot: u16,
-<a href=#471 id=471 data-nosnippet>471</a>        issuer: api::service_binding::ServiceBinding,
+<a href=#471 id=471 data-nosnippet>471</a>        issuer: abi::service_binding::ServiceBinding,
 <a href=#472 id=472 data-nosnippet>472</a>        receipt: ReceiptRef,
 <a href=#473 id=473 data-nosnippet>473</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), Status&gt; {
 <a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = [<span class="number">0u8</span>; <span class="number">64</span>];
@@ -490,7 +490,7 @@
 <a href=#490 id=490 data-nosnippet>490</a>    }
 <a href=#491 id=491 data-nosnippet>491</a>    <span class="kw">pub fn </span>authorize_input(
 <a href=#492 id=492 data-nosnippet>492</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#493 id=493 data-nosnippet>493</a>        issuer: api::service_binding::ServiceBinding,
+<a href=#493 id=493 data-nosnippet>493</a>        issuer: abi::service_binding::ServiceBinding,
 <a href=#494 id=494 data-nosnippet>494</a>        stdin_writer: Endpoint,
 <a href=#495 id=495 data-nosnippet>495</a>        control_writer: Endpoint,
 <a href=#496 id=496 data-nosnippet>496</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), Status&gt; {

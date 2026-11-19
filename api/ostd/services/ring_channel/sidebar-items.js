@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["RING_CAPACITY","RING_SLOT_BYTES","RING_WORDS_PER_SLOT"],"enum":["RingError"],"struct":["BiRingChannel","RingMessageMeta","SpscRing","SpscSlot"]};

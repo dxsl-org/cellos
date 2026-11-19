@@ -5,10 +5,10 @@
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">use </span><span class="kw">crate</span>::memory::address_space::AddressSpace;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>types::ViError;
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="doccomment">/// Upper bound of the canonical user half for every view this kernel serves.
-<a href=#9 id=9 data-nosnippet>9</a>/// Anything at or above this boundary is non-canonical or kernel-owned and is
-<a href=#10 id=10 data-nosnippet>10</a>/// rejected before any mapping is consulted.
-<a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">const </span>USER_LIMIT: usize = <span class="number">1usize </span>&lt;&lt; <span class="number">38</span>;
+<a href=#8 id=8 data-nosnippet>8</a><span class="comment">// Upper bound of the user window for every view this kernel serves, from the
+<a href=#9 id=9 data-nosnippet>9</a>// HAL. Anything at or above this boundary is non-canonical or kernel-owned and
+<a href=#10 id=10 data-nosnippet>10</a>// is rejected before any mapping is consulted.
+<a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">use </span><span class="kw">crate</span>::hal::paging::USER_LIMIT;
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="doccomment">/// Recoverable failure of the copy transaction. Deliberately a single variant:
 <a href=#14 id=14 data-nosnippet>14</a>/// every rejection — bad arithmetic, missing mapping, missing permission, a

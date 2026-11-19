@@ -254,7 +254,7 @@
 <a href=#254 id=254 data-nosnippet>254</a>
 <a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Revalidate public fields at service boundaries before changing state.
 <a href=#256 id=256 data-nosnippet>256</a>    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="kw">crate</span>::error::TerminalError&gt; {
-<a href=#257 id=257 data-nosnippet>257</a>        api::services::session::validate_dimensions(<span class="self">self</span>.rows, <span class="self">self</span>.cols)
+<a href=#257 id=257 data-nosnippet>257</a>        wire::session::validate_dimensions(<span class="self">self</span>.rows, <span class="self">self</span>.cols)
 <a href=#258 id=258 data-nosnippet>258</a>            .map_err(|<span class="kw">_</span>| <span class="kw">crate</span>::error::TerminalError::InvalidInput)
 <a href=#259 id=259 data-nosnippet>259</a>    }
 <a href=#260 id=260 data-nosnippet>260</a>

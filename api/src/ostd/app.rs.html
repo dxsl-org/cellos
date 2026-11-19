@@ -9,7 +9,7 @@
 <a href=#9 id=9 data-nosnippet>9</a>//! # Message envelope
 <a href=#10 id=10 data-nosnippet>10</a>//!
 <a href=#11 id=11 data-nosnippet>11</a>//! Messages sent through [`AppContext::send_msg`] carry the envelope header
-<a href=#12 id=12 data-nosnippet>12</a>//! defined by [`api::services::proto::app_envelope`]: the magic byte (a
+<a href=#12 id=12 data-nosnippet>12</a>//! defined by [`wire::proto::app_envelope`]: the magic byte (a
 <a href=#13 id=13 data-nosnippet>13</a>//! namespace guard against raw-protocol collisions), then the event kind
 <a href=#14 id=14 data-nosnippet>14</a>//! (message, shutdown, snapshot, restore, capability revocation), then the
 <a href=#15 id=15 data-nosnippet>15</a>//! caller-defined payload.
@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>crate::{syscall, ViError, ViResult};
 <a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>api::services::proto::app_envelope::{
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>wire::proto::app_envelope::{
 <a href=#38 id=38 data-nosnippet>38</a>    CAP_REVOKED_LEN, HEADER_LEN, KIND_CAP_REVOKED, KIND_MESSAGE, KIND_RESTORE, KIND_SHUTDOWN,
 <a href=#39 id=39 data-nosnippet>39</a>    KIND_SNAPSHOT, MAGIC, RESTORE_KEY_LEN, RESTORE_LEN, SHUTDOWN_PARENT_DIED, SHUTDOWN_WATCHDOG,
 <a href=#40 id=40 data-nosnippet>40</a>    SNAPSHOT_LEN,
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>    /// Automatically decoded from the 65-byte `0x10`-opcode IPC message.
 <a href=#86 id=86 data-nosnippet>86</a>    /// Cells must call [`AppContext::request_input_focus`] at startup to
 <a href=#87 id=87 data-nosnippet>87</a>    /// receive these events.
-<a href=#88 id=88 data-nosnippet>88</a>    </span>Input(api::input::InputEvent),
+<a href=#88 id=88 data-nosnippet>88</a>    </span>Input(wire::input::InputEvent),
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// The receive deadline elapsed (only from [`AppContext::run_with_timeout`]).
 <a href=#90 id=90 data-nosnippet>90</a>    </span>Timeout,
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Kernel-requested graceful shutdown (legacy form — no reason byte in envelope).
@@ -135,7 +135,7 @@
 <a href=#135 id=135 data-nosnippet>135</a>    /// subsystem that depended on the capability and stop retrying it, rather
 <a href=#136 id=136 data-nosnippet>136</a>    /// than discovering the loss through a fault.
 <a href=#137 id=137 data-nosnippet>137</a>    ///
-<a href=#138 id=138 data-nosnippet>138</a>    /// `mask` uses the `api::syscall::cap_mask` bits the kernel revoked.
+<a href=#138 id=138 data-nosnippet>138</a>    /// `mask` uses the `abi::syscall::cap_mask` bits the kernel revoked.
 <a href=#139 id=139 data-nosnippet>139</a>    </span>CapRevoked {
 <a href=#140 id=140 data-nosnippet>140</a>        <span class="doccomment">/// The revoked capability mask.
 <a href=#141 id=141 data-nosnippet>141</a>        </span>mask: u32,
@@ -160,7 +160,7 @@
 <a href=#160 id=160 data-nosnippet>160</a>    /// for a caller-identity trailer.
 <a href=#161 id=161 data-nosnippet>161</a>    </span>attest_callers: bool,
 <a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// Kernel-attested identity of the sender of the event being handled.
-<a href=#163 id=163 data-nosnippet>163</a>    </span>caller: <span class="prelude-ty">Option</span>&lt;api::caller_identity::CallerIdentity&gt;,
+<a href=#163 id=163 data-nosnippet>163</a>    </span>caller: <span class="prelude-ty">Option</span>&lt;abi::caller_identity::CallerIdentity&gt;,
 <a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// The request being handled, captured at its receive: a handler that does
 <a href=#165 id=165 data-nosnippet>165</a>    /// its own IPC before replying (a receive replaces the kernel's record of
 <a href=#166 id=166 data-nosnippet>166</a>    /// the current request) still answers the caller's exact operation.
@@ -183,7 +183,7 @@
 <a href=#183 id=183 data-nosnippet>183</a>    }
 <a href=#184 id=184 data-nosnippet>184</a>
 <a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// Ask the kernel to attest the sender of every later event
-<a href=#186 id=186 data-nosnippet>186</a>    /// (`api::caller_identity`). Call from the `Init` arm, before the first
+<a href=#186 id=186 data-nosnippet>186</a>    /// (`abi::caller_identity`). Call from the `Init` arm, before the first
 <a href=#187 id=187 data-nosnippet>187</a>    /// receive. The last `CALLER_IDENTITY_LEN` bytes of the receive buffer then
 <a href=#188 id=188 data-nosnippet>188</a>    /// belong to the kernel and are cut from every event's payload. Only untimed waits are attested: with a heartbeat
 <a href=#189 id=189 data-nosnippet>189</a>    /// or a timeout armed, [`Self::caller`] is `None`, which a service must treat
@@ -196,7 +196,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>    /// so a handler never sees trailer bytes as payload.
 <a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">fn </span>payload(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
 <a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">if </span><span class="self">self</span>.attest_callers {
-<a href=#199 id=199 data-nosnippet>199</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.recv_buf[..RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN]
+<a href=#199 id=199 data-nosnippet>199</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.recv_buf[..RECV_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN]
 <a href=#200 id=200 data-nosnippet>200</a>        } <span class="kw">else </span>{
 <a href=#201 id=201 data-nosnippet>201</a>            <span class="kw-2">&amp;</span><span class="self">self</span>.recv_buf
 <a href=#202 id=202 data-nosnippet>202</a>        }
@@ -205,7 +205,7 @@
 <a href=#205 id=205 data-nosnippet>205</a>    <span class="doccomment">/// Kernel-attested identity of the sender of the event being handled, or
 <a href=#206 id=206 data-nosnippet>206</a>    /// `None` when attestation is off, the wait was timed, or the kernel wrote
 <a href=#207 id=207 data-nosnippet>207</a>    /// no valid trailer. `None` means "unknown caller": deny.
-<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">pub fn </span>caller(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;api::caller_identity::CallerIdentity&gt; {
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">pub fn </span>caller(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;abi::caller_identity::CallerIdentity&gt; {
 <a href=#209 id=209 data-nosnippet>209</a>        <span class="self">self</span>.caller
 <a href=#210 id=210 data-nosnippet>210</a>    }
 <a href=#211 id=211 data-nosnippet>211</a>
@@ -231,7 +231,7 @@
 <a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">if </span>attested {
 <a href=#232 id=232 data-nosnippet>232</a>            <span class="comment">// A message the kernel does not attest must not inherit the
 <a href=#233 id=233 data-nosnippet>233</a>            // previous sender's trailer.
-<a href=#234 id=234 data-nosnippet>234</a>            </span><span class="kw">let </span>tail = RECV_BUF_SIZE - api::caller_identity::CALLER_IDENTITY_LEN;
+<a href=#234 id=234 data-nosnippet>234</a>            </span><span class="kw">let </span>tail = RECV_BUF_SIZE - abi::caller_identity::CALLER_IDENTITY_LEN;
 <a href=#235 id=235 data-nosnippet>235</a>            <span class="self">self</span>.recv_buf[tail..].fill(<span class="number">0</span>);
 <a href=#236 id=236 data-nosnippet>236</a>        }
 <a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">let </span>result = <span class="kw">match </span>wait {
@@ -240,7 +240,7 @@
 <a href=#240 id=240 data-nosnippet>240</a>            <span class="prelude-val">Some</span>(ticks) =&gt; syscall::sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span><span class="self">self</span>.recv_buf, ticks),
 <a href=#241 id=241 data-nosnippet>241</a>        };
 <a href=#242 id=242 data-nosnippet>242</a>        <span class="kw">if </span>attested &amp;&amp; <span class="macro">matches!</span>(result, syscall::SyscallResult::Ok(tid) <span class="kw">if </span>tid != <span class="number">0</span>) {
-<a href=#243 id=243 data-nosnippet>243</a>            <span class="self">self</span>.caller = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span><span class="self">self</span>.recv_buf);
+<a href=#243 id=243 data-nosnippet>243</a>            <span class="self">self</span>.caller = abi::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span><span class="self">self</span>.recv_buf);
 <a href=#244 id=244 data-nosnippet>244</a>        }
 <a href=#245 id=245 data-nosnippet>245</a>        <span class="self">self</span>.request = <span class="kw">match </span>result {
 <a href=#246 id=246 data-nosnippet>246</a>            syscall::SyscallResult::Ok(tid) <span class="kw">if </span>tid != <span class="number">0 </span>=&gt; <span class="prelude-val">Some</span>(<span class="kw">crate</span>::ipc::Incoming::current(tid)),
@@ -449,7 +449,7 @@
 <a href=#449 id=449 data-nosnippet>449</a>                    data: buf[HEADER_LEN..].to_vec(),
 <a href=#450 id=450 data-nosnippet>450</a>                },
 <a href=#451 id=451 data-nosnippet>451</a>            }
-<a href=#452 id=452 data-nosnippet>452</a>        } <span class="kw">else if </span>buf.len() &gt;= <span class="number">2 </span>&amp;&amp; buf[<span class="number">0</span>] == api::input::INPUT_EVENT_OPCODE {
+<a href=#452 id=452 data-nosnippet>452</a>        } <span class="kw">else if </span>buf.len() &gt;= <span class="number">2 </span>&amp;&amp; buf[<span class="number">0</span>] == wire::input::INPUT_EVENT_OPCODE {
 <a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = <span class="kw">crate</span>::input::parse_frame(buf) {
 <a href=#454 id=454 data-nosnippet>454</a>                <span class="kw">return </span>AppEvent::Input(ev);
 <a href=#455 id=455 data-nosnippet>455</a>            }

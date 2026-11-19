@@ -23,15 +23,15 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::service::provider_tid;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#25 id=25 data-nosnippet>25</a>
-<a href=#26 id=26 data-nosnippet>26</a><span class="comment">// Re-export api::input types so consumers can use `ostd::input::KeyState` etc.
-<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub use </span>api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
+<a href=#26 id=26 data-nosnippet>26</a><span class="comment">// Re-export wire::input types so consumers can use `ostd::input::KeyState` etc.
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub use </span>wire::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseButton};
 <a href=#28 id=28 data-nosnippet>28</a>
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span><span class="kw">crate</span>::ipc::post;
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span><span class="kw">crate</span>::syscall::{sys_try_recv, SyscallResult};
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>api::{
-<a href=#32 id=32 data-nosnippet>32</a>    input::{decode_event, INPUT_EVENT_OPCODE},
-<a href=#33 id=33 data-nosnippet>33</a>    ipc::{InputRequest, IPC_BUF_SIZE},
-<a href=#34 id=34 data-nosnippet>34</a>    syscall::service,
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>abi::syscall::service;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>wire::{
+<a href=#33 id=33 data-nosnippet>33</a>    input::{decode_event, INPUT_EVENT_OPCODE},
+<a href=#34 id=34 data-nosnippet>34</a>    ipc::{InputRequest, IPC_BUF_SIZE},
 <a href=#35 id=35 data-nosnippet>35</a>};
 <a href=#36 id=36 data-nosnippet>36</a>
 <a href=#37 id=37 data-nosnippet>37</a><span class="doccomment">/// Register this cell as the keyboard/mouse focus recipient.
@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">let </span>req = InputRequest::SetFocus { cell_tid: <span class="number">0 </span>};
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>req_buf) <span class="kw">else </span>{
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(encoded) = wire::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>req_buf) <span class="kw">else </span>{
 <a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#65 id=65 data-nosnippet>65</a>    };
 <a href=#66 id=66 data-nosnippet>66</a>
@@ -81,7 +81,7 @@
 <a href=#81 id=81 data-nosnippet>81</a>    };
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">let </span>req = InputRequest::ClearFocus { cell_tid: <span class="number">0 </span>};
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>req_buf) <span class="kw">else </span>{
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">let </span><span class="prelude-val">Ok</span>(encoded) = wire::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>req_buf) <span class="kw">else </span>{
 <a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">return</span>;
 <a href=#86 id=86 data-nosnippet>86</a>    };
 <a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">let _ </span>= post(input_tid, encoded);

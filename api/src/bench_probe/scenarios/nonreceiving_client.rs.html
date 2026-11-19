@@ -6,25 +6,25 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! Before services replied without parking, the service sat in `Sending` until
 <a href=#7 id=7 data-nosnippet>7</a>//! the first client exited, and the second call timed out.
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>alloc::format;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::ipc::IPC_BUF_SIZE;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::services::ipc::ConfigRequest;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::services::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>api::services::proto::supervisor::{
-<a href=#14 id=14 data-nosnippet>14</a>    OP_SNAPSHOT, OP_STATUS, PHASE_REFUSED, SNAPSHOT_REQUEST_LEN, STATUS_REJECTED_CALLER,
-<a href=#15 id=15 data-nosnippet>15</a>    STATUS_REPLY_LEN,
-<a href=#16 id=16 data-nosnippet>16</a>};
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>api::syscall::service;
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>api::task::TaskPriority;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>ostd::{
-<a href=#21 id=21 data-nosnippet>21</a>    io::println,
-<a href=#22 id=22 data-nosnippet>22</a>    ipc::{IpcTerminal, PendingCall},
-<a href=#23 id=23 data-nosnippet>23</a>    syscall::{
-<a href=#24 id=24 data-nosnippet>24</a>        sys_exit, sys_get_scheduler_ticks, sys_recv_timeout, sys_send, sys_set_spawn_args,
-<a href=#25 id=25 data-nosnippet>25</a>        sys_spawn_pinned, sys_try_send, SyscallResult,
-<a href=#26 id=26 data-nosnippet>26</a>    },
-<a href=#27 id=27 data-nosnippet>27</a>    task::yield_now,
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>abi::syscall::service;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>abi::task::TaskPriority;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>alloc::format;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::{
+<a href=#14 id=14 data-nosnippet>14</a>    io::println,
+<a href=#15 id=15 data-nosnippet>15</a>    ipc::{IpcTerminal, PendingCall},
+<a href=#16 id=16 data-nosnippet>16</a>    syscall::{
+<a href=#17 id=17 data-nosnippet>17</a>        sys_exit, sys_get_scheduler_ticks, sys_recv_timeout, sys_send, sys_set_spawn_args,
+<a href=#18 id=18 data-nosnippet>18</a>        sys_spawn_pinned, sys_try_send, SyscallResult,
+<a href=#19 id=19 data-nosnippet>19</a>    },
+<a href=#20 id=20 data-nosnippet>20</a>    task::yield_now,
+<a href=#21 id=21 data-nosnippet>21</a>};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>wire::ipc::ConfigRequest;
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>wire::ipc::IPC_BUF_SIZE;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>wire::proto::supervisor::{
+<a href=#26 id=26 data-nosnippet>26</a>    OP_SNAPSHOT, OP_STATUS, PHASE_REFUSED, SNAPSHOT_REQUEST_LEN, STATUS_REJECTED_CALLER,
+<a href=#27 id=27 data-nosnippet>27</a>    STATUS_REPLY_LEN,
 <a href=#28 id=28 data-nosnippet>28</a>};
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">const </span>PROBE_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/bin/bench-probe"</span>;
@@ -53,7 +53,7 @@
 <a href=#53 id=53 data-nosnippet>53</a><span class="doccomment">/// The request every client sends to `service_id`, in `buf`.
 <a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">fn </span>request(service_id: u16, buf: <span class="kw-2">&amp;mut </span>[u8; IPC_BUF_SIZE]) -&gt; usize {
 <a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">match </span>service_id {
-<a href=#56 id=56 data-nosnippet>56</a>        service::CONFIG =&gt; api::ipc::encode(<span class="kw-2">&amp;</span>ConfigRequest::Get(<span class="string">"OS"</span>), buf)
+<a href=#56 id=56 data-nosnippet>56</a>        service::CONFIG =&gt; wire::ipc::encode(<span class="kw-2">&amp;</span>ConfigRequest::Get(<span class="string">"OS"</span>), buf)
 <a href=#57 id=57 data-nosnippet>57</a>            .map(|bytes| bytes.len())
 <a href=#58 id=58 data-nosnippet>58</a>            .unwrap_or_else(|<span class="kw">_</span>| fail(<span class="string">"config request encode"</span>)),
 <a href=#59 id=59 data-nosnippet>59</a>        service::SUPERVISOR =&gt; {
@@ -62,7 +62,7 @@
 <a href=#62 id=62 data-nosnippet>62</a>            HEADER_LEN + SNAPSHOT_REQUEST_LEN
 <a href=#63 id=63 data-nosnippet>63</a>        }
 <a href=#64 id=64 data-nosnippet>64</a>        service::COMPOSITOR =&gt; {
-<a href=#65 id=65 data-nosnippet>65</a>            buf[<span class="number">0</span>] = api::display::compositor_ops::GET_SCREEN_SIZE;
+<a href=#65 id=65 data-nosnippet>65</a>            buf[<span class="number">0</span>] = wire::display::compositor_ops::GET_SCREEN_SIZE;
 <a href=#66 id=66 data-nosnippet>66</a>            <span class="number">1
 <a href=#67 id=67 data-nosnippet>67</a>        </span>}
 <a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"unknown service"</span>),
@@ -73,8 +73,8 @@
 <a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">fn </span>reply_matches(service_id: u16, reply: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
 <a href=#74 id=74 data-nosnippet>74</a>    <span class="kw">match </span>service_id {
 <a href=#75 id=75 data-nosnippet>75</a>        service::CONFIG =&gt; <span class="macro">matches!</span>(
-<a href=#76 id=76 data-nosnippet>76</a>            api::ipc::decode::&lt;api::services::ipc::ConfigResponse&gt;(reply),
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="prelude-val">Ok</span>(api::services::ipc::ConfigResponse::Value(<span class="string">"Cellos"</span>))
+<a href=#76 id=76 data-nosnippet>76</a>            wire::ipc::decode::&lt;wire::ipc::ConfigResponse&gt;(reply),
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="prelude-val">Ok</span>(wire::ipc::ConfigResponse::Value(<span class="string">"Cellos"</span>))
 <a href=#78 id=78 data-nosnippet>78</a>        ),
 <a href=#79 id=79 data-nosnippet>79</a>        service::SUPERVISOR =&gt; reply == SUPERVISOR_REFUSAL,
 <a href=#80 id=80 data-nosnippet>80</a>        service::COMPOSITOR =&gt; reply.len() == <span class="number">8</span>,

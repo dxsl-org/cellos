@@ -20,8 +20,8 @@
 <a href=#20 id=20 data-nosnippet>20</a>#![no_main]
 <a href=#21 id=21 data-nosnippet>21</a>#![forbid(unsafe_code)]
 <a href=#22 id=22 data-nosnippet>22</a>
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">use </span>api::completion::source;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::pcie_function::{IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
+<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">use </span>abi::completion::source;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>abi::pcie_function::{IRQ_MODE_ALLOW_MSI, IRQ_MODE_ALLOW_MSIX};
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>edu_export_proto::{
 <a href=#26 id=26 data-nosnippet>26</a>    Msg, EDU_DEVICE, EDU_VENDOR, MSG_LEN, OP_COPY, OP_DIE, OP_DMA_TO, OP_HELLO, OP_MAP,
 <a href=#27 id=27 data-nosnippet>27</a>    OP_STALE_AFTER_DEATH, OP_STATUS, STATUS_BAD_REQUEST, STATUS_DMA_FAILED, STATUS_MAP_REFUSED,
@@ -36,8 +36,8 @@
 <a href=#36 id=36 data-nosnippet>36</a>    sys_recv, sys_send, DmaExportError, PcieDeviceInfo, SyscallResult,
 <a href=#37 id=37 data-nosnippet>37</a>};
 <a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
-<a href=#40 id=40 data-nosnippet>40</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#39 id=39 data-nosnippet>39</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#40 id=40 data-nosnippet>40</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#41 id=41 data-nosnippet>41</a>    Log,
 <a href=#42 id=42 data-nosnippet>42</a>    Exit,
 <a href=#43 id=43 data-nosnippet>43</a>    Send,

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MMIO_SLOT_SIZE","VIRTIO_DEV_NET"],"fn":["find_and_init_net","virtio_slot_iter"],"struct":["CellHal"]};
+window.SIDEBAR_ITEMS = {"constant":["FIND_ATTEMPTS","MMIO_SLOT_SIZE","VIRTIO_DEV_NET"],"fn":["find_and_init_net","init_first_free","virtio_slot_iter"],"struct":["CellHal"]};

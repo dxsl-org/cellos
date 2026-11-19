@@ -40,8 +40,8 @@
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">mod </span>regs;
 <a href=#41 id=41 data-nosnippet>41</a><span class="kw">mod </span>topology;
 <a href=#42 id=42 data-nosnippet>42</a>
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>api::syscall::service;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>abi::syscall::service;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">use </span>controller::XhciController;
 <a href=#46 id=46 data-nosnippet>46</a><span class="kw">use </span>driver_hid::{decode_boot_report, BootState, EvdevEvent, HidDeviceId, HidKind};
 <a href=#47 id=47 data-nosnippet>47</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
@@ -249,7 +249,7 @@
 <a href=#249 id=249 data-nosnippet>249</a>// PcieDriverCap and UsbDriverCap are granted by init via the reviewed
 <a href=#250 id=250 data-nosnippet>250</a>// `/bin/xhci` launch edge (not a manifest flag). This manifest declares NO
 <a href=#251 id=251 data-nosnippet>251</a>// privileged flags.
-<a href=#252 id=252 data-nosnippet>252</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#252 id=252 data-nosnippet>252</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#253 id=253 data-nosnippet>253</a>    block_io = <span class="bool-val">false</span>,
 <a href=#254 id=254 data-nosnippet>254</a>    network = <span class="bool-val">false</span>,
 <a href=#255 id=255 data-nosnippet>255</a>    spawn = <span class="bool-val">false</span>,
@@ -268,7 +268,7 @@
 <a href=#268 id=268 data-nosnippet>268</a>// MSI-X vector + event-ring wait of `irq.rs`.
 <a href=#269 id=269 data-nosnippet>269</a>// `Exit`/`ForceExit`/`Yield` carry no allowlist bit and are always permitted, but
 <a href=#270 id=270 data-nosnippet>270</a>// naming them keeps the intent explicit (the macro skips bit-less names).
-<a href=#271 id=271 data-nosnippet>271</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#271 id=271 data-nosnippet>271</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#272 id=272 data-nosnippet>272</a>    <span class="comment">// AppContext event-loop base set.
 <a href=#273 id=273 data-nosnippet>273</a>    </span>Send,
 <a href=#274 id=274 data-nosnippet>274</a>    Recv,

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["disable_stage2","enable_stage2","s2_tlb_flush_all","s2_tlb_flush_ipa"]};
+window.SIDEBAR_ITEMS = {"constant":["VMID_COUNT"],"fn":["clear_stage2_root","disable_stage2","enable_stage2","load_stage2","s2_tlb_flush_all"]};

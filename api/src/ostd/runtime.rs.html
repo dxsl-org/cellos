@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>//! ```
 <a href=#28 id=28 data-nosnippet>28</a>
 <a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">use </span><span class="kw">crate</span>::app::{AppContext, AppEvent};
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>api::syscall::{SyscallSet, ViSyscall};
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>abi::syscall::{SyscallSet, ViSyscall};
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="comment">// ── SyscallSet profiles ───────────────────────────────────────────────────────
 <a href=#33 id=33 data-nosnippet>33</a>
@@ -237,7 +237,7 @@
 <a href=#237 id=237 data-nosnippet>237</a>        spawn    = <span class="macro-nonterminal">$spawn</span>:literal,
 <a href=#238 id=238 data-nosnippet>238</a>        handler  = <span class="macro-nonterminal">$handler</span>:expr $(,)<span class="question-mark">?
 <a href=#239 id=239 data-nosnippet>239</a>    </span>) =&gt; {
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="macro">api::declare_manifest!</span>(block_io = <span class="macro-nonterminal">$bio</span>, network = <span class="macro-nonterminal">$net</span>, spawn = <span class="macro-nonterminal">$spawn</span>);
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="macro-nonterminal">$crate::__declare_manifest</span>!(block_io = <span class="macro-nonterminal">$bio</span>, network = <span class="macro-nonterminal">$net</span>, spawn = <span class="macro-nonterminal">$spawn</span>);
 <a href=#241 id=241 data-nosnippet>241</a>
 <a href=#242 id=242 data-nosnippet>242</a>        <span class="attr">#[used]
 <a href=#243 id=243 data-nosnippet>243</a>        #[link_section = <span class="string">"__ViCell_syscalls"</span>]
@@ -259,7 +259,7 @@
 <a href=#259 id=259 data-nosnippet>259</a>        help     = <span class="macro-nonterminal">$help</span>:literal,
 <a href=#260 id=260 data-nosnippet>260</a>        handler  = <span class="macro-nonterminal">$handler</span>:expr $(,)<span class="question-mark">?
 <a href=#261 id=261 data-nosnippet>261</a>    </span>) =&gt; {
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro">api::declare_manifest!</span>(block_io = <span class="macro-nonterminal">$bio</span>, network = <span class="macro-nonterminal">$net</span>, spawn = <span class="macro-nonterminal">$spawn</span>);
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro-nonterminal">$crate::__declare_manifest</span>!(block_io = <span class="macro-nonterminal">$bio</span>, network = <span class="macro-nonterminal">$net</span>, spawn = <span class="macro-nonterminal">$spawn</span>);
 <a href=#263 id=263 data-nosnippet>263</a>
 <a href=#264 id=264 data-nosnippet>264</a>        <span class="attr">#[used]
 <a href=#265 id=265 data-nosnippet>265</a>        #[link_section = <span class="string">"__ViCell_syscalls"</span>]
@@ -277,7 +277,7 @@
 <a href=#277 id=277 data-nosnippet>277</a>    };
 <a href=#278 id=278 data-nosnippet>278</a>    <span class="comment">// Full explicit 3-cap form + explicit protection class (Manifest v2 opt-in)
 <a href=#279 id=279 data-nosnippet>279</a>    // — e.g. an FFI cell requesting
-<a href=#280 id=280 data-nosnippet>280</a>    // `tier = api::manifest::PROTECTION_CLASS_FFI` for PKU key 2. Additive:
+<a href=#280 id=280 data-nosnippet>280</a>    // `tier = abi::manifest::PROTECTION_CLASS_FFI` for PKU key 2. Additive:
 <a href=#281 id=281 data-nosnippet>281</a>    // every pre-existing form keeps the default PROTECTION_CLASS_LEGACY.
 <a href=#282 id=282 data-nosnippet>282</a>    </span>(
 <a href=#283 id=283 data-nosnippet>283</a>        block_io = <span class="macro-nonterminal">$bio</span>:literal,
@@ -286,7 +286,7 @@
 <a href=#286 id=286 data-nosnippet>286</a>        tier     = <span class="macro-nonterminal">$tier</span>:expr,
 <a href=#287 id=287 data-nosnippet>287</a>        handler  = <span class="macro-nonterminal">$handler</span>:expr $(,)<span class="question-mark">?
 <a href=#288 id=288 data-nosnippet>288</a>    </span>) =&gt; {
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="macro">api::declare_manifest!</span>(
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="macro-nonterminal">$crate::__declare_manifest</span>!(
 <a href=#290 id=290 data-nosnippet>290</a>            block_io = <span class="macro-nonterminal">$bio</span>,
 <a href=#291 id=291 data-nosnippet>291</a>            network = <span class="macro-nonterminal">$net</span>,
 <a href=#292 id=292 data-nosnippet>292</a>            spawn = <span class="macro-nonterminal">$spawn</span>,

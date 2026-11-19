@@ -23,13 +23,13 @@
 <a href=#23 id=23 data-nosnippet>23</a>// holds no SpawnCap, and the kernel refuses ordinary `RegisterService` without
 <a href=#24 id=24 data-nosnippet>24</a>// it. `init` spawns this cell and registers `service::OCEL_JS` on its behalf
 <a href=#25 id=25 data-nosnippet>25</a>// (cells/tools/init/src/boot.rs, `spawn_optional_services`).
-<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#27 id=27 data-nosnippet>27</a>    block_io = <span class="bool-val">false</span>,
 <a href=#28 id=28 data-nosnippet>28</a>    network = <span class="bool-val">false</span>,
 <a href=#29 id=29 data-nosnippet>29</a>    spawn = <span class="bool-val">false</span>,
-<a href=#30 id=30 data-nosnippet>30</a>    tier = api::manifest::PROTECTION_CLASS_UNTRUSTED
+<a href=#30 id=30 data-nosnippet>30</a>    tier = abi::manifest::PROTECTION_CLASS_UNTRUSTED
 <a href=#31 id=31 data-nosnippet>31</a>);
-<a href=#32 id=32 data-nosnippet>32</a><span class="macro">api::declare_syscalls!</span>[Log, Recv, Send, SendGather, TryRecv, GetTime];
+<a href=#32 id=32 data-nosnippet>32</a><span class="macro">abi::declare_syscalls!</span>[Log, Recv, Send, SendGather, TryRecv, GetTime];
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#35 id=35 data-nosnippet>35</a>

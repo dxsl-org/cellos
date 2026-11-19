@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BITMAP_WORDS","MAX_REUSED"],"enum":["Reuse","Span","TagRefusal"],"fn":["generation_bits","is_kernel"],"struct":["Invalidated","TagLease","TagPool"]};

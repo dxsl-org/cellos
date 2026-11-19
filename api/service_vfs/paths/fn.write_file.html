@@ -3,7 +3,7 @@
     caller: <a class="struct" href="../caller/struct.Caller.html" title="struct service_vfs::caller::Caller">Caller</a>,
     path: &amp;str,
     content: &amp;[u8],
-) -&gt; <a class="enum" href="../../api/services/ipc/enum.VfsResponse.html" title="enum api::services::ipc::VfsResponse">VfsResponse</a>&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Authorize, charge and perform a write to an absolute path.</p>
+) -&gt; VfsResponse&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Authorize, charge and perform a write to an absolute path.</p>
 <p>Shared by the path-string and handle-addressed write operations so the quota
 accounting cannot drift between them: two copies of a net-delta calculation
 is two chances to charge the wrong cell.</p>

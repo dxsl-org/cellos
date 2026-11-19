@@ -4,8 +4,8 @@
 <a href=#4 id=4 data-nosnippet>4</a>//! and tile group (or just move a lone window). Shift + drag of a lone tab
 <a href=#5 id=5 data-nosnippet>5</a>//! slides it along the frame's top edge.
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>api::display::Rect;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::input::{KeyEvent, KeyState, Modifiers};
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>wire::display::Rect;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>wire::input::{KeyEvent, KeyState, Modifiers};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>super::{Capture, PointerRouter, RouteContext};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::stacking;
@@ -76,7 +76,7 @@
 <a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// A Shift/Ctrl/Alt/Win key event on its own: a modifier transition sent
 <a href=#77 id=77 data-nosnippet>77</a>/// to the compositor only, never to be forwarded to an app.
 <a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub fn </span>is_modifier_key(key: <span class="kw-2">&amp;</span>KeyEvent) -&gt; bool {
-<a href=#79 id=79 data-nosnippet>79</a>    key.keysym == api::input::KeySym::Unknown
+<a href=#79 id=79 data-nosnippet>79</a>    key.keysym == wire::input::KeySym::Unknown
 <a href=#80 id=80 data-nosnippet>80</a>        &amp;&amp; <span class="macro">matches!</span>(
 <a href=#81 id=81 data-nosnippet>81</a>            key.scancode,
 <a href=#82 id=82 data-nosnippet>82</a>            <span class="number">0x2A </span>| <span class="number">0x36 </span>| <span class="number">0x1D </span>| <span class="number">0x61 </span>| <span class="number">0x38 </span>| <span class="number">0x64 </span>| LEFT_META | RIGHT_META

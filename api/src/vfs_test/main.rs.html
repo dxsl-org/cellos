@@ -23,8 +23,8 @@
 <a href=#23 id=23 data-nosnippet>23</a>
 <a href=#24 id=24 data-nosnippet>24</a><span class="comment">// Declare the syscall allowlist and manifest so the kernel enforces a minimal
 <a href=#25 id=25 data-nosnippet>25</a>// capability set for this test cell.
-<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
-<a href=#27 id=27 data-nosnippet>27</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#27 id=27 data-nosnippet>27</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#28 id=28 data-nosnippet>28</a>    Send,
 <a href=#29 id=29 data-nosnippet>29</a>    Recv,
 <a href=#30 id=30 data-nosnippet>30</a>    RecvTimeout,
@@ -45,7 +45,7 @@
 <a href=#45 id=45 data-nosnippet>45</a>/// Spins (yield-looping) until init has registered vfs — safe because init
 <a href=#46 id=46 data-nosnippet>46</a>/// spawns vfs before vfs-test and vfs registers itself before yielding.
 <a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">fn </span>vfs_tid() -&gt; usize {
-<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">use </span>api::syscall::service;
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">use </span>abi::syscall::service;
 <a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">loop </span>{
 <a href=#50 id=50 data-nosnippet>50</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = ostd::service::provider_tid(service::VFS) {
 <a href=#51 id=51 data-nosnippet>51</a>            <span class="kw">return </span>tid;
@@ -59,14 +59,14 @@
 <a href=#59 id=59 data-nosnippet>59</a>
 <a href=#60 id=60 data-nosnippet>60</a><span class="comment">// ── Test harness ─────────────────────────────────────────────────────────────
 <a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">fn </span>vfs_req(req: <span class="kw-2">&amp;</span>api::ipc::VfsRequest&lt;<span class="lifetime">'_</span>&gt;) -&gt; api::ipc::VfsResponse&lt;<span class="lifetime">'static</span>&gt; {
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span><span class="kw-2">mut </span>send_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">fn </span>vfs_req(req: <span class="kw-2">&amp;</span>wire::ipc::VfsRequest&lt;<span class="lifetime">'_</span>&gt;) -&gt; wire::ipc::VfsResponse&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">let </span><span class="kw-2">mut </span>send_buf = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="comment">// Leak the receive buffer so VfsResponse::Data borrows from it safely.
 <a href=#65 id=65 data-nosnippet>65</a>    // This is fine in a test cell that runs and exits.
-<a href=#66 id=66 data-nosnippet>66</a>    </span><span class="kw">let </span>recv_buf: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8; api::ipc::IPC_BUF_SIZE] =
-<a href=#67 id=67 data-nosnippet>67</a>        alloc::boxed::Box::leak(alloc::boxed::Box::new([<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE]));
+<a href=#66 id=66 data-nosnippet>66</a>    </span><span class="kw">let </span>recv_buf: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8; wire::ipc::IPC_BUF_SIZE] =
+<a href=#67 id=67 data-nosnippet>67</a>        alloc::boxed::Box::leak(alloc::boxed::Box::new([<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE]));
 <a href=#68 id=68 data-nosnippet>68</a>    ostd::ipc::service_call_typed(vfs_tid(), req, <span class="kw-2">&amp;mut </span>send_buf, recv_buf)
-<a href=#69 id=69 data-nosnippet>69</a>        .unwrap_or(api::ipc::VfsResponse::Err(<span class="number">0xFD</span>))
+<a href=#69 id=69 data-nosnippet>69</a>        .unwrap_or(wire::ipc::VfsResponse::Err(<span class="number">0xFD</span>))
 <a href=#70 id=70 data-nosnippet>70</a>}
 <a href=#71 id=71 data-nosnippet>71</a>
 <a href=#72 id=72 data-nosnippet>72</a><span class="doccomment">/// Send bytes to the VFS exactly as given, without encoding them first.
@@ -74,23 +74,23 @@
 <a href=#74 id=74 data-nosnippet>74</a>/// The only way to put a message on the wire that the request type cannot
 <a href=#75 id=75 data-nosnippet>75</a>/// express — an invalid-UTF-8 name, for instance, which Rust will not let a
 <a href=#76 id=76 data-nosnippet>76</a>/// `&amp;str` hold but a hostile sender has no trouble producing.
-<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">fn </span>vfs_raw(msg: <span class="kw-2">&amp;</span>[u8]) -&gt; api::ipc::VfsResponse&lt;<span class="lifetime">'static</span>&gt; {
+<a href=#77 id=77 data-nosnippet>77</a></span><span class="kw">fn </span>vfs_raw(msg: <span class="kw-2">&amp;</span>[u8]) -&gt; wire::ipc::VfsResponse&lt;<span class="lifetime">'static</span>&gt; {
 <a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">let </span>service_tid = vfs_tid();
 <a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">if let </span>ostd::syscall::SyscallResult::Err(<span class="kw">_</span>) = ostd::syscall::sys_send(service_tid, msg) {
-<a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(<span class="number">0xFD</span>);
+<a href=#80 id=80 data-nosnippet>80</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(<span class="number">0xFD</span>);
 <a href=#81 id=81 data-nosnippet>81</a>    }
 <a href=#82 id=82 data-nosnippet>82</a>
 <a href=#83 id=83 data-nosnippet>83</a>    <span class="comment">// Raw requests cannot use service_call_typed, but replies still must come
 <a href=#84 id=84 data-nosnippet>84</a>    // from VFS and an unexpected sender must never be decoded as a reply.
-<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="kw">let </span>buf: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8; api::ipc::IPC_BUF_SIZE] =
-<a href=#86 id=86 data-nosnippet>86</a>        alloc::boxed::Box::leak(alloc::boxed::Box::new([<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE]));
+<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="kw">let </span>buf: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8; wire::ipc::IPC_BUF_SIZE] =
+<a href=#86 id=86 data-nosnippet>86</a>        alloc::boxed::Box::leak(alloc::boxed::Box::new([<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE]));
 <a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">match </span>ostd::syscall::sys_recv(service_tid, buf) {
 <a href=#88 id=88 data-nosnippet>88</a>        ostd::syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender == service_tid =&gt; {
-<a href=#89 id=89 data-nosnippet>89</a>            api::ipc::decode::&lt;api::ipc::VfsResponse&gt;(buf)
-<a href=#90 id=90 data-nosnippet>90</a>                .unwrap_or(api::ipc::VfsResponse::Err(<span class="number">0xFE</span>))
+<a href=#89 id=89 data-nosnippet>89</a>            wire::ipc::decode::&lt;wire::ipc::VfsResponse&gt;(buf)
+<a href=#90 id=90 data-nosnippet>90</a>                .unwrap_or(wire::ipc::VfsResponse::Err(<span class="number">0xFE</span>))
 <a href=#91 id=91 data-nosnippet>91</a>        }
-<a href=#92 id=92 data-nosnippet>92</a>        ostd::syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; api::ipc::VfsResponse::Err(<span class="number">0xFC</span>),
-<a href=#93 id=93 data-nosnippet>93</a>        ostd::syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; api::ipc::VfsResponse::Err(<span class="number">0xFD</span>),
+<a href=#92 id=92 data-nosnippet>92</a>        ostd::syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; wire::ipc::VfsResponse::Err(<span class="number">0xFC</span>),
+<a href=#93 id=93 data-nosnippet>93</a>        ostd::syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; wire::ipc::VfsResponse::Err(<span class="number">0xFD</span>),
 <a href=#94 id=94 data-nosnippet>94</a>    }
 <a href=#95 id=95 data-nosnippet>95</a>}
 <a href=#96 id=96 data-nosnippet>96</a>
@@ -123,7 +123,7 @@
 <a href=#123 id=123 data-nosnippet>123</a><span class="macro">macro_rules!</span> assert_ok {
 <a href=#124 id=124 data-nosnippet>124</a>    (<span class="macro-nonterminal">$req</span>:expr, <span class="macro-nonterminal">$msg</span>:literal) =&gt; {
 <a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span><span class="macro-nonterminal">$req</span>) {
-<a href=#126 id=126 data-nosnippet>126</a>            api::ipc::VfsResponse::Ok =&gt; pass(<span class="macro-nonterminal">$msg</span>),
+<a href=#126 id=126 data-nosnippet>126</a>            wire::ipc::VfsResponse::Ok =&gt; pass(<span class="macro-nonterminal">$msg</span>),
 <a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">_ </span>=&gt; fail(<span class="macro-nonterminal">$msg</span>),
 <a href=#128 id=128 data-nosnippet>128</a>        }
 <a href=#129 id=129 data-nosnippet>129</a>    };
@@ -132,8 +132,8 @@
 <a href=#132 id=132 data-nosnippet>132</a><span class="macro">macro_rules!</span> assert_err {
 <a href=#133 id=133 data-nosnippet>133</a>    (<span class="macro-nonterminal">$req</span>:expr, <span class="macro-nonterminal">$code</span>:expr, <span class="macro-nonterminal">$msg</span>:literal) =&gt; {
 <a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span><span class="macro-nonterminal">$req</span>) {
-<a href=#135 id=135 data-nosnippet>135</a>            api::ipc::VfsResponse::Err(c) <span class="kw">if </span>c == <span class="macro-nonterminal">$code </span>=&gt; pass(<span class="macro-nonterminal">$msg</span>),
-<a href=#136 id=136 data-nosnippet>136</a>            api::ipc::VfsResponse::Err(c) =&gt; {
+<a href=#135 id=135 data-nosnippet>135</a>            wire::ipc::VfsResponse::Err(c) <span class="kw">if </span>c == <span class="macro-nonterminal">$code </span>=&gt; pass(<span class="macro-nonterminal">$msg</span>),
+<a href=#136 id=136 data-nosnippet>136</a>            wire::ipc::VfsResponse::Err(c) =&gt; {
 <a href=#137 id=137 data-nosnippet>137</a>                ostd::io::print(<span class="string">"[FAIL] "</span>);
 <a href=#138 id=138 data-nosnippet>138</a>                ostd::io::print(<span class="macro-nonterminal">$msg</span>);
 <a href=#139 id=139 data-nosnippet>139</a>                ostd::io::print(<span class="string">" — wrong code: "</span>);
@@ -151,15 +151,15 @@
 <a href=#151 id=151 data-nosnippet>151</a></span><span class="doccomment">/// 1. File lifecycle: write → stat → unlink → stat-gone.
 <a href=#152 id=152 data-nosnippet>152</a></span><span class="kw">fn </span>test_file_lifecycle() {
 <a href=#153 id=153 data-nosnippet>153</a>    <span class="macro">assert_ok!</span>(
-<a href=#154 id=154 data-nosnippet>154</a>        api::ipc::VfsRequest::Write {
+<a href=#154 id=154 data-nosnippet>154</a>        wire::ipc::VfsRequest::Write {
 <a href=#155 id=155 data-nosnippet>155</a>            path: <span class="string">"/tmp/test_lifecycle.txt"</span>,
 <a href=#156 id=156 data-nosnippet>156</a>            content: <span class="string">b"hello world"
 <a href=#157 id=157 data-nosnippet>157</a>        </span>},
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="string">"write /tmp/test_lifecycle.txt"
 <a href=#159 id=159 data-nosnippet>159</a>    </span>);
 <a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp/test_lifecycle.txt"</span>)) {
-<a href=#162 id=162 data-nosnippet>162</a>        api::ipc::VfsResponse::Stat {
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp/test_lifecycle.txt"</span>)) {
+<a href=#162 id=162 data-nosnippet>162</a>        wire::ipc::VfsResponse::Stat {
 <a href=#163 id=163 data-nosnippet>163</a>            size: <span class="number">11</span>,
 <a href=#164 id=164 data-nosnippet>164</a>            is_dir: <span class="bool-val">false</span>,
 <a href=#165 id=165 data-nosnippet>165</a>        } =&gt; pass(<span class="string">"stat size=11 is_file"</span>),
@@ -167,12 +167,12 @@
 <a href=#167 id=167 data-nosnippet>167</a>    }
 <a href=#168 id=168 data-nosnippet>168</a>
 <a href=#169 id=169 data-nosnippet>169</a>    <span class="macro">assert_ok!</span>(
-<a href=#170 id=170 data-nosnippet>170</a>        api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/test_lifecycle.txt"</span>),
+<a href=#170 id=170 data-nosnippet>170</a>        wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/test_lifecycle.txt"</span>),
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="string">"unlink /tmp/test_lifecycle.txt"
 <a href=#172 id=172 data-nosnippet>172</a>    </span>);
 <a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp/test_lifecycle.txt"</span>)) {
-<a href=#175 id=175 data-nosnippet>175</a>        api::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"stat after unlink returns Err"</span>),
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp/test_lifecycle.txt"</span>)) {
+<a href=#175 id=175 data-nosnippet>175</a>        wire::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"stat after unlink returns Err"</span>),
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"stat after unlink should return Err"</span>),
 <a href=#177 id=177 data-nosnippet>177</a>    }
 <a href=#178 id=178 data-nosnippet>178</a>}
@@ -180,19 +180,19 @@
 <a href=#180 id=180 data-nosnippet>180</a><span class="doccomment">/// 2. Directory operations: mkdir, write inside, listdir, rmdir.
 <a href=#181 id=181 data-nosnippet>181</a></span><span class="kw">fn </span>test_directory_ops() {
 <a href=#182 id=182 data-nosnippet>182</a>    <span class="macro">assert_ok!</span>(
-<a href=#183 id=183 data-nosnippet>183</a>        api::ipc::VfsRequest::Mkdir(<span class="string">"/tmp/testdir"</span>),
+<a href=#183 id=183 data-nosnippet>183</a>        wire::ipc::VfsRequest::Mkdir(<span class="string">"/tmp/testdir"</span>),
 <a href=#184 id=184 data-nosnippet>184</a>        <span class="string">"mkdir /tmp/testdir"
 <a href=#185 id=185 data-nosnippet>185</a>    </span>);
 <a href=#186 id=186 data-nosnippet>186</a>    <span class="macro">assert_ok!</span>(
-<a href=#187 id=187 data-nosnippet>187</a>        api::ipc::VfsRequest::Write {
+<a href=#187 id=187 data-nosnippet>187</a>        wire::ipc::VfsRequest::Write {
 <a href=#188 id=188 data-nosnippet>188</a>            path: <span class="string">"/tmp/testdir/file.txt"</span>,
 <a href=#189 id=189 data-nosnippet>189</a>            content: <span class="string">b"x"
 <a href=#190 id=190 data-nosnippet>190</a>        </span>},
 <a href=#191 id=191 data-nosnippet>191</a>        <span class="string">"write inside testdir"
 <a href=#192 id=192 data-nosnippet>192</a>    </span>);
 <a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::ListDir(<span class="string">"/tmp/testdir"</span>)) {
-<a href=#195 id=195 data-nosnippet>195</a>        api::ipc::VfsResponse::Data(bytes) =&gt; {
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::ListDir(<span class="string">"/tmp/testdir"</span>)) {
+<a href=#195 id=195 data-nosnippet>195</a>        wire::ipc::VfsResponse::Data(bytes) =&gt; {
 <a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">if </span>bytes.windows(<span class="number">10</span>).any(|w| w == <span class="string">b"f:file.txt"</span>) {
 <a href=#197 id=197 data-nosnippet>197</a>                pass(<span class="string">"listdir /tmp/testdir contains f:file.txt"</span>);
 <a href=#198 id=198 data-nosnippet>198</a>            } <span class="kw">else </span>{
@@ -202,9 +202,9 @@
 <a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"listdir /tmp/testdir failed"</span>),
 <a href=#203 id=203 data-nosnippet>203</a>    }
 <a href=#204 id=204 data-nosnippet>204</a>
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/testdir/file.txt"</span>));
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/testdir/file.txt"</span>));
 <a href=#206 id=206 data-nosnippet>206</a>    <span class="macro">assert_ok!</span>(
-<a href=#207 id=207 data-nosnippet>207</a>        api::ipc::VfsRequest::Rmdir(<span class="string">"/tmp/testdir"</span>),
+<a href=#207 id=207 data-nosnippet>207</a>        wire::ipc::VfsRequest::Rmdir(<span class="string">"/tmp/testdir"</span>),
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="string">"rmdir /tmp/testdir after cleanup"
 <a href=#209 id=209 data-nosnippet>209</a>    </span>);
 <a href=#210 id=210 data-nosnippet>210</a>}
@@ -212,7 +212,7 @@
 <a href=#212 id=212 data-nosnippet>212</a><span class="doccomment">/// 3. Access control: write to /bin/ → PermissionDenied (Err 3).
 <a href=#213 id=213 data-nosnippet>213</a></span><span class="kw">fn </span>test_access_control() {
 <a href=#214 id=214 data-nosnippet>214</a>    <span class="macro">assert_err!</span>(
-<a href=#215 id=215 data-nosnippet>215</a>        api::ipc::VfsRequest::Write {
+<a href=#215 id=215 data-nosnippet>215</a>        wire::ipc::VfsRequest::Write {
 <a href=#216 id=216 data-nosnippet>216</a>            path: <span class="string">"/bin/evil"</span>,
 <a href=#217 id=217 data-nosnippet>217</a>            content: <span class="string">b"hack"
 <a href=#218 id=218 data-nosnippet>218</a>        </span>},
@@ -221,13 +221,13 @@
 <a href=#221 id=221 data-nosnippet>221</a>    </span>);
 <a href=#222 id=222 data-nosnippet>222</a>
 <a href=#223 id=223 data-nosnippet>223</a>    <span class="macro">assert_ok!</span>(
-<a href=#224 id=224 data-nosnippet>224</a>        api::ipc::VfsRequest::Write {
+<a href=#224 id=224 data-nosnippet>224</a>        wire::ipc::VfsRequest::Write {
 <a href=#225 id=225 data-nosnippet>225</a>            path: <span class="string">"/tmp/access_ok.txt"</span>,
 <a href=#226 id=226 data-nosnippet>226</a>            content: <span class="string">b"ok"
 <a href=#227 id=227 data-nosnippet>227</a>        </span>},
 <a href=#228 id=228 data-nosnippet>228</a>        <span class="string">"write /tmp/ still works"
 <a href=#229 id=229 data-nosnippet>229</a>    </span>);
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/access_ok.txt"</span>));
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/access_ok.txt"</span>));
 <a href=#231 id=231 data-nosnippet>231</a>
 <a href=#232 id=232 data-nosnippet>232</a>    <span class="comment">// ── Destructive-op authorization ─────────────────────────────────────────
 <a href=#233 id=233 data-nosnippet>233</a>    //
@@ -242,12 +242,12 @@
 <a href=#242 id=242 data-nosnippet>242</a>    // delete there already failed at the backend with Err(1) — that arm proves
 <a href=#243 id=243 data-nosnippet>243</a>    // ordering, not that a deletion was ever possible.)
 <a href=#244 id=244 data-nosnippet>244</a>    </span><span class="macro">assert_err!</span>(
-<a href=#245 id=245 data-nosnippet>245</a>        api::ipc::VfsRequest::Unlink(<span class="string">"/readme.txt"</span>),
+<a href=#245 id=245 data-nosnippet>245</a>        wire::ipc::VfsRequest::Unlink(<span class="string">"/readme.txt"</span>),
 <a href=#246 id=246 data-nosnippet>246</a>        <span class="number">3</span>,
 <a href=#247 id=247 data-nosnippet>247</a>        <span class="string">"unlink /readme.txt (read-only / prefix) → PermissionDenied"
 <a href=#248 id=248 data-nosnippet>248</a>    </span>);
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/readme.txt"</span>)) {
-<a href=#250 id=250 data-nosnippet>250</a>        api::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">false</span>, .. } =&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/readme.txt"</span>)) {
+<a href=#250 id=250 data-nosnippet>250</a>        wire::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">false</span>, .. } =&gt; {
 <a href=#251 id=251 data-nosnippet>251</a>            pass(<span class="string">"/readme.txt survived the refused unlink"</span>)
 <a href=#252 id=252 data-nosnippet>252</a>        }
 <a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"/readme.txt survived the refused unlink"</span>),
@@ -258,14 +258,14 @@
 <a href=#258 id=258 data-nosnippet>258</a>    // backend and reported Err(1) (not found). A non-existent target keeps this
 <a href=#259 id=259 data-nosnippet>259</a>    // assertion non-destructive if it is ever run against an ungated build.
 <a href=#260 id=260 data-nosnippet>260</a>    </span><span class="macro">assert_err!</span>(
-<a href=#261 id=261 data-nosnippet>261</a>        api::ipc::VfsRequest::Rmdir(<span class="string">"/no_such_dir"</span>),
+<a href=#261 id=261 data-nosnippet>261</a>        wire::ipc::VfsRequest::Rmdir(<span class="string">"/no_such_dir"</span>),
 <a href=#262 id=262 data-nosnippet>262</a>        <span class="number">3</span>,
 <a href=#263 id=263 data-nosnippet>263</a>        <span class="string">"rmdir under / → PermissionDenied (authorized before backend)"
 <a href=#264 id=264 data-nosnippet>264</a>    </span>);
 <a href=#265 id=265 data-nosnippet>265</a>    <span class="comment">// Also proves the check precedes `collect_dir_bytes`, so an unauthorized
 <a href=#266 id=266 data-nosnippet>266</a>    // caller cannot use this op to probe subtree sizes.
 <a href=#267 id=267 data-nosnippet>267</a>    </span><span class="macro">assert_err!</span>(
-<a href=#268 id=268 data-nosnippet>268</a>        api::ipc::VfsRequest::RmdirRecursive(<span class="string">"/no_such_dir"</span>),
+<a href=#268 id=268 data-nosnippet>268</a>        wire::ipc::VfsRequest::RmdirRecursive(<span class="string">"/no_such_dir"</span>),
 <a href=#269 id=269 data-nosnippet>269</a>        <span class="number">3</span>,
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="string">"rmdir_recursive under / → PermissionDenied (before subtree walk)"
 <a href=#271 id=271 data-nosnippet>271</a>    </span>);
@@ -274,7 +274,7 @@
 <a href=#274 id=274 data-nosnippet>274</a>    // denial. The invalid grant must stay untouched because cap resolution
 <a href=#275 id=275 data-nosnippet>275</a>    // fails before grant access.
 <a href=#276 id=276 data-nosnippet>276</a>    </span><span class="macro">assert_err!</span>(
-<a href=#277 id=277 data-nosnippet>277</a>        api::ipc::VfsRequest::WriteGrant {
+<a href=#277 id=277 data-nosnippet>277</a>        wire::ipc::VfsRequest::WriteGrant {
 <a href=#278 id=278 data-nosnippet>278</a>            cap: <span class="number">0</span>,
 <a href=#279 id=279 data-nosnippet>279</a>            offset: <span class="number">0</span>,
 <a href=#280 id=280 data-nosnippet>280</a>            grant: <span class="number">0</span>,
@@ -308,24 +308,24 @@
 <a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">const </span>PATCHED: <span class="kw-2">&amp;</span>[u8] = <span class="string">b"prXXixgrant!"</span>;
 <a href=#309 id=309 data-nosnippet>309</a>
 <a href=#310 id=310 data-nosnippet>310</a>    <span class="macro">assert_ok!</span>(
-<a href=#311 id=311 data-nosnippet>311</a>        api::ipc::VfsRequest::Write {
+<a href=#311 id=311 data-nosnippet>311</a>        wire::ipc::VfsRequest::Write {
 <a href=#312 id=312 data-nosnippet>312</a>            path: PATH,
 <a href=#313 id=313 data-nosnippet>313</a>            content: INITIAL
 <a href=#314 id=314 data-nosnippet>314</a>        },
 <a href=#315 id=315 data-nosnippet>315</a>        <span class="string">"grant-write: create writable target"
 <a href=#316 id=316 data-nosnippet>316</a>    </span>);
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>dir = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::OpenRootDir { path: <span class="string">"/tmp" </span>}) {
-<a href=#318 id=318 data-nosnippet>318</a>        api::ipc::VfsResponse::DirHandle(dir) =&gt; dir,
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span>dir = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::OpenRootDir { path: <span class="string">"/tmp" </span>}) {
+<a href=#318 id=318 data-nosnippet>318</a>        wire::ipc::VfsResponse::DirHandle(dir) =&gt; dir,
 <a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">_ </span>=&gt; {
 <a href=#320 id=320 data-nosnippet>320</a>            fail(<span class="string">"grant-write: open /tmp directory capability"</span>);
 <a href=#321 id=321 data-nosnippet>321</a>            <span class="kw">return</span>;
 <a href=#322 id=322 data-nosnippet>322</a>        }
 <a href=#323 id=323 data-nosnippet>323</a>    };
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>file = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::OpenFileAt {
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">let </span>file = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::OpenFileAt {
 <a href=#325 id=325 data-nosnippet>325</a>        dir,
 <a href=#326 id=326 data-nosnippet>326</a>        name: <span class="string">"grant-write.txt"</span>,
 <a href=#327 id=327 data-nosnippet>327</a>    }) {
-<a href=#328 id=328 data-nosnippet>328</a>        api::ipc::VfsResponse::FileHandle(file) =&gt; file,
+<a href=#328 id=328 data-nosnippet>328</a>        wire::ipc::VfsResponse::FileHandle(file) =&gt; file,
 <a href=#329 id=329 data-nosnippet>329</a>        <span class="kw">_ </span>=&gt; {
 <a href=#330 id=330 data-nosnippet>330</a>            fail(<span class="string">"grant-write: open service file handle"</span>);
 <a href=#331 id=331 data-nosnippet>331</a>            <span class="kw">return</span>;
@@ -347,20 +347,20 @@
 <a href=#347 id=347 data-nosnippet>347</a>            <span class="kw">return</span>;
 <a href=#348 id=348 data-nosnippet>348</a>        }
 <a href=#349 id=349 data-nosnippet>349</a>    };
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::WriteGrant {
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::WriteGrant {
 <a href=#351 id=351 data-nosnippet>351</a>        cap: file.<span class="number">0</span>,
 <a href=#352 id=352 data-nosnippet>352</a>        offset: INITIAL.len() <span class="kw">as </span>u64,
 <a href=#353 id=353 data-nosnippet>353</a>        grant: grant.id(),
 <a href=#354 id=354 data-nosnippet>354</a>        bytes: APPEND.len(),
 <a href=#355 id=355 data-nosnippet>355</a>    }) {
-<a href=#356 id=356 data-nosnippet>356</a>        api::ipc::VfsResponse::GrantDone { bytes } <span class="kw">if </span>bytes == APPEND.len() =&gt; {
+<a href=#356 id=356 data-nosnippet>356</a>        wire::ipc::VfsResponse::GrantDone { bytes } <span class="kw">if </span>bytes == APPEND.len() =&gt; {
 <a href=#357 id=357 data-nosnippet>357</a>            pass(<span class="string">"grant-write: commits exact bytes before acknowledgement"</span>)
 <a href=#358 id=358 data-nosnippet>358</a>        }
 <a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"grant-write: commits exact bytes before acknowledgement"</span>),
 <a href=#360 id=360 data-nosnippet>360</a>    }
 <a href=#361 id=361 data-nosnippet>361</a>
 <a href=#362 id=362 data-nosnippet>362</a>    <span class="macro">assert_err!</span>(
-<a href=#363 id=363 data-nosnippet>363</a>        api::ipc::VfsRequest::WriteGrant {
+<a href=#363 id=363 data-nosnippet>363</a>        wire::ipc::VfsRequest::WriteGrant {
 <a href=#364 id=364 data-nosnippet>364</a>            cap: file.<span class="number">0</span>,
 <a href=#365 id=365 data-nosnippet>365</a>            offset: EXPECTED.len() <span class="kw">as </span>u64 + <span class="number">1</span>,
 <a href=#366 id=366 data-nosnippet>366</a>            grant: <span class="number">0</span>,
@@ -380,7 +380,7 @@
 <a href=#380 id=380 data-nosnippet>380</a>        }
 <a href=#381 id=381 data-nosnippet>381</a>    };
 <a href=#382 id=382 data-nosnippet>382</a>    <span class="macro">assert_err!</span>(
-<a href=#383 id=383 data-nosnippet>383</a>        api::ipc::VfsRequest::WriteGrant {
+<a href=#383 id=383 data-nosnippet>383</a>        wire::ipc::VfsRequest::WriteGrant {
 <a href=#384 id=384 data-nosnippet>384</a>            cap: file.<span class="number">0</span>,
 <a href=#385 id=385 data-nosnippet>385</a>            offset: <span class="number">0</span>,
 <a href=#386 id=386 data-nosnippet>386</a>            grant: short_grant.id(),
@@ -397,7 +397,7 @@
 <a href=#397 id=397 data-nosnippet>397</a>        }
 <a href=#398 id=398 data-nosnippet>398</a>    };
 <a href=#399 id=399 data-nosnippet>399</a>    <span class="macro">assert_err!</span>(
-<a href=#400 id=400 data-nosnippet>400</a>        api::ipc::VfsRequest::WriteGrant {
+<a href=#400 id=400 data-nosnippet>400</a>        wire::ipc::VfsRequest::WriteGrant {
 <a href=#401 id=401 data-nosnippet>401</a>            cap: file.<span class="number">0</span>,
 <a href=#402 id=402 data-nosnippet>402</a>            offset: <span class="number">0</span>,
 <a href=#403 id=403 data-nosnippet>403</a>            grant: unshared_grant.id(),
@@ -424,13 +424,13 @@
 <a href=#424 id=424 data-nosnippet>424</a>            <span class="kw">return</span>;
 <a href=#425 id=425 data-nosnippet>425</a>        }
 <a href=#426 id=426 data-nosnippet>426</a>    };
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::WriteGrant {
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::WriteGrant {
 <a href=#428 id=428 data-nosnippet>428</a>        cap: file.<span class="number">0</span>,
 <a href=#429 id=429 data-nosnippet>429</a>        offset: <span class="number">2</span>,
 <a href=#430 id=430 data-nosnippet>430</a>        grant: patch_grant.id(),
 <a href=#431 id=431 data-nosnippet>431</a>        bytes: PATCH.len(),
 <a href=#432 id=432 data-nosnippet>432</a>    }) {
-<a href=#433 id=433 data-nosnippet>433</a>        api::ipc::VfsResponse::GrantDone { bytes } <span class="kw">if </span>bytes == PATCH.len() =&gt; {
+<a href=#433 id=433 data-nosnippet>433</a>        wire::ipc::VfsResponse::GrantDone { bytes } <span class="kw">if </span>bytes == PATCH.len() =&gt; {
 <a href=#434 id=434 data-nosnippet>434</a>            pass(<span class="string">"grant-write: copies into exact bounded destination range"</span>)
 <a href=#435 id=435 data-nosnippet>435</a>        }
 <a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"grant-write: copies into exact bounded destination range"</span>),
@@ -444,25 +444,25 @@
 <a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"grant-write: bounded copy preserves prefix and suffix"</span>),
 <a href=#445 id=445 data-nosnippet>445</a>    }
 <a href=#446 id=446 data-nosnippet>446</a>
-<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">let </span>root = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::OpenRootDir { path: <span class="string">"/" </span>}) {
-<a href=#448 id=448 data-nosnippet>448</a>        api::ipc::VfsResponse::DirHandle(root) =&gt; root,
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">let </span>root = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::OpenRootDir { path: <span class="string">"/" </span>}) {
+<a href=#448 id=448 data-nosnippet>448</a>        wire::ipc::VfsResponse::DirHandle(root) =&gt; root,
 <a href=#449 id=449 data-nosnippet>449</a>        <span class="kw">_ </span>=&gt; {
 <a href=#450 id=450 data-nosnippet>450</a>            fail(<span class="string">"grant-write: open read-only root capability"</span>);
 <a href=#451 id=451 data-nosnippet>451</a>            <span class="kw">return</span>;
 <a href=#452 id=452 data-nosnippet>452</a>        }
 <a href=#453 id=453 data-nosnippet>453</a>    };
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">let </span>read_only = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::OpenFileAt {
+<a href=#454 id=454 data-nosnippet>454</a>    <span class="kw">let </span>read_only = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::OpenFileAt {
 <a href=#455 id=455 data-nosnippet>455</a>        dir: root,
 <a href=#456 id=456 data-nosnippet>456</a>        name: <span class="string">"readme.txt"</span>,
 <a href=#457 id=457 data-nosnippet>457</a>    }) {
-<a href=#458 id=458 data-nosnippet>458</a>        api::ipc::VfsResponse::FileHandle(file) =&gt; file,
+<a href=#458 id=458 data-nosnippet>458</a>        wire::ipc::VfsResponse::FileHandle(file) =&gt; file,
 <a href=#459 id=459 data-nosnippet>459</a>        <span class="kw">_ </span>=&gt; {
 <a href=#460 id=460 data-nosnippet>460</a>            fail(<span class="string">"grant-write: open read-only file handle"</span>);
 <a href=#461 id=461 data-nosnippet>461</a>            <span class="kw">return</span>;
 <a href=#462 id=462 data-nosnippet>462</a>        }
 <a href=#463 id=463 data-nosnippet>463</a>    };
 <a href=#464 id=464 data-nosnippet>464</a>    <span class="macro">assert_err!</span>(
-<a href=#465 id=465 data-nosnippet>465</a>        api::ipc::VfsRequest::WriteGrant {
+<a href=#465 id=465 data-nosnippet>465</a>        wire::ipc::VfsRequest::WriteGrant {
 <a href=#466 id=466 data-nosnippet>466</a>            cap: read_only.<span class="number">0</span>,
 <a href=#467 id=467 data-nosnippet>467</a>            offset: <span class="number">0</span>,
 <a href=#468 id=468 data-nosnippet>468</a>            grant: <span class="number">0</span>,
@@ -471,13 +471,13 @@
 <a href=#471 id=471 data-nosnippet>471</a>        <span class="number">3</span>,
 <a href=#472 id=472 data-nosnippet>472</a>        <span class="string">"grant-write: write authorization precedes grant access"
 <a href=#473 id=473 data-nosnippet>473</a>    </span>);
-<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::CloseFile { file: read_only });
-<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::CloseDir { dir: root });
+<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::CloseFile { file: read_only });
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::CloseDir { dir: root });
 <a href=#476 id=476 data-nosnippet>476</a>
 <a href=#477 id=477 data-nosnippet>477</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
 <a href=#478 id=478 data-nosnippet>478</a>    </span>{
 <a href=#479 id=479 data-nosnippet>479</a>        <span class="macro">assert_err!</span>(
-<a href=#480 id=480 data-nosnippet>480</a>            api::ipc::VfsRequest::WriteGrant {
+<a href=#480 id=480 data-nosnippet>480</a>            wire::ipc::VfsRequest::WriteGrant {
 <a href=#481 id=481 data-nosnippet>481</a>                cap: file.<span class="number">0</span>,
 <a href=#482 id=482 data-nosnippet>482</a>                offset: <span class="number">0</span>,
 <a href=#483 id=483 data-nosnippet>483</a>                grant: <span class="number">0</span>,
@@ -486,8 +486,8 @@
 <a href=#486 id=486 data-nosnippet>486</a>            <span class="number">2</span>,
 <a href=#487 id=487 data-nosnippet>487</a>            <span class="string">"grant-write: quota overflow is refused before grant access"
 <a href=#488 id=488 data-nosnippet>488</a>        </span>);
-<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(PATH)) {
-<a href=#490 id=490 data-nosnippet>490</a>            api::ipc::VfsResponse::Stat {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(PATH)) {
+<a href=#490 id=490 data-nosnippet>490</a>            wire::ipc::VfsResponse::Stat {
 <a href=#491 id=491 data-nosnippet>491</a>                size,
 <a href=#492 id=492 data-nosnippet>492</a>                is_dir: <span class="bool-val">false</span>,
 <a href=#493 id=493 data-nosnippet>493</a>            } <span class="kw">if </span>size == EXPECTED.len() <span class="kw">as </span>u64 =&gt; {
@@ -497,25 +497,25 @@
 <a href=#497 id=497 data-nosnippet>497</a>        }
 <a href=#498 id=498 data-nosnippet>498</a>    }
 <a href=#499 id=499 data-nosnippet>499</a>
-<a href=#500 id=500 data-nosnippet>500</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::CloseFile { file });
-<a href=#501 id=501 data-nosnippet>501</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::CloseDir { dir });
-<a href=#502 id=502 data-nosnippet>502</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(PATH));
+<a href=#500 id=500 data-nosnippet>500</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::CloseFile { file });
+<a href=#501 id=501 data-nosnippet>501</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::CloseDir { dir });
+<a href=#502 id=502 data-nosnippet>502</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(PATH));
 <a href=#503 id=503 data-nosnippet>503</a>}
 <a href=#504 id=504 data-nosnippet>504</a>
 <a href=#505 id=505 data-nosnippet>505</a><span class="doccomment">/// 5. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
 <a href=#506 id=506 data-nosnippet>506</a></span><span class="kw">fn </span>test_async_read() {
 <a href=#507 id=507 data-nosnippet>507</a>    <span class="macro">assert_ok!</span>(
-<a href=#508 id=508 data-nosnippet>508</a>        api::ipc::VfsRequest::Write {
+<a href=#508 id=508 data-nosnippet>508</a>        wire::ipc::VfsRequest::Write {
 <a href=#509 id=509 data-nosnippet>509</a>            path: <span class="string">"/tmp/async_test.txt"</span>,
 <a href=#510 id=510 data-nosnippet>510</a>            content: <span class="string">b"async content"
 <a href=#511 id=511 data-nosnippet>511</a>        </span>},
 <a href=#512 id=512 data-nosnippet>512</a>        <span class="string">"write file for async read"
 <a href=#513 id=513 data-nosnippet>513</a>    </span>);
 <a href=#514 id=514 data-nosnippet>514</a>
-<a href=#515 id=515 data-nosnippet>515</a>    <span class="kw">let </span>handle = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::ReadAsync {
+<a href=#515 id=515 data-nosnippet>515</a>    <span class="kw">let </span>handle = <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::ReadAsync {
 <a href=#516 id=516 data-nosnippet>516</a>        path: <span class="string">"/tmp/async_test.txt"</span>,
 <a href=#517 id=517 data-nosnippet>517</a>    }) {
-<a href=#518 id=518 data-nosnippet>518</a>        api::ipc::VfsResponse::PendingHandle(h) =&gt; {
+<a href=#518 id=518 data-nosnippet>518</a>        wire::ipc::VfsResponse::PendingHandle(h) =&gt; {
 <a href=#519 id=519 data-nosnippet>519</a>            pass(<span class="string">"ReadAsync returns PendingHandle"</span>);
 <a href=#520 id=520 data-nosnippet>520</a>            h
 <a href=#521 id=521 data-nosnippet>521</a>        }
@@ -526,8 +526,8 @@
 <a href=#526 id=526 data-nosnippet>526</a>    };
 <a href=#527 id=527 data-nosnippet>527</a>
 <a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">if </span>handle != <span class="number">0 </span>{
-<a href=#529 id=529 data-nosnippet>529</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Poll { handle }) {
-<a href=#530 id=530 data-nosnippet>530</a>            api::ipc::VfsResponse::Data(bytes) =&gt; {
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Poll { handle }) {
+<a href=#530 id=530 data-nosnippet>530</a>            wire::ipc::VfsResponse::Data(bytes) =&gt; {
 <a href=#531 id=531 data-nosnippet>531</a>                <span class="kw">if </span>bytes.starts_with(<span class="string">b"async content"</span>) {
 <a href=#532 id=532 data-nosnippet>532</a>                    pass(<span class="string">"Poll returns correct data"</span>);
 <a href=#533 id=533 data-nosnippet>533</a>                } <span class="kw">else </span>{
@@ -538,57 +538,57 @@
 <a href=#538 id=538 data-nosnippet>538</a>        }
 <a href=#539 id=539 data-nosnippet>539</a>
 <a href=#540 id=540 data-nosnippet>540</a>        <span class="macro">assert_err!</span>(
-<a href=#541 id=541 data-nosnippet>541</a>            api::ipc::VfsRequest::Poll { handle },
+<a href=#541 id=541 data-nosnippet>541</a>            wire::ipc::VfsRequest::Poll { handle },
 <a href=#542 id=542 data-nosnippet>542</a>            <span class="number">4</span>,
 <a href=#543 id=543 data-nosnippet>543</a>            <span class="string">"Poll stale handle returns Err"
 <a href=#544 id=544 data-nosnippet>544</a>        </span>);
 <a href=#545 id=545 data-nosnippet>545</a>    }
 <a href=#546 id=546 data-nosnippet>546</a>
-<a href=#547 id=547 data-nosnippet>547</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/async_test.txt"</span>));
+<a href=#547 id=547 data-nosnippet>547</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/async_test.txt"</span>));
 <a href=#548 id=548 data-nosnippet>548</a>}
 <a href=#549 id=549 data-nosnippet>549</a>
 <a href=#550 id=550 data-nosnippet>550</a><span class="doccomment">/// 6. RamFS (/tmp) volatile write and stat.
 <a href=#551 id=551 data-nosnippet>551</a></span><span class="kw">fn </span>test_ramfs() {
 <a href=#552 id=552 data-nosnippet>552</a>    <span class="macro">assert_ok!</span>(
-<a href=#553 id=553 data-nosnippet>553</a>        api::ipc::VfsRequest::Write {
+<a href=#553 id=553 data-nosnippet>553</a>        wire::ipc::VfsRequest::Write {
 <a href=#554 id=554 data-nosnippet>554</a>            path: <span class="string">"/tmp/volatile.txt"</span>,
 <a href=#555 id=555 data-nosnippet>555</a>            content: <span class="string">b"volatile"
 <a href=#556 id=556 data-nosnippet>556</a>        </span>},
 <a href=#557 id=557 data-nosnippet>557</a>        <span class="string">"write /tmp/volatile.txt"
 <a href=#558 id=558 data-nosnippet>558</a>    </span>);
 <a href=#559 id=559 data-nosnippet>559</a>
-<a href=#560 id=560 data-nosnippet>560</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp/volatile.txt"</span>)) {
-<a href=#561 id=561 data-nosnippet>561</a>        api::ipc::VfsResponse::Stat {
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp/volatile.txt"</span>)) {
+<a href=#561 id=561 data-nosnippet>561</a>        wire::ipc::VfsResponse::Stat {
 <a href=#562 id=562 data-nosnippet>562</a>            size: <span class="number">8</span>,
 <a href=#563 id=563 data-nosnippet>563</a>            is_dir: <span class="bool-val">false</span>,
 <a href=#564 id=564 data-nosnippet>564</a>        } =&gt; pass(<span class="string">"stat /tmp/volatile.txt size=8"</span>),
 <a href=#565 id=565 data-nosnippet>565</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"stat /tmp/volatile.txt"</span>),
 <a href=#566 id=566 data-nosnippet>566</a>    }
 <a href=#567 id=567 data-nosnippet>567</a>
-<a href=#568 id=568 data-nosnippet>568</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp"</span>)) {
-<a href=#569 id=569 data-nosnippet>569</a>        api::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">true</span>, .. } =&gt; pass(<span class="string">"stat /tmp is_dir=true"</span>),
+<a href=#568 id=568 data-nosnippet>568</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp"</span>)) {
+<a href=#569 id=569 data-nosnippet>569</a>        wire::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">true</span>, .. } =&gt; pass(<span class="string">"stat /tmp is_dir=true"</span>),
 <a href=#570 id=570 data-nosnippet>570</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"stat /tmp"</span>),
 <a href=#571 id=571 data-nosnippet>571</a>    }
 <a href=#572 id=572 data-nosnippet>572</a>}
 <a href=#573 id=573 data-nosnippet>573</a>
 <a href=#574 id=574 data-nosnippet>574</a><span class="doccomment">/// 7. Stat on /tmp root directory.
 <a href=#575 id=575 data-nosnippet>575</a></span><span class="kw">fn </span>test_stat_dir() {
-<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp"</span>)) {
-<a href=#577 id=577 data-nosnippet>577</a>        api::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">true</span>, .. } =&gt; pass(<span class="string">"stat /tmp is_dir=true"</span>),
+<a href=#576 id=576 data-nosnippet>576</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp"</span>)) {
+<a href=#577 id=577 data-nosnippet>577</a>        wire::ipc::VfsResponse::Stat { is_dir: <span class="bool-val">true</span>, .. } =&gt; pass(<span class="string">"stat /tmp is_dir=true"</span>),
 <a href=#578 id=578 data-nosnippet>578</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"stat /tmp should return is_dir=true"</span>),
 <a href=#579 id=579 data-nosnippet>579</a>    }
 <a href=#580 id=580 data-nosnippet>580</a>}
 <a href=#581 id=581 data-nosnippet>581</a>
 <a href=#582 id=582 data-nosnippet>582</a><span class="doccomment">/// 8. Edge cases: nonexistent path stat and listdir.
 <a href=#583 id=583 data-nosnippet>583</a></span><span class="kw">fn </span>test_edge_cases() {
-<a href=#584 id=584 data-nosnippet>584</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Stat(<span class="string">"/tmp/does_not_exist_xyz.txt"</span>)) {
-<a href=#585 id=585 data-nosnippet>585</a>        api::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"stat nonexistent returns Err"</span>),
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Stat(<span class="string">"/tmp/does_not_exist_xyz.txt"</span>)) {
+<a href=#585 id=585 data-nosnippet>585</a>        wire::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"stat nonexistent returns Err"</span>),
 <a href=#586 id=586 data-nosnippet>586</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"stat nonexistent should Err"</span>),
 <a href=#587 id=587 data-nosnippet>587</a>    }
 <a href=#588 id=588 data-nosnippet>588</a>
-<a href=#589 id=589 data-nosnippet>589</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::ListDir(<span class="string">"/tmp/nonexistent_dir"</span>)) {
-<a href=#590 id=590 data-nosnippet>590</a>        api::ipc::VfsResponse::Data([]) =&gt; pass(<span class="string">"listdir nonexistent = empty"</span>),
-<a href=#591 id=591 data-nosnippet>591</a>        api::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"listdir nonexistent = Err"</span>),
+<a href=#589 id=589 data-nosnippet>589</a>    <span class="kw">match </span>vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::ListDir(<span class="string">"/tmp/nonexistent_dir"</span>)) {
+<a href=#590 id=590 data-nosnippet>590</a>        wire::ipc::VfsResponse::Data([]) =&gt; pass(<span class="string">"listdir nonexistent = empty"</span>),
+<a href=#591 id=591 data-nosnippet>591</a>        wire::ipc::VfsResponse::Err(<span class="kw">_</span>) =&gt; pass(<span class="string">"listdir nonexistent = Err"</span>),
 <a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"listdir nonexistent unexpected response"</span>),
 <a href=#593 id=593 data-nosnippet>593</a>    }
 <a href=#594 id=594 data-nosnippet>594</a>}
@@ -610,14 +610,14 @@
 <a href=#610 id=610 data-nosnippet>610</a></span><span class="kw">fn </span>test_quota_limit() {
 <a href=#611 id=611 data-nosnippet>611</a>    <span class="kw">let </span>chunk = [<span class="string">b'q'</span>; <span class="number">400</span>];
 <a href=#612 id=612 data-nosnippet>612</a>    <span class="macro">assert_ok!</span>(
-<a href=#613 id=613 data-nosnippet>613</a>        api::ipc::VfsRequest::Write {
+<a href=#613 id=613 data-nosnippet>613</a>        wire::ipc::VfsRequest::Write {
 <a href=#614 id=614 data-nosnippet>614</a>            path: <span class="string">"/tmp/q1.bin"</span>,
 <a href=#615 id=615 data-nosnippet>615</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#616 id=616 data-nosnippet>616</a>        },
 <a href=#617 id=617 data-nosnippet>617</a>        <span class="string">"quota write 1 (400B) fits"
 <a href=#618 id=618 data-nosnippet>618</a>    </span>);
 <a href=#619 id=619 data-nosnippet>619</a>    <span class="macro">assert_ok!</span>(
-<a href=#620 id=620 data-nosnippet>620</a>        api::ipc::VfsRequest::Write {
+<a href=#620 id=620 data-nosnippet>620</a>        wire::ipc::VfsRequest::Write {
 <a href=#621 id=621 data-nosnippet>621</a>            path: <span class="string">"/tmp/q2.bin"</span>,
 <a href=#622 id=622 data-nosnippet>622</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#623 id=623 data-nosnippet>623</a>        },
@@ -625,7 +625,7 @@
 <a href=#625 id=625 data-nosnippet>625</a>    </span>);
 <a href=#626 id=626 data-nosnippet>626</a>    <span class="comment">// Third write → 1208 total &gt; 1100 → quota exceeded.
 <a href=#627 id=627 data-nosnippet>627</a>    </span><span class="macro">assert_err!</span>(
-<a href=#628 id=628 data-nosnippet>628</a>        api::ipc::VfsRequest::Write {
+<a href=#628 id=628 data-nosnippet>628</a>        wire::ipc::VfsRequest::Write {
 <a href=#629 id=629 data-nosnippet>629</a>            path: <span class="string">"/tmp/q3.bin"</span>,
 <a href=#630 id=630 data-nosnippet>630</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#631 id=631 data-nosnippet>631</a>        },
@@ -634,19 +634,19 @@
 <a href=#634 id=634 data-nosnippet>634</a>    </span>);
 <a href=#635 id=635 data-nosnippet>635</a>    <span class="comment">// Releasing q1 frees 800B; q3 (800B) now fits.
 <a href=#636 id=636 data-nosnippet>636</a>    </span><span class="macro">assert_ok!</span>(
-<a href=#637 id=637 data-nosnippet>637</a>        api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q1.bin"</span>),
+<a href=#637 id=637 data-nosnippet>637</a>        wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q1.bin"</span>),
 <a href=#638 id=638 data-nosnippet>638</a>        <span class="string">"unlink q1 releases quota"
 <a href=#639 id=639 data-nosnippet>639</a>    </span>);
 <a href=#640 id=640 data-nosnippet>640</a>    <span class="macro">assert_ok!</span>(
-<a href=#641 id=641 data-nosnippet>641</a>        api::ipc::VfsRequest::Write {
+<a href=#641 id=641 data-nosnippet>641</a>        wire::ipc::VfsRequest::Write {
 <a href=#642 id=642 data-nosnippet>642</a>            path: <span class="string">"/tmp/q3.bin"</span>,
 <a href=#643 id=643 data-nosnippet>643</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#644 id=644 data-nosnippet>644</a>        },
 <a href=#645 id=645 data-nosnippet>645</a>        <span class="string">"quota write after release succeeds"
 <a href=#646 id=646 data-nosnippet>646</a>    </span>);
 <a href=#647 id=647 data-nosnippet>647</a>    <span class="comment">// Cleanup: net 0 delta (q2+q3=1600B remain, but test_rmdir starts fresh).
-<a href=#648 id=648 data-nosnippet>648</a>    </span><span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q2.bin"</span>));
-<a href=#649 id=649 data-nosnippet>649</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q3.bin"</span>));
+<a href=#648 id=648 data-nosnippet>648</a>    </span><span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q2.bin"</span>));
+<a href=#649 id=649 data-nosnippet>649</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/q3.bin"</span>));
 <a href=#650 id=650 data-nosnippet>650</a>}
 <a href=#651 id=651 data-nosnippet>651</a>
 <a href=#652 id=652 data-nosnippet>652</a><span class="doccomment">/// 10. RmdirRecursive releases quota (test-hooks only, 1.1 KiB quota).
@@ -660,18 +660,18 @@
 <a href=#660 id=660 data-nosnippet>660</a></span><span class="kw">fn </span>test_rmdir_recursive_quota() {
 <a href=#661 id=661 data-nosnippet>661</a>    <span class="kw">let </span>chunk = [<span class="string">b'r'</span>; <span class="number">400</span>];
 <a href=#662 id=662 data-nosnippet>662</a>    <span class="macro">assert_ok!</span>(
-<a href=#663 id=663 data-nosnippet>663</a>        api::ipc::VfsRequest::Mkdir(<span class="string">"/tmp/rdir_q"</span>),
+<a href=#663 id=663 data-nosnippet>663</a>        wire::ipc::VfsRequest::Mkdir(<span class="string">"/tmp/rdir_q"</span>),
 <a href=#664 id=664 data-nosnippet>664</a>        <span class="string">"rdir-quota: mkdir"
 <a href=#665 id=665 data-nosnippet>665</a>    </span>);
 <a href=#666 id=666 data-nosnippet>666</a>    <span class="macro">assert_ok!</span>(
-<a href=#667 id=667 data-nosnippet>667</a>        api::ipc::VfsRequest::Write {
+<a href=#667 id=667 data-nosnippet>667</a>        wire::ipc::VfsRequest::Write {
 <a href=#668 id=668 data-nosnippet>668</a>            path: <span class="string">"/tmp/rdir_q/a.bin"</span>,
 <a href=#669 id=669 data-nosnippet>669</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#670 id=670 data-nosnippet>670</a>        },
 <a href=#671 id=671 data-nosnippet>671</a>        <span class="string">"rdir-quota: write a.bin (400B)"
 <a href=#672 id=672 data-nosnippet>672</a>    </span>);
 <a href=#673 id=673 data-nosnippet>673</a>    <span class="macro">assert_ok!</span>(
-<a href=#674 id=674 data-nosnippet>674</a>        api::ipc::VfsRequest::Write {
+<a href=#674 id=674 data-nosnippet>674</a>        wire::ipc::VfsRequest::Write {
 <a href=#675 id=675 data-nosnippet>675</a>            path: <span class="string">"/tmp/rdir_q/b.bin"</span>,
 <a href=#676 id=676 data-nosnippet>676</a>            content: <span class="kw-2">&amp;</span>chunk
 <a href=#677 id=677 data-nosnippet>677</a>        },
@@ -679,7 +679,7 @@
 <a href=#679 id=679 data-nosnippet>679</a>    </span>);
 <a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">let </span>small = [<span class="string">b'x'</span>; <span class="number">300</span>];
 <a href=#681 id=681 data-nosnippet>681</a>    <span class="macro">assert_err!</span>(
-<a href=#682 id=682 data-nosnippet>682</a>        api::ipc::VfsRequest::Write {
+<a href=#682 id=682 data-nosnippet>682</a>        wire::ipc::VfsRequest::Write {
 <a href=#683 id=683 data-nosnippet>683</a>            path: <span class="string">"/tmp/rdir_quota_overflow.bin"</span>,
 <a href=#684 id=684 data-nosnippet>684</a>            content: <span class="kw-2">&amp;</span>small
 <a href=#685 id=685 data-nosnippet>685</a>        },
@@ -687,17 +687,17 @@
 <a href=#687 id=687 data-nosnippet>687</a>        <span class="string">"rdir-quota: overflow write correctly blocked before delete"
 <a href=#688 id=688 data-nosnippet>688</a>    </span>);
 <a href=#689 id=689 data-nosnippet>689</a>    <span class="macro">assert_ok!</span>(
-<a href=#690 id=690 data-nosnippet>690</a>        api::ipc::VfsRequest::RmdirRecursive(<span class="string">"/tmp/rdir_q"</span>),
+<a href=#690 id=690 data-nosnippet>690</a>        wire::ipc::VfsRequest::RmdirRecursive(<span class="string">"/tmp/rdir_q"</span>),
 <a href=#691 id=691 data-nosnippet>691</a>        <span class="string">"rdir-quota: RmdirRecursive releases 800B"
 <a href=#692 id=692 data-nosnippet>692</a>    </span>);
 <a href=#693 id=693 data-nosnippet>693</a>    <span class="macro">assert_ok!</span>(
-<a href=#694 id=694 data-nosnippet>694</a>        api::ipc::VfsRequest::Write {
+<a href=#694 id=694 data-nosnippet>694</a>        wire::ipc::VfsRequest::Write {
 <a href=#695 id=695 data-nosnippet>695</a>            path: <span class="string">"/tmp/rdir_quota_ok.bin"</span>,
 <a href=#696 id=696 data-nosnippet>696</a>            content: <span class="kw-2">&amp;</span>small
 <a href=#697 id=697 data-nosnippet>697</a>        },
 <a href=#698 id=698 data-nosnippet>698</a>        <span class="string">"rdir-quota: write after recursive delete succeeds (quota freed)"
 <a href=#699 id=699 data-nosnippet>699</a>    </span>);
-<a href=#700 id=700 data-nosnippet>700</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>api::ipc::VfsRequest::Unlink(<span class="string">"/tmp/rdir_quota_ok.bin"</span>));
+<a href=#700 id=700 data-nosnippet>700</a>    <span class="kw">let _ </span>= vfs_req(<span class="kw-2">&amp;</span>wire::ipc::VfsRequest::Unlink(<span class="string">"/tmp/rdir_quota_ok.bin"</span>));
 <a href=#701 id=701 data-nosnippet>701</a>}
 <a href=#702 id=702 data-nosnippet>702</a>
 <a href=#703 id=703 data-nosnippet>703</a><span class="comment">// ── Entry point ──────────────────────────────────────────────────────────────

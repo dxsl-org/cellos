@@ -139,56 +139,80 @@
 <a href=#139 id=139 data-nosnippet>139</a>
 <a href=#140 id=140 data-nosnippet>140</a><span class="comment">// ─── Device init ──────────────────────────────────────────────────────────────
 <a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a></span><span class="doccomment">/// Probe all VirtIO MMIO slots and initialise the first Network device found.
-<a href=#143 id=143 data-nosnippet>143</a>///
-<a href=#144 id=144 data-nosnippet>144</a>/// Returns `None` if no VirtIO NIC is present (graceful exit on non-VirtIO platforms).
-<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub fn </span>find_and_init_net() -&gt; <span class="prelude-ty">Option</span>&lt;NetDevice&gt; {
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">for </span>(base, irq) <span class="kw">in </span>virtio_slot_iter() {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="comment">// VirtIO device of another type — never claim it (the claim is
-<a href=#148 id=148 data-nosnippet>148</a>        // exclusive) nor create an MmioTransport on it (that resets it).
-<a href=#149 id=149 data-nosnippet>149</a>        </span><span class="kw">match </span>sys_probe_virtio_mmio(base) {
-<a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">Ok</span>(identity) <span class="kw">if </span>identity.device_id == VIRTIO_DEV_NET =&gt; {}
-<a href=#151 id=151 data-nosnippet>151</a>            <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
-<a href=#152 id=152 data-nosnippet>152</a>        }
-<a href=#153 id=153 data-nosnippet>153</a>
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="comment">// Claim exclusive MMIO ownership via the kernel resource registry.
-<a href=#155 id=155 data-nosnippet>155</a>        </span><span class="kw">if </span>ostd::mmio::request_region(base, MMIO_SLOT_SIZE).is_err() {
-<a href=#156 id=156 data-nosnippet>156</a>            <span class="comment">// Already owned by another Cell — skip.
-<a href=#157 id=157 data-nosnippet>157</a>            </span><span class="kw">continue</span>;
+<a href=#142 id=142 data-nosnippet>142</a></span><span class="doccomment">/// Discovery rounds (one yield apart) while a network slot is still held,
+<a href=#143 id=143 data-nosnippet>143</a>/// before concluding none is free: a restarted cell can probe before its
+<a href=#144 id=144 data-nosnippet>144</a>/// predecessor's claim is reaped. The bound the PCI driver cells use.
+<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">const </span>FIND_ATTEMPTS: usize = <span class="number">200</span>;
+<a href=#146 id=146 data-nosnippet>146</a>
+<a href=#147 id=147 data-nosnippet>147</a><span class="doccomment">/// Probe all VirtIO MMIO slots and initialise the first Network device found.
+<a href=#148 id=148 data-nosnippet>148</a>///
+<a href=#149 id=149 data-nosnippet>149</a>/// A network slot another Cell still holds is retried, a yield apart, for at
+<a href=#150 id=150 data-nosnippet>150</a>/// most [`FIND_ATTEMPTS`] rounds; with no network slot at all the scan ends
+<a href=#151 id=151 data-nosnippet>151</a>/// after one round. Returns `None` if no VirtIO NIC is claimable (graceful
+<a href=#152 id=152 data-nosnippet>152</a>/// exit on non-VirtIO platforms).
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">pub fn </span>find_and_init_net() -&gt; <span class="prelude-ty">Option</span>&lt;NetDevice&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">for _ in </span><span class="number">0</span>..FIND_ATTEMPTS {
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span><span class="kw-2">mut </span>held = <span class="bool-val">false</span>;
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(device) = init_first_free(<span class="kw-2">&amp;mut </span>held) {
+<a href=#157 id=157 data-nosnippet>157</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(device);
 <a href=#158 id=158 data-nosnippet>158</a>        }
-<a href=#159 id=159 data-nosnippet>159</a>
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="comment">// Create VirtIO transport.
-<a href=#161 id=161 data-nosnippet>161</a>        // SAFETY: the kernel identified a VirtIO network transport at `base` and
-<a href=#162 id=162 data-nosnippet>162</a>        // granted this Cell the slot above, so the header is live device memory
-<a href=#163 id=163 data-nosnippet>163</a>        // this Cell may access.
-<a href=#164 id=164 data-nosnippet>164</a>        </span><span class="kw">let </span>header = <span class="kw">unsafe </span>{ NonNull::new_unchecked(base <span class="kw">as </span><span class="kw-2">*mut </span>VirtIOHeader) };
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span>transport = <span class="kw">match unsafe </span>{ MmioTransport::new(header) } {
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="prelude-val">Ok</span>(t) <span class="kw">if </span>t.device_type() == DeviceType::Network =&gt; t,
-<a href=#167 id=167 data-nosnippet>167</a>            <span class="prelude-val">Ok</span>(t) =&gt; {
-<a href=#168 id=168 data-nosnippet>168</a>                <span class="comment">// Magic matched but type changed between our probe and transport init (race).
-<a href=#169 id=169 data-nosnippet>169</a>                // Forget to avoid resetting the device; drop our MMIO claim and move on.
-<a href=#170 id=170 data-nosnippet>170</a>                </span>core::mem::forget(t);
-<a href=#171 id=171 data-nosnippet>171</a>                <span class="kw">continue</span>;
-<a href=#172 id=172 data-nosnippet>172</a>            }
-<a href=#173 id=173 data-nosnippet>173</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
-<a href=#174 id=174 data-nosnippet>174</a>        };
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a>        <span class="comment">// Initialise virtqueues and allocate RX buffers.
-<a href=#177 id=177 data-nosnippet>177</a>        </span><span class="kw">let </span>net: CellNet =
-<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">match </span>VirtIONet::&lt;CellHal, MmioTransport, NET_QUEUE_SIZE&gt;::new(transport, RX_BUF_LEN) {
-<a href=#179 id=179 data-nosnippet>179</a>                <span class="prelude-val">Ok</span>(n) =&gt; n,
-<a href=#180 id=180 data-nosnippet>180</a>                <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>                    <span class="kw">let _ </span>= e;
-<a href=#182 id=182 data-nosnippet>182</a>                    <span class="kw">continue</span>;
-<a href=#183 id=183 data-nosnippet>183</a>                }
-<a href=#184 id=184 data-nosnippet>184</a>            };
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(NetDevice {
-<a href=#187 id=187 data-nosnippet>187</a>            net,
-<a href=#188 id=188 data-nosnippet>188</a>            irq: irq <span class="kw">as </span>u8,
-<a href=#189 id=189 data-nosnippet>189</a>            mmio_base: base,
-<a href=#190 id=190 data-nosnippet>190</a>        });
-<a href=#191 id=191 data-nosnippet>191</a>    }
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="prelude-val">None
-<a href=#193 id=193 data-nosnippet>193</a></span>}
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">if </span>!held {
+<a href=#160 id=160 data-nosnippet>160</a>            <span class="kw">break</span>;
+<a href=#161 id=161 data-nosnippet>161</a>        }
+<a href=#162 id=162 data-nosnippet>162</a>        ostd::task::yield_now();
+<a href=#163 id=163 data-nosnippet>163</a>    }
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="prelude-val">None
+<a href=#165 id=165 data-nosnippet>165</a></span>}
+<a href=#166 id=166 data-nosnippet>166</a>
+<a href=#167 id=167 data-nosnippet>167</a><span class="doccomment">/// One pass over the slots; sets `held` when a network slot's claim failed.
+<a href=#168 id=168 data-nosnippet>168</a></span><span class="kw">fn </span>init_first_free(held: <span class="kw-2">&amp;mut </span>bool) -&gt; <span class="prelude-ty">Option</span>&lt;NetDevice&gt; {
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="kw">for </span>(base, irq) <span class="kw">in </span>virtio_slot_iter() {
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="comment">// VirtIO device of another type — never claim it (the claim is
+<a href=#171 id=171 data-nosnippet>171</a>        // exclusive) nor create an MmioTransport on it (that resets it).
+<a href=#172 id=172 data-nosnippet>172</a>        </span><span class="kw">match </span>sys_probe_virtio_mmio(base) {
+<a href=#173 id=173 data-nosnippet>173</a>            <span class="prelude-val">Ok</span>(identity) <span class="kw">if </span>identity.device_id == VIRTIO_DEV_NET =&gt; {}
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
+<a href=#175 id=175 data-nosnippet>175</a>        }
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="comment">// Claim exclusive MMIO ownership via the kernel resource registry.
+<a href=#178 id=178 data-nosnippet>178</a>        </span><span class="kw">if </span>ostd::mmio::request_region(base, MMIO_SLOT_SIZE).is_err() {
+<a href=#179 id=179 data-nosnippet>179</a>            <span class="comment">// Owned by another Cell, live or awaiting reap.
+<a href=#180 id=180 data-nosnippet>180</a>            </span><span class="kw-2">*</span>held = <span class="bool-val">true</span>;
+<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">continue</span>;
+<a href=#182 id=182 data-nosnippet>182</a>        }
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="comment">// Create VirtIO transport.
+<a href=#185 id=185 data-nosnippet>185</a>        // SAFETY: the kernel identified a VirtIO network transport at `base` and
+<a href=#186 id=186 data-nosnippet>186</a>        // granted this Cell the slot above, so the header is live device memory
+<a href=#187 id=187 data-nosnippet>187</a>        // this Cell may access.
+<a href=#188 id=188 data-nosnippet>188</a>        </span><span class="kw">let </span>header = <span class="kw">unsafe </span>{ NonNull::new_unchecked(base <span class="kw">as </span><span class="kw-2">*mut </span>VirtIOHeader) };
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>transport = <span class="kw">match unsafe </span>{ MmioTransport::new(header) } {
+<a href=#190 id=190 data-nosnippet>190</a>            <span class="prelude-val">Ok</span>(t) <span class="kw">if </span>t.device_type() == DeviceType::Network =&gt; t,
+<a href=#191 id=191 data-nosnippet>191</a>            <span class="prelude-val">Ok</span>(t) =&gt; {
+<a href=#192 id=192 data-nosnippet>192</a>                <span class="comment">// Magic matched but type changed between our probe and transport init (race).
+<a href=#193 id=193 data-nosnippet>193</a>                // Forget to avoid resetting the device; drop our MMIO claim and move on.
+<a href=#194 id=194 data-nosnippet>194</a>                </span>core::mem::forget(t);
+<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw">continue</span>;
+<a href=#196 id=196 data-nosnippet>196</a>            }
+<a href=#197 id=197 data-nosnippet>197</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">continue</span>,
+<a href=#198 id=198 data-nosnippet>198</a>        };
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="comment">// Initialise virtqueues and allocate RX buffers.
+<a href=#201 id=201 data-nosnippet>201</a>        </span><span class="kw">let </span>net: CellNet =
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">match </span>VirtIONet::&lt;CellHal, MmioTransport, NET_QUEUE_SIZE&gt;::new(transport, RX_BUF_LEN) {
+<a href=#203 id=203 data-nosnippet>203</a>                <span class="prelude-val">Ok</span>(n) =&gt; n,
+<a href=#204 id=204 data-nosnippet>204</a>                <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#205 id=205 data-nosnippet>205</a>                    <span class="kw">let _ </span>= e;
+<a href=#206 id=206 data-nosnippet>206</a>                    <span class="kw">continue</span>;
+<a href=#207 id=207 data-nosnippet>207</a>                }
+<a href=#208 id=208 data-nosnippet>208</a>            };
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">return </span><span class="prelude-val">Some</span>(NetDevice {
+<a href=#211 id=211 data-nosnippet>211</a>            net,
+<a href=#212 id=212 data-nosnippet>212</a>            irq: irq <span class="kw">as </span>u8,
+<a href=#213 id=213 data-nosnippet>213</a>            mmio_base: base,
+<a href=#214 id=214 data-nosnippet>214</a>        });
+<a href=#215 id=215 data-nosnippet>215</a>    }
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="prelude-val">None
+<a href=#217 id=217 data-nosnippet>217</a></span>}
 </code></pre></div></section></main></body></html>

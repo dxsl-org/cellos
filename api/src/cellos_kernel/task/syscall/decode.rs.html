@@ -127,7 +127,7 @@
 <a href=#127 id=127 data-nosnippet>127</a>    },
 <a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// 205: RegisterService — register `tid` as the current provider of `service_id`.
 <a href=#129 id=129 data-nosnippet>129</a>    /// SpawnCap owns the namespace; fixed-ID self-registration uses narrower caps.
-<a href=#130 id=130 data-nosnippet>130</a>    /// `flags` are `api::syscall::service_flags`, namespace owner only.
+<a href=#130 id=130 data-nosnippet>130</a>    /// `flags` are `abi::syscall::service_flags`, namespace owner only.
 <a href=#131 id=131 data-nosnippet>131</a>    </span>RegisterService {
 <a href=#132 id=132 data-nosnippet>132</a>        service_id: u16,
 <a href=#133 id=133 data-nosnippet>133</a>        tid: usize,
@@ -589,7 +589,7 @@
 <a href=#589 id=589 data-nosnippet>589</a>    <span class="doccomment">/// 420: Snapshot — serialize all allocated physical frames to disk for warm boot.
 <a href=#590 id=590 data-nosnippet>590</a>    </span>Snapshot,
 <a href=#591 id=591 data-nosnippet>591</a>    <span class="doccomment">/// 500: BlkRead — read one 512-byte sector from the VirtIO block device.
-<a href=#592 id=592 data-nosnippet>592</a>    /// Not in `ViSyscall` enum to preserve `libs/api` stability (raw dispatch).
+<a href=#592 id=592 data-nosnippet>592</a>    /// Not in `ViSyscall` enum to preserve `libs/abi` stability (raw dispatch).
 <a href=#593 id=593 data-nosnippet>593</a>    </span>BlkRead {
 <a href=#594 id=594 data-nosnippet>594</a>        sector: u64,
 <a href=#595 id=595 data-nosnippet>595</a>        buf_ptr: usize,
@@ -871,19 +871,19 @@
 <a href=#871 id=871 data-nosnippet>871</a>            msg_ptr: a1,
 <a href=#872 id=872 data-nosnippet>872</a>            msg_len: a2,
 <a href=#873 id=873 data-nosnippet>873</a>        },
-<a href=#874 id=874 data-nosnippet>874</a>        ViSyscall::Recv =&gt; <span class="kw">match </span>api::caller_identity::recv_timeout_ticks(a3) {
+<a href=#874 id=874 data-nosnippet>874</a>        ViSyscall::Recv =&gt; <span class="kw">match </span>abi::caller_identity::recv_timeout_ticks(a3) {
 <a href=#875 id=875 data-nosnippet>875</a>            <span class="number">0 </span>=&gt; Syscall::Recv {
 <a href=#876 id=876 data-nosnippet>876</a>                mask: a0,
 <a href=#877 id=877 data-nosnippet>877</a>                buf_ptr: a1,
 <a href=#878 id=878 data-nosnippet>878</a>                buf_len: a2,
-<a href=#879 id=879 data-nosnippet>879</a>                attest_caller: a3 &amp; api::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
+<a href=#879 id=879 data-nosnippet>879</a>                attest_caller: a3 &amp; abi::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
 <a href=#880 id=880 data-nosnippet>880</a>            },
 <a href=#881 id=881 data-nosnippet>881</a>            ticks =&gt; Syscall::RecvTimeout {
 <a href=#882 id=882 data-nosnippet>882</a>                mask: a0,
 <a href=#883 id=883 data-nosnippet>883</a>                buf_ptr: a1,
 <a href=#884 id=884 data-nosnippet>884</a>                buf_len: a2,
 <a href=#885 id=885 data-nosnippet>885</a>                deadline: (<span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u64).wrapping_add(ticks),
-<a href=#886 id=886 data-nosnippet>886</a>                attest_caller: a3 &amp; api::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
+<a href=#886 id=886 data-nosnippet>886</a>                attest_caller: a3 &amp; abi::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
 <a href=#887 id=887 data-nosnippet>887</a>                timeout_is_error: <span class="bool-val">true</span>,
 <a href=#888 id=888 data-nosnippet>888</a>            },
 <a href=#889 id=889 data-nosnippet>889</a>        },
@@ -891,7 +891,7 @@
 <a href=#891 id=891 data-nosnippet>891</a>            mask: a0,
 <a href=#892 id=892 data-nosnippet>892</a>            buf_ptr: a1,
 <a href=#893 id=893 data-nosnippet>893</a>            buf_len: a2,
-<a href=#894 id=894 data-nosnippet>894</a>            attest_caller: a3 &amp; api::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
+<a href=#894 id=894 data-nosnippet>894</a>            attest_caller: a3 &amp; abi::caller_identity::RECV_ATTEST_CALLER != <span class="number">0</span>,
 <a href=#895 id=895 data-nosnippet>895</a>        },
 <a href=#896 id=896 data-nosnippet>896</a>        ViSyscall::SendGather =&gt; Syscall::SendGather {
 <a href=#897 id=897 data-nosnippet>897</a>            target: a0,
@@ -1419,7 +1419,7 @@
 <a href=#1419 id=1419 data-nosnippet>1419</a>                path_ptr: a0,
 <a href=#1420 id=1420 data-nosnippet>1420</a>                path_len: a1,
 <a href=#1421 id=1421 data-nosnippet>1421</a>            },
-<a href=#1422 id=1422 data-nosnippet>1422</a>            <span class="comment">// Block I/O — intentionally absent from ViSyscall/libs/api (avoids Law 1).
+<a href=#1422 id=1422 data-nosnippet>1422</a>            <span class="comment">// Block I/O — intentionally absent from ViSyscall/libs/abi (avoids Law 1).
 <a href=#1423 id=1423 data-nosnippet>1423</a>            </span><span class="number">255 </span>=&gt; Syscall::Rename {
 <a href=#1424 id=1424 data-nosnippet>1424</a>                old_ptr: a0,
 <a href=#1425 id=1425 data-nosnippet>1425</a>                old_len: a1,

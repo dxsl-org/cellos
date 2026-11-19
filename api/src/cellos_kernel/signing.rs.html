@@ -110,7 +110,7 @@
 <a href=#110 id=110 data-nosnippet>110</a>    (posture, prefix)
 <a href=#111 id=111 data-nosnippet>111</a>}
 <a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a><span class="doccomment">/// The `api::cell_image` anchor class reported for an image this kernel's
+<a href=#113 id=113 data-nosnippet>113</a><span class="doccomment">/// The `abi::cell_image` anchor class reported for an image this kernel's
 <a href=#114 id=114 data-nosnippet>114</a>/// signature check verified. Follows the key `CELL_SIGNER_PUBKEY` actually
 <a href=#115 id=115 data-nosnippet>115</a>/// selects (the private profile key overrides the others), not the feature
 <a href=#116 id=116 data-nosnippet>116</a>/// list, so the class always names the key that did the verifying.
@@ -124,15 +124,15 @@
 <a href=#124 id=124 data-nosnippet>124</a>
 <a href=#125 id=125 data-nosnippet>125</a><span class="kw">const fn </span>anchor_class_for(private: bool, release: bool, dev: bool) -&gt; u8 {
 <a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">if </span>private {
-<a href=#127 id=127 data-nosnippet>127</a>        api::cell_image::ANCHOR_PRIVATE
+<a href=#127 id=127 data-nosnippet>127</a>        abi::cell_image::ANCHOR_PRIVATE
 <a href=#128 id=128 data-nosnippet>128</a>    } <span class="kw">else if </span>release {
-<a href=#129 id=129 data-nosnippet>129</a>        api::cell_image::ANCHOR_RELEASE
+<a href=#129 id=129 data-nosnippet>129</a>        abi::cell_image::ANCHOR_RELEASE
 <a href=#130 id=130 data-nosnippet>130</a>    } <span class="kw">else if </span>dev {
-<a href=#131 id=131 data-nosnippet>131</a>        api::cell_image::ANCHOR_DEV
+<a href=#131 id=131 data-nosnippet>131</a>        abi::cell_image::ANCHOR_DEV
 <a href=#132 id=132 data-nosnippet>132</a>    } <span class="kw">else </span>{
 <a href=#133 id=133 data-nosnippet>133</a>        <span class="comment">// The zero placeholder key verifies nothing, so no image ever reaches
 <a href=#134 id=134 data-nosnippet>134</a>        // the caller of this function with this value.
-<a href=#135 id=135 data-nosnippet>135</a>        </span>api::cell_image::ANCHOR_UNSIGNED
+<a href=#135 id=135 data-nosnippet>135</a>        </span>abi::cell_image::ANCHOR_UNSIGNED
 <a href=#136 id=136 data-nosnippet>136</a>    }
 <a href=#137 id=137 data-nosnippet>137</a>}
 <a href=#138 id=138 data-nosnippet>138</a>
@@ -140,7 +140,7 @@
 <a href=#140 id=140 data-nosnippet>140</a>// one. A release kernel reporting `ANCHOR_DEV` would turn the public dev seed
 <a href=#141 id=141 data-nosnippet>141</a>// into release authority, so such a build must not exist.
 <a href=#142 id=142 data-nosnippet>142</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(
-<a href=#143 id=143 data-nosnippet>143</a>    !<span class="macro">cfg!</span>(feature = <span class="string">"release-signing-key"</span>) || anchor_class() != api::cell_image::ANCHOR_DEV
+<a href=#143 id=143 data-nosnippet>143</a>    !<span class="macro">cfg!</span>(feature = <span class="string">"release-signing-key"</span>) || anchor_class() != abi::cell_image::ANCHOR_DEV
 <a href=#144 id=144 data-nosnippet>144</a>);
 <a href=#145 id=145 data-nosnippet>145</a>
 <a href=#146 id=146 data-nosnippet>146</a><span class="attr">#[cfg(test)]
@@ -151,10 +151,10 @@
 <a href=#151 id=151 data-nosnippet>151</a>            <span class="kw">let </span>(private, release, dev) = (bits &amp; <span class="number">1 </span>!= <span class="number">0</span>, bits &amp; <span class="number">2 </span>!= <span class="number">0</span>, bits &amp; <span class="number">4 </span>!= <span class="number">0</span>);
 <a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>class = <span class="kw">super</span>::anchor_class_for(private, release, dev);
 <a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">if </span>release {
-<a href=#154 id=154 data-nosnippet>154</a>                <span class="macro">assert_ne!</span>(class, api::cell_image::ANCHOR_DEV);
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="macro">assert_ne!</span>(class, abi::cell_image::ANCHOR_DEV);
 <a href=#155 id=155 data-nosnippet>155</a>            }
 <a href=#156 id=156 data-nosnippet>156</a>            <span class="kw">if </span>dev &amp;&amp; !release &amp;&amp; !private {
-<a href=#157 id=157 data-nosnippet>157</a>                <span class="macro">assert_eq!</span>(class, api::cell_image::ANCHOR_DEV);
+<a href=#157 id=157 data-nosnippet>157</a>                <span class="macro">assert_eq!</span>(class, abi::cell_image::ANCHOR_DEV);
 <a href=#158 id=158 data-nosnippet>158</a>            }
 <a href=#159 id=159 data-nosnippet>159</a>        }
 <a href=#160 id=160 data-nosnippet>160</a>    }

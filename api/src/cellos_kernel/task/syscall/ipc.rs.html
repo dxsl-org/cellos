@@ -462,7 +462,7 @@
 <a href=#462 id=462 data-nosnippet>462</a>                                }
 <a href=#463 id=463 data-nosnippet>463</a>                            }
 <a href=#464 id=464 data-nosnippet>464</a>                            <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#465 id=465 data-nosnippet>465</a>                                sched.async_index.note_holder(caller_id, token);
+<a href=#465 id=465 data-nosnippet>465</a>                                <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#466 id=466 data-nosnippet>466</a>                            }
 <a href=#467 id=467 data-nosnippet>467</a>                            <span class="kw">if let </span>ResumeSnapshot::Message {
 <a href=#468 id=468 data-nosnippet>468</a>                                sender_tid,
@@ -514,7 +514,7 @@
 <a href=#514 id=514 data-nosnippet>514</a>            }
 <a href=#515 id=515 data-nosnippet>515</a>        }
 <a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#517 id=517 data-nosnippet>517</a>            sched.async_index.note_holder(caller_id, token);
+<a href=#517 id=517 data-nosnippet>517</a>            <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#518 id=518 data-nosnippet>518</a>        }
 <a href=#519 id=519 data-nosnippet>519</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(header) = wire_header {
 <a href=#520 id=520 data-nosnippet>520</a>            <span class="kw">crate</span>::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -685,7 +685,7 @@
 <a href=#685 id=685 data-nosnippet>685</a>            }
 <a href=#686 id=686 data-nosnippet>686</a>        }
 <a href=#687 id=687 data-nosnippet>687</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#688 id=688 data-nosnippet>688</a>            sched.async_index.note_holder(caller_id, token);
+<a href=#688 id=688 data-nosnippet>688</a>            <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#689 id=689 data-nosnippet>689</a>        }
 <a href=#690 id=690 data-nosnippet>690</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(header) = wire_header {
 <a href=#691 id=691 data-nosnippet>691</a>            <span class="kw">crate</span>::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -873,7 +873,7 @@
 <a href=#873 id=873 data-nosnippet>873</a>                                }
 <a href=#874 id=874 data-nosnippet>874</a>                            }
 <a href=#875 id=875 data-nosnippet>875</a>                            <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#876 id=876 data-nosnippet>876</a>                                sched.async_index.note_holder(caller_id, token);
+<a href=#876 id=876 data-nosnippet>876</a>                                <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#877 id=877 data-nosnippet>877</a>                            }
 <a href=#878 id=878 data-nosnippet>878</a>                            <span class="kw">if let </span>ResumeSnapshot::Message {
 <a href=#879 id=879 data-nosnippet>879</a>                                sender_tid,
@@ -927,7 +927,7 @@
 <a href=#927 id=927 data-nosnippet>927</a>            }
 <a href=#928 id=928 data-nosnippet>928</a>        }
 <a href=#929 id=929 data-nosnippet>929</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#930 id=930 data-nosnippet>930</a>            sched.async_index.note_holder(caller_id, token);
+<a href=#930 id=930 data-nosnippet>930</a>            <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#931 id=931 data-nosnippet>931</a>        }
 <a href=#932 id=932 data-nosnippet>932</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(header) = wire_header {
 <a href=#933 id=933 data-nosnippet>933</a>            <span class="kw">crate</span>::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -1067,7 +1067,7 @@
 <a href=#1067 id=1067 data-nosnippet>1067</a>                }
 <a href=#1068 id=1068 data-nosnippet>1068</a>            }
 <a href=#1069 id=1069 data-nosnippet>1069</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = held {
-<a href=#1070 id=1070 data-nosnippet>1070</a>                sched.async_index.note_holder(caller_id, token);
+<a href=#1070 id=1070 data-nosnippet>1070</a>                <span class="kw">crate</span>::task::async_ipc::note_holder(sched, caller_id, token);
 <a href=#1071 id=1071 data-nosnippet>1071</a>            }
 <a href=#1072 id=1072 data-nosnippet>1072</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(header) = wire_header {
 <a href=#1073 id=1073 data-nosnippet>1073</a>                <span class="kw">crate</span>::task::wake_sender_token(sched, sender_tid, caller_id, header);
@@ -1160,371 +1160,330 @@
 <a href=#1160 id=1160 data-nosnippet>1160</a>    </span>}
 <a href=#1161 id=1161 data-nosnippet>1161</a>}
 <a href=#1162 id=1162 data-nosnippet>1162</a>
-<a href=#1163 id=1163 data-nosnippet>1163</a><span class="doccomment">/// Handler for `Syscall::Log` (extracted from the dispatcher).
-<a href=#1164 id=1164 data-nosnippet>1164</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>log(caller_id: usize, msg_ptr: usize, msg_len: usize) -&gt; SyscallResult {
-<a href=#1165 id=1165 data-nosnippet>1165</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
-<a href=#1166 id=1166 data-nosnippet>1166</a>        <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
-<a href=#1167 id=1167 data-nosnippet>1167</a>        </span>{
-<a href=#1168 id=1168 data-nosnippet>1168</a>            <span class="kw">let </span>owner = <span class="kw">crate</span>::task::SCHEDULER
-<a href=#1169 id=1169 data-nosnippet>1169</a>                .lock()
-<a href=#1170 id=1170 data-nosnippet>1170</a>                .as_ref()
-<a href=#1171 id=1171 data-nosnippet>1171</a>                .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>caller_id))
-<a href=#1172 id=1172 data-nosnippet>1172</a>                .map(|task| {
-<a href=#1173 id=1173 data-nosnippet>1173</a>                    <span class="kw">let </span>owner = <span class="kw">crate</span>::p01_measurement::Owner::of(task);
-<a href=#1174 id=1174 data-nosnippet>1174</a>                    <span class="comment">// The temporary user-copy buffer belongs to this Log
-<a href=#1175 id=1175 data-nosnippet>1175</a>                    // invocation, including while a stage census reads it.
-<a href=#1176 id=1176 data-nosnippet>1176</a>                    </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(layout) = core::alloc::Layout::array::&lt;u8&gt;(msg.capacity()) {
-<a href=#1177 id=1177 data-nosnippet>1177</a>                        <span class="kw">crate</span>::memory::heap::p01_owner::runtime_buffer(
-<a href=#1178 id=1178 data-nosnippet>1178</a>                            msg.as_ptr() <span class="kw">as </span>usize,
-<a href=#1179 id=1179 data-nosnippet>1179</a>                            layout,
-<a href=#1180 id=1180 data-nosnippet>1180</a>                            owner,
-<a href=#1181 id=1181 data-nosnippet>1181</a>                            <span class="kw">crate</span>::memory::heap::p01_owner::TASK_IO,
-<a href=#1182 id=1182 data-nosnippet>1182</a>                        );
-<a href=#1183 id=1183 data-nosnippet>1183</a>                    } <span class="kw">else </span>{
-<a href=#1184 id=1184 data-nosnippet>1184</a>                        <span class="kw">crate</span>::p01_measurement::invalidate(<span class="kw">crate</span>::p01_measurement::COUNTER);
-<a href=#1185 id=1185 data-nosnippet>1185</a>                    }
-<a href=#1186 id=1186 data-nosnippet>1186</a>                    owner
-<a href=#1187 id=1187 data-nosnippet>1187</a>                });
-<a href=#1188 id=1188 data-nosnippet>1188</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(owner) = owner {
-<a href=#1189 id=1189 data-nosnippet>1189</a>                <span class="kw">crate</span>::p01_measurement::stage(owner, <span class="kw-2">&amp;</span>msg);
-<a href=#1190 id=1190 data-nosnippet>1190</a>            }
-<a href=#1191 id=1191 data-nosnippet>1191</a>        }
-<a href=#1192 id=1192 data-nosnippet>1192</a>        <span class="kw">crate</span>::task::print_user_log(<span class="kw-2">&amp;</span>msg, caller_id);
-<a href=#1193 id=1193 data-nosnippet>1193</a>    }
-<a href=#1194 id=1194 data-nosnippet>1194</a>    <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#1195 id=1195 data-nosnippet>1195</a>}
-<a href=#1196 id=1196 data-nosnippet>1196</a>
-<a href=#1197 id=1197 data-nosnippet>1197</a><span class="doccomment">/// Handler for `Syscall::Heartbeat` (extracted from the dispatcher).
-<a href=#1198 id=1198 data-nosnippet>1198</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>heartbeat(caller_id: usize, interval: usize) -&gt; SyscallResult {
-<a href=#1199 id=1199 data-nosnippet>1199</a>    <span class="comment">// Open: a cell asserts its own liveness. Arms a deadline `interval` ticks
-<a href=#1200 id=1200 data-nosnippet>1200</a>    // ahead; `pick_next` terminates the cell as HUNG if it lapses. interval=0
-<a href=#1201 id=1201 data-nosnippet>1201</a>    // disables. Self-targeted only — a cell can only (re)arm its OWN deadline.
-<a href=#1202 id=1202 data-nosnippet>1202</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#1203 id=1203 data-nosnippet>1203</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>caller_id) {
-<a href=#1204 id=1204 data-nosnippet>1204</a>            t.heartbeat_deadline = <span class="kw">if </span>interval == <span class="number">0 </span>{
-<a href=#1205 id=1205 data-nosnippet>1205</a>                <span class="prelude-val">None
-<a href=#1206 id=1206 data-nosnippet>1206</a>            </span>} <span class="kw">else </span>{
-<a href=#1207 id=1207 data-nosnippet>1207</a>                <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u64 + interval <span class="kw">as </span>u64)
-<a href=#1208 id=1208 data-nosnippet>1208</a>            };
-<a href=#1209 id=1209 data-nosnippet>1209</a>        }
-<a href=#1210 id=1210 data-nosnippet>1210</a>    }
-<a href=#1211 id=1211 data-nosnippet>1211</a>    <span class="prelude-val">Ok</span>(<span class="number">0</span>)
-<a href=#1212 id=1212 data-nosnippet>1212</a>}
-<a href=#1213 id=1213 data-nosnippet>1213</a>
-<a href=#1214 id=1214 data-nosnippet>1214</a><span class="doccomment">/// Handler for `Syscall::SetTimer` (extracted from the dispatcher).
-<a href=#1215 id=1215 data-nosnippet>1215</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>set_timer(deadline: usize) -&gt; SyscallResult {
-<a href=#1216 id=1216 data-nosnippet>1216</a>    <span class="comment">// Check if deadline passed
-<a href=#1217 id=1217 data-nosnippet>1217</a>    </span><span class="kw">let </span>now = <span class="kw">crate</span>::task::system_ticks();
-<a href=#1218 id=1218 data-nosnippet>1218</a>    <span class="kw">let </span>wake_at = now + deadline;
-<a href=#1219 id=1219 data-nosnippet>1219</a>
-<a href=#1220 id=1220 data-nosnippet>1220</a>    <span class="comment">// Sleep!
-<a href=#1221 id=1221 data-nosnippet>1221</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#1222 id=1222 data-nosnippet>1222</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.current_task_mut() {
-<a href=#1223 id=1223 data-nosnippet>1223</a>            task.state = TaskState::Blocked {
-<a href=#1224 id=1224 data-nosnippet>1224</a>                wait: WaitKind::Sleep,
-<a href=#1225 id=1225 data-nosnippet>1225</a>                deadline: <span class="prelude-val">Some</span>(wake_at <span class="kw">as </span>u64),
-<a href=#1226 id=1226 data-nosnippet>1226</a>            };
-<a href=#1227 id=1227 data-nosnippet>1227</a>        }
-<a href=#1228 id=1228 data-nosnippet>1228</a>    }
-<a href=#1229 id=1229 data-nosnippet>1229</a>    <span class="comment">// Yield CPU safely
-<a href=#1230 id=1230 data-nosnippet>1230</a>    </span><span class="kw">crate</span>::task::yield_cpu();
+<a href=#1163 id=1163 data-nosnippet>1163</a><span class="doccomment">/// Test hook (x86_64): `[selftest] SMAP-WINDOW`, once per boot, on the first
+<a href=#1164 id=1164 data-nosnippet>1164</a>/// `Log` from a Sas cell while CR4.SMAP is set. Its message was just copied in
+<a href=#1165 id=1165 data-nosnippet>1165</a>/// through the user-copy window (a real syscall copy that succeeded under
+<a href=#1166 id=1166 data-nosnippet>1166</a>/// SMAP: without the window's STAC it would fault and the copy would fail);
+<a href=#1167 id=1167 data-nosnippet>1167</a>/// a raw supervisor read of the same user byte outside the window must take a
+<a href=#1168 id=1168 data-nosnippet>1168</a>/// page fault. Nothing is logged when SMAP is off; the lane requires the
+<a href=#1169 id=1169 data-nosnippet>1169</a>/// marker only when the boot line says `smap=on`.
+<a href=#1170 id=1170 data-nosnippet>1170</a></span><span class="attr">#[cfg(all(
+<a href=#1171 id=1171 data-nosnippet>1171</a>    feature = <span class="string">"test-hooks"</span>,
+<a href=#1172 id=1172 data-nosnippet>1172</a>    feature = <span class="string">"native-domains"</span>,
+<a href=#1173 id=1173 data-nosnippet>1173</a>    cellos_wide,
+<a href=#1174 id=1174 data-nosnippet>1174</a>    target_arch = <span class="string">"x86_64"
+<a href=#1175 id=1175 data-nosnippet>1175</a></span>))]
+<a href=#1176 id=1176 data-nosnippet>1176</a></span><span class="kw">fn </span>smap_window_self_test(caller_id: usize, msg_ptr: usize) {
+<a href=#1177 id=1177 data-nosnippet>1177</a>    <span class="kw">use </span>core::sync::atomic::{AtomicBool, Ordering};
+<a href=#1178 id=1178 data-nosnippet>1178</a>    <span class="kw">static </span>RAN: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#1179 id=1179 data-nosnippet>1179</a>    <span class="kw">if </span>RAN.load(Ordering::Acquire)
+<a href=#1180 id=1180 data-nosnippet>1180</a>        || !<span class="kw">crate</span>::arch::user_access::smap_active()
+<a href=#1181 id=1181 data-nosnippet>1181</a>        || !caller_copy_view(caller_id).is_ok_and(|view| view.is_sas())
+<a href=#1182 id=1182 data-nosnippet>1182</a>        || RAN.swap(<span class="bool-val">true</span>, Ordering::AcqRel)
+<a href=#1183 id=1183 data-nosnippet>1183</a>    {
+<a href=#1184 id=1184 data-nosnippet>1184</a>        <span class="kw">return</span>;
+<a href=#1185 id=1185 data-nosnippet>1185</a>    }
+<a href=#1186 id=1186 data-nosnippet>1186</a>    <span class="kw">if </span><span class="kw">crate</span>::task::user_copy::raw_user_read_faults_for_test(msg_ptr) {
+<a href=#1187 id=1187 data-nosnippet>1187</a>        <span class="macro">log::info!</span>(<span class="string">"[selftest] SMAP-WINDOW: PASS (syscall copy ok, raw read faulted)"</span>);
+<a href=#1188 id=1188 data-nosnippet>1188</a>    } <span class="kw">else </span>{
+<a href=#1189 id=1189 data-nosnippet>1189</a>        <span class="macro">log::error!</span>(<span class="string">"[selftest] SMAP-WINDOW: FAIL (raw read of user 0x{msg_ptr:x} did not fault)"</span>);
+<a href=#1190 id=1190 data-nosnippet>1190</a>    }
+<a href=#1191 id=1191 data-nosnippet>1191</a>}
+<a href=#1192 id=1192 data-nosnippet>1192</a>
+<a href=#1193 id=1193 data-nosnippet>1193</a><span class="doccomment">/// Handler for `Syscall::Log` (extracted from the dispatcher).
+<a href=#1194 id=1194 data-nosnippet>1194</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>log(caller_id: usize, msg_ptr: usize, msg_len: usize) -&gt; SyscallResult {
+<a href=#1195 id=1195 data-nosnippet>1195</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(msg) = read_user_string(caller_id, msg_ptr, msg_len, MAX_LOG_MSG) {
+<a href=#1196 id=1196 data-nosnippet>1196</a>        <span class="attr">#[cfg(all(
+<a href=#1197 id=1197 data-nosnippet>1197</a>            feature = <span class="string">"test-hooks"</span>,
+<a href=#1198 id=1198 data-nosnippet>1198</a>            feature = <span class="string">"native-domains"</span>,
+<a href=#1199 id=1199 data-nosnippet>1199</a>            cellos_wide,
+<a href=#1200 id=1200 data-nosnippet>1200</a>            target_arch = <span class="string">"x86_64"
+<a href=#1201 id=1201 data-nosnippet>1201</a>        </span>))]
+<a href=#1202 id=1202 data-nosnippet>1202</a>        </span>smap_window_self_test(caller_id, msg_ptr);
+<a href=#1203 id=1203 data-nosnippet>1203</a>        <span class="attr">#[cfg(feature = <span class="string">"p01-trace"</span>)]
+<a href=#1204 id=1204 data-nosnippet>1204</a>        </span>{
+<a href=#1205 id=1205 data-nosnippet>1205</a>            <span class="kw">let </span>owner = <span class="kw">crate</span>::task::SCHEDULER
+<a href=#1206 id=1206 data-nosnippet>1206</a>                .lock()
+<a href=#1207 id=1207 data-nosnippet>1207</a>                .as_ref()
+<a href=#1208 id=1208 data-nosnippet>1208</a>                .and_then(|sched| sched.tasks.get(<span class="kw-2">&amp;</span>caller_id))
+<a href=#1209 id=1209 data-nosnippet>1209</a>                .map(|task| {
+<a href=#1210 id=1210 data-nosnippet>1210</a>                    <span class="kw">let </span>owner = <span class="kw">crate</span>::p01_measurement::Owner::of(task);
+<a href=#1211 id=1211 data-nosnippet>1211</a>                    <span class="comment">// The temporary user-copy buffer belongs to this Log
+<a href=#1212 id=1212 data-nosnippet>1212</a>                    // invocation, including while a stage census reads it.
+<a href=#1213 id=1213 data-nosnippet>1213</a>                    </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(layout) = core::alloc::Layout::array::&lt;u8&gt;(msg.capacity()) {
+<a href=#1214 id=1214 data-nosnippet>1214</a>                        <span class="kw">crate</span>::memory::heap::p01_owner::runtime_buffer(
+<a href=#1215 id=1215 data-nosnippet>1215</a>                            msg.as_ptr() <span class="kw">as </span>usize,
+<a href=#1216 id=1216 data-nosnippet>1216</a>                            layout,
+<a href=#1217 id=1217 data-nosnippet>1217</a>                            owner,
+<a href=#1218 id=1218 data-nosnippet>1218</a>                            <span class="kw">crate</span>::memory::heap::p01_owner::TASK_IO,
+<a href=#1219 id=1219 data-nosnippet>1219</a>                        );
+<a href=#1220 id=1220 data-nosnippet>1220</a>                    } <span class="kw">else </span>{
+<a href=#1221 id=1221 data-nosnippet>1221</a>                        <span class="kw">crate</span>::p01_measurement::invalidate(<span class="kw">crate</span>::p01_measurement::COUNTER);
+<a href=#1222 id=1222 data-nosnippet>1222</a>                    }
+<a href=#1223 id=1223 data-nosnippet>1223</a>                    owner
+<a href=#1224 id=1224 data-nosnippet>1224</a>                });
+<a href=#1225 id=1225 data-nosnippet>1225</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(owner) = owner {
+<a href=#1226 id=1226 data-nosnippet>1226</a>                <span class="kw">crate</span>::p01_measurement::stage(owner, <span class="kw-2">&amp;</span>msg);
+<a href=#1227 id=1227 data-nosnippet>1227</a>            }
+<a href=#1228 id=1228 data-nosnippet>1228</a>        }
+<a href=#1229 id=1229 data-nosnippet>1229</a>        <span class="kw">crate</span>::task::print_user_log(<span class="kw-2">&amp;</span>msg, caller_id);
+<a href=#1230 id=1230 data-nosnippet>1230</a>    }
 <a href=#1231 id=1231 data-nosnippet>1231</a>    <span class="prelude-val">Ok</span>(<span class="number">0</span>)
 <a href=#1232 id=1232 data-nosnippet>1232</a>}
 <a href=#1233 id=1233 data-nosnippet>1233</a>
-<a href=#1234 id=1234 data-nosnippet>1234</a><span class="doccomment">/// Handler for `Syscall::GetProcs` (extracted from the dispatcher).
-<a href=#1235 id=1235 data-nosnippet>1235</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_procs(caller_id: usize, buf_ptr: usize, buf_len: usize) -&gt; SyscallResult {
-<a href=#1236 id=1236 data-nosnippet>1236</a>    <span class="kw">let </span>bytes_len = buf_len
-<a href=#1237 id=1237 data-nosnippet>1237</a>        .checked_mul(core::mem::size_of::&lt;api::syscall::ProcessInfo&gt;())
-<a href=#1238 id=1238 data-nosnippet>1238</a>        .ok_or(SyscallError::InvalidInput)<span class="question-mark">?</span>;
-<a href=#1239 id=1239 data-nosnippet>1239</a>    validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1240 id=1240 data-nosnippet>1240</a>
-<a href=#1241 id=1241 data-nosnippet>1241</a>    <span class="kw">let </span>rows = collect_process_rows(buf_len, snapshot_process_info);
-<a href=#1242 id=1242 data-nosnippet>1242</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
-<a href=#1243 id=1243 data-nosnippet>1243</a>        core::slice::from_raw_parts(
-<a href=#1244 id=1244 data-nosnippet>1244</a>            rows.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>u8,
-<a href=#1245 id=1245 data-nosnippet>1245</a>            rows.len() * core::mem::size_of::&lt;api::syscall::ProcessInfo&gt;(),
-<a href=#1246 id=1246 data-nosnippet>1246</a>        )
-<a href=#1247 id=1247 data-nosnippet>1247</a>    };
-<a href=#1248 id=1248 data-nosnippet>1248</a>    write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1249 id=1249 data-nosnippet>1249</a>    <span class="prelude-val">Ok</span>(rows.len())
-<a href=#1250 id=1250 data-nosnippet>1250</a>}
-<a href=#1251 id=1251 data-nosnippet>1251</a>
-<a href=#1252 id=1252 data-nosnippet>1252</a><span class="doccomment">/// Handler for `Syscall::GetProcs2` (extracted from the dispatcher).
-<a href=#1253 id=1253 data-nosnippet>1253</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_procs2(caller_id: usize, buf_ptr: usize, buf_len: usize) -&gt; SyscallResult {
-<a href=#1254 id=1254 data-nosnippet>1254</a>    <span class="kw">let </span>bytes_len = buf_len
-<a href=#1255 id=1255 data-nosnippet>1255</a>        .checked_mul(core::mem::size_of::&lt;api::syscall::ProcessInfoV2&gt;())
-<a href=#1256 id=1256 data-nosnippet>1256</a>        .ok_or(SyscallError::InvalidInput)<span class="question-mark">?</span>;
-<a href=#1257 id=1257 data-nosnippet>1257</a>    validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1258 id=1258 data-nosnippet>1258</a>
-<a href=#1259 id=1259 data-nosnippet>1259</a>    <span class="kw">let </span>sample_ticks = <span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u64;
-<a href=#1260 id=1260 data-nosnippet>1260</a>    <span class="kw">let </span>rows = collect_process_rows(buf_len, |task| snapshot_process_info_v2(task, sample_ticks));
-<a href=#1261 id=1261 data-nosnippet>1261</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
-<a href=#1262 id=1262 data-nosnippet>1262</a>        core::slice::from_raw_parts(
-<a href=#1263 id=1263 data-nosnippet>1263</a>            rows.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>u8,
-<a href=#1264 id=1264 data-nosnippet>1264</a>            rows.len() * core::mem::size_of::&lt;api::syscall::ProcessInfoV2&gt;(),
-<a href=#1265 id=1265 data-nosnippet>1265</a>        )
-<a href=#1266 id=1266 data-nosnippet>1266</a>    };
-<a href=#1267 id=1267 data-nosnippet>1267</a>    write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1268 id=1268 data-nosnippet>1268</a>    <span class="prelude-val">Ok</span>(rows.len())
+<a href=#1234 id=1234 data-nosnippet>1234</a><span class="doccomment">/// Handler for `Syscall::Heartbeat` (extracted from the dispatcher).
+<a href=#1235 id=1235 data-nosnippet>1235</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>heartbeat(caller_id: usize, interval: usize) -&gt; SyscallResult {
+<a href=#1236 id=1236 data-nosnippet>1236</a>    <span class="comment">// Open: a cell asserts its own liveness. Arms a deadline `interval` ticks
+<a href=#1237 id=1237 data-nosnippet>1237</a>    // ahead; `pick_next` terminates the cell as HUNG if it lapses. interval=0
+<a href=#1238 id=1238 data-nosnippet>1238</a>    // disables. Self-targeted only — a cell can only (re)arm its OWN deadline.
+<a href=#1239 id=1239 data-nosnippet>1239</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#1240 id=1240 data-nosnippet>1240</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(t) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>caller_id) {
+<a href=#1241 id=1241 data-nosnippet>1241</a>            t.heartbeat_deadline = <span class="kw">if </span>interval == <span class="number">0 </span>{
+<a href=#1242 id=1242 data-nosnippet>1242</a>                <span class="prelude-val">None
+<a href=#1243 id=1243 data-nosnippet>1243</a>            </span>} <span class="kw">else </span>{
+<a href=#1244 id=1244 data-nosnippet>1244</a>                <span class="prelude-val">Some</span>(<span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u64 + interval <span class="kw">as </span>u64)
+<a href=#1245 id=1245 data-nosnippet>1245</a>            };
+<a href=#1246 id=1246 data-nosnippet>1246</a>        }
+<a href=#1247 id=1247 data-nosnippet>1247</a>    }
+<a href=#1248 id=1248 data-nosnippet>1248</a>    <span class="prelude-val">Ok</span>(<span class="number">0</span>)
+<a href=#1249 id=1249 data-nosnippet>1249</a>}
+<a href=#1250 id=1250 data-nosnippet>1250</a>
+<a href=#1251 id=1251 data-nosnippet>1251</a><span class="doccomment">/// Handler for `Syscall::SetTimer` (extracted from the dispatcher).
+<a href=#1252 id=1252 data-nosnippet>1252</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>set_timer(deadline: usize) -&gt; SyscallResult {
+<a href=#1253 id=1253 data-nosnippet>1253</a>    <span class="comment">// Check if deadline passed
+<a href=#1254 id=1254 data-nosnippet>1254</a>    </span><span class="kw">let </span>now = <span class="kw">crate</span>::task::system_ticks();
+<a href=#1255 id=1255 data-nosnippet>1255</a>    <span class="kw">let </span>wake_at = now + deadline;
+<a href=#1256 id=1256 data-nosnippet>1256</a>
+<a href=#1257 id=1257 data-nosnippet>1257</a>    <span class="comment">// Sleep!
+<a href=#1258 id=1258 data-nosnippet>1258</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#1259 id=1259 data-nosnippet>1259</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.current_task_mut() {
+<a href=#1260 id=1260 data-nosnippet>1260</a>            task.state = TaskState::Blocked {
+<a href=#1261 id=1261 data-nosnippet>1261</a>                wait: WaitKind::Sleep,
+<a href=#1262 id=1262 data-nosnippet>1262</a>                deadline: <span class="prelude-val">Some</span>(wake_at <span class="kw">as </span>u64),
+<a href=#1263 id=1263 data-nosnippet>1263</a>            };
+<a href=#1264 id=1264 data-nosnippet>1264</a>        }
+<a href=#1265 id=1265 data-nosnippet>1265</a>    }
+<a href=#1266 id=1266 data-nosnippet>1266</a>    <span class="comment">// Yield CPU safely
+<a href=#1267 id=1267 data-nosnippet>1267</a>    </span><span class="kw">crate</span>::task::yield_cpu();
+<a href=#1268 id=1268 data-nosnippet>1268</a>    <span class="prelude-val">Ok</span>(<span class="number">0</span>)
 <a href=#1269 id=1269 data-nosnippet>1269</a>}
 <a href=#1270 id=1270 data-nosnippet>1270</a>
-<a href=#1271 id=1271 data-nosnippet>1271</a><span class="doccomment">/// Handler for `Syscall::MemInfo` (extracted from the dispatcher).
-<a href=#1272 id=1272 data-nosnippet>1272</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -&gt; SyscallResult {
-<a href=#1273 id=1273 data-nosnippet>1273</a>    <span class="kw">let </span>len = core::mem::size_of::&lt;api::syscall::ViMemInfoV1&gt;();
-<a href=#1274 id=1274 data-nosnippet>1274</a>    <span class="kw">if </span>out_len &lt; len {
-<a href=#1275 id=1275 data-nosnippet>1275</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::BufferTooSmall);
-<a href=#1276 id=1276 data-nosnippet>1276</a>    }
-<a href=#1277 id=1277 data-nosnippet>1277</a>    validate_user_buf(out_ptr, len, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1278 id=1278 data-nosnippet>1278</a>    <span class="kw">let </span>info = {
-<a href=#1279 id=1279 data-nosnippet>1279</a>        <span class="kw">let </span>guard = <span class="kw">crate</span>::memory::frame::FRAME_ALLOCATOR.lock();
-<a href=#1280 id=1280 data-nosnippet>1280</a>        <span class="kw">let </span>allocator = guard.as_ref().ok_or(SyscallError::OutOfMemory)<span class="question-mark">?</span>;
-<a href=#1281 id=1281 data-nosnippet>1281</a>        api::syscall::ViMemInfoV1 {
-<a href=#1282 id=1282 data-nosnippet>1282</a>            total_frames: allocator.total_frames() <span class="kw">as </span>u64,
-<a href=#1283 id=1283 data-nosnippet>1283</a>            used_frames: allocator.used_frames() <span class="kw">as </span>u64,
-<a href=#1284 id=1284 data-nosnippet>1284</a>            free_frames: allocator.free_frames() <span class="kw">as </span>u64,
-<a href=#1285 id=1285 data-nosnippet>1285</a>            page_size: allocator.page_size() <span class="kw">as </span>u64,
-<a href=#1286 id=1286 data-nosnippet>1286</a>        }
-<a href=#1287 id=1287 data-nosnippet>1287</a>    };
-<a href=#1288 id=1288 data-nosnippet>1288</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
-<a href=#1289 id=1289 data-nosnippet>1289</a>        core::slice::from_raw_parts(<span class="kw-2">&amp;</span>info <span class="kw">as </span><span class="kw-2">*const </span>api::syscall::ViMemInfoV1 <span class="kw">as </span><span class="kw-2">*const </span>u8, len)
-<a href=#1290 id=1290 data-nosnippet>1290</a>    };
-<a href=#1291 id=1291 data-nosnippet>1291</a>    write_user_slice(caller_id, out_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1292 id=1292 data-nosnippet>1292</a>    <span class="prelude-val">Ok</span>(len)
-<a href=#1293 id=1293 data-nosnippet>1293</a>}
-<a href=#1294 id=1294 data-nosnippet>1294</a>
-<a href=#1295 id=1295 data-nosnippet>1295</a><span class="doccomment">/// Handler for `Syscall::GetTime` (extracted from the dispatcher).
-<a href=#1296 id=1296 data-nosnippet>1296</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_time(op: usize) -&gt; SyscallResult {
-<a href=#1297 id=1297 data-nosnippet>1297</a>    <span class="kw">match </span>op {
-<a href=#1298 id=1298 data-nosnippet>1298</a>        <span class="comment">// op=0: raw monotonic ticks (arch-specific frequency)
-<a href=#1299 id=1299 data-nosnippet>1299</a>        </span><span class="number">0 </span>=&gt; {
-<a href=#1300 id=1300 data-nosnippet>1300</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#1301 id=1301 data-nosnippet>1301</a>            </span><span class="kw">let </span>t = hal::common::timer::read_mtime() <span class="kw">as </span>usize;
-<a href=#1302 id=1302 data-nosnippet>1302</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#1303 id=1303 data-nosnippet>1303</a>            </span><span class="kw">let </span>t = hal::timer::read_ticks() <span class="kw">as </span>usize;
-<a href=#1304 id=1304 data-nosnippet>1304</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1305 id=1305 data-nosnippet>1305</a>            </span><span class="kw">let </span>t = hal::clock::now_ns() <span class="kw">as </span>usize;
-<a href=#1306 id=1306 data-nosnippet>1306</a>            <span class="attr">#[cfg(not(any(
-<a href=#1307 id=1307 data-nosnippet>1307</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#1308 id=1308 data-nosnippet>1308</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#1309 id=1309 data-nosnippet>1309</a>                target_arch = <span class="string">"x86_64"
-<a href=#1310 id=1310 data-nosnippet>1310</a>            </span>)))]
-<a href=#1311 id=1311 data-nosnippet>1311</a>            </span><span class="kw">let </span>t = <span class="number">0usize</span>;
-<a href=#1312 id=1312 data-nosnippet>1312</a>            <span class="prelude-val">Ok</span>(t)
-<a href=#1313 id=1313 data-nosnippet>1313</a>        }
-<a href=#1314 id=1314 data-nosnippet>1314</a>        <span class="comment">// op=1: milliseconds since boot
-<a href=#1315 id=1315 data-nosnippet>1315</a>        </span><span class="number">1 </span>=&gt; {
-<a href=#1316 id=1316 data-nosnippet>1316</a>            <span class="comment">// 10 MHz mtime on QEMU RV64 → 10_000 ticks/ms
-<a href=#1317 id=1317 data-nosnippet>1317</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#1318 id=1318 data-nosnippet>1318</a>            </span><span class="kw">let </span>ms = (hal::common::timer::read_mtime() / <span class="number">10_000</span>) <span class="kw">as </span>usize;
-<a href=#1319 id=1319 data-nosnippet>1319</a>            <span class="comment">// Dynamic timer frequency on ARM64 (19.2 MHz on RPi3, 62.5 MHz on QEMU virt)
-<a href=#1320 id=1320 data-nosnippet>1320</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#1321 id=1321 data-nosnippet>1321</a>            </span><span class="kw">let </span>ms = {
-<a href=#1322 id=1322 data-nosnippet>1322</a>                <span class="kw">let </span>freq = hal::timer::read_freq();
-<a href=#1323 id=1323 data-nosnippet>1323</a>                <span class="kw">let </span>ticks_per_ms = <span class="kw">if </span>freq &gt; <span class="number">0 </span>{ freq / <span class="number">1000 </span>} <span class="kw">else </span>{ <span class="number">62_500 </span>};
-<a href=#1324 id=1324 data-nosnippet>1324</a>                (hal::timer::read_ticks() / ticks_per_ms) <span class="kw">as </span>usize
-<a href=#1325 id=1325 data-nosnippet>1325</a>            };
-<a href=#1326 id=1326 data-nosnippet>1326</a>            <span class="comment">// The x86 clocksource already returns nanoseconds; ÷ 1_000_000 → ms
-<a href=#1327 id=1327 data-nosnippet>1327</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1328 id=1328 data-nosnippet>1328</a>            </span><span class="kw">let </span>ms = (hal::clock::now_ns() / <span class="number">1_000_000</span>) <span class="kw">as </span>usize;
-<a href=#1329 id=1329 data-nosnippet>1329</a>            <span class="attr">#[cfg(not(any(
-<a href=#1330 id=1330 data-nosnippet>1330</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#1331 id=1331 data-nosnippet>1331</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#1332 id=1332 data-nosnippet>1332</a>                target_arch = <span class="string">"x86_64"
-<a href=#1333 id=1333 data-nosnippet>1333</a>            </span>)))]
-<a href=#1334 id=1334 data-nosnippet>1334</a>            </span><span class="kw">let </span>ms = <span class="number">0usize</span>;
-<a href=#1335 id=1335 data-nosnippet>1335</a>            <span class="prelude-val">Ok</span>(ms)
-<a href=#1336 id=1336 data-nosnippet>1336</a>        }
-<a href=#1337 id=1337 data-nosnippet>1337</a>        <span class="comment">// op=4: scheduler ticks (10 ms preemption slices)
-<a href=#1338 id=1338 data-nosnippet>1338</a>        </span><span class="number">4 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::task::system_ticks()),
-<a href=#1339 id=1339 data-nosnippet>1339</a>        <span class="comment">// op=2: nanoseconds since Unix epoch (wall-clock)
-<a href=#1340 id=1340 data-nosnippet>1340</a>        </span><span class="number">2 </span>=&gt; {
-<a href=#1341 id=1341 data-nosnippet>1341</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#1342 id=1342 data-nosnippet>1342</a>            </span><span class="kw">let </span>ns = hal::common::rtc::now_epoch_ns() <span class="kw">as </span>usize;
-<a href=#1343 id=1343 data-nosnippet>1343</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#1344 id=1344 data-nosnippet>1344</a>            </span><span class="kw">let </span>ns = hal::rtc::now_epoch_ns() <span class="kw">as </span>usize;
-<a href=#1345 id=1345 data-nosnippet>1345</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1346 id=1346 data-nosnippet>1346</a>            </span><span class="kw">let </span>ns = hal::rtc::now_epoch_ns() <span class="kw">as </span>usize;
-<a href=#1347 id=1347 data-nosnippet>1347</a>            <span class="attr">#[cfg(not(any(
-<a href=#1348 id=1348 data-nosnippet>1348</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#1349 id=1349 data-nosnippet>1349</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#1350 id=1350 data-nosnippet>1350</a>                target_arch = <span class="string">"x86_64"
-<a href=#1351 id=1351 data-nosnippet>1351</a>            </span>)))]
-<a href=#1352 id=1352 data-nosnippet>1352</a>            </span><span class="kw">let </span>ns = <span class="number">0usize</span>;
-<a href=#1353 id=1353 data-nosnippet>1353</a>            <span class="prelude-val">Ok</span>(ns)
-<a href=#1354 id=1354 data-nosnippet>1354</a>        }
-<a href=#1355 id=1355 data-nosnippet>1355</a>        <span class="comment">// op=3: seconds since Unix epoch (wall-clock)
-<a href=#1356 id=1356 data-nosnippet>1356</a>        </span><span class="number">3 </span>=&gt; {
-<a href=#1357 id=1357 data-nosnippet>1357</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#1358 id=1358 data-nosnippet>1358</a>            </span><span class="kw">let </span>s = (hal::common::rtc::now_epoch_ns() / <span class="number">1_000_000_000</span>) <span class="kw">as </span>usize;
-<a href=#1359 id=1359 data-nosnippet>1359</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#1360 id=1360 data-nosnippet>1360</a>            </span><span class="kw">let </span>s = (hal::rtc::now_epoch_ns() / <span class="number">1_000_000_000</span>) <span class="kw">as </span>usize;
-<a href=#1361 id=1361 data-nosnippet>1361</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1362 id=1362 data-nosnippet>1362</a>            </span><span class="kw">let </span>s = (hal::rtc::now_epoch_ns() / <span class="number">1_000_000_000</span>) <span class="kw">as </span>usize;
-<a href=#1363 id=1363 data-nosnippet>1363</a>            <span class="attr">#[cfg(not(any(
-<a href=#1364 id=1364 data-nosnippet>1364</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#1365 id=1365 data-nosnippet>1365</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#1366 id=1366 data-nosnippet>1366</a>                target_arch = <span class="string">"x86_64"
-<a href=#1367 id=1367 data-nosnippet>1367</a>            </span>)))]
-<a href=#1368 id=1368 data-nosnippet>1368</a>            </span><span class="kw">let </span>s = <span class="number">0usize</span>;
-<a href=#1369 id=1369 data-nosnippet>1369</a>            <span class="prelude-val">Ok</span>(s)
-<a href=#1370 id=1370 data-nosnippet>1370</a>        }
-<a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="comment">// op=5: monotonic tick counter frequency in Hz
-<a href=#1372 id=1372 data-nosnippet>1372</a>        </span><span class="number">5 </span>=&gt; {
-<a href=#1373 id=1373 data-nosnippet>1373</a>            <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#1374 id=1374 data-nosnippet>1374</a>            </span><span class="kw">let </span>freq = <span class="number">10_000_000usize</span>;
-<a href=#1375 id=1375 data-nosnippet>1375</a>            <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
-<a href=#1376 id=1376 data-nosnippet>1376</a>            </span><span class="kw">let </span>freq = hal::timer::read_freq() <span class="kw">as </span>usize;
-<a href=#1377 id=1377 data-nosnippet>1377</a>            <span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1378 id=1378 data-nosnippet>1378</a>            </span><span class="kw">let </span>freq = <span class="number">1_000_000_000usize</span>; <span class="comment">// HPET is in nanoseconds (1 GHz)
-<a href=#1379 id=1379 data-nosnippet>1379</a>            </span><span class="attr">#[cfg(not(any(
-<a href=#1380 id=1380 data-nosnippet>1380</a>                target_arch = <span class="string">"riscv64"</span>,
-<a href=#1381 id=1381 data-nosnippet>1381</a>                target_arch = <span class="string">"aarch64"</span>,
-<a href=#1382 id=1382 data-nosnippet>1382</a>                target_arch = <span class="string">"x86_64"
-<a href=#1383 id=1383 data-nosnippet>1383</a>            </span>)))]
-<a href=#1384 id=1384 data-nosnippet>1384</a>            </span><span class="kw">let </span>freq = <span class="number">10_000_000usize</span>;
-<a href=#1385 id=1385 data-nosnippet>1385</a>            <span class="prelude-val">Ok</span>(freq)
-<a href=#1386 id=1386 data-nosnippet>1386</a>        }
-<a href=#1387 id=1387 data-nosnippet>1387</a>        <span class="comment">// Unknown op — return 0 for backward compatibility
-<a href=#1388 id=1388 data-nosnippet>1388</a>        </span><span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(<span class="number">0</span>),
-<a href=#1389 id=1389 data-nosnippet>1389</a>    }
-<a href=#1390 id=1390 data-nosnippet>1390</a>}
-<a href=#1391 id=1391 data-nosnippet>1391</a>
-<a href=#1392 id=1392 data-nosnippet>1392</a><span class="doccomment">/// Handler for `Syscall::ReadLog` (extracted from the dispatcher).
-<a href=#1393 id=1393 data-nosnippet>1393</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>read_log(
-<a href=#1394 id=1394 data-nosnippet>1394</a>    caller_id: usize,
-<a href=#1395 id=1395 data-nosnippet>1395</a>    buf_ptr: usize,
-<a href=#1396 id=1396 data-nosnippet>1396</a>    max: usize,
-<a href=#1397 id=1397 data-nosnippet>1397</a>    source: usize,
-<a href=#1398 id=1398 data-nosnippet>1398</a>) -&gt; SyscallResult {
-<a href=#1399 id=1399 data-nosnippet>1399</a>    <span class="comment">// Per-call staging cap: the user-log ring holds 8 KiB, so more is
-<a href=#1400 id=1400 data-nosnippet>1400</a>    // zeroed heap that can never be filled.
-<a href=#1401 id=1401 data-nosnippet>1401</a>    </span><span class="kw">let </span>cap = <span class="kw">match </span>source {
-<a href=#1402 id=1402 data-nosnippet>1402</a>        <span class="number">0 </span>=&gt; <span class="number">8192</span>,
-<a href=#1403 id=1403 data-nosnippet>1403</a>        <span class="number">1 </span>=&gt; {
-<a href=#1404 id=1404 data-nosnippet>1404</a>            <span class="kw">if </span>!caller_has_supervisor(caller_id) {
-<a href=#1405 id=1405 data-nosnippet>1405</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
-<a href=#1406 id=1406 data-nosnippet>1406</a>            }
-<a href=#1407 id=1407 data-nosnippet>1407</a>            <span class="number">65536
-<a href=#1408 id=1408 data-nosnippet>1408</a>        </span>}
-<a href=#1409 id=1409 data-nosnippet>1409</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidInput),
-<a href=#1410 id=1410 data-nosnippet>1410</a>    };
-<a href=#1411 id=1411 data-nosnippet>1411</a>    <span class="kw">if </span>max == <span class="number">0 </span>{
-<a href=#1412 id=1412 data-nosnippet>1412</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#1413 id=1413 data-nosnippet>1413</a>    }
-<a href=#1414 id=1414 data-nosnippet>1414</a>    <span class="kw">if </span>buf_ptr == <span class="number">0 </span>{
-<a href=#1415 id=1415 data-nosnippet>1415</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidInput);
+<a href=#1271 id=1271 data-nosnippet>1271</a><span class="doccomment">/// Handler for `Syscall::GetProcs` (extracted from the dispatcher).
+<a href=#1272 id=1272 data-nosnippet>1272</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_procs(caller_id: usize, buf_ptr: usize, buf_len: usize) -&gt; SyscallResult {
+<a href=#1273 id=1273 data-nosnippet>1273</a>    <span class="kw">let </span>bytes_len = buf_len
+<a href=#1274 id=1274 data-nosnippet>1274</a>        .checked_mul(core::mem::size_of::&lt;abi::syscall::ProcessInfo&gt;())
+<a href=#1275 id=1275 data-nosnippet>1275</a>        .ok_or(SyscallError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#1276 id=1276 data-nosnippet>1276</a>    validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1277 id=1277 data-nosnippet>1277</a>
+<a href=#1278 id=1278 data-nosnippet>1278</a>    <span class="kw">let </span>rows = collect_process_rows(buf_len, snapshot_process_info);
+<a href=#1279 id=1279 data-nosnippet>1279</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
+<a href=#1280 id=1280 data-nosnippet>1280</a>        core::slice::from_raw_parts(
+<a href=#1281 id=1281 data-nosnippet>1281</a>            rows.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>u8,
+<a href=#1282 id=1282 data-nosnippet>1282</a>            rows.len() * core::mem::size_of::&lt;abi::syscall::ProcessInfo&gt;(),
+<a href=#1283 id=1283 data-nosnippet>1283</a>        )
+<a href=#1284 id=1284 data-nosnippet>1284</a>    };
+<a href=#1285 id=1285 data-nosnippet>1285</a>    write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1286 id=1286 data-nosnippet>1286</a>    <span class="prelude-val">Ok</span>(rows.len())
+<a href=#1287 id=1287 data-nosnippet>1287</a>}
+<a href=#1288 id=1288 data-nosnippet>1288</a>
+<a href=#1289 id=1289 data-nosnippet>1289</a><span class="doccomment">/// Handler for `Syscall::GetProcs2` (extracted from the dispatcher).
+<a href=#1290 id=1290 data-nosnippet>1290</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_procs2(caller_id: usize, buf_ptr: usize, buf_len: usize) -&gt; SyscallResult {
+<a href=#1291 id=1291 data-nosnippet>1291</a>    <span class="kw">let </span>bytes_len = buf_len
+<a href=#1292 id=1292 data-nosnippet>1292</a>        .checked_mul(core::mem::size_of::&lt;abi::syscall::ProcessInfoV2&gt;())
+<a href=#1293 id=1293 data-nosnippet>1293</a>        .ok_or(SyscallError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#1294 id=1294 data-nosnippet>1294</a>    validate_user_buf(buf_ptr, bytes_len, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1295 id=1295 data-nosnippet>1295</a>
+<a href=#1296 id=1296 data-nosnippet>1296</a>    <span class="kw">let </span>sample_ticks = <span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u64;
+<a href=#1297 id=1297 data-nosnippet>1297</a>    <span class="kw">let </span>rows = collect_process_rows(buf_len, |task| snapshot_process_info_v2(task, sample_ticks));
+<a href=#1298 id=1298 data-nosnippet>1298</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
+<a href=#1299 id=1299 data-nosnippet>1299</a>        core::slice::from_raw_parts(
+<a href=#1300 id=1300 data-nosnippet>1300</a>            rows.as_ptr() <span class="kw">as </span><span class="kw-2">*const </span>u8,
+<a href=#1301 id=1301 data-nosnippet>1301</a>            rows.len() * core::mem::size_of::&lt;abi::syscall::ProcessInfoV2&gt;(),
+<a href=#1302 id=1302 data-nosnippet>1302</a>        )
+<a href=#1303 id=1303 data-nosnippet>1303</a>    };
+<a href=#1304 id=1304 data-nosnippet>1304</a>    write_user_slice(caller_id, buf_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1305 id=1305 data-nosnippet>1305</a>    <span class="prelude-val">Ok</span>(rows.len())
+<a href=#1306 id=1306 data-nosnippet>1306</a>}
+<a href=#1307 id=1307 data-nosnippet>1307</a>
+<a href=#1308 id=1308 data-nosnippet>1308</a><span class="doccomment">/// Handler for `Syscall::MemInfo` (extracted from the dispatcher).
+<a href=#1309 id=1309 data-nosnippet>1309</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>mem_info(caller_id: usize, out_ptr: usize, out_len: usize) -&gt; SyscallResult {
+<a href=#1310 id=1310 data-nosnippet>1310</a>    <span class="kw">let </span>len = core::mem::size_of::&lt;abi::syscall::ViMemInfoV1&gt;();
+<a href=#1311 id=1311 data-nosnippet>1311</a>    <span class="kw">if </span>out_len &lt; len {
+<a href=#1312 id=1312 data-nosnippet>1312</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::BufferTooSmall);
+<a href=#1313 id=1313 data-nosnippet>1313</a>    }
+<a href=#1314 id=1314 data-nosnippet>1314</a>    validate_user_buf(out_ptr, len, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1315 id=1315 data-nosnippet>1315</a>    <span class="kw">let </span>info = {
+<a href=#1316 id=1316 data-nosnippet>1316</a>        <span class="kw">let </span>frames = <span class="kw">crate</span>::memory::frame::stats().ok_or(SyscallError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#1317 id=1317 data-nosnippet>1317</a>        abi::syscall::ViMemInfoV1 {
+<a href=#1318 id=1318 data-nosnippet>1318</a>            total_frames: frames.total_frames <span class="kw">as </span>u64,
+<a href=#1319 id=1319 data-nosnippet>1319</a>            used_frames: frames.used_frames <span class="kw">as </span>u64,
+<a href=#1320 id=1320 data-nosnippet>1320</a>            free_frames: frames.free_frames <span class="kw">as </span>u64,
+<a href=#1321 id=1321 data-nosnippet>1321</a>            page_size: <span class="kw">crate</span>::memory::paging::PAGE_SIZE <span class="kw">as </span>u64,
+<a href=#1322 id=1322 data-nosnippet>1322</a>        }
+<a href=#1323 id=1323 data-nosnippet>1323</a>    };
+<a href=#1324 id=1324 data-nosnippet>1324</a>    <span class="kw">let </span>raw_bytes = <span class="kw">unsafe </span>{
+<a href=#1325 id=1325 data-nosnippet>1325</a>        core::slice::from_raw_parts(<span class="kw-2">&amp;</span>info <span class="kw">as </span><span class="kw-2">*const </span>abi::syscall::ViMemInfoV1 <span class="kw">as </span><span class="kw-2">*const </span>u8, len)
+<a href=#1326 id=1326 data-nosnippet>1326</a>    };
+<a href=#1327 id=1327 data-nosnippet>1327</a>    write_user_slice(caller_id, out_ptr, raw_bytes, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1328 id=1328 data-nosnippet>1328</a>    <span class="prelude-val">Ok</span>(len)
+<a href=#1329 id=1329 data-nosnippet>1329</a>}
+<a href=#1330 id=1330 data-nosnippet>1330</a>
+<a href=#1331 id=1331 data-nosnippet>1331</a><span class="doccomment">/// Handler for `Syscall::GetTime` (extracted from the dispatcher).
+<a href=#1332 id=1332 data-nosnippet>1332</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_time(op: usize) -&gt; SyscallResult {
+<a href=#1333 id=1333 data-nosnippet>1333</a>    <span class="kw">match </span>op {
+<a href=#1334 id=1334 data-nosnippet>1334</a>        <span class="comment">// op=0: raw monotonic ticks (arch-specific frequency)
+<a href=#1335 id=1335 data-nosnippet>1335</a>        </span><span class="number">0 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::arch::clock::uptime_ticks()),
+<a href=#1336 id=1336 data-nosnippet>1336</a>        <span class="comment">// op=1: milliseconds since boot
+<a href=#1337 id=1337 data-nosnippet>1337</a>        </span><span class="number">1 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::arch::clock::uptime_ms()),
+<a href=#1338 id=1338 data-nosnippet>1338</a>        <span class="comment">// op=4: scheduler ticks (10 ms preemption slices)
+<a href=#1339 id=1339 data-nosnippet>1339</a>        </span><span class="number">4 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::task::system_ticks()),
+<a href=#1340 id=1340 data-nosnippet>1340</a>        <span class="comment">// op=2: nanoseconds since Unix epoch (wall-clock)
+<a href=#1341 id=1341 data-nosnippet>1341</a>        </span><span class="number">2 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::arch::clock::epoch_ns() <span class="kw">as </span>usize),
+<a href=#1342 id=1342 data-nosnippet>1342</a>        <span class="comment">// op=3: seconds since Unix epoch (wall-clock)
+<a href=#1343 id=1343 data-nosnippet>1343</a>        </span><span class="number">3 </span>=&gt; <span class="prelude-val">Ok</span>((<span class="kw">crate</span>::arch::clock::epoch_ns() / <span class="number">1_000_000_000</span>) <span class="kw">as </span>usize),
+<a href=#1344 id=1344 data-nosnippet>1344</a>        <span class="comment">// op=5: monotonic tick counter frequency in Hz
+<a href=#1345 id=1345 data-nosnippet>1345</a>        </span><span class="number">5 </span>=&gt; <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::arch::clock::tick_hz()),
+<a href=#1346 id=1346 data-nosnippet>1346</a>        <span class="comment">// Unknown op — return 0 for backward compatibility
+<a href=#1347 id=1347 data-nosnippet>1347</a>        </span><span class="kw">_ </span>=&gt; <span class="prelude-val">Ok</span>(<span class="number">0</span>),
+<a href=#1348 id=1348 data-nosnippet>1348</a>    }
+<a href=#1349 id=1349 data-nosnippet>1349</a>}
+<a href=#1350 id=1350 data-nosnippet>1350</a>
+<a href=#1351 id=1351 data-nosnippet>1351</a><span class="doccomment">/// Handler for `Syscall::ReadLog` (extracted from the dispatcher).
+<a href=#1352 id=1352 data-nosnippet>1352</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>read_log(
+<a href=#1353 id=1353 data-nosnippet>1353</a>    caller_id: usize,
+<a href=#1354 id=1354 data-nosnippet>1354</a>    buf_ptr: usize,
+<a href=#1355 id=1355 data-nosnippet>1355</a>    max: usize,
+<a href=#1356 id=1356 data-nosnippet>1356</a>    source: usize,
+<a href=#1357 id=1357 data-nosnippet>1357</a>) -&gt; SyscallResult {
+<a href=#1358 id=1358 data-nosnippet>1358</a>    <span class="comment">// Per-call staging cap: the user-log ring holds 8 KiB, so more is
+<a href=#1359 id=1359 data-nosnippet>1359</a>    // zeroed heap that can never be filled.
+<a href=#1360 id=1360 data-nosnippet>1360</a>    </span><span class="kw">let </span>cap = <span class="kw">match </span>source {
+<a href=#1361 id=1361 data-nosnippet>1361</a>        <span class="number">0 </span>=&gt; <span class="number">8192</span>,
+<a href=#1362 id=1362 data-nosnippet>1362</a>        <span class="number">1 </span>=&gt; {
+<a href=#1363 id=1363 data-nosnippet>1363</a>            <span class="kw">if </span>!caller_has_supervisor(caller_id) {
+<a href=#1364 id=1364 data-nosnippet>1364</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::PermissionDenied);
+<a href=#1365 id=1365 data-nosnippet>1365</a>            }
+<a href=#1366 id=1366 data-nosnippet>1366</a>            <span class="number">65536
+<a href=#1367 id=1367 data-nosnippet>1367</a>        </span>}
+<a href=#1368 id=1368 data-nosnippet>1368</a>        <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidInput),
+<a href=#1369 id=1369 data-nosnippet>1369</a>    };
+<a href=#1370 id=1370 data-nosnippet>1370</a>    <span class="kw">if </span>max == <span class="number">0 </span>{
+<a href=#1371 id=1371 data-nosnippet>1371</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#1372 id=1372 data-nosnippet>1372</a>    }
+<a href=#1373 id=1373 data-nosnippet>1373</a>    <span class="kw">if </span>buf_ptr == <span class="number">0 </span>{
+<a href=#1374 id=1374 data-nosnippet>1374</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidInput);
+<a href=#1375 id=1375 data-nosnippet>1375</a>    }
+<a href=#1376 id=1376 data-nosnippet>1376</a>    <span class="kw">let </span>max = max.min(cap);
+<a href=#1377 id=1377 data-nosnippet>1377</a>    <span class="kw">let </span><span class="kw-2">mut </span>kbuf = alloc::vec::Vec::new();
+<a href=#1378 id=1378 data-nosnippet>1378</a>    kbuf.try_reserve_exact(max)
+<a href=#1379 id=1379 data-nosnippet>1379</a>        .map_err(|<span class="kw">_</span>| SyscallError::OutOfMemory)<span class="question-mark">?</span>;
+<a href=#1380 id=1380 data-nosnippet>1380</a>    kbuf.resize(max, <span class="number">0</span>);
+<a href=#1381 id=1381 data-nosnippet>1381</a>    <span class="kw">if </span>source == <span class="number">0 </span>{
+<a href=#1382 id=1382 data-nosnippet>1382</a>        <span class="kw">let </span>n = <span class="kw">crate</span>::task::read_log_ring(<span class="kw-2">&amp;mut </span>kbuf);
+<a href=#1383 id=1383 data-nosnippet>1383</a>        <span class="kw">if </span>n &gt; <span class="number">0 </span>{
+<a href=#1384 id=1384 data-nosnippet>1384</a>            write_user_slice(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n], MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1385 id=1385 data-nosnippet>1385</a>        }
+<a href=#1386 id=1386 data-nosnippet>1386</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(n);
+<a href=#1387 id=1387 data-nosnippet>1387</a>    }
+<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="comment">// Audit records leave the ring only once delivered: a faulting
+<a href=#1389 id=1389 data-nosnippet>1389</a>    // buffer must not destroy the evidence it was meant to receive.
+<a href=#1390 id=1390 data-nosnippet>1390</a>    </span><span class="kw">let </span>(start, n) = <span class="kw">crate</span>::audit::peek(<span class="kw-2">&amp;mut </span>kbuf);
+<a href=#1391 id=1391 data-nosnippet>1391</a>    <span class="kw">if </span>n &gt; <span class="number">0 </span>{
+<a href=#1392 id=1392 data-nosnippet>1392</a>        write_user_slice(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n], MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1393 id=1393 data-nosnippet>1393</a>        <span class="kw">crate</span>::audit::consume(start, n);
+<a href=#1394 id=1394 data-nosnippet>1394</a>    }
+<a href=#1395 id=1395 data-nosnippet>1395</a>    <span class="prelude-val">Ok</span>(n)
+<a href=#1396 id=1396 data-nosnippet>1396</a>}
+<a href=#1397 id=1397 data-nosnippet>1397</a>
+<a href=#1398 id=1398 data-nosnippet>1398</a><span class="doccomment">/// Handler for `Syscall::WaitForEvent` (extracted from the dispatcher).
+<a href=#1399 id=1399 data-nosnippet>1399</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>wait_for_event(caller_id: usize, mask: u32, deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;) -&gt; SyscallResult {
+<a href=#1400 id=1400 data-nosnippet>1400</a>    <span class="comment">// Lost-wakeup guard: check pending events BEFORE parking.
+<a href=#1401 id=1401 data-nosnippet>1401</a>    </span><span class="kw">let </span>already = <span class="kw">crate</span>::task::waker::consume_pending(mask);
+<a href=#1402 id=1402 data-nosnippet>1402</a>    <span class="kw">if </span>already != <span class="number">0 </span>{
+<a href=#1403 id=1403 data-nosnippet>1403</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(already <span class="kw">as </span>usize);
+<a href=#1404 id=1404 data-nosnippet>1404</a>    }
+<a href=#1405 id=1405 data-nosnippet>1405</a>    <span class="comment">// Park: set WaitEvent state so the timer sweep can wake this task.
+<a href=#1406 id=1406 data-nosnippet>1406</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>caller_id) {
+<a href=#1408 id=1408 data-nosnippet>1408</a>            task.state = <span class="kw">crate</span>::task::tcb::TaskState::Blocked {
+<a href=#1409 id=1409 data-nosnippet>1409</a>                wait: <span class="kw">crate</span>::task::tcb::WaitKind::Completion {
+<a href=#1410 id=1410 data-nosnippet>1410</a>                    source: abi::completion::source::NET_RX,
+<a href=#1411 id=1411 data-nosnippet>1411</a>                    delivery: <span class="kw">crate</span>::task::tcb::Delivery::EventMask(mask),
+<a href=#1412 id=1412 data-nosnippet>1412</a>                },
+<a href=#1413 id=1413 data-nosnippet>1413</a>                deadline,
+<a href=#1414 id=1414 data-nosnippet>1414</a>            };
+<a href=#1415 id=1415 data-nosnippet>1415</a>        }
 <a href=#1416 id=1416 data-nosnippet>1416</a>    }
-<a href=#1417 id=1417 data-nosnippet>1417</a>    <span class="kw">let </span>max = max.min(cap);
-<a href=#1418 id=1418 data-nosnippet>1418</a>    <span class="kw">let </span><span class="kw-2">mut </span>kbuf = alloc::vec::Vec::new();
-<a href=#1419 id=1419 data-nosnippet>1419</a>    kbuf.try_reserve_exact(max)
-<a href=#1420 id=1420 data-nosnippet>1420</a>        .map_err(|<span class="kw">_</span>| SyscallError::OutOfMemory)<span class="question-mark">?</span>;
-<a href=#1421 id=1421 data-nosnippet>1421</a>    kbuf.resize(max, <span class="number">0</span>);
-<a href=#1422 id=1422 data-nosnippet>1422</a>    <span class="kw">if </span>source == <span class="number">0 </span>{
-<a href=#1423 id=1423 data-nosnippet>1423</a>        <span class="kw">let </span>n = <span class="kw">crate</span>::task::read_log_ring(<span class="kw-2">&amp;mut </span>kbuf);
-<a href=#1424 id=1424 data-nosnippet>1424</a>        <span class="kw">if </span>n &gt; <span class="number">0 </span>{
-<a href=#1425 id=1425 data-nosnippet>1425</a>            write_user_slice(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n], MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1426 id=1426 data-nosnippet>1426</a>        }
-<a href=#1427 id=1427 data-nosnippet>1427</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(n);
-<a href=#1428 id=1428 data-nosnippet>1428</a>    }
-<a href=#1429 id=1429 data-nosnippet>1429</a>    <span class="comment">// Audit records leave the ring only once delivered: a faulting
-<a href=#1430 id=1430 data-nosnippet>1430</a>    // buffer must not destroy the evidence it was meant to receive.
-<a href=#1431 id=1431 data-nosnippet>1431</a>    </span><span class="kw">let </span>(start, n) = <span class="kw">crate</span>::audit::peek(<span class="kw-2">&amp;mut </span>kbuf);
-<a href=#1432 id=1432 data-nosnippet>1432</a>    <span class="kw">if </span>n &gt; <span class="number">0 </span>{
-<a href=#1433 id=1433 data-nosnippet>1433</a>        write_user_slice(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n], MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1434 id=1434 data-nosnippet>1434</a>        <span class="kw">crate</span>::audit::consume(start, n);
-<a href=#1435 id=1435 data-nosnippet>1435</a>    }
-<a href=#1436 id=1436 data-nosnippet>1436</a>    <span class="prelude-val">Ok</span>(n)
-<a href=#1437 id=1437 data-nosnippet>1437</a>}
-<a href=#1438 id=1438 data-nosnippet>1438</a>
-<a href=#1439 id=1439 data-nosnippet>1439</a><span class="doccomment">/// Handler for `Syscall::WaitForEvent` (extracted from the dispatcher).
-<a href=#1440 id=1440 data-nosnippet>1440</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>wait_for_event(caller_id: usize, mask: u32, deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;) -&gt; SyscallResult {
-<a href=#1441 id=1441 data-nosnippet>1441</a>    <span class="comment">// Lost-wakeup guard: check pending events BEFORE parking.
-<a href=#1442 id=1442 data-nosnippet>1442</a>    </span><span class="kw">let </span>already = <span class="kw">crate</span>::task::waker::consume_pending(mask);
-<a href=#1443 id=1443 data-nosnippet>1443</a>    <span class="kw">if </span>already != <span class="number">0 </span>{
-<a href=#1444 id=1444 data-nosnippet>1444</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(already <span class="kw">as </span>usize);
-<a href=#1445 id=1445 data-nosnippet>1445</a>    }
-<a href=#1446 id=1446 data-nosnippet>1446</a>    <span class="comment">// Park: set WaitEvent state so the timer sweep can wake this task.
-<a href=#1447 id=1447 data-nosnippet>1447</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#1448 id=1448 data-nosnippet>1448</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.tasks.get_mut(<span class="kw-2">&amp;</span>caller_id) {
-<a href=#1449 id=1449 data-nosnippet>1449</a>            task.state = <span class="kw">crate</span>::task::tcb::TaskState::Blocked {
-<a href=#1450 id=1450 data-nosnippet>1450</a>                wait: <span class="kw">crate</span>::task::tcb::WaitKind::Completion {
-<a href=#1451 id=1451 data-nosnippet>1451</a>                    source: api::completion::source::NET_RX,
-<a href=#1452 id=1452 data-nosnippet>1452</a>                    delivery: <span class="kw">crate</span>::task::tcb::Delivery::EventMask(mask),
-<a href=#1453 id=1453 data-nosnippet>1453</a>                },
-<a href=#1454 id=1454 data-nosnippet>1454</a>                deadline,
-<a href=#1455 id=1455 data-nosnippet>1455</a>            };
-<a href=#1456 id=1456 data-nosnippet>1456</a>        }
-<a href=#1457 id=1457 data-nosnippet>1457</a>    }
-<a href=#1458 id=1458 data-nosnippet>1458</a>    <span class="comment">// Yield; wake happens in pick_next's global sweep (on any hart).
-<a href=#1459 id=1459 data-nosnippet>1459</a>    </span><span class="kw">crate</span>::task::yield_cpu();
-<a href=#1460 id=1460 data-nosnippet>1460</a>    <span class="comment">// After re-schedule: timer sweep wrote the fired mask into trap_frame.regs[10].
-<a href=#1461 id=1461 data-nosnippet>1461</a>    // Return it so ViCell_syscall_dispatch writes the correct value back.
-<a href=#1462 id=1462 data-nosnippet>1462</a>    </span><span class="kw">let </span>fired = <span class="kw">crate</span>::task::SCHEDULER
-<a href=#1463 id=1463 data-nosnippet>1463</a>        .lock()
-<a href=#1464 id=1464 data-nosnippet>1464</a>        .as_ref()
-<a href=#1465 id=1465 data-nosnippet>1465</a>        .and_then(|s| s.tasks.get(<span class="kw-2">&amp;</span>caller_id))
-<a href=#1466 id=1466 data-nosnippet>1466</a>        .map(|t| t.trap_frame.regs[<span class="number">10</span>])
-<a href=#1467 id=1467 data-nosnippet>1467</a>        .unwrap_or(<span class="number">0</span>);
-<a href=#1468 id=1468 data-nosnippet>1468</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
-<a href=#1469 id=1469 data-nosnippet>1469</a>    </span><span class="kw">let </span>fired = fired <span class="kw">as </span>usize;
-<a href=#1470 id=1470 data-nosnippet>1470</a>    <span class="prelude-val">Ok</span>(fired)
-<a href=#1471 id=1471 data-nosnippet>1471</a>}
-<a href=#1472 id=1472 data-nosnippet>1472</a>
-<a href=#1473 id=1473 data-nosnippet>1473</a><span class="doccomment">/// Handler for `Syscall::WaitCompletion` (extracted from the dispatcher).
-<a href=#1474 id=1474 data-nosnippet>1474</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>wait_completion(
-<a href=#1475 id=1475 data-nosnippet>1475</a>    caller_id: usize,
-<a href=#1476 id=1476 data-nosnippet>1476</a>    mask: u32,
-<a href=#1477 id=1477 data-nosnippet>1477</a>    deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#1478 id=1478 data-nosnippet>1478</a>    out_ptr: usize,
-<a href=#1479 id=1479 data-nosnippet>1479</a>) -&gt; SyscallResult {
-<a href=#1480 id=1480 data-nosnippet>1480</a>    <span class="kw">crate</span>::task::completion_wait::wait_completion(caller_id, mask, deadline, out_ptr)
-<a href=#1481 id=1481 data-nosnippet>1481</a>}
-<a href=#1482 id=1482 data-nosnippet>1482</a>
-<a href=#1483 id=1483 data-nosnippet>1483</a><span class="doccomment">/// Handler for `Syscall::GetRandom` (extracted from the dispatcher).
-<a href=#1484 id=1484 data-nosnippet>1484</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_random(caller_id: usize, buf_ptr: usize, len: usize) -&gt; SyscallResult {
-<a href=#1485 id=1485 data-nosnippet>1485</a>    <span class="kw">if </span>len == <span class="number">0 </span>{
-<a href=#1486 id=1486 data-nosnippet>1486</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
-<a href=#1487 id=1487 data-nosnippet>1487</a>    }
-<a href=#1488 id=1488 data-nosnippet>1488</a>    <span class="comment">// Validate the ABI descriptor before entropy is consumed. `len`
-<a href=#1489 id=1489 data-nosnippet>1489</a>    // remains the caller-declared capacity; only the output span caps
-<a href=#1490 id=1490 data-nosnippet>1490</a>    // at 64 bytes, as required by the frozen syscall contract.
-<a href=#1491 id=1491 data-nosnippet>1491</a>    </span>validate_user_buf(buf_ptr, len, MAX_USER_BUF)<span class="question-mark">?</span>;
-<a href=#1492 id=1492 data-nosnippet>1492</a>    <span class="kw">let </span>capped = len.min(<span class="number">64</span>);
-<a href=#1493 id=1493 data-nosnippet>1493</a>    preflight_user_output(caller_id, buf_ptr, capped)<span class="question-mark">?</span>;
-<a href=#1494 id=1494 data-nosnippet>1494</a>    <span class="kw">let </span><span class="kw-2">mut </span>kbuf = [<span class="number">0u8</span>; <span class="number">64</span>];
-<a href=#1495 id=1495 data-nosnippet>1495</a>    <span class="kw">let </span>written = <span class="kw">crate</span>::dev::virtio_rng::get_random(<span class="kw-2">&amp;mut </span>kbuf[..capped]);
-<a href=#1496 id=1496 data-nosnippet>1496</a>    <span class="kw">let </span>n = <span class="kw">if </span>written &gt; <span class="number">0 </span>{
-<a href=#1497 id=1497 data-nosnippet>1497</a>        written
-<a href=#1498 id=1498 data-nosnippet>1498</a>    } <span class="kw">else </span>{
-<a href=#1499 id=1499 data-nosnippet>1499</a>        <span class="attr">#[cfg(all(feature = <span class="string">"dev-weak-rng"</span>, not(feature = <span class="string">"qemu-dev-https"</span>)))]
-<a href=#1500 id=1500 data-nosnippet>1500</a>        </span>{
-<a href=#1501 id=1501 data-nosnippet>1501</a>            <span class="kw">static </span>WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
-<a href=#1502 id=1502 data-nosnippet>1502</a>                core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
-<a href=#1503 id=1503 data-nosnippet>1503</a>            <span class="kw">if </span>!WEAK_RNG_WARNED.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
-<a href=#1504 id=1504 data-nosnippet>1504</a>                <span class="macro">log::warn!</span>(
-<a href=#1505 id=1505 data-nosnippet>1505</a>                    <span class="string">"[kernel] GetRandom: no hardware entropy — serving WEAK xorshift32 \
-<a href=#1506 id=1506 data-nosnippet>1506</a>                             (dev-weak-rng). NOT cryptographically secure; never ship this."
-<a href=#1507 id=1507 data-nosnippet>1507</a>                </span>);
-<a href=#1508 id=1508 data-nosnippet>1508</a>            }
-<a href=#1509 id=1509 data-nosnippet>1509</a>            <span class="kw">let </span>seed =
-<a href=#1510 id=1510 data-nosnippet>1510</a>                <span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u32 ^ (caller_id <span class="kw">as </span>u32).wrapping_mul(<span class="number">0x9e37_79b9</span>);
-<a href=#1511 id=1511 data-nosnippet>1511</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="kw">if </span>seed == <span class="number">0 </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ seed };
-<a href=#1512 id=1512 data-nosnippet>1512</a>            <span class="kw">for </span>byte <span class="kw">in </span>kbuf[..capped].iter_mut() {
-<a href=#1513 id=1513 data-nosnippet>1513</a>                state ^= state &lt;&lt; <span class="number">13</span>;
-<a href=#1514 id=1514 data-nosnippet>1514</a>                state ^= state &gt;&gt; <span class="number">17</span>;
-<a href=#1515 id=1515 data-nosnippet>1515</a>                state ^= state &lt;&lt; <span class="number">5</span>;
-<a href=#1516 id=1516 data-nosnippet>1516</a>                <span class="kw-2">*</span>byte = state <span class="kw">as </span>u8;
-<a href=#1517 id=1517 data-nosnippet>1517</a>            }
-<a href=#1518 id=1518 data-nosnippet>1518</a>            capped
-<a href=#1519 id=1519 data-nosnippet>1519</a>        }
-<a href=#1520 id=1520 data-nosnippet>1520</a>        <span class="comment">// The QEMU HTTPS image must fail closed even when development
-<a href=#1521 id=1521 data-nosnippet>1521</a>        // defaults also enabled dev-weak-rng through feature unification.
-<a href=#1522 id=1522 data-nosnippet>1522</a>        </span><span class="attr">#[cfg(any(not(feature = <span class="string">"dev-weak-rng"</span>), feature = <span class="string">"qemu-dev-https"</span>))]
-<a href=#1523 id=1523 data-nosnippet>1523</a>        </span><span class="number">0
-<a href=#1524 id=1524 data-nosnippet>1524</a>    </span>};
-<a href=#1525 id=1525 data-nosnippet>1525</a>    <span class="kw">if </span>n &gt; <span class="number">0 </span>{
-<a href=#1526 id=1526 data-nosnippet>1526</a>        write_getrandom_output(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n])<span class="question-mark">?</span>;
-<a href=#1527 id=1527 data-nosnippet>1527</a>    }
-<a href=#1528 id=1528 data-nosnippet>1528</a>    <span class="prelude-val">Ok</span>(n)
-<a href=#1529 id=1529 data-nosnippet>1529</a>}
+<a href=#1417 id=1417 data-nosnippet>1417</a>    <span class="comment">// Yield; wake happens in pick_next's global sweep (on any hart).
+<a href=#1418 id=1418 data-nosnippet>1418</a>    </span><span class="kw">crate</span>::task::yield_cpu();
+<a href=#1419 id=1419 data-nosnippet>1419</a>    <span class="comment">// After re-schedule: timer sweep wrote the fired mask into trap_frame.regs[10].
+<a href=#1420 id=1420 data-nosnippet>1420</a>    // Return it so ViCell_syscall_dispatch writes the correct value back.
+<a href=#1421 id=1421 data-nosnippet>1421</a>    </span><span class="kw">let </span>fired = <span class="kw">crate</span>::task::SCHEDULER
+<a href=#1422 id=1422 data-nosnippet>1422</a>        .lock()
+<a href=#1423 id=1423 data-nosnippet>1423</a>        .as_ref()
+<a href=#1424 id=1424 data-nosnippet>1424</a>        .and_then(|s| s.tasks.get(<span class="kw-2">&amp;</span>caller_id))
+<a href=#1425 id=1425 data-nosnippet>1425</a>        .map(|t| t.trap_frame.regs[<span class="number">10</span>])
+<a href=#1426 id=1426 data-nosnippet>1426</a>        .unwrap_or(<span class="number">0</span>);
+<a href=#1427 id=1427 data-nosnippet>1427</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
+<a href=#1428 id=1428 data-nosnippet>1428</a>    </span><span class="kw">let </span>fired = fired <span class="kw">as </span>usize;
+<a href=#1429 id=1429 data-nosnippet>1429</a>    <span class="prelude-val">Ok</span>(fired)
+<a href=#1430 id=1430 data-nosnippet>1430</a>}
+<a href=#1431 id=1431 data-nosnippet>1431</a>
+<a href=#1432 id=1432 data-nosnippet>1432</a><span class="doccomment">/// Handler for `Syscall::WaitCompletion` (extracted from the dispatcher).
+<a href=#1433 id=1433 data-nosnippet>1433</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>wait_completion(
+<a href=#1434 id=1434 data-nosnippet>1434</a>    caller_id: usize,
+<a href=#1435 id=1435 data-nosnippet>1435</a>    mask: u32,
+<a href=#1436 id=1436 data-nosnippet>1436</a>    deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#1437 id=1437 data-nosnippet>1437</a>    out_ptr: usize,
+<a href=#1438 id=1438 data-nosnippet>1438</a>) -&gt; SyscallResult {
+<a href=#1439 id=1439 data-nosnippet>1439</a>    <span class="kw">crate</span>::task::completion_wait::wait_completion(caller_id, mask, deadline, out_ptr)
+<a href=#1440 id=1440 data-nosnippet>1440</a>}
+<a href=#1441 id=1441 data-nosnippet>1441</a>
+<a href=#1442 id=1442 data-nosnippet>1442</a><span class="doccomment">/// Handler for `Syscall::GetRandom` (extracted from the dispatcher).
+<a href=#1443 id=1443 data-nosnippet>1443</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get_random(caller_id: usize, buf_ptr: usize, len: usize) -&gt; SyscallResult {
+<a href=#1444 id=1444 data-nosnippet>1444</a>    <span class="kw">if </span>len == <span class="number">0 </span>{
+<a href=#1445 id=1445 data-nosnippet>1445</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
+<a href=#1446 id=1446 data-nosnippet>1446</a>    }
+<a href=#1447 id=1447 data-nosnippet>1447</a>    <span class="comment">// Validate the ABI descriptor before entropy is consumed. `len`
+<a href=#1448 id=1448 data-nosnippet>1448</a>    // remains the caller-declared capacity; only the output span caps
+<a href=#1449 id=1449 data-nosnippet>1449</a>    // at 64 bytes, as required by the frozen syscall contract.
+<a href=#1450 id=1450 data-nosnippet>1450</a>    </span>validate_user_buf(buf_ptr, len, MAX_USER_BUF)<span class="question-mark">?</span>;
+<a href=#1451 id=1451 data-nosnippet>1451</a>    <span class="kw">let </span>capped = len.min(<span class="number">64</span>);
+<a href=#1452 id=1452 data-nosnippet>1452</a>    preflight_user_output(caller_id, buf_ptr, capped)<span class="question-mark">?</span>;
+<a href=#1453 id=1453 data-nosnippet>1453</a>    <span class="kw">let </span><span class="kw-2">mut </span>kbuf = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#1454 id=1454 data-nosnippet>1454</a>    <span class="kw">let </span>written = <span class="kw">crate</span>::dev::virtio_rng::get_random(<span class="kw-2">&amp;mut </span>kbuf[..capped]);
+<a href=#1455 id=1455 data-nosnippet>1455</a>    <span class="kw">let </span>n = <span class="kw">if </span>written &gt; <span class="number">0 </span>{
+<a href=#1456 id=1456 data-nosnippet>1456</a>        written
+<a href=#1457 id=1457 data-nosnippet>1457</a>    } <span class="kw">else </span>{
+<a href=#1458 id=1458 data-nosnippet>1458</a>        <span class="attr">#[cfg(all(feature = <span class="string">"dev-weak-rng"</span>, not(feature = <span class="string">"qemu-dev-https"</span>)))]
+<a href=#1459 id=1459 data-nosnippet>1459</a>        </span>{
+<a href=#1460 id=1460 data-nosnippet>1460</a>            <span class="kw">static </span>WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
+<a href=#1461 id=1461 data-nosnippet>1461</a>                core::sync::atomic::AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#1462 id=1462 data-nosnippet>1462</a>            <span class="kw">if </span>!WEAK_RNG_WARNED.swap(<span class="bool-val">true</span>, core::sync::atomic::Ordering::Relaxed) {
+<a href=#1463 id=1463 data-nosnippet>1463</a>                <span class="macro">log::warn!</span>(
+<a href=#1464 id=1464 data-nosnippet>1464</a>                    <span class="string">"[kernel] GetRandom: no hardware entropy — serving WEAK xorshift32 \
+<a href=#1465 id=1465 data-nosnippet>1465</a>                             (dev-weak-rng). NOT cryptographically secure; never ship this."
+<a href=#1466 id=1466 data-nosnippet>1466</a>                </span>);
+<a href=#1467 id=1467 data-nosnippet>1467</a>            }
+<a href=#1468 id=1468 data-nosnippet>1468</a>            <span class="kw">let </span>seed =
+<a href=#1469 id=1469 data-nosnippet>1469</a>                <span class="kw">crate</span>::task::system_ticks() <span class="kw">as </span>u32 ^ (caller_id <span class="kw">as </span>u32).wrapping_mul(<span class="number">0x9e37_79b9</span>);
+<a href=#1470 id=1470 data-nosnippet>1470</a>            <span class="kw">let </span><span class="kw-2">mut </span>state = <span class="kw">if </span>seed == <span class="number">0 </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ seed };
+<a href=#1471 id=1471 data-nosnippet>1471</a>            <span class="kw">for </span>byte <span class="kw">in </span>kbuf[..capped].iter_mut() {
+<a href=#1472 id=1472 data-nosnippet>1472</a>                state ^= state &lt;&lt; <span class="number">13</span>;
+<a href=#1473 id=1473 data-nosnippet>1473</a>                state ^= state &gt;&gt; <span class="number">17</span>;
+<a href=#1474 id=1474 data-nosnippet>1474</a>                state ^= state &lt;&lt; <span class="number">5</span>;
+<a href=#1475 id=1475 data-nosnippet>1475</a>                <span class="kw-2">*</span>byte = state <span class="kw">as </span>u8;
+<a href=#1476 id=1476 data-nosnippet>1476</a>            }
+<a href=#1477 id=1477 data-nosnippet>1477</a>            capped
+<a href=#1478 id=1478 data-nosnippet>1478</a>        }
+<a href=#1479 id=1479 data-nosnippet>1479</a>        <span class="comment">// The QEMU HTTPS image must fail closed even when development
+<a href=#1480 id=1480 data-nosnippet>1480</a>        // defaults also enabled dev-weak-rng through feature unification.
+<a href=#1481 id=1481 data-nosnippet>1481</a>        </span><span class="attr">#[cfg(any(not(feature = <span class="string">"dev-weak-rng"</span>), feature = <span class="string">"qemu-dev-https"</span>))]
+<a href=#1482 id=1482 data-nosnippet>1482</a>        </span><span class="number">0
+<a href=#1483 id=1483 data-nosnippet>1483</a>    </span>};
+<a href=#1484 id=1484 data-nosnippet>1484</a>    <span class="kw">if </span>n &gt; <span class="number">0 </span>{
+<a href=#1485 id=1485 data-nosnippet>1485</a>        write_getrandom_output(caller_id, buf_ptr, <span class="kw-2">&amp;</span>kbuf[..n])<span class="question-mark">?</span>;
+<a href=#1486 id=1486 data-nosnippet>1486</a>    }
+<a href=#1487 id=1487 data-nosnippet>1487</a>    <span class="prelude-val">Ok</span>(n)
+<a href=#1488 id=1488 data-nosnippet>1488</a>}
 </code></pre></div></section></main></body></html>

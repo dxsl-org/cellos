@@ -30,17 +30,17 @@
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span><span class="kw">crate</span>::app::{FilesApp, PromptKind};
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span><span class="kw">crate</span>::fs::FileSystem;
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span><span class="kw">crate</span>::model::ViewMode;
-<a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span>api::display::PixelFormat;
-<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>ostd::display::linear::icons::LineIcon;
-<a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>ostd::display::ViSurface;
-<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>ostd::syscall::{
-<a href=#38 id=38 data-nosnippet>38</a>    sys_get_resolution, sys_spawn_from_path, sys_spawn_from_path_raw, sys_yield, SyscallResult,
-<a href=#39 id=39 data-nosnippet>39</a>};
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>ostd::typography::TextFonts;
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
-<a href=#42 id=42 data-nosnippet>42</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
-<a href=#43 id=43 data-nosnippet>43</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span>ostd::display::linear::icons::LineIcon;
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>ostd::display::ViSurface;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>ostd::input::{InputEvent, KeyState, KeySym, Modifiers, MouseButton};
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>ostd::syscall::{
+<a href=#37 id=37 data-nosnippet>37</a>    sys_get_resolution, sys_spawn_from_path, sys_spawn_from_path_raw, sys_yield, SyscallResult,
+<a href=#38 id=38 data-nosnippet>38</a>};
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>ostd::typography::TextFonts;
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>wire::display::PixelFormat;
+<a href=#42 id=42 data-nosnippet>42</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
+<a href=#43 id=43 data-nosnippet>43</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#44 id=44 data-nosnippet>44</a>    Log,
 <a href=#45 id=45 data-nosnippet>45</a>    SpawnFromPath,
 <a href=#46 id=46 data-nosnippet>46</a>    GrantAlloc,
@@ -296,7 +296,7 @@
 <a href=#296 id=296 data-nosnippet>296</a>        sys_yield();
 <a href=#297 id=297 data-nosnippet>297</a>    }
 <a href=#298 id=298 data-nosnippet>298</a>}
-<a href=#299 id=299 data-nosnippet>299</a><span class="kw">fn </span>dispatch_launch_intent(intent: <span class="kw-2">&amp;</span>api::services::mime::LaunchIntent) {
+<a href=#299 id=299 data-nosnippet>299</a><span class="kw">fn </span>dispatch_launch_intent(intent: <span class="kw-2">&amp;</span>wire::mime::LaunchIntent) {
 <a href=#300 id=300 data-nosnippet>300</a>    ostd::io::print(<span class="string">"[files] LaunchIntent: "</span>);
 <a href=#301 id=301 data-nosnippet>301</a>    ostd::io::print(intent.action.as_str());
 <a href=#302 id=302 data-nosnippet>302</a>    ostd::io::print(<span class="string">" target="</span>);
@@ -304,7 +304,7 @@
 <a href=#304 id=304 data-nosnippet>304</a>    ostd::io::print(<span class="string">" app="</span>);
 <a href=#305 id=305 data-nosnippet>305</a>    ostd::io::println(intent.app_binary);
 <a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span>spawned = <span class="kw">if </span>intent.action == api::services::mime::FileAction::Run
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span>spawned = <span class="kw">if </span>intent.action == wire::mime::FileAction::Run
 <a href=#308 id=308 data-nosnippet>308</a>        &amp;&amp; intent.target_path.starts_with(<span class="string">"/bin/"</span>)
 <a href=#309 id=309 data-nosnippet>309</a>    {
 <a href=#310 id=310 data-nosnippet>310</a>        sys_spawn_from_path(<span class="kw-2">&amp;</span>intent.target_path)

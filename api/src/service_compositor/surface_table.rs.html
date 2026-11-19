@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>// pass blits each surface's single active Grant. The kernel refuses a holder's
 <a href=#28 id=28 data-nosnippet>28</a>// 65th distinct lease as an unknown id, which `resolve_pixels` would treat as a
 <a href=#29 id=29 data-nosnippet>29</a>// released buffer and detach, so every surface must fit one holder's table.
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(MAX_SURFACES &lt;= api::syscall::grant_slice::MAX_LEASES_PER_HOLDER);
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(MAX_SURFACES &lt;= abi::syscall::grant_slice::MAX_LEASES_PER_HOLDER);
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Largest width or height a client may request. Keeps `w * h * bpp` and
 <a href=#33 id=33 data-nosnippet>33</a>/// `x + w` arithmetic far from `u32`/`i32` overflow on every target.

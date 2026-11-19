@@ -17,12 +17,12 @@
 <a href=#17 id=17 data-nosnippet>17</a>//! stashes a full compositor queue's events, then the main loop retries before
 <a href=#18 id=18 data-nosnippet>18</a>//! consuming more raw input. No synchronous Send/SetFocus IPC cycle is created.
 <a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>api::services::proto::input::INPUT_EVENT_OPCODE;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>api::syscall::service;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::session::{zeroize, Scrub};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::syscall::sys_try_send;
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>abi::syscall::service;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>ostd::session::{zeroize, Scrub};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::syscall::sys_try_send;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>wire::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>wire::proto::input::INPUT_EVENT_OPCODE;
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span><span class="kw">crate</span>::focus_routes::{FocusRoutes, Requester};
 <a href=#28 id=28 data-nosnippet>28</a>
@@ -135,8 +135,8 @@
 <a href=#135 id=135 data-nosnippet>135</a>    ///
 <a href=#136 id=136 data-nosnippet>136</a>    /// The IPC message format is:
 <a href=#137 id=137 data-nosnippet>137</a>    /// ```text
-<a href=#138 id=138 data-nosnippet>138</a>    /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
-<a href=#139 id=139 data-nosnippet>139</a>    /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
+<a href=#138 id=138 data-nosnippet>138</a>    /// byte[0]   = INPUT_EVENT_OPCODE (`wire::proto::input`)
+<a href=#139 id=139 data-nosnippet>139</a>    /// byte[1..] = encode_event() output (see libs/wire/src/input.rs)
 <a href=#140 id=140 data-nosnippet>140</a>    /// ```
 <a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">fn </span>dispatch_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: usize, event: <span class="kw-2">&amp;</span>InputEvent) -&gt; bool {
 <a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">if let </span>InputEvent::Key(key) = event {
@@ -231,8 +231,8 @@
 <a href=#231 id=231 data-nosnippet>231</a>    ///
 <a href=#232 id=232 data-nosnippet>232</a>    /// The IPC message format is:
 <a href=#233 id=233 data-nosnippet>233</a>    /// ```text
-<a href=#234 id=234 data-nosnippet>234</a>    /// byte[0]   = INPUT_EVENT_OPCODE (`api::services::proto::input`)
-<a href=#235 id=235 data-nosnippet>235</a>    /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
+<a href=#234 id=234 data-nosnippet>234</a>    /// byte[0]   = INPUT_EVENT_OPCODE (`wire::proto::input`)
+<a href=#235 id=235 data-nosnippet>235</a>    /// byte[1..] = encode_event() output (see libs/wire/src/input.rs)
 <a href=#236 id=236 data-nosnippet>236</a>    /// ```
 <a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">fn </span>try_send_event(target: usize, event: <span class="kw-2">&amp;</span>InputEvent) -&gt; <span class="prelude-ty">Result</span>&lt;(), ()&gt; {
 <a href=#238 id=238 data-nosnippet>238</a>        <span class="comment">// A focused-cell key event can be a typed secret: both staging buffers are wiped after the send.

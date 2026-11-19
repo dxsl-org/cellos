@@ -33,15 +33,15 @@
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">mod </span>window_decoration;
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">mod </span>z_order;
 <a href=#35 id=35 data-nosnippet>35</a>
-<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>api::display::Rect;
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>api::services::proto::input::INPUT_EVENT_OPCODE;
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>framebuffer::ScreenFb;
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>ostd::io::println;
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>ostd::service::{serve, Handler, Owner, Request, ServeConfig, Wait, WatchPolicy};
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor};
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>render::render_frame;
-<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>surface_table::SurfaceTable;
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>framebuffer::ScreenFb;
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>input_handler::{connect_to_input, handle_input_event, InputState, ScreenBounds};
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>ostd::io::println;
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>ostd::service::{serve, Handler, Owner, Request, ServeConfig, Wait, WatchPolicy};
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>ostd::syscall::{sys_get_resolution, sys_get_time, sys_gpu_cursor};
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>render::render_frame;
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>surface_table::SurfaceTable;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>wire::display::Rect;
+<a href=#44 id=44 data-nosnippet>44</a><span class="kw">use </span>wire::proto::input::INPUT_EVENT_OPCODE;
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">use </span>z_order::ZOrder;
 <a href=#46 id=46 data-nosnippet>46</a>
 <a href=#47 id=47 data-nosnippet>47</a><span class="doccomment">/// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.

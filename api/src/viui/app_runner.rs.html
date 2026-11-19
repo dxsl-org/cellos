@@ -124,7 +124,7 @@
 <a href=#124 id=124 data-nosnippet>124</a>///
 <a href=#125 id=125 data-nosnippet>125</a>/// # Hardware vs software repeat
 <a href=#126 id=126 data-nosnippet>126</a>/// The input service already sends `state=Repeated` events for hardware
-<a href=#127 id=127 data-nosnippet>127</a>/// auto-repeat (see `api::input::KeyState::Repeated`). `input_bridge::parse_input_message`
+<a href=#127 id=127 data-nosnippet>127</a>/// auto-repeat (see `wire::input::KeyState::Repeated`). `input_bridge::parse_input_message`
 <a href=#128 id=128 data-nosnippet>128</a>/// treats those identically to `Pressed`, so hardware repeat already works without
 <a href=#129 id=129 data-nosnippet>129</a>/// this struct. `KeyRepeatState` provides *software* repeat for platforms that do NOT
 <a href=#130 id=130 data-nosnippet>130</a>/// forward hardware repeat (serial consoles, touch keyboards, synthetic input in tests).
@@ -475,7 +475,7 @@
 <a href=#475 id=475 data-nosnippet>475</a>
 <a href=#476 id=476 data-nosnippet>476</a>        <span class="comment">// ── Software key-repeat injection ─────────────────────────────────────
 <a href=#477 id=477 data-nosnippet>477</a>        // Only runs when time is advancing (dt_ms &gt; 0) and a key is held.
-<a href=#478 id=478 data-nosnippet>478</a>        // Platforms that send hardware repeat events (api::input::KeyState::Repeated)
+<a href=#478 id=478 data-nosnippet>478</a>        // Platforms that send hardware repeat events (wire::input::KeyState::Repeated)
 <a href=#479 id=479 data-nosnippet>479</a>        // already inject repeats via input_bridge, so this path fires only when
 <a href=#480 id=480 data-nosnippet>480</a>        // held_ms crosses the thresholds without hardware-repeat interruption.
 <a href=#481 id=481 data-nosnippet>481</a>        </span><span class="kw">if </span>dt_ms &gt; <span class="number">0 </span>{

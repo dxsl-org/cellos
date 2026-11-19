@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>alloc::format;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>alloc::string::String;
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse};
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="doccomment">/// 5 s: one VFS `Stat` or `ListDir`, which may read metadata from disk.
 <a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">const </span>VFS_CALL_TICKS: u64 = <span class="number">500</span>;
@@ -14,14 +14,14 @@
 <a href=#14 id=14 data-nosnippet>14</a>}
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>stat_path(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;bool&gt;, String&gt; {
-<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>VfsRequest::Stat(path), <span class="kw-2">&amp;mut </span>send)
+<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#18 id=18 data-nosnippet>18</a>    <span class="kw">let </span>len = wire::ipc::encode(<span class="kw-2">&amp;</span>VfsRequest::Stat(path), <span class="kw-2">&amp;mut </span>send)
 <a href=#19 id=19 data-nosnippet>19</a>        .map_err(|<span class="kw">_</span>| String::from(<span class="string">"failed to encode VFS stat request"</span>))<span class="question-mark">?
 <a href=#20 id=20 data-nosnippet>20</a>        </span>.len();
-<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">let </span>raw = request_vfs(len, <span class="kw-2">&amp;</span>send, <span class="kw-2">&amp;mut </span>recv)<span class="question-mark">?</span>;
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="prelude-val">Ok</span>(
-<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">match </span>api::ipc::decode::&lt;VfsResponse&gt;(raw)
+<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">match </span>wire::ipc::decode::&lt;VfsResponse&gt;(raw)
 <a href=#25 id=25 data-nosnippet>25</a>            .map_err(|<span class="kw">_</span>| String::from(<span class="string">"failed to decode VFS stat response"</span>))<span class="question-mark">?
 <a href=#26 id=26 data-nosnippet>26</a>        </span>{
 <a href=#27 id=27 data-nosnippet>27</a>            VfsResponse::Stat { is_dir, .. } =&gt; <span class="prelude-val">Some</span>(is_dir),
@@ -32,13 +32,13 @@
 <a href=#32 id=32 data-nosnippet>32</a>}
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>list_dir(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;DirEntry&gt;, String&gt; {
-<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>VfsRequest::ListDir(path), <span class="kw-2">&amp;mut </span>send)
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">let </span>len = wire::ipc::encode(<span class="kw-2">&amp;</span>VfsRequest::ListDir(path), <span class="kw-2">&amp;mut </span>send)
 <a href=#37 id=37 data-nosnippet>37</a>        .map_err(|<span class="kw">_</span>| String::from(<span class="string">"failed to encode VFS list request"</span>))<span class="question-mark">?
 <a href=#38 id=38 data-nosnippet>38</a>        </span>.len();
-<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#39 id=39 data-nosnippet>39</a>    <span class="kw">let </span><span class="kw-2">mut </span>recv = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span>raw = request_vfs(len, <span class="kw-2">&amp;</span>send, <span class="kw-2">&amp;mut </span>recv)<span class="question-mark">?</span>;
-<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>data = <span class="kw">match </span>api::ipc::decode::&lt;VfsResponse&gt;(raw)
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span>data = <span class="kw">match </span>wire::ipc::decode::&lt;VfsResponse&gt;(raw)
 <a href=#42 id=42 data-nosnippet>42</a>        .map_err(|<span class="kw">_</span>| String::from(<span class="string">"failed to decode VFS list response"</span>))<span class="question-mark">?
 <a href=#43 id=43 data-nosnippet>43</a>    </span>{
 <a href=#44 id=44 data-nosnippet>44</a>        VfsResponse::Data(data) =&gt; data,
@@ -71,7 +71,7 @@
 <a href=#71 id=71 data-nosnippet>71</a>
 <a href=#72 id=72 data-nosnippet>72</a><span class="kw">fn </span>request_vfs&lt;<span class="lifetime">'a</span>&gt;(len: usize, send: <span class="kw-2">&amp;</span>[u8], recv: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8], String&gt; {
 <a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">let </span>vfs = <span class="kw">loop </span>{
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = ostd::service::provider_tid(api::syscall::service::VFS) {
+<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(tid) = ostd::service::provider_tid(abi::syscall::service::VFS) {
 <a href=#75 id=75 data-nosnippet>75</a>            <span class="kw">break </span>tid;
 <a href=#76 id=76 data-nosnippet>76</a>        }
 <a href=#77 id=77 data-nosnippet>77</a>        ostd::task::yield_now();

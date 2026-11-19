@@ -20,9 +20,9 @@
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span><span class="kw">crate</span>::codec::{Decoder, KeyAction, KeyState, KeySymbol, Modifiers};
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::input::{Event, EventKind};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::session::TerminalSession;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>alloc::collections::VecDeque;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>api::cell_session::{ObjectRefV1, Status};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>abi::cell_session::{ObjectRefV1, Status};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::collections::VecDeque;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="doccomment">/// Raw routing plus bracketed paste (`TerminalMode` bits 0 and 4).
 <a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub const </span>RAW_SHELL_MODE: u32 = <span class="number">1 </span>| <span class="number">16</span>;

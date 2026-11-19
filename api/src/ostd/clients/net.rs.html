@@ -8,8 +8,8 @@
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::service::NetRef;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>crate::{ViError, ViResult};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::services::proto::net::NetError;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE, NET_TCP_INLINE_DATA_MAX};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>wire::proto::net::NetError;
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="doccomment">/// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
 <a href=#15 id=15 data-nosnippet>15</a>/// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
@@ -285,7 +285,7 @@
 <a href=#285 id=285 data-nosnippet>285</a>                }
 <a href=#286 id=286 data-nosnippet>286</a>                <span class="prelude-val">Err</span>(ViError::Unknown) =&gt; {
 <a href=#287 id=287 data-nosnippet>287</a>                    <span class="comment">// EOF: net service sent `Err(TCP_RECV_EOF)` signalling FIN/RST
-<a href=#288 id=288 data-nosnippet>288</a>                    // (`api::services::proto::net::TCP_RECV_EOF`).
+<a href=#288 id=288 data-nosnippet>288</a>                    // (`wire::proto::net::TCP_RECV_EOF`).
 <a href=#289 id=289 data-nosnippet>289</a>                    </span><span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="number">0</span>);
 <a href=#290 id=290 data-nosnippet>290</a>                }
 <a href=#291 id=291 data-nosnippet>291</a>                <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">crate</span>::io::OstdError(e)),

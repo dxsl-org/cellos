@@ -161,10 +161,10 @@
 <a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Wait briefly for one key event from the input service and queue its
 <a href=#162 id=162 data-nosnippet>162</a>    /// bytes. Returns `false` when no input service is registered.
 <a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">fn </span>poll_input_service(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">use </span>api::input::{decode_event, InputEvent, INPUT_EVENT_OPCODE};
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">use </span>wire::input::{decode_event, InputEvent, INPUT_EVENT_OPCODE};
 <a href=#165 id=165 data-nosnippet>165</a>        <span class="comment">// Short enough that console bytes on fd 0 are still picked up promptly.
 <a href=#166 id=166 data-nosnippet>166</a>        </span><span class="kw">const </span>TIMEOUT_TICKS: u64 = <span class="number">2</span>;
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(input_tid) = <span class="kw">crate</span>::service::provider_tid(api::syscall::service::INPUT) <span class="kw">else </span>{
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(input_tid) = <span class="kw">crate</span>::service::provider_tid(abi::syscall::service::INPUT) <span class="kw">else </span>{
 <a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#169 id=169 data-nosnippet>169</a>        };
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="comment">// Claim focus once per input-service incarnation, as Stdin does:
@@ -175,7 +175,7 @@
 <a href=#175 id=175 data-nosnippet>175</a>            }
 <a href=#176 id=176 data-nosnippet>176</a>            <span class="self">self</span>.focused_on = input_tid;
 <a href=#177 id=177 data-nosnippet>177</a>        }
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span><span class="kw-2">mut </span>frame = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">if let </span>syscall::SyscallResult::Ok(sender) =
 <a href=#180 id=180 data-nosnippet>180</a>            syscall::sys_recv_timeout(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>frame, TIMEOUT_TICKS)
 <a href=#181 id=181 data-nosnippet>181</a>        {
@@ -299,8 +299,8 @@
 <a href=#299 id=299 data-nosnippet>299</a>/// events (the input service maps C0 controls to `Escape`/`Return`/`Backspace`
 <a href=#300 id=300 data-nosnippet>300</a>/// and passes the rest as `Printable` with the raw byte) and physical keys
 <a href=#301 id=301 data-nosnippet>301</a>/// feed the same byte state machine. Returns how many bytes were written.
-<a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">fn </span>key_bytes(key: <span class="kw-2">&amp;</span>api::input::KeyEvent, out: <span class="kw-2">&amp;mut </span>[u8; <span class="number">4</span>]) -&gt; usize {
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">use </span>api::input::{KeyState, KeySym, Modifiers};
+<a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">fn </span>key_bytes(key: <span class="kw-2">&amp;</span>wire::input::KeyEvent, out: <span class="kw-2">&amp;mut </span>[u8; <span class="number">4</span>]) -&gt; usize {
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">use </span>wire::input::{KeyState, KeySym, Modifiers};
 <a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span>key.state == KeyState::Released {
 <a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">return </span><span class="number">0</span>;
 <a href=#306 id=306 data-nosnippet>306</a>    }
@@ -335,7 +335,7 @@
 <a href=#335 id=335 data-nosnippet>335</a><span class="attr">#[cfg(test)]
 <a href=#336 id=336 data-nosnippet>336</a></span><span class="kw">mod </span>tests {
 <a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">use </span><span class="kw">super</span>::key_bytes;
-<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">use </span>api::input::{KeyEvent, KeyState, KeySym, Modifiers};
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">use </span>wire::input::{KeyEvent, KeyState, KeySym, Modifiers};
 <a href=#339 id=339 data-nosnippet>339</a>
 <a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">fn </span>key(keysym: KeySym, character: u32, modifiers: Modifiers, state: KeyState) -&gt; KeyEvent {
 <a href=#341 id=341 data-nosnippet>341</a>        KeyEvent {

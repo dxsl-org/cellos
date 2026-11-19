@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["app_envelope","compositor","config","input","net","nic","supervisor","tls","vfs"]};

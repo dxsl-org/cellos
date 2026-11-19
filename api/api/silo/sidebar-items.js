@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEVELOPMENT_PROFILE_DIGEST","DEVELOPMENT_RELAY_GENERATION","DEVELOPMENT_SILO_FRAME_LEN"],"enum":["DevelopmentSiloError","DevelopmentSiloRequest","DevelopmentSiloResponse"]};

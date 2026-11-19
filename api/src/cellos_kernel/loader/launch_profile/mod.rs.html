@@ -63,66 +63,68 @@
 <a href=#63 id=63 data-nosnippet>63</a>) -&gt; <span class="prelude-ty">Option</span>&lt;LaunchProfile&gt; {
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">let </span>profile = <span class="kw">match </span>caller.name {
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="string">"init" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::init_profile(route, target),
-<a href=#66 id=66 data-nosnippet>66</a>        <span class="attr">#[cfg(feature = <span class="string">"phase02-terminal-profile"</span>)]
-<a href=#67 id=67 data-nosnippet>67</a>        </span><span class="string">"phase02-session-parent" </span>| <span class="string">"phase02-session-child" </span>=&gt; {
-<a href=#68 id=68 data-nosnippet>68</a>            profiles::phase02_session_profile(caller.name, route, target)
-<a href=#69 id=69 data-nosnippet>69</a>        }
-<a href=#70 id=70 data-nosnippet>70</a>        <span class="string">"cellbox" </span>=&gt; {
-<a href=#71 id=71 data-nosnippet>71</a>            <span class="attr">#[cfg(feature = <span class="string">"phase02-terminal-profile"</span>)]
-<a href=#72 id=72 data-nosnippet>72</a>            </span><span class="kw">if </span>target == <span class="string">"/bin/phase02-session-parent" </span>{
-<a href=#73 id=73 data-nosnippet>73</a>                <span class="kw">return </span>profiles::phase02_session_profile(caller.name, route, target);
-<a href=#74 id=74 data-nosnippet>74</a>            }
-<a href=#75 id=75 data-nosnippet>75</a>            <span class="attr">#[cfg(feature = <span class="string">"phase03-filter-profile"</span>)]
-<a href=#76 id=76 data-nosnippet>76</a>            </span><span class="kw">if </span>target == <span class="string">"/bin/p03-filter" </span>{
-<a href=#77 id=77 data-nosnippet>77</a>                <span class="kw">return </span>profiles::phase03_filter_profile(route, target);
-<a href=#78 id=78 data-nosnippet>78</a>            }
-<a href=#79 id=79 data-nosnippet>79</a>            profiles::cellbox_profile(route, target)
-<a href=#80 id=80 data-nosnippet>80</a>        }
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="comment">// Reviewed GUI Terminal edge (Phase 04 S3): the only row `terminal` owns.
-<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="string">"terminal" </span>=&gt; profiles::terminal_profile(route, target),
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="string">"chrome" </span>=&gt; profiles::chrome_profile(route, target),
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="comment">// Private Phase04 fixture: the same one edge for the test driver that links
-<a href=#85 id=85 data-nosnippet>85</a>        // the Terminal's SDK host. Never compiled into an ordinary image.
-<a href=#86 id=86 data-nosnippet>86</a>        </span><span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
-<a href=#87 id=87 data-nosnippet>87</a>        </span><span class="string">"phase04-terminal-driver" </span>=&gt; profiles::phase04_driver_profile(route, target),
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="string">"desktop" </span>=&gt; profiles::desktop_profile(route, target),
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="string">"pipe-test" </span>=&gt; profiles::pipe_test_profile(route, target),
-<a href=#90 id=90 data-nosnippet>90</a>        <span class="string">"c-spawn" </span>=&gt; profiles::c_spawn_profile(route, target),
-<a href=#91 id=91 data-nosnippet>91</a>        <span class="comment">// Hypha binaries are signed as `hypha-core` / `hypha-tool-spawn` (the signer
-<a href=#92 id=92 data-nosnippet>92</a>        // strips only `service-`/`app-`/`driver-` from the artifact name).
-<a href=#93 id=93 data-nosnippet>93</a>        </span><span class="string">"hypha-core" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::hypha_profile(route, target),
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="string">"hypha-tool-spawn" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::tool_spawn_profile(route, target),
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="string">"dwc2-usb" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::dwc2_function_worker_profile(route, target),
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="string">"backend-supervisor" </span><span class="kw">if </span>caller.has_spawn =&gt; {
-<a href=#97 id=97 data-nosnippet>97</a>            profiles::backend_supervisor_profile(route, target)
-<a href=#98 id=98 data-nosnippet>98</a>        }
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="string">"recovery-authority" </span><span class="kw">if </span>caller.has_spawn =&gt; {
-<a href=#100 id=100 data-nosnippet>100</a>            profiles::recovery_authority_profile(route, target)
-<a href=#101 id=101 data-nosnippet>101</a>        }
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="string">"c2c-render" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::render_worker_profile(route, target),
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="string">"supervisor" </span><span class="kw">if </span>caller.has_spawn &amp;&amp; caller.has_supervisor =&gt; {
-<a href=#104 id=104 data-nosnippet>104</a>            profiles::supervisor_profile(route, target)
-<a href=#105 id=105 data-nosnippet>105</a>        }
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="string">"bench" </span>| <span class="string">"capacity-probe" </span><span class="kw">if </span>caller.has_spawn =&gt; {
-<a href=#107 id=107 data-nosnippet>107</a>            profiles::pinned_profile(caller.name, route, target)
-<a href=#108 id=108 data-nosnippet>108</a>        }
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="string">"periph-demo" </span>=&gt; profiles::pinned_profile(caller.name, route, target),
-<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#111 id=111 data-nosnippet>111</a>    }<span class="question-mark">?</span>;
-<a href=#112 id=112 data-nosnippet>112</a>
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="comment">// SpawnFromElf carries caller-owned bytes and only an advisory path. Until
-<a href=#114 id=114 data-nosnippet>114</a>    // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
-<a href=#115 id=115 data-nosnippet>115</a>    // profile that carries authority. Service-IPC tools use an empty ceiling;
-<a href=#116 id=116 data-nosnippet>116</a>    // capability-bearing ELF routes remain lifecycle-only. The S2-T/S2-W rights
-<a href=#117 id=117 data-nosnippet>117</a>    // do not count here: they were ambient to every ELF before that annex, so a
-<a href=#118 id=118 data-nosnippet>118</a>    // row holding only them stays reachable on this route (D-TW1).
-<a href=#119 id=119 data-nosnippet>119</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(route, LaunchRoute::Elf)
-<a href=#120 id=120 data-nosnippet>120</a>        &amp;&amp; profile.child_ceiling.without_observe_mutate() != CapSet::EMPTY
-<a href=#121 id=121 data-nosnippet>121</a>        &amp;&amp; !profile.requires_lifecycle_authority
-<a href=#122 id=122 data-nosnippet>122</a>    {
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#124 id=124 data-nosnippet>124</a>    }
-<a href=#125 id=125 data-nosnippet>125</a>
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="prelude-val">Some</span>(profile)
-<a href=#127 id=127 data-nosnippet>127</a>}
+<a href=#66 id=66 data-nosnippet>66</a>        <span class="string">"activator" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::activator_profile(route, target),
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="string">"fixture-launcher" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::fixture_launcher_profile(route, target),
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="attr">#[cfg(feature = <span class="string">"phase02-terminal-profile"</span>)]
+<a href=#69 id=69 data-nosnippet>69</a>        </span><span class="string">"phase02-session-parent" </span>| <span class="string">"phase02-session-child" </span>=&gt; {
+<a href=#70 id=70 data-nosnippet>70</a>            profiles::phase02_session_profile(caller.name, route, target)
+<a href=#71 id=71 data-nosnippet>71</a>        }
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="string">"cellbox" </span>=&gt; {
+<a href=#73 id=73 data-nosnippet>73</a>            <span class="attr">#[cfg(feature = <span class="string">"phase02-terminal-profile"</span>)]
+<a href=#74 id=74 data-nosnippet>74</a>            </span><span class="kw">if </span>target == <span class="string">"/bin/phase02-session-parent" </span>{
+<a href=#75 id=75 data-nosnippet>75</a>                <span class="kw">return </span>profiles::phase02_session_profile(caller.name, route, target);
+<a href=#76 id=76 data-nosnippet>76</a>            }
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="attr">#[cfg(feature = <span class="string">"phase03-filter-profile"</span>)]
+<a href=#78 id=78 data-nosnippet>78</a>            </span><span class="kw">if </span>target == <span class="string">"/bin/p03-filter" </span>{
+<a href=#79 id=79 data-nosnippet>79</a>                <span class="kw">return </span>profiles::phase03_filter_profile(route, target);
+<a href=#80 id=80 data-nosnippet>80</a>            }
+<a href=#81 id=81 data-nosnippet>81</a>            profiles::cellbox_profile(route, target)
+<a href=#82 id=82 data-nosnippet>82</a>        }
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="comment">// Reviewed GUI Terminal edge (Phase 04 S3): the only row `terminal` owns.
+<a href=#84 id=84 data-nosnippet>84</a>        </span><span class="string">"terminal" </span>=&gt; profiles::terminal_profile(route, target),
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="string">"chrome" </span>=&gt; profiles::chrome_profile(route, target),
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="comment">// Private Phase04 fixture: the same one edge for the test driver that links
+<a href=#87 id=87 data-nosnippet>87</a>        // the Terminal's SDK host. Never compiled into an ordinary image.
+<a href=#88 id=88 data-nosnippet>88</a>        </span><span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
+<a href=#89 id=89 data-nosnippet>89</a>        </span><span class="string">"phase04-terminal-driver" </span>=&gt; profiles::phase04_driver_profile(route, target),
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="string">"desktop" </span>=&gt; profiles::desktop_profile(route, target),
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="string">"pipe-test" </span>=&gt; profiles::pipe_test_profile(route, target),
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="string">"c-spawn" </span>=&gt; profiles::c_spawn_profile(route, target),
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="comment">// Hypha binaries are signed as `hypha-core` / `hypha-tool-spawn` (the signer
+<a href=#94 id=94 data-nosnippet>94</a>        // strips only `service-`/`app-`/`driver-` from the artifact name).
+<a href=#95 id=95 data-nosnippet>95</a>        </span><span class="string">"hypha-core" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::hypha_profile(route, target),
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="string">"hypha-tool-spawn" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::tool_spawn_profile(route, target),
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="string">"dwc2-usb" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::dwc2_function_worker_profile(route, target),
+<a href=#98 id=98 data-nosnippet>98</a>        <span class="string">"backend-supervisor" </span><span class="kw">if </span>caller.has_spawn =&gt; {
+<a href=#99 id=99 data-nosnippet>99</a>            profiles::backend_supervisor_profile(route, target)
+<a href=#100 id=100 data-nosnippet>100</a>        }
+<a href=#101 id=101 data-nosnippet>101</a>        <span class="string">"recovery-authority" </span><span class="kw">if </span>caller.has_spawn =&gt; {
+<a href=#102 id=102 data-nosnippet>102</a>            profiles::recovery_authority_profile(route, target)
+<a href=#103 id=103 data-nosnippet>103</a>        }
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="string">"c2c-render" </span><span class="kw">if </span>caller.has_spawn =&gt; profiles::render_worker_profile(route, target),
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="string">"supervisor" </span><span class="kw">if </span>caller.has_spawn &amp;&amp; caller.has_supervisor =&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>            profiles::supervisor_profile(route, target)
+<a href=#107 id=107 data-nosnippet>107</a>        }
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="string">"bench" </span>| <span class="string">"capacity-probe" </span><span class="kw">if </span>caller.has_spawn =&gt; {
+<a href=#109 id=109 data-nosnippet>109</a>            profiles::pinned_profile(caller.name, route, target)
+<a href=#110 id=110 data-nosnippet>110</a>        }
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="string">"periph-demo" </span>=&gt; profiles::pinned_profile(caller.name, route, target),
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#113 id=113 data-nosnippet>113</a>    }<span class="question-mark">?</span>;
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// SpawnFromElf carries caller-owned bytes and only an advisory path. Until
+<a href=#116 id=116 data-nosnippet>116</a>    // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
+<a href=#117 id=117 data-nosnippet>117</a>    // profile that carries authority. Service-IPC tools use an empty ceiling;
+<a href=#118 id=118 data-nosnippet>118</a>    // capability-bearing ELF routes remain lifecycle-only. The S2-T/S2-W rights
+<a href=#119 id=119 data-nosnippet>119</a>    // do not count here: they were ambient to every ELF before that annex, so a
+<a href=#120 id=120 data-nosnippet>120</a>    // row holding only them stays reachable on this route (D-TW1).
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(route, LaunchRoute::Elf)
+<a href=#122 id=122 data-nosnippet>122</a>        &amp;&amp; profile.child_ceiling.without_observe_mutate() != CapSet::EMPTY
+<a href=#123 id=123 data-nosnippet>123</a>        &amp;&amp; !profile.requires_lifecycle_authority
+<a href=#124 id=124 data-nosnippet>124</a>    {
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#126 id=126 data-nosnippet>126</a>    }
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a>    <span class="prelude-val">Some</span>(profile)
+<a href=#129 id=129 data-nosnippet>129</a>}
 </code></pre></div></section></main></body></html>

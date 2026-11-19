@@ -29,7 +29,7 @@
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="comment">// A request and the kernel's caller-identity trailer must share one receive buffer.
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">const _</span>: () =
-<a href=#32 id=32 data-nosnippet>32</a>    <span class="macro">assert!</span>(MAX_REQUEST_LEN + api::caller_identity::CALLER_IDENTITY_LEN &lt;= api::ipc::IPC_BUF_SIZE);
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="macro">assert!</span>(MAX_REQUEST_LEN + abi::caller_identity::CALLER_IDENTITY_LEN &lt;= wire::ipc::IPC_BUF_SIZE);
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// Device IDs from `include/drm/intel/pciids.h` (PTL, WCL and LNL lists).
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub const </span>QUERY_DEVICE_IDS: <span class="kw-2">&amp;</span>[u16] = <span class="kw-2">&amp;</span>[
@@ -116,7 +116,7 @@
 <a href=#116 id=116 data-nosnippet>116</a><span class="kw">type </span>CellGpu = Gpu&lt;mmio::MmioRegion, KernelClock, KernelDma, KernelExports&gt;;
 <a href=#117 id=117 data-nosnippet>117</a>
 <a href=#118 id=118 data-nosnippet>118</a><span class="kw">fn </span>serve(<span class="kw-2">mut </span>service: Service&lt;CellGpu&gt;) -&gt; ! {
-<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#119 id=119 data-nosnippet>119</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">let </span><span class="kw-2">mut </span>reply = [<span class="number">0u8</span>; MAX_REPLY_LEN];
 <a href=#121 id=121 data-nosnippet>121</a>    <span class="kw">let </span><span class="kw-2">mut </span>unavailable_logged = <span class="bool-val">false</span>;
 <a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span><span class="kw-2">mut </span>faults = service.gpu.faults;
@@ -211,7 +211,7 @@
 <a href=#211 id=211 data-nosnippet>211</a>            owner_generation: record.owner_generation,
 <a href=#212 id=212 data-nosnippet>212</a>            iova: record.iova,
 <a href=#213 id=213 data-nosnippet>213</a>            len: record.len,
-<a href=#214 id=214 data-nosnippet>214</a>            device_write: record.flags &amp; api::dma_export::EXPORT_DEVICE_WRITE != <span class="number">0</span>,
+<a href=#214 id=214 data-nosnippet>214</a>            device_write: record.flags &amp; abi::dma_export::EXPORT_DEVICE_WRITE != <span class="number">0</span>,
 <a href=#215 id=215 data-nosnippet>215</a>        })
 <a href=#216 id=216 data-nosnippet>216</a>    }
 <a href=#217 id=217 data-nosnippet>217</a>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["EXPIRY_LOG_LIMIT","IMS_MSIX","PARK_TICKS","SPIN_BEFORE_PARK","WANT_VECTORS"],"struct":["NicIrq"]};
+window.SIDEBAR_ITEMS = {"constant":["IMS_MSIX","WANT_VECTORS"],"fn":["program","rearm"]};

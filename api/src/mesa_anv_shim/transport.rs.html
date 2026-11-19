@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">impl </span>IpcTransport {
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="doccomment">/// The live `XE_GPU` provider (`service::XE_GPU`, registered by init per CP1 D-G8).
 <a href=#23 id=23 data-nosnippet>23</a>    </span><span class="kw">pub fn </span>connect() -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, i32&gt; {
-<a href=#24 id=24 data-nosnippet>24</a>        ostd::service::provider_tid(api::syscall::service::XE_GPU)
+<a href=#24 id=24 data-nosnippet>24</a>        ostd::service::provider_tid(abi::syscall::service::XE_GPU)
 <a href=#25 id=25 data-nosnippet>25</a>            .map(|provider| <span class="self">Self </span>{ provider })
 <a href=#26 id=26 data-nosnippet>26</a>            .ok_or(ENODEV)
 <a href=#27 id=27 data-nosnippet>27</a>    }

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["protect_page","protect_pages","protect_range"]};
+window.SIDEBAR_ITEMS = {"fn":["confirmed","protect_mapped_range","protect_page","protect_pages","protect_range","rewrite_leaf","write_mapped_then_flush"]};

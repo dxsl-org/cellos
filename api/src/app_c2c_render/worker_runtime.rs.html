@@ -21,8 +21,8 @@
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span>scene_hash = scene.fingerprint();
 <a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">let </span><span class="kw-2">mut </span>owner = <span class="prelude-val">None</span>;
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span><span class="kw-2">mut </span>copied = Vec::with_capacity(COPIED_TILE_MAX_BYTES);
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span><span class="kw-2">mut </span>incoming = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">let </span><span class="kw-2">mut </span>outgoing = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">let </span><span class="kw-2">mut </span>incoming = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">let </span><span class="kw-2">mut </span>outgoing = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">loop </span>{
 <a href=#27 id=27 data-nosnippet>27</a>        incoming.fill(<span class="number">0</span>);
 <a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">let </span>sender = <span class="kw">match </span>sys_recv(owner.unwrap_or(<span class="number">0</span>), <span class="kw-2">&amp;mut </span>incoming) {
@@ -154,7 +154,7 @@
 <a href=#154 id=154 data-nosnippet>154</a>            }
 <a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">_ </span>=&gt; Response::Error(RenderError::InvalidOutput),
 <a href=#156 id=156 data-nosnippet>156</a>        };
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>sent = api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>outgoing)
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">let </span>sent = wire::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>outgoing)
 <a href=#158 id=158 data-nosnippet>158</a>            .map_err(|<span class="kw">_</span>| ostd::ipc::IpcError::Encode)
 <a href=#159 id=159 data-nosnippet>159</a>            .and_then(|encoded| ostd::ipc::reply(operation, encoded));
 <a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">if let </span>Response::Done { pixels, .. } = response {

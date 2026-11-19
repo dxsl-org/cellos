@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! track press/release symmetrically.
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::layout_us_qwerty::{modifier_for_scancode, toggle_modifier_for_scancode};
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::input::{KeyState, Modifiers};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>wire::input::{KeyState, Modifiers};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// Tracks the current state of all modifier keys.
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="attr">#[derive(Debug, Default, Clone, Copy)]
@@ -51,18 +51,18 @@
 <a href=#51 id=51 data-nosnippet>51</a>    ///
 <a href=#52 id=52 data-nosnippet>52</a>    /// The lock keys are the one piece of keyboard state the host has to write
 <a href=#53 id=53 data-nosnippet>53</a>    /// back: a keyboard shows Caps/Num/Scroll Lock on its own LEDs and nothing
-<a href=#54 id=54 data-nosnippet>54</a>    /// else can light them. The bits are the ones [`api::ipc::OP_SET_LEDS`]
+<a href=#54 id=54 data-nosnippet>54</a>    /// else can light them. The bits are the ones [`wire::ipc::OP_SET_LEDS`]
 <a href=#55 id=55 data-nosnippet>55</a>    /// defines, so this value goes out unchanged.
 <a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">pub fn </span>led_bitmap(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="kw">let </span><span class="kw-2">mut </span>bits = <span class="number">0u8</span>;
 <a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.contains(Modifiers::NUM_LOCK) {
-<a href=#59 id=59 data-nosnippet>59</a>            bits |= api::ipc::led_bits::NUM_LOCK;
+<a href=#59 id=59 data-nosnippet>59</a>            bits |= wire::ipc::led_bits::NUM_LOCK;
 <a href=#60 id=60 data-nosnippet>60</a>        }
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.contains(Modifiers::CAPS_LOCK) {
-<a href=#62 id=62 data-nosnippet>62</a>            bits |= api::ipc::led_bits::CAPS_LOCK;
+<a href=#62 id=62 data-nosnippet>62</a>            bits |= wire::ipc::led_bits::CAPS_LOCK;
 <a href=#63 id=63 data-nosnippet>63</a>        }
 <a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0</span>.contains(Modifiers::SCROLL_LOCK) {
-<a href=#65 id=65 data-nosnippet>65</a>            bits |= api::ipc::led_bits::SCROLL_LOCK;
+<a href=#65 id=65 data-nosnippet>65</a>            bits |= wire::ipc::led_bits::SCROLL_LOCK;
 <a href=#66 id=66 data-nosnippet>66</a>        }
 <a href=#67 id=67 data-nosnippet>67</a>        bits
 <a href=#68 id=68 data-nosnippet>68</a>    }
@@ -79,8 +79,8 @@
 <a href=#79 id=79 data-nosnippet>79</a><span class="attr">#[cfg(test)]
 <a href=#80 id=80 data-nosnippet>80</a></span><span class="kw">mod </span>tests {
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">use </span><span class="kw">super</span>::ModifierState;
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">use </span>api::input::{KeyState, Modifiers};
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">use </span>api::ipc::led_bits;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">use </span>wire::input::{KeyState, Modifiers};
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">use </span>wire::ipc::led_bits;
 <a href=#84 id=84 data-nosnippet>84</a>
 <a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">const </span>CAPS_LOCK: u32 = <span class="number">0x3A</span>;
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">const </span>NUM_LOCK: u32 = <span class="number">0x45</span>;

@@ -9,7 +9,7 @@
 <a href=#9 id=9 data-nosnippet>9</a>//! ## Why a cell cannot name what it does not hold
 <a href=#10 id=10 data-nosnippet>10</a>//! A handle-addressed request carries a directory and one component. The
 <a href=#11 id=11 data-nosnippet>11</a>//! component is checked as raw bytes before anything is joined to it
-<a href=#12 id=12 data-nosnippet>12</a>//! (`api::dir_name`), so it cannot contain a separator or be `..`. The resolved
+<a href=#12 id=12 data-nosnippet>12</a>//! (`wire::dir_name`), so it cannot contain a separator or be `..`. The resolved
 <a href=#13 id=13 data-nosnippet>13</a>//! path is therefore always exactly one level below a directory the caller was
 <a href=#14 id=14 data-nosnippet>14</a>//! given. There is no path outside the handle the caller can express, which is
 <a href=#15 id=15 data-nosnippet>15</a>//! the difference between this and an access check.
@@ -20,11 +20,11 @@
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">pub mod </span>bind;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub mod </span>lifecycle;
 <a href=#22 id=22 data-nosnippet>22</a>
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>alloc::collections::BTreeMap;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::string::String;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>api::dir_name::{join_component, validate_dir_component, DirNameError};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>alloc::collections::BTreeMap;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>alloc::string::String;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>wire::dir_name::{join_component, validate_dir_component, DirNameError};
 <a href=#28 id=28 data-nosnippet>28</a>
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span><span class="kw">crate</span>::paths::{may_alias, may_alias_within};
@@ -32,7 +32,7 @@
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Most handles one cell may hold at once.
 <a href=#33 id=33 data-nosnippet>33</a>///
 <a href=#34 id=34 data-nosnippet>34</a>/// Bounds the table against a cell that opens directories in a loop. Well above
-<a href=#35 id=35 data-nosnippet>35</a>/// `api::dir_handles::MAX_SPAWN_DIR_HANDLES`, so a cell can always derive from
+<a href=#35 id=35 data-nosnippet>35</a>/// `abi::dir_handles::MAX_SPAWN_DIR_HANDLES`, so a cell can always derive from
 <a href=#36 id=36 data-nosnippet>36</a>/// everything it inherited.
 <a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub const </span>MAX_HANDLES_PER_CELL: usize = <span class="number">32</span>;
 <a href=#38 id=38 data-nosnippet>38</a>
@@ -220,8 +220,8 @@
 <a href=#220 id=220 data-nosnippet>220</a><span class="attr">#[cfg(test)]
 <a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">mod </span>tests {
 <a href=#222 id=222 data-nosnippet>222</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">use </span>api::dir_attestation::ViDirHandleAttestation;
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">use </span>api::dir_handles::{DirHandleSet, ViSpawnDirHandles};
+<a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">use </span>abi::dir_attestation::ViDirHandleAttestation;
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">use </span>abi::dir_handles::{DirHandleSet, ViSpawnDirHandles};
 <a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">use </span>types::CellId;
 <a href=#226 id=226 data-nosnippet>226</a>
 <a href=#227 id=227 data-nosnippet>227</a>    <span class="attr">#[test]

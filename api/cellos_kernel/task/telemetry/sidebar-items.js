@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SystemMemory"],"fn":["capture","count","draw_epoch","member","monotonic_ns","provider_epoch","request_is_valid","rtc_epoch_ns"],"static":["PROVIDER_EPOCH"],"struct":["Capture","CpuLedger","ExitedCpu"]};
+window.SIDEBAR_ITEMS = {"enum":["SystemMemory"],"fn":["capture","count","draw_epoch","member","provider_epoch","request_is_valid","rtc_epoch_ns"],"static":["PROVIDER_EPOCH"],"struct":["Capture","CpuLedger","ExitedCpu"]};

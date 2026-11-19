@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HOTSWAP_RETIRED","INIT_BOOT_STOP","RETIREMENT_RECORD_LEN","RETIREMENT_RECORD_VERSION"],"enum":["RecordError","RetirementState"],"mod":["reason"],"struct":["ViRetirementV1"]};

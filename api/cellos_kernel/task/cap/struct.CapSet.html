@@ -74,7 +74,7 @@ constant is the union of everything and therefore never constrains
 anything; using it as a ceiling would admit every request while reading
 like a restriction. The self-tests use it in the opposite direction — as
 the widest possible ceiling, to prove a request is not <em>over</em>-tightened.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.from_manifest" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#248-302">Source</a><h4 class="code-header">pub fn <a href="#method.from_manifest" class="fn">from_manifest</a>(m: &amp;<a class="struct" href="../../../api/abi/manifest/struct.CellManifest.html" title="struct api::abi::manifest::CellManifest">CellManifest</a>) -&gt; <a class="struct" href="struct.CapSet.html" title="struct cellos_kernel::task::cap::CapSet">CapSet</a></h4></section></summary><div class="docblock"><p>Derive the caps a manifest <em>requests</em>. Mirrors the historical loader grant
+</div></details><details class="toggle method-toggle" open><summary><section id="method.from_manifest" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#248-302">Source</a><h4 class="code-header">pub fn <a href="#method.from_manifest" class="fn">from_manifest</a>(m: &amp;CellManifest) -&gt; <a class="struct" href="struct.CapSet.html" title="struct cellos_kernel::task::cap::CapSet">CapSet</a></h4></section></summary><div class="docblock"><p>Derive the caps a manifest <em>requests</em>. Mirrors the historical loader grant
 logic exactly — in particular <code>block_regions</code> replicates the SRV-bit
 co-grant <code>data | (lfs&lt;&lt;1) | (lfs&lt;&lt;2)</code> (NOT a 1:1 copy) so the VFS service
 keeps its P5 range after intersection. The H-ext gate is baked in here so
@@ -107,16 +107,16 @@ before the annex, so a row that carries only them still counts as
 carrying no authority for that route (D-TW1, behavior-preserving).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.intersect" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#368-392">Source</a><h4 class="code-header">pub fn <a href="#method.intersect" class="fn">intersect</a>(self, o: <a class="struct" href="struct.CapSet.html" title="struct cellos_kernel::task::cap::CapSet">CapSet</a>) -&gt; <a class="struct" href="struct.CapSet.html" title="struct cellos_kernel::task::cap::CapSet">CapSet</a></h4></section></summary><div class="docblock"><p>Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.net_caller_flags" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#397-411">Source</a><h4 class="code-header">pub fn <a href="#method.net_caller_flags" class="fn">net_caller_flags</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>The attested caller-trailer flags for this Cell’s network rights
-(<code>api::caller_identity::CALLER_FLAG_NET_*</code>). Only these four bits; the
+(<code>abi::caller_identity::CALLER_FLAG_NET_*</code>). Only these four bits; the
 caller ORs in any other flag it owns.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.config_caller_flags" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#415-421">Source</a><h4 class="code-header">pub fn <a href="#method.config_caller_flags" class="fn">config_caller_flags</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>The attested caller-trailer flag for this Cell’s Q right
-(<code>api::caller_identity::CALLER_FLAG_CONFIG_WRITE</code>), or 0.</p>
+(<code>abi::caller_identity::CALLER_FLAG_CONFIG_WRITE</code>), or 0.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.kms_caller_flags" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#427-437">Source</a><h4 class="code-header">pub fn <a href="#method.kms_caller_flags" class="fn">kms_caller_flags</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>The attested caller-trailer flags for this Cell’s KMS SSH rights
-(<code>api::caller_identity::CALLER_FLAG_KMS_SSH_SIGN</code> /
+(<code>abi::caller_identity::CALLER_FLAG_KMS_SSH_SIGN</code> /
 <code>CALLER_FLAG_KMS_SSH_ADMIN</code>), or 0. Only these two bits; the caller ORs in
 any other flag it owns.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.without_revoke_mask" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#442-457">Source</a><h4 class="code-header">pub fn <a href="#method.without_revoke_mask" class="fn">without_revoke_mask</a>(self, cap_mask: u32) -&gt; <a class="struct" href="struct.CapSet.html" title="struct cellos_kernel::task::cap::CapSet">CapSet</a></h4></section></summary><div class="docblock"><p>This set minus the rights named by a <code>CapRevoke</code> mask
-(<code>api::syscall::cap_mask</code>): the boolean caps it names, and the MMIO-class
+(<code>abi::syscall::cap_mask</code>): the boolean caps it names, and the MMIO-class
 and block-region bits in its parameterised fields.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.apply_to" class="method"><a class="src rightside" href="../../../src/cellos_kernel/task/cap.rs.html#464-469">Source</a><h4 class="code-header">pub fn <a href="#method.apply_to" class="fn">apply_to</a>(self, t: &amp;mut <a class="struct" href="../tcb/struct.Task.html" title="struct cellos_kernel::task::tcb::Task">Task</a>)</h4></section></summary><div class="docblock"><p>Install the granted caps as <code>t</code>’s incarnation record (<code>Task::rights</code>).
 Pure data — block-IO VFS-handler registration and any other side

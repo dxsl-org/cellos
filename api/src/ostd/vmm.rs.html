@@ -18,8 +18,8 @@
 <a href=#18 id=18 data-nosnippet>18</a>//! exclusively.
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="attr">#![allow(unsafe_code)]
 <a href=#20 id=20 data-nosnippet>20</a>
-<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">use </span>api::hypervisor::ViVmExit;
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>api::syscall::ViSyscall;
+<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">use </span>abi::hypervisor::ViVmExit;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>abi::syscall::ViSyscall;
 <a href=#23 id=23 data-nosnippet>23</a>
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::syscall::syscall;
 <a href=#25 id=25 data-nosnippet>25</a>
@@ -113,7 +113,7 @@
 <a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub fn </span>run_vcpu(vm_id: usize, vcpu_id: usize, budget_ns: u64, exit: <span class="kw-2">&amp;mut </span>ViVmExit) -&gt; usize {
 <a href=#114 id=114 data-nosnippet>114</a>    <span class="comment">// SAFETY: `exit` is exclusively borrowed for the whole call. The kernel
 <a href=#115 id=115 data-nosnippet>115</a>    // writes exactly `size_of::&lt;ViVmExit&gt;()` bytes (80, pinned by const asserts
-<a href=#116 id=116 data-nosnippet>116</a>    // in `api::hypervisor` and the kernel's `vmm_wire`): first all zeros — tag 0
+<a href=#116 id=116 data-nosnippet>116</a>    // in `abi::hypervisor` and the kernel's `vmm_wire`): first all zeros — tag 0
 <a href=#117 id=117 data-nosnippet>117</a>    // with zero payload, a valid `MmioRead` — then `encode_exit`'s image, whose
 <a href=#118 id=118 data-nosnippet>118</a>    // tag is a declared discriminant, whose `bool`s are 0/1 and whose padding is
 <a href=#119 id=119 data-nosnippet>119</a>    // zero. The guest runs on stage-2 mappings of its carve only, so the world

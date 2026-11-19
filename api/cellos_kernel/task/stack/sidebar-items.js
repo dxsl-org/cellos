@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STACK_GUARD_PAGES"],"fn":["overlaps_stack_reservation","release_frames","unpublish_user_frames"],"mod":["reservations"],"struct":["CellSegments","Stack"]};
+window.SIDEBAR_ITEMS = {"constant":["STACK_GUARD_PAGES"],"fn":["overlaps_stack_reservation","release_stack_reservation","release_stack_slot","retire_run","unpublish_user_frames"],"mod":["reservations"],"struct":["Stack"]};

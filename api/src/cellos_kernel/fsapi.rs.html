@@ -96,7 +96,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>            <span class="prelude-val">Some</span>(heap_owner),
 <a href=#97 id=97 data-nosnippet>97</a>            <span class="kw">crate</span>::memory::heap::p01_owner::TASK_IO,
 <a href=#98 id=98 data-nosnippet>98</a>        );
-<a href=#99 id=99 data-nosnippet>99</a>        fs.open(<span class="kw-2">&amp;</span>resolved.path, api::fs::OpenMode::Read)
+<a href=#99 id=99 data-nosnippet>99</a>        fs.open(<span class="kw-2">&amp;</span>resolved.path, abi::fs::OpenMode::Read)
 <a href=#100 id=100 data-nosnippet>100</a>            .map_err(|<span class="kw">_</span>| ())<span class="question-mark">?
 <a href=#101 id=101 data-nosnippet>101</a>    </span>};
 <a href=#102 id=102 data-nosnippet>102</a>
@@ -211,8 +211,8 @@
 <a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub fn </span>file_fstat(
 <a href=#212 id=212 data-nosnippet>212</a>    caller_id: usize,
 <a href=#213 id=213 data-nosnippet>213</a>    fd: usize,
-<a href=#214 id=214 data-nosnippet>214</a>) -&gt; core::result::Result&lt;api::syscall::ViFstatV1, ()&gt; {
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">use </span>api::syscall::{
+<a href=#214 id=214 data-nosnippet>214</a>) -&gt; core::result::Result&lt;abi::syscall::ViFstatV1, ()&gt; {
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">use </span>abi::syscall::{
 <a href=#216 id=216 data-nosnippet>216</a>        ViFstatV1, VI_FSTAT_ACCESS_READ, VI_FSTAT_ACCESS_WRITE, VI_FSTAT_KIND_CHARACTER,
 <a href=#217 id=217 data-nosnippet>217</a>        VI_FSTAT_KIND_DIRECTORY, VI_FSTAT_KIND_REGULAR,
 <a href=#218 id=218 data-nosnippet>218</a>    };
@@ -293,9 +293,9 @@
 <a href=#293 id=293 data-nosnippet>293</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(task) = sched.current_task_mut() {
 <a href=#294 id=294 data-nosnippet>294</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(handle) = task.open_files.get_mut(<span class="kw-2">&amp;</span>fd) {
 <a href=#295 id=295 data-nosnippet>295</a>                <span class="kw">let </span>pos = <span class="kw">match </span>whence {
-<a href=#296 id=296 data-nosnippet>296</a>                    <span class="number">0 </span>=&gt; api::fs::SeekFrom::Start(offset <span class="kw">as </span>u64),
-<a href=#297 id=297 data-nosnippet>297</a>                    <span class="number">1 </span>=&gt; api::fs::SeekFrom::Current(offset <span class="kw">as </span>i64),
-<a href=#298 id=298 data-nosnippet>298</a>                    <span class="number">2 </span>=&gt; api::fs::SeekFrom::End(offset <span class="kw">as </span>i64),
+<a href=#296 id=296 data-nosnippet>296</a>                    <span class="number">0 </span>=&gt; abi::fs::SeekFrom::Start(offset <span class="kw">as </span>u64),
+<a href=#297 id=297 data-nosnippet>297</a>                    <span class="number">1 </span>=&gt; abi::fs::SeekFrom::Current(offset <span class="kw">as </span>i64),
+<a href=#298 id=298 data-nosnippet>298</a>                    <span class="number">2 </span>=&gt; abi::fs::SeekFrom::End(offset <span class="kw">as </span>i64),
 <a href=#299 id=299 data-nosnippet>299</a>                    <span class="kw">_ </span>=&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(()), <span class="comment">// Invalid whence
 <a href=#300 id=300 data-nosnippet>300</a>                </span>};
 <a href=#301 id=301 data-nosnippet>301</a>

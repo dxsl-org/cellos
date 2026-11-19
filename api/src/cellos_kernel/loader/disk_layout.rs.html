@@ -30,9 +30,9 @@
 <a href=#30 id=30 data-nosnippet>30</a>//! `header.count` is bounded by [`MAX_CELL_ENTRIES`]; each entry carries its
 <a href=#31 id=31 data-nosnippet>31</a>//! own `data_lba`, so the bound is a reader sanity limit, not a layout offset.
 <a href=#32 id=32 data-nosnippet>32</a>
-<a href=#33 id=33 data-nosnippet>33</a></span><span class="comment">// Partition constants live in `api::disk` (the Law-1 contract shared with
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="comment">// Partition constants live in `abi::disk` (the Law-1 contract shared with
 <a href=#34 id=34 data-nosnippet>34</a>// cells and image tools); re-exported here so kernel code keeps short paths.
-<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub use </span>api::disk::{
+<a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">pub use </span>abi::disk::{
 <a href=#36 id=36 data-nosnippet>36</a>    PART_CELLSTORE_BASE_LBA, PART_CELLSTORE_SECTORS, PART_CELLTBL_SECTORS, PART_FAT32_BASE_LBA,
 <a href=#37 id=37 data-nosnippet>37</a>    PART_FAT32_SECTORS, PART_LFS_BASE_LBA, PART_LFS_SECTORS, PART_SNAPSHOT_BASE_LBA,
 <a href=#38 id=38 data-nosnippet>38</a>    PART_SNAPSHOT_SECTORS, PART_SRV_BASE_LBA, PART_SRV_SECTORS,
@@ -41,7 +41,7 @@
 <a href=#41 id=41 data-nosnippet>41</a><span class="doccomment">/// Sector offset (from LBA 0) where the cell bootstrap section (P2) begins.
 <a href=#42 id=42 data-nosnippet>42</a>/// Equals `PART_FAT32_BASE_LBA + PART_FAT32_SECTORS` — the value predates the
 <a href=#43 id=43 data-nosnippet>43</a>/// MBR and is kept identical so the early loader needs no migration.
-<a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub const </span>CELL_TABLE_BASE_LBA: u64 = api::disk::PART_CELLTBL_BASE_LBA;
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub const </span>CELL_TABLE_BASE_LBA: u64 = abi::disk::PART_CELLTBL_BASE_LBA;
 <a href=#45 id=45 data-nosnippet>45</a>
 <a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Magic bytes at the start of `CellTableHeader`; identifies a valid table.
 <a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub const </span>CELL_TABLE_MAGIC: u64 = <span class="number">0x5649_4F53_5F43_454C</span>; <span class="comment">// "ViCell_CEL" in ASCII

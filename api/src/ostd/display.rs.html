@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! ## Usage
 <a href=#4 id=4 data-nosnippet>4</a>//! ```no_run
 <a href=#5 id=5 data-nosnippet>5</a>//! use ostd::display::{wait_for_compositor, ViSurface};
-<a href=#6 id=6 data-nosnippet>6</a>//! use ostd::services::display::PixelFormat;
+<a href=#6 id=6 data-nosnippet>6</a>//! use wire::display::PixelFormat;
 <a href=#7 id=7 data-nosnippet>7</a>//!
 <a href=#8 id=8 data-nosnippet>8</a>//! # fn create_surface() -&gt; ostd::ViResult&lt;()&gt; {
 <a href=#9 id=9 data-nosnippet>9</a>//! let comp_tid = wait_for_compositor();
@@ -29,7 +29,7 @@
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub use </span>surface::ViSurface;
 <a href=#30 id=30 data-nosnippet>30</a>
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span><span class="kw">crate</span>::service::provider_tid;
-<a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>api::syscall::service;
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>abi::syscall::service;
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>dispatcher::{route_compositor_frame, take_forwarded_input_event};
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use </span>routing::drain_compositor_once;
 <a href=#35 id=35 data-nosnippet>35</a>

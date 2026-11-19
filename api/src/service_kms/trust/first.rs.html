@@ -20,11 +20,11 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>alloc::string::String;
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#22 id=22 data-nosnippet>22</a>
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>api::cell_session::trust::{<span class="self">self </span><span class="kw">as </span>tr, TrustChallengeV1, TrustPromptV1};
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::cell_session::{ObjectRefV1 <span class="kw">as </span>Ref, PrincipalV1, Status};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>api::ipc::{ssh_trust, Observation, SaveOutcome};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>abi::cell_session::trust::{<span class="self">self </span><span class="kw">as </span>tr, TrustChallengeV1, TrustPromptV1};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>abi::cell_session::{ObjectRefV1 <span class="kw">as </span>Ref, PrincipalV1, Status};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>kms_codec::{KmsErrorCode, TrustOutcomePayload};
 <a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>sha2::{Digest, Sha256};
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>types::kms::{KmsErrorCode, TrustOutcomePayload};
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>wire::ipc::{ssh_trust, Observation, SaveOutcome};
 <a href=#28 id=28 data-nosnippet>28</a>
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>super::{
 <a href=#30 id=30 data-nosnippet>30</a>    base64_encode, blob_names, canonical_host, lookup, owner, parse, Principal, TrustIo, TrustLeaf,
@@ -208,7 +208,7 @@
 <a href=#208 id=208 data-nosnippet>208</a>    ))
 <a href=#209 id=209 data-nosnippet>209</a>}
 <a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// One `api::ipc::ssh_trust` code for the caller's own `challenge`.
+<a href=#211 id=211 data-nosnippet>211</a><span class="doccomment">/// One `wire::ipc::ssh_trust` code for the caller's own `challenge`.
 <a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>commit(leaf: <span class="kw-2">&amp;mut </span>TrustLeaf, caller: Principal, challenge: Ref) -&gt; u8 {
 <a href=#213 id=213 data-nosnippet>213</a>    <span class="comment">// Only the caller's own challenge: a guessed or another caller's ref is refused.
 <a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">let </span><span class="prelude-val">Some</span>(n) = leaf

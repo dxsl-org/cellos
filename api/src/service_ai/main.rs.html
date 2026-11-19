@@ -27,17 +27,17 @@
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">extern crate </span>alloc;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">extern crate </span>ostd;
 <a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>ai_engine::{Engine, EngineError, SamplingParams};
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>ai_proto::{
-<a href=#32 id=32 data-nosnippet>32</a>    <span class="self">self</span>, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
-<a href=#33 id=33 data-nosnippet>33</a>    MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
-<a href=#34 id=34 data-nosnippet>34</a>};
-<a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>api::caller_identity::CallerIdentity;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>abi::caller_identity::CallerIdentity;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>ai_engine::{Engine, EngineError, SamplingParams};
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>ai_proto::{
+<a href=#33 id=33 data-nosnippet>33</a>    <span class="self">self</span>, backend, limit, AiError, AiRequest, AiResponse, DeviceTarget, FinishReason,
+<a href=#34 id=34 data-nosnippet>34</a>    MAX_EMBED_DIM, MAX_SESSIONS, MAX_TOKENS_PER_POLL,
+<a href=#35 id=35 data-nosnippet>35</a>};
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>ostd::io::{print, print_usize, println};
 <a href=#38 id=38 data-nosnippet>38</a>
-<a href=#39 id=39 data-nosnippet>39</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
-<a href=#40 id=40 data-nosnippet>40</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#39 id=39 data-nosnippet>39</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#40 id=40 data-nosnippet>40</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#41 id=41 data-nosnippet>41</a>    Send,
 <a href=#42 id=42 data-nosnippet>42</a>    SendGather,
 <a href=#43 id=43 data-nosnippet>43</a>    Recv,

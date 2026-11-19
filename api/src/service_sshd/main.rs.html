@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="comment">// GetRandom: per-connection KEX secrets and the first host key.
 <a href=#29 id=29 data-nosnippet>29</a>// VfsMutate: creating /srv/sshd and the host key seed on first start.
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#31 id=31 data-nosnippet>31</a>    Send,
 <a href=#32 id=32 data-nosnippet>32</a>    Recv,
 <a href=#33 id=33 data-nosnippet>33</a>    Log,
@@ -70,7 +70,7 @@
 <a href=#70 id=70 data-nosnippet>70</a>    init_custom_heap();
 <a href=#71 id=71 data-nosnippet>71</a>    log(<span class="string">"[sshd] Cellos SSH-2.0 daemon starting..."</span>);
 <a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">while </span>ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">while </span>ostd::service::provider_tid(abi::syscall::service::VFS).is_none() {
 <a href=#74 id=74 data-nosnippet>74</a>        ostd::syscall::sys_yield();
 <a href=#75 id=75 data-nosnippet>75</a>    }
 <a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span>host_key = <span class="kw">match </span>host_key::load_or_create(kex::kernel_entropy) {

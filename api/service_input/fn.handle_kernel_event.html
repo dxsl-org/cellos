@@ -5,7 +5,7 @@
     dispatcher: &amp;mut <a class="struct" href="dispatcher/struct.Dispatcher.html" title="struct service_input::dispatcher::Dispatcher">Dispatcher</a>,
     hid_devices: &amp;mut <a class="struct" href="struct.HidDeviceStates.html" title="struct service_input::HidDeviceStates">HidDeviceStates</a>,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Handle a raw VirtIO event pushed by the kernel (sender == 0).</p>
-<p>Wire format (<code>api::services::proto::input</code>): <code>[opcode:1][code:4 LE][value:4 LE]</code>
+<p>Wire format (<code>wire::proto::input</code>): <code>[opcode:1][code:4 LE][value:4 LE]</code>
 EV_KEY = keyboard key or mouse button via BTN_* scancode ≥ 0x110
 EV_REL = relative mouse: REL_X/Y/WHEEL
 EV_ABS = absolute mouse: ABS_X/Y in guest framebuffer pixels

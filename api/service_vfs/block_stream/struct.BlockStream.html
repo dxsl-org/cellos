@@ -7,7 +7,7 @@
 </div><span id="structfield.pos" class="structfield section-header"><a href="#structfield.pos" class="anchor field">§</a><code>pos: u64</code></span><div class="docblock"><p>Byte position within the volume (partition-relative; LBA 0 = byte 0).</p>
 </div><span id="structfield.base_lba" class="structfield section-header"><a href="#structfield.base_lba" class="anchor field">§</a><code>base_lba: u64</code></span><div class="docblock"><p>Absolute base LBA of this volume’s partition, added to the relative
 sector before the block syscall so fatfs and the page cache only ever
-see partition-relative sectors. <code>api::disk::PART_FAT32_BASE_LBA</code> for the
+see partition-relative sectors. <code>abi::disk::PART_FAT32_BASE_LBA</code> for the
 <code>/mnt/sd</code> volume; <code>PART_CELLSTORE_BASE_LBA</code> for the <code>/bin</code> cell-store.</p>
 </div><span id="structfield.sectors" class="structfield section-header"><a href="#structfield.sectors" class="anchor field">§</a><code>sectors: u64</code></span><div class="docblock"><p>Partition length in sectors. fatfs derives sector numbers from the
 on-disk BPB and FAT chains, which are untrusted: without this bound a

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fallback_boot_info"],"static":["FALLBACK_BOOT_INFO"]};

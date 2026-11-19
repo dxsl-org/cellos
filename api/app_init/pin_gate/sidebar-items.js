@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GATE_ATTEMPTS","GATE_ROUNDS","GATE_ROUND_TICKS","SAFE_SERVICE","SAFE_SHELL"],"fn":["ask_gate","enter_safe_mode","gate","reason","safe_set"],"struct":["Decision","SafeConsole"]};

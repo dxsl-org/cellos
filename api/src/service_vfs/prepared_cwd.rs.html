@@ -3,16 +3,16 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! Entries are minted once, linked to the source, and sealed but unpublished.
 <a href=#4 id=4 data-nosnippet>4</a>//! The kernel's immutable issuer receipt is the only publication decision. Every
 <a href=#5 id=5 data-nosnippet>5</a>//! ordinary ingress reconciles that decision before looking up a directory.
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>alloc::collections::{BTreeMap, BTreeSet};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::cell_session::{
-<a href=#9 id=9 data-nosnippet>9</a>    ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, RequestHeaderV1, ResultHeaderV1,
-<a href=#10 id=10 data-nosnippet>10</a>    Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
-<a href=#11 id=11 data-nosnippet>11</a>};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>api::ipc::{VfsResponse, IPC_BUF_SIZE};
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>sha2::{Digest, Sha256};
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>types::CellId;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>abi::cell_session::{
+<a href=#7 id=7 data-nosnippet>7</a>    ChildRefV1, KernelOp, ObjectRefV1, PrincipalV1, Reader, RequestHeaderV1, ResultHeaderV1,
+<a href=#8 id=8 data-nosnippet>8</a>    Status, Writer, HEADER_LEN, MAX_SERVICE_RECORD_LEN,
+<a href=#9 id=9 data-nosnippet>9</a>};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>alloc::collections::{BTreeMap, BTreeSet};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>sha2::{Digest, Sha256};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>types::CellId;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>wire::ipc::{VfsResponse, IPC_BUF_SIZE};
 <a href=#16 id=16 data-nosnippet>16</a>
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span><span class="kw">crate</span>::dirs::DirError;
@@ -363,9 +363,9 @@
 <a href=#363 id=363 data-nosnippet>363</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::QuotaExceeded);
 <a href=#364 id=364 data-nosnippet>364</a>        }
 <a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>charge = RESERVATION_CHARGE + path.len() <span class="kw">as </span>u64;
-<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">let </span><span class="kw-2">mut </span>binding = [<span class="number">0u8</span>; api::service_binding::SERVICE_BINDING_LEN];
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="kw">let </span><span class="kw-2">mut </span>binding = [<span class="number">0u8</span>; abi::service_binding::SERVICE_BINDING_LEN];
 <a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>issuer =
-<a href=#368 id=368 data-nosnippet>368</a>            ostd::syscall::sys_lookup_service_bound(api::syscall::service::VFS, <span class="kw-2">&amp;mut </span>binding)
+<a href=#368 id=368 data-nosnippet>368</a>            ostd::syscall::sys_lookup_service_bound(abi::syscall::service::VFS, <span class="kw-2">&amp;mut </span>binding)
 <a href=#369 id=369 data-nosnippet>369</a>                .ok_or(Status::Revoked)<span class="question-mark">?</span>;
 <a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>id = <span class="kw">if </span><span class="self">self</span>.next == <span class="number">0 </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ <span class="self">self</span>.next };
 <a href=#371 id=371 data-nosnippet>371</a>        <span class="self">self</span>.next = id.checked_add(<span class="number">1</span>).ok_or(Status::QuotaExceeded)<span class="question-mark">?</span>;
@@ -697,7 +697,7 @@
 <a href=#697 id=697 data-nosnippet>697</a>        </span>|| r.u16()<span class="question-mark">? </span>!= <span class="number">0
 <a href=#698 id=698 data-nosnippet>698</a>        </span>|| r.u16()<span class="question-mark">? </span>!= <span class="number">4
 <a href=#699 id=699 data-nosnippet>699</a>        </span>|| r.u16()<span class="question-mark">? </span>!= <span class="number">0
-<a href=#700 id=700 data-nosnippet>700</a>        </span>|| r.u64()<span class="question-mark">? </span>!= api::syscall::service::VFS <span class="kw">as </span>u64
+<a href=#700 id=700 data-nosnippet>700</a>        </span>|| r.u64()<span class="question-mark">? </span>!= abi::syscall::service::VFS <span class="kw">as </span>u64
 <a href=#701 id=701 data-nosnippet>701</a>        || r.reference()<span class="question-mark">? </span>!= expected
 <a href=#702 id=702 data-nosnippet>702</a>        || r.u64()<span class="question-mark">? </span>!= <span class="number">0
 <a href=#703 id=703 data-nosnippet>703</a>    </span>{
@@ -1406,7 +1406,7 @@
 <a href=#1406 id=1406 data-nosnippet>1406</a>        w.u16(<span class="number">0</span>).unwrap();
 <a href=#1407 id=1407 data-nosnippet>1407</a>        w.u16(<span class="number">4</span>).unwrap();
 <a href=#1408 id=1408 data-nosnippet>1408</a>        w.u16(<span class="number">0</span>).unwrap();
-<a href=#1409 id=1409 data-nosnippet>1409</a>        w.u64(api::syscall::service::VFS <span class="kw">as </span>u64).unwrap();
+<a href=#1409 id=1409 data-nosnippet>1409</a>        w.u64(abi::syscall::service::VFS <span class="kw">as </span>u64).unwrap();
 <a href=#1410 id=1410 data-nosnippet>1410</a>        w.reference(reference).unwrap();
 <a href=#1411 id=1411 data-nosnippet>1411</a>        w.u64(<span class="number">0</span>).unwrap();
 <a href=#1412 id=1412 data-nosnippet>1412</a>        <span class="macro">assert_eq!</span>(validate_grant(<span class="kw-2">&amp;</span>bytes, reference), <span class="prelude-val">Ok</span>(()));

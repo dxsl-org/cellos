@@ -104,28 +104,15 @@
 <a href=#104 id=104 data-nosnippet>104</a></span><span class="kw">pub fn </span>x86_catalog() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor] {
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="kw-2">&amp;</span>X86_CATALOG
 <a href=#106 id=106 data-nosnippet>106</a>}
-<a href=#107 id=107 data-nosnippet>107</a><span class="kw">static </span>AARCH64_CATALOG: [<span class="kw-2">&amp;</span>BoardDescriptor; <span class="number">6</span>] = [
-<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw-2">&amp;</span>qemu_virt_aarch64::QEMU_VIRT_AARCH64,
-<a href=#109 id=109 data-nosnippet>109</a>    <span class="kw-2">&amp;</span>raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B,
-<a href=#110 id=110 data-nosnippet>110</a>    <span class="kw-2">&amp;</span>raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B,
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw-2">&amp;</span>vm_aarch64::AARCH64_VM,
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw-2">&amp;</span>apple_macmini_m1::MACMINI_M1,
-<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw-2">&amp;</span>apple_macmini_m2::MACMINI_M2,
-<a href=#114 id=114 data-nosnippet>114</a>];
-<a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a><span class="doccomment">/// Returns the compiled AArch64 catalog.
-<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">pub fn </span>aarch64_catalog() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor] {
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw-2">&amp;</span>AARCH64_CATALOG
-<a href=#119 id=119 data-nosnippet>119</a>}
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a><span class="doccomment">/// Returns the descriptor in `catalog` whose slug equals `slug` byte for byte.
-<a href=#122 id=122 data-nosnippet>122</a>///
-<a href=#123 id=123 data-nosnippet>123</a>/// The search is confined to the catalog the caller names, so a slug from
-<a href=#124 id=124 data-nosnippet>124</a>/// another architecture's board list can never be found through it.
-<a href=#125 id=125 data-nosnippet>125</a></span><span class="kw">pub fn </span>find_by_slug(
-<a href=#126 id=126 data-nosnippet>126</a>    catalog: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor],
-<a href=#127 id=127 data-nosnippet>127</a>    slug: <span class="kw-2">&amp;</span>str,
-<a href=#128 id=128 data-nosnippet>128</a>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor&gt; {
-<a href=#129 id=129 data-nosnippet>129</a>    catalog.iter().copied().find(|board| board.slug == slug)
-<a href=#130 id=130 data-nosnippet>130</a>}
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a><span class="doccomment">/// Returns the descriptor in `catalog` whose slug equals `slug` byte for byte.
+<a href=#109 id=109 data-nosnippet>109</a>///
+<a href=#110 id=110 data-nosnippet>110</a>/// The search is confined to the catalog the caller names, so a slug from
+<a href=#111 id=111 data-nosnippet>111</a>/// another architecture's board list can never be found through it.
+<a href=#112 id=112 data-nosnippet>112</a></span><span class="kw">pub fn </span>find_by_slug(
+<a href=#113 id=113 data-nosnippet>113</a>    catalog: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor],
+<a href=#114 id=114 data-nosnippet>114</a>    slug: <span class="kw-2">&amp;</span>str,
+<a href=#115 id=115 data-nosnippet>115</a>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>BoardDescriptor&gt; {
+<a href=#116 id=116 data-nosnippet>116</a>    catalog.iter().copied().find(|board| board.slug == slug)
+<a href=#117 id=117 data-nosnippet>117</a>}
 </code></pre></div></section></main></body></html>

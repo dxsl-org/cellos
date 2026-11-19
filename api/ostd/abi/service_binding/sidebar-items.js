@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["SERVICE_BINDING_LEN"],"struct":["ServiceBinding"]};

@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! quota accounting (net-delta on overwrite), async-read pending table, and
 <a href=#6 id=6 data-nosnippet>6</a>//! zero-copy grant I/O.
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>api::services::proto::vfs::VfsError;
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>wire::proto::vfs::VfsError;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::manager::VfsManager;
@@ -24,10 +24,10 @@
 <a href=#24 id=24 data-nosnippet>24</a>    vfs: <span class="kw-2">&amp;mut </span>VfsManager,
 <a href=#25 id=25 data-nosnippet>25</a>    buf: <span class="kw-2">&amp;</span>[u8],
 <a href=#26 id=26 data-nosnippet>26</a>    caller: <span class="prelude-ty">Option</span>&lt;Caller&gt;,
-<a href=#27 id=27 data-nosnippet>27</a>    resp_buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; api::ipc::IPC_BUF_SIZE],
-<a href=#28 id=28 data-nosnippet>28</a>) -&gt; api::ipc::VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#27 id=27 data-nosnippet>27</a>    resp_buf: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; wire::ipc::IPC_BUF_SIZE],
+<a href=#28 id=28 data-nosnippet>28</a>) -&gt; wire::ipc::VfsResponse&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#29 id=29 data-nosnippet>29</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(caller) = caller <span class="kw">else </span>{
-<a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
 <a href=#31 id=31 data-nosnippet>31</a>    };
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a>    <span class="comment">// Settle what the kernel says this cell inherited before acting on anything
@@ -36,293 +36,277 @@
 <a href=#36 id=36 data-nosnippet>36</a>    // answer landed would be one path-string operation ahead of the seal.
 <a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">crate</span>::dir_admission::admit(vfs, caller);
 <a href=#38 id=38 data-nosnippet>38</a>    <span class="kw">if </span>!<span class="kw">crate</span>::prepared_cwd::ready(vfs, caller) {
-<a href=#39 id=39 data-nosnippet>39</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#39 id=39 data-nosnippet>39</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
 <a href=#40 id=40 data-nosnippet>40</a>    }
 <a href=#41 id=41 data-nosnippet>41</a>
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="comment">// Decode typed request; `take_from_bytes` tolerates trailing bytes in the
 <a href=#43 id=43 data-nosnippet>43</a>    // receive buffer — both zeros left by a previous message and the kernel's
 <a href=#44 id=44 data-nosnippet>44</a>    // caller-identity trailer at the very end.
-<a href=#45 id=45 data-nosnippet>45</a>    </span><span class="kw">let </span>req = <span class="kw">match </span>api::ipc::decode::&lt;api::ipc::VfsRequest&gt;(buf) {
+<a href=#45 id=45 data-nosnippet>45</a>    </span><span class="kw">let </span>req = <span class="kw">match </span>wire::ipc::decode::&lt;wire::ipc::VfsRequest&gt;(buf) {
 <a href=#46 id=46 data-nosnippet>46</a>        <span class="prelude-val">Ok</span>(r) =&gt; r,
-<a href=#47 id=47 data-nosnippet>47</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Malformed <span class="kw">as </span>u8),
+<a href=#47 id=47 data-nosnippet>47</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Malformed <span class="kw">as </span>u8),
 <a href=#48 id=48 data-nosnippet>48</a>    };
 <a href=#49 id=49 data-nosnippet>49</a>
-<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw">if let </span>api::ipc::VfsRequest::PreparedChildV1(record) = req {
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="kw">if let </span>wire::ipc::VfsRequest::PreparedChildV1(record) = req {
 <a href=#51 id=51 data-nosnippet>51</a>        <span class="kw">return </span><span class="kw">crate</span>::prepared_cwd::handle(vfs, caller, record, resp_buf);
 <a href=#52 id=52 data-nosnippet>52</a>    }
 <a href=#53 id=53 data-nosnippet>53</a>
 <a href=#54 id=54 data-nosnippet>54</a>    <span class="comment">// Centrally deny any mutating request from a caller lacking VfsMutate authority
-<a href=#55 id=55 data-nosnippet>55</a>    // BEFORE path sealing, handle resolution, or backend work. The only exception
-<a href=#56 id=56 data-nosnippet>56</a>    // is init's machine pin store: `Write`/`Mkdir` inside `/srv/.cellos-machine`
-<a href=#57 id=57 data-nosnippet>57</a>    // from the live `MACHINE_PIN` provider (see `AccessTable::is_machine_pin_writer`).
-<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">if </span>req.requires_mutation_authority()
-<a href=#59 id=59 data-nosnippet>59</a>        &amp;&amp; !caller.may_mutate()
-<a href=#60 id=60 data-nosnippet>60</a>        &amp;&amp; !machine_pin_write(vfs, caller, <span class="kw-2">&amp;</span>req)
-<a href=#61 id=61 data-nosnippet>61</a>    {
-<a href=#62 id=62 data-nosnippet>62</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#63 id=63 data-nosnippet>63</a>    }
-<a href=#64 id=64 data-nosnippet>64</a>    <span class="comment">// A cell that has given up path strings is refused here, before the request
-<a href=#65 id=65 data-nosnippet>65</a>    // reaches an arm that could serve it. Refusing at the entry rather than in
-<a href=#66 id=66 data-nosnippet>66</a>    // each arm is what makes the guarantee hold for every path-addressed
-<a href=#67 id=67 data-nosnippet>67</a>    // operation, including any added later.
-<a href=#68 id=68 data-nosnippet>68</a>    </span><span class="kw">if </span>req.is_path_addressed() &amp;&amp; vfs.dirs.is_sealed(caller) {
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#70 id=70 data-nosnippet>70</a>    }
-<a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="comment">// A source may not disappear between issuer sealing and kernel commit.
-<a href=#73 id=73 data-nosnippet>73</a>    // Abort-if-uncommitted linearizes against commit before the revoke walks
-<a href=#74 id=74 data-nosnippet>74</a>    // the existing directory lineage.
-<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">if let </span>api::ipc::VfsRequest::CloseDir { dir } = req {
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">if </span>!<span class="kw">crate</span>::prepared_cwd::before_revoke(vfs, caller, dir) {
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#78 id=78 data-nosnippet>78</a>        }
-<a href=#79 id=79 data-nosnippet>79</a>    }
-<a href=#80 id=80 data-nosnippet>80</a>
-<a href=#81 id=81 data-nosnippet>81</a>    <span class="comment">// Phase 12 (CP1 W3): the SSH host-trust store moved to KMS. The three trust variants
-<a href=#82 id=82 data-nosnippet>82</a>    // stay as tombstones so every later request keeps its byte; they are unsupported.
-<a href=#83 id=83 data-nosnippet>83</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(
-<a href=#84 id=84 data-nosnippet>84</a>        req,
-<a href=#85 id=85 data-nosnippet>85</a>        api::ipc::VfsRequest::TrustLookup { .. }
-<a href=#86 id=86 data-nosnippet>86</a>            | api::ipc::VfsRequest::TrustChallenge { .. }
-<a href=#87 id=87 data-nosnippet>87</a>            | api::ipc::VfsRequest::TrustCommit { .. }
-<a href=#88 id=88 data-nosnippet>88</a>    ) {
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Unsupported <span class="kw">as </span>u8);
-<a href=#90 id=90 data-nosnippet>90</a>    }
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(resp) = <span class="kw">crate</span>::save::handle(vfs, caller, <span class="kw-2">&amp;</span>req) {
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">return </span>resp;
-<a href=#93 id=93 data-nosnippet>93</a>    }
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(resp) = <span class="kw">crate</span>::dispatch_paths::handle_path_request(vfs, caller, <span class="kw-2">&amp;</span>req) {
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">return </span>resp;
-<a href=#96 id=96 data-nosnippet>96</a>    }
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">match </span>req {
-<a href=#99 id=99 data-nosnippet>99</a>        api::ipc::VfsRequest::ListDir(p) =&gt; {
-<a href=#100 id=100 data-nosnippet>100</a>            <span class="kw">if </span>!vfs.access.can_read(caller, p) {
-<a href=#101 id=101 data-nosnippet>101</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#102 id=102 data-nosnippet>102</a>            }
-<a href=#103 id=103 data-nosnippet>103</a>            <span class="kw">if </span>!vfs.healthy(p) {
-<a href=#104 id=104 data-nosnippet>104</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#105 id=105 data-nosnippet>105</a>            }
-<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">if </span>!<span class="macro">matches!</span>(vfs.stat(p), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)))) {
-<a href=#107 id=107 data-nosnippet>107</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#55 id=55 data-nosnippet>55</a>    // BEFORE path sealing, handle resolution, or backend work. There is no
+<a href=#56 id=56 data-nosnippet>56</a>    // exception: the machine-pin Cell that writes `/srv/.cellos-machine` holds W.
+<a href=#57 id=57 data-nosnippet>57</a>    </span><span class="kw">if </span>req.requires_mutation_authority() &amp;&amp; !caller.may_mutate() {
+<a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#59 id=59 data-nosnippet>59</a>    }
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="comment">// A cell that has given up path strings is refused here, before the request
+<a href=#61 id=61 data-nosnippet>61</a>    // reaches an arm that could serve it. Refusing at the entry rather than in
+<a href=#62 id=62 data-nosnippet>62</a>    // each arm is what makes the guarantee hold for every path-addressed
+<a href=#63 id=63 data-nosnippet>63</a>    // operation, including any added later.
+<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="kw">if </span>req.is_path_addressed() &amp;&amp; vfs.dirs.is_sealed(caller) {
+<a href=#65 id=65 data-nosnippet>65</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#66 id=66 data-nosnippet>66</a>    }
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="comment">// A source may not disappear between issuer sealing and kernel commit.
+<a href=#69 id=69 data-nosnippet>69</a>    // Abort-if-uncommitted linearizes against commit before the revoke walks
+<a href=#70 id=70 data-nosnippet>70</a>    // the existing directory lineage.
+<a href=#71 id=71 data-nosnippet>71</a>    </span><span class="kw">if let </span>wire::ipc::VfsRequest::CloseDir { dir } = req {
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">if </span>!<span class="kw">crate</span>::prepared_cwd::before_revoke(vfs, caller, dir) {
+<a href=#73 id=73 data-nosnippet>73</a>            <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#74 id=74 data-nosnippet>74</a>        }
+<a href=#75 id=75 data-nosnippet>75</a>    }
+<a href=#76 id=76 data-nosnippet>76</a>
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="comment">// Phase 12 (CP1 W3): the SSH host-trust store moved to KMS. The three trust variants
+<a href=#78 id=78 data-nosnippet>78</a>    // stay as tombstones so every later request keeps its byte; they are unsupported.
+<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(
+<a href=#80 id=80 data-nosnippet>80</a>        req,
+<a href=#81 id=81 data-nosnippet>81</a>        wire::ipc::VfsRequest::TrustLookup { .. }
+<a href=#82 id=82 data-nosnippet>82</a>            | wire::ipc::VfsRequest::TrustChallenge { .. }
+<a href=#83 id=83 data-nosnippet>83</a>            | wire::ipc::VfsRequest::TrustCommit { .. }
+<a href=#84 id=84 data-nosnippet>84</a>    ) {
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Unsupported <span class="kw">as </span>u8);
+<a href=#86 id=86 data-nosnippet>86</a>    }
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(resp) = <span class="kw">crate</span>::save::handle(vfs, caller, <span class="kw-2">&amp;</span>req) {
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">return </span>resp;
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(resp) = <span class="kw">crate</span>::dispatch_paths::handle_path_request(vfs, caller, <span class="kw-2">&amp;</span>req) {
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">return </span>resp;
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">match </span>req {
+<a href=#95 id=95 data-nosnippet>95</a>        wire::ipc::VfsRequest::ListDir(p) =&gt; {
+<a href=#96 id=96 data-nosnippet>96</a>            <span class="kw">if </span>!vfs.access.can_read(caller, p) {
+<a href=#97 id=97 data-nosnippet>97</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#98 id=98 data-nosnippet>98</a>            }
+<a href=#99 id=99 data-nosnippet>99</a>            <span class="kw">if </span>!vfs.healthy(p) {
+<a href=#100 id=100 data-nosnippet>100</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#101 id=101 data-nosnippet>101</a>            }
+<a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">if </span>!<span class="macro">matches!</span>(vfs.stat(p), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">true</span>)))) {
+<a href=#103 id=103 data-nosnippet>103</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#104 id=104 data-nosnippet>104</a>            }
+<a href=#105 id=105 data-nosnippet>105</a>            <span class="kw">let </span>listed = vfs.list_dir(p, resp_buf);
+<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">if </span>!vfs.healthy(p) {
+<a href=#107 id=107 data-nosnippet>107</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
 <a href=#108 id=108 data-nosnippet>108</a>            }
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">let </span>listed = vfs.list_dir(p, resp_buf);
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">if </span>!vfs.healthy(p) {
-<a href=#111 id=111 data-nosnippet>111</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#112 id=112 data-nosnippet>112</a>            }
-<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(n) = listed <span class="kw">else </span>{
-<a href=#114 id=114 data-nosnippet>114</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#115 id=115 data-nosnippet>115</a>            };
-<a href=#116 id=116 data-nosnippet>116</a>            api::ipc::VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
-<a href=#117 id=117 data-nosnippet>117</a>        }
-<a href=#118 id=118 data-nosnippet>118</a>        api::ipc::VfsRequest::ReadAsync { path } =&gt; {
-<a href=#119 id=119 data-nosnippet>119</a>            <span class="comment">// Authorize BEFORE reading: the read happens now (the disk backend is
-<a href=#120 id=120 data-nosnippet>120</a>            // still blocking) and `Poll` only hands over what was already read, so
-<a href=#121 id=121 data-nosnippet>121</a>            // this is the only point where the path is known.
-<a href=#122 id=122 data-nosnippet>122</a>            </span><span class="kw">if </span>!vfs.access.can_read(caller, path) {
-<a href=#123 id=123 data-nosnippet>123</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#124 id=124 data-nosnippet>124</a>            }
-<a href=#125 id=125 data-nosnippet>125</a>            <span class="comment">// A handle records durable state against the caller, so it needs a
-<a href=#126 id=126 data-nosnippet>126</a>            // caller that cannot be confused with a later one.
-<a href=#127 id=127 data-nosnippet>127</a>            </span><span class="kw">if </span>!caller.may_own_state() {
-<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#129 id=129 data-nosnippet>129</a>            }
-<a href=#130 id=130 data-nosnippet>130</a>            <span class="kw">if </span>!vfs.healthy(path) || !<span class="macro">matches!</span>(vfs.stat(path), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">false</span>)))) {
-<a href=#131 id=131 data-nosnippet>131</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#132 id=132 data-nosnippet>132</a>            }
-<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">let </span>lease = <span class="kw">if </span>path.starts_with(<span class="string">"/srv"</span>) {
-<a href=#134 id=134 data-nosnippet>134</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(k) = <span class="kw">crate</span>::namespace::NamespaceKey::parse(path) <span class="kw">else </span>{
-<a href=#135 id=135 data-nosnippet>135</a>                    <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#136 id=136 data-nosnippet>136</a>                };
-<a href=#137 id=137 data-nosnippet>137</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(l) = vfs.ledger.acquire_service_handle(<span class="kw-2">&amp;</span>k) <span class="kw">else </span>{
-<a href=#138 id=138 data-nosnippet>138</a>                    <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#139 id=139 data-nosnippet>139</a>                };
-<a href=#140 id=140 data-nosnippet>140</a>                <span class="prelude-val">Some</span>(l)
-<a href=#141 id=141 data-nosnippet>141</a>            } <span class="kw">else </span>{
-<a href=#142 id=142 data-nosnippet>142</a>                <span class="prelude-val">None
-<a href=#143 id=143 data-nosnippet>143</a>            </span>};
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="kw">let </span>data = vfs.read_to_vec(path);
-<a href=#145 id=145 data-nosnippet>145</a>            <span class="kw">if </span>!vfs.healthy(path) {
-<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#147 id=147 data-nosnippet>147</a>            }
-<a href=#148 id=148 data-nosnippet>148</a>            <span class="comment">// A read that failed part way is an error, never a short handle.
-<a href=#149 id=149 data-nosnippet>149</a>            </span><span class="kw">let </span><span class="prelude-val">Ok</span>(data) = data <span class="kw">else </span>{
-<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#151 id=151 data-nosnippet>151</a>            };
-<a href=#152 id=152 data-nosnippet>152</a>            <span class="kw">let </span>handle = vfs.pending.insert(caller, path, data, lease);
-<a href=#153 id=153 data-nosnippet>153</a>            api::ipc::VfsResponse::PendingHandle(handle)
-<a href=#154 id=154 data-nosnippet>154</a>        }
-<a href=#155 id=155 data-nosnippet>155</a>
-<a href=#156 id=156 data-nosnippet>156</a>        api::ipc::VfsRequest::Poll { handle } =&gt; {
-<a href=#157 id=157 data-nosnippet>157</a>            <span class="comment">// With a synchronous backend data is always ready on first poll.
-<a href=#158 id=158 data-nosnippet>158</a>            //
-<a href=#159 id=159 data-nosnippet>159</a>            // Two independent checks, in this order.  Ownership first: a handle
-<a href=#160 id=160 data-nosnippet>160</a>            // owned by another cell is refused with the same code as a stale one,
-<a href=#161 id=161 data-nosnippet>161</a>            // so sweeping the sequential handle space reveals nothing about other
-<a href=#162 id=162 data-nosnippet>162</a>            // cells.  Then the path rules again — the slot stores the path it was
-<a href=#163 id=163 data-nosnippet>163</a>            // filled from, because the authorization at `ReadAsync` time proves
-<a href=#164 id=164 data-nosnippet>164</a>            // only what policy said then, and a slot can outlive a rule change.
-<a href=#165 id=165 data-nosnippet>165</a>            </span><span class="kw">let </span>readable = <span class="kw">match </span>vfs.pending.owned_path(caller, handle) {
-<a href=#166 id=166 data-nosnippet>166</a>                <span class="prelude-val">Some</span>(path) =&gt; vfs.access.can_read(caller, path),
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Handle <span class="kw">as </span>u8),
-<a href=#168 id=168 data-nosnippet>168</a>            };
-<a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">if </span>!readable {
-<a href=#170 id=170 data-nosnippet>170</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#171 id=171 data-nosnippet>171</a>            }
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="kw">if </span>!vfs
-<a href=#173 id=173 data-nosnippet>173</a>                .pending
-<a href=#174 id=174 data-nosnippet>174</a>                .owned_path(caller, handle)
-<a href=#175 id=175 data-nosnippet>175</a>                .is_some_and(|path| vfs.healthy(path))
-<a href=#176 id=176 data-nosnippet>176</a>            {
-<a href=#177 id=177 data-nosnippet>177</a>                <span class="kw">let _ </span>= vfs.pending.poll(caller, handle);
-<a href=#178 id=178 data-nosnippet>178</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
-<a href=#179 id=179 data-nosnippet>179</a>            }
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">match </span>vfs.pending.poll(caller, handle) {
-<a href=#181 id=181 data-nosnippet>181</a>                <span class="prelude-val">Some</span>(data) =&gt; {
-<a href=#182 id=182 data-nosnippet>182</a>                    <span class="comment">// Cap at 480, not resp_buf.len(): the reply must still fit
-<a href=#183 id=183 data-nosnippet>183</a>                    // the 512-byte IPC frame AFTER the postcard envelope. A
-<a href=#184 id=184 data-nosnippet>184</a>                    // full 512-byte payload made encode fail and the client
-<a href=#185 id=185 data-nosnippet>185</a>                    // saw an empty reply (surfaced by /bin ELF reads).
-<a href=#186 id=186 data-nosnippet>186</a>                    </span><span class="kw">let </span>n = data.len().min(<span class="number">480</span>);
-<a href=#187 id=187 data-nosnippet>187</a>                    resp_buf[..n].copy_from_slice(<span class="kw-2">&amp;</span>data[..n]);
-<a href=#188 id=188 data-nosnippet>188</a>                    api::ipc::VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
-<a href=#189 id=189 data-nosnippet>189</a>                }
-<a href=#190 id=190 data-nosnippet>190</a>                <span class="prelude-val">None </span>=&gt; api::ipc::VfsResponse::Err(VfsError::Handle <span class="kw">as </span>u8),
-<a href=#191 id=191 data-nosnippet>191</a>            }
-<a href=#192 id=192 data-nosnippet>192</a>        }
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="comment">// ── Zero-Copy Grant I/O (Storage 2.0) ──────────────────────────────
-<a href=#195 id=195 data-nosnippet>195</a>        </span>api::ipc::VfsRequest::ReadGrant {
-<a href=#196 id=196 data-nosnippet>196</a>            cap,
-<a href=#197 id=197 data-nosnippet>197</a>            offset,
-<a href=#198 id=198 data-nosnippet>198</a>            size,
-<a href=#199 id=199 data-nosnippet>199</a>            grant,
-<a href=#200 id=200 data-nosnippet>200</a>        } =&gt; <span class="kw">crate</span>::grant_read::read_grant(vfs, caller, cap, offset, size, grant),
-<a href=#201 id=201 data-nosnippet>201</a>
-<a href=#202 id=202 data-nosnippet>202</a>        api::ipc::VfsRequest::WriteGrant {
-<a href=#203 id=203 data-nosnippet>203</a>            cap,
-<a href=#204 id=204 data-nosnippet>204</a>            offset,
-<a href=#205 id=205 data-nosnippet>205</a>            grant,
-<a href=#206 id=206 data-nosnippet>206</a>            bytes,
-<a href=#207 id=207 data-nosnippet>207</a>        } =&gt; {
-<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">if </span>!caller.may_mutate() {
-<a href=#209 id=209 data-nosnippet>209</a>                <span class="kw">return </span>api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
-<a href=#210 id=210 data-nosnippet>210</a>            }
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">crate</span>::grant_write::write(vfs, caller, cap, offset, grant, bytes)
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">let </span><span class="prelude-val">Ok</span>(n) = listed <span class="kw">else </span>{
+<a href=#110 id=110 data-nosnippet>110</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#111 id=111 data-nosnippet>111</a>            };
+<a href=#112 id=112 data-nosnippet>112</a>            wire::ipc::VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
+<a href=#113 id=113 data-nosnippet>113</a>        }
+<a href=#114 id=114 data-nosnippet>114</a>        wire::ipc::VfsRequest::ReadAsync { path } =&gt; {
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="comment">// Authorize BEFORE reading: the read happens now (the disk backend is
+<a href=#116 id=116 data-nosnippet>116</a>            // still blocking) and `Poll` only hands over what was already read, so
+<a href=#117 id=117 data-nosnippet>117</a>            // this is the only point where the path is known.
+<a href=#118 id=118 data-nosnippet>118</a>            </span><span class="kw">if </span>!vfs.access.can_read(caller, path) {
+<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#120 id=120 data-nosnippet>120</a>            }
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="comment">// A handle records durable state against the caller, so it needs a
+<a href=#122 id=122 data-nosnippet>122</a>            // caller that cannot be confused with a later one.
+<a href=#123 id=123 data-nosnippet>123</a>            </span><span class="kw">if </span>!caller.may_own_state() {
+<a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#125 id=125 data-nosnippet>125</a>            }
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">if </span>!vfs.healthy(path) || !<span class="macro">matches!</span>(vfs.stat(path), <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((<span class="kw">_</span>, <span class="bool-val">false</span>)))) {
+<a href=#127 id=127 data-nosnippet>127</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#128 id=128 data-nosnippet>128</a>            }
+<a href=#129 id=129 data-nosnippet>129</a>            <span class="kw">let </span>lease = <span class="kw">if </span>path.starts_with(<span class="string">"/srv"</span>) {
+<a href=#130 id=130 data-nosnippet>130</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(k) = <span class="kw">crate</span>::namespace::NamespaceKey::parse(path) <span class="kw">else </span>{
+<a href=#131 id=131 data-nosnippet>131</a>                    <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#132 id=132 data-nosnippet>132</a>                };
+<a href=#133 id=133 data-nosnippet>133</a>                <span class="kw">let </span><span class="prelude-val">Ok</span>(l) = vfs.ledger.acquire_service_handle(<span class="kw-2">&amp;</span>k) <span class="kw">else </span>{
+<a href=#134 id=134 data-nosnippet>134</a>                    <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#135 id=135 data-nosnippet>135</a>                };
+<a href=#136 id=136 data-nosnippet>136</a>                <span class="prelude-val">Some</span>(l)
+<a href=#137 id=137 data-nosnippet>137</a>            } <span class="kw">else </span>{
+<a href=#138 id=138 data-nosnippet>138</a>                <span class="prelude-val">None
+<a href=#139 id=139 data-nosnippet>139</a>            </span>};
+<a href=#140 id=140 data-nosnippet>140</a>            <span class="kw">let </span>data = vfs.read_to_vec(path);
+<a href=#141 id=141 data-nosnippet>141</a>            <span class="kw">if </span>!vfs.healthy(path) {
+<a href=#142 id=142 data-nosnippet>142</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#143 id=143 data-nosnippet>143</a>            }
+<a href=#144 id=144 data-nosnippet>144</a>            <span class="comment">// A read that failed part way is an error, never a short handle.
+<a href=#145 id=145 data-nosnippet>145</a>            </span><span class="kw">let </span><span class="prelude-val">Ok</span>(data) = data <span class="kw">else </span>{
+<a href=#146 id=146 data-nosnippet>146</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#147 id=147 data-nosnippet>147</a>            };
+<a href=#148 id=148 data-nosnippet>148</a>            <span class="kw">let </span>handle = vfs.pending.insert(caller, path, data, lease);
+<a href=#149 id=149 data-nosnippet>149</a>            wire::ipc::VfsResponse::PendingHandle(handle)
+<a href=#150 id=150 data-nosnippet>150</a>        }
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a>        wire::ipc::VfsRequest::Poll { handle } =&gt; {
+<a href=#153 id=153 data-nosnippet>153</a>            <span class="comment">// With a synchronous backend data is always ready on first poll.
+<a href=#154 id=154 data-nosnippet>154</a>            //
+<a href=#155 id=155 data-nosnippet>155</a>            // Two independent checks, in this order.  Ownership first: a handle
+<a href=#156 id=156 data-nosnippet>156</a>            // owned by another cell is refused with the same code as a stale one,
+<a href=#157 id=157 data-nosnippet>157</a>            // so sweeping the sequential handle space reveals nothing about other
+<a href=#158 id=158 data-nosnippet>158</a>            // cells.  Then the path rules again — the slot stores the path it was
+<a href=#159 id=159 data-nosnippet>159</a>            // filled from, because the authorization at `ReadAsync` time proves
+<a href=#160 id=160 data-nosnippet>160</a>            // only what policy said then, and a slot can outlive a rule change.
+<a href=#161 id=161 data-nosnippet>161</a>            </span><span class="kw">let </span>readable = <span class="kw">match </span>vfs.pending.owned_path(caller, handle) {
+<a href=#162 id=162 data-nosnippet>162</a>                <span class="prelude-val">Some</span>(path) =&gt; vfs.access.can_read(caller, path),
+<a href=#163 id=163 data-nosnippet>163</a>                <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Handle <span class="kw">as </span>u8),
+<a href=#164 id=164 data-nosnippet>164</a>            };
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="kw">if </span>!readable {
+<a href=#166 id=166 data-nosnippet>166</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#167 id=167 data-nosnippet>167</a>            }
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="kw">if </span>!vfs
+<a href=#169 id=169 data-nosnippet>169</a>                .pending
+<a href=#170 id=170 data-nosnippet>170</a>                .owned_path(caller, handle)
+<a href=#171 id=171 data-nosnippet>171</a>                .is_some_and(|path| vfs.healthy(path))
+<a href=#172 id=172 data-nosnippet>172</a>            {
+<a href=#173 id=173 data-nosnippet>173</a>                <span class="kw">let _ </span>= vfs.pending.poll(caller, handle);
+<a href=#174 id=174 data-nosnippet>174</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Io <span class="kw">as </span>u8);
+<a href=#175 id=175 data-nosnippet>175</a>            }
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">match </span>vfs.pending.poll(caller, handle) {
+<a href=#177 id=177 data-nosnippet>177</a>                <span class="prelude-val">Some</span>(data) =&gt; {
+<a href=#178 id=178 data-nosnippet>178</a>                    <span class="comment">// Cap at 480, not resp_buf.len(): the reply must still fit
+<a href=#179 id=179 data-nosnippet>179</a>                    // the 512-byte IPC frame AFTER the postcard envelope. A
+<a href=#180 id=180 data-nosnippet>180</a>                    // full 512-byte payload made encode fail and the client
+<a href=#181 id=181 data-nosnippet>181</a>                    // saw an empty reply (surfaced by /bin ELF reads).
+<a href=#182 id=182 data-nosnippet>182</a>                    </span><span class="kw">let </span>n = data.len().min(<span class="number">480</span>);
+<a href=#183 id=183 data-nosnippet>183</a>                    resp_buf[..n].copy_from_slice(<span class="kw-2">&amp;</span>data[..n]);
+<a href=#184 id=184 data-nosnippet>184</a>                    wire::ipc::VfsResponse::Data(<span class="kw-2">&amp;</span>resp_buf[..n])
+<a href=#185 id=185 data-nosnippet>185</a>                }
+<a href=#186 id=186 data-nosnippet>186</a>                <span class="prelude-val">None </span>=&gt; wire::ipc::VfsResponse::Err(VfsError::Handle <span class="kw">as </span>u8),
+<a href=#187 id=187 data-nosnippet>187</a>            }
+<a href=#188 id=188 data-nosnippet>188</a>        }
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="comment">// ── Zero-Copy Grant I/O (Storage 2.0) ──────────────────────────────
+<a href=#191 id=191 data-nosnippet>191</a>        </span>wire::ipc::VfsRequest::ReadGrant {
+<a href=#192 id=192 data-nosnippet>192</a>            cap,
+<a href=#193 id=193 data-nosnippet>193</a>            offset,
+<a href=#194 id=194 data-nosnippet>194</a>            size,
+<a href=#195 id=195 data-nosnippet>195</a>            grant,
+<a href=#196 id=196 data-nosnippet>196</a>        } =&gt; <span class="kw">crate</span>::grant_read::read_grant(vfs, caller, cap, offset, size, grant),
+<a href=#197 id=197 data-nosnippet>197</a>
+<a href=#198 id=198 data-nosnippet>198</a>        wire::ipc::VfsRequest::WriteGrant {
+<a href=#199 id=199 data-nosnippet>199</a>            cap,
+<a href=#200 id=200 data-nosnippet>200</a>            offset,
+<a href=#201 id=201 data-nosnippet>201</a>            grant,
+<a href=#202 id=202 data-nosnippet>202</a>            bytes,
+<a href=#203 id=203 data-nosnippet>203</a>        } =&gt; {
+<a href=#204 id=204 data-nosnippet>204</a>            <span class="kw">if </span>!caller.may_mutate() {
+<a href=#205 id=205 data-nosnippet>205</a>                <span class="kw">return </span>wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
+<a href=#206 id=206 data-nosnippet>206</a>            }
+<a href=#207 id=207 data-nosnippet>207</a>            <span class="kw">crate</span>::grant_write::write(vfs, caller, cap, offset, grant, bytes)
+<a href=#208 id=208 data-nosnippet>208</a>        }
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>        wire::ipc::VfsRequest::ReadFileGrant { path, grant, max } =&gt; {
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="kw">crate</span>::grant_read::read_file_grant(vfs, caller, path, grant, max)
 <a href=#212 id=212 data-nosnippet>212</a>        }
 <a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a>        api::ipc::VfsRequest::ReadFileGrant { path, grant, max } =&gt; {
-<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">crate</span>::grant_read::read_file_grant(vfs, caller, path, grant, max)
-<a href=#216 id=216 data-nosnippet>216</a>        }
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="comment">// ── Directory capabilities ──────────────────────────────────────────
-<a href=#219 id=219 data-nosnippet>219</a>        // Grouped and delegated: these arms share a resolution step that has no
-<a href=#220 id=220 data-nosnippet>220</a>        // counterpart above, and interleaving them would put the two addressing
-<a href=#221 id=221 data-nosnippet>221</a>        // models in one match where a reader has to check which one each arm is
-<a href=#222 id=222 data-nosnippet>222</a>        // in.
-<a href=#223 id=223 data-nosnippet>223</a>        </span>api::ipc::VfsRequest::WriteHandleGrant { .. }
-<a href=#224 id=224 data-nosnippet>224</a>        | api::ipc::VfsRequest::SyncHandle { .. }
-<a href=#225 id=225 data-nosnippet>225</a>        | api::ipc::VfsRequest::WriteAt { .. }
-<a href=#226 id=226 data-nosnippet>226</a>        | api::ipc::VfsRequest::UnlinkAt { .. }
-<a href=#227 id=227 data-nosnippet>227</a>        | api::ipc::VfsRequest::MkdirAt { .. }
-<a href=#228 id=228 data-nosnippet>228</a>        | api::ipc::VfsRequest::RmdirAt { .. }
-<a href=#229 id=229 data-nosnippet>229</a>        | api::ipc::VfsRequest::RenameAt { .. }
-<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">if </span>!caller.may_mutate() =&gt;
-<a href=#231 id=231 data-nosnippet>231</a>        {
-<a href=#232 id=232 data-nosnippet>232</a>            api::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8)
-<a href=#233 id=233 data-nosnippet>233</a>        }
-<a href=#234 id=234 data-nosnippet>234</a>
-<a href=#235 id=235 data-nosnippet>235</a>        api::ipc::VfsRequest::OpenRootDir { .. }
-<a href=#236 id=236 data-nosnippet>236</a>        | api::ipc::VfsRequest::OpenDir { .. }
-<a href=#237 id=237 data-nosnippet>237</a>        | api::ipc::VfsRequest::ReadAt { .. }
-<a href=#238 id=238 data-nosnippet>238</a>        | api::ipc::VfsRequest::WriteAt { .. }
-<a href=#239 id=239 data-nosnippet>239</a>        | api::ipc::VfsRequest::StatAt { .. }
-<a href=#240 id=240 data-nosnippet>240</a>        | api::ipc::VfsRequest::ListAt { .. }
-<a href=#241 id=241 data-nosnippet>241</a>        | api::ipc::VfsRequest::ListAtPage { .. }
-<a href=#242 id=242 data-nosnippet>242</a>        | api::ipc::VfsRequest::FileHandleState { .. }
-<a href=#243 id=243 data-nosnippet>243</a>        | api::ipc::VfsRequest::UnlinkAt { .. }
-<a href=#244 id=244 data-nosnippet>244</a>        | api::ipc::VfsRequest::CloseDir { .. }
-<a href=#245 id=245 data-nosnippet>245</a>        | api::ipc::VfsRequest::SealPaths
-<a href=#246 id=246 data-nosnippet>246</a>        | api::ipc::VfsRequest::OpenFileAt { .. }
-<a href=#247 id=247 data-nosnippet>247</a>        | api::ipc::VfsRequest::ReadFileHandle { .. }
-<a href=#248 id=248 data-nosnippet>248</a>        | api::ipc::VfsRequest::CloseFile { .. }
-<a href=#249 id=249 data-nosnippet>249</a>        | api::ipc::VfsRequest::ReadHandleGrant { .. }
-<a href=#250 id=250 data-nosnippet>250</a>        | api::ipc::VfsRequest::WriteHandleGrant { .. }
-<a href=#251 id=251 data-nosnippet>251</a>        | api::ipc::VfsRequest::SyncHandle { .. }
-<a href=#252 id=252 data-nosnippet>252</a>        | api::ipc::VfsRequest::MkdirAt { .. }
-<a href=#253 id=253 data-nosnippet>253</a>        | api::ipc::VfsRequest::RmdirAt { .. }
-<a href=#254 id=254 data-nosnippet>254</a>        | api::ipc::VfsRequest::RenameAt { .. } =&gt; {
-<a href=#255 id=255 data-nosnippet>255</a>            <span class="kw">crate</span>::dispatch_dirs::handle(vfs, caller, <span class="kw-2">&amp;</span>req, resp_buf)
-<a href=#256 id=256 data-nosnippet>256</a>        }
-<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">_ </span>=&gt; api::ipc::VfsResponse::Err(VfsError::Malformed <span class="kw">as </span>u8),
-<a href=#258 id=258 data-nosnippet>258</a>    }
-<a href=#259 id=259 data-nosnippet>259</a>}
-<a href=#260 id=260 data-nosnippet>260</a>
-<a href=#261 id=261 data-nosnippet>261</a><span class="doccomment">/// Whether `req` is the narrow machine pin exception to the central mutate
-<a href=#262 id=262 data-nosnippet>262</a>/// gate: a path `Write` or `Mkdir` that `AccessTable::is_machine_pin_writer`
-<a href=#263 id=263 data-nosnippet>263</a>/// admits. Any other request kind, path or caller still needs the mutate flag.
-<a href=#264 id=264 data-nosnippet>264</a></span><span class="kw">fn </span>machine_pin_write(vfs: <span class="kw-2">&amp;</span>VfsManager, caller: Caller, req: <span class="kw-2">&amp;</span>api::ipc::VfsRequest&lt;<span class="lifetime">'_</span>&gt;) -&gt; bool {
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">match </span><span class="kw-2">*</span>req {
-<a href=#266 id=266 data-nosnippet>266</a>        api::ipc::VfsRequest::Write { path, .. } | api::ipc::VfsRequest::Mkdir(path) =&gt; {
-<a href=#267 id=267 data-nosnippet>267</a>            vfs.access.is_machine_pin_writer(caller, path)
-<a href=#268 id=268 data-nosnippet>268</a>        }
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
-<a href=#270 id=270 data-nosnippet>270</a>    }
-<a href=#271 id=271 data-nosnippet>271</a>}
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a><span class="attr">#[cfg(test)]
-<a href=#274 id=274 data-nosnippet>274</a></span><span class="kw">mod </span>tests {
-<a href=#275 id=275 data-nosnippet>275</a>    <span class="kw">use </span>api::caller_identity::CALLER_FLAG_NET_CONNECT;
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">use </span>api::cell_session::ObjectRefV1;
-<a href=#277 id=277 data-nosnippet>277</a>    <span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">use </span>api::services::proto::vfs::VfsError;
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="kw">use </span>types::CellId;
-<a href=#280 id=280 data-nosnippet>280</a>
-<a href=#281 id=281 data-nosnippet>281</a>    <span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="kw">use </span><span class="kw">crate</span>::manager::VfsManager;
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a>    <span class="doccomment">/// Phase 12 W3: the host-trust store lives in KMS; the tombstones answer Unsupported
-<a href=#285 id=285 data-nosnippet>285</a>    /// (byte 6) to every caller, including one holding the outbound-connect right.
-<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="attr">#[test]
-<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="kw">fn </span>trust_tombstones_answer_unsupported() {
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">let </span>caller = Caller {
-<a href=#289 id=289 data-nosnippet>289</a>            flags: CALLER_FLAG_NET_CONNECT,
-<a href=#290 id=290 data-nosnippet>290</a>            ..Caller::principal(CellId(<span class="number">91</span>), <span class="number">1</span>)
-<a href=#291 id=291 data-nosnippet>291</a>        };
-<a href=#292 id=292 data-nosnippet>292</a>        <span class="kw">let </span><span class="kw-2">mut </span>vfs = VfsManager::new();
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="kw">let _ </span>= vfs.dirs.on_contact(caller);
-<a href=#294 id=294 data-nosnippet>294</a>        vfs.dirs.mark_attested(caller);
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="kw">let </span>session = ObjectRefV1 {
-<a href=#296 id=296 data-nosnippet>296</a>            id: <span class="number">41</span>,
-<a href=#297 id=297 data-nosnippet>297</a>            generation: <span class="number">3</span>,
-<a href=#298 id=298 data-nosnippet>298</a>        };
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">for </span>req <span class="kw">in </span>[
-<a href=#300 id=300 data-nosnippet>300</a>            VfsRequest::TrustLookup {
-<a href=#301 id=301 data-nosnippet>301</a>                host: <span class="string">"h"</span>,
-<a href=#302 id=302 data-nosnippet>302</a>                port: <span class="number">22</span>,
-<a href=#303 id=303 data-nosnippet>303</a>                algorithm: <span class="string">"ssh-ed25519"</span>,
-<a href=#304 id=304 data-nosnippet>304</a>                key: <span class="string">b"k"</span>,
-<a href=#305 id=305 data-nosnippet>305</a>            },
-<a href=#306 id=306 data-nosnippet>306</a>            VfsRequest::TrustChallenge {
-<a href=#307 id=307 data-nosnippet>307</a>                host: <span class="string">"h"</span>,
-<a href=#308 id=308 data-nosnippet>308</a>                port: <span class="number">22</span>,
-<a href=#309 id=309 data-nosnippet>309</a>                algorithm: <span class="string">"ssh-ed25519"</span>,
-<a href=#310 id=310 data-nosnippet>310</a>                key: <span class="string">b"k"</span>,
-<a href=#311 id=311 data-nosnippet>311</a>                session,
-<a href=#312 id=312 data-nosnippet>312</a>                epoch: <span class="number">4</span>,
-<a href=#313 id=313 data-nosnippet>313</a>            },
-<a href=#314 id=314 data-nosnippet>314</a>            VfsRequest::TrustCommit { challenge: session },
-<a href=#315 id=315 data-nosnippet>315</a>        ] {
-<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">let </span><span class="kw-2">mut </span>request = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#317 id=317 data-nosnippet>317</a>            api::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>request).expect(<span class="string">"request fits"</span>);
-<a href=#318 id=318 data-nosnippet>318</a>            <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#319 id=319 data-nosnippet>319</a>            <span class="kw">let </span>resp = <span class="kw">super</span>::handle_request(<span class="kw-2">&amp;mut </span>vfs, <span class="kw-2">&amp;</span>request, <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
-<a href=#320 id=320 data-nosnippet>320</a>            <span class="macro">assert!</span>(
-<a href=#321 id=321 data-nosnippet>321</a>                <span class="macro">matches!</span>(resp, VfsResponse::Err(code) <span class="kw">if </span>code == VfsError::Unsupported <span class="kw">as </span>u8),
-<a href=#322 id=322 data-nosnippet>322</a>                <span class="string">"{req:?}: {resp:?}"
-<a href=#323 id=323 data-nosnippet>323</a>            </span>);
-<a href=#324 id=324 data-nosnippet>324</a>        }
-<a href=#325 id=325 data-nosnippet>325</a>        <span class="macro">assert_eq!</span>(VfsError::Unsupported <span class="kw">as </span>u8, <span class="number">6</span>);
-<a href=#326 id=326 data-nosnippet>326</a>    }
-<a href=#327 id=327 data-nosnippet>327</a>}
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="comment">// ── Directory capabilities ──────────────────────────────────────────
+<a href=#215 id=215 data-nosnippet>215</a>        // Grouped and delegated: these arms share a resolution step that has no
+<a href=#216 id=216 data-nosnippet>216</a>        // counterpart above, and interleaving them would put the two addressing
+<a href=#217 id=217 data-nosnippet>217</a>        // models in one match where a reader has to check which one each arm is
+<a href=#218 id=218 data-nosnippet>218</a>        // in.
+<a href=#219 id=219 data-nosnippet>219</a>        </span>wire::ipc::VfsRequest::WriteHandleGrant { .. }
+<a href=#220 id=220 data-nosnippet>220</a>        | wire::ipc::VfsRequest::SyncHandle { .. }
+<a href=#221 id=221 data-nosnippet>221</a>        | wire::ipc::VfsRequest::WriteAt { .. }
+<a href=#222 id=222 data-nosnippet>222</a>        | wire::ipc::VfsRequest::UnlinkAt { .. }
+<a href=#223 id=223 data-nosnippet>223</a>        | wire::ipc::VfsRequest::MkdirAt { .. }
+<a href=#224 id=224 data-nosnippet>224</a>        | wire::ipc::VfsRequest::RmdirAt { .. }
+<a href=#225 id=225 data-nosnippet>225</a>        | wire::ipc::VfsRequest::RenameAt { .. }
+<a href=#226 id=226 data-nosnippet>226</a>            <span class="kw">if </span>!caller.may_mutate() =&gt;
+<a href=#227 id=227 data-nosnippet>227</a>        {
+<a href=#228 id=228 data-nosnippet>228</a>            wire::ipc::VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8)
+<a href=#229 id=229 data-nosnippet>229</a>        }
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a>        wire::ipc::VfsRequest::OpenRootDir { .. }
+<a href=#232 id=232 data-nosnippet>232</a>        | wire::ipc::VfsRequest::OpenDir { .. }
+<a href=#233 id=233 data-nosnippet>233</a>        | wire::ipc::VfsRequest::ReadAt { .. }
+<a href=#234 id=234 data-nosnippet>234</a>        | wire::ipc::VfsRequest::WriteAt { .. }
+<a href=#235 id=235 data-nosnippet>235</a>        | wire::ipc::VfsRequest::StatAt { .. }
+<a href=#236 id=236 data-nosnippet>236</a>        | wire::ipc::VfsRequest::ListAt { .. }
+<a href=#237 id=237 data-nosnippet>237</a>        | wire::ipc::VfsRequest::ListAtPage { .. }
+<a href=#238 id=238 data-nosnippet>238</a>        | wire::ipc::VfsRequest::FileHandleState { .. }
+<a href=#239 id=239 data-nosnippet>239</a>        | wire::ipc::VfsRequest::UnlinkAt { .. }
+<a href=#240 id=240 data-nosnippet>240</a>        | wire::ipc::VfsRequest::CloseDir { .. }
+<a href=#241 id=241 data-nosnippet>241</a>        | wire::ipc::VfsRequest::SealPaths
+<a href=#242 id=242 data-nosnippet>242</a>        | wire::ipc::VfsRequest::OpenFileAt { .. }
+<a href=#243 id=243 data-nosnippet>243</a>        | wire::ipc::VfsRequest::ReadFileHandle { .. }
+<a href=#244 id=244 data-nosnippet>244</a>        | wire::ipc::VfsRequest::CloseFile { .. }
+<a href=#245 id=245 data-nosnippet>245</a>        | wire::ipc::VfsRequest::ReadHandleGrant { .. }
+<a href=#246 id=246 data-nosnippet>246</a>        | wire::ipc::VfsRequest::WriteHandleGrant { .. }
+<a href=#247 id=247 data-nosnippet>247</a>        | wire::ipc::VfsRequest::SyncHandle { .. }
+<a href=#248 id=248 data-nosnippet>248</a>        | wire::ipc::VfsRequest::MkdirAt { .. }
+<a href=#249 id=249 data-nosnippet>249</a>        | wire::ipc::VfsRequest::RmdirAt { .. }
+<a href=#250 id=250 data-nosnippet>250</a>        | wire::ipc::VfsRequest::RenameAt { .. } =&gt; {
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="kw">crate</span>::dispatch_dirs::handle(vfs, caller, <span class="kw-2">&amp;</span>req, resp_buf)
+<a href=#252 id=252 data-nosnippet>252</a>        }
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">_ </span>=&gt; wire::ipc::VfsResponse::Err(VfsError::Malformed <span class="kw">as </span>u8),
+<a href=#254 id=254 data-nosnippet>254</a>    }
+<a href=#255 id=255 data-nosnippet>255</a>}
+<a href=#256 id=256 data-nosnippet>256</a>
+<a href=#257 id=257 data-nosnippet>257</a><span class="attr">#[cfg(test)]
+<a href=#258 id=258 data-nosnippet>258</a></span><span class="kw">mod </span>tests {
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">use </span>abi::caller_identity::CALLER_FLAG_NET_CONNECT;
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">use </span>abi::cell_session::ObjectRefV1;
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="kw">use </span>types::CellId;
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="kw">use </span>wire::proto::vfs::VfsError;
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">use </span><span class="kw">crate</span>::manager::VfsManager;
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="doccomment">/// Phase 12 W3: the host-trust store lives in KMS; the tombstones answer Unsupported
+<a href=#269 id=269 data-nosnippet>269</a>    /// (byte 6) to every caller, including one holding the outbound-connect right.
+<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="attr">#[test]
+<a href=#271 id=271 data-nosnippet>271</a>    </span><span class="kw">fn </span>trust_tombstones_answer_unsupported() {
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span>caller = Caller {
+<a href=#273 id=273 data-nosnippet>273</a>            flags: CALLER_FLAG_NET_CONNECT,
+<a href=#274 id=274 data-nosnippet>274</a>            ..Caller::principal(CellId(<span class="number">91</span>), <span class="number">1</span>)
+<a href=#275 id=275 data-nosnippet>275</a>        };
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span><span class="kw-2">mut </span>vfs = VfsManager::new();
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let _ </span>= vfs.dirs.on_contact(caller);
+<a href=#278 id=278 data-nosnippet>278</a>        vfs.dirs.mark_attested(caller);
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="kw">let </span>session = ObjectRefV1 {
+<a href=#280 id=280 data-nosnippet>280</a>            id: <span class="number">41</span>,
+<a href=#281 id=281 data-nosnippet>281</a>            generation: <span class="number">3</span>,
+<a href=#282 id=282 data-nosnippet>282</a>        };
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">for </span>req <span class="kw">in </span>[
+<a href=#284 id=284 data-nosnippet>284</a>            VfsRequest::TrustLookup {
+<a href=#285 id=285 data-nosnippet>285</a>                host: <span class="string">"h"</span>,
+<a href=#286 id=286 data-nosnippet>286</a>                port: <span class="number">22</span>,
+<a href=#287 id=287 data-nosnippet>287</a>                algorithm: <span class="string">"ssh-ed25519"</span>,
+<a href=#288 id=288 data-nosnippet>288</a>                key: <span class="string">b"k"</span>,
+<a href=#289 id=289 data-nosnippet>289</a>            },
+<a href=#290 id=290 data-nosnippet>290</a>            VfsRequest::TrustChallenge {
+<a href=#291 id=291 data-nosnippet>291</a>                host: <span class="string">"h"</span>,
+<a href=#292 id=292 data-nosnippet>292</a>                port: <span class="number">22</span>,
+<a href=#293 id=293 data-nosnippet>293</a>                algorithm: <span class="string">"ssh-ed25519"</span>,
+<a href=#294 id=294 data-nosnippet>294</a>                key: <span class="string">b"k"</span>,
+<a href=#295 id=295 data-nosnippet>295</a>                session,
+<a href=#296 id=296 data-nosnippet>296</a>                epoch: <span class="number">4</span>,
+<a href=#297 id=297 data-nosnippet>297</a>            },
+<a href=#298 id=298 data-nosnippet>298</a>            VfsRequest::TrustCommit { challenge: session },
+<a href=#299 id=299 data-nosnippet>299</a>        ] {
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">let </span><span class="kw-2">mut </span>request = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#301 id=301 data-nosnippet>301</a>            wire::ipc::encode(<span class="kw-2">&amp;</span>req, <span class="kw-2">&amp;mut </span>request).expect(<span class="string">"request fits"</span>);
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">let </span>resp = <span class="kw">super</span>::handle_request(<span class="kw-2">&amp;mut </span>vfs, <span class="kw-2">&amp;</span>request, <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
+<a href=#304 id=304 data-nosnippet>304</a>            <span class="macro">assert!</span>(
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="macro">matches!</span>(resp, VfsResponse::Err(code) <span class="kw">if </span>code == VfsError::Unsupported <span class="kw">as </span>u8),
+<a href=#306 id=306 data-nosnippet>306</a>                <span class="string">"{req:?}: {resp:?}"
+<a href=#307 id=307 data-nosnippet>307</a>            </span>);
+<a href=#308 id=308 data-nosnippet>308</a>        }
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="macro">assert_eq!</span>(VfsError::Unsupported <span class="kw">as </span>u8, <span class="number">6</span>);
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>}
 </code></pre></div></section></main></body></html>

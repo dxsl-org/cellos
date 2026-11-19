@@ -34,13 +34,13 @@
 <a href=#34 id=34 data-nosnippet>34</a><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="kw">mod </span>pci_x86;
 <a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>api::services::proto::nic::NicStatus;
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>device::NetDevice;
-<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>dispatch::{handle, NicReply, REPLY_BUF};
-<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
-<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>ostd::service::{sender_is_live_provider, service};
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>ostd::sync::Mutex;
-<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>ostd::syscall::{sys_register_nic_driver, sys_try_send};
+<a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>device::NetDevice;
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>dispatch::{handle, NicReply, REPLY_BUF};
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
+<a href=#40 id=40 data-nosnippet>40</a><span class="kw">use </span>ostd::service::{sender_is_live_provider, service};
+<a href=#41 id=41 data-nosnippet>41</a><span class="kw">use </span>ostd::sync::Mutex;
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">use </span>ostd::syscall::{sys_register_nic_driver, sys_try_send};
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">use </span>wire::proto::nic::NicStatus;
 <a href=#44 id=44 data-nosnippet>44</a>
 <a href=#45 id=45 data-nosnippet>45</a><span class="kw">static </span>STATE: Mutex&lt;<span class="prelude-ty">Option</span>&lt;NetDevice&gt;&gt; = Mutex::new(<span class="prelude-val">None</span>);
 <a href=#46 id=46 data-nosnippet>46</a>
@@ -115,7 +115,7 @@
 <a href=#115 id=115 data-nosnippet>115</a><span class="macro">ostd::run_app!</span>(handler);
 <a href=#116 id=116 data-nosnippet>116</a>
 <a href=#117 id=117 data-nosnippet>117</a><span class="comment">// PcieDriverCap is granted by loader.rs via path match (/bin/virtio-net).
-<a href=#118 id=118 data-nosnippet>118</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#118 id=118 data-nosnippet>118</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#119 id=119 data-nosnippet>119</a>    block_io = <span class="bool-val">false</span>,
 <a href=#120 id=120 data-nosnippet>120</a>    network = <span class="bool-val">false</span>,
 <a href=#121 id=121 data-nosnippet>121</a>    spawn = <span class="bool-val">false</span>,

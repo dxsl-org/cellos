@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">mod </span>rings;
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">mod </span>scan;
 <a href=#33 id=33 data-nosnippet>33</a>
-<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>api::pcie_function::{ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64};
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>abi::pcie_function::{ViPcieFunctionV1, BAR_KIND_MEM32, BAR_KIND_MEM64};
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
 <a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>ostd::io::print_fmt;
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">use </span>ostd::sync::Mutex;
@@ -165,7 +165,7 @@
 <a href=#165 id=165 data-nosnippet>165</a>
 <a href=#166 id=166 data-nosnippet>166</a><span class="comment">// PcieDriverCap is granted by init via the reviewed `/bin/pvscsi` launch
 <a href=#167 id=167 data-nosnippet>167</a>// edge; this manifest declares no privileged flags.
-<a href=#168 id=168 data-nosnippet>168</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#168 id=168 data-nosnippet>168</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#169 id=169 data-nosnippet>169</a>    block_io = <span class="bool-val">false</span>,
 <a href=#170 id=170 data-nosnippet>170</a>    network = <span class="bool-val">false</span>,
 <a href=#171 id=171 data-nosnippet>171</a>    spawn = <span class="bool-val">false</span>,
@@ -179,7 +179,7 @@
 <a href=#179 id=179 data-nosnippet>179</a>// claim, block-route registration, the per-command clock budget, exit, the
 <a href=#180 id=180 data-nosnippet>180</a>// DMA grant (and its release when authorization fails), and the completion
 <a href=#181 id=181 data-nosnippet>181</a>// interrupt (435 at start, `WaitCompletion(IRQ)` parks).
-<a href=#182 id=182 data-nosnippet>182</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#182 id=182 data-nosnippet>182</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#183 id=183 data-nosnippet>183</a>    Send,
 <a href=#184 id=184 data-nosnippet>184</a>    SendGather,
 <a href=#185 id=185 data-nosnippet>185</a>    Recv,

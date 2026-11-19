@@ -1,13 +1,13 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/net/src/handlers/tcp.rs`."><title>tcp.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="service_net" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_net/handlers/</div>tcp.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>alloc::collections::BTreeMap;
-<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>api::ipc::{
-<a href=#3 id=3 data-nosnippet>3</a>    net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
-<a href=#4 id=4 data-nosnippet>4</a>};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>api::services::proto::net::{NetError, TCP_RECV_EOF};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>smoltcp::{
-<a href=#7 id=7 data-nosnippet>7</a>    iface::{Interface, SocketSet},
-<a href=#8 id=8 data-nosnippet>8</a>    socket::tcp,
-<a href=#9 id=9 data-nosnippet>9</a>    wire::{IpAddress, IpEndpoint},
-<a href=#10 id=10 data-nosnippet>10</a>};
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>smoltcp::{
+<a href=#3 id=3 data-nosnippet>3</a>    iface::{Interface, SocketSet},
+<a href=#4 id=4 data-nosnippet>4</a>    socket::tcp,
+<a href=#5 id=5 data-nosnippet>5</a>    wire::{IpAddress, IpEndpoint},
+<a href=#6 id=6 data-nosnippet>6</a>};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>wire::ipc::{
+<a href=#8 id=8 data-nosnippet>8</a>    net_ready, NetRequest, NetResponse, TcpInterest, TcpReadyEvent, NET_TCP_INLINE_DATA_MAX,
+<a href=#9 id=9 data-nosnippet>9</a>};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>wire::proto::net::{NetError, TCP_RECV_EOF};
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>super::{make_tcp, send_typed, tcp_state_byte, try_promote};
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>crate::{
@@ -50,8 +50,8 @@
 <a href=#50 id=50 data-nosnippet>50</a>            table.set_state(cap, SocketState::Connecting);
 <a href=#51 id=51 data-nosnippet>51</a>            <span class="comment">// A cancelled exact call cannot retain a socket capability the
 <a href=#52 id=52 data-nosnippet>52</a>            // client never received. Legacy callers still get their reply.
-<a href=#53 id=53 data-nosnippet>53</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>response = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#54 id=54 data-nosnippet>54</a>            <span class="kw">let </span>delivered = api::ipc::encode(<span class="kw-2">&amp;</span>R::CapId(cap <span class="kw">as </span>u32), <span class="kw-2">&amp;mut </span>response)
+<a href=#53 id=53 data-nosnippet>53</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>response = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#54 id=54 data-nosnippet>54</a>            <span class="kw">let </span>delivered = wire::ipc::encode(<span class="kw-2">&amp;</span>R::CapId(cap <span class="kw">as </span>u32), <span class="kw-2">&amp;mut </span>response)
 <a href=#55 id=55 data-nosnippet>55</a>                .ok()
 <a href=#56 id=56 data-nosnippet>56</a>                .is_some_and(|bytes| {
 <a href=#57 id=57 data-nosnippet>57</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(token) = ostd::ipc::current() {
@@ -286,7 +286,7 @@
 <a href=#286 id=286 data-nosnippet>286</a>            } <span class="kw">else </span>{
 <a href=#287 id=287 data-nosnippet>287</a>                <span class="kw">match </span>readiness(interests, <span class="kw-2">*</span>cursor, owner, sockets, table) {
 <a href=#288 id=288 data-nosnippet>288</a>                    <span class="prelude-val">Ok</span>((events, next_cursor)) =&gt; {
-<a href=#289 id=289 data-nosnippet>289</a>                        <span class="kw">let </span><span class="kw-2">mut </span>packed = [<span class="number">0u8</span>; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES];
+<a href=#289 id=289 data-nosnippet>289</a>                        <span class="kw">let </span><span class="kw-2">mut </span>packed = [<span class="number">0u8</span>; READY_PAGE * wire::ipc::NET_READY_RECORD_BYTES];
 <a href=#290 id=290 data-nosnippet>290</a>                        <span class="kw">let </span>bytes = pack_events(<span class="kw-2">&amp;</span>events, <span class="kw-2">&amp;mut </span>packed);
 <a href=#291 id=291 data-nosnippet>291</a>                        send_typed(
 <a href=#292 id=292 data-nosnippet>292</a>                            sender,
@@ -334,15 +334,15 @@
 <a href=#334 id=334 data-nosnippet>334</a>    table: <span class="kw-2">&amp;</span>SocketTable,
 <a href=#335 id=335 data-nosnippet>335</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(ReadyEvents, u16), ()&gt; {
 <a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">if </span>interests.is_empty()
-<a href=#337 id=337 data-nosnippet>337</a>        || interests.len() &gt; MAX_INTERESTS * api::ipc::NET_READY_RECORD_BYTES
+<a href=#337 id=337 data-nosnippet>337</a>        || interests.len() &gt; MAX_INTERESTS * wire::ipc::NET_READY_RECORD_BYTES
 <a href=#338 id=338 data-nosnippet>338</a>        || !interests
 <a href=#339 id=339 data-nosnippet>339</a>            .len()
-<a href=#340 id=340 data-nosnippet>340</a>            .is_multiple_of(api::ipc::NET_READY_RECORD_BYTES)
+<a href=#340 id=340 data-nosnippet>340</a>            .is_multiple_of(wire::ipc::NET_READY_RECORD_BYTES)
 <a href=#341 id=341 data-nosnippet>341</a>    {
 <a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(());
 <a href=#343 id=343 data-nosnippet>343</a>    }
-<a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">let </span>count = interests.len() / api::ipc::NET_READY_RECORD_BYTES;
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">for </span>raw <span class="kw">in </span>interests.chunks_exact(api::ipc::NET_READY_RECORD_BYTES) {
+<a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">let </span>count = interests.len() / wire::ipc::NET_READY_RECORD_BYTES;
+<a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">for </span>raw <span class="kw">in </span>interests.chunks_exact(wire::ipc::NET_READY_RECORD_BYTES) {
 <a href=#346 id=346 data-nosnippet>346</a>        <span class="kw">let </span>interest = TcpInterest::decode(raw).ok_or(())<span class="question-mark">?</span>;
 <a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">if </span>interest.mask == <span class="number">0
 <a href=#348 id=348 data-nosnippet>348</a>            </span>|| interest.mask
@@ -363,8 +363,8 @@
 <a href=#363 id=363 data-nosnippet>363</a>    <span class="kw">let </span><span class="kw-2">mut </span>next = start;
 <a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">for _ in </span><span class="number">0</span>..count {
 <a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span>interest = TcpInterest::decode(
-<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw-2">&amp;</span>interests[next * api::ipc::NET_READY_RECORD_BYTES
-<a href=#367 id=367 data-nosnippet>367</a>                ..(next + <span class="number">1</span>) * api::ipc::NET_READY_RECORD_BYTES],
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw-2">&amp;</span>interests[next * wire::ipc::NET_READY_RECORD_BYTES
+<a href=#367 id=367 data-nosnippet>367</a>                ..(next + <span class="number">1</span>) * wire::ipc::NET_READY_RECORD_BYTES],
 <a href=#368 id=368 data-nosnippet>368</a>        )
 <a href=#369 id=369 data-nosnippet>369</a>        .ok_or(())<span class="question-mark">?</span>;
 <a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>cap = interest.cap_id <span class="kw">as </span>u64;
@@ -415,12 +415,12 @@
 <a href=#415 id=415 data-nosnippet>415</a>
 <a href=#416 id=416 data-nosnippet>416</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>pack_events&lt;<span class="lifetime">'a</span>&gt;(
 <a href=#417 id=417 data-nosnippet>417</a>    events: <span class="kw-2">&amp;</span>[TcpReadyEvent],
-<a href=#418 id=418 data-nosnippet>418</a>    out: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; READY_PAGE * api::ipc::NET_READY_RECORD_BYTES],
+<a href=#418 id=418 data-nosnippet>418</a>    out: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u8; READY_PAGE * wire::ipc::NET_READY_RECORD_BYTES],
 <a href=#419 id=419 data-nosnippet>419</a>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8] {
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span>len = events.len() * api::ipc::NET_READY_RECORD_BYTES;
+<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">let </span>len = events.len() * wire::ipc::NET_READY_RECORD_BYTES;
 <a href=#421 id=421 data-nosnippet>421</a>    <span class="kw">for </span>(event, chunk) <span class="kw">in </span>events
 <a href=#422 id=422 data-nosnippet>422</a>        .iter()
-<a href=#423 id=423 data-nosnippet>423</a>        .zip(out[..len].chunks_exact_mut(api::ipc::NET_READY_RECORD_BYTES))
+<a href=#423 id=423 data-nosnippet>423</a>        .zip(out[..len].chunks_exact_mut(wire::ipc::NET_READY_RECORD_BYTES))
 <a href=#424 id=424 data-nosnippet>424</a>    {
 <a href=#425 id=425 data-nosnippet>425</a>        chunk[..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span>event.cap_id.to_le_bytes());
 <a href=#426 id=426 data-nosnippet>426</a>        chunk[<span class="number">4</span>] = event.ready;

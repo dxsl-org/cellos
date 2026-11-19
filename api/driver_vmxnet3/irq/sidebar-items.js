@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["EXPIRY_LOG_LIMIT","ICTRL_DISABLE_ALL","PARK_TICKS","SPIN_BEFORE_PARK","WANT_VECTORS"],"struct":["IntrPlan","NicIrq"]};
+window.SIDEBAR_ITEMS = {"constant":["ICTRL_DISABLE_ALL","WANT_VECTORS"],"struct":["IntrPlan"]};

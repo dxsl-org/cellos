@@ -15,10 +15,10 @@
 <a href=#15 id=15 data-nosnippet>15</a>//! Settling what a cell inherited, before any of this runs, lives in
 <a href=#16 id=16 data-nosnippet>16</a>//! [`crate::dir_admission`].
 <a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use </span>alloc::string::String;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>api::services::proto::vfs::VfsError;
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>alloc::string::String;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>wire::proto::vfs::VfsError;
 <a href=#22 id=22 data-nosnippet>22</a>
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="kw">crate</span>::caller::Caller;
 <a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span><span class="kw">crate</span>::dirs::DirError;
@@ -145,7 +145,7 @@
 <a href=#145 id=145 data-nosnippet>145</a>    <span class="comment">// Checked as raw bytes, before anything is joined or cleaned up: this is the
 <a href=#146 id=146 data-nosnippet>146</a>    // one operation left that takes a path, so it is the one place a traversal
 <a href=#147 id=147 data-nosnippet>147</a>    // could still enter the handle graph.
-<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="kw">let </span><span class="prelude-val">Ok</span>(checked) = api::dir_name::validate_dir_path(path.as_bytes()) <span class="kw">else </span>{
+<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="kw">let </span><span class="prelude-val">Ok</span>(checked) = wire::dir_name::validate_dir_path(path.as_bytes()) <span class="kw">else </span>{
 <a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">return </span>VfsResponse::Err(VfsError::Denied <span class="kw">as </span>u8);
 <a href=#150 id=150 data-nosnippet>150</a>    };
 <a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>!vfs.access.can_read(caller, checked) {

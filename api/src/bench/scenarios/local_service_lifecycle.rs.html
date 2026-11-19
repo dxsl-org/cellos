@@ -5,25 +5,25 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! must terminate either caller with PeerGone, not leave a masked Recv stranded.
 <a href=#6 id=6 data-nosnippet>6</a>//! The same lane witnesses quota retention, real expiry and queued caller death.
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>alloc::format;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::c2c::RetryClass;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::ipc::IPC_BUF_SIZE;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::services::ipc::{VfsRequest, VfsResponse};
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>api::services::proto::supervisor::OWNER_EXITED_NOTICE;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>api::task::TaskPriority;
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>ostd::{
-<a href=#17 id=17 data-nosnippet>17</a>    cluster_endpoint::{CellMethod, EndpointError, LocalEndpoint},
-<a href=#18 id=18 data-nosnippet>18</a>    io::println,
-<a href=#19 id=19 data-nosnippet>19</a>    ipc::{submit, take, wait, IpcTakeResult, IpcTerminal},
-<a href=#20 id=20 data-nosnippet>20</a>    service::ServiceRef,
-<a href=#21 id=21 data-nosnippet>21</a>    syscall::{
-<a href=#22 id=22 data-nosnippet>22</a>        sys_exit, sys_lookup_service_bound, sys_recv, sys_send, sys_set_spawn_args,
-<a href=#23 id=23 data-nosnippet>23</a>        sys_spawn_pinned, SyscallResult,
-<a href=#24 id=24 data-nosnippet>24</a>    },
-<a href=#25 id=25 data-nosnippet>25</a>    task::yield_now,
-<a href=#26 id=26 data-nosnippet>26</a>};
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>abi::task::TaskPriority;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>alloc::format;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::{
+<a href=#13 id=13 data-nosnippet>13</a>    cluster_endpoint::{CellMethod, EndpointError, LocalEndpoint},
+<a href=#14 id=14 data-nosnippet>14</a>    io::println,
+<a href=#15 id=15 data-nosnippet>15</a>    ipc::{submit, take, wait, IpcTakeResult, IpcTerminal},
+<a href=#16 id=16 data-nosnippet>16</a>    service::ServiceRef,
+<a href=#17 id=17 data-nosnippet>17</a>    syscall::{
+<a href=#18 id=18 data-nosnippet>18</a>        sys_exit, sys_lookup_service_bound, sys_recv, sys_send, sys_set_spawn_args,
+<a href=#19 id=19 data-nosnippet>19</a>        sys_spawn_pinned, SyscallResult,
+<a href=#20 id=20 data-nosnippet>20</a>    },
+<a href=#21 id=21 data-nosnippet>21</a>    task::yield_now,
+<a href=#22 id=22 data-nosnippet>22</a>};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>types::c2c::RetryClass;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>wire::ipc::IPC_BUF_SIZE;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse};
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>wire::proto::supervisor::OWNER_EXITED_NOTICE;
 <a href=#27 id=27 data-nosnippet>27</a>
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">const </span>PROBE_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/bin/bench-probe"</span>;
 <a href=#29 id=29 data-nosnippet>29</a><span class="kw">const </span>PROVIDER_ROLE: <span class="kw-2">&amp;</span>str = <span class="string">"c2c-provider"</span>;
@@ -194,7 +194,7 @@
 <a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">_ </span>=&gt; fail(<span class="string">"nested provider request"</span>),
 <a href=#195 id=195 data-nosnippet>195</a>    };
 <a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>operation = ostd::ipc::current().unwrap_or_else(|| fail(<span class="string">"nested provider token"</span>));
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span><span class="kw-2">mut </span>vfs = ServiceRef::&lt;{ api::syscall::service::VFS }&gt;::new();
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span><span class="kw-2">mut </span>vfs = ServiceRef::&lt;{ abi::syscall::service::VFS }&gt;::new();
 <a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">let </span><span class="kw-2">mut </span>response = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
 <a href=#200 id=200 data-nosnippet>200</a>        vfs.call::&lt;VfsRequest, VfsResponse&gt;(<span class="kw-2">&amp;</span>VfsRequest::Stat(<span class="string">"/"</span>), <span class="kw-2">&amp;mut </span>response)
@@ -1383,9 +1383,9 @@
 <a href=#1383 id=1383 data-nosnippet>1383</a>/// below to appear. A capture bug (identity stored as 0/0) makes `lookup_bound`
 <a href=#1384 id=1384 data-nosnippet>1384</a>/// report no binding, so this leg fails loudly instead of passing on a stub.
 <a href=#1385 id=1385 data-nosnippet>1385</a></span><span class="kw">fn </span>binding_leg() {
-<a href=#1386 id=1386 data-nosnippet>1386</a>    <span class="kw">let </span>vfs_tid = provider_tid(api::syscall::service::VFS);
-<a href=#1387 id=1387 data-nosnippet>1387</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; api::service_binding::SERVICE_BINDING_LEN];
-<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="kw">match </span>sys_lookup_service_bound(api::syscall::service::VFS, <span class="kw-2">&amp;mut </span>buf) {
+<a href=#1386 id=1386 data-nosnippet>1386</a>    <span class="kw">let </span>vfs_tid = provider_tid(abi::syscall::service::VFS);
+<a href=#1387 id=1387 data-nosnippet>1387</a>    <span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; abi::service_binding::SERVICE_BINDING_LEN];
+<a href=#1388 id=1388 data-nosnippet>1388</a>    <span class="kw">match </span>sys_lookup_service_bound(abi::syscall::service::VFS, <span class="kw-2">&amp;mut </span>buf) {
 <a href=#1389 id=1389 data-nosnippet>1389</a>        <span class="prelude-val">Some</span>(binding) =&gt; {
 <a href=#1390 id=1390 data-nosnippet>1390</a>            println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#1391 id=1391 data-nosnippet>1391</a>                <span class="string">"[local-lifecycle] VFS-BINDING tid={} cell={} gen={} matches_lookup={}"</span>,
@@ -1401,8 +1401,8 @@
 <a href=#1401 id=1401 data-nosnippet>1401</a>    <span class="comment">// No provider: this image neither builds nor launches the AI cell, so the id
 <a href=#1402 id=1402 data-nosnippet>1402</a>    // resolves to nothing and the bound lookup must say so rather than write a
 <a href=#1403 id=1403 data-nosnippet>1403</a>    // record; `provider_tid` reports the same absence.
-<a href=#1404 id=1404 data-nosnippet>1404</a>    </span><span class="kw">let </span>absent_tid = provider_tid(api::syscall::service::AI);
-<a href=#1405 id=1405 data-nosnippet>1405</a>    <span class="kw">let </span>absent_binding = sys_lookup_service_bound(api::syscall::service::AI, <span class="kw-2">&amp;mut </span>buf);
+<a href=#1404 id=1404 data-nosnippet>1404</a>    </span><span class="kw">let </span>absent_tid = provider_tid(abi::syscall::service::AI);
+<a href=#1405 id=1405 data-nosnippet>1405</a>    <span class="kw">let </span>absent_binding = sys_lookup_service_bound(abi::syscall::service::AI, <span class="kw-2">&amp;mut </span>buf);
 <a href=#1406 id=1406 data-nosnippet>1406</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#1407 id=1407 data-nosnippet>1407</a>        <span class="string">"[local-lifecycle] ABSENT-BINDING lookup={:?} bound_is_none={}"</span>,
 <a href=#1408 id=1408 data-nosnippet>1408</a>        absent_tid,
@@ -1479,10 +1479,10 @@
 <a href=#1479 id=1479 data-nosnippet>1479</a>/// `ostd::service::classify_call_failure`'s host tests and becomes a lane witness when the
 <a href=#1480 id=1480 data-nosnippet>1480</a>/// Phase-02 cross-tier fixture registers a service and is killed.
 <a href=#1481 id=1481 data-nosnippet>1481</a></span><span class="kw">fn </span>sdk_leg() {
-<a href=#1482 id=1482 data-nosnippet>1482</a>    <span class="kw">let </span><span class="kw-2">mut </span>record = [<span class="number">0u8</span>; api::service_binding::SERVICE_BINDING_LEN];
-<a href=#1483 id=1483 data-nosnippet>1483</a>    <span class="kw">let </span>raw = sys_lookup_service_bound(api::syscall::service::VFS, <span class="kw-2">&amp;mut </span>record);
+<a href=#1482 id=1482 data-nosnippet>1482</a>    <span class="kw">let </span><span class="kw-2">mut </span>record = [<span class="number">0u8</span>; abi::service_binding::SERVICE_BINDING_LEN];
+<a href=#1483 id=1483 data-nosnippet>1483</a>    <span class="kw">let </span>raw = sys_lookup_service_bound(abi::syscall::service::VFS, <span class="kw-2">&amp;mut </span>record);
 <a href=#1484 id=1484 data-nosnippet>1484</a>
-<a href=#1485 id=1485 data-nosnippet>1485</a>    <span class="kw">let </span><span class="kw-2">mut </span>vfs: ServiceRef&lt;{ api::syscall::service::VFS }&gt; = ServiceRef::new();
+<a href=#1485 id=1485 data-nosnippet>1485</a>    <span class="kw">let </span><span class="kw-2">mut </span>vfs: ServiceRef&lt;{ abi::syscall::service::VFS }&gt; = ServiceRef::new();
 <a href=#1486 id=1486 data-nosnippet>1486</a>    <span class="kw">let </span>sdk = vfs.binding();
 <a href=#1487 id=1487 data-nosnippet>1487</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#1488 id=1488 data-nosnippet>1488</a>        <span class="string">"[local-lifecycle] SDK-BINDING matches_raw={} tid={:?}"</span>,
@@ -1505,7 +1505,7 @@
 <a href=#1505 id=1505 data-nosnippet>1505</a>    <span class="kw">let </span>(request, label) = <span class="kw">match </span>cwd {
 <a href=#1506 id=1506 data-nosnippet>1506</a>        <span class="prelude-val">Some</span>(grant) =&gt; (
 <a href=#1507 id=1507 data-nosnippet>1507</a>            VfsRequest::ListAtPage {
-<a href=#1508 id=1508 data-nosnippet>1508</a>                dir: api::dir_handles::ViDirHandle(grant.id),
+<a href=#1508 id=1508 data-nosnippet>1508</a>                dir: abi::dir_handles::ViDirHandle(grant.id),
 <a href=#1509 id=1509 data-nosnippet>1509</a>                cursor: <span class="number">0</span>,
 <a href=#1510 id=1510 data-nosnippet>1510</a>            },
 <a href=#1511 id=1511 data-nosnippet>1511</a>            <span class="string">"ListAtPage(cwd)"</span>,
@@ -1538,7 +1538,7 @@
 <a href=#1538 id=1538 data-nosnippet>1538</a>
 <a href=#1539 id=1539 data-nosnippet>1539</a>    <span class="comment">// The binding the handle holds is still the live one, and the unresolved case says so
 <a href=#1540 id=1540 data-nosnippet>1540</a>    // without querying: an unbound handle is not live.
-<a href=#1541 id=1541 data-nosnippet>1541</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>absent = ServiceRef::&lt;{ api::syscall::service::AI }&gt;::new();
+<a href=#1541 id=1541 data-nosnippet>1541</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>absent = ServiceRef::&lt;{ abi::syscall::service::AI }&gt;::new();
 <a href=#1542 id=1542 data-nosnippet>1542</a>    <span class="kw">let </span>resolved_still_live = vfs.is_live();
 <a href=#1543 id=1543 data-nosnippet>1543</a>    <span class="kw">let </span>unresolved_live = absent.is_live();
 <a href=#1544 id=1544 data-nosnippet>1544</a>    println(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1573,7 +1573,7 @@
 <a href=#1573 id=1573 data-nosnippet>1573</a>    <span class="kw">type </span>Request = ();
 <a href=#1574 id=1574 data-nosnippet>1574</a>    <span class="kw">type </span>Response&lt;<span class="lifetime">'a</span>&gt; = ();
 <a href=#1575 id=1575 data-nosnippet>1575</a>
-<a href=#1576 id=1576 data-nosnippet>1576</a>    <span class="kw">const </span>SERVICE_ID: u16 = api::syscall::service::AI;
+<a href=#1576 id=1576 data-nosnippet>1576</a>    <span class="kw">const </span>SERVICE_ID: u16 = abi::syscall::service::AI;
 <a href=#1577 id=1577 data-nosnippet>1577</a>    <span class="kw">const </span>EXPORT_ID: u16 = <span class="number">0</span>;
 <a href=#1578 id=1578 data-nosnippet>1578</a>    <span class="kw">const </span>RETRY_CLASS: RetryClass = RetryClass::Idempotent;
 <a href=#1579 id=1579 data-nosnippet>1579</a>}

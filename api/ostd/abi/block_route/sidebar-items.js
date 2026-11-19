@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BLOCK_DEVICE_MMIO","BLOCK_DEVICE_PCI","BLOCK_ROUTE_RECORD_LEN","BLOCK_ROUTE_VERSION","FLAGS_KNOWN","FLAG_PROVIDER_LIVE","MAX_BLOCK_ROUTES"],"enum":["RouteRecordError"],"struct":["DeviceKey","ViBlockRouteV1"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["BenchReport","BenchmarkResult","PerformanceTargets"],"trait":["ViBenchmark","ViBenchmarkSuite"]};

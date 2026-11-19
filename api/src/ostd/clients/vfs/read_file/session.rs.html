@@ -2,10 +2,10 @@
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span><span class="kw">super</span>::wire::{vfs_err_from_code, MAX_READ_CHUNK};
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span><span class="kw">crate</span>::service::VfsRef;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>crate::{ViError, ViResult};
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::vfs_file_handles::ViVfsFileHandle;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>alloc::vec::Vec;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>wire::vfs_file_handles::ViVfsFileHandle;
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// The one-request seam every VFS client path goes through; tests replace it.
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::clients::vfs) <span class="kw">trait </span>VfsReadOps {

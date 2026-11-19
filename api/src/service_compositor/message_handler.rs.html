@@ -5,11 +5,11 @@
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">mod </span>view;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">mod </span>view_frame;
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">mod </span>window;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::display::Rect;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>api::services::proto::compositor::{OWNER_EXITED_LEN, OWNER_EXITED_RELAY};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::syscall::service;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::syscall::sys_grant_unregister;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>abi::syscall::service;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::syscall::sys_grant_unregister;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>wire::display::Rect;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>wire::proto::compositor::{OWNER_EXITED_LEN, OWNER_EXITED_RELAY};
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span><span class="kw">crate</span>::appearance::Appearance;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span><span class="kw">crate</span>::input_handler::InputState;
@@ -77,21 +77,21 @@
 <a href=#77 id=77 data-nosnippet>77</a>
 <a href=#78 id=78 data-nosnippet>78</a>    <span class="attr">#[allow(deprecated)] </span><span class="comment">// WRITE_PIXELS kept for legacy clients; new code uses ATTACH_GRANT
 <a href=#79 id=79 data-nosnippet>79</a>    </span><span class="kw">match </span>buf[<span class="number">0</span>] {
-<a href=#80 id=80 data-nosnippet>80</a>        api::display::compositor_ops::CREATE_SURFACE
-<a href=#81 id=81 data-nosnippet>81</a>        | api::display::compositor_ops::WRITE_PIXELS
-<a href=#82 id=82 data-nosnippet>82</a>        | api::display::compositor_ops::DAMAGE_SURFACE
-<a href=#83 id=83 data-nosnippet>83</a>        | api::display::compositor_ops::MOVE_SURFACE
-<a href=#84 id=84 data-nosnippet>84</a>        | api::display::compositor_ops::RAISE_SURFACE
-<a href=#85 id=85 data-nosnippet>85</a>        | api::display::compositor_ops::DESTROY_SURFACE =&gt; {
+<a href=#80 id=80 data-nosnippet>80</a>        wire::display::compositor_ops::CREATE_SURFACE
+<a href=#81 id=81 data-nosnippet>81</a>        | wire::display::compositor_ops::WRITE_PIXELS
+<a href=#82 id=82 data-nosnippet>82</a>        | wire::display::compositor_ops::DAMAGE_SURFACE
+<a href=#83 id=83 data-nosnippet>83</a>        | wire::display::compositor_ops::MOVE_SURFACE
+<a href=#84 id=84 data-nosnippet>84</a>        | wire::display::compositor_ops::RAISE_SURFACE
+<a href=#85 id=85 data-nosnippet>85</a>        | wire::display::compositor_ops::DESTROY_SURFACE =&gt; {
 <a href=#86 id=86 data-nosnippet>86</a>            surface::handle(buf, sender, input, table, frames, z_order, pending_dirty)
 <a href=#87 id=87 data-nosnippet>87</a>        }
-<a href=#88 id=88 data-nosnippet>88</a>        api::display::compositor_ops::SET_TITLE
-<a href=#89 id=89 data-nosnippet>89</a>        | api::display::compositor_ops::SET_ICON
-<a href=#90 id=90 data-nosnippet>90</a>        | api::display::compositor_ops::CONFIGURE_ACK
-<a href=#91 id=91 data-nosnippet>91</a>        | api::display::compositor_ops::CLOSE_RESPONSE
-<a href=#92 id=92 data-nosnippet>92</a>        | api::display::compositor_ops::MINIMIZE
-<a href=#93 id=93 data-nosnippet>93</a>        | api::display::compositor_ops::MAXIMIZE
-<a href=#94 id=94 data-nosnippet>94</a>        | api::display::compositor_ops::RESTORE =&gt; window::handle(
+<a href=#88 id=88 data-nosnippet>88</a>        wire::display::compositor_ops::SET_TITLE
+<a href=#89 id=89 data-nosnippet>89</a>        | wire::display::compositor_ops::SET_ICON
+<a href=#90 id=90 data-nosnippet>90</a>        | wire::display::compositor_ops::CONFIGURE_ACK
+<a href=#91 id=91 data-nosnippet>91</a>        | wire::display::compositor_ops::CLOSE_RESPONSE
+<a href=#92 id=92 data-nosnippet>92</a>        | wire::display::compositor_ops::MINIMIZE
+<a href=#93 id=93 data-nosnippet>93</a>        | wire::display::compositor_ops::MAXIMIZE
+<a href=#94 id=94 data-nosnippet>94</a>        | wire::display::compositor_ops::RESTORE =&gt; window::handle(
 <a href=#95 id=95 data-nosnippet>95</a>            buf,
 <a href=#96 id=96 data-nosnippet>96</a>            sender,
 <a href=#97 id=97 data-nosnippet>97</a>            MessageContext {
@@ -105,20 +105,20 @@
 <a href=#105 id=105 data-nosnippet>105</a>                appearance,
 <a href=#106 id=106 data-nosnippet>106</a>            },
 <a href=#107 id=107 data-nosnippet>107</a>        ),
-<a href=#108 id=108 data-nosnippet>108</a>        api::display::compositor_ops::ATTACH_GRANT
-<a href=#109 id=109 data-nosnippet>109</a>        | api::display::compositor_ops::DETACH_REPLACED_GRANT
-<a href=#110 id=110 data-nosnippet>110</a>        | api::display::compositor_ops::DAMAGE_NOTIFY
-<a href=#111 id=111 data-nosnippet>111</a>        | api::display::compositor_ops::DETACH_GRANT
-<a href=#112 id=112 data-nosnippet>112</a>        | api::display::compositor_ops::GET_SCREEN_SIZE =&gt; {
+<a href=#108 id=108 data-nosnippet>108</a>        wire::display::compositor_ops::ATTACH_GRANT
+<a href=#109 id=109 data-nosnippet>109</a>        | wire::display::compositor_ops::DETACH_REPLACED_GRANT
+<a href=#110 id=110 data-nosnippet>110</a>        | wire::display::compositor_ops::DAMAGE_NOTIFY
+<a href=#111 id=111 data-nosnippet>111</a>        | wire::display::compositor_ops::DETACH_GRANT
+<a href=#112 id=112 data-nosnippet>112</a>        | wire::display::compositor_ops::GET_SCREEN_SIZE =&gt; {
 <a href=#113 id=113 data-nosnippet>113</a>            grant::handle(buf, sender, table, frames, appearance, (screen_w, screen_h))
 <a href=#114 id=114 data-nosnippet>114</a>        }
-<a href=#115 id=115 data-nosnippet>115</a>        api::display::compositor_ops::CREATE_VIEW
-<a href=#116 id=116 data-nosnippet>116</a>        | api::display::compositor_ops::DESTROY_VIEW
-<a href=#117 id=117 data-nosnippet>117</a>        | api::display::compositor_ops::SELECT_VIEW
-<a href=#118 id=118 data-nosnippet>118</a>        | api::display::compositor_ops::GROUP_VIEW
-<a href=#119 id=119 data-nosnippet>119</a>        | api::display::compositor_ops::DETACH_VIEW
-<a href=#120 id=120 data-nosnippet>120</a>        | api::display::compositor_ops::SNAP_FRAME
-<a href=#121 id=121 data-nosnippet>121</a>        | api::display::compositor_ops::TOGGLE_FULLSCREEN =&gt; view::handle(
+<a href=#115 id=115 data-nosnippet>115</a>        wire::display::compositor_ops::CREATE_VIEW
+<a href=#116 id=116 data-nosnippet>116</a>        | wire::display::compositor_ops::DESTROY_VIEW
+<a href=#117 id=117 data-nosnippet>117</a>        | wire::display::compositor_ops::SELECT_VIEW
+<a href=#118 id=118 data-nosnippet>118</a>        | wire::display::compositor_ops::GROUP_VIEW
+<a href=#119 id=119 data-nosnippet>119</a>        | wire::display::compositor_ops::DETACH_VIEW
+<a href=#120 id=120 data-nosnippet>120</a>        | wire::display::compositor_ops::SNAP_FRAME
+<a href=#121 id=121 data-nosnippet>121</a>        | wire::display::compositor_ops::TOGGLE_FULLSCREEN =&gt; view::handle(
 <a href=#122 id=122 data-nosnippet>122</a>            buf,
 <a href=#123 id=123 data-nosnippet>123</a>            sender,
 <a href=#124 id=124 data-nosnippet>124</a>            MessageContext {
@@ -132,9 +132,9 @@
 <a href=#132 id=132 data-nosnippet>132</a>                appearance,
 <a href=#133 id=133 data-nosnippet>133</a>            },
 <a href=#134 id=134 data-nosnippet>134</a>        ),
-<a href=#135 id=135 data-nosnippet>135</a>        api::display::compositor_ops::SET_APPEARANCE =&gt; {
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>frame = <span class="kw-2">&amp;</span>buf[..api::display::SET_APPEARANCE_WIRE_SIZE];
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">let </span>changed = api::display::SetAppearance::decode(frame)
+<a href=#135 id=135 data-nosnippet>135</a>        wire::display::compositor_ops::SET_APPEARANCE =&gt; {
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>frame = <span class="kw-2">&amp;</span>buf[..wire::display::SET_APPEARANCE_WIRE_SIZE];
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">let </span>changed = wire::display::SetAppearance::decode(frame)
 <a href=#138 id=138 data-nosnippet>138</a>                .is_ok_and(|request| appearance.apply(<span class="kw-2">&amp;</span>request, sender, table));
 <a href=#139 id=139 data-nosnippet>139</a>            <span class="kw">if </span>changed {
 <a href=#140 id=140 data-nosnippet>140</a>                <span class="comment">// Every frame and panel shadow on screen changes colour, and

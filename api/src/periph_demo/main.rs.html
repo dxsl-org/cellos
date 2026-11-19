@@ -11,7 +11,7 @@
 <a href=#11 id=11 data-nosnippet>11</a><span class="attr">#[path = <span class="string">"bcm-gpio-gate.rs"</span>]
 <a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">mod </span>bcm_gpio_gate;
 <a href=#13 id=13 data-nosnippet>13</a>
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>api::declare_manifest;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>abi::declare_manifest;
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>driver_gpio::Pl061Gpio;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>driver_serial::Pl011Uart;
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>hal_gpio::{Edge, PinDir, ViGpio};
@@ -31,9 +31,9 @@
 <a href=#31 id=31 data-nosnippet>31</a><span class="kw">const </span>SELF_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/bin/periph-demo"</span>;
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">const </span>PINNED_WORKER_ARG: <span class="kw-2">&amp;</span>str = <span class="string">"--pinned-worker"</span>;
 <a href=#33 id=33 data-nosnippet>33</a><span class="doccomment">/// Priority of the pinned poll worker. The spawn contract bounds this by
-<a href=#34 id=34 data-nosnippet>34</a>/// `api::TaskPriority::RealTime`; a raw `200` was refused (silently, as
+<a href=#34 id=34 data-nosnippet>34</a>/// `abi::TaskPriority::RealTime`; a raw `200` was refused (silently, as
 <a href=#35 id=35 data-nosnippet>35</a>/// `spawn_pinned unavailable`) because the gate denies anything above that.
-<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">const </span>POLL_PRIORITY: u8 = api::TaskPriority::RealTime <span class="kw">as </span>u8;
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">const </span>POLL_PRIORITY: u8 = abi::TaskPriority::RealTime <span class="kw">as </span>u8;
 <a href=#37 id=37 data-nosnippet>37</a>
 <a href=#38 id=38 data-nosnippet>38</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#39 id=39 data-nosnippet>39</a>

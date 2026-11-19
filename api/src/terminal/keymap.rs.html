@@ -2,12 +2,12 @@
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="doccomment">//! Compositor/focus key events -&gt; normalized terminal session input.
 <a href=#3 id=3 data-nosnippet>3</a>//!
 <a href=#4 id=4 data-nosnippet>4</a>//! Key codes and modifier bits follow the frozen `cellos-vt1` namespace in
-<a href=#5 id=5 data-nosnippet>5</a>//! `api::services::session` (named keys at `0x110000+`, characters as their own
+<a href=#5 id=5 data-nosnippet>5</a>//! `wire::session` (named keys at `0x110000+`, characters as their own
 <a href=#6 id=6 data-nosnippet>6</a>//! code point). The input service turns them into bytes; this module never
 <a href=#7 id=7 data-nosnippet>7</a>//! produces escape sequences itself.
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>api::services::session::{encode_key, key_code, modifiers};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::input::{KeyEvent, KeyState, KeySym, Modifiers};
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>ostd::input::{KeyEvent, KeyState, KeySym, Modifiers};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>wire::session::{encode_key, key_code, modifiers};
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// One normalized input to submit to the session.
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -473,7 +473,7 @@
 <a href=#473 id=473 data-nosnippet>473</a>            payload[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>modifiers.to_le_bytes());
 <a href=#474 id=474 data-nosnippet>474</a>            payload[<span class="number">8</span>] = pressed;
 <a href=#475 id=475 data-nosnippet>475</a>            <span class="macro">assert!</span>(
-<a href=#476 id=476 data-nosnippet>476</a>                api::services::session::validate_event(<span class="number">1</span>, <span class="kw-2">&amp;</span>payload).is_ok(),
+<a href=#476 id=476 data-nosnippet>476</a>                wire::session::validate_event(<span class="number">1</span>, <span class="kw-2">&amp;</span>payload).is_ok(),
 <a href=#477 id=477 data-nosnippet>477</a>                <span class="string">"{sym:?}"
 <a href=#478 id=478 data-nosnippet>478</a>            </span>);
 <a href=#479 id=479 data-nosnippet>479</a>        }

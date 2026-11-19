@@ -5,7 +5,7 @@
     cap: u64,
     screen: (u32, u32),
     at: Option&lt;(i32, i32)&gt;,
-) -&gt; Option&lt;<a class="struct" href="../../api/services/display/struct.Rect.html" title="struct api::services::display::Rect">Rect</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Pull the shown window <code>cap</code> out of its stack into a window of its own,
+) -&gt; Option&lt;Rect&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Pull the shown window <code>cap</code> out of its stack into a window of its own,
 at <code>at</code> or else a little below and right of where it was, kept on the
 <code>screen</code>. The stack shows the tab beside it in its place. Returns the
 area to repaint.</p>

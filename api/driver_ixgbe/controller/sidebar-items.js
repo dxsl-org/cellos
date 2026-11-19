@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["LINK_POLLS","RESET_POLLS"],"struct":["IxgbeController"]};
+window.SIDEBAR_ITEMS = {"constant":["IXGBE_BAR0_LEN","IXGBE_MMIO_MIN","LINK_POLLS","RESET_POLLS"],"struct":["IxgbeController"]};

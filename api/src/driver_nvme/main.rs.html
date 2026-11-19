@@ -64,7 +64,7 @@
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">if </span>cached != <span class="number">0 </span>&amp;&amp; cached == sender_tid {
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#66 id=66 data-nosnippet>66</a>    }
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(api::syscall::service::VFS, sender_tid) {
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">if </span>ostd::service::sender_is_live_provider(abi::syscall::service::VFS, sender_tid) {
 <a href=#68 id=68 data-nosnippet>68</a>        VFS_TID.store(sender_tid, Ordering::Relaxed);
 <a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">return </span><span class="bool-val">true</span>;
 <a href=#70 id=70 data-nosnippet>70</a>    }
@@ -189,7 +189,7 @@
 <a href=#189 id=189 data-nosnippet>189</a><span class="comment">// ── Capability manifest ───────────────────────────────────────────────────────
 <a href=#190 id=190 data-nosnippet>190</a>// PcieDriverCap is granted by init via direct TCB write (not a manifest flag).
 <a href=#191 id=191 data-nosnippet>191</a>// This manifest declares NO privileged flags — init elevates the cell at spawn.
-<a href=#192 id=192 data-nosnippet>192</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#192 id=192 data-nosnippet>192</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#193 id=193 data-nosnippet>193</a>    block_io = <span class="bool-val">false</span>,
 <a href=#194 id=194 data-nosnippet>194</a>    network = <span class="bool-val">false</span>,
 <a href=#195 id=195 data-nosnippet>195</a>    spawn = <span class="bool-val">false</span>,

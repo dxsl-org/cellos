@@ -2,7 +2,7 @@
 App-side display helpers: <code>ViSurface</code> for Grant-backed compositor surfaces.</p>
 <h3 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h3>
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>ostd::display::{wait_for_compositor, ViSurface};
-<span class="kw">use </span>ostd::services::display::PixelFormat;
+<span class="kw">use </span>wire::display::PixelFormat;
 
 <span class="kw">let </span>comp_tid = wait_for_compositor();
 <span class="kw">let </span><span class="kw-2">mut </span>surface = ViSurface::create(comp_tid, <span class="number">640</span>, <span class="number">480</span>, PixelFormat::Bgra8888)<span class="question-mark">?</span>;

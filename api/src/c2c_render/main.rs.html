@@ -4,26 +4,26 @@
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">extern crate </span>alloc;
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="attr">#[cfg(test)]
-<a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>alloc::string::ToString;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>alloc::{format, string::String, vec, vec::Vec};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::dir_handles::ViDirHandle;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>api::vfs_file_handles::ViVfsFileHandle;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>app_c2c_render::{percentile, pixel_hash, Clock};
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>ostd::grant::GrantHandle;
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>ostd::ipc::IpcError;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>ostd::syscall::{
-<a href=#17 id=17 data-nosnippet>17</a>    sys_exit, sys_force_exit, sys_set_spawn_args, sys_spawn_from_path, sys_wait, sys_yield,
-<a href=#18 id=18 data-nosnippet>18</a>    SyscallResult,
-<a href=#19 id=19 data-nosnippet>19</a>};
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>render_core::{
-<a href=#21 id=21 data-nosnippet>21</a>    render_tile, Output, RenderConfig, RenderError, RenderStats, Request, Response, Scene, Tile,
-<a href=#22 id=22 data-nosnippet>22</a>    COPIED_TILE_MAX_BYTES,
-<a href=#23 id=23 data-nosnippet>23</a>};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>abi::dir_handles::ViDirHandle;
+<a href=#8 id=8 data-nosnippet>8</a><span class="attr">#[cfg(test)]
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>alloc::string::ToString;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>alloc::{format, string::String, vec, vec::Vec};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>app_c2c_render::{percentile, pixel_hash, Clock};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::grant::GrantHandle;
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>ostd::ipc::IpcError;
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>ostd::syscall::{
+<a href=#15 id=15 data-nosnippet>15</a>    sys_exit, sys_force_exit, sys_set_spawn_args, sys_spawn_from_path, sys_wait, sys_yield,
+<a href=#16 id=16 data-nosnippet>16</a>    SyscallResult,
+<a href=#17 id=17 data-nosnippet>17</a>};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>render_core::{
+<a href=#19 id=19 data-nosnippet>19</a>    render_tile, Output, RenderConfig, RenderError, RenderStats, Request, Response, Scene, Tile,
+<a href=#20 id=20 data-nosnippet>20</a>    COPIED_TILE_MAX_BYTES,
+<a href=#21 id=21 data-nosnippet>21</a>};
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>wire::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>wire::vfs_file_handles::ViVfsFileHandle;
 <a href=#24 id=24 data-nosnippet>24</a>
-<a href=#25 id=25 data-nosnippet>25</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
-<a href=#26 id=26 data-nosnippet>26</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#25 id=25 data-nosnippet>25</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>);
+<a href=#26 id=26 data-nosnippet>26</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#27 id=27 data-nosnippet>27</a>    Log,
 <a href=#28 id=28 data-nosnippet>28</a>    Send,
 <a href=#29 id=29 data-nosnippet>29</a>    Recv,
@@ -205,11 +205,11 @@
 <a href=#205 id=205 data-nosnippet>205</a>    }
 <a href=#206 id=206 data-nosnippet>206</a>
 <a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">fn </span>call(<span class="kw-2">&amp;</span><span class="self">self</span>, request: <span class="kw-2">&amp;</span>Request) -&gt; <span class="prelude-ty">Result</span>&lt;(Response, usize), String&gt; {
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span><span class="kw-2">mut </span>receive = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>send = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span><span class="kw-2">mut </span>receive = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#210 id=210 data-nosnippet>210</a>        <span class="comment">// Request admission and completion belong to the exact returned worker
 <a href=#211 id=211 data-nosnippet>211</a>        // TID and one kernel operation, never a global service or arbitrary recv.
-<a href=#212 id=212 data-nosnippet>212</a>        </span><span class="kw">let </span>encoded = api::ipc::encode(request, <span class="kw-2">&amp;mut </span>send)
+<a href=#212 id=212 data-nosnippet>212</a>        </span><span class="kw">let </span>encoded = wire::ipc::encode(request, <span class="kw-2">&amp;mut </span>send)
 <a href=#213 id=213 data-nosnippet>213</a>            .map_err(|<span class="kw">_</span>| String::from(<span class="string">"request exceeds IPC frame"</span>))<span class="question-mark">?</span>;
 <a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>request_bytes = encoded.len();
 <a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span>call = ostd::ipc::PendingCall::submit(<span class="self">self</span>.tid, encoded)
@@ -233,7 +233,7 @@
 <a href=#233 id=233 data-nosnippet>233</a>        }
 <a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span>raw = <span class="kw-2">&amp;</span>receive[..completion.len];
 <a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span>response =
-<a href=#236 id=236 data-nosnippet>236</a>            api::ipc::decode(raw).map_err(|<span class="kw">_</span>| String::from(<span class="string">"invalid worker response encoding"</span>))<span class="question-mark">?</span>;
+<a href=#236 id=236 data-nosnippet>236</a>            wire::ipc::decode(raw).map_err(|<span class="kw">_</span>| String::from(<span class="string">"invalid worker response encoding"</span>))<span class="question-mark">?</span>;
 <a href=#237 id=237 data-nosnippet>237</a>        <span class="prelude-val">Ok</span>((response, request_bytes + raw.len()))
 <a href=#238 id=238 data-nosnippet>238</a>    }
 <a href=#239 id=239 data-nosnippet>239</a>
@@ -326,8 +326,8 @@
 <a href=#326 id=326 data-nosnippet>326</a>    worker: Worker,
 <a href=#327 id=327 data-nosnippet>327</a>    grant: <span class="prelude-ty">Option</span>&lt;GrantHandle&lt;u8&gt;&gt;,
 <a href=#328 id=328 data-nosnippet>328</a>    pending: <span class="prelude-ty">Option</span>&lt;ActiveTile&gt;,
-<a href=#329 id=329 data-nosnippet>329</a>    send: [u8; api::ipc::IPC_BUF_SIZE],
-<a href=#330 id=330 data-nosnippet>330</a>    receive: [u8; api::ipc::IPC_BUF_SIZE],
+<a href=#329 id=329 data-nosnippet>329</a>    send: [u8; wire::ipc::IPC_BUF_SIZE],
+<a href=#330 id=330 data-nosnippet>330</a>    receive: [u8; wire::ipc::IPC_BUF_SIZE],
 <a href=#331 id=331 data-nosnippet>331</a>    completed: u32,
 <a href=#332 id=332 data-nosnippet>332</a>}
 <a href=#333 id=333 data-nosnippet>333</a>
@@ -355,7 +355,7 @@
 <a href=#355 id=355 data-nosnippet>355</a>            scene_hash,
 <a href=#356 id=356 data-nosnippet>356</a>            output,
 <a href=#357 id=357 data-nosnippet>357</a>        };
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>encoded = api::ipc::encode(<span class="kw-2">&amp;</span>request, <span class="kw-2">&amp;mut </span><span class="self">self</span>.send)
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>encoded = wire::ipc::encode(<span class="kw-2">&amp;</span>request, <span class="kw-2">&amp;mut </span><span class="self">self</span>.send)
 <a href=#359 id=359 data-nosnippet>359</a>            .map_err(|<span class="kw">_</span>| String::from(<span class="string">"request exceeds IPC frame"</span>))<span class="question-mark">?</span>;
 <a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>request_bytes = encoded.len();
 <a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>started_ns = clock.now_ns();
@@ -398,8 +398,8 @@
 <a href=#398 id=398 data-nosnippet>398</a>                worker,
 <a href=#399 id=399 data-nosnippet>399</a>                grant: <span class="prelude-val">None</span>,
 <a href=#400 id=400 data-nosnippet>400</a>                pending: <span class="prelude-val">None</span>,
-<a href=#401 id=401 data-nosnippet>401</a>                send: [<span class="number">0</span>; api::ipc::IPC_BUF_SIZE],
-<a href=#402 id=402 data-nosnippet>402</a>                receive: [<span class="number">0</span>; api::ipc::IPC_BUF_SIZE],
+<a href=#401 id=401 data-nosnippet>401</a>                send: [<span class="number">0</span>; wire::ipc::IPC_BUF_SIZE],
+<a href=#402 id=402 data-nosnippet>402</a>                receive: [<span class="number">0</span>; wire::ipc::IPC_BUF_SIZE],
 <a href=#403 id=403 data-nosnippet>403</a>                completed: <span class="number">0</span>,
 <a href=#404 id=404 data-nosnippet>404</a>            });
 <a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">let </span>slot = pool.slots.last_mut().unwrap();

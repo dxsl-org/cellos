@@ -12,9 +12,9 @@
 <a href=#12 id=12 data-nosnippet>12</a>//! it before touching the store. The client never pre-filters: this module is
 <a href=#13 id=13 data-nosnippet>13</a>//! the only decision point.
 <a href=#14 id=14 data-nosnippet>14</a>
-<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span>api::caller_identity::{CallerIdentity, CALLER_FLAG_CONFIG_WRITE};
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>api::ipc::ConfigRequest;
-<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>api::services::proto::config::ConfigError;
+<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span>abi::caller_identity::{CallerIdentity, CALLER_FLAG_CONFIG_WRITE};
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>wire::ipc::ConfigRequest;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>wire::proto::config::ConfigError;
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// Keys seeded by the service and never writable at runtime.
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>SYSTEM_KEYS: [<span class="kw-2">&amp;</span>str; <span class="number">2</span>] = [<span class="string">"PATH"</span>, <span class="string">"OS"</span>];
@@ -59,7 +59,7 @@
 <a href=#59 id=59 data-nosnippet>59</a><span class="attr">#[cfg(test)]
 <a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">mod </span>tests {
 <a href=#61 id=61 data-nosnippet>61</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">use </span>api::caller_identity::{CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE};
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">use </span>abi::caller_identity::{CALLER_FLAG_NET_RIGHTS_MASK, CALLER_FLAG_VFS_MUTATE};
 <a href=#63 id=63 data-nosnippet>63</a>
 <a href=#64 id=64 data-nosnippet>64</a>    <span class="kw">const fn </span>caller(flags: u32) -&gt; CallerIdentity {
 <a href=#65 id=65 data-nosnippet>65</a>        CallerIdentity {

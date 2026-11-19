@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["RESET_POLLS"],"struct":["I40eController"]};
+window.SIDEBAR_ITEMS = {"constant":["AQ_BUFFER","ARQ","ATQ","I40E_BAR0_LEN","I40E_MMIO_MIN","LAYOUT","RESET_POLLS"],"struct":["I40eController"]};

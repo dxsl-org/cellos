@@ -33,7 +33,7 @@
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">use </span><span class="kw">crate</span>::service;
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span><span class="kw">crate</span>::tls::{tls_close, tls_connect, tls_read, tls_write};
 <a href=#35 id=35 data-nosnippet>35</a><span class="kw">use </span>crate::{ViError, ViResult};
-<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>api::services::proto::tls::{CONNECT_FAILED, MAX_SEND};
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>wire::proto::tls::{CONNECT_FAILED, MAX_SEND};
 <a href=#37 id=37 data-nosnippet>37</a>
 <a href=#38 id=38 data-nosnippet>38</a><span class="doccomment">/// Bound write-side zero-progress retries; receive never retries EOF or errors.
 <a href=#39 id=39 data-nosnippet>39</a></span><span class="kw">const </span>WRITE_RETRY_BUDGET: u32 = <span class="number">100_000</span>;

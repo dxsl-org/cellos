@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! the duplicate-refusing `ElfSections` parser rather than
 <a href=#7 id=7 data-nosnippet>7</a>//! `ElfLoader::get_section` (first match wins, no duplicate check).
 <a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span><span class="kw">super</span>::elf_section::{ElfSections, SHT_NOBITS};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>api::cell_image::{is_valid_image_name, ImageIdentity, IMAGE_NAME_SECTION};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>abi::cell_image::{is_valid_image_name, ImageIdentity, IMAGE_NAME_SECTION};
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a><span class="doccomment">/// The identity recorded for an admitted image. `verified` is true only when
 <a href=#12 id=12 data-nosnippet>12</a>/// its signature verified under this kernel's anchor: the name is believed
@@ -114,7 +114,7 @@
 <a href=#114 id=114 data-nosnippet>114</a>    <span class="attr">#[test]
 <a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">fn </span>verified_image_carries_its_name_under_this_kernels_anchor() {
 <a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>signed = measured_identity(<span class="kw-2">&amp;</span>elf64(<span class="string">b"sshd"</span>, <span class="number">1</span>, <span class="number">1</span>), [<span class="number">5</span>; <span class="number">32</span>], <span class="bool-val">true</span>);
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if </span><span class="kw">crate</span>::signing::anchor_class() == api::cell_image::ANCHOR_UNSIGNED {
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if </span><span class="kw">crate</span>::signing::anchor_class() == abi::cell_image::ANCHOR_UNSIGNED {
 <a href=#118 id=118 data-nosnippet>118</a>            <span class="comment">// No anchor compiled in: nothing can verify, so nothing is named.
 <a href=#119 id=119 data-nosnippet>119</a>            </span><span class="macro">assert!</span>(!signed.is_signed());
 <a href=#120 id=120 data-nosnippet>120</a>        } <span class="kw">else </span>{

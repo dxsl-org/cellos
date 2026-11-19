@@ -5,11 +5,11 @@
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">extern crate </span>alloc;
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>api::syscall::service;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::io::println;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::ipc::IpcError;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>abi::syscall::service;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ostd::io::println;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::ipc::IpcError;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="comment">// 200ms per net-service request (system_ticks() runs at 100 Hz = 10ms per tick).
 <a href=#15 id=15 data-nosnippet>15</a>// Each call gets a fresh 20-tick budget covering admission and the reply.

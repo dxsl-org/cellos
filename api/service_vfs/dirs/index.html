@@ -7,7 +7,7 @@ what a handle permits is answered here.</p>
 <h3 id="why-a-cell-cannot-name-what-it-does-not-hold"><a class="doc-anchor" href="#why-a-cell-cannot-name-what-it-does-not-hold">§</a>Why a cell cannot name what it does not hold</h3>
 <p>A handle-addressed request carries a directory and one component. The
 component is checked as raw bytes before anything is joined to it
-(<code>api::dir_name</code>), so it cannot contain a separator or be <code>..</code>. The resolved
+(<code>wire::dir_name</code>), so it cannot contain a separator or be <code>..</code>. The resolved
 path is therefore always exactly one level below a directory the caller was
 given. There is no path outside the handle the caller can express, which is
 the difference between this and an access check.</p>

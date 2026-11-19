@@ -3,7 +3,7 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! Reports physical frames committed by the kernel frame allocator. This
 <a href=#4 id=4 data-nosnippet>4</a>//! includes the reserved kernel heap and is not a resident-set measurement.
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>api::benchmark::ViBenchmark;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>wire::benchmark::ViBenchmark;
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">pub struct </span>MemoryFootprintBench {
 <a href=#9 id=9 data-nosnippet>9</a>    measured_bytes: u64,
@@ -25,15 +25,15 @@
 <a href=#25 id=25 data-nosnippet>25</a>        <span class="string">"memory_footprint"
 <a href=#26 id=26 data-nosnippet>26</a>    </span>}
 <a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">fn </span>run_once(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; api::ViResult&lt;u64&gt; {
-<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">let </span>info = ostd::syscall::sys_mem_info().map_err(|<span class="kw">_</span>| api::ViError::IO)<span class="question-mark">?</span>;
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">fn </span>run_once(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; types::ViResult&lt;u64&gt; {
+<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">let </span>info = ostd::syscall::sys_mem_info().map_err(|<span class="kw">_</span>| types::ViError::IO)<span class="question-mark">?</span>;
 <a href=#30 id=30 data-nosnippet>30</a>        <span class="kw">if </span>info.total_frames != info.used_frames.saturating_add(info.free_frames) {
-<a href=#31 id=31 data-nosnippet>31</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(api::ViError::InvalidInput);
+<a href=#31 id=31 data-nosnippet>31</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(types::ViError::InvalidInput);
 <a href=#32 id=32 data-nosnippet>32</a>        }
 <a href=#33 id=33 data-nosnippet>33</a>        <span class="self">self</span>.measured_bytes = info
 <a href=#34 id=34 data-nosnippet>34</a>            .used_frames
 <a href=#35 id=35 data-nosnippet>35</a>            .checked_mul(info.page_size)
-<a href=#36 id=36 data-nosnippet>36</a>            .ok_or(api::ViError::InvalidInput)<span class="question-mark">?</span>;
+<a href=#36 id=36 data-nosnippet>36</a>            .ok_or(types::ViError::InvalidInput)<span class="question-mark">?</span>;
 <a href=#37 id=37 data-nosnippet>37</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.measured_bytes)
 <a href=#38 id=38 data-nosnippet>38</a>    }
 <a href=#39 id=39 data-nosnippet>39</a>}

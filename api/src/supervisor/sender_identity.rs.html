@@ -5,10 +5,10 @@
 <a href=#5 id=5 data-nosnippet>5</a>/// sender, and a measured image for that `(cell, generation)` signed as
 <a href=#6 id=6 data-nosnippet>6</a>/// `program`. A missing trailer or record is an unknown caller: refused.
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>caller_runs_program(
-<a href=#8 id=8 data-nosnippet>8</a>    caller: <span class="prelude-ty">Option</span>&lt;api::caller_identity::CallerIdentity&gt;,
+<a href=#8 id=8 data-nosnippet>8</a>    caller: <span class="prelude-ty">Option</span>&lt;abi::caller_identity::CallerIdentity&gt;,
 <a href=#9 id=9 data-nosnippet>9</a>    sender_tid: usize,
 <a href=#10 id=10 data-nosnippet>10</a>    program: <span class="kw-2">&amp;</span>str,
-<a href=#11 id=11 data-nosnippet>11</a>    resolve: <span class="kw">impl </span>Fn(u64, u64) -&gt; <span class="prelude-ty">Option</span>&lt;api::cell_image::CellImage&gt;,
+<a href=#11 id=11 data-nosnippet>11</a>    resolve: <span class="kw">impl </span>Fn(u64, u64) -&gt; <span class="prelude-ty">Option</span>&lt;abi::cell_image::CellImage&gt;,
 <a href=#12 id=12 data-nosnippet>12</a>) -&gt; bool {
 <a href=#13 id=13 data-nosnippet>13</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(caller) = caller <span class="kw">else </span>{
 <a href=#14 id=14 data-nosnippet>14</a>        <span class="kw">return </span><span class="bool-val">false</span>;
@@ -21,8 +21,8 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="attr">#[cfg(test)]
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">mod </span>tests {
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">use </span><span class="kw">super</span>::caller_runs_program;
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">use </span>api::caller_identity::CallerIdentity;
-<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">use </span>api::cell_image::{CellImage, ImageIdentity, ANCHOR_DEV};
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">use </span>abi::caller_identity::CallerIdentity;
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">use </span>abi::cell_image::{CellImage, ImageIdentity, ANCHOR_DEV};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">const </span>CELL: u64 = <span class="number">40</span>;
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">const </span>GENERATION: u64 = <span class="number">7</span>;

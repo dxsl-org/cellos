@@ -17,7 +17,7 @@
 <a href=#17 id=17 data-nosnippet>17</a>//! [`take_for_launch`] runs while the scheduler lock is held and produces the
 <a href=#18 id=18 data-nosnippet>18</a>//! complete record installed in the unpublished child before insertion.
 <a href=#19 id=19 data-nosnippet>19</a>
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>api::dir_handles::{DirHandleSet, InheritedDirHandles};
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>abi::dir_handles::{DirHandleSet, InheritedDirHandles};
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Record `set` as the handles `tid`'s next spawn should pass on.
 <a href=#23 id=23 data-nosnippet>23</a>///
@@ -72,7 +72,7 @@
 <a href=#72 id=72 data-nosnippet>72</a>
 <a href=#73 id=73 data-nosnippet>73</a><span class="doccomment">/// Returns `None` when `cell_id` names no live root-owned Cell generation.
 <a href=#74 id=74 data-nosnippet>74</a>/// Cell IDs are bounded reusable quota slots, never task-table indexes.
-<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub fn </span>attestation_for(cell_id: u64) -&gt; <span class="prelude-ty">Option</span>&lt;api::dir_attestation::ViDirHandleAttestation&gt; {
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub fn </span>attestation_for(cell_id: u64) -&gt; <span class="prelude-ty">Option</span>&lt;abi::dir_attestation::ViDirHandleAttestation&gt; {
 <a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">if </span>cell_id == <span class="number">0 </span>{
 <a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
 <a href=#78 id=78 data-nosnippet>78</a>    }
@@ -80,7 +80,7 @@
 <a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">let </span>sched = guard.as_ref()<span class="question-mark">?</span>;
 <a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">let </span>owner = sched.live_cell_owner_for_id(types::CellId(cell_id))<span class="question-mark">?</span>;
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">let </span>task = sched.tasks.get(<span class="kw-2">&amp;</span>(owner.root_tid <span class="kw">as </span>usize))<span class="question-mark">?</span>;
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="prelude-val">Some</span>(api::dir_attestation::ViDirHandleAttestation {
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="prelude-val">Some</span>(abi::dir_attestation::ViDirHandleAttestation {
 <a href=#84 id=84 data-nosnippet>84</a>        cell_id,
 <a href=#85 id=85 data-nosnippet>85</a>        generation: owner.generation,
 <a href=#86 id=86 data-nosnippet>86</a>        spawner_cell_id: task.inherited_dirs.spawner_cell_id,

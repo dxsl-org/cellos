@@ -23,7 +23,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">extern crate </span>alloc;
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="comment">// Manifest: requires HypervisorCap (allowlist bit 44).
-<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#27 id=27 data-nosnippet>27</a>    block_io = <span class="bool-val">false</span>,
 <a href=#28 id=28 data-nosnippet>28</a>    network = <span class="bool-val">false</span>,
 <a href=#29 id=29 data-nosnippet>29</a>    spawn = <span class="bool-val">false</span>,
@@ -33,7 +33,7 @@
 <a href=#33 id=33 data-nosnippet>33</a></span>);
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="comment">// Narrow syscall allowlist enforced by the kernel.
-<a href=#36 id=36 data-nosnippet>36</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#36 id=36 data-nosnippet>36</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#37 id=37 data-nosnippet>37</a>    <span class="comment">// IPC / service discovery
 <a href=#38 id=38 data-nosnippet>38</a>    </span>Send,
 <a href=#39 id=39 data-nosnippet>39</a>    TrySend,

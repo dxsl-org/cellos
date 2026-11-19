@@ -306,17 +306,17 @@
 <a href=#306 id=306 data-nosnippet>306</a>    <span class="doccomment">/// The arena could not hold the next chunk.
 <a href=#307 id=307 data-nosnippet>307</a>    </span>Allocation,
 <a href=#308 id=308 data-nosnippet>308</a>    <span class="doccomment">/// The stream failed (not an end of stream).
-<a href=#309 id=309 data-nosnippet>309</a>    </span>Read(api::cell_session::Status),
+<a href=#309 id=309 data-nosnippet>309</a>    </span>Read(abi::cell_session::Status),
 <a href=#310 id=310 data-nosnippet>310</a>}
 <a href=#311 id=311 data-nosnippet>311</a>
 <a href=#312 id=312 data-nosnippet>312</a><span class="doccomment">/// Read `read` to end of stream, keeping at most `bound` bytes. `read` returns the
 <a href=#313 id=313 data-nosnippet>313</a>/// number of bytes it placed in the buffer, or `Err(Status::Eof)` at the end.
 <a href=#314 id=314 data-nosnippet>314</a></span><span class="attr">#[cfg(any(test, not(feature = <span class="string">"shell_test"</span>)))]
 <a href=#315 id=315 data-nosnippet>315</a></span><span class="kw">pub fn </span>read_bounded(
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw-2">mut </span>read: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, api::cell_session::Status&gt;,
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw-2">mut </span>read: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;usize, abi::cell_session::Status&gt;,
 <a href=#317 id=317 data-nosnippet>317</a>    bound: usize,
 <a href=#318 id=318 data-nosnippet>318</a>) -&gt; <span class="prelude-ty">Result</span>&lt;alloc::vec::Vec&lt;u8&gt;, StdinStop&gt; {
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">use </span>api::cell_session::Status;
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">use </span>abi::cell_session::Status;
 <a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = alloc::vec::Vec::new();
 <a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">let </span><span class="kw-2">mut </span>chunk = [<span class="number">0u8</span>; <span class="number">512</span>];
 <a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">loop </span>{
@@ -339,7 +339,7 @@
 <a href=#339 id=339 data-nosnippet>339</a>/// failure still needs its one stderr line. A failed stdout makes the one-shot end with
 <a href=#340 id=340 data-nosnippet>340</a>/// 1 (DS0-4); a command that already failed has reported its own diagnostic.
 <a href=#341 id=341 data-nosnippet>341</a></span><span class="attr">#[cfg(any(test, not(feature = <span class="string">"shell_test"</span>)))]
-<a href=#342 id=342 data-nosnippet>342</a></span><span class="kw">pub fn </span>final_status(status: i32, stdout_failure: <span class="prelude-ty">Option</span>&lt;api::cell_session::Status&gt;) -&gt; (i32, bool) {
+<a href=#342 id=342 data-nosnippet>342</a></span><span class="kw">pub fn </span>final_status(status: i32, stdout_failure: <span class="prelude-ty">Option</span>&lt;abi::cell_session::Status&gt;) -&gt; (i32, bool) {
 <a href=#343 id=343 data-nosnippet>343</a>    <span class="kw">match </span>stdout_failure {
 <a href=#344 id=344 data-nosnippet>344</a>        <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; (OUTPUT_FAILED_STATUS, status == <span class="number">0</span>),
 <a href=#345 id=345 data-nosnippet>345</a>        <span class="prelude-val">None </span>=&gt; (status, <span class="bool-val">false</span>),
@@ -470,9 +470,9 @@
 <a href=#470 id=470 data-nosnippet>470</a></span><span class="kw">mod </span>tests {
 <a href=#471 id=471 data-nosnippet>471</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">use </span><span class="kw">crate</span>::ledger::{Surface, LEDGER};
-<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">use </span>alloc::collections::BTreeSet;
-<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">use </span>alloc::vec::Vec;
-<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">use </span>api::cell_session::Status;
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">use </span>abi::cell_session::Status;
+<a href=#474 id=474 data-nosnippet>474</a>    <span class="kw">use </span>alloc::collections::BTreeSet;
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">use </span>alloc::vec::Vec;
 <a href=#476 id=476 data-nosnippet>476</a>
 <a href=#477 id=477 data-nosnippet>477</a>    <span class="kw">const </span>STAGES: [<span class="kw-2">&amp;</span>str; <span class="number">6</span>] = [<span class="string">"select"</span>, <span class="string">"where"</span>, <span class="string">"sort-by"</span>, <span class="string">"take"</span>, <span class="string">"to"</span>, <span class="string">"from"</span>];
 <a href=#478 id=478 data-nosnippet>478</a>

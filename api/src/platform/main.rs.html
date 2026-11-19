@@ -42,7 +42,7 @@
 <a href=#42 id=42 data-nosnippet>42</a><span class="comment">// Syscall allowlist stays explicit: app_entry!'s generated set (app_syscall_set)
 <a href=#43 id=43 data-nosnippet>43</a>// lacks RequestMmio/RegisterPcieBar/RegisterPciDevice, which this cell needs.
 <a href=#44 id=44 data-nosnippet>44</a>// Must come before run_app! (run_app! does not emit VICELL_SYSCALLS).
-<a href=#45 id=45 data-nosnippet>45</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#46 id=46 data-nosnippet>46</a>    Log,
 <a href=#47 id=47 data-nosnippet>47</a>    RequestMmio,
 <a href=#48 id=48 data-nosnippet>48</a>    RegisterPcieBar,
@@ -51,7 +51,7 @@
 <a href=#51 id=51 data-nosnippet>51</a>];
 <a href=#52 id=52 data-nosnippet>52</a>
 <a href=#53 id=53 data-nosnippet>53</a><span class="comment">// No privileged manifest flags: PlatformCap is granted by path match, not here.
-<a href=#54 id=54 data-nosnippet>54</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#55 id=55 data-nosnippet>55</a>    block_io = <span class="bool-val">false</span>,
 <a href=#56 id=56 data-nosnippet>56</a>    network = <span class="bool-val">false</span>,
 <a href=#57 id=57 data-nosnippet>57</a>    spawn = <span class="bool-val">false</span>,

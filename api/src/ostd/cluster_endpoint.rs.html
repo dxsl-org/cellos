@@ -6,12 +6,12 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! metadata; Phase 04 deliberately exposes no transmit method while remote
 <a href=#7 id=7 data-nosnippet>7</a>//! dispatch remains disabled.
 <a href=#8 id=8 data-nosnippet>8</a>
-<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>api::ipc::IPC_BUF_SIZE;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>api::services::cluster::{CellNetId, ClusterId};
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>core::marker::PhantomData;
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>serde::{Deserialize, Serialize};
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
+<a href=#9 id=9 data-nosnippet>9</a></span><span class="kw">use </span>abi::service_binding::{ServiceBinding, SERVICE_BINDING_LEN};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>core::marker::PhantomData;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>serde::{Deserialize, Serialize};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>types::c2c::{RelativeDeadline, RetryClass, ServerEpoch};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>wire::cluster::{CellNetId, ClusterId};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>wire::ipc::IPC_BUF_SIZE;
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::call_outcome::{<span class="self">self</span>, CallOutcome};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span><span class="kw">crate</span>::ipc;

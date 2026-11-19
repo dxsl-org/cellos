@@ -38,7 +38,7 @@
 <a href=#38 id=38 data-nosnippet>38</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) bars: <span class="kw">crate</span>::bars_x86::BarRegions,
 <a href=#39 id=39 data-nosnippet>39</a>    <span class="doccomment">/// Set when a request stalled; the device is never touched again.
 <a href=#40 id=40 data-nosnippet>40</a>    </span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) poisoned: bool,
+<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) poisoned: <span class="kw">crate</span>::io_x86::Poison,
 <a href=#42 id=42 data-nosnippet>42</a>}
 <a href=#43 id=43 data-nosnippet>43</a>
 <a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// Classify a virtio-drivers request result by issue certainty.

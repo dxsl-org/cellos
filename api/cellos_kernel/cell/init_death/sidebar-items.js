@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HALT","NONE","RESET","RESET_CLAIMED"],"enum":["Action","Reason"],"fn":["act_if_pending","park","record","reset","stage_fault"],"static":["FAULT_PC","FAULT_ROOT","PENDING","RECORDED"],"struct":["InitDeath"]};

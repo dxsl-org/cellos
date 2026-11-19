@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>//! The store is one file under the KMS namespace (`/srv/cellos/kms`, which the VFS admits
 <a href=#5 id=5 data-nosnippet>5</a>//! only to the live KMS), seeded by the provisioner (D79-10). A lookup compares the
 <a href=#6 id=6 data-nosnippet>6</a>//! caller's configured host identifier, port, algorithm and complete key blob with it and
-<a href=#7 id=7 data-nosnippet>7</a>//! answers one [`api::ipc::ssh_trust`] code; the store's contents never leave the
+<a href=#7 id=7 data-nosnippet>7</a>//! answers one [`wire::ipc::ssh_trust`] code; the store's contents never leave the
 <a href=#8 id=8 data-nosnippet>8</a>//! service. Only an attested caller holding the outbound-connect right may ask. A query
 <a href=#9 id=9 data-nosnippet>9</a>//! is staged in [`query`] (opcodes 25-27, 29) because host and key do not fit one frame.
 <a href=#10 id=10 data-nosnippet>10</a>//!
@@ -26,14 +26,14 @@
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>alloc::vec::Vec;
 <a href=#28 id=28 data-nosnippet>28</a>
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>api::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT};
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>api::cell_session::ObjectRefV1 <span class="kw">as </span>Ref;
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>api::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
-<a href=#32 id=32 data-nosnippet>32</a><span class="kw">use </span>types::kms::{
-<a href=#33 id=33 data-nosnippet>33</a>    KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshAbortRequestPayload, SshChunkRequestPayload,
-<a href=#34 id=34 data-nosnippet>34</a>    SshImportCommitRequestPayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
-<a href=#35 id=35 data-nosnippet>35</a>    TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,
-<a href=#36 id=36 data-nosnippet>36</a>};
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>abi::caller_identity::{CallerIdentity, CALLER_FLAG_NET_CONNECT};
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>abi::cell_session::ObjectRefV1 <span class="kw">as </span>Ref;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>kms_codec::{
+<a href=#32 id=32 data-nosnippet>32</a>    KmsErrorCode, KmsOpcode, KmsTrustQueryKind, SshAbortRequestPayload, SshChunkRequestPayload,
+<a href=#33 id=33 data-nosnippet>33</a>    SshImportCommitRequestPayload, TrustChallengeCommitRequestPayload, TrustOutcomePayload,
+<a href=#34 id=34 data-nosnippet>34</a>    TrustQueryBeginRequestPayload, KMS_TRUST_ALGORITHM_MAX, KMS_TRUST_HOST_MAX, KMS_TRUST_KEY_MAX,
+<a href=#35 id=35 data-nosnippet>35</a>};
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">use </span>wire::ipc::{ssh_trust, Observation, SaveExpect, SaveOutcome};
 <a href=#37 id=37 data-nosnippet>37</a>
 <a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span><span class="kw">crate</span>::auth::attested_caller;
 <a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span><span class="kw">crate</span>::reply::SuccessPayload;

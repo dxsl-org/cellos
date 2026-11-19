@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use </span>alloc::vec::Vec;
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>api::services::vmm_session::{
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>wire::vmm_session::{
 <a href=#11 id=11 data-nosnippet>11</a>    abs_position, ABS_X, ABS_Y, BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE, EV_ABS,
 <a href=#12 id=12 data-nosnippet>12</a>    EV_KEY, EV_REL, REL_WHEEL,
 <a href=#13 id=13 data-nosnippet>13</a>};
@@ -98,14 +98,14 @@
 <a href=#98 id=98 data-nosnippet>98</a><span class="attr">#[cfg(test)]
 <a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">mod </span>tests {
 <a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">use </span>api::input::KeyEvent;
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">use </span>api::services::vmm_session::ABS_MAX;
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">use </span>wire::input::KeyEvent;
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">use </span>wire::vmm_session::ABS_MAX;
 <a href=#103 id=103 data-nosnippet>103</a>
 <a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">fn </span>key(scancode: u32, modifiers: Modifiers, state: KeyState) -&gt; InputEvent {
 <a href=#105 id=105 data-nosnippet>105</a>        InputEvent::Key(KeyEvent {
 <a href=#106 id=106 data-nosnippet>106</a>            timestamp_ticks: <span class="number">0</span>,
 <a href=#107 id=107 data-nosnippet>107</a>            scancode,
-<a href=#108 id=108 data-nosnippet>108</a>            keysym: api::input::KeySym::Printable,
+<a href=#108 id=108 data-nosnippet>108</a>            keysym: wire::input::KeySym::Printable,
 <a href=#109 id=109 data-nosnippet>109</a>            character: <span class="number">0</span>,
 <a href=#110 id=110 data-nosnippet>110</a>            modifiers,
 <a href=#111 id=111 data-nosnippet>111</a>            state,

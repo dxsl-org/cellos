@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//!
 <a href=#6 id=6 data-nosnippet>6</a>//! Drives a smoltcp TCP/IPv4 stack backed by the registered NIC Driver Cell.
 <a href=#7 id=7 data-nosnippet>7</a>//! Provides BSD-style socket IPC for consumer cells via typed postcard messages
-<a href=#8 id=8 data-nosnippet>8</a>//! (`api::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
+<a href=#8 id=8 data-nosnippet>8</a>//! (`wire::ipc::NetRequest`/`NetResponse`).  Legacy TLS raw opcodes (0x30–0x32)
 <a href=#9 id=9 data-nosnippet>9</a>//! from `ostd::tls` are handled by the raw fallback in `handlers`.
 <a href=#10 id=10 data-nosnippet>10</a>
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="attr">#[cfg(all(
@@ -35,10 +35,10 @@
 <a href=#35 id=35 data-nosnippet>35</a></span><span class="macro">ostd::declare_custom_heap!</span>(<span class="number">8 </span>* <span class="number">1024 </span>* <span class="number">1024</span>);
 <a href=#36 id=36 data-nosnippet>36</a>
 <a href=#37 id=37 data-nosnippet>37</a><span class="comment">// Declares network capability; the kernel grants NetworkCap at spawn.
-<a href=#38 id=38 data-nosnippet>38</a></span><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">true</span>, spawn = <span class="bool-val">false</span>);
+<a href=#38 id=38 data-nosnippet>38</a></span><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">true</span>, spawn = <span class="bool-val">false</span>);
 <a href=#39 id=39 data-nosnippet>39</a>
 <a href=#40 id=40 data-nosnippet>40</a><span class="comment">// Narrow syscall allowlist -- kernel enforces this at dispatch (Phase 27).
-<a href=#41 id=41 data-nosnippet>41</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#42 id=42 data-nosnippet>42</a>    Send,
 <a href=#43 id=43 data-nosnippet>43</a>    SendGather,
 <a href=#44 id=44 data-nosnippet>44</a>    Recv,

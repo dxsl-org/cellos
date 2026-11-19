@@ -8,7 +8,7 @@ libc.a (<code>third_party/mlibc/sysdeps/vicell/generic/startup.cpp</code>), whic
 up TLS, the Tcb and environ and then runs <code>.init_array</code> once (CP1
 cell-initial-stack-auxv, AX-6).</p>
 <p><strong>Exclusivity:</strong> a cell that depends on mlibc-shim MUST also enable the
-<code>mlibc</code> feature on <code>api</code> (<code>api = { features = ["mlibc"] }</code>).  Failing to
+<code>mlibc</code> feature on <code>posix-shim</code> (<code>posix-shim = { features = ["mlibc"] }</code>).  Failing to
 do so links BOTH posix.rs symbols AND mlibc symbols, which is a
 duplicate-symbol link error.</p>
 </div></details></section></div></main></body></html>

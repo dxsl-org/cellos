@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["APP_CHROME","APP_FILES","APP_OCEL","APP_TERMINAL"],"enum":["FileAction","MimeType"],"mod":["registry","types"],"struct":["AppCandidate","AssociationRegistry","LaunchIntent"]};

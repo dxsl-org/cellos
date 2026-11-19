@@ -20,9 +20,9 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::export_registry::{load_remote_exports, RegistrySource, RemoteExports};
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span><span class="kw">crate</span>::peer_config::{parse_peer_config_bytes, MAX_PEERS};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span><span class="kw">crate</span>::relay_config::{parse_relay_endpoint_bytes, RelayEndpoint};
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>api::cluster::{CellNetId, PeerTicket};
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::clients::vfs::VfsClient;
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::io::{print, println};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::clients::vfs::VfsClient;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::io::{print, println};
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>wire::cluster::{CellNetId, PeerTicket};
 <a href=#26 id=26 data-nosnippet>26</a>
 <a href=#27 id=27 data-nosnippet>27</a><span class="kw">const </span>CFG_PATH: <span class="kw-2">&amp;</span>str = <span class="string">"/etc/cellos/cluster.cfg"</span>;
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">const </span>CFG_READ_MAX_BYTES: usize = <span class="number">4 </span>* <span class="number">1024</span>;

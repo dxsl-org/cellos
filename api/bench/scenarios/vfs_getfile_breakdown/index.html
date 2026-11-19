@@ -4,7 +4,7 @@ by-reference direct call would skip? A direct call skips the whole IPC
 rendezvous — encoding the request, both <code>ecall</code>s, and both context switches —
 and runs the handler on the caller’s own thread. It does <strong>not</strong> skip the
 handler body, nor encoding and decoding the reply (the fast handler still
-ends in <code>api::ipc::encode</code>), nor resolving the caller’s identity.</p>
+ends in <code>wire::ipc::encode</code>), nor resolving the caller’s identity.</p>
 <p>So: <code>saving ≈ round_trip</code>, <code>total ≈ round_trip + handler_body</code>, and the
 fraction saved is <code>round_trip / (round_trip + handler_body)</code>.</p>
 <h2 id="why-the-peer-is-an-echo-and-not-the-real-vfs"><a class="doc-anchor" href="#why-the-peer-is-an-echo-and-not-the-real-vfs">§</a>Why the peer is an echo and not the real VFS</h2>

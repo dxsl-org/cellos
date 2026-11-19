@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">pub use </span><span class="self">self</span>::discovery::Discovery;
 <a href=#22 id=22 data-nosnippet>22</a>
 <a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span><span class="self">self</span>::router::Router;
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>api::block_route::ViBlockRouteV1;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>abi::block_route::ViBlockRouteV1;
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>ostd::prelude::Mutex;
 <a href=#26 id=26 data-nosnippet>26</a><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>ostd::syscall <span class="kw">as </span>sys;
@@ -165,7 +165,7 @@
 <a href=#165 id=165 data-nosnippet>165</a></span><span class="attr">#[cfg(target_os = <span class="string">"none"</span>)]
 <a href=#166 id=166 data-nosnippet>166</a></span><span class="kw">fn </span>wait_for_vfs_registration() {
 <a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">let </span>start = sys::sys_get_scheduler_ticks();
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">while </span>ostd::service::provider_tid(api::syscall::service::VFS).is_none() {
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="kw">while </span>ostd::service::provider_tid(abi::syscall::service::VFS).is_none() {
 <a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>waited = <span class="kw">match </span>(start, sys::sys_get_scheduler_ticks()) {
 <a href=#170 id=170 data-nosnippet>170</a>            (<span class="prelude-val">Some</span>(start), <span class="prelude-val">Some</span>(now)) =&gt; now.saturating_sub(start),
 <a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">_ </span>=&gt; u64::MAX,

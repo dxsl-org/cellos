@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_REPLY_SIZE","MAX_RUN_SECTORS","OP_FLUSH","OP_READ","OP_READ_RUN","OP_WRITE","REPLY_SIZE","SECTOR_SIZE"],"enum":["BlockOutcome"],"fn":["serve_read_run"],"struct":["ReadRunRequest"]};

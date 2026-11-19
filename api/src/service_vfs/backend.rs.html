@@ -11,7 +11,7 @@
 <a href=#11 id=11 data-nosnippet>11</a>//! RamFS mutates its tree (FAT uses fatfs interior mutability and ignores it).
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">use </span>alloc::vec::Vec;
-<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>api::ipc::vfs_dir_page::{push_entry, EntryKind};
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>wire::ipc::vfs_dir_page::{push_entry, EntryKind};
 <a href=#15 id=15 data-nosnippet>15</a>
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span><span class="kw">crate</span>::fs_error::FsError;
 <a href=#17 id=17 data-nosnippet>17</a>
@@ -23,7 +23,7 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// One page written by [`FsBackend::list_page`].
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 <a href=#25 id=25 data-nosnippet>25</a></span><span class="kw">pub struct </span>ListPage {
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Bytes of packed `api::ipc::vfs_dir_page` entries written to `out`.
+<a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Bytes of packed `wire::ipc::vfs_dir_page` entries written to `out`.
 <a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub </span>written: usize,
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// Cursor of the first entry that did not fit; `None` when this page ends
 <a href=#29 id=29 data-nosnippet>29</a>    /// the listing.
@@ -169,7 +169,7 @@
 <a href=#169 id=169 data-nosnippet>169</a>
 <a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Exact identity of `path` (absence is `Observation::Absent`); `Ok(None)`
 <a href=#171 id=171 data-nosnippet>171</a>    /// when the backend can name no identity for it.
-<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;api::ipc::Observation&gt;, FsError&gt; {
+<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;wire::ipc::Observation&gt;, FsError&gt; {
 <a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">let _ </span>= path;
 <a href=#174 id=174 data-nosnippet>174</a>        <span class="prelude-val">Err</span>(FsError::Unsupported)
 <a href=#175 id=175 data-nosnippet>175</a>    }
@@ -194,10 +194,10 @@
 <a href=#194 id=194 data-nosnippet>194</a>        stage: <span class="kw-2">&amp;</span>str,
 <a href=#195 id=195 data-nosnippet>195</a>        sealed: (u64, u64),
 <a href=#196 id=196 data-nosnippet>196</a>        dst: <span class="kw-2">&amp;</span>str,
-<a href=#197 id=197 data-nosnippet>197</a>        expect: api::ipc::SaveExpect,
-<a href=#198 id=198 data-nosnippet>198</a>    ) -&gt; api::ipc::SaveOutcome {
+<a href=#197 id=197 data-nosnippet>197</a>        expect: wire::ipc::SaveExpect,
+<a href=#198 id=198 data-nosnippet>198</a>    ) -&gt; wire::ipc::SaveOutcome {
 <a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">let _ </span>= (stage, sealed, dst, expect);
-<a href=#200 id=200 data-nosnippet>200</a>        api::ipc::SaveOutcome::NotPublished(api::ipc::save_refusal::REFUSED)
+<a href=#200 id=200 data-nosnippet>200</a>        wire::ipc::SaveOutcome::NotPublished(wire::ipc::save_refusal::REFUSED)
 <a href=#201 id=201 data-nosnippet>201</a>    }
 <a href=#202 id=202 data-nosnippet>202</a>}
 </code></pre></div></section></main></body></html>

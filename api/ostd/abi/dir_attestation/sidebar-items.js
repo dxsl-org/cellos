@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DIR_ATTESTATION_LEN","DIR_ATTESTATION_VERSION"],"struct":["ViDirHandleAttestation"]};

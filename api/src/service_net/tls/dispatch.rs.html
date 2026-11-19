@@ -16,16 +16,16 @@
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>alloc::collections::{BTreeMap, VecDeque};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>alloc::string::String;
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>alloc::vec::Vec;
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>api::services::proto::tls;
-<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>core::future::Future;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>core::ops::Bound::{Excluded, Unbounded};
-<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>core::pin::Pin;
-<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>core::task::{Context, Poll, Waker};
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>ostd::syscall::{sys_try_send, SyscallResult};
-<a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>smoltcp::{
-<a href=#26 id=26 data-nosnippet>26</a>    iface::{Interface, SocketHandle, SocketSet},
-<a href=#27 id=27 data-nosnippet>27</a>    socket::tcp,
-<a href=#28 id=28 data-nosnippet>28</a>};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>core::future::Future;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span>core::ops::Bound::{Excluded, Unbounded};
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>core::pin::Pin;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">use </span>core::task::{Context, Poll, Waker};
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">use </span>ostd::syscall::{sys_try_send, SyscallResult};
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">use </span>smoltcp::{
+<a href=#25 id=25 data-nosnippet>25</a>    iface::{Interface, SocketHandle, SocketSet},
+<a href=#26 id=26 data-nosnippet>26</a>    socket::tcp,
+<a href=#27 id=27 data-nosnippet>27</a>};
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>wire::proto::tls;
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="kw">const </span>TCP_TIMEOUT: u64 = <span class="number">150_000_000</span>; <span class="comment">// 15 seconds (sys_get_time: 10 MHz)
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">const </span>TLS_TIMEOUT: u64 = <span class="number">300_000_000</span>; <span class="comment">// 30 seconds for one TLS operation

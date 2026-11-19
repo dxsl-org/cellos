@@ -1,231 +1,523 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/loader/va_alloc.rs`."><title>va_alloc.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cellos_kernel/loader/</div>va_alloc.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Virtual address allocator for cell images.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/loader/va_alloc.rs`."><title>va_alloc.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cellos_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">cellos_kernel/loader/</div>va_alloc.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Virtual address allocators: cell image slots and the user-stack arena.
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! Assigns each cell image one aligned VA slot within the cell VA region
 <a href=#4 id=4 data-nosnippet>4</a>//! [CELL_VA_START, CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE): a PIE takes
 <a href=#5 id=5 data-nosnippet>5</a>//! any free slot (`alloc_cell_va`); a fixed-VA image claims the one slot it is
 <a href=#6 id=6 data-nosnippet>6</a>//! linked into (`reserve_cell_va`). Every PT_LOAD must stay inside the slot
-<a href=#7 id=7 data-nosnippet>7</a>//! its spawn owns (see `loader::elf::image_va`).
-<a href=#8 id=8 data-nosnippet>8</a>//!
-<a href=#9 id=9 data-nosnippet>9</a>//! This region lives entirely below the SV39 user-half boundary (256 GiB), so
-<a href=#10 id=10 data-nosnippet>10</a>//! the `USER_VADDR_MAX` guard is never triggered by any allocated slot.
-<a href=#11 id=11 data-nosnippet>11</a>//!
-<a href=#12 id=12 data-nosnippet>12</a>//! # Design
-<a href=#13 id=13 data-nosnippet>13</a>//! Simple two-level allocator: a bump pointer for never-allocated slots, and a
-<a href=#14 id=14 data-nosnippet>14</a>//! free list (atomic bitset) for slots returned by `free_cell_va`.  Allocations
-<a href=#15 id=15 data-nosnippet>15</a>//! are O(n_freed) in the worst case, O(1) when the free list is empty.
-<a href=#16 id=16 data-nosnippet>16</a>
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="comment">// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
-<a href=#18 id=18 data-nosnippet>18</a>// via the critical-section impl hal/arch/riscv registers.
-<a href=#19 id=19 data-nosnippet>19</a></span><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">use </span>core::sync::atomic::AtomicU64;
-<a href=#21 id=21 data-nosnippet>21</a><span class="kw">use </span>core::sync::atomic::Ordering;
-<a href=#22 id=22 data-nosnippet>22</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">use </span>portable_atomic::AtomicU64;
-<a href=#24 id=24 data-nosnippet>24</a>
-<a href=#25 id=25 data-nosnippet>25</a><span class="attr">#[cfg(all(feature = <span class="string">"large-cell-va"</span>, target_pointer_width = <span class="string">"32"</span>))]
-<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">compile_error!</span>(<span class="string">"large-cell-va requires a 64-bit paged target"</span>);
-<a href=#27 id=27 data-nosnippet>27</a><span class="attr">#[cfg(all(feature = <span class="string">"large-cell-va"</span>, feature = <span class="string">"cell-scale-experiment"</span>))]
-<a href=#28 id=28 data-nosnippet>28</a></span><span class="macro">compile_error!</span>(
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="string">"large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half"
-<a href=#30 id=30 data-nosnippet>30</a></span>);
-<a href=#31 id=31 data-nosnippet>31</a>
-<a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Cell VA region start — 64 GiB (0x10_0000_0000).
-<a href=#33 id=33 data-nosnippet>33</a>///
-<a href=#34 id=34 data-nosnippet>34</a>/// Must lie above ALL identity-mapped regions in the SAS, avoiding collision
-<a href=#35 id=35 data-nosnippet>35</a>/// when physical RAM extends to &gt;= 4 GiB (e.g. 0x1_0000_0000..0x1_8000_0000):
-<a href=#36 id=36 data-nosnippet>36</a>///   - QEMU virt RISC-V: UART/VirtIO MMIO at 0x1000_0000–0x1001_0000
-<a href=#37 id=37 data-nosnippet>37</a>///   - PCIe ECAM at 0x3000_0000 (1 MiB); VirtIO BAR below 0x8000_0000
-<a href=#38 id=38 data-nosnippet>38</a>///   - RAM identity map: supports physical configurations up to 48 GiB
-<a href=#39 id=39 data-nosnippet>39</a>///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
-<a href=#40 id=40 data-nosnippet>40</a>///     64 GiB clears all of the above with room to spare and remains well inside
-<a href=#41 id=41 data-nosnippet>41</a>///     the SV39 user-half (256 GiB = 0x40_0000_0000).
-<a href=#42 id=42 data-nosnippet>42</a>///
-<a href=#43 id=43 data-nosnippet>43</a>/// RISC-V medany: even the 256 MiB desktop slot stays within ±2 GiB.
-<a href=#44 id=44 data-nosnippet>44</a>///
-<a href=#45 id=45 data-nosnippet>45</a>/// RV32 Nano boots with SATP=0 (bare physical, no paging — see specs/04), so
-<a href=#46 id=46 data-nosnippet>46</a>/// PIE cells never occur there and `alloc_cell_va` is never actually called;
-<a href=#47 id=47 data-nosnippet>47</a>/// this constant only needs to type-check as a 32-bit `usize` on that target.
-<a href=#48 id=48 data-nosnippet>48</a></span><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
-<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_START: usize = <span class="number">0x10_0000_0000</span>;
-<a href=#50 id=50 data-nosnippet>50</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
-<a href=#51 id=51 data-nosnippet>51</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_START: usize = <span class="number">0x2000_0000</span>;
-<a href=#52 id=52 data-nosnippet>52</a>
-<a href=#53 id=53 data-nosnippet>53</a><span class="doccomment">/// Embedded keeps the historical 32 MiB spacing. Desktop images opt in to a
-<a href=#54 id=54 data-nosnippet>54</a>/// 256 MiB slot, sufficient for a 128 MiB static arena plus code and data.
-<a href=#55 id=55 data-nosnippet>55</a></span><span class="attr">#[cfg(not(feature = <span class="string">"large-cell-va"</span>))]
-<a href=#56 id=56 data-nosnippet>56</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_STRIDE: usize = <span class="number">32 </span>* <span class="number">1024 </span>* <span class="number">1024</span>;
-<a href=#57 id=57 data-nosnippet>57</a><span class="attr">#[cfg(feature = <span class="string">"large-cell-va"</span>)]
-<a href=#58 id=58 data-nosnippet>58</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_STRIDE: usize = <span class="number">256 </span>* <span class="number">1024 </span>* <span class="number">1024</span>;
-<a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a><span class="doccomment">/// Maximum simultaneous PIE cell slots: normally 512 (16 GiB embedded or
-<a href=#61 id=61 data-nosnippet>61</a>/// 128 GiB desktop). Both regions, starting at 64 GiB, fit SV39's user half.
-<a href=#62 id=62 data-nosnippet>62</a>///
-<a href=#63 id=63 data-nosnippet>63</a>/// `cell-scale-experiment` raises this to 4096 slots (4096 × 32 MiB = 128 GiB of
-<a href=#64 id=64 data-nosnippet>64</a>/// VA, still inside the user half) so the D5 scale measurement measures memory
-<a href=#65 id=65 data-nosnippet>65</a>/// rather than this constant. See `memory::cell_quota::MAX_CELLS`.
-<a href=#66 id=66 data-nosnippet>66</a></span><span class="attr">#[cfg(not(feature = <span class="string">"cell-scale-experiment"</span>))]
-<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">const </span>MAX_SLOTS: usize = <span class="number">512</span>;
-<a href=#68 id=68 data-nosnippet>68</a><span class="attr">#[cfg(feature = <span class="string">"cell-scale-experiment"</span>)]
-<a href=#69 id=69 data-nosnippet>69</a></span><span class="kw">const </span>MAX_SLOTS: usize = <span class="number">4096</span>;
-<a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a><span class="attr">#[cfg(target_pointer_width = <span class="string">"64"</span>)]
-<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE &lt;= <span class="number">0x40_0000_0000</span>);
-<a href=#73 id=73 data-nosnippet>73</a>
-<a href=#74 id=74 data-nosnippet>74</a><span class="doccomment">/// Exclusive end of a valid reservation, shared by ELF admission and release.
-<a href=#75 id=75 data-nosnippet>75</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>slot_end(base: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span>offset = base.checked_sub(CELL_VA_START)<span class="question-mark">?</span>;
-<a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">if </span>!offset.is_multiple_of(CELL_VA_STRIDE) || offset / CELL_VA_STRIDE &gt;= MAX_SLOTS {
-<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#79 id=79 data-nosnippet>79</a>    }
-<a href=#80 id=80 data-nosnippet>80</a>    base.checked_add(CELL_VA_STRIDE)
-<a href=#81 id=81 data-nosnippet>81</a>}
-<a href=#82 id=82 data-nosnippet>82</a>
-<a href=#83 id=83 data-nosnippet>83</a><span class="doccomment">/// Base of the slot containing `va`, or `None` outside the cell VA region.
-<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>slot_containing(va: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>index = va.checked_sub(CELL_VA_START)<span class="question-mark">? </span>/ CELL_VA_STRIDE;
-<a href=#86 id=86 data-nosnippet>86</a>    (index &lt; MAX_SLOTS).then(|| CELL_VA_START + index * CELL_VA_STRIDE)
-<a href=#87 id=87 data-nosnippet>87</a>}
-<a href=#88 id=88 data-nosnippet>88</a>
-<a href=#89 id=89 data-nosnippet>89</a><span class="doccomment">/// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
-<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">const </span>BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(<span class="number">64</span>);
-<a href=#91 id=91 data-nosnippet>91</a>
-<a href=#92 id=92 data-nosnippet>92</a><span class="doccomment">/// Slot ownership. Invariant: a slot is owned by exactly one spawn iff its
-<a href=#93 id=93 data-nosnippet>93</a>/// index is below `bump` and its `free` bit is clear; every `free` bit lies
-<a href=#94 id=94 data-nosnippet>94</a>/// below `bump`.
-<a href=#95 id=95 data-nosnippet>95</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>SlotAllocator {
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="doccomment">/// The first slot that has NEVER been handed out.
-<a href=#97 id=97 data-nosnippet>97</a>    </span>bump: core::sync::atomic::AtomicUsize,
-<a href=#98 id=98 data-nosnippet>98</a>    <span class="doccomment">/// Bit N = 1 means slot N is available for reuse. Each repeat of the inline
-<a href=#99 id=99 data-nosnippet>99</a>    /// `const` block is a distinct AtomicU64 (an inline const sidesteps
-<a href=#100 id=100 data-nosnippet>100</a>    /// `clippy::declare_interior_mutable_const` without changing semantics).
-<a href=#101 id=101 data-nosnippet>101</a>    </span>free: [AtomicU64; BITMAP_WORDS],
-<a href=#102 id=102 data-nosnippet>102</a>}
-<a href=#103 id=103 data-nosnippet>103</a>
-<a href=#104 id=104 data-nosnippet>104</a><span class="kw">static </span>SLOTS: SlotAllocator = SlotAllocator::new();
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a><span class="kw">impl </span>SlotAllocator {
-<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>new() -&gt; <span class="self">Self </span>{
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="self">Self </span>{
-<a href=#109 id=109 data-nosnippet>109</a>            bump: core::sync::atomic::AtomicUsize::new(<span class="number">0</span>),
-<a href=#110 id=110 data-nosnippet>110</a>            free: [<span class="kw">const </span>{ AtomicU64::new(<span class="number">0</span>) }; BITMAP_WORDS],
-<a href=#111 id=111 data-nosnippet>111</a>        }
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>alloc(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="comment">// 1. Try the free list first.
-<a href=#116 id=116 data-nosnippet>116</a>        </span><span class="kw">for </span>(word_idx, word) <span class="kw">in </span><span class="self">self</span>.free.iter().enumerate() {
-<a href=#117 id=117 data-nosnippet>117</a>            <span class="kw">let </span><span class="kw-2">mut </span>val = word.load(Ordering::Relaxed);
-<a href=#118 id=118 data-nosnippet>118</a>            <span class="kw">while </span>val != <span class="number">0 </span>{
-<a href=#119 id=119 data-nosnippet>119</a>                <span class="kw">let </span>bit = val.trailing_zeros() <span class="kw">as </span>usize;
-<a href=#120 id=120 data-nosnippet>120</a>                <span class="kw">let </span>slot = word_idx * <span class="number">64 </span>+ bit;
-<a href=#121 id=121 data-nosnippet>121</a>                <span class="kw">if </span>slot &gt;= MAX_SLOTS {
-<a href=#122 id=122 data-nosnippet>122</a>                    <span class="kw">break</span>;
-<a href=#123 id=123 data-nosnippet>123</a>                }
-<a href=#124 id=124 data-nosnippet>124</a>                <span class="kw">let </span>mask = <span class="number">1u64 </span>&lt;&lt; bit;
-<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">match </span>word.compare_exchange_weak(
-<a href=#126 id=126 data-nosnippet>126</a>                    val,
-<a href=#127 id=127 data-nosnippet>127</a>                    val &amp; !mask,
-<a href=#128 id=128 data-nosnippet>128</a>                    Ordering::AcqRel,
-<a href=#129 id=129 data-nosnippet>129</a>                    Ordering::Relaxed,
-<a href=#130 id=130 data-nosnippet>130</a>                ) {
-<a href=#131 id=131 data-nosnippet>131</a>                    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Some</span>(CELL_VA_START + slot * CELL_VA_STRIDE),
-<a href=#132 id=132 data-nosnippet>132</a>                    <span class="prelude-val">Err</span>(cur) =&gt; val = cur, <span class="comment">// retry with updated value
-<a href=#133 id=133 data-nosnippet>133</a>                </span>}
-<a href=#134 id=134 data-nosnippet>134</a>            }
-<a href=#135 id=135 data-nosnippet>135</a>        }
+<a href=#7 id=7 data-nosnippet>7</a>//! its spawn owns (see `loader::elf::image_va`). A fixed-VA image links into
+<a href=#8 id=8 data-nosnippet>8</a>//! one of the lowest [`FIXED_VA_SLOTS`] slots: randomised order hands those to
+<a href=#9 id=9 data-nosnippet>9</a>//! a PIE only once every other slot is held.
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! Every user stack takes one `STACK_VA_STRIDE` slot of the stack arena right
+<a href=#12 id=12 data-nosnippet>12</a>//! above the cell region (`alloc_stack_va`), so it is never mapped at its
+<a href=#13 id=13 data-nosnippet>13</a>//! physical address; the slot returns (`free_stack_va`) only once its frames'
+<a href=#14 id=14 data-nosnippet>14</a>//! translations are gone on every hart.
+<a href=#15 id=15 data-nosnippet>15</a>//!
+<a href=#16 id=16 data-nosnippet>16</a>//! Both regions live entirely below the SV39 user-half boundary (256 GiB), so
+<a href=#17 id=17 data-nosnippet>17</a>//! the `USER_VADDR_MAX` guard is never triggered by any allocated slot.
+<a href=#18 id=18 data-nosnippet>18</a>//!
+<a href=#19 id=19 data-nosnippet>19</a>//! # Design
+<a href=#20 id=20 data-nosnippet>20</a>//! Each region is one atomic ownership bitmap: bit N is set iff slot N has a
+<a href=#21 id=21 data-nosnippet>21</a>//! holder. `alloc` probes from a start index ([`SlotOrder`]) for the first clear
+<a href=#22 id=22 data-nosnippet>22</a>//! bit, wrapping once through the region, and sets it with one compare-exchange;
+<a href=#23 id=23 data-nosnippet>23</a>//! `reserve` sets one named bit; `free` clears it. Slots are all one size, so
+<a href=#24 id=24 data-nosnippet>24</a>//! any free slot fits any request: the region is exhausted only when every slot
+<a href=#25 id=25 data-nosnippet>25</a>//! is held, whatever the start index. A probe reads at most `slots / 64 + 1`
+<a href=#26 id=26 data-nosnippet>26</a>//! bitmap words, one more for a region with a fixed-VA band (10 for the 512
+<a href=#27 id=27 data-nosnippet>27</a>//! cell slots, 513 for the 32 768 stack slots).
+<a href=#28 id=28 data-nosnippet>28</a>//!
+<a href=#29 id=29 data-nosnippet>29</a>//! The start index is random per allocation when the kernel has a hardware
+<a href=#30 id=30 data-nosnippet>30</a>//! entropy source at boot (x86 RDSEED/RDRAND), so a cell's image and stack
+<a href=#31 id=31 data-nosnippet>31</a>//! addresses differ between boots; it is then drawn above the region's
+<a href=#32 id=32 data-nosnippet>32</a>//! fixed-VA band ([`Region::fixed`]), and the band is probed last. Without one
+<a href=#33 id=33 data-nosnippet>33</a>//! (RV64, AArch64, an x86 CPU without RDRAND) every probe starts at slot 0:
+<a href=#34 id=34 data-nosnippet>34</a>//! lowest free slot first, band included, the historical order.
+<a href=#35 id=35 data-nosnippet>35</a>//!
+<a href=#36 id=36 data-nosnippet>36</a>//! # Identity-mapped RAM
+<a href=#37 id=37 data-nosnippet>37</a>//! Grants and SHM pages keep their physical address as their VA, and RV64 and
+<a href=#38 id=38 data-nosnippet>38</a>//! AArch64 also map all RAM at VA == PA, so RAM must end below the cell slots:
+<a href=#39 id=39 data-nosnippet>39</a>//! the frame allocator leaves RAM at or above [`IDENTITY_RAM_END`] unused
+<a href=#40 id=40 data-nosnippet>40</a>//! (logged once at boot), and the boot maps assert it
+<a href=#41 id=41 data-nosnippet>41</a>//! ([`assert_identity_ram_below_cells`]). MMIO is refused window by window
+<a href=#42 id=42 data-nosnippet>42</a>//! where it would reach the slots or the arena ([`overlaps_allocated_va`]).
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="comment">// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+<a href=#45 id=45 data-nosnippet>45</a>// via the critical-section impl hal/arch/riscv registers.
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
+<a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">use </span>core::sync::atomic::AtomicU64;
+<a href=#48 id=48 data-nosnippet>48</a><span class="kw">use </span>core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+<a href=#49 id=49 data-nosnippet>49</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">use </span>portable_atomic::AtomicU64;
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="attr">#[cfg(all(feature = <span class="string">"large-cell-va"</span>, target_pointer_width = <span class="string">"32"</span>))]
+<a href=#53 id=53 data-nosnippet>53</a></span><span class="macro">compile_error!</span>(<span class="string">"large-cell-va requires a 64-bit paged target"</span>);
+<a href=#54 id=54 data-nosnippet>54</a><span class="attr">#[cfg(all(feature = <span class="string">"large-cell-va"</span>, feature = <span class="string">"cell-scale-experiment"</span>))]
+<a href=#55 id=55 data-nosnippet>55</a></span><span class="macro">compile_error!</span>(
+<a href=#56 id=56 data-nosnippet>56</a>    <span class="string">"large-cell-va cannot be combined with cell-scale-experiment: exceeds SV39 user half"
+<a href=#57 id=57 data-nosnippet>57</a></span>);
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="doccomment">/// Cell VA region start — 64 GiB (0x10_0000_0000).
+<a href=#60 id=60 data-nosnippet>60</a>///
+<a href=#61 id=61 data-nosnippet>61</a>/// Must lie above ALL identity-mapped regions in the SAS, avoiding collision
+<a href=#62 id=62 data-nosnippet>62</a>/// when physical RAM extends to &gt;= 4 GiB (e.g. 0x1_0000_0000..0x1_8000_0000):
+<a href=#63 id=63 data-nosnippet>63</a>///   - QEMU virt RISC-V: UART/VirtIO MMIO at 0x1000_0000–0x1001_0000
+<a href=#64 id=64 data-nosnippet>64</a>///   - PCIe ECAM at 0x3000_0000 (1 MiB); VirtIO BAR below 0x8000_0000
+<a href=#65 id=65 data-nosnippet>65</a>///   - RAM identity map: supports physical configurations up to 48 GiB
+<a href=#66 id=66 data-nosnippet>66</a>///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
+<a href=#67 id=67 data-nosnippet>67</a>///     64 GiB clears all of the above with room to spare and remains well inside
+<a href=#68 id=68 data-nosnippet>68</a>///     the user window (`hal::paging::USER_LIMIT`, 256 GiB).
+<a href=#69 id=69 data-nosnippet>69</a>///
+<a href=#70 id=70 data-nosnippet>70</a>/// RISC-V medany: even the 256 MiB desktop slot stays within ±2 GiB.
+<a href=#71 id=71 data-nosnippet>71</a>///
+<a href=#72 id=72 data-nosnippet>72</a>/// RV32 Nano boots with SATP=0 (bare physical, no paging — see specs/04), so
+<a href=#73 id=73 data-nosnippet>73</a>/// PIE cells never occur there and `alloc_cell_va` is never actually called;
+<a href=#74 id=74 data-nosnippet>74</a>/// this constant only needs to type-check as a 32-bit `usize` on that target.
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="attr">#[cfg(not(target_arch = <span class="string">"riscv32"</span>))]
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_START: usize = <span class="number">0x10_0000_0000</span>;
+<a href=#77 id=77 data-nosnippet>77</a><span class="attr">#[cfg(target_arch = <span class="string">"riscv32"</span>)]
+<a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_START: usize = <span class="number">0x2000_0000</span>;
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="doccomment">/// Embedded keeps the historical 32 MiB spacing. Desktop images opt in to a
+<a href=#81 id=81 data-nosnippet>81</a>/// 256 MiB slot, sufficient for a 128 MiB static arena plus code and data.
+<a href=#82 id=82 data-nosnippet>82</a></span><span class="attr">#[cfg(not(feature = <span class="string">"large-cell-va"</span>))]
+<a href=#83 id=83 data-nosnippet>83</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_STRIDE: usize = <span class="number">32 </span>* <span class="number">1024 </span>* <span class="number">1024</span>;
+<a href=#84 id=84 data-nosnippet>84</a><span class="attr">#[cfg(feature = <span class="string">"large-cell-va"</span>)]
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CELL_VA_STRIDE: usize = <span class="number">256 </span>* <span class="number">1024 </span>* <span class="number">1024</span>;
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// Maximum simultaneous PIE cell slots: normally 512 (16 GiB embedded or
+<a href=#88 id=88 data-nosnippet>88</a>/// 128 GiB desktop). Both regions, starting at 64 GiB, fit SV39's user half.
+<a href=#89 id=89 data-nosnippet>89</a>///
+<a href=#90 id=90 data-nosnippet>90</a>/// `cell-scale-experiment` raises this to 4096 slots (4096 × 32 MiB = 128 GiB of
+<a href=#91 id=91 data-nosnippet>91</a>/// VA, still inside the user half) so the D5 scale measurement measures memory
+<a href=#92 id=92 data-nosnippet>92</a>/// rather than this constant. See `memory::cell_quota::MAX_CELLS`.
+<a href=#93 id=93 data-nosnippet>93</a></span><span class="attr">#[cfg(not(feature = <span class="string">"cell-scale-experiment"</span>))]
+<a href=#94 id=94 data-nosnippet>94</a></span><span class="kw">const </span>MAX_SLOTS: usize = <span class="number">512</span>;
+<a href=#95 id=95 data-nosnippet>95</a><span class="attr">#[cfg(feature = <span class="string">"cell-scale-experiment"</span>)]
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="kw">const </span>MAX_SLOTS: usize = <span class="number">4096</span>;
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a><span class="attr">#[cfg(cellos_wide)]
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">const _</span>: () = <span class="macro">assert!</span>(CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE &lt;= <span class="kw">crate</span>::hal::paging::USER_LIMIT);
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a><span class="doccomment">/// Exclusive end of the RAM the kernel manages and maps at VA == PA: the
+<a href=#102 id=102 data-nosnippet>102</a>/// first cell slot. The frame allocator leaves usable RAM at or above it
+<a href=#103 id=103 data-nosnippet>103</a>/// unused (`memory::frame::plan_managed_ranges`), so no grant, SHM page or
+<a href=#104 id=104 data-nosnippet>104</a>/// RV64/AArch64 RAM alias can land on a cell slot or the stack arena. Bare
+<a href=#105 id=105 data-nosnippet>105</a>/// physical targets map no cell slots and keep all RAM.
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#107 id=107 data-nosnippet>107</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>IDENTITY_RAM_END: usize = CELL_VA_START;
+<a href=#108 id=108 data-nosnippet>108</a><span class="attr">#[cfg(not(cellos_wide))]
+<a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>IDENTITY_RAM_END: usize = usize::MAX;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a><span class="doccomment">/// The lowest cell slots, kept for fixed-VA (ET_EXEC) images: randomised
+<a href=#112 id=112 data-nosnippet>112</a>/// order hands one to a PIE only once every other slot is held, so a fixed
+<a href=#113 id=113 data-nosnippet>113</a>/// image linked into this band finds its slot free while any slot is. The
+<a href=#114 id=114 data-nosnippet>114</a>/// deterministic order (no entropy) still takes slots lowest-first, band
+<a href=#115 id=115 data-nosnippet>115</a>/// included, exactly as before randomisation. No shipped cell is fixed-VA.
+<a href=#116 id=116 data-nosnippet>116</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>FIXED_VA_SLOTS: usize = <span class="number">8</span>;
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a><span class="doccomment">/// A run of equal, aligned VA slots: `slots` slots of `stride` bytes from
+<a href=#119 id=119 data-nosnippet>119</a>/// `start`; the lowest `fixed` of them are the fixed-VA band (see
+<a href=#120 id=120 data-nosnippet>120</a>/// [`FIXED_VA_SLOTS`]; `0` for a region no fixed image links into).
+<a href=#121 id=121 data-nosnippet>121</a></span><span class="attr">#[derive(Clone, Copy)]
+<a href=#122 id=122 data-nosnippet>122</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>Region {
+<a href=#123 id=123 data-nosnippet>123</a>    start: usize,
+<a href=#124 id=124 data-nosnippet>124</a>    stride: usize,
+<a href=#125 id=125 data-nosnippet>125</a>    slots: usize,
+<a href=#126 id=126 data-nosnippet>126</a>    fixed: usize,
+<a href=#127 id=127 data-nosnippet>127</a>}
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a><span class="kw">impl </span>Region {
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="doccomment">/// Index of the slot whose base is exactly `base`.
+<a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">fn </span>index_of_base(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>offset = base.checked_sub(<span class="self">self</span>.start)<span class="question-mark">?</span>;
+<a href=#133 id=133 data-nosnippet>133</a>        (offset.is_multiple_of(<span class="self">self</span>.stride) &amp;&amp; offset / <span class="self">self</span>.stride &lt; <span class="self">self</span>.slots)
+<a href=#134 id=134 data-nosnippet>134</a>            .then_some(offset / <span class="self">self</span>.stride)
+<a href=#135 id=135 data-nosnippet>135</a>    }
 <a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="comment">// 2. Bump-allocate a fresh slot.
-<a href=#138 id=138 data-nosnippet>138</a>        </span><span class="kw">let </span>idx = <span class="self">self</span>.bump.fetch_add(<span class="number">1</span>, Ordering::SeqCst);
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">if </span>idx &gt;= MAX_SLOTS {
-<a href=#140 id=140 data-nosnippet>140</a>            <span class="self">self</span>.bump.fetch_sub(<span class="number">1</span>, Ordering::SeqCst);
-<a href=#141 id=141 data-nosnippet>141</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#142 id=142 data-nosnippet>142</a>        }
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="prelude-val">Some</span>(CELL_VA_START + idx * CELL_VA_STRIDE)
-<a href=#144 id=144 data-nosnippet>144</a>    }
-<a href=#145 id=145 data-nosnippet>145</a>
-<a href=#146 id=146 data-nosnippet>146</a>    <span class="doccomment">/// Claim the exact slot at `base`, or refuse when another spawn owns it.
-<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reserve(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) -&gt; bool {
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if </span>slot_end(base).is_none() {
-<a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#150 id=150 data-nosnippet>150</a>        }
-<a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>slot = (base - CELL_VA_START) / CELL_VA_STRIDE;
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">loop </span>{
-<a href=#153 id=153 data-nosnippet>153</a>            <span class="kw">let </span>bump = <span class="self">self</span>.bump.load(Ordering::SeqCst);
-<a href=#154 id=154 data-nosnippet>154</a>            <span class="kw">if </span>slot &lt; bump {
-<a href=#155 id=155 data-nosnippet>155</a>                <span class="comment">// Handed out before: claimable only while it is on the free list.
-<a href=#156 id=156 data-nosnippet>156</a>                </span><span class="kw">let </span>mask = <span class="number">1u64 </span>&lt;&lt; (slot % <span class="number">64</span>);
-<a href=#157 id=157 data-nosnippet>157</a>                <span class="kw">return </span><span class="self">self</span>.free[slot / <span class="number">64</span>].fetch_and(!mask, Ordering::AcqRel) &amp; mask != <span class="number">0</span>;
-<a href=#158 id=158 data-nosnippet>158</a>            }
-<a href=#159 id=159 data-nosnippet>159</a>            <span class="kw">if </span><span class="self">self
-<a href=#160 id=160 data-nosnippet>160</a>                </span>.bump
-<a href=#161 id=161 data-nosnippet>161</a>                .compare_exchange(bump, slot + <span class="number">1</span>, Ordering::SeqCst, Ordering::SeqCst)
-<a href=#162 id=162 data-nosnippet>162</a>                .is_ok()
-<a href=#163 id=163 data-nosnippet>163</a>            {
-<a href=#164 id=164 data-nosnippet>164</a>                <span class="comment">// The slots jumped over were never handed out: they go on the
-<a href=#165 id=165 data-nosnippet>165</a>                // free list so the ownership invariant keeps holding.
-<a href=#166 id=166 data-nosnippet>166</a>                </span><span class="kw">for </span>skipped <span class="kw">in </span>bump..slot {
-<a href=#167 id=167 data-nosnippet>167</a>                    <span class="self">self</span>.free[skipped / <span class="number">64</span>].fetch_or(<span class="number">1u64 </span>&lt;&lt; (skipped % <span class="number">64</span>), Ordering::Release);
-<a href=#168 id=168 data-nosnippet>168</a>                }
-<a href=#169 id=169 data-nosnippet>169</a>                <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#170 id=170 data-nosnippet>170</a>            }
-<a href=#171 id=171 data-nosnippet>171</a>        }
-<a href=#172 id=172 data-nosnippet>172</a>    }
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>free(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) {
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">if </span>slot_end(base).is_none() {
-<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">return</span>;
-<a href=#177 id=177 data-nosnippet>177</a>        }
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span>slot = (base - CELL_VA_START) / CELL_VA_STRIDE;
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="comment">// Restore the bump cursor exactly when this is the most recently minted
-<a href=#180 id=180 data-nosnippet>180</a>        // slot. If another allocation raced ahead, publish it to the free bitmap.
-<a href=#181 id=181 data-nosnippet>181</a>        </span><span class="kw">if </span><span class="self">self
-<a href=#182 id=182 data-nosnippet>182</a>            </span>.bump
-<a href=#183 id=183 data-nosnippet>183</a>            .compare_exchange(slot + <span class="number">1</span>, slot, Ordering::AcqRel, Ordering::Acquire)
-<a href=#184 id=184 data-nosnippet>184</a>            .is_err()
-<a href=#185 id=185 data-nosnippet>185</a>        {
-<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">let </span>word = <span class="kw-2">&amp;</span><span class="self">self</span>.free[slot / <span class="number">64</span>];
-<a href=#187 id=187 data-nosnippet>187</a>            <span class="kw">let </span>mask = <span class="number">1u64 </span>&lt;&lt; (slot % <span class="number">64</span>);
-<a href=#188 id=188 data-nosnippet>188</a>            word.fetch_or(mask, Ordering::Release);
-<a href=#189 id=189 data-nosnippet>189</a>        }
-<a href=#190 id=190 data-nosnippet>190</a>    }
-<a href=#191 id=191 data-nosnippet>191</a>}
-<a href=#192 id=192 data-nosnippet>192</a>
-<a href=#193 id=193 data-nosnippet>193</a><span class="doccomment">/// Allocate one profile-sized VA slot for a new PIE cell.
-<a href=#194 id=194 data-nosnippet>194</a>///
-<a href=#195 id=195 data-nosnippet>195</a>/// Returns `None` when all slots are exhausted (unlikely in practice: 512 cells
-<a href=#196 id=196 data-nosnippet>196</a>/// and the free list recycles dead cells' slots).
-<a href=#197 id=197 data-nosnippet>197</a></span><span class="kw">pub fn </span>alloc_cell_va() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#198 id=198 data-nosnippet>198</a>    SLOTS.alloc()
-<a href=#199 id=199 data-nosnippet>199</a>}
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a><span class="doccomment">/// Claim the slot at `base` for a fixed-VA (ET_EXEC) image that is linked
-<a href=#202 id=202 data-nosnippet>202</a>/// inside it. `false` when `base` is not a slot base or another cell owns it:
-<a href=#203 id=203 data-nosnippet>203</a>/// a fixed-VA image may never land in a slot a PIE (or another image) holds.
-<a href=#204 id=204 data-nosnippet>204</a></span><span class="kw">pub fn </span>reserve_cell_va(base: usize) -&gt; bool {
-<a href=#205 id=205 data-nosnippet>205</a>    SLOTS.reserve(base)
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="doccomment">/// Return a VA slot to the free list so it can be reused by a future cell.
-<a href=#209 id=209 data-nosnippet>209</a>///
-<a href=#210 id=210 data-nosnippet>210</a>/// `base` must be a value previously returned by `alloc_cell_va` or claimed
-<a href=#211 id=211 data-nosnippet>211</a>/// by `reserve_cell_va`. Silently ignores invalid values.
-<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">pub fn </span>free_cell_va(base: usize) {
-<a href=#213 id=213 data-nosnippet>213</a>    SLOTS.free(base)
-<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">fn </span>base(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; usize {
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="self">self</span>.start + index * <span class="self">self</span>.stride
+<a href=#139 id=139 data-nosnippet>139</a>    }
+<a href=#140 id=140 data-nosnippet>140</a>}
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a><span class="doccomment">/// The cell image slots.
+<a href=#143 id=143 data-nosnippet>143</a></span><span class="kw">const </span>CELLS: Region = Region {
+<a href=#144 id=144 data-nosnippet>144</a>    start: CELL_VA_START,
+<a href=#145 id=145 data-nosnippet>145</a>    stride: CELL_VA_STRIDE,
+<a href=#146 id=146 data-nosnippet>146</a>    slots: MAX_SLOTS,
+<a href=#147 id=147 data-nosnippet>147</a>    fixed: FIXED_VA_SLOTS,
+<a href=#148 id=148 data-nosnippet>148</a>};
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="doccomment">/// Exclusive end of a valid reservation, shared by ELF admission and release.
+<a href=#151 id=151 data-nosnippet>151</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>slot_end(base: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>    CELLS.index_of_base(base)<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>    base.checked_add(CELL_VA_STRIDE)
+<a href=#154 id=154 data-nosnippet>154</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a><span class="doccomment">/// Base of the slot containing `va`, or `None` outside the cell VA region.
+<a href=#157 id=157 data-nosnippet>157</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>slot_containing(va: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">let </span>index = va.checked_sub(CELL_VA_START)<span class="question-mark">? </span>/ CELL_VA_STRIDE;
+<a href=#159 id=159 data-nosnippet>159</a>    (index &lt; MAX_SLOTS).then(|| CELL_VA_START + index * CELL_VA_STRIDE)
+<a href=#160 id=160 data-nosnippet>160</a>}
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a><span class="doccomment">/// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
+<a href=#163 id=163 data-nosnippet>163</a></span><span class="kw">const </span>BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(<span class="number">64</span>);
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="doccomment">/// Where [`SlotAllocator::alloc`] starts probing.
+<a href=#166 id=166 data-nosnippet>166</a>///
+<a href=#167 id=167 data-nosnippet>167</a>/// Randomised iff [`seed`](Self::seed) found its source able to fill one
+<a href=#168 id=168 data-nosnippet>168</a>/// 64-bit word; it is then read again for every allocation. Otherwise every
+<a href=#169 id=169 data-nosnippet>169</a>/// start is 0 (lowest free slot first) and the source is never called again.
+<a href=#170 id=170 data-nosnippet>170</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>SlotOrder {
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Fills a prefix of the buffer with hardware entropy and returns its length
+<a href=#172 id=172 data-nosnippet>172</a>    /// (`dev::virtio_rng::get_random`'s contract); never allocates or blocks.
+<a href=#173 id=173 data-nosnippet>173</a>    </span>source: <span class="kw">fn</span>(<span class="kw-2">&amp;mut </span>[u8]) -&gt; usize,
+<a href=#174 id=174 data-nosnippet>174</a>    randomised: AtomicBool,
+<a href=#175 id=175 data-nosnippet>175</a>}
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a><span class="kw">impl </span>SlotOrder {
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>new(source: <span class="kw">fn</span>(<span class="kw-2">&amp;mut </span>[u8]) -&gt; usize) -&gt; <span class="self">Self </span>{
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="self">Self </span>{
+<a href=#180 id=180 data-nosnippet>180</a>            source,
+<a href=#181 id=181 data-nosnippet>181</a>            randomised: AtomicBool::new(<span class="bool-val">false</span>),
+<a href=#182 id=182 data-nosnippet>182</a>        }
+<a href=#183 id=183 data-nosnippet>183</a>    }
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// Probe the source once and fix the order for this boot: `true` (random
+<a href=#186 id=186 data-nosnippet>186</a>    /// starts) iff it filled a whole word.
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="attr">#[cfg(any(cellos_wide, test))]
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>seed(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>randomised = <span class="self">self</span>.word().is_some();
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="comment">// Only this flag is published: the source holds its own state.
+<a href=#191 id=191 data-nosnippet>191</a>        </span><span class="self">self</span>.randomised.store(randomised, Ordering::Relaxed);
+<a href=#192 id=192 data-nosnippet>192</a>        randomised
+<a href=#193 id=193 data-nosnippet>193</a>    }
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="doccomment">/// The random start offset for one allocation over a span of `span`
+<a href=#196 id=196 data-nosnippet>196</a>    /// slots, below `span`; `None` in deterministic order. In randomised order
+<a href=#197 id=197 data-nosnippet>197</a>    /// a source that fails this once (RDSEED and RDRAND both exhausted after
+<a href=#198 id=198 data-nosnippet>198</a>    /// their bounded retries) starts that one allocation at offset 0; which
+<a href=#199 id=199 data-nosnippet>199</a>    /// slot it gets never affects ownership.
+<a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">fn </span>random_start(<span class="kw-2">&amp;</span><span class="self">self</span>, span: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">if </span>!<span class="self">self</span>.randomised.load(Ordering::Relaxed) {
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="prelude-val">Some</span>(<span class="self">self</span>.word().map_or(<span class="number">0</span>, |word| (word % span <span class="kw">as </span>u64) <span class="kw">as </span>usize))
+<a href=#205 id=205 data-nosnippet>205</a>    }
+<a href=#206 id=206 data-nosnippet>206</a>
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">fn </span>word(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0u8</span>; <span class="number">8</span>];
+<a href=#209 id=209 data-nosnippet>209</a>        ((<span class="self">self</span>.source)(<span class="kw-2">&amp;mut </span>bytes) == bytes.len()).then(|| u64::from_le_bytes(bytes))
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>}
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a><span class="doccomment">/// The start order of both regions, fixed once at boot by [`seed_slot_order`].
+<a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">static </span>SLOT_ORDER: SlotOrder = SlotOrder::new(<span class="kw">crate</span>::dev::virtio_rng::get_random);
 <a href=#215 id=215 data-nosnippet>215</a>
-<a href=#216 id=216 data-nosnippet>216</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>snapshot() -&gt; (usize, alloc::vec::Vec&lt;u64&gt;) {
-<a href=#218 id=218 data-nosnippet>218</a>    (
-<a href=#219 id=219 data-nosnippet>219</a>        SLOTS.bump.load(Ordering::Acquire),
-<a href=#220 id=220 data-nosnippet>220</a>        SLOTS
-<a href=#221 id=221 data-nosnippet>221</a>            .free
-<a href=#222 id=222 data-nosnippet>222</a>            .iter()
-<a href=#223 id=223 data-nosnippet>223</a>            .map(|word| word.load(Ordering::Acquire))
-<a href=#224 id=224 data-nosnippet>224</a>            .collect(),
-<a href=#225 id=225 data-nosnippet>225</a>    )
-<a href=#226 id=226 data-nosnippet>226</a>}
-<a href=#227 id=227 data-nosnippet>227</a>
-<a href=#228 id=228 data-nosnippet>228</a><span class="attr">#[cfg(test)]
-<a href=#229 id=229 data-nosnippet>229</a>#[path = <span class="string">"va-alloc-tests.rs"</span>]
-<a href=#230 id=230 data-nosnippet>230</a></span><span class="kw">mod </span>tests;
+<a href=#216 id=216 data-nosnippet>216</a><span class="doccomment">/// Boot, once, before any cell image or user stack takes a slot: random slot
+<a href=#217 id=217 data-nosnippet>217</a>/// starts if the kernel entropy source works, else lowest-first. Logs which.
+<a href=#218 id=218 data-nosnippet>218</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>seed_slot_order() {
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">if </span>SLOT_ORDER.seed() {
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="macro">log::info!</span>(<span class="string">"[va] slot order: randomised"</span>);
+<a href=#222 id=222 data-nosnippet>222</a>    } <span class="kw">else </span>{
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="macro">log::info!</span>(<span class="string">"[va] slot order: deterministic (no entropy)"</span>);
+<a href=#224 id=224 data-nosnippet>224</a>    }
+<a href=#225 id=225 data-nosnippet>225</a>}
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a><span class="doccomment">/// Slot ownership over one [`Region`] (`WORDS` bitmap words cover its slots).
+<a href=#228 id=228 data-nosnippet>228</a>/// Invariant: bit N of `owned` is set iff slot N has exactly one holder, and no
+<a href=#229 id=229 data-nosnippet>229</a>/// bit at or past `region.slots` is ever set. Only an atomic read-modify-write
+<a href=#230 id=230 data-nosnippet>230</a>/// that finds a bit clear sets it (`alloc`, `reserve`), so no slot is handed
+<a href=#231 id=231 data-nosnippet>231</a>/// out twice; only `free` clears one.
+<a href=#232 id=232 data-nosnippet>232</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">struct </span>SlotAllocator&lt;<span class="kw">const </span>WORDS: usize = BITMAP_WORDS&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>    region: Region,
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="doccomment">/// Each repeat of the inline `const` block is a distinct AtomicU64 (an
+<a href=#235 id=235 data-nosnippet>235</a>    /// inline const sidesteps `clippy::declare_interior_mutable_const`).
+<a href=#236 id=236 data-nosnippet>236</a>    </span>owned: [AtomicU64; WORDS],
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// `free` calls that found their slot already clear (see [`Self::free`]).
+<a href=#238 id=238 data-nosnippet>238</a>    </span>stale_frees: AtomicUsize,
+<a href=#239 id=239 data-nosnippet>239</a>}
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a><span class="kw">static </span>SLOTS: SlotAllocator = SlotAllocator::new();
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a><span class="kw">impl </span>SlotAllocator {
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="doccomment">/// The cell image slots.
+<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="self">Self</span>::over(CELLS)
+<a href=#247 id=247 data-nosnippet>247</a>    }
+<a href=#248 id=248 data-nosnippet>248</a>}
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a><span class="kw">impl</span>&lt;<span class="kw">const </span>WORDS: usize&gt; SlotAllocator&lt;WORDS&gt; {
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">const fn </span>over(region: Region) -&gt; <span class="self">Self </span>{
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="macro">assert!</span>(region.slots &gt; <span class="number">0 </span>&amp;&amp; region.slots &lt;= WORDS * <span class="number">64</span>);
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="macro">assert!</span>(region.fixed &lt; region.slots);
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="self">Self </span>{
+<a href=#255 id=255 data-nosnippet>255</a>            region,
+<a href=#256 id=256 data-nosnippet>256</a>            owned: [<span class="kw">const </span>{ AtomicU64::new(<span class="number">0</span>) }; WORDS],
+<a href=#257 id=257 data-nosnippet>257</a>            stale_frees: AtomicUsize::new(<span class="number">0</span>),
+<a href=#258 id=258 data-nosnippet>258</a>        }
+<a href=#259 id=259 data-nosnippet>259</a>    }
+<a href=#260 id=260 data-nosnippet>260</a>
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// Take a free slot in `order`; `None` only when every slot is held.
+<a href=#262 id=262 data-nosnippet>262</a>    ///
+<a href=#263 id=263 data-nosnippet>263</a>    /// Deterministic order: the lowest free slot. Randomised order: the first
+<a href=#264 id=264 data-nosnippet>264</a>    /// free slot at or after a random start above the fixed-VA band, wrapping
+<a href=#265 id=265 data-nosnippet>265</a>    /// once to the band's end; the band only when every other slot is held.
+<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>alloc(<span class="kw-2">&amp;</span><span class="self">self</span>, order: <span class="kw-2">&amp;</span>SlotOrder) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>(fixed, slots) = (<span class="self">self</span>.region.fixed, <span class="self">self</span>.region.slots);
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">match </span>order.random_start(slots - fixed) {
+<a href=#269 id=269 data-nosnippet>269</a>            <span class="prelude-val">None </span>=&gt; <span class="self">self</span>.claim_span(<span class="number">0</span>, slots),
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="prelude-val">Some</span>(offset) =&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>                <span class="kw">let </span>start = fixed + offset;
+<a href=#272 id=272 data-nosnippet>272</a>                <span class="self">self</span>.claim_span(start, slots)
+<a href=#273 id=273 data-nosnippet>273</a>                    .or_else(|| <span class="self">self</span>.claim_span(fixed, start))
+<a href=#274 id=274 data-nosnippet>274</a>                    .or_else(|| <span class="self">self</span>.claim_span(<span class="number">0</span>, fixed))
+<a href=#275 id=275 data-nosnippet>275</a>            }
+<a href=#276 id=276 data-nosnippet>276</a>        }
+<a href=#277 id=277 data-nosnippet>277</a>    }
+<a href=#278 id=278 data-nosnippet>278</a>
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="doccomment">/// Claim the first free slot at or after `start`, wrapping past the last
+<a href=#280 id=280 data-nosnippet>280</a>    /// slot to slot 0: every slot is probed once. `start == 0` is lowest-first.
+<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="attr">#[cfg(test)]
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">fn </span>claim_from(<span class="kw-2">&amp;</span><span class="self">self</span>, start: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="self">self</span>.claim_span(start, <span class="self">self</span>.region.slots)
+<a href=#284 id=284 data-nosnippet>284</a>            .or_else(|| <span class="self">self</span>.claim_span(<span class="number">0</span>, start))
+<a href=#285 id=285 data-nosnippet>285</a>    }
+<a href=#286 id=286 data-nosnippet>286</a>
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="doccomment">/// Claim the lowest free slot in `[from, to)` (`to &lt;= region.slots`),
+<a href=#288 id=288 data-nosnippet>288</a>    /// reading each bitmap word the span touches once.
+<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">fn </span>claim_span(<span class="kw-2">&amp;</span><span class="self">self</span>, from: usize, to: usize) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">let </span><span class="kw-2">mut </span>next = from;
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">while </span>next &lt; to {
+<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">let </span>index = next / <span class="number">64</span>;
+<a href=#293 id=293 data-nosnippet>293</a>            <span class="kw">let </span>word_end = ((index + <span class="number">1</span>) * <span class="number">64</span>).min(to);
+<a href=#294 id=294 data-nosnippet>294</a>            <span class="comment">// Bits `next % 64 ..= (word_end - 1) % 64` of word `index`.
+<a href=#295 id=295 data-nosnippet>295</a>            </span><span class="kw">let </span>probed = (u64::MAX &lt;&lt; (next % <span class="number">64</span>)) &amp; (u64::MAX &gt;&gt; (<span class="number">64 </span>- (word_end - index * <span class="number">64</span>)));
+<a href=#296 id=296 data-nosnippet>296</a>            <span class="kw">let </span>word = <span class="kw-2">&amp;</span><span class="self">self</span>.owned[index];
+<a href=#297 id=297 data-nosnippet>297</a>            <span class="kw">let </span><span class="kw-2">mut </span>seen = word.load(Ordering::Relaxed);
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw">loop </span>{
+<a href=#299 id=299 data-nosnippet>299</a>                <span class="kw">let </span>open = probed &amp; !seen;
+<a href=#300 id=300 data-nosnippet>300</a>                <span class="kw">if </span>open == <span class="number">0 </span>{
+<a href=#301 id=301 data-nosnippet>301</a>                    <span class="kw">break</span>;
+<a href=#302 id=302 data-nosnippet>302</a>                }
+<a href=#303 id=303 data-nosnippet>303</a>                <span class="kw">let </span>bit = open.trailing_zeros() <span class="kw">as </span>usize;
+<a href=#304 id=304 data-nosnippet>304</a>                <span class="comment">// Acquire: the previous holder's `free` happens before this
+<a href=#305 id=305 data-nosnippet>305</a>                // holder's use of the slot.
+<a href=#306 id=306 data-nosnippet>306</a>                </span><span class="kw">match </span>word.compare_exchange_weak(
+<a href=#307 id=307 data-nosnippet>307</a>                    seen,
+<a href=#308 id=308 data-nosnippet>308</a>                    seen | <span class="number">1u64 </span>&lt;&lt; bit,
+<a href=#309 id=309 data-nosnippet>309</a>                    Ordering::AcqRel,
+<a href=#310 id=310 data-nosnippet>310</a>                    Ordering::Relaxed,
+<a href=#311 id=311 data-nosnippet>311</a>                ) {
+<a href=#312 id=312 data-nosnippet>312</a>                    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Some</span>(<span class="self">self</span>.region.base(index * <span class="number">64 </span>+ bit)),
+<a href=#313 id=313 data-nosnippet>313</a>                    <span class="prelude-val">Err</span>(now) =&gt; seen = now,
+<a href=#314 id=314 data-nosnippet>314</a>                }
+<a href=#315 id=315 data-nosnippet>315</a>            }
+<a href=#316 id=316 data-nosnippet>316</a>            next = word_end;
+<a href=#317 id=317 data-nosnippet>317</a>        }
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="prelude-val">None
+<a href=#319 id=319 data-nosnippet>319</a>    </span>}
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a>    <span class="doccomment">/// Claim the exact slot at `base`, or refuse when another holder owns it.
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>reserve(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) -&gt; bool {
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(slot) = <span class="self">self</span>.region.index_of_base(base) <span class="kw">else </span>{
+<a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#325 id=325 data-nosnippet>325</a>        };
+<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">let </span>mask = <span class="number">1u64 </span>&lt;&lt; (slot % <span class="number">64</span>);
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="self">self</span>.owned[slot / <span class="number">64</span>].fetch_or(mask, Ordering::AcqRel) &amp; mask == <span class="number">0
+<a href=#328 id=328 data-nosnippet>328</a>    </span>}
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="doccomment">/// Release the slot at `base`. Not a slot base: ignored. A slot nobody
+<a href=#331 id=331 data-nosnippet>331</a>    /// holds stays clear, so the ownership invariant holds, but a second free
+<a href=#332 id=332 data-nosnippet>332</a>    /// means some holder's bookkeeping is wrong (a later one could clear a new
+<a href=#333 id=333 data-nosnippet>333</a>    /// holder's bit): it is logged and counted, and test builds fail on it.
+<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>free(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) {
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(slot) = <span class="self">self</span>.region.index_of_base(base) <span class="kw">else </span>{
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="kw">return</span>;
+<a href=#337 id=337 data-nosnippet>337</a>        };
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">let </span>mask = <span class="number">1u64 </span>&lt;&lt; (slot % <span class="number">64</span>);
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">if </span><span class="self">self</span>.owned[slot / <span class="number">64</span>].fetch_and(!mask, Ordering::Release) &amp; mask == <span class="number">0 </span>{
+<a href=#340 id=340 data-nosnippet>340</a>            <span class="kw">let </span>stale = <span class="self">self</span>.stale_frees.fetch_add(<span class="number">1</span>, Ordering::Relaxed) + <span class="number">1</span>;
+<a href=#341 id=341 data-nosnippet>341</a>            <span class="macro">log::error!</span>(<span class="string">"[va] free of unheld slot {base:#x} ignored ({stale} so far)"</span>);
+<a href=#342 id=342 data-nosnippet>342</a>            <span class="attr">#[cfg(test)]
+<a href=#343 id=343 data-nosnippet>343</a>            </span><span class="macro">debug_assert!</span>(<span class="bool-val">false</span>, <span class="string">"free of unheld slot {base:#x}"</span>);
+<a href=#344 id=344 data-nosnippet>344</a>        }
+<a href=#345 id=345 data-nosnippet>345</a>    }
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a>    <span class="doccomment">/// `free` calls that found their slot already clear.
+<a href=#348 id=348 data-nosnippet>348</a>    </span><span class="attr">#[cfg(test)]
+<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>stale_frees(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="self">self</span>.stale_frees.load(Ordering::Relaxed)
+<a href=#351 id=351 data-nosnippet>351</a>    }
+<a href=#352 id=352 data-nosnippet>352</a>
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// Slots owned right now.
+<a href=#354 id=354 data-nosnippet>354</a>    </span><span class="attr">#[cfg(test)]
+<a href=#355 id=355 data-nosnippet>355</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>owned(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="self">self</span>.owned
+<a href=#357 id=357 data-nosnippet>357</a>            .iter()
+<a href=#358 id=358 data-nosnippet>358</a>            .map(|word| word.load(Ordering::Acquire).count_ones() <span class="kw">as </span>usize)
+<a href=#359 id=359 data-nosnippet>359</a>            .sum()
+<a href=#360 id=360 data-nosnippet>360</a>    }
+<a href=#361 id=361 data-nosnippet>361</a>
+<a href=#362 id=362 data-nosnippet>362</a>    <span class="doccomment">/// The ownership bitmap, word by word.
+<a href=#363 id=363 data-nosnippet>363</a>    </span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#364 id=364 data-nosnippet>364</a>    </span><span class="kw">fn </span>snapshot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; alloc::vec::Vec&lt;u64&gt; {
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="self">self</span>.owned
+<a href=#366 id=366 data-nosnippet>366</a>            .iter()
+<a href=#367 id=367 data-nosnippet>367</a>            .map(|word| word.load(Ordering::Acquire))
+<a href=#368 id=368 data-nosnippet>368</a>            .collect()
+<a href=#369 id=369 data-nosnippet>369</a>    }
+<a href=#370 id=370 data-nosnippet>370</a>
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="doccomment">/// Does the slot at `base` have a holder? `false` for a non-slot address.
+<a href=#372 id=372 data-nosnippet>372</a>    </span><span class="attr">#[cfg(all(cellos_wide, feature = <span class="string">"test-hooks"</span>))]
+<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">fn </span>held(<span class="kw-2">&amp;</span><span class="self">self</span>, base: usize) -&gt; bool {
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="self">self</span>.region.index_of_base(base).is_some_and(|slot| {
+<a href=#375 id=375 data-nosnippet>375</a>            <span class="self">self</span>.owned[slot / <span class="number">64</span>].load(Ordering::Acquire) &amp; (<span class="number">1u64 </span>&lt;&lt; (slot % <span class="number">64</span>)) != <span class="number">0
+<a href=#376 id=376 data-nosnippet>376</a>        </span>})
+<a href=#377 id=377 data-nosnippet>377</a>    }
+<a href=#378 id=378 data-nosnippet>378</a>}
+<a href=#379 id=379 data-nosnippet>379</a>
+<a href=#380 id=380 data-nosnippet>380</a><span class="doccomment">/// First byte of the user-stack arena: right above the cell slots, so it lies
+<a href=#381 id=381 data-nosnippet>381</a>/// inside the user window and above all identity-mapped RAM (which ends below
+<a href=#382 id=382 data-nosnippet>382</a>/// the cell slots, [`IDENTITY_RAM_END`]). 80 GiB by default, 192 GiB with
+<a href=#383 id=383 data-nosnippet>383</a>/// `large-cell-va` or `cell-scale-experiment`.
+<a href=#384 id=384 data-nosnippet>384</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>STACK_VA_START: usize = CELL_VA_START + MAX_SLOTS * CELL_VA_STRIDE;
+<a href=#386 id=386 data-nosnippet>386</a>
+<a href=#387 id=387 data-nosnippet>387</a><span class="doccomment">/// One user stack per slot: its bottom guards, then its usable pages, then
+<a href=#388 id=388 data-nosnippet>388</a>/// unmapped VA up to the next slot. The largest stack the kernel allocates
+<a href=#389 id=389 data-nosnippet>389</a>/// (`task::STACK_PAGES` plus `task::stack::STACK_GUARD_PAGES`) rounded up to a
+<a href=#390 id=390 data-nosnippet>390</a>/// power of two: 512 KiB.
+<a href=#391 id=391 data-nosnippet>391</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>STACK_VA_STRIDE: usize =
+<a href=#392 id=392 data-nosnippet>392</a>    (<span class="kw">crate</span>::task::STACK_PAGES + <span class="kw">crate</span>::task::stack::STACK_GUARD_PAGES).next_power_of_two()
+<a href=#393 id=393 data-nosnippet>393</a>        * <span class="kw">crate</span>::memory::paging::PAGE_SIZE;
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a><span class="doccomment">/// Live user stacks at once (16 GiB of VA at the 512 KiB stride).
+<a href=#396 id=396 data-nosnippet>396</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#397 id=397 data-nosnippet>397</a></span><span class="kw">const </span>STACK_SLOTS: usize = <span class="number">32 </span>* <span class="number">1024</span>;
+<a href=#398 id=398 data-nosnippet>398</a>
+<a href=#399 id=399 data-nosnippet>399</a><span class="attr">#[cfg(cellos_wide)]
+<a href=#400 id=400 data-nosnippet>400</a></span><span class="kw">const _</span>: () =
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="macro">assert!</span>(STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE &lt;= <span class="kw">crate</span>::hal::paging::USER_LIMIT);
+<a href=#402 id=402 data-nosnippet>402</a>
+<a href=#403 id=403 data-nosnippet>403</a><span class="attr">#[cfg(cellos_wide)]
+<a href=#404 id=404 data-nosnippet>404</a></span><span class="kw">const </span>STACKS: Region = Region {
+<a href=#405 id=405 data-nosnippet>405</a>    start: STACK_VA_START,
+<a href=#406 id=406 data-nosnippet>406</a>    stride: STACK_VA_STRIDE,
+<a href=#407 id=407 data-nosnippet>407</a>    slots: STACK_SLOTS,
+<a href=#408 id=408 data-nosnippet>408</a>    fixed: <span class="number">0</span>,
+<a href=#409 id=409 data-nosnippet>409</a>};
+<a href=#410 id=410 data-nosnippet>410</a>
+<a href=#411 id=411 data-nosnippet>411</a><span class="attr">#[cfg(cellos_wide)]
+<a href=#412 id=412 data-nosnippet>412</a></span><span class="kw">static </span>STACK_ARENA: SlotAllocator&lt;{ STACK_SLOTS / <span class="number">64 </span>}&gt; = SlotAllocator::over(STACKS);
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a><span class="doccomment">/// Take one stack slot (`STACK_VA_STRIDE` bytes of VA, nothing mapped) in
+<a href=#415 id=415 data-nosnippet>415</a>/// this boot's [`SlotOrder`], or `None` when every slot is held.
+<a href=#416 id=416 data-nosnippet>416</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#417 id=417 data-nosnippet>417</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>alloc_stack_va() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#418 id=418 data-nosnippet>418</a>    STACK_ARENA.alloc(<span class="kw-2">&amp;</span>SLOT_ORDER)
+<a href=#419 id=419 data-nosnippet>419</a>}
+<a href=#420 id=420 data-nosnippet>420</a>
+<a href=#421 id=421 data-nosnippet>421</a><span class="doccomment">/// Paging targets only: the bare-physical ones never map a stack.
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="attr">#[cfg(not(cellos_wide))]
+<a href=#423 id=423 data-nosnippet>423</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>alloc_stack_va() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="prelude-val">None
+<a href=#425 id=425 data-nosnippet>425</a></span>}
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a><span class="doccomment">/// Return a stack slot. Only once nothing translates any page of it on any
+<a href=#428 id=428 data-nosnippet>428</a>/// hart: the stack's `VaHold` calls this after its run's flush is confirmed.
+<a href=#429 id=429 data-nosnippet>429</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>free_stack_va(base: usize) {
+<a href=#430 id=430 data-nosnippet>430</a>    <span class="attr">#[cfg(cellos_wide)]
+<a href=#431 id=431 data-nosnippet>431</a>    </span>STACK_ARENA.free(base);
+<a href=#432 id=432 data-nosnippet>432</a>    <span class="attr">#[cfg(not(cellos_wide))]
+<a href=#433 id=433 data-nosnippet>433</a>    </span><span class="kw">let _ </span>= base;
+<a href=#434 id=434 data-nosnippet>434</a>}
+<a href=#435 id=435 data-nosnippet>435</a>
+<a href=#436 id=436 data-nosnippet>436</a><span class="doccomment">/// Boot check: RAM mapped at VA == PA (grants and SHM pages keep their
+<a href=#437 id=437 data-nosnippet>437</a>/// physical address as VA; RV64 and AArch64 also map all RAM there) ends at or
+<a href=#438 id=438 data-nosnippet>438</a>/// below `ram_end`, which must not reach the cell slots. The frame allocator
+<a href=#439 id=439 data-nosnippet>439</a>/// already leaves RAM at or above [`IDENTITY_RAM_END`] unused, so this holds
+<a href=#440 id=440 data-nosnippet>440</a>/// unless firmware placed the kernel or bootloader memory there, which cannot
+<a href=#441 id=441 data-nosnippet>441</a>/// be dropped. MMIO is not RAM: each boot or later MMIO window is refused on
+<a href=#442 id=442 data-nosnippet>442</a>/// its own when it reaches the slots or the arena ([`overlaps_allocated_va`]).
+<a href=#443 id=443 data-nosnippet>443</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#444 id=444 data-nosnippet>444</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>assert_identity_ram_below_cells(ram_end: usize) {
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="macro">assert!</span>(
+<a href=#446 id=446 data-nosnippet>446</a>        ram_end &lt;= IDENTITY_RAM_END,
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="string">"identity-mapped RAM ends at {ram_end:#x}, inside the cell VA slots at {CELL_VA_START:#x}"
+<a href=#448 id=448 data-nosnippet>448</a>    </span>);
+<a href=#449 id=449 data-nosnippet>449</a>}
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// End of the VA the kernel hands out from its allocators: the cell slots
+<a href=#452 id=452 data-nosnippet>452</a>/// `[CELL_VA_START, STACK_VA_START)`, then the stack arena right above them.
+<a href=#453 id=453 data-nosnippet>453</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#454 id=454 data-nosnippet>454</a></span><span class="kw">const </span>ALLOCATED_VA_END: usize = STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE;
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a><span class="doccomment">/// Does `[start, start + len)` reach the VA the kernel hands out from its
+<a href=#457 id=457 data-nosnippet>457</a>/// allocators, `[CELL_VA_START, ALLOCATED_VA_END)` (cell slots and stack
+<a href=#458 id=458 data-nosnippet>458</a>/// arena)? A physical range that does can never be mapped at VA == PA: its
+<a href=#459 id=459 data-nosnippet>459</a>/// leaves would alias a cell image or a user stack. A range whose end
+<a href=#460 id=460 data-nosnippet>460</a>/// overflows counts as overlapping; an empty one never does.
+<a href=#461 id=461 data-nosnippet>461</a></span><span class="attr">#[cfg(cellos_wide)]
+<a href=#462 id=462 data-nosnippet>462</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>overlaps_allocated_va(start: usize, len: usize) -&gt; bool {
+<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">match </span>start.checked_add(len) {
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="prelude-val">Some</span>(end) =&gt; len != <span class="number">0 </span>&amp;&amp; start &lt; ALLOCATED_VA_END &amp;&amp; CELL_VA_START &lt; end,
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="prelude-val">None </span>=&gt; <span class="bool-val">true</span>,
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>}
+<a href=#468 id=468 data-nosnippet>468</a>
+<a href=#469 id=469 data-nosnippet>469</a><span class="doccomment">/// Paging targets only: the bare-physical ones allocate no VA.
+<a href=#470 id=470 data-nosnippet>470</a></span><span class="attr">#[cfg(not(cellos_wide))]
+<a href=#471 id=471 data-nosnippet>471</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>overlaps_allocated_va(_start: usize, _len: usize) -&gt; bool {
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="bool-val">false
+<a href=#473 id=473 data-nosnippet>473</a></span>}
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a><span class="doccomment">/// Does `va` lie in the stack arena?
+<a href=#476 id=476 data-nosnippet>476</a></span><span class="attr">#[cfg(all(cellos_wide, feature = <span class="string">"test-hooks"</span>))]
+<a href=#477 id=477 data-nosnippet>477</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>in_stack_arena(va: usize) -&gt; bool {
+<a href=#478 id=478 data-nosnippet>478</a>    (STACK_VA_START..STACK_VA_START + STACK_SLOTS * STACK_VA_STRIDE).contains(<span class="kw-2">&amp;</span>va)
+<a href=#479 id=479 data-nosnippet>479</a>}
+<a href=#480 id=480 data-nosnippet>480</a>
+<a href=#481 id=481 data-nosnippet>481</a><span class="doccomment">/// Does the stack slot at `base` have a holder right now?
+<a href=#482 id=482 data-nosnippet>482</a></span><span class="attr">#[cfg(all(cellos_wide, feature = <span class="string">"test-hooks"</span>))]
+<a href=#483 id=483 data-nosnippet>483</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stack_slot_held(base: usize) -&gt; bool {
+<a href=#484 id=484 data-nosnippet>484</a>    STACK_ARENA.held(base)
+<a href=#485 id=485 data-nosnippet>485</a>}
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a><span class="doccomment">/// Allocate one profile-sized VA slot for a new PIE cell, in this boot's
+<a href=#488 id=488 data-nosnippet>488</a>/// [`SlotOrder`].
+<a href=#489 id=489 data-nosnippet>489</a>///
+<a href=#490 id=490 data-nosnippet>490</a>/// Returns `None` only when every slot is held (`MAX_SLOTS` live images; a
+<a href=#491 id=491 data-nosnippet>491</a>/// dead cell's slot returns once its flush is confirmed).
+<a href=#492 id=492 data-nosnippet>492</a></span><span class="kw">pub fn </span>alloc_cell_va() -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#493 id=493 data-nosnippet>493</a>    SLOTS.alloc(<span class="kw-2">&amp;</span>SLOT_ORDER)
+<a href=#494 id=494 data-nosnippet>494</a>}
+<a href=#495 id=495 data-nosnippet>495</a>
+<a href=#496 id=496 data-nosnippet>496</a><span class="doccomment">/// Claim the slot at `base` for a fixed-VA (ET_EXEC) image that is linked
+<a href=#497 id=497 data-nosnippet>497</a>/// inside it. `false` when `base` is not a slot base or another cell owns it:
+<a href=#498 id=498 data-nosnippet>498</a>/// a fixed-VA image may never land in a slot a PIE (or another image) holds.
+<a href=#499 id=499 data-nosnippet>499</a>/// With randomised order a live PIE may hold any slot outside the lowest
+<a href=#500 id=500 data-nosnippet>500</a>/// [`FIXED_VA_SLOTS`], and those only once every other slot is held.
+<a href=#501 id=501 data-nosnippet>501</a></span><span class="kw">pub fn </span>reserve_cell_va(base: usize) -&gt; bool {
+<a href=#502 id=502 data-nosnippet>502</a>    SLOTS.reserve(base)
+<a href=#503 id=503 data-nosnippet>503</a>}
+<a href=#504 id=504 data-nosnippet>504</a>
+<a href=#505 id=505 data-nosnippet>505</a><span class="doccomment">/// Return a VA slot so it can be reused by a future cell.
+<a href=#506 id=506 data-nosnippet>506</a>///
+<a href=#507 id=507 data-nosnippet>507</a>/// `base` must be a value previously returned by `alloc_cell_va` or claimed
+<a href=#508 id=508 data-nosnippet>508</a>/// by `reserve_cell_va`. A non-slot address is ignored; a slot nobody holds
+<a href=#509 id=509 data-nosnippet>509</a>/// is logged and counted (`SlotAllocator::free`).
+<a href=#510 id=510 data-nosnippet>510</a></span><span class="kw">pub fn </span>free_cell_va(base: usize) {
+<a href=#511 id=511 data-nosnippet>511</a>    SLOTS.free(base)
+<a href=#512 id=512 data-nosnippet>512</a>}
+<a href=#513 id=513 data-nosnippet>513</a>
+<a href=#514 id=514 data-nosnippet>514</a><span class="doccomment">/// The cell slots' ownership bitmap, word by word.
+<a href=#515 id=515 data-nosnippet>515</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#516 id=516 data-nosnippet>516</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>snapshot() -&gt; alloc::vec::Vec&lt;u64&gt; {
+<a href=#517 id=517 data-nosnippet>517</a>    SLOTS.snapshot()
+<a href=#518 id=518 data-nosnippet>518</a>}
+<a href=#519 id=519 data-nosnippet>519</a>
+<a href=#520 id=520 data-nosnippet>520</a><span class="attr">#[cfg(test)]
+<a href=#521 id=521 data-nosnippet>521</a>#[path = <span class="string">"va-alloc-tests.rs"</span>]
+<a href=#522 id=522 data-nosnippet>522</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

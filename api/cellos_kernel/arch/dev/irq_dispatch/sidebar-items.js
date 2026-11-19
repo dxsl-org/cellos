@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["vi_handle_riscv_external_irq","vi_riscv_plic_context"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_tid","notice_accepted"],"struct":["Endpoint"]};

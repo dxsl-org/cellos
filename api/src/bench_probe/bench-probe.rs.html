@@ -10,7 +10,7 @@
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">mod </span>scenarios;
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="comment">// Probe/load roles do not spawn further children.
-<a href=#13 id=13 data-nosnippet>13</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#14 id=14 data-nosnippet>14</a>    Send,
 <a href=#15 id=15 data-nosnippet>15</a>    SendGather,
 <a href=#16 id=16 data-nosnippet>16</a>    Recv,
@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>    <span class="comment">// `fastpath-echo` resolves the host's channel Grant (owner-checked).
 <a href=#32 id=32 data-nosnippet>32</a>    </span>GrantSlice
 <a href=#33 id=33 data-nosnippet>33</a>];
-<a href=#34 id=34 data-nosnippet>34</a><span class="macro">api::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
+<a href=#34 id=34 data-nosnippet>34</a><span class="macro">abi::declare_manifest!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">false</span>);
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#37 id=37 data-nosnippet>37</a>

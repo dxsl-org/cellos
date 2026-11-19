@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["NOT_SEALED","QUOTA","REFUSED","STAGE_CHANGED"]};

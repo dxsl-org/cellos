@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","I40E_TXD_QW1_CMD_EOP","I40E_TXD_QW1_CMD_RS","I40E_TXD_QW1_DTYPE_DATA"],"fn":["clear","read_rx_desc","write_rx_desc","write_tx_desc"],"struct":["RxDesc","TxDesc"]};
+window.SIDEBAR_ITEMS = {"constant":["BUF_SIZE","I40E_TXD_QW1_CMD_EOP","I40E_TXD_QW1_CMD_RS","I40E_TXD_QW1_DTYPE_DATA","RX_SLOTS","TX_SLOTS"],"struct":["RxDesc","TxDesc"]};

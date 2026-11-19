@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["deserialize_slice","serialize_slice"],"trait":["ViSerializable"]};

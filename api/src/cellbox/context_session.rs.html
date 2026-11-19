@@ -24,7 +24,7 @@
 <a href=#24 id=24 data-nosnippet>24</a>//! order. Without the entry the holder's stdout and stderr writers stay separate.
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a></span><span class="attr">#[cfg(any(test, not(feature = <span class="string">"shell_test"</span>)))]
-<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>api::cell_session::Status;
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span>abi::cell_session::Status;
 <a href=#28 id=28 data-nosnippet>28</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
 <a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">use </span>terminal_sdk::context::ChildContext;
 <a href=#30 id=30 data-nosnippet>30</a><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))]
@@ -196,7 +196,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>    }
 <a href=#197 id=197 data-nosnippet>197</a>
 <a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">fn </span>merged_for(environment: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str)]) -&gt; bool {
-<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">use </span>api::cell_session::ObjectRefV1;
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">use </span>abi::cell_session::ObjectRefV1;
 <a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">use </span>terminal_sdk::context::ChildContext;
 <a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">let </span>operation = ObjectRefV1 {
 <a href=#202 id=202 data-nosnippet>202</a>            id: <span class="number">5</span>,

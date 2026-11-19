@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VARINT_U32_MAX_LEN","VFS_REQUEST_RENAME","VFS_RESPONSE_ERR","VFS_RESPONSE_OK"],"enum":["RenameReply"],"fn":["decode_reply","encode_rename","put_str","put_varint","take_varint_u32"]};

@@ -23,12 +23,12 @@
 <a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">extern crate </span>alloc;
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">use </span>alloc::boxed::Box;
-<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>api::ViError;
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
-<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>ostd::hotswap::{hotswap_key, restore_transfer, stash_transfer, ViStateTransfer};
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>ostd::io::println;
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>ostd::sync::Mutex;
-<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>ostd::syscall::sys_hotswap_ready;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">use </span>ostd::app::{AppContext, AppEvent};
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>ostd::hotswap::{hotswap_key, restore_transfer, stash_transfer, ViStateTransfer};
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span>ostd::io::println;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>ostd::sync::Mutex;
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>ostd::syscall::sys_hotswap_ready;
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">use </span>types::ViError;
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a><span class="comment">// spawn = true grants StateStash / StateRestore / HotSwapReady allowlist bits
 <a href=#34 id=34 data-nosnippet>34</a>// (bits 33, 34, 32) that the hotswap state-transfer protocol requires.
@@ -74,7 +74,7 @@
 <a href=#74 id=74 data-nosnippet>74</a></span><span class="kw">fn </span>main_handler(ctx: <span class="kw-2">&amp;mut </span>AppContext, event: AppEvent) {
 <a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">match </span>event {
 <a href=#76 id=76 data-nosnippet>76</a>        AppEvent::Init =&gt; {
-<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">match </span>ostd::syscall::sys_register_service(api::syscall::service::HOTSWAP_DEMO, <span class="number">0</span>, <span class="number">0</span>) {
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="kw">match </span>ostd::syscall::sys_register_service(abi::syscall::service::HOTSWAP_DEMO, <span class="number">0</span>, <span class="number">0</span>) {
 <a href=#78 id=78 data-nosnippet>78</a>                ostd::syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; {
 <a href=#79 id=79 data-nosnippet>79</a>                    println(<span class="string">"[hotswap-demo-v1] service registered"</span>)
 <a href=#80 id=80 data-nosnippet>80</a>                }

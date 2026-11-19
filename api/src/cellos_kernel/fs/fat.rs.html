@@ -12,8 +12,8 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span><span class="self">self</span>::runs::RunMap;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span><span class="kw">crate</span>::dev::ramdisk::ViRamDisk; <span class="comment">// Use RAM disk instead of VirtIO
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">use </span><span class="kw">crate</span>::sync::Spinlock;
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>api::block::ViBlockDevice;
-<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>api::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>abi::block::ViBlockDevice;
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>abi::fs::{BoxFuture, FileResult, OpenMode, Stat, ViFile, ViFileSystem};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>types::{ViError, ViResult}; <span class="comment">// Using Spinlock for kernel level sync
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a>// Import io traits from fatfs (0.4)
@@ -410,11 +410,11 @@
 <a href=#410 id=410 data-nosnippet>410</a>        <span class="prelude-val">Ok</span>(n)
 <a href=#411 id=411 data-nosnippet>411</a>    }
 <a href=#412 id=412 data-nosnippet>412</a>
-<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">fn </span>seek(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pos: api::fs::SeekFrom) -&gt; ViResult&lt;u64&gt; {
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">fn </span>seek(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pos: abi::fs::SeekFrom) -&gt; ViResult&lt;u64&gt; {
 <a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>new_pos = <span class="kw">match </span>pos {
-<a href=#415 id=415 data-nosnippet>415</a>            api::fs::SeekFrom::Start(off) =&gt; off,
-<a href=#416 id=416 data-nosnippet>416</a>            api::fs::SeekFrom::Current(off) =&gt; (<span class="self">self</span>.pos <span class="kw">as </span>i64 + off) <span class="kw">as </span>u64,
-<a href=#417 id=417 data-nosnippet>417</a>            api::fs::SeekFrom::End(off) =&gt; {
+<a href=#415 id=415 data-nosnippet>415</a>            abi::fs::SeekFrom::Start(off) =&gt; off,
+<a href=#416 id=416 data-nosnippet>416</a>            abi::fs::SeekFrom::Current(off) =&gt; (<span class="self">self</span>.pos <span class="kw">as </span>i64 + off) <span class="kw">as </span>u64,
+<a href=#417 id=417 data-nosnippet>417</a>            abi::fs::SeekFrom::End(off) =&gt; {
 <a href=#418 id=418 data-nosnippet>418</a>                <span class="comment">// We need file size to seek from end
 <a href=#419 id=419 data-nosnippet>419</a>                </span><span class="kw">let </span>fs_lock = <span class="self">self</span>.fs.lock();
 <a href=#420 id=420 data-nosnippet>420</a>                <span class="kw">let </span>root = fs_lock.root_dir();
@@ -518,31 +518,18 @@
 <a href=#518 id=518 data-nosnippet>518</a>        <span class="prelude-val">Ok</span>(())
 <a href=#519 id=519 data-nosnippet>519</a>    }
 <a href=#520 id=520 data-nosnippet>520</a>
-<a href=#521 id=521 data-nosnippet>521</a>    <span class="kw">fn </span>read_async(
-<a href=#522 id=522 data-nosnippet>522</a>        <span class="self">self</span>: Box&lt;<span class="self">Self</span>&gt;,
-<a href=#523 id=523 data-nosnippet>523</a>        buf_ptr: usize,
-<a href=#524 id=524 data-nosnippet>524</a>        buf_len: usize,
-<a href=#525 id=525 data-nosnippet>525</a>    ) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, FileResult&lt;usize&gt;&gt; {
-<a href=#526 id=526 data-nosnippet>526</a>        <span class="comment">// Contract guard (2026-07-31 Recv buffer-pinning audit): this synchronous
-<a href=#527 id=527 data-nosnippet>527</a>        // future must not be wired to a live async syscall until cancellation has
-<a href=#528 id=528 data-nosnippet>528</a>        // an explicit stop-touching-buffer acknowledgement and unpin point.
-<a href=#529 id=529 data-nosnippet>529</a>        </span>Box::pin(<span class="kw">async move </span>{
-<a href=#530 id=530 data-nosnippet>530</a>            <span class="kw">let </span><span class="kw-2">mut </span>this = <span class="self">self</span>;
-<a href=#531 id=531 data-nosnippet>531</a>            <span class="comment">// Create a temporary slice from the user pointer.
-<a href=#532 id=532 data-nosnippet>532</a>            // SAFETY: The kernel guarantees the pointer is valid (mapped to user space)
-<a href=#533 id=533 data-nosnippet>533</a>            // and we rely on the caller to ensure it doesn't race.
-<a href=#534 id=534 data-nosnippet>534</a>            // In a real async driver, we would need to pin user memory.
-<a href=#535 id=535 data-nosnippet>535</a>            </span><span class="kw">let </span>buf = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(buf_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8, buf_len) };
-<a href=#536 id=536 data-nosnippet>536</a>
-<a href=#537 id=537 data-nosnippet>537</a>            <span class="comment">// Perform synchronous read (for now, until RamDisk is async)
-<a href=#538 id=538 data-nosnippet>538</a>            // This still satisfies the architectural requirement of returning a future.
-<a href=#539 id=539 data-nosnippet>539</a>            </span><span class="kw">let </span>res = this.read(buf);
-<a href=#540 id=540 data-nosnippet>540</a>
-<a href=#541 id=541 data-nosnippet>541</a>            <span class="comment">// Return ownership and result
-<a href=#542 id=542 data-nosnippet>542</a>            // Cast FatFile back to Trait Object
-<a href=#543 id=543 data-nosnippet>543</a>            </span><span class="kw">let </span>trait_obj: Box&lt;<span class="kw">dyn </span>ViFile + Send + Sync&gt; = this;
-<a href=#544 id=544 data-nosnippet>544</a>            (trait_obj, res)
-<a href=#545 id=545 data-nosnippet>545</a>        })
-<a href=#546 id=546 data-nosnippet>546</a>    }
-<a href=#547 id=547 data-nosnippet>547</a>}
+<a href=#521 id=521 data-nosnippet>521</a>    <span class="doccomment">/// Not supported. No syscall reaches it, and a kernel file must never
+<a href=#522 id=522 data-nosnippet>522</a>    /// write through a raw user pointer: user bytes move only through the
+<a href=#523 id=523 data-nosnippet>523</a>    /// user-copy window (SMAP on x86_64).
+<a href=#524 id=524 data-nosnippet>524</a>    </span><span class="kw">fn </span>read_async(
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="self">self</span>: Box&lt;<span class="self">Self</span>&gt;,
+<a href=#526 id=526 data-nosnippet>526</a>        _buf_ptr: usize,
+<a href=#527 id=527 data-nosnippet>527</a>        _buf_len: usize,
+<a href=#528 id=528 data-nosnippet>528</a>    ) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, FileResult&lt;usize&gt;&gt; {
+<a href=#529 id=529 data-nosnippet>529</a>        Box::pin(<span class="kw">async move </span>{
+<a href=#530 id=530 data-nosnippet>530</a>            <span class="kw">let </span>file: Box&lt;<span class="kw">dyn </span>ViFile + Send + Sync&gt; = <span class="self">self</span>;
+<a href=#531 id=531 data-nosnippet>531</a>            (file, <span class="prelude-val">Err</span>(ViError::NotSupported))
+<a href=#532 id=532 data-nosnippet>532</a>        })
+<a href=#533 id=533 data-nosnippet>533</a>    }
+<a href=#534 id=534 data-nosnippet>534</a>}
 </code></pre></div></section></main></body></html>

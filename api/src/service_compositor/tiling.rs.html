@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>//! the "tabstops" of the group and cannot drift from the windows.
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>alloc::vec::Vec;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::display::{Rect, WindowState};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>wire::display::{Rect, WindowState};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span><span class="kw">crate</span>::stacking;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span><span class="kw">crate</span>::surface_table::frame::Side;
@@ -185,7 +185,7 @@
 <a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">else </span>{
 <a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">continue</span>;
 <a href=#187 id=187 data-nosnippet>187</a>        };
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>restore = api::display::compositor_ops::RESTORE;
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>restore = wire::display::compositor_ops::RESTORE;
 <a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(StateTransition::StateChanged(state)) =
 <a href=#190 id=190 data-nosnippet>190</a>            surface.request_state(other <span class="kw">as </span>u32, restore, surface.screen_rect())
 <a href=#191 id=191 data-nosnippet>191</a>        {

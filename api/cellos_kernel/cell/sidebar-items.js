@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cap_registry","cspace","hotswap","metadata","retirement_verdict","service_registry","state_stash"]};
+window.SIDEBAR_ITEMS = {"mod":["cap_registry","cspace","hotswap","init_death","metadata","retirement_verdict","service_registry","state_stash"]};

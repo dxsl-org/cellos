@@ -62,7 +62,7 @@
 <a href=#62 id=62 data-nosnippet>62</a><span class="comment">// Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 <a href=#63 id=63 data-nosnippet>63</a>// part_data/part_lfs scope the raw block syscalls to P1 (FAT32) + P4
 <a href=#64 id=64 data-nosnippet>64</a>// (littlefs) — P2 cell-table and P3 snapshot stay kernel-only (P03 design).
-<a href=#65 id=65 data-nosnippet>65</a></span><span class="macro">api::declare_manifest!</span>(
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="macro">abi::declare_manifest!</span>(
 <a href=#66 id=66 data-nosnippet>66</a>    block_io = <span class="bool-val">true</span>,
 <a href=#67 id=67 data-nosnippet>67</a>    network = <span class="bool-val">false</span>,
 <a href=#68 id=68 data-nosnippet>68</a>    spawn = <span class="bool-val">false</span>,
@@ -76,7 +76,7 @@
 <a href=#76 id=76 data-nosnippet>76</a>// `Read` syscall is deliberately ABSENT: it is an async transformation that
 <a href=#77 id=77 data-nosnippet>77</a>// requires the caller to park immediately, which a service dispatch loop
 <a href=#78 id=78 data-nosnippet>78</a>// cannot do (see backend_bootfs.rs::read_to_vec).
-<a href=#79 id=79 data-nosnippet>79</a></span><span class="macro">api::declare_syscalls!</span>[
+<a href=#79 id=79 data-nosnippet>79</a></span><span class="macro">abi::declare_syscalls!</span>[
 <a href=#80 id=80 data-nosnippet>80</a>    Send,
 <a href=#81 id=81 data-nosnippet>81</a>    SendGather,
 <a href=#82 id=82 data-nosnippet>82</a>    Recv,
@@ -188,9 +188,9 @@
 <a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">impl </span>ostd::service::Handler <span class="kw">for </span>Vfs {
 <a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">fn </span>on_request(<span class="kw-2">&amp;mut </span><span class="self">self</span>, request: ostd::service::Request&lt;<span class="lifetime">'_</span>&gt;) {
 <a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>caller = caller::Caller::from_attested(<span class="kw-2">*</span>request.caller());
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>encoded_len = {
-<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#193 id=193 data-nosnippet>193</a>            <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
 <a href=#194 id=194 data-nosnippet>194</a>            <span class="kw">let </span><span class="kw-2">mut </span>guard = GLOBAL_VFS.lock();
 <a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">let </span>vfs = guard
 <a href=#196 id=196 data-nosnippet>196</a>                .as_mut()
@@ -199,7 +199,7 @@
 <a href=#199 id=199 data-nosnippet>199</a>            <span class="kw">let </span>response =
 <a href=#200 id=200 data-nosnippet>200</a>                dispatch::handle_request(vfs, request.payload(), <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
 <a href=#201 id=201 data-nosnippet>201</a>            <span class="self">self</span>.idle_work = prepared_cwd::idle_work(vfs);
-<a href=#202 id=202 data-nosnippet>202</a>            api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded)
+<a href=#202 id=202 data-nosnippet>202</a>            wire::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded)
 <a href=#203 id=203 data-nosnippet>203</a>                .map(|bytes| bytes.len())
 <a href=#204 id=204 data-nosnippet>204</a>                .unwrap_or(<span class="number">0</span>)
 <a href=#205 id=205 data-nosnippet>205</a>        };
@@ -209,9 +209,9 @@
 <a href=#209 id=209 data-nosnippet>209</a>
 <a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// No owner watch, no durable state: the request is refused.
 <a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">fn </span>on_unwatched(<span class="kw-2">&amp;mut </span><span class="self">self</span>, request: ostd::service::Request&lt;<span class="lifetime">'_</span>&gt;) {
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>denied = api::ipc::VfsResponse::Err(api::services::proto::vfs::VfsError::Denied <span class="kw">as </span>u8);
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>denied, <span class="kw-2">&amp;mut </span>encoded)
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; wire::ipc::IPC_BUF_SIZE];
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>denied = wire::ipc::VfsResponse::Err(wire::proto::vfs::VfsError::Denied <span class="kw">as </span>u8);
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>len = wire::ipc::encode(<span class="kw-2">&amp;</span>denied, <span class="kw-2">&amp;mut </span>encoded)
 <a href=#215 id=215 data-nosnippet>215</a>            .map(|bytes| bytes.len())
 <a href=#216 id=216 data-nosnippet>216</a>            .unwrap_or(<span class="number">0</span>);
 <a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">let _ </span>= request.reply(<span class="kw-2">&amp;</span>encoded[..len]);

@@ -26,16 +26,16 @@
 <a href=#26 id=26 data-nosnippet>26</a>//! (bounded reaping).
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">use </span><span class="kw">crate</span>::stream::{call, ok, Endpoint, EndpointRights, Operation, ReceiptRef};
 <a href=#28 id=28 data-nosnippet>28</a><span class="kw">use </span><span class="kw">crate</span>::Status;
-<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>api::cell_session::frontend::{
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">use </span>abi::cell_session::frontend::{
 <a href=#30 id=30 data-nosnippet>30</a>    BindFrontendChildV1, FrontendStatusV1, ReattachFrontendV1, ReattachResultV1,
 <a href=#31 id=31 data-nosnippet>31</a>    RegisterFrontendV1, FRONTEND_KIND_GUI, FRONTEND_STATE_ATTACHED, FRONTEND_STATE_BOUND,
 <a href=#32 id=32 data-nosnippet>32</a>    FRONTEND_STATE_CLOSED, FRONTEND_STATE_LOST, FRONTEND_STATE_PENDING,
 <a href=#33 id=33 data-nosnippet>33</a>};
-<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>api::cell_session::{
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">use </span>abi::cell_session::{
 <a href=#35 id=35 data-nosnippet>35</a>    ChildRefV1, InputOp, KernelOp, ObjectRefV1, Reader, Writer, GRANT_KIND_INPUT_FRONTEND,
 <a href=#36 id=36 data-nosnippet>36</a>    HEADER_LEN, SLOT_FRONTEND,
 <a href=#37 id=37 data-nosnippet>37</a>};
-<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>api::service_binding::ServiceBinding;
+<a href=#38 id=38 data-nosnippet>38</a><span class="kw">use </span>abi::service_binding::ServiceBinding;
 <a href=#39 id=39 data-nosnippet>39</a><span class="kw">use </span>ostd::child_context::{ChildContext, Grant, GrantSlot};
 <a href=#40 id=40 data-nosnippet>40</a>
 <a href=#41 id=41 data-nosnippet>41</a><span class="doccomment">/// Largest chunk one `drain_*` call can return (one stream read frame).
@@ -271,10 +271,10 @@
 <a href=#271 id=271 data-nosnippet>271</a>    <span class="doccomment">/// Create the holder operation and the output rings for a `rows`×`cols` terminal.
 <a href=#272 id=272 data-nosnippet>272</a>    /// Nothing is registered or launched yet.
 <a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub fn </span>open(rows: u16, cols: u16) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, Status&gt; {
-<a href=#274 id=274 data-nosnippet>274</a>        api::services::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        wire::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
 <a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>operation = Operation::create(<span class="prelude-val">None</span>)<span class="question-mark">?</span>;
 <a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>result = (|| {
-<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">let </span>owner = ostd::session::service_binding(api::syscall::service::INPUT)<span class="question-mark">?</span>;
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">let </span>owner = ostd::session::service_binding(abi::syscall::service::INPUT)<span class="question-mark">?</span>;
 <a href=#278 id=278 data-nosnippet>278</a>            <span class="kw">let </span>(output, stdout_writer) = operation.create_stream(RING_CAPACITY)<span class="question-mark">?</span>;
 <a href=#279 id=279 data-nosnippet>279</a>            <span class="kw">let </span>(diagnostic, stderr_writer) = operation.create_stream(RING_CAPACITY)<span class="question-mark">?</span>;
 <a href=#280 id=280 data-nosnippet>280</a>            <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
@@ -308,7 +308,7 @@
 <a href=#308 id=308 data-nosnippet>308</a>        </span><span class="kw">let </span>mutating = op != InputOp::QueryFrontend;
 <a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>h = ostd::session::service_call(
 <a href=#310 id=310 data-nosnippet>310</a>            <span class="self">self</span>.owner,
-<a href=#311 id=311 data-nosnippet>311</a>            api::syscall::service::INPUT,
+<a href=#311 id=311 data-nosnippet>311</a>            abi::syscall::service::INPUT,
 <a href=#312 id=312 data-nosnippet>312</a>            shell.operation.reference().raw(),
 <a href=#313 id=313 data-nosnippet>313</a>            op <span class="kw">as </span>u16,
 <a href=#314 id=314 data-nosnippet>314</a>            mutating,
@@ -533,11 +533,11 @@
 <a href=#533 id=533 data-nosnippet>533</a>        payload[..<span class="number">4</span>].copy_from_slice(<span class="kw-2">&amp;</span>code.to_le_bytes());
 <a href=#534 id=534 data-nosnippet>534</a>        payload[<span class="number">4</span>..<span class="number">8</span>].copy_from_slice(<span class="kw-2">&amp;</span>modifiers.to_le_bytes());
 <a href=#535 id=535 data-nosnippet>535</a>        payload[<span class="number">8</span>] = pressed;
-<a href=#536 id=536 data-nosnippet>536</a>        api::services::session::validate_event(<span class="number">1</span>, <span class="kw-2">&amp;</span>payload)<span class="question-mark">?</span>;
+<a href=#536 id=536 data-nosnippet>536</a>        wire::session::validate_event(<span class="number">1</span>, <span class="kw-2">&amp;</span>payload)<span class="question-mark">?</span>;
 <a href=#537 id=537 data-nosnippet>537</a>        <span class="self">self</span>.submit_event(<span class="number">1</span>, <span class="kw-2">&amp;</span>payload)
 <a href=#538 id=538 data-nosnippet>538</a>    }
 <a href=#539 id=539 data-nosnippet>539</a>    <span class="kw">pub fn </span>submit_text(<span class="kw-2">&amp;mut </span><span class="self">self</span>, text: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), Status&gt; {
-<a href=#540 id=540 data-nosnippet>540</a>        api::services::session::validate_text(text.as_bytes())<span class="question-mark">?</span>;
+<a href=#540 id=540 data-nosnippet>540</a>        wire::session::validate_text(text.as_bytes())<span class="question-mark">?</span>;
 <a href=#541 id=541 data-nosnippet>541</a>        <span class="kw">if </span>text.is_empty() || text.len() &gt; <span class="number">512 </span>{
 <a href=#542 id=542 data-nosnippet>542</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::Malformed);
 <a href=#543 id=543 data-nosnippet>543</a>        }
@@ -555,7 +555,7 @@
 <a href=#555 id=555 data-nosnippet>555</a>    }
 <a href=#556 id=556 data-nosnippet>556</a>    <span class="doccomment">/// Entire paste validation occurs before the first owner mutation.
 <a href=#557 id=557 data-nosnippet>557</a>    </span><span class="kw">pub fn </span>submit_paste(<span class="kw-2">&amp;mut </span><span class="self">self</span>, text: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), Status&gt; {
-<a href=#558 id=558 data-nosnippet>558</a>        api::services::session::validate_paste(text.as_bytes())<span class="question-mark">?</span>;
+<a href=#558 id=558 data-nosnippet>558</a>        wire::session::validate_paste(text.as_bytes())<span class="question-mark">?</span>;
 <a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">let </span>link = <span class="self">self</span>.link()<span class="question-mark">?</span>;
 <a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = [<span class="number">0u8</span>; <span class="number">48</span>];
 <a href=#561 id=561 data-nosnippet>561</a>        <span class="kw">let </span><span class="kw-2">mut </span>w = Writer::new(<span class="kw-2">&amp;mut </span>body);
@@ -650,7 +650,7 @@
 <a href=#650 id=650 data-nosnippet>650</a>        <span class="kw">if </span><span class="self">self</span>.closed {
 <a href=#651 id=651 data-nosnippet>651</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::Revoked);
 <a href=#652 id=652 data-nosnippet>652</a>        }
-<a href=#653 id=653 data-nosnippet>653</a>        api::services::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
+<a href=#653 id=653 data-nosnippet>653</a>        wire::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
 <a href=#654 id=654 data-nosnippet>654</a>        <span class="self">self</span>.rows = rows;
 <a href=#655 id=655 data-nosnippet>655</a>        <span class="self">self</span>.cols = cols;
 <a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(link) = <span class="self">self</span>.link <span class="kw">else </span>{ <span class="kw">return </span><span class="prelude-val">Ok</span>(()) };
@@ -772,7 +772,7 @@
 <a href=#772 id=772 data-nosnippet>772</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Status::WrongSession);
 <a href=#773 id=773 data-nosnippet>773</a>        }
 <a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>resume = <span class="self">self</span>.resume.ok_or(Status::Stale)<span class="question-mark">?</span>;
-<a href=#775 id=775 data-nosnippet>775</a>        api::services::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
+<a href=#775 id=775 data-nosnippet>775</a>        wire::session::validate_dimensions(rows, cols)<span class="question-mark">?</span>;
 <a href=#776 id=776 data-nosnippet>776</a>        <span class="kw">let </span>frontend = <span class="self">self</span>.register(rows, cols)<span class="question-mark">?</span>;
 <a href=#777 id=777 data-nosnippet>777</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = [<span class="number">0u8</span>; ReattachFrontendV1::LEN];
 <a href=#778 id=778 data-nosnippet>778</a>        ReattachFrontendV1 { frontend, resume }.encode(<span class="kw-2">&amp;mut </span>body)<span class="question-mark">?</span>;
@@ -1055,7 +1055,7 @@
 <a href=#1055 id=1055 data-nosnippet>1055</a>                    GRANT_KIND_INPUT_FRONTEND,
 <a href=#1056 id=1056 data-nosnippet>1056</a>                    GrantSlot::Frontend,
 <a href=#1057 id=1057 data-nosnippet>1057</a>                    <span class="number">0</span>,
-<a href=#1058 id=1058 data-nosnippet>1058</a>                    api::syscall::service::INPUT <span class="kw">as </span>u64,
+<a href=#1058 id=1058 data-nosnippet>1058</a>                    abi::syscall::service::INPUT <span class="kw">as </span>u64,
 <a href=#1059 id=1059 data-nosnippet>1059</a>                    r(<span class="number">13</span>, <span class="number">1</span>)
 <a href=#1060 id=1060 data-nosnippet>1060</a>                ),
 <a href=#1061 id=1061 data-nosnippet>1061</a>            ]

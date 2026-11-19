@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"fn":["flush_tlb_page"],"struct":["PageTable"]};
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE","USER_LIMIT"],"fn":["current_root","flush_tlb_page","leaf","phys_to_virt"],"struct":["PageTable"]};

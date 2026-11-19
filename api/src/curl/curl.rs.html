@@ -3,13 +3,13 @@
 <a href=#3 id=3 data-nosnippet>3</a>#![forbid(unsafe_code)]
 <a href=#4 id=4 data-nosnippet>4</a></span><span class="kw">extern crate </span>ostd;
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>api::services::proto::net::NetError;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>api::syscall::service;
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ostd::io::{print, println};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::ipc::{service_call_typed_bounded, IpcError};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
-<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>ostd::syscall::{sys_get_time_ms, sys_yield};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>abi::syscall::service;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>ostd::io::{print, println};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>ostd::ipc::{service_call_typed_bounded, IpcError};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ostd::service::provider_tid;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ostd::syscall::{sys_get_time_ms, sys_yield};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>wire::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>wire::proto::net::NetError;
 <a href=#13 id=13 data-nosnippet>13</a>
 <a href=#14 id=14 data-nosnippet>14</a><span class="doccomment">/// service-net refused the request: this Cell holds no network right for it.
 <a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">const </span>NET_DENIED: <span class="kw-2">&amp;</span>str = <span class="string">"permission denied (no network right)"</span>;
@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>/// its own DNS query deadline.
 <a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">const </span>NET_CALL_TICKS: u64 = <span class="number">1_000</span>;
 <a href=#33 id=33 data-nosnippet>33</a>
-<a href=#34 id=34 data-nosnippet>34</a><span class="macro">api::declare_syscalls!</span>[Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
+<a href=#34 id=34 data-nosnippet>34</a><span class="macro">abi::declare_syscalls!</span>[Send, Recv, Log, StateRestore, LookupServiceBound, GetTime];
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a><span class="macro">ostd::cell_main!</span>(cell_main);
 <a href=#37 id=37 data-nosnippet>37</a>

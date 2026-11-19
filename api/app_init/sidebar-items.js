@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","launch_order","main","own_tid","required_services_available","start_services"],"mod":["activation","activation_state","boot","configuration","machine_pin","service_table","supervisor"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["boot_stop","cell_main","launch_order","main","own_tid","required_services_available","start_services"],"mod":["boot","configuration","pin_gate","service_table","supervisor"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["REGISTRATION_POLLS","REGISTRATION_TICKS","STORE_OPTIONAL_PROFILE"],"fn":["authorize_confirm","evaluate","registered_facts","run","short"],"struct":["Gate"]};

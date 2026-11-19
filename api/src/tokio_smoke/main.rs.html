@@ -11,7 +11,7 @@
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>ostd::service::provider_tid;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>vimio::{Events, Interest, Selector, Token, Waker};
 <a href=#13 id=13 data-nosnippet>13</a>
-<a href=#14 id=14 data-nosnippet>14</a><span class="macro">api::declare_manifest!</span>(
+<a href=#14 id=14 data-nosnippet>14</a><span class="macro">abi::declare_manifest!</span>(
 <a href=#15 id=15 data-nosnippet>15</a>    block_io = <span class="bool-val">false</span>,
 <a href=#16 id=16 data-nosnippet>16</a>    network = <span class="bool-val">true</span>,
 <a href=#17 id=17 data-nosnippet>17</a>    spawn = <span class="bool-val">false</span>,
@@ -22,7 +22,7 @@
 <a href=#22 id=22 data-nosnippet>22</a>    spi = <span class="bool-val">false
 <a href=#23 id=23 data-nosnippet>23</a></span>);
 <a href=#24 id=24 data-nosnippet>24</a>
-<a href=#25 id=25 data-nosnippet>25</a><span class="macro">api::declare_syscalls!</span>[
+<a href=#25 id=25 data-nosnippet>25</a><span class="macro">abi::declare_syscalls!</span>[
 <a href=#26 id=26 data-nosnippet>26</a>    Send,
 <a href=#27 id=27 data-nosnippet>27</a>    Recv,
 <a href=#28 id=28 data-nosnippet>28</a>    TrySend,
@@ -84,18 +84,18 @@
 <a href=#84 id=84 data-nosnippet>84</a>    }
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="comment">// Connect to network service if online
-<a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(net_tid) = provider_tid(api::syscall::service::NET) {
+<a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(net_tid) = provider_tid(abi::syscall::service::NET) {
 <a href=#88 id=88 data-nosnippet>88</a>        println(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
 <a href=#89 id=89 data-nosnippet>89</a>            <span class="string">"[tokio-smoke] Network service available at tid: {}"</span>,
 <a href=#90 id=90 data-nosnippet>90</a>            net_tid
 <a href=#91 id=91 data-nosnippet>91</a>        ));
 <a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>req = api::ipc::NetRequest::TcpListen { port: HTTP_PORT };
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>req = wire::ipc::NetRequest::TcpListen { port: HTTP_PORT };
 <a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; <span class="number">128</span>];
 <a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">128</span>];
 <a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(api::ipc::NetResponse::CapId(listener_cap)) =
-<a href=#98 id=98 data-nosnippet>98</a>            ostd::ipc::service_call_typed_bounded::&lt;<span class="kw">_</span>, api::ipc::NetResponse&lt;<span class="lifetime">'_</span>&gt;&gt;(
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(wire::ipc::NetResponse::CapId(listener_cap)) =
+<a href=#98 id=98 data-nosnippet>98</a>            ostd::ipc::service_call_typed_bounded::&lt;<span class="kw">_</span>, wire::ipc::NetResponse&lt;<span class="lifetime">'_</span>&gt;&gt;(
 <a href=#99 id=99 data-nosnippet>99</a>                net_tid,
 <a href=#100 id=100 data-nosnippet>100</a>                <span class="kw-2">&amp;</span>req,
 <a href=#101 id=101 data-nosnippet>101</a>                <span class="kw-2">&amp;mut </span>req_buf,

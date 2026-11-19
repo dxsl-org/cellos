@@ -4,8 +4,8 @@
 <a href=#4 id=4 data-nosnippet>4</a><span class="attr">#[cfg(feature = <span class="string">"ssh-dev-custody"</span>)]
 <a href=#5 id=5 data-nosnippet>5</a></span><span class="kw">mod </span>ssh;
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>api::caller_identity::CallerIdentity;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>types::kms::{
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>abi::caller_identity::CallerIdentity;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>kms_codec::{
 <a href=#9 id=9 data-nosnippet>9</a>    BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1, ServiceNetBindingEpoch,
 <a href=#10 id=10 data-nosnippet>10</a>};
 <a href=#11 id=11 data-nosnippet>11</a>
@@ -135,10 +135,10 @@
 <a href=#135 id=135 data-nosnippet>135</a>    </span>))]
 <a href=#136 id=136 data-nosnippet>136</a>    </span><span class="kw">pub fn </span>development_silo_boot_probe(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
 <a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>status = <span class="self">self</span>.provider.relay_p256_status();
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">if </span>status.metadata.provider != types::kms::KmsProviderKind::SiloWrapped
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">if </span>status.metadata.provider != kms_codec::KmsProviderKind::SiloWrapped
 <a href=#139 id=139 data-nosnippet>139</a>            || status.metadata.assessment
-<a href=#140 id=140 data-nosnippet>140</a>                != types::kms::RelayProviderAssessment::DevelopmentReference
-<a href=#141 id=141 data-nosnippet>141</a>            || status.metadata.readiness != types::kms::KmsCapabilityReadiness::Ready
+<a href=#140 id=140 data-nosnippet>140</a>                != kms_codec::RelayProviderAssessment::DevelopmentReference
+<a href=#141 id=141 data-nosnippet>141</a>            || status.metadata.readiness != kms_codec::KmsCapabilityReadiness::Ready
 <a href=#142 id=142 data-nosnippet>142</a>        {
 <a href=#143 id=143 data-nosnippet>143</a>            <span class="kw">return </span><span class="bool-val">false</span>;
 <a href=#144 id=144 data-nosnippet>144</a>        }
@@ -343,7 +343,7 @@
 <a href=#343 id=343 data-nosnippet>343</a></span><span class="kw">mod </span>ssh_unavailable_tests {
 <a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#345 id=345 data-nosnippet>345</a>    <span class="kw">use </span><span class="kw">crate</span>::storage::FixtureRelayProvider;
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">use </span>types::kms::{KmsCapabilityReadiness, RelayP256StatusPayload, KMS_PAYLOAD_LEN};
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">use </span>kms_codec::{KmsCapabilityReadiness, RelayP256StatusPayload, KMS_PAYLOAD_LEN};
 <a href=#347 id=347 data-nosnippet>347</a>
 <a href=#348 id=348 data-nosnippet>348</a>    <span class="kw">const </span>SSH_OPCODES: [KmsOpcode; <span class="number">10</span>] = [
 <a href=#349 id=349 data-nosnippet>349</a>        KmsOpcode::BeginSshKeyImport,

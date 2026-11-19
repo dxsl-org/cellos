@@ -1,9 +1,0 @@
-(function() {
-    const implementors = Object.fromEntries([["cellbox",[["impl <a class=\"trait\" href=\"api/services/hotswap/trait.ViStateTransfer.html\" title=\"trait api::services::hotswap::ViStateTransfer\">ViStateTransfer</a> for <a class=\"struct\" href=\"cellbox/state_transfer/struct.ShellStateOwned.html\" title=\"struct cellbox::state_transfer::ShellStateOwned\">ShellStateOwned</a>",0],["impl&lt;'a&gt; <a class=\"trait\" href=\"api/services/hotswap/trait.ViStateTransfer.html\" title=\"trait api::services::hotswap::ViStateTransfer\">ViStateTransfer</a> for <a class=\"struct\" href=\"cellbox/state_transfer/struct.ShellState.html\" title=\"struct cellbox::state_transfer::ShellState\">ShellState</a>&lt;'a&gt;",0]]],["service_config",[["impl <a class=\"trait\" href=\"api/services/hotswap/trait.ViStateTransfer.html\" title=\"trait api::services::hotswap::ViStateTransfer\">ViStateTransfer</a> for <a class=\"struct\" href=\"service_config/struct.ConfigStore.html\" title=\"struct service_config::ConfigStore\">ConfigStore</a>",0]]],["service_vfs",[["impl <a class=\"trait\" href=\"api/services/hotswap/trait.ViStateTransfer.html\" title=\"trait api::services::hotswap::ViStateTransfer\">ViStateTransfer</a> for <a class=\"struct\" href=\"service_vfs/manager/struct.VfsManager.html\" title=\"struct service_vfs::manager::VfsManager\">VfsManager</a>",0]]]]);
-    if (window.register_implementors) {
-        window.register_implementors(implementors);
-    } else {
-        window.pending_implementors = implementors;
-    }
-})()
-//{"start":59,"fragment_lengths":[668,317,322]}

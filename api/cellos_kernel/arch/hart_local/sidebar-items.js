@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PHYSICAL_ID_LIMIT"]};

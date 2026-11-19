@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Backing","PinState","Receiver","RegionKind"],"fn":["is_grant"],"struct":["Region","RegionOwner","RegionTable"],"type":["DomainRecord"]};

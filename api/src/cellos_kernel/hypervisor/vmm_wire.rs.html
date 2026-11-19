@@ -7,7 +7,7 @@
 <a href=#7 id=7 data-nosnippet>7</a>//! layout: the `u8` tag at 0, the payload (a `repr(C)` struct per variant) at
 <a href=#8 id=8 data-nosnippet>8</a>//! 8, the union's alignment.
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>api::hypervisor::ViVmExit;
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">use </span>abi::hypervisor::ViVmExit;
 <a href=#11 id=11 data-nosnippet>11</a>
 <a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// Size of the `ViVmExit` record in the cell's buffer (frozen ABI).
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>EXIT_LEN: usize = core::mem::size_of::&lt;ViVmExit&gt;();
