@@ -1271,19 +1271,6 @@ jobs:
           --target x86_64-unknown-linux-gnu
           -- --nocapture --test-threads=2
 
-      # ADR-0031 phase 05: virtio-net/blk/scsi over PCI. Default q35 lane (DHCP +
-      # two-boot persistence), vIOMMU fail-closed without iommu_platform, and
-      # vIOMMU with iommu_platform=on. The kvm-default-vm acceptance test needs
-      # /dev/kvm and VICELL_X86_VM_ISO (limine-vm.conf); it skips otherwise.
-      - name: virtio-pci integration test (x86_64)
-        run: |
-          X86_LIMINE_CONF=scripts/x86/limine-vm.conf \
-            X86_ISO_ROOT="$RUNNER_TEMP/x86-vm-iso-root" \
-            bash scripts/x86/make-iso-ci.sh build/x86-vm-lane/vicell-x86-vm.iso
-          VICELL_X86_VM_ISO="$GITHUB_WORKSPACE/build/x86-vm-lane/vicell-x86-vm.iso" \
-            cargo test --manifest-path tests/integration/Cargo.toml \
-            --test virtio-x86 --target x86_64-unknown-linux-gnu -- --nocapture
-
       # Phase 05: the VT-d register base must come from ACPI DMAR, and a profile
       # that requires isolation must refuse untranslated DMA. The kernel is the
       # one the steps above booted (one x86_64 image, profile bound at boot,
@@ -1294,6 +1281,20 @@ jobs:
           X86_LIMINE_CONF=scripts/x86/limine-pc.conf \
             X86_ISO_ROOT="$RUNNER_TEMP/x86-pc-iso-root" \
             bash scripts/x86/make-iso-ci.sh build/x86-pc-lane/vicell-x86-pc.iso
+
+      # ADR-0031 phase 05: virtio-net/blk/scsi over PCI. Default q35 lane (DHCP +
+      # two-boot persistence), vIOMMU fail-closed without iommu_platform, and
+      # vIOMMU with iommu_platform=on. The kvm-default-vm acceptance test needs
+      # /dev/kvm and VICELL_X86_VM_ISO (limine-vm.conf); it skips otherwise. The
+      # VT-d cases boot the x86_64-pc image built in the step above.
+      - name: virtio-pci integration test (x86_64)
+        run: |
+          X86_LIMINE_CONF=scripts/x86/limine-vm.conf \
+            X86_ISO_ROOT="$RUNNER_TEMP/x86-vm-iso-root" \
+            bash scripts/x86/make-iso-ci.sh build/x86-vm-lane/vicell-x86-vm.iso
+          VICELL_X86_VM_ISO="$GITHUB_WORKSPACE/build/x86-vm-lane/vicell-x86-vm.iso" \
+            cargo test --manifest-path tests/integration/Cargo.toml \
+            --test virtio-x86 --target x86_64-unknown-linux-gnu -- --nocapture
 
       # Plan 261103-2218 phase 09: QEMU `pvscsi` + `scsi-hd` on `/bin/pvscsi`
       # next to an NVMe primary: IRQ-driven bind line and two-boot persistence
