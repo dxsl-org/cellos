@@ -3,14 +3,31 @@ name: CI
 on:
   push:
     branches: [main]
+    # Planning/doc-only pushes start no run. The Lint guards that read these
+    # trees run before every push in .githooks/pre-push (scripts/ci-local.py).
+    paths-ignore: ['.agents/**', 'docs/**', '*.md']
   pull_request:
     branches: [main]
+    paths-ignore: ['.agents/**', 'docs/**', '*.md']
   workflow_dispatch:
+    inputs:
+      heavy:
+        description: Run the QEMU lanes on GitHub-hosted runners too
+        type: boolean
+        default: true
 
 # A newer push to the same branch/PR supersedes the running pipeline.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+# Runner selection (repository variable CI_SELF_HOSTED, Settings -> Variables):
+#   "true"  every job runs on the self-hosted `cellos-ci` runner (no hosted
+#           minutes; setup: scripts/ci-runner/setup-runner.sh). Steps that need
+#           root (apt) only verify the host has the packages.
+#   unset   jobs run on ubuntu-24.04. The QEMU lanes, marked
+#           `if: vars.CI_SELF_HOSTED == 'true' || inputs.heavy`, then run only
+#           from a manual workflow_dispatch, not on push or pull_request.
 
 # ⚠ Do NOT add a workflow-level RUSTFLAGS here. The RUSTFLAGS env var REPLACES
 # (does not merge with) per-target rustflags — a global "-D warnings" silently
@@ -40,7 +57,7 @@ env:
 jobs:
   lint:
     name: Lint (fmt + clippy)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -197,7 +214,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src,rustfmt,clippy
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
 
@@ -208,8 +226,10 @@ jobs:
       # its vendored C core, so the riscv64 cross gcc must be present even for
       # a lint-only job.
       - name: Install cross C compiler for littlefs2-sys
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-riscv64-unknown-elf
 
       - name: Clippy (riscv64 target)
         env:
@@ -242,7 +262,7 @@ jobs:
 
   board-configs:
     name: Board configuration matrix
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -254,7 +274,8 @@ jobs:
           components: rust-src
           targets: riscv64gc-unknown-none-elf,aarch64-unknown-none-softfloat,x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: board-configs
@@ -267,7 +288,7 @@ jobs:
 
   build:
     name: Build (${{ matrix.target }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -332,7 +353,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: ${{ matrix.short }}
@@ -343,8 +365,10 @@ jobs:
       # `-none` target unless we install and point it at a matching cross compiler.
       - name: Install cross C compiler for littlefs2-sys
         if: matrix.cc_pkg != ''
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q ${{ matrix.cc_pkg }}
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ${{ matrix.cc_pkg }}
 
       # scripts/build-boot-ramdisk-ci.sh bakes a signed /POLICY.BIN, and
       # scripts/sign-policy.py needs Ed25519 from `cryptography`. Without this the
@@ -353,7 +377,7 @@ jobs:
       - name: Install Python cryptography (policy blob signing)
         if: matrix.short == 'rv64'
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       # The rv64 artifact feeds the QEMU boot gate, and kernel_fs.img (VIFS1
       # ramdisk, gitignored build artifact) must be real — build.rs otherwise
@@ -437,15 +461,18 @@ jobs:
 
   qemu-boot:
     name: QEMU Boot Test (512M RAM)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     needs: build
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install QEMU
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc
 
       - name: Download kernel artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -467,7 +494,8 @@ jobs:
   # (2026-09-27) both lived in the tree unnoticed until a manual run.
   rust-std-lane:
     name: Tier 1 rust-std lane (sysroot overlay + QEMU smoke)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -481,7 +509,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: rust-std-lane
@@ -494,16 +523,15 @@ jobs:
       # a RISC-V or AArch64 cell ELF), plus the RISC-V C cross compiler the
       # bootstrap cells' build scripts probe for.
       - name: Install QEMU, xorriso and the cell cross toolchains
-        timeout-minutes: 10
-        run: >
-          sudo apt-get update -q && sudo apt-get install -y -q
-          qemu-system-misc qemu-system-arm qemu-system-x86 xorriso
-          gcc-riscv64-unknown-elf binutils-aarch64-linux-gnu
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc qemu-system-arm qemu-system-x86 xorriso gcc-riscv64-unknown-elf binutils-aarch64-linux-gnu
 
       # scripts/sign-policy.py builds the Ed25519 POLICY.BIN the ramdisk carries.
       - name: Install Python cryptography (policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       # The validator and both approval artifacts are digest-pinned; these tests
       # are the only thing that notices when a covered input drifts.
@@ -533,7 +561,8 @@ jobs:
 
   c2c-broker-oracle-single-guest-local-runtime:
     name: C2C Broker Oracle (single-guest local-runtime QEMU)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
       # Keep evidence under RUNNER_TEMP: checkout may replace the workspace
@@ -575,27 +604,32 @@ jobs:
           } >> "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Cache dependencies for single-guest local-runtime oracle
+        if: runner.environment == 'github-hosted'
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           cache-targets: false
           key: c2c-broker-oracle-single-guest-local-runtime
 
-      - name: Install single-guest local-runtime QEMU dependencies
-        # Run 33147796277 spent 19m58s fetching 167 MB at 140 kB/s and reached
-        # dpkg only as the old 20-minute limit expired. Skip QEMU's optional
-        # GUI/media recommendations and leave bounded time for unpack/configure.
-        timeout-minutes: 25
+      - name: Record single-guest local-runtime setup start
         shell: bash
         run: |
-          set -euo pipefail
           log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
           printf '[setup] Rust dependency cache setup completed\n' | tee -a "$log"
           printf '[setup] apt dependency installation starting\n' | tee -a "$log"
-          sudo apt-get update -q 2>&1 | tee -a "$log"
-          sudo apt-get install -y -q --no-install-recommends \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev 2>&1 | tee -a "$log"
-          printf '[setup] apt dependency installation completed\n' | tee -a "$log"
+
+      - name: Install single-guest local-runtime QEMU dependencies
+        # Run 33147796277 spent 19m58s fetching 167 MB at 140 kB/s. Skip QEMU's
+        # optional GUI/media recommendations; the action caches the .debs.
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          no-install-recommends: "true"
+
+      - name: Record single-guest local-runtime apt completion
+        shell: bash
+        run: printf '[setup] apt dependency installation completed\n' | tee -a "$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
 
       - name: Install Python cryptography for single-guest local-runtime signing
         timeout-minutes: 5
@@ -604,7 +638,7 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/c2c-oracle-evidence/single-guest-local-runtime-qemu.log"
           printf '[setup] Python cryptography installation starting\n' | tee -a "$log"
-          python3 -m pip install --user --quiet -r requirements-ci.txt 2>&1 | tee -a "$log"
+          python3 scripts/ensure-ci-python-deps.py 2>&1 | tee -a "$log"
           printf '[setup] Python cryptography installation completed\n' | tee -a "$log"
 
       - name: Run single-guest local-runtime C2C broker QEMU oracle
@@ -629,7 +663,7 @@ jobs:
 
   aarch64-lint:
     name: Clippy (aarch64)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -641,7 +675,8 @@ jobs:
           components: rust-src,clippy
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: aarch64-lint
@@ -657,7 +692,8 @@ jobs:
 
   qemu-aarch64-boot:
     name: QEMU Boot Test (aarch64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     needs: build
     steps:
@@ -670,17 +706,20 @@ jobs:
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: aarch64-boot
 
       - name: Install QEMU, libclang and aarch64 sysroot
-        timeout-minutes: 10
         # gcc-aarch64-linux-gnu supplies /usr/aarch64-linux-gnu — the sysroot
         # bindgen needs for aarch64 struct layouts (host glibc headers 404 on
         # bits/libc-header-start.h under --target=aarch64-linux-gnu).
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
 
       - name: Build aarch64 cells
         # clang cross-compiles the littlefs C core for the bare-metal target
@@ -704,7 +743,7 @@ jobs:
       # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Assemble aarch64 kernel_fs.img
         # The cell list must match scripts/build-aarch64-cells.ps1, which is the
@@ -792,7 +831,8 @@ jobs:
   # runner.
   qemu-hypervisor-machinery:
     name: QEMU Hypervisor Machinery Smoke (TCG)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     needs: build
     # Job-level: make-hypervisor-fs.sh runs its own cargo builds, so the
@@ -812,7 +852,8 @@ jobs:
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: hypervisor-smoke
@@ -820,8 +861,10 @@ jobs:
       # squashfs-tools: make-hypervisor-fs.sh pulls the ext4 modules for the
       # guest's /bin/pi-guest-init out of modloop-virt with unsquashfs.
       - name: Install QEMU, squashfs-tools and aarch64 sysroot
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -925,14 +968,17 @@ jobs:
           components: rust-src
           targets: aarch64-unknown-none-softfloat
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: hypervisor-boot-kvm
 
       - name: Install QEMU, squashfs-tools and aarch64 sysroot
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-arm squashfs-tools libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -997,7 +1043,7 @@ jobs:
 
   x86_64-lint:
     name: Clippy (x86_64)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1009,7 +1055,8 @@ jobs:
           components: rust-src,clippy
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86_64-lint
@@ -1042,7 +1089,8 @@ jobs:
 
   qemu-x86_64-boot:
     name: QEMU Boot Test (x86_64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     needs: build
     steps:
@@ -1055,21 +1103,24 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86_64-boot
 
       - name: Install QEMU and xorriso
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-x86 xorriso
 
       # kernel_fs.img is a gitignored build artifact; the committed copy goes
       # stale against the kernel ABI — assemble a fresh one.
       # cellos_sign verifies the F1/F5 policy through `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Assemble x86_64 kernel_fs.img (headless profile)
         # scripts/assemble-x86-image.py is the single x86 image recipe (also
@@ -1339,7 +1390,8 @@ jobs:
   # is never written.
   x86-c2c:
     name: Intel C2C gate (x86_64 TCG)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1358,18 +1410,21 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-c2c
 
       - name: Install QEMU and xorriso
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-x86 xorriso
 
       - name: Install Python packages (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Build two-node C2C image (headless, isolated)
         env:
@@ -1444,7 +1499,8 @@ jobs:
 
   qemu-x86-hypervisor-boot:
     name: QEMU Hypervisor Boot-to-Shell (x86_64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     needs: build
     timeout-minutes: 60
     env:
@@ -1464,21 +1520,20 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-hypervisor-boot
 
       - name: Install QEMU build and image dependencies
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev \
-            libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev libslirp-dev ninja-build pkg-config python3-venv xorriso xz-utils zstd
       - name: Install Python cryptography (policy blob signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
 
       - name: Restore QEMU 10.2.0
@@ -1557,7 +1612,8 @@ jobs:
   # not the application-acceptance oracle. QEMU evidence is not physical evidence.
   qemu-x86-tier3-python:
     name: Tier 3 CPython In-Guest Gate (x86_64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     needs: build
     timeout-minutes: 100
     env:
@@ -1582,18 +1638,17 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-tier3-python
 
       - name: Install QEMU build and image dependencies
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev \
-            libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: binutils build-essential curl gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1665,7 +1720,8 @@ jobs:
   # in .agents/TODO.md (`seg_max`), not a problem with this job's wiring.
   qemu-x86-tier3-virtio-e2e:
     name: Tier 3 x86 VirtIO E2E + Persistence (x86_64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     needs: build
     timeout-minutes: 60
     env:
@@ -1688,7 +1744,8 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-virtio-e2e
@@ -1696,13 +1753,10 @@ jobs:
       # mtools/dosfstools provision the outer NVMe image the lane boots with
       # (mcopy + mkfs.fat); xorriso builds the ISO.
       - name: Install QEMU build and image dependencies
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            binutils build-essential curl dosfstools gzip libglib2.0-dev \
-            libpixman-1-dev libslirp-dev mtools ninja-build pkg-config \
-            python3-venv xorriso xz-utils zstd
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: binutils build-essential curl dosfstools gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1751,7 +1805,8 @@ jobs:
   # own cells (hostile-backend-recovery) and its C probe.
   qemu-x86-tier3-hostile:
     name: Tier 3 x86 Hostile Corpus (x86_64)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     needs: build
     timeout-minutes: 75
     env:
@@ -1774,19 +1829,17 @@ jobs:
           components: rust-src
           targets: x86_64-unknown-none
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: x86-tier3-hostile
 
       - name: Install QEMU build and image dependencies
-        timeout-minutes: 10
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            binutils build-essential curl dosfstools gzip libglib2.0-dev \
-            libpixman-1-dev libslirp-dev mtools ninja-build pkg-config \
-            python3-venv xorriso xz-utils zstd
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: binutils build-essential curl dosfstools gzip libglib2.0-dev libpixman-1-dev libslirp-dev mtools ninja-build pkg-config python3-venv xorriso xz-utils zstd
 
       - name: Restore QEMU 10.2.0
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1833,7 +1886,8 @@ jobs:
 
   vfs-quota:
     name: VFS Quota Integration Test
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1844,23 +1898,24 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: vfs-quota
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step, not appended to the apt install above: that step already spends its
       # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Build test-hooks kernel
         run: |
@@ -1886,7 +1941,8 @@ jobs:
       fail-fast: false
       matrix:
         arch: [riscv64, aarch64]
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1897,23 +1953,24 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: ai-inference-oracle-${{ matrix.arch }}
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q qemu-system-misc qemu-system-arm gcc-riscv64-unknown-elf gcc-aarch64-linux-gnu libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc qemu-system-arm gcc-riscv64-unknown-elf gcc-aarch64-linux-gnu libclang-dev
 
       # The runner signs its cells through scripts/lib-sign-cells.sh, which needs
       # the policy signer too (cryptography). Own step for the same reason the
       # vfs-quota job separates it: the apt step above can consume its whole budget.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       # Cheap pre-check: the AI interface is frozen under Law 1, so a change to a confirmed
       # item must be an explicit ABI decision rather than an unnoticed edit here.
@@ -1939,7 +1996,8 @@ jobs:
 
   srv-cellosfs:
     name: CellosFS /srv Integration Test
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1950,24 +2008,24 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: srv-cellosfs
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step, not appended to the apt install above: that step already spends its
       # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Build srv-test kernel
         run: |
@@ -1998,7 +2056,8 @@ jobs:
     # args, 61-row cell table and P6 cell-store, digest-verified before it
     # replaces the image).
     name: RV64 integration disk (launch profile + Tier-2 fault isolation)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2011,23 +2070,23 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: rv64-tier2-disk
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step: cell and policy signing needs it, and a timeout in the apt step
       # above must not read as a signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Build the RV64 integration disk
         run: |
@@ -2044,7 +2103,7 @@ jobs:
 
   unit-tests:
     name: Host unit tests (types + api)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2055,7 +2114,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
 
@@ -2174,7 +2234,7 @@ jobs:
   # replace it.
   kms-ssh-dev-posture:
     name: KMS SSH dev custody (host tests + variant markers)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2185,7 +2245,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: kms-ssh-dev-posture
@@ -2283,7 +2344,7 @@ jobs:
     # check. The closure file the signer reads is generated from `cargo metadata`;
     # this job regenerates it and fails on drift, so the signer itself needs no cargo.
     name: F1/F5 admission check (cellos-sign --check)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2327,7 +2388,8 @@ jobs:
 
   shell-utils:
     name: Shell Utilities Integration Test (Phase E)
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2338,24 +2400,24 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: shell-utils
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step, not appended to the apt install above: that step already spends its
       # whole dependency-install budget fetching the cross toolchain on a slow mirror,
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Build shell-test kernel
         run: |
@@ -2404,7 +2466,8 @@ jobs:
     outputs:
       evidence-artifact-id: ${{ steps.upload-software-evidence.outputs.artifact-id }}
       producer-runner: ${{ steps.capture-producer.outputs.producer-runner }}
-    runs-on: ubuntu-24.04
+    if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -2415,22 +2478,22 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
           key: boot-suite
 
       - name: Install dependencies
-        timeout-minutes: 20
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step — see the note on the other jobs' cryptography step.
       - name: Install Python cryptography (policy blob signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Prepare authenticated software evidence logs
         run: mkdir -p software-evidence
@@ -2661,7 +2724,7 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     # rustsec/audit-check reports through a check run; the repository default token
     # cannot create one ("Resource not accessible by integration").
@@ -2675,6 +2738,7 @@ jobs:
         # v1's bundled cargo-deny can't parse CVSS 4.0 entries now present in
         # the RustSec advisory DB ("unsupported CVSS version: 4.0"); v2 ships
         # a current cargo-deny that supports it.
+        if: runner.environment == 'github-hosted'
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           arguments: --all-features
@@ -2682,6 +2746,7 @@ jobs:
       - name: cargo-deny advisories (silo-guest workspace)
         # Separate workspace holding long-term P-256 signing keys; its own
         # deny.toml ignores no advisory.
+        if: runner.environment == 'github-hosted'
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           manifest-path: cells/guests/silo-guest/Cargo.toml
@@ -2691,14 +2756,24 @@ jobs:
         run: scripts/check-copyleft-leaves.sh
 
       - name: cargo-audit
+        if: runner.environment == 'github-hosted'
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Self-hosted: the same checks with binaries the runner setup installs
+      # (the actions above run in containers or call the checks API).
+      - name: cargo-deny + cargo-audit (self-hosted)
+        if: runner.environment != 'github-hosted'
+        run: |
+          cargo deny --all-features check
+          cargo deny --manifest-path cells/guests/silo-guest/Cargo.toml check advisories
+          cargo audit
+
   attest-catalog:
     name: Attest Authenticated Software Evidence
     needs: [lint, boot-suite]
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
     permissions:
       id-token: write

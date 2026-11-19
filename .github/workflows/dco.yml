@@ -7,7 +7,7 @@ on:
 jobs:
   dco:
     name: DCO Sign-off Check
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

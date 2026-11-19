@@ -21,7 +21,7 @@ env:
 jobs:
   bench:
     name: Run benchmarks (RV64)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 30
 
     steps:
@@ -37,9 +37,10 @@ jobs:
           components: rust-src
 
       - name: Install QEMU
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q qemu-system-misc
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-misc
 
       - name: Restore perf history
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -62,8 +63,10 @@ jobs:
       # service-vfs pulls littlefs2-sys, which cross-compiles vendored C —
       # same toolchain requirements as ci.yml's riscv64 jobs.
       - name: Install cross C compiler for littlefs2-sys
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-riscv64-unknown-elf
 
       - name: Build bootstrap + bench cells
         env:
@@ -186,7 +189,7 @@ jobs:
     # job cannot gate. Budgets need a matched KVM baseline on a named machine
     # (scripts/x86/run-bench-x86.sh kvm on a KVM-capable runner).
     name: Run benchmarks (x86_64 TCG, report-only)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 60
     continue-on-error: true
 
@@ -202,14 +205,16 @@ jobs:
           targets: x86_64-unknown-none
 
       - name: Install QEMU and xorriso
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: qemu-system-x86 xorriso
 
       # scripts/lib-sign-cells.sh signs every cell with the dev key through
       # `cryptography`'s Ed25519.
       - name: Install Python cryptography (cell signing)
         timeout-minutes: 5
-        run: python3 -m pip install --user --quiet -r requirements-ci.txt
+        run: python3 scripts/ensure-ci-python-deps.py
 
       - name: Restore perf history
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

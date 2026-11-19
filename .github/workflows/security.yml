@@ -12,7 +12,7 @@ env:
 jobs:
   audit:
     name: cargo-audit
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -22,7 +22,8 @@ jobs:
           toolchain: nightly-2026-05-01
           components: rust-src
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           cache-on-failure: true
 
@@ -32,6 +33,7 @@ jobs:
       # otherwise. (ci.yml's Security Scan has the same ordering.)
       - name: cargo-deny
         # v2 for the same CVSS 4.0 reason (matches ci.yml Security Scan).
+        if: runner.environment == 'github-hosted'
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
           arguments: --all-features
@@ -39,9 +41,17 @@ jobs:
       - name: cargo-audit
         # v2: v1.4.1 bundles a cargo-audit that can't parse CVSS 4.0 entries
         # now present in the RustSec advisory DB. Ignore list: .cargo/audit.toml.
+        if: runner.environment == 'github-hosted'
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Self-hosted: same checks with the binaries the runner setup installs.
+      - name: cargo-deny + cargo-audit (self-hosted)
+        if: runner.environment != 'github-hosted'
+        run: |
+          cargo deny --all-features check
+          cargo audit
 
   f1-admission:
     # Same gate as ci.yml's `f1-admission`, run weekly for the one thing a
@@ -53,7 +63,7 @@ jobs:
     # its allowlist now live in scripts/unsafe-allowlist.toml, checked by
     # scripts/cellos-sign — one implementation, two schedules.
     name: F1/F5 admission check (cellos-sign --check)
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

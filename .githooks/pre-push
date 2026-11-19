@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Pre-push gate for main: runs CI's lint jobs on this machine through
+# scripts/ci-local.py, so a guard, rustfmt or clippy failure is caught before
+# it costs a CI run. Enabled per clone by: git config core.hooksPath .githooks
+#
+#   CELLOS_PREPUSH_SKIP='Validate app-tier*;Clippy*' git push   # skip steps by name glob
+#   git push --no-verify                                         # bypass the gate
+#
+# Pushes to other branches are not gated.
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+pushes_main=false
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    [[ "$remote_ref" == refs/heads/main ]] && pushes_main=true
+done
+$pushes_main || exit 0
+
+skip=()
+IFS=';' read -ra globs <<< "${CELLOS_PREPUSH_SKIP:-}"
+for glob in "${globs[@]}"; do
+    [[ -n "$glob" ]] && skip+=(--skip "$glob")
+done
+
+for job in lint x86_64-lint aarch64-lint; do
+    if ! python3 "$root/scripts/ci-local.py" run "$job" --fail-fast "${skip[@]}"; then
+        echo "pre-push: CI job '$job' fails locally; fix it, skip the step with" \
+             "CELLOS_PREPUSH_SKIP, or push with --no-verify" >&2
+        exit 1
+    fi
+done

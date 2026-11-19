@@ -13,7 +13,7 @@ env:
 jobs:
   rustdoc:
     name: Build and deploy rustdoc
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
     permissions:
       contents: write
     steps:
@@ -23,15 +23,18 @@ jobs:
         with:
           toolchain: nightly-2026-05-01
           components: rust-src
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - if: runner.environment == 'github-hosted'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with: { cache-on-failure: true }
       # rustdoc executes build scripts: littlefs2-sys compiles its vendored C
       # core, so the cross gcc + freestanding headers are required (same as
       # the CI lint job); the excluded crates need toolchain pieces CI does
       # not have (prebuilt mlibc, doomgeneric clone, a full libc for lua).
       - name: Install cross C compiler for littlefs2-sys
-        timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+        timeout-minutes: 15
+        uses: ./.github/actions/apt-install
+        with:
+          packages: gcc-riscv64-unknown-elf
       - name: Build rustdoc
         env:
           CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc

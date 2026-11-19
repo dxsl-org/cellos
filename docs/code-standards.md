@@ -814,6 +814,39 @@ opt-level = "z"        # Size + speed tradeoff
 
 ---
 
+## CI Usage (runner minutes are a budget)
+
+The repository is private, so every hosted runner minute counts against the
+monthly quota. One full `ci.yml` run costs several hundred minutes.
+
+- **Reproduce locally first.** `scripts/ci-local.py run <job>` runs a CI job's
+  steps on this machine with the job's env, shells, timeouts and `if:`
+  conditions (`list` shows job ids; `--only`/`--skip` pick steps by name glob,
+  `--matrix short=rv64` picks a matrix row). Fix a CI failure only after it
+  fails here too.
+- **Pre-push gate.** `git config core.hooksPath .githooks` enables
+  `.githooks/pre-push`, which runs the `lint`, `x86_64-lint` and
+  `aarch64-lint` jobs before a push to `main` (about 75 s warm). Skip a step
+  that is red for a known reason with `CELLOS_PREPUSH_SKIP='<glob>;<glob>'`.
+- **Batch fixes; push once.** Each push starts a full run. When only some jobs
+  failed for infrastructure reasons, `gh run rerun <id> --failed` reruns those
+  jobs alone.
+- **Doc/plan-only pushes start no run** (`paths-ignore`: `.agents/**`,
+  `docs/**`, `*.md`); the pre-push gate still runs the guards that read them.
+- **Runner selection.** With the repository variable `CI_SELF_HOSTED=true`,
+  every workflow job runs on the self-hosted `cellos-ci` runners
+  (`scripts/ci-runner/setup-runner.sh install|status|remove`; their HOME and
+  toolchains are isolated under `~/.cellos-ci`). Without it, jobs run on
+  `ubuntu-24.04`, and the QEMU lanes run only from a manual dispatch
+  (`gh workflow run CI`). `release.yml` always uses hosted runners: it holds
+  the production signing secrets.
+- **Package installs** go through `.github/actions/apt-install`: a `.deb` cache
+  per runner image, time-boxed attempts and one mirror fallback on hosted
+  runners; a presence check on self-hosted ones. Python pins go through
+  `scripts/ensure-ci-python-deps.py`.
+
+---
+
 ## Common Patterns
 
 ### Global State (Kernel)

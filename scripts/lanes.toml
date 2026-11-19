@@ -1,5 +1,7 @@
 # Lane manifest: every QEMU/run lane script and every tests/integration target.
-# tier: pr (ci.yml, every push/PR) | nightly (scheduled workflow) | manual (run by hand) | retired
+# tier: pr (ci.yml: every push/PR on the self-hosted runners; QEMU lanes on hosted
+#       runners only by workflow_dispatch, see ci.yml's runner-selection note)
+#       | nightly (scheduled workflow) | manual (run by hand) | retired
 # arch: x86_64 | aarch64 | riscv64 | default (script/test picks the repo default target)
 # Checked by scripts/check-lanes.py. Add a row when you add a lane; a pr/nightly row
 # must be named by a workflow of that tier.
