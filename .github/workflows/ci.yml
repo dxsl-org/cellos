@@ -224,11 +224,13 @@ jobs:
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
         # Same exclusions as the Build job: these crates' build scripts compile
         # vendored C that needs toolchain pieces CI does not have (lua needs
-        # signal.h/stdio.h — a full libc, not just the vendored string.h).
+        # signal.h/stdio.h — a full libc, not just the vendored string.h), and the
+        # x86 mlibc witnesses would turn on `posix-shim/mlibc` for every cell.
         run: >
           cargo clippy
           --workspace
           --exclude app-mlibc-smoke
+          --exclude app-mlibc-posix-x86 --exclude app-drm-lite-x86 --exclude app-cpp-hosted-smoke
           --exclude doom
           --exclude tetris-c
           --exclude lua
@@ -287,8 +289,13 @@ jobs:
             # exercises.
             cc_pkg: gcc-riscv64-unknown-elf clang
             cc_bin: riscv64-unknown-elf-gcc
+            # app-mlibc-posix-x86, app-drm-lite-x86 and app-cpp-hosted-smoke are
+            # x86_64 witnesses that enable `posix-shim/mlibc`; in a --workspace build
+            # feature unification turns that on for every cell, compiling out the
+            # shim's libc symbols (malloc, working_dir, ...) that the other cells link.
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke
+              --exclude app-mlibc-posix-x86 --exclude app-drm-lite-x86 --exclude app-cpp-hosted-smoke
               --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: aarch64-unknown-none-softfloat
             short: aarch64
@@ -298,10 +305,16 @@ jobs:
             # `app-c-spawn-child`) compile a thunk whose header says "Cell builds
             # require RISC-V" and whose non-RISC-V branch expects a host-test
             # backend (`cellos_test_syscall4`), so the AArch64 leg excludes them
-            # the way it already excludes lua/doom/tetris-c.
+            # the way it already excludes lua/doom/tetris-c. `ocel-pdf` asserts an
+            # RV64 target in its build script; `ocel-quickjs` compiles its
+            # floating-point engine with `-mgeneral-regs-only` on aarch64, which gcc
+            # refuses, and no aarch64 image ships it. The x86 mlibc witnesses are
+            # excluded for the feature-unification reason given on the riscv64 row.
             cells_args: >-
               --workspace --exclude cellos-kernel --exclude app-mlibc-smoke
+              --exclude app-mlibc-posix-x86 --exclude app-drm-lite-x86 --exclude app-cpp-hosted-smoke
               --exclude c-pthread --exclude app-c-spawn --exclude app-c-spawn-child
+              --exclude ocel-pdf --exclude ocel-quickjs
               --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: x86_64-unknown-none
             short: x86_64
@@ -1320,15 +1333,20 @@ jobs:
   # Intel C2C gate (ADR-0022, architecture remediation Phase 02). Runs on every
   # push/PR under TCG: the two-node C2C test (positive, and C2C_NEGATIVE=1 which
   # must fail), the x86 Tier-2 domain test and the local service lifecycle target.
-  # Images go to isolated dirs; kernel/src/embedded-x86_64 is never written.
+  # Images go to isolated dirs outside the checkout: dev-key image assembly refuses
+  # any out-dir or cargo target dir inside the repository except the canonical
+  # route (assemble-x86-image.py check_isolation), and kernel/src/embedded-x86_64
+  # is never written.
   x86-c2c:
     name: Intel C2C gate (x86_64 TCG)
     runs-on: ubuntu-24.04
     timeout-minutes: 75
-    env:
-      C2C_DIR: ${{ github.workspace }}/target/c2c-gate
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # `runner` is not available in job-level env, so the path is exported here.
+      - name: Set isolated work dir
+        run: echo "C2C_DIR=$RUNNER_TEMP/c2c-gate" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -1356,7 +1374,7 @@ jobs:
           CC_x86_64_unknown_none: cc
           CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
           BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target/c2c-gate/cells
+          CARGO_TARGET_DIR: ${{ runner.temp }}/c2c-gate/cells
         run: python3 scripts/assemble-x86-image.py --profile headless --out-dir "$C2C_DIR/embedded"
 
       - name: Build two-node C2C kernel and ISO
@@ -1417,8 +1435,8 @@ jobs:
         with:
           name: x86-c2c-logs-${{ github.run_attempt }}
           path: |
-            target/c2c-gate/twonode/*.log
-            target/c2c-gate/twonode-neg/*.log
+            ${{ runner.temp }}/c2c-gate/twonode/*.log
+            ${{ runner.temp }}/c2c-gate/twonode-neg/*.log
           if-no-files-found: ignore
 
   qemu-x86-hypervisor-boot:
