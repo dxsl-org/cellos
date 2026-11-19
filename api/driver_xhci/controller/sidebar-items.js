@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["PARK_POLLS","SPIN_BEFORE_PARK"],"fn":["alloc","parse_boot_keyboard","ring_enqueue","ring_init_link","ring_read_trb","ring_write_trb","setup_packet"],"struct":["Enumerated","XhciController"]};
+window.SIDEBAR_ITEMS = {"constant":["DEVICE_TIERS","PARK_POLLS","SPIN_BEFORE_PARK"],"fn":["alloc","alloc_per_tier","parse_boot_keyboard","ring_enqueue","ring_init_link","ring_read_trb","ring_write_trb","setup_packet"],"struct":["Enumerated","XhciController"]};
