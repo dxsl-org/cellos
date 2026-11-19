@@ -12,7 +12,7 @@ by the caller;</li>
 </ul>
 <p>The action runs later, from <a href="fn.act_if_pending.html" title="fn cellos_kernel::cell::init_death::act_if_pending"><code>act_if_pending</code></a> in <code>yield_cpu</code>, which never
 runs under <code>SCHEDULER</code> (it takes that lock itself). Exit code
-[<code>INIT_BOOT_STOP</code>] halts, so a boot that cannot succeed does not reset into
+<a href="../../../abi/retirement/constant.INIT_BOOT_STOP.html" title="constant abi::retirement::INIT_BOOT_STOP"><code>INIT_BOOT_STOP</code></a> halts, so a boot that cannot succeed does not reset into
 the same failure forever; every other death resets the machine. Every hart
 that reaches <code>yield_cpu</code> after the flag parks, so a halt stops the whole
 machine and a reset runs on exactly one hart.</p>

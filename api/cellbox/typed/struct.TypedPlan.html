@@ -2,8 +2,8 @@
     pub head: <a class="enum" href="enum.Head.html" title="enum cellbox::typed::Head">Head</a>,
     pub producer_argv: Vec&lt;String&gt;,
     pub text_display: bool,
-    pub category: Category,
-    pub stages: Vec&lt;Stage&gt;,
+    pub category: <a class="enum" href="../../text_engine/pipeline/enum.Category.html" title="enum text_engine::pipeline::Category">Category</a>,
+    pub stages: Vec&lt;<a class="enum" href="../../text_engine/pipeline/enum.Stage.html" title="enum text_engine::pipeline::Stage">Stage</a>&gt;,
     pub typed_cmds: usize,
     pub output: Option&lt;(String, bool)&gt;,
     pub tail_externals: usize,
@@ -16,8 +16,8 @@
 (<code>rg</code> parses its own argv, where <code>--text</code> may be a pattern or a path).</p>
 </div><span id="structfield.text_display" class="structfield section-header"><a href="#structfield.text_display" class="anchor field">§</a><code>text_display: bool</code></span><div class="docblock"><p><code>--text</code> was given: nonterminal/redirect rows use the plain text table (the
 search text renderer for <code>rg</code>) instead of typed JSONL.</p>
-</div><span id="structfield.category" class="structfield section-header"><a href="#structfield.category" class="anchor field">§</a><code>category: Category</code></span><div class="docblock"><p>What the head yields into the typed segment: Rows, or Frames (<code>top --records</code>).</p>
-</div><span id="structfield.stages" class="structfield section-header"><a href="#structfield.stages" class="anchor field">§</a><code>stages: Vec&lt;Stage&gt;</code></span><div class="docblock"><p>Typed segment. For a byte head the first element is the <code>from</code> stage, except
+</div><span id="structfield.category" class="structfield section-header"><a href="#structfield.category" class="anchor field">§</a><code>category: <a class="enum" href="../../text_engine/pipeline/enum.Category.html" title="enum text_engine::pipeline::Category">Category</a></code></span><div class="docblock"><p>What the head yields into the typed segment: Rows, or Frames (<code>top --records</code>).</p>
+</div><span id="structfield.stages" class="structfield section-header"><a href="#structfield.stages" class="anchor field">§</a><code>stages: Vec&lt;<a class="enum" href="../../text_engine/pipeline/enum.Stage.html" title="enum text_engine::pipeline::Stage">Stage</a>&gt;</code></span><div class="docblock"><p>Typed segment. For a byte head the first element is the <code>from</code> stage, except
 when <code>rg -</code> consumes the bytes (<code>search</code> with <code>stdin</code>).</p>
 </div><span id="structfield.typed_cmds" class="structfield section-header"><a href="#structfield.typed_cmds" class="anchor field">§</a><code>typed_cmds: usize</code></span><div class="docblock"><p>Number of leading <code>cmds</code> covered by the head + typed segment; the rest are
 byte-consuming built-ins fed by a terminal <code>to</code> (or, after <code>rg</code>, by its

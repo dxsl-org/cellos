@@ -2,7 +2,7 @@
     bdf: u32,
     want: usize,
     mode: usize,
-) -&gt; Result&lt;PcieIrqAlloc, <a class="enum" href="enum.PcieFunctionError.html" title="enum ostd::syscall::PcieFunctionError">PcieFunctionError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>435: allocate up to <code>want</code> (1..=32) MSI-X or MSI interrupts for the owned
+) -&gt; Result&lt;<a class="struct" href="../../abi/pcie_function/struct.PcieIrqAlloc.html" title="struct abi::pcie_function::PcieIrqAlloc">PcieIrqAlloc</a>, <a class="enum" href="enum.PcieFunctionError.html" title="enum ostd::syscall::PcieFunctionError">PcieFunctionError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>435: allocate up to <code>want</code> (1..=32) MSI-X or MSI interrupts for the owned
 function at <code>bdf</code>; <code>mode</code> holds <code>abi::pcie_function::IRQ_MODE_*</code> bits.
 MSI-X is preferred. Wait on line <code>i</code> with <code>sys_wait_irq(first_irq + i, 0)</code>,
 or on every held line at once with <code>ipc::wait_any(source::IRQ, ticks)</code>.

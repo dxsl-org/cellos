@@ -5,7 +5,7 @@ call <code>AppContext::run()</code>. The context manages the receive buffer, int
 the message envelope, and delivers typed [<code>AppEvent</code>]s.</p>
 <h2 id="message-envelope"><a class="doc-anchor" href="#message-envelope">§</a>Message envelope</h2>
 <p>Messages sent through [<code>AppContext::send_msg</code>] carry the envelope header
-defined by [<code>wire::proto::app_envelope</code>]: the magic byte (a
+defined by <a href="../../abi/app_envelope/index.html" title="mod abi::app_envelope"><code>wire::proto::app_envelope</code></a>: the magic byte (a
 namespace guard against raw-protocol collisions), then the event kind
 (message, shutdown, snapshot, restore, capability revocation), then the
 caller-defined payload.</p>

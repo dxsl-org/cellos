@@ -5,7 +5,7 @@ and G2H events drained from the G2H ring by polling.</p>
 layout, <code>guc_ct_ctb_h2g_register</code>, <code>guc_ct_ctb_g2h_register</code>,
 <code>guc_ct_control_toggle</code>, <code>__xe_guc_ct_start</code>, <code>h2g_write</code>, <code>__guc_ct_send_locked</code>,
 <code>g2h_read</code>), <code>abi/guc_communication_ctb_abi.h</code> (descriptor and message formats).
-The ring arithmetic is [<code>intel_gpu_core::ct</code>]. Interrupts are not used: the driver
+The ring arithmetic is <a href="../../intel_gpu_core/ct/index.html" title="mod intel_gpu_core::ct"><code>intel_gpu_core::ct</code></a>. Interrupts are not used: the driver
 drains the G2H ring whenever it needs an answer or touches a queue.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.GucCt.html" title="struct driver_intel_gpu::guc_ct::GucCt">GucCt</a></dt><dd>One enabled CT channel.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.CtFailure.html" title="enum driver_intel_gpu::guc_ct::CtFailure">CtFailure</a></dt><dd>Why a CT operation failed.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.H2G_SPACE_TIMEOUT_US.html" title="constant driver_intel_gpu::guc_ct::H2G_SPACE_TIMEOUT_US">H2G_<wbr>SPACE_<wbr>TIMEOUT_<wbr>US</a></dt><dd><code>xe_guc_ct_queue_proc_time_jiffies</code>: a full 16 KiB H2G ring takes about 4 s to drain,
 so a sender waits that long for space before declaring the channel dead.</dd></dl></section></div></main></body></html>

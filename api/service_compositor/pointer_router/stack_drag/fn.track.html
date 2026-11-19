@@ -2,11 +2,11 @@
     router: &amp;mut <a class="struct" href="../struct.PointerRouter.html" title="struct service_compositor::pointer_router::PointerRouter">PointerRouter</a>,
     cap: u64,
     start: (i32, i32),
-    rect: Rect,
+    rect: <a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>,
     x: i32,
     y: i32,
     context: &amp;mut <a class="struct" href="../struct.RouteContext.html" title="struct service_compositor::pointer_router::RouteContext">RouteContext</a>&lt;'_, F&gt;,
 )<div class="where">where
-    F: FnMut(Rect),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Pointer at <code>(x, y)</code> during a Win+drag of <code>cap</code> that started at <code>start</code>
+    F: FnMut(<a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Pointer at <code>(x, y)</code> during a Win+drag of <code>cap</code> that started at <code>start</code>
 with the frame at <code>rect</code>: update the ghost and the target.</p>
 </div></details></section></div></main></body></html>

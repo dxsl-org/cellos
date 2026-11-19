@@ -5,7 +5,7 @@
 ) -&gt; Result&lt;Option&lt;(u32, usize)&gt;, <a class="enum" href="enum.Failure.html" title="enum cellos_kernel::task::async_ipc::Failure">Failure</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Take <code>owner</code>’s operation <code>token</code> into a kernel buffer if it is terminal;
 otherwise park <code>owner</code> until one of its operations changes, and return
 <code>None</code> so the caller yields and asks again.</p>
-<p>A terminal returns its kind ([<code>abi::syscall::ipc_status</code>]) and reply length,
+<p>A terminal returns its kind (<a href="../../../abi/syscall/ipc_status/index.html" title="mod abi::syscall::ipc_status"><code>abi::syscall::ipc_status</code></a>) and reply length,
 and the operation is gone. Parking checks this operation only: another
 operation of <code>owner</code> that is already terminal must not turn the wait into a
 spin. For a syscall the kernel serves with <a href="fn.submit_request.html" title="fn cellos_kernel::task::async_ipc::submit_request"><code>submit_request</code></a>.</p>

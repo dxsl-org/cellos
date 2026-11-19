@@ -4,7 +4,7 @@ touches the network. Two rules decide whether that is possible, and both are pol
 than plumbing, so they are pinned by host tests here instead of only by the QEMU gate:</p>
 <ul>
 <li><strong>Wire budget.</strong> One AI request is one IPC message, so a prompt above
-[<code>ai_proto::MAX_PROMPT_BYTES</code>] cannot be submitted locally at all. Such a turn is not a
+<a href="../../ai_proto/constant.MAX_PROMPT_BYTES.html" title="constant ai_proto::MAX_PROMPT_BYTES"><code>ai_proto::MAX_PROMPT_BYTES</code></a> cannot be submitted locally at all. Such a turn is not a
 failure — it is a request for the larger-context backend, which is the network one.</li>
 <li><strong>Absence, not failure.</strong> <code>NoService</code>/<code>NoModel</code> mean “no local inference here”, so the turn
 may be retried over the network. A <em>failed</em> local attempt — <code>Busy</code>, a mid-session transport
