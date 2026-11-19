@@ -2626,9 +2626,11 @@ jobs:
         # Absence is an explicit capability boundary: static content still works,
         # but no QuickJS, PDF or matcher is activated. Reassembly follows the
         # engine lanes because it replaces the embedded image/kernel artifacts.
+        # `input,ui` starts virtio-gpu and the compositor: gen-disk-ci.sh defaults
+        # to the headless `input` plan, in which Ocel has no compositor to draw on.
         run: |
           set -o pipefail
-          CELLOS_NO_OCEL_QUICKJS=1 CELLOS_NO_OCEL_PDF=1 \
+          CELLOS_INIT_FEATURES=input,ui CELLOS_NO_OCEL_QUICKJS=1 CELLOS_NO_OCEL_PDF=1 \
             bash scripts/gen-disk-ci.sh --disk disk_ocel_static.img \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/gen-disk-ocel-static.log"
           cd tests/integration
