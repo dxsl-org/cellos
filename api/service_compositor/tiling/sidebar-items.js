@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MIN_H","MIN_OVERLAP_PERCENT","MIN_W","SNAP"],"fn":["candidates","end","follow","glue","glue_at","group_windows","overlaps","raise","restore_group"],"mod":["resize"],"struct":["Glue"]};
+window.SIDEBAR_ITEMS = {"constant":["MIN_H","MIN_OVERLAP_PERCENT","MIN_W","SNAP"],"fn":["candidates","end","follow","glue","glue_at","group_windows","overlaps","raise","restore_group"],"mod":["resize"],"struct":["Glue"],"type":["GlueCandidate"]};

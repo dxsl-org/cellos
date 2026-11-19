@@ -526,7 +526,7 @@
 <a href=#526 id=526 data-nosnippet>526</a>        <span class="kw">let </span>creator = sched
 <a href=#527 id=527 data-nosnippet>527</a>            .tasks
 <a href=#528 id=528 data-nosnippet>528</a>            .get(<span class="kw-2">&amp;</span>caller.tid)
-<a href=#529 id=529 data-nosnippet>529</a>            .map(|t| <span class="kw">crate</span>::memory::cell_quota::Charge::of(t))
+<a href=#529 id=529 data-nosnippet>529</a>            .map(<span class="kw">crate</span>::memory::cell_quota::Charge::of)
 <a href=#530 id=530 data-nosnippet>530</a>            .ok_or(ViError::PermissionDenied)<span class="question-mark">?</span>;
 <a href=#531 id=531 data-nosnippet>531</a>        <span class="comment">// A session child is an ordinary governed path launch: never a boot
 <a href=#532 id=532 data-nosnippet>532</a>        // singleton, hotswap replacement, or service route publisher. A domain

@@ -3,7 +3,7 @@
     bdf: u32,
     out: &amp;mut [u8],
 ) -&gt; Result&lt;(), <a class="enum" href="enum.DmaExportError.html" title="enum ostd::syscall::DmaExportError">DmaExportError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>438 with a caller-chosen output buffer, passed with its own length. The
-kernel accepts exactly [<code>abi::dma_export::DMA_EXPORT_RECORD_LEN</code>] bytes and
+kernel accepts exactly <a href="../../abi/dma_export/constant.DMA_EXPORT_RECORD_LEN.html" title="constant abi::dma_export::DMA_EXPORT_RECORD_LEN"><code>abi::dma_export::DMA_EXPORT_RECORD_LEN</code></a> bytes and
 refuses any other length with <a href="enum.DmaExportError.html#variant.InvalidInput" title="variant ostd::syscall::DmaExportError::InvalidInput"><code>DmaExportError::InvalidInput</code></a> before any
 effect; prefer <a href="fn.sys_map_dma_export.html" title="fn ostd::syscall::sys_map_dma_export"><code>sys_map_dma_export</code></a>, which decodes the record.</p>
 </div></details></section></div></main></body></html>

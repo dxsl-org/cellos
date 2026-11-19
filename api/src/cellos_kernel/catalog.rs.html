@@ -527,344 +527,346 @@
 <a href=#527 id=527 data-nosnippet>527</a>    target(<span class="string">"/bin/echo"</span>),
 <a href=#528 id=528 data-nosnippet>528</a>    target(<span class="string">"/bin/free"</span>),
 <a href=#529 id=529 data-nosnippet>529</a>    target(<span class="string">"/bin/gpio-test-rv"</span>),
-<a href=#530 id=530 data-nosnippet>530</a>    target(<span class="string">"/bin/http-smoke"</span>),
-<a href=#531 id=531 data-nosnippet>531</a>    target(<span class="string">"/bin/input-test"</span>),
-<a href=#532 id=532 data-nosnippet>532</a>    target(<span class="string">"/bin/window-policy-probe"</span>),
-<a href=#533 id=533 data-nosnippet>533</a>    target(<span class="string">"/bin/ls"</span>),
-<a href=#534 id=534 data-nosnippet>534</a>    target(<span class="string">"/bin/ps"</span>),
-<a href=#535 id=535 data-nosnippet>535</a>    target(<span class="string">"/bin/robot-dashboard"</span>),
-<a href=#536 id=536 data-nosnippet>536</a>    target(<span class="string">"/bin/viui-demo"</span>),
-<a href=#537 id=537 data-nosnippet>537</a>    target(<span class="string">"/bin/tetris"</span>),
-<a href=#538 id=538 data-nosnippet>538</a>    target(<span class="string">"/bin/tetris-c"</span>),
-<a href=#539 id=539 data-nosnippet>539</a>    target(<span class="string">"/bin/tetris-lua"</span>),
-<a href=#540 id=540 data-nosnippet>540</a>    target(<span class="string">"/bin/wx-test"</span>),
-<a href=#541 id=541 data-nosnippet>541</a>    target(<span class="string">"/bin/python"</span>),
-<a href=#542 id=542 data-nosnippet>542</a>    <span class="comment">// `/bin/lua` keeps no network right (annex S2-N D-N3); `/bin/lua-net` is
-<a href=#543 id=543 data-nosnippet>543</a>    // the same signed binary on a client-network edge (user decision 2026-11-10).
-<a href=#544 id=544 data-nosnippet>544</a>    </span>target(<span class="string">"/bin/lua"</span>),
-<a href=#545 id=545 data-nosnippet>545</a>    target(<span class="string">"/bin/tool-fs"</span>),
-<a href=#546 id=546 data-nosnippet>546</a>    target(<span class="string">"/bin/tool-sys"</span>),
-<a href=#547 id=547 data-nosnippet>547</a>    <span class="comment">// ── network clients and servers of the net service ──────────────────────
-<a href=#548 id=548 data-nosnippet>548</a>    // They hold no NetworkCap; their ceiling carries only the coarse rights the
-<a href=#549 id=549 data-nosnippet>549</a>    // net service enforces. A non-empty ceiling makes the caller-owned ELF route
-<a href=#550 id=550 data-nosnippet>550</a>    // refuse the edge, so a shell cannot relabel bytes as a granted worker.
-<a href=#551 id=551 data-nosnippet>551</a>    </span>net_client(<span class="string">"/bin/curl"</span>),
-<a href=#552 id=552 data-nosnippet>552</a>    net_client(<span class="string">"/bin/wget"</span>),
-<a href=#553 id=553 data-nosnippet>553</a>    net_client(<span class="string">"/bin/mqtt"</span>),
-<a href=#554 id=554 data-nosnippet>554</a>    net_client(<span class="string">"/bin/llm-gateway"</span>),
-<a href=#555 id=555 data-nosnippet>555</a>    net_client(<span class="string">"/bin/https-demo"</span>),
-<a href=#556 id=556 data-nosnippet>556</a>    net_client(<span class="string">"/bin/posix-shim-test"</span>),
-<a href=#557 id=557 data-nosnippet>557</a>    net_client(<span class="string">"/bin/lua-net"</span>),
-<a href=#558 id=558 data-nosnippet>558</a>    <span class="comment">// Ocel is a network client and a capability-free boot cell.
-<a href=#559 id=559 data-nosnippet>559</a>    </span>Cell {
-<a href=#560 id=560 data-nosnippet>560</a>        path: <span class="string">"/bin/ocel"</span>,
-<a href=#561 id=561 data-nosnippet>561</a>        request: NET_CLIENT,
-<a href=#562 id=562 data-nosnippet>562</a>        boot: <span class="prelude-val">Some</span>(LEGACY),
-<a href=#563 id=563 data-nosnippet>563</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_CLIENT)),
-<a href=#564 id=564 data-nosnippet>564</a>        ..ROW
-<a href=#565 id=565 data-nosnippet>565</a>    },
-<a href=#566 id=566 data-nosnippet>566</a>    Cell {
-<a href=#567 id=567 data-nosnippet>567</a>        path: <span class="string">"/bin/nc"</span>,
-<a href=#568 id=568 data-nosnippet>568</a>        request: NET_PEER,
-<a href=#569 id=569 data-nosnippet>569</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_PEER)),
-<a href=#570 id=570 data-nosnippet>570</a>        ..ROW
-<a href=#571 id=571 data-nosnippet>571</a>    },
-<a href=#572 id=572 data-nosnippet>572</a>    Cell {
-<a href=#573 id=573 data-nosnippet>573</a>        path: <span class="string">"/bin/httpd"</span>,
-<a href=#574 id=574 data-nosnippet>574</a>        request: NET_LISTENER,
-<a href=#575 id=575 data-nosnippet>575</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_LISTENER)),
-<a href=#576 id=576 data-nosnippet>576</a>        ..ROW
-<a href=#577 id=577 data-nosnippet>577</a>    },
-<a href=#578 id=578 data-nosnippet>578</a>    <span class="comment">// SSH server: inbound listener only — no DNS, no outbound connect.
-<a href=#579 id=579 data-nosnippet>579</a>    </span>Cell {
-<a href=#580 id=580 data-nosnippet>580</a>        path: <span class="string">"/bin/sshd"</span>,
-<a href=#581 id=581 data-nosnippet>581</a>        request: NET_LISTENER,
-<a href=#582 id=582 data-nosnippet>582</a>        boot: <span class="prelude-val">Some</span>(legacy_with(NET_LISTENER)),
-<a href=#583 id=583 data-nosnippet>583</a>        ..ROW
-<a href=#584 id=584 data-nosnippet>584</a>    },
-<a href=#585 id=585 data-nosnippet>585</a>    Cell {
-<a href=#586 id=586 data-nosnippet>586</a>        path: <span class="string">"/bin/robot-demo"</span>,
-<a href=#587 id=587 data-nosnippet>587</a>        request: NET_CLIENT,
-<a href=#588 id=588 data-nosnippet>588</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(union(
-<a href=#589 id=589 data-nosnippet>589</a>            NET_CLIENT,
-<a href=#590 id=590 data-nosnippet>590</a>            CapSet {
-<a href=#591 id=591 data-nosnippet>591</a>                network: <span class="bool-val">true</span>,
-<a href=#592 id=592 data-nosnippet>592</a>                mmio_devices: DEV_GPIO,
-<a href=#593 id=593 data-nosnippet>593</a>                ..CapSet::EMPTY
-<a href=#594 id=594 data-nosnippet>594</a>            },
-<a href=#595 id=595 data-nosnippet>595</a>        ))),
-<a href=#596 id=596 data-nosnippet>596</a>        ..ROW
-<a href=#597 id=597 data-nosnippet>597</a>    },
-<a href=#598 id=598 data-nosnippet>598</a>    <span class="comment">// ── peripheral demos on reviewed edges ──────────────────────────────────
-<a href=#599 id=599 data-nosnippet>599</a>    </span>Cell {
-<a href=#600 id=600 data-nosnippet>600</a>        path: <span class="string">"/bin/periph-demo"</span>,
-<a href=#601 id=601 data-nosnippet>601</a>        user_target: <span class="prelude-val">Some</span>(mmio(CONSOLE_MMIO)),
-<a href=#602 id=602 data-nosnippet>602</a>        ..ROW
-<a href=#603 id=603 data-nosnippet>603</a>    },
-<a href=#604 id=604 data-nosnippet>604</a>    Cell {
-<a href=#605 id=605 data-nosnippet>605</a>        path: <span class="string">"/bin/periph-test"</span>,
-<a href=#606 id=606 data-nosnippet>606</a>        user_target: <span class="prelude-val">Some</span>(mmio(CONSOLE_MMIO)),
-<a href=#607 id=607 data-nosnippet>607</a>        ..ROW
-<a href=#608 id=608 data-nosnippet>608</a>    },
-<a href=#609 id=609 data-nosnippet>609</a>    Cell {
-<a href=#610 id=610 data-nosnippet>610</a>        path: <span class="string">"/bin/pwm-demo"</span>,
-<a href=#611 id=611 data-nosnippet>611</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO)),
-<a href=#612 id=612 data-nosnippet>612</a>        ..ROW
-<a href=#613 id=613 data-nosnippet>613</a>    },
-<a href=#614 id=614 data-nosnippet>614</a>    Cell {
-<a href=#615 id=615 data-nosnippet>615</a>        path: <span class="string">"/bin/sensor-demo"</span>,
-<a href=#616 id=616 data-nosnippet>616</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO | DEV_I2C)),
-<a href=#617 id=617 data-nosnippet>617</a>        ..ROW
-<a href=#618 id=618 data-nosnippet>618</a>    },
-<a href=#619 id=619 data-nosnippet>619</a>    Cell {
-<a href=#620 id=620 data-nosnippet>620</a>        path: <span class="string">"/bin/spi-demo"</span>,
-<a href=#621 id=621 data-nosnippet>621</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO | DEV_SPI)),
-<a href=#622 id=622 data-nosnippet>622</a>        ..ROW
-<a href=#623 id=623 data-nosnippet>623</a>    },
-<a href=#624 id=624 data-nosnippet>624</a>    <span class="comment">// ── lifecycle parents on reviewed edges (keep `spawn`) ──────────────────
-<a href=#625 id=625 data-nosnippet>625</a>    </span>spawner_target(<span class="string">"/bin/bench"</span>),
-<a href=#626 id=626 data-nosnippet>626</a>    spawner_target(<span class="string">"/bin/c2c-render"</span>),
-<a href=#627 id=627 data-nosnippet>627</a>    spawner_target(<span class="string">"/bin/capacity-probe"</span>),
-<a href=#628 id=628 data-nosnippet>628</a>    spawner_target(<span class="string">"/bin/hypha"</span>),
-<a href=#629 id=629 data-nosnippet>629</a>    spawner_target(<span class="string">"/bin/tool-spawn"</span>),
-<a href=#630 id=630 data-nosnippet>630</a>    <span class="comment">// The B0 supervisor must reach the shell edge with SpawnCap (ADR-0021 §2.4).
-<a href=#631 id=631 data-nosnippet>631</a>    </span>spawner_target(<span class="string">"/bin/backend-supervisor"</span>),
-<a href=#632 id=632 data-nosnippet>632</a>    spawner_target(<span class="string">"/bin/hotswap-demo-v1"</span>),
-<a href=#633 id=633 data-nosnippet>633</a>    spawner_target(<span class="string">"/bin/hotswap-demo-v2"</span>),
-<a href=#634 id=634 data-nosnippet>634</a>    <span class="comment">// Phase 09B state authority: lifecycle parent of its worker.
-<a href=#635 id=635 data-nosnippet>635</a>    </span>spawner_target(<span class="string">"/bin/recovery-authority"</span>),
-<a href=#636 id=636 data-nosnippet>636</a>];
-<a href=#637 id=637 data-nosnippet>637</a>
-<a href=#638 id=638 data-nosnippet>638</a><span class="doccomment">/// ADR-0033 CP1 §7 QEMU `edu` lanes, test-hooks images only: the export holder
-<a href=#639 id=639 data-nosnippet>639</a>/// drives QEMU's `edu` device; the client owns Grants and exports them.
-<a href=#640 id=640 data-nosnippet>640</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#641 id=641 data-nosnippet>641</a></span><span class="kw">pub const </span>TEST_HOOK_CELLS: <span class="kw-2">&amp;</span>[Cell] = <span class="kw-2">&amp;</span>[
-<a href=#642 id=642 data-nosnippet>642</a>    pcie_driver(<span class="string">"/bin/edu-holder"</span>),
-<a href=#643 id=643 data-nosnippet>643</a>    boot_only(<span class="string">"/bin/export-client"</span>),
-<a href=#644 id=644 data-nosnippet>644</a>];
-<a href=#645 id=645 data-nosnippet>645</a>
-<a href=#646 id=646 data-nosnippet>646</a><span class="doccomment">/// Private S2-T/S2-W positive control (annex §6, E1): the probe binary the
-<a href=#647 id=647 data-nosnippet>647</a>/// sandbox copy at `/data/bin/s2tw-probe` runs, on a reviewed edge with X/M/W.
-<a href=#648 id=648 data-nosnippet>648</a></span><span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
-<a href=#649 id=649 data-nosnippet>649</a></span><span class="kw">pub const </span>PHASE04_DRIVER_CELLS: <span class="kw-2">&amp;</span>[Cell] = <span class="kw-2">&amp;</span>[target(<span class="string">"/bin/s2tw-probe"</span>)];
-<a href=#650 id=650 data-nosnippet>650</a>
-<a href=#651 id=651 data-nosnippet>651</a><span class="doccomment">/// Every row compiled into this kernel, production rows first.
-<a href=#652 id=652 data-nosnippet>652</a></span><span class="kw">pub fn </span>rows() -&gt; <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'static </span>Cell&gt; {
-<a href=#653 id=653 data-nosnippet>653</a>    <span class="kw">let </span>rows = CELLS.iter();
-<a href=#654 id=654 data-nosnippet>654</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
-<a href=#655 id=655 data-nosnippet>655</a>    </span><span class="kw">let </span>rows = rows.chain(TEST_HOOK_CELLS.iter());
-<a href=#656 id=656 data-nosnippet>656</a>    <span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
-<a href=#657 id=657 data-nosnippet>657</a>    </span><span class="kw">let </span>rows = rows.chain(PHASE04_DRIVER_CELLS.iter());
-<a href=#658 id=658 data-nosnippet>658</a>    rows
-<a href=#659 id=659 data-nosnippet>659</a>}
-<a href=#660 id=660 data-nosnippet>660</a>
-<a href=#661 id=661 data-nosnippet>661</a><span class="kw">pub fn </span>find(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>Cell&gt; {
-<a href=#662 id=662 data-nosnippet>662</a>    rows().find(|row| row.path == path)
-<a href=#663 id=663 data-nosnippet>663</a>}
-<a href=#664 id=664 data-nosnippet>664</a>
-<a href=#665 id=665 data-nosnippet>665</a><span class="doccomment">/// Authority `path` requests on top of its manifest: the row's `request`, plus
-<a href=#666 id=666 data-nosnippet>666</a>/// the S2-T/S2-W observe/mutate rights for every non-sandbox path (annex §3).
-<a href=#667 id=667 data-nosnippet>667</a></span><span class="kw">pub fn </span>request(path: <span class="kw-2">&amp;</span>str) -&gt; CapSet {
-<a href=#668 id=668 data-nosnippet>668</a>    <span class="kw">let </span>row = find(path).map_or(CapSet::EMPTY, |row| row.request);
-<a href=#669 id=669 data-nosnippet>669</a>    <span class="kw">if </span>is_sandbox(path) {
-<a href=#670 id=670 data-nosnippet>670</a>        row
-<a href=#671 id=671 data-nosnippet>671</a>    } <span class="kw">else </span>{
-<a href=#672 id=672 data-nosnippet>672</a>        union(row, LEGACY)
-<a href=#673 id=673 data-nosnippet>673</a>    }
-<a href=#674 id=674 data-nosnippet>674</a>}
-<a href=#675 id=675 data-nosnippet>675</a>
-<a href=#676 id=676 data-nosnippet>676</a><span class="doccomment">/// Boot ceiling row, `Some(EMPTY)` for the sandbox, `None` for an unknown path.
-<a href=#677 id=677 data-nosnippet>677</a></span><span class="kw">pub fn </span>boot(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;CapSet&gt; {
-<a href=#678 id=678 data-nosnippet>678</a>    <span class="kw">match </span>find(path).and_then(|row| row.boot) {
-<a href=#679 id=679 data-nosnippet>679</a>        <span class="prelude-val">Some</span>(caps) =&gt; <span class="prelude-val">Some</span>(caps),
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="prelude-val">None </span><span class="kw">if </span>is_sandbox(path) =&gt; <span class="prelude-val">Some</span>(CapSet::EMPTY),
-<a href=#681 id=681 data-nosnippet>681</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#682 id=682 data-nosnippet>682</a>    }
-<a href=#683 id=683 data-nosnippet>683</a>}
-<a href=#684 id=684 data-nosnippet>684</a>
-<a href=#685 id=685 data-nosnippet>685</a><span class="doccomment">/// Reviewed launch-target ceiling, `Some(EMPTY)` for the sandbox, else `None`.
-<a href=#686 id=686 data-nosnippet>686</a></span><span class="kw">pub fn </span>user_target(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;CapSet&gt; {
-<a href=#687 id=687 data-nosnippet>687</a>    <span class="kw">match </span>find(path).and_then(|row| row.user_target) {
-<a href=#688 id=688 data-nosnippet>688</a>        <span class="prelude-val">Some</span>(caps) =&gt; <span class="prelude-val">Some</span>(caps),
-<a href=#689 id=689 data-nosnippet>689</a>        <span class="prelude-val">None </span><span class="kw">if </span>is_sandbox(path) =&gt; <span class="prelude-val">Some</span>(CapSet::EMPTY),
-<a href=#690 id=690 data-nosnippet>690</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#691 id=691 data-nosnippet>691</a>    }
-<a href=#692 id=692 data-nosnippet>692</a>}
-<a href=#693 id=693 data-nosnippet>693</a>
-<a href=#694 id=694 data-nosnippet>694</a><span class="doccomment">/// Install paths whose bytes are another program's signed image, so the image
-<a href=#695 id=695 data-nosnippet>695</a>/// name would claim that program's launch edges. `/bin/cellbox-ssh` is the
-<a href=#696 id=696 data-nosnippet>696</a>/// signed `cellbox` file run as the network-facing SSH client; it must not act
-<a href=#697 id=697 data-nosnippet>697</a>/// as the operator shell (KSSH K7: the sign holder never reaches the admin Cell).
-<a href=#698 id=698 data-nosnippet>698</a></span><span class="kw">pub const </span>IDENTITY_ALIASES: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="string">"/bin/cellbox-ssh"</span>];
-<a href=#699 id=699 data-nosnippet>699</a>
-<a href=#700 id=700 data-nosnippet>700</a><span class="doccomment">/// Whether a Cell launched by the kernel from `path` may be named by its signed
-<a href=#701 id=701 data-nosnippet>701</a>/// image (Phase 06): a `/bin/` install path (the same rule that admits a
-<a href=#702 id=702 data-nosnippet>702</a>/// privileged manifest, `governed_spawn`) that is not an alias. Callers must
-<a href=#703 id=703 data-nosnippet>703</a>/// also have resolved `path` in the kernel (Path, Pinned or boot route); a
-<a href=#704 id=704 data-nosnippet>704</a>/// caller-supplied ELF's advisory path never qualifies.
-<a href=#705 id=705 data-nosnippet>705</a></span><span class="kw">pub fn </span>names_launch_identity(path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#706 id=706 data-nosnippet>706</a>    path.starts_with(<span class="string">"/bin/"</span>) &amp;&amp; !IDENTITY_ALIASES.contains(<span class="kw-2">&amp;</span>path)
-<a href=#707 id=707 data-nosnippet>707</a>}
-<a href=#708 id=708 data-nosnippet>708</a>
-<a href=#709 id=709 data-nosnippet>709</a><span class="kw">pub fn </span>is_trusted_core(path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#710 id=710 data-nosnippet>710</a>    find(path).is_some_and(|row| row.trusted_core)
-<a href=#711 id=711 data-nosnippet>711</a>}
-<a href=#712 id=712 data-nosnippet>712</a>
-<a href=#713 id=713 data-nosnippet>713</a><span class="doccomment">/// Legacy grants for a cell without a `__ViCell_manifest`, still bounded by the
-<a href=#714 id=714 data-nosnippet>714</a>/// launch request. Suffix match on `/bin/` paths only (historic behaviour).
-<a href=#715 id=715 data-nosnippet>715</a></span><span class="kw">pub fn </span>legacy_manifestless(path: <span class="kw-2">&amp;</span>str) -&gt; CapSet {
-<a href=#716 id=716 data-nosnippet>716</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = CapSet::EMPTY;
-<a href=#717 id=717 data-nosnippet>717</a>    <span class="kw">if </span>path.starts_with(<span class="string">"/bin/"</span>) {
-<a href=#718 id=718 data-nosnippet>718</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/vfs"</span>) {
-<a href=#719 id=719 data-nosnippet>719</a>            c.block_io = <span class="bool-val">true</span>;
-<a href=#720 id=720 data-nosnippet>720</a>            c.block_regions = <span class="number">0b111</span>; <span class="comment">// legacy fallback: P1 + P4 + SRV
-<a href=#721 id=721 data-nosnippet>721</a>        </span>}
-<a href=#722 id=722 data-nosnippet>722</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/net"</span>) {
-<a href=#723 id=723 data-nosnippet>723</a>            c.network = <span class="bool-val">true</span>;
-<a href=#724 id=724 data-nosnippet>724</a>        }
-<a href=#725 id=725 data-nosnippet>725</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/cellbox"</span>) || path.ends_with(<span class="string">"/bin/init"</span>) {
-<a href=#726 id=726 data-nosnippet>726</a>            c.spawn = <span class="bool-val">true</span>;
-<a href=#727 id=727 data-nosnippet>727</a>        }
-<a href=#728 id=728 data-nosnippet>728</a>    }
-<a href=#729 id=729 data-nosnippet>729</a>    c
-<a href=#730 id=730 data-nosnippet>730</a>}
-<a href=#731 id=731 data-nosnippet>731</a>
-<a href=#732 id=732 data-nosnippet>732</a><span class="comment">// ── PCI functions each driver program may claim (H-3) ───────────────────────
+<a href=#530 id=530 data-nosnippet>530</a>    target(<span class="string">"/bin/input-test"</span>),
+<a href=#531 id=531 data-nosnippet>531</a>    target(<span class="string">"/bin/window-policy-probe"</span>),
+<a href=#532 id=532 data-nosnippet>532</a>    target(<span class="string">"/bin/ls"</span>),
+<a href=#533 id=533 data-nosnippet>533</a>    target(<span class="string">"/bin/ps"</span>),
+<a href=#534 id=534 data-nosnippet>534</a>    target(<span class="string">"/bin/robot-dashboard"</span>),
+<a href=#535 id=535 data-nosnippet>535</a>    target(<span class="string">"/bin/viui-demo"</span>),
+<a href=#536 id=536 data-nosnippet>536</a>    target(<span class="string">"/bin/tetris"</span>),
+<a href=#537 id=537 data-nosnippet>537</a>    target(<span class="string">"/bin/tetris-c"</span>),
+<a href=#538 id=538 data-nosnippet>538</a>    target(<span class="string">"/bin/tetris-lua"</span>),
+<a href=#539 id=539 data-nosnippet>539</a>    target(<span class="string">"/bin/wx-test"</span>),
+<a href=#540 id=540 data-nosnippet>540</a>    target(<span class="string">"/bin/python"</span>),
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="comment">// `/bin/lua` keeps no network right (annex S2-N D-N3); `/bin/lua-net` is
+<a href=#542 id=542 data-nosnippet>542</a>    // the same signed binary on a client-network edge (user decision 2026-11-10).
+<a href=#543 id=543 data-nosnippet>543</a>    </span>target(<span class="string">"/bin/lua"</span>),
+<a href=#544 id=544 data-nosnippet>544</a>    target(<span class="string">"/bin/tool-fs"</span>),
+<a href=#545 id=545 data-nosnippet>545</a>    target(<span class="string">"/bin/tool-sys"</span>),
+<a href=#546 id=546 data-nosnippet>546</a>    <span class="comment">// ── network clients and servers of the net service ──────────────────────
+<a href=#547 id=547 data-nosnippet>547</a>    // They hold no NetworkCap; their ceiling carries only the coarse rights the
+<a href=#548 id=548 data-nosnippet>548</a>    // net service enforces. A non-empty ceiling makes the caller-owned ELF route
+<a href=#549 id=549 data-nosnippet>549</a>    // refuse the edge, so a shell cannot relabel bytes as a granted worker.
+<a href=#550 id=550 data-nosnippet>550</a>    </span>net_client(<span class="string">"/bin/curl"</span>),
+<a href=#551 id=551 data-nosnippet>551</a>    net_client(<span class="string">"/bin/wget"</span>),
+<a href=#552 id=552 data-nosnippet>552</a>    net_client(<span class="string">"/bin/mqtt"</span>),
+<a href=#553 id=553 data-nosnippet>553</a>    net_client(<span class="string">"/bin/llm-gateway"</span>),
+<a href=#554 id=554 data-nosnippet>554</a>    net_client(<span class="string">"/bin/https-demo"</span>),
+<a href=#555 id=555 data-nosnippet>555</a>    <span class="comment">// The plain-HTTP round-trip gate (tests/integration/tests/http-smoke.rs): it
+<a href=#556 id=556 data-nosnippet>556</a>    // must connect to the host mock, so it is a client like the tools above.
+<a href=#557 id=557 data-nosnippet>557</a>    </span>net_client(<span class="string">"/bin/http-smoke"</span>),
+<a href=#558 id=558 data-nosnippet>558</a>    net_client(<span class="string">"/bin/posix-shim-test"</span>),
+<a href=#559 id=559 data-nosnippet>559</a>    net_client(<span class="string">"/bin/lua-net"</span>),
+<a href=#560 id=560 data-nosnippet>560</a>    <span class="comment">// Ocel is a network client and a capability-free boot cell.
+<a href=#561 id=561 data-nosnippet>561</a>    </span>Cell {
+<a href=#562 id=562 data-nosnippet>562</a>        path: <span class="string">"/bin/ocel"</span>,
+<a href=#563 id=563 data-nosnippet>563</a>        request: NET_CLIENT,
+<a href=#564 id=564 data-nosnippet>564</a>        boot: <span class="prelude-val">Some</span>(LEGACY),
+<a href=#565 id=565 data-nosnippet>565</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_CLIENT)),
+<a href=#566 id=566 data-nosnippet>566</a>        ..ROW
+<a href=#567 id=567 data-nosnippet>567</a>    },
+<a href=#568 id=568 data-nosnippet>568</a>    Cell {
+<a href=#569 id=569 data-nosnippet>569</a>        path: <span class="string">"/bin/nc"</span>,
+<a href=#570 id=570 data-nosnippet>570</a>        request: NET_PEER,
+<a href=#571 id=571 data-nosnippet>571</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_PEER)),
+<a href=#572 id=572 data-nosnippet>572</a>        ..ROW
+<a href=#573 id=573 data-nosnippet>573</a>    },
+<a href=#574 id=574 data-nosnippet>574</a>    Cell {
+<a href=#575 id=575 data-nosnippet>575</a>        path: <span class="string">"/bin/httpd"</span>,
+<a href=#576 id=576 data-nosnippet>576</a>        request: NET_LISTENER,
+<a href=#577 id=577 data-nosnippet>577</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(NET_LISTENER)),
+<a href=#578 id=578 data-nosnippet>578</a>        ..ROW
+<a href=#579 id=579 data-nosnippet>579</a>    },
+<a href=#580 id=580 data-nosnippet>580</a>    <span class="comment">// SSH server: inbound listener only — no DNS, no outbound connect.
+<a href=#581 id=581 data-nosnippet>581</a>    </span>Cell {
+<a href=#582 id=582 data-nosnippet>582</a>        path: <span class="string">"/bin/sshd"</span>,
+<a href=#583 id=583 data-nosnippet>583</a>        request: NET_LISTENER,
+<a href=#584 id=584 data-nosnippet>584</a>        boot: <span class="prelude-val">Some</span>(legacy_with(NET_LISTENER)),
+<a href=#585 id=585 data-nosnippet>585</a>        ..ROW
+<a href=#586 id=586 data-nosnippet>586</a>    },
+<a href=#587 id=587 data-nosnippet>587</a>    Cell {
+<a href=#588 id=588 data-nosnippet>588</a>        path: <span class="string">"/bin/robot-demo"</span>,
+<a href=#589 id=589 data-nosnippet>589</a>        request: NET_CLIENT,
+<a href=#590 id=590 data-nosnippet>590</a>        user_target: <span class="prelude-val">Some</span>(legacy_with(union(
+<a href=#591 id=591 data-nosnippet>591</a>            NET_CLIENT,
+<a href=#592 id=592 data-nosnippet>592</a>            CapSet {
+<a href=#593 id=593 data-nosnippet>593</a>                network: <span class="bool-val">true</span>,
+<a href=#594 id=594 data-nosnippet>594</a>                mmio_devices: DEV_GPIO,
+<a href=#595 id=595 data-nosnippet>595</a>                ..CapSet::EMPTY
+<a href=#596 id=596 data-nosnippet>596</a>            },
+<a href=#597 id=597 data-nosnippet>597</a>        ))),
+<a href=#598 id=598 data-nosnippet>598</a>        ..ROW
+<a href=#599 id=599 data-nosnippet>599</a>    },
+<a href=#600 id=600 data-nosnippet>600</a>    <span class="comment">// ── peripheral demos on reviewed edges ──────────────────────────────────
+<a href=#601 id=601 data-nosnippet>601</a>    </span>Cell {
+<a href=#602 id=602 data-nosnippet>602</a>        path: <span class="string">"/bin/periph-demo"</span>,
+<a href=#603 id=603 data-nosnippet>603</a>        user_target: <span class="prelude-val">Some</span>(mmio(CONSOLE_MMIO)),
+<a href=#604 id=604 data-nosnippet>604</a>        ..ROW
+<a href=#605 id=605 data-nosnippet>605</a>    },
+<a href=#606 id=606 data-nosnippet>606</a>    Cell {
+<a href=#607 id=607 data-nosnippet>607</a>        path: <span class="string">"/bin/periph-test"</span>,
+<a href=#608 id=608 data-nosnippet>608</a>        user_target: <span class="prelude-val">Some</span>(mmio(CONSOLE_MMIO)),
+<a href=#609 id=609 data-nosnippet>609</a>        ..ROW
+<a href=#610 id=610 data-nosnippet>610</a>    },
+<a href=#611 id=611 data-nosnippet>611</a>    Cell {
+<a href=#612 id=612 data-nosnippet>612</a>        path: <span class="string">"/bin/pwm-demo"</span>,
+<a href=#613 id=613 data-nosnippet>613</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO)),
+<a href=#614 id=614 data-nosnippet>614</a>        ..ROW
+<a href=#615 id=615 data-nosnippet>615</a>    },
+<a href=#616 id=616 data-nosnippet>616</a>    Cell {
+<a href=#617 id=617 data-nosnippet>617</a>        path: <span class="string">"/bin/sensor-demo"</span>,
+<a href=#618 id=618 data-nosnippet>618</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO | DEV_I2C)),
+<a href=#619 id=619 data-nosnippet>619</a>        ..ROW
+<a href=#620 id=620 data-nosnippet>620</a>    },
+<a href=#621 id=621 data-nosnippet>621</a>    Cell {
+<a href=#622 id=622 data-nosnippet>622</a>        path: <span class="string">"/bin/spi-demo"</span>,
+<a href=#623 id=623 data-nosnippet>623</a>        user_target: <span class="prelude-val">Some</span>(mmio(DEV_GPIO | DEV_SPI)),
+<a href=#624 id=624 data-nosnippet>624</a>        ..ROW
+<a href=#625 id=625 data-nosnippet>625</a>    },
+<a href=#626 id=626 data-nosnippet>626</a>    <span class="comment">// ── lifecycle parents on reviewed edges (keep `spawn`) ──────────────────
+<a href=#627 id=627 data-nosnippet>627</a>    </span>spawner_target(<span class="string">"/bin/bench"</span>),
+<a href=#628 id=628 data-nosnippet>628</a>    spawner_target(<span class="string">"/bin/c2c-render"</span>),
+<a href=#629 id=629 data-nosnippet>629</a>    spawner_target(<span class="string">"/bin/capacity-probe"</span>),
+<a href=#630 id=630 data-nosnippet>630</a>    spawner_target(<span class="string">"/bin/hypha"</span>),
+<a href=#631 id=631 data-nosnippet>631</a>    spawner_target(<span class="string">"/bin/tool-spawn"</span>),
+<a href=#632 id=632 data-nosnippet>632</a>    <span class="comment">// The B0 supervisor must reach the shell edge with SpawnCap (ADR-0021 §2.4).
+<a href=#633 id=633 data-nosnippet>633</a>    </span>spawner_target(<span class="string">"/bin/backend-supervisor"</span>),
+<a href=#634 id=634 data-nosnippet>634</a>    spawner_target(<span class="string">"/bin/hotswap-demo-v1"</span>),
+<a href=#635 id=635 data-nosnippet>635</a>    spawner_target(<span class="string">"/bin/hotswap-demo-v2"</span>),
+<a href=#636 id=636 data-nosnippet>636</a>    <span class="comment">// Phase 09B state authority: lifecycle parent of its worker.
+<a href=#637 id=637 data-nosnippet>637</a>    </span>spawner_target(<span class="string">"/bin/recovery-authority"</span>),
+<a href=#638 id=638 data-nosnippet>638</a>];
+<a href=#639 id=639 data-nosnippet>639</a>
+<a href=#640 id=640 data-nosnippet>640</a><span class="doccomment">/// ADR-0033 CP1 §7 QEMU `edu` lanes, test-hooks images only: the export holder
+<a href=#641 id=641 data-nosnippet>641</a>/// drives QEMU's `edu` device; the client owns Grants and exports them.
+<a href=#642 id=642 data-nosnippet>642</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#643 id=643 data-nosnippet>643</a></span><span class="kw">pub const </span>TEST_HOOK_CELLS: <span class="kw-2">&amp;</span>[Cell] = <span class="kw-2">&amp;</span>[
+<a href=#644 id=644 data-nosnippet>644</a>    pcie_driver(<span class="string">"/bin/edu-holder"</span>),
+<a href=#645 id=645 data-nosnippet>645</a>    boot_only(<span class="string">"/bin/export-client"</span>),
+<a href=#646 id=646 data-nosnippet>646</a>];
+<a href=#647 id=647 data-nosnippet>647</a>
+<a href=#648 id=648 data-nosnippet>648</a><span class="doccomment">/// Private S2-T/S2-W positive control (annex §6, E1): the probe binary the
+<a href=#649 id=649 data-nosnippet>649</a>/// sandbox copy at `/data/bin/s2tw-probe` runs, on a reviewed edge with X/M/W.
+<a href=#650 id=650 data-nosnippet>650</a></span><span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
+<a href=#651 id=651 data-nosnippet>651</a></span><span class="kw">pub const </span>PHASE04_DRIVER_CELLS: <span class="kw-2">&amp;</span>[Cell] = <span class="kw-2">&amp;</span>[target(<span class="string">"/bin/s2tw-probe"</span>)];
+<a href=#652 id=652 data-nosnippet>652</a>
+<a href=#653 id=653 data-nosnippet>653</a><span class="doccomment">/// Every row compiled into this kernel, production rows first.
+<a href=#654 id=654 data-nosnippet>654</a></span><span class="kw">pub fn </span>rows() -&gt; <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'static </span>Cell&gt; {
+<a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">let </span>rows = CELLS.iter();
+<a href=#656 id=656 data-nosnippet>656</a>    <span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#657 id=657 data-nosnippet>657</a>    </span><span class="kw">let </span>rows = rows.chain(TEST_HOOK_CELLS.iter());
+<a href=#658 id=658 data-nosnippet>658</a>    <span class="attr">#[cfg(feature = <span class="string">"phase04-driver-profile"</span>)]
+<a href=#659 id=659 data-nosnippet>659</a>    </span><span class="kw">let </span>rows = rows.chain(PHASE04_DRIVER_CELLS.iter());
+<a href=#660 id=660 data-nosnippet>660</a>    rows
+<a href=#661 id=661 data-nosnippet>661</a>}
+<a href=#662 id=662 data-nosnippet>662</a>
+<a href=#663 id=663 data-nosnippet>663</a><span class="kw">pub fn </span>find(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>Cell&gt; {
+<a href=#664 id=664 data-nosnippet>664</a>    rows().find(|row| row.path == path)
+<a href=#665 id=665 data-nosnippet>665</a>}
+<a href=#666 id=666 data-nosnippet>666</a>
+<a href=#667 id=667 data-nosnippet>667</a><span class="doccomment">/// Authority `path` requests on top of its manifest: the row's `request`, plus
+<a href=#668 id=668 data-nosnippet>668</a>/// the S2-T/S2-W observe/mutate rights for every non-sandbox path (annex §3).
+<a href=#669 id=669 data-nosnippet>669</a></span><span class="kw">pub fn </span>request(path: <span class="kw-2">&amp;</span>str) -&gt; CapSet {
+<a href=#670 id=670 data-nosnippet>670</a>    <span class="kw">let </span>row = find(path).map_or(CapSet::EMPTY, |row| row.request);
+<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">if </span>is_sandbox(path) {
+<a href=#672 id=672 data-nosnippet>672</a>        row
+<a href=#673 id=673 data-nosnippet>673</a>    } <span class="kw">else </span>{
+<a href=#674 id=674 data-nosnippet>674</a>        union(row, LEGACY)
+<a href=#675 id=675 data-nosnippet>675</a>    }
+<a href=#676 id=676 data-nosnippet>676</a>}
+<a href=#677 id=677 data-nosnippet>677</a>
+<a href=#678 id=678 data-nosnippet>678</a><span class="doccomment">/// Boot ceiling row, `Some(EMPTY)` for the sandbox, `None` for an unknown path.
+<a href=#679 id=679 data-nosnippet>679</a></span><span class="kw">pub fn </span>boot(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;CapSet&gt; {
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">match </span>find(path).and_then(|row| row.boot) {
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="prelude-val">Some</span>(caps) =&gt; <span class="prelude-val">Some</span>(caps),
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="prelude-val">None </span><span class="kw">if </span>is_sandbox(path) =&gt; <span class="prelude-val">Some</span>(CapSet::EMPTY),
+<a href=#683 id=683 data-nosnippet>683</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#684 id=684 data-nosnippet>684</a>    }
+<a href=#685 id=685 data-nosnippet>685</a>}
+<a href=#686 id=686 data-nosnippet>686</a>
+<a href=#687 id=687 data-nosnippet>687</a><span class="doccomment">/// Reviewed launch-target ceiling, `Some(EMPTY)` for the sandbox, else `None`.
+<a href=#688 id=688 data-nosnippet>688</a></span><span class="kw">pub fn </span>user_target(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;CapSet&gt; {
+<a href=#689 id=689 data-nosnippet>689</a>    <span class="kw">match </span>find(path).and_then(|row| row.user_target) {
+<a href=#690 id=690 data-nosnippet>690</a>        <span class="prelude-val">Some</span>(caps) =&gt; <span class="prelude-val">Some</span>(caps),
+<a href=#691 id=691 data-nosnippet>691</a>        <span class="prelude-val">None </span><span class="kw">if </span>is_sandbox(path) =&gt; <span class="prelude-val">Some</span>(CapSet::EMPTY),
+<a href=#692 id=692 data-nosnippet>692</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#693 id=693 data-nosnippet>693</a>    }
+<a href=#694 id=694 data-nosnippet>694</a>}
+<a href=#695 id=695 data-nosnippet>695</a>
+<a href=#696 id=696 data-nosnippet>696</a><span class="doccomment">/// Install paths whose bytes are another program's signed image, so the image
+<a href=#697 id=697 data-nosnippet>697</a>/// name would claim that program's launch edges. `/bin/cellbox-ssh` is the
+<a href=#698 id=698 data-nosnippet>698</a>/// signed `cellbox` file run as the network-facing SSH client; it must not act
+<a href=#699 id=699 data-nosnippet>699</a>/// as the operator shell (KSSH K7: the sign holder never reaches the admin Cell).
+<a href=#700 id=700 data-nosnippet>700</a></span><span class="kw">pub const </span>IDENTITY_ALIASES: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="string">"/bin/cellbox-ssh"</span>];
+<a href=#701 id=701 data-nosnippet>701</a>
+<a href=#702 id=702 data-nosnippet>702</a><span class="doccomment">/// Whether a Cell launched by the kernel from `path` may be named by its signed
+<a href=#703 id=703 data-nosnippet>703</a>/// image (Phase 06): a `/bin/` install path (the same rule that admits a
+<a href=#704 id=704 data-nosnippet>704</a>/// privileged manifest, `governed_spawn`) that is not an alias. Callers must
+<a href=#705 id=705 data-nosnippet>705</a>/// also have resolved `path` in the kernel (Path, Pinned or boot route); a
+<a href=#706 id=706 data-nosnippet>706</a>/// caller-supplied ELF's advisory path never qualifies.
+<a href=#707 id=707 data-nosnippet>707</a></span><span class="kw">pub fn </span>names_launch_identity(path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#708 id=708 data-nosnippet>708</a>    path.starts_with(<span class="string">"/bin/"</span>) &amp;&amp; !IDENTITY_ALIASES.contains(<span class="kw-2">&amp;</span>path)
+<a href=#709 id=709 data-nosnippet>709</a>}
+<a href=#710 id=710 data-nosnippet>710</a>
+<a href=#711 id=711 data-nosnippet>711</a><span class="kw">pub fn </span>is_trusted_core(path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#712 id=712 data-nosnippet>712</a>    find(path).is_some_and(|row| row.trusted_core)
+<a href=#713 id=713 data-nosnippet>713</a>}
+<a href=#714 id=714 data-nosnippet>714</a>
+<a href=#715 id=715 data-nosnippet>715</a><span class="doccomment">/// Legacy grants for a cell without a `__ViCell_manifest`, still bounded by the
+<a href=#716 id=716 data-nosnippet>716</a>/// launch request. Suffix match on `/bin/` paths only (historic behaviour).
+<a href=#717 id=717 data-nosnippet>717</a></span><span class="kw">pub fn </span>legacy_manifestless(path: <span class="kw-2">&amp;</span>str) -&gt; CapSet {
+<a href=#718 id=718 data-nosnippet>718</a>    <span class="kw">let </span><span class="kw-2">mut </span>c = CapSet::EMPTY;
+<a href=#719 id=719 data-nosnippet>719</a>    <span class="kw">if </span>path.starts_with(<span class="string">"/bin/"</span>) {
+<a href=#720 id=720 data-nosnippet>720</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/vfs"</span>) {
+<a href=#721 id=721 data-nosnippet>721</a>            c.block_io = <span class="bool-val">true</span>;
+<a href=#722 id=722 data-nosnippet>722</a>            c.block_regions = <span class="number">0b111</span>; <span class="comment">// legacy fallback: P1 + P4 + SRV
+<a href=#723 id=723 data-nosnippet>723</a>        </span>}
+<a href=#724 id=724 data-nosnippet>724</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/net"</span>) {
+<a href=#725 id=725 data-nosnippet>725</a>            c.network = <span class="bool-val">true</span>;
+<a href=#726 id=726 data-nosnippet>726</a>        }
+<a href=#727 id=727 data-nosnippet>727</a>        <span class="kw">if </span>path.ends_with(<span class="string">"/bin/cellbox"</span>) || path.ends_with(<span class="string">"/bin/init"</span>) {
+<a href=#728 id=728 data-nosnippet>728</a>            c.spawn = <span class="bool-val">true</span>;
+<a href=#729 id=729 data-nosnippet>729</a>        }
+<a href=#730 id=730 data-nosnippet>730</a>    }
+<a href=#731 id=731 data-nosnippet>731</a>    c
+<a href=#732 id=732 data-nosnippet>732</a>}
 <a href=#733 id=733 data-nosnippet>733</a>
-<a href=#734 id=734 data-nosnippet>734</a></span><span class="doccomment">/// One PCI match a driver program may query with 418 (class triple) or 424
-<a href=#735 id=735 data-nosnippet>735</a>/// (vendor:device). `prog_if: None` admits every programming interface.
-<a href=#736 id=736 data-nosnippet>736</a></span><span class="attr">#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-<a href=#737 id=737 data-nosnippet>737</a></span><span class="kw">pub enum </span>PciMatch {
-<a href=#738 id=738 data-nosnippet>738</a>    Class {
-<a href=#739 id=739 data-nosnippet>739</a>        class: u8,
-<a href=#740 id=740 data-nosnippet>740</a>        subclass: u8,
-<a href=#741 id=741 data-nosnippet>741</a>        prog_if: <span class="prelude-ty">Option</span>&lt;u8&gt;,
-<a href=#742 id=742 data-nosnippet>742</a>    },
-<a href=#743 id=743 data-nosnippet>743</a>    Id {
-<a href=#744 id=744 data-nosnippet>744</a>        vendor: u16,
-<a href=#745 id=745 data-nosnippet>745</a>        device: u16,
-<a href=#746 id=746 data-nosnippet>746</a>    },
-<a href=#747 id=747 data-nosnippet>747</a>}
-<a href=#748 id=748 data-nosnippet>748</a>
-<a href=#749 id=749 data-nosnippet>749</a><span class="kw">const fn </span>id(vendor: u16, device: u16) -&gt; PciMatch {
-<a href=#750 id=750 data-nosnippet>750</a>    PciMatch::Id { vendor, device }
-<a href=#751 id=751 data-nosnippet>751</a>}
-<a href=#752 id=752 data-nosnippet>752</a>
-<a href=#753 id=753 data-nosnippet>753</a><span class="kw">const </span>VIRTIO: u16 = <span class="number">0x1AF4</span>;
-<a href=#754 id=754 data-nosnippet>754</a><span class="kw">const </span>VMWARE: u16 = <span class="number">0x15AD</span>;
-<a href=#755 id=755 data-nosnippet>755</a><span class="kw">const </span>INTEL: u16 = <span class="number">0x8086</span>;
-<a href=#756 id=756 data-nosnippet>756</a>
-<a href=#757 id=757 data-nosnippet>757</a><span class="doccomment">/// PCI functions per **measured program name** (`__ViCell_image`, the name the
-<a href=#758 id=758 data-nosnippet>758</a>/// kernel attests for the caller's Cell — never an install path or task name).
-<a href=#759 id=759 data-nosnippet>759</a>/// Holding `pcie_driver` is necessary but no longer sufficient: 418/424 also
-<a href=#760 id=760 data-nosnippet>760</a>/// refuse a query outside the caller's row, so one driver cannot claim another
-<a href=#761 id=761 data-nosnippet>761</a>/// driver's controller by asking first. A program with no row claims nothing.
-<a href=#762 id=762 data-nosnippet>762</a></span><span class="kw">pub const </span>PCI_DRIVERS: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[PciMatch])] = <span class="kw-2">&amp;</span>[
-<a href=#763 id=763 data-nosnippet>763</a>    (
-<a href=#764 id=764 data-nosnippet>764</a>        <span class="string">"nvme"</span>,
-<a href=#765 id=765 data-nosnippet>765</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
-<a href=#766 id=766 data-nosnippet>766</a>            class: <span class="number">0x01</span>,
-<a href=#767 id=767 data-nosnippet>767</a>            subclass: <span class="number">0x08</span>,
-<a href=#768 id=768 data-nosnippet>768</a>            prog_if: <span class="prelude-val">Some</span>(<span class="number">0x02</span>),
-<a href=#769 id=769 data-nosnippet>769</a>        }],
-<a href=#770 id=770 data-nosnippet>770</a>    ),
-<a href=#771 id=771 data-nosnippet>771</a>    <span class="comment">// AHCI, plus the two non-AHCI SATA prog-ifs it probes only to log a refusal.
-<a href=#772 id=772 data-nosnippet>772</a>    </span>(
-<a href=#773 id=773 data-nosnippet>773</a>        <span class="string">"ahci"</span>,
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
-<a href=#775 id=775 data-nosnippet>775</a>            class: <span class="number">0x01</span>,
-<a href=#776 id=776 data-nosnippet>776</a>            subclass: <span class="number">0x06</span>,
-<a href=#777 id=777 data-nosnippet>777</a>            prog_if: <span class="prelude-val">None</span>,
-<a href=#778 id=778 data-nosnippet>778</a>        }],
-<a href=#779 id=779 data-nosnippet>779</a>    ),
-<a href=#780 id=780 data-nosnippet>780</a>    (
-<a href=#781 id=781 data-nosnippet>781</a>        <span class="string">"xhci"</span>,
-<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
-<a href=#783 id=783 data-nosnippet>783</a>            class: <span class="number">0x0C</span>,
-<a href=#784 id=784 data-nosnippet>784</a>            subclass: <span class="number">0x03</span>,
-<a href=#785 id=785 data-nosnippet>785</a>            prog_if: <span class="prelude-val">Some</span>(<span class="number">0x30</span>),
-<a href=#786 id=786 data-nosnippet>786</a>        }],
-<a href=#787 id=787 data-nosnippet>787</a>    ),
-<a href=#788 id=788 data-nosnippet>788</a>    (<span class="string">"virtio-blk"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1042</span>), id(VIRTIO, <span class="number">0x1001</span>)]),
-<a href=#789 id=789 data-nosnippet>789</a>    (<span class="string">"virtio-scsi"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1048</span>), id(VIRTIO, <span class="number">0x1004</span>)]),
-<a href=#790 id=790 data-nosnippet>790</a>    (<span class="string">"virtio-net"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1041</span>), id(VIRTIO, <span class="number">0x1000</span>)]),
-<a href=#791 id=791 data-nosnippet>791</a>    (<span class="string">"vmxnet3"</span>, <span class="kw-2">&amp;</span>[id(VMWARE, <span class="number">0x07B0</span>)]),
-<a href=#792 id=792 data-nosnippet>792</a>    (<span class="string">"pvscsi"</span>, <span class="kw-2">&amp;</span>[id(VMWARE, <span class="number">0x07C0</span>)]),
-<a href=#793 id=793 data-nosnippet>793</a>    (<span class="string">"e1000"</span>, <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x100E</span>), id(INTEL, <span class="number">0x100F</span>)]),
-<a href=#794 id=794 data-nosnippet>794</a>    (<span class="string">"e1000e"</span>, <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x10D3</span>)]),
-<a href=#795 id=795 data-nosnippet>795</a>    (
-<a href=#796 id=796 data-nosnippet>796</a>        <span class="string">"igb"</span>,
-<a href=#797 id=797 data-nosnippet>797</a>        <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x10C9</span>), id(INTEL, <span class="number">0x1533</span>), id(INTEL, <span class="number">0x1521</span>)],
-<a href=#798 id=798 data-nosnippet>798</a>    ),
-<a href=#799 id=799 data-nosnippet>799</a>    <span class="comment">// ADR-0033 CP1 §7 QEMU `edu` holder; only test-hooks kernels give it
-<a href=#800 id=800 data-nosnippet>800</a>    // `pcie_driver`, so the row is inert elsewhere.
-<a href=#801 id=801 data-nosnippet>801</a>    </span>(<span class="string">"edu-holder"</span>, <span class="kw-2">&amp;</span>[id(<span class="number">0x1234</span>, <span class="number">0x11E8</span>)]),
-<a href=#802 id=802 data-nosnippet>802</a>];
-<a href=#803 id=803 data-nosnippet>803</a>
-<a href=#804 id=804 data-nosnippet>804</a><span class="kw">fn </span>pci_row(program: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[PciMatch] {
-<a href=#805 id=805 data-nosnippet>805</a>    PCI_DRIVERS
-<a href=#806 id=806 data-nosnippet>806</a>        .iter()
-<a href=#807 id=807 data-nosnippet>807</a>        .find(|(name, <span class="kw">_</span>)| <span class="kw-2">*</span>name == program)
-<a href=#808 id=808 data-nosnippet>808</a>        .map_or(<span class="kw-2">&amp;</span>[], |(<span class="kw">_</span>, matches)| <span class="kw-2">*</span>matches)
-<a href=#809 id=809 data-nosnippet>809</a>}
-<a href=#810 id=810 data-nosnippet>810</a>
-<a href=#811 id=811 data-nosnippet>811</a><span class="doccomment">/// Whether `program` may query the class triple with 418.
-<a href=#812 id=812 data-nosnippet>812</a></span><span class="kw">pub fn </span>pci_class_allowed(program: <span class="kw-2">&amp;</span>str, class: u8, subclass: u8, prog_if: u8) -&gt; bool {
-<a href=#813 id=813 data-nosnippet>813</a>    pci_row(program).iter().any(|m| {
-<a href=#814 id=814 data-nosnippet>814</a>        <span class="macro">matches!</span>(<span class="kw-2">*</span>m, PciMatch::Class { class: c, subclass: s, prog_if: p }
-<a href=#815 id=815 data-nosnippet>815</a>            <span class="kw">if </span>c == class &amp;&amp; s == subclass &amp;&amp; p.is_none_or(|p| p == prog_if))
-<a href=#816 id=816 data-nosnippet>816</a>    })
-<a href=#817 id=817 data-nosnippet>817</a>}
-<a href=#818 id=818 data-nosnippet>818</a>
-<a href=#819 id=819 data-nosnippet>819</a><span class="doccomment">/// Whether `program` may query `vendor:device` with 424.
-<a href=#820 id=820 data-nosnippet>820</a></span><span class="kw">pub fn </span>pci_id_allowed(program: <span class="kw-2">&amp;</span>str, vendor: u16, device: u16) -&gt; bool {
-<a href=#821 id=821 data-nosnippet>821</a>    pci_row(program).contains(<span class="kw-2">&amp;</span>PciMatch::Id { vendor, device })
-<a href=#822 id=822 data-nosnippet>822</a>}
-<a href=#823 id=823 data-nosnippet>823</a>
-<a href=#824 id=824 data-nosnippet>824</a><span class="attr">#[cfg(test)]
-<a href=#825 id=825 data-nosnippet>825</a></span><span class="kw">mod </span>tests {
-<a href=#826 id=826 data-nosnippet>826</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#827 id=827 data-nosnippet>827</a>
-<a href=#828 id=828 data-nosnippet>828</a>    <span class="doccomment">/// Every Ethernet ID the kernel hands out is claimable by the program
-<a href=#829 id=829 data-nosnippet>829</a>    /// installed at the path the table names, and by no other NIC program.
-<a href=#830 id=830 data-nosnippet>830</a>    </span><span class="attr">#[test]
-<a href=#831 id=831 data-nosnippet>831</a>    </span><span class="kw">fn </span>ethernet_ids_belong_to_their_driver_program_only() {
-<a href=#832 id=832 data-nosnippet>832</a>        <span class="kw">use </span><span class="kw">crate</span>::dev::pcie_ecam::ETHERNET_DRIVER_IDS;
-<a href=#833 id=833 data-nosnippet>833</a>        <span class="kw">for </span>(vendor, device, path) <span class="kw">in </span>ETHERNET_DRIVER_IDS {
-<a href=#834 id=834 data-nosnippet>834</a>            <span class="kw">let </span>owner = path.trim_start_matches(<span class="string">"/bin/"</span>);
-<a href=#835 id=835 data-nosnippet>835</a>            <span class="macro">assert!</span>(
-<a href=#836 id=836 data-nosnippet>836</a>                pci_id_allowed(owner, vendor, device),
-<a href=#837 id=837 data-nosnippet>837</a>                <span class="string">"{owner} {vendor:#x}:{device:#x}"
-<a href=#838 id=838 data-nosnippet>838</a>            </span>);
-<a href=#839 id=839 data-nosnippet>839</a>            <span class="kw">for </span>(other, <span class="kw">_</span>) <span class="kw">in </span>PCI_DRIVERS.iter().filter(|(name, <span class="kw">_</span>)| <span class="kw-2">*</span>name != owner) {
-<a href=#840 id=840 data-nosnippet>840</a>                <span class="macro">assert!</span>(
-<a href=#841 id=841 data-nosnippet>841</a>                    !pci_id_allowed(other, vendor, device),
-<a href=#842 id=842 data-nosnippet>842</a>                    <span class="string">"{other} may claim {path}'s device"
-<a href=#843 id=843 data-nosnippet>843</a>                </span>);
-<a href=#844 id=844 data-nosnippet>844</a>            }
-<a href=#845 id=845 data-nosnippet>845</a>        }
-<a href=#846 id=846 data-nosnippet>846</a>    }
-<a href=#847 id=847 data-nosnippet>847</a>
-<a href=#848 id=848 data-nosnippet>848</a>    <span class="doccomment">/// Only kernel install paths name a Cell; the SSH alias of the shell and
-<a href=#849 id=849 data-nosnippet>849</a>    /// sandbox copies of a signed program do not.
-<a href=#850 id=850 data-nosnippet>850</a>    </span><span class="attr">#[test]
-<a href=#851 id=851 data-nosnippet>851</a>    </span><span class="kw">fn </span>launch_identity_needs_a_non_alias_install_path() {
-<a href=#852 id=852 data-nosnippet>852</a>        <span class="macro">assert!</span>(names_launch_identity(<span class="string">"/bin/cellbox"</span>));
-<a href=#853 id=853 data-nosnippet>853</a>        <span class="macro">assert!</span>(names_launch_identity(<span class="string">"/bin/shutdown"</span>));
-<a href=#854 id=854 data-nosnippet>854</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/bin/cellbox-ssh"</span>));
-<a href=#855 id=855 data-nosnippet>855</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/home/x/shutdown"</span>));
-<a href=#856 id=856 data-nosnippet>856</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/apps/cellbox"</span>));
-<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/srv/sshd"</span>));
-<a href=#858 id=858 data-nosnippet>858</a>    }
-<a href=#859 id=859 data-nosnippet>859</a>
-<a href=#860 id=860 data-nosnippet>860</a>    <span class="attr">#[test]
-<a href=#861 id=861 data-nosnippet>861</a>    </span><span class="kw">fn </span>class_drivers_cannot_claim_each_other() {
-<a href=#862 id=862 data-nosnippet>862</a>        <span class="macro">assert!</span>(pci_class_allowed(<span class="string">"nvme"</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
-<a href=#863 id=863 data-nosnippet>863</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">"ahci"</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
-<a href=#864 id=864 data-nosnippet>864</a>        <span class="macro">assert!</span>(pci_class_allowed(<span class="string">"ahci"</span>, <span class="number">0x01</span>, <span class="number">0x06</span>, <span class="number">0x00</span>));
-<a href=#865 id=865 data-nosnippet>865</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">"xhci"</span>, <span class="number">0x01</span>, <span class="number">0x06</span>, <span class="number">0x01</span>));
-<a href=#866 id=866 data-nosnippet>866</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">""</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
-<a href=#867 id=867 data-nosnippet>867</a>        <span class="macro">assert!</span>(!pci_id_allowed(<span class="string">"input"</span>, VIRTIO, <span class="number">0x1042</span>));
-<a href=#868 id=868 data-nosnippet>868</a>    }
-<a href=#869 id=869 data-nosnippet>869</a>}
+<a href=#734 id=734 data-nosnippet>734</a><span class="comment">// ── PCI functions each driver program may claim (H-3) ───────────────────────
+<a href=#735 id=735 data-nosnippet>735</a>
+<a href=#736 id=736 data-nosnippet>736</a></span><span class="doccomment">/// One PCI match a driver program may query with 418 (class triple) or 424
+<a href=#737 id=737 data-nosnippet>737</a>/// (vendor:device). `prog_if: None` admits every programming interface.
+<a href=#738 id=738 data-nosnippet>738</a></span><span class="attr">#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+<a href=#739 id=739 data-nosnippet>739</a></span><span class="kw">pub enum </span>PciMatch {
+<a href=#740 id=740 data-nosnippet>740</a>    Class {
+<a href=#741 id=741 data-nosnippet>741</a>        class: u8,
+<a href=#742 id=742 data-nosnippet>742</a>        subclass: u8,
+<a href=#743 id=743 data-nosnippet>743</a>        prog_if: <span class="prelude-ty">Option</span>&lt;u8&gt;,
+<a href=#744 id=744 data-nosnippet>744</a>    },
+<a href=#745 id=745 data-nosnippet>745</a>    Id {
+<a href=#746 id=746 data-nosnippet>746</a>        vendor: u16,
+<a href=#747 id=747 data-nosnippet>747</a>        device: u16,
+<a href=#748 id=748 data-nosnippet>748</a>    },
+<a href=#749 id=749 data-nosnippet>749</a>}
+<a href=#750 id=750 data-nosnippet>750</a>
+<a href=#751 id=751 data-nosnippet>751</a><span class="kw">const fn </span>id(vendor: u16, device: u16) -&gt; PciMatch {
+<a href=#752 id=752 data-nosnippet>752</a>    PciMatch::Id { vendor, device }
+<a href=#753 id=753 data-nosnippet>753</a>}
+<a href=#754 id=754 data-nosnippet>754</a>
+<a href=#755 id=755 data-nosnippet>755</a><span class="kw">const </span>VIRTIO: u16 = <span class="number">0x1AF4</span>;
+<a href=#756 id=756 data-nosnippet>756</a><span class="kw">const </span>VMWARE: u16 = <span class="number">0x15AD</span>;
+<a href=#757 id=757 data-nosnippet>757</a><span class="kw">const </span>INTEL: u16 = <span class="number">0x8086</span>;
+<a href=#758 id=758 data-nosnippet>758</a>
+<a href=#759 id=759 data-nosnippet>759</a><span class="doccomment">/// PCI functions per **measured program name** (`__ViCell_image`, the name the
+<a href=#760 id=760 data-nosnippet>760</a>/// kernel attests for the caller's Cell — never an install path or task name).
+<a href=#761 id=761 data-nosnippet>761</a>/// Holding `pcie_driver` is necessary but no longer sufficient: 418/424 also
+<a href=#762 id=762 data-nosnippet>762</a>/// refuse a query outside the caller's row, so one driver cannot claim another
+<a href=#763 id=763 data-nosnippet>763</a>/// driver's controller by asking first. A program with no row claims nothing.
+<a href=#764 id=764 data-nosnippet>764</a></span><span class="kw">pub const </span>PCI_DRIVERS: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>[PciMatch])] = <span class="kw-2">&amp;</span>[
+<a href=#765 id=765 data-nosnippet>765</a>    (
+<a href=#766 id=766 data-nosnippet>766</a>        <span class="string">"nvme"</span>,
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
+<a href=#768 id=768 data-nosnippet>768</a>            class: <span class="number">0x01</span>,
+<a href=#769 id=769 data-nosnippet>769</a>            subclass: <span class="number">0x08</span>,
+<a href=#770 id=770 data-nosnippet>770</a>            prog_if: <span class="prelude-val">Some</span>(<span class="number">0x02</span>),
+<a href=#771 id=771 data-nosnippet>771</a>        }],
+<a href=#772 id=772 data-nosnippet>772</a>    ),
+<a href=#773 id=773 data-nosnippet>773</a>    <span class="comment">// AHCI, plus the two non-AHCI SATA prog-ifs it probes only to log a refusal.
+<a href=#774 id=774 data-nosnippet>774</a>    </span>(
+<a href=#775 id=775 data-nosnippet>775</a>        <span class="string">"ahci"</span>,
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
+<a href=#777 id=777 data-nosnippet>777</a>            class: <span class="number">0x01</span>,
+<a href=#778 id=778 data-nosnippet>778</a>            subclass: <span class="number">0x06</span>,
+<a href=#779 id=779 data-nosnippet>779</a>            prog_if: <span class="prelude-val">None</span>,
+<a href=#780 id=780 data-nosnippet>780</a>        }],
+<a href=#781 id=781 data-nosnippet>781</a>    ),
+<a href=#782 id=782 data-nosnippet>782</a>    (
+<a href=#783 id=783 data-nosnippet>783</a>        <span class="string">"xhci"</span>,
+<a href=#784 id=784 data-nosnippet>784</a>        <span class="kw-2">&amp;</span>[PciMatch::Class {
+<a href=#785 id=785 data-nosnippet>785</a>            class: <span class="number">0x0C</span>,
+<a href=#786 id=786 data-nosnippet>786</a>            subclass: <span class="number">0x03</span>,
+<a href=#787 id=787 data-nosnippet>787</a>            prog_if: <span class="prelude-val">Some</span>(<span class="number">0x30</span>),
+<a href=#788 id=788 data-nosnippet>788</a>        }],
+<a href=#789 id=789 data-nosnippet>789</a>    ),
+<a href=#790 id=790 data-nosnippet>790</a>    (<span class="string">"virtio-blk"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1042</span>), id(VIRTIO, <span class="number">0x1001</span>)]),
+<a href=#791 id=791 data-nosnippet>791</a>    (<span class="string">"virtio-scsi"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1048</span>), id(VIRTIO, <span class="number">0x1004</span>)]),
+<a href=#792 id=792 data-nosnippet>792</a>    (<span class="string">"virtio-net"</span>, <span class="kw-2">&amp;</span>[id(VIRTIO, <span class="number">0x1041</span>), id(VIRTIO, <span class="number">0x1000</span>)]),
+<a href=#793 id=793 data-nosnippet>793</a>    (<span class="string">"vmxnet3"</span>, <span class="kw-2">&amp;</span>[id(VMWARE, <span class="number">0x07B0</span>)]),
+<a href=#794 id=794 data-nosnippet>794</a>    (<span class="string">"pvscsi"</span>, <span class="kw-2">&amp;</span>[id(VMWARE, <span class="number">0x07C0</span>)]),
+<a href=#795 id=795 data-nosnippet>795</a>    (<span class="string">"e1000"</span>, <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x100E</span>), id(INTEL, <span class="number">0x100F</span>)]),
+<a href=#796 id=796 data-nosnippet>796</a>    (<span class="string">"e1000e"</span>, <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x10D3</span>)]),
+<a href=#797 id=797 data-nosnippet>797</a>    (
+<a href=#798 id=798 data-nosnippet>798</a>        <span class="string">"igb"</span>,
+<a href=#799 id=799 data-nosnippet>799</a>        <span class="kw-2">&amp;</span>[id(INTEL, <span class="number">0x10C9</span>), id(INTEL, <span class="number">0x1533</span>), id(INTEL, <span class="number">0x1521</span>)],
+<a href=#800 id=800 data-nosnippet>800</a>    ),
+<a href=#801 id=801 data-nosnippet>801</a>    <span class="comment">// ADR-0033 CP1 §7 QEMU `edu` holder; only test-hooks kernels give it
+<a href=#802 id=802 data-nosnippet>802</a>    // `pcie_driver`, so the row is inert elsewhere.
+<a href=#803 id=803 data-nosnippet>803</a>    </span>(<span class="string">"edu-holder"</span>, <span class="kw-2">&amp;</span>[id(<span class="number">0x1234</span>, <span class="number">0x11E8</span>)]),
+<a href=#804 id=804 data-nosnippet>804</a>];
+<a href=#805 id=805 data-nosnippet>805</a>
+<a href=#806 id=806 data-nosnippet>806</a><span class="kw">fn </span>pci_row(program: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[PciMatch] {
+<a href=#807 id=807 data-nosnippet>807</a>    PCI_DRIVERS
+<a href=#808 id=808 data-nosnippet>808</a>        .iter()
+<a href=#809 id=809 data-nosnippet>809</a>        .find(|(name, <span class="kw">_</span>)| <span class="kw-2">*</span>name == program)
+<a href=#810 id=810 data-nosnippet>810</a>        .map_or(<span class="kw-2">&amp;</span>[], |(<span class="kw">_</span>, matches)| <span class="kw-2">*</span>matches)
+<a href=#811 id=811 data-nosnippet>811</a>}
+<a href=#812 id=812 data-nosnippet>812</a>
+<a href=#813 id=813 data-nosnippet>813</a><span class="doccomment">/// Whether `program` may query the class triple with 418.
+<a href=#814 id=814 data-nosnippet>814</a></span><span class="kw">pub fn </span>pci_class_allowed(program: <span class="kw-2">&amp;</span>str, class: u8, subclass: u8, prog_if: u8) -&gt; bool {
+<a href=#815 id=815 data-nosnippet>815</a>    pci_row(program).iter().any(|m| {
+<a href=#816 id=816 data-nosnippet>816</a>        <span class="macro">matches!</span>(<span class="kw-2">*</span>m, PciMatch::Class { class: c, subclass: s, prog_if: p }
+<a href=#817 id=817 data-nosnippet>817</a>            <span class="kw">if </span>c == class &amp;&amp; s == subclass &amp;&amp; p.is_none_or(|p| p == prog_if))
+<a href=#818 id=818 data-nosnippet>818</a>    })
+<a href=#819 id=819 data-nosnippet>819</a>}
+<a href=#820 id=820 data-nosnippet>820</a>
+<a href=#821 id=821 data-nosnippet>821</a><span class="doccomment">/// Whether `program` may query `vendor:device` with 424.
+<a href=#822 id=822 data-nosnippet>822</a></span><span class="kw">pub fn </span>pci_id_allowed(program: <span class="kw-2">&amp;</span>str, vendor: u16, device: u16) -&gt; bool {
+<a href=#823 id=823 data-nosnippet>823</a>    pci_row(program).contains(<span class="kw-2">&amp;</span>PciMatch::Id { vendor, device })
+<a href=#824 id=824 data-nosnippet>824</a>}
+<a href=#825 id=825 data-nosnippet>825</a>
+<a href=#826 id=826 data-nosnippet>826</a><span class="attr">#[cfg(test)]
+<a href=#827 id=827 data-nosnippet>827</a></span><span class="kw">mod </span>tests {
+<a href=#828 id=828 data-nosnippet>828</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#829 id=829 data-nosnippet>829</a>
+<a href=#830 id=830 data-nosnippet>830</a>    <span class="doccomment">/// Every Ethernet ID the kernel hands out is claimable by the program
+<a href=#831 id=831 data-nosnippet>831</a>    /// installed at the path the table names, and by no other NIC program.
+<a href=#832 id=832 data-nosnippet>832</a>    </span><span class="attr">#[test]
+<a href=#833 id=833 data-nosnippet>833</a>    </span><span class="kw">fn </span>ethernet_ids_belong_to_their_driver_program_only() {
+<a href=#834 id=834 data-nosnippet>834</a>        <span class="kw">use </span><span class="kw">crate</span>::dev::pcie_ecam::ETHERNET_DRIVER_IDS;
+<a href=#835 id=835 data-nosnippet>835</a>        <span class="kw">for </span>(vendor, device, path) <span class="kw">in </span>ETHERNET_DRIVER_IDS {
+<a href=#836 id=836 data-nosnippet>836</a>            <span class="kw">let </span>owner = path.trim_start_matches(<span class="string">"/bin/"</span>);
+<a href=#837 id=837 data-nosnippet>837</a>            <span class="macro">assert!</span>(
+<a href=#838 id=838 data-nosnippet>838</a>                pci_id_allowed(owner, vendor, device),
+<a href=#839 id=839 data-nosnippet>839</a>                <span class="string">"{owner} {vendor:#x}:{device:#x}"
+<a href=#840 id=840 data-nosnippet>840</a>            </span>);
+<a href=#841 id=841 data-nosnippet>841</a>            <span class="kw">for </span>(other, <span class="kw">_</span>) <span class="kw">in </span>PCI_DRIVERS.iter().filter(|(name, <span class="kw">_</span>)| <span class="kw-2">*</span>name != owner) {
+<a href=#842 id=842 data-nosnippet>842</a>                <span class="macro">assert!</span>(
+<a href=#843 id=843 data-nosnippet>843</a>                    !pci_id_allowed(other, vendor, device),
+<a href=#844 id=844 data-nosnippet>844</a>                    <span class="string">"{other} may claim {path}'s device"
+<a href=#845 id=845 data-nosnippet>845</a>                </span>);
+<a href=#846 id=846 data-nosnippet>846</a>            }
+<a href=#847 id=847 data-nosnippet>847</a>        }
+<a href=#848 id=848 data-nosnippet>848</a>    }
+<a href=#849 id=849 data-nosnippet>849</a>
+<a href=#850 id=850 data-nosnippet>850</a>    <span class="doccomment">/// Only kernel install paths name a Cell; the SSH alias of the shell and
+<a href=#851 id=851 data-nosnippet>851</a>    /// sandbox copies of a signed program do not.
+<a href=#852 id=852 data-nosnippet>852</a>    </span><span class="attr">#[test]
+<a href=#853 id=853 data-nosnippet>853</a>    </span><span class="kw">fn </span>launch_identity_needs_a_non_alias_install_path() {
+<a href=#854 id=854 data-nosnippet>854</a>        <span class="macro">assert!</span>(names_launch_identity(<span class="string">"/bin/cellbox"</span>));
+<a href=#855 id=855 data-nosnippet>855</a>        <span class="macro">assert!</span>(names_launch_identity(<span class="string">"/bin/shutdown"</span>));
+<a href=#856 id=856 data-nosnippet>856</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/bin/cellbox-ssh"</span>));
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/home/x/shutdown"</span>));
+<a href=#858 id=858 data-nosnippet>858</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/apps/cellbox"</span>));
+<a href=#859 id=859 data-nosnippet>859</a>        <span class="macro">assert!</span>(!names_launch_identity(<span class="string">"/srv/sshd"</span>));
+<a href=#860 id=860 data-nosnippet>860</a>    }
+<a href=#861 id=861 data-nosnippet>861</a>
+<a href=#862 id=862 data-nosnippet>862</a>    <span class="attr">#[test]
+<a href=#863 id=863 data-nosnippet>863</a>    </span><span class="kw">fn </span>class_drivers_cannot_claim_each_other() {
+<a href=#864 id=864 data-nosnippet>864</a>        <span class="macro">assert!</span>(pci_class_allowed(<span class="string">"nvme"</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
+<a href=#865 id=865 data-nosnippet>865</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">"ahci"</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
+<a href=#866 id=866 data-nosnippet>866</a>        <span class="macro">assert!</span>(pci_class_allowed(<span class="string">"ahci"</span>, <span class="number">0x01</span>, <span class="number">0x06</span>, <span class="number">0x00</span>));
+<a href=#867 id=867 data-nosnippet>867</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">"xhci"</span>, <span class="number">0x01</span>, <span class="number">0x06</span>, <span class="number">0x01</span>));
+<a href=#868 id=868 data-nosnippet>868</a>        <span class="macro">assert!</span>(!pci_class_allowed(<span class="string">""</span>, <span class="number">0x01</span>, <span class="number">0x08</span>, <span class="number">0x02</span>));
+<a href=#869 id=869 data-nosnippet>869</a>        <span class="macro">assert!</span>(!pci_id_allowed(<span class="string">"input"</span>, VIRTIO, <span class="number">0x1042</span>));
+<a href=#870 id=870 data-nosnippet>870</a>    }
+<a href=#871 id=871 data-nosnippet>871</a>}
 </code></pre></div></section></main></body></html>

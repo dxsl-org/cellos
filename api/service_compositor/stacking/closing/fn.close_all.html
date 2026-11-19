@@ -3,7 +3,7 @@
     table: &amp;mut <a class="struct" href="../../surface_table/storage/struct.SurfaceTable.html" title="struct service_compositor::surface_table::storage::SurfaceTable">SurfaceTable</a>,
     z_order: &amp;mut <a class="struct" href="../../z_order/struct.ZOrder.html" title="struct service_compositor::z_order::ZOrder">ZOrder</a>,
     cap: u64,
-) -&gt; Option&lt;Rect&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>“Close all tabs” of the stack showing <code>cap</code>: queue every tab in tab
+) -&gt; Option&lt;<a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>“Close all tabs” of the stack showing <code>cap</code>: queue every tab in tab
 order and ask the first. Each further tab is asked once the one before
 answered (<a href="fn.advance_close.html" title="fn service_compositor::stacking::closing::advance_close"><code>advance_close</code></a>), so every owner decides about its own tab.</p>
 </div></details></section></div></main></body></html>

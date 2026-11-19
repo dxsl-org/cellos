@@ -5,7 +5,7 @@
     flags: u16,
 ) -&gt; Result&lt;u64, <a class="enum" href="enum.DmaExportError.html" title="enum ostd::syscall::DmaExportError">DmaExportError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>437: export <code>[va, va + len)</code> of this Cell’s own memory (inside a Grant it
 owns) to the live provider of <code>holder_service</code>; <code>flags</code> may carry
-[<code>abi::dma_export::EXPORT_DEVICE_WRITE</code>]. The range stays locked (it cannot
+<a href="../../abi/dma_export/constant.EXPORT_DEVICE_WRITE.html" title="constant abi::dma_export::EXPORT_DEVICE_WRITE"><code>abi::dma_export::EXPORT_DEVICE_WRITE</code></a>. The range stays locked (it cannot
 be freed) until the lease is revoked. Returns the export id to send to the
 holder beside the request it backs.</p>
 </div></details></section></div></main></body></html>

@@ -2,7 +2,7 @@
     data: &amp;[u8],
     digest: [u8; 32],
     verified: bool,
-) -&gt; ImageIdentity</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The identity recorded for an admitted image. <code>verified</code> is true only when
+) -&gt; <a class="struct" href="../../../abi/cell_image/struct.ImageIdentity.html" title="struct abi::cell_image::ImageIdentity">ImageIdentity</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The identity recorded for an admitted image. <code>verified</code> is true only when
 its signature verified under this kernel’s anchor: the name is believed
 only then, because only then are the section bytes covered by a signature
 the kernel checked. An unsigned image states its digest and nothing else,

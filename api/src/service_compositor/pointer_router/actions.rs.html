@@ -178,7 +178,7 @@
 <a href=#178 id=178 data-nosnippet>178</a><span class="kw">where
 <a href=#179 id=179 data-nosnippet>179</a>    </span>F: FnMut(Rect),
 <a href=#180 id=180 data-nosnippet>180</a>{
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(member) = context
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="kw">let </span>member = context
 <a href=#182 id=182 data-nosnippet>182</a>        .frames
 <a href=#183 id=183 data-nosnippet>183</a>        .frame_of(cap)
 <a href=#184 id=184 data-nosnippet>184</a>        .and_then(|frame| context.frames.members(frame).get(index).copied())
@@ -187,24 +187,21 @@
 <a href=#187 id=187 data-nosnippet>187</a>                .table
 <a href=#188 id=188 data-nosnippet>188</a>                .get(member)
 <a href=#189 id=189 data-nosnippet>189</a>                .is_some_and(|s| <span class="macro">matches!</span>(s.state(), WindowState::Normal | WindowState::Maximized))
-<a href=#190 id=190 data-nosnippet>190</a>        })
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">else </span>{
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#193 id=193 data-nosnippet>193</a>    };
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = context.frames.frame_of(member) {
-<a href=#195 id=195 data-nosnippet>195</a>        context.frames.clear_close_queue(frame);
+<a href=#190 id=190 data-nosnippet>190</a>        })<span class="question-mark">?</span>;
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = context.frames.frame_of(member) {
+<a href=#192 id=192 data-nosnippet>192</a>        context.frames.clear_close_queue(frame);
+<a href=#193 id=193 data-nosnippet>193</a>    }
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(area) = stacking::select(context.frames, context.table, context.z_order, member) {
+<a href=#195 id=195 data-nosnippet>195</a>        (context.damage)(area);
 <a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(area) = stacking::select(context.frames, context.table, context.z_order, member) {
-<a href=#198 id=198 data-nosnippet>198</a>        (context.damage)(area);
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>    focus(router, member, context.table);
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="prelude-val">Some</span>(member)
-<a href=#202 id=202 data-nosnippet>202</a>}
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a><span class="kw">fn </span>focus(router: <span class="kw-2">&amp;mut </span>PointerRouter, cap: u64, table: <span class="kw-2">&amp;</span>SurfaceTable) {
-<a href=#205 id=205 data-nosnippet>205</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get(cap).filter(|surface| surface.accepts_input()) {
-<a href=#206 id=206 data-nosnippet>206</a>        router.focused_owner = surface.owner;
-<a href=#207 id=207 data-nosnippet>207</a>        router.selected_cap = <span class="prelude-val">Some</span>(cap);
-<a href=#208 id=208 data-nosnippet>208</a>    }
-<a href=#209 id=209 data-nosnippet>209</a>}
+<a href=#197 id=197 data-nosnippet>197</a>    focus(router, member, context.table);
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="prelude-val">Some</span>(member)
+<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#200 id=200 data-nosnippet>200</a>
+<a href=#201 id=201 data-nosnippet>201</a><span class="kw">fn </span>focus(router: <span class="kw-2">&amp;mut </span>PointerRouter, cap: u64, table: <span class="kw-2">&amp;</span>SurfaceTable) {
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(surface) = table.get(cap).filter(|surface| surface.accepts_input()) {
+<a href=#203 id=203 data-nosnippet>203</a>        router.focused_owner = surface.owner;
+<a href=#204 id=204 data-nosnippet>204</a>        router.selected_cap = <span class="prelude-val">Some</span>(cap);
+<a href=#205 id=205 data-nosnippet>205</a>    }
+<a href=#206 id=206 data-nosnippet>206</a>}
 </code></pre></div></section></main></body></html>

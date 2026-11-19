@@ -2,7 +2,7 @@
 <p>The supervisor (init) respawns a dead service under a NEW tid. Clients that
 addressed the service by its old tid would break. This registry adds an
 indirection: the supervisor registers each service’s tid under a well-known
-<code>service_id</code> ([<code>abi::syscall::service</code>]) and re-registers the new tid on
+<code>service_id</code> (<a href="../../../abi/syscall/service/index.html" title="mod abi::syscall::service"><code>abi::syscall::service</code></a>) and re-registers the new tid on
 respawn; a client resolves <code>service_id → tid</code> right before sending, so it
 reconnects transparently. Keeping the map in the kernel (the never-die core)
 means it survives any service’s death, and a dead provider is auto-cleared
@@ -11,8 +11,8 @@ client retries) instead of a stale tid.</p>
 <p>Each entry also records the provider’s <strong>Cell identity</strong> — <code>(cell_id, generation)</code>. A tid says where to send; it is not an identity, because a
 <code>CellId</code> slot may be reused later while the generation cannot. Recording the
 identity here is what lets <code>LookupServiceBound</code> answer with a binding instead
-of a bare tid, and it is the same axis [<code>abi::caller_identity::CallerIdentity</code>]
-and [<code>abi::cell_owner::CellOwner</code>] already use — one identity concept, not two.
+of a bare tid, and it is the same axis <a href="../../../abi/caller_identity/struct.CallerIdentity.html" title="struct abi::caller_identity::CallerIdentity"><code>abi::caller_identity::CallerIdentity</code></a>
+and <a href="../../../abi/cell_owner/struct.CellOwner.html" title="struct abi::cell_owner::CellOwner"><code>abi::cell_owner::CellOwner</code></a> already use — one identity concept, not two.
 A provider whose recorded identity is not live (<code>cell_id == 0</code> or
 <code>generation == 0</code>) is <strong>not bindable</strong> and is reported as “no live provider”,
 so the kernel never states a binding it cannot stand behind.</p>
@@ -25,7 +25,7 @@ registrar owns it until it exits. <code>lookup</code> is open to all cells.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.ServiceEntry.html" title="struct cellos_kernel::cell::service_registry::ServiceEntry">Service<wbr>Entry</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>service_id</code> → current provider. <code>0</code> is never stored as a tid (it is the ABI
 “no provider” sentinel returned by <code>lookup</code>).</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Refusal.html" title="enum cellos_kernel::cell::service_registry::Refusal">Refusal</a></dt><dd>Why <a href="fn.register_as.html" title="fn cellos_kernel::cell::service_registry::register_as"><code>register_as</code></a> refused.</dd><dt><a class="enum" href="enum.Registrar.html" title="enum cellos_kernel::cell::service_registry::Registrar">Registrar</a></dt><dd>Who asks to publish a service id, as established by the syscall dispatch.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.MAX_SERVICES.html" title="constant cellos_kernel::cell::service_registry::MAX_SERVICES">MAX_<wbr>SERVICES</a></dt><dd>Upper bound on distinct registered services. Bounds kernel memory and matches
 the small, fixed set of well-known service IDs — a runaway registrar cannot
-grow the map without bound.</dd><dt><a class="constant" href="constant.PRIVATE_ID_BASE.html" title="constant cellos_kernel::cell::service_registry::PRIVATE_ID_BASE">PRIVATE_<wbr>ID_<wbr>BASE</a></dt><dd>Ids below this are the well-known namespace of [<code>abi::syscall::service</code>];
+grow the map without bound.</dd><dt><a class="constant" href="constant.PRIVATE_ID_BASE.html" title="constant cellos_kernel::cell::service_registry::PRIVATE_ID_BASE">PRIVATE_<wbr>ID_<wbr>BASE</a></dt><dd>Ids below this are the well-known namespace of <a href="../../../abi/syscall/service/index.html" title="mod abi::syscall::service"><code>abi::syscall::service</code></a>;
 ids at or above it are private ids a lifecycle parent publishes for its own
 children (the demo and test fixtures use <code>0x7Axx</code>).</dd></dl><h2 id="statics" class="section-header">Statics<a href="#statics" class="anchor">§</a></h2><dl class="item-table"><dt><a class="static" href="static.OWNERS.html" title="static cellos_kernel::cell::service_registry::OWNERS">OWNERS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Private id → tid of the spawn-only registrar that owns it. Lock order:
 <code>OWNERS → REGISTRY</code>; nothing takes <code>OWNERS</code> while holding <code>REGISTRY</code>.</dd><dt><a class="static" href="static.REGISTRY.html" title="static cellos_kernel::cell::service_registry::REGISTRY">REGISTRY</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.clear_tid.html" title="fn cellos_kernel::cell::service_registry::clear_tid">clear_<wbr>tid</a></dt><dd>Remove every registration that points at <code>tid</code>. Called from <code>exit_task</code> when a

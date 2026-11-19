@@ -206,9 +206,9 @@
 <a href=#206 id=206 data-nosnippet>206</a>            <span class="kw">return</span>;
 <a href=#207 id=207 data-nosnippet>207</a>        };
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="kw">if </span>!item.is_dir {
-<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(intent) = wire::mime::AssociationRegistry::resolve_intent_with_app(
-<a href=#210 id=210 data-nosnippet>210</a>                <span class="kw-2">&amp;</span>item.path, app_id, <span class="prelude-val">None</span>,
-<a href=#211 id=211 data-nosnippet>211</a>            ) {
+<a href=#209 id=209 data-nosnippet>209</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(intent) =
+<a href=#210 id=210 data-nosnippet>210</a>                wire::mime::AssociationRegistry::resolve_intent_with_app(<span class="kw-2">&amp;</span>item.path, app_id, <span class="prelude-val">None</span>)
+<a href=#211 id=211 data-nosnippet>211</a>            {
 <a href=#212 id=212 data-nosnippet>212</a>                <span class="self">self</span>.status_message = <span class="macro">format!</span>(
 <a href=#213 id=213 data-nosnippet>213</a>                    <span class="string">"{} {} with {}"</span>,
 <a href=#214 id=214 data-nosnippet>214</a>                    intent.action.as_str(),
@@ -721,73 +721,77 @@
 <a href=#721 id=721 data-nosnippet>721</a>        app.trash_selected();
 <a href=#722 id=722 data-nosnippet>722</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/tmp/c5dir/a.txt"</span>).is_ok());
 <a href=#723 id=723 data-nosnippet>723</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
-<a href=#724 id=724 data-nosnippet>724</a>        <span class="macro">assert!</span>(app.status_message.starts_with(<span class="string">"Trash unavailable"</span>), <span class="string">"{}"</span>, app.status_message);
-<a href=#725 id=725 data-nosnippet>725</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Shift+Delete"</span>));
-<a href=#726 id=726 data-nosnippet>726</a>    }
-<a href=#727 id=727 data-nosnippet>727</a>
-<a href=#728 id=728 data-nosnippet>728</a>    <span class="attr">#[test]
-<a href=#729 id=729 data-nosnippet>729</a>    </span><span class="kw">fn </span>trash_and_undo_restores_file() {
-<a href=#730 id=730 data-nosnippet>730</a>        <span class="kw">let </span>fs = FakeFs::new()
-<a href=#731 id=731 data-nosnippet>731</a>            .dir(<span class="string">"/data"</span>)
-<a href=#732 id=732 data-nosnippet>732</a>            .file(<span class="string">"/data/memo.txt"</span>, <span class="string">b"important\n"</span>);
-<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data"</span>);
-<a href=#734 id=734 data-nosnippet>734</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">"memo.txt"</span>]);
-<a href=#735 id=735 data-nosnippet>735</a>        app.selected_index = <span class="number">1</span>;
-<a href=#736 id=736 data-nosnippet>736</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
-<a href=#737 id=737 data-nosnippet>737</a>
-<a href=#738 id=738 data-nosnippet>738</a>        <span class="comment">// Trash the file
-<a href=#739 id=739 data-nosnippet>739</a>        </span>app.trash_selected();
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">assert!</span>(app.can_undo_trash());
-<a href=#741 id=741 data-nosnippet>741</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">".trash"</span>]);
-<a href=#742 id=742 data-nosnippet>742</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Moved memo.txt to Trash"</span>));
-<a href=#743 id=743 data-nosnippet>743</a>
-<a href=#744 id=744 data-nosnippet>744</a>        <span class="comment">// Verify it was moved to /data/.trash/memo.txt
-<a href=#745 id=745 data-nosnippet>745</a>        </span><span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/memo.txt"</span>).is_ok());
-<a href=#746 id=746 data-nosnippet>746</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/memo.txt"</span>).is_err());
+<a href=#724 id=724 data-nosnippet>724</a>        <span class="macro">assert!</span>(
+<a href=#725 id=725 data-nosnippet>725</a>            app.status_message.starts_with(<span class="string">"Trash unavailable"</span>),
+<a href=#726 id=726 data-nosnippet>726</a>            <span class="string">"{}"</span>,
+<a href=#727 id=727 data-nosnippet>727</a>            app.status_message
+<a href=#728 id=728 data-nosnippet>728</a>        );
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Shift+Delete"</span>));
+<a href=#730 id=730 data-nosnippet>730</a>    }
+<a href=#731 id=731 data-nosnippet>731</a>
+<a href=#732 id=732 data-nosnippet>732</a>    <span class="attr">#[test]
+<a href=#733 id=733 data-nosnippet>733</a>    </span><span class="kw">fn </span>trash_and_undo_restores_file() {
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">let </span>fs = FakeFs::new()
+<a href=#735 id=735 data-nosnippet>735</a>            .dir(<span class="string">"/data"</span>)
+<a href=#736 id=736 data-nosnippet>736</a>            .file(<span class="string">"/data/memo.txt"</span>, <span class="string">b"important\n"</span>);
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data"</span>);
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">"memo.txt"</span>]);
+<a href=#739 id=739 data-nosnippet>739</a>        app.selected_index = <span class="number">1</span>;
+<a href=#740 id=740 data-nosnippet>740</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
+<a href=#741 id=741 data-nosnippet>741</a>
+<a href=#742 id=742 data-nosnippet>742</a>        <span class="comment">// Trash the file
+<a href=#743 id=743 data-nosnippet>743</a>        </span>app.trash_selected();
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="macro">assert!</span>(app.can_undo_trash());
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">".trash"</span>]);
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Moved memo.txt to Trash"</span>));
 <a href=#747 id=747 data-nosnippet>747</a>
-<a href=#748 id=748 data-nosnippet>748</a>        <span class="comment">// Undo trash
-<a href=#749 id=749 data-nosnippet>749</a>        </span>app.undo_last_trash();
-<a href=#750 id=750 data-nosnippet>750</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
-<a href=#751 id=751 data-nosnippet>751</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">".trash"</span>, <span class="string">"memo.txt"</span>]);
-<a href=#752 id=752 data-nosnippet>752</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Restored memo.txt from Trash"</span>));
-<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/memo.txt"</span>).is_ok());
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/memo.txt"</span>).is_err());
-<a href=#755 id=755 data-nosnippet>755</a>    }
-<a href=#756 id=756 data-nosnippet>756</a>
-<a href=#757 id=757 data-nosnippet>757</a>    <span class="attr">#[test]
-<a href=#758 id=758 data-nosnippet>758</a>    </span><span class="kw">fn </span>undo_skips_entry_purged_from_trash() {
-<a href=#759 id=759 data-nosnippet>759</a>        <span class="kw">let </span>fs = FakeFs::new()
-<a href=#760 id=760 data-nosnippet>760</a>            .dir(<span class="string">"/data"</span>)
-<a href=#761 id=761 data-nosnippet>761</a>            .file(<span class="string">"/data/old.txt"</span>, <span class="string">b"old\n"</span>)
-<a href=#762 id=762 data-nosnippet>762</a>            .file(<span class="string">"/data/new.txt"</span>, <span class="string">b"new\n"</span>);
-<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data"</span>);
-<a href=#764 id=764 data-nosnippet>764</a>        app.selected_index = <span class="number">1</span>;
-<a href=#765 id=765 data-nosnippet>765</a>        app.trash_selected();
-<a href=#766 id=766 data-nosnippet>766</a>        <span class="comment">// Folders first: "..", ".trash", "old.txt".
-<a href=#767 id=767 data-nosnippet>767</a>        </span>app.selected_index = <span class="number">2</span>;
-<a href=#768 id=768 data-nosnippet>768</a>        app.trash_selected();
-<a href=#769 id=769 data-nosnippet>769</a>        <span class="macro">assert_eq!</span>(app.trash_stack.len(), <span class="number">2</span>);
-<a href=#770 id=770 data-nosnippet>770</a>        <span class="kw">let </span>purged = app.trash_stack[<span class="number">1</span>].trashed_path.clone();
-<a href=#771 id=771 data-nosnippet>771</a>        app.fs.unlink(<span class="kw-2">&amp;</span>purged).unwrap();
-<a href=#772 id=772 data-nosnippet>772</a>
-<a href=#773 id=773 data-nosnippet>773</a>        app.undo_last_trash();
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"no longer in Trash"</span>));
-<a href=#775 id=775 data-nosnippet>775</a>        app.undo_last_trash();
-<a href=#776 id=776 data-nosnippet>776</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Restored"</span>));
-<a href=#777 id=777 data-nosnippet>777</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
-<a href=#778 id=778 data-nosnippet>778</a>    }
-<a href=#779 id=779 data-nosnippet>779</a>
-<a href=#780 id=780 data-nosnippet>780</a>    <span class="attr">#[test]
-<a href=#781 id=781 data-nosnippet>781</a>    </span><span class="kw">fn </span>delete_in_trash_lookalike_folder_still_trashes() {
-<a href=#782 id=782 data-nosnippet>782</a>        <span class="kw">let </span>fs = FakeFs::new()
-<a href=#783 id=783 data-nosnippet>783</a>            .dir(<span class="string">"/data"</span>)
-<a href=#784 id=784 data-nosnippet>784</a>            .dir(<span class="string">"/data/.trash-old"</span>)
-<a href=#785 id=785 data-nosnippet>785</a>            .file(<span class="string">"/data/.trash-old/keep.txt"</span>, <span class="string">b"keep\n"</span>);
-<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data/.trash-old"</span>);
-<a href=#787 id=787 data-nosnippet>787</a>        app.selected_index = <span class="number">1</span>;
-<a href=#788 id=788 data-nosnippet>788</a>        app.trash_selected();
-<a href=#789 id=789 data-nosnippet>789</a>        <span class="macro">assert!</span>(app.can_undo_trash());
-<a href=#790 id=790 data-nosnippet>790</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/keep.txt"</span>).is_ok());
-<a href=#791 id=791 data-nosnippet>791</a>    }
-<a href=#792 id=792 data-nosnippet>792</a>}
+<a href=#748 id=748 data-nosnippet>748</a>        <span class="comment">// Verify it was moved to /data/.trash/memo.txt
+<a href=#749 id=749 data-nosnippet>749</a>        </span><span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/memo.txt"</span>).is_ok());
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/memo.txt"</span>).is_err());
+<a href=#751 id=751 data-nosnippet>751</a>
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="comment">// Undo trash
+<a href=#753 id=753 data-nosnippet>753</a>        </span>app.undo_last_trash();
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="macro">assert_eq!</span>(names(<span class="kw-2">&amp;</span>app), [<span class="string">".."</span>, <span class="string">".trash"</span>, <span class="string">"memo.txt"</span>]);
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Restored memo.txt from Trash"</span>));
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/memo.txt"</span>).is_ok());
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/memo.txt"</span>).is_err());
+<a href=#759 id=759 data-nosnippet>759</a>    }
+<a href=#760 id=760 data-nosnippet>760</a>
+<a href=#761 id=761 data-nosnippet>761</a>    <span class="attr">#[test]
+<a href=#762 id=762 data-nosnippet>762</a>    </span><span class="kw">fn </span>undo_skips_entry_purged_from_trash() {
+<a href=#763 id=763 data-nosnippet>763</a>        <span class="kw">let </span>fs = FakeFs::new()
+<a href=#764 id=764 data-nosnippet>764</a>            .dir(<span class="string">"/data"</span>)
+<a href=#765 id=765 data-nosnippet>765</a>            .file(<span class="string">"/data/old.txt"</span>, <span class="string">b"old\n"</span>)
+<a href=#766 id=766 data-nosnippet>766</a>            .file(<span class="string">"/data/new.txt"</span>, <span class="string">b"new\n"</span>);
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data"</span>);
+<a href=#768 id=768 data-nosnippet>768</a>        app.selected_index = <span class="number">1</span>;
+<a href=#769 id=769 data-nosnippet>769</a>        app.trash_selected();
+<a href=#770 id=770 data-nosnippet>770</a>        <span class="comment">// Folders first: "..", ".trash", "old.txt".
+<a href=#771 id=771 data-nosnippet>771</a>        </span>app.selected_index = <span class="number">2</span>;
+<a href=#772 id=772 data-nosnippet>772</a>        app.trash_selected();
+<a href=#773 id=773 data-nosnippet>773</a>        <span class="macro">assert_eq!</span>(app.trash_stack.len(), <span class="number">2</span>);
+<a href=#774 id=774 data-nosnippet>774</a>        <span class="kw">let </span>purged = app.trash_stack[<span class="number">1</span>].trashed_path.clone();
+<a href=#775 id=775 data-nosnippet>775</a>        app.fs.unlink(<span class="kw-2">&amp;</span>purged).unwrap();
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a>        app.undo_last_trash();
+<a href=#778 id=778 data-nosnippet>778</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"no longer in Trash"</span>));
+<a href=#779 id=779 data-nosnippet>779</a>        app.undo_last_trash();
+<a href=#780 id=780 data-nosnippet>780</a>        <span class="macro">assert!</span>(app.status_message.contains(<span class="string">"Restored"</span>));
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="macro">assert!</span>(!app.can_undo_trash());
+<a href=#782 id=782 data-nosnippet>782</a>    }
+<a href=#783 id=783 data-nosnippet>783</a>
+<a href=#784 id=784 data-nosnippet>784</a>    <span class="attr">#[test]
+<a href=#785 id=785 data-nosnippet>785</a>    </span><span class="kw">fn </span>delete_in_trash_lookalike_folder_still_trashes() {
+<a href=#786 id=786 data-nosnippet>786</a>        <span class="kw">let </span>fs = FakeFs::new()
+<a href=#787 id=787 data-nosnippet>787</a>            .dir(<span class="string">"/data"</span>)
+<a href=#788 id=788 data-nosnippet>788</a>            .dir(<span class="string">"/data/.trash-old"</span>)
+<a href=#789 id=789 data-nosnippet>789</a>            .file(<span class="string">"/data/.trash-old/keep.txt"</span>, <span class="string">b"keep\n"</span>);
+<a href=#790 id=790 data-nosnippet>790</a>        <span class="kw">let </span><span class="kw-2">mut </span>app = app_at(fs, <span class="string">"/data/.trash-old"</span>);
+<a href=#791 id=791 data-nosnippet>791</a>        app.selected_index = <span class="number">1</span>;
+<a href=#792 id=792 data-nosnippet>792</a>        app.trash_selected();
+<a href=#793 id=793 data-nosnippet>793</a>        <span class="macro">assert!</span>(app.can_undo_trash());
+<a href=#794 id=794 data-nosnippet>794</a>        <span class="macro">assert!</span>(app.fs.stat(<span class="string">"/data/.trash/keep.txt"</span>).is_ok());
+<a href=#795 id=795 data-nosnippet>795</a>    }
+<a href=#796 id=796 data-nosnippet>796</a>}
 </code></pre></div></section></main></body></html>
