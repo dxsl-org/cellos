@@ -99,16 +99,39 @@ pub extern "C" fn generic_main() -> ! {
 #[cfg(all(not(test), target_os = "none"))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Log panic
-    // We don't have a proper writer yet, so just stringify manually?
-    // Or just sys_log("PANIC!");
+    // No allocation or `core::fmt` here: the heap may be the thing that broke.
     let _ = sys_log("PANIC: Application crashed!\n");
     if let Some(location) = info.location() {
-        // simple formatting
+        let mut digits = [0u8; 10];
         let _ = sys_log("Location: ");
         let _ = sys_log(location.file());
+        let _ = sys_log(":");
+        let _ = sys_log(decimal(location.line(), &mut digits));
+        let _ = sys_log("\n");
+    }
+    // Literal messages only (`panic!("...")`, `assert!` with a plain string);
+    // formatted ones would need `core::fmt`.
+    if let Some(message) = info.message().as_str() {
+        let _ = sys_log("Message: ");
+        let _ = sys_log(message);
+        let _ = sys_log("\n");
     }
 
     // Exit
     crate::syscall::sys_exit(1);
+}
+
+/// Render `value` in decimal into the tail of `buf`, allocation-free.
+#[cfg(all(not(test), target_os = "none"))]
+fn decimal(mut value: u32, buf: &mut [u8; 10]) -> &str {
+    let mut start = buf.len();
+    loop {
+        start -= 1;
+        buf[start] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    core::str::from_utf8(&buf[start..]).unwrap_or("?")
 }
