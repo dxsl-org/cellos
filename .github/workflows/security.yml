@@ -31,12 +31,12 @@ jobs:
       # cargo-deny generates it as a side effect — audit-check only reads an
       # existing ./Cargo.lock and dies with "Couldn't load ./Cargo.lock"
       # otherwise. (ci.yml's Security Scan has the same ordering.)
+      # The binary, not the container action (see scripts/ensure-cargo-deny.sh).
+      - name: Install cargo-deny
+        run: scripts/ensure-cargo-deny.sh
+
       - name: cargo-deny
-        # v2 for the same CVSS 4.0 reason (matches ci.yml Security Scan).
-        if: runner.environment == 'github-hosted'
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          arguments: --all-features
+        run: cargo deny --all-features check
 
       - name: cargo-audit
         # v2: v1.4.1 bundles a cargo-audit that can't parse CVSS 4.0 entries
@@ -46,12 +46,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Self-hosted: same checks with the binaries the runner setup installs.
-      - name: cargo-deny + cargo-audit (self-hosted)
+      # Self-hosted: audit-check reports through the checks API; the runner
+      # setup installs the cargo-audit binary instead.
+      - name: cargo-audit (self-hosted)
         if: runner.environment != 'github-hosted'
-        run: |
-          cargo deny --all-features check
-          cargo audit
+        run: cargo audit
 
   f1-admission:
     # Same gate as ci.yml's `f1-admission`, run weekly for the one thing a

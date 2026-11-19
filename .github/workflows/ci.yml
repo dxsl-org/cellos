@@ -2734,23 +2734,19 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # The binary, not EmbarkStudios/cargo-deny-action: a container action is
+      # built during job setup even when its step is skipped, which breaks the
+      # job on self-hosted runners (scripts/ensure-cargo-deny.sh).
+      - name: Install cargo-deny
+        run: scripts/ensure-cargo-deny.sh
+
       - name: cargo-deny
-        # v1's bundled cargo-deny can't parse CVSS 4.0 entries now present in
-        # the RustSec advisory DB ("unsupported CVSS version: 4.0"); v2 ships
-        # a current cargo-deny that supports it.
-        if: runner.environment == 'github-hosted'
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          arguments: --all-features
+        run: cargo deny --all-features check
 
       - name: cargo-deny advisories (silo-guest workspace)
         # Separate workspace holding long-term P-256 signing keys; its own
         # deny.toml ignores no advisory.
-        if: runner.environment == 'github-hosted'
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
-        with:
-          manifest-path: cells/guests/silo-guest/Cargo.toml
-          command: check advisories
+        run: cargo deny --manifest-path cells/guests/silo-guest/Cargo.toml check advisories
 
       - name: Copyleft leaf check (ADR-0030)
         run: scripts/check-copyleft-leaves.sh
@@ -2761,14 +2757,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Self-hosted: the same checks with binaries the runner setup installs
-      # (the actions above run in containers or call the checks API).
-      - name: cargo-deny + cargo-audit (self-hosted)
+      # Self-hosted: audit-check reports through the checks API; the runner
+      # setup installs the cargo-audit binary instead.
+      - name: cargo-audit (self-hosted)
         if: runner.environment != 'github-hosted'
-        run: |
-          cargo deny --all-features check
-          cargo deny --manifest-path cells/guests/silo-guest/Cargo.toml check advisories
-          cargo audit
+        run: cargo audit
 
   attest-catalog:
     name: Attest Authenticated Software Evidence
