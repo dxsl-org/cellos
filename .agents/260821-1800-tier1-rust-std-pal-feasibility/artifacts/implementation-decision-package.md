@@ -7,7 +7,7 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `3482dc3a77b76a5fef0328d4d903e7602169d898690deb835cc847be1b37411f` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact eleven-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `3482dc3a77b76a5fef0328d4d903e7602169d898690deb835cc847be1b37411f` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
@@ -51,3 +51,5 @@ Digest re-bound 2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6: co
 Digest re-bound 2026-11-16 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6, owner-approved in Phase 19 of the architecture remediation (`.agents/261110-1703-architecture-remediation/phase-19-closure.md`, Deviation Log). The remediation moved covered inputs without changing their roles: `kernel/src/task/syscall.rs` split into `kernel/src/task/syscall/{mod,decode,ipc,misc,fs}.rs`; `kernel/src/task/drivers.rs` and `drivers/virtio_rng.rs` became `kernel/src/dev.rs` and `dev/virtio_rng.rs`; `libs/api/src/abi.rs`, `abi/syscall.rs` and `services/benchmark.rs` became `libs/abi/src/lib.rs`, `libs/abi/src/syscall.rs` and `libs/wire/src/benchmark.rs`; `kernel/src/task/getrandom-sas-*.rs` moved to `kernel/src/arch/riscv64/task/`. Other covered inputs changed in place. The six-source kernel security inventory is now eleven paths: the ten re-pinned paths plus `kernel/src/task/syscall/grant.rs`, added in a second re-bind the same day because GetRandom's final write (`syscall/misc.rs`) takes the grant-table locks defined there. The manifest lists 111 inputs (was 106). This line records only the digest re-bind; it is not a new signer decision.
 
 Digest re-bound again 2026-11-19 under condition 6, owner-approved for the CI repair: a clippy fix in `kernel/src/task/syscall/fs.rs` (`.map(|task| Charge::of(task))` → `.map(Charge::of)`, no behaviour change) moved that pinned input. Inventory digest `58f24367…` → `4a79439c…`, support map `e606c186…` → `c8a6c7e7…`, manifest `635eab30…` → `7f7bdbad…`; still eleven paths and 111 inputs. Not a new signer decision.
+
+Digest re-bound a third time 2026-11-20 under condition 6, owner-approved for the CI repair: the cell panic handler in `libs/ostd/src/startup.rs` now also logs the panic line and any literal message (allocation-free; no change to what a cell can do). Input `521fe99d…` → `6e4804a1…`, manifest `7f7bdbad…` → `3482dc3a…`; still 111 inputs. Not a new signer decision.
