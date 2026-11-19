@@ -45,6 +45,14 @@ name = "xhci"
 path = "/bin/xhci"
 restart = "never"
 
+# Second xHCI instance (phase 11 multi-controller): each instance claims the first
+# controller no live driver owns, so two rows cover two controllers in any spawn
+# order. With one controller the second instance finds none and exits.
+[[cells]]
+name = "xhci-2"
+path = "/bin/xhci"
+restart = "never"
+
 [[cells]]
 name = "intel-gpu"
 path = "/bin/intel-gpu"

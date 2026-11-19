@@ -153,10 +153,15 @@ fn init() {
             ));
         }
         Err(ViError::NotFound) => {
+            // Stay alive without a device: the kernel offers each instance the
+            // first controller no live driver owns, so exiting here would hand
+            // this controller to the next instance (`xhci-2`) and leave the
+            // controller that has the keyboard unclaimed. `poll` is a no-op
+            // while `STATE` is empty.
             let _ = print_fmt(format_args!(
                 "[xhci] no USB device attached; driver cell idle\n"
             ));
-            ostd::syscall::sys_exit(0);
+            return;
         }
         Err(error) => {
             let _ = print_fmt(format_args!("[xhci] enumeration failed: {:?}\n", error));

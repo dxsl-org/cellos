@@ -51,6 +51,8 @@ pub struct XhciController {
     speed: u32,
     /// Slot assigned by the controller, and the address-device state.
     slot: u8,
+    /// Hub tier of the device being addressed: indexes `dev_ctx`/`ep0_ring`.
+    tier: usize,
     ep0_mps: u16,
     /// Device Context Index of the interrupt-IN endpoint (DCI = 2*ep + 1).
     /// Used for the add-flag, Context Entries, context offset, event filter and
@@ -67,8 +69,11 @@ pub struct XhciController {
     evt_ring: DmaRegion,
     erst: DmaRegion,
     input_ctx: DmaRegion,
-    dev_ctx: DmaRegion,
-    ep0_ring: DmaRegion,
+    /// One output device context and EP0 transfer ring per hub tier: a hub and
+    /// the devices behind it are separate slots, and an enabled slot owns its
+    /// output context and the ring its EP0 dequeue pointer names.
+    dev_ctx: [DmaRegion; DEVICE_TIERS],
+    ep0_ring: [DmaRegion; DEVICE_TIERS],
     int_ring: DmaRegion,
     data: DmaRegion,
     report: DmaRegion,
@@ -165,6 +170,10 @@ const SPIN_BEFORE_PARK: u64 = 64;
 /// parks, never later.
 const PARK_POLLS: u64 = POLL_YIELD_EVERY * PARK_TICKS;
 
+/// Devices addressed in one enumeration chain: the root-port device plus the
+/// two hub tiers `DeviceTopology::child_of` allows below it.
+const DEVICE_TIERS: usize = 3;
+
 impl XhciController {
     /// Parse capabilities, reset the controller, program the rings, and start it.
     ///
@@ -247,8 +256,8 @@ impl XhciController {
         let evt_ring = alloc(1, bdf, "event ring")?;
         let erst = alloc(1, bdf, "event ring segment table")?;
         let input_ctx = alloc(1, bdf, "input context")?;
-        let dev_ctx = alloc(1, bdf, "device context")?;
-        let ep0_ring = alloc(1, bdf, "ep0 transfer ring")?;
+        let dev_ctx = alloc_per_tier(bdf, "device context")?;
+        let ep0_ring = alloc_per_tier(bdf, "ep0 transfer ring")?;
         let int_ring = alloc(1, bdf, "interrupt transfer ring")?;
         let data = alloc(1, bdf, "control data buffer")?;
         let report = alloc(1, bdf, "HID report buffer")?;
@@ -266,7 +275,9 @@ impl XhciController {
         };
 
         ring_init_link(&cmd_ring);
-        ring_init_link(&ep0_ring);
+        for ring in &ep0_ring {
+            ring_init_link(ring);
+        }
         ring_init_link(&int_ring);
 
         let mut ctrl = Self {
@@ -279,6 +290,7 @@ impl XhciController {
             port: 0,
             speed: 0,
             slot: 0,
+            tier: 0,
             ep0_mps: 8,
             int_dci: 0,
             int_mps: 8,
@@ -407,7 +419,16 @@ impl XhciController {
             return Err(ViError::IO);
         }
         self.slot = slot;
-        self.dcbaa.write_u64(slot as usize * 8, self.dev_ctx.iova());
+        // A fresh slot gets a zeroed output context and an empty EP0 ring with
+        // the producer at index 0, matching the dequeue pointer Address Device
+        // programs: reusing a ring the parent hub consumed would replay its TRBs.
+        self.tier = topo.depth as usize;
+        self.dev_ctx[self.tier].zero();
+        self.dcbaa.write_u64(slot as usize * 8, self.dev_ctx[self.tier].iova());
+        self.ep0_ring[self.tier].zero();
+        ring_init_link(&self.ep0_ring[self.tier]);
+        self.ep0_enq = 0;
+        self.ep0_cycle = 1;
 
         self.ep0_mps = if topo.speed == SPEED_HIGH { 64 } else { 8 };
         self.build_ep0_context(&topo);
@@ -888,7 +909,7 @@ impl XhciController {
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
             .write_u32(ep0 + 4, ep_dw1(self.ep0_mps, EP_TYPE_CONTROL));
-        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring.iova() | 1);
+        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
         self.input_ctx.write_u32(ep0 + 16, 8);
     }
 
@@ -908,7 +929,7 @@ impl XhciController {
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
             .write_u32(ep0 + 4, ep_dw1(mps, EP_TYPE_CONTROL));
-        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring.iova() | 1);
+        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
         self.input_ctx.write_u32(ep0 + 16, 8);
         let (code, _) = self.command(Trb {
             parameter: self.input_ctx.iova(),
@@ -1020,7 +1041,7 @@ impl XhciController {
     ) -> ViResult<usize> {
         let setup = setup_packet(bm, breq, wvalue, windex, len);
         ring_enqueue(
-            &self.ep0_ring,
+            &self.ep0_ring[self.tier],
             &mut self.ep0_enq,
             &mut self.ep0_cycle,
             Trb {
@@ -1030,7 +1051,7 @@ impl XhciController {
             },
         );
         ring_enqueue(
-            &self.ep0_ring,
+            &self.ep0_ring[self.tier],
             &mut self.ep0_enq,
             &mut self.ep0_cycle,
             Trb {
@@ -1040,7 +1061,7 @@ impl XhciController {
             },
         );
         ring_enqueue(
-            &self.ep0_ring,
+            &self.ep0_ring[self.tier],
             &mut self.ep0_enq,
             &mut self.ep0_cycle,
             Trb {
@@ -1066,7 +1087,7 @@ impl XhciController {
     fn control_no_data(&mut self, bm: u8, breq: u8, wvalue: u16, windex: u16) -> ViResult<()> {
         let setup = setup_packet(bm, breq, wvalue, windex, 0);
         ring_enqueue(
-            &self.ep0_ring,
+            &self.ep0_ring[self.tier],
             &mut self.ep0_enq,
             &mut self.ep0_cycle,
             Trb {
@@ -1076,7 +1097,7 @@ impl XhciController {
             },
         );
         ring_enqueue(
-            &self.ep0_ring,
+            &self.ep0_ring[self.tier],
             &mut self.ep0_enq,
             &mut self.ep0_cycle,
             Trb {
@@ -1120,6 +1141,11 @@ fn alloc(pages: usize, bdf: u32, what: &str) -> ViResult<DmaRegion> {
             Err(ViError::OutOfMemory)
         }
     }
+}
+
+/// One single-page region per hub tier (see [`DEVICE_TIERS`]).
+fn alloc_per_tier(bdf: u32, what: &str) -> ViResult<[DmaRegion; DEVICE_TIERS]> {
+    Ok([alloc(1, bdf, what)?, alloc(1, bdf, what)?, alloc(1, bdf, what)?])
 }
 
 /// Find a HID boot keyboard interface and its interrupt-IN endpoint.
