@@ -3,18 +3,18 @@
     fn <a href="#tymethod.connect_async" class="fn">connect_async</a>(
         &amp;self,
         addr: <a class="struct" href="../net/struct.IpEndpoint.html" title="struct wire::net::IpEndpoint">IpEndpoint</a>,
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpStream.html" title="trait wire::async_io::ViAsyncTcpStream">ViAsyncTcpStream</a>&gt;&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpStream.html" title="trait wire::async_io::ViAsyncTcpStream">ViAsyncTcpStream</a>&gt;&gt;&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.listen_async" class="fn">listen_async</a>(
         &amp;self,
         port: u16,
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpListener.html" title="trait wire::async_io::ViAsyncTcpListener">ViAsyncTcpListener</a>&gt;&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpListener.html" title="trait wire::async_io::ViAsyncTcpListener">ViAsyncTcpListener</a>&gt;&gt;&gt;;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Async TCP stack interface.</p>
 </div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.connect_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#55-56">Source</a><h4 class="code-header">fn <a href="#tymethod.connect_async" class="fn">connect_async</a>(
     &amp;self,
     addr: <a class="struct" href="../net/struct.IpEndpoint.html" title="struct wire::net::IpEndpoint">IpEndpoint</a>,
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpStream.html" title="trait wire::async_io::ViAsyncTcpStream">ViAsyncTcpStream</a>&gt;&gt;&gt;</h4></section></summary><div class="docblock"><p>Connect asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpStream.html" title="trait wire::async_io::ViAsyncTcpStream">ViAsyncTcpStream</a>&gt;&gt;&gt;</h4></section></summary><div class="docblock"><p>Connect asynchronously.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.listen_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#59">Source</a><h4 class="code-header">fn <a href="#tymethod.listen_async" class="fn">listen_async</a>(
     &amp;self,
     port: u16,
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpListener.html" title="trait wire::async_io::ViAsyncTcpListener">ViAsyncTcpListener</a>&gt;&gt;&gt;</h4></section></summary><div class="docblock"><p>Listen asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;Box&lt;dyn <a class="trait" href="trait.ViAsyncTcpListener.html" title="trait wire::async_io::ViAsyncTcpListener">ViAsyncTcpListener</a>&gt;&gt;&gt;</h4></section></summary><div class="docblock"><p>Listen asynchronously.</p>
 </div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/wire/async_io/trait.ViAsyncTcpStack.js" async></script></section></div></main></body></html>
