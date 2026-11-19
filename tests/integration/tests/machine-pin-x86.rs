@@ -19,7 +19,7 @@
 //!   without it: the diff names `dmar.present` and `vtd.active`.
 //! * `q35_unbound_root_port_nic_is_in_the_pci_set` — a `pcnet` (no Driver
 //!   Cell) added behind a PCIe root port is named in the diff exactly like a
-//!   bus-0 function, while the Platform Cell still names it refused.
+//!   bus-0 function, while the Platform Cell names it recorded without a driver.
 //!
 //! Disks come from `scripts/x86/machine_pin_disk.py` (P1 FAT32 + blank P5
 //! CellosFS). Serial capture maps bytes to chars one to one, so markers are
@@ -496,7 +496,7 @@ fn q35_unbound_root_port_nic_is_in_the_pci_set() {
     let qemu = boot(Some("pcnet"));
     require(
         &qemu,
-        "[platform] registration refused bus 1 device 0 function 0 id 1022:2000 class 2:0:0",
+        "[platform] registered (no driver) bus 1 device 0 function 0 id 1022:2000 class 2:0:0",
         "the Platform Cell did not name the unbound NIC",
     );
     require(&qemu, MISMATCH, "the root-port NIC did not change the pin");
