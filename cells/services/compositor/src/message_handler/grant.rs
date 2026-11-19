@@ -20,21 +20,25 @@ pub(super) fn handle(
 ) {
     // ATTACH_GRANT and DETACH_REPLACED_GRANT both carry the cap at bytes 4..8.
     let cap = u64::from(u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]));
-    match buf[0] {
-        compositor_ops::ATTACH_GRANT => {
-            if attach_grant(buf, sender, table, appearance) {
-                stacking::reconcile_frame_of(frames, table, cap, screen);
-            }
+    let reconcile = match buf[0] {
+        compositor_ops::ATTACH_GRANT => attach_grant(buf, sender, table, appearance),
+        compositor_ops::DETACH_REPLACED_GRANT => detach_replaced_grant(buf, sender, table),
+        compositor_ops::DAMAGE_NOTIFY => {
+            damage_notify(buf, sender, table);
+            false
         }
-        compositor_ops::DETACH_REPLACED_GRANT => {
-            if detach_replaced_grant(buf, sender, table) {
-                stacking::reconcile_frame_of(frames, table, cap, screen);
-            }
+        compositor_ops::DETACH_GRANT => {
+            detach_grant(buf, sender, table);
+            false
         }
-        compositor_ops::DAMAGE_NOTIFY => damage_notify(buf, sender, table),
-        compositor_ops::DETACH_GRANT => detach_grant(buf, sender, table),
-        compositor_ops::GET_SCREEN_SIZE => screen_size(sender),
-        _ => {}
+        compositor_ops::GET_SCREEN_SIZE => {
+            screen_size(sender);
+            false
+        }
+        _ => false,
+    };
+    if reconcile {
+        stacking::reconcile_frame_of(frames, table, cap, screen);
     }
 }
 

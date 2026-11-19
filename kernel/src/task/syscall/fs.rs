@@ -211,7 +211,7 @@ pub(super) fn pipe_create(caller_id: usize, capacity: usize, out_ptr: usize) -> 
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|task| crate::memory::cell_quota::Charge::of(task))
+        .map(crate::memory::cell_quota::Charge::of)
         .ok_or(SyscallError::PermissionDenied)?;
     let (read_handle, write_handle) = crate::ipc::pipe::create(capacity, owner)?;
     let mut out = [0u8; 16];

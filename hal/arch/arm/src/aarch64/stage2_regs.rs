@@ -243,10 +243,15 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
 /// As [`monitor_load_stage2`]; never called through the Pi gateway.
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn load_stage2(vmid: u16, root_pa: u64) {
-    debug_assert!(
-        !El2Monitor::PRESENT,
-        "the Pi monitor loads VTTBR_EL2 itself"
-    );
+    // Per-board constant: true on BCM2837 builds, whose callers must never reach
+    // this path. A `const` assert would break those builds, so it stays a debug check.
+    #[allow(clippy::assertions_on_constants)]
+    {
+        debug_assert!(
+            !El2Monitor::PRESENT,
+            "the Pi monitor loads VTTBR_EL2 itself"
+        );
+    }
     unsafe {
         monitor_load_stage2(vmid, root_pa);
     }

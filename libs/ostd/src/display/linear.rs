@@ -41,7 +41,12 @@ pub struct Radii {
 
 impl Radii {
     pub const fn all(r: u32) -> Self {
-        Self { top_left: r, top_right: r, bottom_right: r, bottom_left: r }
+        Self {
+            top_left: r,
+            top_right: r,
+            bottom_right: r,
+            bottom_left: r,
+        }
     }
 }
 
@@ -90,7 +95,11 @@ impl RoundRect {
         let toward = if row < self.h / 2 { row - 1 } else { row + 1 };
         let (lo, ro) = self.insets(toward);
         let left_end = lo.max(li + 1).min(right_edge);
-        let right_start = self.w.saturating_sub(ro).min(right_edge.saturating_sub(1)).max(li);
+        let right_start = self
+            .w
+            .saturating_sub(ro)
+            .min(right_edge.saturating_sub(1))
+            .max(li);
         ((li, left_end), (right_start, right_edge))
     }
 }
@@ -104,7 +113,7 @@ pub const fn corner_inset(r: u32, row: u32) -> u32 {
     // Doubled coordinates keep the half-pixel center offset integral:
     // inset = r - round(sqrt(r^2 - (r - row - 0.5)^2)).
     let d = 2 * (r - row) - 1;
-    r - (isqrt(4 * r * r - d * d) + 1) / 2
+    r - isqrt(4 * r * r - d * d).div_ceil(2)
 }
 
 pub(crate) const fn isqrt(n: u32) -> u32 {

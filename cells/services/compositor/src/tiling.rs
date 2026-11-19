@@ -209,10 +209,13 @@ pub fn restore_group(
     area
 }
 
-/// Every way `g` (dropped) can glue to `t`: (signed gap, side, dropped
-/// first, shift moving `g` flush, shared edge). Client windows may sit
+/// One way `g` (dropped) can glue to `t`: (signed gap, side, dropped
+/// first, shift moving `g` flush, shared edge).
+type GlueCandidate = (i32, Side, bool, (i32, i32), Rect);
+
+/// Every [`GlueCandidate`] of `g` against `t`. Client windows may sit
 /// anywhere in `i32`, so every difference saturates.
-fn candidates(g: Rect, t: Rect) -> [(i32, Side, bool, (i32, i32), Rect); 4] {
+fn candidates(g: Rect, t: Rect) -> [GlueCandidate; 4] {
     let (gr, gb, tr, tb) = (end(g.x, g.w), end(g.y, g.h), end(t.x, t.w), end(t.y, t.h));
     let v_ok = overlaps(g.y, gb, t.y, tb);
     let h_ok = overlaps(g.x, gr, t.x, tr);

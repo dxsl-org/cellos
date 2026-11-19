@@ -191,16 +191,16 @@ impl Handler for Compositor {
         message_handler::handle_message(
             buf,
             sender,
-            message_handler::MessageContext::new(
-                self.fb.width,
-                self.fb.height,
-                &mut self.input,
-                &mut self.table,
-                &mut self.frames,
-                &mut self.z_order,
-                &mut self.pending_dirty,
-                &mut self.appearance,
-            ),
+            message_handler::MessageContext {
+                screen_w: self.fb.width,
+                screen_h: self.fb.height,
+                input: &mut self.input,
+                table: &mut self.table,
+                frames: &mut self.frames,
+                z_order: &mut self.z_order,
+                pending_dirty: &mut self.pending_dirty,
+                appearance: &mut self.appearance,
+            },
         );
     }
 

@@ -178,7 +178,7 @@ pub(super) fn show_tab<F>(
 where
     F: FnMut(Rect),
 {
-    let Some(member) = context
+    let member = context
         .frames
         .frame_of(cap)
         .and_then(|frame| context.frames.members(frame).get(index).copied())
@@ -187,10 +187,7 @@ where
                 .table
                 .get(member)
                 .is_some_and(|s| matches!(s.state(), WindowState::Normal | WindowState::Maximized))
-        })
-    else {
-        return None;
-    };
+        })?;
     if let Some(frame) = context.frames.frame_of(member) {
         context.frames.clear_close_queue(frame);
     }

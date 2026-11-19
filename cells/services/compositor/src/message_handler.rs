@@ -17,37 +17,14 @@ use crate::surface_table::SurfaceTable;
 use crate::z_order::ZOrder;
 
 pub(crate) struct MessageContext<'a> {
-    screen_w: u32,
-    screen_h: u32,
-    input: &'a mut InputState,
-    table: &'a mut SurfaceTable,
-    frames: &'a mut crate::surface_table::FrameRegistry,
-    z_order: &'a mut ZOrder,
-    pending_dirty: &'a mut Option<Rect>,
-    appearance: &'a mut Appearance,
-}
-impl<'a> MessageContext<'a> {
-    pub(crate) fn new(
-        screen_w: u32,
-        screen_h: u32,
-        input: &'a mut InputState,
-        table: &'a mut SurfaceTable,
-        frames: &'a mut crate::surface_table::FrameRegistry,
-        z_order: &'a mut ZOrder,
-        pending_dirty: &'a mut Option<Rect>,
-        appearance: &'a mut Appearance,
-    ) -> Self {
-        Self {
-            screen_w,
-            screen_h,
-            input,
-            table,
-            frames,
-            z_order,
-            pending_dirty,
-            appearance,
-        }
-    }
+    pub(crate) screen_w: u32,
+    pub(crate) screen_h: u32,
+    pub(crate) input: &'a mut InputState,
+    pub(crate) table: &'a mut SurfaceTable,
+    pub(crate) frames: &'a mut crate::surface_table::FrameRegistry,
+    pub(crate) z_order: &'a mut ZOrder,
+    pub(crate) pending_dirty: &'a mut Option<Rect>,
+    pub(crate) appearance: &'a mut Appearance,
 }
 
 /// Dispatch one IPC message from a consumer cell or the supervisor.

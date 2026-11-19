@@ -526,7 +526,7 @@ impl SessionPublication {
         let creator = sched
             .tasks
             .get(&caller.tid)
-            .map(|t| crate::memory::cell_quota::Charge::of(t))
+            .map(crate::memory::cell_quota::Charge::of)
             .ok_or(ViError::PermissionDenied)?;
         // A session child is an ordinary governed path launch: never a boot
         // singleton, hotswap replacement, or service route publisher. A domain
