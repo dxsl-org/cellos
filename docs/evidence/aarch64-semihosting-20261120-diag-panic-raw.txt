@@ -1,0 +1,1022 @@
+[INFO] CFI: BTI unavailable
+[INFO] CFI: PAC-RET unavailable
+[INFO] MTE: unavailable
+[Cellos] kernel boot v0.2.1
+Kernel started (Hart: 0, DTB: ...)
+[INFO] Limine not found, using QEMU/OpenSBI fallback
+[boot] kernel_phys_base=0x0000000040080000
+[INFO] Initializing paging...
+[INFO] Paging initialized
+[INFO] Activating paging...
+[INFO] Paging activated
+[INFO] Frame allocator initialized
+[INFO] Heap initialized
+[INFO] RT heap initialized
+[INFO] HAL initialized (PLIC enabled)
+[ INFO] [boot] DTB RAM range 0x0..0x0
+[ INFO] Console: Input Driver Initialized.
+[ INFO] RAM Disk: read-only, 12288 KB (24576 sectors)
+[ INFO] [va] slot order: deterministic (no entropy)
+[ WARN] [mbr] LBA 0 unreadable — skipping partition verification
+[loader] WARN: cell table not found — disk image may lack bootstrap section
+[ INFO] Filesystem: Initializing...
+[ INFO] Boot Sector Debug:
+[ INFO]   Signature: 0xAA55
+[ INFO]   Bytes/Sector: 512
+[ INFO]   Sectors/Cluster: 1
+[ INFO]   Reserved Sectors: 1
+[ INFO]   FAT Count: 2
+[ INFO]   Media: 0xF8
+[ INFO]   Total Sectors: 0
+[ INFO]   Sectors/FAT (FAT16): 128
+[ INFO]   Root Entry Count: 512
+[ INFO] Filesystem: FAT16 mounted successfully.
+[ INFO] [system-config] applied: logging=Info, default_cell_heap_mib=16
+[ INFO] [policy] loaded + verified (71 entries, flags 0x00)
+[ INFO] state-stash: round-trip OK, foreign read refused
+[INFO] Kernel subsystems initialized successfully.
+[INFO] Initializing scheduler...
+[ INFO] Process: Initializing Scheduler...
+[INFO] Scheduler initialized
+[ INFO] [selftest] DEATH-SUBSCRIBER-QUOTA: PASS pairs=32 duplicates=8 owner 0->0->0 exit 0->0
+[INFO] death-subscriber quota self-test PASS
+[INFO] [selftest] PCIE-BAR-WINDOW: PASS (bounded, aligned, overflow-safe)
+[ INFO] === ELF Loader Tests ===
+[ INFO]   [ok] empty path rejected
+[ INFO]   [ok] path without leading '/' rejected
+[ INFO]   [ok] path longer than MAX_CELL_PATH rejected
+[ INFO]   [ok] well-formed path passes format validation
+[ERROR] ELF: PT_LOAD 0x1000000001..0x1002000001 refused: leaves the VA slot this spawn owns
+[ERROR] ELF: PT_LOAD 0x1000000000..0x1008000000 refused: leaves the VA slot this spawn owns
+[ERROR] ELF: fixed-VA image at 0x0 is outside the cell VA region; link it inside one cell slot or build it PIE
+[ERROR] ELF: PT_LOAD 0x1000001000..0x1000002000 refused: leaves the VA slot this spawn owns
+[ INFO]   [ok] PIE slot boundaries reject oversized images before mapping
+[ INFO]   [ok] fixed-VA images refused on the null page and foreign slots
+[ INFO]   [ok] forged "/bin/vfs" name → /mem/vfs
+[ INFO]   [ok] every label component is non-empty and separator-free
+[ INFO]   [ok] no forged name selects a path-derived capability
+[ INFO]   [ok] 300-char name truncated to 69 bytes
+[ INFO]   [ok] empty .rela.dyn → Ok
+[ERROR] [reloc] .rela.dyn size 7 not a multiple of Rela64 size 24
+[ INFO]   [ok] non-multiple rela size → InvalidInput
+[ERROR] [reloc] too many relocations: 65537 > 65536
+[ INFO]   [ok] 65537 entries (> 65536) → InvalidInput
+[ERROR] [reloc] unsupported relocation type 255
+[ INFO]   [ok] unknown reloc type 0xFF → NotSupported
+[ INFO]   [ok] R_RISCV_NONE → no-op, Ok
+[ INFO]   [ok] R_RISCV_RELATIVE patched 0x41097000 → 0x41097400
+[ INFO]   [ok] relocation target outside owned pages rejected
+[ INFO]   [ok] relocation target in owned-page hole rejected
+[ INFO]   [ok] cross-page relocation word rejected
+[ INFO]   [ok] overflowing relocation target rejected
+[ INFO]   [ok] CellManifest is 16 bytes (v2)
+[ INFO]   [ok] valid v2 manifest parses with correct flags + protection class
+[ INFO]   [ok] v1 manifest upcasts to v2 with PROTECTION_CLASS_LEGACY
+[ INFO]   [ok] bad magic rejected
+[ INFO]   [ok] short slice rejected (both v1 floor and v2 16-byte floor)
+[ INFO]   [ok] bad version rejected
+[ INFO]   [ok] reserved flag bits rejected
+[ INFO]   [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero
+[ INFO]   [ok] out-of-range tier values rejected
+[ INFO]   [ok] PROTECTION_CLASS_LEGACY parses as a valid native v2 class (tier-less constructor output)
+[ INFO]   [ok] network=false → no NetworkCap granted
+[ INFO]   [ok] manifest-section admission corpus
+[ INFO]   [ok] opcode 61 → ForceExit
+[ INFO]   [ok] ForceExit allowlist_bit = None
+[ INFO]   [ok] signing::self_test() passed
+[ INFO]   [ok] extract_sig(&[]) → None
+[ INFO]   [ok] extract_sig(non-elf) → None
+[ INFO]   [ok] extract_sig(constructed elf) → Some([0xAB; 64])
+[ INFO]   [ok] extract_sig tolerates unrelated non-UTF-8 section name
+[ INFO]   [ok] extract_sig rejects NOBITS signature declaration
+[ INFO]   [ok] signing_required() -> true (Tier 1 SAS admission gate active)
+[ INFO]   [ok] CELLOS-LOADER-SIG-001: metadata and segment mutations rejected
+[ERROR] [wx] refusing to spawn 'selftest': page 0x5000 is W+X after the boundary merge — two PT_LOADs with different permissions share it; align the segments to 4 KiB
+[ERROR] ELF: rejecting spawn — PT_LOAD #0 at 0x1000 declares W+X; writable code is refused (split the segment or drop PF_X in the linker script)
+[ INFO] [wx] self-tests PASSED
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'atomic-unaligned': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] ATOMIC_PUBLICATION_ALIGNMENT: PASS
+[ERROR] Stack alloc failed: cell quota table exhausted (max=64)
+[ INFO] ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_FIXTURE_ROUNDTRIP: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-00: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-01: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-02: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-03: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'atomic-denial': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-04: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-RF: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-RM: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-RW: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-FA: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   refused: spawn
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-05: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-06: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'init': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-07: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'init': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-08: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ INFO] [early] VIFS1-first /bin/vfs <- ramdisk (771792 bytes)
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-09: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-10: PASS
+[ INFO] [service-registry] 32514 -> tid 50101 (cell 21 gen 1 flags 0x3)
+[ WARN] [input] registered input service TID 50102
+[ INFO] [service-registry] 32513 -> tid 50103 (cell 23 gen 3 flags 0x0)
+[ERROR] [loader] boot-ceiling: "/bin/platform" narrowed by its row — widen the row if the cap is legitimate.
+[ERROR] [loader]   requested = CapSet { block_io: false, network: false, spawn: true, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   ceiling   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   granted   = CapSet { block_io: false, network: false, spawn: false, hypervisor: false, mmio_devices: 0, block_regions: 0, pcie_driver: false, platform: true, supervisor: false, usb_driver: false, serial_port: false, net_resolve: false, net_connect: false, net_listen: false, net_l2: false, observe_tasks: true, observe_memory: true, vfs_mutate: true, config_write: false, kms_ssh_sign: false, kms_ssh_admin: false }
+[ERROR] [loader]   refused: spawn
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'platform': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] [service-registry] cleared stale entries for dead tid 50103
+[ INFO] [service-registry] cleared stale entries for dead tid 50101
+[ INFO] ATOMIC_PUBLICATION_AP-11: PASS
+[ WARN] [measure] log full (2 entries, 254 promised) — aggregate still advancing
+[ INFO] ATOMIC_PUBLICATION_AP-PM: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PR: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PT: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PA: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PH: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PL: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PU: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PS: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PC: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PF: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PK: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PB: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PE: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PI: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PQ: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PG: PASS
+[ INFO] ATOMIC_PUBLICATION_AP-PX: PASS
+[ WARN] [kernel] raw opcode 502 denied for <unknown>
+[ INFO] ATOMIC_PUBLICATION_AP-PZ: PASS
+[ INFO] ATOMIC_PUBLICATION_ARMING: PASS
+[ INFO] [selftest] ELF-LOADER: PASS
+[ INFO] Thread 'thread' (ID 1): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] [kernel] CapRevoke: task 9003 revoked mask=0x00000004 from task 1
+[ WARN] [kernel] CapRevoke: refused ambient-authority bits mask=0x00000008 from task 9001 (no teardown for hypervisor authority)
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x0000ff00 from task 9002
+[ INFO] [selftest] REVOKE-MMIO: window 0x9000000 restored to boot posture (1 page(s))
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000004 from task 9003
+[ WARN] [pcie] 00:1f.7 of tid 9004 not quiescent (OutOfRange); function and frames retained
+[ERROR] [kernel] CapRevoke: DMA teardown for task 9004 was not acknowledged; capability left in the record, retry the revoke
+[ INFO] [kernel] CapRevoke: task 9001 revoked mask=0x00000070 from task 9004
+[ WARN] [sched] cell CellId(60) at thread cap (32) — refusing spawn_thread
+[ INFO] [selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)
+[INFO] thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)
+[ INFO] [grant] task 9201 acknowledged: releasing 1 quarantined page(s) at 0x43ca2000
+[ INFO] GRANT-RECLAIM-OWNED: PASS
+[ INFO] GRANT-RECLAIM-RECEIVED: PASS
+[ INFO] GRANT-RECLAIM-PINNED: PASS
+[INFO] grant-reclaim self-test PASS (owned reclaimed, received kept, pin withheld)
+[ INFO] MMIO-REVOKE-CLASS: PASS
+[ INFO] MMIO-REVOKE-USERBIT: PASS
+[ INFO] MMIO-REVOKE-ALLOWLIST: PASS
+[INFO] mmio-revoke self-test PASS (class selective, user access removed)
+[ INFO] Thread 'thread' (ID 1): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ WARN] [sched] cell CellId(63) cannot afford thread stacks (139264 bytes, 0 in use) — refusing spawn_thread
+[ INFO] [selftest] THREAD-QUOTA: PASS (charged, released, enforced)
+[INFO] thread-quota self-test PASS (charged, released, enforced)
+[ INFO] Thread 'thread' (ID 1): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 2): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 3): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 4): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 5): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 6): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 7): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 8): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 9): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 10): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 11): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 12): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 13): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 14): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 15): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 16): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 17): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 18): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 19): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 20): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 21): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 22): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 23): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 24): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 25): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 26): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 27): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 28): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 29): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 30): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 31): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 32): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 33): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 34): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 35): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 36): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 37): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 38): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 39): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 40): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 41): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 42): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 43): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 44): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 45): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 46): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 47): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 48): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 49): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 50): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 51): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 52): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 53): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 54): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 55): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 56): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 57): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 58): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 59): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 60): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 61): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 62): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 63): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 64): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 65): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 66): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 67): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 68): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 69): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 70): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 71): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 72): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 73): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 74): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 75): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 76): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 77): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 78): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 79): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 80): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 81): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 82): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 83): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 84): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 85): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 86): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 87): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 88): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 89): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 90): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 91): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 92): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 93): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 94): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 95): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 96): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 97): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 98): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 99): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 100): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 101): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 102): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 103): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 104): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 105): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 106): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 107): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 108): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 109): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 110): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 111): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 112): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 113): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 114): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 115): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 116): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 117): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 118): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 119): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 120): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 121): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 122): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 123): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 124): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 125): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 126): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 127): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 128): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 129): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 130): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 131): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 132): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 133): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 134): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 135): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 136): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 137): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 138): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 139): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 140): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 141): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 142): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 143): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 144): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 145): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 146): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 147): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 148): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 149): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 150): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 151): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 152): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 153): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 154): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 155): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 156): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 157): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 158): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 159): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 160): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 161): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 162): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 163): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 164): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 165): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 166): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 167): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 168): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 169): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 170): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 171): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 172): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 173): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 174): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 175): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 176): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 177): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 178): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 179): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 180): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 181): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 182): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 183): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 184): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 185): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 186): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 187): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 188): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 189): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 190): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 191): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 192): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 193): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 194): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 195): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 196): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 197): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 198): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 199): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 200): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 201): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 202): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 203): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 204): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 205): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 206): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 207): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 208): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 209): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 210): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 211): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 212): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 213): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 214): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 215): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 216): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 217): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 218): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 219): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 220): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 221): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 222): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 223): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 224): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 225): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 226): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 227): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 228): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 229): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 230): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 231): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 232): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 233): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 234): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 235): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 236): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 237): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 238): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 239): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 240): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 241): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 242): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 243): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 244): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 245): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 246): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 247): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 248): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 249): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 250): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 251): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 252): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 253): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 254): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 255): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 256): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 257): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 258): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 259): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 260): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 261): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 262): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 263): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 264): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 265): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 266): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 267): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 268): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 269): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 270): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 271): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 272): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 273): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 274): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 275): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 276): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 277): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 278): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 279): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 280): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 281): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 282): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 283): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 284): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 285): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 286): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 287): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 288): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 289): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 290): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 291): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 292): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 293): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 294): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 295): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 296): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 297): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 298): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 299): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 300): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 301): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 302): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 303): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 304): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 305): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 306): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 307): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 308): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 309): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 310): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 311): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 312): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 313): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 314): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 315): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 316): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 317): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 318): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 319): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 320): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 321): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 322): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 323): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 324): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 325): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 326): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 327): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 328): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 329): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 330): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 331): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 332): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 333): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 334): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 335): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 336): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 337): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 338): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 339): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 340): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 341): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 342): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 343): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 344): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 345): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 346): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 347): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 348): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 349): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 350): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 351): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 352): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 353): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 354): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 355): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 356): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 357): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 358): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 359): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 360): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 361): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 362): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 363): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 364): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 365): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 366): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 367): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 368): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 369): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 370): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 371): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 372): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 373): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 374): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 375): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 376): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 377): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 378): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 379): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 380): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 381): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 382): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 383): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 384): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 385): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 386): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 387): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 388): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 389): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 390): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 391): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 392): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 393): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 394): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 395): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 396): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 397): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 398): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 399): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 400): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 401): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 402): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 403): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 404): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 405): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 406): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 407): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 408): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 409): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 410): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 411): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 412): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 413): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 414): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 415): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 416): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 417): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 418): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 419): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 420): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 421): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 422): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 423): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 424): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 425): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 426): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 427): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 428): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 429): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 430): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 431): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 432): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 433): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 434): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 435): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 436): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 437): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 438): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 439): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 440): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 441): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 442): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 443): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 444): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 445): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 446): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 447): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 448): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 449): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 450): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 451): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 452): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 453): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 454): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 455): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 456): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 457): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 458): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 459): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 460): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 461): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 462): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 463): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 464): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 465): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 466): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 467): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 468): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 469): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 470): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 471): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 472): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 473): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 474): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 475): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 476): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 477): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 478): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 479): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 480): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 481): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 482): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 483): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 484): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 485): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 486): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 487): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 488): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 489): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 490): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 491): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 492): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 493): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 494): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 495): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 496): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 497): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 498): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 499): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 500): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 501): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 502): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 503): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 504): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 505): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 506): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 507): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 508): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 509): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 510): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 511): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 512): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] [selftest] STACK-ARENA: PASS (512 thread spawn/exit rounds, no slot leaked)
+[ INFO] Thread 'thread' (ID 1): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 2): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] Thread 'thread' (ID 3): KStack 0x43091000-0x430A3000, UStackTop 0x1400012000, Entry 0x1000, Arg 0x0
+[ INFO] [selftest] TASK-ID-REUSE: PASS (monotonic across spawn/exit)
+[INFO] task-id-reuse self-test PASS (monotonic across spawn/exit)
+[INFO] thread-user-entry self-test SKIP (RV64 runtime gate only)
+[ INFO] [selftest] COMPLETION-QUEUE: PASS (cap 32 slots, 688 bytes per cell)
+[INFO] completion-queue self-test PASS (reserve, land, bound, defer)
+[ WARN] [net-rx] cell 9412 took over the reservation held by cell 9411
+[ INFO] [selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases, IPC-safe)
+[INFO] net-rx-reservation self-test PASS (fill, remember, release)
+[ INFO] [selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe, completion-wake)
+[INFO] ipc-pending self-test PASS (deferred delivery, bounds, quota)
+[INFO] cap-file self-test PASS (read-only enforcement)
+[ INFO] [selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)
+[INFO] ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 9521 gen 130 flags 0x3)
+[ WARN] [grant] GrantFree 0x440ac000 refused: region 0x440ac000+4096 overlaps a pinned region 0x440ac000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 9521 gen 132 flags 0x3)
+[ WARN] [grant] GrantUnregister 0x440af000 refused: region 0x440af000+4096 overlaps a pinned region 0x440af000+1 pages owned by task 9532 with 1 in-flight operation(s)
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 9521 gen 134 flags 0x3)
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [selftest] VFS-LIFETIME: stage=smp-stale-context-denied-capacity-preserved
+[ INFO] [service-registry] 32289 -> tid 9521 (cell 41 gen 136 flags 0x3)
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 41 gen 137 flags 0x3)
+[ INFO] [service-registry] cleared stale entries for dead tid 9521
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 9521 gen 141 flags 0x3)
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [service-registry] 32290 -> tid 9522 (cell 9521 gen 145 flags 0x3)
+[ INFO] [grant] owner 9532 pending-revoked VFS lease holder=9522 request=1
+[ INFO] [service-registry] cleared stale entries for dead tid 9522
+[ INFO] [selftest] VFS-LIFETIME: stage=dead-owner-pending-revoke-exact-release
+[ INFO] [selftest] VFS-LIFETIME: PASS (atomic grant-table lease + teardown orders + exact quarantine + owner watch)
+[INFO] vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)
+[INFO] stack-probe self-test PASS (two guards, overflow target unmapped, watermark, user stack off identity)
+[INFO] [selftest] FREE-FRAME-NX: PASS
+[INFO] stack-sizing policy self-test PASS (measured=16, unknown=64)
+[ INFO] [smp] no firmware tree declares PSCI; EL3 absent — inferring conduit Hvc
+[ INFO] [smp] PSCI conduit Hvc, kernel at EL1
+[ INFO] [smp] PSCI 1.1 over Hvc, 0 CPU(s) described
+[ INFO] [smp] hart 1: firmware reports no such core — single-hart
+[ INFO] [selftest] SMP-IPI: skipped, no remote hart online
+[INFO] Tier 2 admission: ENABLED (development profile)
+[ INFO] S22-AARCH64-SAS-FASTPATH: PASS roots=0 flushes=0 harts=1
+[ INFO] S22-AARCH64-PLAN: PASS harts=1
+[ INFO] S22-AARCH64-RESUME-ROOT: PASS harts=1
+[ INFO] S22-AARCH64-ROOT-SWITCH: PASS b=0x20000440e0000 c=0x3000044105000 back=0x41002000 outgoing_stack_shared=false safe_root_consumed=true
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=3 frames=36 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=36 leaked=0
+[ INFO] S22-AARCH64-LEAF-NONG: PASS user=0x600000411f4f47 private=0x60000044152f47 grant=0x600000411f2f47 kstack=0x600000430d8f07 thread_kstack=0x600000430dbf07 thread_ustack=0x600000430ddf47 shared=0x60000041091707 kernel_root_kstack=present
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=40 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=36 leaked=0
+[ INFO] S22-AARCH64-RELEASE-FLUSH: PASS targeted=5 full=0 targeted_delta=1 full_delta=0 control_live=true
+[ WARN] S22-AARCH64-ASID-INVALIDATION: UNPROVEN witnessed=0xa1a10001->0xb2b20002 after_foreign=0xb2b20002 control=0xc3c30001->0xd4d40002 environment_asid_flush_unscoped=true
+[ INFO] S22-AARCH64-ADMISSION-ENABLED: PASS
+[ INFO] S22-AARCH64-ADMISSION-DENY: PASS
+[ INFO] S22-AARCH64-ADMISSION-DRAIN: PASS
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'admission-publication-probe': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] S22-AARCH64-ADMISSION-PUBLICATION-DENY: PASS
+[ INFO] S22-AARCH64-ADMISSION-CEILING: PASS
+[ INFO] S22-AARCH64-PIN-DYING: PASS harts=1
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=36 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=36 leaked=0
+[ INFO] S22-AARCH64-GRANT-REVOKE-OWNER-MAPPED: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE-OWNER-SLICE: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE-SLICE-RO: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE-SLICE-RW: PASS
+[ WARN] [grant] GrantShare 0x44338000 refused: write-only has no domain page representation
+[ INFO] S22-AARCH64-GRANT-REVOKE-WO-REFUSED: PASS
+[ WARN] [grant] GrantShare denied: caller 9601 or target 0 is not a live private root
+[ INFO] S22-AARCH64-GRANT-REVOKE-FOREIGN-PEER: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE-REVOKE: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE-FRAME-REUSE: PASS
+[ WARN] [grant] GrantShare 0x430d3000 receiver publish refused: Mapping(Dying)
+[ INFO] S22-AARCH64-GRANT-REVOKE-PARTIAL-MAP: PASS
+[ WARN] [grant] GrantAlloc denied: task 9603 is not a live private root (phase-01 denial)
+[ WARN] [grant] GrantSlice denied: task 9603 is not a live private root (phase-01 denial)
+[ INFO] S22-AARCH64-GRANT-REVOKE-DEAD-ROOT: PASS
+[ INFO] S22-AARCH64-GRANT-REVOKE: PASS
+[ INFO] S22-AARCH64-DMA-QUARANTINE: DENY
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=40 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=39 leaked=0
+[ WARN] [grant] GrantShare 0x443b7000 refused: write-only has no domain page representation
+[ WARN] [grant] GrantShare denied: caller 9502 or target 9501 is not a live private root
+[ WARN] [grant] GrantShare denied: caller 9501 or target 9503 is not a live private root
+[ WARN] [grant] GrantAlloc denied: task 9505 is not a live private root (phase-01 denial)
+[ WARN] [grant] GrantSlice denied: task 9505 is not a live private root (phase-01 denial)
+[ INFO] [grant-gate] frame accounting: baseline=52916 before_sweep=52916 after_sweep=52916 deficit=0 owned_delta=0 backings=0 queued_tables=0 deferred=false reg_deferred=false run_quarantined=0 run_leaked=0
+[ INFO] S22-AARCH64-GRANT-GATE-ALLOC: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-REGISTER: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-WO: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-SHARE: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-SLICE: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-RETIRED: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-SAS: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-RETIRE-REFUSAL: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-FRAMES: PASS
+[ INFO] S22-AARCH64-GRANT-GATE-RETIRE-OUTCOME: COMPLETED
+[ INFO] S22-AARCH64-GRANT-GATE: PASS
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=3 frames=39 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=2 frames=39 leaked=0
+[ INFO] [selftest] DOMAIN-FRAME-RELEASE: PASS tag=1 frames=39 leaked=0
+[ INFO] IOMMU-TEARDOWN: SKIP (no DMA remapper page table on this architecture)
+[ INFO] [selftest] OFF-HART0-TIMEOUT: SKIP harts=1
+[INFO] Spawning Embedded Init...
+[INFO] ed25519 verify self-test PASS (RFC 8032 + tamper)
+[INFO] policy verify+parse self-test PASS (signed blob + tamper)
+[INFO] cell signing self-test PASS
+[ INFO] [signing] cell trust posture=dev anchor=[22, fc, 29, 77, 92, f0, b6, ff] unsigned=tier2
+[ INFO] [selftest] OWNER-SLOT: PASS (parser, signature validation, tamper rejection, admission)
+[ INFO] [selftest] C3-ADM-001: PASS
+[ INFO] [selftest] C3-ADM-002: PASS
+[ INFO] [selftest] C3-ADM-003: PASS
+[ INFO] [selftest] C3-ADM-004: PASS
+[ INFO] [selftest] C3-ADM-005: PASS
+[ INFO] [selftest] C3-ADM-006: PASS
+[ INFO] [selftest] C3-ADM-007: PASS
+[ INFO] [selftest] C3-ADM-008: PASS
+[ INFO] [selftest] C3-ADM-009: PASS
+[ INFO] [selftest] C3-ADM-010: PASS
+[ INFO] [selftest] C3-ADM-011: PASS
+[ INFO] [selftest] C3-ADM-012: PASS
+[ INFO] [selftest] C3-ADM-013: PASS
+[ INFO] [selftest] C3-ADM-014: PASS
+[ INFO] [selftest] C3-ADM-015: PASS
+[ INFO] [selftest] C3-ADM-016: PASS
+[ INFO] [selftest] C3-ADM-017: PASS
+[ INFO] [selftest] C3-ADM-032: PASS
+[ INFO] [selftest] C3-ADM-033: PASS
+[ INFO] [selftest] C3-ADM-018: PASS
+[ INFO] [selftest] C3-ADM-019: PASS
+[ INFO] [selftest] C3-ADM-020: PASS
+[ INFO] [selftest] C3-ADM-021: PASS
+[ INFO] [selftest] C3-ADM-022: PASS
+[ INFO] [selftest] C3-ADM-023: PASS
+[ INFO] [selftest] C3-ADM-024: PASS
+[ INFO] [selftest] C3-ADM-025: PASS
+[ INFO] [selftest] C3-ADM-026: PASS
+[ INFO] [selftest] C3-ADM-027: PASS
+[ INFO] [selftest] C3-ADM-028: PASS
+[ INFO] [selftest] C3-ADM-029: PASS
+[ INFO] [selftest] C3-ADM-030: PASS
+[ INFO] [selftest] C3-ADM-031: PASS
+[INFO] admission-core self-test PASS (fail-closed A/B floor model)
+[ INFO] [selftest] P-TRUST: PASS (privileged path-caps bounded by ceiling)
+[INFO] P-TRUST self-test PASS (privileged path-caps ceiling-bounded)
+[ INFO] [selftest] boot-ceiling: PASS (per-path table, no union collapse)
+[INFO] boot-ceiling self-test PASS (per-path table, no union collapse)
+[INFO] mmio-allowlist self-test PASS (known windows live, DWC2 denied)
+[ INFO] [selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)
+[INFO] Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)
+[SELFTEST] MTE-SELFTEST: SKIP: MTE2 unavailable
+[ INFO] S22-AARCH64-TWO-VM-STAGE2: SKIP (not an EL2 host)
+[ INFO] [selftest] VM-GUEST-BUDGET: SKIP (this host runs no guests)
+[ INFO] [selftest] TAG-POOL-OWNER-LIMIT: SKIP (this host runs no guests)
+[INFO] ATOMIC_PUBLICATION_AP-15: arming trusted init
+[INFO] ATOMIC_PUBLICATION_AP-15: armed for trusted init
+[INFO] Publishing trusted init
+[ INFO] ELF LOAD: 0x1000000000-0x1000030FD0 flags=R-X
+[ INFO] ELF LOAD: 0x1000030FD0-0x100003CD38 flags=R--
+[ INFO] ELF LOAD: 0x100003D000-0x100003EC60 flags=RW-
+[ INFO] ELF LOAD: 0x100003F000-0x100013F040 flags=RW-
+[ INFO] ELF LOAD: 0x100013F040-0x1000144DA8 flags=R--
+[ INFO] [wx] 'init': 66/325 cell pages lowered to read-only/execute-only
+[ INFO] [va] init: image base 0x1000000000, user stack 0x1400000000
+[ INFO] ATOMIC_PUBLICATION_AP-15: PASS
+[ INFO] Successfully spawned init with complete root authority (tid=1)
+[INFO] Kernel initialization complete. Entering idle loop.
+[INFO] Starting scheduler...
+[ INFO] [selftest] IRQ-ALLOC-CHARGE: PASS owner=0x0 in_use=0 spins=1319898
+[ INFO] [sched] hart 0 dispatched a task
+
+[KERNEL PANIC] Critical failure.
+panicked at hal/arch/arm/src/aarch64/trap.rs:197:17:
+[aarch64] kernel trap ec=0x25 esr=0x96000006 elr=0x40082034 far=0x50000000 spsr=0x60000005 vector=0
+[KERNEL PANIC] halting...
+qemu-system-aarch64: terminating on signal 15 from pid 1490858 (timeout)
