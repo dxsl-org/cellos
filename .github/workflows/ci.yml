@@ -1344,9 +1344,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      # `runner` is not available in job-level env, so the path is exported here.
+      # `runner` is not available in job-level env, so the path is exported here. The
+      # assembler creates only its own --out-dir, so the parent must exist.
       - name: Set isolated work dir
-        run: echo "C2C_DIR=$RUNNER_TEMP/c2c-gate" >> "$GITHUB_ENV"
+        run: |
+          mkdir -p "$RUNNER_TEMP/c2c-gate"
+          echo "C2C_DIR=$RUNNER_TEMP/c2c-gate" >> "$GITHUB_ENV"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
