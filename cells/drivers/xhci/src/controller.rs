@@ -424,7 +424,8 @@ impl XhciController {
         // programs: reusing a ring the parent hub consumed would replay its TRBs.
         self.tier = topo.depth as usize;
         self.dev_ctx[self.tier].zero();
-        self.dcbaa.write_u64(slot as usize * 8, self.dev_ctx[self.tier].iova());
+        self.dcbaa
+            .write_u64(slot as usize * 8, self.dev_ctx[self.tier].iova());
         self.ep0_ring[self.tier].zero();
         ring_init_link(&self.ep0_ring[self.tier]);
         self.ep0_enq = 0;
@@ -909,7 +910,8 @@ impl XhciController {
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
             .write_u32(ep0 + 4, ep_dw1(self.ep0_mps, EP_TYPE_CONTROL));
-        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
+        self.input_ctx
+            .write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
         self.input_ctx.write_u32(ep0 + 16, 8);
     }
 
@@ -929,7 +931,8 @@ impl XhciController {
         self.input_ctx.write_u32(ep0, 0);
         self.input_ctx
             .write_u32(ep0 + 4, ep_dw1(mps, EP_TYPE_CONTROL));
-        self.input_ctx.write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
+        self.input_ctx
+            .write_u64(ep0 + 8, self.ep0_ring[self.tier].iova() | 1);
         self.input_ctx.write_u32(ep0 + 16, 8);
         let (code, _) = self.command(Trb {
             parameter: self.input_ctx.iova(),
@@ -1145,7 +1148,11 @@ fn alloc(pages: usize, bdf: u32, what: &str) -> ViResult<DmaRegion> {
 
 /// One single-page region per hub tier (see [`DEVICE_TIERS`]).
 fn alloc_per_tier(bdf: u32, what: &str) -> ViResult<[DmaRegion; DEVICE_TIERS]> {
-    Ok([alloc(1, bdf, what)?, alloc(1, bdf, what)?, alloc(1, bdf, what)?])
+    Ok([
+        alloc(1, bdf, what)?,
+        alloc(1, bdf, what)?,
+        alloc(1, bdf, what)?,
+    ])
 }
 
 /// Find a HID boot keyboard interface and its interrupt-IN endpoint.
