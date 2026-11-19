@@ -2,7 +2,7 @@
 
 Decision: **UNBLOCKED / CONDITIONAL GO**
 Feasibility state: `FEASIBILITY_PACKAGE_VERIFIED_SECURITY_BACKING_AND_HUMAN_APPROVAL_GRANTED`
-Canonical approval-input-manifest SHA-256: `635eab309cb0a228fb371f5a8a46582f520cb79bb5d2e99680a16259e7bdca0b` (independently package-verified; GetRandom technical backing complete; human approvals granted; umbrella Phase 03 baseline approved and implemented).
+Canonical approval-input-manifest SHA-256: `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1` (independently package-verified; GetRandom technical backing complete; human approvals granted; umbrella Phase 03 baseline approved and implemented).
 
 Required before a later child may be created:
 
@@ -19,7 +19,7 @@ The six conditions above are satisfied as of 2026-09-16:
 3. Six-path kernel security inventory is closed, present, and digest-matched.
 4. `COMPILER-INTEGRATION-APPROVAL`, `RUNTIME-CONTRACT-APPROVAL`, and `BENCHMARK-CONTRACT-APPROVAL` are each explicitly granted by both named roles.
 5. Umbrella Phase 03 production gates and Spec 18c provenance contract are approved by their named owner (2026-09-16).
-6. Canonical approval-input-manifest is independently verified and all records are bound to `635eab309cb0a228fb371f5a8a46582f520cb79bb5d2e99680a16259e7bdca0b`.
+6. Canonical approval-input-manifest is independently verified and all records are bound to `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1`.
 
 This checkpoint is **UNBLOCKED / CONDITIONAL GO**. In-tree CellOS PAL implementation planning may proceed. Target publication, external triple, and production promotion remain gated behind final live evidence.
 

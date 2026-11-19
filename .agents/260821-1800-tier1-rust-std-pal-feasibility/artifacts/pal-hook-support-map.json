@@ -1379,7 +1379,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 11,
-    "inventory_digest": "58f2436748e2886cd171897fdec6d2a1e127585a34324edc6c477c19500c28df",
+    "inventory_digest": "4a79439c70be6c727e7ae97eb0b3e25a4e172f3e2af3aa1e815172018172425c",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1416,7 +1416,7 @@
         "roles": [
           "user-buffer validation primitives"
         ],
-        "sha256": "256c25961bf2a403be68f4bb364be132df727817be17f898811afbfa45f9de07"
+        "sha256": "5027f334fbaf46d2714b3a5b5870a26eff171c35a10eadbb9a643cd146c68e91"
       },
       {
         "path": "kernel/src/task/syscall/grant.rs",

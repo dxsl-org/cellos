@@ -7,11 +7,11 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `635eab309cb0a228fb371f5a8a46582f520cb79bb5d2e99680a16259e7bdca0b` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact eleven-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
-Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its eleven-entry kernel security-backing inventory digest is `58f2436748e2886cd171897fdec6d2a1e127585a34324edc6c477c19500c28df`; and the support-map file digest bound by the canonical manifest is `e606c186ee74e92cfd43d694d787bd6e0ef64f1cbf93122398edd13e4029d0e0`.
+Pinned source identity is nightly `2026-05-01`, rustc `1.97.0-nightly (f53b654a8)`. The support map's 46-file source-manifest digest is `b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105`; its eleven-entry kernel security-backing inventory digest is `4a79439c70be6c727e7ae97eb0b3e25a4e172f3e2af3aa1e815172018172425c`; and the support-map file digest bound by the canonical manifest is `c8a6c7e7b1059ee74fe4859d9bb887779f012e4ebd1f0e086282b9a3b3d6c494`.
 
 ## Reconciliation
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `635eab309cb0a228fb371f5a8a46582f520cb79bb5d2e99680a16259e7bdca0b` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `7f7bdbad823be67bb1252cb88a3e7a081e5da3c0b8902cc7945d57d2f0d43bf1` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
@@ -49,3 +49,5 @@ There is no PAL, target, runtime, private or published sysroot, target JSON, pub
 Digest re-bound 2026-09-29 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6: covered inputs `kernel/Cargo.toml`, `kernel/src/task/syscall.rs`, `libs/api/src/abi/syscall.rs`, `libs/ostd/src/syscall.rs`, `libs/ostd/src/startup.rs` changed after the 2026-09-16 binding. This line records only the digest re-bind; it is not a new signer decision. Re-bound a third time the same day for `.agents/260821-0642-app-tiers-completion/plan.md` and `phase-06-tier1-rust-std-pal.md`, whose Phase 06 text now records the bounded implementation (PAL, target specs, sysroot overlay, QEMU lane) while promotion and approvals stay blocked. Re-bound again the same day for `tests/rust-std-promotion/test_validator.py` and `test_validator_rejections.py`, which now resolve the pinned rust-src through the installed toolchain instead of the maintainer's absolute path (both files are pinned approval inputs).
 
 Digest re-bound 2026-11-16 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6, owner-approved in Phase 19 of the architecture remediation (`.agents/261110-1703-architecture-remediation/phase-19-closure.md`, Deviation Log). The remediation moved covered inputs without changing their roles: `kernel/src/task/syscall.rs` split into `kernel/src/task/syscall/{mod,decode,ipc,misc,fs}.rs`; `kernel/src/task/drivers.rs` and `drivers/virtio_rng.rs` became `kernel/src/dev.rs` and `dev/virtio_rng.rs`; `libs/api/src/abi.rs`, `abi/syscall.rs` and `services/benchmark.rs` became `libs/abi/src/lib.rs`, `libs/abi/src/syscall.rs` and `libs/wire/src/benchmark.rs`; `kernel/src/task/getrandom-sas-*.rs` moved to `kernel/src/arch/riscv64/task/`. Other covered inputs changed in place. The six-source kernel security inventory is now eleven paths: the ten re-pinned paths plus `kernel/src/task/syscall/grant.rs`, added in a second re-bind the same day because GetRandom's final write (`syscall/misc.rs`) takes the grant-table locks defined there. The manifest lists 111 inputs (was 106). This line records only the digest re-bind; it is not a new signer decision.
+
+Digest re-bound again 2026-11-19 under condition 6, owner-approved for the CI repair: a clippy fix in `kernel/src/task/syscall/fs.rs` (`.map(|task| Charge::of(task))` → `.map(Charge::of)`, no behaviour change) moved that pinned input. Inventory digest `58f24367…` → `4a79439c…`, support map `e606c186…` → `c8a6c7e7…`, manifest `635eab30…` → `7f7bdbad…`; still eleven paths and 111 inputs. Not a new signer decision.
