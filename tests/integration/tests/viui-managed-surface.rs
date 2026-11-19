@@ -16,13 +16,23 @@ const RESTORED_FRAME: &str = "/tmp/cellos-viui-restored.ppm";
 // Inter's measured 16px line box and the 8px gap precede the button.
 const LABEL_REGION: (usize, usize, usize, usize) = (96, 96, 176, 116);
 const BUTTON_CLICK: (u32, u32) = (100, 128);
-const INITIAL_MAXIMIZE: (u32, u32) = (698, 70);
-const MAXIMIZED_RESTORE: (u32, u32) = (1254, 10);
-const INITIAL_CLOSE: (u32, u32) = (714, 70);
-const MAXIMIZED_BUTTON_SAMPLE: (usize, usize) = (90, 82);
-const RESTORED_BUTTON_SAMPLE: (usize, usize) = (170, 138);
-const BUTTON_NORMAL: [u8; 3] = [50, 50, 100];
-const BUTTON_HOVER: [u8; 3] = [70, 70, 130];
+// Window operations go through the Cell Tab's window menu (ADR-0027: the tab holds
+// only the app icon and the title). Geometry as in window-policy.rs: the icon sits
+// at content + (13, -15), menu items are 28px tall from content y + 3 (Maximize or
+// Restore first, Close after Minimize and a 9px separator), x = icon x + 47. When
+// maximized the content origin is (1, 28).
+const MENU_ICON: (u32, u32) = (93, 65);
+const MENU_MAXIMIZE: (u32, u32) = (140, 97);
+const MENU_CLOSE: (u32, u32) = (140, 162);
+const MAXIMIZED_MENU_ICON: (u32, u32) = (14, 13);
+const MAXIMIZED_MENU_RESTORE: (u32, u32) = (60, 45);
+// Inside the button's padding, just in from its bottom-left focus border (the label
+// text starts a few pixels to the right). Maximized moves the button by (-79, -52).
+const MAXIMIZED_BUTTON_SAMPLE: (usize, usize) = (21, 97);
+const RESTORED_BUTTON_SAMPLE: (usize, usize) = (100, 149);
+// The default light theme's button fill, plain and hovered.
+const BUTTON_NORMAL: [u8; 3] = [230, 232, 238];
+const BUTTON_HOVER: [u8; 3] = [218, 222, 230];
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -48,6 +58,13 @@ fn prerequisites_ok() -> bool {
 fn click(qemu: &mut QemuRunner, point: (u32, u32)) {
     qemu.send_qemu_mouse_abs(point.0, point.1);
     qemu.send_qemu_mouse_click();
+}
+
+/// Open the window menu from the tab icon at `icon`, then choose the item at `item`.
+fn window_menu(qemu: &mut QemuRunner, icon: (u32, u32), item: (u32, u32)) {
+    click(qemu, icon);
+    std::thread::sleep(Duration::from_millis(200));
+    click(qemu, item);
 }
 
 fn capture_region(qemu: &mut QemuRunner, path: &str) -> Vec<u8> {
@@ -109,18 +126,18 @@ fn generated_counter_survives_managed_surface_configure() {
         "generated Counter label did not repaint after pointer activation"
     );
 
-    click(&mut qemu, INITIAL_MAXIMIZE);
+    window_menu(&mut qemu, MENU_ICON, MENU_MAXIMIZE);
     settle();
     assert!(qemu.capture_qemu_screen(MAXIMIZED_FRAME));
     // A compositor-owned control move may leave the widget's hover state set.
     assert_button_background(MAXIMIZED_FRAME, MAXIMIZED_BUTTON_SAMPLE, "maximized");
 
-    click(&mut qemu, MAXIMIZED_RESTORE);
+    window_menu(&mut qemu, MAXIMIZED_MENU_ICON, MAXIMIZED_MENU_RESTORE);
     settle();
     assert!(qemu.capture_qemu_screen(RESTORED_FRAME));
     assert_button_background(RESTORED_FRAME, RESTORED_BUTTON_SAMPLE, "restored");
 
-    click(&mut qemu, INITIAL_CLOSE);
+    window_menu(&mut qemu, MENU_ICON, MENU_CLOSE);
     qemu.wait_for("[viui-demo] close request accepted", EVENT_TIMEOUT)
         .unwrap_or_else(|error| {
             panic!("accepted close did not shut down: {error}\n{}", qemu.dump())
@@ -155,9 +172,9 @@ fn generated_counter_survives_managed_surface_configure() {
         .unwrap_or_else(|error| {
             panic!("second pointer activation failed: {error}\n{}", qemu.dump())
         });
-    click(&mut qemu, INITIAL_MAXIMIZE);
+    window_menu(&mut qemu, MENU_ICON, MENU_MAXIMIZE);
     settle();
-    click(&mut qemu, MAXIMIZED_RESTORE);
+    window_menu(&mut qemu, MAXIMIZED_MENU_ICON, MAXIMIZED_MENU_RESTORE);
     settle();
     qemu.send_qemu_key("ret");
     qemu.wait_for("[viui-demo] key=Enter", EVENT_TIMEOUT)
