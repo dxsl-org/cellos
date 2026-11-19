@@ -317,6 +317,10 @@ fn tier2_posix_ffi_execution_runs_in_paged_domain() {
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
+    // Taken before the command: the cell prints its last markers within
+    // milliseconds of `POSIX-ENTROPY`, so a checkpoint taken after that wait can
+    // land past `PORTING-SMOKE: OK` and miss it.
+    let after_cell_markers = qemu.output_checkpoint();
     send_command(&mut qemu, "posix-shim-test");
 
     // 1. Verify admission to Tier 2 Paged Domain under private SATP
@@ -354,7 +358,6 @@ fn tier2_posix_ffi_execution_runs_in_paged_domain() {
     // the foreground cell exits — the input path has no queue, so a command typed
     // mid-cell is dropped. Wait for the cell's own end marker and the prompt it
     // returns to before typing anything.
-    let after_cell_markers = qemu.output_checkpoint();
     qemu.wait_for_after("PORTING-SMOKE: OK", after_cell_markers, FAULT_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
