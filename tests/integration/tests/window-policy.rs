@@ -19,6 +19,7 @@ const BACKGROUND: [u8; 3] = [0x00, 0xFF, 0x00];
 // items 28px tall from menu + (4, 4) — Maximize/Restore, Minimize, then a 9px
 // separator and Close.
 const FRAME: [u8; 3] = [0xC3, 0xC7, 0xD0];
+const FRAME_ACTIVE: [u8; 3] = [0x9A, 0xA0, 0xAD];
 const TITLE_INACTIVE: [u8; 3] = [0xEB, 0xED, 0xF2];
 const TITLE_ACTIVE: [u8; 3] = [0xFF, 0xFF, 0xFF];
 const GLYPH_INACTIVE: [u8; 3] = [0x6E, 0x73, 0x83];
@@ -128,10 +129,13 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         FRONT,
         "later front surface must initially paint the overlap"
     );
+    // A client may not take keyboard focus from another client
+    // (`input_handler::request_focus`): `back`, the first interactive window, keeps
+    // the selection although later windows paint over it.
     assert_eq!(
         color_at("/tmp/cellos-window-policy-front.ppm", 79, 140),
-        FRAME,
-        "unselected interactive surface retains its compositor-owned frame"
+        FRAME_ACTIVE,
+        "the first interactive surface keeps the selection and its active frame"
     );
 
     qemu.send_qemu_mouse_abs(100, 100);
@@ -145,7 +149,8 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         "clicking exposed back surface must raise it over front"
     );
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-back.ppm", 100, 70),
+        // Tab background right of the icon and title (x = 100 is the icon glyph).
+        color_at("/tmp/cellos-window-policy-back.ppm", 200, 70),
         TITLE_ACTIVE,
         "selected back surface must receive an active compositor titlebar"
     );
@@ -202,12 +207,12 @@ fn clicking_exposed_surface_raises_and_focuses_its_owner() {
         .unwrap_or_else(|error| panic!("front release not delivered: {error}\n{}", qemu.dump()));
     capture_settled(&mut qemu, "/tmp/cellos-window-policy-front-selected.ppm");
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-front-selected.ppm", 100, 70),
+        color_at("/tmp/cellos-window-policy-front-selected.ppm", 200, 70),
         TITLE_INACTIVE,
         "new selection must deactivate the old back titlebar"
     );
     assert_eq!(
-        color_at("/tmp/cellos-window-policy-front-selected.ppm", 180, 110),
+        color_at("/tmp/cellos-window-policy-front-selected.ppm", 280, 110),
         TITLE_ACTIVE,
         "selected front surface must receive an active compositor titlebar"
     );

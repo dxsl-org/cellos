@@ -50,7 +50,15 @@ impl<'a> ViShell<'a> {
         executor::shell_println("");
         executor::shell_println("=== Cellos shell ready — type 'help' for commands ===");
 
+        // The serial console is self-service (input `focus_routes`): until the shell
+        // claims it, serial bytes follow the compositor's keyboard focus, so the first
+        // window that takes focus would also receive every line typed at the console.
+        // A claim from a non-compositor cell sets only the console route.
+        let mut console_claimed = false;
         loop {
+            if !console_claimed {
+                console_claimed = ostd::input::request_focus();
+            }
             // Show custom prompt if PATH set? Or USER?
             // For now static prompt.
             executor::shell_print(self.prompt);
