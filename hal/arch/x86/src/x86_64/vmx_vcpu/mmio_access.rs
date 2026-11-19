@@ -67,9 +67,12 @@ impl VmxVcpu {
             return Ok(unknown(ISS_NO_INSTRUCTION));
         };
         // `decode_mmio` reads the write flag from bit 1, where VMX keeps it too.
-        let Some((exit, length)) =
-            decode_mmio(qual & QUAL_WRITE, gpa, &instruction[..available], &mut self.gpr)
-        else {
+        let Some((exit, length)) = decode_mmio(
+            qual & QUAL_WRITE,
+            gpa,
+            &instruction[..available],
+            &mut self.gpr,
+        ) else {
             return Ok(unknown(ISS_UNDECODABLE));
         };
         super::complete_instruction(rip.wrapping_add(u64::from(length)))?;
@@ -88,8 +91,14 @@ mod tests {
         assert!(is_mmio_data_access(DATA, 0xd000_0070));
         assert!(is_mmio_data_access(DATA | QUAL_WRITE, 0xd000_3ffc));
         assert!(!is_mmio_data_access(DATA, 0xd000_4000), "past the window");
-        assert!(!is_mmio_data_access(DATA | QUAL_FETCH, 0xd000_0000), "fetch");
-        assert!(!is_mmio_data_access(QUAL_LINEAR_VALID, 0xd000_0000), "page walk");
+        assert!(
+            !is_mmio_data_access(DATA | QUAL_FETCH, 0xd000_0000),
+            "fetch"
+        );
+        assert!(
+            !is_mmio_data_access(QUAL_LINEAR_VALID, 0xd000_0000),
+            "page walk"
+        );
         assert!(!is_mmio_data_access(0, 0xd000_0000), "no linear address");
     }
 }

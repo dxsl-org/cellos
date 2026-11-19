@@ -206,9 +206,9 @@ impl<F: FileSystem> FilesApp<F> {
             return;
         };
         if !item.is_dir {
-            if let Some(intent) = wire::mime::AssociationRegistry::resolve_intent_with_app(
-                &item.path, app_id, None,
-            ) {
+            if let Some(intent) =
+                wire::mime::AssociationRegistry::resolve_intent_with_app(&item.path, app_id, None)
+            {
                 self.status_message = format!(
                     "{} {} with {}",
                     intent.action.as_str(),
@@ -721,7 +721,11 @@ mod tests {
         app.trash_selected();
         assert!(app.fs.stat("/tmp/c5dir/a.txt").is_ok());
         assert!(!app.can_undo_trash());
-        assert!(app.status_message.starts_with("Trash unavailable"), "{}", app.status_message);
+        assert!(
+            app.status_message.starts_with("Trash unavailable"),
+            "{}",
+            app.status_message
+        );
         assert!(app.status_message.contains("Shift+Delete"));
     }
 

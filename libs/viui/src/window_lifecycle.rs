@@ -10,8 +10,8 @@
 //! Single-window apps call [`WindowLifecycle::poll`] once per loop turn; it
 //! drains every pending compositor event for the cell.
 
-use wire::display::{WindowCloseRequest, WindowConfigure, WindowState};
 use ostd::display::{poll_surface_events, SurfaceEvent, ViSurface};
+use wire::display::{WindowCloseRequest, WindowConfigure, WindowState};
 
 /// How a compositor close request is answered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,7 +51,11 @@ pub struct WindowLifecycle {
 
 impl WindowLifecycle {
     pub const fn new(close_policy: ClosePolicy) -> Self {
-        Self { close_policy, minimized: false, closed: false }
+        Self {
+            close_policy,
+            minimized: false,
+            closed: false,
+        }
     }
 
     pub fn set_close_policy(&mut self, close_policy: ClosePolicy) {
@@ -81,7 +85,10 @@ impl WindowLifecycle {
                     .map(|()| (surface.width(), surface.height()))
             };
             let mut respond = |request: WindowCloseRequest, accept: bool| {
-                surface.borrow().respond_close(request.serial, accept).is_ok()
+                surface
+                    .borrow()
+                    .respond_close(request.serial, accept)
+                    .is_ok()
             };
             self.handle_event(cap, event, &mut apply, &mut respond, &mut on_event);
         }
@@ -113,7 +120,9 @@ impl WindowLifecycle {
                 }
             }
             SurfaceEvent::CloseRequest(request) if request.cap == cap => match self.close_policy {
-                ClosePolicy::Ask => on_event(WindowEvent::CloseRequested { serial: request.serial }),
+                ClosePolicy::Ask => on_event(WindowEvent::CloseRequested {
+                    serial: request.serial,
+                }),
                 policy => {
                     let accept = policy == ClosePolicy::Accept;
                     if respond(request, accept) && accept {
@@ -126,7 +135,11 @@ impl WindowLifecycle {
                 let minimized = change.state == WindowState::Minimized;
                 if minimized != self.minimized {
                     self.minimized = minimized;
-                    on_event(if minimized { WindowEvent::Minimized } else { WindowEvent::Restored });
+                    on_event(if minimized {
+                        WindowEvent::Minimized
+                    } else {
+                        WindowEvent::Restored
+                    });
                 }
             }
             _ => {}

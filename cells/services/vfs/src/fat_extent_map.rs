@@ -77,7 +77,9 @@ impl ExtentMap {
     /// order, clipped to the file's end.
     pub(crate) fn pieces(&self, offset: u64, len: u64) -> impl Iterator<Item = (u64, u64)> + '_ {
         let end = offset.saturating_add(len).min(self.size);
-        let first = self.runs.partition_point(|run| run.file + run.len <= offset);
+        let first = self
+            .runs
+            .partition_point(|run| run.file + run.len <= offset);
         self.runs[first..]
             .iter()
             .take_while(move |run| run.file < end)
@@ -131,7 +133,10 @@ impl ExtentCache {
     /// its chain; a write inside the mapped size changes no cluster.
     pub(crate) fn written(&mut self, key: FileKey, end: u64) {
         if let Some(at) = self.position(key) {
-            let inside = self.entries[at].1.as_ref().is_some_and(|map| end <= map.size());
+            let inside = self.entries[at]
+                .1
+                .as_ref()
+                .is_some_and(|map| end <= map.size());
             if !inside {
                 self.entries.remove(at);
             }
@@ -164,7 +169,11 @@ mod tests {
         assert_eq!(map.size(), 8292);
         assert_eq!(map.runs.len(), 2);
         let pieces: Vec<_> = map.pieces(8000, 1000).collect();
-        assert_eq!(pieces, [(8192 + 8000, 192), (40960, 100)], "clipped at the end");
+        assert_eq!(
+            pieces,
+            [(8192 + 8000, 192), (40960, 100)],
+            "clipped at the end"
+        );
         assert_eq!(map.pieces(0, 512).collect::<Vec<_>>(), [(8192, 512)]);
         assert_eq!(map.pieces(8292, 10).count(), 0, "at end of file");
     }
@@ -179,7 +188,9 @@ mod tests {
 
     #[test]
     fn a_chain_that_loops_past_the_file_end_stops_at_its_size() {
-        let looping = [(8192, 4096)].into_iter().chain(core::iter::repeat((8192, 0)));
+        let looping = [(8192, 4096)]
+            .into_iter()
+            .chain(core::iter::repeat((8192, 0)));
         let map = ExtentMap::build(looping).unwrap();
         assert_eq!(map.size(), 4096);
     }

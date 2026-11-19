@@ -50,7 +50,6 @@ pub mod gpu_renderer;
 pub mod input_bridge;
 pub mod layout;
 pub mod managed_surface;
-pub mod window_lifecycle;
 pub mod navigation;
 pub mod node;
 pub mod node_widgets;
@@ -67,6 +66,7 @@ pub mod theme;
 pub mod widget;
 pub mod widgets;
 pub mod window;
+pub mod window_lifecycle;
 
 // ─── GPU renderer convenience re-exports ─────────────────────────────────────
 pub use executor::{CommandExecutor, CpuExecutor};

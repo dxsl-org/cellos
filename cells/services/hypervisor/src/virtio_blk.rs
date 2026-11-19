@@ -73,7 +73,10 @@ impl BlkDisk {
     /// `file` is an opened persistent disk and the spec it was opened with;
     /// `None` selects the 4 MiB volatile disk.
     pub fn new(
-        file: Option<(crate::persistent_disk::PersistentDisk, crate::persistent_disk::DiskSpec)>,
+        file: Option<(
+            crate::persistent_disk::PersistentDisk,
+            crate::persistent_disk::DiskSpec,
+        )>,
         irq: Option<u32>,
     ) -> Self {
         let (backend, num_sectors, read_only) = match file {
@@ -244,7 +247,12 @@ fn force_persistent_unavailable_once(backend: &mut Backend) {
     }
 }
 
-fn handle_blk_request(backend: &mut Backend, read_only: bool, bufs: &[DescBuf], vm_id: usize) -> u32 {
+fn handle_blk_request(
+    backend: &mut Backend,
+    read_only: bool,
+    bufs: &[DescBuf],
+    vm_id: usize,
+) -> u32 {
     if bufs.len() < 2 {
         println("[hv-blk] descriptor chain has fewer than two buffers");
         return 0;

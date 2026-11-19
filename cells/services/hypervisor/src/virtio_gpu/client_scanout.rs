@@ -6,8 +6,8 @@
 //! vCPU loop; damage is coalesced and retried at the next poll.
 
 use super::{command, resource::ResourceTable};
-use wire::vmm_session::VmmEvent;
 use ostd::syscall::{sys_grant_share, sys_post, SyscallResult};
+use wire::vmm_session::VmmEvent;
 
 pub struct ClientScanout {
     client_tid: usize,
@@ -117,6 +117,9 @@ impl ClientScanout {
     }
 
     fn post(&self, event: &VmmEvent) -> bool {
-        matches!(sys_post(self.client_tid, &event.encode()), SyscallResult::Ok(0))
+        matches!(
+            sys_post(self.client_tid, &event.encode()),
+            SyscallResult::Ok(0)
+        )
     }
 }

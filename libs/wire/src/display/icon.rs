@@ -53,15 +53,34 @@ mod tests {
 
     #[test]
     fn frame_round_trips_and_refuses_malformed_bytes() {
-        let frame = SetIcon { icon: 12, cap: 0x0102_0304 }.encode();
+        let frame = SetIcon {
+            icon: 12,
+            cap: 0x0102_0304,
+        }
+        .encode();
         assert_eq!(frame, [0x13, 12, 0, 0, 4, 3, 2, 1]);
-        assert_eq!(SetIcon::decode(&frame), Ok(SetIcon { icon: 12, cap: 0x0102_0304 }));
-        assert_eq!(SetIcon::decode(&frame[..7]), Err(DisplayProtocolError::InvalidLength));
+        assert_eq!(
+            SetIcon::decode(&frame),
+            Ok(SetIcon {
+                icon: 12,
+                cap: 0x0102_0304
+            })
+        );
+        assert_eq!(
+            SetIcon::decode(&frame[..7]),
+            Err(DisplayProtocolError::InvalidLength)
+        );
         let mut bad = frame;
         bad[2] = 1;
-        assert_eq!(SetIcon::decode(&bad), Err(DisplayProtocolError::NonZeroReserved));
+        assert_eq!(
+            SetIcon::decode(&bad),
+            Err(DisplayProtocolError::NonZeroReserved)
+        );
         bad = frame;
         bad[0] = 0x0A;
-        assert_eq!(SetIcon::decode(&bad), Err(DisplayProtocolError::InvalidOpcode));
+        assert_eq!(
+            SetIcon::decode(&bad),
+            Err(DisplayProtocolError::InvalidOpcode)
+        );
     }
 }

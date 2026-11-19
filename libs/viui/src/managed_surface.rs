@@ -7,8 +7,8 @@
 extern crate alloc;
 
 use alloc::{boxed::Box, rc::Rc};
-use wire::display::{WindowCloseRequest, WindowConfigure};
 use ostd::display::{poll_surface_events, ViSurface};
+use wire::display::{WindowCloseRequest, WindowConfigure};
 
 use crate::app_runner::ViApp;
 use crate::event::Event;
@@ -50,7 +50,11 @@ impl ManagedSurfaceApp {
     /// Select the response sent for matching compositor close requests.
     /// [`ClosePolicy::Ask`] is not offered here: there is no app loop to ask.
     pub fn set_close_policy(&mut self, close_policy: ClosePolicy) {
-        let policy = if close_policy == ClosePolicy::Ask { ClosePolicy::Reject } else { close_policy };
+        let policy = if close_policy == ClosePolicy::Ask {
+            ClosePolicy::Reject
+        } else {
+            close_policy
+        };
         self.lifecycle.set_close_policy(policy);
     }
 
@@ -111,12 +115,17 @@ impl ManagedSurfaceApp {
                     .map(|()| (surface.width(), surface.height()))
             };
             let mut respond = |request: WindowCloseRequest, accept: bool| {
-                surface.borrow().respond_close(request.serial, accept).is_ok()
+                surface
+                    .borrow()
+                    .respond_close(request.serial, accept)
+                    .is_ok()
             };
             let mut relayout = false;
-            self.lifecycle.handle_event(cap, event, &mut apply, &mut respond, &mut |event| {
-                relayout |= matches!(event, WindowEvent::Resized { .. } | WindowEvent::Restored);
-            });
+            self.lifecycle
+                .handle_event(cap, event, &mut apply, &mut respond, &mut |event| {
+                    relayout |=
+                        matches!(event, WindowEvent::Resized { .. } | WindowEvent::Restored);
+                });
             if relayout {
                 self.app.mark_dirty();
             }

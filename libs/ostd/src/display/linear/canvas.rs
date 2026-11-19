@@ -23,7 +23,14 @@ impl<'a> Canvas<'a> {
             (pixels.len() - row_bytes) / stride + 1
         };
         let height = u64::from(height).min(rows as u64);
-        Self { pixels, stride, x0: 0, y0: 0, x1: width as i64, y1: height as i64 }
+        Self {
+            pixels,
+            stride,
+            x0: 0,
+            y0: 0,
+            x1: width as i64,
+            y1: height as i64,
+        }
     }
 
     /// Restrict further drawing to the intersection with `(x, y, w, h)`.
@@ -83,7 +90,12 @@ impl<'a> Canvas<'a> {
             let (li, ri) = shape.insets(row);
             let x = i64::from(shape.x);
             let y = i64::from(shape.y) + i64::from(row);
-            self.span(y, x + i64::from(li), x + i64::from(shape.w) - i64::from(ri), color);
+            self.span(
+                y,
+                x + i64::from(li),
+                x + i64::from(shape.w) - i64::from(ri),
+                color,
+            );
         }
     }
 
@@ -126,7 +138,8 @@ impl<'a> Canvas<'a> {
         let a = u32::from(color[3]);
         for px in row.chunks_exact_mut(4) {
             for ch in 0..3 {
-                px[ch] = ((u32::from(color[ch]) * a + u32::from(px[ch]) * (255 - a) + 127) / 255) as u8;
+                px[ch] =
+                    ((u32::from(color[ch]) * a + u32::from(px[ch]) * (255 - a) + 127) / 255) as u8;
             }
             px[3] = 255;
         }

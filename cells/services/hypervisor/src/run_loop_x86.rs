@@ -22,19 +22,12 @@ mod x86_mmio_dispatch;
 #[path = "x86-port-dispatch.rs"]
 mod x86_port_dispatch;
 
-use crate::{
-    cmos_rtc::CmosRtc,
-    pic_8259::Pic8259,
-    pit_8253::Pit8253,
-    uart_16550::Uart16550,
-    virtio_blk::BlkDisk,
-    virtio_gpu::GpuDev,
-    virtio_input::InputDev,
-    virtio_mmio::VirtioMmio,
-    virtio_net::NetDev,
-    vmm,
-};
 use crate::app_session_x86::{AppSession, SessionRequest};
+use crate::{
+    cmos_rtc::CmosRtc, pic_8259::Pic8259, pit_8253::Pit8253, uart_16550::Uart16550,
+    virtio_blk::BlkDisk, virtio_gpu::GpuDev, virtio_input::InputDev, virtio_mmio::VirtioMmio,
+    virtio_net::NetDev, vmm,
+};
 use abi::hypervisor::ViVmExit;
 use ostd::io::println;
 use x86_mmio_dispatch::{MmioDevices, MmioDevicesMut};
@@ -69,8 +62,8 @@ pub fn run(
             Some(session),
         ),
         None => {
-            let comp_tid = ostd::service::provider_tid(abi::syscall::service::COMPOSITOR)
-                .unwrap_or(0);
+            let comp_tid =
+                ostd::service::provider_tid(abi::syscall::service::COMPOSITOR).unwrap_or(0);
             let (width, height) = ostd::syscall::sys_get_resolution();
             let gpu = GpuDev::new(
                 comp_tid,
@@ -295,8 +288,7 @@ fn serve_host(
                 push_console_event(input, event);
             }
             gpu.reconnect_compositor(
-                ostd::service::provider_tid(abi::syscall::service::COMPOSITOR)
-                    .unwrap_or(0),
+                ostd::service::provider_tid(abi::syscall::service::COMPOSITOR).unwrap_or(0),
             );
             false
         }

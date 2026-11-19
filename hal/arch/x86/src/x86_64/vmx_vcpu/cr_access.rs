@@ -61,9 +61,8 @@ impl VmxVcpu {
                 let efer = vmread(GUEST_IA32_EFER)?;
                 let paging = value & CR0_PG != 0;
                 let enters_long_mode = paging && efer & EFER_LME != 0;
-                let leaves_paging_in_64bit_code = !paging
-                    && efer & EFER_LMA != 0
-                    && vmread(GUEST_CS_AR_BYTES)? & CS_AR_L != 0;
+                let leaves_paging_in_64bit_code =
+                    !paging && efer & EFER_LMA != 0 && vmread(GUEST_CS_AR_BYTES)? & CS_AR_L != 0;
                 if value & !allowed != 0
                     || (paging && value & CR0_PE == 0)
                     || (value & CR0_NW != 0 && value & CR0_CD == 0)
@@ -87,8 +86,7 @@ impl VmxVcpu {
                 let value = self.read_gpr(reg)?;
                 let allowed = super::super::msr::read(MSR_IA32_VMX_CR4_FIXED1);
                 let long_mode = vmread(GUEST_IA32_EFER)? & EFER_LMA != 0;
-                let enables_pcide =
-                    value & CR4_PCIDE != 0 && vmread(GUEST_CR4)? & CR4_PCIDE == 0;
+                let enables_pcide = value & CR4_PCIDE != 0 && vmread(GUEST_CR4)? & CR4_PCIDE == 0;
                 let pcide_refused =
                     enables_pcide && (!long_mode || vmread(GUEST_CR3)? & 0xFFF != 0);
                 if value & !allowed != 0 || (long_mode && value & CR4_PAE == 0) || pcide_refused {

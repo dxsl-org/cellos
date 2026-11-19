@@ -1,7 +1,7 @@
 //! The guest scanout Grant and copies from it into the window surface.
 
-use wire::display::Rect;
 use ostd::syscall::{sys_grant_copy_rows_owned_by, GrantRows};
+use wire::display::Rect;
 
 const BYTES_PER_PIXEL: usize = 4;
 
@@ -36,11 +36,7 @@ impl GuestFrame {
         dst_width: u32,
         dst_height: u32,
     ) -> Option<Rect> {
-        let clipped = clip(
-            rect,
-            self.width.min(dst_width),
-            self.height.min(dst_height),
-        )?;
+        let clipped = clip(rect, self.width.min(dst_width), self.height.min(dst_height))?;
         let (x, y) = (clipped.x as usize, clipped.y as usize);
         let src_stride = self.width as usize * BYTES_PER_PIXEL;
         let rows = GrantRows {
@@ -83,7 +79,11 @@ mod tests {
         assert_eq!(clip(rect(1, 1, 10, 10), 3, 3), Some(rect(1, 1, 2, 2)));
         assert_eq!(clip(rect(-4, 2, 6, 1), 3, 3), Some(rect(0, 2, 2, 1)));
         assert_eq!(clip(rect(-4, -4, 2, 2), 3, 3), None, "entirely above-left");
-        assert_eq!(clip(rect(3, 0, 5, 1), 3, 3), None, "starts past the right edge");
+        assert_eq!(
+            clip(rect(3, 0, 5, 1), 3, 3),
+            None,
+            "starts past the right edge"
+        );
         assert_eq!(clip(rect(0, 0, 0, 5), 3, 3), None, "empty");
     }
 }

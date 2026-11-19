@@ -88,7 +88,9 @@ impl GuestProfile {
             return base.into();
         };
         // Kernel parameters go before ` -- `; what follows it belongs to init.
-        let (kernel, init) = base.split_once(" -- ").map_or((base, None), |(k, i)| (k, Some(i)));
+        let (kernel, init) = base
+            .split_once(" -- ")
+            .map_or((base, None), |(k, i)| (k, Some(i)));
         let mut line = alloc::format!("{kernel} tsc_early_khz={khz} tsc=reliable");
         if let Some(init) = init {
             line.push_str(" -- ");

@@ -105,7 +105,11 @@ fn cell_main() {
             "fixture-launcher: cpp-smoke spawn failed.",
         ),
     ] {
-        ostd::io::println(if spawn(path).is_some() { admitted } else { failed });
+        ostd::io::println(if spawn(path).is_some() {
+            admitted
+        } else {
+            failed
+        });
     }
 
     // Phase-02 slice B cross-tier exchange. A private-root provider holds no

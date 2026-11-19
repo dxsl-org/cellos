@@ -245,7 +245,9 @@ fn union_rect(a: command::Rect, b: command::Rect) -> command::Rect {
     let left = a.x.min(b.x);
     let top = a.y.min(b.y);
     let right = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
-    let bottom = a.y.saturating_add(a.height).max(b.y.saturating_add(b.height));
+    let bottom =
+        a.y.saturating_add(a.height)
+            .max(b.y.saturating_add(b.height));
     command::Rect {
         x: left,
         y: top,

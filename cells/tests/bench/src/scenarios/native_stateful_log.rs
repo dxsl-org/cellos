@@ -6,12 +6,12 @@
 //! handle, so each checkpoint rewrites the whole log; the log's content is the
 //! record list either way.
 
-use alloc::vec::Vec;
 use abi::dir_handles::ViDirHandle;
-use wire::ipc::IPC_BUF_SIZE;
-use wire::ipc::{VfsRequest, VfsResponse};
+use alloc::vec::Vec;
 use cellos_fs::crc32::crc32c;
 use ostd::service::ServiceRef;
+use wire::ipc::IPC_BUF_SIZE;
+use wire::ipc::{VfsRequest, VfsResponse};
 
 const LOG_NAME: &str = "checkpoint.log";
 const RECORD_LEN: usize = 12;

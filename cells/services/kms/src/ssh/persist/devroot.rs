@@ -12,6 +12,10 @@ use blake2::{Blake2s256, Digest};
 pub(crate) const DEV_ROOT_LABEL: &[u8] = b"CELLOS-KSSH-T1-DEV-ROOT-v1 PUBLIC CONSTANT NOT A SECRET";
 
 /// `BLAKE2s-256(DEV_ROOT_LABEL)`.
+///
+/// `black_box` keeps the label an opaque input: a release build otherwise folds the
+/// digest of a constant at compile time and drops the label bytes, and the
+/// artifact checker then cannot tell a persist build from any other.
 pub(crate) fn mac_key() -> [u8; 32] {
-    Blake2s256::digest(DEV_ROOT_LABEL).into()
+    Blake2s256::digest(core::hint::black_box(DEV_ROOT_LABEL)).into()
 }

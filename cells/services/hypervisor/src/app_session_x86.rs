@@ -7,12 +7,12 @@
 //! sender's message is dropped. The session protocol is
 //! `wire::vmm_session`.
 
-use wire::vmm_session::{
-    self as vmm_ipc, display_size_valid, VmmInputForwardRequest, VmmLaunchReply,
-    VmmLaunchRequest, VmmResizeRequest,
-};
 use ostd::io::println;
 use ostd::syscall::{sys_post, sys_recv_timeout, sys_try_recv, SyscallResult};
+use wire::vmm_session::{
+    self as vmm_ipc, display_size_valid, VmmInputForwardRequest, VmmLaunchReply, VmmLaunchRequest,
+    VmmResizeRequest,
+};
 
 use crate::virtio_gpu::GpuDev;
 use crate::virtio_input::InputDev;

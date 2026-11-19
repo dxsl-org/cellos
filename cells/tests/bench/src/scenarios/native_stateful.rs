@@ -19,19 +19,17 @@
 
 extern crate alloc;
 
-use alloc::format;
 use abi::dir_handles::ViDirHandle;
-use wire::hostile_backend_recovery::{
-    encode_kill_request, parse_kill_response, KILL_STATUS_OK,
-};
-use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
 use abi::syscall::service;
+use alloc::format;
 use ostd::io::println;
 use ostd::service::provider_tid;
 use ostd::syscall::{
     sys_heartbeat, sys_recv, sys_send, sys_set_spawn_args, sys_set_timer, sys_spawn_pinned,
     sys_yield, SyscallResult,
 };
+use wire::hostile_backend_recovery::{encode_kill_request, parse_kill_response, KILL_STATUS_OK};
+use wire::proto::app_envelope::{HEADER_LEN, KIND_MESSAGE, MAGIC};
 
 use super::native_stateful_log::{self as log, CHECKPOINT_INTERVAL};
 

@@ -1,11 +1,11 @@
 //! The Chrome window: guest start, event loop, status text.
 
-use wire::display::{PixelFormat, Rect};
-use wire::vmm_session::VmmEvent;
 use ostd::display::ViSurface;
 use ostd::typography::{FontFace, TextFonts};
 use viui::theme;
 use viui::window_lifecycle::{ClosePolicy, WindowEvent, WindowLifecycle};
+use wire::display::{PixelFormat, Rect};
+use wire::vmm_session::VmmEvent;
 
 use crate::frame::GuestFrame;
 use crate::guest::{Guest, InputOutbox};
@@ -59,7 +59,11 @@ pub fn cell_main() {
         (screen_h.saturating_sub(height) / 2) as i32,
     );
     let mut fonts = TextFonts::new();
-    paint_status(&mut surface, &mut fonts, "Starting Chromium in a Linux guest...");
+    paint_status(
+        &mut surface,
+        &mut fonts,
+        "Starting Chromium in a Linux guest...",
+    );
 
     let guest = match Guest::start(width, height) {
         Ok(guest) => {
@@ -96,7 +100,11 @@ pub fn cell_main() {
         }
         let Some(guest) = &guest else {
             if resized {
-                paint_status(&mut surface, &mut fonts, "The Linux guest could not be started.");
+                paint_status(
+                    &mut surface,
+                    &mut fonts,
+                    "The Linux guest could not be started.",
+                );
             }
             let _ = ostd::syscall::sys_set_timer(1);
             continue;
@@ -123,12 +131,31 @@ pub fn cell_main() {
         while let Some(event) = guest.next_event() {
             busy = true;
             match event {
-                VmmEvent::Scanout { grant, width, height } => {
-                    frame = Some(GuestFrame::new(grant, guest.hypervisor_tid(), width, height));
+                VmmEvent::Scanout {
+                    grant,
+                    width,
+                    height,
+                } => {
+                    frame = Some(GuestFrame::new(
+                        grant,
+                        guest.hypervisor_tid(),
+                        width,
+                        height,
+                    ));
                 }
-                VmmEvent::Damage { x, y, width, height } => {
+                VmmEvent::Damage {
+                    x,
+                    y,
+                    width,
+                    height,
+                } => {
                     let Some(frame) = &frame else { continue };
-                    let rect = Rect { x: x as i32, y: y as i32, w: width, h: height };
+                    let rect = Rect {
+                        x: x as i32,
+                        y: y as i32,
+                        w: width,
+                        h: height,
+                    };
                     let (w, h, stride) = (surface.width(), surface.height(), surface.stride());
                     if let Some(copied) = frame.copy_to(rect, surface.pixels_mut(), stride, w, h) {
                         surface.damage(copied);

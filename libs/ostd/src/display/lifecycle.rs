@@ -1,9 +1,10 @@
 //! Managed-surface lifecycle requests, Grant replacement, and cleanup.
 
-use wire::display::{
-    compositor_ops, AppearancePalette, SetAppearance, SetIcon, SetTitle, SurfaceStateRequest, WindowConfigure,
-};
 use types::{ViError, ViResult};
+use wire::display::{
+    compositor_ops, AppearancePalette, SetAppearance, SetIcon, SetTitle, SurfaceStateRequest,
+    WindowConfigure,
+};
 
 use crate::syscall::{sys_grant_register, sys_grant_share, sys_grant_slice};
 
@@ -38,7 +39,11 @@ impl ViSurface {
     /// # Errors
     /// Returns `IO` when the request cannot be sent.
     pub fn set_icon(&self, icon: crate::display::linear::icons::LineIcon) -> ViResult<()> {
-        let frame = SetIcon { icon: icon as u8, cap: self.cap }.encode();
+        let frame = SetIcon {
+            icon: icon as u8,
+            cap: self.cap,
+        }
+        .encode();
         ipc::send_lifecycle_request(self.comp_tid, &frame)
     }
 

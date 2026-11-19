@@ -100,9 +100,19 @@ mod tests {
         let regs = [1, 2, 3, 4];
         assert_eq!(filter(0x6, 0, regs), regs);
         let [_, ebx, ecx, edx] = filter(0x7, 0, [0, u32::MAX, u32::MAX, u32::MAX]);
-        assert_eq!((ebx | LEAF7_EBX_INVPCID, ecx | LEAF7_ECX_WAITPKG), (u32::MAX, u32::MAX));
-        assert_eq!((ebx & LEAF7_EBX_INVPCID, ecx & LEAF7_ECX_WAITPKG, edx), (0, 0, u32::MAX));
+        assert_eq!(
+            (ebx | LEAF7_EBX_INVPCID, ecx | LEAF7_ECX_WAITPKG),
+            (u32::MAX, u32::MAX)
+        );
+        assert_eq!(
+            (ebx & LEAF7_EBX_INVPCID, ecx & LEAF7_ECX_WAITPKG, edx),
+            (0, 0, u32::MAX)
+        );
         assert_eq!(filter(0x5000_0000, 0, regs), regs);
-        assert_eq!(filter(0x7, 1, regs), regs, "leaf 7 subleaf 1 is not the feature subleaf");
+        assert_eq!(
+            filter(0x7, 1, regs),
+            regs,
+            "leaf 7 subleaf 1 is not the feature subleaf"
+        );
     }
 }

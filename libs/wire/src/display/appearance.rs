@@ -46,7 +46,11 @@ pub struct SetAppearance {
 
 impl SetAppearance {
     pub const fn new(cap: u32, palette: AppearancePalette, revision: u32) -> Self {
-        Self { palette, cap, revision }
+        Self {
+            palette,
+            cap,
+            revision,
+        }
     }
 
     /// Encode into the exact 12-byte little-endian wire frame.
@@ -127,7 +131,10 @@ impl AppearanceChanged {
         if generation == 0 {
             return Err(DisplayProtocolError::InvalidDiscriminant);
         }
-        Ok(Self { palette: AppearancePalette::decode(bytes[1])?, generation })
+        Ok(Self {
+            palette: AppearancePalette::decode(bytes[1])?,
+            generation,
+        })
     }
 }
 
@@ -149,15 +156,30 @@ mod tests {
             mutate(&mut bytes);
             SetAppearance::decode(&bytes)
         };
-        assert_eq!(refused(|b| b[0] = 0x0A), Err(DisplayProtocolError::InvalidOpcode));
-        assert_eq!(refused(|b| b[1] = 3), Err(DisplayProtocolError::InvalidDiscriminant));
-        assert_eq!(refused(|b| b[3] = 1), Err(DisplayProtocolError::NonZeroReserved));
-        assert_eq!(SetAppearance::decode(&frame[..11]), Err(DisplayProtocolError::InvalidLength));
+        assert_eq!(
+            refused(|b| b[0] = 0x0A),
+            Err(DisplayProtocolError::InvalidOpcode)
+        );
+        assert_eq!(
+            refused(|b| b[1] = 3),
+            Err(DisplayProtocolError::InvalidDiscriminant)
+        );
+        assert_eq!(
+            refused(|b| b[3] = 1),
+            Err(DisplayProtocolError::NonZeroReserved)
+        );
+        assert_eq!(
+            SetAppearance::decode(&frame[..11]),
+            Err(DisplayProtocolError::InvalidLength)
+        );
     }
 
     #[test]
     fn appearance_event_never_reads_as_a_create_reply() {
-        let event = AppearanceChanged { palette: AppearancePalette::Dark, generation: 3 };
+        let event = AppearanceChanged {
+            palette: AppearancePalette::Dark,
+            generation: 3,
+        };
         let frame = event.encode();
         assert_eq!(frame, [0xA3, 1, 0, 0, 3, 0, 0, 0]);
         assert_eq!(AppearanceChanged::decode(&frame), Ok(event));
@@ -170,6 +192,9 @@ mod tests {
             AppearanceChanged::decode(&[0xA3, 9, 0, 0, 1, 0, 0, 0]),
             Err(DisplayProtocolError::InvalidDiscriminant)
         );
-        assert_eq!(AppearanceChanged::decode(&frame[..7]), Err(DisplayProtocolError::InvalidLength));
+        assert_eq!(
+            AppearanceChanged::decode(&frame[..7]),
+            Err(DisplayProtocolError::InvalidLength)
+        );
     }
 }

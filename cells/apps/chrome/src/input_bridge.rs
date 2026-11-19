@@ -7,11 +7,11 @@
 
 use alloc::vec::Vec;
 
+use ostd::input::{InputEvent, KeyState, Modifiers, MouseButton};
 use wire::vmm_session::{
     abs_position, ABS_X, ABS_Y, BTN_EXTRA, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, BTN_SIDE, EV_ABS,
     EV_KEY, EV_REL, REL_WHEEL,
 };
-use ostd::input::{InputEvent, KeyState, Modifiers, MouseButton};
 
 /// One evdev event: (type, code, value).
 pub type GuestEvent = (u16, u16, i32);
@@ -33,9 +33,7 @@ pub struct InputBridge {
 
 impl InputBridge {
     pub const fn new() -> Self {
-        Self {
-            held: Modifiers(0),
-        }
+        Self { held: Modifiers(0) }
     }
 
     /// Guest events for one window event; `width`/`height` are the window's
@@ -48,7 +46,11 @@ impl InputBridge {
                 out.push((EV_ABS, ABS_Y, abs_position(y, height)));
             }
             InputEvent::MouseButton { button, state } => {
-                out.push((EV_KEY, button_code(button), i32::from(state != KeyState::Released)));
+                out.push((
+                    EV_KEY,
+                    button_code(button),
+                    i32::from(state != KeyState::Released),
+                ));
             }
             InputEvent::MouseScroll { dy, .. } if dy != 0 => {
                 // Host scroll is positive downwards; evdev REL_WHEEL is positive upwards.
@@ -138,7 +140,10 @@ mod tests {
             [(EV_ABS, ABS_X, ABS_MAX), (EV_ABS, ABS_Y, 0)]
         );
         let scroll = InputEvent::MouseScroll { dx: 0, dy: 3 };
-        assert_eq!(bridge.translate(&scroll, 800, 600), [(EV_REL, REL_WHEEL, -3)]);
+        assert_eq!(
+            bridge.translate(&scroll, 800, 600),
+            [(EV_REL, REL_WHEEL, -3)]
+        );
     }
 
     #[test]

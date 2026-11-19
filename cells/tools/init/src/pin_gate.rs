@@ -11,9 +11,9 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use wire::machine_pin::{MachinePinRequest, MachinePinResponse, PinState};
 use ostd::io::println;
 use ostd::ipc::{IpcTerminal, PendingCall};
+use wire::machine_pin::{MachinePinRequest, MachinePinResponse, PinState};
 
 use crate::service_table::{self, Service};
 
@@ -84,7 +84,8 @@ fn ask_gate(pin: usize) -> Option<(PinState, bool)> {
     let mut reply = [0u8; wire::ipc::IPC_BUF_SIZE];
     for _ in 0..GATE_ATTEMPTS {
         let pending = PendingCall::submit(pin, &request).ok()?;
-        if let Ok(Some(completion)) = pending.wait_and_take(&mut reply, GATE_ROUND_TICKS, GATE_ROUNDS)
+        if let Ok(Some(completion)) =
+            pending.wait_and_take(&mut reply, GATE_ROUND_TICKS, GATE_ROUNDS)
         {
             if completion.terminal != IpcTerminal::Reply {
                 if service_table::task_alive(pin) != Some(true) {
@@ -118,8 +119,8 @@ pub(crate) fn safe_set(
     };
     let service =
         (1..autoload_offset.min(services.len())).find(|index| enabled(index, SAFE_SERVICE));
-    let shell =
-        (autoload_offset..autoload_end.min(services.len())).find(|index| enabled(index, SAFE_SHELL));
+    let shell = (autoload_offset..autoload_end.min(services.len()))
+        .find(|index| enabled(index, SAFE_SHELL));
     let withheld = services
         .iter()
         .enumerate()
@@ -189,10 +190,7 @@ pub(crate) fn enter_safe_mode(
         println("Init: SAFE MODE — no console in plan; supervising storage only.");
         return None;
     };
-    let console = SafeConsole {
-        pin: pin?,
-        shell,
-    };
+    let console = SafeConsole { pin: pin?, shell };
     console.announce(services);
     Some(console)
 }

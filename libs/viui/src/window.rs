@@ -103,7 +103,10 @@ impl WindowChrome {
         theme: &dyn ViTheme,
     ) {
         let w = canvas.width();
-        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, TITLEBAR_H), theme.tab_active_bg());
+        canvas.fill_rect(
+            Rect::new(0.0, 0.0, w as f32, TITLEBAR_H),
+            theme.tab_active_bg(),
+        );
         canvas.draw_line(
             Point::new(0.0, TITLEBAR_H - 1.0),
             Point::new(w as f32 - 1.0, TITLEBAR_H - 1.0),
@@ -376,7 +379,10 @@ impl ManagedWindow {
         let pixels = self.surf.pixels_mut();
         let theme = crate::theme::system();
         let mut canvas = FramebufferCanvas::new(pixels, stride, w, h);
-        canvas.fill_rect(Rect::new(0.0, 0.0, w as f32, h as f32), theme.bg().with_alpha(255));
+        canvas.fill_rect(
+            Rect::new(0.0, 0.0, w as f32, h as f32),
+            theme.bg().with_alpha(255),
+        );
 
         // Chrome occupies top TITLEBAR_H rows; content paints below
         self.chrome.paint(&mut canvas, &mut self.font, theme);

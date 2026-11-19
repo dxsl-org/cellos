@@ -247,11 +247,11 @@ impl AttachGrant {
 
 mod appearance;
 mod icon;
-pub use icon::{SetIcon, SET_ICON_WIRE_SIZE};
 pub use appearance::{
     AppearanceChanged, AppearancePalette, SetAppearance, APPEARANCE_CHANGED_WIRE_SIZE,
     SET_APPEARANCE_WIRE_SIZE,
 };
+pub use icon::{SetIcon, SET_ICON_WIRE_SIZE};
 
 // ─── Window lifecycle IPC messages ───────────────────────────────────────────
 

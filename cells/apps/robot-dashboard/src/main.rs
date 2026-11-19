@@ -51,8 +51,8 @@ use wire::display::PixelFormat;
 
 use viui::{
     animation::AnimatedSignal,
-    managed_surface::{ClosePolicy, ManagedSurfaceApp, ManagedTick},
     event::Event,
+    managed_surface::{ClosePolicy, ManagedSurfaceApp, ManagedTick},
     node::ViNode,
     node_widgets::{
         button::Button, column::Column, flex_box::FlexBox, label::Label, list_view::ListView,

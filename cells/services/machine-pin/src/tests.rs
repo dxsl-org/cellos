@@ -4,15 +4,15 @@
 use crate::diff;
 use crate::gate::*;
 use crate::store::{self, PinRead, PinStore};
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
-use abi::machine_facts::{MachineFactsRecord, FLAG_HYPERVISOR, PROFILE_SOURCE_CMDLINE};
-use wire::machine_pin::{PinState, Refusal};
 use abi::machine_facts::{
     FactString, PciFunctionId, ViMachineFactsV1, FLAG_ACPI_OEM, FLAG_DMAR_PRESENT, FLAG_PCI_ECAM,
     FLAG_SMBIOS, FLAG_VTD_ACTIVE, PROFILE_SOURCE_DEFAULT,
 };
+use abi::machine_facts::{MachineFactsRecord, FLAG_HYPERVISOR, PROFILE_SOURCE_CMDLINE};
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use wire::machine_pin::{PinState, Refusal};
 
 /// A fake store recording every write; `read` answers `answer`.
 struct FakeStore {

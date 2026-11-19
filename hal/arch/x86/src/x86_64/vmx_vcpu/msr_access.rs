@@ -99,7 +99,10 @@ impl VmxVcpu {
                 if (value ^ efer) & EFER_LME != 0 && vmread(GUEST_CR0)? & CR0_PG != 0 {
                     return Ok(false);
                 }
-                vmwrite(GUEST_IA32_EFER, (value & EFER_GUEST_WRITABLE) | (efer & EFER_LMA))?;
+                vmwrite(
+                    GUEST_IA32_EFER,
+                    (value & EFER_GUEST_WRITABLE) | (efer & EFER_LMA),
+                )?;
             }
             MSR_FS_BASE => vmwrite(GUEST_FS_BASE, value)?,
             MSR_GS_BASE => vmwrite(GUEST_GS_BASE, value)?,
@@ -153,7 +156,10 @@ mod tests {
         assert!(value_is_loadable(MSR_LSTAR, 0xffff_8000_0000_0000));
         assert!(value_is_loadable(MSR_LSTAR, 0x0000_7fff_ffff_ffff));
         assert!(!value_is_loadable(MSR_LSTAR, 0x0000_8000_0000_0000));
-        assert!(!value_is_loadable(MSR_KERNEL_GS_BASE, 0xfff0_0000_0000_0000));
+        assert!(!value_is_loadable(
+            MSR_KERNEL_GS_BASE,
+            0xfff0_0000_0000_0000
+        ));
         assert!(!value_is_loadable(MSR_SYSENTER_EIP, 0x0000_8000_0000_0000));
         // STAR holds selectors, not an address; any value loads.
         assert!(value_is_loadable(MSR_STAR, u64::MAX));

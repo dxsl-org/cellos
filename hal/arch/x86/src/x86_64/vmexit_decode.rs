@@ -181,7 +181,11 @@ pub fn decode_mmio(
             val: gprs[reg as usize] & size_mask(width),
         },
         // A 32-bit load writes the whole register; a 16-bit one merges.
-        0x8b if !is_write_fault => ViVmExit::MmioRead { ipa, size: width, reg },
+        0x8b if !is_write_fault => ViVmExit::MmioRead {
+            ipa,
+            size: width,
+            reg,
+        },
         0xc7 if is_write_fault && reg == 0 => {
             let bytes = usize::from(width);
             let immediate = instruction.get(cursor..cursor.checked_add(bytes)?)?;
@@ -311,15 +315,34 @@ mod tests {
         let mut gprs = [u64::MAX; 16];
         // movzbl 0x100(%rdi),%eax
         assert!(matches!(
-            decode_mmio(0, 0xd000_0900, &[0x0f, 0xb6, 0x87, 0x00, 0x01, 0x00, 0x00], &mut gprs),
-            Some((ViVmExit::MmioRead { size: 1, reg: 0, .. }, 7))
+            decode_mmio(
+                0,
+                0xd000_0900,
+                &[0x0f, 0xb6, 0x87, 0x00, 0x01, 0x00, 0x00],
+                &mut gprs
+            ),
+            Some((
+                ViVmExit::MmioRead {
+                    size: 1,
+                    reg: 0,
+                    ..
+                },
+                7
+            ))
         ));
         assert_eq!(gprs[0], 0);
         // movzwl (%rsi),%r9d
         gprs[9] = u64::MAX;
         assert!(matches!(
             decode_mmio(0, 0xd000_0904, &[0x44, 0x0f, 0xb7, 0x0e], &mut gprs),
-            Some((ViVmExit::MmioRead { size: 2, reg: 9, .. }, 4))
+            Some((
+                ViVmExit::MmioRead {
+                    size: 2,
+                    reg: 9,
+                    ..
+                },
+                4
+            ))
         ));
         assert_eq!(gprs[9], 0);
         // A plain byte load merges and must leave the register alone.
@@ -334,15 +357,41 @@ mod tests {
         gprs[0] = 0x1234_5678;
         assert!(matches!(
             decode_mmio(NPF_WRITE, 0xd000_0900, &[0x66, 0x89, 0x07], &mut gprs),
-            Some((ViVmExit::MmioWrite { size: 2, val: 0x5678, .. }, 3))
+            Some((
+                ViVmExit::MmioWrite {
+                    size: 2,
+                    val: 0x5678,
+                    ..
+                },
+                3
+            ))
         ));
         assert!(matches!(
             decode_mmio(0, 0xd000_0900, &[0x66, 0x8b, 0x07], &mut gprs),
-            Some((ViVmExit::MmioRead { size: 2, reg: 0, .. }, 3))
+            Some((
+                ViVmExit::MmioRead {
+                    size: 2,
+                    reg: 0,
+                    ..
+                },
+                3
+            ))
         ));
         assert!(matches!(
-            decode_mmio(NPF_WRITE, 0xd000_0900, &[0x66, 0xc7, 0x07, 0x34, 0x12], &mut gprs),
-            Some((ViVmExit::MmioWrite { size: 2, val: 0x1234, .. }, 5))
+            decode_mmio(
+                NPF_WRITE,
+                0xd000_0900,
+                &[0x66, 0xc7, 0x07, 0x34, 0x12],
+                &mut gprs
+            ),
+            Some((
+                ViVmExit::MmioWrite {
+                    size: 2,
+                    val: 0x1234,
+                    ..
+                },
+                5
+            ))
         ));
         assert!(decode_mmio(0, 0xd000_0900, &[0x48, 0x8b, 0x07], &mut gprs).is_none());
         assert!(decode_mmio(NPF_WRITE, 0xd000_0900, &[0x48, 0x89, 0x07], &mut gprs).is_none());

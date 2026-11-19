@@ -145,8 +145,15 @@ mod tests {
         assert_eq!(t(0x20_0000 + 0x1_2345), Some(0x1_2345));
         assert_eq!(t(0x4000_0000 + 0x0abc_def0), Some(0x0abc_def0));
         assert_eq!(t(0x60_0000), None, "unmapped PD entry");
-        assert_eq!(view.translate(CR0_PG, PML4, CR4_LA57, EFER_LMA, 0x20_0000), None);
-        assert_eq!(view.translate(CR0_PG, PML4, 0, 0, 0x20_0000), None, "paging outside long mode");
+        assert_eq!(
+            view.translate(CR0_PG, PML4, CR4_LA57, EFER_LMA, 0x20_0000),
+            None
+        );
+        assert_eq!(
+            view.translate(CR0_PG, PML4, 0, 0, 0x20_0000),
+            None,
+            "paging outside long mode"
+        );
     }
 
     #[test]
