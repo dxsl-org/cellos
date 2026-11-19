@@ -25,8 +25,9 @@ class ReviewRegressionTests(unittest.TestCase):
         return acceptance.LedgerTests("run").future(full_matrix)
 
     def test_public_api_resolves_explicit_module_paths(self) -> None:
+        # `window_lifecycle.rs` declares its tests with `#[path = "window_lifecycle_tests.rs"]`.
         root = Path(__file__).resolve().parents[2]
-        self.assertIn("libs/viui/src/managed_surface_tests.rs", public_api.paths(root))
+        self.assertIn("libs/viui/src/window_lifecycle_tests.rs", public_api.paths(root))
 
     def test_committed_sources_use_raw_blobs_and_reject_git_options(self) -> None:
         root = Path(tempfile.mkdtemp())

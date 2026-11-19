@@ -1495,16 +1495,44 @@
       },
       "state_digest": "e6b7475ffc775b1d25f72c67d6bdfbb21bb008c46a3e1e9f996e849e9d9a7470",
       "hash": "666bcd99a5b4b9ee2642543774a32ba18aac9e286accbec016ba6b4c198eaec1"
+    },
+    {
+      "sequence": 14,
+      "event_id": "spec23-source-amendment-20261119",
+      "previous_hash": "666bcd99a5b4b9ee2642543774a32ba18aac9e286accbec016ba6b4c198eaec1",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-11-19T06:00:56Z",
+      "action": {
+        "kind": "source_amendment",
+        "changes": [
+          {
+            "section": "source_binding",
+            "before_sha256": "1d3ef507a927404f3def7fc6595040c983e7944eaaa35763229da91d29b92c0a",
+            "after_sha256": "a7924bdc6a6ef8f26bcffca31df4aef54ac3756a8df3a47707d7b4910bc6f5ef"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/spec23-native-sdk-contract-9a8d7031af3d.md",
+            "sha256": "9a8d7031af3d1d4a27c9f6772ca2dce71211bde556a81a510e78ff4a303f87e4",
+            "size_bytes": 33434,
+            "kind": "artifact"
+          }
+        ]
+      },
+      "state_digest": "e9d568e645d4aee6da65a5aa50399519cf8ac01fc7cb00a5e222d9675fb78034",
+      "hash": "91c9e823b93cc76ea31dc7dd355b2f2e9add29d6fa420a232e2b136191ed7702"
     }
   ],
   "baseline_prefix": {
-    "event_count": 13,
-    "tip_hash": "666bcd99a5b4b9ee2642543774a32ba18aac9e286accbec016ba6b4c198eaec1"
+    "event_count": 14,
+    "tip_hash": "91c9e823b93cc76ea31dc7dd355b2f2e9add29d6fa420a232e2b136191ed7702"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
-    "sha256": "9265afc81b1537d7fec26636f1471f532c30c0d58f1f6bda6b1ce7e50cb22299",
+    "sha256": "9a8d7031af3d1d4a27c9f6772ca2dce71211bde556a81a510e78ff4a303f87e4",
     "matrix_sha256": "f742a6ec1f5a0110bbe4882028ac32fbdd9c884307d207171519919704ca7ece",
-    "ratified_revision": "fd3d12aebb1d114f9787debac5bdeb42c6595e11"
+    "ratified_revision": "6a2f6d3271c4c0fca485af3e943958c125361623"
   }
 }

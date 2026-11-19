@@ -51,7 +51,8 @@ def github_approval(value: object, event: dict, as_of: dt.datetime) -> None:
 def action(root: Path, value: object, states: dict[int, str], event: dict | None = None, as_of: dt.datetime | None = None) -> tuple[int, str]:
     """Replay one exact seed or adjacent lifecycle transition action."""
     if not isinstance(value, dict) or value.get("kind") not in {
-        "seed", "lifecycle_transition", "schema_migration", "record_correction", "blocker_resolution"
+        "seed", "lifecycle_transition", "schema_migration", "record_correction", "blocker_resolution",
+        "source_amendment",
     }:
         raise ValueError("event action kind invalid")
     if value["kind"] == "schema_migration":
@@ -91,6 +92,20 @@ def action(root: Path, value: object, states: dict[int, str], event: dict | None
                 raise ValueError("correction change digest invalid")
         artifacts(root, item["evidence"], "record correction evidence")
         return 0, "record_correction"
+    if value["kind"] == "source_amendment":
+        # Re-binds an amended Spec 23 text. Its capability matrix must not move: the
+        # baseline check compares matrix digests, and the snapshot/ratified-revision
+        # rules of `validator.bind_source` apply to the new binding.
+        item = exact(value, {"kind", "changes", "evidence"}, "source amendment action")
+        if not isinstance(item["changes"], list) or len(item["changes"]) != 1:
+            raise ValueError("source amendment changes exactly the source binding")
+        change = exact(item["changes"][0], {"section", "before_sha256", "after_sha256"}, "source amendment change")
+        if change["section"] != "source_binding":
+            raise ValueError("source amendment section invalid")
+        if not HEX.fullmatch(text(change["before_sha256"], "before digest")) or not HEX.fullmatch(text(change["after_sha256"], "after digest")):
+            raise ValueError("source amendment digest invalid")
+        artifacts(root, item["evidence"], "source amendment evidence")
+        return 0, "source_amendment"
     if value["kind"] == "blocker_resolution":
         item = exact(value, {"kind", "blocker_id", "changes", "evidence", "github_approval"}, "blocker resolution action")
         text(item["blocker_id"], "blocker id")
@@ -188,7 +203,7 @@ def history(root: dict, path: Path, digest, as_of) -> tuple[dict[int, str], dict
         ids[ident], prior = (phase, status), event["hash"]
         last_time = recorded
     if schema_version == 3:
-        if migration_indices or any(ev["action"]["kind"] in {"record_correction", "blocker_resolution"} for ev in events):
+        if migration_indices or any(ev["action"]["kind"] in {"record_correction", "blocker_resolution", "source_amendment"} for ev in events):
             raise ValueError("schema 3 ledger cannot contain v4 events")
     elif schema_version in {4, 5}:
         expected = 1 if schema_version == 4 else 2
@@ -198,7 +213,7 @@ def history(root: dict, path: Path, digest, as_of) -> tuple[dict[int, str], dict
         if moves != ([(3, 4)] if schema_version == 4 else [(3, 4), (4, 5)]):
             raise ValueError("schema migration sequence invalid")
         mig_idx = migration_indices[0]
-        if any(events[idx]["action"]["kind"] in {"record_correction", "blocker_resolution"} for idx in range(mig_idx)):
+        if any(events[idx]["action"]["kind"] in {"record_correction", "blocker_resolution", "source_amendment"} for idx in range(mig_idx)):
             raise ValueError("v4 actions must appear after schema migration")
     prefix = exact(root["baseline_prefix"], {"event_count", "tip_hash"}, "baseline prefix")
     if not 1 <= integer(prefix["event_count"], "prefix count") <= len(events) or prefix["tip_hash"] != events[prefix["event_count"] - 1]["hash"] or events[-1]["state_digest"] != digest(root):

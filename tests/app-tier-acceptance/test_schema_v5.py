@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from app_tier_acceptance import checks, source, validator
+from app_tier_acceptance import checks, ledger, source, validator
 from app_tier_acceptance.checks import HEX, canonical_digest
 from fixtures import append_migration_event, append_migration_v5, refresh_event
 
@@ -95,6 +95,52 @@ def migrated() -> tuple[dict, dict]:
     return v4, v5
 
 
+PREVIOUS_SHA = "9265afc81b1537d7fec26636f1471f532c30c0d58f1f6bda6b1ce7e50cb22299"
+
+
+def amended() -> tuple[dict, dict]:
+    """Return a schema 5 state bound to an archived revision and its source_amendment.
+
+    The amendment re-binds the live contract text; the matrix digest is unchanged.
+    """
+    _, v5 = migrated()
+    prior = copy.deepcopy(v5)
+    prior["source_binding"]["sha256"] = PREVIOUS_SHA
+    refresh_event(prior, canonical_digest)
+    current = copy.deepcopy(prior)
+    current["source_binding"] = copy.deepcopy(v5["source_binding"])
+    events = current["events"]
+    recorded = dt.datetime.fromisoformat(events[-1]["recorded_at"].replace("Z", "+00:00")) + dt.timedelta(seconds=1)
+    live = source.source_file().read_bytes()
+    events.append({
+        "sequence": len(events) + 1,
+        "event_id": "source-amendment",
+        "previous_hash": events[-1]["hash"],
+        "steward": "steward",
+        "reviewer": "reviewer",
+        "recorded_at": recorded.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "action": {
+            "kind": "source_amendment",
+            "changes": [{
+                "section": "source_binding",
+                "before_sha256": canonical_digest(prior["source_binding"]),
+                "after_sha256": canonical_digest(current["source_binding"]),
+            }],
+            "evidence": [{
+                "path": source.snapshot_path(AMENDED_SHA),
+                "sha256": AMENDED_SHA,
+                "size_bytes": len(live),
+                "kind": "artifact",
+            }],
+        },
+        "state_digest": "0" * 64,
+        "hash": "0" * 64,
+    })
+    current["baseline_prefix"] = {"event_count": len(events), "tip_hash": "0" * 64}
+    refresh_event(current, canonical_digest)
+    return prior, current
+
+
 class SchemaV5Tests(unittest.TestCase):
     """Source revisions are amendable, so their evidence must be archived by digest."""
 
@@ -110,6 +156,26 @@ class SchemaV5Tests(unittest.TestCase):
         _, v5 = migrated()
         self.assertEqual(v5["source_binding"]["sha256"], AMENDED_SHA)
         self.assertEqual(validator.validate(v5, NOW), "NOT_COMPLETE")
+
+    def test_source_amendment_rebinds_the_contract_text(self) -> None:
+        prior, current = amended()
+        ledger.baseline(current, prior)
+        self.assertEqual(validator.validate(current, NOW), "NOT_COMPLETE")
+
+    def test_source_amendment_cannot_move_the_capability_matrix(self) -> None:
+        prior, current = amended()
+        current["source_binding"]["matrix_sha256"] = "ab" * 32
+        current["events"][-1]["action"]["changes"][0]["after_sha256"] = canonical_digest(current["source_binding"])
+        refresh_event(current, canonical_digest)
+        with self.assertRaisesRegex(ValueError, "capability matrix"):
+            ledger.baseline(current, prior)
+
+    def test_source_amendment_cannot_carry_other_changes(self) -> None:
+        prior, current = amended()
+        current["claims"] = []
+        refresh_event(current, canonical_digest)
+        with self.assertRaisesRegex(ValueError, "unauthorized section"):
+            ledger.baseline(current, prior)
 
     def test_archived_ratified_revision_still_validates(self) -> None:
         """The historical pins keep validating after the contract was amended."""

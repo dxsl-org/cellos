@@ -30,13 +30,20 @@ digest is still unchanged. Phase 03
 is `IMPLEMENTED` with its provenance and admission gate core; its external-floor physical qualification remains blocked. Phase 04
 is `IMPLEMENTED`. Phase 05 (Manifest-v2 tooling) is `IMPLEMENTED`; its record
 is the same event that carried the second re-base, because
-`scripts/app_tier_acceptance/ledger.py::baseline` permits `source_binding` to
+`scripts/app_tier_acceptance/ledger.py::baseline` then permitted `source_binding` to
 move only with a lifecycle transition. Phase 06 (Tier 1 rust-std PAL) is
 `IMPLEMENTED` at its bounded implementation boundary — the private target
 specs, PAL and sysroot overlay are exercised by the QEMU lane — while live
 benchmark evidence, `PAL-019`/`PAL-031` approval, promotion and publication
 remain blocked. These lifecycle statuses do not change the qualification
 aggregate or C9 result.
+
+A prose-only amendment of Spec 23 is now recorded on its own as a `source_amendment`
+event: it may change `source_binding` and nothing else, the matrix digest must stay
+equal, the new revision must be archived under `docs/evidence/`, and
+`ratified_revision` must be a commit holding exactly those bytes. Event 14 re-bases
+the binding onto the contract as of `6a2f6d32` (four prose edits since `fd3d12ae`:
+witness paths and the bounded-request wording; matrix digest unchanged).
 
 All current source availability and exact cell text remain in the JSON ledger.
 No `PASS` capability is seeded: physical RPi3 qualification, Tier-2 admission,

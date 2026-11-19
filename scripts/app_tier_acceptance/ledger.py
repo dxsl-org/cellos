@@ -257,6 +257,22 @@ def baseline(current: dict, prior: object) -> None:
             raise ValueError("blocker resolution reuses historical blocker evidence")
         return
 
+    if kind == "source_amendment":
+        if prior.get("schema_version") != 5 or current.get("schema_version") != 5:
+            raise ValueError("source amendment requires schema version 5")
+        allowed = {"events", "baseline_prefix", "source_binding"}
+        if any(current[key] != prior.get(key) for key in set(current) - allowed):
+            raise ValueError("source amendment changed unauthorized section")
+        before, after = prior["source_binding"], current["source_binding"]
+        if after == before or after["path"] != before["path"]:
+            raise ValueError("source amendment must re-bind the same contract")
+        if after["matrix_sha256"] != before["matrix_sha256"]:
+            raise ValueError("source amendment cannot change the capability matrix")
+        expected = [{"section": "source_binding", "before_sha256": canonical_digest(before), "after_sha256": canonical_digest(after)}]
+        if action.get("changes") != expected:
+            raise ValueError("source amendment changes mismatch")
+        return
+
     if kind != "lifecycle_transition":
         raise ValueError("unsupported baseline transition action")
 
