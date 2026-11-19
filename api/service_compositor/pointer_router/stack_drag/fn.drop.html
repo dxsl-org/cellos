@@ -5,7 +5,7 @@
     (target, glue): (Option&lt;u64&gt;, Option&lt;<a class="struct" href="../../tiling/struct.Glue.html" title="struct service_compositor::tiling::Glue">Glue</a>&gt;),
     context: &amp;mut <a class="struct" href="../struct.RouteContext.html" title="struct service_compositor::pointer_router::RouteContext">RouteContext</a>&lt;'_, F&gt;,
 )<div class="where">where
-    F: FnMut(<a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Release of a Win+drag of <code>cap</code>: stack onto <code>target</code>; else tile to <code>glue</code>
+    F: FnMut(Rect),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Release of a Win+drag of <code>cap</code>: stack onto <code>target</code>; else tile to <code>glue</code>
 or just land where the ghost was. A tab leaves its stack and the frame
 its tile group unless it is stacked.</p>
 </div></details></section></div></main></body></html>

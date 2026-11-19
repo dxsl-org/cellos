@@ -10,7 +10,7 @@ project already proved there (Spec 12 §4.3).</p>
 <h2 id="wire-discipline-spec-17"><a class="doc-anchor" href="#wire-discipline-spec-17">§</a>Wire discipline (Spec 17)</h2>
 <ul>
 <li>Typed actor traffic rides the existing App SDK envelope
-(<a href="../../abi/app_envelope/index.html" title="mod abi::app_envelope"><code>wire::proto::app_envelope</code></a>) with kind <code>KIND_MESSAGE</code>, so
+([<code>wire::proto::app_envelope</code>]) with kind <code>KIND_MESSAGE</code>, so
 [<code>Actor</code>] implementations keep receiving <code>Shutdown</code>, <code>CapRevoked</code>, and
 hot-swap events on the same mailbox. No new byte-0 value
 is claimed (§3).</li>

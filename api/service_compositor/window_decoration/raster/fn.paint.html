@@ -2,8 +2,8 @@
     pixels: &amp;mut [u8],
     width: u32,
     height: u32,
-    content: <a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>,
-    dirty: <a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>,
+    content: Rect,
+    dirty: Rect,
     style: &amp;<a class="struct" href="struct.Style.html" title="struct service_compositor::window_decoration::raster::Style">Style</a>&lt;'_&gt;,
     font: &amp;mut <a class="struct" href="../title/struct.TitleFont.html" title="struct service_compositor::window_decoration::title::TitleFont">TitleFont</a>,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Paint shadow, tab fills, hairlines, app icons and titles inside <code>dirty</code>.

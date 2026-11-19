@@ -3,7 +3,7 @@
     table: &amp;<a class="struct" href="../surface_table/storage/struct.SurfaceTable.html" title="struct service_compositor::surface_table::storage::SurfaceTable">SurfaceTable</a>,
     frames: &amp;<a class="struct" href="../surface_table/frame/struct.FrameRegistry.html" title="struct service_compositor::surface_table::frame::FrameRegistry">FrameRegistry</a>,
     cap: u64,
-    dirty: <a class="struct" href="../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>,
+    dirty: Rect,
     chrome: &amp;<a class="struct" href="struct.ChromeState.html" title="struct service_compositor::render::ChromeState">ChromeState</a>,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Paint the frame of the shown window <code>cap</code>: shadow, body and every tab of
 its stack, in tab order.</p>

@@ -5,7 +5,7 @@
     offset: u64,
     size: usize,
     grant: usize,
-) -&gt; <a class="enum" href="../../wire/ipc/enum.VfsResponse.html" title="enum wire::ipc::VfsResponse">VfsResponse</a>&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>ReadGrant</code>: up to <code>size</code> bytes at <code>offset</code> of the file behind the
+) -&gt; VfsResponse&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>ReadGrant</code>: up to <code>size</code> bytes at <code>offset</code> of the file behind the
 VFS-issued handle <code>cap</code>, into <code>grant</code>.</p>
 <p>Same authority as <code>WriteGrant</code>: only an open entry in <code>FileHandleTable</code>
 names a path. An unknown handle and one held by another caller are the same

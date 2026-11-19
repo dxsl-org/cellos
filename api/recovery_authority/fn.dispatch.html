@@ -2,7 +2,7 @@
     provider: &amp;mut <a class="struct" href="lifecycle/struct.Provider.html" title="struct recovery_authority::lifecycle::Provider">Provider</a>,
     from: <a class="struct" href="../recovery_demo/ledger/struct.Sender.html" title="struct recovery_demo::ledger::Sender">Sender</a>,
     msg: <a class="enum" href="../recovery_demo/wire/enum.Msg.html" title="enum recovery_demo::wire::Msg">Msg</a>,
-    request: &amp;<a class="struct" href="../ostd/ipc/post/struct.Incoming.html" title="struct ostd::ipc::post::Incoming">Incoming</a>,
+    request: &amp;Incoming,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Every request gets exactly one answer through <code>request</code>; <code>Restored</code> and
 <code>RestoreFailed</code> are one-way events and get none.</p>
 </div></details></section></div></main></body></html>

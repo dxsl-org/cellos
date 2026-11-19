@@ -15,7 +15,7 @@ after <a href="dma/struct.DmaSet.html#method.alloc_authorized" title="associated
 requests as soon as the syscall returns. A refused registration drops
 the device and exits 1.</li>
 <li><strong>Serve</strong>: only the live <code>service::NET</code> provider may drive the NIC; the
-NIC wire (<a href="../wire/proto/nic/index.html" title="mod wire::proto::nic"><code>wire::proto::nic</code></a>) is dispatched here, unchanged.</li>
+NIC wire ([<code>wire::proto::nic</code>]) is dispatched here, unchanged.</li>
 <li><strong>Shutdown</strong>: <code>Shutdown</code>/<code>ShutdownWith</code> exit 0.</li>
 </ol>
 <p>A chip supplies its register model, PHY, reset, identity table,

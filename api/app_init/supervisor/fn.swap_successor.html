@@ -2,7 +2,7 @@
     service_id: u16,
     reason: u64,
     dead: usize,
-    live: Option&lt;<a class="struct" href="../../abi/service_binding/struct.ServiceBinding.html" title="struct abi::service_binding::ServiceBinding">ServiceBinding</a>&gt;,
+    live: Option&lt;ServiceBinding&gt;,
 ) -&gt; Option&lt;usize&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The provider that replaced <code>dead</code> in a committed hot-swap of <code>service_id</code>:
 the death carries the swap reason and the registry names a live, different
 provider. The machine-pin row never has one: init alone registers that

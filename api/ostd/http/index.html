@@ -3,7 +3,7 @@ re-exported <code>http_core</code> protocol items (<code>RequestBuilder</code>, 
 <code>parse_response_headers</code>, <code>ParsedHeaders</code>, <code>Framing</code>, <code>HttpError</code>).
 Opt-in: <code>httparse</code>/<code>serde_json</code> are only linked under this feature.
 <code>ostd::http</code> — feature-gated HTTP/1.1 client surface (<code>feature = "http"</code>).</p>
-<p>Re-exports the pure protocol logic from <a href="../../http_core/index.html" title="mod http_core"><code>http_core</code></a> (host-testable) and
+<p>Re-exports the pure protocol logic from [<code>http_core</code>] (host-testable) and
 adds the ostd-only transport glue: [<code>HttpClient</code>] (generic over any
 <code>embedded_io::Read + Write</code>) and [<code>TlsStream</code>] (HTTPS adapter over the net
 cell’s raw TLS IPC).</p>

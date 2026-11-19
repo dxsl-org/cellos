@@ -2,9 +2,9 @@
     out: &amp;mut [u64],
     flags: usize,
 ) -&gt; Result&lt;usize, <a class="enum" href="enum.SyscallError.html" title="enum ostd::syscall::SyscallError">SyscallError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Capture one Cell-aware telemetry snapshot (Phase 06 S6-1).</p>
-<p><code>out</code> is 8-byte aligned by type; <code>flags</code> are <a href="../../abi/telemetry/request/index.html" title="mod abi::telemetry::request"><code>abi::telemetry::request</code></a> bits.
+<p><code>out</code> is 8-byte aligned by type; <code>flags</code> are [<code>abi::telemetry::request</code>] bits.
 Returns the bytes written into <code>out</code> — decode them with
-<a href="../../abi/telemetry/struct.TelemetrySnapshot.html#method.parse" title="associated function abi::telemetry::TelemetrySnapshot::parse"><code>abi::telemetry::TelemetrySnapshot::parse</code></a>. Requires a <code>GetProcs2</code> or
+[<code>abi::telemetry::TelemetrySnapshot::parse</code>]. Requires a <code>GetProcs2</code> or
 <code>TelemetrySnapshot</code> declaration (shared bit 55) and the caller’s
 <code>observe_tasks</code> right.</p>
 <h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>

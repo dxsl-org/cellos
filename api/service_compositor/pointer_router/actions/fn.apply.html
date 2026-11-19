@@ -4,7 +4,7 @@
     action: <a class="enum" href="../../window_decoration/enum.Control.html" title="enum service_compositor::window_decoration::Control">Control</a>,
     context: &amp;mut <a class="struct" href="../struct.RouteContext.html" title="struct service_compositor::pointer_router::RouteContext">RouteContext</a>&lt;'_, F&gt;,
 )<div class="where">where
-    F: FnMut(<a class="struct" href="../../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Run a window action. A window that stops taking input loses focus; when
+    F: FnMut(Rect),</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Run a window action. A window that stops taking input loses focus; when
 it was the shown tab of a stack, the tab now shown takes focus instead.
 Maximizing a tiled window takes it out of its tile group first.</p>
 </div></details></section></div></main></body></html>

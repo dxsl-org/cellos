@@ -8,7 +8,7 @@
 publish only a private id (<code>&gt;= 0x100</code>) that no other live registrar owns. A
 kernel-defined narrow capability may instead authorize one fixed service ID
 with <code>tid=0</code> self-registration.
-<code>flags</code> (<a href="../../abi/syscall/service_flags/index.html" title="mod abi::syscall::service_flags"><code>abi::syscall::service_flags</code></a>) are the namespace owner’s: any other
+<code>flags</code> ([<code>abi::syscall::service_flags</code>]) are the namespace owner’s: any other
 caller passes 0. <a href="../service/fn.namespace_flags.html" title="fn ostd::service::namespace_flags"><code>crate::service::namespace_flags</code></a> is init’s policy for them.
 Returns <code>Ok(0)</code> on success and <code>Err</code> when authority is absent, the target is
 invalid, or the registry is full.</p>
