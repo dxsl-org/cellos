@@ -4,13 +4,13 @@
         &amp;'a self,
         sector: u64,
         buf: &amp;'a mut [u8],
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;()&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.write_sector_async" class="fn">write_sector_async</a>&lt;'a&gt;(
         &amp;'a self,
         sector: u64,
         buf: &amp;'a [u8],
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;()&gt;&gt;;
-<span class="item-spacer"></span>    fn <a href="#tymethod.flush_async" class="fn">flush_async</a>(&amp;self) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;()&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.flush_async" class="fn">flush_async</a>(&amp;self) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.sector_count" class="fn">sector_count</a>(&amp;self) -&gt; u64;
 <span class="item-spacer"></span>    fn <a href="#tymethod.sector_size" class="fn">sector_size</a>(&amp;self) -&gt; usize;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Async block device interface.</p>
@@ -18,13 +18,13 @@
     &amp;'a self,
     sector: u64,
     buf: &amp;'a mut [u8],
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Read sector asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Read sector asynchronously.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.write_sector_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#90">Source</a><h4 class="code-header">fn <a href="#tymethod.write_sector_async" class="fn">write_sector_async</a>&lt;'a&gt;(
     &amp;'a self,
     sector: u64,
     buf: &amp;'a [u8],
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Write sector asynchronously.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.flush_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#93">Source</a><h4 class="code-header">fn <a href="#tymethod.flush_async" class="fn">flush_async</a>(&amp;self) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Flush asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Write sector asynchronously.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.flush_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#93">Source</a><h4 class="code-header">fn <a href="#tymethod.flush_async" class="fn">flush_async</a>(&amp;self) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;&gt;</h4></section></summary><div class="docblock"><p>Flush asynchronously.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.sector_count" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#96">Source</a><h4 class="code-header">fn <a href="#tymethod.sector_count" class="fn">sector_count</a>(&amp;self) -&gt; u64</h4></section></summary><div class="docblock"><p>Get sector count (synchronous, metadata only).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.sector_size" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#99">Source</a><h4 class="code-header">fn <a href="#tymethod.sector_size" class="fn">sector_size</a>(&amp;self) -&gt; usize</h4></section></summary><div class="docblock"><p>Get sector size (synchronous, metadata only).</p>
 </div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/wire/async_io/trait.ViAsyncBlockDevice.js" async></script></section></div></main></body></html>
