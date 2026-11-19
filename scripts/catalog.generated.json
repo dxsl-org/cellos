@@ -621,14 +621,6 @@
       "trusted_core": false
     },
     {
-      "path": "/bin/http-smoke",
-      "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
-      "ptrust": false,
-      "boot": null,
-      "user_target": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
-      "trusted_core": false
-    },
-    {
       "path": "/bin/input-test",
       "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": false, "net_connect": false, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
       "ptrust": false,
@@ -774,6 +766,14 @@
     },
     {
       "path": "/bin/https-demo",
+      "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": true, "net_connect": true, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
+      "ptrust": false,
+      "boot": null,
+      "user_target": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": true, "net_connect": true, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
+      "trusted_core": false
+    },
+    {
+      "path": "/bin/http-smoke",
       "request": {"block_io": false, "network": false, "spawn": false, "hypervisor": false, "pcie_driver": false, "platform": false, "supervisor": false, "usb_driver": false, "serial_port": false, "net_resolve": true, "net_connect": true, "net_listen": false, "net_l2": false, "observe_tasks": true, "observe_memory": true, "vfs_mutate": true, "config_write": false, "kms_ssh_sign": false, "kms_ssh_admin": false, "mmio_devices": 0, "block_regions": 0},
       "ptrust": false,
       "boot": null,

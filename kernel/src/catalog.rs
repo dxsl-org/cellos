@@ -527,7 +527,6 @@ pub const CELLS: &[Cell] = &[
     target("/bin/echo"),
     target("/bin/free"),
     target("/bin/gpio-test-rv"),
-    target("/bin/http-smoke"),
     target("/bin/input-test"),
     target("/bin/window-policy-probe"),
     target("/bin/ls"),
@@ -553,6 +552,9 @@ pub const CELLS: &[Cell] = &[
     net_client("/bin/mqtt"),
     net_client("/bin/llm-gateway"),
     net_client("/bin/https-demo"),
+    // The plain-HTTP round-trip gate (tests/integration/tests/http-smoke.rs): it
+    // must connect to the host mock, so it is a client like the tools above.
+    net_client("/bin/http-smoke"),
     net_client("/bin/posix-shim-test"),
     net_client("/bin/lua-net"),
     // Ocel is a network client and a capability-free boot cell.

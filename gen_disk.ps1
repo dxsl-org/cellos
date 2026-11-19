@@ -580,6 +580,7 @@ if (Test-Path $hypha_tool_spawn_bin)  { $kfs_args += @($hypha_tool_spawn_bin, "/
 # only source. Keep in sync with scripts/gen-disk-ci.sh.
 if (Test-Path $shutdown_bin)        { $kfs_args += @($shutdown_bin,        "/bin/shutdown") }
 if (Test-Path $posix_shim_test_bin) { $kfs_args += @($posix_shim_test_bin, "/bin/posix-shim-test") }
+if (Test-Path $http_smoke_bin)      { $kfs_args += @($http_smoke_bin,      "/bin/http-smoke") }
 if (Test-Path $nc_bin)              { $kfs_args += @($nc_bin,              "/bin/nc") }
 if (Test-Path $curl_bin)            { $kfs_args += @($curl_bin,            "/bin/curl") }
 if (Test-Path $wget_bin)            { $kfs_args += @($wget_bin,            "/bin/wget") }

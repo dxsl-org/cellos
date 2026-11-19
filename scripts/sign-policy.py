@@ -231,7 +231,7 @@ DEV_POLICY = [
     # User decision 2026-11-10: the Lua runtime's second install path (same signed
     # file as /bin/lua, which has no row and no network right, D-N3).
     ("/bin/lua-net",     0, 0, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
-    ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0, 0, 0, *NET_CLIENT),
     ("/bin/std-smoke",   0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/desktop",     0, 0, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/compositor",  0, 0, 0, 0, 0, 0,     0, 0, 0),

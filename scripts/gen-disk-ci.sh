@@ -378,9 +378,11 @@ add_kfs "$REL/hypha-tool-spawn"     "/bin/tool-spawn"
 # step, `posix-shim-test` is the POSIX ledger's behavioural witness, and the
 # network tools are the shell's own network commands. httpd's edge carries
 # NET_LISTENER, so the caller-owned ELF-route fallback refuses it
-# (`launch_profile::authorize`) and VIFS1 is its only source.
+# (`launch_profile::authorize`) and VIFS1 is its only source. `http-smoke` is a
+# NET_CLIENT edge for the same reason.
 add_kfs "$REL/shutdown"             "/bin/shutdown"
 add_kfs "$REL/posix-shim-test"      "/bin/posix-shim-test"
+add_kfs "$REL/http-smoke"           "/bin/http-smoke"
 add_kfs "$REL/nc"                   "/bin/nc"
 add_kfs "$REL/curl"                 "/bin/curl"
 add_kfs "$REL/wget"                 "/bin/wget"
