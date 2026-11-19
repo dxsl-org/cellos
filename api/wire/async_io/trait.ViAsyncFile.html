@@ -3,21 +3,21 @@
     fn <a href="#tymethod.read_async" class="fn">read_async</a>&lt;'a&gt;(
         &amp;'a mut self,
         buf: &amp;'a mut [u8],
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;usize&gt;&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.write_async" class="fn">write_async</a>&lt;'a&gt;(
         &amp;'a mut self,
         buf: &amp;'a [u8],
-    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;&gt;;
-<span class="item-spacer"></span>    fn <a href="#tymethod.seek_async" class="fn">seek_async</a>(&amp;mut self, pos: <a class="enum" href="enum.SeekFrom.html" title="enum wire::async_io::SeekFrom">SeekFrom</a>) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;u64&gt;&gt;;
+    ) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;usize&gt;&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.seek_async" class="fn">seek_async</a>(&amp;mut self, pos: <a class="enum" href="enum.SeekFrom.html" title="enum wire::async_io::SeekFrom">SeekFrom</a>) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;u64&gt;&gt;;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Async file interface.</p>
 <p>Provides non-blocking read/write operations.</p>
 </div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.read_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#43">Source</a><h4 class="code-header">fn <a href="#tymethod.read_async" class="fn">read_async</a>&lt;'a&gt;(
     &amp;'a mut self,
     buf: &amp;'a mut [u8],
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;&gt;</h4></section></summary><div class="docblock"><p>Read data asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;usize&gt;&gt;</h4></section></summary><div class="docblock"><p>Read data asynchronously.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.write_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#46">Source</a><h4 class="code-header">fn <a href="#tymethod.write_async" class="fn">write_async</a>&lt;'a&gt;(
     &amp;'a mut self,
     buf: &amp;'a [u8],
-) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;&gt;</h4></section></summary><div class="docblock"><p>Write data asynchronously.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.seek_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#49">Source</a><h4 class="code-header">fn <a href="#tymethod.seek_async" class="fn">seek_async</a>(&amp;mut self, pos: <a class="enum" href="enum.SeekFrom.html" title="enum wire::async_io::SeekFrom">SeekFrom</a>) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;u64&gt;&gt;</h4></section></summary><div class="docblock"><p>Seek asynchronously.</p>
+) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'a, ViResult&lt;usize&gt;&gt;</h4></section></summary><div class="docblock"><p>Write data asynchronously.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.seek_async" class="method"><a class="src rightside" href="../../src/wire/async_io.rs.html#49">Source</a><h4 class="code-header">fn <a href="#tymethod.seek_async" class="fn">seek_async</a>(&amp;mut self, pos: <a class="enum" href="enum.SeekFrom.html" title="enum wire::async_io::SeekFrom">SeekFrom</a>) -&gt; <a class="type" href="type.BoxFuture.html" title="type wire::async_io::BoxFuture">BoxFuture</a>&lt;'_, ViResult&lt;u64&gt;&gt;</h4></section></summary><div class="docblock"><p>Seek asynchronously.</p>
 </div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/wire/async_io/trait.ViAsyncFile.js" async></script></section></div></main></body></html>
