@@ -103,6 +103,11 @@ under the rules below; this list admits nothing by itself.
      `scripts/qemu-aarch64-test-hooks.sh` raw log and a new `blocker_resolution` event approved
      by the reviewer on GitHub.
    - Jobs that `needs: build` were skipped in that run, so their results arrive with the next run.
+   - The heapless 0.8 advisory ignores in `deny.toml`/`audit.toml` (RUSTSEC-2026-0574 to 0582)
+     go away only when `smoltcp` moves to 0.13+ (heapless 0.9) and `ostd`/`service-net` follow.
+     Review by 2027-01-31.
+   - The Ubuntu apt mirror was slow enough on 2026-11-19 that about six install steps per run
+     timed out; apt caching or a pinned mirror would remove that source of red runs.
 
 ### Current admission: contract cutover and execution freeze
 
