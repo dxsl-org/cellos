@@ -318,6 +318,15 @@ __trap_exit:
     // NOTE: NO board-specific probes here — see the no-board-probes rule at
     // vt_sync_el0. This path runs on every first task entry on all boards.
     //
+    // Mask IRQ and FIQ first. A fresh task's CpuContext carries DAIF = 0, so
+    // `__switch_el1` arrives here with interrupts open; an interrupt taken
+    // between the ELR/SPSR writes below and `eret` would overwrite both with its
+    // own EL1 return state, and this `eret` would then re-enter __trap_exit at
+    // EL1 on a popped stack (seen as a data abort at the kernel stack top).
+    // `eret` restores PSTATE from SPSR (EL0t, DAIF clear), so the Cell still
+    // runs with interrupts enabled.
+    msr   daifset, #3
+    //
     // Runtime EL dispatch via EL2_ACTIVE flag.
     // SAFETY: EL2_ACTIVE is an AtomicBool (1 byte); ldrb loads it atomically
     // for reads (store-release in el2_mark_active provides the ordering guarantee).
