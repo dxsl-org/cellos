@@ -2,7 +2,7 @@
     ptr: usize,
     len: usize,
     direction: <a class="enum" href="../range/enum.Direction.html" title="enum cellos_kernel::task::user_copy::range::Direction">Direction</a>,
-    leaf: impl Fn(usize) -&gt; Option&lt;<a class="struct" href="../../../../hal_paging/struct.Leaf.html" title="struct hal_paging::Leaf">Leaf</a>&gt;,
+    leaf: impl Fn(usize) -&gt; Option&lt;Leaf&gt;,
 ) -&gt; Result&lt;(), <a class="enum" href="../range/enum.CopyError.html" title="enum cellos_kernel::task::user_copy::range::CopyError">CopyError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Require every page of <code>[ptr, ptr+len)</code> to resolve to a valid user leaf
 with the direction’s R/W right. <code>leaf</code> returns the leaf for one page VA. A
 retired page (unmapped, or re-mapped kernel-only) fails here.</p>
