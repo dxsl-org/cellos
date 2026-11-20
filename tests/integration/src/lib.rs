@@ -2717,6 +2717,19 @@ impl QemuRunner {
         self.output.lock().unwrap().contains(needle)
     }
 
+    /// True if some captured serial line is exactly `line` (surrounding
+    /// whitespace and `\r` ignored). Negative checks need this rather than
+    /// [`Self::output_contains`]: the shell echoes typed input in chunks, and a
+    /// chunk can start a serial line with the very marker a command must not
+    /// print (`USER: CASE_WILD ;; esac`).
+    pub fn output_has_line(&self, line: &str) -> bool {
+        self.output
+            .lock()
+            .unwrap()
+            .lines()
+            .any(|candidate| candidate.trim() == line)
+    }
+
     /// Full captured serial output (for diagnostics on failure).
     pub fn dump(&self) -> String {
         self.output.lock().unwrap().clone()

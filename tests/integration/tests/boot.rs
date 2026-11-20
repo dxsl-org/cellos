@@ -939,7 +939,7 @@ fn shell_while_loop() {
     // not the typed command's own serial echo — a bare substring check failed the
     // test on its own echo once input fixes made echoes arrive complete.
     assert!(
-        !qemu.output_contains(": SHOULD_NOT_APPEAR"),
+        !qemu.output_has_line("USER: SHOULD_NOT_APPEAR"),
         "while false ran its body\n{}",
         qemu.dump()
     );
@@ -1024,7 +1024,7 @@ fn shell_case_statement() {
     qemu.wait_for("CASE_EXACT", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("exact arm not taken: {e}\n{}", qemu.dump()));
     assert!(
-        !qemu.output_contains(": CASE_WILD"),
+        !qemu.output_has_line("USER: CASE_WILD"),
         "wildcard arm fired when exact matched\n{}",
         qemu.dump()
     );
@@ -1037,7 +1037,7 @@ fn shell_case_statement() {
     qemu.wait_for("CASE_FALLBACK", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("wildcard arm not taken: {e}\n{}", qemu.dump()));
     assert!(
-        !qemu.output_contains(": CASE_EXACT2"),
+        !qemu.output_has_line("USER: CASE_EXACT2"),
         "exact arm fired for unmatched value\n{}",
         qemu.dump()
     );
@@ -1527,7 +1527,7 @@ fn shell_and_operator() {
     qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt after failed &&: {e}\n{}", qemu.dump()));
     assert!(
-        !qemu.output_contains(": SHOULD_NOT_APPEAR"),
+        !qemu.output_has_line("USER: SHOULD_NOT_APPEAR"),
         "&& ran right side despite left failing\n{}",
         qemu.dump()
     );
@@ -1556,7 +1556,7 @@ fn shell_or_operator() {
     qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(
-        !qemu.output_contains(": SHOULD_NOT_APPEAR_2"),
+        !qemu.output_has_line("USER: SHOULD_NOT_APPEAR_2"),
         "|| ran right side despite left succeeding\n{}",
         qemu.dump()
     );
@@ -1649,7 +1649,7 @@ fn shell_if_else_branch() {
     // ": WRONG" matches only an OUTPUT line ("USER: WRONG"), not the typed
     // command's serial echo, which contains the keyword.
     assert!(
-        !qemu.output_contains(": WRONG"),
+        !qemu.output_has_line("USER: WRONG"),
         "then branch fired when it should not have\n{}",
         qemu.dump()
     );
