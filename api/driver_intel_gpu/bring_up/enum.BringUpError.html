@@ -2,7 +2,7 @@
     Probe(ViError),
     FirmwareUnavailable(&amp;'static str),
     FirmwareRead(ViError),
-    FirmwareRejected(<a class="enum" href="../../intel_gpu_core/guc_fw/enum.FwError.html" title="enum intel_gpu_core::guc_fw::FwError">FwError</a>),
+    FirmwareRejected(FwError),
     FirmwareMap(ViError),
     NoMemory,
     GucLoad(<a class="enum" href="../guc/enum.GucError.html" title="enum driver_intel_gpu::guc::GucError">GucError</a>),
@@ -11,7 +11,7 @@
 </div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Probe" class="variant"><a href="#variant.Probe" class="anchor">§</a><h3 class="code-header">Probe(ViError)</h3></section><div class="docblock"><p>Forcewake was not acknowledged, or the GT identity is unreadable or unsupported.</p>
 </div><section id="variant.FirmwareUnavailable" class="variant"><a href="#variant.FirmwareUnavailable" class="anchor">§</a><h3 class="code-header">FirmwareUnavailable(&amp;'static str)</h3></section><div class="docblock"><p>The image carries no GuC firmware at this path.</p>
 </div><section id="variant.FirmwareRead" class="variant"><a href="#variant.FirmwareRead" class="anchor">§</a><h3 class="code-header">FirmwareRead(ViError)</h3></section><div class="docblock"><p>The firmware file could not be read (I/O, or larger than the driver accepts).</p>
-</div><section id="variant.FirmwareRejected" class="variant"><a href="#variant.FirmwareRejected" class="anchor">§</a><h3 class="code-header">FirmwareRejected(<a class="enum" href="../../intel_gpu_core/guc_fw/enum.FwError.html" title="enum intel_gpu_core::guc_fw::FwError">FwError</a>)</h3></section><div class="docblock"><p>The file is not a valid GuC image, or not the pinned release.</p>
+</div><section id="variant.FirmwareRejected" class="variant"><a href="#variant.FirmwareRejected" class="anchor">§</a><h3 class="code-header">FirmwareRejected(FwError)</h3></section><div class="docblock"><p>The file is not a valid GuC image, or not the pinned release.</p>
 </div><section id="variant.FirmwareMap" class="variant"><a href="#variant.FirmwareMap" class="anchor">§</a><h3 class="code-header">FirmwareMap(ViError)</h3></section><div class="docblock"><p>The firmware could not be made device-readable or mapped into the GGTT.</p>
 </div><section id="variant.NoMemory" class="variant"><a href="#variant.NoMemory" class="anchor">§</a><h3 class="code-header">NoMemory</h3></section><div class="docblock"><p>No device memory for the GuC log, ADS or CT buffers.</p>
 </div><section id="variant.GucLoad" class="variant"><a href="#variant.GucLoad" class="anchor">§</a><h3 class="code-header">GucLoad(<a class="enum" href="../guc/enum.GucError.html" title="enum driver_intel_gpu::guc::GucError">GucError</a>)</h3></section><div class="docblock"><p>The GuC did not partition, reset, take the DMA, or reach its running state.</p>

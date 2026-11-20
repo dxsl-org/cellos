@@ -3,6 +3,6 @@
     context: u64,
     requested: usize,
     sense: &amp;[u8],
-) -&gt; Result&lt;<a class="struct" href="../../scsi_block/exec/struct.Completion.html" title="struct scsi_block::exec::Completion">Completion</a>, <a class="enum" href="../error/enum.PvscsiError.html" title="enum driver_pvscsi::error::PvscsiError">PvscsiError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Decode a 32-byte completion for the request <code>context</code> that asked for
+) -&gt; Result&lt;Completion, <a class="enum" href="../error/enum.PvscsiError.html" title="enum driver_pvscsi::error::PvscsiError">PvscsiError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Decode a 32-byte completion for the request <code>context</code> that asked for
 <code>requested</code> data bytes; <code>sense</code> is the sense area as the device left it.</p>
 </div></details></section></div></main></body></html>

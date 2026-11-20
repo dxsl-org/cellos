@@ -9,7 +9,7 @@ driver drops the file’s GPU state first; then the shim revokes every export.</
     fd: i32,
     request: u32,
     arg: &amp;mut [u8],
-    mem: &amp;mut impl <a class="trait" href="../../intel_gpu_core/uapi/trait.UserMemory.html" title="trait intel_gpu_core::uapi::UserMemory">UserMemory</a>,
+    mem: &amp;mut impl UserMemory,
 ) -&gt; Result&lt;(), i32&gt;</h4></section></summary><div class="docblock"><p>Serve one ioctl. <code>arg</code> is the request’s struct, exactly <code>ioctl_size(request)</code> bytes.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.mmap" class="method"><a class="src rightside" href="../../src/mesa_anv_shim/shim.rs.html#161-179">Source</a><h4 class="code-header">pub fn <a href="#method.mmap" class="fn">mmap</a>(&amp;mut self, fd: i32, offset: u64, len: u64) -&gt; Result&lt;u64, i32&gt;</h4></section></summary><div class="docblock"><p><code>mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, offset)</code> of a GEM object’s
 fake offset: the object’s own pages in this Cell. Placed (<code>MAP_FIXED</code>) maps are not
