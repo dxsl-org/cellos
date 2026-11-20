@@ -2702,6 +2702,11 @@ jobs:
           CELLOS_EXPECT_OCEL_ENGINE_ABSENT=1 \
             cargo test --test ocel-browser -- --test-threads=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/ocel-static.log"
+          # The parked-executor TIMER witness needs a compositor at shell start, which
+          # only this `input,ui` image has (tests/executor-park.rs).
+          CELLOS_UI_DISK="$GITHUB_WORKSPACE/disk_ocel_static.img" \
+            cargo test --test executor-park \
+            2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/executor-park.log"
 
       - name: Run Tier 2 hardware fault isolation evidence
         shell: bash

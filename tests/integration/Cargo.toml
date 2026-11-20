@@ -186,6 +186,10 @@ name = "desktop-shell"
 path = "tests/desktop-shell.rs"
 
 [[test]]
+name = "executor-park"
+path = "tests/executor-park.rs"
+
+[[test]]
 name = "ocel-browser"
 path = "tests/ocel-browser.rs"
 
