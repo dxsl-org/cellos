@@ -2,7 +2,7 @@
     key: &amp;str,
     value: &amp;str,
     buf: &amp;'b mut [u8; 4096],
-) -&gt; ViResult&lt;&amp;'b [u8]&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Encode a <code>Set</code>. service-config receives with an attested caller trailer in
+) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;&amp;'b [u8]&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Encode a <code>Set</code>. service-config receives with an attested caller trailer in
 the last <code>CALLER_IDENTITY_LEN</code> bytes of its <code>IPC_BUF_SIZE</code> buffer, so a
 request reaching into that tail would be overwritten: refuse it here.</p>
 </div></details></section></div></main></body></html>

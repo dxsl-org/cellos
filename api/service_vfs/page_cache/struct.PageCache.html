@@ -21,7 +21,7 @@ release builds, and a persisted guest marker did go missing that way.</p>
     dev: &amp;mut impl <a class="trait" href="trait.SectorDevice.html" title="trait service_vfs::page_cache::SectorDevice">SectorDevice</a>,
     sector: u64,
     data: &amp;[u8; 512],
-) -&gt; BlockOutcome</h4></section></summary><div class="docblock"><p>Write a full sector: device first, cache second.</p>
+) -&gt; <a class="enum" href="../../types/block_wire/enum.BlockOutcome.html" title="enum types::block_wire::BlockOutcome">BlockOutcome</a></h4></section></summary><div class="docblock"><p>Write a full sector: device first, cache second.</p>
 <p>FAT32 has no journal, so write-through is the durability model — and the
 order matters as much as the policy: writing the device before the cache
 keeps every resident entry clean, which is what makes eviction safe.</p>
