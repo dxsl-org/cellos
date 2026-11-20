@@ -98,7 +98,7 @@
     },
     {
       "id": "B-AARCH64-SEMHOSTING",
-      "status": "PASS",
+      "status": "BLOCKED",
       "subject": "qemu-arm64",
       "scope": "AArch64 test-hooks semihosting execution and clean termination.",
       "evidence": [
@@ -109,34 +109,7 @@
           "kind": "source"
         }
       ],
-      "resolution": {
-        "event_id": "resolution-b-aarch64-semihosting-20260915",
-        "subject": "qemu-arm64",
-        "architecture": "aarch64",
-        "environment": "qemu",
-        "hardware": "QEMU TCG",
-        "firmware_sha256": "N/A",
-        "owner": "accountable-maintainer",
-        "runner": "independent-runner",
-        "command": "bash scripts/qemu-aarch64-test-hooks.sh",
-        "recorded_at": "2026-09-15T01:54:25Z",
-        "expires_at": "2026-10-15T01:54:25Z",
-        "ttl_seconds": 2592000,
-        "artifacts": [
-          {
-            "path": "docs/evidence/aarch64-semihosting-20260915-04-raw.txt",
-            "sha256": "6e1e1037b7a1de879afb426d74150748d5bb1666412da950a3c1030f5f03ed07",
-            "size_bytes": 30117,
-            "kind": "log"
-          },
-          {
-            "path": "docs/evidence/aarch64-semihosting-20260915-04-runner.txt",
-            "sha256": "8cb74cb80fcca6e014d3578a2a00e9cc8502d111ad9be83bc8bb519d1cc87751",
-            "size_bytes": 12532,
-            "kind": "artifact"
-          }
-        ]
-      }
+      "resolution": null
     }
   ],
   "rows": [
@@ -1523,11 +1496,45 @@
       },
       "state_digest": "e9d568e645d4aee6da65a5aa50399519cf8ac01fc7cb00a5e222d9675fb78034",
       "hash": "91c9e823b93cc76ea31dc7dd355b2f2e9add29d6fa420a232e2b136191ed7702"
+    },
+    {
+      "sequence": 15,
+      "event_id": "correction-b-aarch64-semihosting-expired-20261120",
+      "previous_hash": "91c9e823b93cc76ea31dc7dd355b2f2e9add29d6fa420a232e2b136191ed7702",
+      "steward": "lungmat8",
+      "reviewer": "datgausaigon",
+      "recorded_at": "2026-11-20T02:13:45Z",
+      "action": {
+        "kind": "record_correction",
+        "changes": [
+          {
+            "section": "blockers",
+            "before_sha256": "bb03acee5d2f9b080dddabc48515e8a90bd52dba78dca0e328a7a920c2fe3387",
+            "after_sha256": "978a1b28a4608eeb5244394943aaeb3ce48ba7e68196e09d2bcd8606fe2e83fc"
+          }
+        ],
+        "evidence": [
+          {
+            "path": "docs/evidence/aarch64-semihosting-20261120-05-raw.txt",
+            "sha256": "7b5383e25b907cd4be461d30d7dd46ac7043045aebdda31c195e12829ec74ebd",
+            "size_bytes": 115022,
+            "kind": "log"
+          },
+          {
+            "path": "docs/evidence/aarch64-semihosting-20261120-05-runner.txt",
+            "sha256": "31f0018018108d4a6369266314a4b54e8c5cc35fa0c70b4483b813175fdeb66f",
+            "size_bytes": 23088,
+            "kind": "artifact"
+          }
+        ]
+      },
+      "state_digest": "4c2b81c0aae739a1d3b54e1ad727ffd22c470611535ca9e93b1f295f0f7b4f23",
+      "hash": "50573b61868ec7cd78b90a9546bad93042243c2523f0f9ddf158f50e88a94efe"
     }
   ],
   "baseline_prefix": {
-    "event_count": 14,
-    "tip_hash": "91c9e823b93cc76ea31dc7dd355b2f2e9add29d6fa420a232e2b136191ed7702"
+    "event_count": 15,
+    "tip_hash": "50573b61868ec7cd78b90a9546bad93042243c2523f0f9ddf158f50e88a94efe"
   },
   "source_binding": {
     "path": "docs/specs/23-native-sdk-contract.md",
