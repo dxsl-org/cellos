@@ -560,6 +560,8 @@ static mut BOOT_CONTEXTS: [crate::hal::arch::Context; crate::sched::smp::MAX_HAR
         gp: 0,
         tp: 0,
         sscratch: 0,
+        fp: [0; 32],
+        fcsr: 0,
     }; crate::sched::smp::MAX_HARTS];
 /// The context a hart that has never run a task saves itself into.
 ///

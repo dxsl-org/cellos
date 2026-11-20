@@ -34,6 +34,52 @@ __switch:
     sd t0, 14*8(a0)
     sd gp, 16*8(a0)
     sd tp, 17*8(a0)
+    # Floating-point state. Cells run rv64gc/lp64d code and may be preempted
+    # with live values in f0-f31; the kernel never uses FP, so these are still
+    # the outgoing task's registers. Without this, another FP-using Cell (the
+    # compositor's blending) overwrote them mid-computation. FS=Dirty first:
+    # with FS=Off (boot/idle sstatus) the accesses below would trap.
+    # The kernel's module asm is assembled without the D extension; the FP
+    # instructions below are legal at run time (rv64gc hart, FS set first).
+    .option push
+    .option arch, +d
+    li t0, 0x6000
+    csrs sstatus, t0
+    fsd f0, 19*8(a0)
+    fsd f1, 20*8(a0)
+    fsd f2, 21*8(a0)
+    fsd f3, 22*8(a0)
+    fsd f4, 23*8(a0)
+    fsd f5, 24*8(a0)
+    fsd f6, 25*8(a0)
+    fsd f7, 26*8(a0)
+    fsd f8, 27*8(a0)
+    fsd f9, 28*8(a0)
+    fsd f10, 29*8(a0)
+    fsd f11, 30*8(a0)
+    fsd f12, 31*8(a0)
+    fsd f13, 32*8(a0)
+    fsd f14, 33*8(a0)
+    fsd f15, 34*8(a0)
+    fsd f16, 35*8(a0)
+    fsd f17, 36*8(a0)
+    fsd f18, 37*8(a0)
+    fsd f19, 38*8(a0)
+    fsd f20, 39*8(a0)
+    fsd f21, 40*8(a0)
+    fsd f22, 41*8(a0)
+    fsd f23, 42*8(a0)
+    fsd f24, 43*8(a0)
+    fsd f25, 44*8(a0)
+    fsd f26, 45*8(a0)
+    fsd f27, 46*8(a0)
+    fsd f28, 47*8(a0)
+    fsd f29, 48*8(a0)
+    fsd f30, 49*8(a0)
+    fsd f31, 50*8(a0)
+    frcsr t0
+    sd t0, 51*8(a0)
+    .option pop
     # Root activation belongs after the outgoing save and before incoming
     # registers/stack restore. A zero PPN preserves the SAS/same-domain path.
     beqz a3, 1f
@@ -86,6 +132,50 @@ __switch:
     # incoming s11 value, has been restored. Restoring sstatus last makes a
     # pending timer/IPI observe either the complete old context or this complete
     # new one, never the transient Context base in s11.
+    # Incoming FP state (see the save above); FS=Dirty again in case the
+    # completion callback changed sstatus. `csrw sstatus` below sets the
+    # incoming context's own FS.
+    # The kernel's module asm is assembled without the D extension; the FP
+    # instructions below are legal at run time (rv64gc hart, FS set first).
+    .option push
+    .option arch, +d
+    li t0, 0x6000
+    csrs sstatus, t0
+    ld t0, 51*8(s11)
+    fscsr t0
+    fld f0, 19*8(s11)
+    fld f1, 20*8(s11)
+    fld f2, 21*8(s11)
+    fld f3, 22*8(s11)
+    fld f4, 23*8(s11)
+    fld f5, 24*8(s11)
+    fld f6, 25*8(s11)
+    fld f7, 26*8(s11)
+    fld f8, 27*8(s11)
+    fld f9, 28*8(s11)
+    fld f10, 29*8(s11)
+    fld f11, 30*8(s11)
+    fld f12, 31*8(s11)
+    fld f13, 32*8(s11)
+    fld f14, 33*8(s11)
+    fld f15, 34*8(s11)
+    fld f16, 35*8(s11)
+    fld f17, 36*8(s11)
+    fld f18, 37*8(s11)
+    fld f19, 38*8(s11)
+    fld f20, 39*8(s11)
+    fld f21, 40*8(s11)
+    fld f22, 41*8(s11)
+    fld f23, 42*8(s11)
+    fld f24, 43*8(s11)
+    fld f25, 44*8(s11)
+    fld f26, 45*8(s11)
+    fld f27, 46*8(s11)
+    fld f28, 47*8(s11)
+    fld f29, 48*8(s11)
+    fld f30, 49*8(s11)
+    fld f31, 50*8(s11)
+    .option pop
     ld t0, 15*8(s11)
     ld s11,13*8(s11)
     csrw sstatus, t0

@@ -20,6 +20,14 @@ pub struct Context {
     pub gp: usize,
     pub tp: usize,
     pub sscratch: usize,
+    /// f0-f31 of the task, saved and restored by `__switch` (offsets 19*8 ..
+    /// 50*8). Cells are built for rv64gc/lp64d and keep live floating-point
+    /// values across preemption. Trap entry does not save them: kernel FP use
+    /// is limited to boot-config TOML parsing and float formatting/parsing in
+    /// `core`, none of which runs on a Cell's syscall path today.
+    pub fp: [u64; 32],
+    /// `fcsr` (rounding mode and accrued exception flags), offset 51*8.
+    pub fcsr: usize,
 }
 
 // Assembly implementation handled by build.rs.
