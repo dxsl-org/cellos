@@ -51,6 +51,7 @@ pub fn supported_size(px: f32) -> bool {
     px.is_finite() && px > 0.0 && px <= MAX_FONT_PX
 }
 
+#[track_caller]
 fn require_supported_size(px: f32) {
     assert!(
         supported_size(px),
@@ -106,6 +107,7 @@ impl GlyphAtlas {
         })
     }
 
+    #[track_caller]
     fn scale(&self, px: f32) -> f32 {
         require_supported_size(px);
         // API sizes are pixels per em, whereas ab_glyph uses ascent-descent.
@@ -117,6 +119,7 @@ impl GlyphAtlas {
     /// Returns `(GlyphMetrics, coverage_bitmap)`.  The bitmap is 1 byte per pixel
     /// stored row-major, top-left origin, width × height bytes total.
     /// Repeated calls for the same `(c, px)` return the cached result.
+    #[track_caller]
     pub fn rasterize(&mut self, c: char, px: f32) -> (GlyphMetrics, &[u8]) {
         // Unsupported scalars share the font's missing-glyph cache entry.
         let key = (self.font.glyph_id(c).0 as u32, px.to_bits());
@@ -171,24 +174,28 @@ impl GlyphAtlas {
     /// Distance from baseline to the ascender line in screen pixels (positive, y-down).
     ///
     /// Use as: `baseline_screen_y = origin_y + atlas.ascender(px)`.
+    #[track_caller]
     pub fn ascender(&self, px: f32) -> f32 {
         require_supported_size(px);
         self.font.ascent_unscaled() * px / self.units_per_em
     }
 
     /// Total line height (ascent − descent + line_gap) in pixels.
+    #[track_caller]
     pub fn line_height(&self, px: f32) -> f32 {
         require_supported_size(px);
         (self.font.height_unscaled() + self.font.line_gap_unscaled()) * px / self.units_per_em
     }
 
     /// Horizontal advance without outlining or allocating.
+    #[track_caller]
     pub fn advance(&self, c: char, px: f32) -> f32 {
         require_supported_size(px);
         self.font.h_advance_unscaled(self.font.glyph_id(c)) * px / self.units_per_em
     }
 
     /// Pair adjustment in pixels; identical in measuring and painting.
+    #[track_caller]
     pub fn kerning(&self, left: char, right: char, px: f32) -> f32 {
         require_supported_size(px);
         self.font
@@ -198,6 +205,7 @@ impl GlyphAtlas {
     }
 
     /// Advance of one NFC-normalized line, including pair kerning.
+    #[track_caller]
     pub fn measure(&self, text: &str, px: f32) -> f32 {
         let mut width = 0.0;
         let mut previous = None;
@@ -214,6 +222,7 @@ impl GlyphAtlas {
     /// Paint a normalized line using cached grayscale coverage and BGRA
     /// source-over compositing. `y` is the line top, not the glyph top.
     /// Returns the same pen advance as `measure`.
+    #[track_caller]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_text(
         &mut self,

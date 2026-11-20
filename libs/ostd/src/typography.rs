@@ -69,28 +69,34 @@ impl TextFonts {
             .or_insert_with(|| GlyphAtlas::from_static(face.bytes()).expect("invalid bundled font"))
     }
 
+    #[track_caller]
     pub fn measure(&mut self, face: FontFace, text: &str, px: f32) -> f32 {
         self.atlas(face).measure(text, px)
     }
 
+    #[track_caller]
     pub fn advance(&mut self, face: FontFace, c: char, px: f32) -> f32 {
         self.atlas(face).advance(c, px)
     }
 
+    #[track_caller]
     pub fn kerning(&mut self, face: FontFace, left: char, right: char, px: f32) -> f32 {
         self.atlas(face).kerning(left, right, px)
     }
 
+    #[track_caller]
     pub fn line_height(&mut self, face: FontFace, px: f32) -> f32 {
         self.atlas(face).line_height(px)
     }
 
+    #[track_caller]
     pub fn ascender(&mut self, face: FontFace, px: f32) -> f32 {
         self.atlas(face).ascender(px)
     }
 
     /// Paint a line into a BGRA buffer, clipped to the surface and viewport.
     /// `y` is the line top; returns the same advance as `measure`.
+    #[track_caller]
     #[allow(clippy::too_many_arguments)]
     pub fn draw_text(
         &mut self,
