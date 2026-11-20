@@ -2723,6 +2723,20 @@ jobs:
       - name: Run per-task FP register file regression (RV64)
         run: bash scripts/qemu-fp-context-test.sh
 
+      # Portability primitives, each in its own Tier 2 test Cell: per-task TLS base
+      # (SetTlsBase + the tp register across switches) and futex wait/wake (mutex,
+      # ping-pong, timeout, mismatch, invalid address). The second-hart runs resume
+      # threads on another hart than the one that parked them.
+      - name: Run per-task TLS base lane (RV64, 1 and 2 harts)
+        run: |
+          bash scripts/qemu-tls-test.sh --harts 1
+          bash scripts/qemu-tls-test.sh --harts 2
+
+      - name: Run futex wait/wake lane (RV64, 1 and 2 harts)
+        run: |
+          bash scripts/qemu-futex-test.sh --harts 1
+          bash scripts/qemu-futex-test.sh --harts 2
+
       - name: Upload software evidence logs
         id: upload-software-evidence
         if: always()

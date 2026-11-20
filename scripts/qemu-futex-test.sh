@@ -50,14 +50,12 @@ MARKER_WINDOW="${MARKER_WINDOW:-150}"
 for tool in "$QEMU" python3; do
     command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: $tool not found on PATH" >&2; exit 1; }
 done
-[[ -f "$KERNEL" ]] || { echo "FAIL: kernel ELF not found: $KERNEL (build it first)" >&2; exit 1; }
+# The kernel is not rebuilt here: it must embed the init/ramdisk of the image that
+# produced `$DISK` (`scripts/gen-disk-ci.sh` builds both together). A plain
+# `cargo build -p cellos-kernel` falls back to the in-tree embedded init, which
+# exits before the shell. Run gen-disk-ci.sh (or a lane that does) first.
+[[ -f "$KERNEL" ]] || { echo "FAIL: kernel ELF not found: $KERNEL (run scripts/gen-disk-ci.sh)" >&2; exit 1; }
 [[ -f "$DISK" ]] || { echo "FAIL: disk image not found: $DISK" >&2; exit 1; }
-
-# The default-feature kernel is rebuilt here on purpose: `scripts/build-test-hooks-ci.sh`
-# writes its test-hooks build to the same `cellos-kernel` path, so a stale artifact from
-# another lane would silently change what this run proves (or deny the launch edge).
-echo "==> Building the default-feature kernel"
-cargo build --release --target "$TARGET" -Z build-std=core,alloc -p cellos-kernel
 
 echo "==> Building the cell ($TARGET)"
 cargo build --release --target "$TARGET" -p app-futex-test
