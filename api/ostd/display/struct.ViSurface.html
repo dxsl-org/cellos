@@ -8,7 +8,7 @@ Grant pointer must remain on the cell’s task.</p>
 when the request cannot be sent.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.set_appearance" class="method"><a class="src rightside" href="../../src/ostd/display/lifecycle.rs.html#32-35">Source</a><h4 class="code-header">pub fn <a href="#method.set_appearance" class="fn">set_appearance</a>(
     &amp;self,
-    palette: AppearancePalette,
+    palette: <a class="enum" href="../../wire/display/appearance/enum.AppearancePalette.html" title="enum wire::display::appearance::AppearancePalette">AppearancePalette</a>,
     revision: u32,
 ) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Ask the compositor to draw its chrome (Cell Tabs, frames, panel
 shadows) in <code>palette</code>. Honoured only for a Panel surface, i.e. from the
@@ -30,7 +30,7 @@ system shell; <code>revision</code> must grow across calls from one shell.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.acknowledge_configure" class="method"><a class="src rightside" href="../../src/ostd/display/lifecycle.rs.html#78-80">Source</a><h4 class="code-header">pub fn <a href="#method.acknowledge_configure" class="fn">acknowledge_configure</a>(&amp;self, serial: u32) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Acknowledge the compositor’s nonzero configuration <code>serial</code>.</p>
 <h5 id="errors-6"><a class="doc-anchor" href="#errors-6">§</a>Errors</h5>
 <p>Returns <code>IO</code> when the acknowledgement cannot be sent or is rejected.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.apply_configure" class="method"><a class="src rightside" href="../../src/ostd/display/lifecycle.rs.html#92-147">Source</a><h4 class="code-header">pub fn <a href="#method.apply_configure" class="fn">apply_configure</a>(&amp;mut self, configure: WindowConfigure) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Apply <code>configure</code> by staging a replacement Grant and acknowledging its serial.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.apply_configure" class="method"><a class="src rightside" href="../../src/ostd/display/lifecycle.rs.html#92-147">Source</a><h4 class="code-header">pub fn <a href="#method.apply_configure" class="fn">apply_configure</a>(&amp;mut self, configure: <a class="struct" href="../../wire/display/struct.WindowConfigure.html" title="struct wire::display::WindowConfigure">WindowConfigure</a>) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Apply <code>configure</code> by staging a replacement Grant and acknowledging its serial.</p>
 <p>On successful acknowledgement this swaps the local dimensions and pixels.
 An explicit attachment rejection releases the new Grant; an ambiguous IPC
 failure retains it for <code>Drop</code> so the compositor never reads freed pages.</p>
@@ -46,7 +46,7 @@ and <code>IO</code> for mapping or compositor transaction failures.</p>
     comp_tid: usize,
     width: u32,
     height: u32,
-    fmt: PixelFormat,
+    fmt: <a class="enum" href="../../wire/display/enum.PixelFormat.html" title="enum wire::display::PixelFormat">PixelFormat</a>,
 ) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Create an interactive <code>width</code> × <code>height</code> BGRA surface owned by <code>comp_tid</code>.</p>
 <p>Returns a Grant-backed surface whose pixels are writable by this task.</p>
 <h5 id="errors-9"><a class="doc-anchor" href="#errors-9">§</a>Errors</h5>
@@ -56,7 +56,7 @@ mapping or compositor surface setup fails.</p>
     comp_tid: usize,
     width: u32,
     height: u32,
-    fmt: PixelFormat,
+    fmt: <a class="enum" href="../../wire/display/enum.PixelFormat.html" title="enum wire::display::PixelFormat">PixelFormat</a>,
 ) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Create a non-focusable <code>width</code> × <code>height</code> background surface for <code>comp_tid</code>.</p>
 <h5 id="errors-10"><a class="doc-anchor" href="#errors-10">§</a>Errors</h5>
 <p>Returns <code>OutOfMemory</code> when Grant registration fails and <code>IO</code> when Grant
@@ -65,14 +65,14 @@ mapping or compositor surface setup fails.</p>
     comp_tid: usize,
     width: u32,
     height: u32,
-    fmt: PixelFormat,
+    fmt: <a class="enum" href="../../wire/display/enum.PixelFormat.html" title="enum wire::display::PixelFormat">PixelFormat</a>,
 ) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;Self&gt;</h4></section></summary><div class="docblock"><p>Create an undecorated panel/dock surface for <code>comp_tid</code> that receives input.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.pixels_mut" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#100-104">Source</a><h4 class="code-header">pub fn <a href="#method.pixels_mut" class="fn">pixels_mut</a>(&amp;mut self) -&gt; &amp;mut [u8]</h4></section></summary><div class="docblock"><p>Return mutable pixels for the current Grant-backed surface dimensions.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.stride" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#107-109">Source</a><h4 class="code-header">pub fn <a href="#method.stride" class="fn">stride</a>(&amp;self) -&gt; usize</h4></section></summary><div class="docblock"><p>Return the current row stride in bytes.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.width" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#112-114">Source</a><h4 class="code-header">pub fn <a href="#method.width" class="fn">width</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>Return the current surface width in pixels.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.height" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#117-119">Source</a><h4 class="code-header">pub fn <a href="#method.height" class="fn">height</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>Return the current surface height in pixels.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.cap" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#122-124">Source</a><h4 class="code-header">pub fn <a href="#method.cap" class="fn">cap</a>(&amp;self) -&gt; u32</h4></section></summary><div class="docblock"><p>Return the capability that identifies this surface in lifecycle events.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.damage" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#129-137">Source</a><h4 class="code-header">pub fn <a href="#method.damage" class="fn">damage</a>(&amp;self, rect: Rect)</h4></section></summary><div class="docblock"><p>Mark the surface-local <code>rect</code> dirty for a later compositor blend.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.damage" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#129-137">Source</a><h4 class="code-header">pub fn <a href="#method.damage" class="fn">damage</a>(&amp;self, rect: <a class="struct" href="../../wire/display/struct.Rect.html" title="struct wire::display::Rect">Rect</a>)</h4></section></summary><div class="docblock"><p>Mark the surface-local <code>rect</code> dirty for a later compositor blend.</p>
 <p>Posted without waiting: a full compositor mailbox drops it.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.damage_all" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#140-147">Source</a><h4 class="code-header">pub fn <a href="#method.damage_all" class="fn">damage_all</a>(&amp;self)</h4></section></summary><div class="docblock"><p>Mark every current surface pixel dirty for a later compositor blend.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.move_to" class="method"><a class="src rightside" href="../../src/ostd/display/surface.rs.html#150-159">Source</a><h4 class="code-header">pub fn <a href="#method.move_to" class="fn">move_to</a>(&amp;self, x: i32, y: i32)</h4></section></summary><div class="docblock"><p>Move the surface’s content origin to screen coordinates (<code>x</code>, <code>y</code>).</p>
