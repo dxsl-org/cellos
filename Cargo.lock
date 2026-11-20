@@ -383,6 +383,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "app-fp-context-test"
+version = "0.1.0"
+dependencies = [
+ "abi",
+ "cell-build",
+ "ostd",
+]
+
+[[package]]
 name = "app-futex-test"
 version = "0.1.0"
 dependencies = [

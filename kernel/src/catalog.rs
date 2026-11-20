@@ -516,6 +516,7 @@ pub const CELLS: &[Cell] = &[
     target("/bin/c-pthread"),
     target("/bin/tls-test"),
     target("/bin/futex-test"),
+    target("/bin/fp-context-test"),
     target("/bin/pipe-test"),
     target("/bin/pipe-peer"),
     target("/bin/c-spawn"),

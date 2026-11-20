@@ -224,6 +224,15 @@ review_by = "2027-05-28"
 tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): apps and tests group"
 
 [[file]]
+path = "cells/tests/fp-context-test/src/regs.rs"
+class = "test-harness"
+reason = "Per-task FP register file regression test: one riscv64 `asm!` block loads a known pattern into f0-f31 and fcsr, issues the Yield ecall, and stores the registers back, so nothing but the trap and the kernel's scheduling runs between load and read-back. That is the only way to observe whether the kernel hands a task another task's FP state. One `unsafe` token (regs.rs:29); every FP register is declared clobbered and the ecall uses ostd's syscall ABI. The crate is FFI (Tier 2)."
+approver = "dmin"
+date = "2026-11-20"
+review_by = "2027-05-28"
+tracking = "RV64 FP context regression lane (scripts/qemu-fp-context-test.sh), 2026-11-20"
+
+[[file]]
 path = "cells/tests/cpp-smoke/src/cpp.rs"
 class = "c-ffi"
 reason = "C++ FFI (cpp-freestanding profile): extern \"C\" calls into the cell's C++ translation units are unsafe by construction; the C++ side is outside the Rust type system entirely. All unsafe in this crate is confined to this file behind safe wrappers. Re-reviewed 2026-11-16: seven `unsafe` sites, one call per safe wrapper; `read_file` passes a slice's pointer with that slice's own length. The crate is FFI (Tier 2). Phase 19 wave 2026-11-16: every site re-read (cpp.rs:20-:46); count and lines unchanged."
@@ -649,6 +658,15 @@ approver = "dmin"
 date = "2026-09-22"
 review_by = "2027-05-28"
 tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): apps and tests group"
+
+[[crate]]
+name = "app-fp-context-test"
+class = "test-harness"
+reason = "Owns allowlisted unsafe under cells/tests/fp-context-test/ — see the [[file]] entry for the justification. regs.rs holds the crate's single `unsafe` token; main.rs has none. The manifest is FFI (Tier 2)."
+approver = "dmin"
+date = "2026-11-20"
+review_by = "2027-05-28"
+tracking = "RV64 FP context regression lane (scripts/qemu-fp-context-test.sh), 2026-11-20"
 
 [[crate]]
 name = "app-cpp-smoke"

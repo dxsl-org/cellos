@@ -1,0 +1,17 @@
+[package]
+name = "app-fp-context-test"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+description = "Per-task floating-point register file smoke test: f0-f31 and fcsr across context switches"
+
+[[bin]]
+name = "fp-context-test"
+path = "src/main.rs"
+
+[dependencies]
+abi  = { path = "../../../libs/abi", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

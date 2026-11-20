@@ -237,6 +237,7 @@ members = [
     "cells/tests/cpp-smoke",
     "cells/tests/tls-test",
     "cells/tests/futex-test",
+    "cells/tests/fp-context-test",
     "cells/tests/pipe-test",
     "cells/tests/pipe-peer",
     "cells/tests/phase02-session-parent",

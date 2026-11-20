@@ -2524,6 +2524,12 @@ dir = "cells/tests/fixture-launcher"
 src = "cells/tests/fixture-launcher/src/main.rs"
 
 [[bin]]
+name = "fp-context-test"
+package = "app-fp-context-test"
+dir = "cells/tests/fp-context-test"
+src = "cells/tests/fp-context-test/src/main.rs"
+
+[[bin]]
 name = "futex-test"
 package = "app-futex-test"
 dir = "cells/tests/futex-test"

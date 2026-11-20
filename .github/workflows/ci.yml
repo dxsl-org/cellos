@@ -2712,6 +2712,12 @@ jobs:
           cargo test --test tier2-fault-isolation -- --test-threads=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/software-evidence/tier2-fault-isolation.log"
 
+      # Every RV64 Cell is rv64gc/lp64d: two threads load their own f0-f31/fcsr
+      # pattern, yield to each other and read it back, so a context switch that
+      # drops FP state fails on the first round (the 2026-11-20 Ocel font-size panics).
+      - name: Run per-task FP register file regression (RV64)
+        run: bash scripts/qemu-fp-context-test.sh
+
       - name: Upload software evidence logs
         id: upload-software-evidence
         if: always()
