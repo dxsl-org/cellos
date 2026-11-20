@@ -4,33 +4,33 @@
         &amp;self,
         public_key: &amp;[u8; 32],
         secret: &amp;[u8],
-    ) -&gt; Result&lt;(), KmsClientError&gt;;
+    ) -&gt; Result&lt;(), <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;;
 <span class="item-spacer"></span>    fn <a href="#tymethod.sign" class="fn">sign</a>(
         &amp;self,
         public_key: &amp;[u8; 32],
         session_id: &amp;[u8; 32],
         username: &amp;str,
-    ) -&gt; Result&lt;SshSignResponsePayload, KmsClientError&gt;;
+    ) -&gt; Result&lt;SshSignResponsePayload, <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;;
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The two key-service calls a login makes after the preflight, so that the unlock and
 sign sequence runs under host tests with a scripted service.</p>
 </div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.stage_secret" class="method"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#401">Source</a><h4 class="code-header">fn <a href="#tymethod.stage_secret" class="fn">stage_secret</a>(
     &amp;self,
     public_key: &amp;[u8; 32],
     secret: &amp;[u8],
-) -&gt; Result&lt;(), KmsClientError&gt;</h4></section></summary><div class="docblock"><p>Stage the passphrase for the next signature (Begin and the ordered chunks).</p>
+) -&gt; Result&lt;(), <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;</h4></section></summary><div class="docblock"><p>Stage the passphrase for the next signature (Begin and the ordered chunks).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="tymethod.sign" class="method"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#403-408">Source</a><h4 class="code-header">fn <a href="#tymethod.sign" class="fn">sign</a>(
     &amp;self,
     public_key: &amp;[u8; 32],
     session_id: &amp;[u8; 32],
     username: &amp;str,
-) -&gt; Result&lt;SshSignResponsePayload, KmsClientError&gt;</h4></section></summary><div class="docblock"><p>Sign the userauth challenge.</p>
-</div></details></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-KeyService-for-KmsClient" class="impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#411-423">Source</a><a href="#impl-KeyService-for-KmsClient" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.KeyService.html" title="trait cellbox::ssh::KeyService">KeyService</a> for KmsClient</h3></section></summary><div class="impl-items"><section id="method.stage_secret" class="method trait-impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#412-414">Source</a><a href="#method.stage_secret" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.stage_secret" class="fn">stage_secret</a>(
+) -&gt; Result&lt;SshSignResponsePayload, <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;</h4></section></summary><div class="docblock"><p>Sign the userauth challenge.</p>
+</div></details></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-KeyService-for-KmsClient" class="impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#411-423">Source</a><a href="#impl-KeyService-for-KmsClient" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.KeyService.html" title="trait cellbox::ssh::KeyService">KeyService</a> for <a class="struct" href="../../ostd/clients/kms/struct.KmsClient.html" title="struct ostd::clients::kms::KmsClient">KmsClient</a></h3></section></summary><div class="impl-items"><section id="method.stage_secret" class="method trait-impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#412-414">Source</a><a href="#method.stage_secret" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.stage_secret" class="fn">stage_secret</a>(
     &amp;self,
     public_key: &amp;[u8; 32],
     secret: &amp;[u8],
-) -&gt; Result&lt;(), KmsClientError&gt;</h4></section><section id="method.sign" class="method trait-impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#415-422">Source</a><a href="#method.sign" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.sign" class="fn">sign</a>(
+) -&gt; Result&lt;(), <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;</h4></section><section id="method.sign" class="method trait-impl"><a class="src rightside" href="../../src/cellbox/ssh.rs.html#415-422">Source</a><a href="#method.sign" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.sign" class="fn">sign</a>(
     &amp;self,
     public_key: &amp;[u8; 32],
     session_id: &amp;[u8; 32],
     username: &amp;str,
-) -&gt; Result&lt;SshSignResponsePayload, KmsClientError&gt;</h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/cellbox/ssh/trait.KeyService.js" data-ignore-extern-crates="ostd" async></script></section></div></main></body></html>
+) -&gt; Result&lt;SshSignResponsePayload, <a class="enum" href="../../ostd/clients/kms/enum.KmsClientError.html" title="enum ostd::clients::kms::KmsClientError">KmsClientError</a>&gt;</h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/cellbox/ssh/trait.KeyService.js" data-ignore-extern-crates="ostd" async></script></section></div></main></body></html>

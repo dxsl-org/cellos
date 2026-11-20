@@ -4,7 +4,7 @@
     port: u16,
     hostname: &amp;str,
 ) -&gt; u64</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Open a TLS 1.3 connection to <code>addr:port</code> with the given SNI <code>hostname</code>.</p>
-<p>Sends <a href="../../wire/proto/tls/constant.CONNECT.html" title="constant wire::proto::tls::CONNECT"><code>wire::CONNECT</code></a> to the net service at <code>net_tid</code>.  Blocks until the TCP
+<p>Sends [<code>wire::CONNECT</code>] to the net service at <code>net_tid</code>.  Blocks until the TCP
 handshake and TLS handshake complete, or until the net service times out.</p>
 <p>Returns the <code>cap_id</code> (non-zero on success, 0 on failure).</p>
 </div></details></section></div></main></body></html>

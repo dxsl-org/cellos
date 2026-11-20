@@ -2,10 +2,10 @@
     bytes: &amp;[u8],
     diagnostic: bool,
     merged: bool,
-    write: impl FnMut(<a class="enum" href="enum.Sink.html" title="enum cellbox::executor::Sink">Sink</a>, &amp;[u8]) -&gt; Result&lt;usize, <a class="enum" href="../../abi/cell_session/enum.Status.html" title="enum abi::cell_session::Status">Status</a>&gt;,
-    blocked: impl FnMut() -&gt; Result&lt;(), E&gt;,
+    write: impl FnMut(<a class="enum" href="enum.Sink.html" title="enum cellbox::executor::Sink">Sink</a>, &amp;[u8]) -&gt; <a class="type" href="../../ostd/type.Result.html" title="type ostd::Result">Result</a>&lt;usize, <a class="enum" href="../../abi/cell_session/enum.Status.html" title="enum abi::cell_session::Status">Status</a>&gt;,
+    blocked: impl FnMut() -&gt; <a class="type" href="../../ostd/type.Result.html" title="type ostd::Result">Result</a>&lt;(), E&gt;,
     pause: impl FnMut(),
-) -&gt; Result&lt;(), E&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>write_terminal_bytes</code> against the endpoint <code>sink_for(diagnostic, merged)</code> selects.
+) -&gt; <a class="type" href="../../ostd/type.Result.html" title="type ostd::Result">Result</a>&lt;(), E&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><code>write_terminal_bytes</code> against the endpoint <code>sink_for(diagnostic, merged)</code> selects.
 The routing is decided once per write, so the unsent suffix always retries on the
 endpoint that took the first byte.</p>
 </div></details></section></div></main></body></html>
