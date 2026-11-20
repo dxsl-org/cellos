@@ -32,8 +32,7 @@ use crate::interface::VirtioNetDevice;
 const LOOP_TRACE_INTERVAL_TICKS: u64 = 2_000 * super::MTIME_TICKS_PER_MS;
 
 pub(super) struct Probe {
-    net_rx_producer_proved: bool,
-    pending_net_rx_proof: bool,
+    net_rx_proof: super::net_rx_proof::NetRxProof,
     #[cfg(feature = "ipc-wake-oracle")]
     oracle: crate::idle_ipc_wake_oracle::IdleIpcWakeOracle,
     #[cfg(feature = "loop-trace")]
@@ -47,8 +46,7 @@ pub(super) struct Probe {
 impl Probe {
     pub(super) fn new() -> Self {
         Self {
-            net_rx_producer_proved: false,
-            pending_net_rx_proof: false,
+            net_rx_proof: super::net_rx_proof::NetRxProof::default(),
             #[cfg(feature = "ipc-wake-oracle")]
             oracle: crate::idle_ipc_wake_oracle::IdleIpcWakeOracle::new(),
             #[cfg(feature = "loop-trace")]
@@ -107,15 +105,13 @@ impl Probe {
         self.oracle.record_ipc_drain(sys_get_time(), sender);
     }
 
-    /// `drained` frames were pumped this turn: the first ones behind a NET_RX
-    /// completion prove the IRQ→completion producer.
+    /// `drained` frames were pumped this turn; see [`NetRxProof`] for when a
+    /// frame and a NET_RX completion together prove the IRQ→completion producer.
+    ///
+    /// [`NetRxProof`]: super::net_rx_proof::NetRxProof
     pub(super) fn rx_drained(&mut self, drained: usize) {
-        if self.pending_net_rx_proof {
-            if !self.net_rx_producer_proved && drained > 0 {
-                println("[net-rx-producer] irq->completion PASS");
-                self.net_rx_producer_proved = true;
-            }
-            self.pending_net_rx_proof = false;
+        if self.net_rx_proof.drained(drained) {
+            println("[net-rx-producer] irq->completion PASS");
         }
     }
 
@@ -158,8 +154,12 @@ impl Probe {
         #[cfg(not(feature = "ipc-wake-oracle"))]
         let completion = sys_wait_completion(NET_RX, wait_ticks);
         if let Some(completion) = completion {
-            self.pending_net_rx_proof =
-                completion.source == NET_RX && completion.result == NET_RX as i64;
+            if completion.source == NET_RX
+                && completion.result == NET_RX as i64
+                && self.net_rx_proof.completion()
+            {
+                println("[net-rx-producer] irq->completion PASS");
+            }
         }
     }
 }

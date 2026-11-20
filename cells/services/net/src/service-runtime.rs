@@ -35,6 +35,9 @@ mod net_pump;
 #[cfg(target_os = "none")]
 #[path = "net_state.rs"]
 mod net_state;
+#[cfg(any(test, target_os = "none"))]
+#[path = "net-rx-proof.rs"]
+mod net_rx_proof;
 #[cfg(target_os = "none")]
 #[path = "probe.rs"]
 mod probe;
