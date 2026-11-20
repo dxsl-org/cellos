@@ -56,20 +56,17 @@ fn vfs_req(req: &wire::ipc::VfsRequest<'_>) -> wire::ipc::VfsResponse<'static> {
     }
 }
 
+// Each result line is one `sys_log` call: the runner matches whole lines, and a
+// line written in pieces can be split by another Cell's log line landing between
+// them (seen in CI as `S1 mount: FAIL (Err` / `Init: …` / `)`).
 fn pass(label: &str) {
     PASSED.fetch_add(1, Ordering::Relaxed);
-    ostd::io::print("[srv-test] ");
-    ostd::io::print(label);
-    ostd::io::println(": PASS");
+    ostd::io::print_fmt(format_args!("[srv-test] {}: PASS\n", label));
 }
 
 fn fail(label: &str, note: &str) {
     FAILED.fetch_add(1, Ordering::Relaxed);
-    ostd::io::print("[srv-test] ");
-    ostd::io::print(label);
-    ostd::io::print(": FAIL (");
-    ostd::io::print(note);
-    ostd::io::println(")");
+    ostd::io::print_fmt(format_args!("[srv-test] {}: FAIL ({})\n", label, note));
 }
 
 // ── Scenario implementations ─────────────────────────────────────────────────
