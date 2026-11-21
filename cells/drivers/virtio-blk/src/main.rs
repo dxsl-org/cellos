@@ -11,12 +11,13 @@
 //! protocol) to the registered VFS only. Replaces the kernel's `virtio_blk.rs`
 //! driver per the Kernel Boundary Law (G2 loader redesign).
 //!
-//! # Coexistence during migration (phase 02)
-//! The single QEMU virtio-blk device is still owned by the kernel (boot + VFS)
-//! until phases 05/06. `device::find_and_init_blk` therefore SKIPS any block
-//! device already showing `DRIVER_OK` (kernel-owned) and this cell exits
-//! gracefully when no free device remains — it never resets the live boot disk.
-//! Once the kernel relinquishes the device (phase 06), the same probe claims it.
+//! # Device ownership
+//! The `RequestMmio` claim is the only gate on a device: no other driver
+//! drives a block slot, and initialising the transport resets the device, so a
+//! slot left at `DRIVER_OK` (by firmware, or by a predecessor cell whose slot
+//! the kernel reset when it died) is taken over. A slot still held by a
+//! predecessor awaiting reap is retried; the cell exits when no block device
+//! can be claimed.
 //!
 //! # Law 4 exception
 //! `src/mmio.rs`, `src/hal_x86.rs` and `src/io.rs` use `unsafe` for the
@@ -70,12 +71,10 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
             let Some(dev) = device::find_and_init_blk() else {
-                // No free VirtIO-blk device: the kernel owns the boot disk until
-                // phases 05/06 remove the in-kernel driver, or no device exists on
-                // this platform. Exit cleanly — the kernel block path stays
-                // authoritative. On x86_64 the PCI probe already logged why.
+                // No claimable VirtIO-blk device on this platform. Exit cleanly;
+                // on x86_64 the PCI probe already logged why.
                 #[cfg(not(target_arch = "x86_64"))]
-                ostd::io::println("[virtio-blk] no free device (kernel-owned) — exiting");
+                ostd::io::println("[virtio-blk] no free device — exiting");
                 ostd::syscall::sys_exit(0);
             };
 

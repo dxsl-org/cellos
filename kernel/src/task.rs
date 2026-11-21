@@ -1819,19 +1819,35 @@ pub(crate) fn wake_task(tid: usize, result: usize) {
 /// exactly the hardware state it would reach by dying. Serialized against the
 /// other teardowns: a timed-out invalidation must be retried, not interleaved.
 ///
-/// Order: quiesce every owned PCI function (no new DMA, no interrupts), then
-/// revoke and fence its IOMMU translations, then release the acknowledged
-/// frames. Quiescing is idempotent, so a retried teardown repeats it
-/// harmlessly. The device records stay owned: the caller frees them with
+/// Order: reset every owned VirtIO MMIO slot and quiesce every owned PCI
+/// function (no new DMA, no interrupts), then revoke and fence the IOMMU
+/// translations, then release the acknowledged frames. Resetting and
+/// quiescing are idempotent, so a retried teardown repeats them harmlessly.
+/// The device records stay owned: the caller frees them with
 /// [`ownership::release_for`](crate::dev::ownership::release_for) once the
 /// windows are released too.
 ///
 /// Returns `false` when hardware did not acknowledge the teardown, including a
-/// function that could not be shown quiescent; the caller must then keep the
-/// authority (and the frames) fail-closed.
+/// VirtIO slot that did not confirm its reset or a function that could not be
+/// shown quiescent; the caller must then keep the authority (and the frames)
+/// fail-closed.
 pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let _cleanup = IOMMU_CLEANUP_SERIAL.lock();
-    let owned: alloc::vec::Vec<u32> = crate::dev::ownership::devices_of(tid)
+    let devices = crate::dev::ownership::devices_of(tid);
+    // No IOMMU sits in front of a VirtIO MMIO device: only its reset stops it
+    // writing into memory the owner programmed (posted RX buffers, a late
+    // completion).
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    for base in crate::dev::virtio_common::slot_bases(&devices) {
+        if !crate::dev::virtio_common::reset_slot(base) {
+            log::warn!(
+                "[virtio] slot {base:#x} of tid {tid} did not confirm reset; slot and grants retained"
+            );
+            return false;
+        }
+        log::info!("[virtio] reset slot {base:#x} for tid {tid}");
+    }
+    let owned: alloc::vec::Vec<u32> = devices
         .into_iter()
         .filter(|(_, kind)| matches!(kind, crate::dev::ownership::DeviceKind::Pci { .. }))
         .map(|(key, _)| key.id as u32)
@@ -1906,6 +1922,16 @@ fn release_retired_devices(tid: usize) {
     crate::dev::ownership::release_for(tid, crate::dev::ownership::Scope::Retired);
 }
 
+/// Finish a deferred teardown that has now been acknowledged. A VirtIO slot
+/// owner's grants were withheld at death (see [`reap_retired_task_resources`]);
+/// its device is reset now, so they are reaped before the slot is released.
+fn finish_deferred_teardown(tid: usize) {
+    if owns_virtio_slot(tid) {
+        crate::task::syscall::reap_grants_for_task(tid);
+    }
+    release_retired_devices(tid);
+}
+
 fn retry_retired_dma_cleanup() {
     let retry = IOMMU_CLEANUP_RETRIES.lock().pop_front();
     #[cfg(not(feature = "p01-trace"))]
@@ -1913,7 +1939,7 @@ fn retry_retired_dma_cleanup() {
         if !teardown_dma_authority(tid) {
             queue_retired_dma_cleanup(tid);
         } else {
-            release_retired_devices(tid);
+            finish_deferred_teardown(tid);
         }
     }
     #[cfg(feature = "p01-trace")]
@@ -1925,13 +1951,20 @@ fn retry_retired_dma_cleanup() {
             // Preserve the immutable incarnation and token through every retry.
             IOMMU_CLEANUP_RETRIES.lock().push_back(cleanup);
         } else {
-            release_retired_devices(cleanup.tid);
+            finish_deferred_teardown(cleanup.tid);
             crate::p01_resources::finish(cleanup.obligation, 1);
             if let Some(owner) = cleanup.owner {
                 crate::p01_resources::checked(owner, 5);
             }
         }
     }
+}
+
+/// Whether `tid` owns a VirtIO MMIO slot, a device no IOMMU confines.
+fn owns_virtio_slot(tid: usize) -> bool {
+    crate::dev::virtio_common::slot_bases(&crate::dev::ownership::devices_of(tid))
+        .next()
+        .is_some()
 }
 
 /// What reaping one retired task observed, for the retirement verdict.
@@ -1952,6 +1985,11 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
     // can still reach, and quarantines the rest under their export's key.
     crate::task::syscall::dma_export::reap_owner(tid);
     let dma_deferred = !teardown_dma_authority(tid);
+    // Unpinned grant frames are reachable by a VirtIO MMIO device that was not
+    // reset, so a slot owner's grants are withheld until the deferred teardown
+    // confirms the reset; that retry reaps them. Checked before the records
+    // are released below.
+    let grants_withheld = dma_deferred && owns_virtio_slot(tid);
     if dma_deferred {
         queue_retired_dma_cleanup(tid);
     } else {
@@ -1960,7 +1998,12 @@ fn reap_retired_task_resources(tid: usize) -> MemberReap {
         release_retired_devices(tid);
     }
     crate::dev::irq_wait::release_waiters_for(tid);
-    let grants = crate::task::syscall::reap_grants_for_task(tid);
+    let grants = if grants_withheld {
+        log::warn!("[grant] task {tid} owns a VirtIO slot not yet reset; grants withheld");
+        crate::task::syscall::GrantReap::default()
+    } else {
+        crate::task::syscall::reap_grants_for_task(tid)
+    };
     MemberReap {
         dma_deferred,
         grants,

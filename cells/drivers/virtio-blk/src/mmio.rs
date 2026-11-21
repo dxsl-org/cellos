@@ -11,7 +11,6 @@
 #![allow(unsafe_code)]
 
 use crate::device::BlkDevice;
-use abi::syscall::virtio_probe::STATUS_DRIVER_OK;
 use core::ptr::NonNull;
 use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_probe_virtio_mmio, BlockDevice};
 use virtio_drivers::{
@@ -141,14 +140,11 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 /// predecessor's claim is reaped. The bound the PCI driver cells use.
 const FIND_ATTEMPTS: usize = 200;
 
-/// Probe all VirtIO MMIO slots and initialise the first FREE Block device.
+/// Probe all VirtIO MMIO slots and initialise the first claimable Block device.
 ///
-/// A block device already showing `DRIVER_OK` is owned by the in-kernel
-/// virtio_blk driver (boot disk) — it is skipped so this cell never resets the
-/// live device during the migration window (phase 02). A block slot another
-/// Cell still holds is retried, a yield apart, for at most [`FIND_ATTEMPTS`]
-/// rounds; otherwise the scan ends after one round. Returns `None` when no
-/// free block device is present (graceful exit).
+/// A block slot another Cell still holds is retried, a yield apart, for at
+/// most [`FIND_ATTEMPTS`] rounds; otherwise the scan ends after one round.
+/// Returns `None` when no claimable block device is present (graceful exit).
 pub fn find_and_init_blk() -> Option<BlkDevice> {
     for _ in 0..FIND_ATTEMPTS {
         let mut held = false;
@@ -170,12 +166,6 @@ fn init_first_free(held: &mut bool) -> Option<BlkDevice> {
             continue;
         };
         if identity.device_id != VIRTIO_DEV_BLK {
-            continue;
-        }
-
-        // Coexistence guard: skip a block device another driver already brought
-        // up (DRIVER_OK set). Creating a transport on it would reset a live disk.
-        if identity.status & STATUS_DRIVER_OK != 0 {
             continue;
         }
 

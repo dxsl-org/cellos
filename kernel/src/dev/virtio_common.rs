@@ -98,6 +98,62 @@ pub(crate) fn probe_slot(base: usize) -> SlotProbe {
     }
 }
 
+/// Status reads a slot reset may take before it counts as unconfirmed. Kept
+/// small because an unconfirmed reset is retried on every scheduler pass (QEMU
+/// completes the reset inside the status write, so the first read confirms).
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", test))]
+const RESET_POLL_BUDGET: u32 = 1024;
+
+/// Bases of the VirtIO MMIO slots among one owner's device records.
+pub(crate) fn slot_bases(
+    devices: &[(abi::block_route::DeviceKey, super::ownership::DeviceKind)],
+) -> impl Iterator<Item = usize> + '_ {
+    devices
+        .iter()
+        .filter(|(_, kind)| matches!(kind, super::ownership::DeviceKind::VirtioSlot))
+        .map(|(key, _)| key.id as usize)
+}
+
+/// Write 0 (device reset) through `write_status`, then read `read_status` at
+/// most `budget` times until it reports 0. The spec counts a reset complete
+/// only once Status reads back 0.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", test))]
+fn reset_status(
+    write_status: impl FnOnce(u32),
+    mut read_status: impl FnMut() -> u32,
+    budget: u32,
+) -> bool {
+    write_status(0);
+    for _ in 0..budget {
+        if read_status() == 0 {
+            return true;
+        }
+        core::hint::spin_loop();
+    }
+    false
+}
+
+/// Reset the VirtIO device in the slot at `base`, so it stops DMA into memory
+/// its dead or revoked owner had programmed. Returns `false` when the device
+/// did not confirm the reset within [`RESET_POLL_BUDGET`] reads.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub(crate) fn reset_slot(base: usize) -> bool {
+    use abi::syscall::virtio_probe::STATUS_OFFSET;
+    let status = (base + STATUS_OFFSET) as *mut u32;
+    // A claimed slot is user-mapped on RISC-V; S-mode reaches it only with SUM.
+    with_riscv_sum_for_virtio_ack(|| {
+        reset_status(
+            // SAFETY: `base` is a slot record's key, one of the board's VirtIO
+            // slots the boot identity map covers as device memory; Status is a
+            // 32-bit register inside it and writing 0 is the spec's reset.
+            |value| unsafe { core::ptr::write_volatile(status, value) },
+            // SAFETY: same register; reading Status has no side effect.
+            || unsafe { core::ptr::read_volatile(status) },
+            RESET_POLL_BUDGET,
+        )
+    })
+}
+
 /// Execute one VirtIO MMIO ACK sequence with RV64 SUM enabled only for that scope.
 ///
 /// On RV64, supervisor-mode MMIO ACK helpers may touch user-accessible identity-mapped
@@ -186,7 +242,12 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_slot_base, slot_window, PAGE, SLOT_REGS_LEN};
+    use super::{
+        is_slot_base, reset_status, slot_bases, slot_window, PAGE, RESET_POLL_BUDGET, SLOT_REGS_LEN,
+    };
+    use crate::dev::ownership::DeviceKind;
+    use abi::block_route::{DeviceKey, BLOCK_DEVICE_MMIO, BLOCK_DEVICE_PCI};
+    use core::cell::{Cell, RefCell};
 
     const RISCV_SLOTS: [usize; 8] = [
         0x1000_1000,
@@ -240,5 +301,68 @@ mod tests {
             slot_window(0x2000_1000, [0x2000_0e00, 0x2000_1000].into_iter()),
             PAGE
         );
+    }
+
+    /// Teardown resets exactly the owner's VirtIO slots: a PCI function is
+    /// quiesced instead, and the DWC2 aperture is not a VirtIO transport.
+    #[test]
+    fn only_virtio_slot_records_are_reset() {
+        let mmio = |base: u64| DeviceKey::new(BLOCK_DEVICE_MMIO, base).unwrap();
+        let devices = [
+            (mmio(0x1000_8000), DeviceKind::VirtioSlot),
+            (
+                DeviceKey::new(BLOCK_DEVICE_PCI, 0x00_10).unwrap(),
+                DeviceKind::Pci { class: None },
+            ),
+            (mmio(0x3f98_0000), DeviceKind::Dwc2),
+            (mmio(0x0a00_3e00), DeviceKind::VirtioSlot),
+        ];
+        assert_eq!(
+            slot_bases(&devices).collect::<alloc::vec::Vec<_>>(),
+            [0x1000_8000, 0x0a00_3e00]
+        );
+        assert_eq!(slot_bases(&devices[1..3]).count(), 0);
+    }
+
+    /// The reset writes 0 before polling and is confirmed by the first 0 read.
+    #[test]
+    fn reset_writes_zero_then_waits_for_status_zero() {
+        let events = RefCell::new(alloc::vec::Vec::new());
+        let status = [0x0f, 0x0f, 0];
+        let mut reads = 0usize;
+        let confirmed = reset_status(
+            |value| events.borrow_mut().push(("write", value)),
+            || {
+                let value = status[reads.min(2)];
+                reads += 1;
+                events.borrow_mut().push(("read", value));
+                value
+            },
+            RESET_POLL_BUDGET,
+        );
+        assert!(confirmed);
+        assert_eq!(
+            *events.borrow(),
+            [("write", 0), ("read", 0x0f), ("read", 0x0f), ("read", 0)]
+        );
+    }
+
+    /// A device that never reads back 0 is reported unconfirmed after exactly
+    /// the budget, never polled forever.
+    #[test]
+    fn a_reset_that_never_completes_is_unconfirmed_after_the_budget() {
+        let writes = Cell::new(0);
+        let reads = Cell::new(0u32);
+        let confirmed = reset_status(
+            |_| writes.set(writes.get() + 1),
+            || {
+                reads.set(reads.get() + 1);
+                0x4f
+            },
+            RESET_POLL_BUDGET,
+        );
+        assert!(!confirmed);
+        assert_eq!(writes.get(), 1);
+        assert_eq!(reads.get(), RESET_POLL_BUDGET);
     }
 }
