@@ -170,6 +170,11 @@ arch = "default"
 tier = "pr"
 
 [[lane]]
+path = "scripts/qemu-fp-context-test-aarch64.sh"
+arch = "aarch64"
+tier = "pr"
+
+[[lane]]
 path = "scripts/qemu-futex-test.sh"
 arch = "default"
 tier = "pr"

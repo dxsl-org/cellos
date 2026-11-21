@@ -37,11 +37,14 @@
 # io_x86.rs 4; mmio.rs/hal_x86.rs drop 4 NonNull::new_unchecked): 590 / 37.
 # 2026-11-21 allowlist open items: cells -4 (service-input virtio_device.rs drops
 # 3 NonNull::new_unchecked; nvme queue.rs drops the redundant ring zero-fill): 586 / 37.
+# 2026-11-21 AArch64 FP context lane: cells +1 (fp-context-test is Tier 1 on aarch64,
+# where Tier 2 is refused on production and EL2 hosts; its one test-harness token
+# now counts): 587 / 37.
 
 version = 1
 
 [total]
-unsafe = 586
+unsafe = 587
 attrs = 37
 
 # ── kernel/third_party/virtio_drivers (vendored virtio-drivers 0.7.5 fork) ───────

@@ -16,6 +16,11 @@ on:
         type: boolean
         default: true
 
+# Every job reads only; `security` (checks: write) and `attest-catalog`
+# (id-token/attestations: write) widen their own token.
+permissions:
+  contents: read
+
 # A newer push to the same branch/PR supersedes the running pipeline.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -187,12 +192,19 @@ jobs:
           python3 scripts/check-service-wire-literals.py
 
       - name: Validate app-tier acceptance ledger
+        # Ref names are attacker-chosen text: they reach the script through env,
+        # never spliced into it by `${{ }}`.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           baseline_dir="$RUNNER_TEMP/app-tier-acceptance-baseline"
           baseline_json="$RUNNER_TEMP/app-tier-acceptance-baseline.json"
-          base_ref="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            base_ref="$(PYTHONPATH=scripts python3 -c 'from app_tier_acceptance.baseline_ref import dispatch_baseline; print(dispatch_baseline("${{ github.ref_name }}", "${{ github.event.repository.default_branch }}"))')"
+          base_ref="$PUSH_BASE"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            base_ref="$(PYTHONPATH=scripts python3 -c 'import sys; from app_tier_acceptance.baseline_ref import dispatch_baseline; print(dispatch_baseline(sys.argv[1], sys.argv[2]))' "$REF_NAME" "$DEFAULT_BRANCH")"
           elif [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
             echo "missing trusted push baseline" >&2
             exit 1
@@ -207,6 +219,14 @@ jobs:
             python3 scripts/validate-app-tier-acceptance.py
           fi
           python3 -m unittest discover -s tests/app-tier-acceptance -p 'test_*.py'
+
+      # Supply-chain pins (audit 12 S-10/S-11): every CI Python requirement is
+      # an exact, hashed pin, and the committed Limine boot stages match their
+      # recorded digests on every push, not only in the x86 ISO lanes.
+      - name: Check CI supply-chain pins
+        run: |
+          python3 -m unittest scripts/test_ensure_ci_python_deps.py
+          (cd limine/limine-8.7.0/bin && sha256sum --quiet --strict -c SHA256SUMS)
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master 2026-11-10
@@ -823,6 +843,14 @@ jobs:
         run: |
           LANE=virt-el2-novhe BOOT_WINDOW=120 bash scripts/qemu-aarch64-test.sh \
             target/aarch64-unknown-none-softfloat/release/cellos-kernel.Image
+
+      # Per-task FP/SIMD state: two threads of a Tier 1 cell load q0-q31/FPCR/
+      # FPSR, Yield, and read them back on the EL1 host (`__switch_el1`) and the
+      # VHE host (`__switch_el2`), each with 1 and 2 CPUs. A switch that drops
+      # FP state fails on the first round. The lane embeds the cell into its own
+      # kernel and Image under target/fp-context-aarch64.
+      - name: Run per-task FP/SIMD register file regression (aarch64, EL1 + EL2, 1 and 2 CPUs)
+        run: bash scripts/qemu-fp-context-test-aarch64.sh
 
   # Tier 3b ARM64 hypervisor. Both jobs boot the Alpine guest to its shell
   # ("~ #") through scripts/qemu-hypervisor-smoke.sh; they differ only in the
@@ -2838,14 +2866,20 @@ jobs:
 
       - name: Validate and stage software evidence
         shell: bash
+        # Ref names and the runner name are free text: passed through env, never
+        # spliced into the script by `${{ }}`.
+        env:
+          PRODUCER_RUNNER: ${{ needs.boot-suite.outputs.producer-runner }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          GIT_REF: ${{ github.ref }}
         run: |
           mkdir -p .authenticated-evidence
           python3 scripts/validate-admission-prequalification.py 2>&1 | tee .authenticated-evidence/catalog-validation.log
           python3 scripts/create-authenticated-evidence-bundle.py \
             --output evidence/manifest.json \
             --revision "${{ github.sha }}" \
-            --runner "${{ needs.boot-suite.outputs.producer-runner }}" \
-            --workflow-ref "${{ github.workflow_ref }}" \
+            --runner "$PRODUCER_RUNNER" \
+            --workflow-ref "$WORKFLOW_REF" \
             --sequence "${{ github.run_id }}:${{ github.run_attempt }}" \
             --command "boot-suite: gen_disk + http-smoke + boot + window-policy + viui-managed-surface" \
             --input catalog.json=scripts/admission_prequalification/catalog.json \
@@ -2864,7 +2898,7 @@ jobs:
             --log window-policy.log=.authenticated-evidence/runtime/window-policy.log \
             --log viui-managed-surface.log=.authenticated-evidence/runtime/viui-managed-surface.log \
             --environment event_name="${{ github.event_name }}" \
-            --environment ref="${{ github.ref }}" \
+            --environment ref="$GIT_REF" \
             --environment lint_result="${{ needs.lint.result }}" \
             --environment boot_suite_result="${{ needs.boot-suite.result }}"
 

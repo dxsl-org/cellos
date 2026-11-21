@@ -226,11 +226,11 @@ tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): apps and test
 [[file]]
 path = "cells/tests/fp-context-test/src/regs.rs"
 class = "test-harness"
-reason = "Per-task FP register file regression test: one riscv64 `asm!` block loads a known pattern into f0-f31 and fcsr, issues the Yield ecall, and stores the registers back, so nothing but the trap and the kernel's scheduling runs between load and read-back. That is the only way to observe whether the kernel hands a task another task's FP state. One `unsafe` token (regs.rs:29); every FP register is declared clobbered and the ecall uses ostd's syscall ABI. The crate is FFI (Tier 2)."
+reason = "Per-task FP register file regression test: one `asm!` block per architecture (riscv64: f0-f31 and fcsr; aarch64: q0-q31, FPCR and FPSR) loads a known pattern, issues the Yield trap, and stores the registers back, so nothing but the trap and the kernel's scheduling runs between load and read-back. That is the only way to observe whether the kernel hands a task another task's FP state. One `unsafe` token (regs.rs:353) wraps whichever `fp_yield_asm!` the target selects. riscv64 declares every FP register clobbered; aarch64 (softfloat target, vector registers cannot be named as clobbers) saves the file it found and restores it before the block ends. The trap uses ostd's syscall ABI. The manifest is FFI (Tier 2) on riscv64 and STANDARD (Tier 1, counted in the Tier-1 total) on aarch64, where Tier 2 admission is refused on production and EL2 hosts."
 approver = "dmin"
 date = "2026-11-20"
 review_by = "2027-05-28"
-tracking = "RV64 FP context regression lane (scripts/qemu-fp-context-test.sh), 2026-11-20"
+tracking = "FP context regression lanes (scripts/qemu-fp-context-test.sh RV64, 2026-11-20; scripts/qemu-fp-context-test-aarch64.sh, 2026-11-21)"
 
 [[file]]
 path = "cells/tests/cpp-smoke/src/cpp.rs"
@@ -662,11 +662,11 @@ tracking = "Allowlist re-review wave 2026-11-16 (P19, S8c step 6): apps and test
 [[crate]]
 name = "app-fp-context-test"
 class = "test-harness"
-reason = "Owns allowlisted unsafe under cells/tests/fp-context-test/ — see the [[file]] entry for the justification. regs.rs holds the crate's single `unsafe` token; main.rs has none. The manifest is FFI (Tier 2)."
+reason = "Owns allowlisted unsafe under cells/tests/fp-context-test/ — see the [[file]] entry for the justification. regs.rs holds the crate's single `unsafe` token; main.rs has none. The manifest is FFI (Tier 2) on riscv64 and STANDARD (Tier 1) on aarch64."
 approver = "dmin"
 date = "2026-11-20"
 review_by = "2027-05-28"
-tracking = "RV64 FP context regression lane (scripts/qemu-fp-context-test.sh), 2026-11-20"
+tracking = "FP context regression lanes (scripts/qemu-fp-context-test.sh RV64, 2026-11-20; scripts/qemu-fp-context-test-aarch64.sh, 2026-11-21)"
 
 [[crate]]
 name = "app-cpp-smoke"

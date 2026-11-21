@@ -3,7 +3,8 @@
 //! Two switch implementations:
 //!   `__switch_el1` — saves/restores elr_el1/spsr_el1 (EL1 normal boot).
 //!   `__switch_el2` — saves/restores elr_el2/spsr_el2 (EL2 hypervisor host).
-//! Runtime selection via `el2::is_el2()`.
+//! Runtime selection via `el2::is_el2()`. Both save and restore the task's
+//! FP/SIMD register file (`q0`-`q31`, `FPCR`, `FPSR`).
 
 use core::arch::global_asm;
 
@@ -21,6 +22,11 @@ use core::arch::global_asm;
 /// entry/exit.  Without explicit save/restore here every `eret` would use the
 /// last *other* task's user SP — causing the wrong user stack and eventual guard
 /// page faults.
+///
+/// `fpcr`/`fpsr`/`v` are the task's FP/SIMD state. EL0 runs with FP/SIMD
+/// untrapped and std Cells are built with `+neon`, while trap entry saves only
+/// the general registers; the kernel is softfloat and never touches the
+/// vector file, so the switch is the only point where it changes owner.
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct CpuContext {
@@ -49,7 +55,21 @@ pub struct CpuContext {
     ///
     /// Saved via `mrs x9, daif`, restored via `msr daif, x9`.
     pub daif: u64, // offset 128
+    pub fpcr: u64,     // offset 136
+    pub fpsr: u64,     // offset 144
+    /// `q0`-`q31` (offset 160; 16-byte aligned for `stp`/`ldp` of Q registers).
+    pub v: [u128; 32],
 }
+
+// The switch stubs (here and in el2.rs) address these fields by literal offset.
+const _: () = {
+    assert!(core::mem::offset_of!(CpuContext, sp) == 96);
+    assert!(core::mem::offset_of!(CpuContext, daif) == 128);
+    assert!(core::mem::offset_of!(CpuContext, fpcr) == 136);
+    assert!(core::mem::offset_of!(CpuContext, fpsr) == 144);
+    assert!(core::mem::offset_of!(CpuContext, v) == 160);
+    assert!(core::mem::size_of::<CpuContext>() == 672);
+};
 
 /// Atomically capture DAIF and mask IRQs (DAIF.I = 1).
 #[inline(always)]
@@ -103,6 +123,9 @@ impl CpuContext {
             spsr_el1: 0,
             sp_el0: 0,
             daif: 0,
+            fpcr: 0,
+            fpsr: 0,
+            v: [0; 32],
         }
     }
 
@@ -308,6 +331,29 @@ __switch_el1:
     // context restores the idle loop's IRQ-enabled DAIF, keeping WFI functional.
     mrs  x9,  daif
     str  x9,       [x0, #128]
+    // FP/SIMD file: offsets 136 (FPCR), 144 (FPSR), 160.. (q0-q31). The kernel
+    // is softfloat, so these still hold the outgoing task's EL0 values here.
+    // `.arch_extension fp`: the kernel target assembles without FP.
+    .arch_extension fp
+    mrs  x9,  fpcr
+    mrs  x10, fpsr
+    stp  x9,  x10, [x0, #136]
+    stp  q0,  q1,  [x0, #160]
+    stp  q2,  q3,  [x0, #192]
+    stp  q4,  q5,  [x0, #224]
+    stp  q6,  q7,  [x0, #256]
+    stp  q8,  q9,  [x0, #288]
+    stp  q10, q11, [x0, #320]
+    stp  q12, q13, [x0, #352]
+    stp  q14, q15, [x0, #384]
+    stp  q16, q17, [x0, #416]
+    stp  q18, q19, [x0, #448]
+    stp  q20, q21, [x0, #480]
+    stp  q22, q23, [x0, #512]
+    stp  q24, q25, [x0, #544]
+    stp  q26, q27, [x0, #576]
+    stp  q28, q29, [x0, #608]
+    stp  q30, q31, [x0, #640]
 
     // Root transition, if the caller asked for one (x2 = TTBR0_EL1 value; zero
     // means "no write", the SAS path). It sits between the save and the load on
@@ -329,6 +375,25 @@ __switch_el1:
 
     // Restore new context after the completion callback.
     mov  x9,  x19
+    ldp  x10, x11, [x9, #136]
+    msr  fpcr, x10
+    msr  fpsr, x11
+    ldp  q0,  q1,  [x9, #160]
+    ldp  q2,  q3,  [x9, #192]
+    ldp  q4,  q5,  [x9, #224]
+    ldp  q6,  q7,  [x9, #256]
+    ldp  q8,  q9,  [x9, #288]
+    ldp  q10, q11, [x9, #320]
+    ldp  q12, q13, [x9, #352]
+    ldp  q14, q15, [x9, #384]
+    ldp  q16, q17, [x9, #416]
+    ldp  q18, q19, [x9, #448]
+    ldp  q20, q21, [x9, #480]
+    ldp  q22, q23, [x9, #512]
+    ldp  q24, q25, [x9, #544]
+    ldp  q26, q27, [x9, #576]
+    ldp  q28, q29, [x9, #608]
+    ldp  q30, q31, [x9, #640]
     ldp  x19, x20, [x9, #0]
     ldp  x21, x22, [x9, #16]
     ldp  x23, x24, [x9, #32]

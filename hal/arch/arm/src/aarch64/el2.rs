@@ -178,6 +178,7 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
 // `elr_el2`/`spsr_el2` instead of `elr_el1`/`spsr_el1`.
 // CpuContext offsets (see context.rs):
 //   x19-x30: 0..88   sp: 96   elr: 104   spsr: 112   sp_el0: 120   daif: 128
+//   fpcr: 136   fpsr: 144   q0-q31: 160..672
 
 global_asm!(
     r#"
@@ -202,6 +203,29 @@ __switch_el2:
     str  x9,       [x0, #120]
     mrs  x9,  daif
     str  x9,       [x0, #128]
+    // The EL0 FP/SIMD file, as in `__switch_el1`. On a VHE host a vCPU's
+    // guest values may be live here too (the QEMU-virt world switch keeps no
+    // separate guest bank); they stay with the task that ran the vCPU.
+    .arch_extension fp
+    mrs  x9,  fpcr
+    mrs  x10, fpsr
+    stp  x9,  x10, [x0, #136]
+    stp  q0,  q1,  [x0, #160]
+    stp  q2,  q3,  [x0, #192]
+    stp  q4,  q5,  [x0, #224]
+    stp  q6,  q7,  [x0, #256]
+    stp  q8,  q9,  [x0, #288]
+    stp  q10, q11, [x0, #320]
+    stp  q12, q13, [x0, #352]
+    stp  q14, q15, [x0, #384]
+    stp  q16, q17, [x0, #416]
+    stp  q18, q19, [x0, #448]
+    stp  q20, q21, [x0, #480]
+    stp  q22, q23, [x0, #512]
+    stp  q24, q25, [x0, #544]
+    stp  q26, q27, [x0, #576]
+    stp  q28, q29, [x0, #608]
+    stp  q30, q31, [x0, #640]
 
     // Outgoing Context stored: adopt the incoming stack and publish completion.
     mov  x19, x1
@@ -211,6 +235,25 @@ __switch_el2:
     bl   vi_context_switch_complete
 
     mov  x9,  x19
+    ldp  x10, x11, [x9, #136]
+    msr  fpcr, x10
+    msr  fpsr, x11
+    ldp  q0,  q1,  [x9, #160]
+    ldp  q2,  q3,  [x9, #192]
+    ldp  q4,  q5,  [x9, #224]
+    ldp  q6,  q7,  [x9, #256]
+    ldp  q8,  q9,  [x9, #288]
+    ldp  q10, q11, [x9, #320]
+    ldp  q12, q13, [x9, #352]
+    ldp  q14, q15, [x9, #384]
+    ldp  q16, q17, [x9, #416]
+    ldp  q18, q19, [x9, #448]
+    ldp  q20, q21, [x9, #480]
+    ldp  q22, q23, [x9, #512]
+    ldp  q24, q25, [x9, #544]
+    ldp  q26, q27, [x9, #576]
+    ldp  q28, q29, [x9, #608]
+    ldp  q30, q31, [x9, #640]
     ldp  x19, x20, [x9, #0]
     ldp  x21, x22, [x9, #16]
     ldp  x23, x24, [x9, #32]

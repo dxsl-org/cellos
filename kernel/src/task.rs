@@ -589,6 +589,9 @@ const IDLE_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     spsr_el1: 0x305,
     sp_el0: 0,
     daif: 0, // saved/restored by __switch_el1; 0 = no DAIF masking (IRQs enabled)
+    fpcr: 0,
+    fpsr: 0,
+    v: [0; 32],
 };
 
 #[cfg(target_arch = "aarch64")]

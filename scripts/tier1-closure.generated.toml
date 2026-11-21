@@ -26,6 +26,7 @@ tier1_roots = [
     "app-c2c-render",
     "app-cellbox",
     "app-chrome",
+    "app-fp-context-test",
     "app-haily-agent",
     "app-hello",
     "app-http-smoke",

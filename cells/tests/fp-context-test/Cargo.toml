@@ -3,7 +3,7 @@ name = "app-fp-context-test"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
-description = "Per-task floating-point register file smoke test: f0-f31 and fcsr across context switches"
+description = "Per-task floating-point register file smoke test: f0-f31/fcsr (RV64) and q0-q31/FPCR/FPSR (AArch64) across context switches"
 
 [[bin]]
 name = "fp-context-test"
