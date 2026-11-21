@@ -171,3 +171,9 @@ pub(crate) unsafe fn guarded_byte_copy(
     );
     ret
 }
+
+/// Whether `base` may become the user thread pointer: the user `tp` rides the
+/// trap frame, takes any value, and a bad base only faults the cell itself.
+pub(crate) fn thread_pointer_admissible(_base: usize) -> bool {
+    true
+}

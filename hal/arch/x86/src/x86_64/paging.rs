@@ -430,7 +430,9 @@ impl PageTableTrait for PageTable {
         let pdpt = self.get_or_alloc(i3, user, tables, alloc_fn)?;
         let pd = pdpt.get_or_alloc(i2, user, tables, alloc_fn)?;
         let pt = pd.get_or_alloc(i1, user, tables, alloc_fn)?;
-        pt.set_entry(i0, phys as u64 | leaf_bits(flags));
+        // Only the frame bits of `phys`: stray low or high bits must never
+        // become leaf flags (`U/S`, `PWT`, `NX`, ...).
+        pt.set_entry(i0, (phys as u64 & PTE_ADDR_MASK) | leaf_bits(flags));
         Ok(())
     }
     fn protect(&mut self, virt: VAddr, flags: PageFlags) -> ViResult<()> {
@@ -805,5 +807,41 @@ mod tests {
         assert_eq!(data[3] & PTE_USER, 0);
         assert_ne!(data[3] & PTE_NX, 0);
         assert!(chain(&root, high).iter().all(|pte| pte & PTE_USER != 0));
+    }
+
+    /// 05 S-9: a firmware base with low bits set (HPET `0xFED0_0004`) must map
+    /// its page, never OR `U/S` (bit 2) or other flag bits into the leaf.
+    #[test]
+    fn map_with_keeps_only_the_frame_bits_of_phys() {
+        let mut root = Box::new(PageTable::zero());
+        let mut frames: Vec<Box<PageTable>> = Vec::new();
+        let mut allocate = || {
+            let mut table = Box::new(PageTable::zero());
+            let address = table.as_mut() as *mut PageTable as usize;
+            frames.push(table);
+            Some(address)
+        };
+        let va = 0xFED0_0000;
+        let kernel_rw = PageFlags::from_bits(PageFlags::READ | PageFlags::WRITE);
+        root.map_with(
+            va,
+            0xFED0_0004,
+            kernel_rw,
+            TablePolicy::UserReachable,
+            &mut allocate,
+        )
+        .unwrap();
+        let leaf = root.leaf_entry(va).unwrap();
+        assert_eq!(leaf & PTE_ADDR_MASK, 0xFED0_0000);
+        assert_eq!(leaf & PTE_USER, 0, "low phys bits must not grant U/S");
+        root.map_with(
+            va,
+            0x8000_0000_FED0_0000,
+            kernel_rw,
+            TablePolicy::UserReachable,
+            &mut allocate,
+        )
+        .unwrap();
+        assert_eq!(root.leaf_entry(va).unwrap() & PTE_ADDR_MASK, 0xFED0_0000);
     }
 }

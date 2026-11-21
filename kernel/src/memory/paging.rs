@@ -573,11 +573,15 @@ pub fn init_kernel_paging_x86(
             .filter(|end| *end > ecam_base_usize)
             .ok_or(PageTableError::InvalidAddress)?
     };
+    let page_end = |base: usize| {
+        base.checked_add(PAGE_SIZE)
+            .ok_or(PageTableError::InvalidAddress)
+    };
     let mmio_regions: &[(usize, usize)] = &[
-        (ioapic_base_usize, ioapic_base_usize + PAGE_SIZE), // IOAPIC (from ACPI)
-        (hpet_base_usize, hpet_base_usize + PAGE_SIZE),     // HPET   (from ACPI)
-        (lapic_base_usize, lapic_base_usize + PAGE_SIZE),   // LAPIC  (from ACPI)
-        (ecam_base_usize, ecam_end),                        // complete MCFG allocation
+        (ioapic_base_usize, page_end(ioapic_base_usize)?), // IOAPIC (from ACPI)
+        (hpet_base_usize, page_end(hpet_base_usize)?),     // HPET   (from ACPI)
+        (lapic_base_usize, page_end(lapic_base_usize)?),   // LAPIC  (from ACPI)
+        (ecam_base_usize, ecam_end),                       // complete MCFG allocation
     ];
     for &(start, end) in mmio_regions {
         if start == 0 {

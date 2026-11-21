@@ -1396,7 +1396,15 @@ pub(super) fn read_log(
 }
 
 /// Handler for `Syscall::WaitForEvent` (extracted from the dispatcher).
+///
+/// Naming NET_RX consumes the one system-wide level flag, so only the live
+/// `NET` provider may (`completion_wait::net_rx_authorised`).
 pub(super) fn wait_for_event(caller_id: usize, mask: u32, deadline: Option<u64>) -> SyscallResult {
+    if mask & abi::syscall::events::NET_RX != 0
+        && !crate::task::completion_wait::net_rx_authorised(caller_id)
+    {
+        return Err(SyscallError::PermissionDenied);
+    }
     // Lost-wakeup guard: check pending events BEFORE parking.
     let already = crate::task::waker::consume_pending(mask);
     if already != 0 {

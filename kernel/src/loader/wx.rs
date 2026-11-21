@@ -8,8 +8,9 @@
 //! cell in the single address space. This module closes the window.
 //!
 //! # Ordering contract (do not reorder)
-//! 1. `elf::load_segments` maps all pages WRITE and records the *target* flags,
-//!    OR-ing them across PT_LOADs that share a boundary page.
+//! 1. `elf::load_segments` maps all pages with [`load_window_flags`]
+//!    (kernel-only, writable, never executable) and records the *target*
+//!    flags, OR-ing them across PT_LOADs that share a boundary page.
 //! 2. `reloc::apply_relocations` patches each owned frame through its kernel
 //!    alias (every arch), never through the cell's USER mapping.
 //! 3. `enforce` publishes the code bytes to instruction fetch on every online
@@ -80,6 +81,21 @@ pub fn page_flags(write: bool, execute: bool, guarded: bool) -> Flags {
         }
     }
     Flags::from_bits(bits)
+}
+
+/// Flags a page carries during the load window, before [`enforce`] installs
+/// its `final_flags`.
+///
+/// Kernel-only and writable: the loader copies segments and applies
+/// relocations through these pages and the frames' kernel alias, so the window
+/// must give a concurrently running cell (another hart, same address space) no
+/// access at all, and must not leave a kernel-executable writable page either.
+/// `USER`, `EXECUTE` and `GUARDED` therefore appear only when `enforce`
+/// rewrites the page.
+pub fn load_window_flags(final_flags: Flags) -> Flags {
+    Flags::from_bits(
+        (final_flags.bits() & !(Flags::USER | Flags::EXECUTE | Flags::GUARDED)) | Flags::WRITE,
+    )
 }
 
 /// Reject a PT_LOAD that declares both `PF_W` and `PF_X`.
@@ -292,6 +308,7 @@ pub fn run_self_tests() {
     assert!(reject_wx_segment(2, 0x3000, false, false).is_ok());
 
     assert_guard_selection();
+    assert_load_window();
 
     log::info!("[wx] self-tests PASSED");
 }
@@ -330,10 +347,37 @@ pub fn assert_guard_selection() {
     assert_ne!(merged & Flags::GUARDED, 0);
 }
 
+/// The load window (02 S-4): every page, whatever its `p_flags`, is mapped
+/// kernel-only, writable and not executable until `enforce` runs.
+///
+/// # Panics
+/// Panics if a window page is USER, executable, guarded or read-only, or if
+/// its flags depend on the segment (a boundary merge would then have to remap).
+pub fn assert_load_window() {
+    let window = load_window_flags(page_flags(false, false, false));
+    for write in [false, true] {
+        for execute in [false, true] {
+            for guarded in [false, true] {
+                let flags = load_window_flags(page_flags(write, execute, guarded)).bits();
+                assert_eq!(flags & Flags::USER, 0, "no cell may reach a loading page");
+                assert_eq!(flags & Flags::EXECUTE, 0, "a loading page is never fetched");
+                assert_eq!(flags & Flags::GUARDED, 0);
+                assert_ne!(flags & Flags::WRITE, 0, "the loader writes every page");
+                assert_eq!(flags, window.bits(), "window flags ignore p_flags");
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn guard_selection() {
         super::assert_guard_selection();
+    }
+
+    #[test]
+    fn load_window_is_kernel_only() {
+        super::assert_load_window();
     }
 }

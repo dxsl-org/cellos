@@ -89,6 +89,13 @@ pub(crate) fn smap_active() -> bool {
     crate::hal::x86_64::protect::active().smap
 }
 
+/// Whether `base` may become the user thread pointer. WRMSR of a
+/// non-canonical `IA32_FS_BASE` raises #GP in ring 0, on the set and on every
+/// resume, so only a user-range (and so canonical) address is admitted.
+pub(crate) fn thread_pointer_admissible(base: usize) -> bool {
+    base < crate::hal::paging::USER_LIMIT
+}
+
 /// Write the architecture's user thread pointer register.
 pub(crate) fn write_user_thread_pointer(base: usize) {
     const IA32_FS_BASE: u32 = 0xC000_0100;
@@ -103,5 +110,23 @@ pub(crate) fn write_user_thread_pointer(base: usize) {
             in("edx") (base >> 32) as u32,
             options(nomem, nostack)
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::thread_pointer_admissible;
+
+    #[test]
+    fn only_user_range_thread_pointers_are_admitted() {
+        let limit = crate::hal::paging::USER_LIMIT;
+        assert!(thread_pointer_admissible(0));
+        assert!(thread_pointer_admissible(limit - 1));
+        assert!(!thread_pointer_admissible(limit));
+        // Non-canonical: WRMSR IA32_FS_BASE would #GP in ring 0.
+        assert!(!thread_pointer_admissible(0x8000_0000_0000_0000));
+        assert!(!thread_pointer_admissible(0x0000_8000_0000_0000));
+        // Canonical but kernel half.
+        assert!(!thread_pointer_admissible(0xFFFF_8000_0000_0000));
     }
 }

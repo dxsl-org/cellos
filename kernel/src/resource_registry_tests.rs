@@ -1,6 +1,6 @@
 use super::{
-    checked_mmio_end, ecam_claim_admitted, owns_exact_mmio, request_ecam_mmio, static_range_class,
-    valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
+    bar_window_admitted, checked_mmio_end, ecam_claim_admitted, owns_exact_mmio, request_ecam_mmio,
+    static_range_class, valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
 };
 use crate::dev::ownership::{claim_pci, pci_owner, release_for, Scope};
 use types::ViError;
@@ -59,6 +59,35 @@ fn pcie_bar_windows_reject_unbounded_or_misaligned_authority() {
     assert!(!valid_pcie_bar_window(0xF000_0000, 0x3000));
     assert!(!valid_pcie_bar_window(0x8000_0000, (1 << 30) + 1));
     assert!(!valid_pcie_bar_window(usize::MAX - 0xFFF, 0x1000));
+}
+
+/// 10 S-9: a BAR read back from a hostile device (or registered by a Platform
+/// Cell) that aliases RAM, the kernel image or ECAM is never recorded, so it
+/// can never be user-mapped for a driver Cell.
+#[test]
+fn pcie_bar_windows_refuse_ram_kernel_image_and_ecam() {
+    const RAM: (usize, usize) = (0x8000_0000, 0x9000_0000);
+    const IMAGE: (usize, usize) = (0x0020_0000, 0x0040_0000);
+    const ECAM: (usize, usize) = (0xB000_0000, 0xC000_0000);
+    let reserved = || [RAM, IMAGE, ECAM].into_iter();
+    assert!(bar_window_admitted(0xFE00_0000, 0x4000, reserved()));
+    // Adjacent to every reserved span: half-open ranges do not touch.
+    assert!(bar_window_admitted(0x7FFF_C000, 0x4000, reserved()));
+    assert!(bar_window_admitted(0x0040_0000, 0x1000, reserved()));
+    assert!(bar_window_admitted(0xC000_0000, 0x1000, reserved()));
+    // Inside or straddling RAM, the kernel image and ECAM.
+    assert!(!bar_window_admitted(0x8000_0000, 0x4000, reserved()));
+    assert!(!bar_window_admitted(0x8FFF_F000, 0x1000, reserved()));
+    assert!(!bar_window_admitted(0xA000_0000, 0x2000_0000, reserved()));
+    assert!(!bar_window_admitted(0x0030_0000, 0x1000, reserved()));
+    assert!(!bar_window_admitted(0x0020_0000, 0x20_0000, reserved()));
+    assert!(!bar_window_admitted(0xB010_0000, 0x1000, reserved()));
+    // An invalid shape stays refused whatever the reserved spans are.
+    assert!(!bar_window_admitted(
+        0xF000_1000,
+        0x4000,
+        core::iter::empty()
+    ));
 }
 
 /// Phase 08C non-reuse: a retirement that cannot prove the function quiescent

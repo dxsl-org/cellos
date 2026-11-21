@@ -285,6 +285,8 @@ pub(super) enum CompletionParkDecision {
     IpcPending,
     /// A line of the wait's IRQ snapshot is already pending.
     IrqPending,
+    /// A NET_RX wait's queue already holds a record: drain instead of parking.
+    Drainable,
 }
 
 /// Publish a completion wait only if no already-published IPC must interrupt it.
@@ -296,6 +298,12 @@ pub(super) enum CompletionParkDecision {
 /// source checks its pending notification in the same hold: every terminal
 /// transition takes `SCHEDULER` too, so a terminal published before this check
 /// is seen here and one published after it finds the parked state and wakes it.
+///
+/// NET_RX gets the same treatment from its queue: the ISR appends without
+/// `SCHEDULER`, and `deliver_pending_wakes` (under `SCHEDULER`) drops the wake
+/// of a task that is not parked yet. A record appended after the waiter's last
+/// drain is therefore seen here (the queue's ring lock is a leaf), and one
+/// appended after this check finds the published state and is woken.
 pub(super) fn publish_wait_state_locked(
     task: &mut Task,
     tid: usize,
@@ -304,6 +312,14 @@ pub(super) fn publish_wait_state_locked(
 ) -> CompletionParkDecision {
     if source & abi::completion::source::NET_RX != 0 && !task.pending_msgs.is_empty() {
         return CompletionParkDecision::MailboxPending;
+    }
+    if source & abi::completion::source::NET_RX != 0
+        && task
+            .completion
+            .as_ref()
+            .is_some_and(|queue| queue.drainable() != 0)
+    {
+        return CompletionParkDecision::Drainable;
     }
     if source & abi::completion::source::IPC != 0
         && super::async_ipc::has_pending_notification(task)
@@ -364,6 +380,26 @@ pub(super) fn finish_net_rx_wait(
     }
 }
 
+/// Whether `tid` may wait on NET_RX: it runs as the incarnation (cell and
+/// generation) of the live, active `NET` service provider.
+///
+/// NET_RX is one system-wide source: a single reservation and a single level
+/// flag, both filled by every NIC interrupt. A waiter outside the network stack
+/// would take its frames (and its reservation) and stall networking, so the
+/// source belongs to the registered provider alone. Because only that
+/// incarnation can arm, a reservation the next arm displaces belongs to a dead
+/// or replaced provider, or to another thread of the same one.
+/// Takes `SCHEDULER`, then the service registry (ranked below it).
+pub(crate) fn net_rx_authorised(tid: usize) -> bool {
+    let guard = super::SCHEDULER.lock();
+    let Some(task) = guard.as_ref().and_then(|sched| sched.tasks.get(&tid)) else {
+        return false;
+    };
+    let identity = (task.cell_id.0, task.cell_generation);
+    crate::cell::service_registry::lookup_bound(abi::syscall::service::NET)
+        .is_some_and(|(_, cell, generation)| (cell, generation) == identity)
+}
+
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
 /// and write the result to `out_ptr`.
 ///
@@ -382,7 +418,9 @@ pub(super) fn finish_net_rx_wait(
 /// - `InvalidInput` — `mask` is empty or names a source this kernel does not
 ///   serve (`IRQ` off x86_64), `TIMER` lacks a deadline, or `out_ptr` is null.
 /// - `PermissionDenied` — `IRQ` is named and the caller holds no line, at
-///   entry or after every line it held was revoked mid-wait.
+///   entry or after every line it held was revoked mid-wait; or `NET_RX` is
+///   named and the caller is not the live `NET` provider
+///   ([`net_rx_authorised`]).
 /// - `BufferTooSmall` — `out_ptr` cannot hold a whole record.
 /// - `TryAgain` — the caller's queue has no free slot. This is backpressure, and
 ///   it is reported here, to the cell that caused it, rather than to the
@@ -406,6 +444,9 @@ pub fn wait_completion(
         return Err(SyscallError::InvalidInput);
     }
     validate_user_buf(out_ptr, COMPLETION_LEN, COMPLETION_LEN)?;
+    if mask & abi::completion::source::NET_RX != 0 && !net_rx_authorised(caller_id) {
+        return Err(SyscallError::PermissionDenied);
+    }
     // The snapshot takes the allocation lock alone, before any SCHEDULER hold.
     let irq_lines = if mask & abi::completion::source::IRQ != 0 {
         let lines = owned_irq_lines(caller_id);
@@ -511,7 +552,9 @@ pub fn wait_completion(
                 let _ = queue.release(slot);
                 return Ok(0);
             }
-            Some(CompletionParkDecision::Parked) => {}
+            // Landed after the drain above: deliver it like a woken wait.
+            Some(CompletionParkDecision::Drainable) => {}
+            Some(CompletionParkDecision::Parked) => super::yield_cpu(),
             None => {
                 if is_net_rx {
                     while let NetRxCleanupStep::RetryCompleting = net_rx_cleanup_step(&queue) {
@@ -523,7 +566,6 @@ pub fn wait_completion(
                 return Err(SyscallError::Unknown);
             }
         }
-        super::yield_cpu();
 
         if let Some(done) = queue.drain() {
             if !is_net_rx {
@@ -651,9 +693,11 @@ fn wait_multi(
             Some(CompletionParkDecision::MailboxPending) => {
                 return finish_multi_empty(caller_id, out_ptr, queue, slot, has_net_rx);
             }
-            Some(CompletionParkDecision::IpcPending | CompletionParkDecision::IrqPending) => {
-                continue
-            }
+            Some(
+                CompletionParkDecision::IpcPending
+                | CompletionParkDecision::IrqPending
+                | CompletionParkDecision::Drainable,
+            ) => continue,
             Some(CompletionParkDecision::Parked) => super::yield_cpu(),
         }
     }
@@ -1124,6 +1168,95 @@ mod tests {
         assert_eq!(task.state, TaskState::Ready, "the waiter does not park");
         assert!(irq_wait::take_pending(0xC4) && irq_wait::take_pending(0xC5));
         let _ = queue.release(slot);
+    }
+
+    /// 03 S-5: an RX completion that lands between the waiter's last drain and
+    /// its park has already lost its wake (the task was not parked when
+    /// `deliver_pending_wakes` ran), so the park itself must see the record
+    /// and refuse; with an empty queue the same wait parks.
+    #[test]
+    fn a_record_landing_before_the_park_stops_a_net_rx_park() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let queue = queue();
+        let slot = queue.reserve().unwrap();
+        let mut task = Box::new(Task::new(
+            TID + 2,
+            CellId(72),
+            "msw-park",
+            alloc::vec::Vec::new(),
+        ));
+        task.state = TaskState::Ready;
+        task.completion = Some(queue.clone());
+        assert!(queue.complete_from(slot, NET_RX, NET_RX as isize));
+        for mask in [NET_RX, NET_RX | IPC] {
+            assert_eq!(
+                publish_wait_state_locked(&mut task, TID + 2, mask, Some(5)),
+                CompletionParkDecision::Drainable,
+                "mask {mask:#x} parked over a drainable record"
+            );
+            assert_eq!(task.state, TaskState::Ready, "the waiter does not park");
+        }
+        assert!(queue.drain().is_some());
+        assert_eq!(
+            publish_wait_state_locked(&mut task, TID + 2, NET_RX, Some(5)),
+            CompletionParkDecision::Parked
+        );
+        task.state = TaskState::Ready;
+        task.completion = None;
+    }
+
+    /// 03 S-6: NET_RX belongs to the live `NET` provider's exact incarnation;
+    /// any other caller is refused before it can reserve or arm, so it can
+    /// neither take the reservation nor consume the level flag.
+    #[test]
+    fn only_the_live_net_provider_may_wait_on_net_rx() {
+        use crate::cell::service_registry;
+        const PROVIDER: usize = 72_401;
+        const OTHER: usize = 72_402;
+        const NET_SERVICE: u16 = abi::syscall::service::NET;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let saved = super::super::SCHEDULER.lock().take();
+        let mut sched = Scheduler::new();
+        for (tid, cell) in [(PROVIDER, 74), (OTHER, 75)] {
+            let mut task = Box::new(Task::new(
+                tid,
+                CellId(cell),
+                "net-rx-gate",
+                alloc::vec::Vec::new(),
+            ));
+            task.cell_generation = 3;
+            sched.tasks.insert(tid, task);
+        }
+        *super::super::SCHEDULER.lock() = Some(sched);
+
+        // The registry is shared with host tests that do not take
+        // TEST_STATE_LOCK: re-publish until this row is the one observed.
+        let authorised = (0..64).any(|_| {
+            assert!(service_registry::register(NET_SERVICE, PROVIDER, 74, 3));
+            net_rx_authorised(PROVIDER)
+                && service_registry::lookup_bound(NET_SERVICE).map(|(tid, ..)| tid)
+                    == Some(PROVIDER)
+        });
+        assert!(authorised, "the registered provider was refused");
+        assert!(!net_rx_authorised(OTHER), "another cell may wait on NET_RX");
+        for mask in [NET_RX, NET_RX | IPC] {
+            assert_eq!(
+                wait_completion(OTHER, mask, Some(1), 0x1000),
+                Err(SyscallError::PermissionDenied),
+                "mask {mask:#x}"
+            );
+        }
+        // A later incarnation of the provider's CellId is not the provider.
+        if let Some(task) = super::super::SCHEDULER
+            .lock()
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&PROVIDER))
+        {
+            task.cell_generation = 4;
+        }
+        assert!(!net_rx_authorised(PROVIDER));
+        service_registry::clear_tid(PROVIDER);
+        *super::super::SCHEDULER.lock() = saved;
     }
 
     #[cfg(target_arch = "x86_64")]

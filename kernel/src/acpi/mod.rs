@@ -134,6 +134,41 @@ pub fn with_topology<R>(f: impl FnOnce(&AcpiTopology) -> R) -> R {
     f(&TOPOLOGY.lock())
 }
 
+/// Whether a firmware-reported register-block base (HPET, LAPIC, I/O APIC)
+/// may be mapped: nonzero, page-aligned — low bits would land in the leaf's
+/// flag bits (`U/S`, `PWT`, ...) — and inside the 52-bit physical space.
+pub(crate) fn mmio_base_admissible(base: u64) -> bool {
+    base != 0 && base & 0xFFF == 0 && base < 1 << 52
+}
+
+/// Whether the window `[base, base + len)` stays clear of every boot
+/// memory-map entry that is RAM (usable, bootloader, kernel, ACPI tables or
+/// NVS): a firmware MMIO base there would be remapped uncached and the
+/// kernel's register writes would land in memory. `false` when the window
+/// wraps.
+#[allow(dead_code)] // reason: only the x86_64 boot MMIO window calls it; acpi builds on every target
+pub(crate) fn mmio_window_clear_of_ram(
+    base: u64,
+    len: usize,
+    memory_map: &[crate::boot::MemoryMapEntry],
+) -> bool {
+    use crate::boot::MemoryType;
+    let Some(end) = base.checked_add(len as u64) else {
+        return false;
+    };
+    !memory_map.iter().any(|entry| {
+        matches!(
+            entry.ty,
+            MemoryType::Usable
+                | MemoryType::Bootloader
+                | MemoryType::Kernel
+                | MemoryType::AcpiReclaimable
+                | MemoryType::AcpiNvs
+        ) && (entry.base as u64) < end
+            && base < (entry.base as u64).saturating_add(entry.length as u64)
+    })
+}
+
 /// Parse ACPI tables starting from `rsdp_phys`.
 ///
 /// `map_physical` must make `[phys, phys + len)` readable and return its virtual

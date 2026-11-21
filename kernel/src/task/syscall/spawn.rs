@@ -555,6 +555,12 @@ pub(super) fn spawn(caller_id: usize, entry: usize, arg: usize) -> SyscallResult
 
 /// Handler for `Syscall::SetTlsBase` (extracted from the dispatcher).
 pub(super) fn set_tls_base(caller_id: usize, base: usize) -> SyscallResult {
+    // The base is installed into a register on every resume; one the
+    // architecture would fault on in the kernel (x86 non-canonical FS_BASE) is
+    // refused before it is stored.
+    if !crate::arch::user_access::thread_pointer_admissible(base) {
+        return Err(SyscallError::InvalidInput);
+    }
     // Self-only by construction: the ABI has no target task parameter, so
     // this can only ever change the caller's own thread pointer, and the
     // base carries no authority — the kernel never dereferences it. A bad
@@ -1360,5 +1366,31 @@ pub(super) fn snapshot(caller_id: usize) -> SyscallResult {
             log::warn!("[snapshot] unavailable: {reason}");
             Err(SyscallError::Unknown)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 01 S-8: a base the architecture refuses (x86: non-canonical FS_BASE,
+    /// a ring-0 #GP on every resume) is refused before any task is touched.
+    #[test]
+    fn set_tls_base_refuses_an_inadmissible_base_before_lookup() {
+        let unknown_caller = usize::MAX;
+        for base in [0x8000_0000_0000_0000usize, 1 << 47, usize::MAX] {
+            if crate::arch::user_access::thread_pointer_admissible(base) {
+                continue;
+            }
+            assert_eq!(
+                set_tls_base(unknown_caller, base),
+                Err(SyscallError::InvalidInput),
+                "base {base:#x}"
+            );
+        }
+        assert_eq!(
+            set_tls_base(unknown_caller, 0x1000),
+            Err(SyscallError::PermissionDenied)
+        );
     }
 }

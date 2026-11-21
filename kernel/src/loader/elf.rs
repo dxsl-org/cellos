@@ -219,17 +219,17 @@ impl ElfLoader {
                 //   final_flags — what the ELF actually asks for. Recorded per page,
                 //                 OR-ed across PT_LOADs that share a boundary page,
                 //                 and applied by `wx::enforce` after relocation.
-                //   load_flags  — final_flags plus WRITE. Used only while the loader
-                //                 runs, because `.rela.dyn` patching writes through
-                //                 the cell's own VA on riscv64/x86_64.
+                //   load_flags  — `wx::load_window_flags(final_flags)`: kernel-only,
+                //                 writable, not executable. Segment copy and
+                //                 relocation write through the frame's kernel alias.
                 //
-                // The WRITE bit therefore lives for exactly the load window. After
-                // `wx::enforce` a cell's `.text`/`.rodata` are hardware read-only,
-                // which is what stops one cell rewriting another's code in the SAS.
+                // No cell can touch the page until `wx::enforce` installs the final
+                // flags, and after it a cell's `.text`/`.rodata` are hardware
+                // read-only, which stops one cell rewriting another's code in the SAS.
                 use crate::memory::paging::Flags;
                 let final_flags =
                     super::wx::page_flags(ph_flags.is_write(), ph_flags.is_execute(), guarded_code);
-                let flags = Flags::from_bits(final_flags.bits() | Flags::WRITE);
+                let flags = super::wx::load_window_flags(final_flags);
 
                 // Map pages. The invalidation is batched (phase 07b R1): every
                 // leaf of this segment is written through `map_page_deferred`
@@ -275,19 +275,10 @@ impl ElfLoader {
                         if let Some(entry) = mapped.iter_mut().find(|p| p.va == current_page) {
                             // Merge the TARGET flags — this is the value `wx::enforce`
                             // will apply, so the OR must happen here, on the page, and
-                            // never per-segment after the fact.
-                            let merged =
+                            // never per-segment after the fact. The leaf keeps its
+                            // load-window flags, which do not depend on the segment.
+                            entry.final_flags =
                                 Flags::from_bits(entry.final_flags.bits() | final_flags.bits());
-                            if merged != entry.final_flags {
-                                entry.final_flags = merged;
-                                let _ = crate::memory::paging::map_page_deferred(
-                                    frame_allocator,
-                                    batch,
-                                    current_page,
-                                    phys,
-                                    Flags::from_bits(merged.bits() | Flags::WRITE),
-                                );
-                            }
                         }
                         crate::memory::frame::phys_to_virt(phys)
                     } else {
@@ -443,11 +434,104 @@ impl ElfParser for ElfLoader {
         })
     }
 
+    /// The first section named `name`, through the bounded section table.
+    ///
+    /// A named `SHT_NOBITS` (or `SHT_NULL`) section has no bytes in the file and
+    /// is refused rather than sliced: its `sh_offset`/`sh_size` are not file
+    /// ranges, and an out-of-range one must never reach a slice index.
     fn get_section<'a>(&self, data: &'a [u8], name: &str) -> ViResult<&'a [u8]> {
-        let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
-        match elf.find_section_by_name(name) {
-            Some(section) => Ok(section.raw_data(&elf)),
-            None => Err(ViError::NotFound),
+        use super::elf_section::{ElfSections, SHT_NOBITS};
+        let elf = ElfSections::parse(data).ok_or(ViError::InvalidInput)?;
+        if elf.count() == 0 {
+            return Err(ViError::NotFound);
+        }
+        let names = elf.names().ok_or(ViError::InvalidInput)?;
+        for index in 0..elf.count() {
+            let section = elf.section(index).ok_or(ViError::InvalidInput)?;
+            if elf.name(names, section) != Some(name.as_bytes()) {
+                continue;
+            }
+            if section.kind == SHT_NOBITS || section.kind == 0 {
+                return Err(ViError::InvalidInput);
+            }
+            return elf.bytes(section).ok_or(ViError::InvalidInput);
+        }
+        Err(ViError::NotFound)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ElfLoader, ElfParser};
+    use types::ViError;
+
+    const NAMES: &[u8] = b"\0.shstrtab\0__ViCell_syscalls\0";
+    const DATA: usize = 96;
+    const SHOFF: usize = 128;
+    const SHT_PROGBITS: u64 = 1;
+    const SHT_NOBITS: u64 = 8;
+
+    fn put(elf: &mut [u8], at: usize, value: u64, width: usize) {
+        elf[at..at + width].copy_from_slice(&value.to_le_bytes()[..width]);
+    }
+
+    /// ELF64 with `.shstrtab` and one `__ViCell_syscalls` of `kind` at
+    /// `offset`/`size`; eight payload bytes sit at `DATA`.
+    fn image(kind: u64, offset: u64, size: u64) -> alloc::vec::Vec<u8> {
+        let mut elf = alloc::vec![0u8; SHOFF + 3 * 64];
+        elf[..7].copy_from_slice(b"\x7fELF\x02\x01\x01");
+        put(&mut elf, 16, 3, 2);
+        put(&mut elf, 20, 1, 4);
+        put(&mut elf, 40, SHOFF as u64, 8);
+        put(&mut elf, 52, 64, 2);
+        put(&mut elf, 58, 64, 2);
+        put(&mut elf, 60, 3, 2);
+        put(&mut elf, 62, 1, 2);
+        elf[64..64 + NAMES.len()].copy_from_slice(NAMES);
+        elf[DATA..DATA + 8].copy_from_slice(&0x1234u64.to_le_bytes());
+        for (index, name, kind, offset, size) in [
+            (1usize, 1u64, 3u64, 64u64, NAMES.len() as u64),
+            (2, 11, kind, offset, size),
+        ] {
+            let base = SHOFF + index * 64;
+            put(&mut elf, base, name, 4);
+            put(&mut elf, base + 4, kind, 4);
+            put(&mut elf, base + 24, offset, 8);
+            put(&mut elf, base + 32, size, 8);
+        }
+        elf
+    }
+
+    #[test]
+    fn file_backed_section_is_returned() {
+        let elf = image(SHT_PROGBITS, DATA as u64, 8);
+        assert_eq!(
+            ElfLoader.get_section(&elf, "__ViCell_syscalls"),
+            Ok(&elf[DATA..DATA + 8])
+        );
+        assert_eq!(
+            ElfLoader.get_section(&elf, "__ViCell_cluster"),
+            Err(ViError::NotFound)
+        );
+    }
+
+    /// 02 S-1: a named NOBITS section with a hostile offset used to be sliced
+    /// by xmas-elf `raw_data` and panic the kernel.
+    #[test]
+    fn nobits_or_out_of_range_section_is_refused_without_panic() {
+        for (kind, offset, size) in [
+            (SHT_NOBITS, u64::MAX, 8),
+            (SHT_NOBITS, DATA as u64, 8),
+            (SHT_PROGBITS, u64::MAX, 8),
+            (SHT_PROGBITS, DATA as u64, u64::MAX),
+            (SHT_PROGBITS, (SHOFF + 3 * 64) as u64, 1),
+        ] {
+            let elf = image(kind, offset, size);
+            assert_eq!(
+                ElfLoader.get_section(&elf, "__ViCell_syscalls"),
+                Err(ViError::InvalidInput),
+                "kind={kind} offset={offset:#x} size={size:#x}"
+            );
         }
     }
 }

@@ -2680,3 +2680,112 @@ fn recv_timeout_bits_select_a_timed_receive_that_keeps_attestation() {
         })
     ));
 }
+
+/// 01 S-7: `GrantAlloc`/`GrantRegister` frames are reserved on the caller's
+/// incarnation before any frame exists (a run past its quota is refused with
+/// nothing taken), and the run carries that charge so its free refunds it.
+#[test]
+fn grant_frames_are_reserved_on_the_callers_cell() {
+    use super::{billed_grant_run, reserve_grant_frames};
+    use crate::memory::cell_quota::{self, Account, Charge, Limits};
+    use crate::memory::frame_run::RunCharge;
+    const TID: usize = 56_001;
+    const CELL: CellId = CellId((cell_quota::MAX_CELLS - 2) as u64);
+    const GENERATION: u64 = 3;
+    const PAGE: usize = 4096;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    let mut task = alloc::boxed::Box::new(Task::new(
+        TID,
+        CELL,
+        "grant-quota-test",
+        alloc::vec::Vec::new(),
+    ));
+    task.cell_generation = GENERATION;
+    scheduler.tasks.insert(TID, task);
+    *SCHEDULER.lock() = Some(scheduler);
+    cell_quota::register(
+        CELL,
+        GENERATION,
+        Limits {
+            memory: 2 * PAGE,
+            guest: 0,
+        },
+    );
+
+    assert!(
+        matches!(reserve_grant_frames(TID, 3), Ok(None)),
+        "a grant past the quota was admitted"
+    );
+    assert_eq!(cell_quota::in_use(CELL), 0, "a refusal takes nothing");
+
+    // A grant refused after its reservation (no frames) refunds it on drop.
+    let refused = reserve_grant_frames(TID, 1).unwrap().expect("within quota");
+    assert_eq!(cell_quota::in_use(CELL), PAGE);
+    drop(refused);
+    assert_eq!(cell_quota::in_use(CELL), 0);
+
+    let bill = reserve_grant_frames(TID, 2).unwrap().expect("within quota");
+    assert_eq!(cell_quota::in_use(CELL), 2 * PAGE);
+    assert!(
+        matches!(reserve_grant_frames(TID, 1), Ok(None)),
+        "the spent quota admitted another grant"
+    );
+    let run = billed_grant_run(0x5c10_0000, 2, bill);
+    assert_eq!(
+        run.charge(),
+        RunCharge {
+            owner: Charge::new(CELL, GENERATION),
+            account: Some(Account::Memory),
+        },
+        "the run must carry the caller's charge to its free"
+    );
+    // Synthetic frames: nothing to free, and the run keeps its charge.
+    core::mem::forget(run);
+    assert_eq!(cell_quota::in_use(CELL), 2 * PAGE);
+
+    SCHEDULER
+        .lock()
+        .as_mut()
+        .unwrap()
+        .tasks
+        .remove(&TID)
+        .unwrap();
+    assert!(matches!(
+        reserve_grant_frames(TID, 1),
+        Err(SyscallError::PermissionDenied)
+    ));
+    cell_quota::deregister(CELL);
+    *SCHEDULER.lock() = saved;
+}
+
+/// 03 S-6: `WaitForEvent(NET_RX)` would consume the system-wide level flag; a
+/// caller that is not the live NET provider is refused and leaves it set.
+#[test]
+fn wait_for_event_refuses_net_rx_to_a_non_provider() {
+    const TID: usize = 56_101;
+    let _guard = crate::TEST_STATE_LOCK.lock();
+    let saved = SCHEDULER.lock().take();
+    let mut scheduler = Scheduler::new();
+    let mut task = alloc::boxed::Box::new(Task::new(
+        TID,
+        CellId(76),
+        "net-rx-event-gate",
+        alloc::vec::Vec::new(),
+    ));
+    task.cell_generation = 3;
+    scheduler.tasks.insert(TID, task);
+    *SCHEDULER.lock() = Some(scheduler);
+    crate::task::waker::relevel_net_rx();
+    assert!(matches!(
+        super::ipc::wait_for_event(TID, abi::syscall::events::NET_RX, Some(1)),
+        Err(SyscallError::PermissionDenied)
+    ));
+    assert!(
+        crate::task::waker::has_any_pending(),
+        "a refused caller consumed the NET_RX level flag"
+    );
+    let _ = crate::task::waker::consume_pending(abi::syscall::events::NET_RX);
+    *SCHEDULER.lock() = saved;
+}

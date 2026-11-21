@@ -157,6 +157,18 @@ fn tagged_layout(layout: Layout) -> Option<Layout> {
     Layout::from_size_align(layout.size().checked_add(OWNER_TAG_BYTES)?, layout.align()).ok()
 }
 
+/// The share of the heap a Cell-charged allocation may never take: 1/4, so
+/// 8 MiB of the 32 MiB kernel heap stays for the kernel's own (infallible)
+/// allocations however many Cells sit at their quota.
+const KERNEL_RESERVE_DIVISOR: usize = 4;
+
+/// Whether a Cell-charged block of `request` bytes still leaves the kernel
+/// reserve of a heap of `size` bytes with `free` bytes left.
+fn leaves_kernel_reserve(free: usize, size: usize, request: usize) -> bool {
+    free.checked_sub(request)
+        .is_some_and(|left| left >= size / KERNEL_RESERVE_DIVISOR)
+}
+
 struct QuotaAlloc {
     inner: LockedHeap,
 }
@@ -167,7 +179,12 @@ impl QuotaAlloc {
         layout: Layout,
         #[cfg(feature = "p01-trace")] origin: Option<p01_owner::Provenance>,
     ) -> *mut u8 {
+        #[cfg(not(all(test, not(target_os = "none"))))]
         let charge = crate::sched::hart_local::alloc_charge();
+        // Host test threads share one hart slot, so a scope another test opens
+        // concurrently would otherwise bill this thread's allocations.
+        #[cfg(all(test, not(target_os = "none")))]
+        let charge = thread_charge();
         let Some(owner) = crate::memory::cell_quota::charge_owner(charge, layout.size()) else {
             // Cell quota exceeded — return null, no panic.
             NULL_FROM_QUOTA.fetch_add(1, Ordering::Relaxed);
@@ -179,31 +196,40 @@ impl QuotaAlloc {
             return core::ptr::null_mut();
         };
         // A payload too large to carry the tag cannot be backed by the heap
-        // either; it takes the inner-heap failure path below.
+        // either; it takes the inner-heap failure path below. A counted Cell
+        // charge may not eat into the kernel reserve (02 S-6): the per-Cell
+        // quotas together exceed the heap, and the kernel's own allocations
+        // are infallible.
         let tagged = tagged_layout(layout);
-        #[cfg(not(feature = "p01-trace"))]
-        let ptr = tagged.map_or(core::ptr::null_mut(), |tagged| self.inner.alloc(tagged));
-        #[cfg(feature = "p01-trace")]
+        let cell_charge = owner != crate::memory::cell_quota::UNCHARGED_OWNER;
         let ptr = {
             let mut heap = self.inner.lock();
+            #[cfg(feature = "p01-trace")]
             let before = heap.used();
             let result = tagged
+                .filter(|tagged| {
+                    !cell_charge || leaves_kernel_reserve(heap.free(), heap.size(), tagged.size())
+                })
                 .map_or(Err(()), |tagged| heap.allocate_first_fit(tagged))
                 .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr());
-            if !result.is_null() {
-                p01_owner::allocated(
-                    result,
-                    layout,
-                    origin,
-                    heap.used() - before,
-                    P01_EPOCH.load(Ordering::Relaxed).saturating_add(1) as u64,
-                );
+            #[cfg(feature = "p01-trace")]
+            {
+                if !result.is_null() {
+                    p01_owner::allocated(
+                        result,
+                        layout,
+                        origin,
+                        heap.used() - before,
+                        P01_EPOCH.load(Ordering::Relaxed).saturating_add(1) as u64,
+                    );
+                }
+                p01_transition(heap.used());
             }
-            p01_transition(heap.used());
             result
         };
         if ptr.is_null() {
-            // Inner heap OOM — refund the charge we already applied.
+            // Inner heap OOM or the kernel reserve — refund the charge we
+            // already applied.
             NULL_FROM_HEAP.fetch_add(1, Ordering::Relaxed);
             #[cfg(target_arch = "riscv64")]
             // SAFETY: called with a live stack; the scan only reads it.
@@ -478,6 +504,95 @@ pub fn oom_sources() -> (usize, usize) {
 unsafe fn owner_word(payload: *const u8, size: usize) -> usize {
     // SAFETY: the caller's contract; the tag word follows the payload.
     unsafe { payload.add(size).cast::<usize>().read_unaligned() }
+}
+
+/// Boot fixture `HEAP-RESERVE` (02 S-6): a Cell with an unbounded quota fills
+/// the live kernel heap with 256 KiB blocks until it is refused; the refusal
+/// must come at the kernel reserve, and a 1 MiB kernel allocation must still
+/// succeed. Runs before secondaries start and before any Cell runs, so nothing
+/// else competes for the heap while it is full.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn reserve_selftest() {
+    use crate::memory::cell_quota::{self, Charge, Limits, QuotaReservation};
+    use alloc::vec::Vec;
+    // Largest first, then smaller blocks into what fragmentation leaves, so
+    // the last refusal is the reserve's and not a missing contiguous hole.
+    const BLOCKS: [usize; 3] = [256 * 1024, 16 * 1024, 1024];
+    const HELD_MAX: usize = 1024;
+    const KERNEL_PROBE: usize = 1024 * 1024;
+
+    let (used, free) = usage();
+    let size = used + free;
+    let reserve = size / KERNEL_RESERVE_DIVISOR;
+    let generation = crate::task::tcb::next_cell_generation();
+    let limits = Limits {
+        memory: usize::MAX,
+        guest: 0,
+    };
+    let Some(quota) = (1..cell_quota::MAX_CELLS).rev().find_map(|raw| {
+        QuotaReservation::reserve(types::CellId(raw as u64), generation, limits).ok()
+    }) else {
+        log::error!("[selftest] HEAP-RESERVE: FAIL no free CellId");
+        return;
+    };
+    let cell = Charge::new(quota.cell_id(), generation);
+    let mut held: Vec<Vec<u8>> = Vec::new();
+    if held.try_reserve_exact(HELD_MAX).is_err() {
+        log::error!("[selftest] HEAP-RESERVE: FAIL no room for the block list");
+        return;
+    }
+    let refused = alloc_for(cell, || {
+        BLOCKS.iter().all(|&block| {
+            while held.len() < HELD_MAX {
+                let mut chunk = Vec::new();
+                if chunk.try_reserve_exact(block).is_err() {
+                    return true;
+                }
+                held.push(chunk);
+            }
+            false
+        })
+    });
+    let left = usage().1;
+    let charged = cell_quota::in_use(cell.cell());
+    let mut probe: Vec<u8> = Vec::new();
+    let kernel_ok = probe.try_reserve_exact(KERNEL_PROBE).is_ok();
+    drop(probe);
+    let blocks = held.len();
+    drop(held);
+    let after = cell_quota::in_use(cell.cell());
+    drop(quota);
+    let smallest = BLOCKS[BLOCKS.len() - 1] + OWNER_TAG_BYTES;
+    let failure = if !refused {
+        Some("the cell was never refused")
+    } else if left < reserve {
+        Some("the cell took the kernel reserve")
+    } else if leaves_kernel_reserve(left, size, smallest) {
+        Some("the cell was refused short of the reserve")
+    } else if !kernel_ok {
+        Some("a kernel allocation failed with the cells at the reserve")
+    } else if after != 0 {
+        Some("the cell's charge was not refunded")
+    } else {
+        None
+    };
+    match failure {
+        None => log::info!(
+            "[selftest] HEAP-RESERVE: PASS blocks={} charged={} free={} reserve={}",
+            blocks,
+            charged,
+            left,
+            reserve
+        ),
+        Some(reason) => log::error!(
+            "[selftest] HEAP-RESERVE: FAIL {} (blocks={} charged={} free={} reserve={})",
+            reason,
+            blocks,
+            charged,
+            left,
+            reserve
+        ),
+    }
 }
 
 /// Boot fixture `IRQ-ALLOC-CHARGE` (census §8.6(a)): an allocation made in
@@ -778,6 +893,63 @@ mod tests {
             0,
             "tagged layouts round-trip exactly"
         );
+
+        cell_quota::deregister(CellId(OWNER as u64));
+        cell_quota::deregister(CellId(OTHER as u64));
+    }
+
+    /// 02 S-6: Cells whose quotas together exceed the heap cannot take the
+    /// kernel reserve; a kernel allocation still succeeds afterwards.
+    #[test]
+    fn cell_charges_leave_the_kernel_reserve() {
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let mut arena = alloc::vec![0u64; 1024];
+        let heap = QuotaAlloc {
+            inner: LockedHeap::empty(),
+        };
+        // SAFETY: the arena outlives `heap` and is used by nothing else.
+        unsafe {
+            heap.inner
+                .lock()
+                .init(arena.as_mut_ptr().cast(), arena.len() * 8)
+        };
+        let size = heap.inner.lock().size();
+        let reserve = size / KERNEL_RESERVE_DIVISOR;
+        let limits = cell_quota::Limits {
+            memory: size,
+            guest: 0,
+        };
+        cell_quota::register(CellId(OWNER as u64), 1, limits);
+        cell_quota::register(CellId(OTHER as u64), 1, limits);
+        let block = Layout::from_size_align(248, 8).unwrap();
+        let mut held = alloc::vec::Vec::new();
+
+        // SAFETY: every block below is freed once with the layout it was allocated with.
+        unsafe {
+            for cell in [OWNER, OTHER] {
+                loop {
+                    let ptr = alloc_for(charge(cell, 1), || heap.alloc(block));
+                    if ptr.is_null() {
+                        break;
+                    }
+                    held.push(ptr);
+                }
+            }
+            let free = heap.inner.lock().free();
+            assert!(
+                free >= reserve,
+                "cells left {free} bytes of a {reserve}-byte reserve"
+            );
+            assert!(in_use(OWNER) > 0 && in_use(OWNER) < size);
+            let kernel = heap.alloc(Layout::from_size_align(reserve / 2, 8).unwrap());
+            assert!(!kernel.is_null(), "the kernel allocates from its reserve");
+            heap.dealloc(kernel, Layout::from_size_align(reserve / 2, 8).unwrap());
+            for ptr in held.drain(..) {
+                heap.dealloc(ptr, block);
+            }
+        }
+        assert_eq!((in_use(OWNER), in_use(OTHER)), (0, 0));
+        assert_eq!(heap.inner.lock().used(), 0);
 
         cell_quota::deregister(CellId(OWNER as u64));
         cell_quota::deregister(CellId(OTHER as u64));

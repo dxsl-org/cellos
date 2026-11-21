@@ -259,12 +259,12 @@ pub(crate) fn register_pci_function(bdf: u32, class: u32) {
 
 /// Add BAR window `[base, base + len)` to PCI function `bdf`'s record (boot
 /// scan, 236; 235 through [`register_platform_bar`]). Only a bounded
-/// conventional BAR is admitted
-/// ([`valid_pcie_bar_window`](crate::resource_registry::valid_pcie_bar_window)).
+/// conventional BAR clear of RAM, the kernel image and ECAM is admitted
+/// ([`pcie_bar_admitted`](crate::resource_registry::pcie_bar_admitted)).
 pub(crate) fn register_pci_bar(bdf: u32, base: usize, len: usize) {
-    if !crate::resource_registry::valid_pcie_bar_window(base, len) {
+    if !crate::resource_registry::pcie_bar_admitted(base, len) {
         log::warn!(
-            "[pcie] rejected invalid BAR window base={:#x} len={:#x}",
+            "[pcie] rejected BAR window base={:#x} len={:#x}: invalid, or it reaches RAM, the kernel image or ECAM",
             base,
             len
         );

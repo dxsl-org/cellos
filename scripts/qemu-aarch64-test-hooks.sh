@@ -333,6 +333,7 @@ REQUIRED_MARKERS=(
     "stack-probe self-test PASS (two guards, overflow target unmapped, watermark, user stack off identity)"
     "[selftest] STACK-ARENA: PASS"
     "[selftest] FREE-FRAME-NX: PASS"
+    "[selftest] HEAP-RESERVE: PASS"
     "stack-sizing policy self-test PASS"
     "admission-core self-test PASS"
     "ATOMIC_PUBLICATION_ARMING: PASS"

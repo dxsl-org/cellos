@@ -220,6 +220,74 @@ pub(crate) fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
         && base.checked_add(len).is_some()
 }
 
+/// A BAR window may be recorded for a PCI function — and so later user-mapped
+/// for its driver Cell — only when it is a bounded conventional window
+/// ([`valid_pcie_bar_window`]) that reaches no managed RAM frame, no part of
+/// the kernel image and no part of the ECAM window. The
+/// address comes from device config space or a Platform Cell, and neither may
+/// alias kernel memory or config space into a Cell.
+///
+/// The kernel registers BARs only once the frame allocator is installed;
+/// without one managed RAM is unknown and the window is refused. Host tests
+/// run without an allocator and see no managed RAM.
+pub(crate) fn pcie_bar_admitted(base: usize, len: usize) -> bool {
+    // An image span that cannot be read back refuses every window.
+    let image = kernel_image_span().unwrap_or((0, usize::MAX));
+    let ecam = crate::dev::pcie_ecam::admitted_ecam_range()
+        .and_then(|(ecam_base, ecam_len)| Some((ecam_base, ecam_base.checked_add(ecam_len)?)))
+        .unwrap_or((0, 0));
+    let reserved = [image, ecam];
+    let admitted = crate::memory::frame::with(|allocator| {
+        bar_window_admitted(
+            base,
+            len,
+            allocator
+                .managed_ranges()
+                .map(|range| (range.start, range.start + range.frames * 4096))
+                .chain(reserved),
+        )
+    });
+    #[cfg(all(test, not(target_os = "none")))]
+    let admitted = admitted.or_else(|| Some(bar_window_admitted(base, len, reserved.into_iter())));
+    admitted.unwrap_or(false)
+}
+
+/// [`valid_pcie_bar_window`] and clear of every `(start, end)` in `reserved`.
+fn bar_window_admitted(
+    base: usize,
+    len: usize,
+    reserved: impl Iterator<Item = (usize, usize)>,
+) -> bool {
+    valid_pcie_bar_window(base, len) && !overlaps_any(base, base + len, reserved)
+}
+
+/// `[base, end)` overlaps one of `ranges` (`(start, end)` pairs).
+fn overlaps_any(base: usize, end: usize, mut ranges: impl Iterator<Item = (usize, usize)>) -> bool {
+    ranges.any(|(start, range_end)| base < range_end && start < end)
+}
+
+/// The kernel image's physical span: the linker-delimited image from its first
+/// text byte to the end of its writable data (the boot stack included), loaded
+/// contiguously (riscv64/aarch64 link it at its load address; Limine loads the
+/// x86_64 image as one physical block behind its higher-half mapping).
+#[cfg(not(all(test, not(target_os = "none"))))]
+fn kernel_image_span() -> Option<(usize, usize)> {
+    unsafe extern "C" {
+        static __domain_text_start: u8;
+        static __domain_writable_end: u8;
+    }
+    let start = core::ptr::addr_of!(__domain_text_start) as usize;
+    let len = (core::ptr::addr_of!(__domain_writable_end) as usize).checked_sub(start)?;
+    let phys = crate::memory::paging::virt_to_phys(start)?;
+    Some((phys, phys.checked_add(len)?))
+}
+
+/// Host tests link no kernel image: an empty span.
+#[cfg(all(test, not(target_os = "none")))]
+fn kernel_image_span() -> Option<(usize, usize)> {
+    Some((0, 0))
+}
+
 fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
     if len == 0 {
         return Err(ViError::InvalidInput);
@@ -291,7 +359,7 @@ fn ecam_claim_admitted(
     base: usize,
     end: usize,
     window: Option<(usize, usize)>,
-    mut ram: impl Iterator<Item = (usize, usize)>,
+    ram: impl Iterator<Item = (usize, usize)>,
 ) -> bool {
     let Some((window_base, window_len)) = window else {
         return false;
@@ -300,7 +368,7 @@ fn ecam_claim_admitted(
         && window_base
             .checked_add(window_len)
             .is_some_and(|window_end| end <= window_end);
-    inside && !ram.any(|(start, ram_end)| base < ram_end && start < end)
+    inside && !overlaps_any(base, end, ram)
 }
 
 /// The platform's DWC2 host controller aperture `(base, size)`, if it has one.

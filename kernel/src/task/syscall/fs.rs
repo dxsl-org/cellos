@@ -288,12 +288,15 @@ pub(super) fn pipe_read(
                 }
                 // Enqueue and park under one lock: a writer that drains the
                 // queue takes `SCHEDULER` to wake us, so either it sees our
-                // entry and wakes a parked task, or we see its bytes on the
-                // next `try_read`. Lock order stays SCHEDULER -> PIPES.
+                // entry and wakes a parked task, or `park_reader` sees its
+                // bytes (or the last writer's close) and refuses to park, and
+                // we retry. Lock order stays SCHEDULER -> PIPES.
                 if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
-                            crate::ipc::pipe::park_reader(handle, caller_id);
+                            if !crate::ipc::pipe::park_reader(handle, caller_id) {
+                                continue;
+                            }
                             task.state = crate::task::tcb::TaskState::Blocked {
                                 wait: crate::task::tcb::WaitKind::PipeRead { handle },
                                 deadline,
@@ -359,10 +362,14 @@ pub(super) fn pipe_write(
                 if deadline.is_some_and(|d| crate::task::system_ticks() as u64 >= d) {
                     return Ok(0);
                 }
+                // Same handshake as `pipe_read`: a reader that drained space
+                // after our `try_write` makes `park_writer` refuse.
                 if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                     match sched.tasks.get_mut(&caller_id) {
                         Some(task) => {
-                            crate::ipc::pipe::park_writer(handle, caller_id);
+                            if !crate::ipc::pipe::park_writer(handle, caller_id) {
+                                continue;
+                            }
                             task.state = crate::task::tcb::TaskState::Blocked {
                                 wait: crate::task::tcb::WaitKind::PipeWrite { handle },
                                 deadline,

@@ -276,9 +276,18 @@ pub(crate) fn early(_hartid: usize, dtb: usize) -> EarlyPlatform {
 
     // Each boot MMIO window is mapped at VA == PA; one that would reach the
     // cell slots or the stack arena is refused (logged) and its device treated
-    // as absent, like any later identity MMIO map (`identity_map_refused`).
+    // as absent, like any later identity MMIO map (`identity_map_refused`). So
+    // is one inside RAM: the uncached remap would turn the kernel's register
+    // writes into stores to memory.
     let window = |what: &str, base: u64, len: usize| {
-        if base != 0 && memory::paging::identity_map_refused(what, base as usize, len) {
+        if base == 0 {
+            return 0;
+        }
+        if !crate::acpi::mmio_window_clear_of_ram(base, len, mmap_entries) {
+            log::error!("[acpi] {what}: window {base:#x} (+{len:#x}) overlaps RAM; device ignored");
+            return 0;
+        }
+        if memory::paging::identity_map_refused(what, base as usize, len) {
             0
         } else {
             base

@@ -104,8 +104,9 @@ impl Drop for ObservedOperation {
     }
 }
 
-/// Task-local, kernel-charged storage. Tokens are global monotonic identifiers,
-/// never slot indexes; reuse after take cannot alias a late service reply.
+/// Task-local storage charged to the owning incarnation's memory quota.
+/// Tokens are global monotonic identifiers, never slot indexes; reuse after
+/// take cannot alias a late service reply.
 #[derive(Default)]
 pub struct Operations(Vec<Operation>);
 
@@ -134,15 +135,20 @@ impl Operations {
         let pos = self.0.iter().position(|op| op.id == id)?;
         Some(self.0.swap_remove(pos))
     }
-    fn push(&mut self, op: Operation) -> Result<(), Failure> {
+    /// Append `op`; growth is charged to `owner`, the incarnation whose task
+    /// holds this list, so up to `MAX_OPERATIONS` records per thread cannot
+    /// hold kernel heap outside that Cell's quota.
+    fn push(
+        &mut self,
+        op: Operation,
+        owner: crate::memory::cell_quota::Charge,
+    ) -> Result<(), Failure> {
         if self.0.len() == MAX_OPERATIONS {
             return Err(Failure::Busy);
         }
         if self.0.len() == self.0.capacity() {
-            crate::memory::heap::alloc_for(crate::memory::cell_quota::Charge::KERNEL, || {
-                self.0.try_reserve(1)
-            })
-            .map_err(|_| Failure::Busy)?;
+            crate::memory::heap::alloc_for(owner, || self.0.try_reserve(1))
+                .map_err(|_| Failure::Busy)?;
         }
         self.0.push(op);
         Ok(())
@@ -365,12 +371,9 @@ impl Default for AsyncIndex {
 fn push_operation(sched: &mut Scheduler, owner: usize, op: Operation) -> Result<(), Failure> {
     sched.async_index.reserve()?;
     let token = op.id;
-    sched
-        .tasks
-        .get_mut(&owner)
-        .ok_or(Failure::Invalid)?
-        .async_operations
-        .push(op)?;
+    let task = sched.tasks.get_mut(&owner).ok_or(Failure::Invalid)?;
+    let charge = crate::memory::cell_quota::Charge::of(task);
+    task.async_operations.push(op, charge)?;
     sched.async_index.insert(token, owner);
     Ok(())
 }
@@ -1352,7 +1355,7 @@ mod tests {
                 .get_mut(&OWNER)
                 .unwrap()
                 .async_operations
-                .push(overflow()),
+                .push(overflow(), crate::memory::cell_quota::Charge::KERNEL),
             Err(Failure::Busy)
         ));
         peer_died(&mut sched, PROVIDER, 1_003, 8);
@@ -1382,7 +1385,7 @@ mod tests {
                     .get_mut(&OWNER)
                     .unwrap()
                     .async_operations
-                    .push(overflow()),
+                    .push(overflow(), crate::memory::cell_quota::Charge::KERNEL),
                 Err(Failure::Busy)
             ),
             "terminal results still charge the full quota"
@@ -2343,7 +2346,7 @@ mod tests {
         admitted.reply = full_reply();
         let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
         assert_eq!(
-            ops.push(refused),
+            ops.push(refused, crate::memory::cell_quota::Charge::KERNEL),
             Err(Failure::Busy),
             "a full set of retained terminals admitted more"
         );
@@ -2352,7 +2355,10 @@ mod tests {
         assert!(alloc_probe::freed_bytes() - freed >= ipc_wire::MAX_IPC_WIRE_PAYLOAD);
         assert_eq!(charged(&sched), MAX_OPERATIONS - 1);
         let ops = &mut sched.tasks.get_mut(&OWNER).unwrap().async_operations;
-        assert_eq!(ops.push(admitted), Ok(()));
+        assert_eq!(
+            ops.push(admitted, crate::memory::cell_quota::Charge::KERNEL),
+            Ok(())
+        );
         assert_eq!(charged(&sched), MAX_OPERATIONS);
 
         // Owner exit terminalises what is left but keeps it charged until the
@@ -3288,7 +3294,10 @@ mod tests {
             .remove(43)
             .unwrap();
         let foreign = sched.tasks.get_mut(&FOREIGN_CELL).unwrap();
-        foreign.async_operations.push(misplaced).unwrap();
+        foreign
+            .async_operations
+            .push(misplaced, crate::memory::cell_quota::Charge::KERNEL)
+            .unwrap();
         assert!(!has_pending_notification(foreign));
         assert_eq!(take_notification(foreign), None);
     }
@@ -3716,5 +3725,43 @@ mod tests {
         drop(queue);
         assert_eq!(cell_quota::in_use(CELL), 0, "the last handle refunds it");
         cell_quota::deregister(CELL);
+    }
+
+    /// The per-task operation list grows against its owner Cell's quota, not
+    /// the kernel's: a Cell with no headroom cannot submit, and nothing is
+    /// recorded for the refused operation.
+    #[test]
+    fn operation_list_growth_is_charged_to_the_owner_cell() {
+        use crate::memory::cell_quota::{self, Limits};
+        use types::CellId;
+        const CELL: CellId = CellId((cell_quota::MAX_CELLS - 1) as u64);
+        const GENERATION: u64 = 6;
+        let _guard = crate::TEST_STATE_LOCK.lock();
+        let push_with_limit = |limit: usize, id: usize| {
+            let mut sched = fixture();
+            let task = sched.tasks.get_mut(&OWNER).unwrap();
+            task.cell_id = CELL;
+            task.cell_generation = GENERATION;
+            task.async_operations = Operations::new();
+            let op = operation(&sched, OWNER, PROVIDER, id, Phase::Queued);
+            cell_quota::register(
+                CELL,
+                GENERATION,
+                Limits {
+                    memory: limit,
+                    guest: 0,
+                },
+            );
+            let pushed = alloc_probe::admitting_by_quota(|| push_operation(&mut sched, OWNER, op));
+            cell_quota::deregister(CELL);
+            let recorded = sched.tasks[&OWNER].async_operations.find(id).is_some();
+            (pushed, recorded)
+        };
+        assert_eq!(
+            push_with_limit(0, 3_000),
+            (Err(Failure::Busy), false),
+            "an exhausted Cell grew its operation list"
+        );
+        assert_eq!(push_with_limit(1 << 20, 3_001), (Ok(()), true));
     }
 }

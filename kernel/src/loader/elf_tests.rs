@@ -21,6 +21,8 @@ pub fn run_all() {
     test_spawn_path_too_long_rejected();
     test_spawn_path_valid_format_accepted();
     test_pie_slot_admission_precedes_mapping();
+    #[cfg(feature = "test-hooks")]
+    test_load_window_is_kernel_only();
     test_mem_label_neutralises_forged_install_path();
     test_mem_label_component_carries_no_separator();
     test_mem_label_grants_no_path_caps();
@@ -150,6 +152,41 @@ fn test_pie_slot_admission_precedes_mapping() {
     super::va_alloc::free_cell_va(base);
     log::info!("  [ok] PIE slot boundaries reject oversized images before mapping");
     log::info!("  [ok] fixed-VA images refused on the null page and foreign slots");
+}
+
+/// 02 S-4: between `load_segments` and `wx::enforce` the image's leaves are
+/// what the hardware walker sees, and no cell may reach them.
+#[cfg(feature = "test-hooks")]
+fn test_load_window_is_kernel_only() {
+    let base = super::va_alloc::alloc_cell_va().expect("ELF selftest needs a VA slot");
+    let mut image = build_minimal_signed_elf([0; 64]);
+    image[16..18].copy_from_slice(&3u16.to_le_bytes()); // ET_DYN, R-X PT_LOAD at 0x1000
+    let image_ref = &image;
+    let mut batch = crate::memory::frame_run::Batch::new();
+    let loaded = crate::memory::frame::with(|allocator| {
+        super::ElfLoader.load_segments(image_ref, allocator, &mut batch, base, base, false)
+    })
+    .expect("ELF selftest needs frame allocator");
+    let _ = batch.complete();
+    let mapped = loaded.expect("minimal PIE loads");
+    assert!(!mapped.is_empty());
+    for page in &mapped {
+        assert_ne!(
+            page.final_flags.bits() & crate::memory::paging::Flags::USER,
+            0
+        );
+        assert_eq!(
+            crate::memory::paging::mapping_state(page.va),
+            (true, false),
+            "load-window page {:#x} is user-accessible",
+            page.va
+        );
+    }
+    let mut batch = crate::memory::frame_run::Batch::new();
+    super::ElfLoader::unwind(&mapped, &mut batch);
+    let _ = batch.complete();
+    super::va_alloc::free_cell_va(base);
+    log::info!("  [ok] load-window pages are kernel-only until W^X lowering");
 }
 
 // ─── spawn_from_path path validation ─────────────────────────────────────────

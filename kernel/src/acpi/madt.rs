@@ -29,8 +29,14 @@ pub(super) fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo, topo: 
     // SAFETY: the caller validated and mapped `[virt, virt + length)`.
     let table = unsafe { TableBytes::new(virt, length) };
 
-    if let Some(lapic) = table.u32(36).filter(|addr| *addr != 0) {
-        info.lapic_base = lapic as u64;
+    // A base that cannot be mapped as one page leaves its gate closed (header)
+    // or the earlier value in place (override); see `mmio_base_admissible`.
+    if let Some(lapic) = table
+        .u32(36)
+        .map(u64::from)
+        .filter(|addr| super::mmio_base_admissible(*addr))
+    {
+        info.lapic_base = lapic;
     }
 
     let mut offset = 44usize;
@@ -54,16 +60,21 @@ pub(super) fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo, topo: 
             ),
             // I/O APIC: id u8 @2, address u32 @4, gsi_base u32 @8.
             1 if len >= 12 => {
-                let address = table.u32(at(4)).unwrap_or(0);
+                let address = table.u32(at(4)).map_or(0, u64::from);
                 let gsi_base = table.u32(at(8)).unwrap_or(0);
-                if address != 0 {
-                    info.ioapic_base = address as u64;
+                if super::mmio_base_admissible(address) {
+                    info.ioapic_base = address;
                     info.ioapic_gsi_base = gsi_base;
                     topo.ioapics.push(IoApicEntry {
                         id: table.u8(at(2)).unwrap_or(0),
-                        address: address as u64,
+                        address,
                         gsi_base,
                     });
+                } else if address != 0 {
+                    log::warn!(
+                        "[acpi] MADT I/O APIC base {:#x} unaligned; skipped",
+                        address
+                    );
                 }
             }
             // Interrupt Source Override: bus u8 @2, source u8 @3, gsi u32 @4, flags u16 @8.
@@ -86,7 +97,10 @@ pub(super) fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo, topo: 
             }
             // Local APIC address override: address u64 @4.
             5 if len >= 12 => {
-                if let Some(lapic) = table.u64(at(4)).filter(|addr| *addr != 0) {
+                if let Some(lapic) = table
+                    .u64(at(4))
+                    .filter(|addr| super::mmio_base_admissible(*addr))
+                {
                     info.lapic_base = lapic;
                 }
             }

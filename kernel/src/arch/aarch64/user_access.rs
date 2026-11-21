@@ -58,6 +58,12 @@ pub(crate) unsafe fn guarded_byte_copy(
     ret
 }
 
+/// Whether `base` may become the user thread pointer: `TPIDR_EL0` holds any
+/// value without faulting, and a bad base only faults the cell itself.
+pub(crate) fn thread_pointer_admissible(_base: usize) -> bool {
+    true
+}
+
 /// Write the architecture's user thread pointer register.
 pub(crate) fn write_user_thread_pointer(base: usize) {
     // SAFETY: TPIDR_EL0 is the EL0-visible thread pointer; writing it from EL1 is

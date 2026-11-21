@@ -65,11 +65,14 @@ pub fn init(
         return;
     }
     let half = u16::from(fadt.pm1a_evt.bit_width / 16);
-    let (Some(status_a), true) = (io_port(&fadt.pm1a_evt), half >= 2) else {
+    // The whole event block, status half then enable half, must lie below
+    // port 0x10000: `status + half` never wraps to the low legacy ports.
+    let fits = |status: &u16| half >= 2 && status.checked_add(2 * half - 1).is_some();
+    let Some(status_a) = io_port(&fadt.pm1a_evt).filter(fits) else {
         log::warn!("[acpi] sci: no I/O PM1a event block; power button off");
         return;
     };
-    let status_b = io_port(&fadt.pm1b_evt);
+    let status_b = io_port(&fadt.pm1b_evt).filter(fits);
     if !enable_acpi_mode(&fadt) {
         log::warn!("[acpi] sci: SCI_EN stayed clear; power button off");
         return;

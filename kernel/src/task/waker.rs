@@ -16,12 +16,16 @@
 //!   simplify anything — it would lose frames.
 //!
 //! Exactly one reservation may be outstanding, because there is one source and
-//! one consumer. Arming while one is already outstanding displaces it, and the
-//! displaced reservation is completed as abandoned rather than dropped: a slot
-//! that has been promised a landing must always get one, or its waiter never
-//! runs again. Refusing the newcomer instead was rejected — a reservation left
-//! behind by a cell that died mid-wait would then wedge the source for the cell
-//! that replaces it, and a service dying and being restarted is routine here.
+//! one consumer: the live `NET` service provider. `WaitCompletion` and
+//! `WaitForEvent` refuse NET_RX to every other caller
+//! (`completion_wait::net_rx_authorised`), so only that incarnation's threads
+//! ever arm. Arming while one is already outstanding therefore displaces a
+//! reservation left by a dead or replaced provider (or a sibling thread), and
+//! the displaced reservation is completed as abandoned rather than dropped: a
+//! slot that has been promised a landing must always get one, or its waiter
+//! never runs again. Refusing the newcomer instead was rejected — a reservation
+//! left behind by a provider that died mid-wait would then wedge the source for
+//! the one that replaces it, and a service dying and being restarted is routine.
 //!
 //! Lock order: `NET_RX_WAIT` is a leaf and is taken alone. It is never held
 //! across `CompletionQueue::complete`, so the append path's lock set stays

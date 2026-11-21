@@ -264,6 +264,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // unrelated boot tasks can add noise. Assertions make any failure boot-fatal.
     #[cfg(feature = "test-hooks")]
     crate::loader::elf_tests::run_all();
+    // Fills the live heap as one Cell: nothing else may allocate meanwhile.
+    #[cfg(feature = "test-hooks")]
+    crate::memory::heap::reserve_selftest();
     arch::boot::fixtures_after_loader_corpus();
 
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).

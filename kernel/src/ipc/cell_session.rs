@@ -45,6 +45,15 @@ const MAX_STAGING_PER_PRINCIPAL: usize = 4;
 const ABORT_BUDGET: usize = 8;
 /// Dead-owner records one maintenance pass may probe for drainability.
 const DRAIN_BUDGET: usize = 4;
+/// Bootstrap records one controller may hold in any state. A terminal record
+/// is kept only to be read back; past this bound the controller's oldest one
+/// is released, so its retries cannot fill the global table.
+const MAX_BOOTSTRAPS_PER_CONTROLLER: usize = 16;
+/// Live holders of an operation that only its owner may add. A member the
+/// owner handed DELEGATE can create streams and stage children in the
+/// operation, but never into this reserve, so the owner can always bootstrap
+/// (8 holders) and open streams in its own operation.
+const OWNER_HOLDER_RESERVE: usize = 16;
 
 type Result<T, E = Status> = core::result::Result<T, E>;
 
@@ -373,8 +382,16 @@ impl State {
         }
     }
     /// At most 64 live holder nodes per operation (retained closed records do
-    /// not count), with the vector capacity reserved before any mutation.
-    fn holder_capacity(&mut self, operation: Ref, count: usize) -> Result<()> {
+    /// not count), with the vector capacity reserved before any mutation. The
+    /// last `OWNER_HOLDER_RESERVE` are the owner's alone: `actor`, the
+    /// principal adding (and charged for) the holders, is held below them
+    /// otherwise, so no member can exhaust the owner's own operation.
+    fn holder_capacity(&mut self, actor: Principal, operation: Ref, count: usize) -> Result<()> {
+        let limit = if self.operations[self.op_index(operation)?].owner == actor {
+            64
+        } else {
+            64 - OWNER_HOLDER_RESERVE
+        };
         let live = self
             .endpoints
             .iter()
@@ -383,12 +400,31 @@ impl State {
                     && (h.endpoint.state == 0 || h.endpoint.state == 4)
             })
             .count();
-        if live + count > 64 {
+        if live + count > limit {
             return Err(Status::QuotaExceeded);
         }
         self.endpoints
             .try_reserve(count)
             .map_err(|_| Status::QuotaExceeded)
+    }
+    /// `op_active` for a request that grows the operation (a sub-operation, a
+    /// stream, a staged child): only its owner, or a member the owner handed
+    /// DELEGATE through an open holder, may. Any other member (a read-only
+    /// stdin, a write-only peer) only uses the endpoints it was given.
+    fn op_extender(&self, actor: Principal, operation: Ref) -> Result<usize> {
+        let i = self.op_active(actor, operation)?;
+        if self.operations[i].owner != actor
+            && !self.endpoints.iter().any(|h| {
+                h.endpoint.holder == actor
+                    && h.endpoint.operation == operation
+                    && h.endpoint.state == 0
+                    && h.endpoint.rights & DELEGATE != 0
+                    && h.endpoint.prepared.is_none()
+            })
+        {
+            return Err(Status::Denied);
+        }
+        Ok(i)
     }
     #[allow(clippy::too_many_arguments)]
     fn add_holder(
@@ -401,7 +437,7 @@ impl State {
         parent: Ref,
         prepared: Option<Child>,
     ) -> Result<Ref> {
-        self.holder_capacity(operation, 1)?;
+        self.holder_capacity(charged, operation, 1)?;
         let charge = reserve(charged, core::mem::size_of::<Holder>())?;
         let reference = self.mint()?;
         self.endpoints.push(Holder {
@@ -427,11 +463,11 @@ impl State {
         operation: Ref,
         capacity: u32,
     ) -> Result<[Ref; 2]> {
-        self.op_active(actor, operation)?;
+        self.op_extender(actor, operation)?;
         if capacity != 0 && !(64..=65536).contains(&capacity) {
             return Err(Status::Malformed);
         }
-        self.holder_capacity(operation, 2)?;
+        self.holder_capacity(actor, operation, 2)?;
         let first = reserve(actor, core::mem::size_of::<Holder>())?;
         let second = reserve(actor, core::mem::size_of::<Holder>())?;
         let reader = self.mint()?;
@@ -951,8 +987,9 @@ impl State {
         }
         self.drain_operation_cursor = last;
     }
-    /// Remove an operation, its holder records and every request ledger scoped
-    /// to it. Operation ids are never reused, so no fence can reopen.
+    /// Remove an operation, its holder records, the bootstrap records rooted in
+    /// it and every request ledger scoped to it. Operation ids are never
+    /// reused, so no fence can reopen.
     fn remove_operation(&mut self, index: usize) {
         let reference = self.operations.remove(index).reference;
         self.endpoints.retain(|h| h.endpoint.operation != reference);
@@ -960,6 +997,10 @@ impl State {
         // Receipt-less terminal child records are retained for their preparer
         // (`QueryChild`) until here; nothing else can refer to them.
         self.prepared.retain(|p| p.operation != reference);
+        // Only terminal bootstraps remain (`drained` and CloseOperation refuse
+        // a live one); with their operation gone nothing can resolve them, and
+        // kept they would fill the global table for every controller.
+        self.bootstraps.retain(|b| b.operation != reference);
     }
     /// A finished child record (terminal 3, aborted 4, expired 5) that no receipt names
     /// any more: only its preparer can read it (`QueryChild`), and it is released with its
@@ -1229,22 +1270,11 @@ impl State {
                 r.finish()?;
                 let mut depth = 0;
                 if parent != ZERO {
-                    let pi = self.op_active(actor, parent)?;
+                    let pi = self.op_extender(actor, parent)?;
                     depth = self.operations[pi]
                         .depth
                         .checked_add(1)
                         .ok_or(Status::QuotaExceeded)?;
-                    if self.operations[pi].owner != actor
-                        && !self.endpoints.iter().any(|h| {
-                            h.endpoint.holder == actor
-                                && h.endpoint.operation == parent
-                                && h.endpoint.state == 0
-                                && h.endpoint.rights & DELEGATE != 0
-                                && h.endpoint.prepared.is_none()
-                        })
-                    {
-                        return Err(Status::Denied);
-                    }
                     if self
                         .operations
                         .iter()
@@ -2100,7 +2130,7 @@ impl State {
         if kind == 1 {
             // The issuer's producer peers are reserved now, so commit can move
             // the sole writer count to them without allocating or failing.
-            self.holder_capacity(operation, 2)?;
+            self.holder_capacity(preparer, operation, 2)?;
             let charges = [
                 reserve(preparer, core::mem::size_of::<Holder>())?,
                 reserve(preparer, core::mem::size_of::<Holder>())?,
@@ -2379,22 +2409,49 @@ impl State {
         {
             return Err(Status::WrongOwner);
         }
-        if self.bootstraps.len() >= 256
-            || self.bootstraps.iter().filter(|b| b.state <= 2).count() >= 64
-            || self
-                .bootstraps
-                .iter()
-                .filter(|b| b.controller == actor && b.state <= 2)
-                .count()
-                >= 8
-        {
-            return Err(Status::QuotaExceeded);
-        }
+        self.admit_bootstrap(actor)?;
         let (reference, endpoints) =
             self.install_bootstrap(sched, actor, operation, owner, capacity)?;
         w.reference(reference)?;
         for endpoint in &endpoints[..6] {
             w.reference(*endpoint)?;
+        }
+        Ok(())
+    }
+    /// Room in the bootstrap table for one more record of `controller`. Live
+    /// records are capped globally and per controller; terminal ones are kept
+    /// only to be read back, so past `MAX_BOOTSTRAPS_PER_CONTROLLER` the
+    /// controller's oldest terminal record is released instead of refusing.
+    fn admit_bootstrap(&mut self, controller: Principal) -> Result<()> {
+        if self.bootstraps.iter().filter(|b| b.state <= 2).count() >= 64
+            || self
+                .bootstraps
+                .iter()
+                .filter(|b| b.controller == controller && b.state <= 2)
+                .count()
+                >= 8
+        {
+            return Err(Status::QuotaExceeded);
+        }
+        // At most 8 of the controller's records are live, so at the bound one
+        // of them is terminal: release the oldest (the table is in mint order).
+        if self
+            .bootstraps
+            .iter()
+            .filter(|b| b.controller == controller)
+            .count()
+            >= MAX_BOOTSTRAPS_PER_CONTROLLER
+        {
+            if let Some(oldest) = self
+                .bootstraps
+                .iter()
+                .position(|b| b.controller == controller && b.state > 2)
+            {
+                self.bootstraps.remove(oldest);
+            }
+        }
+        if self.bootstraps.len() >= 256 {
+            return Err(Status::QuotaExceeded);
         }
         Ok(())
     }
@@ -2408,7 +2465,7 @@ impl State {
         owner: Binding,
         capacity: u32,
     ) -> Result<(Ref, [Ref; 8])> {
-        self.holder_capacity(operation, 8)?;
+        self.holder_capacity(actor, operation, 8)?;
         self.bootstraps
             .try_reserve(1)
             .map_err(|_| Status::QuotaExceeded)?;
@@ -3005,7 +3062,7 @@ fn prepare_child(
     {
         let guard = crate::task::SCHEDULER.lock();
         let sched = guard.as_ref().ok_or(Status::Revoked)?;
-        sched.cell_session.op_active(principal, operation)?;
+        sched.cell_session.op_extender(principal, operation)?;
         if sched
             .cell_session
             .prepared
@@ -3074,7 +3131,7 @@ fn prepare_child(
     if resolve_actor(sched, caller)? != principal {
         return Err(Status::Revoked);
     }
-    sched.cell_session.op_active(principal, operation)?;
+    sched.cell_session.op_extender(principal, operation)?;
     if sched
         .cell_session
         .prepared
@@ -3216,10 +3273,15 @@ fn stream_io(
                     .ok_or(Status::Malformed)?,
             )
         };
-        if selector == 5 {
-            pipe::park_reader(e.handle, caller);
+        // SCHEDULER is held since the attempt above, so the ring cannot have
+        // changed; a refused park still means "retry", never "block".
+        let parked = if selector == 5 {
+            pipe::park_reader(e.handle, caller)
         } else {
-            pipe::park_writer(e.handle, caller);
+            pipe::park_writer(e.handle, caller)
+        };
+        if !parked {
+            continue;
         }
         let task = sched.tasks.get_mut(&caller).ok_or(Status::Revoked)?;
         task.state = if selector == 5 {
@@ -4147,5 +4209,159 @@ mod tests {
             &mut Reader::new(&[0u8; 12])
         )
         .is_err());
+    }
+
+    // Cells no other host test registers a quota for, so every charge below is
+    // uncounted and only the session's own bounds decide.
+    const OWNER: Principal = Principal {
+        cell_id: 33,
+        generation: 2,
+    };
+    const MEMBER: Principal = Principal {
+        cell_id: 34,
+        generation: 2,
+    };
+    const INPUT: Binding = Binding {
+        tid: 9,
+        cell_id: 35,
+        generation: 2,
+    };
+
+    fn request(
+        state: &mut State,
+        sched: &mut Scheduler,
+        actor: Principal,
+        selector: u16,
+        body: &[u8],
+    ) -> Result<alloc::vec::Vec<u8>> {
+        let mut out = [0u8; 256];
+        let n = state.execute(sched, actor, selector, body, &mut out)?;
+        Ok(out[..n].to_vec())
+    }
+
+    fn create_operation(state: &mut State, sched: &mut Scheduler) -> Ref {
+        let mut body = [0u8; 16];
+        Writer::new(&mut body).reference(ZERO).unwrap();
+        let out = request(state, sched, OWNER, 1, &body).expect("root operation");
+        Reader::new(&out).reference().unwrap()
+    }
+
+    fn create_stream(
+        state: &mut State,
+        sched: &mut Scheduler,
+        actor: Principal,
+        operation: Ref,
+    ) -> Result<()> {
+        let mut body = [0u8; 24];
+        let mut w = Writer::new(&mut body);
+        w.reference(operation).unwrap();
+        w.u32(0).unwrap();
+        w.u32(0).unwrap();
+        request(state, sched, actor, 2, &body).map(|_| ())
+    }
+
+    /// Make `MEMBER` hold an open endpoint with `rights` in `operation`, as a
+    /// duplicate or delegation from the owner would.
+    fn admit_member(state: &mut State, operation: Ref, rights: u32) {
+        let (read, _write) = pipe::create(0, Charge::KERNEL).unwrap();
+        let reference = state.mint().unwrap();
+        state.endpoints.push(Holder {
+            endpoint: Endpoint {
+                reference,
+                holder: MEMBER,
+                operation,
+                handle: read,
+                rights,
+                parent: ZERO,
+                prepared: None,
+                enabled: true,
+                state: 0,
+                issuer_held: false,
+            },
+            _charge: reserve(MEMBER, 0).unwrap(),
+        });
+    }
+
+    fn live_holders(state: &State, operation: Ref) -> usize {
+        state
+            .endpoints
+            .iter()
+            .filter(|h| h.endpoint.operation == operation && h.endpoint.state == 0)
+            .count()
+    }
+
+    /// 03 S-7: a member without DELEGATE cannot grow the owner's operation,
+    /// and one with DELEGATE stops below the owner's reserve, so the owner can
+    /// still open streams in (and bootstrap) its own operation.
+    #[test]
+    fn members_cannot_exhaust_the_owners_operation() {
+        let mut sched = Scheduler::new();
+        let mut state = State::new();
+        let operation = create_operation(&mut state, &mut sched);
+
+        admit_member(&mut state, operation, READ | CLOSE);
+        assert_eq!(
+            create_stream(&mut state, &mut sched, MEMBER, operation),
+            Err(Status::Denied),
+            "a read-only member created a stream"
+        );
+
+        admit_member(&mut state, operation, READ | DELEGATE | CLOSE);
+        let mut created = 0;
+        while create_stream(&mut state, &mut sched, MEMBER, operation).is_ok() {
+            created += 1;
+            assert!(created <= 32, "a member's streams are never unbounded");
+        }
+        assert_eq!(
+            create_stream(&mut state, &mut sched, MEMBER, operation),
+            Err(Status::QuotaExceeded)
+        );
+        assert!(live_holders(&state, operation) <= 64 - OWNER_HOLDER_RESERVE);
+        for _ in 0..OWNER_HOLDER_RESERVE / 2 {
+            assert_eq!(
+                create_stream(&mut state, &mut sched, OWNER, operation),
+                Ok(()),
+                "the member used up the owner's reserve"
+            );
+        }
+    }
+
+    /// Create, bootstrap, abort and close the controller's operation.
+    fn bootstrap_cycle(state: &mut State, sched: &mut Scheduler) {
+        let operation = create_operation(state, sched);
+        state.admit_bootstrap(OWNER).expect("room for a bootstrap");
+        let (reference, _) = state
+            .install_bootstrap(sched, OWNER, operation, INPUT, 0)
+            .expect("bootstrap");
+        let bi = state.bootstrap_index(reference).unwrap();
+        state.close_bootstrap(sched, bi, 3);
+        let mut body = [0u8; 16];
+        Writer::new(&mut body).reference(operation).unwrap();
+        request(state, sched, OWNER, 20, &body).expect("close operation");
+    }
+
+    /// 03 S-8: terminal bootstraps leave with their operation, and a
+    /// controller's terminal records never fill the global table, whether it
+    /// closes each operation or keeps aborting within one.
+    #[test]
+    fn terminal_bootstraps_never_fill_the_table() {
+        let mut sched = Scheduler::new();
+        let mut state = State::new();
+        for _ in 0..300 {
+            bootstrap_cycle(&mut state, &mut sched);
+        }
+        assert!(state.bootstraps.is_empty(), "closing released none");
+
+        let operation = create_operation(&mut state, &mut sched);
+        for _ in 0..300 {
+            state.admit_bootstrap(OWNER).expect("room for a bootstrap");
+            let (reference, _) = state
+                .install_bootstrap(&mut sched, OWNER, operation, INPUT, 0)
+                .expect("bootstrap");
+            let bi = state.bootstrap_index(reference).unwrap();
+            state.close_bootstrap(&mut sched, bi, 3);
+            assert!(state.bootstraps.len() <= MAX_BOOTSTRAPS_PER_CONTROLLER);
+        }
+        assert_eq!(state.admit_bootstrap(OWNER), Ok(()));
     }
 }

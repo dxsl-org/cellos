@@ -411,9 +411,11 @@ pub(super) fn release_domain_backing(_record: &DomainRecord, row: Region, _withh
     }
 }
 
-/// A reclaimed grant's frames as one run, still mapped: USER in the shared root
-/// (and, on RV64/AArch64, over the kernel's identity alias, which the release
-/// restores).
+/// A grant's frames as one run billed to nobody, still mapped: USER in the
+/// shared root (and, on RV64/AArch64, over the kernel's identity alias, which
+/// the release restores). Fixtures only; a cell's grant is billed to it
+/// (`alloc_owned_grant`).
+#[cfg(any(test, feature = "test-hooks"))]
 pub(super) fn grant_run(base: usize, n_pages: usize) -> crate::memory::frame_run::FrameRun {
     use crate::memory::cell_quota::Charge;
     use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
@@ -1633,11 +1635,13 @@ pub(crate) fn test_retire_grant_pages_into(
 pub(crate) fn test_alloc_owned_grant(
     caller_id: usize,
 ) -> Option<crate::memory::frame_run::FrameRun> {
+    let bill = reserve_grant_frames(caller_id, 1).ok().flatten()?;
     alloc_owned_grant(
         "refusal fixture",
         caller_id,
         &live_domain_space(caller_id),
         1,
+        bill,
     )
 }
 
@@ -2282,7 +2286,31 @@ pub(super) fn revoke_dma_export(
     dma_export::revoke(caller_id, export_id)
 }
 
-/// A new grant's frames for `caller_id`, or `None` for the `Ok(0)` refusal.
+/// The memory-quota reservation a new grant of `n_pages` frames draws from
+/// `caller_id`'s incarnation, taken before any frame is allocated. The run
+/// carries it, so it is refunded exactly when the frames return to the
+/// allocator (free, unregister or reap), never while a pin withholds them.
+///
+/// # Errors
+/// [`SyscallError::PermissionDenied`] for a caller with no live binding;
+/// `Ok(None)` when its quota cannot cover the run.
+pub(super) fn reserve_grant_frames(
+    caller_id: usize,
+    n_pages: usize,
+) -> Result<Option<crate::memory::cell_quota::Reservation>, SyscallError> {
+    use crate::memory::cell_quota::{Account, Charge, Reservation};
+    const PAGE_SIZE: usize = 4096;
+    let (cell, generation) = live_task_binding(caller_id).ok_or(SyscallError::PermissionDenied)?;
+    Ok(Reservation::take(
+        Charge::new(cell, generation),
+        Account::Memory,
+        n_pages * PAGE_SIZE,
+    )
+    .ok())
+}
+
+/// A new grant's frames for `caller_id`, billed with `bill`, or `None` for the
+/// `Ok(0)` refusal (which drops `bill` and so refunds it).
 ///
 /// A SAS owner gets them USER in the shared root (`alloc_grant_pages`). A
 /// domain owner gets a supervisor-only run, mapped RW+NX in its own root only;
@@ -2293,11 +2321,12 @@ fn alloc_owned_grant(
     caller_id: usize,
     owner_space: &Option<DomainRoot>,
     n_pages: usize,
+    bill: crate::memory::cell_quota::Reservation,
 ) -> Option<crate::memory::frame_run::FrameRun> {
     match owner_space {
         #[cfg(cellos_domain_grants)]
         Some(space) => {
-            let backing = alloc_grant_pages_supervisor_only(n_pages)?;
+            let backing = alloc_grant_pages_supervisor_only(n_pages, bill)?;
             match map_domain_owner_pages(space, backing) {
                 Ok(backing) => Some(backing),
                 Err(error) => {
@@ -2310,11 +2339,28 @@ fn alloc_owned_grant(
         }
         #[cfg(not(cellos_domain_grants))]
         Some(_) => {
-            let _ = (kind, caller_id);
+            let _ = (kind, caller_id, bill);
             None
         }
-        None => alloc_grant_pages(n_pages).map(|paddr| grant_run(paddr, n_pages)),
+        None => alloc_grant_pages(n_pages).map(|paddr| billed_grant_run(paddr, n_pages, bill)),
     }
+}
+
+/// A new SAS grant's frames at `base`, mapped USER in the shared root (over
+/// the identity alias on RV64/AArch64), carrying `bill` as their charge.
+pub(super) fn billed_grant_run(
+    base: usize,
+    n_pages: usize,
+    bill: crate::memory::cell_quota::Reservation,
+) -> crate::memory::frame_run::FrameRun {
+    use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
+    FrameRun::mapped(
+        base,
+        n_pages,
+        bill,
+        RunKind::Leaf,
+        KernelAlias::of_identity_remap(base),
+    )
 }
 
 /// Release a new grant whose caller lost its live binding before the row was
@@ -2375,7 +2421,10 @@ pub(super) fn grant_alloc(caller_id: usize, size: usize) -> SyscallResult {
     }
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
-    let Some(run) = alloc_owned_grant("GrantAlloc", caller_id, &owner_space, n_pages) else {
+    let Some(bill) = reserve_grant_frames(caller_id, n_pages)? else {
+        return Ok(0);
+    };
+    let Some(run) = alloc_owned_grant("GrantAlloc", caller_id, &owner_space, n_pages, bill) else {
         return Ok(0);
     };
     let paddr = run.base();
@@ -2671,7 +2720,11 @@ pub(super) fn grant_register(caller_id: usize, size: usize) -> SyscallResult {
     }
     let owner_space = live_domain_space(caller_id);
     let n_pages = size.div_ceil(PAGE_SIZE);
-    let Some(run) = alloc_owned_grant("GrantRegister", caller_id, &owner_space, n_pages) else {
+    let Some(bill) = reserve_grant_frames(caller_id, n_pages)? else {
+        return Ok(0);
+    };
+    let Some(run) = alloc_owned_grant("GrantRegister", caller_id, &owner_space, n_pages, bill)
+    else {
         return Ok(0);
     };
     let paddr = run.base();

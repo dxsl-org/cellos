@@ -39,10 +39,13 @@ pub(super) fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
     // GAS address at GAS offset +4 → table offset 44.
     // SAFETY: offset 44 is within the validated HPET body.
     let hpet_addr = unsafe { core::ptr::read_unaligned((virt + 44) as *const u64) };
-    if hpet_addr != 0 {
+    if super::mmio_base_admissible(hpet_addr) {
         info.hpet_base = hpet_addr;
         log::info!("[acpi] HPET: event timer block = {:#x}", hpet_addr);
     } else {
-        log::warn!("[acpi] HPET: GAS address is 0 — timer gate closed");
+        log::warn!(
+            "[acpi] HPET: GAS address {:#x} is zero, unaligned or beyond 52 bits — timer gate closed",
+            hpet_addr
+        );
     }
 }

@@ -474,7 +474,9 @@ pub struct GpeBlock {
 
 /// GPE0/GPE1 blocks of a raw FADT (ACPI 6.5 Table 5.9: `GPE0_BLK` 80,
 /// `GPE1_BLK` 84, lengths 92/93, `X_GPE0_BLK` 220, `X_GPE1_BLK` 232). A block
-/// outside I/O space is left out: the SCI path only drives port I/O.
+/// outside I/O space is left out: the SCI path only drives port I/O. So is one
+/// whose ports run past `0xFFFF`: the SCI path writes `port + index`, which
+/// must never wrap to the low legacy ports (8237 DMA, PIC).
 fn gpe_blocks(facp: &[u8]) -> [GpeBlock; 2] {
     let u8_at = |off: usize| facp.get(off).copied().unwrap_or(0);
     let u64_at = |off: usize, width: usize| {
@@ -493,10 +495,14 @@ fn gpe_blocks(facp: &[u8]) -> [GpeBlock; 2] {
             (Gas::SYSTEM_IO, u64_at(legacy, 4))
         };
         match (space, u16::try_from(address)) {
-            (Gas::SYSTEM_IO, Ok(port)) if port != 0 => GpeBlock {
-                port,
-                len: u8_at(len_at),
-            },
+            (Gas::SYSTEM_IO, Ok(port))
+                if port != 0 && port.checked_add(u16::from(u8_at(len_at))).is_some() =>
+            {
+                GpeBlock {
+                    port,
+                    len: u8_at(len_at),
+                }
+            }
             _ => GpeBlock::default(),
         }
     };

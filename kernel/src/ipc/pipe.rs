@@ -220,32 +220,44 @@ pub(crate) fn duplicate_end(handle: PipeHandle) -> bool {
 /// Close one end. Returns true when the pipe object was dropped (last end).
 ///
 /// Closing the last writer end makes readers observe EOF; closing the last reader
-/// end makes writers fail with a closed pipe.
+/// end makes writers fail with a closed pipe. Either transition wakes the peers
+/// parked on the other side, otherwise a reader blocked without a deadline would
+/// never observe the EOF. Takes `SCHEDULER` to wake, so callers hold no lock.
 pub(crate) fn close_end(handle: PipeHandle, tid: usize) -> bool {
     let mut pipes = PIPES.lock();
     let Some(pipe) = pipes.get_mut(&handle.pipe) else {
         return false;
     };
+    let mut to_wake = VecDeque::new();
     match handle.end {
         PipeEnd::Read => {
             pipe.readers = pipe.readers.saturating_sub(1);
             pipe.read_waiters.retain(|queued| *queued != tid);
+            if pipe.readers == 0 {
+                to_wake = core::mem::take(&mut pipe.write_waiters);
+            }
         }
         PipeEnd::Write => {
             pipe.writers = pipe.writers.saturating_sub(1);
             pipe.write_waiters.retain(|queued| *queued != tid);
+            if pipe.writers == 0 {
+                to_wake = core::mem::take(&mut pipe.read_waiters);
+            }
         }
     }
     // Both ends gone: release the object and refund the ring.
-    if pipe.readers == 0 && pipe.writers == 0 {
-        let pipe = pipes
+    let released = (pipe.readers == 0 && pipe.writers == 0).then(|| {
+        pipes
             .remove(&handle.pipe)
-            .expect("pipe remained present while holding PIPES");
-        drop(pipes);
-        drop(pipe);
-        return true;
+            .expect("pipe remained present while holding PIPES")
+    });
+    drop(pipes);
+    let dropped = released.is_some();
+    drop(released);
+    for waiter in to_wake {
+        crate::task::wake_task(waiter, 0);
     }
-    false
+    dropped
 }
 
 /// Writer ends still attached to this pipe.
@@ -315,33 +327,52 @@ pub(crate) fn try_read(handle: PipeHandle, dst: &mut [u8], tid: usize) -> Option
 }
 
 /// Park `tid` as a reader (waiting for data or EOF).
-pub(crate) fn park_reader(handle: PipeHandle, tid: usize) {
+///
+/// Returns false, without parking, when the ring already holds data, no writer
+/// end remains, or the pipe is gone: a write or close that landed after the
+/// caller's `try_read` found nobody to wake, so the caller must retry instead of
+/// blocking. The caller holds `SCHEDULER` across this call and its Blocked
+/// publish, so a later writer's wake cannot slip between them.
+pub(crate) fn park_reader(handle: PipeHandle, tid: usize) -> bool {
     let mut pipes = PIPES.lock();
-    if let Some(pipe) = pipes.get_mut(&handle.pipe) {
-        if !pipe.read_waiters.contains(&tid) {
-            #[cfg(feature = "p01-trace")]
-            let _semantic = crate::memory::heap::p01_owner::creation(
-                None,
-                crate::memory::heap::p01_owner::PIPE_SHARED,
-            );
-            pipe.read_waiters.push_back(tid);
-        }
+    let Some(pipe) = pipes.get_mut(&handle.pipe) else {
+        return false;
+    };
+    if !pipe.is_empty() || pipe.writers == 0 {
+        return false;
     }
+    if !pipe.read_waiters.contains(&tid) {
+        #[cfg(feature = "p01-trace")]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::PIPE_SHARED,
+        );
+        pipe.read_waiters.push_back(tid);
+    }
+    true
 }
 
 /// Park `tid` as a writer (waiting for space or a reader).
-pub(crate) fn park_writer(handle: PipeHandle, tid: usize) {
+///
+/// Returns false, without parking, when the ring has space, no reader end
+/// remains, or the pipe is gone; same contract as [`park_reader`].
+pub(crate) fn park_writer(handle: PipeHandle, tid: usize) -> bool {
     let mut pipes = PIPES.lock();
-    if let Some(pipe) = pipes.get_mut(&handle.pipe) {
-        if !pipe.write_waiters.contains(&tid) {
-            #[cfg(feature = "p01-trace")]
-            let _semantic = crate::memory::heap::p01_owner::creation(
-                None,
-                crate::memory::heap::p01_owner::PIPE_SHARED,
-            );
-            pipe.write_waiters.push_back(tid);
-        }
+    let Some(pipe) = pipes.get_mut(&handle.pipe) else {
+        return false;
+    };
+    if !pipe.is_full() || pipe.readers == 0 {
+        return false;
     }
+    if !pipe.write_waiters.contains(&tid) {
+        #[cfg(feature = "p01-trace")]
+        let _semantic = crate::memory::heap::p01_owner::creation(
+            None,
+            crate::memory::heap::p01_owner::PIPE_SHARED,
+        );
+        pipe.write_waiters.push_back(tid);
+    }
+    true
 }
 
 /// Drop every waiter entry and endpoint a dying task owned.
@@ -534,4 +565,86 @@ pub(crate) fn session_close(
         drop(pipe);
     }
     final_reader
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::cell_quota::Charge;
+
+    /// Tids far above any host-test scheduler fixture, so `wake_task` never
+    /// touches another test's task.
+    const READER: usize = 0x5eed_0001;
+    const WRITER: usize = 0x5eed_0002;
+
+    fn waiters(handle: PipeHandle) -> (Vec<usize>, Vec<usize>) {
+        let pipes = PIPES.lock();
+        let pipe = pipes.get(&handle.pipe).expect("pipe is live");
+        (
+            pipe.read_waiters.iter().copied().collect(),
+            pipe.write_waiters.iter().copied().collect(),
+        )
+    }
+
+    #[test]
+    fn closing_last_writer_releases_parked_readers() {
+        let (read, write) = create(MIN_CAPACITY, Charge::KERNEL).expect("pipe");
+        assert!(park_reader(read, READER));
+        assert_eq!(waiters(read).0, [READER]);
+        assert!(!close_end(write, WRITER));
+        // The reader was handed to `wake_task`, so it observes EOF on retry.
+        assert!(waiters(read).0.is_empty());
+        let mut buf = [0u8; 4];
+        assert!(matches!(
+            try_read(read, &mut buf, READER),
+            Some(ReadOutcome::Eof)
+        ));
+        assert!(close_end(read, READER));
+    }
+
+    #[test]
+    fn closing_last_reader_releases_parked_writers() {
+        let (read, write) = create(MIN_CAPACITY, Charge::KERNEL).expect("pipe");
+        let fill = [0xa5u8; MIN_CAPACITY];
+        assert!(matches!(
+            try_write(write, &fill, WRITER),
+            Some(WriteOutcome::Wrote(MIN_CAPACITY))
+        ));
+        assert!(park_writer(write, WRITER));
+        assert!(!close_end(read, READER));
+        assert!(waiters(write).1.is_empty());
+        assert!(matches!(
+            try_write(write, &fill, WRITER),
+            Some(WriteOutcome::NoReader)
+        ));
+        assert!(close_end(write, WRITER));
+    }
+
+    #[test]
+    fn park_refuses_once_the_peer_already_made_progress() {
+        let (read, write) = create(MIN_CAPACITY, Charge::KERNEL).expect("pipe");
+        // A write landing between the reader's empty `try_read` and its park
+        // found no waiter to wake: the park must refuse so the reader retries.
+        assert!(matches!(
+            try_write(write, b"x", WRITER),
+            Some(WriteOutcome::Wrote(1))
+        ));
+        assert!(!park_reader(read, READER));
+        assert!(waiters(read).0.is_empty());
+        // Space in the ring: a writer must not park either.
+        assert!(!park_writer(write, WRITER));
+        assert!(waiters(write).1.is_empty());
+
+        // Last writer gone with an empty ring: EOF is ready, never park.
+        let mut buf = [0u8; 4];
+        assert!(matches!(
+            try_read(read, &mut buf, READER),
+            Some(ReadOutcome::Read(1))
+        ));
+        assert!(!close_end(write, WRITER));
+        assert!(!park_reader(read, READER));
+        assert!(close_end(read, READER));
+        // A closed pipe is gone: parking on it must not block forever.
+        assert!(!park_reader(read, READER));
+    }
 }

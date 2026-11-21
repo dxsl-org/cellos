@@ -278,10 +278,13 @@ fn unmap_owner_pages(space: &DomainRoot, base: usize, pages: usize) {
 /// zeroing needs no remap at all; the caller then maps the owner's own private
 /// root over the returned run. That alias is never removed, so the run is
 /// `KernelAlias::Intact`: its release has nothing to unpublish or restore in
-/// the kernel root (census §7.8).
+/// the kernel root (census §7.8). `bill` covers exactly the run and becomes
+/// its charge, refunded when the frames return to the allocator.
 #[cfg(cellos_domain_grants)]
-fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::frame_run::FrameRun> {
-    use crate::memory::cell_quota::Charge;
+fn alloc_grant_pages_supervisor_only(
+    n_pages: usize,
+    bill: crate::memory::cell_quota::Reservation,
+) -> Option<crate::memory::frame_run::FrameRun> {
     use crate::memory::frame::phys_to_virt;
     use crate::memory::frame_run::{FrameRun, KernelAlias, RunKind};
     const PAGE_SIZE: usize = 4096;
@@ -296,7 +299,7 @@ fn alloc_grant_pages_supervisor_only(n_pages: usize) -> Option<crate::memory::fr
     Some(FrameRun::mapped(
         paddr,
         n_pages,
-        Charge::KERNEL,
+        bill,
         RunKind::Leaf,
         KernelAlias::Intact,
     ))

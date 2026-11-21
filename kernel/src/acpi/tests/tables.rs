@@ -3,6 +3,7 @@
 
 use super::super::dmar::parse_dmar;
 use super::super::fadt::parse_fadt;
+use super::super::hpet::parse_hpet;
 use super::super::madt::parse_madt;
 use super::super::mcfg::parse_mcfg;
 use super::super::spcr::parse_spcr;
@@ -345,4 +346,80 @@ fn parse_walk_reaches_fadt_spcr_and_madt_and_drops_a_corrupt_fadt() {
     let (info, _) = parse_image(&firmware_image(2, b"BOCHS ", &[madt, corrupt]));
     assert_eq!(info.fadt, None);
     assert_ne!(info.ioapic_base, 0);
+}
+
+fn hpet(address: u64) -> AcpiInfo {
+    let mut table = vec![0u8; 56];
+    table[44..52].copy_from_slice(&address.to_le_bytes());
+    let mut info = AcpiInfo::default();
+    parse_hpet(table.as_ptr() as usize, table.len(), &mut info);
+    info
+}
+
+/// 05 S-9: a firmware register base whose low bits would become PTE flag bits
+/// (`0xFED0_0004` sets U/S) or that lies beyond the 52-bit physical space is
+/// never recorded, so it is never mapped.
+#[test]
+fn hpet_and_madt_bases_must_be_page_aligned_and_52_bit() {
+    assert_eq!(hpet(0xFED0_0000).hpet_base, 0xFED0_0000);
+    assert_eq!(hpet(0xFED0_0004).hpet_base, 0);
+    assert_eq!(hpet(1 << 52).hpet_base, 0);
+    assert_eq!(hpet(u64::MAX & !0xFFF).hpet_base, 0);
+
+    let mut override_record = vec![0u8, 0];
+    override_record.extend_from_slice(&0xFEE0_0804u64.to_le_bytes());
+    let mut table = madt_table(&[
+        ioapic(1, 0xFEC0_0010, 0),
+        ioapic(2, 0xFEC0_1000, 24),
+        rec(5, &override_record),
+    ]);
+    let (info, topo) = madt(&table);
+    assert_eq!(
+        info.lapic_base, 0xFEE0_0000,
+        "an unaligned override is ignored"
+    );
+    assert_eq!((info.ioapic_base, topo.ioapics.len()), (0xFEC0_1000, 1));
+
+    table[36..40].copy_from_slice(&0xFEE0_0001u32.to_le_bytes());
+    let (info, _) = madt(&table[..44]);
+    assert_eq!(info.lapic_base, 0);
+}
+
+/// 05 S-9: a firmware MMIO base inside RAM (here a LAPIC override pointing
+/// at usable memory) is refused before the boot path maps it uncached.
+#[test]
+fn mmio_windows_inside_ram_are_refused() {
+    use crate::boot::{MemoryMapEntry, MemoryType};
+    let map = [
+        MemoryMapEntry {
+            base: 0,
+            length: 0x9_F000,
+            ty: MemoryType::Usable,
+        },
+        MemoryMapEntry {
+            base: 0x10_0000,
+            length: 0x7FF0_0000,
+            ty: MemoryType::Usable,
+        },
+        MemoryMapEntry {
+            base: 0xB000_0000,
+            length: 0x1000_0000,
+            ty: MemoryType::Reserved,
+        },
+        MemoryMapEntry {
+            base: 0xFED0_0000,
+            length: 0x1000,
+            ty: MemoryType::Reserved,
+        },
+    ];
+    assert!(mmio_window_clear_of_ram(0xFEE0_0000, 0x1000, &map));
+    assert!(mmio_window_clear_of_ram(0xFED0_0000, 0x1000, &map));
+    assert!(mmio_window_clear_of_ram(0xB000_0000, 0x1000_0000, &map));
+    assert!(!mmio_window_clear_of_ram(0x4000_0000, 0x1000, &map));
+    assert!(!mmio_window_clear_of_ram(0x7FFF_F000, 0x2000, &map));
+    assert!(!mmio_window_clear_of_ram(u64::MAX & !0xFFF, 0x2000, &map));
+    let mut override_record = vec![0u8, 0];
+    override_record.extend_from_slice(&0x4000_0000u64.to_le_bytes());
+    let (info, _) = madt(&madt_table(&[rec(5, &override_record)]));
+    assert!(!mmio_window_clear_of_ram(info.lapic_base, 0x1000, &map));
 }

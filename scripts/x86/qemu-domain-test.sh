@@ -418,6 +418,7 @@ REQUIRED_MARKERS=(
     "announced fault:::[tier2-exploit] deliberately writing to NULL (0x0) — expect Page Fault termination"
     "frame release:::[selftest] DOMAIN-FRAME-RELEASE: PASS"
     "interrupt allocations charge the kernel:::[selftest] IRQ-ALLOC-CHARGE: PASS"
+    "cell charges leave the kernel heap reserve:::[selftest] HEAP-RESERVE: PASS"
     "user stacks map from the stack arena:::[selftest] STACK-ARENA: PASS"
     "user stack off identity:::stack-probe self-test PASS (two guards, overflow target unmapped, watermark, user stack off identity)"
     "domain teardown:::S22-X86-DOMAIN-TEARDOWN: PASS releases="

@@ -1832,6 +1832,28 @@ rationale = "Only the timer poll arms the quarantined-window retry, so a houseke
 review = "kernel/src/resource_registry.rs:poll_quarantined_windows; kernel/src/resource_registry.rs:retry_quarantined_windows; kernel/src/task.rs:vi_timer_tick"
 
 [[global]]
+key = "kernel::resource_registry::kernel_image_span()::__domain_text_start @cfg(not (all (test , not (target_os = \"none\"))))"
+lifetime = "global"
+mutation = "linker"
+owner = "kernel/linker.ld, linker-aarch64.ld, linker-rpi3.ld and linker-x86-64.ld assign the address (start of the image's .text); resource_registry::kernel_image_span reads only the address"
+contexts = ["normal"]
+seal = "fixed at link time by the target's linker script"
+retirement = "never: link-time constant"
+rationale = "Only addr_of! is taken, by kernel_image_span when pcie_bar_admitted screens a PCI BAR registration; the byte is never read or written, so no runtime mutation exists."
+review = "kernel/linker.ld; kernel/linker-x86-64.ld; kernel/linker-aarch64.ld; kernel/src/resource_registry.rs:kernel_image_span; kernel/src/resource_registry.rs:pcie_bar_admitted"
+
+[[global]]
+key = "kernel::resource_registry::kernel_image_span()::__domain_writable_end @cfg(not (all (test , not (target_os = \"none\"))))"
+lifetime = "global"
+mutation = "linker"
+owner = "kernel/linker.ld, linker-aarch64.ld, linker-rpi3.ld and linker-x86-64.ld assign the address (end of the image's writable data, boot stack included); resource_registry::kernel_image_span reads only the address"
+contexts = ["normal"]
+seal = "fixed at link time by the target's linker script"
+retirement = "never: link-time constant"
+rationale = "Only addr_of! is taken, by kernel_image_span when pcie_bar_admitted screens a PCI BAR registration; the byte is never read or written, so no runtime mutation exists."
+review = "kernel/linker.ld; kernel/linker-x86-64.ld; kernel/linker-aarch64.ld; kernel/src/resource_registry.rs:kernel_image_span; kernel/src/resource_registry.rs:pcie_bar_admitted"
+
+[[global]]
 key = "kernel::resource_registry::DISPLAY_FRAMEBUFFER"
 lifetime = "global"
 mutation = "spinlock"
