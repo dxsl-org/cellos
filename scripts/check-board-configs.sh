@@ -136,32 +136,34 @@ run bash scripts/check-hal-boundaries.sh
 
 record_run board-host-contracts \
     run cargo test -p cellos-boards -p hal-soc-x86 --target x86_64-unknown-linux-gnu
+# `compile-only` embeds empty stubs: these are type checks of board selection, and
+# without it the kernel build script falls back to whatever image lies in the tree.
 record_run qemu-rv64 \
-    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf
+    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features compile-only
 record_run qemu-aarch64 \
-    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat
+    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features compile-only
 record_run vf2 \
-    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2
+    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2,compile-only
 record_run pioneer \
-    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-pioneer
+    run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-pioneer,compile-only
 record_run rpi3 \
-    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3
+    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3,compile-only
 record_run rpi4 \
-    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4
+    run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4,compile-only
 # One x86_64 image covers every x86 catalog profile; the profile is bound at
 # boot from the Limine command line, so there is no per-board feature to check.
 record_run x86-64 \
-    run cargo check -p cellos-kernel --target x86_64-unknown-none
+    run cargo check -p cellos-kernel --target x86_64-unknown-none --features compile-only
 
 expect_compile_error \
     riscv-conflict \
     'Conflicting RISC-V board features: `board-vf2` and `board-pioneer` cannot be enabled together.' \
-    cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2,board-pioneer
+    cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf --features board-vf2,board-pioneer,compile-only
 
 expect_compile_error \
     aarch64-conflict \
     'Conflicting AArch64 board features: `board-rpi3` and `board-rpi4` cannot be enabled together.' \
-    cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3,board-rpi4
+    cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3,board-rpi4,compile-only
 
 if [[ ${#failures[@]} -ne 0 ]]; then
     printf 'board configuration matrix failed: %s\n' "${failures[*]}" >&2
