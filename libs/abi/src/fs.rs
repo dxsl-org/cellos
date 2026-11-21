@@ -202,19 +202,6 @@ impl Drop for FileHandle {
     }
 }
 
-/// A file lease for exclusive access or locking.
-///
-/// Ensures the lease is released (revoked) when dropped.
-pub struct Lease {
-    pub id: u64,
-}
-
-impl Drop for Lease {
-    fn drop(&mut self) {
-        // In the future, this would notify the Lock Manager to release the lease.
-    }
-}
-
 /// File open mode.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

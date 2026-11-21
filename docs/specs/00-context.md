@@ -90,15 +90,14 @@ Cellos/
 - **Kernel/HAL**: Chỉ dùng unsafe khi tương tác trực tiếp phần cứng và phải có # Safety documentation.
 
 **Luật 5: Module Style (Modern Rust)**
-> **Historical (2026-11-16).** Luật cấm `mod.rs` không được enforce và code không theo: git đang track 41 file `mod.rs` ngoài `third_party/` và `.agents/` (ví dụ `kernel/src/arch/mod.rs`, `kernel/src/task/syscall/mod.rs`, `libs/ostd/src/service/mod.rs`), và không có CI lint nào kiểm tra. Code mới nên ưu tiên `foo.rs` + `foo/`, nhưng `mod.rs` không bị chặn.
-- **TUYỆT ĐỐI CẤM** sử dụng `mod.rs`.
-- Sử dụng cấu trúc hiện đại: `foo.rs` nằm ngang hàng với thư mục `foo/`.
+> **Cập nhật 2026-11-21 ([ADR-0036](../decisions/0036-retire-spec00-laws-5-and-6-sas-clause.md)).** Luật cấm `mod.rs` đã được bãi bỏ: code đang có 41 file `mod.rs` ngoài `third_party/` và không có CI lint nào kiểm tra.
+- `mod.rs` được phép. Module mới nên ưu tiên cấu trúc `foo.rs` nằm ngang hàng với thư mục `foo/`; đây là khuyến nghị về style, không có lint.
 - Tên file/thư mục phải là snake_case.
 
 **Luật 6: Cellos Naming Convention**
 - Mọi thành phần trong mã nguồn phải tuân thủ quy tắc đặt tên để phân biệt giữa **Hợp đồng Cellos (Contract)**, **Thực thi (Implementation)** và **Mã nguồn Fork**.
 - **Chống đụng độ:** Không được đặt tên trùng với các thư viện fork (ví dụ: cấm đặt tên Trait là `FileSystem` nếu đã fork RedoxFS).
-- ~~**Định danh SAS:** Các Trait bắt đầu bằng `Vi` phải hỗ trợ cơ chế chuyển giao sở hữu (Ownership) hoặc Lease/Grant để tối ưu hóa Single Address Space.~~ (**Historical (2026-11-16):** code không theo — nhiều trait `Vi` chỉ là giao diện thiết bị/UI không có ownership hay Lease/Grant, ví dụ `ViUart`, `ViGpio`, `ViSpi` (`hal/traits/`) và `ViTheme`, `ViWidget` (`libs/viui`). Tiền tố `Vi` hiện chỉ là quy ước đặt tên.)
+- **Tiền tố `Vi`:** chỉ là quy ước đặt tên cho hợp đồng Cellos (bảng dưới). Ownership và lifetime được quy định bởi từng ranh giới thực tế: message theo [Spec 17](17-ipc-wire-contract.md) và Grant theo `libs/ostd/src/grant.rs`, không phải bởi tên trait. *(Cập nhật 2026-11-21, [ADR-0036](../decisions/0036-retire-spec00-laws-5-and-6-sas-clause.md): bãi bỏ điều khoản cũ "Định danh SAS" yêu cầu mọi trait `Vi` hỗ trợ chuyển giao ownership hoặc Lease/Grant; phần lớn 38 trait `Vi` là giao diện thiết bị/UI không có ownership, ví dụ `ViUart`, `ViGpio`, `ViSpi`, `ViTheme`, `ViWidget`.)*
 - **Refactor hàng Fork:** Khi đưa mã nguồn ngoại lai vào, phải giữ nguyên logic gốc nhưng phải bọc (wrap) hoặc implement lại các Trait theo chuẩn `Vi` để Kernel có thể gọi.
 
 | Đối tượng | Tiền tố / Quy tắc | Ví dụ |
@@ -120,7 +119,7 @@ Cellos/
 **Luật 8: Quản lý tài nguyên & LBI (Memory Safety)**
 - **Tối ưu hóa tham chiếu (Borrowing over Heap)**: Sử dụng tham chiếu (`&` / `&mut`) thay vì Ownership (`Box`) khi chỉ cần truy cập dữ liệu tạm thời để giảm áp lực cấp phát lên heap. *(Cập nhật 2026-11-16: không có "Global Heap" chung cho Cells; mỗi Cell có arena riêng, mặc định 1 MiB (`libs/ostd/src/heap.rs`), kernel có heap riêng.)*
 - **Lifetime**: Mọi struct chứa tham chiếu phải chỉ định rõ `lifetime` để ngăn chặn dangling references trong Single Address Space.
-- **Drop**: Bắt buộc triển khai `Drop` trait cho các cấu trúc quản lý tài nguyên để đảm bảo thu hồi tài nguyên ngay lập tức khi đối tượng ra khỏi phạm vi (scope). *(Cập nhật 2026-11-16: các `Drop` hiện có: `FileHandle` (`libs/abi/src/fs.rs:196`), `ostd::fs::File` và `ReadDir` (`libs/ostd/src/fs.rs:217`, `:38`), `GrantHandle` (`libs/ostd/src/grant.rs:223`). `Lease::drop` (`libs/abi/src/fs.rs:212`) vẫn rỗng — chưa có Lock Manager. `DriverContext` không tồn tại.)*
+- **Drop**: Bắt buộc triển khai `Drop` trait cho các cấu trúc quản lý tài nguyên để đảm bảo thu hồi tài nguyên ngay lập tức khi đối tượng ra khỏi phạm vi (scope). *(Cập nhật 2026-11-16: các `Drop` hiện có: `FileHandle` (`libs/abi/src/fs.rs:196`), `ostd::fs::File` và `ReadDir` (`libs/ostd/src/fs.rs:217`, `:38`), `GrantHandle` (`libs/ostd/src/grant.rs:223`). `DriverContext` không tồn tại. Cập nhật 2026-11-21: `abi::fs::Lease`, có `Drop` rỗng và không có constructor hay consumer nào, đã bị xoá; lease thật là grant lease do kernel quản lý.)*
 
 
 ## 4. Agent Workflow
