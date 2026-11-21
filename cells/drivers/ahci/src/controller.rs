@@ -527,7 +527,22 @@ impl AhciController {
         dma_write_u32(&self.cmd_table, 136, 0); // reserved
         dma_write_u32(&self.cmd_table, 140, u32::from(count) * SECTOR_BYTES - 1); // DBC = byte count - 1
 
-        self.issue_and_wait(p, tag, what)
+        self.issue_and_wait(p, tag, what)?;
+        // A clean completion with a short PRDBC (command header DWORD1, as in
+        // IDENTIFY) left part of the buffer stale; serving it as the sectors read
+        // would hand the caller old bytes as current data.
+        if !write {
+            let expected = u32::from(count) * SECTOR_BYTES;
+            let prdbc = dma_read_u32(&self.cmd_list, 4);
+            if prdbc != expected {
+                let _ = print_fmt(format_args!(
+                    "[ahci] port={} tag={} {} short transfer: PRDBC={} expected {}\n",
+                    self.port, tag, what, prdbc, expected
+                ));
+                return Err(BlockOutcome::Indeterminate);
+            }
+        }
+        Ok(())
     }
 
     /// Clear latched port errors, kick PxCI bit `tag`, and poll it back to 0.

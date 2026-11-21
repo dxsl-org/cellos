@@ -27,6 +27,12 @@ use crate::manager::VfsManager;
 /// Largest `ReadGrant` transfer: the one page `ostd::fs` allocates per call.
 const MAX_GRANT_READ: usize = 4096;
 
+/// Largest `ReadFileGrant` copy. The bytes are staged on this cell's heap
+/// before the single grant copy (one `GrantSlice` per request), so the bound
+/// keeps one request from exhausting the heap every client shares; it still
+/// covers the largest cell ELF the loader reads this way.
+const MAX_FILE_GRANT_READ: usize = crate::VFS_HEAP_BYTES / 2;
+
 /// `ReadGrant`: up to `size` bytes at `offset` of the file behind the
 /// VFS-issued handle `cap`, into `grant`.
 ///
@@ -107,19 +113,27 @@ pub(crate) fn read_file_grant<'a>(
     if !vfs.access.can_read(caller, path) {
         return VfsResponse::Err(VfsError::Denied as u8);
     }
-    if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, false)))) {
+    if !vfs.healthy(path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    let data = vfs.read_to_vec(path);
+    let Ok(Some((size, false))) = vfs.stat(path) else {
+        return VfsResponse::Err(VfsError::Io as u8);
+    };
+    let n = usize::try_from(size).unwrap_or(usize::MAX).min(max);
+    if n > MAX_FILE_GRANT_READ {
+        return VfsResponse::Err(VfsError::Io as u8);
+    }
+    let mut data = vec![0u8; n];
+    let read = vfs.read_exact_at(path, 0, &mut data);
     if !vfs.healthy(path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     // A read that failed part way is an error, never the bytes before it.
-    let Ok(data) = data else {
+    if read.is_err() {
         return VfsResponse::Err(VfsError::Io as u8);
-    };
+    }
     // The adapter also caps the copy at the kernel-registered grant length.
-    match sys_grant_copy_from_slice(grant, &data[..data.len().min(max)]) {
+    match sys_grant_copy_from_slice(grant, &data) {
         Some(bytes) => VfsResponse::GrantDone { bytes },
         None => VfsResponse::Err(VfsError::Io as u8),
     }

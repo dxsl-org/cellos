@@ -14,6 +14,7 @@ use crate::backend_bootfs::BootFsProxy;
 use crate::backend_fat::FatBackend;
 use crate::blk_router::DeviceRef;
 use crate::fs_error::FsError;
+use crate::page_cache::CacheBudget;
 
 /// Cursor bit marking a position in the cell-store half of a `/bin` listing.
 const STORE_PHASE: u32 = 1 << 30;
@@ -27,11 +28,16 @@ impl BinOverlay {
     /// `store_base_lba`/`store_sectors` = `abi::disk::PART_CELLSTORE_*` on the
     /// primary disk `dev`. The cell-store FAT is mounted with prefix `/bin` so
     /// `/bin/<cell>` strips to `<cell>` at the FAT root — matching the layout
-    /// gen_disk writes into the cell-store.
-    pub fn new(dev: DeviceRef, store_base_lba: u64, store_sectors: u64) -> Self {
+    /// gen_disk writes into the cell-store. Its sector cache draws on `budget`.
+    pub fn new(
+        dev: DeviceRef,
+        store_base_lba: u64,
+        store_sectors: u64,
+        budget: CacheBudget,
+    ) -> Self {
         Self {
             boot: BootFsProxy::new(),
-            store: FatBackend::mount("/bin", dev, store_base_lba, store_sectors),
+            store: FatBackend::mount("/bin", dev, store_base_lba, store_sectors, budget),
         }
     }
 

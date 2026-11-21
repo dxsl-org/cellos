@@ -7,8 +7,6 @@
 
 use alloc::string::ToString;
 
-use alloc::vec::Vec;
-
 use wire::ipc::VfsResponse;
 use wire::proto::vfs::VfsError;
 use wire::vfs_file_handles::ViVfsFileHandle;
@@ -54,47 +52,30 @@ pub(crate) fn write<'a>(
     let Some(end) = offset.checked_add(bytes) else {
         return VfsResponse::Err(VfsError::Io as u8);
     };
-    let new_len = file_len.max(end);
-    let refunded_to_caller = if vfs.quota.writer_of(&path) == Some(caller.cell) {
-        file_len as u64
-    } else {
-        0
-    };
-    let net_charge = (new_len as u64).saturating_sub(refunded_to_caller);
-    if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
+    let (old_len, new_len) = (file_len as u64, file_len.max(end) as u64);
+    if !vfs.quota.can_replace(caller.cell, &path, old_len, new_len) {
         return VfsResponse::Err(VfsError::Quota as u8);
     }
     if bytes == 0 {
         return VfsResponse::GrantDone { bytes: 0 };
     }
-
-    let old = vfs.read_to_vec(&path);
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    let Ok(old) = old else {
-        return VfsResponse::Err(VfsError::Io as u8);
-    };
-    if old.len() != file_len {
-        return VfsResponse::Err(VfsError::Io as u8);
-    }
-    let mut committed = Vec::with_capacity(new_len);
-    committed.extend_from_slice(&old);
-    committed.resize(new_len, 0);
     // GrantSlice resolution and VFS lease publication are one kernel grant-table
-    // transaction. Copy into only the requested file range; a missing or short
-    // grant is an I/O error and the backend remains untouched.
-    if ostd::syscall::sys_grant_copy_to_slice(grant, &mut committed[offset..end]) != Some(bytes) {
+    // transaction. Stage only the requested range: a missing or short grant is
+    // an I/O error and the backend remains untouched.
+    let mut chunk = alloc::vec![0u8; bytes];
+    if ostd::syscall::sys_grant_copy_to_slice(grant, &mut chunk) != Some(bytes) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-
-    if vfs.write(&path, &committed).is_err() {
+    // Only the written range reaches the backend, never a copy of the file.
+    if vfs.write_at(&path, offset as u64, &chunk).is_err() {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     // Observed native sync is functional completion, not crash-preserving
     // durability. A failed mutation is possibly accepted and closes the instance.
-    vfs.quota.release_path(&path, file_len as u64);
-    let _ = vfs.quota.charge(caller.cell, new_len as u64);
-    vfs.quota.set_writer(&path, caller.cell);
+    vfs.quota
+        .commit_replace(caller.cell, &path, old_len, new_len);
     VfsResponse::GrantDone { bytes }
 }

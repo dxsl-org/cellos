@@ -2,6 +2,7 @@
 //! `dispatch::handle_request`, from a cell that has sealed its path strings.
 
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use std::sync::{Arc, Mutex as HostMutex};
 
@@ -207,4 +208,63 @@ fn handle_addressed_lifecycle_needs_mutation_authority_and_an_owned_handle() {
         call(&mut vfs, WRITER, &mixed),
         Reply::Err(VfsError::Handle as u8)
     );
+}
+
+/// Empty files and directories cost the entry charge, so creating them is
+/// bounded by quota, and every way of deleting them returns it to the writer.
+#[test]
+fn empty_entries_are_charged_and_every_delete_returns_the_charge() {
+    let mut vfs = manager();
+    let entry = 4096;
+    vfs.quota = crate::quota::QuotaTracker::with_limits(8 * entry, entry);
+    fn write(path: &str) -> VfsRequest<'_> {
+        VfsRequest::Write { path, content: b"" }
+    }
+    let names: Vec<String> = (0..6).map(|i| format!("/tmp/e{i}")).collect();
+    for name in &names {
+        assert_eq!(call(&mut vfs, WRITER, &write(name)), Reply::Ok, "{name}");
+    }
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::Mkdir("/tmp/d")),
+        Reply::Ok
+    );
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::Mkdir("/tmp/d/e")),
+        Reply::Ok
+    );
+    assert_eq!(vfs.quota.used(WRITER.cell), 8 * entry);
+    // Nothing more is free: neither an empty file nor a directory.
+    let quota = Reply::Err(VfsError::Quota as u8);
+    assert_eq!(call(&mut vfs, WRITER, &write("/tmp/one-more")), quota);
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::Mkdir("/tmp/one-more")),
+        quota
+    );
+    // Rewriting a file the caller owns costs only the byte difference.
+    assert_eq!(call(&mut vfs, WRITER, &write(&names[0])), Reply::Ok);
+
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::Unlink(&names[0])),
+        Reply::Ok
+    );
+    assert_eq!(vfs.quota.used(WRITER.cell), 7 * entry);
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::Rmdir("/tmp/d/e")),
+        Reply::Ok
+    );
+    assert_eq!(vfs.quota.used(WRITER.cell), 6 * entry);
+    assert_eq!(call(&mut vfs, WRITER, &write("/tmp/d/f")), Reply::Ok);
+    assert_eq!(
+        call(&mut vfs, WRITER, &VfsRequest::RmdirRecursive("/tmp/d")),
+        Reply::Ok
+    );
+    assert_eq!(vfs.quota.used(WRITER.cell), 5 * entry);
+    // Appending to a new path pays for the entry once, then bytes only.
+    let append = VfsRequest::Append {
+        path: "/tmp/log",
+        content: b"abc",
+    };
+    assert_eq!(call(&mut vfs, WRITER, &append), Reply::Ok);
+    assert_eq!(call(&mut vfs, WRITER, &append), Reply::Ok);
+    assert_eq!(vfs.quota.used(WRITER.cell), 6 * entry + 6);
 }

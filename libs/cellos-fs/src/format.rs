@@ -161,7 +161,9 @@ impl Superblock {
         else {
             return false;
         };
-        let bitmap_capacity = self.free_bitmap_blocks as u64 * BLOCK_SIZE as u64 * 8;
+        // One bitmap bit per block; `format` writes exactly this many bitmap blocks,
+        // so any other count is a forged or damaged superblock.
+        let bitmap_blocks_needed = self.total_blocks.div_ceil(BLOCK_SIZE as u64 * 8);
         let inode_capacity = self.inode_blocks.len() as u64 * INODES_PER_BLOCK as u64;
         if self.version != FORMAT_VERSION
             || self.block_size != BLOCK_SIZE as u32
@@ -170,7 +172,7 @@ impl Superblock {
             || self.free_bitmap_block < FIRST_USABLE_BLOCK
             || self.free_bitmap_blocks == 0
             || bitmap_end >= self.total_blocks
-            || bitmap_capacity < self.total_blocks
+            || self.free_bitmap_blocks as u64 != bitmap_blocks_needed
             || usize::try_from(self.free_bitmap_blocks)
                 .ok()
                 .and_then(|n| n.checked_mul(BLOCK_SIZE))
@@ -357,7 +359,7 @@ pub struct DirEntryRecord {
 }
 
 impl DirEntryRecord {
-    pub const SIZE: usize = 8 + 1 + 1 + MAX_NAME_LEN; // 258 bytes
+    pub const SIZE: usize = 8 + 1 + 1 + MAX_NAME_LEN; // 56 bytes
 
     pub fn new(inode_num: u64, file_type: u8, name_str: &str) -> Option<Self> {
         let bytes = name_str.as_bytes();

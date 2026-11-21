@@ -51,8 +51,14 @@ fn owner_death_purges_only_the_watched_owner() {
     vfs.dirs.mark_attested(CELL_OLD);
     let _ = vfs.dirs.on_contact(CELL_OTHER);
     vfs.dirs.mark_attested(CELL_OTHER);
-    let old_pending = vfs.pending.insert(CELL_OLD, "/data/old", vec![1u8], None);
-    let other_pending = vfs.pending.insert(CELL_OTHER, "/data/new", vec![2u8], None);
+    let old_pending = vfs
+        .pending
+        .insert(CELL_OLD, "/data/old", vec![1u8], None)
+        .unwrap();
+    let other_pending = vfs
+        .pending
+        .insert(CELL_OTHER, "/data/new", vec![2u8], None)
+        .unwrap();
     let old_dir = vfs.dirs.open_root(CELL_OLD, "/tmp").expect("old dir");
     let other_dir = vfs.dirs.open_root(CELL_OTHER, "/tmp").expect("other dir");
     let old_file = vfs

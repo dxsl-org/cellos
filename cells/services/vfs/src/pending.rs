@@ -6,6 +6,18 @@ use alloc::vec::Vec;
 use crate::caller::Caller;
 use crate::namespace::ServiceHandle;
 
+/// Most pending reads one caller generation may hold at once.
+pub const MAX_PENDING_PER_CALLER: usize = 8;
+
+/// Most pending reads the table holds across every caller. Each slot may pin a
+/// `/srv` service lease, so the bound also caps how many keys reads can hold
+/// against unlink, rmdir and rename.
+pub const MAX_PENDING: usize = 64;
+
+/// Bytes one `Poll` reply carries: the 512-byte IPC frame less the postcard
+/// envelope. A slot never stores more, because nothing past it is deliverable.
+pub const POLL_PAYLOAD: usize = 480;
+
 /// One pending async read slot.
 pub struct PendingRead {
     pub owner: Caller,
@@ -30,16 +42,33 @@ impl PendingTable {
             next_id: 1,
         }
     }
-    /// Insert pre-read data on behalf of `owner` and return its handle.
+
+    /// Whether `owner` may open one more slot. Checked before the read and
+    /// before any lease, so a refused request holds nothing.
+    pub fn has_room(&self, owner: Caller) -> bool {
+        self.slots.len() < MAX_PENDING
+            && self.slots.values().filter(|s| s.owner == owner).count() < MAX_PENDING_PER_CALLER
+    }
+
+    /// Insert pre-read data on behalf of `owner` and return its handle; `None`
+    /// when [`Self::has_room`] refuses. `data` beyond [`POLL_PAYLOAD`] is dropped.
     pub fn insert(
         &mut self,
         owner: Caller,
         path: &str,
-        data: Vec<u8>,
+        mut data: Vec<u8>,
         lease: Option<ServiceHandle>,
-    ) -> u32 {
-        let id = self.next_id;
-        self.next_id = self.next_id.wrapping_add(1).max(1); // skip 0
+    ) -> Option<u32> {
+        if !self.has_room(owner) {
+            return None;
+        }
+        data.truncate(POLL_PAYLOAD);
+        let mut id = self.next_id;
+        // Skip 0 and, after the u32 space wraps, any handle still outstanding.
+        while id == 0 || self.slots.contains_key(&id) {
+            id = id.wrapping_add(1);
+        }
+        self.next_id = id.wrapping_add(1);
         self.slots.insert(
             id,
             PendingRead {
@@ -49,7 +78,7 @@ impl PendingTable {
                 _lease: lease,
             },
         );
-        id
+        Some(id)
     }
 
     /// The path a slot was filled from, if `caller` owns that slot.
@@ -116,7 +145,9 @@ mod tests {
     #[test]
     fn poll_returns_data_to_the_issuing_cell() {
         let mut table = PendingTable::new();
-        let handle = table.insert(CELL_B, "/data/b", vec![1u8, 2, 3], None);
+        let handle = table
+            .insert(CELL_B, "/data/b", vec![1u8, 2, 3], None)
+            .unwrap();
         assert_eq!(table.poll(CELL_B, handle), Some(vec![1u8, 2, 3]));
         // A successful poll consumes the slot.
         assert_eq!(table.poll(CELL_B, handle), None);
@@ -125,7 +156,9 @@ mod tests {
     #[test]
     fn poll_rejects_another_cells_handle() {
         let mut table = PendingTable::new();
-        let handle = table.insert(CELL_B, "/data/b", vec![0xAA; 8], None);
+        let handle = table
+            .insert(CELL_B, "/data/b", vec![0xAA; 8], None)
+            .unwrap();
         assert_eq!(table.poll(CELL_A, handle), None);
     }
 
@@ -133,7 +166,9 @@ mod tests {
     fn handle_sweep_neither_reads_nor_destroys_another_cells_slot() {
         let mut table = PendingTable::new();
         let contents = vec![0xBE; 16];
-        let handle = table.insert(CELL_B, "/data/b", contents.clone(), None);
+        let handle = table
+            .insert(CELL_B, "/data/b", contents.clone(), None)
+            .unwrap();
 
         // Cell A sweeps the low handle space the way an attacker would.
         for probe in 1..=64u32 {
@@ -151,7 +186,9 @@ mod tests {
     #[test]
     fn a_respawned_cell_cannot_poll_its_predecessors_slot() {
         let mut table = PendingTable::new();
-        let handle = table.insert(CELL_B, "/data/b", vec![0xCD; 4], None);
+        let handle = table
+            .insert(CELL_B, "/data/b", vec![0xCD; 4], None)
+            .unwrap();
         assert_eq!(table.poll(CELL_B_RESPAWNED, handle), None);
         // Refused, not consumed.
         assert_eq!(table.poll(CELL_B, handle), Some(vec![0xCD; 4]));
@@ -160,7 +197,7 @@ mod tests {
     #[test]
     fn owned_path_is_visible_to_the_issuing_cell_only() {
         let mut table = PendingTable::new();
-        let handle = table.insert(CELL_B, "/data/b", vec![1u8], None);
+        let handle = table.insert(CELL_B, "/data/b", vec![1u8], None).unwrap();
         assert_eq!(table.owned_path(CELL_B, handle), Some("/data/b"));
         assert_eq!(table.owned_path(CELL_A, handle), None);
         assert_eq!(table.owned_path(CELL_B_RESPAWNED, handle), None);
@@ -169,17 +206,72 @@ mod tests {
     #[test]
     fn poll_rejects_a_handle_that_was_never_issued() {
         let mut table = PendingTable::new();
-        let handle = table.insert(CELL_A, "/data/a", vec![7u8], None);
+        let handle = table.insert(CELL_A, "/data/a", vec![7u8], None).unwrap();
         assert_eq!(table.poll(CELL_A, handle.wrapping_add(1)), None);
     }
 
     #[test]
     fn purge_owner_is_exact_to_the_generation() {
         let mut table = PendingTable::new();
-        let old = table.insert(CELL_B, "/data/b", vec![1u8], None);
-        let new = table.insert(CELL_B_RESPAWNED, "/data/c", vec![2u8], None);
+        let old = table.insert(CELL_B, "/data/b", vec![1u8], None).unwrap();
+        let new = table
+            .insert(CELL_B_RESPAWNED, "/data/c", vec![2u8], None)
+            .unwrap();
         assert_eq!(table.purge_owner(CELL_B), 1);
         assert_eq!(table.poll(CELL_B, old), None);
         assert_eq!(table.poll(CELL_B_RESPAWNED, new), Some(vec![2u8]));
+    }
+
+    #[test]
+    fn one_caller_holds_at_most_its_share_and_others_keep_theirs() {
+        let mut table = PendingTable::new();
+        let handles: Vec<u32> = (0..MAX_PENDING_PER_CALLER)
+            .map(|_| table.insert(CELL_A, "/data/a", vec![1u8], None).unwrap())
+            .collect();
+        assert!(!table.has_room(CELL_A));
+        assert_eq!(table.insert(CELL_A, "/data/a", vec![1u8], None), None);
+        // Another principal, a respawn of the same cell id included, is unaffected.
+        assert!(table.insert(CELL_B, "/data/b", vec![2u8], None).is_some());
+        assert!(table
+            .insert(CELL_B_RESPAWNED, "/data/b", vec![2u8], None)
+            .is_some());
+        // Polling frees a slot for its owner.
+        assert_eq!(table.poll(CELL_A, handles[0]), Some(vec![1u8]));
+        assert!(table.insert(CELL_A, "/data/a", vec![1u8], None).is_some());
+    }
+
+    #[test]
+    fn the_table_is_bounded_across_callers() {
+        let mut table = PendingTable::new();
+        for cell in 0..(MAX_PENDING / MAX_PENDING_PER_CALLER) as u64 {
+            let owner = Caller::principal(CellId(100 + cell), 1);
+            for _ in 0..MAX_PENDING_PER_CALLER {
+                assert!(table.insert(owner, "/data/x", vec![0u8], None).is_some());
+            }
+        }
+        let fresh = Caller::principal(CellId(999), 1);
+        assert!(!table.has_room(fresh));
+        assert_eq!(table.insert(fresh, "/data/x", vec![0u8], None), None);
+    }
+
+    #[test]
+    fn a_slot_keeps_only_what_one_poll_can_carry() {
+        let mut table = PendingTable::new();
+        let handle = table
+            .insert(CELL_A, "/data/a", vec![7u8; 4 * POLL_PAYLOAD], None)
+            .unwrap();
+        assert_eq!(table.poll(CELL_A, handle), Some(vec![7u8; POLL_PAYLOAD]));
+    }
+
+    #[test]
+    fn a_wrapped_handle_counter_skips_outstanding_handles() {
+        let mut table = PendingTable::new();
+        table.next_id = u32::MAX;
+        let last = table.insert(CELL_A, "/data/a", vec![1u8], None).unwrap();
+        assert_eq!(last, u32::MAX);
+        table.next_id = u32::MAX;
+        let next = table.insert(CELL_A, "/data/a", vec![2u8], None).unwrap();
+        assert_eq!(next, 1);
+        assert_eq!(table.poll(CELL_A, last), Some(vec![1u8]));
     }
 }

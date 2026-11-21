@@ -136,11 +136,17 @@ impl AccessTable {
         if !is_canonical_policy_path(path) {
             return false;
         }
+        // Unpublished save stages belong to the transaction that made them and
+        // are reached only through `save`, which goes around this table. A
+        // path-addressed read, write or delete there would read or tamper with
+        // another cell's pending save.
+        if touches_save_staging(path) {
+            return false;
+        }
+        // The guest's whole disk is the guest's data: only the live hypervisor
+        // reads or writes it.
         if is_guest_disk_path(path) {
-            return match kind {
-                AccessKind::Read => true,
-                AccessKind::Write => self.is_live_hypervisor(caller),
-            };
+            return self.is_live_hypervisor(caller);
         }
         match self.rule_for(path) {
             Some(rule) if is_kms_store_rule(rule.prefix) => {
@@ -184,6 +190,14 @@ fn contains_provider_namespace(path: &str) -> bool {
     contains_kms_namespace(path)
         || contains_machine_pin_namespace(path)
         || contains_srv_owner_namespace(path)
+}
+
+/// Whether any component of `path` is a backend's save-staging directory.
+/// ASCII case is ignored so a FAT alias of the name cannot slip past.
+fn touches_save_staging(path: &str) -> bool {
+    let staging = crate::backend_cellosfs::STAGING_DIR.trim_start_matches('/');
+    path.split('/')
+        .any(|component| component.eq_ignore_ascii_case(staging))
 }
 
 fn touches_boot_configuration(path: &str) -> bool {

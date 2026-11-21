@@ -367,20 +367,27 @@ fn unsealed_tampered_and_misdigested_stages_never_publish() {
         call(&mut vfs, BOB, &VfsRequest::SaveAbort { id }),
         Reply::Err(VfsError::Handle as u8)
     );
-    // Staged bytes rewritten after sealing.
+    // Another cell cannot reach a stage by path at all: not to read it, rewrite
+    // it or delete it.
     let id = staged(&mut vfs, ALICE, "/srv/u", b"sealed");
     let stage = format!("/srv/.cbx-save/{id:08x}");
-    assert_eq!(
-        call(
-            &mut vfs,
-            BOB,
-            &VfsRequest::Write {
-                path: &stage,
-                content: b"evil!!"
-            }
-        ),
-        Reply::Ok
-    );
+    let denied = Reply::Err(VfsError::Denied as u8);
+    let write = VfsRequest::Write {
+        path: &stage,
+        content: b"evil!!",
+    };
+    for request in [
+        write,
+        VfsRequest::Unlink(&stage),
+        VfsRequest::Stat(&stage),
+        VfsRequest::ReadAsync { path: &stage },
+        VfsRequest::ListDir("/srv/.cbx-save"),
+    ] {
+        assert_eq!(call(&mut vfs, BOB, &request), denied, "{request:?}");
+    }
+    // Staged bytes rewritten after sealing (beneath the path policy, as an
+    // offline tamper would) still never publish.
+    assert_eq!(vfs.write(&stage, b"evil!!"), Ok(()));
     assert_eq!(
         commit(&mut vfs, ALICE, id, SaveExpect::Absent),
         Reply::Outcome(SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED))

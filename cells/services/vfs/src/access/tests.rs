@@ -131,3 +131,27 @@ fn boot_configuration_cannot_be_replaced_through_fat_aliases_or_ancestors() {
     assert!(table.can_write(CELL, "/mnt/sd/etc/cellos-other/file"));
     assert!(table.can_write(CELL, "/mnt/sd/other"));
 }
+
+#[test]
+fn save_staging_is_unreachable_by_path_on_every_mount() {
+    let table = AccessTable::new();
+    for path in [
+        "/data/.cbx-save",
+        "/data/.cbx-save/00000001",
+        "/srv/.cbx-save/00000001",
+        "/srv/s8test/.cbx-save/00000001",
+        "/srv/.CBX-SAVE/00000001",
+        "/mnt/sd/.cbx-save/x",
+        "/tmp/.cbx-save",
+    ] {
+        assert!(!table.can_read(CELL, path), "{path} readable");
+        assert!(!table.can_write(CELL, path), "{path} writable");
+        assert!(!table.can_remove_dir(CELL, path), "{path} removable");
+        assert!(!table.can_remove_tree(CELL, path), "{path} removable");
+    }
+    // Only the exact component is reserved.
+    for path in ["/data/.cbx-saved", "/srv/x.cbx-save", "/srv/cbx-save/x"] {
+        assert!(table.can_read(CELL, path), "{path}");
+        assert!(table.can_write(CELL, path), "{path}");
+    }
+}

@@ -33,7 +33,16 @@ pub(crate) fn mkdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
     let Ok(_reservation) = reserve_srv(vfs, path) else {
         return VfsResponse::Err(VfsError::Denied as u8);
     };
+    // A new directory costs the entry charge; `mkdir -p` over an existing one
+    // (FAT) creates nothing and costs nothing.
+    let creates = !matches!(vfs.stat(path), Ok(Some(_)));
+    if creates && !vfs.quota.can_charge(caller.cell, vfs.quota.entry_charge()) {
+        return VfsResponse::Err(VfsError::Quota as u8);
+    }
     if vfs.mkdir(path).is_ok() {
+        if creates {
+            vfs.quota.commit_entry(caller.cell, path);
+        }
         VfsResponse::Ok
     } else {
         VfsResponse::Err(VfsError::Io as u8)
@@ -52,6 +61,7 @@ pub(crate) fn rmdir(vfs: &mut VfsManager, caller: Caller, path: &str) -> VfsResp
         return VfsResponse::Err(VfsError::Denied as u8);
     };
     if vfs.rmdir(path).is_ok() {
+        vfs.quota.release_path(path, 0);
         VfsResponse::Ok
     } else {
         VfsResponse::Err(VfsError::Io as u8)
@@ -96,9 +106,6 @@ pub(crate) fn rename(
     if !ok {
         return VfsResponse::Err(VfsError::Io as u8);
     }
-    if let Some(w) = vfs.quota.writer_of(old) {
-        vfs.quota.release_path(old, 0);
-        vfs.quota.set_writer(new, w);
-    }
+    vfs.quota.move_writer(old, new);
     VfsResponse::Ok
 }

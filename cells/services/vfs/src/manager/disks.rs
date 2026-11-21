@@ -11,6 +11,7 @@ use crate::backend_cellosfs::CellosFsBackend;
 use crate::backend_fat::FatBackend;
 use crate::blk_router::{DeviceRef, Discovery};
 use crate::mount::MountTable;
+use crate::page_cache::CacheBudget;
 
 /// Parent of every secondary-disk mount point.
 pub(crate) const SECONDARY_ROOT: &str = "/mnt/disk";
@@ -93,7 +94,10 @@ pub(crate) fn disk_mounts(discovery: &Discovery) -> Vec<DiskMount> {
 }
 
 /// Create and mount every entry of `plan`; longest prefix wins over `/`.
+/// Every FAT mount's sector cache shares one budget, so attaching disks does
+/// not multiply the heap the caches may take.
 pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
+    let budget = CacheBudget::new();
     for mount in plan {
         match mount {
             DiskMount::Fat {
@@ -103,7 +107,7 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
                 sectors,
                 secondary,
             } => {
-                let fat = FatBackend::mount(&prefix, dev, base_lba, sectors);
+                let fat = FatBackend::mount(&prefix, dev, base_lba, sectors, budget.clone());
                 if secondary && !fat.is_mounted() {
                     ostd::io::println(&format!("[vfs] {prefix}: no FAT32 volume"));
                     continue;
@@ -129,7 +133,7 @@ pub(crate) fn mount_disks(mounts: &mut MountTable, plan: Vec<DiskMount>) {
             } => {
                 // VIFS1 ramdisk (bootstrap cells) unioned with the on-disk FAT
                 // cell-store (non-bootstrap cells).
-                let overlay = BinOverlay::new(dev, base_lba, sectors);
+                let overlay = BinOverlay::new(dev, base_lba, sectors, budget.clone());
                 let index = mounts.add_backend(Box::new(overlay));
                 mounts.mount("/bin", index);
             }

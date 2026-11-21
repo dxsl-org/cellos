@@ -9,7 +9,7 @@
 //! a flush flushes only that device.
 
 use crate::blk_router::{blk_flush, blk_read, blk_read_sectors, blk_write, DeviceRef};
-use crate::page_cache::{PageCache, SectorDevice};
+use crate::page_cache::{CacheBudget, PageCache, SectorDevice};
 use alloc::vec::Vec;
 use types::block_wire::{BlockOutcome, MAX_RUN_SECTORS};
 
@@ -283,10 +283,11 @@ impl ReadAhead {
 }
 
 impl CachedBlockStream {
-    pub fn new(dev: DeviceRef, base_lba: u64, sectors: u64) -> Self {
+    /// `budget` is shared by every mount's cache (see `page_cache`).
+    pub fn new(dev: DeviceRef, base_lba: u64, sectors: u64, budget: CacheBudget) -> Self {
         Self {
             inner: BlockStream::new(dev, base_lba, sectors),
-            cache: PageCache::new(),
+            cache: PageCache::new(budget),
             ahead: ReadAhead::default(),
             last: None,
         }

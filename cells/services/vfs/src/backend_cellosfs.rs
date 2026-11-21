@@ -83,7 +83,8 @@ impl CellosFsBackend {
 }
 
 /// Directory, per CellosFS mount, that holds unpublished save transactions.
-const STAGING_DIR: &str = "/.cbx-save";
+/// Path-addressed access to it is refused (`access`).
+pub(crate) const STAGING_DIR: &str = "/.cbx-save";
 
 /// Remove staging objects left by transactions that did not survive the last
 /// mount. Nothing outside [`STAGING_DIR`] is touched.

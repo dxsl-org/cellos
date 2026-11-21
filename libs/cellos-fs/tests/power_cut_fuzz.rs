@@ -460,17 +460,8 @@ fn malformed_inode_mappings_refuse_instead_of_short_or_fabricated_reads() {
         }
         rewrite_inode(&mut disk, &sb, &mut inode);
         let writes = disk.write_count();
-        #[cfg(not(feature = "g2-cow-experiment"))]
-        {
-            let mut fs = CellosFs::open(disk.clone()).unwrap();
-            let mut output = [0; 9000];
-            assert_eq!(
-                fs.read_file("/file", 0, &mut output),
-                Err(FsError::Corrupted),
-                "case {case}"
-            );
-        }
-        #[cfg(feature = "g2-cow-experiment")]
+        // Both engines validate every reachable inode at open, so a malformed
+        // mapping is refused before any read can observe it.
         assert_eq!(
             CellosFs::open(disk.clone()).err(),
             Some(FsError::Corrupted),
@@ -558,12 +549,14 @@ fn inode_number_exhaustion_and_unlink_release_errors_propagate() {
     disk.read_block(2, &mut bitmap).unwrap();
     bitmap[physical as usize / 8] &= !(1 << (physical % 8));
     disk.write_block(2, &bitmap).unwrap();
-    let mut fs = CellosFs::open(disk.clone()).unwrap();
     let writes = disk.write_count();
+    // Open checks every reachable extent block against the bitmap, so the
+    // release path never sees a block the bitmap already calls free.
     #[cfg(not(feature = "g2-cow-experiment"))]
-    assert_eq!(fs.unlink("/file"), Err(FsError::Corrupted));
+    assert_eq!(CellosFs::open(disk.clone()).err(), Some(FsError::Corrupted));
     #[cfg(feature = "g2-cow-experiment")]
     {
+        let mut fs = CellosFs::open(disk.clone()).unwrap();
         let free = fs.free_blocks();
         fs.unlink("/file").unwrap(); // bitmap bits never authorize retirement
         assert!(fs.free_blocks() < free); // changed table is reserved, data stays protected
@@ -629,5 +622,129 @@ fn open_refuses_selected_inode_table_blocks_marked_free_without_writing() {
         }
         assert_eq!(disk.write_count(), writes);
         assert_eq!(disk.flush_count(), flushes);
+    }
+}
+
+#[test]
+fn geometry_requires_exactly_one_bitmap_bit_per_block() {
+    // 40,000 blocks need div_ceil(40_000, 32_768) = 2 bitmap blocks.
+    for (bitmap_blocks, valid) in [(1, false), (2, true), (3, false)] {
+        assert_eq!(
+            Superblock::new(40_000, bitmap_blocks).validate_geometry(40_000),
+            valid,
+            "bitmap blocks {bitmap_blocks}"
+        );
+    }
+}
+
+/// Format, populate, sync once (slot B becomes active), then return the image
+/// and the active superblock so a test can forge one structure in it.
+#[cfg(not(feature = "g2-cow-experiment"))]
+fn synced_image(populate: impl FnOnce(&mut CellosFs<MemDisk>)) -> (MemDisk, Superblock) {
+    let disk = MemDisk::new(128);
+    let mut fs = CellosFs::format(disk.clone(), 128).unwrap();
+    populate(&mut fs);
+    fs.sync().unwrap();
+    let sb = *fs.superblock();
+    assert_eq!(sb.sequence, 2);
+    (disk, sb)
+}
+
+#[cfg(not(feature = "g2-cow-experiment"))]
+fn assert_open_refused_without_writes(disk: &MemDisk, what: &str) {
+    let writes = disk.write_count();
+    let flushes = disk.flush_count();
+    assert_eq!(
+        CellosFs::open(disk.clone()).err(),
+        Some(FsError::Corrupted),
+        "{what}"
+    );
+    assert_eq!(disk.write_count(), writes, "{what}");
+    assert_eq!(disk.flush_count(), flushes, "{what}");
+}
+
+#[cfg(not(feature = "g2-cow-experiment"))]
+fn set_bitmap_bit(disk: &mut MemDisk, sb: &Superblock, block: u64, allocated: bool) {
+    let mut bitmap = [0; BLOCK_SIZE];
+    disk.read_block(sb.free_bitmap_block, &mut bitmap).unwrap();
+    if allocated {
+        bitmap[block as usize / 8] |= 1 << (block % 8);
+    } else {
+        bitmap[block as usize / 8] &= !(1 << (block % 8));
+    }
+    disk.write_block(sb.free_bitmap_block, &bitmap).unwrap();
+}
+
+#[cfg(not(feature = "g2-cow-experiment"))]
+#[test]
+fn open_refuses_oversized_bitmap_block_count() {
+    let (mut disk, sb) = synced_image(|fs| {
+        fs.create_file("/f").unwrap();
+    });
+    // The sync moved the inode table past block 3, so a second bitmap block at
+    // 3 fits every other geometry and reserved-bit check.
+    assert_eq!(sb.free_bitmap_blocks, 1);
+    assert!(sb.inode_blocks.iter().all(|&b| b == 0 || b > 3));
+    set_bitmap_bit(&mut disk, &sb, 3, true);
+    let mut bytes = [0; BLOCK_SIZE];
+    disk.read_block(1, &mut bytes).unwrap();
+    let mut forged = Superblock::from_bytes(&bytes).unwrap();
+    forged.free_bitmap_blocks = 2;
+    forged.update_checksum();
+    disk.write_block(1, &forged.to_bytes()).unwrap();
+    assert_open_refused_without_writes(&disk, "two bitmap blocks for 128 blocks");
+}
+
+#[cfg(not(feature = "g2-cow-experiment"))]
+#[test]
+fn open_refuses_shared_or_unallocated_extent_blocks() {
+    for case in 0..3 {
+        let mut files = None;
+        let (mut disk, sb) = synced_image(|fs| {
+            for path in ["/a", "/b"] {
+                fs.create_file(path).unwrap();
+                fs.replace_file(path, &vec![0x5A; 8192]).unwrap();
+            }
+            files = Some((fs.lookup("/a").unwrap(), fs.lookup("/b").unwrap()));
+        });
+        let (a, mut b) = files.unwrap();
+        let a_physical = u64::from_le_bytes(a.payload[8..16].try_into().unwrap());
+        match case {
+            0 => {
+                b.payload[8..16].copy_from_slice(&a_physical.to_le_bytes());
+                rewrite_inode(&mut disk, &sb, &mut b);
+            }
+            1 => {
+                b.payload[8..16].copy_from_slice(&(a_physical + 1).to_le_bytes());
+                rewrite_inode(&mut disk, &sb, &mut b);
+            }
+            _ => set_bitmap_bit(&mut disk, &sb, a_physical + 1, false),
+        }
+        assert_open_refused_without_writes(&disk, &format!("extent case {case}"));
+    }
+}
+
+#[cfg(not(feature = "g2-cow-experiment"))]
+#[test]
+fn open_refuses_inode_reachable_through_two_entries() {
+    for case in 0..3 {
+        let mut found = None;
+        let (mut disk, sb) = synced_image(|fs| {
+            fs.create_dir("/d").unwrap();
+            fs.create_file("/f").unwrap();
+            found = Some((fs.lookup("/d").unwrap(), fs.lookup("/f").unwrap()));
+        });
+        let (mut dir, file) = found.unwrap();
+        let entry = match case {
+            0 => cellos_fs::DirEntryRecord::new(file.inode_num, 1, "alias"),
+            1 => cellos_fs::DirEntryRecord::new(1, 2, "root"),
+            _ => cellos_fs::DirEntryRecord::new(dir.inode_num, 2, "self"),
+        }
+        .unwrap();
+        let mut count = dir.extent_count as usize;
+        cellos_fs::inode::DirPayload::insert(&mut dir.payload, &mut count, &entry).unwrap();
+        dir.extent_count = count as u32;
+        rewrite_inode(&mut disk, &sb, &mut dir);
+        assert_open_refused_without_writes(&disk, &format!("reference case {case}"));
     }
 }

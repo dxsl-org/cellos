@@ -18,6 +18,7 @@ use crate::blk_router::DeviceRef;
 use crate::block_stream::{BlockStream, CachedBlockStream, StreamError};
 use crate::fat_extent_map::{ExtentCache, ExtentMap, FileKey};
 use crate::fs_error::FsError;
+use crate::page_cache::CacheBudget;
 use alloc::sync::Arc;
 use core::cell::RefCell;
 use ostd::io::println;
@@ -70,8 +71,15 @@ impl FatBackend {
     /// `/mnt/disk/<name>` (P1 offset) on a secondary disk. On failure (bad BPB
     /// or exFAT) the backend stays in fallback mode — every op fails cleanly
     /// while other mounts keep working; see [`Self::is_mounted`]. Every sector
-    /// fatfs touches is bounded to `sectors` from `base_lba`.
-    pub fn mount(prefix: &str, dev: DeviceRef, base_lba: u64, sectors: u64) -> Self {
+    /// fatfs touches is bounded to `sectors` from `base_lba`. The sector cache
+    /// draws on `budget`, shared with every other FAT mount.
+    pub fn mount(
+        prefix: &str,
+        dev: DeviceRef,
+        base_lba: u64,
+        sectors: u64,
+        budget: CacheBudget,
+    ) -> Self {
         if probe_exfat(dev, base_lba, sectors) {
             println("[vfs] exFAT volume detected — not supported; reformat to FAT32 or use /data (littlefs)");
             return Self {
@@ -83,15 +91,15 @@ impl FatBackend {
             };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
-        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(dev, base_lba, sectors), opts)
-        {
+        let stream = CachedBlockStream::new(dev, base_lba, sectors, budget);
+        let fs = match fatfs::FileSystem::new(stream, opts) {
             Ok(fs) => {
                 // Include the mount prefix so every FAT volume is distinguishable
                 // in the boot log.
                 ostd::io::print("[vfs] FAT32 ");
                 ostd::io::print(prefix);
                 println(" volume mounted");
-                for entry in fs.root_dir().iter().flatten() {
+                for entry in dir_entries(&fs.root_dir()).flatten() {
                     let name = entry.file_name();
                     if name.eq_ignore_ascii_case("guest_disk.img")
                         || name.eq_ignore_ascii_case("guest.img")
@@ -227,11 +235,34 @@ fn open_dir_allow_root<'a>(fs: &'a DataFs, rel: &str) -> Result<DataDir<'a>, FsE
     }
 }
 
+/// A device error under fatfs: whether it left a mutation's outcome unknown.
+pub(crate) trait DeviceError {
+    fn indeterminate(&self) -> bool;
+}
+
+impl DeviceError for StreamError {
+    fn indeterminate(&self) -> bool {
+        matches!(self, StreamError::Indeterminate)
+    }
+}
+
+/// Host-test images: a failed read or write is never indeterminate.
+#[cfg(test)]
+impl DeviceError for () {
+    fn indeterminate(&self) -> bool {
+        false
+    }
+}
+
 /// fatfs's error in VFS terms. `InvalidInput` means a path named the wrong
 /// kind of entry; [`dir_error`] and [`file_error`] say which where it is known.
-fn fat_error(error: fatfs::Error<StreamError>) -> FsError {
+fn fat_error<E: DeviceError>(error: fatfs::Error<E>) -> FsError {
+    if let fatfs::Error::Io(device) = &error {
+        if device.indeterminate() {
+            return FsError::Indeterminate;
+        }
+    }
     match error {
-        fatfs::Error::Io(StreamError::Indeterminate) => FsError::Indeterminate,
         fatfs::Error::NotFound => FsError::NotFound,
         fatfs::Error::AlreadyExists => FsError::AlreadyExists,
         fatfs::Error::DirectoryIsNotEmpty => FsError::DirectoryNotEmpty,
@@ -246,7 +277,7 @@ fn fat_error(error: fatfs::Error<StreamError>) -> FsError {
 }
 
 /// [`fat_error`] for an operation that needs a directory.
-fn dir_error(error: fatfs::Error<StreamError>) -> FsError {
+fn dir_error<E: DeviceError>(error: fatfs::Error<E>) -> FsError {
     match error {
         fatfs::Error::InvalidInput => FsError::NotADirectory,
         error => fat_error(error),
@@ -254,7 +285,7 @@ fn dir_error(error: fatfs::Error<StreamError>) -> FsError {
 }
 
 /// [`fat_error`] for an operation that needs a regular file.
-fn file_error(error: fatfs::Error<StreamError>) -> FsError {
+fn file_error<E: DeviceError>(error: fatfs::Error<E>) -> FsError {
     match error {
         fatfs::Error::InvalidInput => FsError::IsADirectory,
         error => fat_error(error),
@@ -313,6 +344,35 @@ fn split_last(rel: &str) -> (&str, &str) {
     }
 }
 
+/// Most entries one FAT directory can hold: 65,536 32-byte slots (FAT spec).
+/// A walk that yields more is going round a looped cluster chain.
+const MAX_DIR_ENTRIES: usize = 65_536;
+
+/// Bounds of a recursive delete, as CellosFS's. A directory whose cluster
+/// points back at an ancestor makes the tree endless, so it hits these.
+const REMOVE_MAX_DEPTH: usize = 32;
+const REMOVE_MAX_ENTRIES: usize = 4096;
+
+/// `dir`'s entries in on-disk order, `.` and `..` included. A read failure,
+/// or a walk past [`MAX_DIR_ENTRIES`], is `Io` and ends the walk.
+fn dir_entries<'a, IO, TP, OCC>(
+    dir: &fatfs::Dir<'a, IO, TP, OCC>,
+) -> impl Iterator<Item = Result<fatfs::DirEntry<'a, IO, TP, OCC>, FsError>> + 'a
+where
+    IO: fatfs::ReadWriteSeek + 'a,
+    TP: fatfs::TimeProvider + 'a,
+    OCC: fatfs::OemCpConverter + 'a,
+{
+    dir.iter()
+        .take(MAX_DIR_ENTRIES + 1)
+        .enumerate()
+        .map(|(index, entry)| match entry {
+            Ok(_) if index == MAX_DIR_ENTRIES => Err(FsError::Io),
+            Ok(entry) => Ok(entry),
+            Err(_) => Err(FsError::Io),
+        })
+}
+
 /// Page one FAT directory in on-disk order. An iteration error is the whole
 /// page's error (`Io`), never an early end: fatfs ends its iterator after the
 /// first error, which `list` used to report as a complete listing.
@@ -327,9 +387,10 @@ where
     TP: fatfs::TimeProvider,
     OCC: fatfs::OemCpConverter,
 {
-    let entries = dir.iter().filter_map(|entry| {
-        let Ok(entry) = entry else {
-            return Some(Err(FsError::Io));
+    let entries = dir_entries(dir).filter_map(|entry| {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => return Some(Err(error)),
         };
         let name = entry.file_name();
         if name == "." || name == ".." || skip(name.as_bytes()) {
@@ -359,39 +420,79 @@ fn ensure_dir_chain<'a>(root: DataDir<'a>, parts: &str) -> Result<DataDir<'a>, F
     Ok(cur)
 }
 
-/// Depth-first delete of `rel` (path relative to the FAT root).
-///
-/// Rebuilds `root_dir()` per level and addresses children by full relative path
-/// so no `Dir` handle is held across a recursive call (borrow-checker safe).
-/// Collects `iter()` entries before mutating — avoids iterator-vs-mutation aliasing.
-/// An entry that cannot be read stops the removal before anything is removed
-/// at that level.
-fn remove_tree(fs: &DataFs, rel: &str) -> Result<(), FsError> {
-    let dir = match fs.root_dir().open_dir(rel) {
-        Ok(d) => d,
-        // `rel` is a file (or already gone) — remove it directly.
-        Err(_) => return fs.root_dir().remove(rel).map_err(fat_error),
-    };
-    // Collect (name, is_dir) so the iterator borrow is released before we mutate.
-    let mut entries: Vec<(String, bool)> = Vec::new();
-    for entry in dir.iter() {
-        let entry = entry.map_err(|_| FsError::Io)?;
-        let name = entry.file_name();
-        if name != "." && name != ".." {
-            entries.push((name, entry.is_dir()));
-        }
+/// `name` in `dir` as a new empty file, replacing a regular file of that name.
+/// A directory there is `IsADirectory` and is left in place, as on RamFS.
+pub(crate) fn replace_file<'a, IO, TP, OCC>(
+    dir: &fatfs::Dir<'a, IO, TP, OCC>,
+    name: &str,
+) -> Result<fatfs::File<'a, IO, TP, OCC>, FsError>
+where
+    IO: fatfs::ReadWriteSeek,
+    TP: fatfs::TimeProvider,
+    OCC: fatfs::OemCpConverter,
+    IO::Error: DeviceError,
+{
+    if dir.open_dir(name).is_ok() {
+        return Err(FsError::IsADirectory);
     }
-    drop(dir);
+    let _ = dir.remove(name);
+    dir.create_file(name).map_err(file_error)
+}
 
-    for (name, is_dir) in &entries {
-        let child = alloc::format!("{}/{}", rel, name);
-        if *is_dir {
-            remove_tree(fs, &child)?;
-        } else {
-            fs.root_dir().remove(&child).map_err(fat_error)?;
+/// Delete `rel` (path relative to the FAT root) and everything below it.
+///
+/// The whole tree is walked first, with an explicit stack, and nothing is
+/// removed unless the walk completes inside [`REMOVE_MAX_DEPTH`] and
+/// [`REMOVE_MAX_ENTRIES`] (`Unsupported` otherwise) without a read error
+/// (`Io`). Removal then runs children before parents.
+pub(crate) fn remove_tree<IO, TP, OCC>(
+    fs: &fatfs::FileSystem<IO, TP, OCC>,
+    rel: &str,
+) -> Result<(), FsError>
+where
+    IO: fatfs::ReadWriteSeek,
+    TP: fatfs::TimeProvider,
+    OCC: fatfs::OemCpConverter,
+    IO::Error: DeviceError,
+{
+    let root = fs.root_dir();
+    if root.open_dir(rel).is_err() {
+        // `rel` is a file (or already gone) — remove it directly.
+        return root.remove(rel).map_err(fat_error);
+    }
+    // Pre-order: a directory precedes everything below it, so the reverse is
+    // a valid removal order.
+    let mut order: Vec<String> = Vec::new();
+    let mut pending: Vec<(String, usize)> = alloc::vec![(String::from(rel), 0)];
+    let mut seen = 0usize;
+    while let Some((path, depth)) = pending.pop() {
+        let dir = root.open_dir(&path).map_err(dir_error)?;
+        order.push(path.clone());
+        for entry in dir_entries(&dir) {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name == "." || name == ".." {
+                continue;
+            }
+            seen += 1;
+            if seen > REMOVE_MAX_ENTRIES {
+                return Err(FsError::Unsupported);
+            }
+            let child = alloc::format!("{path}/{name}");
+            if entry.is_dir() {
+                if depth >= REMOVE_MAX_DEPTH {
+                    return Err(FsError::Unsupported);
+                }
+                pending.push((child, depth + 1));
+            } else {
+                order.push(child);
+            }
         }
     }
-    fs.root_dir().remove(rel).map_err(fat_error)
+    for path in order.iter().rev() {
+        root.remove(path).map_err(fat_error)?;
+    }
+    Ok(())
 }
 
 impl FsBackend for FatBackend {
@@ -400,8 +501,8 @@ impl FsBackend for FatBackend {
         let dir = open_dir_allow_root(fs, self.rel_allow_root(path))?;
 
         let mut pos = 0;
-        for entry in dir.iter() {
-            let e = entry.map_err(|_| FsError::Io)?;
+        for entry in dir_entries(&dir) {
+            let e = entry?;
             let name = e.file_name();
             if name == "." || name == ".." {
                 continue;
@@ -448,8 +549,8 @@ impl FsBackend for FatBackend {
                 Err(error) => return Err(fat_error(error)),
             }
         };
-        for entry in directory.iter() {
-            let entry = entry.map_err(|_| FsError::Io)?;
+        for entry in dir_entries(&directory) {
+            let entry = entry?;
             if entry.file_name().eq_ignore_ascii_case(name)
                 || entry.short_file_name().eq_ignore_ascii_case(name)
             {
@@ -537,12 +638,10 @@ impl FsBackend for FatBackend {
         })?;
         // Replacing the file frees its clusters for any other file to reuse.
         self.extents.get_mut().clear();
-        let _ = dir.remove(name);
-        let mut file = dir.create_file(name).map_err(|error| {
+        let mut file = replace_file(&dir, name).inspect_err(|error| {
             println(&alloc::format!(
                 "[vfs-fat] write failed while creating file: {error:?}"
             ));
-            file_error(error)
         })?;
         file.write_all(content).map_err(|error| {
             println(&alloc::format!(

@@ -25,16 +25,25 @@ use types::{CellId, ViError, ViResult};
 /// Default per-cell quota: 32 MB.
 #[allow(dead_code)]
 const DEFAULT_QUOTA_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Quota every charged path costs on top of its bytes: one 4 KiB allocation
+/// unit, the least a file or directory occupies on FAT or CellosFS. Without
+/// it empty files and directories were free, and each still costs heap here
+/// (a `writers` record, a RamFS node) and an entry on disk.
+#[allow(dead_code)]
+const ENTRY_CHARGE: u64 = 4096;
+
 /// Per-cell quota and usage tracker.
 ///
 /// Keyed by `CellId` alone, without the caller generation: a respawned service
 /// inherits its predecessor's usage because the bytes are still on disk.
-#[derive(Default)]
 pub struct QuotaTracker {
     used: BTreeMap<u64, u64>,
     /// Path → the cell whose ledger that path's bytes were charged to.
     writers: BTreeMap<String, CellId>,
     limit: u64,
+    /// What each recorded path costs beyond its bytes (see [`ENTRY_CHARGE`]).
+    entry: u64,
 }
 
 impl QuotaTracker {
@@ -44,21 +53,28 @@ impl QuotaTracker {
             used: BTreeMap::new(),
             writers: BTreeMap::new(),
             limit: DEFAULT_QUOTA_BYTES,
+            entry: ENTRY_CHARGE,
         }
     }
 
-    /// Create a tracker with a custom byte limit.
+    /// Create a tracker with a custom byte limit and per-entry charge.
     ///
     /// Used by `test-hooks` builds to exercise quota enforcement with a tiny
     /// limit — writing the full 32 MB production limit over the 512-byte IPC
     /// path would take ~67k messages, far too slow for a QEMU integration test.
-    #[cfg(feature = "test-hooks")]
-    pub fn with_limit(limit: u64) -> Self {
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn with_limits(limit: u64, entry: u64) -> Self {
         Self {
             used: BTreeMap::new(),
             writers: BTreeMap::new(),
             limit,
+            entry,
         }
+    }
+
+    /// Quota one recorded path costs beyond its bytes.
+    pub fn entry_charge(&self) -> u64 {
+        self.entry
     }
 
     /// Check whether `owner` can afford `bytes` without exceeding the quota.
@@ -96,17 +112,8 @@ impl QuotaTracker {
     ///
     /// For a write that replaces the whole file: the previous contents have just
     /// been released to the previous writer, so the new writer owns all the bytes.
-    pub fn set_writer(&mut self, path: &str, owner: CellId) {
+    fn set_writer(&mut self, path: &str, owner: CellId) {
         self.writers.insert(path.to_string(), owner);
-    }
-
-    /// Record `owner` as the cell charged for `path` only if no cell is recorded
-    /// yet.
-    ///
-    /// For an append, which leaves earlier bytes charged where they were. See the
-    /// module note on files written by more than one cell.
-    pub fn record_writer(&mut self, path: &str, owner: CellId) {
-        self.writers.entry(path.to_string()).or_insert(owner);
     }
 
     /// The cell charged for `path`, if VFS charged anyone.
@@ -118,14 +125,89 @@ impl QuotaTracker {
         self.writers.get(path).copied()
     }
 
-    /// Release `bytes` for `path` from the cell that was charged, and forget the
-    /// record.
+    /// What `owner` must still afford to replace `path`'s `old_size` bytes with
+    /// `new_size`. Only the cell charged for the old contents gets them back:
+    /// anyone else pays the whole new file, entry charge included.
+    pub fn replace_cost(&self, owner: CellId, path: &str, old_size: u64, new_size: u64) -> u64 {
+        let refund = if self.writer_of(path) == Some(owner) {
+            old_size.saturating_add(self.entry)
+        } else {
+            0
+        };
+        new_size.saturating_add(self.entry).saturating_sub(refund)
+    }
+
+    /// Whether `owner` can afford [`Self::replace_cost`].
+    pub fn can_replace(&self, owner: CellId, path: &str, old_size: u64, new_size: u64) -> bool {
+        self.can_charge(owner, self.replace_cost(owner, path, old_size, new_size))
+    }
+
+    /// Account a completed replacement: the old contents go back to whoever
+    /// was charged for them, the new ones are charged to `owner`.
+    pub fn commit_replace(&mut self, owner: CellId, path: &str, old_size: u64, new_size: u64) {
+        self.release_path(path, old_size);
+        let _ = self.charge(owner, new_size.saturating_add(self.entry));
+        self.set_writer(path, owner);
+    }
+
+    /// What appending `bytes` to `path` costs: the bytes, plus the entry charge
+    /// when no cell is charged for the path yet.
+    pub fn append_cost(&self, path: &str, bytes: u64) -> u64 {
+        match self.writer_of(path) {
+            Some(_) => bytes,
+            None => bytes.saturating_add(self.entry),
+        }
+    }
+
+    /// Account a completed append. Earlier bytes stay charged where they were;
+    /// see the module note on files written by more than one cell.
+    pub fn commit_append(&mut self, owner: CellId, path: &str, bytes: u64) {
+        let _ = self.charge(owner, self.append_cost(path, bytes));
+        self.writers.entry(path.to_string()).or_insert(owner);
+    }
+
+    /// Account a directory `owner` just created: the entry charge alone.
+    pub fn commit_entry(&mut self, owner: CellId, path: &str) {
+        let _ = self.charge(owner, self.entry);
+        self.set_writer(path, owner);
+    }
+
+    /// Move the record for `old` to `new` after a rename: nothing on disk was
+    /// freed, so nothing is released.
+    pub fn move_writer(&mut self, old: &str, new: &str) {
+        if let Some(owner) = self.writers.remove(old) {
+            self.set_writer(new, owner);
+        }
+    }
+
+    /// Release `bytes` for `path`, plus its entry charge, to the cell that was
+    /// charged, and forget the record.
     ///
     /// A path with no recorded writer releases nothing. That is deliberate: the
     /// alternative — crediting the requesting cell — is the bug this replaces.
     pub fn release_path(&mut self, path: &str, bytes: u64) {
         if let Some(owner) = self.writers.remove(path) {
-            self.release(owner, bytes);
+            self.release(owner, bytes.saturating_add(self.entry));
+        }
+    }
+
+    /// Release the entry charge of every record at or below `root`, after the
+    /// tree is gone. Bytes of files must already be released by path
+    /// ([`Self::release_path`]); what remains here are directories and files
+    /// below the depth the caller measured.
+    pub fn release_tree(&mut self, root: &str) {
+        let root = root.trim_end_matches('/');
+        let doomed: alloc::vec::Vec<String> = self
+            .writers
+            .keys()
+            .filter(|held| {
+                held.strip_prefix(root)
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+            })
+            .cloned()
+            .collect();
+        for path in doomed {
+            self.release_path(&path, 0);
         }
     }
 

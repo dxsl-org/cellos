@@ -105,12 +105,13 @@ pub fn handle(
     // only answers it with an opaque status - which is how the Tier-3 lane's
     // persistence failures surface. Name the caller's sector and the namespace
     // size instead, so a failing boot says whether the request or the size was
-    // wrong.
+    // wrong, and refuse it before anything reaches the device.
     if matches!(op, DrvOp::Read | DrvOp::Write) && sector >= ctrl.n_sectors {
         let _ = ostd::io::print_fmt(format_args!(
             "[nvme] out-of-range request: op={:?} sector={} namespace_sectors={}\n",
             op, sector, ctrl.n_sectors
         ));
+        return status(out, BlockOutcome::NotIssued);
     }
 
     if op == DrvOp::Flush {

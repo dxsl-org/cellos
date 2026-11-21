@@ -39,10 +39,66 @@ impl RamFile {
             children: BTreeMap::new(),
         }
     }
+
+    /// Nodes and bytes below this node, walked without recursion.
+    fn usage_below(&self) -> Usage {
+        let mut usage = Usage::default();
+        let mut pending: Vec<&RamFile> = alloc::vec![self];
+        while let Some(node) = pending.pop() {
+            for (name, child) in &node.children {
+                usage.nodes += 1;
+                usage.bytes += name.len() + child.data.len();
+                pending.push(child);
+            }
+        }
+        usage
+    }
+}
+
+/// Most nodes (files and directories) RamFS holds: each costs heap every
+/// client shares, whatever its size, and the quota charges only a minimum.
+const MAX_NODES: usize = 4096;
+
+/// Most bytes of names and file content RamFS holds. Kept well under the VFS
+/// heap: the per-cell quota is larger than the heap, so it cannot be the bound.
+const MAX_BYTES: usize = crate::VFS_HEAP_BYTES / 4;
+
+/// What a tree holds, counted against [`MAX_NODES`] and [`MAX_BYTES`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Usage {
+    nodes: usize,
+    bytes: usize,
+}
+
+impl Usage {
+    /// `self` after adding `nodes` nodes and `added` bytes and dropping `freed`
+    /// bytes; `NoSpace` past either bound.
+    fn admit(self, nodes: usize, added: usize, freed: usize) -> Result<Self, FsError> {
+        let next = Self {
+            nodes: self.nodes.saturating_add(nodes),
+            bytes: self.bytes.saturating_sub(freed).saturating_add(added),
+        };
+        if next.nodes > MAX_NODES || next.bytes > MAX_BYTES {
+            return Err(FsError::NoSpace);
+        }
+        Ok(next)
+    }
+
+    /// `self` after removing the node `name` and everything below it.
+    fn release(self, name: &str, node: &RamFile) -> Self {
+        let below = node.usage_below();
+        Self {
+            nodes: self.nodes.saturating_sub(1 + below.nodes),
+            bytes: self
+                .bytes
+                .saturating_sub(name.len() + node.data.len() + below.bytes),
+        }
+    }
 }
 
 pub struct RamFsBackend {
     root: Box<RamFile>,
+    usage: Usage,
 }
 
 impl RamFsBackend {
@@ -52,6 +108,13 @@ impl RamFsBackend {
             String::from("readme.txt"),
             Box::new(RamFile::new_file(b"Welcome to Cellos!\n")),
         );
+        // httpd's web root: network clients reach files only below /www.
+        let mut www = Box::new(RamFile::new_dir());
+        www.children.insert(
+            String::from("readme.txt"),
+            Box::new(RamFile::new_file(b"Welcome to Cellos!\n")),
+        );
+        root.children.insert(String::from("www"), www);
         // /bin is served by BootFsProxy (kernel initramfs) since Phase 02 —
         // the embedded ELF copies that used to live here doubled every /bin
         // binary in RAM (once in kernel_fs.img, once in the VFS cell image).
@@ -72,7 +135,8 @@ impl RamFsBackend {
             root.children.insert(String::from("etc"), etc);
         }
 
-        Self { root }
+        let usage = root.usage_below();
+        Self { root, usage }
     }
 
     #[cfg(test)]
@@ -142,20 +206,62 @@ impl RamFsBackend {
     /// Create or overwrite a regular file. Fails if the parent does not exist
     /// or `path` names an existing directory.
     fn write_node(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {
+        self.put_file(
+            path,
+            true,
+            |_| Some(content.len()),
+            |data| {
+                *data = Vec::from(content);
+            },
+        )
+    }
+
+    /// Resize the regular file at `path` to `new_len(old_len)` bytes and let
+    /// `fill` write them, creating the file first when `create` allows. The
+    /// change is admitted against the RamFS bounds before anything moves;
+    /// `None` from `new_len` is an unrepresentable length.
+    fn put_file(
+        &mut self,
+        path: &str,
+        create: bool,
+        new_len: impl FnOnce(usize) -> Option<usize>,
+        fill: impl FnOnce(&mut Vec<u8>),
+    ) -> Result<(), FsError> {
+        let usage = self.usage;
         let (parent, name) = self.parent_mut(path)?;
-        match parent.children.get_mut(&name) {
-            Some(existing) if existing.is_dir => Err(FsError::IsADirectory),
-            Some(existing) => {
-                existing.data = Vec::from(content);
-                Ok(())
-            }
-            None => {
-                parent
-                    .children
-                    .insert(name, Box::new(RamFile::new_file(content)));
-                Ok(())
-            }
-        }
+        let (nodes, old_len) = match parent.children.get(&name) {
+            Some(existing) if existing.is_dir => return Err(FsError::IsADirectory),
+            Some(existing) => (0, existing.data.len()),
+            None if create => (1, 0),
+            None => return Err(FsError::NotFound),
+        };
+        let new_len = new_len(old_len).ok_or(FsError::InvalidPath)?;
+        let name_len = if nodes == 1 { name.len() } else { 0 };
+        let next = usage.admit(nodes, name_len.saturating_add(new_len), old_len)?;
+        let file = parent
+            .children
+            .entry(name)
+            .or_insert_with(|| Box::new(RamFile::new_file(&[])));
+        fill(&mut file.data);
+        self.usage = next;
+        Ok(())
+    }
+
+    /// Remove `path`'s last component once `check` accepts the node, and
+    /// release what it held.
+    fn detach(
+        &mut self,
+        path: &str,
+        check: impl FnOnce(&RamFile) -> Result<(), FsError>,
+    ) -> Result<(), FsError> {
+        let usage = self.usage;
+        let (parent, name) = self.parent_mut(path)?;
+        check(parent.children.get(&name).ok_or(FsError::NotFound)?)?;
+        let Some(removed) = parent.children.remove(&name) else {
+            return Err(FsError::NotFound);
+        };
+        self.usage = usage.release(&name, &removed);
+        Ok(())
     }
 
     fn dir_node(&self, path: &str) -> Result<&RamFile, FsError> {
@@ -262,64 +368,152 @@ impl FsBackend for RamFsBackend {
         if !path.starts_with("/tmp/") {
             return Err(FsError::Unsupported);
         }
-        let mut data = match self.get_file_data(path) {
-            Ok(d) => d.to_vec(),
-            Err(FsError::NotFound) => Vec::new(),
-            Err(error) => return Err(error),
-        };
-        data.extend_from_slice(content);
-        self.write_node(path, &data)
+        self.put_file(
+            path,
+            true,
+            |old| old.checked_add(content.len()),
+            |data| data.extend_from_slice(content),
+        )
+    }
+
+    /// Positional write into an existing `/tmp` file; a gap past the end reads
+    /// back as zeros.
+    fn write_at(&mut self, path: &str, offset: u64, content: &[u8]) -> Result<(), FsError> {
+        if !path.starts_with("/tmp/") {
+            return Err(FsError::Unsupported);
+        }
+        let start = usize::try_from(offset).map_err(|_| FsError::InvalidPath)?;
+        let end = start
+            .checked_add(content.len())
+            .ok_or(FsError::InvalidPath)?;
+        self.put_file(
+            path,
+            false,
+            |old| Some(old.max(end)),
+            |data| {
+                if data.len() < end {
+                    data.reserve_exact(end - data.len());
+                    data.resize(end, 0);
+                }
+                data[start..end].copy_from_slice(content);
+            },
+        )
     }
 
     fn mkdir(&mut self, path: &str) -> Result<(), FsError> {
+        let usage = self.usage;
         let (parent, name) = self.parent_mut(path)?;
         if parent.children.contains_key(&name) {
             return Err(FsError::AlreadyExists);
         }
+        let next = usage.admit(1, name.len(), 0)?;
         parent.children.insert(name, Box::new(RamFile::new_dir()));
+        self.usage = next;
         Ok(())
     }
 
     fn rmdir(&mut self, path: &str) -> Result<(), FsError> {
-        let (parent, name) = self.parent_mut(path)?;
-        match parent.children.get(&name) {
-            None => Err(FsError::NotFound),
-            Some(c) if !c.is_dir => Err(FsError::NotADirectory),
-            Some(c) if !c.children.is_empty() => Err(FsError::DirectoryNotEmpty),
-            Some(_) => {
-                parent.children.remove(&name);
-                Ok(())
-            }
-        }
+        self.detach(path, |node| match node {
+            c if !c.is_dir => Err(FsError::NotADirectory),
+            c if !c.children.is_empty() => Err(FsError::DirectoryNotEmpty),
+            _ => Ok(()),
+        })
     }
 
     fn unlink(&mut self, path: &str) -> Result<(), FsError> {
         if Self::is_oracle_fixture_path(path) {
             return Err(FsError::Unsupported);
         }
-        let (parent, name) = self.parent_mut(path)?;
-        match parent.children.get(&name) {
-            None => Err(FsError::NotFound),
-            Some(c) if c.is_dir => Err(FsError::IsADirectory),
-            Some(_) => {
-                parent.children.remove(&name);
+        self.detach(path, |node| {
+            if node.is_dir {
+                Err(FsError::IsADirectory)
+            } else {
                 Ok(())
             }
-        }
+        })
     }
 
     fn rmdir_recursive(&mut self, path: &str) -> Result<(), FsError> {
         if Self::is_oracle_fixture_path(path) {
             return Err(FsError::Unsupported);
         }
-        let (parent, name) = self.parent_mut(path)?;
-        match parent.children.get(&name) {
-            None => Err(FsError::NotFound),
-            Some(c) if !c.is_dir => Err(FsError::NotADirectory),
-            Some(_) => {
-                parent.children.remove(&name);
+        self.detach(path, |node| {
+            if node.is_dir {
                 Ok(())
+            } else {
+                Err(FsError::NotADirectory)
             }
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_count_is_bounded_and_removal_returns_room() {
+        let mut ram = RamFsBackend::new();
+        let room = MAX_NODES - ram.usage.nodes;
+        for i in 0..room {
+            assert_eq!(ram.write(&alloc::format!("/tmp/{i}"), b""), Ok(()), "{i}");
         }
+        assert_eq!(ram.write("/tmp/one-more", b""), Err(FsError::NoSpace));
+        assert_eq!(ram.mkdir("/tmp/one-more"), Err(FsError::NoSpace));
+        assert_eq!(ram.unlink("/tmp/0"), Ok(()));
+        assert_eq!(ram.mkdir("/tmp/d"), Ok(()));
+        assert_eq!(ram.mkdir("/tmp/d/e"), Err(FsError::NoSpace));
+    }
+
+    #[test]
+    fn byte_total_is_bounded_across_writes_appends_and_positional_writes() {
+        let mut ram = RamFsBackend::new();
+        let chunk = alloc::vec![7u8; MAX_BYTES / 4];
+        for name in ["a", "b", "c"] {
+            assert_eq!(ram.write(&alloc::format!("/tmp/{name}"), &chunk), Ok(()));
+        }
+        // The fourth quarter no longer fits beside the seeded catalog.
+        assert_eq!(ram.write("/tmp/d", &chunk), Err(FsError::NoSpace));
+        assert_eq!(ram.append("/tmp/a", &chunk), Err(FsError::NoSpace));
+        assert_eq!(
+            ram.write_at("/tmp/a", (MAX_BYTES / 2) as u64, b"x"),
+            Err(FsError::NoSpace)
+        );
+        assert_eq!(
+            ram.stat("/tmp/a"),
+            Ok(Some(((MAX_BYTES / 4) as u64, false)))
+        );
+        // Overwriting in place is charged the difference only.
+        assert_eq!(ram.write("/tmp/a", &chunk), Ok(()));
+        // A recursive delete returns everything below it.
+        assert_eq!(ram.mkdir("/tmp/tree"), Ok(()));
+        assert_eq!(ram.write("/tmp/tree/big", &chunk[..1024]), Ok(()));
+        let before = ram.usage;
+        assert_eq!(ram.rmdir_recursive("/tmp/tree"), Ok(()));
+        assert_eq!(ram.usage.nodes, before.nodes - 2);
+        assert_eq!(ram.usage, ram.root.usage_below());
+        assert_eq!(ram.unlink("/tmp/b"), Ok(()));
+        assert_eq!(ram.write("/tmp/d", &chunk), Ok(()));
+        assert_eq!(ram.usage, ram.root.usage_below());
+    }
+
+    #[test]
+    fn positional_writes_patch_extend_and_need_an_existing_file() {
+        let mut ram = RamFsBackend::new();
+        assert_eq!(ram.write_at("/tmp/f", 0, b"x"), Err(FsError::NotFound));
+        assert_eq!(ram.write("/tmp/f", b"hello"), Ok(()));
+        assert_eq!(ram.write_at("/tmp/f", 1, b"EL"), Ok(()));
+        assert_eq!(ram.write_at("/tmp/f", 7, b"!"), Ok(()));
+        assert_eq!(ram.read_to_vec("/tmp/f").as_deref(), Ok(&b"hELlo\0\0!"[..]));
+        assert_eq!(
+            ram.write_at("/readme.txt", 0, b"x"),
+            Err(FsError::Unsupported)
+        );
+        assert_eq!(ram.mkdir("/tmp/dir"), Ok(()));
+        assert_eq!(
+            ram.write_at("/tmp/dir", 0, b"x"),
+            Err(FsError::IsADirectory)
+        );
+        assert_eq!(ram.usage, ram.root.usage_below());
     }
 }

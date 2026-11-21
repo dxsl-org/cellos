@@ -41,12 +41,14 @@ pub(crate) fn handle_path_request(
                 None
             };
             let append_len = content.len() as u64;
-            if !vfs.quota.can_charge(caller.cell, append_len) {
+            if !vfs
+                .quota
+                .can_charge(caller.cell, vfs.quota.append_cost(path, append_len))
+            {
                 return Some(VfsResponse::Err(VfsError::Quota as u8));
             }
             if vfs.append(path, content).is_ok() {
-                let _ = vfs.quota.charge(caller.cell, append_len);
-                vfs.quota.record_writer(path, caller.cell);
+                vfs.quota.commit_append(caller.cell, path, append_len);
                 VfsResponse::Ok
             } else {
                 VfsResponse::Err(VfsError::Io as u8)
@@ -77,6 +79,7 @@ pub(crate) fn handle_path_request(
                 for (path, size) in files {
                     vfs.quota.release_path(&path, size);
                 }
+                vfs.quota.release_tree(p);
                 VfsResponse::Ok
             } else {
                 VfsResponse::Err(VfsError::Io as u8)

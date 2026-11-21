@@ -221,18 +221,20 @@ fn checks() -> [bool; 4] {
         _ => false,
     } && contents(&mut vfs, cfg) == b"a\r\nb";
 
-    // Staged bytes changed after sealing never publish.
+    // No cell reaches a stage by path; bytes changed beneath the path policy
+    // after sealing (an offline tamper) still never publish.
     let tampered = staged(&mut vfs, "/srv/s8test/new", b"sealed").is_some_and(|id| {
         let stage = alloc::format!("/srv/s8test/.cbx-save/{id:08x}");
-        ok(
-            &mut vfs,
-            BOB,
-            &VfsRequest::Write {
-                path: &stage,
-                content: b"evil!!",
-            },
-        ) && commit(&mut vfs, id, SaveExpect::Absent)
-            == Some(SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED))
+        let write = VfsRequest::Write {
+            path: &stage,
+            content: b"evil!!",
+        };
+        matches!(
+            call(&mut vfs, BOB, &write, &mut [0; IPC_BUF_SIZE]),
+            VfsResponse::Err(code) if code == VfsError::Denied as u8
+        ) && vfs.write(&stage, b"evil!!").is_ok()
+            && commit(&mut vfs, id, SaveExpect::Absent)
+                == Some(SaveOutcome::NotPublished(save_refusal::STAGE_CHANGED))
     }) && vfs.stat("/srv/s8test/new") == Ok(None);
 
     // A backend without conditional publication refuses before staging.

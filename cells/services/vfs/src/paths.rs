@@ -80,21 +80,15 @@ pub(crate) fn write_file<'a>(
         return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
     }
     let new_size = content.len() as u64;
-    let refunded_to_caller = if vfs.quota.writer_of(path) == Some(caller.cell) {
-        old_size
-    } else {
-        0
-    };
-    let net_charge = new_size.saturating_sub(refunded_to_caller);
-    if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
+    // An empty file still costs the entry charge, so creating files is never free.
+    if !vfs.quota.can_replace(caller.cell, path, old_size, new_size) {
         return wire::ipc::VfsResponse::Err(VfsError::Quota as u8);
     }
     if vfs.write(path, content).is_ok() {
         // Release the old contents to whoever was charged for them, then charge
         // the new contents to this caller.
-        vfs.quota.release_path(path, old_size);
-        let _ = vfs.quota.charge(caller.cell, new_size);
-        vfs.quota.set_writer(path, caller.cell);
+        vfs.quota
+            .commit_replace(caller.cell, path, old_size, new_size);
         wire::ipc::VfsResponse::Ok
     } else {
         wire::ipc::VfsResponse::Err(VfsError::Io as u8)

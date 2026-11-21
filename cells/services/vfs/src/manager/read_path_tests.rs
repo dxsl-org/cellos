@@ -1242,3 +1242,193 @@ fn recursive_removal_clears_a_native_data_tree_but_never_srv() {
     );
     assert_eq!(vfs.stat("/srv/t/sub/f"), Ok(Some((1, false))));
 }
+
+/// FAT image bytes shared between successive mounts, so a test can build a
+/// volume with fatfs, corrupt it on the bytes, and mount it again.
+#[derive(Clone)]
+struct SharedFatDisk {
+    data: Arc<HostMutex<Vec<u8>>>,
+    pos: usize,
+}
+
+impl fatfs::IoBase for SharedFatDisk {
+    type Error = ();
+}
+
+impl fatfs::Read for SharedFatDisk {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
+        let data = self.data.lock().unwrap();
+        let n = buf.len().min(data.len() - self.pos);
+        buf[..n].copy_from_slice(&data[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+impl fatfs::Write for SharedFatDisk {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, ()> {
+        let mut data = self.data.lock().unwrap();
+        let n = buf.len().min(data.len() - self.pos);
+        data[self.pos..self.pos + n].copy_from_slice(&buf[..n]);
+        self.pos += n;
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> Result<(), ()> {
+        Ok(())
+    }
+}
+
+impl fatfs::Seek for SharedFatDisk {
+    fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
+        let len = self.data.lock().unwrap().len() as i64;
+        let target = match pos {
+            fatfs::SeekFrom::Start(offset) => i64::try_from(offset).map_err(|_| ())?,
+            fatfs::SeekFrom::End(delta) => len + delta,
+            fatfs::SeekFrom::Current(delta) => self.pos as i64 + delta,
+        };
+        if target < 0 || target > len {
+            return Err(());
+        }
+        self.pos = target as usize;
+        Ok(self.pos as u64)
+    }
+}
+
+type SharedFat =
+    fatfs::FileSystem<SharedFatDisk, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+
+/// An 8 MiB FAT16 volume with 512-byte clusters: 16 directory slots per
+/// cluster, and 16-bit FAT entries a test can rewrite directly.
+fn shared_fat16() -> Arc<HostMutex<Vec<u8>>> {
+    let data = Arc::new(HostMutex::new(alloc::vec![0u8; 8 << 20]));
+    let mut disk = SharedFatDisk {
+        data: data.clone(),
+        pos: 0,
+    };
+    fatfs::format_volume(
+        &mut disk,
+        fatfs::FormatVolumeOptions::new()
+            .fat_type(fatfs::FatType::Fat16)
+            .bytes_per_cluster(512),
+    )
+    .expect("format");
+    data
+}
+
+fn mount_shared(data: &Arc<HostMutex<Vec<u8>>>) -> SharedFat {
+    let disk = SharedFatDisk {
+        data: data.clone(),
+        pos: 0,
+    };
+    fatfs::FileSystem::new(disk, fatfs::FsOptions::new()).expect("mount")
+}
+
+/// Byte offset of the directory entry whose 8.3 name is `sfn` (11 bytes,
+/// space padded) and whose attributes mark a directory.
+fn dir_entry_offset(image: &[u8], sfn: &[u8; 11]) -> usize {
+    image
+        .chunks_exact(32)
+        .position(|slot| &slot[..11] == sfn && slot[11] & 0x10 != 0)
+        .map(|index| index * 32)
+        .unwrap_or_else(|| panic!("no directory entry {sfn:?}"))
+}
+
+fn first_cluster(image: &[u8], entry: usize) -> u16 {
+    u16::from_le_bytes([image[entry + 26], image[entry + 27]])
+}
+
+/// Point FAT16 entry `cluster` at `next` in every FAT copy.
+fn set_fat16(image: &mut [u8], cluster: u16, next: u16) {
+    let bytes_per_sector = usize::from(u16::from_le_bytes([image[11], image[12]]));
+    let reserved = usize::from(u16::from_le_bytes([image[14], image[15]]));
+    let fats = usize::from(image[16]);
+    let fat_sectors = usize::from(u16::from_le_bytes([image[22], image[23]]));
+    for copy in 0..fats {
+        let at = (reserved + copy * fat_sectors) * bytes_per_sector + 2 * usize::from(cluster);
+        image[at..at + 2].copy_from_slice(&next.to_le_bytes());
+    }
+}
+
+/// A subdirectory whose cluster is its parent's makes the tree endless. The
+/// recursive delete refuses it before removing anything, instead of recursing
+/// until the stack overflows.
+#[test]
+fn fat_directory_cycle_is_refused_by_recursive_delete_without_removing_anything() {
+    let data = shared_fat16();
+    {
+        let fs = mount_shared(&data);
+        let a = fs.root_dir().create_dir("A").expect("a");
+        a.create_dir("B").expect("b");
+        a.create_file("KEEP").expect("keep");
+        drop(a);
+        fs.unmount().expect("unmount");
+    }
+    {
+        let mut image = data.lock().unwrap();
+        let a = first_cluster(&image, dir_entry_offset(&image, b"A          "));
+        let b = dir_entry_offset(&image, b"B          ");
+        image[b + 26..b + 28].copy_from_slice(&a.to_le_bytes());
+    }
+    let fs = mount_shared(&data);
+    assert_eq!(
+        crate::backend_fat::remove_tree(&fs, "A"),
+        Err(FsError::Unsupported)
+    );
+    assert!(fs.root_dir().open_file("A/KEEP").is_ok());
+    assert!(fs.root_dir().open_dir("A/B/B/B").is_ok(), "cycle intact");
+    // A listing of the looped directory is still finite.
+    let looped = fs.root_dir().open_dir("A/B").expect("b");
+    let mut out = alloc::vec![0u8; MAX_INLINE_PAYLOAD];
+    let page = crate::backend_fat::page_dir(&looped, 0, &mut out, &|_| false).expect("page");
+    assert_eq!(page.next, None);
+}
+
+/// A directory whose cluster chain loops back on itself repeats its entries
+/// forever. Every walk gives up at the FAT limit on directory size.
+#[test]
+fn fat_looped_cluster_chain_ends_every_directory_walk() {
+    let data = shared_fat16();
+    {
+        let fs = mount_shared(&data);
+        let dir = fs.root_dir().create_dir("LOOP").expect("dir");
+        // `.`, `..` and 14 files fill the first cluster; two more open a second.
+        for i in 0..16 {
+            dir.create_file(&format!("F{i:02}")).expect("file");
+        }
+        drop(dir);
+        fs.unmount().expect("unmount");
+    }
+    {
+        let mut image = data.lock().unwrap();
+        let first = first_cluster(&image, dir_entry_offset(&image, b"LOOP       "));
+        set_fat16(&mut image, first, first);
+    }
+    let fs = mount_shared(&data);
+    let looped = fs.root_dir().open_dir("LOOP").expect("dir");
+    let mut out = alloc::vec![0u8; MAX_INLINE_PAYLOAD];
+    // A cursor no real directory reaches: without the bound the walk would
+    // run to it rather than fail.
+    assert_eq!(
+        crate::backend_fat::page_dir(&looped, 70_000, &mut out, &|_| false),
+        Err(FsError::Io)
+    );
+    assert!(crate::backend_fat::remove_tree(&fs, "LOOP").is_err());
+    assert!(fs.root_dir().open_file("LOOP/F00").is_ok());
+}
+
+/// `Write` over an empty FAT directory used to delete it and create a file.
+#[test]
+fn fat_write_over_a_directory_is_refused_and_keeps_it() {
+    let data = shared_fat16();
+    let fs = mount_shared(&data);
+    let root = fs.root_dir();
+    root.create_dir("EMPTY").expect("dir");
+    assert!(matches!(
+        crate::backend_fat::replace_file(&root, "EMPTY"),
+        Err(FsError::IsADirectory)
+    ));
+    assert!(root.open_dir("EMPTY").is_ok());
+    root.create_file("FILE").expect("file");
+    assert!(crate::backend_fat::replace_file(&root, "FILE").is_ok());
+}

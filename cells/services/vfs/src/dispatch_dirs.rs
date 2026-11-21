@@ -206,18 +206,18 @@ fn read_at<'a>(
     }
     // Absent and empty must not look alike: an empty reply for a missing file
     // would make a caller act on data that does not exist.
-    if !matches!(vfs.stat(&path), Ok(Some((_, false)))) {
+    let Ok(Some((size, false))) = vfs.stat(&path) else {
         return VfsResponse::Err(VfsError::Io as u8);
-    }
-    let data = vfs.read_to_vec(&path);
+    };
+    // The reply carries one frame, so only that prefix is read.
+    let n = usize::try_from(size).map_or(MAX_INLINE_PAYLOAD, |size| size.min(MAX_INLINE_PAYLOAD));
+    let read = vfs.read_exact_at(&path, 0, &mut resp_buf[..n]);
     if !vfs.healthy(&path) {
         return VfsResponse::Err(VfsError::Io as u8);
     }
     // A read that failed part way is an error, never the bytes before it.
-    let Ok(data) = data else {
+    if read.is_err() {
         return VfsResponse::Err(VfsError::Io as u8);
-    };
-    let n = data.len().min(MAX_INLINE_PAYLOAD);
-    resp_buf[..n].copy_from_slice(&data[..n]);
+    }
     VfsResponse::Data(&resp_buf[..n])
 }

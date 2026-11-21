@@ -39,6 +39,9 @@ pub enum FsError {
     /// The backend is not serving: no backend at the path, never mounted,
     /// poisoned or unavailable.
     Unavailable,
+    /// The answer would exceed what this service buffers for one request on
+    /// the heap every client shares.
+    TooLarge,
 }
 
 impl FsError {
@@ -70,6 +73,7 @@ mod tests {
             FsError::Io,
             FsError::Indeterminate,
             FsError::Unavailable,
+            FsError::TooLarge,
         ] {
             assert_eq!(error.wire(), 1, "{error:?}");
         }

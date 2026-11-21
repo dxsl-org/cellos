@@ -1,9 +1,11 @@
 //! LRU sector cache for the VFS block stream.
 //!
 //! Lives entirely inside the VFS cell — one owner, no lock contention.
-//! Cache budget is derived from the cell's heap; see `MAX_CACHE_BYTES`.
+//! Every cache draws on one [`CacheBudget`]; see `MAX_CACHE_BYTES`.
 
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use types::block_wire::BlockOutcome;
 
 /// Raw partition-relative sector I/O beneath the cache.
@@ -15,7 +17,7 @@ pub trait SectorDevice {
     fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> BlockOutcome;
 }
 
-/// Sector cache budget: a quarter of the cell's heap.
+/// Sector cache budget: a quarter of the cell's heap, for every cache together.
 ///
 /// Each entry costs 512 B of payload plus BTreeMap/VecDeque bookkeeping, so the
 /// resident cost is ~15% above `total_bytes`; the rest of the heap has to hold
@@ -24,7 +26,9 @@ pub trait SectorDevice {
 /// arena before eviction could start and the cell died with
 /// `OOM: cell heap exhausted` after ~1 MiB of distinct sectors (a guest write
 /// burst longer than the boot's own I/O). Deriving it from the heap keeps the
-/// two in step.
+/// two in step. It was later per cache, and every FAT mount (`/mnt/sd`, the
+/// `/bin` store, each secondary disk) has one, so two attached disks were
+/// enough to exceed the heap; [`CacheBudget`] makes it one budget.
 const MAX_CACHE_BYTES: usize = crate::VFS_HEAP_BYTES / 4;
 
 /// Eviction watermark: entries are dropped once the cache reaches this fraction
@@ -36,6 +40,29 @@ struct CachedSector {
     data: [u8; 512],
 }
 
+/// Cached bytes across every [`PageCache`] sharing this handle. Clones share
+/// the count; the cell is single-threaded, so the atomic only makes it `Send`.
+#[derive(Clone, Default)]
+pub struct CacheBudget(Arc<AtomicUsize>);
+
+impl CacheBudget {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn used(&self) -> usize {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn take(&self, bytes: usize) {
+        self.0.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    fn give(&self, bytes: usize) {
+        self.0.fetch_sub(bytes, Ordering::Relaxed);
+    }
+}
+
 /// LRU sector cache keyed by sector number.
 ///
 /// Write policy: write-through, and specifically *device first* — a cache entry
@@ -44,20 +71,23 @@ struct CachedSector {
 /// and on flush failure leave the entry dirty) made eviction of unflushed data
 /// possible; the `debug_assert` that was supposed to catch it is a no-op in
 /// release builds, and a persisted guest marker did go missing that way.
+///
+/// A cache evicts only its own entries. When the shared budget is spent and it
+/// has none left to evict, it serves sectors uncached rather than grow.
 pub struct PageCache {
     entries: BTreeMap<u64, CachedSector>,
     lru_order: VecDeque<u64>,
     total_bytes: usize,
-    max_bytes: usize,
+    budget: CacheBudget,
 }
 
 impl PageCache {
-    pub fn new() -> Self {
+    pub fn new(budget: CacheBudget) -> Self {
         Self {
             entries: BTreeMap::new(),
             lru_order: VecDeque::new(),
             total_bytes: 0,
-            max_bytes: MAX_CACHE_BYTES,
+            budget,
         }
     }
 
@@ -110,6 +140,7 @@ impl PageCache {
     fn evict(&mut self, sector: u64) {
         if self.entries.remove(&sector).is_some() {
             self.total_bytes -= 512;
+            self.budget.give(512);
             if let Some(pos) = self.lru_order.iter().position(|&s| s == sector) {
                 self.lru_order.remove(pos);
             }
@@ -123,17 +154,20 @@ impl PageCache {
             self.touch(sector);
             return;
         }
-        while self.total_bytes + 512 > self.max_bytes * EVICT_NUMERATOR / EVICT_DENOMINATOR {
+        while self.budget.used() + 512 > MAX_CACHE_BYTES * EVICT_NUMERATOR / EVICT_DENOMINATOR {
             let Some(lru) = self.lru_order.pop_back() else {
-                break;
+                // Nothing of ours left to evict: other caches hold the budget.
+                return;
             };
             if self.entries.remove(&lru).is_some() {
                 self.total_bytes -= 512;
+                self.budget.give(512);
             }
         }
         self.entries.insert(sector, CachedSector { data: *data });
         self.lru_order.push_front(sector);
         self.total_bytes += 512;
+        self.budget.take(512);
     }
 
     fn touch(&mut self, sector: u64) {
@@ -148,9 +182,15 @@ impl PageCache {
     }
 }
 
+impl Drop for PageCache {
+    fn drop(&mut self) {
+        self.budget.give(self.total_bytes);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{PageCache, SectorDevice};
+    use super::{CacheBudget, PageCache, SectorDevice, MAX_CACHE_BYTES};
     use alloc::collections::BTreeMap;
     use types::block_wire::BlockOutcome;
 
@@ -181,7 +221,7 @@ mod tests {
 
     #[test]
     fn failed_write_evicts_the_resident_sector() {
-        let mut cache = PageCache::new();
+        let mut cache = PageCache::new(CacheBudget::new());
         let mut medium = Medium::default();
         assert!(cache.write_sector(&mut medium, 7, &[1; 512]).is_completed());
         assert!(cache.write_sector(&mut medium, 8, &[2; 512]).is_completed());
@@ -211,7 +251,7 @@ mod tests {
 
     #[test]
     fn failed_write_of_absent_sector_leaves_cache_unchanged() {
-        let mut cache = PageCache::new();
+        let mut cache = PageCache::new(CacheBudget::new());
         let mut medium = Medium {
             fail_writes: true,
             ..Medium::default()
@@ -220,5 +260,32 @@ mod tests {
         assert!(cache.entries.is_empty());
         assert!(cache.lru_order.is_empty());
         assert_eq!(cache.total_bytes, 0);
+    }
+
+    #[test]
+    fn every_mounts_cache_shares_one_budget() {
+        let budget = CacheBudget::new();
+        let mut caches: alloc::vec::Vec<PageCache> =
+            (0..4).map(|_| PageCache::new(budget.clone())).collect();
+        let mut medium = Medium::default();
+        let mut buf = [0u8; 512];
+        // Each cache alone reads more distinct sectors than the whole budget.
+        let sectors = (MAX_CACHE_BYTES / 512) as u64 + 64;
+        for cache in &mut caches {
+            for sector in 0..sectors {
+                assert!(cache.read_sector(&mut medium, sector, &mut buf));
+            }
+        }
+        let held: usize = caches.iter().map(|cache| cache.total_bytes).sum();
+        assert_eq!(held, budget.used());
+        assert!(held <= MAX_CACHE_BYTES, "{held} > {MAX_CACHE_BYTES}");
+        // A cache with nothing to evict serves reads uncached, correctly.
+        let reads = medium.reads;
+        assert!(caches[3].read_sector(&mut medium, 1, &mut buf));
+        assert_eq!(medium.reads, reads + 1);
+        // Dropping a cache returns its share.
+        let first = caches[0].total_bytes;
+        drop(caches.remove(0));
+        assert_eq!(budget.used(), held - first);
     }
 }

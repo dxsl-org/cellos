@@ -137,8 +137,61 @@ impl<D: BlockDevice> CellosFs<D> {
         if !fs.root_inode()?.is_dir() {
             return Err(FsError::Corrupted);
         }
+        fs.verify_reachable_tree()?;
         fs.free_inodes = fs.scan_free_inodes();
         Ok(fs)
+    }
+
+    /// Refuse a volume whose reachable namespace is not a tree, or whose file
+    /// blocks are not each allocated and owned by one extent: an aliased inode
+    /// or block lets a write through one name corrupt another, and an unset bit
+    /// lets a later allocation overwrite live data. Bounded by the inode table
+    /// (`next_inode_num` <= 257, each visited once) and by the volume size
+    /// (claimed ranges are disjoint and inside `total_blocks`).
+    fn verify_reachable_tree(&mut self) -> Result<(), FsError> {
+        let limit =
+            usize::try_from(self.active_sb.next_inode_num).map_err(|_| FsError::Corrupted)?;
+        let mut referenced = alloc::vec![false; limit];
+        referenced[1] = true;
+        let mut pending = alloc::vec![(1u64, true)];
+        let mut claimed: Vec<(u64, u64)> = Vec::new();
+        while let Some((num, expect_dir)) = pending.pop() {
+            let inode = self.get_inode(num)?;
+            if inode.is_dir() != expect_dir {
+                return Err(FsError::Corrupted);
+            }
+            if inode.is_dir() {
+                for entry in DirPayload::list(&inode.payload, inode.extent_count as usize) {
+                    let child = referenced
+                        .get_mut(usize::try_from(entry.inode_num).map_err(|_| FsError::Corrupted)?)
+                        .ok_or(FsError::Corrupted)?;
+                    if *child {
+                        return Err(FsError::Corrupted);
+                    }
+                    *child = true;
+                    pending.push((entry.inode_num, entry.file_type == 2));
+                }
+            } else if !inode.is_inline() {
+                for ext in self.read_extents(&inode)? {
+                    claimed.push((
+                        ext.physical_block,
+                        ext.physical_block + ext.block_count as u64,
+                    ));
+                }
+            }
+        }
+        claimed.sort_unstable();
+        if claimed.windows(2).any(|pair| pair[1].0 < pair[0].1) {
+            return Err(FsError::Corrupted);
+        }
+        for &(start, end) in &claimed {
+            for block in start..end {
+                if !self.allocator.is_allocated(block)? {
+                    return Err(FsError::Corrupted);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Return reference to the active Superblock.

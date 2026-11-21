@@ -18,8 +18,9 @@ fn guest_disk_is_writable_only_by_live_hypervisor() {
     assert!(!hv_table.can_remove_tree(CELL, "/mnt/sd/guest_disk.img"));
     assert!(!hv_table.can_remove_dir(CELL, "/mnt/sd/guest_disk.img"));
 
+    // Another cell can neither read the guest's disk nor write it.
     let other_table = AccessTable::with_service_lookup(|_| None);
-    assert!(other_table.can_read(CELL, "/mnt/sd/guest_disk.img"));
+    assert!(!other_table.can_read(CELL, "/mnt/sd/guest_disk.img"));
     assert!(!other_table.can_write(CELL, "/mnt/sd/guest_disk.img"));
 }
 
@@ -136,7 +137,7 @@ fn guest_disk_case_insensitive_fat_lookup_is_protected() {
     ] {
         assert!(is_guest_disk_path(variant));
         assert!(contains_guest_disk(variant));
-        assert!(other_table.can_read(CELL, variant));
+        assert!(!other_table.can_read(CELL, variant));
         assert!(
             !other_table.can_write(CELL, variant),
             "{variant} must deny write for non-hypervisor"
@@ -163,7 +164,7 @@ fn guest_disk_sfn_aliases_and_83_names_are_protected() {
     ] {
         assert!(is_guest_disk_path(alias), "{alias} should match guest disk");
         assert!(contains_guest_disk(alias), "{alias} should be contained");
-        assert!(other_table.can_read(CELL, alias));
+        assert!(!other_table.can_read(CELL, alias));
         assert!(
             !other_table.can_write(CELL, alias),
             "{alias} must deny write for non-hypervisor"

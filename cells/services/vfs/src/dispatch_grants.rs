@@ -107,17 +107,7 @@ pub(crate) fn write_handle_grant<'a>(
         return VfsResponse::Err(VfsError::Denied as u8);
     }
     let new_len = file_len.max(end);
-    let refunded = if vfs.quota.writer_of(&path) == Some(caller.cell) {
-        file_len
-    } else {
-        0
-    };
-    let net_charge = if is_guest_disk {
-        0
-    } else {
-        new_len.saturating_sub(refunded)
-    };
-    if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
+    if !is_guest_disk && !vfs.quota.can_replace(caller.cell, &path, file_len, new_len) {
         return VfsResponse::Err(VfsError::Quota as u8);
     }
 
@@ -128,9 +118,8 @@ pub(crate) fn write_handle_grant<'a>(
         return VfsResponse::Err(VfsError::Io as u8);
     }
     if !is_guest_disk {
-        vfs.quota.release_path(&path, file_len);
-        let _ = vfs.quota.charge(caller.cell, new_len);
-        vfs.quota.set_writer(&path, caller.cell);
+        vfs.quota
+            .commit_replace(caller.cell, &path, file_len, new_len);
     }
     VfsResponse::GrantDone { bytes }
 }
@@ -411,7 +400,8 @@ mod health_tests {
         vfs.dirs.mark_attested(caller);
         let handle = vfs
             .pending
-            .insert(caller, "/data/a", alloc::vec![1, 2], None);
+            .insert(caller, "/data/a", alloc::vec![1, 2], None)
+            .unwrap();
         let mut request = [0; IPC_BUF_SIZE];
         let mut buffer = [0; IPC_BUF_SIZE];
         wire::ipc::encode(&wire::ipc::VfsRequest::Poll { handle }, &mut request).unwrap();

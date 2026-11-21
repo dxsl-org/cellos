@@ -31,6 +31,12 @@ use crate::mount::MountTable;
 use crate::namespace::NamespaceLedger;
 use crate::pending::PendingTable;
 use crate::quota::QuotaTracker;
+
+/// Largest file [`VfsManager::read_to_vec`] copies whole. Larger files are
+/// served only through ranged reads (`read_at`), whose buffers the request
+/// bounds.
+pub(crate) const MAX_WHOLE_READ: u64 = 1024 * 1024;
+
 pub struct VfsManager {
     pub(crate) mounts: MountTable,
     /// Boot-image configuration fallback; runtime files may override only
@@ -68,9 +74,11 @@ impl VfsManager {
             mounts,
             boot_config: BootFsProxy::new(),
             // test-hooks: 1.1 KiB quota so vfs-test can hit the limit with
-            // 400-byte chunks (must fit within the 512-byte IPC buffer).
+            // 400-byte chunks (must fit within the 512-byte IPC buffer). Each
+            // path still costs an entry charge, scaled down so the lane's byte
+            // arithmetic (a handful of files below 1,100 bytes) keeps its room.
             #[cfg(feature = "test-hooks")]
-            quota: QuotaTracker::with_limit(1100),
+            quota: QuotaTracker::with_limits(1100, 16),
             #[cfg(not(feature = "test-hooks"))]
             quota: QuotaTracker::new(),
             access: AccessTable::new(),
@@ -217,7 +225,12 @@ impl VfsManager {
             .file_size(path)
     }
 
+    /// Whole-file copy, refused above [`MAX_WHOLE_READ`]: the copy lives on
+    /// this cell's heap, which every client shares.
     pub fn read_to_vec(&self, path: &str) -> Result<Vec<u8>, FsError> {
+        if matches!(self.file_size(path), Ok(size) if size > MAX_WHOLE_READ) {
+            return Err(FsError::TooLarge);
+        }
         if let Some((backend, source)) = self.config_source(path) {
             return backend.read_to_vec(source);
         }
@@ -225,6 +238,23 @@ impl VfsManager {
             .backend(path)
             .ok_or(FsError::Unavailable)?
             .read_to_vec(path)
+    }
+
+    /// Fill all of `buf` from `offset` through ranged reads, which a backend
+    /// may answer in pieces. Callers size `buf` from the file's stat, so ending
+    /// early is `Io`, never a shorter answer.
+    pub fn read_exact_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<(), FsError> {
+        let mut filled = 0;
+        while filled < buf.len() {
+            let at = offset
+                .checked_add(filled as u64)
+                .ok_or(FsError::InvalidPath)?;
+            match self.read_at(path, at, &mut buf[filled..])? {
+                0 => return Err(FsError::Io),
+                n => filled += n,
+            }
+        }
+        Ok(())
     }
 
     pub fn write(&mut self, path: &str, content: &[u8]) -> Result<(), FsError> {

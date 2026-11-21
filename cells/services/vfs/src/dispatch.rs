@@ -126,9 +126,17 @@ pub fn handle_request<'a>(
             if !caller.may_own_state() {
                 return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
             }
-            if !vfs.healthy(path) || !matches!(vfs.stat(path), Ok(Some((_, false)))) {
+            // Refused before the read and before any lease, so a full table
+            // costs neither heap nor a `/srv` key.
+            if !vfs.pending.has_room(caller) {
+                return wire::ipc::VfsResponse::Err(VfsError::Quota as u8);
+            }
+            if !vfs.healthy(path) {
                 return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
+            let Ok(Some((size, false))) = vfs.stat(path) else {
+                return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
+            };
             let lease = if path.starts_with("/srv") {
                 let Ok(k) = crate::namespace::NamespaceKey::parse(path) else {
                     return wire::ipc::VfsResponse::Err(VfsError::Denied as u8);
@@ -140,16 +148,23 @@ pub fn handle_request<'a>(
             } else {
                 None
             };
-            let data = vfs.read_to_vec(path);
+            // `Poll` delivers one frame, so only that prefix is ever read.
+            let len = usize::try_from(size).map_or(crate::pending::POLL_PAYLOAD, |size| {
+                size.min(crate::pending::POLL_PAYLOAD)
+            });
+            let mut data = alloc::vec![0u8; len];
+            let read = vfs.read_exact_at(path, 0, &mut data);
             if !vfs.healthy(path) {
                 return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
             }
             // A read that failed part way is an error, never a short handle.
-            let Ok(data) = data else {
+            if read.is_err() {
                 return wire::ipc::VfsResponse::Err(VfsError::Io as u8);
-            };
-            let handle = vfs.pending.insert(caller, path, data, lease);
-            wire::ipc::VfsResponse::PendingHandle(handle)
+            }
+            match vfs.pending.insert(caller, path, data, lease) {
+                Some(handle) => wire::ipc::VfsResponse::PendingHandle(handle),
+                None => wire::ipc::VfsResponse::Err(VfsError::Quota as u8),
+            }
         }
 
         wire::ipc::VfsRequest::Poll { handle } => {
@@ -182,7 +197,7 @@ pub fn handle_request<'a>(
                     // the 512-byte IPC frame AFTER the postcard envelope. A
                     // full 512-byte payload made encode fail and the client
                     // saw an empty reply (surfaced by /bin ELF reads).
-                    let n = data.len().min(480);
+                    let n = data.len().min(crate::pending::POLL_PAYLOAD);
                     resp_buf[..n].copy_from_slice(&data[..n]);
                     wire::ipc::VfsResponse::Data(&resp_buf[..n])
                 }

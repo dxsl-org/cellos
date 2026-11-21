@@ -64,9 +64,11 @@ pub static EXACT_RULES: &[PathRule] = &[
         allow_read_all: false,
         allow_write_all: false,
     },
+    // The guest system disk: only the live hypervisor reads or writes it
+    // (`access::guest_disk`).
     PathRule {
         prefix: crate::access::GUEST_DISK_PATH,
-        allow_read_all: true,
+        allow_read_all: false,
         allow_write_all: false,
     },
 ];

@@ -306,20 +306,12 @@ fn commit(
             wire::ipc::SaveExpect::Absent => 0,
             wire::ipc::SaveExpect::Present { .. } => vfs.file_size(&dst).unwrap_or(0),
         };
-        let refund = if vfs.quota.writer_of(&dst) == Some(caller.cell) {
-            old_size
-        } else {
-            0
-        };
-        let net = len.saturating_sub(refund);
-        if net > 0 && !vfs.quota.can_charge(caller.cell, net) {
+        if !vfs.quota.can_replace(caller.cell, &dst, old_size, len) {
             break 'outcome SaveOutcome::NotPublished(save_refusal::QUOTA);
         }
         let outcome = vfs.publish_if(&stage, sealed, &dst, expect);
         if outcome.published().is_some() {
-            vfs.quota.release_path(&dst, old_size);
-            let _ = vfs.quota.charge(caller.cell, len);
-            vfs.quota.set_writer(&dst, caller.cell);
+            vfs.quota.commit_replace(caller.cell, &dst, old_size, len);
         }
         outcome
     };
