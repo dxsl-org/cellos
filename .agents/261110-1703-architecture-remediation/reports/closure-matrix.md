@@ -145,31 +145,31 @@ Taken from the evidence reports' residual sections. "Today" is this step's check
 
 | From | Residual | Today |
 |---|---|---|
-| [P16 §6](phase-16-evidence.md) | A refused `RegionTable::insert` in `grant_alloc`/`grant_register` leaves the domain owner's private-root PTEs | unchanged [INFERENCE: no later phase lists a fix] |
-| P16 §6 | `paging.rs` resets `await_flush` per run, not per release | unchanged [INFERENCE] |
-| P16 §6 | The RV64 shootdown self-test does not block RFENCE with 3+ harts; `CELL_ID_RELEASE_OBSERVED` is never reset | unchanged [INFERENCE] |
+| [P16 §6](phase-16-evidence.md) | A refused `RegionTable::insert` in `grant_alloc`/`grant_register` leaves the domain owner's private-root PTEs | fixed 2026-11-21 by `dfca888274`: `refuse_owned_grant` unmaps the private-root or SAS pages and leaks the run. The test-hooks `GRANT-GATE-REFUSED-ROW` check is part of the lane-required `GRANT-GATE: PASS` (the SAS variant was also affected) |
+| P16 §6 | `paging.rs` resets `await_flush` per run, not per release | fixed 2026-11-21 by `dfca888274`: one flag per `release_windows`, covered by a host test |
+| P16 §6 | The RV64 shootdown self-test does not block RFENCE with 3+ harts; `CELL_ID_RELEASE_OBSERVED` is never reset | flag reset by `7ebd5e00d5`. The 3+ hart oracle stays latent while RV64 `MAX_HARTS = 2`; the self-test documents what it needs |
 | P16 §6 | One owner could hold all 255 AArch64 VMIDs | closed by P17 `TagPool` (4 VMIDs per owner; phase-17 evidence §2) |
-| P16 §6 | AArch64 `map_guest_memory` can overwrite live Stage-2 leaves without a TLBI; `request_mmio` takes `SCHEDULER` under `RESOURCE_REGISTRY` | unchanged; the `grant_window` inversion of the same shape was fixed in P18 (`978c801353`) |
+| P16 §6 | AArch64 `map_guest_memory` can overwrite live Stage-2 leaves without a TLBI; `request_mmio` takes `SCHEDULER` under `RESOURCE_REGISTRY` | both fixed: a changed valid Stage-2 leaf now triggers a TLB flush (`dfca888274`, host test). The `request_mmio` order was fixed in P18 (`978c801353`), and its regression test now reaches `grant_window` (`dfca888274`) |
 | P16 §6, P17 §4, P18 §4 | EL2 test-hooks lane (`DEVELOPMENT_SILO=1`) broken; recorded in `lanes.toml` | fixed by `268db39da4`: root-entering self-tests are skipped on an EL2 host and the Silo lane boots on cortex-a76; both modes pass (phase-19 Deviation Log; the owner took the kernel test-hooks change) |
 | [P17 §7](phase-17-evidence.md) | SMAP does nothing between cells; `RequestMmio` refuses LAPIC/IOAPIC/HPET/VT-d windows | by design |
 | P17 §7 | OVMF 64-bit aperture at 64 GiB: those BARs refused [INFERENCE in the evidence] | not run |
-| P17 §7 | RV64/AArch64 boot assert if kernel memory is at or above 64 GiB | unchanged |
-| P17 §7 | No RV64 `fence.i` after loader writes (pre-existing) | unchanged |
+| P17 §7 | RV64/AArch64 boot assert if kernel memory is at or above 64 GiB | not a defect (2026-11-21 triage): usable RAM is clipped at 64 GiB and the kernel links at a fixed low base, so only a new linker base could trip it, and fail-stop is then right |
+| P17 §7 | No RV64 `fence.i` after loader writes (pre-existing) | fixed 2026-11-21 by `7ebd5e00d5`: `wx::enforce` fences locally and remotely (SBI RFENCE, IPI fallback); `wx-cross-hart-tlb` requires the marker. Hardware proof on VisionFive 2 / Pioneer is still owed |
 | P17 §7 | Grants stay at VA = PA (owner decision; ABI text) | see M-T4 |
 | P17 §7 | Grant pages, root stacks and cell segments uncharged (owner decision) | see M-T3 |
 | P17 §7 | Kernel stacks at VA = PA (needs RV64 secondary-hart entry change) | see M-T4 |
-| P17 §7 | x86 SVM `TAG-POOL-OWNER-LIMIT` and an x86 boot with RAM ≥ 64 GiB not exercised | not run |
+| P17 §7 | x86 SVM `TAG-POOL-OWNER-LIMIT` and an x86 boot with RAM ≥ 64 GiB not exercised | SVM: TCG already ran it; `52c82ec868` makes it mandatory in the x86 domain lane. RAM ≥ 64 GiB: a one-off `-m 72G` boot (2026-11-21) clips RAM correctly but then **panics**: `/bin/platform` and init are refused with `ELF: load VA 0x1000000000 already mapped`, then `trusted-init success contract did not publish init`. Open, untriaged |
 | P17 §7 | `vfs-quota` lane fails on `main` (`shell: authenticated serial session failed: NotFound`) | fixed by `d4610efa6b`: `/bin/input` ships in the RV64 test-hooks image, and the baseline is named `cellbox` |
-| P17 §7 | x86 demand-paging path maps a "zeroed" frame without clearing it (dormant) | unchanged |
-| P17 §7 | UMIP: foreign binaries not audited for `sgdt`/`sidt`/`sldt`/`smsw` | unchanged |
+| P17 §7 | x86 demand-paging path maps a "zeroed" frame without clearing it (dormant) | fixed 2026-11-21 by `dfca888274`: the dead path is deleted; it could also map low physical memory |
+| P17 §7 | UMIP: foreign binaries not audited for `sgdt`/`sidt`/`sldt`/`smsw` | fixed 2026-11-21 by `52c82ec868`: `check-x86-umip-mnemonics.py` runs in CI on the headless and domain images (0 hits) |
 | [P18 §6](phase-18-evidence.md) | Traffic on one NIC at a time (owner decision; ABI change) | see M-W4 |
 | P18 §6 | Physical-only NICs cannot bind: empty ID lists, no catalog rows | see M-W5 |
-| P18 §6 | virtio-blk restart skips its dead predecessor's slot (`DRIVER_OK` never reset) | unchanged; see also N-1 and N-3 |
-| P18 §6 | A Tier-1 ELF signed under a non-`cells/` name gets only a NOTE from the ELF check | recorded in Spec 16 F1c / Spec 18 |
+| P18 §6 | virtio-blk restart skips its dead predecessor's slot (`DRIVER_OK` never reset) | fixed 2026-11-21 by `bb8d1193ec`: the kernel resets every VirtIO MMIO slot a dying owner holds before reaping its grants, and an unconfirmed reset withholds them. This also closes DMA into freed frames for virtio-net/gpu/input. The driver guard is gone. Init still does not supervise virtio-blk (owner decision), so the reset is host-tested only |
+| P18 §6 | A Tier-1 ELF signed under a non-`cells/` name gets only a NOTE from the ELF check | fixed 2026-11-21 by `52c82ec868`: refused unless `--as ELF=BIN` names its crate binary |
 | P18 §6 | Allowlist review wave due before 2027-02-03 (stale entries stop `--sign`) | closed by Phase 19 step 6: 0 of 112 entries have a `review_by` before 2027-03-01 (`708b80877b`, `fef6f2ff93`, `1420ea6984` and earlier wave commits) |
-| P18 §6 | Device-capability revoke has no end-to-end host test | unchanged |
-| P18 §6 | `nic2-x86` CI cost not measured in CI | unchanged (nothing pushed) |
-| P18 §6 | aarch64 `IOMMU-TEARDOWN: SKIP`, unchecked by any lane | unchanged |
+| P18 §6 | Device-capability revoke has no end-to-end host test | fixed 2026-11-21 by `52c82ec868`: three lanes require the thread-cap, grant-reclaim and mmio-revoke PASS lines, and REVOKE-PRIVILEGED proves a NIC route is vacated (negative control red) |
+| P18 §6 | `nic2-x86` CI cost not measured in CI | measured: the step takes 81–100 s on the self-hosted runners (2026-11-21) |
+| P18 §6 | aarch64 `IOMMU-TEARDOWN: SKIP`, unchecked by any lane | fixed 2026-11-21 by `52c82ec868`: aarch64 requires SKIP; RV64 and x86 require the four PASS lines |
 | P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | `x86hv-iso` rollout guard fails on `main` | fixed by `a2d77056e1`: the hypervisor kernel is staged off the guard's default path |
 | P14 §6, P15 §4, P16 §4, P17 §4, P18 §4 | 2 `rust-std-promotion` tests fail on `main` (frozen artifact digests) | fixed by `bd7bc7f4c4`: the owner-approved re-pin of the approval package remaps the moved paths (inventory 6 → 10 entries, manifest 106 → 110 inputs, digest `d12eac3b…`); 33/33 pass. Any later change to a pinned input needs another re-pin. |
 | P14 §6, P18 §4 | `check-lanes.py`: no rows for `qemu-tier3-{chrome,display}-x86.sh` | fixed by `c6714a5aab` (check passes at `f923f4e322`) |
