@@ -4,6 +4,23 @@
 
 ## [Unreleased] Intel x86-64 C2C-only direction
 
+- **2026-11-21 — Carried Phase 16–18 residuals, VirtIO slot reset, allowlist and stall lane.**
+  - **VirtIO MMIO teardown** (`bb8d1193ec`): a virtio-mmio driver Cell that died left its device live, pointing at unpinned grant frames that the reaper handed back to the allocator. A late completion or received packet could then DMA into memory another Cell or the kernel owned (virtio-blk, net, gpu and input on RV64/AArch64). The kernel now resets every slot a dying owner holds, writing Status 0 and polling a bounded number of times for the read-back. If the reset is not confirmed, the owner's grants are withheld. virtio-blk drops its skip-`DRIVER_OK` guard. Host-tested only: no image makes a VirtIO driver exit while it holds its device.
+  - **Memory** (`dfca888274`):
+    - A refused grant-table insert now unmaps its pages, for both private-root and shared owners. The lanes require a `GRANT-GATE-REFUSED-ROW` check.
+    - An MMIO release waits for an unconfirmed flush once instead of once per window.
+    - A changed AArch64 Stage-2 leaf now flushes the Stage-2 TLB.
+    - The dead x86 demand-paging path is deleted. It mapped an uncleared frame and could map low physical memory.
+  - **RV64 `fence.i`** (`7ebd5e00d5`): after a code load, `wx::enforce` syncs instruction caches on the local hart and on every other hart, using SBI RFENCE with an IPI fallback. QEMU cannot show stale instructions; proof on VisionFive 2 / Pioneer is still owed.
+  - **Gates** (`52c82ec868`):
+    - The signer refuses a Tier-1 ELF it cannot attribute to a `cells/` binary. A renamed copy needs `--as ELF=BIN`.
+    - Lanes now require the thread-cap, grant-reclaim, mmio-revoke and `IOMMU-TEARDOWN` markers. REVOKE-PRIVILEGED proves a revoke vacates a NIC route.
+    - The x86 domain lane requires SVM plus `TAG-POOL-OWNER-LIMIT`.
+    - `check-x86-umip-mnemonics.py` audits x86 cell ELFs in CI.
+  - **Allowlist** (`e267c381ba`): every recorded open item is closed. tetris-lua no longer aborts on a negative rectangle edge or an overflowing text position. The Tier-1 unsafe total falls from 590 to 586.
+  - **N-3 stall lane** (`5b723d00f4`): `virtio-blk-stall` holds a write with QEMU `blkdebug`. It checks three things: the poison line after the deadline, an indeterminate write that is never replayed, and a second write refused without being published. Two negative controls confirm the lane fails when it should.
+  - **Board matrix** (`e9dffd987e`): board selections are type-checked with `compile-only`, so no CI job embeds a tracked image any more.
+  - **Found, open:** an x86 boot with `-m 72G` clips RAM correctly, then refuses `/bin/platform` and init (`ELF: load VA 0x1000000000 already mapped`) and panics. Not in CI.
 - **2026-11-21 — Architecture-review residuals N-2 to N-7 closed.** With N-8 and N-9 already done, no `N-` residual from the 2026-11-10 review remains open. The owner chose the recommended option for each.
   - **N-2** (`022e181632`): five unsafe-hygiene items.
     - Lua `vnet` helpers are safe methods on `LuaStack`, whose `unsafe fn new` carries the live-state contract.
