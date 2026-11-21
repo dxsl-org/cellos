@@ -470,6 +470,9 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::arch::riscv64::dev::iommu_riscv::PSCID_NEXT @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/iommu_riscv.rs` | static | `AtomicU16` | cfg inactive in this profile |
 | `kernel::arch::riscv64::dev::iommu_riscv::RISCV_DOMAINS @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/iommu_riscv.rs` | static | `Spinlock<BTreeMap<u64,RiscvDomain>>` | cfg inactive in this profile |
 | `kernel::arch::riscv64::dev::irq_dispatch::UNKNOWN_RV64_IRQ_WARNINGS @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/dev/irq_dispatch.rs` | static | `AtomicU8` | cfg inactive in this profile |
+| `kernel::arch::riscv64::icache::ICACHE_SYNC_COMPLETE @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/icache.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
+| `kernel::arch::riscv64::icache::ICACHE_SYNC_REQUEST @cfg(target_arch = "riscv64")` | `kernel/src/arch/riscv64/icache.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
+| `kernel::arch::riscv64::icache::ICACHE_SYNC_WITNESSED @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/icache.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::riscv64::memory::tlb_shootdown_selftest::EXPECT_STORE_FAULT @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::arch::riscv64::memory::tlb_shootdown_selftest::PHASE @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::arch::riscv64::memory::tlb_shootdown_selftest::STORE_FAULTED @cfg(target_arch = "riscv64" & feature = "test-hooks")` | `kernel/src/arch/riscv64/memory/tlb_shootdown_selftest.rs` | static | `AtomicBool` | cfg inactive in this profile |
@@ -555,7 +558,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::loader::atomic_publication_tests::success::TRUSTED_ARMED @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/success.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/success.rs` | static | `crate::sync::Spinlock<Option<StateSnapshot>>` | cfg inactive in this profile |
 | `kernel::loader::va_alloc::tests::seeded()::STATE @cfg(test)` | `kernel/src/loader/va-alloc-tests.rs` | static | `AtomicU64` | cfg inactive in this profile |
-| `kernel::loader::wx::ICACHE_SYNC_WITNESSED @cfg(all (target_arch = "riscv64" , feature = "test-hooks"))` | `kernel/src/loader/wx.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_ALLOCATION_AFTER @cfg(all (feature = "native-domains" , cellos_wide) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_NEXT_MAP @cfg(all (feature = "native-domains" , cellos_wide) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::memory::cell_quota::P01_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `crate::p01_resources::Source` | cfg inactive in this profile |
@@ -700,8 +702,6 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::sched::quiesce::lane::STOPPED @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::quiesce::lane::TRAP_TICKS @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::quiesce::lane::WITHHELD @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
-| `kernel::sched::smp::ICACHE_SYNC_COMPLETE @cfg(target_arch = "riscv64")` | `kernel/src/sched/smp.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
-| `kernel::sched::smp::ICACHE_SYNC_REQUEST @cfg(target_arch = "riscv64")` | `kernel/src/sched/smp.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::CPU_MPIDRS @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static | `mpidr::MpidrTable<MAX_HARTS>` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::IPI_TAKEN @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::SECONDARY_CONTEXT @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static mut | `[hal::aarch64::boot::SecondaryContext;MAX_HARTS]` | cfg inactive in this profile |

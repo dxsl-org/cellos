@@ -247,7 +247,7 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
   Phase 14). Each arch module exports the same function sets, and shared code calls
   `crate::arch::<set>::<fn>()` without naming an architecture (`kernel/src/arch/mod.rs:1-16`).
   Existing `target_arch` lines outside it are capped, not gone: `scripts/check-hal-boundaries.sh`
-  (run by `scripts/check-board-configs.sh`) fails above 692 such lines or any `asm!` outside
+  (run by `scripts/check-board-configs.sh`) fails above 690 such lines or any `asm!` outside
   `kernel/src/arch/` (`check-hal-boundaries.sh:64-80`). The ceilings only go down: lower them in
   the commit that moves code, never raise them. Do not add
   `cfg_attr(not(target_arch = …), allow(dead_code))` to hide per-arch code.
@@ -1034,7 +1034,7 @@ pub trait ViAsyncFileSystem {
 |------|--------|-------------|
 | `foo.rs` + `foo/` for new modules (`mod.rs` also exists) | ✅ GUIDELINE | Code review (no lint) |
 | Static kernel locks are ranked | ✅ REQUIRED | `tools/mutable-globals --check`; run-time check in `test-hooks` |
-| `target_arch` outside `kernel/src/arch/` ≤ 692 lines; no `asm!` outside it | ✅ REQUIRED | `scripts/check-hal-boundaries.sh` ceilings |
+| `target_arch` outside `kernel/src/arch/` ≤ 690 lines; no `asm!` outside it | ✅ REQUIRED | `scripts/check-hal-boundaries.sh` ceilings |
 | rustfmt-clean | ✅ REQUIRED | `cargo fmt --all --check` (`.github/workflows/ci.yml:199`) |
 | Kernel files listed in `kernel/residents.toml` | ✅ REQUIRED | `scripts/check-kernel-residents.py` |
 | Tier-1 closure `unsafe` within baseline | ✅ REQUIRED | `cellos-sign --check --strict`; lower with `--write-baseline` |

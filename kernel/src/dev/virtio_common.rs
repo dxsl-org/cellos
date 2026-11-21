@@ -30,7 +30,6 @@ const SLOT_REGS_LEN: usize = 0x200;
 const PAGE: usize = 0x1000;
 
 /// `base` is exactly the base of one of `slot_bases`.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", test))]
 fn is_slot_base(base: usize, mut slot_bases: impl Iterator<Item = usize>) -> bool {
     slot_bases.any(|slot| slot == base)
 }
@@ -101,7 +100,6 @@ pub(crate) fn probe_slot(base: usize) -> SlotProbe {
 /// Status reads a slot reset may take before it counts as unconfirmed. Kept
 /// small because an unconfirmed reset is retried on every scheduler pass (QEMU
 /// completes the reset inside the status write, so the first read confirms).
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", test))]
 const RESET_POLL_BUDGET: u32 = 1024;
 
 /// Bases of the VirtIO MMIO slots among one owner's device records.
@@ -117,7 +115,6 @@ pub(crate) fn slot_bases(
 /// Write 0 (device reset) through `write_status`, then read `read_status` at
 /// most `budget` times until it reports 0. The spec counts a reset complete
 /// only once Status reads back 0.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", test))]
 fn reset_status(
     write_status: impl FnOnce(u32),
     mut read_status: impl FnMut() -> u32,
@@ -136,9 +133,15 @@ fn reset_status(
 /// Reset the VirtIO device in the slot at `base`, so it stops DMA into memory
 /// its dead or revoked owner had programmed. Returns `false` when the device
 /// did not confirm the reset within [`RESET_POLL_BUDGET`] reads.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+///
+/// Only one of the platform's slot bases is touched: a record that is not one
+/// (every record on x86_64, which reaches VirtIO over PCI and has no slots)
+/// has no transport to reset and returns `true`.
 pub(crate) fn reset_slot(base: usize) -> bool {
     use abi::syscall::virtio_probe::STATUS_OFFSET;
+    if !is_slot_base(base, virtio_slots().map(|slot| slot.base)) {
+        return true;
+    }
     let status = (base + STATUS_OFFSET) as *mut u32;
     // A claimed slot is user-mapped on RISC-V; S-mode reaches it only with SUM.
     with_riscv_sum_for_virtio_ack(|| {

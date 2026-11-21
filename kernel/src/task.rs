@@ -1836,8 +1836,7 @@ pub(crate) fn teardown_dma_authority(tid: usize) -> bool {
     let devices = crate::dev::ownership::devices_of(tid);
     // No IOMMU sits in front of a VirtIO MMIO device: only its reset stops it
     // writing into memory the owner programmed (posted RX buffers, a late
-    // completion).
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    // completion). Platforms without MMIO slots have nothing to reset.
     for base in crate::dev::virtio_common::slot_bases(&devices) {
         if !crate::dev::virtio_common::reset_slot(base) {
             log::warn!(

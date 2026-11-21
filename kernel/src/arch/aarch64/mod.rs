@@ -14,6 +14,8 @@ pub mod smp;
 
 pub mod tlb;
 
+pub mod icache;
+
 pub mod power;
 
 pub mod cpu;

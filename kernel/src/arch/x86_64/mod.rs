@@ -10,6 +10,8 @@ pub mod layer2_selftest;
 
 pub mod tlb;
 
+pub mod icache;
+
 pub mod power;
 
 pub mod cpu;
