@@ -80,11 +80,10 @@ under the rules below; this list admits nothing by itself.
    - No lane checks the aarch64 `IOMMU-TEARDOWN: SKIP`.
    - The x86 SVM `TAG-POOL-OWNER-LIMIT` path and x86 boots with RAM at or above 64 GiB have not
      been exercised.
-5. **Phase 19 findings.**
-   - N-1: x86 virtio-blk never latches `poisoned`; the owner directed a fix in Phase 19.
-   - N-2: allowlist items re-read in the Phase 19 wave are still open: `push_ip`, doom
-     `DG_ScreenBuffer`, nvme CQ references, net TLS `# Safety` docs and the silo-guest
-     `publish_response` length.
+5. **Phase 19 findings.** N-1 to N-9 are all closed as of 2026-11-21 (closure matrix
+   § New findings): N-1 in Phase 19; N-2 to N-8 by fixes or ADR-0036 on 2026-11-20/21; N-9 by
+   the 2026-11-19 CI repair. The open items once recorded in `scripts/unsafe-allowlist.toml`
+   are closed too (`e267c381ba`).
    - The next allowlist review wave is due before the entries dated 2027-05-14…28. The three
      signed tier exceptions are due 2027-05-14 and 2027-05-21.
 6. **2026-11-05 security audit.** Its
@@ -96,18 +95,17 @@ under the rules below; this list admits nothing by itself.
 7. **Physical qualification.** No result above has run on physical hardware. The
    [HCL](../hardware-compatibility-list.md) has no physical x86 row, and every promotion stays
    gated on exact-device evidence (see § Evidence and security).
-8. **Pushed CI cycle (2026-11-19).** `main` was pushed and its CI run failed 12 jobs. The CI
-   repair entry in the [changelog](../project-changelog.md) records the fixes. Owner items left:
+8. **Pushed CI cycle (2026-11-19 onward).** `main` was pushed and its first CI run failed 12
+   jobs. The CI repair entry in the [changelog](../project-changelog.md) records the fixes. Since
+   2026-11-20, CI runs on two self-hosted runners and every job passes, except the ARM64 KVM job,
+   which has no runner. Owner items left:
    - `B-AARCH64-SEMHOSTING` was renewed on 2026-11-21 under Issue #49 (ledger events 17
      `record_correction` and 18 `blocker_resolution`). The new resolution expires
      2026-12-21T03:53:07Z. Renew again before then with a fresh
      `scripts/qemu-aarch64-test-hooks.sh` run and a new GitHub decision, using the same two events.
-   - Jobs that `needs: build` were skipped in that run, so their results arrive with the next run.
    - The heapless 0.8 advisory ignores in `deny.toml`/`audit.toml` (RUSTSEC-2026-0574 to 0582)
      go away only when `smoltcp` moves to 0.13+ (heapless 0.9) and `ostd`/`service-net` follow.
      Review by 2027-01-31.
-   - The Ubuntu apt mirror was slow enough on 2026-11-19 that about six install steps per run
-     timed out; apt caching or a pinned mirror would remove that source of red runs.
 
 ### Current admission: contract cutover and execution freeze
 
