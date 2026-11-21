@@ -7,7 +7,7 @@ Recommendation: **CONDITIONAL GO — PAL-IMPLEMENTATION-CHECKPOINT is unblocked 
 
 | Input manifest | SHA-256 | Inputs | State |
 |---|---|---:|---|
-| `artifacts/approval-input-manifest.json` | `3482dc3a77b76a5fef0328d4d903e7602169d898690deb835cc847be1b37411f` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
+| `artifacts/approval-input-manifest.json` | `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` | 111 | package, GetRandom technical backing, and PAL approvals verified; checkpoint unblocked |
 
 The canonical manifest binds all six package plans, three upstream plans, six contracts including the hook/source map and governed GetRandom hostile-evidence report, 46 pinned Rust sources, nine other cited Cellos backing sources, the exact eleven-file kernel security-backing inventory, three hostile-evidence fixture sources, the hostile-evidence runner, eight benchmark sources, six tools, both tests, all eight fixtures, and both expected reports. It explicitly excludes itself, this decision record, and all approval/checkpoint records so those records can embed the manifest digest without a hash cycle. No individual digest substitution outside that manifest is an approval input.
 
@@ -36,7 +36,7 @@ Final verification passed 33/33 feasibility tests, 57/57 validator adversarial a
 | `BENCHMARK-CONTRACT-APPROVAL` | performance owner; independent measurement reviewer | GRANTED (APPROVED_FOR_LATER_IMPLEMENTATION_CHECKPOINT 2026-09-16) |
 | `PAL-IMPLEMENTATION-CHECKPOINT` | all six roles above plus umbrella Phase 03 production-gate owner | UNBLOCKED / CONDITIONAL GO (2026-09-16) |
 
-All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `3482dc3a77b76a5fef0328d4d903e7602169d898690deb835cc847be1b37411f` as of 2026-09-16.
+All six approval rows and the implementation checkpoint are ratified and bound to approval-input-manifest digest `ecb06f80c6130eee5865bd72233ab83ee4ec044ceb0c742c691550e6811c4ec6` as of 2026-09-16.
 
 ## Non-Waivable Blockers and Risks
 
@@ -53,3 +53,5 @@ Digest re-bound 2026-11-16 under `PAL-IMPLEMENTATION-CHECKPOINT` condition 6, ow
 Digest re-bound again 2026-11-19 under condition 6, owner-approved for the CI repair: a clippy fix in `kernel/src/task/syscall/fs.rs` (`.map(|task| Charge::of(task))` → `.map(Charge::of)`, no behaviour change) moved that pinned input. Inventory digest `58f24367…` → `4a79439c…`, support map `e606c186…` → `c8a6c7e7…`, manifest `635eab30…` → `7f7bdbad…`; still eleven paths and 111 inputs. Not a new signer decision.
 
 Digest re-bound a third time 2026-11-20 under condition 6, owner-approved for the CI repair: the cell panic handler in `libs/ostd/src/startup.rs` now also logs the panic line and any literal message (allocation-free; no change to what a cell can do). Input `521fe99d…` → `6e4804a1…`, manifest `7f7bdbad…` → `3482dc3a…`; still 111 inputs. Not a new signer decision.
+
+Digest re-bound 2026-11-21 under condition 6, owner-approved for the carried-residual fixes: `kernel/src/task/syscall/grant.rs` (a refused grant-table insert now unmaps its pages, `dfca888274`) `b3d4d8a3…` → `6136da53…`, and `kernel/src/task/syscall/mod.rs` (unmap loop shared as `unmap_owner_pages`) `38fdc74a…` → `5f70a7d6…`. Inventory digest → `37a64431…`, support map → `819ce064…`, manifest `3482dc3a…` → `ecb06f80…`; still eleven paths and 111 inputs. Not a new signer decision.

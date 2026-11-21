@@ -1379,7 +1379,7 @@
     "closure": "exact-set",
     "digest_algorithm": "sha256(canonical-json(entries))",
     "entry_count": 11,
-    "inventory_digest": "4a79439c70be6c727e7ae97eb0b3e25a4e172f3e2af3aa1e815172018172425c",
+    "inventory_digest": "37a64431f70401174467530195703e64db3df16ab10239b04411ce20e8d7f597",
     "entries": [
       {
         "path": "kernel/Cargo.toml",
@@ -1423,7 +1423,7 @@
         "roles": [
           "grant-teardown lock ordering for the GetRandom write"
         ],
-        "sha256": "b3d4d8a302bd81a878dae83d5e6c48a4bfd015188a9f0e6e74c35015f393416d"
+        "sha256": "6136da53532ee957ae6a2853a34e02da4bfe51e6a11c3b3400fed97ae49c6651"
       },
       {
         "path": "kernel/src/task/syscall/ipc.rs",
@@ -1445,7 +1445,7 @@
           "allowlist gate",
           "architecture dispatch"
         ],
-        "sha256": "38fdc74a62e3c3886fa3cc948bad1d53da538445043deecc188ad5d1c2bc5983"
+        "sha256": "5f70a7d67790c54db981485412969964f3f7eaca656d623a317b201b817efc1a"
       },
       {
         "path": "libs/abi/src/syscall.rs",
