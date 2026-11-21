@@ -9,7 +9,7 @@ when this file no longer matches the tree.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | x86_64 | `kernel/src/arch/x86_64/` (57 files) under `target_arch = "x86_64"` | yes | yes | with `native-domains` | yes | 64 | HHDM (PA + offset) | `x86_64-unknown-none` | `ci.yml`, `perf.yml` | 29 / 1 / 25 | `x86_64-pc`, `qemu-q35-x86_64`, `x86_64-vm` |
 | riscv64 | `kernel/src/arch/riscv64/` (44 files) under `target_arch = "riscv64"` | yes | yes | with `native-domains` | no | 2 | identity (VA = PA) | `riscv64gc-unknown-none-elf` | `ci.yml`, `docs.yml`, `perf.yml`, `release.yml` | 26 / 0 / 62 (incl. 86 `default`) | `milk-v-pioneer`, `qemu-virt-riscv64`, `starfive-visionfive-2` |
-| aarch64 | `kernel/src/arch/aarch64/` (27 files) under `target_arch = "aarch64"` | yes | only with `test-hooks` | with `native-domains` and `test-hooks` | yes | 32 | identity (VA = PA) | `aarch64-unknown-none-softfloat` | `ci.yml` | 1 / 0 / 8 | `macmini-m1`, `macmini-m2`, `qemu-virt-aarch64`, `raspberry-pi-3-model-b`, `raspberry-pi-4-model-b`, `aarch64-vm` |
+| aarch64 | `kernel/src/arch/aarch64/` (27 files) under `target_arch = "aarch64"` | yes | only with `test-hooks` | with `native-domains` and `test-hooks` | yes | 32 | identity (VA = PA) | `aarch64-unknown-none-softfloat` | `ci.yml` | 2 / 0 / 8 | `macmini-m1`, `macmini-m2`, `qemu-virt-aarch64`, `raspberry-pi-3-model-b`, `raspberry-pi-4-model-b`, `aarch64-vm` |
 | 32-bit legacy | `kernel/src/arch/legacy/` (19 files) under `not(cellos_wide)` | no | no (not in the 64-bit set) | no (not in the 64-bit set) | no | 2 | — | none | none | 0 / 0 / 0 | none; directories without a descriptor: `qemu/q35-x86_32`, `qemu/virt-aarch32`, `qemu/virt-riscv32` |
 
 Reading the table:
