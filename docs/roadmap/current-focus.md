@@ -39,8 +39,8 @@ under the rules below; this list admits nothing by itself.
    - H-8: dev and test images still run the boot self-tests.
    - H-13: input, net-broker and silo keep their own receive loops; the init boot-stop halt
      path is host-tested only.
-   - H-14: tracked build artifacts and Phases 03/03b wait for one pushed CI cycle; release
-     signing is blocked; the remote endpoint adapter returns `NotSupported`.
+   - H-14: build artifacts untracked 2026-11-22 (`f830f377c5`); Phase 03b (one recipe per
+     architecture) is not started; release signing is blocked; the remote endpoint adapter returns `NotSupported`.
 2. **Open findings with no remediation phase, owner-accepted and handed back.**
    - M-K4: `memory` still calls `task::*` (25 sites).
    - M-A1: `CapSet` carries service rights, and each costs a policy wire version.

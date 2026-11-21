@@ -140,6 +140,7 @@ Phase 04 adds a release-posture boot lane on top of this recipe.
   Impact: `ci.yml` build job.
   Revert: restore the two upload steps and drop the feature.
 - Decision (owner, 2026-11-16, Phase 19): the plan closes with this phase as a residual. Binaries stay tracked until one pushed CI cycle has run; the release ISO stays blocked on release signing. Both items are in the [closure matrix](reports/closure-matrix.md) and the hand-back list in `docs/roadmap/current-focus.md`.
+- Decision (2026-11-22): untrack done in `f830f377c5` after CI run 44921343700 on `124d4279d5` went green (30 jobs; KVM skipped) with 0 `EMBEDDED_OVERRIDE not set` lines across every job log. 1,501 paths left the index (7 embedded images, 194 `gh_2.55.0_linux_amd64/` files, 1,300 Limine `.o/.a/.d/.deb`); `.gitignore` covers them; `kernel/src/embedded-x86_64/manifest.json` stays tracked. The only item left in this phase is the release ISO, blocked on release signing.
 
 ## Evidence
 
