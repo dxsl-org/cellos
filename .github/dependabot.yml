@@ -1,0 +1,28 @@
+version: 2
+# Every action is pinned to a commit SHA; Dependabot moves those pins (and their
+# `# vN` comments) forward. Cargo updates arrive as one grouped weekly PR that
+# the lint job's `cargo metadata --locked` and the deny/audit gates review.
+# requirements-ci.txt is left out: its cryptography pin is the version the
+# self-hosted runners' system Python ships, and scripts/ensure-ci-python-deps.py
+# installs nothing only while that pin matches; a bump would make every runner
+# without pip fail.
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo:
+        patterns: ["*"]
+        update-types: [minor, patch]

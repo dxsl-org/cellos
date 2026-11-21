@@ -13,6 +13,9 @@ set -euo pipefail
 
 LIMINE_TAG="v12.3.2"
 LIMINE_URL="https://github.com/Limine-Bootloader/Limine/releases/download/${LIMINE_TAG}/limine-binary.tar.gz"
+# sha256 of that asset as GitHub's release API publishes it (`digest`); a
+# different download is refused before anything is extracted.
+LIMINE_SHA256="433ac5933ef7918b6a6751db0a81e47fa122581dfb32430bc257be686f3906e5"
 DEST="${1:-tools/limine-riscv64}"
 
 mkdir -p "$(dirname "$DEST")"
@@ -24,6 +27,7 @@ fi
 
 echo "[limine] Downloading Limine ${LIMINE_TAG} binary tarball..."
 TMPTAR=$(mktemp /tmp/limine-binary.XXXXXX.tar.gz)
+trap 'rm -f "$TMPTAR"' EXIT
 
 if command -v curl &>/dev/null; then
   curl -fsSL -o "$TMPTAR" "$LIMINE_URL"
@@ -34,9 +38,14 @@ else
   exit 1
 fi
 
-tar -xOf "$TMPTAR" "limine-binary/BOOTRISCV64.EFI" > "$DEST"
-chmod +x "$DEST"
-rm -f "$TMPTAR"
+if ! echo "$LIMINE_SHA256  $TMPTAR" | sha256sum --quiet --strict -c -; then
+  echo "[limine] ERROR: $LIMINE_URL does not match the pinned sha256 $LIMINE_SHA256" >&2
+  exit 1
+fi
+
+tar -xOf "$TMPTAR" "limine-binary/BOOTRISCV64.EFI" > "$DEST.tmp"
+chmod +x "$DEST.tmp"
+mv "$DEST.tmp" "$DEST"
 
 echo "[limine] Saved BOOTRISCV64.EFI to $DEST ($(du -sh "$DEST" | cut -f1))"
 echo "[limine] NOTE: this is a UEFI EFI binary, not an S-mode ELF."

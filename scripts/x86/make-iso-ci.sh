@@ -64,6 +64,15 @@ for required in "${required_files[@]}"; do
     fi
 done
 
+# The Limine stages are committed blobs, built from the vendored upstream v8.7.0
+# source tree under limine/limine-8.7.0 (so they differ from upstream's own
+# binary release). SHA256SUMS records their digests: a changed blob fails here
+# unless the same commit also changes the recorded digest.
+if ! (cd "$LIMINE" && sha256sum --quiet --strict -c SHA256SUMS); then
+    echo "FAIL: Limine binaries in $LIMINE do not match $LIMINE/SHA256SUMS" >&2
+    exit 1
+fi
+
 mkdir -p "$ISO_ROOT/EFI/BOOT" "$ISO_ROOT/boot/limine" "$(dirname -- "$ISO_OUT")"
 
 install -m 0644 "$KERNEL" "$ISO_ROOT/boot/kernel.elf"

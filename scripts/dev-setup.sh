@@ -68,8 +68,28 @@ info "Pinned toolchain: $TOOLCHAIN"
 step "1/6 Rust toolchain"
 if ! command -v rustup &>/dev/null; then
   $CHECK_ONLY && die "rustup not found — run without --check to install it"
-  info "Installing rustup..."
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none
+  # A pinned rustup-init checked against its recorded sha256, never a fetched
+  # script piped to sh. Moving the pin: take the digests from
+  # https://static.rust-lang.org/rustup/archive/<version>/<triple>/rustup-init.sha256
+  RUSTUP_VERSION=1.29.3
+  case "$(uname -m)" in
+    x86_64)  RUSTUP_TRIPLE=x86_64-unknown-linux-gnu
+             RUSTUP_SHA256=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55 ;;
+    aarch64) RUSTUP_TRIPLE=aarch64-unknown-linux-gnu
+             RUSTUP_SHA256=9f608c142e0e38a78957d0661ba1dfaf0b6fb37184cfaa4b9a0aa57af6184282 ;;
+    *) die "no pinned rustup-init for $(uname -m); install rustup by hand" ;;
+  esac
+  info "Installing rustup $RUSTUP_VERSION..."
+  # rustup picks its mode from argv[0], so the file must be named rustup-init.
+  RUSTUP_DIR="$(mktemp -d)"
+  RUSTUP_INIT="$RUSTUP_DIR/rustup-init"
+  curl --proto '=https' --tlsv1.2 -sSf -o "$RUSTUP_INIT" \
+    "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/$RUSTUP_TRIPLE/rustup-init"
+  echo "$RUSTUP_SHA256  $RUSTUP_INIT" | sha256sum --quiet --strict -c - \
+    || { rm -rf "$RUSTUP_DIR"; die "rustup-init does not match its pinned sha256"; }
+  chmod +x "$RUSTUP_INIT"
+  "$RUSTUP_INIT" -y --default-toolchain none
+  rm -rf "$RUSTUP_DIR"
   # shellcheck source=/dev/null
   source "$HOME/.cargo/env"
 fi

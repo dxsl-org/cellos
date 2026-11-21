@@ -89,13 +89,15 @@ $mtoolsPresent = $null -ne (Get-Command mformat -ErrorAction SilentlyContinue)
 if ($mtoolsPresent) {
     Write-Info "mtools ✓"
 } elseif (-not $Check) {
-    Write-Warn "mtools not found. Attempting to install via Scoop..."
-    if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
-        Write-Info "Installing Scoop..."
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+    # Never pipe a fetched script into Invoke-Expression: without Scoop, name
+    # the install step and let the developer review and run it.
+    if (Get-Command scoop -ErrorAction SilentlyContinue) {
+        Write-Warn "mtools not found. Installing via Scoop..."
+        scoop install mtools
+    } else {
+        Write-Warn "mtools not found and Scoop is not installed. Install Scoop (https://scoop.sh),"
+        Write-Warn "then run: scoop install mtools — or use WSL for the disk image scripts."
     }
-    scoop install mtools
 } else {
     Write-Warn "mtools not found — disk image scripts require mtools or WSL"
 }

@@ -5,6 +5,10 @@ on:
     - cron: "0 6 * * 1"  # Monday 06:00 UTC
   workflow_dispatch:
 
+# Every job reads only; `audit` widens to checks: write for audit-check.
+permissions:
+  contents: read
+
 env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
@@ -13,6 +17,10 @@ jobs:
   audit:
     name: cargo-audit
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
+    # rustsec/audit-check reports through a check run.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
