@@ -219,3 +219,12 @@ cells/apps/vove/
 # Local benchmark captures (numbers are recorded in docs/CHANGELOG)
 perf-results-*/
 /build/x86-init-death-iso-root/
+
+# Build outputs (architecture remediation Phase 03): assembled per build, never tracked.
+/kernel/src/embedded*/init
+/kernel/src/embedded*/kernel_fs.img
+/gh_2.55.0_linux_amd64/
+/limine/**/*.o
+/limine/**/*.a
+/limine/**/*.d
+/limine/*.deb
