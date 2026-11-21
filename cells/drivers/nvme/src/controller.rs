@@ -441,8 +441,9 @@ impl NvmeController {
         let entry = (self.admin.cq_virt() as *const crate::queue::CqEntry)
             .wrapping_add(self.admin.cq.head as usize);
         // SAFETY: head is in range and the queue DMA allocations remain owned here.
-        let raw = unsafe { core::ptr::read_volatile(&(*entry).phase_status) };
-        let done_cid = unsafe { core::ptr::read_volatile(&(*entry).cid) };
+        // Raw field addresses: no reference is formed to device-written memory.
+        let raw = unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*entry).phase_status)) };
+        let done_cid = unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*entry).cid)) };
         let cc = Self::read32(&self.mmio, REG_CC)?;
         let csts = Self::read32(&self.mmio, REG_CSTS)?;
         let aqa = Self::read32(&self.mmio, REG_AQA)?;
@@ -561,8 +562,10 @@ impl NvmeController {
             Err(spent) => {
                 let entry = (self.io.cq_virt() as *const crate::queue::CqEntry)
                     .wrapping_add(self.io.cq.head as usize);
-                // SAFETY: head is in range and this controller owns the live DMA queue.
-                let raw = unsafe { core::ptr::read_volatile(&(*entry).phase_status) };
+                // SAFETY: head is in range and this controller owns the live DMA queue;
+                // the raw field address forms no reference to device-written memory.
+                let raw =
+                    unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*entry).phase_status)) };
                 let _ = print_fmt(format_args!(
                     "[nvme] io timeout opc={} lba={} cid={} after {} (cq_head={} sq_tail={} phase={} raw_status=0x{:x} depth={})\n",
                     opc, lba, cid, spent, self.io.cq.head, self.io.sq_tail, self.io.cq.phase, raw, depth

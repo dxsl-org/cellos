@@ -86,16 +86,18 @@ pub unsafe fn read_request() -> MailboxRequest {
     }
 }
 
+/// Response payload capacity: the rest of the shared page after the header.
+const RESPONSE_DATA_LEN: usize = PAGE_LEN - DATA_OFFSET;
+
 /// Zero the shared request and publish one canonical response in place.
+///
+/// Panics, before touching the mailbox, if `output` exceeds
+/// `RESPONSE_DATA_LEN`; every byte write therefore stays inside the page.
 ///
 /// # Safety
 /// The guest must hold exclusive mailbox access until the following HVC.
-pub unsafe fn publish_response(
-    request_seq: u64,
-    command: u8,
-    status: u8,
-    output: &[u8],
-) {
+pub(crate) unsafe fn publish_response(request_seq: u64, command: u8, status: u8, output: &[u8]) {
+    assert!(output.len() <= RESPONSE_DATA_LEN);
     for offset in (0..PAGE_LEN).step_by(core::mem::size_of::<u64>()) {
         write_word(offset, 0);
     }

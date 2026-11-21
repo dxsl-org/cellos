@@ -197,14 +197,17 @@ impl Queue {
             expected_cid,
             |index, phase| {
                 // SAFETY: the cursor is always within depth and Queue owns the CQ allocation.
+                // The device writes this memory, so fields are read through raw
+                // addresses rather than references.
                 let entry = unsafe { entries.add(index) };
-                let raw = unsafe { core::ptr::read_volatile(&(*entry).phase_status) };
+                let raw =
+                    unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*entry).phase_status)) };
                 if (raw & 1 != 0) != phase {
                     return None;
                 }
                 // The phase publication precedes the rest of the completion's DMA payload.
                 fence(Ordering::Acquire);
-                let cid = unsafe { core::ptr::read_volatile(&(*entry).cid) };
+                let cid = unsafe { core::ptr::read_volatile(core::ptr::addr_of!((*entry).cid)) };
                 Some((cid, raw >> 1))
             },
             acknowledge,

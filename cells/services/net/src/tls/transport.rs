@@ -53,11 +53,27 @@ impl SmoltcpTlsTransport {
         Self { handle }
     }
 
+    /// Socket set installed for the current future poll.
+    ///
+    /// # Safety
+    /// `set_tls_context` installed the socket set for the synchronous
+    /// `Future::poll` now running, it is still valid and not otherwise
+    /// borrowed, and it still contains the caller's socket handle. The returned
+    /// reference must not be held across another `sockets`/`poll_network` call
+    /// or retained beyond this poll; `'static` only erases the dispatcher borrow.
     unsafe fn sockets() -> &'static mut SocketSet<'static> {
         &mut *(TLS_SOCKETS.load(Ordering::Relaxed) as *mut SocketSet<'static>)
     }
 
+    /// Drive smoltcp once with the installed interface, device, and sockets.
+    ///
+    /// # Safety
+    /// All three pointers were installed by `set_tls_context` for the
+    /// synchronous `Future::poll` now running and remain valid and exclusive
+    /// for it; the caller holds no live reference from `sockets()`.
     unsafe fn poll_network() {
+        // The three installed objects are distinct, so these borrows do not
+        // alias, and none outlives this call.
         let iface = &mut *(TLS_IFACE.load(Ordering::Relaxed) as *mut Interface);
         let device = &mut *(TLS_DEVICE.load(Ordering::Relaxed) as *mut VirtioNetDevice);
         let sockets = Self::sockets();
@@ -75,7 +91,8 @@ impl Read for SmoltcpTlsTransport {
             return Ok(0);
         }
         poll_fn(|_| {
-            // SAFETY: the dispatcher installs a valid context for this poll.
+            // SAFETY: TLS futures are polled only by the dispatcher, which installs
+            // a valid, exclusive context for this poll; `socket` dies with the closure.
             let socket = unsafe { Self::sockets().get_mut::<tcp::Socket>(self.handle) };
             if socket.can_recv() {
                 return Poll::Ready(socket.recv_slice(buf).map_err(|_| ErrorKind::Other));
@@ -95,10 +112,13 @@ impl Write for SmoltcpTlsTransport {
             return Ok(0);
         }
         poll_fn(|_| {
+            // SAFETY: TLS futures are polled only by the dispatcher, which installs
+            // a valid, exclusive context for this poll; `socket` dies with the closure.
             let socket = unsafe { Self::sockets().get_mut::<tcp::Socket>(self.handle) };
             if socket.can_send() {
                 let n = socket.send_slice(buf).map_err(|_| ErrorKind::Other)?;
                 // Promptly transmit a record; never wait for the remote ACK here.
+                // SAFETY: same installed context; `socket` is not used past this point.
                 unsafe { Self::poll_network() };
                 return Poll::Ready(Ok(n));
             }
@@ -111,6 +131,8 @@ impl Write for SmoltcpTlsTransport {
     }
 
     async fn flush(&mut self) -> Result<(), ErrorKind> {
+        // SAFETY: flush runs only inside a dispatcher poll with the context
+        // installed, and no socket reference is live here.
         unsafe { Self::poll_network() };
         Ok(())
     }

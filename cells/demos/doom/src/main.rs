@@ -197,15 +197,22 @@ pub unsafe extern "C" fn DG_Init() {
 #[no_mangle]
 pub unsafe extern "C" fn DG_DrawFrame() {
     extern "C" {
-        // DG_ScreenBuffer: allocated by doomgeneric_Create, 320×200 uint32_t
+        // DG_ScreenBuffer: allocated by doomgeneric_Create, 320×200 uint32_t.
+        // C owns it and neither frees nor resizes it during this callback.
         static DG_ScreenBuffer: *mut u32;
     }
     let surf = match SURFACE.as_mut() {
         Some(s) => s,
         None => return,
     };
+    let screen = DG_ScreenBuffer;
+    if screen.is_null() {
+        return;
+    }
 
-    let src = core::slice::from_raw_parts(DG_ScreenBuffer, (DOOM_W * DOOM_H) as usize);
+    // SAFETY: non-null, and C keeps the DOOM_W×DOOM_H buffer alive and
+    // unmodified for the duration of this callback.
+    let src = core::slice::from_raw_parts(screen, (DOOM_W * DOOM_H) as usize);
     // The &mut borrow from pixels_mut() ends at this statement; `dst` below is a
     // fresh slice over the same Grant pages, leaving `surf` free for damage_all().
     let dst_ptr = surf.pixels_mut().as_mut_ptr() as *mut u32;
