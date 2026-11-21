@@ -2055,7 +2055,7 @@ jobs:
     # ran here; `scripts/gen-disk-ci.sh` reproduces the RV64 half natively
     # (same cell list, same production/test-hooks flavour rule, signing, VIFS1
     # args, 61-row cell table and P6 cell-store, digest-verified before it
-    # replaces the image).
+    # replaces the image). The virtio-blk stall lane reuses the same image.
     name: RV64 integration disk (launch profile + Tier-2 fault isolation)
     if: ${{ vars.CI_SELF_HOSTED == 'true' || inputs.heavy }}
     runs-on: ${{ vars.CI_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","X64","cellos-ci"]') || 'ubuntu-24.04' }}
@@ -2101,6 +2101,14 @@ jobs:
         run: |
           cargo test --manifest-path tests/integration/Cargo.toml --test launch-profile -- --test-threads=1
           cargo test --manifest-path tests/integration/Cargo.toml --test tier2-fault-isolation -- --test-threads=1
+
+      - name: Run the virtio-blk stall lane (residual N-3)
+        env:
+          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+        # A blkdebug breakpoint suspends one write in QEMU for good: the driver
+        # must answer Indeterminate after its 30 s deadline, poison the device
+        # once and refuse every later request unpublished.
+        run: cargo test --manifest-path tests/integration/Cargo.toml --test virtio-blk-stall
 
   unit-tests:
     name: Host unit tests (types + api)

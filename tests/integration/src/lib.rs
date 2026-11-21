@@ -445,6 +445,21 @@ fn accept_qemu_serial(listener: &TcpListener, child: &mut Child) -> TcpStream {
         .unwrap_or_else(|error| panic!("{error}"))
 }
 
+/// Copy `disk` to a temp image unique to this process and call (PID plus a
+/// counter, so tests in one process get distinct names).
+fn fresh_disk_copy(disk: &str, prefix: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static CTR: AtomicU64 = AtomicU64::new(0);
+    let tmp = std::env::temp_dir().join(format!(
+        "{prefix}_{}_{}.img",
+        std::process::id(),
+        CTR.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::copy(disk, &tmp)
+        .unwrap_or_else(|e| panic!("failed to copy disk image for test isolation: {e}"));
+    tmp
+}
+
 #[cfg(test)]
 mod serial_accept_tests {
     use super::*;
@@ -493,20 +508,24 @@ impl QemuRunner {
     /// Use for any test that writes to `/data/` (FAT16).  Tests that only write
     /// to `/tmp/` (VFS RamFS, in-memory) can use the shared `boot` instead.
     pub fn boot_with_fresh_disk(kernel: &str, disk: &str) -> Self {
-        let tmp = std::env::temp_dir().join(format!(
-            "ViCell_disk_{}_{}.img",
-            std::process::id(),
-            // Use a combination of PID + a monotonic discriminator so that
-            // multiple tests in the same process get distinct names.
-            {
-                use std::sync::atomic::{AtomicU64, Ordering};
-                static CTR: AtomicU64 = AtomicU64::new(0);
-                CTR.fetch_add(1, Ordering::Relaxed)
-            }
-        ));
-        std::fs::copy(disk, &tmp)
-            .unwrap_or_else(|e| panic!("failed to copy disk image for test isolation: {e}"));
+        let tmp = fresh_disk_copy(disk, "ViCell_disk");
         let mut runner = Self::boot_with_netdev(kernel, &tmp.to_string_lossy(), "user,id=net0");
+        runner.temp_disk = Some(tmp);
+        runner
+    }
+
+    /// [`Self::boot_with_fresh_disk`] with the private copy attached through a
+    /// caller-built `-drive` value: `drive(path)` must define the backend
+    /// `id=hd0,if=none`, e.g. a `blkdebug` wrapper the test then drives with
+    /// [`Self::human_monitor`].
+    pub fn boot_with_fresh_disk_drive(
+        kernel: &str,
+        disk: &str,
+        drive: impl FnOnce(&str) -> String,
+    ) -> Self {
+        let tmp = fresh_disk_copy(disk, "ViCell_disk_drive");
+        let drive = drive(&tmp.to_string_lossy());
+        let mut runner = Self::boot_with_drive(kernel, &drive, "user,id=net0", 1);
         runner.temp_disk = Some(tmp);
         runner
     }
@@ -514,17 +533,7 @@ impl QemuRunner {
     /// [`Self::boot_with_fresh_disk`] on `harts` RV64 harts: a workload whose
     /// retirement must be observed across CPUs cannot use the 1-hart default.
     pub fn boot_with_fresh_disk_smp(kernel: &str, disk: &str, harts: usize) -> Self {
-        let tmp = std::env::temp_dir().join(format!(
-            "ViCell_disk_smp_{}_{}.img",
-            std::process::id(),
-            {
-                use std::sync::atomic::{AtomicU64, Ordering};
-                static CTR: AtomicU64 = AtomicU64::new(0);
-                CTR.fetch_add(1, Ordering::Relaxed)
-            }
-        ));
-        std::fs::copy(disk, &tmp)
-            .unwrap_or_else(|e| panic!("failed to copy disk image for test isolation: {e}"));
+        let tmp = fresh_disk_copy(disk, "ViCell_disk_smp");
         let mut runner =
             Self::boot_with_netdev_harts(kernel, &tmp.to_string_lossy(), "user,id=net0", harts);
         runner.temp_disk = Some(tmp);
@@ -2182,6 +2191,12 @@ impl QemuRunner {
 
     /// [`Self::boot_with_netdev`] with an explicit hart count (`-smp`).
     fn boot_with_netdev_harts(kernel: &str, disk: &str, netdev: &str, harts: usize) -> Self {
+        let drive = format!("file={disk},format=raw,id=hd0,if=none");
+        Self::boot_with_drive(kernel, &drive, netdev, harts)
+    }
+
+    /// [`Self::boot_with_netdev_harts`] with the whole `-drive` value given.
+    fn boot_with_drive(kernel: &str, drive: &str, netdev: &str, harts: usize) -> Self {
         let harts = harts.to_string();
         // Bind an ephemeral port on the host; QEMU connects to it as a serial
         // backend (server=off,nowait → QEMU is the client and connects on start).
@@ -2214,7 +2229,7 @@ impl QemuRunner {
                 "-kernel",
                 kernel,
                 "-drive",
-                &format!("file={disk},format=raw,id=hd0,if=none"),
+                drive,
                 "-device",
                 "virtio-blk-device,drive=hd0",
                 "-netdev",
@@ -2474,9 +2489,13 @@ impl QemuRunner {
     }
 
     fn send_qmp_command(&mut self, command: &str) -> bool {
-        let Some(monitor) = self.monitor.as_mut() else {
-            return false;
-        };
+        self.qmp(command).is_some()
+    }
+
+    /// Run one QMP `command` (a JSON object) and return QEMU's raw reply;
+    /// `None` without a QMP connection or when QEMU answers with an error.
+    pub fn qmp(&mut self, command: &str) -> Option<String> {
+        let monitor = self.monitor.as_mut()?;
 
         // Drain the greeting, then negotiate capabilities. Repeating the
         // negotiation is accepted by QEMU and keeps each helper independent.
@@ -2496,7 +2515,7 @@ impl QemuRunner {
             .and_then(|()| monitor.flush())
             .is_err()
         {
-            return false;
+            return None;
         }
         monitor
             .set_read_timeout(Some(Duration::from_millis(300)))
@@ -2514,7 +2533,7 @@ impl QemuRunner {
             .and_then(|()| monitor.flush())
             .is_err()
         {
-            return false;
+            return None;
         }
         monitor
             .set_read_timeout(Some(Duration::from_millis(500)))
@@ -2528,9 +2547,50 @@ impl QemuRunner {
         }
         monitor.set_read_timeout(None).ok();
 
-        let response = String::from_utf8_lossy(&response);
+        let response = String::from_utf8_lossy(&response).into_owned();
         eprintln!("[test] QMP response: {response:?}");
-        response.contains(r#""return""#) && !response.contains(r#""error""#)
+        (response.contains(r#""return""#) && !response.contains(r#""error""#)).then_some(response)
+    }
+
+    /// Run an HMP `command_line` through QMP `human-monitor-command` and return
+    /// its text output. Commands that report failure only on QEMU's stdout
+    /// (`qemu-io` among them) still return `Some`.
+    pub fn human_monitor(&mut self, command_line: &str) -> Option<String> {
+        let mut quoted = String::with_capacity(command_line.len() + 2);
+        quoted.push('"');
+        for c in command_line.chars() {
+            if matches!(c, '"' | '\\') {
+                quoted.push('\\');
+            }
+            quoted.push(c);
+        }
+        quoted.push('"');
+        let reply = self.qmp(&format!(
+            r#"{{"execute":"human-monitor-command","arguments":{{"command-line":{quoted}}}}}"#
+        ))?;
+        // The reply is `{"return": "<output>"}`, the output a JSON string.
+        let start = reply.find(r#""return""#)?;
+        let body = &reply[start + r#""return""#.len()..];
+        let body = &body[body.find('"')? + 1..];
+        let mut out = String::new();
+        let mut chars = body.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => return Some(out),
+                '\\' => match chars.next()? {
+                    'n' => out.push('\n'),
+                    'r' => out.push('\r'),
+                    't' => out.push('\t'),
+                    'u' => {
+                        let code: String = chars.by_ref().take(4).collect();
+                        out.push(char::from_u32(u32::from_str_radix(&code, 16).ok()?)?);
+                    }
+                    other => out.push(other),
+                },
+                c => out.push(c),
+            }
+        }
+        None
     }
 
     /// Block until any captured line contains `pattern`, or `timeout_secs`

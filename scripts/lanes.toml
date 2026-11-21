@@ -802,6 +802,11 @@ tier = "manual"
 reason = "not named by any workflow as of 2026-11-10; current pass/fail unknown"
 
 [[test]]
+name = "virtio-blk-stall"
+arch = "default"
+tier = "pr"
+
+[[test]]
 name = "virtio-gpu-contract"
 arch = "default"
 tier = "manual"
