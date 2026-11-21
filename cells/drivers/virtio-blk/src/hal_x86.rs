@@ -119,9 +119,9 @@ unsafe impl Hal for CellHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: PhysAddr, _size: usize) -> NonNull<u8> {
-        // SAFETY: SAS identity mapping. The PCI transport maps BARs through its
+        // SAS identity mapping. The PCI transport maps BARs through its
         // `BarMapper` and never calls this.
-        unsafe { NonNull::new_unchecked(paddr as *mut u8) }
+        NonNull::new(paddr as *mut u8).expect("[virtio-blk] MMIO address is null")
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, dir: BufferDirection) -> PhysAddr {

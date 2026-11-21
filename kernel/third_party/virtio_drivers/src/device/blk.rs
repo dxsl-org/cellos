@@ -2,7 +2,7 @@
 
 use crate::hal::Hal;
 use crate::queue::VirtQueue;
-use crate::transport::Transport;
+use crate::transport::{DeviceStatus, Transport};
 use crate::volatile::{volread, Volatile};
 use crate::{Error, Result};
 use bitflags::bitflags;
@@ -151,6 +151,60 @@ impl<H: Hal, T: Transport> VirtIOBlk<H, T> {
         } else {
             Ok(())
         }
+    }
+
+    /// Submits a flush request, but returns immediately without waiting for it to complete.
+    ///
+    /// Returns `Ok(None)` without touching the queue if the device doesn't support the
+    /// `VIRTIO_BLK_F_FLUSH` feature, which [`VirtIOBlk::flush`] likewise ignores. Otherwise
+    /// returns the token of the submitted request: poll [`VirtIOBlk::peek_used`] for it, then
+    /// call `complete_flush` with the same buffers.
+    ///
+    /// # Safety
+    ///
+    /// `req` and `resp` are still borrowed by the underlying VirtIO block device even after this
+    /// method returns. Thus, it is the caller's responsibility to guarantee that they are not
+    /// accessed before the request is completed in order to avoid data races.
+    pub unsafe fn flush_nb(&mut self, req: &mut BlkReq, resp: &mut BlkResp) -> Result<Option<u16>> {
+        if !self.negotiated_features.contains(BlkFeature::FLUSH) {
+            return Ok(None);
+        }
+        *req = BlkReq {
+            type_: ReqType::Flush,
+            ..Default::default()
+        };
+        let token = self
+            .queue
+            .add(&[req.as_bytes()], &mut [resp.as_bytes_mut()])?;
+        if self.queue.should_notify() {
+            self.transport.notify(QUEUE);
+        }
+        Ok(Some(token))
+    }
+
+    /// Completes a flush which was started by `flush_nb`.
+    ///
+    /// # Safety
+    ///
+    /// The same buffers must be passed in again as were passed to `flush_nb` when it returned the
+    /// token.
+    pub unsafe fn complete_flush(
+        &mut self,
+        token: u16,
+        req: &BlkReq,
+        resp: &mut BlkResp,
+    ) -> Result<()> {
+        self.queue
+            .pop_used(token, &[req.as_bytes()], &mut [resp.as_bytes_mut()])?;
+        resp.status.into()
+    }
+
+    /// Returns true if the device has set `DEVICE_NEEDS_RESET`: it hit an error it cannot recover
+    /// from and may never complete requests already submitted.
+    pub fn needs_reset(&self) -> bool {
+        self.transport
+            .get_status()
+            .contains(DeviceStatus::DEVICE_NEEDS_RESET)
     }
 
     /// Gets the device ID.
@@ -770,6 +824,7 @@ mod tests {
             state: state.clone(),
         };
         let mut blk = VirtIOBlk::<FakeHal, FakeTransport<BlkConfig>>::new(transport).unwrap();
+        let state_nb = state.clone();
 
         // Start a thread to simulate the device waiting for a flush request.
         let handle = thread::spawn(move || {
@@ -807,6 +862,48 @@ mod tests {
         blk.flush().unwrap();
 
         handle.join().unwrap();
+
+        // The same flush through the non-blocking path: submitted at once, unfinished until the
+        // device consumes it, then retired by the matching completion.
+        let mut req = BlkReq::default();
+        let mut resp = BlkResp::default();
+        // SAFETY: `req` and `resp` are not accessed between `flush_nb` and the matching
+        // `complete_flush`; one block spans both so the test adds a single `unsafe` site.
+        unsafe {
+            let token = blk
+                .flush_nb(&mut req, &mut resp)
+                .unwrap()
+                .expect("FLUSH negotiated");
+            assert!(State::poll_queue_notified(&state_nb, QUEUE));
+            assert_eq!(blk.peek_used(), None);
+            assert!(state_nb
+                .lock()
+                .unwrap()
+                .read_write_queue::<{ QUEUE_SIZE as usize }>(QUEUE, |request| {
+                    assert_eq!(
+                        request,
+                        BlkReq {
+                            type_: ReqType::Flush,
+                            reserved: 0,
+                            sector: 0,
+                        }
+                        .as_bytes()
+                    );
+                    BlkResp {
+                        status: RespStatus::OK,
+                    }
+                    .as_bytes()
+                    .to_vec()
+                }));
+            assert_eq!(blk.peek_used(), Some(token));
+            assert_eq!(blk.complete_flush(token, &req, &mut resp), Ok(()));
+        }
+        assert_eq!(resp.status(), RespStatus::OK);
+        assert_eq!(blk.peek_used(), None);
+
+        assert!(!blk.needs_reset());
+        state_nb.lock().unwrap().status |= DeviceStatus::DEVICE_NEEDS_RESET;
+        assert!(blk.needs_reset());
     }
 
     #[test]

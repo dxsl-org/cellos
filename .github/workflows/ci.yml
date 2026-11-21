@@ -2160,6 +2160,10 @@ jobs:
           # tests had drifted from the session — they predate the stat that
           # reserves the buffer — and nothing noticed while they were unreachable.
           cargo test -p ostd --target x86_64-unknown-linux-gnu
+          # The vendored virtio-drivers fork (a patched dependency, not a workspace
+          # member, so scripts/host-test-crates.txt cannot list it): its fake
+          # transport pins the non-blocking flush the virtio-blk cell bounds.
+          cargo test -p virtio-drivers --target x86_64-unknown-linux-gnu
           # The aarch64 vGIC's list-register planning and guest timer line are
           # pure functions in `hal-arm` (`aarch64/vgic.rs`), and the QEMU virt
           # layout (GICH/GICV windows included) is validated in

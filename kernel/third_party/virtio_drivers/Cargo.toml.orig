@@ -23,6 +23,3 @@ zerocopy = { version = "0.7.35", features = ["derive"] }
 [features]
 default = ["alloc"]
 alloc = ["zerocopy/alloc"]
-
-[dev-dependencies]
-zerocopy = { version = "0.7.35", features = ["alloc"] }

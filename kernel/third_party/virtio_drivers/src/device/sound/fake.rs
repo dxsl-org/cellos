@@ -30,8 +30,10 @@ use std::{
 };
 use zerocopy::{AsBytes, FromBytes};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FakeSoundDevice {
+    /// Config space the transport points into; must outlive that transport.
+    config_space: Arc<VirtIOSoundConfig>,
     pub state: Arc<Mutex<State>>,
     pub terminate: Arc<AtomicBool>,
     /// The paramaters set for each stream, if any.
@@ -49,11 +51,11 @@ impl FakeSoundDevice {
         pcm_infos: Vec<VirtIOSndPcmInfo>,
         chmap_infos: Vec<VirtIOSndChmapInfo>,
     ) -> (Self, FakeTransport<VirtIOSoundConfig>) {
-        let mut config_space = VirtIOSoundConfig {
+        let config_space = Arc::new(VirtIOSoundConfig {
             jacks: ReadOnly::new(jack_infos.len().try_into().unwrap()),
             streams: ReadOnly::new(pcm_infos.len().try_into().unwrap()),
             chmaps: ReadOnly::new(chmap_infos.len().try_into().unwrap()),
-        };
+        });
         let state = Arc::new(Mutex::new(State {
             queues: vec![
                 QueueStatus::default(),
@@ -67,7 +69,7 @@ impl FakeSoundDevice {
             device_type: DeviceType::Socket,
             max_queue_size: 32,
             device_features: 0,
-            config_space: NonNull::from(&mut config_space),
+            config_space: NonNull::from(&*config_space),
             state: state.clone(),
         };
         let params = repeat_with(|| None).take(pcm_infos.len()).collect();
@@ -75,6 +77,7 @@ impl FakeSoundDevice {
 
         (
             Self {
+                config_space,
                 state,
                 terminate: Arc::new(AtomicBool::new(false)),
                 params: Arc::new(Mutex::new(params)),

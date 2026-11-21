@@ -19,7 +19,7 @@
 //! Once the kernel relinquishes the device (phase 06), the same probe claims it.
 //!
 //! # Law 4 exception
-//! `src/mmio.rs`, `src/hal_x86.rs` and `src/io_x86.rs` use `unsafe` for the
+//! `src/mmio.rs`, `src/hal_x86.rs` and `src/io.rs` use `unsafe` for the
 //! `virtio_drivers::Hal` impls, DMA bounce copies, the non-blocking request
 //! calls and the MMIO probe reads. No other module does.
 
@@ -34,13 +34,11 @@ mod device;
 mod dispatch;
 #[cfg(target_arch = "x86_64")]
 mod hal_x86;
-#[cfg(target_arch = "x86_64")]
-mod io_x86;
+mod io;
 #[cfg(not(target_arch = "x86_64"))]
 mod mmio;
 #[cfg(target_arch = "x86_64")]
 mod pci_x86;
-#[cfg(target_arch = "x86_64")]
 mod wait;
 
 use core::sync::atomic::{AtomicUsize, Ordering};

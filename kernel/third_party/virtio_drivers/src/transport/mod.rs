@@ -1,6 +1,8 @@
 //! VirtIO transports.
 
+// Test-only fake device; exempt from the crate's `deny(missing_docs)`.
 #[cfg(test)]
+#[allow(missing_docs)]
 pub mod fake;
 pub mod mmio;
 pub mod pci;

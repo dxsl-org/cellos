@@ -2,10 +2,9 @@
 //!
 //! The transport is chosen per architecture: virtio-MMIO slots on riscv64 /
 //! aarch64 ([`crate::mmio`]) and virtio-over-PCI on x86_64
-//! ([`crate::pci_x86`]). `dispatch` drives either through [`BlkDevice`].
-//! riscv64 / aarch64 issue blocking requests (below); x86_64 issues polled,
-//! deadline-bounded ones (`crate::io_x86`). Both classify results with
-//! [`outcome`].
+//! ([`crate::pci_x86`]). `dispatch` drives either through [`BlkDevice`],
+//! whose requests are polled and deadline-bounded on every architecture
+//! (`crate::io`) and classified with [`outcome`].
 
 #[cfg(not(target_arch = "x86_64"))]
 pub use crate::mmio::find_and_init_blk;
@@ -37,8 +36,7 @@ pub struct BlkDevice {
     #[cfg(target_arch = "x86_64")]
     pub(crate) bars: crate::bars_x86::BarRegions,
     /// Set when a request stalled; the device is never touched again.
-    #[cfg(target_arch = "x86_64")]
-    pub(crate) poisoned: crate::io_x86::Poison,
+    pub(crate) poisoned: crate::io::Poison,
 }
 
 /// Classify a virtio-drivers request result by issue certainty.
@@ -59,24 +57,5 @@ impl BlkDevice {
     /// Block route under which this device is published.
     pub fn route(&self) -> BlockDevice {
         self.route
-    }
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-impl BlkDevice {
-    /// Read `buf.len() / 512` consecutive sectors into `buf` in one request;
-    /// `buf` is a whole number of sectors, at most one page (the bounce size).
-    pub fn read_sectors(&mut self, sector: u64, buf: &mut [u8]) -> Result<(), BlockOutcome> {
-        outcome(self.blk.read_blocks(sector as usize, buf))
-    }
-
-    /// Write one 512-byte sector.
-    pub fn write_sector(&mut self, sector: u64, buf: &[u8]) -> Result<(), BlockOutcome> {
-        outcome(self.blk.write_blocks(sector as usize, buf))
-    }
-
-    /// Send a VirtIO FLUSH request.
-    pub fn flush(&mut self) -> Result<(), BlockOutcome> {
-        outcome(self.blk.flush())
     }
 }

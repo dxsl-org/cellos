@@ -46,14 +46,21 @@ pub const MMIO_SLOT_SIZE: usize = 0x200;
 /// (heap/.bss/stack) lives at loader VAs that are NOT identity-mapped, so DMA
 /// buffers are bounced through identity-mapped grant pages (see `share`).
 /// Identical to the virtio-net cell's CellHal.
+///
+/// # Abandoned requests
+/// A request that misses its deadline is never completed (`crate::io`), so
+/// `unshare` is never reached for it: its request, data and response bounce
+/// grants deliberately stay allocated and device-addressable until cell
+/// teardown, and a late completion lands there, not in cell memory. Poisoning
+/// refuses every later request, so at most one request's grants are lost.
 pub(crate) struct CellHal;
 
 // SAFETY: CellHal is a zero-sized stateless type; all ops go through kernel syscalls.
 unsafe impl Hal for CellHal {
     fn dma_alloc(pages: usize, _dir: BufferDirection) -> (PhysAddr, NonNull<u8>) {
         let base = sys_grant_alloc(pages * 4096).expect("[virtio-blk] DMA OOM");
-        // SAFETY: base is a non-null page-aligned address from the kernel frame allocator.
-        (base, unsafe { NonNull::new_unchecked(base as *mut u8) })
+        let ptr = NonNull::new(base as *mut u8).expect("[virtio-blk] DMA grant at null");
+        (base, ptr)
     }
 
     unsafe fn dma_dealloc(paddr: PhysAddr, _vaddr: NonNull<u8>, _pages: usize) -> i32 {
@@ -63,8 +70,8 @@ unsafe impl Hal for CellHal {
     }
 
     unsafe fn mmio_phys_to_virt(paddr: PhysAddr, _size: usize) -> NonNull<u8> {
-        // SAFETY: SAS identity mapping — paddr is a valid MMIO address pre-mapped by the kernel.
-        unsafe { NonNull::new_unchecked(paddr as *mut u8) }
+        // SAS identity mapping: paddr is a kernel-mapped MMIO address.
+        NonNull::new(paddr as *mut u8).expect("[virtio-blk] MMIO address is null")
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, dir: BufferDirection) -> PhysAddr {
@@ -180,10 +187,12 @@ fn init_first_free(held: &mut bool) -> Option<BlkDevice> {
         }
 
         // Create the VirtIO transport.
+        let Some(header) = NonNull::new(base as *mut VirtIOHeader) else {
+            continue;
+        };
         // SAFETY: the kernel identified a VirtIO block transport at `base` and
         // granted this Cell the slot above, so the header is live device memory
         // this Cell may access.
-        let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Block => t,
             Ok(t) => {
@@ -203,6 +212,7 @@ fn init_first_free(held: &mut bool) -> Option<BlkDevice> {
         return Some(BlkDevice {
             blk,
             route: BlockDevice::Mmio { base: base as u64 },
+            poisoned: Default::default(),
         });
     }
     None

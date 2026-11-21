@@ -1,4 +1,4 @@
-//! Time budget for one polled request completion (x86_64 PCI path).
+//! Time budget for one polled request completion (every transport).
 //!
 //! The budget is milliseconds on the kernel's monotonic clock (`GetTime`),
 //! read only at the yield cadence; without a clock a poll count bounds the
