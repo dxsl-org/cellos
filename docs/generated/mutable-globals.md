@@ -7,7 +7,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 
 | crate | linked | declarations | needs review | classified | debt | syntactically immutable | inactive cfg |
 |---|---|---|---|---|---|---|---|
-| kernel | yes | 524 | 204 | 203 | 1 | 8 | 314 |
+| kernel | yes | 527 | 204 | 203 | 1 | 8 | 317 |
 | hal-core | yes | 0 | 0 | 0 | 0 | 0 | 0 |
 | hal-x86 | yes | 119 | 69 | 69 | 0 | 0 | 50 |
 | hal-soc-x86 | yes | 8 | 0 | 0 | 0 | 0 | 8 |
@@ -309,7 +309,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::task::waker::NET_RX_PENDING` | `kernel/src/task/waker.rs` | static | atomic | global | normal, irq, exception, ap | kernel::task::waker NET_RX level flag: set by signal_net_rx when no reservation is armed; consumed by consume_pending | none: mutated for the whole run | never: lives for the whole run | reviewed: kernel/src/task/waker.rs:signal_net_rx; kernel/src/task/waker.rs:consume_pending; kernel/src/dev/virtio_common.rs:vi_handle_virtio_irq; kernel/src/sched/scheduler.rs:2069 |
 | `kernel::task::waker::net_rx_reservation::RESERVATION` | `kernel/src/task/waker/net_rx_reservation.rs` | static | spinlock | global | normal | kernel::task::waker::net_rx_reservation: single NET_RX completion reservation armed/disarmed by WaitCompletion and completed by the RX signal | none: mutated for the whole run | displaced reservation is completed as abandoned on re-arm; Idle keeps the last Arc so the ISR never drops it | reviewed: kernel/src/task/waker/net_rx_reservation.rs:arm; kernel/src/task/waker/net_rx_reservation.rs:begin_signal; kernel/src/task/completion_wait.rs:196; hal/arch/x86/src/x86_64/idt/policy.rs:classify |
 
-## Other declarations (435)
+## Other declarations (438)
 
 | key | file | kind | type | why not reviewed here |
 |---|---|---|---|---|
@@ -555,6 +555,7 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::loader::atomic_publication_tests::success::TRUSTED_ARMED @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/success.rs` | static | `AtomicBool` | cfg inactive in this profile |
 | `kernel::loader::atomic_publication_tests::success::TRUSTED_PENDING @cfg(feature = "test-hooks")` | `kernel/src/loader/atomic_publication_tests/success.rs` | static | `crate::sync::Spinlock<Option<StateSnapshot>>` | cfg inactive in this profile |
 | `kernel::loader::va_alloc::tests::seeded()::STATE @cfg(test)` | `kernel/src/loader/va-alloc-tests.rs` | static | `AtomicU64` | cfg inactive in this profile |
+| `kernel::loader::wx::ICACHE_SYNC_WITNESSED @cfg(all (target_arch = "riscv64" , feature = "test-hooks"))` | `kernel/src/loader/wx.rs` | static | `core::sync::atomic::AtomicBool` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_ALLOCATION_AFTER @cfg(all (feature = "native-domains" , cellos_wide) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicUsize` | cfg inactive in this profile |
 | `kernel::memory::address_space::FAIL_NEXT_MAP @cfg(all (feature = "native-domains" , cellos_wide) & feature = "test-hooks")` | `kernel/src/memory/address_space.rs` | static | `AtomicU8` | cfg inactive in this profile |
 | `kernel::memory::cell_quota::P01_SOURCE @cfg(feature = "p01-trace")` | `kernel/src/memory/cell_quota.rs` | static | `crate::p01_resources::Source` | cfg inactive in this profile |
@@ -699,6 +700,8 @@ Discovery and drift aid only. A row records ownership, contexts and lifetime as 
 | `kernel::sched::quiesce::lane::STOPPED @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::quiesce::lane::TRAP_TICKS @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::quiesce::lane::WITHHELD @cfg(all (feature = "test-hooks" , target_arch = "riscv64"))` | `kernel/src/sched/quiesce.rs` | static | `[AtomicUsize;PARK_HARTS]` | cfg inactive in this profile |
+| `kernel::sched::smp::ICACHE_SYNC_COMPLETE @cfg(target_arch = "riscv64")` | `kernel/src/sched/smp.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
+| `kernel::sched::smp::ICACHE_SYNC_REQUEST @cfg(target_arch = "riscv64")` | `kernel/src/sched/smp.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::CPU_MPIDRS @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static | `mpidr::MpidrTable<MAX_HARTS>` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::IPI_TAKEN @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static | `[AtomicUsize;MAX_HARTS]` | cfg inactive in this profile |
 | `kernel::sched::smp::aarch64::SECONDARY_CONTEXT @cfg(target_arch = "aarch64")` | `kernel/src/arch/aarch64/smp_bringup.rs` | static mut | `[hal::aarch64::boot::SecondaryContext;MAX_HARTS]` | cfg inactive in this profile |
