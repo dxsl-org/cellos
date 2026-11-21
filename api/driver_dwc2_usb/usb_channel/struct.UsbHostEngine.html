@@ -23,14 +23,14 @@ value must not produce a zero-length packet size that hangs the engine.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.set_mode" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#604-613">Source</a><h4 class="code-header">pub fn <a href="#method.set_mode" class="fn">set_mode</a>(&amp;self, mode: <a class="enum" href="enum.TransferMode.html" title="enum driver_dwc2_usb::usb_channel::TransferMode">TransferMode</a>) -&gt; bool</h4></section></summary><div class="docblock"><p>Select the payload-transfer mode.</p>
 <p>Switching to DMA allocates the scratch region on first use; a failed
 allocation leaves the engine in FIFO mode rather than half-configured.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.send_setup" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#776-814">Source</a><h4 class="code-header">pub fn <a href="#method.send_setup" class="fn">send_setup</a>(&amp;self, dev_addr: u8, setup: &amp;[u8; 8]) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Execute a standard 8-byte USB SETUP packet on Channel 0.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.recv_data" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#823-890">Source</a><h4 class="code-header">pub fn <a href="#method.recv_data" class="fn">recv_data</a>(&amp;self, dev_addr: u8, buf: &amp;mut [u8]) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive the DATA IN phase of a control transfer on Channel 0.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.send_setup" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#776-814">Source</a><h4 class="code-header">pub fn <a href="#method.send_setup" class="fn">send_setup</a>(&amp;self, dev_addr: u8, setup: &amp;[u8; 8]) -&gt; ViResult&lt;()&gt;</h4></section></summary><div class="docblock"><p>Execute a standard 8-byte USB SETUP packet on Channel 0.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.recv_data" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#823-890">Source</a><h4 class="code-header">pub fn <a href="#method.recv_data" class="fn">recv_data</a>(&amp;self, dev_addr: u8, buf: &amp;mut [u8]) -&gt; ViResult&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive the DATA IN phase of a control transfer on Channel 0.</p>
 <p>Returns the bytes actually received. Packets are sized by the control
 endpoint’s MPS and the transfer ends at the first <strong>short</strong> packet
 (USB 2.0 §8.5.3.1) — a device answering an 18-byte descriptor request
 with its real 8-byte report must not be read as if it had 18 bytes
 available, which is what a fixed-size read would do.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.send_status" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#893-921">Source</a><h4 class="code-header">pub fn <a href="#method.send_status" class="fn">send_status</a>(&amp;self, dev_addr: u8, is_in: bool) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Send STATUS handshake on Channel 0 (0-byte packet with DATA1).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.send_status" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#893-921">Source</a><h4 class="code-header">pub fn <a href="#method.send_status" class="fn">send_status</a>(&amp;self, dev_addr: u8, is_in: bool) -&gt; ViResult&lt;()&gt;</h4></section></summary><div class="docblock"><p>Send STATUS handshake on Channel 0 (0-byte packet with DATA1).</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.control_transfer" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#924-979">Source</a><h4 class="code-header">pub fn <a href="#method.control_transfer" class="fn">control_transfer</a>(
     &amp;self,
     dev_addr: u8,
@@ -39,14 +39,14 @@ available, which is what a fixed-size read would do.</p>
     val: u16,
     idx: u16,
     buf: &amp;mut [u8],
-) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Execute a complete synchronous USB Control Transfer.</p>
+) -&gt; ViResult&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Execute a complete synchronous USB Control Transfer.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.bulk_transmit" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#1136-1263">Source</a><h4 class="code-header">pub fn <a href="#method.bulk_transmit" class="fn">bulk_transmit</a>(
     &amp;self,
     dev_addr: u8,
     ep_num: u8,
     packet: &amp;[u8],
-) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;()&gt;</h4></section></summary><div class="docblock"><p>Transmit a raw Ethernet packet via Bulk OUT (Channel 2, EP 2).</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.failure_name" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#1272-1281">Source</a><h4 class="code-header">pub fn <a href="#method.failure_name" class="fn">failure_name</a>(&amp;self, error: &amp;<a class="enum" href="../../types/enum.ViError.html" title="enum types::ViError">ViError</a>) -&gt; &amp;'static str</h4></section></summary><div class="docblock"><p>Name the last channel failure for the console.</p>
+) -&gt; ViResult&lt;()&gt;</h4></section></summary><div class="docblock"><p>Transmit a raw Ethernet packet via Bulk OUT (Channel 2, EP 2).</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.failure_name" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#1272-1281">Source</a><h4 class="code-header">pub fn <a href="#method.failure_name" class="fn">failure_name</a>(&amp;self, error: &amp;ViError) -&gt; &amp;'static str</h4></section></summary><div class="docblock"><p>Name the last channel failure for the console.</p>
 <p><code>ViError::IO</code> on its own cannot say whether the device refused the transfer
 (<code>STALL</code>), the bus protocol broke (<code>XACTERR</code>) or the channel never reported
 within its budget — and those need different fixes. The board’s NIC TX
@@ -91,7 +91,7 @@ which is why only the bulk paths call this.</p>
     dev_addr: u8,
     ep_num: u8,
     buf: &amp;mut [u8],
-) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive a raw packet via Bulk IN (Channel 1, EP 1). Returns received length or 0 if nothing.</p>
+) -&gt; ViResult&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive a raw packet via Bulk IN (Channel 1, EP 1). Returns received length or 0 if nothing.</p>
 </div></details><details class="toggle method-toggle" open><summary><section id="method.interrupt_receive" class="method"><a class="src rightside" href="../../src/driver_dwc2_usb/usb_channel.rs.html#1523-1637">Source</a><h4 class="code-header">pub fn <a href="#method.interrupt_receive" class="fn">interrupt_receive</a>(
     &amp;self,
     ch: usize,
@@ -100,7 +100,7 @@ which is why only the bulk paths call this.</p>
     mps: u16,
     buf: &amp;mut [u8],
     split_pending: &amp;mut bool,
-) -&gt; <a class="type" href="../../types/type.ViResult.html" title="type types::ViResult">ViResult</a>&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive up to one packet via Interrupt IN on <code>ch</code>.</p>
+) -&gt; ViResult&lt;usize&gt;</h4></section></summary><div class="docblock"><p>Receive up to one packet via Interrupt IN on <code>ch</code>.</p>
 <p>HID input reports ride interrupt endpoints. The device NAKs until it has
 a report, so a NAK is a normal “no data yet” answer, not an error — the
 caller polls. Returns the <em>actual</em> transferred length, read back from
