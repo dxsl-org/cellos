@@ -98,9 +98,9 @@ under the rules below; this list admits nothing by itself.
    gated on exact-device evidence (see § Evidence and security).
 8. **Pushed CI cycle (2026-11-19).** `main` was pushed and its CI run failed 12 jobs. The CI
    repair entry in the [changelog](../project-changelog.md) records the fixes. Owner items left:
-   - `B-AARCH64-SEMHOSTING` was renewed on 2026-11-20 under Issue #48 (ledger events 15
-     `record_correction` and 16 `blocker_resolution`). The new resolution expires
-     2026-12-20T02:15:23Z. Renew again before then with a fresh
+   - `B-AARCH64-SEMHOSTING` was renewed on 2026-11-21 under Issue #49 (ledger events 17
+     `record_correction` and 18 `blocker_resolution`). The new resolution expires
+     2026-12-21T03:53:07Z. Renew again before then with a fresh
      `scripts/qemu-aarch64-test-hooks.sh` run and a new GitHub decision, using the same two events.
    - Jobs that `needs: build` were skipped in that run, so their results arrive with the next run.
    - The heapless 0.8 advisory ignores in `deny.toml`/`audit.toml` (RUSTSEC-2026-0574 to 0582)
