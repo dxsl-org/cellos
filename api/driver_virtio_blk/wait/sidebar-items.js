@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FALLBACK_POLLS","IO_BUDGET_MS","POLL_YIELD_EVERY"],"struct":["Deadline"]};

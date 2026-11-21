@@ -3,7 +3,7 @@
     abs_lba: u64,
     count: u32,
     data: &amp;[u8],
-) -&gt; <a class="enum" href="../../types/block_wire/enum.BlockOutcome.html" title="enum types::block_wire::BlockOutcome">BlockOutcome</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Write <code>count</code> 512-byte sectors starting at absolute LBA <code>abs_lba</code> of <code>dev</code> from <code>data</code>.</p>
+) -&gt; BlockOutcome</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Write <code>count</code> 512-byte sectors starting at absolute LBA <code>abs_lba</code> of <code>dev</code> from <code>data</code>.</p>
 <p>Stops at the first sector that does not complete and returns its outcome;
 earlier sectors stay written.</p>
 </div></details></section></div></main></body></html>
